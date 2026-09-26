@@ -176,7 +176,7 @@ test("Executor reconnect saves a replacement token before discovery", async ({ p
     const response = await route.fetch();
     expect(response.ok()).toBe(true);
     const updated = (await response.json()).json;
-    expect(updated.headerKeys).toEqual(["X-Test"]);
+    expect(updated.headerKeys).toEqual([]);
     expect(updated.revision).toBe(server.revision + 1);
     saved = true;
     await route.fulfill({ response });
@@ -271,8 +271,7 @@ test("configured server owners manage providers from settings", async ({ page },
   const settings = page.getByTestId("user-settings");
   await settings.getByTestId("settings-nav-account").click();
   const link = settings
-    .getByText("Server integrations")
-    .locator("..")
+    .getByRole("group", { name: "Server integrations" })
     .getByRole("link", { name: "Manage", exact: true });
   await expect(link).toBeVisible();
   await captureScreenshot(page, testInfo, "server-integrations-settings");

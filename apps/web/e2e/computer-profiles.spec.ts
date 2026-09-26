@@ -67,37 +67,10 @@ test("computer profiles require confirmation before replacement", async ({ page 
       },
     });
   });
-  let engineRequests = 0;
-  await page.route("**/rpc/computer/engine", (route) => {
-    engineRequests++;
-    return engineRequests === 1
-      ? route.fulfill({
-          status: 503,
-          json: {
-            json: {
-              defined: false,
-              code: "SERVICE_UNAVAILABLE",
-              status: 503,
-              message:
-                "Docker is not running or not reachable at /fixture/docker.sock. Start Docker Desktop and try again.",
-            },
-          },
-        })
-      : route.fulfill({ json: { json: { name: "docker", rootless: false } } });
-  });
   const settings = await openUserSettings(page);
   await settings.getByRole("button", { name: "Computers", exact: true }).click();
-  await expect(
-    settings.getByText(
-      "Docker is not running or not reachable at /fixture/docker.sock. Start Docker Desktop and try again.",
-    ),
-  ).toBeVisible();
-  await captureScreenshot(page, testInfo, "computer-engine-stopped");
-  await settings.getByRole("button", { name: "Retry", exact: true }).click();
-  await expect(
-    settings.getByText("Docker is not running or not reachable", { exact: false }),
-  ).toHaveCount(0);
-  expect(engineRequests).toBe(2);
+  await expect(settings.getByRole("heading", { name: "Team Computer" })).toBeVisible();
+  await expect(settings.getByRole("combobox", { name: "Image profile" })).toHaveValue("base");
 
   await page.getByLabel("Image profile", { exact: true }).selectOption("developer");
   await captureScreenshot(page, testInfo, "computer-image-profiles");

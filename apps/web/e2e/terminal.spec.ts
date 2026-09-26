@@ -1,3 +1,4 @@
+import type { ComputerStatus } from "@ardurbot/contracts";
 import { expect, test } from "@playwright/test";
 import { activeBotId, captureScreenshot, completeOnboarding, signup } from "./helpers";
 
@@ -41,19 +42,26 @@ test("Terminal loads on demand and shell shortcuts stay in the terminal", async 
   await signup(page, `terminal-input-${Date.now()}@ardurbot.test`, "password12", "Terminal Input");
   await completeOnboarding(page);
   const botId = activeBotId(page);
-  await page.route("**/rpc/threads/get", async (route) => {
+  const computer: ComputerStatus = {
+    computerId: "terminal-computer",
+    botId,
+    mode: "team",
+    kind: "docker",
+    state: "running",
+    controlHolder: "user",
+    controlBotId: botId,
+    takeoverRequested: false,
+    screenAvailable: true,
+    screenWidth: 1024,
+    screenHeight: 768,
+    homeRevision: null,
+    busyBotName: null,
+    canUpdate: false,
+  };
+  await page.route("**/rpc/bootstrap", async (route) => {
     const response = await route.fetch();
     const value = await response.json();
-    if (value.json?.computer)
-      value.json.computer = {
-        ...value.json.computer,
-        computerId: "terminal-computer",
-        kind: "docker",
-        state: "running",
-        controlHolder: "user",
-        controlBotId: botId,
-        takeoverRequested: false,
-      };
+    if (value.json?.thread) value.json.thread.computer = computer;
     await route.fulfill({ response, json: value });
   });
   await page.route("**/rpc/terminal/available", (route) =>
@@ -80,11 +88,12 @@ test("Terminal loads on demand and shell shortcuts stay in the terminal", async 
     });
   });
   await page.reload();
-  await page.keyboard.press("ControlOrMeta+k");
+  await page.keyboard.press("ControlOrMeta+K");
+  await expect(page.getByTestId("command-palette")).toBeVisible();
   await page.getByRole("option", { name: "Open terminal", exact: true }).click();
   await expect(page.getByRole("textbox", { name: "Terminal", exact: true })).toBeVisible();
   await page.getByRole("textbox", { name: "Terminal", exact: true }).focus();
-  await page.keyboard.press("ControlOrMeta+k");
+  await page.keyboard.press("ControlOrMeta+K");
   await expect(page.getByTestId("command-palette")).toBeHidden();
   await page.keyboard.press("Escape");
   await expect(page.getByTestId("computer-viewport")).toBeVisible();

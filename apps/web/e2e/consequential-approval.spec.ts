@@ -26,9 +26,10 @@ test("actions run by default while optional confirmations live in advanced user 
   await expect(page.getByTestId("bot-settings").getByText("Action confirmations")).toHaveCount(0);
   await page.getByRole("button", { name: "Close panel" }).click();
 
-  const settings = await openUserSettings(page, "account");
+  const settings = await openUserSettings(page);
   await expect(settings).toHaveAttribute("role", "dialog");
   await expect(settings).toBeFocused();
+  await settings.getByTestId("settings-nav-account").click();
   await expect(settings.getByTestId("advanced-settings")).toBeVisible();
   await expect(settings.getByRole("heading", { name: "Action confirmations" })).not.toBeVisible();
   await captureScreenshot(page, testInfo, "51-user-settings-advanced-collapsed");

@@ -98,8 +98,25 @@ test("message hover shows beside-bubble actions; reply links to parent", async (
     })
     .toEqual({ beside: true, flush: true, centered: true, notBelow: true });
   await captureScreenshot(page, testInfo, "message-bot-actions-desktop");
+
+  const parentText = `hover-parent-${stamp}`;
+  const replyText = `hover-reply-${stamp}`;
+  const composer = page.getByRole("combobox", { name: /^Message/ });
+  await expect(composer).toBeVisible();
+  await sendComposerMessage(page, composer, parentText);
+
+  const parentRow = transcript.locator(`[data-message-id]`).filter({ hasText: parentText }).first();
+  await expect(parentRow).toBeVisible({ timeout: 20_000 });
+
+  // Feedback belongs to a run-backed bot reply; the onboarding greeting has no run.
+  const feedbackRow = transcript
+    .locator("[data-message-id]")
+    .filter({ has: page.locator('button[aria-label="👎"]') })
+    .last();
+  await expect(feedbackRow).toBeAttached();
+  await revealHoverRail(feedbackRow);
   const messageCount = await transcript.locator("[data-message-id]").count();
-  await botToolbar.getByRole("button", { name: "👎", exact: true }).click();
+  await feedbackRow.getByRole("button", { name: "👎", exact: true }).click();
   const reason = page.getByRole("textbox", { name: "What was wrong?", exact: true });
   await reason.fill("Use numbered steps for procedures.");
   await captureScreenshot(page, testInfo, "message-feedback-reason");
@@ -112,16 +129,7 @@ test("message hover shows beside-bubble actions; reply links to parent", async (
   expect((await feedbackSaved).ok()).toBe(true);
   await expect(reason).toBeHidden();
   await expect(transcript.locator("[data-message-id]")).toHaveCount(messageCount);
-  await expectRailAtRest(page, botRow);
-
-  const parentText = `hover-parent-${stamp}`;
-  const replyText = `hover-reply-${stamp}`;
-  const composer = page.getByRole("combobox", { name: /^Message/ });
-  await expect(composer).toBeVisible();
-  await sendComposerMessage(page, composer, parentText);
-
-  const parentRow = transcript.locator(`[data-message-id]`).filter({ hasText: parentText }).first();
-  await expect(parentRow).toBeVisible({ timeout: 20_000 });
+  await expectRailAtRest(page, feedbackRow);
 
   const rail = await revealHoverRail(parentRow);
   const toolbar = parentRow.getByTestId("message-hover-actions");

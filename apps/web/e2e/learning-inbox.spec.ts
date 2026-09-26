@@ -110,8 +110,7 @@ test("learning inbox separates suggestions from applied changes and shows Undo",
                       : { proposal: proposal() };
     await route.fulfill({ contentType: "application/json", body: JSON.stringify({ json }) });
   });
-  await openUserSettings(page, "memory");
-  await page.getByRole("tab", { name: /Learning/ }).click();
+  await openUserSettings(page, "learning");
   const inbox = page.getByTestId("learning-inbox");
   await expect(inbox.getByText("3 suggestions to review", { exact: true })).toBeVisible();
   await captureScreenshot(page, testInfo, "learning-inbox-pending");

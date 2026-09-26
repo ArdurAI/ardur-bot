@@ -13,6 +13,9 @@ test("composer / picker lists skills above actions", async ({ page }, testInfo) 
       "Prepare a concise standup update from recent work. Use when the user asks for standup notes.",
     body: "1. Summarize wins.\n2. List blockers.",
   });
+  // The shell loads the skill catalog on mount; reload to observe the new skill.
+  await page.reload();
+  await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
 
   // aria-label stays available when skill/mention chips hide the placeholder.
   const composer = page.getByRole("combobox", { name: /^Message/ });

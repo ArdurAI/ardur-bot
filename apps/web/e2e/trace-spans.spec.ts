@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import type { ThreadSnapshot } from "@ardurbot/contracts";
 import { expect, test } from "@playwright/test";
 import { installPerformanceFixture, tokenEvent } from "./performance-fixture";
@@ -72,12 +71,9 @@ for (const overflow of ["auto", "hidden", "clip"]) {
   test(`paint excludes text clipped by a nested overflow ${overflow} ancestor`, async ({
     page,
   }) => {
-    const manifest = JSON.parse(
-      await readFile(new URL("../dist/.vite/manifest.json", import.meta.url), "utf8"),
-    );
-    const moduleUrl = `/${manifest["src/lib/scoreboard-trace.ts"].file}`;
+    const moduleUrl = "/src/lib/scoreboard-trace.ts";
     // Isolate geometry from the Shell's asynchronous bootstrap commits. The imported collector
-    // is still the production build; a separate test above exercises its real React lifecycle.
+    // is the same source module the app imports; a separate test above exercises its React lifecycle.
     await page.route("**/trace-fixture", (route) =>
       route.fulfill({
         contentType: "text/html",

@@ -167,7 +167,7 @@ test("takeover, routine, integrations, and export are reachable", async ({ page 
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Export" }).click();
   const download = await downloadPromise;
-  expect(download.suggestedFilename()).toMatch(/(chief-export\.json|bot-v2\.tar\.gz)/i);
+  expect(download.suggestedFilename()).toBe("bot-v2.tar.gz");
   const settings = page.getByTestId("bot-settings");
   await expect(settings.getByRole("button", { name: "Archive bot" })).toHaveCount(0);
   await expect(settings.getByRole("button", { name: "Delete bot" })).toHaveCount(0);
@@ -287,6 +287,8 @@ test("sign-in, spawn, and stop work in the shell", async ({ page }, testInfo) =>
   await page.getByPlaceholder("Password").fill("password12");
   await page.getByRole("button", { name: "Continue with email" }).click();
   await page.waitForURL(/\/app/, { timeout: 20_000 });
+  await page.getByRole("link", { name: "Bots", exact: true }).click();
+  await expect(page).toHaveURL(/\/app\/bots$/);
   await expect(sidebarBotButton(page, /^Chief/)).toBeVisible();
   await expect(sidebarBotButton(page, /Scout/)).toBeVisible();
   await captureScreenshot(page, testInfo, "15-restored-session");

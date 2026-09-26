@@ -7,7 +7,7 @@ import type { createApp } from "../../../../apps/api/src/app.ts";
 import { runIntegrationSuites } from "./integration.js";
 import { runProcess } from "./process.js";
 
-loadRootEnv();
+if (process.env.TESTKIT_SKIP_ROOT_ENV !== "1") loadRootEnv();
 
 const integration = process.argv.includes("--integration");
 const e2e = process.argv.includes("--e2e");
@@ -48,7 +48,7 @@ if (sandboxProvider === "box" && !process.env.BOX_API_KEY) {
 
 async function main() {
   const mode = integration ? "integration" : "e2e";
-  const reportDir = path.resolve("test-report", mode);
+  const reportDir = path.resolve(process.env.TEST_REPORT_DIR ?? "test-report", mode);
   await mkdir(reportDir, { recursive: true });
   const container = await new PostgreSqlContainer("postgres:16-alpine").start();
   try {

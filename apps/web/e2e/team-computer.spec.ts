@@ -95,6 +95,12 @@ test("user control leaves another Team bot's screen available", async ({ page },
   await page.getByTestId("computer-preview").hover();
   await page.getByTestId("computer-preview-open").click();
   await expect(page.getByRole("button", { name: "Close computer" })).toBeVisible();
+  await expect
+    .poll(() => rpc(page, "computer/status", { botId: chiefId }))
+    .toMatchObject({
+      controlHolder: "user",
+      controlBotId: chiefId,
+    });
   await page.getByRole("button", { name: "Close computer" }).click();
 
   await openBot(page, "Worker");

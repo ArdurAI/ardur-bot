@@ -12,10 +12,11 @@ test("owner previews, imports and removes local tool data", async ({ page }, tes
     const response = await route.fetch();
     const body = await response.json();
     await route.fulfill({
-      json: { json: { ...body.json, me: { ...body.json.me, isDeploymentOwner: true } } },
+      response,
+      json: { json: { ...body.json, isDeploymentOwner: true } },
     });
   });
-  await page.goto("/app");
+  await page.goto("/app/bots");
   let imported = false;
   const skill = localImportFixture.items[1]!;
   await page.route("**/rpc/localImport/**", async (route) => {
