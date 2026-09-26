@@ -45,6 +45,13 @@ export class LocalImportHostError extends Error {
     this.name = "LocalImportHostError";
   }
 }
+/** A custom folder is outside the owner's home; re-scanning will fail the same way. */
+export class LocalImportInvalidFolderError extends Error {
+  constructor() {
+    super("Choose a folder inside the owner's home.");
+    this.name = "LocalImportInvalidFolderError";
+  }
+}
 /** Only these stop a whole run; any other failure belongs to the item that caused it. */
 export function localImportStop(error: unknown): LocalImportStop | undefined {
   if (error instanceof LocalImportHostError) return "host";
@@ -147,7 +154,7 @@ export class LocalImportService {
         if (!manifest?.sources.some((source) => source.tool === tool && source.defaultMissing))
           throw new Error("A custom folder is available only when the default is missing.");
         if (!root || root.includes("\0") || root.split(/[/\\]/u).includes(".."))
-          throw new Error("Choose a folder inside the owner's home.");
+          throw new LocalImportInvalidFolderError();
       }
     await this.deps.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`local-import:${config.id}`}, 0))`;
@@ -676,8 +683,8 @@ export class LocalImportService {
       for (const [tool, categories] of Object.entries(
         LocalImportSelectionSchema.parse(config.selection),
       )) {
-        if (categories?.length)
-          await this.run(
+        if (categories?.length) {
+          const response = await this.run(
             owner,
             {
               action: "import",
@@ -687,6 +694,10 @@ export class LocalImportService {
             },
             true,
           );
+          // A stop made no more progress than a thrown error would have; retry next hour
+          // instead of calling a lost host again for every other tool and tenant due now.
+          if (response.stopped) throw new Error(`Automatic import stopped: ${response.stopped}`);
+        }
       }
     }
   }

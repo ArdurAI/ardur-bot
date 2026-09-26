@@ -1,11 +1,13 @@
 // @vitest-environment jsdom
 
 import type { LocalImportStatusSchema } from "@ardurbot/contracts/local-import";
+import { LOCAL_IMPORT_INVALID_FOLDER_CODE } from "@ardurbot/contracts/local-import";
 import {
   localImportFixture,
   localImportServerFixture,
   localImportStatusFixture,
 } from "@ardurbot/testkit/local-import-fixtures";
+import { ORPCError } from "@orpc/client";
 import type { ComponentProps, ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -141,6 +143,68 @@ it.each([
   await act(async () => button(node, "Import all").click());
   expect(node.querySelector('[role="alert"]')?.textContent).toBe(sentence);
 });
+it("says why a stopped first scan ended instead of showing an empty page", async () => {
+  fake.status.mockResolvedValue({ ...localImportStatusFixture, manifest: null });
+  fake.run.mockResolvedValue({ stopped: "host" });
+  const node = await render();
+  expect(node.querySelector('[role="alert"]')?.textContent).toBe(
+    "Import could not finish. Check this computer is connected, then re-scan.",
+  );
+});
+it("keeps the Source folder form visible with its error after a stopped re-scan", async () => {
+  const manifest = {
+    ...localImportFixture,
+    sources: [{ ...localImportFixture.sources[0]!, defaultMissing: true }],
+  };
+  fake.status.mockResolvedValue({ ...localImportStatusFixture, manifest });
+  fake.configure.mockResolvedValue({});
+  fake.run.mockResolvedValue({ stopped: "host" });
+  const node = await render();
+  await act(async () => {
+    const input = node.querySelector(
+      '[aria-label="Source folder for Claude Code"]',
+    ) as HTMLInputElement;
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+      input,
+      "custom",
+    );
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => button(node, "Use folder").click());
+  expect(node.querySelector('[role="alert"]')?.textContent).toBe(
+    "Import could not finish. Check this computer is connected, then re-scan.",
+  );
+  // configure() already cleared the manifest server-side; the page must not have
+  // refreshed into that empty state and lost the form the user was using.
+  expect(node.querySelector('[aria-label="Source folder for Claude Code"]')).not.toBeNull();
+});
+it("names the fix for an invalid custom folder instead of suggesting a retry", async () => {
+  const manifest = {
+    ...localImportFixture,
+    sources: [{ ...localImportFixture.sources[0]!, defaultMissing: true }],
+  };
+  fake.status.mockResolvedValue({ ...localImportStatusFixture, manifest });
+  fake.configure.mockRejectedValue(
+    new ORPCError(LOCAL_IMPORT_INVALID_FOLDER_CODE, {
+      message: "Choose a folder inside the owner's home.",
+    }),
+  );
+  const node = await render();
+  await act(async () => {
+    const input = node.querySelector(
+      '[aria-label="Source folder for Claude Code"]',
+    ) as HTMLInputElement;
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+      input,
+      "../outside",
+    );
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await act(async () => button(node, "Use folder").click());
+  expect(node.querySelector('[role="alert"]')?.textContent).toBe(
+    "Choose a folder inside your home folder.",
+  );
+});
 it("lists failed items with their reason and retries one without re-importing the rest", async () => {
   const failure = (item: (typeof localImportFixture.items)[number], reason: string) => ({
     itemId: item.id,
@@ -164,7 +228,7 @@ it("lists failed items with their reason and retries one without re-importing th
         },
   );
   const node = await render();
-  expect(node.textContent).toContain("Items not scanned: 4.");
+  expect(node.textContent).toContain("4 items were not scanned because of the scan limits.");
   await act(async () => button(node, "Import all").click());
   expect(node.textContent).toContain(
     "714 imported, 0 updated, 0 unchanged, 0 removed, 0 skipped, 0 conflicts, 2 failed.",

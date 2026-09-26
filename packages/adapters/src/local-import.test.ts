@@ -654,6 +654,14 @@ describe("local import lifecycle", () => {
     expect(f.records.rows.filter((row) => row.category === "memories")).toHaveLength(2);
     expect(f.journal().flatMap((doc) => doc.revisions)).toHaveLength(3);
   });
+  it("fails automatic refresh when the host goes away instead of reporting quiet success", async () => {
+    const f = await fixture();
+    await f.importAll();
+    await f.service.configure(owner, { autoImport: true });
+    await f.file(".claude/projects/example/memory/new.md", "A new fact.");
+    f.failReads(0, new LocalImportHostError());
+    await expect(f.service.refresh()).rejects.toThrow("stopped: host");
+  });
   it("splits a changed source from an equal body without overwriting the other source", async () => {
     const f = await fixture();
     await f.file(".claude/projects/example/memory/same.md", "Remember the offline command.");

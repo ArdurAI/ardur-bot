@@ -12,6 +12,7 @@ import {
   addLocalImportResult,
   LOCAL_IMPORT_CATEGORIES,
   LOCAL_IMPORT_EXCLUSIONS,
+  LOCAL_IMPORT_INVALID_FOLDER_CODE,
   LOCAL_IMPORT_PRIVACY,
   LOCAL_IMPORT_TOOL_NAMES,
 } from "@ardurbot/contracts/local-import";
@@ -32,6 +33,7 @@ import { mobileTokens } from "../lib/appearance";
 import { useI18n } from "../lib/i18n";
 import { localImport } from "../lib/local-import";
 import { native, useThemedStyles } from "../lib/native";
+import { RpcError } from "../lib/rpc-error";
 
 type Status = Awaited<ReturnType<typeof localImport.status>>;
 const defaults: LocalImportCategory[] = ["instructions", "memories", "skills", "servers"];
@@ -41,7 +43,9 @@ export default function LocalImport() {
   const styles = useThemedStyles(createStyles);
   const [status, setStatus] = useState<Status | null>(null);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<LocalImportStop | "unavailable" | null>(null);
+  const [error, setError] = useState<LocalImportStop | "unavailable" | "invalid-folder" | null>(
+    null,
+  );
   const [selected, setSelected] = useState<Partial<Record<LocalImportTool, LocalImportCategory[]>>>(
     {},
   );
@@ -61,12 +65,13 @@ export default function LocalImport() {
     plugins: t("Plugins and extensions"),
     other: t("Other files"),
   };
-  const stops: Record<LocalImportStop, string> = {
+  const errorMessages: Record<LocalImportStop | "unavailable" | "invalid-folder", string> = {
     host: t("Import could not finish. Check this computer is connected, then re-scan."),
     rescan: t("This scan is out of date. Re-scan, then try again."),
     failed: t("Import stopped because of an unexpected error. Re-scan, then try again."),
+    unavailable: t("Import is not available right now. Try again in a moment."),
+    "invalid-folder": t("Choose a folder inside your home folder."),
   };
-  const unavailable = t("Import is not available right now. Try again in a moment.");
   const reasons: Record<LocalImportFailure["reason"], string> = {
     credential: t("Looks like it contains a credential. Remove it from the file, then re-scan."),
     failed: t("Could not be saved."),
@@ -79,7 +84,16 @@ export default function LocalImport() {
       void (async () => {
         const initial = await localImport.status();
         if (!active) return;
-        if (!initial.manifest) await localImport.run({ action: "scan" });
+        if (!initial.manifest) {
+          const response = await localImport.run({ action: "scan" });
+          if (!active) return;
+          if (response.stopped) {
+            setStatus(initial);
+            setSelected(initial.selection);
+            setError(response.stopped);
+            return;
+          }
+        }
         const next = await localImport.status();
         if (active) {
           setStatus(next);
@@ -99,14 +113,18 @@ export default function LocalImport() {
       };
     }, []),
   );
-  async function work(action: () => Promise<void>) {
+  async function work(action: () => Promise<undefined | false>) {
     setBusy(true);
     setError(null);
     try {
-      await action();
-      setStatus(await localImport.status());
-    } catch {
-      setError("unavailable");
+      const refresh = await action();
+      if (refresh !== false) setStatus(await localImport.status());
+    } catch (error) {
+      setError(
+        error instanceof RpcError && error.code === LOCAL_IMPORT_INVALID_FOLDER_CODE
+          ? "invalid-folder"
+          : "unavailable",
+      );
     } finally {
       setBusy(false);
     }
@@ -223,13 +241,15 @@ export default function LocalImport() {
         {busy ? <ActivityIndicator accessibilityLabel={t("Working…")} /> : null}
         {error ? (
           <Text accessibilityRole="alert" style={styles.error}>
-            {error === "unavailable" ? unavailable : stops[error]}
+            {errorMessages[error]}
           </Text>
         ) : null}
         {manifest?.limited ? (
           <Text style={styles.muted}>
             {manifest.unscanned
-              ? t("Items not scanned: {count}.", { count: manifest.unscanned })
+              ? t("{count} items were not scanned because of the scan limits.", {
+                  count: manifest.unscanned,
+                })
               : t("Some items exceeded the scan limits.")}
           </Text>
         ) : null}
@@ -473,7 +493,14 @@ export default function LocalImport() {
                                   folders[source.tool] ?? status?.roots[source.tool] ?? "",
                               },
                             });
-                            await localImport.run({ action: "scan" });
+                            const response = await localImport.run({ action: "scan" });
+                            if (response.stopped) {
+                              setError(response.stopped);
+                              // configure() already cleared the manifest; keep showing this
+                              // form and the rest of what was found instead of refreshing
+                              // into an empty screen.
+                              return false;
+                            }
                           })
                         }
                       />

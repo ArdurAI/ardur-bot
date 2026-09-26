@@ -91,9 +91,11 @@ export function runtimePinProblem(
     pin,
     reason,
     actions:
-      pin.runtimeKind === "pi" && code === "pin-credential-missing"
-        ? ["connect", "change-pin"]
-        : ["change-pin"],
+      code === "local-import-rescan" || code === "local-import-item"
+        ? []
+        : pin.runtimeKind === "pi" && code === "pin-credential-missing"
+          ? ["connect", "change-pin"]
+          : ["change-pin"],
   };
 }
 

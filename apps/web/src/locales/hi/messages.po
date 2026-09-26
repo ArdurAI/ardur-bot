@@ -87,6 +87,11 @@ msgstr ""
 msgid "{0} imported, {1} updated, {2} unchanged, {3} removed, {4} skipped, {5} conflicts, {6} failed."
 msgstr ""
 
+#. placeholder {0}: manifest.unscanned
+#: src/pages/import/LocalImportPage.tsx
+msgid "{0} items were not scanned because of the scan limits."
+msgstr ""
+
 #. placeholder {0}: format(size / 1024)
 #: src/components/ArtifactFileCard.tsx
 msgid "{0} KB"
@@ -1361,6 +1366,10 @@ msgstr "बॉट का आकार और रंग चुनें, या �
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Choose a bot…"
+msgstr ""
+
+#: src/pages/import/LocalImportPage.tsx
+msgid "Choose a folder inside your home folder."
 msgstr ""
 
 #: src/pages/shell/runtime-settings.tsx
@@ -3949,11 +3958,6 @@ msgstr "आइटम अपडेट हुआ"
 
 #: src/pages/import/LocalImportPage.tsx
 msgid "Items edited after import were kept."
-msgstr ""
-
-#. placeholder {0}: manifest.unscanned
-#: src/pages/import/LocalImportPage.tsx
-msgid "Items not scanned: {0}."
 msgstr ""
 
 #: src/pages/shell/dialogs.tsx

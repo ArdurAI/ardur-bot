@@ -60,6 +60,7 @@ import {
   isSandboxGoneError,
   isScratchpadStatus,
   kubernetesContexts,
+  LocalImportInvalidFolderError,
   LocalImportService,
   listPiCatalog,
   listScratchpadItems,
@@ -106,6 +107,7 @@ import {
   OPENAI_COMPATIBLE_PROVIDER_ID,
   usableModelId,
 } from "@ardurbot/contracts";
+import { LOCAL_IMPORT_INVALID_FOLDER_CODE } from "@ardurbot/contracts/local-import";
 import { appContract } from "@ardurbot/contracts/rpc";
 import {
   ACTIVE_RUN_STATUSES,
@@ -2642,9 +2644,15 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       status: authed.localImport.status.handler(({ context }) =>
         localImport.status(importOwner(context.actor)),
       ),
-      configure: authed.localImport.configure.handler(({ context, input }) =>
-        localImport.configure(importOwner(context.actor), input),
-      ),
+      configure: authed.localImport.configure.handler(async ({ context, input }) => {
+        try {
+          return await localImport.configure(importOwner(context.actor), input);
+        } catch (error) {
+          if (error instanceof LocalImportInvalidFolderError)
+            throw new ORPCError(LOCAL_IMPORT_INVALID_FOLDER_CODE, { message: error.message });
+          throw error;
+        }
+      }),
       run: authed.localImport.run.handler(async ({ context, input }) => {
         const owner = importOwner(context.actor);
         await assertLocalImportOwner(deps.prisma, owner);

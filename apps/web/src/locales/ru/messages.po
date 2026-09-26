@@ -87,6 +87,11 @@ msgstr "Обработка {0}"
 msgid "{0} imported, {1} updated, {2} unchanged, {3} removed, {4} skipped, {5} conflicts, {6} failed."
 msgstr "Импортировано: {0}, обновлено: {1}, без изменений: {2}, удалено: {3}, пропущено: {4}, конфликтов: {5}, с ошибкой: {6}."
 
+#. placeholder {0}: manifest.unscanned
+#: src/pages/import/LocalImportPage.tsx
+msgid "{0} items were not scanned because of the scan limits."
+msgstr "{0} элементов не были просканированы из-за ограничений сканирования."
+
 #. placeholder {0}: format(size / 1024)
 #: src/components/ArtifactFileCard.tsx
 msgid "{0} KB"
@@ -1362,6 +1367,10 @@ msgstr "Выберите форму и цвет бота или загрузит
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Choose a bot…"
 msgstr "Выбрать бота…"
+
+#: src/pages/import/LocalImportPage.tsx
+msgid "Choose a folder inside your home folder."
+msgstr "Выберите папку внутри вашей домашней папки."
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Choose a model"
@@ -3950,11 +3959,6 @@ msgstr "Задача обновлена"
 #: src/pages/import/LocalImportPage.tsx
 msgid "Items edited after import were kept."
 msgstr ""
-
-#. placeholder {0}: manifest.unscanned
-#: src/pages/import/LocalImportPage.tsx
-msgid "Items not scanned: {0}."
-msgstr "Не просканировано элементов: {0}."
 
 #: src/pages/shell/dialogs.tsx
 msgid "Its conversation, files, and routines will be permanently deleted. Bots it created stay in your list."

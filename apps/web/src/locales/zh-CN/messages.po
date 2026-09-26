@@ -87,6 +87,11 @@ msgstr ""
 msgid "{0} imported, {1} updated, {2} unchanged, {3} removed, {4} skipped, {5} conflicts, {6} failed."
 msgstr "已导入 {0} 项，已更新 {1} 项，未更改 {2} 项，已移除 {3} 项，已跳过 {4} 项，冲突 {5} 项，失败 {6} 项。"
 
+#. placeholder {0}: manifest.unscanned
+#: src/pages/import/LocalImportPage.tsx
+msgid "{0} items were not scanned because of the scan limits."
+msgstr "由于扫描限制，有 {0} 个项目未被扫描。"
+
 #. placeholder {0}: format(size / 1024)
 #: src/components/ArtifactFileCard.tsx
 msgid "{0} KB"
@@ -1362,6 +1367,10 @@ msgstr "选择机器人形状和颜色，或上传图片"
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Choose a bot…"
 msgstr "选择 Bot…"
+
+#: src/pages/import/LocalImportPage.tsx
+msgid "Choose a folder inside your home folder."
+msgstr "选择主文件夹内的一个文件夹。"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Choose a model"
@@ -3950,11 +3959,6 @@ msgstr "事项已更新"
 #: src/pages/import/LocalImportPage.tsx
 msgid "Items edited after import were kept."
 msgstr ""
-
-#. placeholder {0}: manifest.unscanned
-#: src/pages/import/LocalImportPage.tsx
-msgid "Items not scanned: {0}."
-msgstr "未扫描的项目数：{0}。"
 
 #: src/pages/shell/dialogs.tsx
 msgid "Its conversation, files, and routines will be permanently deleted. Bots it created stay in your list."

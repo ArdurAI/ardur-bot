@@ -101,8 +101,14 @@ export class LocalImportScanner {
   /** Files a limit left out; undefined once a limit stops before it can count them. */
   private unscanned: number | undefined = 0;
   private scanning = false;
-  private limit(counted = false) {
+  /**
+   * `true`: one more file was left out and counted. `false` (default): a limit stopped
+   * before it could count how many files it left out. `"listed"`: the file that hit the
+   * limit is still listed with a reason below, so it was scanned, not left out.
+   */
+  private limit(counted: boolean | "listed" = false) {
     this.limited = true;
+    if (counted === "listed") return;
     this.unscanned = counted && this.unscanned !== undefined ? this.unscanned + 1 : undefined;
   }
   constructor(private readonly options: Options) {}
@@ -215,7 +221,7 @@ export class LocalImportScanner {
       const size = Buffer.byteLength(content);
       if (size > LOCAL_IMPORT_BYTES || this.bytes + size > MAX_RETAINED_BYTES) {
         // Still listed below with this reason, so it was scanned, not left out.
-        this.limit();
+        this.limit("listed");
         candidate.reason = "This item exceeds the import size limit.";
       }
       const relative = path.relative(this.home, candidate.file).split(path.sep).join("/");

@@ -87,6 +87,11 @@ msgstr "{0} handling"
 msgid "{0} imported, {1} updated, {2} unchanged, {3} removed, {4} skipped, {5} conflicts, {6} failed."
 msgstr "{0} imported, {1} updated, {2} unchanged, {3} removed, {4} skipped, {5} conflicts, {6} failed."
 
+#. placeholder {0}: manifest.unscanned
+#: src/pages/import/LocalImportPage.tsx
+msgid "{0} items were not scanned because of the scan limits."
+msgstr "{0} items were not scanned because of the scan limits."
+
 #. placeholder {0}: format(size / 1024)
 #: src/components/ArtifactFileCard.tsx
 msgid "{0} KB"
@@ -1362,6 +1367,10 @@ msgstr "Choose a bot shape, color, or upload an image"
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Choose a bot…"
 msgstr "Choose a bot…"
+
+#: src/pages/import/LocalImportPage.tsx
+msgid "Choose a folder inside your home folder."
+msgstr "Choose a folder inside your home folder."
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Choose a model"
@@ -3950,11 +3959,6 @@ msgstr "Item updated"
 #: src/pages/import/LocalImportPage.tsx
 msgid "Items edited after import were kept."
 msgstr "Items edited after import were kept."
-
-#. placeholder {0}: manifest.unscanned
-#: src/pages/import/LocalImportPage.tsx
-msgid "Items not scanned: {0}."
-msgstr "Items not scanned: {0}."
 
 #: src/pages/shell/dialogs.tsx
 msgid "Its conversation, files, and routines will be permanently deleted. Bots it created stay in your list."

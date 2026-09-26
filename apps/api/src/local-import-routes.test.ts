@@ -92,7 +92,7 @@ function fixture() {
       env: { webOrigin: "https://app.example.test" },
     } as unknown as RouterDeps),
   );
-  const call = async (method: string, input: unknown) => {
+  const rawCall = async (method: string, input: unknown) => {
     const { response } = await handler.handle(
       new Request(`https://app.example.test/rpc/localImport/${method}`, {
         method: "POST",
@@ -101,10 +101,14 @@ function fixture() {
       }),
       { prefix: "/rpc", context: { actor } },
     );
-    expect(response?.status).toBe(200);
-    return response!.json();
+    return response!;
   };
-  return { prisma, call, requests, enqueue, config };
+  const call = async (method: string, input: unknown) => {
+    const response = await rawCall(method, input);
+    expect(response.status).toBe(200);
+    return response.json();
+  };
+  return { prisma, call, rawCall, requests, enqueue, config };
 }
 
 it.each([
@@ -119,6 +123,33 @@ it.each([
   if (method === "run") expect(f.enqueue).toHaveBeenCalledOnce();
   if (method === "configure") expect(f.config.selection).toEqual({ "claude-code": ["skills"] });
   if (method === "credentials") expect(f.prisma.secret.create).toHaveBeenCalledOnce();
+});
+
+it("answers a custom folder outside the home with a typed, named error", async () => {
+  const f = fixture();
+  f.config.manifest = {
+    scanId: "00000000-0000-4000-8000-000000000099",
+    scannedAt: "2026-09-24T12:00:00.000Z",
+    platform: "darwin",
+    limited: false,
+    sources: [
+      {
+        tool: "codex",
+        detected: false,
+        defaultMissing: true,
+        counts: { instructions: 0, memories: 0, skills: 0, servers: 0, plugins: 0, other: 0 },
+        memoryFolders: 0,
+      },
+    ],
+    items: [],
+  };
+  const response = await f.rawCall("configure", { roots: { codex: "../outside" } });
+  expect(response.status).not.toBe(200);
+  const body = (await response.json()) as { json: { code: string; message: string } };
+  expect(body.json).toMatchObject({
+    code: "LOCAL_IMPORT_INVALID_FOLDER",
+    message: "Choose a folder inside the owner's home.",
+  });
 });
 
 it("builds the ownership selector explicitly even when a caller supplies a full actor", async () => {

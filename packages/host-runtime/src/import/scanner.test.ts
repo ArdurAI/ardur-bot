@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { LOCAL_IMPORT_BYTES } from "@ardurbot/contracts/local-import";
+import { LOCAL_IMPORT_BYTES, LOCAL_IMPORT_ITEMS } from "@ardurbot/contracts/local-import";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { parseToml, safeText, serverDefinition } from "./formats.js";
 import { LocalImportScanner, localImportDefaults } from "./scanner.js";
@@ -185,6 +185,18 @@ describe("local import discovery", () => {
     expect(scan.items).toMatchObject([
       { importable: false, reason: "This item exceeds the import size limit." },
     ]);
+  });
+
+  it("keeps a numeric unscanned count even when an oversized item is also listed", async () => {
+    await file(".claude/CLAUDE.md", "x".repeat(LOCAL_IMPORT_BYTES + 1));
+    const perFolder = Math.ceil(LOCAL_IMPORT_ITEMS / 2) + 4;
+    for (const project of ["a", "b"])
+      for (let i = 0; i < perFolder; i++)
+        await file(`.claude/projects/${project}/memory/note-${i}.md`, "A fact.");
+    const scan = await new LocalImportScanner({ home }).scan();
+    expect(scan.limited).toBe(true);
+    // The oversized CLAUDE.md must not wipe the count of notes the item cap left out.
+    expect(scan.unscanned).toBeGreaterThan(0);
   });
 
   it("does not know how many files a limit left out once it stops before it can count them", async () => {

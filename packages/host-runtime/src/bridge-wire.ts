@@ -4,6 +4,7 @@ import {
   encodeHostFrame,
   HOST_FRAME_BYTES,
 } from "@ardurbot/contracts/host-bridge";
+import type { RuntimePin } from "@ardurbot/contracts/runtime-pins";
 import { runtimePinProblem } from "@ardurbot/contracts/runtime-pins";
 import type WebSocket from "ws";
 
@@ -54,6 +55,15 @@ export function receiveFrames(
   socket.on("error", () => socket.close());
   socket.once("close", close);
 }
+/** Stands in for a runtime pin when a problem is not about any particular pinned bot. */
+const PLACEHOLDER_PIN: RuntimePin = {
+  runtimeKind: "pi",
+  provider: null,
+  modelId: null,
+  effort: null,
+  credentialId: null,
+  revision: 0,
+};
 export function hostLostProblem(
   request: HostRequest,
   reason = "Host service disconnected — open the desktop app and start a new run.",
@@ -61,30 +71,12 @@ export function hostLostProblem(
   return runtimePinProblem(
     request.operation.op === "runtime.turn"
       ? request.operation.request.model.runtimePin
-      : {
-          runtimeKind: "pi",
-          provider: null,
-          modelId: null,
-          effort: null,
-          credentialId: null,
-          revision: 0,
-        },
+      : PLACEHOLDER_PIN,
     "runtime-unavailable",
     reason,
   );
 }
 /** A local-import operation failed on the host itself, distinct from a lost or busy host. */
 export function importProblem(code: "local-import-rescan" | "local-import-item", reason: string) {
-  return runtimePinProblem(
-    {
-      runtimeKind: "pi",
-      provider: null,
-      modelId: null,
-      effort: null,
-      credentialId: null,
-      revision: 0,
-    },
-    code,
-    reason,
-  );
+  return runtimePinProblem(PLACEHOLDER_PIN, code, reason);
 }
