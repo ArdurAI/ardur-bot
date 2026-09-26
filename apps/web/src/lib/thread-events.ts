@@ -16,6 +16,7 @@ import {
   isActive,
   isCommandCardEvent,
   isRunTerminalEvent,
+  mergeCommandLinks,
   mergeThreadHistory,
   prependThreadHistoryPage,
   progressMessageId,
@@ -143,7 +144,11 @@ export function mergeThreadSnapshot(
   // A threads.get started before SSE caught up must not wipe newer live state
   // (e.g. ask cards applied after send's post-refresh request was already in flight).
   if (prev && prev.threadId === next.threadId && prev.cursor > next.cursor) return prev;
-  return mergeThreadHistory(prev, next, preserveLoadedHistory);
+  const merged = mergeThreadHistory(prev, next, preserveLoadedHistory);
+  // The server never sends `links`; a same-thread refresh must not drop the reader's own record
+  // of live resume links, which is how a partially loaded thread stays correct across a refresh.
+  const carried = prev && prev.threadId === next.threadId ? (prev.links ?? []) : [];
+  return { ...merged, links: mergeCommandLinks(carried, merged.messages) };
 }
 
 /**

@@ -8,6 +8,7 @@ import type { MobileMessage, MobileSnapshot } from "./api.js";
 import {
   applyMobileThreadEvent,
   isMobileThreadSnapshotEvent,
+  mergeMobileSnapshot,
   prependMobileMessagePage,
 } from "./api.js";
 
@@ -171,6 +172,50 @@ describe("native command projection", () => {
     expect(shownCards(withOlderPage?.messages as ThreadMessage[] | undefined)).toEqual([
       ["command:resumed:card-z", "pnpm build", "completed", "built\n"],
       ["m-1", undefined, undefined, undefined],
+    ]);
+  });
+  it("keeps a live resume link across a mergeMobileSnapshot refresh, so the resumed call still joins the old card", () => {
+    const olderMessage: MobileMessage = {
+      id: "m-1",
+      threadId: "thread-1",
+      seq: 3,
+      role: "bot",
+      blocks: [{ kind: "text", text: "building" }],
+    };
+    const initial: MobileSnapshot = {
+      threadId: "thread-1",
+      cursor: 3,
+      messages: [olderMessage],
+      olderCursor: 3,
+      run: null,
+    };
+    const afterLink = applyMobileThreadEvent(initial, {
+      ...resumedEvent("shell:0", "shell:1", { fromCommandId: "card-y", toCommandId: "card-z" }),
+      id: "link",
+      seq: 10,
+    });
+    expect(afterLink?.links).toEqual([
+      { from: "shell:0", to: "shell:1", fromCommandId: "card-y", toCommandId: "card-z" },
+    ]);
+    // A refresh returns the server's snapshot at the same point: `threads.get` never sends
+    // `links`, so a naive merge would silently drop it here.
+    const refreshed = mergeMobileSnapshot(afterLink, { ...initial, cursor: afterLink!.cursor });
+    expect(refreshed.links).toEqual(afterLink?.links);
+    const resumed = { commandId: "card-z", executionId: "shell:1", command: "pnpm build" };
+    const open = { exitCode: null, durationMs: null, stdout: null, stderr: null };
+    const live = [
+      commandEvent("command.intent", { ...resumed, ...open, outcome: "waiting" }),
+      commandEvent("command.finished", { ...resumed, stdout: "built\n" }),
+    ]
+      .map((event, index) => ({ ...event, id: `live-${index}`, seq: 11 + index }))
+      .reduce<MobileSnapshot | null>(
+        (current, event) => applyMobileThreadEvent(current, event),
+        refreshed,
+      );
+    // One card, already at the id the server would use: the refresh never wiped the link.
+    expect(shownCards(live?.messages as ThreadMessage[] | undefined)).toEqual([
+      ["m-1", undefined, undefined, undefined],
+      ["command:resumed:card-z", "pnpm build", "completed", "built\n"],
     ]);
   });
 });

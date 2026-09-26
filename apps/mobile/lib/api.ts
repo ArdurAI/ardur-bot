@@ -25,6 +25,7 @@ import {
   ensureAiDataConsent,
   isCommandCardEvent,
   isRunTerminalEvent,
+  mergeCommandLinks,
   mergeThreadHistory,
   prependThreadHistoryPage,
   progressMessageId,
@@ -884,7 +885,11 @@ export function mergeMobileSnapshot(
   next: MobileSnapshot,
   preserveLoadedHistory = false,
 ): MobileSnapshot {
-  return mergeThreadHistory(prev, next, preserveLoadedHistory);
+  const merged = mergeThreadHistory(prev, next, preserveLoadedHistory);
+  // The server never sends `links`; a same-thread refresh must not drop the reader's own record
+  // of live resume links, which is how a partially loaded thread stays correct across a refresh.
+  const carried = prev && prev.threadId === next.threadId ? (prev.links ?? []) : [];
+  return { ...merged, links: mergeCommandLinks(carried, merged.messages) };
 }
 
 export function prependMobileMessagePage(

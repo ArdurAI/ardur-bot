@@ -256,6 +256,49 @@ function messageJoins(
   };
 }
 
+/** A synthetic link for each command id a loaded card's `resumedFrom` already names as continued. */
+function impliedCommandLinks(
+  messages: readonly Pick<ThreadMessage, "blocks">[],
+): ToolResumedPayload[] {
+  const links: ToolResumedPayload[] = [];
+  for (const message of messages) {
+    for (const block of message.blocks) {
+      if (block.kind !== "command") continue;
+      for (const fromCommandId of block.command.resumedFrom ?? []) {
+        links.push({
+          from: fromCommandId,
+          to: block.command.commandId,
+          fromCommandId,
+          toCommandId: block.command.commandId,
+        });
+      }
+    }
+  }
+  return links;
+}
+
+/**
+ * The resume links a reader keeps across a `threads.get` refresh: its own record, carried
+ * forward, unioned with whatever the refresh's own messages already imply. A refresh's messages
+ * can reveal a hop the reader never saw live (a missed event while disconnected); the carried
+ * record covers the opposite case, a hop whose named card is still not among the messages this
+ * refresh loaded. Neither source alone is enough, so both survive every refresh and merge.
+ */
+export function mergeCommandLinks(
+  previousLinks: readonly ToolResumedPayload[],
+  messages: readonly Pick<ThreadMessage, "blocks">[],
+): ToolResumedPayload[] {
+  const seen = new Set<string>();
+  const merged: ToolResumedPayload[] = [];
+  for (const link of [...previousLinks, ...impliedCommandLinks(messages)]) {
+    const key = `${link.fromCommandId}:${link.toCommandId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    merged.push(link);
+  }
+  return merged;
+}
+
 /**
  * `messages` plus the resume links seen so far, kept separately because a reader with only part
  * of the thread loaded may hold a link whose named card is not among its messages.
