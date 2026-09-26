@@ -9,6 +9,12 @@ export const BOARD_CLOSE_FAILED_BODY =
 const CLOSE_NOTIFY_ATTEMPT = 5;
 const CLOSE_BACKOFF_MS = 30_000;
 const CLOSE_BACKOFF_CAP_MS = 15 * 60_000;
+/**
+ * Once the filing's bot can never open the board again, the scheduled sweep stops picking the
+ * row back up. The person's own Reject or Undo click retries through their own scope and does
+ * not consult this field, so it still works.
+ */
+export const NO_AUTOMATIC_RETRY_AT = new Date("9999-12-31T00:00:00.000Z");
 
 export type PendingCloseRow = {
   id: string;
@@ -164,7 +170,7 @@ async function insertCloseNotice(
   });
 }
 
-async function notifyUnclosedBoardItem(
+export async function notifyUnclosedBoardItem(
   prisma: PrismaClient,
   filing: PendingCloseRow,
   show?: (itemId: string) => Promise<WorkItem>,

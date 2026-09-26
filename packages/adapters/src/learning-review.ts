@@ -75,8 +75,12 @@ function redactValue<T>(value: T, secrets: readonly string[]): T {
   return value;
 }
 const FAILURE_WORD = "fail\\w*|broke\\w*|break\\w*|crash\\w*|error\\w*";
+// Excludes "every time"/"each time" and bare "keep": both read far more often as an ordinary
+// instruction's cadence ("show the error each time it happens", "keep error messages
+// actionable") than as a claim that a failure recurred. "keeps"/"kept" describe an already
+// ongoing repetition ("it keeps failing") and stay.
 const RECUR_WORD =
-  "again|repeated(?:ly)?|recurr\\w*|recurs|every time|each time|keeps?|kept|(?:across|multiple|several) runs";
+  "again|repeated(?:ly)?|recurr\\w*|recurs|keeps|kept|(?:across|multiple|several) runs";
 // A failure word and a recurrence word within a few words of each other, in either order.
 const RECURRENCE = new RegExp(
   `\\b(?:(?:${FAILURE_WORD})(?:\\s+\\S+){0,3}?\\s+(?:${RECUR_WORD})|(?:${RECUR_WORD})(?:\\s+\\S+){0,3}?\\s+(?:${FAILURE_WORD}))\\b`,
@@ -87,7 +91,8 @@ const RECURRENCE = new RegExp(
  * item that says a failure recurred ("failed again", "keeps failing", "the crash happened
  * across multiple runs") is rejected. A recurrence word with no nearby failure word is an
  * ordinary follow-up: "the repeated header row", "across runs" (as in "cache the token across
- * runs"), and "each time" (as in "log the duration each time it runs") all stay valid.
+ * runs"), "each time" (as in "log the duration each time it runs"), and "keep" as a plain
+ * instruction ("keep error messages actionable") all stay valid.
  */
 function claimsRecurrence(candidate: LearningCandidate) {
   const item = candidate.boardItem;

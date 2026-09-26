@@ -190,9 +190,13 @@ the same comment count: Beads leaves `updatedAt` alone when someone comments, so
 as a change for Reject, Undo and every retry. Approve records the item's comment count next to its
 `updatedAt`. If the close fails, the filing keeps the close reason in `closePending` and the
 item's `updatedAt` and comment count in `closeUpdatedAt` and `closeCommentCount`. The worker's
-board notification tick and the next board read of that space finish the close only while the
-item is still open at that `updatedAt` and comment count, or already closed with the pending
-reason. They then delete the filing and free the hourly slot.
+board notification tick and the next board read of that space finish the close whenever the item
+is already closed, for any reason, or is still open and unchanged at that `updatedAt` and comment
+count. They then delete the filing and free the hourly slot. When the filing's own bot can no
+longer open the board at all — archived, its computer moved, or no longer allowed there — the
+tick instead reads the item through the board's owner: closed, for any reason, still finishes
+quietly; still open sends the one notice below and then stops the scheduled retry, leaving the
+filing for a person's own Reject or Undo click, which retries through their own scope regardless.
 Board work for a learning proposal runs as the proposal's bot, as a run's outcome delivery runs
 as the run's bot. With the host bridge on (the packaged images), the desktop admits a bot only
 inside one of its runs, so this work, which has no run, goes through the owner's connection in
@@ -203,9 +207,12 @@ The tick sweeps after its delivery transaction commits, with no transaction open
 never waits for a sweep. Each close holds its space's filing lock around the Beads show and close,
 leaves a space another write holds for the next sweep, and stops at the tick's 15-second deadline.
 A close that deadline interrupts counts as a failed try.
-If someone else has edited the item or closed it for another reason, the tick clears the
-marker, deletes the filing, leaves the item as that person left it, and Learning shows
-"This board item changed after it was filed. Review it on the Board." Retries stop there.
+If a person closes the item themselves, for any reason, before the tick finishes, that ends the
+pending close quietly: the tick clears the marker, deletes the filing, and leaves the item closed
+as they left it. Only an edit that leaves the item open — a different assignee, status or other
+field, with no close — counts as changed; the tick then clears the marker, deletes the filing,
+and Learning shows "This board item changed after it was filed. Review it on the Board." Retries
+stop either way.
 Reject and Undo answer with the code `board-closing`, and web and mobile show
 "Closing on the Board." at once and until that marker clears. A close that keeps failing waits
 longer between tries and, after five failures, sends the notice
@@ -222,8 +229,8 @@ be stored, each later failure tries again. The filing records when it was stored
 body locks that proposal's row and reads the body again first, so the close reason a board read
 records and the changed marker a released close records both stay. An item
 already closed with "Undone from Learning" counts as undone. A learning proposal's
-labels are written on the new item together with `bot-filed`, the same labels the
-diff showed before approval. They follow the board's label rules (no comma, line break or null),
+labels are written on the new item together with `bot-filed`, the same labels Details
+listed before approval. They follow the board's label rules (no comma, line break or null),
 so review drops a proposed item whose label the board would refuse and keeps the rest. Beads lists `created_at` as a
 whole second while a reservation stores milliseconds. A human item created in the
 reservation's same second, with no filer and no filing row, is claimed while the reservation

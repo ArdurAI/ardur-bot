@@ -223,6 +223,32 @@ it("separates pending copy from applied copy, approves without removing the card
   expect(api.revert).toHaveBeenCalledWith({ proposalId: "proposal" });
   expect(container.textContent).toContain("Undone");
 });
+it("shows every field Approve will file for a board item, including labels", async () => {
+  const board = {
+    ...proposal,
+    type: "board-item",
+    proposedContent: undefined,
+    boardItem: {
+      title: "Finish the import follow-up",
+      description: "The run stopped before the import finished.",
+      acceptanceCriteria: "The import completes.",
+      labels: ["bug", "import"],
+    },
+  };
+  api.list.mockResolvedValue({
+    reviews: [],
+    proposals: [board],
+    pendingCount: 1,
+    appliedThisWeek: 0,
+  });
+  await act(async () => root.render(<LearningInbox botId="bot" />));
+  await act(async () => {
+    const details = container.querySelector("article details")! as HTMLDetailsElement;
+    details.open = true;
+    details.dispatchEvent(new Event("toggle", { bubbles: true }));
+  });
+  expect(container.textContent).toContain("bug, import");
+});
 it("shows the board service's own sentence when Approve cannot file the item, not the generic retry text", async () => {
   const board = {
     ...proposal,

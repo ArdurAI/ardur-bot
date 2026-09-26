@@ -23,6 +23,8 @@ import { BeadsBoardProvider } from "./beads.js";
 import type { PendingCloseRow } from "./pending-close.js";
 import {
   closeNoticeOwner,
+  NO_AUTOMATIC_RETRY_AT,
+  notifyUnclosedBoardItem,
   pendingCloseAction,
   recordPendingCloseFailure,
   releaseChangedBoardClose,
@@ -434,7 +436,11 @@ export class BoardService {
     );
   }
   /** The filing's bot, as a run's outcome delivery uses the run's bot, for its owner. */
-  private async pendingCloseScope(filing: PendingCloseRow, signal?: AbortSignal) {
+  private async pendingCloseScope(
+    filing: PendingCloseRow,
+    signal?: AbortSignal,
+    options: { withBot?: boolean } = {},
+  ) {
     if (!filing.workspaceId) throw new Error("This board close has no board.");
     const userId = await closeNoticeOwner(this.options.prisma, filing);
     if (!userId) throw new Error("This board close has no owner.");
@@ -442,7 +448,7 @@ export class BoardService {
       scope: {
         userId,
         spaceId: filing.spaceId,
-        ...(filing.botId ? { botId: filing.botId } : {}),
+        ...((options.withBot ?? true) && filing.botId ? { botId: filing.botId } : {}),
         signal,
       },
       workspaceId: filing.workspaceId,
@@ -457,9 +463,45 @@ export class BoardService {
     return (await this.provider(scope, workspaceId)).show(itemId);
   }
   private async finishPendingClose(filing: PendingCloseRow, signal?: AbortSignal) {
-    if (!filing.closePending || !filing.itemId || !filing.workspaceId) return;
+    const itemId = filing.itemId;
+    if (!filing.closePending || !itemId || !filing.workspaceId) return;
     const { scope, workspaceId } = await this.pendingCloseScope(filing, signal);
-    await this.finishClose(scope, filing, workspaceId);
+    try {
+      await this.finishClose(scope, filing, workspaceId);
+    } catch (error) {
+      if (!filing.botId || !(error instanceof BoardError) || error.problem.code !== "forbidden")
+        throw error;
+      await this.finishBotDeniedClose(filing, itemId, workspaceId, signal);
+    }
+  }
+  /**
+   * The filing's bot can no longer open the board at all (archived, moved, or no longer
+   * allowed on it), so its own scope can never see whether the item closed. The owner can
+   * always open their own board, so a read through the owner's scope decides instead: closed,
+   * for any reason, ends the pending close exactly as a normal close would. Still open sends
+   * the one notice and then stops the scheduled sweep from picking this filing back up; the
+   * person's own Reject or Undo click still retries it through their own scope.
+   */
+  private async finishBotDeniedClose(
+    filing: PendingCloseRow,
+    itemId: string,
+    workspaceId: string,
+    signal?: AbortSignal,
+  ) {
+    const owner = await this.pendingCloseScope(filing, signal, { withBot: false });
+    const provider = await this.provider(owner.scope, workspaceId);
+    const item = await provider.show(itemId);
+    if (item.status === "closed") {
+      await this.options.prisma.botBoardFiling.deleteMany({
+        where: { id: filing.id, spaceId: filing.spaceId },
+      });
+      return;
+    }
+    await notifyUnclosedBoardItem(this.options.prisma, filing, async () => item);
+    await this.options.prisma.botBoardFiling.updateMany({
+      where: { id: filing.id, closePending: filing.closePending },
+      data: { closeNextAt: NO_AUTOMATIC_RETRY_AT },
+    });
   }
   /**
    * Shows the item, decides whether it can close, and closes or releases it, then deletes the

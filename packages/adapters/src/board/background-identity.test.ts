@@ -2,6 +2,7 @@ import type { BoardRun } from "@ardurbot/contracts/board";
 import { getLogger } from "@ardurbot/logging";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ExecutorDeps } from "../executor.js";
+import { NO_AUTOMATIC_RETRY_AT } from "./pending-close.js";
 import { BoardService } from "./service.js";
 
 const beadsItem = {
@@ -31,7 +32,7 @@ afterEach(() => {
 });
 
 /** A learning filing whose Reject already committed, owned by bot "bot" in space "space". */
-function fixture() {
+function fixture(options: { archivedBot?: boolean; itemStatus?: string } = {}) {
   const filing = {
     id: "filing",
     spaceId: "space",
@@ -71,11 +72,21 @@ function fixture() {
     spaceMember: { findUnique: async () => ({ userId: "owner" }) },
     user: { findUniqueOrThrow: async () => ({ name: "Owner" }) },
     bot: {
-      findFirst: async () => ({ id: "bot", name: "Builder", computer: { kind: "desktop" } }),
+      findFirst: async () =>
+        options.archivedBot ? null : { id: "bot", name: "Builder", computer: { kind: "desktop" } },
     },
     boardWorkspace: { findFirst: async () => workspace, findUnique: async () => workspace },
     learningProposal: { findUnique: async () => ({ id: "proposal", userId: "owner" }) },
-    boardFollow: { findMany: async () => [], findUnique: async () => null },
+    boardFollow: {
+      findMany: async () => [],
+      findUnique: async () => null,
+      create: async ({ data }: { data: Record<string, unknown> }) => ({
+        id: "follow",
+        version: 0,
+        ...data,
+      }),
+      updateMany: async () => ({ count: 1 }),
+    },
     boardNotification: { create: vi.fn() },
     hostRegistration: { findUnique: async () => null },
     botBoardFiling: {
@@ -105,7 +116,11 @@ function fixture() {
   const ownerRun = vi.fn(async (request: BoardRun) => {
     requests.push(request);
     const command = request.argv[0];
-    if (command === "show") return { ok: true as const, stdout: JSON.stringify([beadsItem]) };
+    if (command === "show")
+      return {
+        ok: true as const,
+        stdout: JSON.stringify([{ ...beadsItem, status: options.itemStatus ?? beadsItem.status }]),
+      };
     if (command === "close")
       return {
         ok: true as const,
@@ -160,6 +175,42 @@ it("reads a bot's board outside a run through the owner's host connection", asyn
     expect.objectContaining({ userId: "owner", spaceId: "space", botId: undefined }),
   );
   expect(requests.every((request) => request.actor === "Owner")).toBe(true);
+});
+
+it("finishes a pending close quietly through the owner's connection when the filing's bot is archived and the item is already closed", async () => {
+  // The reviewer's confirmed scenario: an archived bot can never open the board again, so
+  // only a read through the owner's own scope can see that a person already closed the item.
+  const { prisma, filings, requests, ownerRun } = fixture({
+    archivedBot: true,
+    itemStatus: "closed",
+  });
+  const app = new BoardService({ prisma: prisma as never, dataDir: "/fixture", ownerRun });
+  await app.sweepPendingCloses();
+  expect(requests.map((request) => [request.argv[0], request.actor])).toEqual([
+    ["show", "Owner"],
+    ["history", "Owner"],
+  ]);
+  expect(filings).toEqual([]);
+  expect(prisma.boardNotification.create).not.toHaveBeenCalled();
+});
+
+it("notifies once and stops the scheduled retry when the filing's bot is archived and the item is still open", async () => {
+  const { prisma, filing, filings, requests, ownerRun } = fixture({
+    archivedBot: true,
+    itemStatus: "open",
+  });
+  const app = new BoardService({ prisma: prisma as never, dataDir: "/fixture", ownerRun });
+  await app.sweepPendingCloses();
+  expect(filings).toEqual([filing]);
+  expect(filing.closePending).toBe("Rejected from Learning");
+  expect(filing.closeNextAt).toEqual(NO_AUTOMATIC_RETRY_AT);
+  expect(prisma.boardNotification.create).toHaveBeenCalledTimes(1);
+  const requestsAfterFirstSweep = requests.length;
+  // A later sweep does not reach the bot's board again or send a second notice: the person
+  // acts through their own Reject or Undo click, which does not consult closeNextAt.
+  await app.sweepPendingCloses();
+  expect(requests).toHaveLength(requestsAfterFirstSweep);
+  expect(prisma.boardNotification.create).toHaveBeenCalledTimes(1);
 });
 
 it("gives the executor only the filing lock pool", () => {

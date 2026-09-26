@@ -13,14 +13,16 @@ export function proposalFingerprint(
     [candidate.target.documentId ?? null, candidate.target.settingKey ?? null],
     candidate.proposedContent?.trim(),
     candidate.typedDelta ? [candidate.typedDelta.key, candidate.typedDelta.value] : null,
-    candidate.boardItem
+    ...(candidate.boardItem
       ? [
-          candidate.boardItem.title.trim(),
-          candidate.boardItem.description,
-          candidate.boardItem.acceptanceCriteria,
-          candidate.boardItem.workspaceId ?? null,
+          [
+            candidate.boardItem.title.trim(),
+            candidate.boardItem.description,
+            candidate.boardItem.acceptanceCriteria,
+            candidate.boardItem.workspaceId ?? null,
+          ],
         ]
-      : null,
+      : []),
     ...(candidate.operation
       ? [
           candidate.operation,

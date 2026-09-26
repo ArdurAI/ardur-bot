@@ -16,7 +16,8 @@ const i18n = vi.hoisted(() => ({
     );
   },
 }));
-vi.mock("./api", () => ({ rpc: request }));
+const RpcServerError = vi.hoisted(() => class RpcServerError extends Error {});
+vi.mock("./api", () => ({ rpc: request, RpcServerError }));
 vi.mock("./MemoryControls", () => ({
   MemoryControls: () => null,
   MemoryIntentControls: () => null,
@@ -62,6 +63,7 @@ vi.mock("react-native", () => {
 import Learning from "../app/learning";
 import Memory from "../app/memory";
 import {
+  actionMessage,
   learningAction,
   learningBeforeAfter,
   loadLearning,
@@ -215,6 +217,37 @@ it("renders the native list, approves, shows applied copy and supports Undo with
   }
 });
 
+it("shows every field Approve will file for a board item, including labels", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const board = {
+    ...proposal,
+    type: "board-item",
+    proposedContent: undefined,
+    boardItem: {
+      title: "Finish the import follow-up",
+      description: "The run stopped before the import finished.",
+      acceptanceCriteria: "The import completes.",
+      labels: ["bug", "import"],
+    },
+  };
+  request.mockImplementation(async (path: string) => {
+    if (path === "learning/settings")
+      return { enabled: true, reviewerPin: null, destination: null, budgets: {} };
+    return { reviews: [], proposals: [board], pendingCount: 1, appliedThisWeek: 0 };
+  });
+  const container = document.createElement("div"),
+    root = createRoot(container);
+  try {
+    await act(async () => root.render(createElement(Learning)));
+    const details = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Details",
+    );
+    await act(async () => details!.click());
+    expect(container.textContent).toContain("bug, import");
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
 it("shows the board service's own sentence when Approve cannot file the item, not the generic retry text", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const board = {
@@ -231,7 +264,7 @@ it("shows the board service's own sentence when Approve cannot file the item, no
     if (path === "learning/settings")
       return { enabled: true, reviewerPin: null, destination: null, budgets: {} };
     if (path === "learning/approve")
-      throw new Error("This bot cannot reach this board's computer.");
+      throw new RpcServerError("This bot cannot reach this board's computer.");
     return { reviews: [], proposals: [board], pendingCount: 1, appliedThisWeek: 0 };
   });
   const container = document.createElement("div"),
@@ -813,4 +846,19 @@ it("opens observations for an owner-authored revision from native document histo
   } finally {
     await act(async () => root.unmount());
   }
+});
+
+it("only trusts a message the server actually sent, and falls back for a transport failure", () => {
+  const fallback = "Could not update learning. Try again.";
+  expect(
+    actionMessage(new RpcServerError("This bot cannot reach this board's computer."), fallback),
+  ).toBe("This bot cannot reach this board's computer.");
+  expect(actionMessage(new RpcServerError("Internal Server Error"), fallback)).toBe(fallback);
+  // A native fetch failure when the phone is offline.
+  expect(actionMessage(new Error("Network request failed"), fallback)).toBe(fallback);
+  // The client's own abort timer.
+  expect(actionMessage(new Error("Request timed out"), fallback)).toBe(fallback);
+  // A response with no message at all.
+  expect(actionMessage(new Error("rpc learning/reject failed"), fallback)).toBe(fallback);
+  expect(actionMessage("not an error", fallback)).toBe(fallback);
 });

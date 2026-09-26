@@ -617,6 +617,8 @@ describe("proposal validation", () => {
     { title: "Remove the repeated header row from the export" },
     { description: "Cache the auth token across runs." },
     { description: "Log the duration each time the sync job runs." },
+    { title: "Keep error messages actionable" },
+    { description: "Show the error each time the import skips a row." },
   ])(
     "keeps an ordinary follow-up that mentions repetition but not a failure recurring (%o)",
     (claim) => {

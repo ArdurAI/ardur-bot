@@ -1050,6 +1050,7 @@ export const RU_MESSAGES: Record<string, string> = {
   "No registered folders": "Нет зарегистрированных папок",
   "Binary file": "Двоичный файл",
   Label: "Метка",
+  Labels: "Метки",
   Assignee: "Исполнитель",
   Deferred: "Отложено",
   "In progress": "В работе",
@@ -1060,6 +1061,7 @@ export const RU_MESSAGES: Record<string, string> = {
   "{name} filed {filed}: {done} done, {open} open, {other} closed without being completed.":
     "{name} создал задач: {filed}; выполнено: {done}, открыто: {open}, закрыто без выполнения: {other}.",
   "This board item is still open.": "Эта задача на доске всё ещё открыта.",
+  "This board item was already closed on the Board.": "Эта задача на доске уже закрыта.",
   "This board item was completed.": "Эта задача на доске выполнена.",
   "This board item was closed without being completed. Review it on the Board.":
     "Эта задача на доске закрыта без выполнения. Проверьте её на доске.",

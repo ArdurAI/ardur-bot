@@ -321,6 +321,14 @@ export default function Learning() {
                           <Text selectable style={styles.body}>
                             {proposal.boardItem.acceptanceCriteria}
                           </Text>
+                          {proposal.boardItem.labels?.length ? (
+                            <>
+                              <Text style={styles.title}>{t("Labels")}</Text>
+                              <Text selectable style={styles.body}>
+                                {proposal.boardItem.labels.join(", ")}
+                              </Text>
+                            </>
+                          ) : null}
                         </>
                       ) : (
                         <>

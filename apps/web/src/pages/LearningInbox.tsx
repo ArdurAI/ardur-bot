@@ -492,6 +492,11 @@ function LearningCard({
             <p>
               <Trans>Acceptance criteria</Trans>: {proposal.boardItem.acceptanceCriteria}
             </p>
+            {proposal.boardItem.labels?.length ? (
+              <p>
+                <Trans>Labels</Trans>: {proposal.boardItem.labels.join(", ")}
+              </p>
+            ) : null}
           </div>
         ) : (
           <pre className="max-h-64 overflow-auto whitespace-pre-wrap py-2">{proposal.diff}</pre>

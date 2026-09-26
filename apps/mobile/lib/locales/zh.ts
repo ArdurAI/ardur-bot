@@ -1012,6 +1012,7 @@ export const ZH_MESSAGES: Record<string, string> = {
   "No registered folders": "暂无已注册文件夹",
   "Binary file": "二进制文件",
   Label: "标签",
+  Labels: "标签",
   Assignee: "负责人",
   Deferred: "已推迟",
   "In progress": "进行中",
@@ -1022,6 +1023,7 @@ export const ZH_MESSAGES: Record<string, string> = {
   "{name} filed {filed}: {done} done, {open} open, {other} closed without being completed.":
     "{name} 提交了 {filed} 项：{done} 项完成，{open} 项开放，{other} 项已关闭但未完成。",
   "This board item is still open.": "此看板事项仍处于开放状态。",
+  "This board item was already closed on the Board.": "此看板事项已经关闭。",
   "This board item was completed.": "此看板事项已完成。",
   "This board item was closed without being completed. Review it on the Board.":
     "此看板事项已关闭但未完成。请在看板上查看。",

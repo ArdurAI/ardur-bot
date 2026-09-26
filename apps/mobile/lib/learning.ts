@@ -5,7 +5,7 @@ import {
   ProposalEvidenceSchema,
   SpaceLearningConfigSchema,
 } from "@ardurbot/contracts";
-import { rpc } from "./api";
+import { RpcServerError, rpc } from "./api";
 
 export async function loadLearning(botId?: string) {
   return LearningInboxSchema.parse(await rpc("learning/list", { botId }));
@@ -39,9 +39,16 @@ export async function loadLearningEvidence(proposalId: string, evidenceId: strin
 }
 // The server flattens an unmapped error to this fixed text before it reaches the client.
 const GENERIC_RPC_ERROR_MESSAGE = "Internal Server Error";
-/** The server's own sentence when a request failed for a reason worth saying, or the fallback. */
+/**
+ * The server's own sentence when a request failed for a reason worth saying, or the fallback.
+ * Only a message the server actually sent qualifies: a transport failure (offline, timed out,
+ * a response with no message at all) throws a plain `Error` instead, which always falls back,
+ * so an untranslated English detail never replaces the caller's translated fallback text.
+ */
 export function actionMessage(error: unknown, fallback: string): string {
-  return error instanceof Error && error.message && error.message !== GENERIC_RPC_ERROR_MESSAGE
+  return error instanceof RpcServerError &&
+    error.message &&
+    error.message !== GENERIC_RPC_ERROR_MESSAGE
     ? error.message
     : fallback;
 }
