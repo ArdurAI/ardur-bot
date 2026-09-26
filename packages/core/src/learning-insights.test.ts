@@ -508,6 +508,23 @@ describe("repeated work that could be a routine", () => {
       ),
     ).toEqual([]);
   });
+  it("recognizes an existing routine even when the repeated request has redacted text", () => {
+    // Task prompts reach computeInsights already redacted (loadInsightFacts redacts them before
+    // this point); a saved Routine.prompt does not. Both must still normalize to the same key.
+    const emailPrompts = Array.from({ length: 3 }, (_, i) => ({
+      botId: "coder",
+      text: "Email the weekly report to [Redacted]",
+      at: hoursAgo(i + 1),
+    }));
+    expect(
+      kinds(
+        facts({
+          prompts: emailPrompts,
+          routines: [{ botId: "coder", prompt: "Email the weekly report to team@company.com" }],
+        }),
+      ),
+    ).toEqual([]);
+  });
   it("ignores short replies and requests that already have a routine", () => {
     const short = Array.from({ length: 5 }, (_, i) => ({
       botId: "coder",

@@ -2244,7 +2244,10 @@ export function ShellPage({
     };
     window.addEventListener(INSIGHT_ACTION_EVENT, listener);
     return () => window.removeEventListener(INSIGHT_ACTION_EVENT, listener);
-  });
+    // openSettings and navigate only forward to state setters here; nothing this
+    // listener reads goes stale, so it mounts once like the file's other listeners.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   useEffect(() => {
     if (!insightAction || !("botId" in insightAction) || active?.id !== insightAction.botId) return;
     setInsightAction(null);

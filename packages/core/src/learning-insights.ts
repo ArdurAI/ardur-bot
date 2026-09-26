@@ -6,6 +6,7 @@ import type {
   InsightTaskKind,
 } from "@ardurbot/contracts";
 import { isReadPolicyTool } from "./action-approval.js";
+import { redactLearningText } from "./learning-signals.js";
 
 const DAY_MS = 86_400_000;
 
@@ -210,6 +211,16 @@ export function normalizeInsightPrompt(text: string): string {
     .replace(/\d+(?:[./:-]\d+)*(?:st|nd|rd|th)?/g, "#")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+/**
+ * What a routine and a repeated task prompt are compared as: redacted first, so a secret in the
+ * text can never keep the two sides from matching, then normalized. Both sides of the dedup use
+ * this one path, whether the text already went through redaction (task prompts) or not yet
+ * (a saved Routine.prompt) — redaction is idempotent, so applying it twice changes nothing.
+ */
+export function normalizeInsightRequest(text: string): string {
+  return normalizeInsightPrompt(redactLearningText(text));
 }
 
 /** Short, stable, not secret: two FNV-1a passes over the key. */
@@ -717,7 +728,7 @@ function routines(facts: InsightFacts): ComputedInsight[] {
   const since = sinceDays(facts.now, ROUTINE_WINDOW_DAYS);
   const existing = new Set(
     facts.routines.map((routine) =>
-      JSON.stringify([routine.botId, normalizeInsightPrompt(routine.prompt)]),
+      JSON.stringify([routine.botId, normalizeInsightRequest(routine.prompt)]),
     ),
   );
   const groups = new Map<
@@ -726,7 +737,7 @@ function routines(facts: InsightFacts): ComputedInsight[] {
   >();
   for (const prompt of facts.prompts) {
     if (prompt.at.getTime() < since) continue;
-    const normalized = normalizeInsightPrompt(prompt.text);
+    const normalized = normalizeInsightRequest(prompt.text);
     if (normalized.replace(/[#\s]/g, "").length < ROUTINE_MIN_PROMPT_CHARS) continue;
     const key = JSON.stringify([prompt.botId, normalized]);
     if (existing.has(key)) continue;
