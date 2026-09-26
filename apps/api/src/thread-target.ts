@@ -1174,68 +1174,72 @@ export async function stopThreadRuns(
   actor: Actor,
   target: ThreadTarget,
 ) {
-  const { runIds, computers, leases } = await deps.prisma.$transaction(async (tx) => {
-    await tx.$queryRaw`SELECT id FROM threads WHERE id = ${target.threadId} FOR UPDATE`;
-    const cancelled = await tx.run.updateManyAndReturn({
-      where: {
-        threadId: target.threadId,
-        status: { in: [...ACTIVE_RUN_STATUSES] },
-      },
-      data: { status: "cancelled", completedAt: new Date() },
-      select: { id: true, botId: true },
-    });
-    for (const run of cancelled) {
-      await appendEventInTransaction(
-        tx,
-        {
-          spaceId: actor.spaceId,
+  // A run writing its last events can hold its run row while waiting for this thread row, so
+  // Postgres may abort this side as a deadlock. Nothing commits then, so a retry is safe.
+  const { runIds, computers, leases } = await withSerializableRetry(() =>
+    deps.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM threads WHERE id = ${target.threadId} FOR UPDATE`;
+      const cancelled = await tx.run.updateManyAndReturn({
+        where: {
           threadId: target.threadId,
-          botId: run.botId,
-          type: "run.cancelled",
-          payload: { runId: run.id, source: "human", reason: "stop", actorId: actor.userId },
+          status: { in: [...ACTIVE_RUN_STATUSES] },
         },
-        { cancelledRunId: run.id },
-      );
-    }
-    const ids = cancelled.map((run) => run.id);
-    await tx.steeringMessage.deleteMany({
-      where: {
-        botId: { in: target.kind === "bot" ? [target.botId] : target.memberBotIds },
-        message: { threadId: target.threadId },
-      },
-    });
-    // Snapshot teardown coordinates before commit. Once cancellation becomes
-    // visible, a worker can release its lease / execution columns immediately; a
-    // later lookup would then miss the sandbox work this request must stop.
-    // Team ownership lives on ComputerExecutionLease; Computer.executionRunId is
-    // only a legacy secondary path and is not written by current acquisition.
-    const leases = ids.length
-      ? await tx.computerExecutionLease.findMany({
-          where: { runId: { in: ids } },
-          select: { computerId: true, botId: true, runId: true, fence: true },
-        })
-      : [];
-    const leaseComputerIds = [...new Set(leases.map((lease) => lease.computerId))];
-    const computers = ids.length
-      ? await tx.computer.findMany({
-          where:
-            leaseComputerIds.length > 0
-              ? {
-                  OR: [{ id: { in: leaseComputerIds } }, { executionRunId: { in: ids } }],
-                }
-              : { executionRunId: { in: ids } },
-          select: {
-            id: true,
-            homeKey: true,
-            kind: true,
-            providerRef: true,
-            executionBotId: true,
-            executionRunId: true,
+        data: { status: "cancelled", completedAt: new Date() },
+        select: { id: true, botId: true },
+      });
+      for (const run of cancelled) {
+        await appendEventInTransaction(
+          tx,
+          {
+            spaceId: actor.spaceId,
+            threadId: target.threadId,
+            botId: run.botId,
+            type: "run.cancelled",
+            payload: { runId: run.id, source: "human", reason: "stop", actorId: actor.userId },
           },
-        })
-      : [];
-    return { runIds: ids, computers, leases };
-  });
+          { cancelledRunId: run.id },
+        );
+      }
+      const ids = cancelled.map((run) => run.id);
+      await tx.steeringMessage.deleteMany({
+        where: {
+          botId: { in: target.kind === "bot" ? [target.botId] : target.memberBotIds },
+          message: { threadId: target.threadId },
+        },
+      });
+      // Snapshot teardown coordinates before commit. Once cancellation becomes
+      // visible, a worker can release its lease / execution columns immediately; a
+      // later lookup would then miss the sandbox work this request must stop.
+      // Team ownership lives on ComputerExecutionLease; Computer.executionRunId is
+      // only a legacy secondary path and is not written by current acquisition.
+      const leases = ids.length
+        ? await tx.computerExecutionLease.findMany({
+            where: { runId: { in: ids } },
+            select: { computerId: true, botId: true, runId: true, fence: true },
+          })
+        : [];
+      const leaseComputerIds = [...new Set(leases.map((lease) => lease.computerId))];
+      const computers = ids.length
+        ? await tx.computer.findMany({
+            where:
+              leaseComputerIds.length > 0
+                ? {
+                    OR: [{ id: { in: leaseComputerIds } }, { executionRunId: { in: ids } }],
+                  }
+                : { executionRunId: { in: ids } },
+            select: {
+              id: true,
+              homeKey: true,
+              kind: true,
+              providerRef: true,
+              executionBotId: true,
+              executionRunId: true,
+            },
+          })
+        : [];
+      return { runIds: ids, computers, leases };
+    }),
+  );
   // Keep the DB lease until after teardown so a replacement run cannot claim the
   // screen while we still need the cancelled run's screenLeaseId to release it.
   const computerById = new Map(computers.map((computer) => [computer.id, computer]));

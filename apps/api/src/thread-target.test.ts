@@ -2280,6 +2280,54 @@ describe("stopThreadRuns", () => {
     );
   });
 
+  it("retries a stop that Postgres aborted as a deadlock with a finishing run", async () => {
+    const cancelledRun = vi
+      .fn()
+      .mockRejectedValueOnce(
+        Object.assign(new Error("Transaction failed due to a write conflict or a deadlock"), {
+          code: "P2034",
+        }),
+      )
+      .mockResolvedValue([{ id: "run-a", botId: "bot-a" }]);
+    const transaction = {
+      $queryRaw: vi.fn(),
+      run: { updateManyAndReturn: cancelledRun },
+      event: {
+        create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({
+          id: "cancel-event",
+          ...data,
+        })),
+      },
+      thread: { update: vi.fn().mockResolvedValue({ nextEventSeq: 1 }) },
+      steeringMessage: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
+      computerExecutionLease: { findMany: vi.fn().mockResolvedValue([]) },
+      computer: { findMany: vi.fn().mockResolvedValue([]) },
+    };
+    const prisma = {
+      $transaction: vi.fn(async (callback: (client: typeof transaction) => unknown) =>
+        callback(transaction),
+      ),
+      computer: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+      computerExecutionLease: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+      event: { deleteMany: vi.fn().mockResolvedValue({ count: 0 }) },
+    } as unknown as PrismaClient;
+
+    await expect(
+      stopThreadRuns(
+        { prisma, sandbox: {} as SandboxProvider },
+        { spaceId: "workspace-1", userId: "user-1" } as Actor,
+        {
+          kind: "bot",
+          botId: "bot-a",
+          threadId: "thread-1",
+          bot: { computer: null },
+        } as ThreadTarget,
+      ),
+    ).resolves.toEqual(["run-a"]);
+    expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+    expect(transaction.event.create).toHaveBeenCalledOnce();
+  });
+
   it("does not tear down a stale legacy execution run when the lease owns a cancelled run", async () => {
     const releaseScreen = vi.fn().mockResolvedValue(undefined);
     const execute = vi.fn(async function* () {

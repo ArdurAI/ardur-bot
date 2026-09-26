@@ -12,6 +12,9 @@ process.env.AGENT_RUNTIME = "scripted";
 
 const hasDb = process.env.VERIFY_DATABASE === "1" && Boolean(process.env.DATABASE_URL);
 const describeIntegration = hasDb ? describe : describe.skip;
+// Loading the API module graph is collection work: on a loaded machine it alone can outlast the
+// 60 s hook budget, so it happens here, where no hook timeout applies.
+const api = hasDb ? await import("../../../apps/api/src/app.ts") : undefined;
 
 describeIntegration("run executor lifecycle", () => {
   let handles: Awaited<ReturnType<typeof createApp>>;
@@ -19,8 +22,7 @@ describeIntegration("run executor lifecycle", () => {
   const stamp = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
   beforeAll(async () => {
-    const { createApp } = await import("../../../apps/api/src/app.ts");
-    handles = await createApp({
+    handles = await api!.createApp({
       databaseUrl: process.env.DATABASE_URL!,
       dataDir,
       sandboxProvider: "fake",
