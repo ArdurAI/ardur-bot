@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld("ardurbotSetup", {
   stack: {
     state: () => ipcRenderer.invoke("desktop.setup.stack.state"),
     start: () => ipcRenderer.invoke("desktop.setup.stack.start"),
+    reset: () => ipcRenderer.invoke("desktop.setup.stack.reset"),
     onChange: (listener) => {
       ipcRenderer.on("desktop.setup.stack.changed", (_event, state) => listener(state));
     },

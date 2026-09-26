@@ -45,4 +45,81 @@ describe("packaged main-process imports", () => {
   it("keeps the device path helpers on a JavaScript subpath", () => {
     expect(contractsPackage.exports["./device-paths"]).toBe("./src/device-paths.js");
   });
+
+  it("resolves every runtime workspace import to JavaScript", () => {
+    expect(runtimeTypeScriptImports(path.join(__dirname))).toEqual([]);
+  });
 });
+
+const NODE_CONDITIONS = ["node", "import", "default"];
+
+function runtimeTypeScriptImports(desktopSrc: string): string[] {
+  const offenders: string[] = [];
+  const seen = new Set<string>();
+  const pending = mainProcessSources().map((file) => path.join(desktopSrc, file));
+  while (pending.length > 0) {
+    const file = pending.pop();
+    if (!file || seen.has(file)) continue;
+    seen.add(file);
+    const source = readFileSync(file, "utf8");
+    for (const specifier of valueImportSpecifiers(source)) {
+      if (specifier.startsWith("node:") || specifier.startsWith(".")) continue;
+      if (!specifier.startsWith("@ardurbot/")) continue;
+      const resolved = resolveWorkspaceSpecifier(specifier);
+      if (!resolved) continue;
+      if (resolved.endsWith(".ts")) {
+        offenders.push(`${path.basename(file)}: ${specifier} -> ${resolved}`);
+        continue;
+      }
+      if (resolved.endsWith(".js") && resolved.includes(`${path.sep}packages${path.sep}`)) {
+        pending.push(resolved);
+      }
+    }
+  }
+  return offenders;
+}
+
+function valueImportSpecifiers(source: string): string[] {
+  const specifiers: string[] = [];
+  for (const match of source.matchAll(
+    /(?:^|\n)\s*import\s+(?!type\b)[\s\S]*?\sfrom\s+["']([^"']+)["']/g,
+  )) {
+    specifiers.push(match[1]!);
+  }
+  for (const match of source.matchAll(
+    /(?:^|\n)\s*export\s+(?!type\b)[\s\S]*?\sfrom\s+["']([^"']+)["']/g,
+  )) {
+    specifiers.push(match[1]!);
+  }
+  return specifiers;
+}
+
+function resolveWorkspaceSpecifier(specifier: string): string | null {
+  const slash = specifier.indexOf("/", specifier.startsWith("@") ? specifier.indexOf("/") + 1 : 0);
+  const name = slash === -1 ? specifier : specifier.slice(0, slash);
+  const subpath = slash === -1 ? "." : `.${specifier.slice(slash)}`;
+  const target = resolveWorkspaceExport(name, subpath);
+  if (!target) return null;
+  const pkgDir = path.join(__dirname, "../../../packages", name.slice("@ardurbot/".length));
+  return path.normalize(path.join(pkgDir, target));
+}
+
+function resolveWorkspaceExport(name: string, subpath: string): string {
+  const pkgDir = path.join(__dirname, "../../../packages", name.slice("@ardurbot/".length));
+  const manifest = JSON.parse(readFileSync(path.join(pkgDir, "package.json"), "utf8")) as {
+    exports?: Record<string, unknown> | string;
+  };
+  const exportsField = manifest.exports;
+  if (!exportsField || typeof exportsField === "string") return exportsField ?? "";
+  return resolveExportTarget(exportsField[subpath]) ?? "";
+}
+
+function resolveExportTarget(target: unknown): string | null {
+  if (typeof target === "string") return target;
+  if (!target || typeof target !== "object") return null;
+  const record = target as Record<string, unknown>;
+  for (const condition of NODE_CONDITIONS) {
+    if (condition in record) return resolveExportTarget(record[condition]);
+  }
+  return null;
+}

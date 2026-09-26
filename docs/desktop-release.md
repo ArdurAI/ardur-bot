@@ -58,6 +58,16 @@ can overwrite the other's ZIP entry. Each feed's version and referenced assets a
 installers, blockmaps, channel feeds, and the generated cask are attached to a GitHub **pre-release**.
 It is never marked latest. The application feed remains `ArdurAI/ardur-bot`.
 
+The desktop build bundles the SQL migrator into `dist/db-migrate.js` with only `pg` left
+external, so `app.asar` carries neither the database package nor Prisma; the API and worker
+bundles under `services` carry their own Prisma runtime.
+
+Every electron-builder run (the release job, `pack`, and `pack:dir`) stages the Postgres binaries
+for the platform and architecture it packs through the `beforePack` hook in
+`apps/desktop/scripts/stage-embedded-postgres.mjs`. It clears any earlier `build/postgres-modules`
+first, keeps the package's library links relative, and fails the build when that platform's
+package is not installed. `pack` builds for the computer it runs on.
+
 The root version is the sole editable input. `scripts/desktop-version.mjs` copies it into the
 desktop package before every desktop build; that package field is derived packaging metadata.
 The executable's `--version` flag prints `app.getVersion()` and exits before taking the instance
@@ -123,8 +133,13 @@ builds come later and require an explicit change to this policy.
 4. Wait for the pre-release assets. Download the DMG matching the Mac architecture, drag
    **Ardur Bot.app** to **Applications**, eject the DMG, and follow the unsigned-opening steps
    in the [README](../README.md#install-a-desktop-preview). Open it, confirm the version in update
-   settings, and complete setup. “This computer” still requires Docker Desktop and published
-   backend images for the selected release; packaging a client does not prove those images exist.
+   settings, and complete setup. **This computer** starts the app's own database and services.
+   On this computer, commands start in the bot's own folder or a folder you add, and file tools
+   stay inside those folders; the approvals you require are what keep a command away from other
+   files. Known secrets are hidden from command output. Disk and CPU use are not capped; a command
+   stops after five minutes. Connecting to an existing server is
+   unchanged. On Windows, stopping that database uses the embedded Postgres library's forced
+   process-tree kill, and the next start uses Postgres crash recovery.
 5. Verify a real installed build before deciding whether `main` should move. Do not retag a
    published version; create a new version for fixes.
 
@@ -133,6 +148,11 @@ For an unsigned host directory build:
 ```sh
 CSC_IDENTITY_AUTO_DISCOVERY=false pnpm --filter @ardurbot/desktop pack:dir
 ```
+
+`ARDURBOT_USER_DATA_DIR` overrides Electron's user-data directory for a packaged or
+unpackaged launch. Point it at an empty temporary directory when checking a packaged
+build so the app does not write into the default profile. `ARDURBOT_PERFORMANCE_USER_DATA`
+is still used when `ARDURBOT_USER_DATA_DIR` is unset.
 
 `--dir` validates and packages an unpacked app; it does not exercise DMG mounting, quarantine,
 NSIS installation, or deb dependencies. The desktop Playwright suite belongs in CI, where it

@@ -7,7 +7,10 @@ import { QuickAccessStore, quickIdentity } from "./quick-access.js";
 import { createQuickAccessWindow, openLinkViewer } from "./windows.js";
 
 export async function installSystemRuntime(
-  options: Pick<SystemDependencies, "mode" | "dataFolder" | "routines" | "menuBar"> & {
+  options: Pick<
+    SystemDependencies,
+    "mode" | "dataFolder" | "routines" | "menuBar" | "localData"
+  > & {
     window(): BrowserWindow | null;
     target(): string | null;
     openMain(): Promise<BrowserWindow | null>;

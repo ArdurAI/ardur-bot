@@ -4309,6 +4309,10 @@ msgstr "Lokal"
 msgid "Local access lets bots run commands without asking. Avoid it on shared or public servers."
 msgstr "Mit lokalem Zugriff können Bots ohne Rückfrage Befehle ausführen. Vermeide dies auf gemeinsam genutzten oder öffentlichen Servern."
 
+#: src/pages/system/SystemPage.tsx
+msgid "Local data"
+msgstr ""
+
 #: src/pages/customize/IntegrationTable.tsx
 msgid "Local dev"
 msgstr ""
@@ -6141,6 +6145,10 @@ msgstr ""
 msgid "Reset computer?"
 msgstr ""
 
+#: src/pages/system/SystemPage.tsx
+msgid "Reset local data"
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Reset password"
 msgstr "Passwort zurücksetzen"
@@ -7379,6 +7387,10 @@ msgstr "Diese Datei ist kein gültiges UTF-8-Markdown."
 
 #: src/pages/system/SystemPage.tsx
 msgid "This folder is managed by the server."
+msgstr ""
+
+#: src/pages/HostComputerSettings.tsx
+msgid "This folder is not available."
 msgstr ""
 
 #: src/pages/HostComputerPrompt.tsx

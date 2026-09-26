@@ -80,6 +80,10 @@ jobs:
           DATABASE_URL: postgres://ardurbot:ardurbot@127.0.0.1:5433/ardurbot
           BETTER_AUTH_SECRET: ci-build-auth-secret-at-least-32-characters
           ENCRYPTION_KEY: ci-build-encryption-key-at-least-32-characters
+      - name: Bundled API and worker on an embedded database
+        run: node apps/desktop/scripts/service-bundle-smoke.mjs
+        env:
+          ARDURBOT_SMOKE_EMBEDDED: "1"
       - name: Electron smoke
         run: xvfb-run --auto-servernum pnpm --filter @ardurbot/desktop exec playwright test --config e2e/playwright.config.ts
       - name: Upload desktop setup screenshots
