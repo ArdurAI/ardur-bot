@@ -1066,4 +1066,23 @@ export const RU_MESSAGES: Record<string, string> = {
     "Импортировано: {created}, обновлено: {updated}, без изменений: {unchanged}, удалено: {removed}, пропущено: {skipped}, конфликтов: {conflicts}.",
   "Some items exceeded the scan limits ({count} items were not scanned).":
     "Некоторые элементы превысили ограничения сканирования (не просканировано элементов: {count}).",
+  Labels: "Метки",
+  "{name} filed {filed}: {done} done, {open} open, {other} closed without being completed.":
+    "{name} создал задач: {filed}; выполнено: {done}, открыто: {open}, закрыто без выполнения: {other}.",
+  "This board item is still open.": "Эта задача на доске всё ещё открыта.",
+  "This board item was already closed on the Board.": "Эта задача на доске уже закрыта.",
+  "This board item was completed.": "Эта задача на доске выполнена.",
+  "This board item was closed without being completed. Review it on the Board.":
+    "Эта задача на доске закрыта без выполнения. Проверьте её на доске.",
+  "This board item was closed without being completed: {reason}. Review it on the Board.":
+    "Эта задача на доске закрыта без выполнения: {reason}. Проверьте её на доске.",
+  "This board item changed after it was filed. Review it on the Board.":
+    "Эта задача на доске изменилась после создания. Проверьте её на доске.",
+  "This board item changed after it was filed, so it was left open for review on the Board.":
+    "Эта задача на доске изменилась после создания, поэтому она оставлена открытой для проверки на доске.",
+  "Closing on the Board.": "Закрывается на доске.",
+  "A board item filed by a bot could not be closed.":
+    "Не удалось закрыть задачу на доске, созданную ботом.",
+  "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected.":
+    "Ardur Bot попытался пять раз. Закройте её на доске или проверьте, что этот компьютер подключён.",
 };

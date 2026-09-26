@@ -1,6 +1,8 @@
+import { Pool } from "pg";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createDb,
+  createFilingLockPool,
   createPool,
   isTooManyDatabaseConnections,
   parsePositiveInteger,
@@ -35,6 +37,61 @@ describe("createDb", () => {
     const { pool } = createDb("postgres://ardurbot:ardurbot@127.0.0.1:9/ardurbot");
     pools.push(pool);
     expect(pool.options.max).toBe(4);
+  });
+});
+
+describe("createFilingLockPool", () => {
+  it("uses six connections and the same checkout settings as the shared pool", () => {
+    const pool = createFilingLockPool("postgres://ardurbot:ardurbot@127.0.0.1:9/ardurbot", {
+      applicationName: "ardurbot-filing-lock",
+    });
+    pools.push(pool);
+    expect(pool.options.max).toBe(6);
+    expect(pool.options.connectionTimeoutMillis).toBe(10_000);
+    expect(pool.options.idleTimeoutMillis).toBe(0);
+    expect(pool.options.application_name).toBe("ardurbot-filing-lock");
+  });
+});
+
+describe("createFilingLockPool connect", () => {
+  it("fails a checkout on 53300 at once so the filing wait decides, while the shared pool backs off", async () => {
+    vi.useFakeTimers();
+    const full = Object.assign(new Error("sorry, too many clients already"), { code: "53300" });
+    const connect = vi.spyOn(Pool.prototype, "connect").mockImplementation((async () => {
+      throw full;
+    }) as never);
+    try {
+      const url = "postgres://ardurbot:ardurbot@127.0.0.1:9/ardurbot";
+      const lock = createFilingLockPool(url);
+      const shared = createPool(url);
+      pools.push(lock, shared);
+      const outcome = (pool: { connect: () => Promise<unknown> }) => {
+        const state = { settled: false, error: undefined as unknown };
+        pool.connect().then(
+          () => {
+            state.settled = true;
+          },
+          (error: unknown) => {
+            state.settled = true;
+            state.error = error;
+          },
+        );
+        return state;
+      };
+      const locked = outcome(lock);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(locked).toEqual({ settled: true, error: full });
+      expect(connect).toHaveBeenCalledTimes(1);
+      const waited = outcome(shared);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(waited.settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(waited).toEqual({ settled: true, error: full });
+      expect(connect).toHaveBeenCalledTimes(9);
+    } finally {
+      connect.mockRestore();
+      vi.useRealTimers();
+    }
   });
 });
 

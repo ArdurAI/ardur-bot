@@ -82,10 +82,9 @@ Only approve a download you trust from the official release page.
   guarantee. Run `ardur-bot --version` after installing it.
 
 **This computer** starts the app's own database and services. Docker is not required for that
-first launch. You can still connect the client to an existing server. On this computer, commands
-start in the bot's own folder or a folder you add, and file tools stay inside those folders; the
-approvals you require are what keep a command away from other files. Known secrets are hidden from
-command output. Disk and CPU use are not capped; a command stops after five minutes. Docker remains available later as an added computer, and Compose remains the way
+first launch. You can still connect the client to an existing server. See
+[what commands can do on this computer](docs/self-host.md#what-commands-can-do-on-this-computer).
+Docker remains available later as an added computer, and Compose remains the way
 to run a server. Unsigned previews use manual downloads for updates on every OS.
 
 After the owner publishes the [Homebrew tap](docs/desktop-release.md#homebrew-tap-handoff):

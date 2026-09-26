@@ -180,6 +180,30 @@ it("offers Reset local data only for a failure that needs it, then starts fresh"
   await vi.waitFor(() => expect(reset().hidden).toBe(true));
 });
 
+it("keeps the failure and its Reset button visible through a reset that stops first, then fails", async () => {
+  const failed: Stack = {
+    ...modes["local mode"].stack("failed"),
+    message: "The app's database settings are missing.",
+    offerReset: true,
+  };
+  const setup = openSetup({ stack: failed });
+  const reset = () => document.getElementById("reset") as HTMLButtonElement;
+  await vi.waitFor(() => expect(reset().hidden).toBe(false));
+
+  // main's resetData() stops everything first, which publishes idle, before the move
+  // itself fails and the sentence comes back.
+  const inUse = "A local data file is in use; close whatever is using it and try again.";
+  setup.bridge.stack.reset.mockImplementationOnce(async () => {
+    setup.push(modes["local mode"].stack("idle"));
+    return inUse;
+  });
+  reset().click();
+  await vi.waitFor(() => expect(setup.text("#status")).toBe(inUse));
+  expect(reset().hidden).toBe(false);
+  expect(reset().textContent?.trim()).toBe("Reset local data");
+  expect(setup.bridge.stack.start).not.toHaveBeenCalled();
+});
+
 it("keeps This computer free of standing explanation; a start says what it is doing", async () => {
   const setup = openSetup({ stack: modes["local mode"].stack("idle") });
   await vi.waitFor(() => expect(setup.bridge.stack.state).toHaveBeenCalled());

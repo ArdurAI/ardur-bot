@@ -1,8 +1,15 @@
-import { BoardService, requestBoardCommand } from "@ardurbot/adapters";
+import type { BoardScope } from "@ardurbot/adapters";
+import {
+  BoardService,
+  createPendingCloseRetry,
+  requestBoardCommand,
+  usesHostBridge,
+} from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
 import type {
   BoardFilter,
   BoardProblem,
+  BoardRun,
   BoardSnapshot,
   BoardView,
   BoardWork,
@@ -10,7 +17,9 @@ import type {
 } from "@ardurbot/contracts/board";
 import { BoardError, BoardPatchSchema, boardColumn } from "@ardurbot/contracts/board";
 import { ACTIVE_RUN_STATUSES } from "@ardurbot/core";
+import type { Pool, PrismaClient } from "@ardurbot/db";
 import { ORPCError } from "@orpc/server";
+import type { HostBridge } from "./host-bridge.js";
 import type { RouterDeps } from "./router.js";
 import { assertTeachingSendAllowed } from "./taught-skills.js";
 import { resolveThreadTarget, sendThreadMessage } from "./thread-target.js";
@@ -27,20 +36,49 @@ export async function boardCall<T>(work: () => Promise<T>): Promise<T> {
     throw error;
   }
 }
+/** The owner's connection to the host, for board work outside a bot's run. */
+export function boardOwnerRun(hostBridge: HostBridge | undefined) {
+  return (request: BoardRun, scope: BoardScope) => {
+    if (!hostBridge)
+      throw new BoardError({
+        code: "command_failed",
+        message: "Open the desktop app to use this board.",
+      });
+    return hostBridge.runBoard(request, scope);
+  };
+}
+/**
+ * With the host bridge on, only the API reaches the host outside a run, so it retries failed
+ * board closes on its own schedule, whatever the wakeup driver. Without the bridge, the worker's
+ * notification tick (or the API's in-memory reconciler) sweeps them instead.
+ */
+export function boardCloseRetry(
+  deps: {
+    prisma: PrismaClient;
+    dataDir: string;
+    lockPool?: Pick<Pool, "connect">;
+    hostBridge?: HostBridge;
+  },
+  env: NodeJS.ProcessEnv = process.env,
+) {
+  if (!usesHostBridge(env)) return undefined;
+  return createPendingCloseRetry(
+    new BoardService({
+      prisma: deps.prisma,
+      dataDir: deps.dataDir,
+      lockPool: deps.lockPool,
+      ownerRun: boardOwnerRun(deps.hostBridge),
+    }),
+  );
+}
 export function createBoard(deps: RouterDeps) {
   const pendingSends = new Set<string>();
   const service = new BoardService({
     prisma: deps.prisma,
     dataDir: deps.dataDir,
+    lockPool: deps.lockPool,
     localRun: (request, scope) => requestBoardCommand(deps, request, scope),
-    ownerRun: (request, scope) => {
-      if (!deps.hostBridge)
-        throw new BoardError({
-          code: "command_failed",
-          message: "Open the desktop app to use this board.",
-        });
-      return deps.hostBridge.runBoard(request, scope);
-    },
+    ownerRun: boardOwnerRun(deps.hostBridge),
   });
   const board = {
     service,

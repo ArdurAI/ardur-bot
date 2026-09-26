@@ -69,6 +69,12 @@
    * setup from the menu shows the choice and saves nothing until a click.
    */
   let saveWhenReady = false;
+  /**
+   * A reset stops everything first, which briefly reports idle before the move itself
+   * settles. That idle is not a real return to idle, so the failure it is meant to clear,
+   * and its Reset button, stay on screen until the reset call itself settles.
+   */
+  let resetting = false;
 
   function selectedMode() {
     const checked = form.querySelector('input[name="mode"]:checked');
@@ -239,6 +245,10 @@
         // Checked after the await: a mode change during it hands the form to the change
         // handler, and a save it started must stay busy and must not be re-rendered over.
         if (selectedMode() !== "new") return;
+        if (resetting && stack.phase === "idle") {
+          await waitForStackChange();
+          continue;
+        }
         renderStack(stack);
         if (TERMINAL_PHASES.has(stack.phase)) {
           if (stack.phase === "ready" && saveWhenReady && selectedMode() === "new") {
@@ -323,9 +333,15 @@
    * A reset that failed answers with the sentence to show.
    */
   async function resetLocalData() {
+    resetting = true;
     setBusy(true);
     setStatus("");
-    const reset = await bridge.stack.reset().catch(() => "Could not reset local data. Try again.");
+    const reset = await bridge.stack
+      .reset()
+      .catch(() => "Could not reset local data. Try again.")
+      .finally(() => {
+        resetting = false;
+      });
     if (reset !== true) {
       if (typeof reset === "string") setStatus(reset, "error");
       setBusy(false);

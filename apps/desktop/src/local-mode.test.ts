@@ -9,7 +9,12 @@ import { MigrationApplyError, MigrationHistoryError } from "@ardurbot/db/migrate
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { localFoldersFile } from "./local-folders.js";
 import { appendCappedLog, LOG_CAP_BYTES } from "./local-logs.js";
-import { LocalModeController, localResetFailure, localServiceLaunch } from "./local-mode.js";
+import {
+  LocalModeController,
+  localResetFailure,
+  localServiceLaunch,
+  resetMoveFailure,
+} from "./local-mode.js";
 import type { EmbeddedPostgresLike, EmbeddedPostgresOptions } from "./local-postgres.js";
 import { MissingDatabaseBinariesError, postgresServesFolder } from "./local-postgres.js";
 
@@ -507,7 +512,7 @@ describe("database watch", () => {
     await controller.stop();
   });
 
-  it("says the database stopped once a server an earlier run left fails two checks in a row", async () => {
+  it("says the database stopped once a server an earlier run left fails a third, longer check too", async () => {
     const root = await userData();
     const databaseDir = path.join(root, "postgres");
     await mkdir(databaseDir, { recursive: true });
@@ -515,14 +520,18 @@ describe("database watch", () => {
     // The first answer adopts the server; the rest are the checks after ready.
     const answers = [true];
     let checks = 0;
+    const timeouts: (number | undefined)[] = [];
     const failedAt: number[] = [];
+    const stopAdoptedPostgres = vi.fn(async () => undefined);
     const controller = new LocalModeController(
       harness(root, {
         allocatePort: async () => 23456,
         portAvailable: async () => true,
         adoptedCheckMs: 10,
-        postgresServes: async () => {
+        stopAdoptedPostgres,
+        postgresServes: async (input) => {
           checks += 1;
+          timeouts.push(input.timeoutMs);
           return answers.shift() ?? false;
         },
         postgresFactory: () => {
@@ -536,14 +545,100 @@ describe("database watch", () => {
     );
     expect(await controller.start()).toMatchObject({ phase: "ready" });
     expect(checks).toBe(1);
-    // One missed answer is not enough; two in a row are.
-    answers.push(false, true, false, false);
+    // Two missed answers in a row still are not enough: a third, with a longer timeout,
+    // decides for certain. Here it is also down, so the stack is reported.
+    answers.push(false, true, false, false, false);
     await vi.waitFor(() => expect(controller.state().phase).toBe("failed"));
     expect(controller.state()).toMatchObject({ message: "The database stopped." });
-    expect(failedAt).toEqual([5]);
+    expect(failedAt).toEqual([6]);
+    // Only the third, deciding check in the failing run of two used the longer timeout.
+    expect(timeouts).toEqual([undefined, undefined, undefined, undefined, undefined, 15_000]);
     await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(failedAt).toEqual([5]);
+    expect(failedAt).toEqual([6]);
+    // Never pg_ctl stop a server this run did not start.
+    expect(stopAdoptedPostgres).not.toHaveBeenCalled();
     await controller.stop();
+  });
+
+  it("keeps an adopted server running when it answers again on the third, longer check", async () => {
+    const root = await userData();
+    const databaseDir = path.join(root, "postgres");
+    await mkdir(databaseDir, { recursive: true });
+    await writeFile(path.join(databaseDir, "postmaster.pid"), `4321\n${databaseDir}\n0\n23999\n`);
+    // Unlike the report case above, a server that answers once the queue is empty is
+    // healthy indefinitely, so the watch never has cause to report it down.
+    const answers = [true];
+    let checks = 0;
+    const timeouts: (number | undefined)[] = [];
+    const failed: string[] = [];
+    const stopAdoptedPostgres = vi.fn(async () => undefined);
+    const controller = new LocalModeController(
+      harness(root, {
+        allocatePort: async () => 23456,
+        portAvailable: async () => true,
+        adoptedCheckMs: 10,
+        stopAdoptedPostgres,
+        postgresServes: async (input) => {
+          checks += 1;
+          timeouts.push(input.timeoutMs);
+          return answers.length > 0 ? answers.shift()! : true;
+        },
+        postgresFactory: () => {
+          throw new Error("a second server must not start");
+        },
+        onFailed: (message) => failed.push(message),
+      }),
+    );
+    expect(await controller.start()).toMatchObject({ phase: "ready" });
+    // A heavy workload made the server miss two checks; the third, longer one catches it.
+    answers.push(false, false, true);
+    await vi.waitFor(() => expect(checks).toBeGreaterThanOrEqual(4));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(controller.state().phase).toBe("ready");
+    expect(failed).toEqual([]);
+    expect(stopAdoptedPostgres).not.toHaveBeenCalled();
+    // The recovering, deciding check used the longer timeout; the two misses did not.
+    expect(timeouts.slice(0, 4)).toEqual([undefined, undefined, undefined, 15_000]);
+    await controller.stop();
+  });
+
+  it("stops a server the watch wrongly reported down exactly once, through resetData and then stop", async () => {
+    const root = await userData();
+    const databaseDir = path.join(root, "postgres");
+    await mkdir(databaseDir, { recursive: true });
+    await writeFile(path.join(databaseDir, "postmaster.pid"), `4321\n${databaseDir}\n0\n23999\n`);
+    await mkdir(path.join(root, "data"), { recursive: true });
+    // The three watch checks all say down; the server is actually still alive, as the
+    // re-check inside the adopted wrapper's own stop() proves once something asks again.
+    const answers = [true, false, false, false];
+    const stopAdoptedPostgres = vi.fn(async () => undefined);
+    const controller = new LocalModeController(
+      harness(root, {
+        allocatePort: async () => 23456,
+        portAvailable: async () => true,
+        adoptedCheckMs: 10,
+        stopAdoptedPostgres,
+        postgresServes: async () => (answers.length > 0 ? answers.shift()! : true),
+        postgresFactory: () => {
+          throw new Error("a second server must not start");
+        },
+      }),
+    );
+    expect(await controller.start()).toMatchObject({ phase: "ready" });
+    await vi.waitFor(() => expect(controller.state().phase).toBe("failed"));
+    expect(controller.state()).toMatchObject({ message: "The database stopped." });
+    // The false report never stops a server nothing has proved is actually down.
+    expect(stopAdoptedPostgres).not.toHaveBeenCalled();
+
+    const backup = await controller.resetData();
+    // resetData's own stop() asked again, found it alive, and stopped it before moving
+    // anything: the data lands in the backup, not next to a server still running.
+    expect(stopAdoptedPostgres).toHaveBeenCalledOnce();
+    expect((await readdir(backup)).sort()).toEqual(["data", "postgres", "secrets.env"]);
+
+    await controller.stop();
+    // The handle resetData already released has nothing left for a later stop to stop again.
+    expect(stopAdoptedPostgres).toHaveBeenCalledOnce();
   });
 });
 
@@ -621,8 +716,9 @@ describe("reset", () => {
       );
       expect(await readFile(path.join(root, "postgres", "PG_VERSION"), "utf8")).toBe("16\n");
       expect(await readdir(path.join(root, "backups"))).toEqual([]);
+      // A folder the app cannot write to (EACCES) is a permissions problem, not a locked file.
       expect(localResetFailure(failure)).toBe(
-        "A local data file is in use; close whatever is using it and try again.",
+        "Ardur Bot cannot move its local data. Check the permissions of its data folder, then try Reset local data again.",
       );
 
       const backup = await controller.resetData();
@@ -718,6 +814,93 @@ describe("reset", () => {
         ]),
     );
     for (const service of services) expect(service.kill).not.toHaveBeenCalled();
+  });
+
+  it.skipIf(unmovable !== null)(
+    `keeps offering the failure a reset was meant to clear after the reset itself fails${unmovable ? ` (${unmovable})` : ""}`,
+    async () => {
+      const root = await userData();
+      await mkdir(path.join(root, "postgres"), { recursive: true });
+      await writeFile(path.join(root, "postgres", "PG_VERSION"), "16\n");
+      await mkdir(path.join(root, "data"), { recursive: true });
+      const states: { phase: string; offerReset?: boolean }[] = [];
+      const controller = new LocalModeController(
+        harness(root, {
+          allocatePort: async () => 23456,
+          portAvailable: async () => true,
+          postgresFactory: () => runningPostgres(),
+          onState: (state) => states.push(state),
+        }),
+      );
+      // No secrets.env over an existing database: only a reset clears it.
+      expect(await controller.start()).toMatchObject({ phase: "failed", offerReset: true });
+      states.length = 0;
+
+      await chmod(path.join(root, "data"), 0o500);
+      try {
+        await expect(controller.resetData()).rejects.toThrow();
+      } finally {
+        await chmod(path.join(root, "data"), 0o700);
+      }
+
+      // Stopping published idle, but the setup window and Settings must see the original
+      // failure again, with its Reset button, not idle.
+      expect(states.map((state) => state.phase)).toEqual(["idle", "failed"]);
+      expect(controller.state()).toMatchObject({ phase: "failed", offerReset: true });
+    },
+  );
+
+  it.skipIf(unmovable !== null)(
+    `leaves the stack idle after a reset with no prior failure fails to move anything${unmovable ? ` (${unmovable})` : ""}`,
+    async () => {
+      const root = await userData();
+      const controller = new LocalModeController(
+        harness(root, {
+          allocatePort: async () => 23456,
+          portAvailable: async () => true,
+          postgresFactory: () => runningPostgres(),
+        }),
+      );
+      expect(await controller.start()).toMatchObject({ phase: "ready" });
+      await mkdir(path.join(root, "data"), { recursive: true });
+
+      await chmod(path.join(root, "data"), 0o500);
+      try {
+        await expect(controller.resetData()).rejects.toThrow();
+      } finally {
+        await chmod(path.join(root, "data"), 0o700);
+      }
+      expect(controller.state().phase).toBe("idle");
+    },
+  );
+});
+
+describe("reset failure sentences", () => {
+  const errorWithCode = (code: string): NodeJS.ErrnoException =>
+    Object.assign(new Error(code), { code });
+
+  it("means a program still has the file open on EBUSY", () => {
+    expect(resetMoveFailure(errorWithCode("EBUSY"), "darwin")).toBe(
+      "A local data file is in use; close whatever is using it and try again.",
+    );
+  });
+
+  it("means a program still has the file open on Windows EPERM", () => {
+    expect(resetMoveFailure(errorWithCode("EPERM"), "win32")).toBe(
+      "A local data file is in use; close whatever is using it and try again.",
+    );
+  });
+
+  it("means the app cannot write to the folder on EACCES", () => {
+    expect(resetMoveFailure(errorWithCode("EACCES"), "darwin")).toBe(
+      "Ardur Bot cannot move its local data. Check the permissions of its data folder, then try Reset local data again.",
+    );
+  });
+
+  it("means the app cannot write to the folder on EPERM off Windows", () => {
+    expect(resetMoveFailure(errorWithCode("EPERM"), "linux")).toBe(
+      "Ardur Bot cannot move its local data. Check the permissions of its data folder, then try Reset local data again.",
+    );
   });
 });
 

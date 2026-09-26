@@ -125,7 +125,7 @@ import {
   isOneShotRoutineCrons,
   nextCronDateAcrossStrict,
 } from "@ardurbot/core";
-import type { PrismaClient, ThreadEvents } from "@ardurbot/db";
+import type { Pool, PrismaClient, ThreadEvents } from "@ardurbot/db";
 import {
   appendEventInTransaction,
   BotSectionNameConflictError,
@@ -461,6 +461,8 @@ export interface RouterDeps {
   terminals?: ReturnType<typeof createTerminalRoutes>;
   cloudAgent?: CloudAgentConnection | null;
   prisma: PrismaClient;
+  /** Filing locks only. Never the shared Prisma pool. */
+  lockPool?: Pick<Pool, "connect">;
   events: ThreadEvents;
   auth: Auth;
   jobs: JobPublisher;
@@ -578,7 +580,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
     home: deps.home,
     dataDir: deps.dataDir,
   });
-  const learning = createLearningService(deps);
+  const learning = createLearningService({ ...deps, boardService: board.service });
   const agentSkills = createAgentSkillsService(deps.prisma, deps.memoryDocuments);
   const localImport = new LocalImportService({
     prisma: deps.prisma,
@@ -3185,16 +3187,16 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         learning.summary(context.actor, input.botId),
       ),
       approve: authed.learning.approve.handler(({ context, input }) =>
-        learning.approve(input.proposalId, context.actor, input.edits),
+        boardCall(() => learning.approve(input.proposalId, context.actor, input.edits)),
       ),
       reject: authed.learning.reject.handler(({ context, input }) =>
-        learning.reject(input.proposalId, context.actor, input.reason),
+        boardCall(() => learning.reject(input.proposalId, context.actor, input.reason)),
       ),
       edit: authed.learning.edit.handler(({ context, input }) =>
         learning.edit(input.proposalId, context.actor, input.edits),
       ),
       revert: authed.learning.revert.handler(({ context, input }) =>
-        learning.revert(input.proposalId, context.actor),
+        boardCall(() => learning.revert(input.proposalId, context.actor)),
       ),
       evidence: authed.learning.evidence.handler(({ context, input }) =>
         learning.evidence(context.actor, input.proposalId, input.evidenceId),
@@ -5330,6 +5332,9 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         boardCall(() => board.view(context.actor, input)),
       ),
       work: authed.board.work.handler(({ context }) => boardCall(() => board.work(context.actor))),
+      filingOutcomes: authed.board.filingOutcomes.handler(({ context }) =>
+        boardCall(() => board.service.filingOutcomes(context.actor)),
+      ),
       configure: authed.board.configure.handler(({ context, input }) =>
         boardCall(() => board.service.configure(context.actor, input.workspaceId, input.patch)),
       ),

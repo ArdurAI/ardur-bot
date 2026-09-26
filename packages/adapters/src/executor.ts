@@ -94,6 +94,7 @@ import {
   stableJsonValue,
   toolEffectIdempotencyKey,
 } from "@ardurbot/core/node/approval-effect-key";
+import type { Pool } from "@ardurbot/db";
 import {
   acceptDelegation,
   appendEventInTransaction,
@@ -700,6 +701,8 @@ export interface ExecutorDeps {
   secretStore: EncryptedSecretStore;
   deploymentModelKey?: string;
   dataDir?: string;
+  /** Filing locks only. Never the shared Prisma pool. */
+  lockPool?: Pick<Pool, "connect">;
   notifications?: NotificationProvider;
   jobs: JobPublisher;
   /** Messaging surface; absent means zero identity queries and no chat prompts. */
@@ -1966,7 +1969,11 @@ export function createRunExecutor(deps: ExecutorDeps) {
         const upkeepEnabled = contextSettings?.botUpkeep === true && !comparisonRun;
         const boardAccess = upkeepEnabled
           ? await resolveBoardAccess(
-              new BoardService({ prisma: deps.prisma, dataDir: deps.dataDir ?? "./data" }),
+              new BoardService({
+                prisma: deps.prisma,
+                dataDir: deps.dataDir ?? "./data",
+                lockPool: deps.lockPool,
+              }),
               deps.prisma,
               {
                 userId: run.userId,
@@ -3859,7 +3866,11 @@ export function createRunExecutor(deps: ExecutorDeps) {
             try {
               return finish(
                 await executeBoardTool(
-                  new BoardService({ prisma: deps.prisma, dataDir: deps.dataDir ?? "./data" }),
+                  new BoardService({
+                    prisma: deps.prisma,
+                    dataDir: deps.dataDir ?? "./data",
+                    lockPool: deps.lockPool,
+                  }),
                   {
                     userId: run.userId,
                     spaceId: run.spaceId,

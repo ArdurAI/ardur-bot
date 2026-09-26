@@ -12,6 +12,7 @@ import { createMessagingReceivers } from "./messaging-receivers.js";
 loadRootEnv();
 
 import {
+  BoardService,
   backfillRuntimePins,
   ChatSdkMessagingSurface,
   createBackgroundJobHandlers,
@@ -60,6 +61,7 @@ import {
 import { resolveEncryptionKey, resolveSupervisorToken } from "@ardurbot/core";
 import {
   createDb,
+  createFilingLockPool,
   createThreadEvents,
   isTooManyDatabaseConnections,
   parsePositiveInteger,
@@ -76,12 +78,15 @@ async function main() {
   // separate ones. Keep this modest: graphile holds a LISTEN client, and the
   // reconciler and messaging receivers each hold an advisory-lock client for the
   // process lifetime (namespace 1380019075, ids 1 and 2). Board notifications
-  // take a transaction lock (id 3) for one tick and return that client. A larger
-  // max just competes for Postgres max_connections (53300).
+  // take a transaction lock (id 3) for one tick and return that client. Board
+  // filings use lockPool (max 6, id 4) so a held filing lock cannot starve the
+  // writes it protects. A larger shared max just competes for Postgres
+  // max_connections (53300).
   const { prisma, pool } = createDb(databaseUrl, {
     poolMax: parsePositiveInteger(process.env.DB_POOL_MAX, 8),
     applicationName: "ardurbot-worker",
   });
+  const lockPool = createFilingLockPool(databaseUrl, { applicationName: "ardurbot-worker" });
   const realtime = new PostgresRealtimeFanout({
     connectionString: process.env.REALTIME_DATABASE_URL ?? databaseUrl,
     publisher: pool,
@@ -190,6 +195,7 @@ async function main() {
   const { memory, service: memoryDocuments } = createMemoryLifecycle(memoryLifecycleDeps);
   const executor = createRunExecutor({
     prisma,
+    lockPool,
     runtime,
     sandbox,
     memory,
@@ -237,6 +243,7 @@ async function main() {
   // Includes the proposal-only learning.review handler; all mutations stay in the regular executor.
   const jobHandlers = createBackgroundJobHandlers({
     dataDir,
+    lockPool,
     executor,
     prisma,
     sandbox,
@@ -284,13 +291,16 @@ async function main() {
     reconcileCloudAgents: () => reconcileCloudAgents({ prisma, jobs, cloudAgent }),
     reconcileComputerUpdates: () => reconcileComputerUpdates({ prisma, jobs }),
     reconcileMemory: () => reconcileMemoryDelivery(memoryLifecycleDeps, memoryDocuments),
-    reconcileBoardOutcomes: () => reconcileBoardOutcomes({ prisma, dataDir }),
+    // The board notification tick below sweeps pending closes; this only finishes run outcomes.
+    reconcileBoardOutcomes: (signal) =>
+      reconcileBoardOutcomes({ prisma, dataDir, lockPool }, { signal }),
   });
   reconciler.start();
   const boardNotifications = createBoardNotificationDelivery({
     prisma,
     notifications: new ExpoPushProvider(dataDir),
     pool,
+    board: new BoardService({ prisma, dataDir, lockPool }),
   });
   boardNotifications.start();
   const chatReceivers = createMessagingReceivers({
@@ -317,6 +327,7 @@ async function main() {
       await mcp.close();
       await prisma.$disconnect().catch(() => undefined);
       await pool.end().catch(() => undefined);
+      await lockPool.end().catch(() => undefined);
     } finally {
       await logger.flush({ timeoutMs: 2_000 });
     }

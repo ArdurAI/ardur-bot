@@ -250,6 +250,8 @@ export async function postgresServesFolder(input: {
   port: number;
   password: string;
   databaseDir: string;
+  /** Three seconds by default; a longer wait rules out a busy server, not a dead one. */
+  timeoutMs?: number;
 }): Promise<boolean> {
   const client = new Client({
     host: "127.0.0.1",
@@ -257,7 +259,7 @@ export async function postgresServesFolder(input: {
     user: POSTGRES_USER,
     password: input.password,
     database: "postgres",
-    connectionTimeoutMillis: 3_000,
+    connectionTimeoutMillis: input.timeoutMs ?? 3_000,
   });
   client.on("error", () => undefined);
   try {

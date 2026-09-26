@@ -47,16 +47,11 @@ export class MigrationHistoryError extends Error {
   }
 }
 
-/** The migration's SQL failed. `databaseError` is the database's own message. */
+/** The migration's SQL failed. Both the name and the database's own message are in the text. */
 export class MigrationApplyError extends MigrationHistoryError {
-  readonly migrationName: string;
-  readonly databaseError: string;
-
   constructor(migrationName: string, databaseError: string) {
     super(`Migration "${migrationName}" failed to apply. ${databaseError}`, "apply");
     this.name = "MigrationApplyError";
-    this.migrationName = migrationName;
-    this.databaseError = databaseError;
   }
 }
 
@@ -76,7 +71,6 @@ interface RecordedMigration {
   migrationName: string;
   finishedAt: unknown;
   rolledBackAt: unknown;
-  logs: unknown;
 }
 
 const MIGRATION_LOCK = 881122334455;
@@ -380,7 +374,7 @@ function errorMessage(error: unknown): string {
 
 async function readRecorded(client: MigrationSqlClient): Promise<RecordedMigration[]> {
   const result = await client.query(
-    `SELECT "id", "checksum", "migration_name", "finished_at", "rolled_back_at", "logs" FROM "_prisma_migrations"`,
+    `SELECT "id", "checksum", "migration_name", "finished_at", "rolled_back_at" FROM "_prisma_migrations"`,
   );
   return result.rows.map((row) => {
     const record = row as Record<string, unknown>;
@@ -390,7 +384,6 @@ async function readRecorded(client: MigrationSqlClient): Promise<RecordedMigrati
       migrationName: String(record.migration_name),
       finishedAt: record.finished_at,
       rolledBackAt: record.rolled_back_at,
-      logs: record.logs,
     };
   });
 }

@@ -122,6 +122,185 @@ it("lists scoped proposals with separate counts and opens only linked, surviving
   });
 });
 
+function boardProposalRow(
+  actor: Actor,
+  id: string,
+  status: "applied" | "reverted",
+  duplicate = false,
+) {
+  return {
+    status,
+    body: {
+      id,
+      type: "board-item",
+      scope: { ...actor, botId: "bot" },
+      target: {},
+      boardItem: {
+        title: `Finish ${id}`,
+        description: "The run stopped before the import finished.",
+        acceptanceCriteria: "The import completes.",
+      },
+      rationale: "Unfinished follow-up",
+      evidenceIds: ["evidence-a"],
+      confidence: { label: "model estimate", value: 0.8 },
+      diff: `+Finish ${id}`,
+      expiresAt: "2099-01-01T00:00:00.000Z",
+      status,
+      appliedBoardItem: {
+        workspaceId: "workspace",
+        itemId: `item-${id}`,
+        updatedAt: "2026-09-25T12:00:00.000Z",
+        duplicate,
+      },
+    },
+  };
+}
+
+it("marks a rejected proposal as closing while the filing close is still pending", async () => {
+  const actor = { spaceId: "space", userId: "user" } as Actor;
+  const row = boardProposalRow(actor, "proposal", "applied");
+  row.status = "rejected";
+  row.body.status = "rejected";
+  const service = createLearningService({
+    prisma: {
+      spaceMember: { findUnique: async () => ({ role: "member" }) },
+      bot: { findFirst: async () => ({ id: "bot" }) },
+      learningProposal: { findFirst: async () => row },
+      botBoardFiling: {
+        findMany: async () => [
+          {
+            learningProposalId: "proposal",
+            closedAt: null,
+            outcome: null,
+            closePending: "Rejected from Learning",
+          },
+        ],
+      },
+    } as unknown as PrismaClient,
+    jobs: {} as never,
+  });
+  await expect(service.proposal(actor, "proposal")).resolves.toMatchObject({
+    status: "rejected",
+    boardClosing: true,
+  });
+});
+
+it("says a pending close could not be finished once its notice was sent", async () => {
+  const actor = { spaceId: "space", userId: "user" } as Actor;
+  const row = boardProposalRow(actor, "proposal", "applied");
+  row.status = "rejected";
+  row.body.status = "rejected";
+  const filing = {
+    learningProposalId: "proposal",
+    closedAt: null,
+    outcome: null,
+    closePending: "Rejected from Learning",
+    closeNoticeAt: null as Date | null,
+  };
+  const service = createLearningService({
+    prisma: {
+      spaceMember: { findUnique: async () => ({ role: "member" }) },
+      bot: { findFirst: async () => ({ id: "bot" }) },
+      learningProposal: { findFirst: async () => row },
+      botBoardFiling: { findMany: async () => [filing] },
+    } as unknown as PrismaClient,
+    jobs: {} as never,
+  });
+  const closing = await service.proposal(actor, "proposal");
+  expect(closing).toMatchObject({ boardClosing: true });
+  expect(closing).not.toHaveProperty("boardCloseFailed");
+  filing.closeNoticeAt = new Date("2026-09-25T13:00:00.000Z");
+  await expect(service.proposal(actor, "proposal")).resolves.toMatchObject({
+    boardClosing: true,
+    boardCloseFailed: true,
+  });
+});
+
+it("reports the recorded outcome for an applied board-item proposal", async () => {
+  const actor = { spaceId: "space", userId: "user" } as Actor;
+  const findMany = vi.fn(async () => [
+    {
+      learningProposalId: "proposal",
+      closedAt: new Date("2026-09-25T13:00:00.000Z"),
+      outcome: "completed",
+    },
+  ]);
+  const service = createLearningService({
+    prisma: {
+      spaceMember: { findUnique: async () => ({ role: "member" }) },
+      bot: { findFirst: async () => ({ id: "bot" }) },
+      learningProposal: { findFirst: async () => boardProposalRow(actor, "proposal", "applied") },
+      botBoardFiling: { findMany },
+    } as unknown as PrismaClient,
+    jobs: {} as never,
+  });
+  await expect(service.proposal(actor, "proposal")).resolves.toMatchObject({
+    boardOutcome: { closedAt: "2026-09-25T13:00:00.000Z", outcome: "completed" },
+  });
+  expect(findMany).toHaveBeenCalledWith({
+    where: { spaceId: "space", learningProposalId: { in: ["proposal"] } },
+    select: {
+      learningProposalId: true,
+      closedAt: true,
+      outcome: true,
+      closePending: true,
+      closeNoticeAt: true,
+    },
+  });
+});
+
+it("loads board outcomes for every listed proposal in one query", async () => {
+  const actor = { spaceId: "space", userId: "user" } as Actor;
+  const rows = [
+    boardProposalRow(actor, "created", "applied"),
+    boardProposalRow(actor, "reused", "applied", true),
+    boardProposalRow(actor, "undone", "reverted"),
+  ];
+  const findFirst = vi.fn();
+  const findMany = vi.fn(async () => [
+    { learningProposalId: "created", closedAt: null, outcome: null },
+    {
+      learningProposalId: "reused",
+      closedAt: new Date("2026-09-25T13:00:00.000Z"),
+      outcome: "closed-other",
+    },
+  ]);
+  const service = createLearningService({
+    prisma: {
+      spaceMember: { findUnique: vi.fn(async () => ({ role: "member" })) },
+      bot: {
+        findFirst: vi.fn(async () => ({ id: "bot" })),
+        findMany: vi.fn(async () => [{ id: "bot", name: "Helper" }]),
+      },
+      learningProposal: { findMany: vi.fn(async () => rows), count: vi.fn(async () => 0) },
+      reviewExecution: { findMany: vi.fn(async () => []) },
+      botBoardFiling: { findFirst, findMany },
+    } as unknown as PrismaClient,
+    jobs: {} as never,
+  });
+  const list = await service.list(actor, "bot");
+  expect(findFirst).not.toHaveBeenCalled();
+  expect(findMany).toHaveBeenCalledOnce();
+  expect(findMany).toHaveBeenCalledWith({
+    where: { spaceId: "space", learningProposalId: { in: ["created", "reused", "undone"] } },
+    select: {
+      learningProposalId: true,
+      closedAt: true,
+      outcome: true,
+      closePending: true,
+      closeNoticeAt: true,
+    },
+  });
+  expect(list.proposals.map((proposal) => [proposal.id, proposal.boardOutcome])).toEqual([
+    ["created", { closedAt: null, outcome: null, closeReason: null }],
+    [
+      "reused",
+      { closedAt: "2026-09-25T13:00:00.000Z", outcome: "closed-other", closeReason: null },
+    ],
+    ["undone", undefined],
+  ]);
+});
+
 it("keeps content-free audit entries in exports when their document no longer exists", async () => {
   const actor = { spaceId: "space", userId: "user" } as Actor;
   const service = createLearningService({

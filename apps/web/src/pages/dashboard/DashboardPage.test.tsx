@@ -14,6 +14,7 @@ import { getDashboardPanels } from "./panels";
 const api = vi.hoisted(() => ({
   team: vi.fn(),
   work: vi.fn(),
+  filingOutcomes: vi.fn(),
   now: vi.fn(),
   runs: vi.fn(),
   thread: vi.fn(),
@@ -32,7 +33,7 @@ const api = vi.hoisted(() => ({
 vi.mock("../../lib/rpc", () => ({
   rpc: {
     team: { board: api.team },
-    board: { work: api.work },
+    board: { work: api.work, filingOutcomes: api.filingOutcomes },
     runs: { list: api.runs },
     threads: { get: api.thread, answer: api.answer, subscribe: api.subscribe },
     host: { status: api.host },
@@ -101,6 +102,7 @@ beforeEach(() => {
   api.usage.mockResolvedValue(summary);
   api.learning.mockResolvedValue({ pendingCount: 0, proposals: [] });
   api.work.mockResolvedValue({ workspace: null, ready: 0, inProgress: 0, blocked: 0, items: [] });
+  api.filingOutcomes.mockResolvedValue({ bots: [] });
   api.features.mockResolvedValue([{ feature: "governance", state: "unavailable" }]);
   node = document.createElement("div");
   document.body.append(node);
@@ -626,6 +628,49 @@ it("labels aggregate usage as records rather than provider requests", async () =
   expect(node.querySelector('[data-panel="usage"]')?.textContent).toContain("2 usage records");
   expect(node.querySelector('[data-panel="usage"]')?.textContent).not.toContain("requests");
 });
+
+it("shows ready work when filing outcomes fail", async () => {
+  api.work.mockResolvedValue({
+    workspace: { id: "planning", name: "Planning" },
+    ready: 2,
+    inProgress: 1,
+    blocked: 0,
+    items: [{ id: "work-1", title: "Next work" }],
+  });
+  api.filingOutcomes.mockRejectedValue(new Error("outcomes unavailable"));
+  await renderPage();
+  const panel = node.querySelector('[data-panel="work"]')!;
+  expect(panel.textContent).toContain("Ready: 2");
+  expect(panel.textContent).toContain("Next work");
+  expect(panel.textContent).not.toContain("Board outcomes");
+  expect(panel.textContent).not.toContain("Could not load");
+  expect(panel.textContent).not.toContain("closed without being completed");
+});
+
+it.each([
+  ["missing", []],
+  ["malformed", { bots: [{ botId: "bot", name: "Helper", filed: "three" }] }],
+  ["empty", null],
+])(
+  "shows ready work and no counts when the filing outcomes answer is %s",
+  async (_label, answer) => {
+    api.work.mockResolvedValue({
+      workspace: { id: "planning", name: "Planning" },
+      ready: 2,
+      inProgress: 1,
+      blocked: 0,
+      items: [{ id: "work-1", title: "Next work" }],
+    });
+    // The e2e dashboard fixture answers any procedure it does not know with [].
+    api.filingOutcomes.mockResolvedValue(answer);
+    await renderPage();
+    const panel = node.querySelector('[data-panel="work"]')!;
+    expect(panel.textContent).toContain("Ready: 2");
+    expect(panel.textContent).toContain("Next work");
+    expect(panel.textContent).not.toContain("Could not load");
+    expect(panel.textContent).not.toContain("closed without being completed");
+  },
+);
 
 it("shows default-board work and item links without adding subscriptions", async () => {
   api.work.mockResolvedValue({

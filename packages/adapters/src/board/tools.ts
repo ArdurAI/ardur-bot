@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { ConnectorTool } from "@ardurbot/adapter-kit";
+import type { BoardCreate, BoardPatch, WorkItem } from "@ardurbot/contracts/board";
 import {
   BOARD_LINK_TYPES,
   BoardClaimFilterSchema,
@@ -10,7 +11,7 @@ import {
   BoardItemIdSchema,
   BoardPatchSchema,
 } from "@ardurbot/contracts/board";
-import type { PrismaClient } from "@ardurbot/db";
+import type { Pool, PrismaClient } from "@ardurbot/db";
 import { z } from "zod";
 import type { BoardScope } from "./service.js";
 import { BoardService } from "./service.js";
@@ -82,8 +83,76 @@ function workspaceIdOf(raw: unknown): string | undefined {
   if (!raw || typeof raw !== "object" || !("workspaceId" in raw)) return undefined;
   return typeof raw.workspaceId === "string" && raw.workspaceId ? raw.workspaceId : undefined;
 }
-function createdIncomplete(error: unknown): boolean {
-  return error instanceof BoardError && error.problem.code === "created_incomplete";
+const REDACTED_TEXT_FIELDS = [
+  "title",
+  "description",
+  "acceptanceCriteria",
+  "assignee",
+  "externalRef",
+] as const;
+/** Removes the run's secrets from every persisted text field of a create or patch. */
+function redactBoardFields<T extends BoardPatch>(fields: T, secrets: string[]): T {
+  const redacted = { ...fields };
+  for (const key of REDACTED_TEXT_FIELDS) {
+    const value = redacted[key];
+    if (typeof value === "string")
+      Object.assign(redacted, { [key]: redactBoardText(value, secrets) });
+  }
+  if (redacted.labels)
+    redacted.labels = redacted.labels.map((label) => redactBoardText(label, secrets));
+  return redacted;
+}
+type Provider = Awaited<ReturnType<BoardService["provider"]>>;
+async function noteFiling(
+  service: BoardService,
+  provider: Provider,
+  scope: BoardScope,
+  item: WorkItem,
+) {
+  if (!scope.runId || !scope.botId || typeof provider.noteFiling !== "function") return item;
+  const actor = await service.actor(scope);
+  return provider.noteFiling(item.id, {
+    runId: scope.runId,
+    botId: scope.botId,
+    botName: filingBotName(actor.startsWith("bot:") ? actor.slice(4) : actor),
+  });
+}
+/** Call inside the space's filing lock; no database transaction spans a host command. */
+async function fileUpkeepItem(
+  service: BoardService,
+  provider: Provider,
+  scope: BoardScope,
+  workspaceId: string,
+  item: BoardCreate,
+) {
+  const title = normalizeBoardTitle(item.title);
+  const existing = (await provider.list()).find(
+    (row) => row.status !== "closed" && normalizeBoardTitle(row.title) === title,
+  );
+  if (existing) {
+    if (!existing.filedBy && (await service.claimHollowFiling(scope, workspaceId, existing, title)))
+      return noteFiling(service, provider, scope, existing);
+    // An open item that cannot be claimed stays the only item, including after a stale hollow is dropped.
+    await service.discardStaleHollow(scope, title);
+    const repair = !existing.filedBy && (await service.runFiling(scope, workspaceId, existing.id));
+    return {
+      item: repair ? await noteFiling(service, provider, scope, existing) : existing,
+      duplicate: true,
+      message: duplicateBoardItemMessage(existing.id),
+    };
+  }
+  await service.discardStaleHollow(scope, title);
+  const reserved = await service.reserveBotFiling(scope, title);
+  if (!reserved.ok) return { error: reserved.message };
+  let created: WorkItem | undefined;
+  try {
+    created = await provider.create({ ...item, labels: withBotFiledLabel(item.labels) });
+    await service.recordFilingItem(reserved.id, workspaceId, created.id);
+  } catch (error) {
+    await service.settleFailedFiling(reserved.id, workspaceId, error, created?.id);
+    throw error;
+  }
+  return noteFiling(service, provider, scope, created);
 }
 async function admittedWorkspaceIds(service: BoardService, scope: BoardScope) {
   try {
@@ -150,72 +219,18 @@ export async function executeBoardTool(
       return provider.show(boardToolSchemas.board_show.parse(raw).id);
     case "board_create": {
       const args = boardToolSchemas.board_create.parse(raw);
-      const item = {
-        ...args.item,
-        ...(args.item.title ? { title: redactBoardText(args.item.title, secrets) } : {}),
-        ...(args.item.description !== undefined
-          ? { description: redactBoardText(args.item.description, secrets) }
-          : {}),
-        ...(args.item.acceptanceCriteria !== undefined
-          ? { acceptanceCriteria: redactBoardText(args.item.acceptanceCriteria, secrets) }
-          : {}),
-      };
+      const item = redactBoardFields(args.item, secrets);
       if (!options.upkeep) return provider.create(item);
-      const outcome = await service.withFilingLock(scope, async (tx) => {
-        const title = normalizeBoardTitle(item.title);
-        const existing = (await provider.list()).find(
-          (row) => row.status !== "closed" && normalizeBoardTitle(row.title) === title,
-        );
-        if (existing)
-          return {
-            kind: "done" as const,
-            value: {
-              item: existing,
-              duplicate: true,
-              message: duplicateBoardItemMessage(existing.id),
-            },
-          };
-        const reserved = await service.reserveBotFiling(scope, tx);
-        if (!reserved.ok) return { kind: "done" as const, value: { error: reserved.message } };
-        let created: Awaited<ReturnType<typeof provider.create>> | undefined;
-        try {
-          created = await provider.create({ ...item, labels: withBotFiledLabel(item.labels) });
-          if (!scope.runId || !scope.botId || typeof provider.noteFiling !== "function")
-            return { kind: "done" as const, value: created };
-          const actor = await service.actor(scope);
-          return {
-            kind: "done" as const,
-            value: await provider.noteFiling(created.id, {
-              runId: scope.runId,
-              botId: scope.botId,
-              botName: filingBotName(actor.startsWith("bot:") ? actor.slice(4) : actor),
-            }),
-          };
-        } catch (error) {
-          if (created || createdIncomplete(error)) return { kind: "incomplete" as const, error };
-          throw error;
-        }
-      });
-      if (outcome.kind === "incomplete") throw outcome.error;
-      return outcome.value;
+      const workspaceId = (await service.workspace(scope, args.workspaceId)).id;
+      return service.withFilingLock(scope, () =>
+        fileUpkeepItem(service, provider, scope, workspaceId, item),
+      );
     }
     case "board_update": {
       const args = boardToolSchemas.board_update.parse(raw);
       if (args.patch.status === "closed")
         await service.assertBotMayClose(scope, input.workspaceId, [args.id]);
-      const patch = {
-        ...args.patch,
-        ...(args.patch.title !== undefined
-          ? { title: redactBoardText(args.patch.title, secrets) }
-          : {}),
-        ...(args.patch.description != null
-          ? { description: redactBoardText(args.patch.description, secrets) }
-          : {}),
-        ...(args.patch.acceptanceCriteria != null
-          ? { acceptanceCriteria: redactBoardText(args.patch.acceptanceCriteria, secrets) }
-          : {}),
-      };
-      return provider.update(args.id, patch);
+      return provider.update(args.id, redactBoardFields(args.patch, secrets));
     }
     case "board_claim": {
       const args = boardToolSchemas.board_claim.parse(raw);
@@ -239,7 +254,7 @@ export async function executeBoardTool(
 }
 /** Deliver only persisted terminal outcomes, through the scoped host outcome authorization. */
 export async function finishBoardRun(
-  deps: { prisma: PrismaClient; dataDir?: string },
+  deps: { prisma: PrismaClient; dataDir?: string; lockPool?: Pick<Pool, "connect"> },
   scope: BoardScope & { runId: string },
   outcome: string,
 ) {
@@ -282,7 +297,11 @@ export async function finishBoardRun(
     };
     checkDeadline();
     const completed = run.status === "completed";
-    const service = new BoardService({ prisma: deps.prisma, dataDir: deps.dataDir ?? "./data" });
+    const service = new BoardService({
+      prisma: deps.prisma,
+      dataDir: deps.dataDir ?? "./data",
+      lockPool: deps.lockPool,
+    });
     const provider = await service.provider({ ...scope, signal }, run.boardWorkspaceId);
     checkDeadline();
     const item = await provider.show(run.boardItemId);

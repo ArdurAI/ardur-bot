@@ -692,6 +692,49 @@ bd --json --actor board-owner --sandbox --dolt-auto-commit off -C "$TMP_BOARD" r
 ]
 ```
 
+## Filing metadata in one update — 2026-09-25
+
+`bd update --help` from `bd version 1.2.2` lists the flag as repeatable:
+
+```text
+      --set-metadata stringArray     Set metadata key=value (repeatable, e.g., --set-metadata team=platform)
+```
+
+On a new temporary board initialized as above, one update carried all three
+filing keys, and `show` returned them together:
+
+```sh
+bd --json --actor board-owner --sandbox --dolt-auto-commit off -C "$TMP_BOARD" update board-<id> --set-metadata ardur_run_id=run-1 --set-metadata ardur_bot_id=builder --set-metadata ardur_filed_by=Builder
+```
+
+```json
+{ "ardur_bot_id": "builder", "ardur_run_id": "run-1", "ardur_filed_by": "Builder" }
+```
+
+The temporary board was removed afterwards.
+
+## Comments, default close reasons and reopening — 2026-09-25
+
+On a new temporary board initialized as above with `bd version 1.2.2`, an item was
+created, and two seconds later a comment was added:
+
+```sh
+bd --json --actor board-owner -C "$TMP_BOARD" comments add -- board-<id> "I'm taking this"
+bd --json --actor board-owner -C "$TMP_BOARD" show --include-comments --include-dependents board-<id>
+```
+
+`show` and `list --all --limit 0` both returned `"comment_count": 1` with `updated_at`
+still equal to `created_at`: a comment does not change `updated_at`. The provider reads
+`comment_count` into `commentCount`, so Reject, Undo and the pending-close retry compare it.
+
+`bd close board-<id>` with no reason, and `bd close board-<id> --reason ""`, both stored
+`"close_reason": "Closed"`. `bd update board-<id> --status closed` left `close_reason`
+empty. `bd close board-<id> --reason Implemented` stored `Implemented`. After
+`bd reopen board-<id>` and after `bd update board-<id> --status open`, `show` returned
+`"status": "open"` with no `close_reason` and no `closed_at`.
+
+The temporary board was removed afterwards.
+
 ## Initialization isolation evidence
 
 A separate temporary folder test used a Git repository with a sentinel agents

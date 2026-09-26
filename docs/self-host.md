@@ -6,11 +6,15 @@ The signed-in product is a long-running API, a Graphile Worker, Postgres, and a 
 
 Same as the README quick start: `.env` from `.env.example`, Postgres via Compose, `pnpm sandbox:build`, `pnpm dev`, then [http://127.0.0.1:5173](http://127.0.0.1:5173) (or `http://localhost:5173` — both loopback hosts are trusted). Electron during source development: `pnpm --filter @ardurbot/desktop dev` while that stack is up, choosing **Existing instance** with that address.
 
-The installed desktop app's **This computer** choice does not use Compose. It starts an embedded Postgres on a loopback port, applies the database migrations, and runs the API and worker on this computer. On this computer, commands start in the bot's own folder or a folder you add, and file tools stay inside those folders; the approvals you require are what keep a command away from other files. Known secrets are hidden from command output. Disk and CPU use are not capped; a command stops after five minutes. See [Local mode data](#local-mode-data) for what it keeps and how to reset it. A data folder that already contains `stack/.env` keeps the Docker Compose stack, including its remembered web port (45173 unless that port was taken). **Existing instance** is unchanged. Compose below remains the way to run a server or to add Docker.
+The installed desktop app's **This computer** choice does not use Compose. It starts an embedded Postgres on a loopback port, applies the database migrations, and runs the API and worker on this computer. See [What commands can do on this computer](#what-commands-can-do-on-this-computer) and [Local mode data](#local-mode-data) for what it keeps and how to reset it. A data folder that already contains `stack/.env` keeps the Docker Compose stack, including its remembered web port (45173 unless that port was taken). **Existing instance** is unchanged. Compose below remains the way to run a server or to add Docker.
 
 For source development in WSL, keep the checkout and `data` directory in the Linux filesystem (for example, `~/ardurbot`), and run `pnpm dev` as your normal user. The host-run supervisor matches bot container UID/GID to that user. If Docker Desktop container IPs are unreachable, set `SANDBOX_CONTROL_VIA_LOOPBACK=true` in `.env`; this publishes the token-protected control service on a random loopback port. Leave this unset for the Compose-hosted supervisor.
 
 Compose bot homes mount only their own subdirectory of the application volume using Docker volume semantics. Docker's internal volume paths are never used as host bind mounts.
+
+### What commands can do on this computer
+
+On this computer, commands start in the bot's own folder or a folder you add, and file tools stay inside those folders; the approvals you require are what keep a command away from other files. Known secrets are hidden from command output. Disk and CPU use are not capped; a command stops after five minutes.
 
 ### Local mode data
 
@@ -346,11 +350,8 @@ The Electron desktop app is a client of the same API. Docker and E2B still apply
   folder. Do not enable it on a public or shared service. macOS does not show its own permission
   dialog for this.
 - **This computer** in the installed app uses the desktop provider with the app's own folder list.
-  The API and worker run on that machine. On this computer, commands start in the bot's own folder
-  or a folder you add, and file tools stay inside those folders; the approvals you require are what
-  keep a command away from other files. Known secrets are hidden from command output. Disk and CPU
-  use are not capped; a command stops after five minutes. A folder
-  you added that is missing (an unplugged drive, a renamed folder) is skipped until it returns,
+  The API and worker run on that machine; see [What commands can do on this computer](#what-commands-can-do-on-this-computer).
+  A folder you added that is missing (an unplugged drive, a renamed folder) is skipped until it returns,
   and Settings marks it. Do not point a public or shared service at this provider. macOS does not show its own permission dialog for these commands.
   On Windows, stopping the embedded database uses the library's forced process-tree kill; the next
   start uses Postgres crash recovery. Docker stays the default for Compose and for a setup that

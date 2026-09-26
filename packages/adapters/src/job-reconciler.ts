@@ -104,7 +104,8 @@ export function createJobReconciler(
     reconcileComputerUpdates?: () => Promise<void>;
     reconcileCloudAgents?: () => Promise<void>;
     reconcileMemory?: () => Promise<void>;
-    reconcileBoardOutcomes?: () => Promise<void>;
+    /** Board work reaches a host, so it runs after recovery and never holds it up. */
+    reconcileBoardOutcomes?: (signal: AbortSignal) => Promise<void>;
     reconcileLocalImport?: () => Promise<void>;
     reconcileBriefs?: () => Promise<void>;
   },
@@ -119,6 +120,19 @@ export function createJobReconciler(
   let controlCursor: ControlCursor | undefined;
   let controlScanDeadline: Date | undefined;
   let nextBriefMaintenanceAt = 0;
+  let board: { done: Promise<void>; stop: AbortController } | undefined;
+
+  // One board pass at a time, started after recovery and never awaited by it.
+  const startBoardWork = () => {
+    if (!deps.reconcileBoardOutcomes || board) return;
+    const stop = new AbortController();
+    const done = (async () => deps.reconcileBoardOutcomes?.(stop.signal))()
+      .catch((error) => getLogger().error("board outcome reconciliation", error))
+      .finally(() => {
+        board = undefined;
+      });
+    board = { done, stop };
+  };
 
   const reconcileOnce = async () => {
     if (reconciling) return reconciling;
@@ -130,7 +144,6 @@ export function createJobReconciler(
           deps.reconcileCloudAgents,
           deps.reconcileComputerUpdates,
           deps.reconcileMemory,
-          deps.reconcileBoardOutcomes,
           deps.reconcileLocalImport,
           async () => {
             if (!deps.reconcileBriefs || Date.now() < nextBriefMaintenanceAt) return;
@@ -354,6 +367,7 @@ export function createJobReconciler(
           ? { at: lastControl.controlLeaseExpiresAt, id: lastControl.id }
           : undefined;
       if (!controlCursor) controlScanDeadline = undefined;
+      startBoardWork();
     })().finally(() => {
       reconciling = undefined;
     });
@@ -377,6 +391,8 @@ export function createJobReconciler(
       if (timer) clearInterval(timer);
       timer = undefined;
       await reconciling?.catch(() => undefined);
+      board?.stop.abort();
+      await board?.done;
       await deps.leadership?.release();
     },
   };

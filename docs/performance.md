@@ -396,13 +396,20 @@ Credential-free pull-request runners do not receive provider credentials. Live p
 stays explicit and budgeted.
 
 Building the physical evidence runner is out of scope for this workflow. No job produces
-`scoreboard-reports` yet, so a tag push stops with no reports at all: the gate records only
-`reports-missing`, with no digest-mismatch or coverage noise stacked on top, and exits 2
-(inconclusive). A run that uploaded some but not all of `parent.json`, `candidate.json`,
-`fixed-release.json`, and `policy.json` gets its own `reports-missing` detail instead, naming
-exactly which of those it did not upload; that detail carries no waiver advice, because a partial
-set is a mistake to fix, not a case for a waiver. Until a runner exists, a preview can be published
-only by a manual `workflow_dispatch` with a non-empty `evidence_waiver` reason. The gate refuses a
+`scoreboard-reports` yet, so a tag push stops with an empty reports directory: the gate records
+only `reports-missing`, naming today's only path to publication — the hand-dispatched waiver,
+below — with no digest-mismatch or coverage noise stacked on top, and exits 2 (inconclusive). A run
+that uploaded some but not all of `parent.json`, `candidate.json`, `fixed-release.json`, and
+`policy.json` gets its own `reports-missing` detail instead, naming exactly which of those it did
+not upload and telling the operator to upload it (or them) with the other reports and run the
+release again; that detail carries no waiver advice, because a partial set is a mistake to fix, not
+a case for a waiver. A report that was uploaded but could not be parsed gets its own
+`reports-missing` detail too: it names that file, says it could not be read, and gives the same
+fix-it-or-re-upload-and-run-again action — it is never described as not uploaded. The waiver advice
+appears only when the reports directory is genuinely empty; an unreadable file, or any other file
+left in the directory while all four reports are absent, rules it out exactly as a partial upload
+does. Until a runner exists, a preview can be published only by a manual `workflow_dispatch` with a
+non-empty `evidence_waiver` reason. The gate refuses a
 waiver whenever this run's reports directory holds any entry at all, whatever it is named or
 however deeply it is nested; it also refuses a waiver beside any attached evidence file it can see
 directly. A waiver only ever publishes when this run's evidence job produced nothing at all. An
@@ -418,9 +425,10 @@ with a slash, any `www.` host, a `://` scheme, or an email address is refused as
 When the gate does not publish, it prints every reason as a job-log line. Most reasons print as
 `::error::` "The release gate refused this run: ... Fix the evidence and run the release again.",
 plus, for `invalid-waiver`, which characters are allowed. `reports-missing` prints its own plain
-sentence, with no "refused this run" wording: the missing-report advice above when some but not
-all reports are missing, or today's only path to publication (the hand-dispatched waiver) when
-none are. An `undeclared-budget` line blocks the run only when the comparison is not tiered by
+sentence, with no "refused this run" wording: the missing- or unreadable-report advice above when
+any report is absent or could not be parsed, or today's only path to publication (the
+hand-dispatched waiver) when the reports directory is genuinely empty. An `undeclared-budget` line
+blocks the run only when the comparison is not tiered by
 report (a submitted policy with no crash-boundary requirement, or a candidate report that is not
 T2); there it prints as an `::error::` naming the budget to declare in the release policy. A tiered
 comparison never blocks on it, and prints it there as a plain `::warning::` instead.
