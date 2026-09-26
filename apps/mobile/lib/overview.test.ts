@@ -4,10 +4,17 @@ import { act, createElement, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import OverviewScreen from "../app/overview";
+import { rpc } from "./api";
 import { loadOverviewConnections, loadOverviewNow, loadOverviewUsage } from "./overview";
 
 vi.mock("./api", () => ({
-  rpc: vi.fn(async () => ({ workspace: null, ready: 0, inProgress: 0, blocked: 0, items: [] })),
+  rpc: vi.fn(async (procedure: string) =>
+    procedure === "board/filingOutcomes"
+      ? {
+          bots: [{ botId: "bot", name: "Helper", filed: 3, done: 1, open: 1, other: 1 }],
+        }
+      : { workspace: null, ready: 0, inProgress: 0, blocked: 0, items: [] },
+  ),
 }));
 vi.mock("./overview", () => ({
   loadOverviewConnections: vi.fn(),
@@ -73,6 +80,10 @@ it("renders the three read-only Overview panels and their empty states", async (
   ])
     expect(node.textContent).toContain(text);
   expect(node.textContent).not.toContain("Allow once");
+  expect(node.textContent).toContain(
+    "Helper filed 3: 1 done, 1 open, 1 closed without being completed.",
+  );
+  expect(node.textContent).not.toContain("closed otherwise");
 });
 it("keeps loading and error recovery independent without exposing approval or settings actions", async () => {
   let reject!: (error: Error) => void;
@@ -164,6 +175,105 @@ it.each(["needs-sign-in", "not-connected"])(
     expect(node.textContent).toContain("Calendar · Needs sign-in");
   },
 );
+it("shows the work list and leaves the counts out when filing outcomes fail", async () => {
+  const original = vi.mocked(rpc).getMockImplementation()!;
+  vi.mocked(rpc).mockImplementation(async (procedure: string, input?: unknown) => {
+    if (procedure === "board/filingOutcomes") throw new Error("outcomes unavailable");
+    if (procedure === "board/work")
+      return {
+        workspace: {
+          id: "workspace",
+          kind: "space",
+          path: "",
+          prefix: "work",
+          name: "Work",
+          enabled: true,
+          initialized: true,
+          isDefault: true,
+          allowAllBots: true,
+          allowedBotIds: [],
+        },
+        ready: 2,
+        inProgress: 0,
+        blocked: 0,
+        items: [
+          {
+            id: "work-1",
+            title: "Ready work",
+            description: "",
+            acceptanceCriteria: "",
+            type: "task",
+            status: "open",
+            priority: 2,
+            assignee: null,
+            labels: [],
+            parent: null,
+            dependencies: [],
+            dueAt: null,
+            deferUntil: null,
+            estimateMinutes: null,
+            externalRef: null,
+            createdAt: "2026-09-25T12:00:00.000Z",
+            updatedAt: "2026-09-25T12:00:00.000Z",
+            closedAt: null,
+            commentCount: 0,
+            comments: [],
+            history: [],
+            closeWhenDone: false,
+          },
+        ],
+      };
+    return original(procedure, input);
+  });
+  try {
+    await act(async () => root.render(createElement(OverviewScreen)));
+    expect(node.textContent).not.toContain("Board outcomes");
+    expect(node.textContent).not.toContain("closed without being completed");
+    expect(node.textContent).toContain("Ready work");
+    expect(node.textContent).toContain("Ready: 2");
+    expect(node.textContent).not.toContain("Could not load");
+  } finally {
+    vi.mocked(rpc).mockImplementation(original);
+  }
+});
+it("asks for the work list and the filing counts at once", async () => {
+  const original = vi.mocked(rpc).getMockImplementation()!;
+  let finishWork!: () => void;
+  const workAnswered = new Promise<void>((resolve) => {
+    finishWork = resolve;
+  });
+  vi.mocked(rpc).mockImplementation(async (procedure: string, input?: unknown) => {
+    if (procedure === "board/work") await workAnswered;
+    return original(procedure, input);
+  });
+  try {
+    await act(async () => root.render(createElement(OverviewScreen)));
+    const asked = () => vi.mocked(rpc).mock.calls.map(([procedure]) => procedure);
+    expect(asked()).toContain("board/work");
+    // The counts do not wait for the work list.
+    expect(asked()).toContain("board/filingOutcomes");
+    await act(async () => finishWork());
+    expect(node.textContent).toContain("Ready: 0 · In progress: 0 · Blocked: 0");
+  } finally {
+    finishWork();
+    vi.mocked(rpc).mockImplementation(original);
+  }
+});
+it("renders the Work summary from a server that has no filing outcomes", async () => {
+  const original = vi.mocked(rpc).getMockImplementation()!;
+  vi.mocked(rpc).mockImplementation(async (procedure: string, input?: unknown) => {
+    if (procedure === "board/filingOutcomes") throw new Error("NOT_FOUND");
+    return original(procedure, input);
+  });
+  try {
+    await act(async () => root.render(createElement(OverviewScreen)));
+    expect(node.textContent).toContain("Ready: 0 · In progress: 0 · Blocked: 0");
+    expect(node.textContent).not.toContain("filed");
+    expect(node.textContent).not.toContain("Could not load");
+  } finally {
+    vi.mocked(rpc).mockImplementation(original);
+  }
+});
 it("identifies totals-only usage as records on mobile", async () => {
   const period = { records: 1, requests: 1, inputTokens: 20, outputTokens: 5, cost: null };
   vi.mocked(loadOverviewUsage).mockResolvedValue({

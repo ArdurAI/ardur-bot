@@ -162,12 +162,122 @@ reviewer model, and Enable. Enable uses the existing learning configure call. Le
 off until someone turns it on.
 
 Bot-created items keep the actor `bot:<name>`, the label `bot-filed`, and the run
-id in Beads metadata while the setting is on. The server allows 5 new items per run
-and 30 per space each hour, and returns an existing open item when the normalized
-title matches. It redacts that run's secrets from titles, descriptions, acceptance
-criteria, comments and close reasons whether or not the setting is on. Read-only
+id in Beads metadata while the setting is on. The run, bot and filer are written in
+one Beads update; if the same run finds its own item without them, it writes them
+again. The server allows 5 new items per run and 30 per space each hour, and returns
+an existing open item when the normalized title matches. Filings in one space run one
+at a time under a Postgres session advisory lock held on a separate six-connection
+pool per process, so the lock never borrows from the shared database pool and six spaces can
+file at once. Every production board service gets that pool; the in-process lock is for tests
+and refuses to run in production. The reservation is its
+own short transaction and no Beads command runs inside a database transaction. A filing
+that waits 15 seconds for the lock returns `Another write is in progress. Try again in a few seconds.`
+A full lock pool, or a Postgres server at its connection limit, counts as waiting; the lock pool
+does not retry a refused connection on its own. A board read's sweep only tries: it waits at
+most 100 ms for a connection and otherwise leaves the space for the next sweep.
+Once create returns an item id, that id stays on the reservation. A failed create that left no item
+removes its reservation. A reservation with no item id stops counting toward either cap
+after 15 minutes. A retry claims an open item only when that item has no filer, no filing
+row, and a created time from the reservation's second through the reservation plus 15
+minutes, and the reservation itself is still inside those 15 minutes. A hollow reservation
+older than 15 minutes is never claimed. The next Approve or tool create deletes it and files a
+new item only when no open item already has that title. When an open item is already there and
+cannot be claimed, Approve links it as reused and the tool returns it as a duplicate. The next
+Reject still deletes a hollow reservation. Learning approval holds the filing lock until the suggestion
+is saved as applied, filing first and then the save. Reject and Undo commit the status
+change under that lock before they close the item. Unchanged means the same `updatedAt` and
+the same comment count: Beads leaves `updatedAt` alone when someone comments, so a comment counts
+as a change for Reject, Undo and every retry. Approve records the item's comment count next to its
+`updatedAt`. If the close fails, the filing keeps the close reason in `closePending` and the
+item's `updatedAt` and comment count in `closeUpdatedAt` and `closeCommentCount`. A scheduled
+sweep and the next board read of that space finish the close whenever the item is already
+closed, for any reason, or is still open and unchanged at that `updatedAt` and comment count.
+They then delete the filing and free the hourly slot. Any board read that shows the item closed
+also ends its pending close and deletes the filing.
+Approve files a learning proposal's item as the proposal's bot, as a run's outcome delivery runs
+as the run's bot. Reject and Undo are the person's own actions, so they show and close the item
+with the person's own board access, and every retry of a close they left pending, scheduled or
+clicked, opens the board as that same person, never through the filing's bot. A bot that was
+archived or unticked from the board's allowed bots cannot block it. If the person can no longer
+close the item, for example because the computer now has another owner, the retry fails and
+counts as a failed try like any other. With the host bridge on (the packaged images), the
+desktop admits a bot only inside one of its runs, so board work with no run goes through the
+owner's connection in the API as the owner. The worker has no such connection, so there its
+notification tick and a run's outcome delivery leave every pending close to the API and do not
+count a failed try. The API sweeps pending closes every 30 seconds whenever the host bridge is
+on, whatever `WAKEUP_DRIVER` is; without the bridge the worker's board notification tick sweeps
+them, or the API's reconciler when it runs the in-memory job queue. The worker's reconciler
+leaves them to that tick. The filing lock keeps two sweeps from closing the same item. The
+worker's tick sweeps after its delivery transaction commits, with no transaction open, and
+delivery never waits for a sweep. Each close holds its space's filing lock around the Beads
+show and close, leaves a space another write holds for the next sweep, and stops at the tick's
+15-second deadline. A close that deadline interrupts counts as a failed try. The API's sweep and
+the in-memory reconciler's sweep have the same deadline, and each passes its stop down to the
+board command. The reconciler recovers runs, leases and routines first and then starts its board
+work (run outcomes, and that sweep in the API) without waiting for it, one pass at a time, so a
+hung board command never delays recovery. Stopping the reconciler stops that pass.
+If a person closes the item themselves, for any reason, before the sweep finishes, that ends the
+pending close quietly: the sweep clears the marker, deletes the filing, and leaves the item closed
+as they left it. Only an edit that leaves the item open — a different assignee, status or other
+field, with no close — counts as changed; the sweep then clears the marker, deletes the filing,
+and Learning shows "This board item changed after it was filed. Review it on the Board." Retries
+stop either way.
+Reject and Undo answer with the code `board-closing`, and web and mobile show
+"Closing on the Board." at once and until that marker clears. A close that keeps failing waits
+longer between tries and, after five failures, sends the notice
+"A board item filed by a bot could not be closed." with "Ardur Bot tried five times. Close it
+on the Board, or check that this computer is connected." Learning shows the same two lines in
+place of "Closing on the Board.", and web and desktop notifications show them in the reader's
+language; mobile push text comes from the server, which has no user language, like every other
+Board push. When the owner follows the item, the notice goes on that follow and advances its
+version in the same write, so the next comment or status change notifies at a later version.
+Otherwise the notice follows the item from the state Beads shows, as Follow does, or, when the
+item cannot be shown, it names the owner, board and item without a follow. If the notice cannot
+be stored, each later failure tries again. The filing records when it was stored in
+`closeNoticeAt`, and no failure after that sends it again. Every write to a learning proposal's
+body locks that proposal's row and reads the body again first, so the close reason a board read
+records and the changed marker a released close records both stay. An item
+already closed with "Undone from Learning" counts as undone. A learning proposal's
+labels are written on the new item together with `bot-filed`, the same labels Details
+listed before approval. They follow the board's label rules (no comma, line break or null),
+so review drops a proposed item whose label the board would refuse and keeps the rest. Beads lists `created_at` as a
+whole second while a reservation stores milliseconds. A human item created in the
+reservation's same second, with no filer and no filing row, is claimed while the reservation
+is still fresh; that is accepted. It redacts that run's secrets from titles,
+descriptions, acceptance criteria, labels, assignees, external references, comments
+and close reasons whether or not the setting is on. Read-only
 grants still reject writes. A stale phone confirmation does not make the board
 read-only; the run pauses for confirmation the same way as other consequential tools.
+
+The Work panel and mobile Overview group the last 30 days of filing records by bot
+and show completed, open and closed-without-being-completed counts. If that outcome
+query fails or its answer is malformed, they still show the work list and leave the counts
+out. A board read finds the filings of the items it
+returned with one query, then records each closed filing's outcome and the proposal's close
+reason in one transaction. If that write fails, the outcome stays empty and the next read retries
+both. An item that is open again clears its filing's outcome and the proposal's close reason, so
+its next close records afresh. A negative phrase counts only when it is the resolution itself:
+won't fix (also wontfix), duplicate, not needed, not planned, obsolete, invalid, cannot
+reproduce and can't reproduce, at the start of the reason or right after "closed as", "resolved
+as", "resolved:", "marked as" or "closed:", are closed without being completed ("Duplicate,
+fixed in board-12", "Not needed, done elsewhere", "Resolved: won't fix", "Closed as a duplicate
+of board-3"). A reason that starts with a completion word (fixed, done, completed, implemented,
+removed, added, shipped, merged, resolved) is otherwise completed, whatever it goes on to name
+("Fixed duplicate header row in the export", "Removed the obsolete endpoint", "Resolved, not a
+duplicate"). Otherwise an empty close reason, Beads' default "Closed" (from `bd close`
+with no reason or an empty one), or a completion word (done, complete, completed, fixed,
+resolved, implemented, shipped, merged, finished, delivered, landed) is completed unless a
+negation comes up to three words before it. The negation words are not, never, no, nothing,
+nobody, none, nowhere, cannot, can't, couldn't, won't, didn't, isn't, wasn't, hasn't, haven't,
+and unable to ("not done", "can't get it fixed", "nothing was resolved", "isn't done").
+"no" followed by a number is a label, not a negation ("ticket no 12 resolved", "case no 5 fixed",
+"Item no 1 done"). "no fix was possible" stays closed without being completed. A
+completion word with an un- prefix (unresolved, unfixed, undone, unfinished) is negated.
+Every other reason is closed without being completed. A learning proposal that
+links to an existing item records its outcome but is not counted again. An item
+that nobody reads after it closes remains open in this projection until the next read,
+so staleness is unbounded for an abandoned board and otherwise lasts until the next
+15-second foreground board poll or later board access.
 
 Send to a bot creates a normal conversation turn containing the item's title,
 description and acceptance criteria. The item becomes in progress, assigned to
@@ -198,7 +308,8 @@ worker's independent notification loop retries mobile push delivery through the 
 notification provider. It has separate leadership, non-overlapping 30-second cycles,
 and one 15-second deadline for each batch. Push delivery does not block run,
 routine or lease recovery. Current ownership, membership, enabled state and notification
-preferences are checked before delivery. Unfollow removes pending notifications.
+preferences are checked before delivery. Unfollow removes pending notifications; a failed-close
+notice without a follow stays until it is delivered.
 External Beads changes are observed on the next app read. Push delivery is at least
 once on transport failures, with the existing per-item collapse key.
 
@@ -222,9 +333,15 @@ for management and Files access. New mobile strings have Russian and Chinese tra
   queue. Very large boards can exceed these limits and return a structured error.
 - The UI and provider add no runtime dependencies or required hosted service.
   Ordinary model costs still apply when work is sent to a bot.
-- Apply the application migrations through `20260925150000_board_follow_settings`
-  before opening Board. Generation and offline tests do not prove a live
-  deployment has applied the schema.
+- Apply the application migrations through `20260926010000_board_filing_upkeep`, which
+  follows `20260925170000_bot_upkeep`, before opening Board. It holds every filing column this
+  work adds and lets a failed-close notice exist without a follow. Generation and offline tests
+  do not prove a live deployment has applied the schema.
+- `packages/adapters/src/board/filing.postgres.test.ts` and `delivery.postgres.test.ts` skip
+  themselves without a real Postgres, and run in CI: the `test-integration` job starts a real
+  `postgres:16-alpine` container (through `@testcontainers/postgresql`, on the runner's own
+  Docker daemon), migrates it, and gives each listed suite in
+  `packages/testkit/src/cli/harness.ts` its own database cloned from that schema.
 
 See [verification evidence](board-verification.md) for the tested commands,
 recorded real-command JSON, UI walkthrough and remaining acceptance checks.

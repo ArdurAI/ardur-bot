@@ -1355,12 +1355,22 @@ const REPORT_NAME_BY_KEY = {
   policy: "policy.json",
 };
 
+function reportList(keys) {
+  const names = keys.map((key) => REPORT_NAME_BY_KEY[key]);
+  return names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+}
+
 /** A partial set never suggests the waiver: the waiver only ever helps when nothing was uploaded. */
-function partialEvidenceDetail(missingKeys) {
-  const names = missingKeys.map((key) => REPORT_NAME_BY_KEY[key]);
-  const list =
-    names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
-  return `This release run did not upload ${list}. Every report is required before the release gate can judge this run.`;
+function partialEvidenceDetail(absentKeys) {
+  const list = reportList(absentKeys);
+  const pronoun = absentKeys.length === 1 ? "it" : "them";
+  return `This release run did not upload ${list}. Upload ${pronoun} with the other reports and run the release again.`;
+}
+
+/** Distinct from `partialEvidenceDetail`: this file was uploaded, it just could not be parsed. */
+function unreadableReportDetail(key) {
+  const name = REPORT_NAME_BY_KEY[key];
+  return `${name} could not be read. Fix or re-upload it and run the release again.`;
 }
 
 export async function evaluatePublicationGate(input) {
@@ -1386,13 +1396,25 @@ export async function evaluatePublicationGate(input) {
   const undeclaredIds = [];
   const missingReports = Object.keys(REPORT_NAME_BY_KEY).filter((key) => !input[key]);
   if (missingReports.length > 0) {
-    push(
-      "reports-missing",
-      "reports",
-      missingReports.length === Object.keys(REPORT_NAME_BY_KEY).length
-        ? NO_EVIDENCE_DETAIL
-        : partialEvidenceDetail(missingReports),
+    const unreadableKeys = missingReports.filter((key) =>
+      (input.unreadableReports ?? []).includes(key),
     );
+    const absentKeys = missingReports.filter((key) => !unreadableKeys.includes(key));
+    // A file that exists but failed to parse is never "not uploaded": name it and tell the
+    // operator to fix or re-upload it, rather than sending them looking for an upload problem.
+    for (const key of unreadableKeys) push("reports-missing", key, unreadableReportDetail(key));
+    if (absentKeys.length > 0)
+      push(
+        "reports-missing",
+        "reports",
+        // The waiver only ever helps an operator who uploaded nothing at all: offer it only when
+        // every report is absent and the reports directory itself is empty, never when it holds
+        // an unreadable file or an unrelated one.
+        absentKeys.length === Object.keys(REPORT_NAME_BY_KEY).length &&
+          !input.reportsDirectoryHasEntries
+          ? NO_EVIDENCE_DETAIL
+          : partialEvidenceDetail(absentKeys),
+      );
   } else {
     if (
       releasePolicy &&
@@ -1869,6 +1891,21 @@ async function readJson(file) {
   }
 }
 
+/** Like `readJson`, but tells a missing file apart from one that exists and failed to parse. */
+async function loadReport(file) {
+  let text;
+  try {
+    text = await readFile(file, "utf8");
+  } catch {
+    return { value: null, unreadable: false };
+  }
+  try {
+    return { value: JSON.parse(text), unreadable: false };
+  } catch {
+    return { value: null, unreadable: true };
+  }
+}
+
 /**
  * The extra candidate reports the gate judges: a public, parseable envelope of the same build as
  * `candidate.json`. Any other `candidate-*.json` is unjudged; the gate refuses it by name and
@@ -2101,9 +2138,13 @@ export async function runReleaseGate(options) {
     energyTargets = energy.observed;
     energyRejections = energy.rejections;
   }
-  const [parent, candidate, fixedRelease, policy] = await Promise.all(
-    REPORT_FILES.map((name) => readJson(path.join(options.reportsRoot, name))),
+  const loadedReports = await Promise.all(
+    REPORT_FILES.map((name) => loadReport(path.join(options.reportsRoot, name))),
   );
+  const [parent, candidate, fixedRelease, policy] = loadedReports.map((report) => report.value);
+  const reportKeys = Object.keys(REPORT_NAME_BY_KEY);
+  const unreadableReports = reportKeys.filter((_key, index) => loadedReports[index].unreadable);
+  const reportsDirectoryHasEntries = await directoryHasEntries(options.reportsRoot);
   const attachedCandidate = files.find((file) => file.name === "scoreboard-candidate.json");
   let attachedEvidenceDigest = null;
   let attachedEvidenceValid = false;
@@ -2142,6 +2183,8 @@ export async function runReleaseGate(options) {
     energyTargets,
     energyRejections,
     unmapped,
+    unreadableReports,
+    reportsDirectoryHasEntries,
     attachedEvidenceDigest,
     attachedEvidenceValid,
     candidateSha: options.candidateSha,

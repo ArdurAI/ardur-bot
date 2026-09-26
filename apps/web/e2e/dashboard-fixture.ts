@@ -236,6 +236,9 @@ export function dashboardFixture(botCount = 1) {
           blocked: boardItem.status === "blocked" ? 1 : 0,
           items: boardItem.status === "open" ? [{ ...boardItem }] : [],
         },
+        "board/filingOutcomes": {
+          bots: [{ botId: "bot", name: "Reviewer", filed: 3, done: 1, open: 1, other: 1 }],
+        },
         "board/view": {
           workspaces: [boardWorkspace],
           workspaceId: "board",

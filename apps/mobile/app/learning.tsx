@@ -1,10 +1,12 @@
 import type {
+  LearningActionResult,
   LearningJourneyEntry,
   LearningProposal,
   ProposalEvidence,
   SpaceLearningConfig,
 } from "@ardurbot/contracts";
 import {
+  boardClosingProposal,
   LearningJourneyEntrySchema,
   learningApprovalBlock,
   learningJourneyLabel,
@@ -28,6 +30,7 @@ import { useI18n } from "../lib/i18n";
 import { LearningCurator } from "../lib/LearningCurator";
 import { LearningObservations, LearningObservationView } from "../lib/LearningObservations";
 import {
+  actionMessage,
   learningAction,
   learningBeforeAfter,
   loadLearning,
@@ -52,7 +55,7 @@ export default function Learning() {
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(busy);
   busyRef.current = busy;
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [evidence, setEvidence] = useState<ProposalEvidence | null>(null);
   const [conflict, setConflict] =
@@ -71,22 +74,29 @@ export default function Learning() {
   }, [botId, selectedId]);
   useFocusEffect(
     useCallback(() => {
-      void load().catch(() => setError(true));
+      void load().catch(() => setError(t("Could not update learning. Try again.")));
       const timer = setInterval(() => {
         if (!busyRef.current) void load().catch(() => undefined);
       }, 15000);
       return () => clearInterval(timer);
     }, [load]),
   );
+  /** Shows a close that Reject or Undo left running at once; the reload that follows confirms it. */
+  function settle(result: LearningActionResult) {
+    const proposal = boardClosingProposal(result);
+    if (!proposal) return;
+    setItems((current) => current.map((row) => (row.id === proposal.id ? proposal : row)));
+    setSelected((current) => (current?.id === proposal.id ? proposal : current));
+  }
   async function change(action: () => Promise<unknown>) {
     if (busy) return;
     setBusy(true);
-    setError(false);
+    setError(null);
     try {
       await action();
       await load();
-    } catch {
-      setError(true);
+    } catch (caught) {
+      setError(actionMessage(caught, t("Could not update learning. Try again.")));
     } finally {
       setBusy(false);
     }
@@ -137,7 +147,7 @@ export default function Learning() {
         {error ? (
           <View>
             <Text accessibilityRole="alert" style={styles.error}>
-              {t("Could not update learning. Try again.")}
+              {error}
             </Text>
             <Button title={t("Retry")} onPress={() => void change(load)} />
           </View>
@@ -213,11 +223,13 @@ export default function Learning() {
                         ? t("Proposed consolidation")
                         : proposal.type === "policy-suggestion"
                           ? proposal.rationale
-                          : (proposal.proposedContent
-                              ?.split("\n")
-                              .find((line) => line.trim() && line !== "---") ??
-                            proposal.typedDelta?.key ??
-                            proposal.type)}
+                          : proposal.type === "board-item"
+                            ? proposal.boardItem?.title
+                            : (proposal.proposedContent
+                                ?.split("\n")
+                                .find((line) => line.trim() && line !== "---") ??
+                              proposal.typedDelta?.key ??
+                              proposal.type)}
                   </Text>
                   <Text style={styles.secondary}>
                     {proposal.scope.botId
@@ -235,19 +247,27 @@ export default function Learning() {
                         <Button
                           title={t("Reject")}
                           disabled={busy}
-                          onPress={() => void change(() => learningAction("reject", proposal.id))}
+                          onPress={() =>
+                            void change(async () => {
+                              const result = await learningAction("reject", proposal.id);
+                              settle(result);
+                              setConflict(result.conflict);
+                              setOpen(proposal.id);
+                            })
+                          }
                         />
                       </>
                     ) : proposal.status === "applied" ? (
                       <>
                         <Text style={styles.body}>{t("Applied")}</Text>
-                        {proposal.appliedRevisionId ? (
+                        {proposal.appliedRevisionId || proposal.appliedBoardItem ? (
                           <Button
                             title={t("Undo")}
                             disabled={busy}
                             onPress={() =>
                               void change(async () => {
                                 const result = await learningAction("revert", proposal.id);
+                                settle(result);
                                 setConflict(result.conflict);
                                 setOpen(proposal.id);
                               })
@@ -257,10 +277,25 @@ export default function Learning() {
                       </>
                     ) : (
                       <Text style={styles.secondary}>
-                        {proposal.status === "reverted" ? t("Undone") : proposal.status}
+                        {proposal.boardChanged
+                          ? t("This board item changed after it was filed. Review it on the Board.")
+                          : proposal.boardCloseFailed
+                            ? t("A board item filed by a bot could not be closed.")
+                            : proposal.boardClosing
+                              ? t("Closing on the Board.")
+                              : proposal.status === "reverted"
+                                ? t("Undone")
+                                : proposal.status}
                       </Text>
                     )}
                   </View>
+                  {proposal.boardCloseFailed && !proposal.boardChanged ? (
+                    <Text style={styles.secondary}>
+                      {t(
+                        "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected.",
+                      )}
+                    </Text>
+                  ) : null}
                   {blocked ? <Text style={styles.secondary}>{t(blocked)}</Text> : null}
                   <Button
                     title={t("Details")}
@@ -272,17 +307,60 @@ export default function Learning() {
                   />
                   {open === proposal.id ? (
                     <View>
-                      <Text style={styles.title}>{t("Before")}</Text>
-                      <Text selectable style={styles.body}>
-                        {diff.before}
-                      </Text>
-                      <Text style={styles.title}>{t("After")}</Text>
-                      <Text selectable style={styles.body}>
-                        {diff.after}
-                      </Text>
+                      {proposal.type === "board-item" && proposal.boardItem ? (
+                        <>
+                          <Text style={styles.title}>{t("Title")}</Text>
+                          <Text selectable style={styles.body}>
+                            {proposal.boardItem.title}
+                          </Text>
+                          <Text style={styles.title}>{t("Description")}</Text>
+                          <Text selectable style={styles.body}>
+                            {proposal.boardItem.description}
+                          </Text>
+                          <Text style={styles.title}>{t("Acceptance criteria")}</Text>
+                          <Text selectable style={styles.body}>
+                            {proposal.boardItem.acceptanceCriteria}
+                          </Text>
+                          {proposal.boardItem.labels?.length ? (
+                            <>
+                              <Text style={styles.title}>{t("Labels")}</Text>
+                              <Text selectable style={styles.body}>
+                                {proposal.boardItem.labels.join(", ")}
+                              </Text>
+                            </>
+                          ) : null}
+                        </>
+                      ) : (
+                        <>
+                          <Text style={styles.title}>{t("Before")}</Text>
+                          <Text selectable style={styles.body}>
+                            {diff.before}
+                          </Text>
+                          <Text style={styles.title}>{t("After")}</Text>
+                          <Text selectable style={styles.body}>
+                            {diff.after}
+                          </Text>
+                        </>
+                      )}
                       <Text style={styles.body}>{proposal.rationale}</Text>
                       {proposal.observation ? (
                         <LearningObservationView observation={proposal.observation} />
+                      ) : null}
+                      {proposal.boardOutcome ? (
+                        <Text style={styles.secondary}>
+                          {proposal.boardOutcome.outcome === "completed"
+                            ? t("This board item was completed.")
+                            : proposal.boardOutcome.outcome === "closed-other"
+                              ? proposal.boardOutcome.closeReason
+                                ? t(
+                                    "This board item was closed without being completed: {reason}. Review it on the Board.",
+                                    { reason: proposal.boardOutcome.closeReason },
+                                  )
+                                : t(
+                                    "This board item was closed without being completed. Review it on the Board.",
+                                  )
+                              : t("This board item is still open.")}
+                        </Text>
                       ) : null}
                       {proposal.confidence ? (
                         <Text style={styles.secondary}>
@@ -330,20 +408,38 @@ export default function Learning() {
                       {conflict ? (
                         <View>
                           <Text style={styles.error}>
-                            {t("Later edits overlap this change. Review both versions in History.")}
+                            {proposal.type === "board-item"
+                              ? conflict.code === "board-left-open"
+                                ? t(
+                                    "This board item changed after it was filed, so it was left open for review on the Board.",
+                                  )
+                                : conflict.code === "board-already-closed"
+                                  ? t("This board item was already closed on the Board.")
+                                  : conflict.code === "board-changed" || !conflict.current
+                                    ? t(
+                                        "This board item changed after it was filed. Review it on the Board.",
+                                      )
+                                    : conflict.current
+                              : t(
+                                  "Later edits overlap this change. Review both versions in History.",
+                                )}
                           </Text>
-                          <Text style={styles.title}>{t("Before")}</Text>
-                          <Text selectable style={styles.body}>
-                            {conflict.before}
-                          </Text>
-                          <Text style={styles.title}>{t("Applied")}</Text>
-                          <Text selectable style={styles.body}>
-                            {conflict.applied}
-                          </Text>
-                          <Text style={styles.title}>{t("Current")}</Text>
-                          <Text selectable style={styles.body}>
-                            {conflict.current}
-                          </Text>
+                          {proposal.type === "board-item" ? null : (
+                            <>
+                              <Text style={styles.title}>{t("Before")}</Text>
+                              <Text selectable style={styles.body}>
+                                {conflict.before}
+                              </Text>
+                              <Text style={styles.title}>{t("Applied")}</Text>
+                              <Text selectable style={styles.body}>
+                                {conflict.applied}
+                              </Text>
+                              <Text style={styles.title}>{t("Current")}</Text>
+                              <Text selectable style={styles.body}>
+                                {conflict.current}
+                              </Text>
+                            </>
+                          )}
                         </View>
                       ) : null}
                     </View>

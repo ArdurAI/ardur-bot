@@ -1,5 +1,6 @@
 import type { ConnectionOverview, UsagePeriod, UsageSummary } from "@ardurbot/contracts";
-import { BoardWorkSchema } from "@ardurbot/contracts/board";
+import type { BoardFilingOutcomeCount } from "@ardurbot/contracts/board";
+import { BoardFilingOutcomeCountSchema, BoardWorkSchema } from "@ardurbot/contracts/board";
 import type { OverviewNow } from "@ardurbot/core";
 import { activeDelegations, TEAM_REFRESH_MS } from "@ardurbot/core";
 import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
@@ -21,7 +22,22 @@ import { useI18n } from "../lib/i18n";
 import { useMobileTokens } from "../lib/native";
 import { loadOverviewConnections, loadOverviewNow, loadOverviewUsage } from "../lib/overview";
 
-const loadWork = async () => BoardWorkSchema.parse(await rpc("board/work", {}));
+const loadWork = async () => {
+  const [work, filingOutcomes] = await Promise.all([
+    rpc("board/work", {}),
+    rpc("board/filingOutcomes", {}).then(
+      (outcomes): BoardFilingOutcomeCount[] => {
+        const parsed = BoardFilingOutcomeCountSchema.array().safeParse(
+          (outcomes as { bots?: unknown } | null)?.bots,
+        );
+        return parsed.success ? parsed.data : [];
+      },
+      // The work list stays; the counts are simply left out.
+      () => [],
+    ),
+  ]);
+  return { ...BoardWorkSchema.parse(work), filingOutcomes };
+};
 const MobileBoard = lazy(() =>
   import("../components/board-view").then((module) => ({ default: module.MobileBoard })),
 );
@@ -87,6 +103,14 @@ export default function OverviewScreen() {
                       </Pressable>
                     ) : null}
                   </View>
+                ))}
+                {data.filingOutcomes.map((row) => (
+                  <Line key={row.botId}>
+                    {t(
+                      "{name} filed {filed}: {done} done, {open} open, {other} closed without being completed.",
+                      row,
+                    )}
+                  </Line>
                 ))}
                 {!data.workspace ? (
                   <Button

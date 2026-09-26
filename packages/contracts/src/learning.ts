@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { BoardLabelSchema } from "./board-label.js";
 import { LocalImportToolSchema } from "./local-import.js";
 import { RuntimePinSchema } from "./runtime-pins.js";
 
@@ -22,10 +23,20 @@ export const LearningProposalTypeSchema = z.enum([
   "memory",
   "skill",
   "preference",
+  "board-item",
   "policy-suggestion",
   "pin-insight",
   "harness-issue",
 ]);
+export const LearningBoardItemSchema = z
+  .object({
+    title: z.string().trim().min(1).max(200),
+    description: z.string().max(32_000),
+    acceptanceCriteria: z.string().trim().min(1).max(32_000),
+    labels: z.array(BoardLabelSchema).max(20).optional(),
+    workspaceId: z.string().min(1).max(160).optional(),
+  })
+  .strict();
 export const LearningCandidateSchema = z
   .object({
     type: LearningProposalTypeSchema,
@@ -42,6 +53,7 @@ export const LearningCandidateSchema = z
       })
       .strict()
       .optional(),
+    boardItem: LearningBoardItemSchema.optional(),
     rationale: z.string().min(1).max(2000),
     evidenceIds: z.array(z.string()).min(1).max(30),
     confidence: z
@@ -50,8 +62,14 @@ export const LearningCandidateSchema = z
   })
   .strict()
   .refine(
-    (value) => (value.proposedContent !== undefined) !== (value.typedDelta !== undefined),
-    "Provide content or a typed delta.",
+    (value) =>
+      [
+        value.proposedContent !== undefined,
+        value.typedDelta !== undefined,
+        value.boardItem !== undefined,
+      ].filter(Boolean).length === 1 &&
+      (value.type === "board-item") === (value.boardItem !== undefined),
+    "Provide content, a typed delta, or a board item for its matching proposal type.",
   );
 export const ObservationWindowSchema = z.object({
   from: z.string().datetime(),
@@ -167,6 +185,30 @@ export const LearningProposalSchema = z
     appliedRevisionId: z.string().optional(),
     revertedRevisionId: z.string().optional(),
     appliedAt: z.string().datetime().optional(),
+    appliedBoardItem: z
+      .object({
+        workspaceId: z.string(),
+        itemId: z.string(),
+        updatedAt: z.string(),
+        // Beads leaves updatedAt alone when someone comments, so Undo also compares the count.
+        commentCount: z.number().int().nonnegative().optional(),
+        duplicate: z.boolean(),
+        closeReason: z.string().max(32_000).optional(),
+      })
+      .strict()
+      .optional(),
+    boardOutcome: z
+      .object({
+        closedAt: z.string().datetime().nullable(),
+        outcome: z.enum(["completed", "closed-other"]).nullable(),
+        closeReason: z.string().nullable().optional(),
+      })
+      .strict()
+      .optional(),
+    boardClosing: z.boolean().optional(),
+    // The pending close kept failing and its notice was sent.
+    boardCloseFailed: z.boolean().optional(),
+    boardChanged: z.boolean().optional(),
     documentId: z.string().optional(),
     blockedReason: z.string().optional(),
     settingBefore: z.boolean().optional(),
@@ -181,8 +223,14 @@ export const LearningProposalSchema = z
   })
   .strict()
   .refine(
-    (value) => (value.proposedContent !== undefined) !== (value.typedDelta !== undefined),
-    "Provide content or a typed delta.",
+    (value) =>
+      [
+        value.proposedContent !== undefined,
+        value.typedDelta !== undefined,
+        value.boardItem !== undefined,
+      ].filter(Boolean).length === 1 &&
+      (value.type === "board-item") === (value.boardItem !== undefined),
+    "Provide content, a typed delta, or a board item for its matching proposal type.",
   );
 export type LearningProposal = z.infer<typeof LearningProposalSchema>;
 export type LearningCandidate = z.infer<typeof LearningCandidateSchema>;
@@ -327,15 +375,23 @@ export const LearningEditSchema = z
 export type LearningEdit = z.infer<typeof LearningEditSchema>;
 export const LearningActionSchema = z.object({
   proposal: LearningProposalSchema,
+  // Reject or Undo committed and the board close is still running. Screens word it themselves.
+  code: z.enum(["board-closing"]).optional(),
   conflict: z
     .object({
       before: z.string(),
       applied: z.string(),
       current: z.string(),
       expectedRevision: z.number(),
+      code: z.string().optional(),
     })
     .optional(),
 });
+export type LearningActionResult = z.infer<typeof LearningActionSchema>;
+/** The proposal Reject or Undo returned while its board close is still running, marked closing. */
+export function boardClosingProposal(result: LearningActionResult): LearningProposal | null {
+  return result.code === "board-closing" ? { ...result.proposal, boardClosing: true } : null;
+}
 export const LearningCountsSchema = z.object({
   pendingCount: z.number(),
   appliedThisWeek: z.number(),
