@@ -4,7 +4,7 @@ import { Trans, useLingui } from "@lingui/react/macro";
 import { Eye, EyeOff } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { authClient, refreshAuthSession } from "../lib/auth";
+import { authClient } from "../lib/auth";
 import { authReturnPath } from "../lib/auth-return-path";
 import { clearSpaceSelection } from "../lib/rpc";
 
@@ -17,6 +17,7 @@ const AUTH_CAPABILITIES_TIMEOUT_MS = 8_000;
 const MAX_AUTH_CAPABILITIES_RESPONSE_BYTES = 64 * 1024;
 
 export function AuthPage({ mode }: { mode: AuthMode }) {
+  const { refetch: refreshAuthSession } = authClient.useSession();
   const { t } = useLingui();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();

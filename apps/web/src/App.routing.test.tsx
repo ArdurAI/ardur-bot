@@ -5,6 +5,7 @@ import { createRoot } from "react-dom/client";
 import { MemoryRouter, useLocation, useParams } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { App } from "./App";
+import { authReturnPath } from "./lib/auth-return-path";
 import { readOpenTo, writeOpenTo } from "./pages/shell/open-to";
 
 let mockSessionUser: { id: string } | null = { id: "viewer" };
@@ -154,7 +155,12 @@ it("defaults malformed preferences to Dashboard and does not use an account iden
 it.each([
   ["/onboarding", "/sign-in?next=%2Fonboarding"],
   ["/mcp/oauth/callback", "/sign-in?next=%2Fmcp%2Foauth%2Fcallback"],
+  [
+    "/mcp/oauth/callback?code=sample&state=local-state",
+    "/sign-in?next=%2Fmcp%2Foauth%2Fcallback%3Fcode%3Dsample%26state%3Dlocal-state",
+  ],
   ["/integrations/setup", "/sign-in?next=%2Fintegrations%2Fsetup"],
+  ["/integrations/setup?mode=mcp", "/sign-in?next=%2Fintegrations%2Fsetup%3Fmode%3Dmcp"],
   ["/app/board", "/sign-in?next=%2Fapp%2Fboard"],
   ["/app/ide", "/sign-in?next=%2Fapp%2Fide"],
   ["/app/team", "/sign-in?next=%2Fapp%2Fteam"],
@@ -176,5 +182,8 @@ it.each([
     expect(node.querySelector('[data-testid="auth-page"]')?.textContent).toBe(
       `in:${expectedSignIn}`,
     );
+    expect(
+      authReturnPath(new URL(expectedSignIn, "http://localhost").searchParams.get("next")),
+    ).toBe(path);
   },
 );
