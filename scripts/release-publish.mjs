@@ -1,5 +1,9 @@
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { appendFileSync, existsSync } from "node:fs";
+
+// Every draft and release this workflow creates carries this marker in its body, so a later run
+// can tell its own leftover draft apart from one a maintainer wrote by hand.
+const WORKFLOW_MARKER = "<!-- ardur-bot-release-desktop-workflow -->";
 
 function fail(message) {
   process.stderr.write(`${message}\n`);
@@ -39,7 +43,7 @@ const waiver = args["waiver-record"];
 if (!tag || !/^[a-f0-9]{40}$/.test(target ?? "") || !notes || files.length === 0)
   fail("invalid-argument");
 
-const view = gh(["release", "view", tag, "--json", "isDraft"]);
+const view = gh(["release", "view", tag, "--json", "isDraft,body"]);
 if (view.status === 0) {
   let parsed;
   try {
@@ -48,6 +52,10 @@ if (view.status === 0) {
     fail("Release lookup failed.");
   }
   if (parsed.isDraft === true) {
+    if (!String(parsed.body ?? "").includes(WORKFLOW_MARKER))
+      fail(
+        "A draft release already exists for this tag and was not created by this workflow; delete or publish it by hand first.",
+      );
     const deleted = gh(["release", "delete", tag, "--yes", "--cleanup-tag=false"]);
     if (deleted.status !== 0) propagate(deleted);
   } else {
@@ -56,6 +64,8 @@ if (view.status === 0) {
 } else if (!/not found/i.test(`${view.stderr ?? ""}${view.stdout ?? ""}`)) {
   propagate(view);
 }
+
+appendFileSync(notes, `\n${WORKFLOW_MARKER}\n`);
 
 const created = gh([
   "release",

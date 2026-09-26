@@ -19,16 +19,8 @@ on:
         required: false
         type: string
         default: ""
-      suite_version:
-        description: Scoreboard suite version
-        required: true
-        type: string
       environment:
         description: Hardware class and platform label
-        required: true
-        type: string
-      mode:
-        description: commit or release
         required: true
         type: string
       gate:
@@ -202,9 +194,10 @@ jobs:
       - name: Verify and restore the previous index chain
         env:
           MISSING_REASON: ${{ steps.prior.outputs.missing_reason }}
+          ARTIFACT_NAME: ${{ steps.prior.outputs.artifact_name }}
         run: |
           set -euo pipefail
-          args=(--source "$RUNNER_TEMP/scoreboard-index-restore" --root .context/performance/scoreboard-index)
+          args=(--source "$RUNNER_TEMP/scoreboard-index-restore" --root .context/performance/scoreboard-index --artifact "$ARTIFACT_NAME")
           if [[ -n "$MISSING_REASON" ]]; then
             args+=(--missing-reason "$MISSING_REASON")
           fi
@@ -215,18 +208,16 @@ jobs:
           SCOREBOARD_HEAD: ${{ inputs.candidate_sha || github.event.pull_request.head.sha || github.sha }}
           SCOREBOARD_RUNNER: ${{ github.sha }}
           SCOREBOARD_PENDING: ${{ needs.budgets.outputs.pending_reason || 'schema-3-evidence-not-produced' }}
-          SCOREBOARD_MODE: ${{ inputs.mode || 'commit' }}
+          SCOREBOARD_MODE: commit
           SCOREBOARD_ENVIRONMENT: ${{ inputs.environment || 'ubuntu-24.04-diagnostic' }}
-          SCOREBOARD_SUITE: ${{ inputs.suite_version || 'scoreboard-1' }}
+          SCOREBOARD_SUITE: scoreboard-1
           SCOREBOARD_FIXED: ${{ inputs.fixed_release_sha }}
           SCOREBOARD_ROOT: .context/performance/scoreboard-index
         run: node scripts/scoreboard-index.mjs index-push
-      - name: Drop commit objects outside the retention window
-        env:
-          SCOREBOARD_ROOT: .context/performance/scoreboard-index
-        run: node scripts/scoreboard-index.mjs prune
       - name: Upload the index transport copy
-        if: always() && steps.prior.outputs.artifact_name != ''
+        # Pull-request, manual and fork runs build a throwaway `-check` chain that nothing ever
+        # restores; only a durable push to dev or main uploads it for a later run to find.
+        if: always() && steps.prior.outputs.durable == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ steps.prior.outputs.artifact_name }}
@@ -270,10 +261,11 @@ jobs:
       - name: Verify and restore the previous release chain
         env:
           MISSING_REASON: ${{ steps.prior.outputs.missing_reason }}
+          ARTIFACT_NAME: ${{ steps.prior.outputs.artifact_name }}
         shell: bash
         run: |
           set -euo pipefail
-          args=(--source "$RUNNER_TEMP/scoreboard-release-index-restore" --root publication/scoreboard-publication/index)
+          args=(--source "$RUNNER_TEMP/scoreboard-release-index-restore" --root publication/scoreboard-publication/index --artifact "$ARTIFACT_NAME")
           if [[ -n "$MISSING_REASON" ]]; then
             args+=(--missing-reason "$MISSING_REASON")
           fi
@@ -311,6 +303,7 @@ jobs:
           SCOREBOARD_OUTPUT: publication/scoreboard-publication/gate.json
           SCOREBOARD_INDEX: publication/scoreboard-publication/index
           SCOREBOARD_WAIVER: ${{ inputs.evidence_waiver }}
+          SCOREBOARD_REPORTS_PRESENT: ${{ steps.reports.outputs.present }}
         run: node scripts/scoreboard-index.mjs release-gate
       - name: Upload the publication gate
         if: always()
