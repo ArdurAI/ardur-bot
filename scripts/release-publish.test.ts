@@ -8,10 +8,13 @@ import { describe, expect, it } from "vitest";
 const repo = fileURLToPath(new URL("..", import.meta.url));
 const script = path.join(repo, "scripts/release-publish.mjs");
 
+const WORKFLOW_MARKER = "<!-- ardur-bot-release-desktop-workflow -->";
+
 async function fakeGh(
   mode:
     | "missing"
     | "draft"
+    | "foreign-draft"
     | "published"
     | "upload-fails"
     | "edit-fails-published"
@@ -35,7 +38,11 @@ const views = readFileSync(process.env.GH_LOG, "utf8")
   .filter((line) => line.includes('"view"')).length;
 if (action === "view") {
   if (process.env.GH_FIXTURE === "draft") {
-    console.log(JSON.stringify({ isDraft: true }));
+    console.log(JSON.stringify({ isDraft: true, body: "${WORKFLOW_MARKER}" }));
+    process.exit(0);
+  }
+  if (process.env.GH_FIXTURE === "foreign-draft") {
+    console.log(JSON.stringify({ isDraft: true, body: "a maintainer's hand-written notes" }));
     process.exit(0);
   }
   if (process.env.GH_FIXTURE === "published") {
@@ -107,6 +114,19 @@ async function calls(log: string) {
 }
 
 describe("release publication retry", () => {
+  it("refuses to delete a hand-written draft and leaves it in place", async () => {
+    const foreign = await fakeGh("foreign-draft");
+    try {
+      const blocked = publish(foreign);
+      expect(blocked.status).not.toBe(0);
+      expect(blocked.stderr).toContain("was not created by this workflow");
+      const foreignCalls = await calls(foreign.log);
+      expect(foreignCalls.map((item) => item[1])).toEqual(["view"]);
+    } finally {
+      await rm(foreign.root, { recursive: true, force: true });
+    }
+  });
+
   it("deletes a leftover draft and still refuses a published release", async () => {
     const draft = await fakeGh("draft");
     const published = await fakeGh("published");
@@ -142,7 +162,7 @@ describe("release publication retry", () => {
       expect(blocked.status).not.toBe(0);
       expect(blocked.stderr).toContain("Release already exists");
       expect(await calls(published.log)).toEqual([
-        ["release", "view", "v0.1.0-alpha.1", "--json", "isDraft"],
+        ["release", "view", "v0.1.0-alpha.1", "--json", "isDraft,body"],
       ]);
 
       expect(publish(missing).status).toBe(0);
