@@ -4,7 +4,12 @@ import type {
   ComputerStatus,
   Me,
 } from "@ardurbot/contracts";
-import { COMPUTER_PROFILES, HOST_MOVE_UNAVAILABLE_MESSAGE } from "@ardurbot/contracts";
+import {
+  COMPUTER_PROFILES,
+  ENGINE_MISSING_CODE,
+  errorDataCode,
+  HOST_MOVE_UNAVAILABLE_CODE,
+} from "@ardurbot/contracts";
 import { ENGINE_LABELS } from "@ardurbot/contracts/fleet";
 import { sandboxKindForBot } from "@ardurbot/core";
 import {
@@ -185,10 +190,11 @@ export function ComputerProfile({
       setConfirm(false);
       await onChanged();
     } catch (caught: unknown) {
+      const code = errorDataCode(caught);
       setError(
-        caught instanceof Error && caught.message === HOST_MOVE_UNAVAILABLE_MESSAGE
-          ? // biome-ignore format: one catalog sentence
-            t`Moving a computer onto the machine running Ardur Bot is not available yet. Choose a saved connection or keep the current engine.`
+        (code === ENGINE_MISSING_CODE || code === HOST_MOVE_UNAVAILABLE_CODE) &&
+          caught instanceof Error
+          ? caught.message
           : t`Could not change the computer; stop its bots and try again.`,
       );
     } finally {

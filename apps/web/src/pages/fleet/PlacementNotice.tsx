@@ -1,7 +1,7 @@
 import type { HostLabel, Run } from "@ardurbot/contracts";
 import { Button } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
-import { useTargetName } from "./FleetSettings";
+import { useTargetName } from "./target-name";
 
 export function PlacementNotice({
   run,

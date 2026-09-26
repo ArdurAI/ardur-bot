@@ -1,5 +1,5 @@
 import { computerSupportsUpdate } from "@ardurbot/adapters";
-import type { ComputerStatus } from "@ardurbot/contracts";
+import type { ComputerStatus, HostLabel } from "@ardurbot/contracts";
 import { ComputerProfileSchema, computerCapabilities } from "@ardurbot/contracts";
 import { ACTIVE_RUN_STATUSES, computerScreenSize } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
@@ -66,6 +66,7 @@ export function toComputerStatus(
     maintenanceId?: string | null;
   } | null,
   busyBotName: string | null = null,
+  hostLabel?: HostLabel,
 ): ComputerStatus {
   const state = computer?.maintenanceId
     ? "booting"
@@ -101,5 +102,6 @@ export function toComputerStatus(
     homeRevision: computer?.homeRevision ?? null,
     busyBotName,
     canUpdate: computerSupportsUpdate(kind),
+    ...(hostLabel ? { hostLabel } : {}),
   };
 }

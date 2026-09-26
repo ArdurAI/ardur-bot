@@ -64,9 +64,10 @@ export class HostBridge {
   }
   async disconnect(userId: string) {
     await this.prisma.$transaction(async (tx) => {
-      await tx.hostRegistration.deleteMany({ where: { id: "default", userId } });
-      // On the desktop app's own stack only Set up chooses the host, so Disconnect undoes it.
-      if (isDesktopComposeStack())
+      const deleted = await tx.hostRegistration.deleteMany({ where: { id: "default", userId } });
+      // On the desktop app's own stack only Set up chooses the host, so Disconnect undoes it —
+      // but only its own registration's Disconnect, never a caller who owned no registration.
+      if (isDesktopComposeStack() && deleted.count > 0)
         await tx.deploymentSettings.updateMany({
           where: { id: "default", computerHost: "this-mac" },
           data: { computerHost: null },

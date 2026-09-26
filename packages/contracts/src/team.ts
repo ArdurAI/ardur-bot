@@ -49,7 +49,7 @@ export const TeamRowSchema = z.object({
 export type TeamRow = z.infer<typeof TeamRowSchema>;
 export const TeamBoardSchema = z.object({
   rows: z.array(TeamRowSchema),
-  hostLabel: HostLabelSchema,
+  hostLabel: HostLabelSchema.optional(),
 });
 export type TeamBoard = z.infer<typeof TeamBoardSchema>;
 export const teamContract = { board: oc.input(z.object({})).output(TeamBoardSchema) };

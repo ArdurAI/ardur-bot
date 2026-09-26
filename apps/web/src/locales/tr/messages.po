@@ -2864,7 +2864,7 @@ msgstr "Varsayılan ({0})"
 msgid "Default board"
 msgstr "Varsayılan pano"
 
-#: src/pages/fleet/FleetSettings.tsx
+#: src/pages/fleet/target-name.ts
 msgid "Default computer"
 msgstr ""
 
@@ -3128,11 +3128,11 @@ msgstr "Docker"
 msgid "Docker limits access to your computer for added security. Using {hostLabel} lets bots work with your local files and tools."
 msgstr "Docker, ek güvenlik için bilgisayarına erişimi sınırlar. {hostLabel} kullanıldığında botlar yerel dosyaların ve araçlarınla çalışabilir."
 
-#: src/pages/fleet/FleetSettings.tsx
+#: src/pages/fleet/target-name.ts
 msgid "Docker on this computer"
 msgstr ""
 
-#: src/pages/fleet/FleetSettings.tsx
+#: src/pages/fleet/target-name.ts
 msgid "Docker on this Mac"
 msgstr ""
 
@@ -4793,10 +4793,6 @@ msgstr ""
 #. placeholder {0}: value.minimumFreeGb
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Move when this Mac has under {0} GB free"
-msgstr ""
-
-#: src/pages/ComputerProfilesSettings.tsx
-msgid "Moving a computer onto the machine running Ardur Bot is not available yet. Choose a saved connection or keep the current engine."
 msgstr ""
 
 #: src/pages/MemoryImportExport.tsx
@@ -7472,7 +7468,7 @@ msgstr "bu bilgisayar"
 #: src/pages/AccountSettingsOverlay.tsx
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
-#: src/pages/fleet/FleetSettings.tsx
+#: src/pages/fleet/target-name.ts
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/ide/IdePage.tsx
 msgid "This computer"
@@ -7495,7 +7491,7 @@ msgid "this Mac"
 msgstr "bu Mac"
 
 #: src/pages/ComputerProfilesSettings.tsx
-#: src/pages/fleet/FleetSettings.tsx
+#: src/pages/fleet/target-name.ts
 #: src/pages/HostComputerSettings.tsx
 msgid "This Mac"
 msgstr ""

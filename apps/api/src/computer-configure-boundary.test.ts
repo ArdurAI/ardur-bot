@@ -140,6 +140,49 @@ it("returns the paired desktop's host label with the computer list", async () =>
   expect(body.json?.map((entry) => entry.status.hostLabel)).toEqual(["This Mac"]);
 });
 
+it("returns the paired desktop's host label from computer.boot", async () => {
+  const computer = {
+    id: "computer",
+    kind: "desktop",
+    state: "running",
+    scope: "dedicated",
+    controlHolder: "none",
+    homeRevision: "saved",
+    providerRef: "ref",
+  };
+  const prisma = {
+    bot: {
+      findFirst: async () => ({
+        id: "bot",
+        spaceId: "space",
+        userId: "owner",
+        archivedAt: null,
+        thread: { id: "thread" },
+        computer,
+      }),
+    },
+    hostRegistration: { findUnique: async () => ({ platform: "darwin" }) },
+    computerExecutionLease: { findUnique: async () => null },
+  } as unknown as PrismaClient;
+  const handler = new RPCHandler(
+    createRouter({
+      prisma,
+      env: { sandboxProvider: "docker" },
+      jobs: { enqueue: async () => undefined },
+    } as unknown as RouterDeps),
+  );
+  const { response } = await handler.handle(
+    new Request("http://127.0.0.1/rpc/computer/boot", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ json: { botId: "bot" } }),
+    }),
+    { prefix: "/rpc", context: { actor } },
+  );
+  const body = (await response?.json()) as { json?: { hostLabel?: string } };
+  expect(body.json?.hostLabel).toBe("This Mac");
+});
+
 it("says which engine is missing when a computer is started", async () => {
   const dataDir = await mkdtemp(path.join(tmpdir(), "ardurbot-missing-engine-rpc-"));
   const computer = {

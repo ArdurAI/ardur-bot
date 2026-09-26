@@ -285,7 +285,6 @@ describe("lingui catalogs", () => {
       "Deployment default ({defaultLabel})",
       "Docker on this Mac",
       "Docker on this computer",
-      "Moving a computer onto the machine running Ardur Bot is not available yet. Choose a saved connection or keep the current engine.",
       "This moves the computer from {sourceLabel} to {destinationLabel} and replaces its files. Continue?",
     ];
     const literal = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -297,6 +296,11 @@ describe("lingui catalogs", () => {
       // Extraction writes the source reference; a hand-written id the code never asks for has none.
       for (const sentence of sentences)
         expect(catalog).toMatch(new RegExp(`#: src/\\S+\\nmsgid "${literal(sentence)}"`));
+      // The host-move refusal is shown as the server sent it (decided by its error code), not
+      // through a hand-translated catalog copy, so it is never extracted.
+      expect(catalog).not.toContain(
+        "Moving a computer onto the machine running Ardur Bot is not available yet.",
+      );
     }
   });
 });

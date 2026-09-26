@@ -101,3 +101,21 @@ export function computerUpdateStages(
 export function computerUpdateNeedsAttention(update: ComputerUpdate): boolean {
   return update.status === "failed" || update.status === "interrupted";
 }
+
+/** A missing-engine failure's sentence already carries the fix, so Recover — which would only
+ * hit the same missing engine again — is not offered for it. */
+export function computerUpdateOffersRecover(
+  update: Pick<ComputerUpdate, "status" | "failureReason">,
+): boolean {
+  return update.status === "failed" && !update.failureReason;
+}
+
+/** The sentence to show while a failed or interrupted update waits for the user's decision.
+ * One source of truth for web and mobile; each supplies its own translated copy. */
+export function computerUpdateAttentionMessage(
+  update: Pick<ComputerUpdate, "status" | "failureReason">,
+  copy: { interrupted: string; generic: string },
+): string {
+  if (update.status === "interrupted") return copy.interrupted;
+  return update.failureReason ?? copy.generic;
+}

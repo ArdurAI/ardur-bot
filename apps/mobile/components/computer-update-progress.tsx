@@ -1,5 +1,10 @@
 import { COMPUTER_UPDATE_STAGES, type ComputerUpdate } from "@ardurbot/contracts";
-import { computerUpdateNeedsAttention, computerUpdateStages } from "@ardurbot/core";
+import {
+  computerUpdateAttentionMessage,
+  computerUpdateNeedsAttention,
+  computerUpdateOffersRecover,
+  computerUpdateStages,
+} from "@ardurbot/core";
 import { usePathname } from "expo-router";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { ActivityIndicator, Alert, Modal, Pressable, StyleSheet, Text, View } from "react-native";
@@ -80,9 +85,14 @@ export function ComputerUpdateProgress() {
             </Text>
             {computerUpdateNeedsAttention(selected) ? (
               <Text style={{ color: tokens.mutedForeground }}>
-                {selected.status === "interrupted"
-                  ? t("Recovery is unavailable until the previous operation has stopped.")
-                  : t("Recovery restores the last saved workspace. Unsaved work may be lost.")}
+                {computerUpdateAttentionMessage(selected, {
+                  interrupted: t(
+                    "Recovery is unavailable until the previous operation has stopped.",
+                  ),
+                  generic: t(
+                    "Recovery restores the last saved workspace. Unsaved work may be lost.",
+                  ),
+                })}
               </Text>
             ) : (
               computerUpdateStages(selected.action).map((stage, index) => {
@@ -142,7 +152,7 @@ export function ComputerUpdateProgress() {
                 <Text style={{ color: tokens.foreground }}>{t("Release computer")}</Text>
               </Pressable>
             ) : null}
-            {selected.status === "failed" ? (
+            {computerUpdateOffersRecover(selected) ? (
               <Pressable
                 accessibilityRole="button"
                 disabled={busy}

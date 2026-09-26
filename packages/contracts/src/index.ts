@@ -44,6 +44,7 @@ export * from "./provider-errors.js";
 export * from "./reactions.js";
 export * from "./request-usage.js";
 export type * from "./rpc.js";
+export * from "./rpc-error.js";
 export * from "./runs.js";
 export * from "./runtime-pins.js";
 export * from "./scoreboard-trace.js";

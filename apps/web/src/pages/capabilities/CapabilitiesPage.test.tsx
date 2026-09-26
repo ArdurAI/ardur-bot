@@ -111,6 +111,39 @@ describe("capability settings controls", () => {
     });
   });
 
+  it("shows the missing-engine sentence for a refused network change", async () => {
+    const sentence =
+      "This computer runs on remote Docker, which is not configured here. Reset it in " +
+      "Settings, Computers to start it on this deployment's engine, or configure Docker again.";
+    const input = {
+      ...props(),
+      onNetworkChange: vi
+        .fn()
+        .mockRejectedValueOnce(
+          Object.assign(new Error(sentence), { data: { code: "engine-missing" } }),
+        ),
+    };
+    await mounted(<CapabilitiesPage {...input} />, async (container) => {
+      await act(async () => button(container, "Allow network egress for Test computer").click());
+      await act(async () => button(container, "Continue").click());
+      expect(container.querySelector('[role="alert"]')?.textContent).toBe(sentence);
+    });
+  });
+
+  it("keeps the generic network-change failure when the error carries no code", async () => {
+    const input = {
+      ...props(),
+      onNetworkChange: vi.fn().mockRejectedValueOnce(new Error("boom")),
+    };
+    await mounted(<CapabilitiesPage {...input} />, async (container) => {
+      await act(async () => button(container, "Allow network egress for Test computer").click());
+      await act(async () => button(container, "Continue").click());
+      expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+        "Could not change the computer. Stop its bots and try again.",
+      );
+    });
+  });
+
   it("renders current space settings read-only for non-owners", async () => {
     const input = { ...props(), canConfigure: false };
     await mounted(<CapabilitiesPage {...input} />, async (container) => {

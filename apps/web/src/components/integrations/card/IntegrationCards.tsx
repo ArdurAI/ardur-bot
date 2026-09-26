@@ -4,7 +4,7 @@ import type {
   IntegrationDescriptor,
   McpServer,
 } from "@ardurbot/contracts";
-import { MCP_INVALID_TOKEN_CODE, mcpErrorCode } from "@ardurbot/contracts";
+import { errorDataCode, MCP_INVALID_TOKEN_CODE } from "@ardurbot/contracts";
 import { Button, Input } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
 import { useEffect, useRef, useState } from "react";
@@ -148,7 +148,7 @@ export function IntegrationCards({
       return current.state === "connected";
     } catch (caught) {
       if (mine === catalogAttempt.current) {
-        setError(mcpErrorCode(caught) === MCP_INVALID_TOKEN_CODE ? "token" : "load");
+        setError(errorDataCode(caught) === MCP_INVALID_TOKEN_CODE ? "token" : "load");
       }
       return false;
     } finally {
@@ -338,7 +338,7 @@ export function IntegrationCards({
                 signal: hooks.signal,
               });
             } catch (caught) {
-              setError(mcpErrorCode(caught) === MCP_INVALID_TOKEN_CODE ? "token" : "load");
+              setError(errorDataCode(caught) === MCP_INVALID_TOKEN_CODE ? "token" : "load");
               return null;
             }
           }}

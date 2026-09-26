@@ -10,7 +10,7 @@ import { rpc } from "../lib/rpc";
 import { ComparisonList } from "./ComparePanel";
 import { CompareStart } from "./CompareStart";
 import { useThreadRefresh } from "./dashboard/use-thread-refresh";
-import { useTargetName } from "./fleet/FleetSettings";
+import { useTargetName } from "./fleet/target-name";
 
 export function TeamBoard({ navigation }: { navigation?: ReactNode }) {
   const [rows, setRows] = useState<TeamRow[]>([]);

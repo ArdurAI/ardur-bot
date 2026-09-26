@@ -1,6 +1,10 @@
 import type { ComputerUpdate } from "@ardurbot/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createComputerUpdates } from "./computer-updates.js";
+import {
+  computerUpdateAttentionMessage,
+  computerUpdateOffersRecover,
+  createComputerUpdates,
+} from "./computer-updates.js";
 
 const update: ComputerUpdate = {
   id: "update-1",
@@ -59,5 +63,34 @@ describe("computer update presentation", () => {
     stop();
     await Promise.resolve();
     expect(store.getSnapshot().updates).toEqual([]);
+  });
+});
+describe("computerUpdateOffersRecover", () => {
+  it("offers Recover for an ordinary failure, never for one with a missing-engine reason", () => {
+    expect(computerUpdateOffersRecover({ status: "failed" })).toBe(true);
+    expect(
+      computerUpdateOffersRecover({
+        status: "failed",
+        failureReason:
+          "This computer runs on E2B, which is not configured here. Reset it in Settings, Computers to start it on this deployment's engine, or configure E2B again.",
+      }),
+    ).toBe(false);
+    expect(computerUpdateOffersRecover({ status: "interrupted" })).toBe(false);
+    expect(computerUpdateOffersRecover({ status: "running" })).toBe(false);
+  });
+});
+describe("computerUpdateAttentionMessage", () => {
+  const copy = { interrupted: "interrupted-copy", generic: "generic-copy" };
+  it("shows the missing-engine sentence in place of the generic recovery warning", () => {
+    expect(computerUpdateAttentionMessage({ status: "failed" }, copy)).toBe("generic-copy");
+    expect(
+      computerUpdateAttentionMessage({ status: "failed", failureReason: "engine gone" }, copy),
+    ).toBe("engine gone");
+    expect(computerUpdateAttentionMessage({ status: "interrupted" }, copy)).toBe(
+      "interrupted-copy",
+    );
+    expect(
+      computerUpdateAttentionMessage({ status: "interrupted", failureReason: "engine gone" }, copy),
+    ).toBe("interrupted-copy");
   });
 });

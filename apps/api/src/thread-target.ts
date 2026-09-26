@@ -460,10 +460,7 @@ export async function threadSnapshot(
             ...core.failure,
           }
         : null,
-      computer: {
-        ...toComputerStatus(target.botId, target.bot.computer, busyBotName),
-        ...(hostLabel ? { hostLabel } : {}),
-      },
+      computer: toComputerStatus(target.botId, target.bot.computer, busyBotName, hostLabel),
     };
   }
 

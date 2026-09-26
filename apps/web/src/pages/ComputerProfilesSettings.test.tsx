@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
 
 import type { ComputerStatus } from "@ardurbot/contracts";
-import { HOST_MOVE_UNAVAILABLE_MESSAGE } from "@ardurbot/contracts";
+import {
+  ENGINE_MISSING_CODE,
+  HOST_MOVE_UNAVAILABLE_CODE,
+  HOST_MOVE_UNAVAILABLE_MESSAGE,
+} from "@ardurbot/contracts";
 import type { ComponentProps, ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -563,7 +567,11 @@ it("shows the host refusal as its own sentence instead of the generic failure", 
   const root = createRoot(element);
   const button = (name: string) =>
     [...element.querySelectorAll("button")].find((entry) => entry.textContent === name)!;
-  api.configure.mockRejectedValueOnce(new Error(HOST_MOVE_UNAVAILABLE_MESSAGE));
+  api.configure.mockRejectedValueOnce(
+    Object.assign(new Error(HOST_MOVE_UNAVAILABLE_MESSAGE), {
+      data: { code: HOST_MOVE_UNAVAILABLE_CODE },
+    }),
+  );
   await act(async () =>
     root.render(
       <ComputerProfile
@@ -589,6 +597,75 @@ it("shows the host refusal as its own sentence instead of the generic failure", 
   expect(element.querySelector('[role="alert"]')?.textContent).toBe(
     "Moving a computer onto the machine running Ardur Bot is not available yet. Choose a saved connection or keep the current engine.",
   );
+  await act(async () => root.unmount());
+});
+
+it("keeps the generic failure when the host refusal sentence carries no code", async () => {
+  const element = document.createElement("div");
+  document.body.append(element);
+  const root = createRoot(element);
+  const button = (name: string) =>
+    [...element.querySelectorAll("button")].find((entry) => entry.textContent === name)!;
+  api.configure.mockRejectedValueOnce(new Error(HOST_MOVE_UNAVAILABLE_MESSAGE));
+  await act(async () =>
+    root.render(
+      <ComputerProfile
+        botId="bot"
+        name="Builder"
+        status={{ ...status, connectionId: "home" }}
+        connections={[
+          { id: "home", name: "Home", settings: { engine: "ssh" } as never },
+          { id: "office", name: "Office", settings: { engine: "ssh" } as never },
+        ]}
+        deploymentDefault={null}
+        onChanged={async () => {}}
+      />,
+    ),
+  );
+  const connection = element.querySelector<HTMLSelectElement>('[aria-label="Connection"]')!;
+  await act(async () => {
+    connection.value = "office";
+    connection.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await act(async () => button("Apply").click());
+  await act(async () => button("Continue").click());
+  expect(element.querySelector('[role="alert"]')?.textContent).toBe(
+    "Could not change the computer; stop its bots and try again.",
+  );
+  await act(async () => root.unmount());
+});
+
+it("shows the missing-engine sentence for a profile-only configure refusal", async () => {
+  const element = document.createElement("div");
+  document.body.append(element);
+  const root = createRoot(element);
+  const button = (name: string) =>
+    [...element.querySelectorAll("button")].find((entry) => entry.textContent === name)!;
+  const sentence =
+    "This computer runs on E2B, which is not configured here. Reset it in Settings, Computers " +
+    "to start it on this deployment's engine, or configure E2B again.";
+  api.configure.mockRejectedValueOnce(
+    Object.assign(new Error(sentence), { data: { code: ENGINE_MISSING_CODE } }),
+  );
+  await act(async () =>
+    root.render(
+      <ComputerProfile
+        botId="bot"
+        name="Builder"
+        status={status}
+        connections={[]}
+        onChanged={async () => {}}
+      />,
+    ),
+  );
+  const profile = element.querySelector<HTMLSelectElement>('[aria-label="Image profile"]')!;
+  await act(async () => {
+    profile.value = "developer";
+    profile.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await act(async () => button("Apply").click());
+  await act(async () => button("Continue").click());
+  expect(element.querySelector('[role="alert"]')?.textContent).toBe(sentence);
   await act(async () => root.unmount());
 });
 

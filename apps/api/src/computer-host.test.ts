@@ -53,7 +53,9 @@ function deployment(sandboxProvider: string, computerHost: string | null) {
         registration = data;
         return data;
       }),
-      deleteMany: vi.fn(async () => {
+      deleteMany: vi.fn(async ({ where }: { where: { userId: string } }) => {
+        if (!registration || (registration as { userId: string }).userId !== where.userId)
+          return { count: 0 };
         registration = null;
         return { count: 1 };
       }),
@@ -140,6 +142,8 @@ function deployment(sandboxProvider: string, computerHost: string | null) {
     pair: () => bridge.pair(owner.userId),
     /** Disconnect this computer in Settings. */
     disconnect: () => bridge.disconnect(owner.userId),
+    /** Disconnect called by a user who holds no registration of their own. */
+    disconnectAs: (userId: string) => bridge.disconnect(userId),
     /** The kind a new bot's computer starts on. */
     async newBotKind() {
       prisma.computer.upsert.mockClear();
@@ -225,6 +229,17 @@ it("on the desktop app's own Compose stack returns new bots to Docker when this 
   // Set up picks this computer again.
   await stack.pair();
   expect(await stack.newBotKind()).toBe("desktop");
+});
+
+it("on the desktop app's own Compose stack, a Disconnect that finds no registration of its own leaves the choice unchanged", async () => {
+  desktopStack();
+  // computerHost is already "this-mac" without ever pairing here, so the delete removes nothing.
+  const stack = deployment("docker", "this-mac");
+  await stack.disconnectAs(owner.userId);
+  expect(await stack.hostChoice()).toEqual({
+    canChooseHostComputer: false,
+    computerHost: "this-mac",
+  });
 });
 
 it.each([

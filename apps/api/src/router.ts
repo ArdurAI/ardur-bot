@@ -108,6 +108,8 @@ import {
 import type { Auth } from "@ardurbot/auth";
 import type { Actor, ComputerStatus, Me, SpaceNavigation } from "@ardurbot/contracts";
 import {
+  ENGINE_MISSING_CODE,
+  HOST_MOVE_UNAVAILABLE_CODE,
   HostMoveUnavailableError,
   IntegrationManifestSchema,
   IntegrationProviderIdSchema,
@@ -2004,12 +2006,13 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           where: { spaceId: context.actor.spaceId, userId: context.actor.userId, archivedAt: null },
           include: { computer: true },
         });
-        const hostLabel = await deploymentHostLabel(deps.prisma);
+        const hasComputer = bots.some((bot) => bot.computer);
+        const hostLabel = hasComputer ? await deploymentHostLabel(deps.prisma) : undefined;
         const seen = new Set<string>();
         return bots.flatMap((bot) => {
           if (!bot.computer || seen.has(bot.computer.id)) return [];
           seen.add(bot.computer.id);
-          const status = { ...toComputerStatus(bot.id, bot.computer), hostLabel };
+          const status = toComputerStatus(bot.id, bot.computer, null, hostLabel);
           return [{ botId: bot.id, name: bot.name, status }];
         });
       }),
@@ -2055,10 +2058,9 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           throw error;
         }
       }),
-      status: authed.computer.status.handler(async ({ context, input }) => ({
-        ...(await computerStatus(deps, context.actor, input.botId)),
-        hostLabel: await deploymentHostLabel(deps.prisma),
-      })),
+      status: authed.computer.status.handler(({ context, input }) =>
+        computerStatus(deps, context.actor, input.botId),
+      ),
       boot: authed.computer.boot.handler(async ({ context, input }) => {
         const bot = await repos.getBot(context.actor, input.botId);
         if (!bot.computer) throw new IsolationError();
@@ -5818,12 +5820,15 @@ async function computerStatus(
   if (await expireStaleComputerControl(deps, bot.computer)) {
     bot = await repos.getBot(actor, botId);
   }
-  const busyBotName = await resolveBusyBotName(deps.prisma, {
-    computerId: bot.computer?.id,
-    botId,
-    botName: bot.name,
-  });
-  return toComputerStatus(botId, bot.computer, busyBotName);
+  const [busyBotName, hostLabel] = await Promise.all([
+    resolveBusyBotName(deps.prisma, {
+      computerId: bot.computer?.id,
+      botId,
+      botName: bot.name,
+    }),
+    bot.computer ? deploymentHostLabel(deps.prisma) : Promise.resolve(undefined),
+  ]);
+  return toComputerStatus(botId, bot.computer, busyBotName, hostLabel);
 }
 
 async function runComputerReplace(
@@ -5875,9 +5880,17 @@ async function runComputerReplace(
 
 /** A missing engine or a refused host move already says what to do, so it reaches the user. */
 function engineRefusal(error: unknown) {
-  return error instanceof MissingComputerProviderError || error instanceof HostMoveUnavailableError
-    ? new ORPCError("BAD_REQUEST", { message: error.message })
-    : error;
+  if (error instanceof MissingComputerProviderError)
+    return new ORPCError("BAD_REQUEST", {
+      message: error.message,
+      data: { code: ENGINE_MISSING_CODE },
+    });
+  if (error instanceof HostMoveUnavailableError)
+    return new ORPCError("BAD_REQUEST", {
+      message: error.message,
+      data: { code: HOST_MOVE_UNAVAILABLE_CODE },
+    });
+  return error;
 }
 
 async function expireStaleComputerControl(

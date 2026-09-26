@@ -8,6 +8,7 @@ import {
   ComputerConnectionInputSchema,
   ComputerConnectionSettingsSchema,
   ComputerEngineUnavailableError,
+  HOST_MOVE_UNAVAILABLE_CODE,
   HOST_MOVE_UNAVAILABLE_MESSAGE,
 } from "@ardurbot/contracts";
 import { sandboxKindForBot } from "@ardurbot/core";
@@ -134,7 +135,10 @@ export async function validateComputerConfiguration(
         ? await prisma.deploymentSettings.findUnique({ where: { id: "default" } })
         : null;
     if (sandboxKindForBot(sandboxProvider, deployment?.computerHost) === "desktop")
-      throw new ORPCError("BAD_REQUEST", { message: HOST_MOVE_UNAVAILABLE_MESSAGE });
+      throw new ORPCError("BAD_REQUEST", {
+        message: HOST_MOVE_UNAVAILABLE_MESSAGE,
+        data: { code: HOST_MOVE_UNAVAILABLE_CODE },
+      });
   }
   if (
     configuration.connectionId &&

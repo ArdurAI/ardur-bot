@@ -8,6 +8,7 @@ import {
   toComputerRef,
 } from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
+import { ENGINE_MISSING_CODE } from "@ardurbot/contracts";
 import { ORPCError } from "@orpc/server";
 import type { RouterDeps } from "./router.js";
 
@@ -27,7 +28,10 @@ export async function refuseIfEngineMissing(
     await owningSandbox(sandbox, computer, context);
   } catch (error) {
     if (!(error instanceof MissingComputerProviderError)) throw error;
-    throw new ORPCError("BAD_REQUEST", { message: error.message });
+    throw new ORPCError("BAD_REQUEST", {
+      message: error.message,
+      data: { code: ENGINE_MISSING_CODE },
+    });
   }
 }
 

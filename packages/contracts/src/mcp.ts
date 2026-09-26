@@ -65,15 +65,6 @@ export function isReauthorizationDeclined(recorded: string | null | undefined): 
  * is made to use it. Carried in the error's `data`, not its message. */
 export const MCP_INVALID_TOKEN_CODE = "invalid_token";
 
-/** The machine-readable code an ORPC error carries in its `data`, when present. */
-export function mcpErrorCode(error: unknown): string | undefined {
-  if (!error || typeof error !== "object" || !("data" in error)) return undefined;
-  const data = (error as { data?: unknown }).data;
-  if (!data || typeof data !== "object" || !("code" in data)) return undefined;
-  const code = (data as { code?: unknown }).code;
-  return typeof code === "string" ? code : undefined;
-}
-
 export const MCP_ONE_CREDENTIAL = "Choose one credential: a token or a header.";
 
 /** A server stores either a bearer token or a named header, never both. */

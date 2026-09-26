@@ -1,5 +1,10 @@
 import { COMPUTER_UPDATE_STAGES, type ComputerUpdate } from "@ardurbot/contracts";
-import { computerUpdateNeedsAttention, computerUpdateStages } from "@ardurbot/core";
+import {
+  computerUpdateAttentionMessage,
+  computerUpdateNeedsAttention,
+  computerUpdateOffersRecover,
+  computerUpdateStages,
+} from "@ardurbot/core";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -156,15 +161,10 @@ export function ComputerUpdateProgress({ onCompleted }: { onCompleted: () => voi
                 role="alert"
                 className="mx-6 my-6 rounded-xl bg-muted px-4 py-4 text-sm text-muted-foreground"
               >
-                {selected.status === "interrupted" ? (
-                  <Trans>Recovery is unavailable until the previous operation has stopped.</Trans>
-                ) : selected.failureReason ? (
-                  selected.failureReason
-                ) : (
-                  <Trans>
-                    Recovery restores the last saved workspace. Unsaved work may be lost.
-                  </Trans>
-                )}
+                {computerUpdateAttentionMessage(selected, {
+                  interrupted: t`Recovery is unavailable until the previous operation has stopped.`,
+                  generic: t`Recovery restores the last saved workspace. Unsaved work may be lost.`,
+                })}
               </p>
             ) : (
               <span role="status" className="sr-only">
@@ -196,7 +196,7 @@ export function ComputerUpdateProgress({ onCompleted }: { onCompleted: () => voi
                   <Trans>Continue in Background</Trans>
                 </Button>
               )}
-              {selected.status === "failed" ? (
+              {computerUpdateOffersRecover(selected) ? (
                 <Button
                   disabled={recovering}
                   onClick={() => {

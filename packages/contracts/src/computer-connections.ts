@@ -65,6 +65,12 @@ export class HostMoveUnavailableError extends Error {
     this.name = "HostMoveUnavailableError";
   }
 }
+/**
+ * ORPC error `data.code`s a client decides on, never by comparing message text: a computer
+ * cannot reach its own (genuinely missing) engine, or cannot be moved onto the host.
+ */
+export const ENGINE_MISSING_CODE = "engine-missing";
+export const HOST_MOVE_UNAVAILABLE_CODE = "host-move-unavailable";
 const ComputerConfigurationFieldsSchema = z.object({
   botId: z.string().min(1),
   imageProfile: ComputerProfileSchema.optional(),
