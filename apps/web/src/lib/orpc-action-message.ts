@@ -1,12 +1,10 @@
-import { fallbackORPCErrorMessage, ORPCError } from "@orpc/client";
+import { rpcErrorMessage } from "@ardurbot/core";
+import { ORPCError } from "@orpc/client";
 
 /**
  * The server's own sentence when a request failed for a reason worth saying, or the given
- * fallback when it did not set one (an unmapped error becomes oRPC's generic per-code text).
+ * fallback. Its code decides: an error the server did not map never shows its text.
  */
 export function actionMessage(error: unknown, fallback: string): string {
-  if (!(error instanceof ORPCError) || !error.message) return fallback;
-  if (!error.defined && error.message === fallbackORPCErrorMessage(error.code, undefined))
-    return fallback;
-  return error.message;
+  return error instanceof ORPCError ? rpcErrorMessage(error, fallback) : fallback;
 }

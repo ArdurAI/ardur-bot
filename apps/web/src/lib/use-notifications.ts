@@ -1,11 +1,7 @@
 import { NotificationActivityTracker, notify } from "@ardurbot/core";
 import { useEffect } from "react";
 import { usePreferences } from "../components/PreferencesProvider";
-import {
-  boardCloseDeniedBody,
-  boardCloseFailedTitle,
-  boardCloseTriedBody,
-} from "./board-close-copy";
+import { boardCloseFailedTitle, boardCloseTriedBody } from "./board-close-copy";
 import { desktopBridge } from "./desktop";
 import { i18n } from "./i18n";
 import { rpc } from "./rpc";
@@ -57,9 +53,7 @@ export function useNotifications() {
                       message: "{name} needs your input",
                       values: { name: row.name },
                     });
-          const body = closeFailed
-            ? i18n._(row.board?.closeDenied ? boardCloseDeniedBody : boardCloseTriedBody)
-            : "";
+          const body = closeFailed ? i18n._(boardCloseTriedBody) : "";
           await notify(
             { id: row.id, category: row.category, title, body, threadId: row.threadId },
             snapshot.preferences.notifications,

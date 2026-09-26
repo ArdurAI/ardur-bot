@@ -135,7 +135,7 @@ test("learning inbox separates suggestions from applied changes and shows Undo",
   await captureScreenshot(page, testInfo, "learning-curator-last-check");
 });
 
-test("learning inbox shows board-item suggestions, their outcome, and a close the bot can no longer finish", async ({
+test("learning inbox shows board-item suggestions, their outcome, and a close that keeps failing", async ({
   page,
 }, testInfo) => {
   await page.setViewportSize({ width: 1280, height: 900 });
@@ -178,11 +178,10 @@ test("learning inbox shows board-item suggestions, their outcome, and a close th
         closeReason: "Duplicate, fixed in work-9",
       },
     }),
-    boardProposal("denied", "Check the nightly sync", {
+    boardProposal("failing", "Check the nightly sync", {
       status: "rejected",
       boardClosing: true,
       boardCloseFailed: true,
-      boardCloseDenied: true,
     }),
   ];
   const learning = (action: string | undefined) =>
@@ -227,14 +226,13 @@ test("learning inbox shows board-item suggestions, their outcome, and a close th
   await page.locator('[data-panel="learning"]').getByRole("button", { name: "Inbox (1)" }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByText("Finish the import follow-up", { exact: true })).toBeVisible();
+  await expect(dialog.getByText("A board item filed by a bot could not be closed.")).toBeVisible();
   await expect(
     dialog.getByText(
-      "The bot that filed this item can no longer use the board. Close it on the Board.",
+      "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected.",
       { exact: true },
     ),
   ).toBeVisible();
-  await expect(dialog.getByText("A board item filed by a bot could not be closed.")).toBeVisible();
-  await expect(dialog.getByText(/tried five times/)).toHaveCount(0);
   for (const details of await dialog.getByText("Details", { exact: true }).all())
     await details.click();
   await expect(dialog.getByText("Labels: import, follow-up").first()).toBeVisible();

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { readFileSync } from "node:fs";
+import path from "node:path";
 import { ORPCError } from "@orpc/client";
 import type { ComponentProps, ReactNode } from "react";
 import { act } from "react";
@@ -169,7 +170,10 @@ const LEFT_OPEN =
 const BOARD_CHANGED = "This board item changed after it was filed. Review it on the Board.";
 
 function catalogTranslation(locale: string, msgid: string) {
-  const catalog = readFileSync(`apps/web/src/locales/${locale}/messages.po`, "utf8");
+  const catalog = readFileSync(
+    path.join(import.meta.dirname, "../locales", locale, "messages.po"),
+    "utf8",
+  );
   const key = `msgid ${JSON.stringify(msgid)}\nmsgstr "`;
   const at = catalog.indexOf(key);
   if (at < 0) return "";
@@ -283,6 +287,25 @@ it("shows the board service's own sentence when Approve cannot file the item, no
   );
   expect(container.textContent).not.toContain("Could not update learning. Try again.");
 });
+it("shows the translated retry sentence, never the server's own text, for an error it did not map", async () => {
+  api.list.mockResolvedValue({
+    reviews: [],
+    proposals: [proposal],
+    pendingCount: 1,
+    appliedThisWeek: 0,
+  });
+  // The body a real server sends when Approve throws a plain Error, such as a suggestion that
+  // another tab already handled.
+  api.approve.mockRejectedValue(
+    new ORPCError("INTERNAL_SERVER_ERROR", { message: "Internal server error", status: 500 }),
+  );
+  await act(async () => root.render(<LearningInbox botId="bot" />));
+  await click("Approve");
+  expect(container.querySelector("[role=alert]")?.textContent).toContain(
+    "Could not update learning. Try again.",
+  );
+  expect(container.textContent).not.toContain("Internal server error");
+});
 it("shows Closing on the Board until the pending close clears", async () => {
   const board = {
     ...proposal,
@@ -373,37 +396,6 @@ it("says a board close that keeps failing could not be closed, and what to do", 
       "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected.",
     ),
   ).not.toBe("");
-});
-it("says the bot that filed the item can no longer use the board, never five tries, when that is why", async () => {
-  api.list.mockResolvedValue({
-    reviews: [],
-    proposals: [
-      {
-        ...pendingBoard,
-        status: "rejected",
-        boardClosing: true,
-        boardCloseFailed: true,
-        boardCloseDenied: true,
-      },
-    ],
-    pendingCount: 0,
-    appliedThisWeek: 0,
-  });
-  await act(async () => root.render(<LearningInbox botId="bot" />));
-  expect(container.textContent).toContain("A board item filed by a bot could not be closed.");
-  expect(container.textContent).toContain(
-    "The bot that filed this item can no longer use the board. Close it on the Board.",
-  );
-  expect(container.textContent).not.toContain("five times");
-  expect(container.textContent).not.toContain("connected");
-  for (const locale of ["ru", "zh-CN"])
-    expect(
-      catalogTranslation(
-        locale,
-        "The bot that filed this item can no longer use the board. Close it on the Board.",
-      ),
-      locale,
-    ).not.toBe("");
 });
 it("shows the changed sentence after a pending close was left with the person", async () => {
   const board = {

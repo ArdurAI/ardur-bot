@@ -193,26 +193,29 @@ item's `updatedAt` and comment count in `closeUpdatedAt` and `closeCommentCount`
 sweep and the next board read of that space finish the close whenever the item is already
 closed, for any reason, or is still open and unchanged at that `updatedAt` and comment count.
 They then delete the filing and free the hourly slot. Any board read that shows the item closed
-also ends its pending close and deletes the filing. When the filing's own bot can no longer
-open the board at all — archived, its computer moved, or no longer allowed there — the sweep
-instead reads the item through the board's owner: closed, for any reason, still finishes
-quietly; still open records `closeDeniedAt`, sends the one notice below, and checks again in a
-day. That daily check tries the bot first, so a bot that can use the board again closes the
-item normally; a failure of any other kind clears `closeDeniedAt` and counts as a failed try.
+also ends its pending close and deletes the filing.
 Approve files a learning proposal's item as the proposal's bot, as a run's outcome delivery runs
-as the run's bot. Reject and Undo are the person's own actions, so they show and close the item,
-and retry a close, with the person's own board access; a bot that was archived or unticked from
-the board's allowed bots cannot block them. With the host bridge on (the packaged images), the
+as the run's bot. Reject and Undo are the person's own actions, so they show and close the item
+with the person's own board access, and every retry of a close they left pending, scheduled or
+clicked, opens the board as that same person, never through the filing's bot. A bot that was
+archived or unticked from the board's allowed bots cannot block it. If the person can no longer
+close the item, for example because the computer now has another owner, the retry fails and
+counts as a failed try like any other. With the host bridge on (the packaged images), the
 desktop admits a bot only inside one of its runs, so board work with no run goes through the
 owner's connection in the API as the owner. The worker has no such connection, so there its
-notification tick, its reconciler and a run's outcome delivery leave every pending close to the
-API and do not count a failed try. The API sweeps pending closes every 30 seconds whenever the
-host bridge is on, whatever `WAKEUP_DRIVER` is; without the bridge the worker's board
-notification tick sweeps them, or the API's reconciler when it runs the in-memory job queue.
-The filing lock keeps two sweeps from closing the same item. The worker's tick sweeps after its
-delivery transaction commits, with no transaction open, and delivery never waits for a sweep. Each close holds its space's filing lock around the Beads show and close,
-leaves a space another write holds for the next sweep, and stops at the tick's 15-second deadline.
-A close that deadline interrupts counts as a failed try. The API's sweep has the same deadline.
+notification tick and a run's outcome delivery leave every pending close to the API and do not
+count a failed try. The API sweeps pending closes every 30 seconds whenever the host bridge is
+on, whatever `WAKEUP_DRIVER` is; without the bridge the worker's board notification tick sweeps
+them, or the API's reconciler when it runs the in-memory job queue. The worker's reconciler
+leaves them to that tick. The filing lock keeps two sweeps from closing the same item. The
+worker's tick sweeps after its delivery transaction commits, with no transaction open, and
+delivery never waits for a sweep. Each close holds its space's filing lock around the Beads
+show and close, leaves a space another write holds for the next sweep, and stops at the tick's
+15-second deadline. A close that deadline interrupts counts as a failed try. The API's sweep and
+the in-memory reconciler's sweep have the same deadline, and each passes its stop down to the
+board command. The reconciler recovers runs, leases and routines first and then starts its board
+work (run outcomes, and that sweep in the API) without waiting for it, one pass at a time, so a
+hung board command never delays recovery. Stopping the reconciler stops that pass.
 If a person closes the item themselves, for any reason, before the sweep finishes, that ends the
 pending close quietly: the sweep clears the marker, deletes the filing, and leaves the item closed
 as they left it. Only an edit that leaves the item open — a different assignee, status or other
@@ -223,12 +226,10 @@ Reject and Undo answer with the code `board-closing`, and web and mobile show
 "Closing on the Board." at once and until that marker clears. A close that keeps failing waits
 longer between tries and, after five failures, sends the notice
 "A board item filed by a bot could not be closed." with "Ardur Bot tried five times. Close it
-on the Board, or check that this computer is connected." When the filing's bot can no longer
-use the board, the notice is sent at the first check instead and its second line is "The bot
-that filed this item can no longer use the board. Close it on the Board." Learning shows the same
-two lines in place of "Closing on the Board.", and web and desktop notifications show them in the
-reader's language; mobile push text comes from the server, which has no user language, like
-every other Board push. When the owner follows the item, the notice goes on that follow and advances its
+on the Board, or check that this computer is connected." Learning shows the same two lines in
+place of "Closing on the Board.", and web and desktop notifications show them in the reader's
+language; mobile push text comes from the server, which has no user language, like every other
+Board push. When the owner follows the item, the notice goes on that follow and advances its
 version in the same write, so the next comment or status change notifies at a later version.
 Otherwise the notice follows the item from the state Beads shows, as Follow does, or, when the
 item cannot be shown, it names the owner, board and item without a follow. If the notice cannot
@@ -255,10 +256,14 @@ out. A board read finds the filings of the items it
 returned with one query, then records each closed filing's outcome and the proposal's close
 reason in one transaction. If that write fails, the outcome stays empty and the next read retries
 both. An item that is open again clears its filing's outcome and the proposal's close reason, so
-its next close records afresh. A negative reason wins over any completion word: won't fix
-(also wontfix), duplicate, not needed, not planned, obsolete, invalid, cannot reproduce and
-can't reproduce are closed without being completed ("Resolved: won't fix", "Duplicate, fixed
-in board-12", "Not needed, done elsewhere"), unless the reason denies it ("Resolved, not a
+its next close records afresh. A negative phrase counts only when it is the resolution itself:
+won't fix (also wontfix), duplicate, not needed, not planned, obsolete, invalid, cannot
+reproduce and can't reproduce, at the start of the reason or right after "closed as", "resolved
+as", "resolved:", "marked as" or "closed:", are closed without being completed ("Duplicate,
+fixed in board-12", "Not needed, done elsewhere", "Resolved: won't fix", "Closed as a duplicate
+of board-3"). A reason that starts with a completion word (fixed, done, completed, implemented,
+removed, added, shipped, merged, resolved) is otherwise completed, whatever it goes on to name
+("Fixed duplicate header row in the export", "Removed the obsolete endpoint", "Resolved, not a
 duplicate"). Otherwise an empty close reason, Beads' default "Closed" (from `bd close`
 with no reason or an empty one), or a completion word (done, complete, completed, fixed,
 resolved, implemented, shipped, merged, finished, delivered, landed) is completed unless a

@@ -49,8 +49,8 @@ export function boardOwnerRun(hostBridge: HostBridge | undefined) {
 }
 /**
  * With the host bridge on, only the API reaches the host outside a run, so it retries failed
- * board closes on its own schedule, whatever the wakeup driver. Without the bridge, the worker
- * (or the API's in-memory reconciler) sweeps them instead.
+ * board closes on its own schedule, whatever the wakeup driver. Without the bridge, the worker's
+ * notification tick (or the API's in-memory reconciler) sweeps them instead.
  */
 export function boardCloseRetry(
   deps: {

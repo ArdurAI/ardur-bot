@@ -320,8 +320,6 @@ describe.skipIf(!hasDb)("Board filings (PostgreSQL)", () => {
         learningProposalId: proposal.id,
         closePending: "Rejected from Learning",
         closeAttempts: 4,
-        // An earlier check found the bot denied; this failure is of another kind.
-        closeDeniedAt: new Date(),
       },
     });
     await recordPendingCloseFailure(db.prisma, filing, async () => {
@@ -329,7 +327,7 @@ describe.skipIf(!hasDb)("Board filings (PostgreSQL)", () => {
     });
     await expect(
       db.prisma.botBoardFiling.findUniqueOrThrow({ where: { id: filing.id } }),
-    ).resolves.toMatchObject({ closeAttempts: 5, closeDeniedAt: null });
+    ).resolves.toMatchObject({ closeAttempts: 5 });
     const notices = await db.prisma.boardNotification.findMany({
       where: { workspaceId: workspace.id },
     });

@@ -7312,10 +7312,6 @@ msgstr "The API did not come back. Refresh this page."
 msgid "The bot is working — wait or stop it"
 msgstr "The bot is working — wait or stop it"
 
-#: src/lib/board-close-copy.ts
-msgid "The bot that filed this item can no longer use the board. Close it on the Board."
-msgstr "The bot that filed this item can no longer use the board. Close it on the Board."
-
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "The connection was cancelled."
 msgstr "The connection was cancelled."

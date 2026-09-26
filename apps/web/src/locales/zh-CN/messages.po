@@ -7312,10 +7312,6 @@ msgstr "API 未恢复。请刷新此页面。"
 msgid "The bot is working — wait or stop it"
 msgstr ""
 
-#: src/lib/board-close-copy.ts
-msgid "The bot that filed this item can no longer use the board. Close it on the Board."
-msgstr "创建此事项的机器人已无法使用看板。请在看板上关闭它。"
-
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "The connection was cancelled."
 msgstr ""

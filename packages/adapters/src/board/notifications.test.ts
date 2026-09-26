@@ -88,21 +88,6 @@ it("says a board item filed by a bot could not be closed and what to do, with or
   );
   expect(prisma.boardNotification.update).toHaveBeenCalledTimes(2);
 });
-it("says the filing bot can no longer use the board, not five tries, when that is why the close failed", async () => {
-  const { prisma, notifications, row, deliver } = fixture();
-  const title = "A board item filed by a bot could not be closed.";
-  prisma.boardNotification.findMany.mockResolvedValue([
-    { ...row, title, changes: ["close-denied"] },
-  ] as never);
-  await deliver();
-  expect(notifications.send).toHaveBeenCalledWith(
-    expect.objectContaining({
-      title,
-      body: "The bot that filed this item can no longer use the board. Close it on the Board.",
-    }),
-    expect.objectContaining({ userId: "owner" }),
-  );
-});
 it("delivers follower changes through the existing provider with the Board deep-link target", async () => {
   const { prisma, notifications, deliver } = fixture();
   await deliver();

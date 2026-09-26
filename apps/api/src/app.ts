@@ -506,8 +506,12 @@ export async function createApp(
         reconcileCloudAgents: () => reconcileCloudAgents({ prisma, jobs, cloudAgent }),
         reconcileComputerUpdates: () => reconcileComputerUpdates({ prisma, jobs }),
         reconcileMemory: () => reconcileMemoryDelivery(memoryLifecycleDeps, memoryDocuments),
-        reconcileBoardOutcomes: () =>
-          reconcileBoardOutcomes({ prisma, dataDir: env.dataDir, lockPool: created.lockPool }),
+        // No worker runs beside the in-memory queue, so this reconciler also sweeps board closes.
+        reconcileBoardOutcomes: (signal) =>
+          reconcileBoardOutcomes(
+            { prisma, dataDir: env.dataDir, lockPool: created.lockPool },
+            { signal, pendingCloses: true },
+          ),
         reconcileLocalImport: async () => {
           await jobs.enqueue({
             name: "local-import.refresh",

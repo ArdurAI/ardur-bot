@@ -9,17 +9,21 @@ import type { PanelActions, PanelContext } from "./panels";
 
 /** The work list, and the per-bot filing counts when they could be read; otherwise none. */
 export async function load({ signal, spaceId }: PanelContext) {
-  const work = await rpc.board.work({}, { signal, context: { spaceId } });
-  let filingOutcomes: BoardFilingOutcomeCount[] = [];
-  try {
-    const outcomes: unknown = await rpc.board.filingOutcomes({}, { signal, context: { spaceId } });
-    const parsed = BoardFilingOutcomeCountSchema.array().safeParse(
-      (outcomes as { bots?: unknown } | null)?.bots,
-    );
-    if (parsed.success) filingOutcomes = parsed.data;
-  } catch (error) {
-    if (signal.aborted || (error instanceof Error && error.name === "AbortError")) throw error;
-  }
+  const [work, filingOutcomes] = await Promise.all([
+    rpc.board.work({}, { signal, context: { spaceId } }),
+    rpc.board.filingOutcomes({}, { signal, context: { spaceId } }).then(
+      (outcomes: unknown): BoardFilingOutcomeCount[] => {
+        const parsed = BoardFilingOutcomeCountSchema.array().safeParse(
+          (outcomes as { bots?: unknown } | null)?.bots,
+        );
+        return parsed.success ? parsed.data : [];
+      },
+      (error: unknown) => {
+        if (signal.aborted || (error instanceof Error && error.name === "AbortError")) throw error;
+        return [];
+      },
+    ),
+  ]);
   return { ...work, filingOutcomes };
 }
 type WorkData = BoardWork & { filingOutcomes: BoardFilingOutcomeCount[] };

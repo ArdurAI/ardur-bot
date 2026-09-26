@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { readFileSync } from "node:fs";
+import path from "node:path";
 import type { NotificationActivity } from "@ardurbot/contracts";
 import { DEFAULT_USER_PREFERENCES } from "@ardurbot/contracts";
 import { act } from "react";
@@ -143,36 +144,6 @@ it("delivers followed Board changes through the shared preference gate", async (
   expect(fake.show).toHaveBeenCalledOnce();
 });
 
-it("says the filing bot can no longer use the board when that is why the close failed", async () => {
-  fake.activity.mockResolvedValueOnce(snapshot([])).mockResolvedValue(
-    snapshot([
-      {
-        ...row,
-        id: "denied-notice",
-        name: "A board item filed by a bot could not be closed.",
-        status: "board_changed",
-        threadId: "board:workspace:item",
-        board: {
-          spaceId: "space",
-          workspaceId: "workspace",
-          itemId: "item",
-          closeFailed: true,
-          closeDenied: true,
-        },
-      },
-    ]),
-  );
-  await renderSettings(<Harness />);
-  await poll();
-  expect(fake.show).toHaveBeenCalledExactlyOnceWith(
-    "A board item filed by a bot could not be closed.",
-    {
-      tag: "board:workspace:item",
-      body: "The bot that filed this item can no longer use the board. Close it on the Board.",
-    },
-  );
-});
-
 it("says a board close that keeps failing could not be closed, and what to do, in the reader's language", async () => {
   fake.activity.mockResolvedValueOnce(snapshot([])).mockResolvedValue(
     snapshot([
@@ -200,7 +171,10 @@ it("says a board close that keeps failing could not be closed, and what to do, i
       "A board item filed by a bot could not be closed.",
       "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected.",
     ]) {
-      const catalog = readFileSync(`apps/web/src/locales/${locale}/messages.po`, "utf8");
+      const catalog = readFileSync(
+        path.join(import.meta.dirname, "../locales", locale, "messages.po"),
+        "utf8",
+      );
       const key = `msgid ${JSON.stringify(msgid)}\nmsgstr "`;
       const at = catalog.indexOf(key);
       const translated =

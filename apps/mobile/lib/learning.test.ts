@@ -16,7 +16,17 @@ const i18n = vi.hoisted(() => ({
     );
   },
 }));
-const RpcServerError = vi.hoisted(() => class RpcServerError extends Error {});
+const RpcServerError = vi.hoisted(
+  () =>
+    class RpcServerError extends Error {
+      constructor(
+        message: string,
+        readonly code?: string,
+      ) {
+        super(message);
+      }
+    },
+);
 vi.mock("./api", () => ({ rpc: request, RpcServerError }));
 vi.mock("./MemoryControls", () => ({
   MemoryControls: () => null,
@@ -264,7 +274,7 @@ it("shows the board service's own sentence when Approve cannot file the item, no
     if (path === "learning/settings")
       return { enabled: true, reviewerPin: null, destination: null, budgets: {} };
     if (path === "learning/approve")
-      throw new RpcServerError("This bot cannot reach this board's computer.");
+      throw new RpcServerError("This bot cannot reach this board's computer.", "FORBIDDEN");
     return { reviews: [], proposals: [board], pendingCount: 1, appliedThisWeek: 0 };
   });
   const container = document.createElement("div"),
@@ -277,6 +287,29 @@ it("shows the board service's own sentence when Approve cannot file the item, no
     await act(async () => approve!.click());
     expect(container.textContent).toContain("This bot cannot reach this board's computer.");
     expect(container.textContent).not.toContain("Could not update learning. Try again.");
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+it("shows the translated retry sentence, never the server's own text, for an error it did not map", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  request.mockImplementation(async (path: string) => {
+    if (path === "learning/settings")
+      return { enabled: true, reviewerPin: null, destination: null, budgets: {} };
+    if (path === "learning/approve")
+      throw new RpcServerError("Internal server error", "INTERNAL_SERVER_ERROR");
+    return { reviews: [], proposals: [proposal], pendingCount: 1, appliedThisWeek: 0 };
+  });
+  const container = document.createElement("div"),
+    root = createRoot(container);
+  try {
+    await act(async () => root.render(createElement(Learning)));
+    const approve = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Approve",
+    );
+    await act(async () => approve!.click());
+    expect(container.textContent).toContain("Could not update learning. Try again.");
+    expect(container.textContent).not.toContain("Internal server error");
   } finally {
     await act(async () => root.unmount());
   }
@@ -408,35 +441,6 @@ it("says a board close that keeps failing could not be closed, and what to do", 
       expect(container.textContent).toContain(messages[title]);
       expect(container.textContent).toContain(messages[body]);
     }
-  } finally {
-    await act(async () => root.unmount());
-  }
-});
-it("says the bot that filed the item can no longer use the board, never five tries, when that is why", async () => {
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  const denied = {
-    ...pendingBoard,
-    status: "rejected",
-    boardClosing: true,
-    boardCloseFailed: true,
-    boardCloseDenied: true,
-  };
-  request.mockImplementation(async (path: string) => {
-    if (path === "learning/journey") return [];
-    if (path === "learning/settings")
-      return { enabled: true, reviewerPin: null, destination: null, budgets: {} };
-    return { reviews: [], proposals: [denied], pendingCount: 0, appliedThisWeek: 0 };
-  });
-  const container = document.createElement("div");
-  const root = createRoot(container);
-  try {
-    await act(async () => root.render(createElement(Learning)));
-    expect(container.textContent).toContain("A board item filed by a bot could not be closed.");
-    expect(container.textContent).toContain(
-      "The bot that filed this item can no longer use the board. Close it on the Board.",
-    );
-    expect(container.textContent).not.toContain("five times");
-    expect(container.textContent).not.toContain("Closing on the Board.");
   } finally {
     await act(async () => root.unmount());
   }
@@ -880,9 +884,22 @@ it("opens observations for an owner-authored revision from native document histo
 it("only trusts a message the server actually sent, and falls back for a transport failure", () => {
   const fallback = "Could not update learning. Try again.";
   expect(
-    actionMessage(new RpcServerError("This bot cannot reach this board's computer."), fallback),
+    actionMessage(
+      new RpcServerError("This bot cannot reach this board's computer.", "FORBIDDEN"),
+      fallback,
+    ),
   ).toBe("This bot cannot reach this board's computer.");
-  expect(actionMessage(new RpcServerError("Internal Server Error"), fallback)).toBe(fallback);
+  // The body a real server sends for an error it did not map, such as a suggestion that another
+  // device already handled.
+  expect(
+    actionMessage(new RpcServerError("Internal server error", "INTERNAL_SERVER_ERROR"), fallback),
+  ).toBe(fallback);
+  expect(
+    actionMessage(new RpcServerError("connect ECONNREFUSED", "INTERNAL_SERVER_ERROR"), fallback),
+  ).toBe(fallback);
+  // A user-facing code with no sentence of its own, and a message with no code at all.
+  expect(actionMessage(new RpcServerError("Forbidden", "FORBIDDEN"), fallback)).toBe(fallback);
+  expect(actionMessage(new RpcServerError("Something broke"), fallback)).toBe(fallback);
   // A native fetch failure when the phone is offline.
   expect(actionMessage(new Error("Network request failed"), fallback)).toBe(fallback);
   // The client's own abort timer.

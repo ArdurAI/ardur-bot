@@ -5,6 +5,7 @@ import {
   ProposalEvidenceSchema,
   SpaceLearningConfigSchema,
 } from "@ardurbot/contracts";
+import { rpcErrorMessage } from "@ardurbot/core";
 import { RpcServerError, rpc } from "./api";
 
 export async function loadLearning(botId?: string) {
@@ -37,20 +38,14 @@ export async function enableLearningReview(settings: {
 export async function loadLearningEvidence(proposalId: string, evidenceId: string) {
   return ProposalEvidenceSchema.parse(await rpc("learning/evidence", { proposalId, evidenceId }));
 }
-// The server flattens an unmapped error to this fixed text before it reaches the client.
-const GENERIC_RPC_ERROR_MESSAGE = "Internal Server Error";
 /**
  * The server's own sentence when a request failed for a reason worth saying, or the fallback.
- * Only a message the server actually sent qualifies: a transport failure (offline, timed out,
- * a response with no message at all) throws a plain `Error` instead, which always falls back,
- * so an untranslated English detail never replaces the caller's translated fallback text.
+ * Only a message the server actually sent qualifies, and only under a code it uses for people:
+ * a transport failure (offline, timed out, a response with no message at all) and an error the
+ * server did not map both fall back, so untranslated English never replaces the fallback.
  */
 export function actionMessage(error: unknown, fallback: string): string {
-  return error instanceof RpcServerError &&
-    error.message &&
-    error.message !== GENERIC_RPC_ERROR_MESSAGE
-    ? error.message
-    : fallback;
+  return error instanceof RpcServerError ? rpcErrorMessage(error, fallback) : fallback;
 }
 /** The diff comes from the server, never reviewer-authored markup. */
 export function learningBeforeAfter(diff: string) {

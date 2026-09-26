@@ -1085,6 +1085,4 @@ export const RU_MESSAGES: Record<string, string> = {
     "Не удалось закрыть задачу на доске, созданную ботом.",
   "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected.":
     "Ardur Bot попытался пять раз. Закройте её на доске или проверьте, что этот компьютер подключён.",
-  "The bot that filed this item can no longer use the board. Close it on the Board.":
-    "Бот, создавший эту задачу, больше не может пользоваться доской. Закройте её на доске.",
 };

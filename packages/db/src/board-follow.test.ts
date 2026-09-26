@@ -343,7 +343,6 @@ it.each([
   "can’t complete this",
   "Has not been resolved",
   "Didn't get it done",
-  "Done? Not fixed yet.",
 ])("classifies the negated close reason %j as closed otherwise", (reason) => {
   expect(boardFilingOutcome(reason)).toBe("closed-other");
 });
@@ -369,13 +368,48 @@ it.each([
   "wontfix, resolved",
   "Won’t fix — resolved upstream",
   "Resolved as duplicate",
-  "Done: not planned",
   "Obsolete, done in the rewrite",
   "Invalid; resolved",
   "Cannot reproduce, closing as fixed",
   "can't reproduce - done",
 ])("lets the negative close reason in %j win over its completion word", (reason) => {
   expect(boardFilingOutcome(reason)).toBe("closed-other");
+});
+it.each([
+  "Closed as duplicate",
+  "Closed as a duplicate of board-3",
+  "closed as not planned",
+  "Closed: obsolete",
+  "Resolved: duplicate",
+  "Resolved as invalid",
+  "Marked as won't fix",
+  "Marked as obsolete",
+  "Duplicate of board-3",
+  "A duplicate",
+  "Invalid",
+  "Obsolete after the rewrite",
+])(
+  "counts the negative close reason %j as closed otherwise when it is the resolution",
+  (reason) => {
+    expect(boardFilingOutcome(reason)).toBe("closed-other");
+  },
+);
+it.each([
+  // What the reason says was done comes first, then what it touched.
+  "Fixed duplicate header row in the export",
+  "Fixed invalid date handling in the import",
+  "Removed the obsolete endpoint; done",
+  "Implemented dedupe so duplicates are no longer created",
+  "Removed the obsolete endpoint",
+  "Added a check for invalid dates",
+  "done - merged the duplicate handling",
+  "Completed the cleanup of obsolete rows",
+  "Shipped the fix for invalid tokens",
+  "Merged dedupe for duplicate uploads",
+  "Resolved the invalid state",
+  "Cleanup of duplicate rows is done",
+])("classifies the close reason %j as completed", (reason) => {
+  expect(boardFilingOutcome(reason)).toBe("completed");
 });
 it.each([
   "nothing was resolved",

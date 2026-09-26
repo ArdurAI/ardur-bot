@@ -18,11 +18,7 @@ import {
 } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  boardCloseDeniedBody,
-  boardCloseFailedTitle,
-  boardCloseTriedBody,
-} from "../lib/board-close-copy";
+import { boardCloseFailedTitle, boardCloseTriedBody } from "../lib/board-close-copy";
 import { actionMessage } from "../lib/orpc-action-message";
 import { rpc } from "../lib/rpc";
 import { LearningCurator } from "./LearningCurator";
@@ -434,9 +430,7 @@ function LearningCard({
         )}
       </div>
       {proposal.boardCloseFailed && !proposal.boardChanged ? (
-        <p className="text-xs text-muted-foreground">
-          {i18n._(proposal.boardCloseDenied ? boardCloseDeniedBody : boardCloseTriedBody)}
-        </p>
+        <p className="text-xs text-muted-foreground">{i18n._(boardCloseTriedBody)}</p>
       ) : null}
       {blocked ? <p className="text-xs text-muted-foreground">{blocked}</p> : null}
       {editing ? (

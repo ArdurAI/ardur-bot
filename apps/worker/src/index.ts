@@ -291,7 +291,9 @@ async function main() {
     reconcileCloudAgents: () => reconcileCloudAgents({ prisma, jobs, cloudAgent }),
     reconcileComputerUpdates: () => reconcileComputerUpdates({ prisma, jobs }),
     reconcileMemory: () => reconcileMemoryDelivery(memoryLifecycleDeps, memoryDocuments),
-    reconcileBoardOutcomes: () => reconcileBoardOutcomes({ prisma, dataDir, lockPool }),
+    // The board notification tick below sweeps pending closes; this only finishes run outcomes.
+    reconcileBoardOutcomes: (signal) =>
+      reconcileBoardOutcomes({ prisma, dataDir, lockPool }, { signal }),
   });
   reconciler.start();
   const boardNotifications = createBoardNotificationDelivery({

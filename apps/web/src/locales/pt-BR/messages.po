@@ -7312,10 +7312,6 @@ msgstr ""
 msgid "The bot is working — wait or stop it"
 msgstr ""
 
-#: src/lib/board-close-copy.ts
-msgid "The bot that filed this item can no longer use the board. Close it on the Board."
-msgstr ""
-
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "The connection was cancelled."
 msgstr ""

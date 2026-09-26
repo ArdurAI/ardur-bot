@@ -23,10 +23,11 @@ it("adds every filing column in one migration without rewriting existing rows", 
     '"closeNextAt" TIMESTAMP(3)',
     '"closeUpdatedAt" TEXT',
     '"closeNoticeAt" TIMESTAMP(3)',
-    '"closeDeniedAt" TIMESTAMP(3)',
     '"closeCommentCount" INTEGER',
   ])
     expect(sql).toContain(`ADD COLUMN ${column}`);
+  // A pending close is retried as the person who asked for it, so no bot denial is recorded.
+  expect(sql).not.toContain("closeDeniedAt");
   expect(sql).not.toMatch(/\bDROP TABLE\b|\bDELETE FROM\b|\bTRUNCATE\b|\bUPDATE "/);
 });
 

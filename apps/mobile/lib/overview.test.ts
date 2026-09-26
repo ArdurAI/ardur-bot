@@ -236,6 +236,29 @@ it("shows the work list and leaves the counts out when filing outcomes fail", as
     vi.mocked(rpc).mockImplementation(original);
   }
 });
+it("asks for the work list and the filing counts at once", async () => {
+  const original = vi.mocked(rpc).getMockImplementation()!;
+  let finishWork!: () => void;
+  const workAnswered = new Promise<void>((resolve) => {
+    finishWork = resolve;
+  });
+  vi.mocked(rpc).mockImplementation(async (procedure: string, input?: unknown) => {
+    if (procedure === "board/work") await workAnswered;
+    return original(procedure, input);
+  });
+  try {
+    await act(async () => root.render(createElement(OverviewScreen)));
+    const asked = () => vi.mocked(rpc).mock.calls.map(([procedure]) => procedure);
+    expect(asked()).toContain("board/work");
+    // The counts do not wait for the work list.
+    expect(asked()).toContain("board/filingOutcomes");
+    await act(async () => finishWork());
+    expect(node.textContent).toContain("Ready: 0 · In progress: 0 · Blocked: 0");
+  } finally {
+    finishWork();
+    vi.mocked(rpc).mockImplementation(original);
+  }
+});
 it("renders the Work summary from a server that has no filing outcomes", async () => {
   const original = vi.mocked(rpc).getMockImplementation()!;
   vi.mocked(rpc).mockImplementation(async (procedure: string, input?: unknown) => {

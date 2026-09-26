@@ -21,8 +21,6 @@ export const NotificationActivitySchema = z.object({
       itemId: z.string(),
       // The notice for a board close that kept failing; screens word it in the reader's language.
       closeFailed: z.boolean().optional(),
-      // That close failed because the bot that filed the item can no longer use the board.
-      closeDenied: z.boolean().optional(),
     })
     .optional(),
   updatedAt: z.string(),

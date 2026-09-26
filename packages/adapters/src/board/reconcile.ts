@@ -8,18 +8,21 @@ const PENDING_CLOSE_INTERVAL_MS = 30_000;
 const PENDING_CLOSE_DEADLINE_MS = 15_000;
 
 /**
- * Recover an interrupted delivery after a terminal run or a disconnected host. With the host
- * bridge on, this process has no owner connection, so its sweep leaves pending closes to the
- * API's own schedule (createPendingCloseRetry).
+ * Recover an interrupted delivery after a terminal run or a disconnected host. `pendingCloses`
+ * also sweeps failed board closes, under a 15-second deadline, for the one process with nothing
+ * else to sweep them: the API on the in-memory job queue. The worker's notification tick sweeps
+ * its own, and with the host bridge on the API's own schedule does (createPendingCloseRetry).
+ * `signal` stops the pass, down to the board command.
  */
-export async function reconcileBoardOutcomes(deps: {
-  prisma: PrismaClient;
-  dataDir: string;
-  lockPool?: Pick<Pool, "connect">;
-}) {
-  await new BoardService(deps).sweepPendingCloses().catch((error) => {
-    getLogger().error("pending board close", error);
-  });
+export async function reconcileBoardOutcomes(
+  deps: {
+    prisma: PrismaClient;
+    dataDir: string;
+    lockPool?: Pick<Pool, "connect">;
+  },
+  options: { signal?: AbortSignal; pendingCloses?: boolean } = {},
+) {
+  if (options.pendingCloses) await sweepBeforeDeadline(new BoardService(deps), options.signal);
   const runs = await deps.prisma.run.findMany({
     where: {
       boardItemId: { not: null },
@@ -31,6 +34,7 @@ export async function reconcileBoardOutcomes(deps: {
     take: 20,
   });
   for (const run of runs) {
+    if (options.signal?.aborted) return;
     try {
       const transcript =
         run.status === "completed" ? await botRunOutcomeText(deps.prisma, run.id) : null;
@@ -40,7 +44,13 @@ export async function reconcileBoardOutcomes(deps: {
         (run.status === "cancelled" ? "Work stopped." : "The run ended without a written summary.");
       await finishBoardRun(
         deps,
-        { userId: run.userId, spaceId: run.spaceId, botId: run.botId, runId: run.id },
+        {
+          userId: run.userId,
+          spaceId: run.spaceId,
+          botId: run.botId,
+          runId: run.id,
+          signal: options.signal,
+        },
         outcome,
       );
     } catch {
@@ -50,6 +60,24 @@ export async function reconcileBoardOutcomes(deps: {
         data: { updatedAt: new Date() },
       });
     }
+  }
+}
+
+/** One sweep, stopped by the caller's signal or at the 15-second deadline, whichever comes first. */
+async function sweepBeforeDeadline(
+  board: Pick<BoardService, "sweepPendingCloses">,
+  signal?: AbortSignal,
+) {
+  const deadline = new AbortController();
+  const timer = setTimeout(() => deadline.abort(), PENDING_CLOSE_DEADLINE_MS);
+  try {
+    await board.sweepPendingCloses({
+      signal: signal ? AbortSignal.any([signal, deadline.signal]) : deadline.signal,
+    });
+  } catch (error) {
+    getLogger().error("pending board close", error);
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -67,16 +95,10 @@ export function createPendingCloseRetry(
   let abort: AbortController | undefined;
   const tick = () => {
     if (!timer || running) return;
-    const controller = new AbortController();
-    abort = controller;
-    const deadline = setTimeout(() => controller.abort(), PENDING_CLOSE_DEADLINE_MS);
-    running = board
-      .sweepPendingCloses({ signal: controller.signal })
-      .catch((error) => getLogger().error("pending board close", error))
-      .finally(() => {
-        clearTimeout(deadline);
-        running = undefined;
-      });
+    abort = new AbortController();
+    running = sweepBeforeDeadline(board, abort.signal).finally(() => {
+      running = undefined;
+    });
   };
   return {
     start() {

@@ -2,7 +2,7 @@ import type { NotificationProvider } from "@ardurbot/adapter-kit";
 import type { Pool, PrismaClient } from "@ardurbot/db";
 import { getUserPreferences } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
-import { BOARD_CLOSE_DENIED_BODY, BOARD_CLOSE_FAILED_BODY } from "./pending-close.js";
+import { BOARD_CLOSE_FAILED_BODY } from "./pending-close.js";
 
 const BOARD_NOTIFICATION_LOCK_NAMESPACE = 1_380_019_075;
 const BOARD_NOTIFICATION_LOCK_ID = 3;
@@ -54,9 +54,7 @@ export async function deliverBoardNotifications(
                     ? "Assignee changed"
                     : change === "close"
                       ? BOARD_CLOSE_FAILED_BODY
-                      : change === "close-denied"
-                        ? BOARD_CLOSE_DENIED_BODY
-                        : "Status changed",
+                      : "Status changed",
               )
               .join(" · "),
             botId: "",

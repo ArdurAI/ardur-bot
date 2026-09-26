@@ -7,7 +7,6 @@ import {
   enqueueLearningReview,
   learningMember,
   observeLearningRevision,
-  pendingCloseFailure,
   proposalView,
   reviewerDestination,
   skillDocumentContext,
@@ -90,7 +89,7 @@ export function createLearningService(deps: {
   const identity = (actor: Actor) => ({ spaceId: actor.spaceId, userId: actor.userId });
   /**
    * Board items carry a filing outcome. A pending close stays visible until it finishes, and says
-   * it could not be closed after five failed tries, or once its bot can no longer use the board.
+   * it could not be closed once its notice was sent.
    */
   async function withBoardOutcomes(spaceId: string, proposals: ReturnType<typeof proposalView>[]) {
     const ids = proposals
@@ -104,22 +103,15 @@ export function createLearningService(deps: {
         closedAt: true,
         outcome: true,
         closePending: true,
-        closeAttempts: true,
         closeNoticeAt: true,
-        closeDeniedAt: true,
       },
     });
     const byProposal = new Map(filings.map((filing) => [filing.learningProposalId, filing]));
     return proposals.map((proposal) => {
       const filing = byProposal.get(proposal.id);
       const boardClosing = Boolean(filing?.closePending);
-      const failure = filing && boardClosing ? pendingCloseFailure(filing) : null;
       const closing = boardClosing
-        ? {
-            boardClosing: true,
-            ...(failure ? { boardCloseFailed: true } : {}),
-            ...(failure === "denied" ? { boardCloseDenied: true } : {}),
-          }
+        ? { boardClosing: true, ...(filing?.closeNoticeAt ? { boardCloseFailed: true } : {}) }
         : {};
       if (!(proposal.status === "applied" && proposal.appliedBoardItem))
         return boardClosing ? { ...proposal, ...closing } : proposal;

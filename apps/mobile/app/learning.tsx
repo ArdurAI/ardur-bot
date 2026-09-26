@@ -291,13 +291,9 @@ export default function Learning() {
                   </View>
                   {proposal.boardCloseFailed && !proposal.boardChanged ? (
                     <Text style={styles.secondary}>
-                      {proposal.boardCloseDenied
-                        ? t(
-                            "The bot that filed this item can no longer use the board. Close it on the Board.",
-                          )
-                        : t(
-                            "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected.",
-                          )}
+                      {t(
+                        "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected.",
+                      )}
                     </Text>
                   ) : null}
                   {blocked ? <Text style={styles.secondary}>{t(blocked)}</Text> : null}

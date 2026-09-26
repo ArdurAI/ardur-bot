@@ -10,33 +10,39 @@ const NEGATED_COMPLETION = new RegExp(
   `\\b(?:nothing|nobody|nowhere|none|never|not|no(?!\\s+\\d)|cannot|unable to|(?:can|couldn|won|didn|isn|wasn|hasn|haven)['’]?t)(?:\\s+[\\w'’]+){0,3}?\\s+(?:${COMPLETION_WORD})\\b`,
   "iu",
 );
-const NOT_COMPLETED =
-  /\b(?:won['’]?t[\s-]*fix|duplicate[ds]?|not\s+needed|not\s+planned|obsolete|invalid|can(?:not|\s+not|['’]?t)\s+reproduce)\b/iu;
-// "not a duplicate" denies a negative reason instead of giving one.
-const DENIED_NOT_COMPLETED =
-  /\b(?:not|isn['’]?t|wasn['’]?t)\s+(?:an?\s+)?(?:duplicate[ds]?|obsolete|invalid)\b/giu;
+const NEGATIVE =
+  "won['’]?t[\\s-]*fix|duplicate[ds]?|not\\s+needed|not\\s+planned|obsolete|invalid|can(?:not|\\s+not|['’]?t)\\s+reproduce";
+// A negative phrase is the resolution at the start of the reason or right after one of these.
+const NEGATIVE_RESOLUTION = new RegExp(
+  `(?:^|\\b(?:closed\\s+as|resolved\\s+as|marked\\s+as|resolved\\s*:|closed\\s*:))\\s*(?:an?\\s+)?(?:${NEGATIVE})\\b`,
+  "iu",
+);
+const LEADING_COMPLETION =
+  /^(?:fixed|done|completed|implemented|removed|added|shipped|merged|resolved)\b/iu;
 
 /**
  * An empty reason, Beads' default "Closed" (from `bd close` with no reason or an empty one),
- * or a completion word means done. A negative reason wins over any completion word: won't
- * fix (also wontfix), duplicate, not needed, not planned, obsolete, invalid, cannot
- * reproduce and can't reproduce are closed otherwise ("Resolved: won't fix", "Duplicate,
- * fixed in board-12"), unless the reason denies it ("Resolved, not a duplicate"). A negation
- * up to three words before any completion word also means closed otherwise. Completion
- * words are done, complete, completed, fixed, resolved, implemented, shipped, merged,
- * finished, delivered and landed. Negations are not, never, no, nothing, nobody, none,
- * nowhere, cannot, can't, couldn't, won't, didn't, isn't, wasn't, hasn't, haven't, and
- * unable to ("not done", "can't get it fixed", "never shipped"). "no" followed by a number
- * is a label, not a negation ("ticket no 12 resolved"). A completion word with an un- prefix
- * (unresolved, unfinished, undone) is negated. Every other reason is closed otherwise.
+ * or a completion word means done. A negative phrase counts only as the resolution itself: won't
+ * fix (also wontfix), duplicate, not needed, not planned, obsolete, invalid, cannot reproduce and
+ * can't reproduce, at the start of the reason or right after "closed as", "resolved as",
+ * "resolved:", "marked as" or "closed:", are closed otherwise ("Duplicate, fixed in board-12",
+ * "Resolved as won't fix"). A reason that starts with fixed, done, completed, implemented,
+ * removed, added, shipped, merged or resolved is otherwise done, whatever it goes on to name
+ * ("Fixed duplicate header row"). Elsewhere a negation up to three words before any completion
+ * word means closed otherwise. Completion words are done, complete, completed, fixed,
+ * resolved, implemented, shipped, merged, finished, delivered and landed. Negations are not,
+ * never, no, nothing, nobody, none, nowhere, cannot, can't, couldn't, won't, didn't, isn't,
+ * wasn't, hasn't, haven't, and unable to ("not done", "can't get it fixed", "never shipped").
+ * "no" followed by a number is a label, not a negation ("ticket no 12 resolved"). A completion
+ * word with an un- prefix (unresolved, unfinished, undone) is negated. Every other reason is
+ * closed otherwise.
  */
 export function boardFilingOutcome(reason = ""): "completed" | "closed-other" {
   const trimmed = reason.trim();
   if (!trimmed || trimmed.toLowerCase() === "closed") return "completed";
-  if (NOT_COMPLETED.test(reason.replace(DENIED_NOT_COMPLETED, " "))) return "closed-other";
-  const withoutUn = reason.replace(UN_COMPLETION, " ");
-  if (UN_COMPLETION.test(reason) && !COMPLETION.test(withoutUn)) return "closed-other";
-  return COMPLETION.test(withoutUn) && !NEGATED_COMPLETION.test(reason)
+  if (NEGATIVE_RESOLUTION.test(trimmed)) return "closed-other";
+  if (LEADING_COMPLETION.test(trimmed)) return "completed";
+  return COMPLETION.test(trimmed.replace(UN_COMPLETION, " ")) && !NEGATED_COMPLETION.test(trimmed)
     ? "completed"
     : "closed-other";
 }

@@ -23,17 +23,19 @@ import { useMobileTokens } from "../lib/native";
 import { loadOverviewConnections, loadOverviewNow, loadOverviewUsage } from "../lib/overview";
 
 const loadWork = async () => {
-  const work = await rpc("board/work", {});
-  let filingOutcomes: BoardFilingOutcomeCount[] = [];
-  try {
-    const outcomes = await rpc("board/filingOutcomes", {});
-    const parsed = BoardFilingOutcomeCountSchema.array().safeParse(
-      (outcomes as { bots?: unknown } | null)?.bots,
-    );
-    filingOutcomes = parsed.success ? parsed.data : [];
-  } catch {
-    // The work list stays; the counts are simply left out.
-  }
+  const [work, filingOutcomes] = await Promise.all([
+    rpc("board/work", {}),
+    rpc("board/filingOutcomes", {}).then(
+      (outcomes): BoardFilingOutcomeCount[] => {
+        const parsed = BoardFilingOutcomeCountSchema.array().safeParse(
+          (outcomes as { bots?: unknown } | null)?.bots,
+        );
+        return parsed.success ? parsed.data : [];
+      },
+      // The work list stays; the counts are simply left out.
+      () => [],
+    ),
+  ]);
   return { ...BoardWorkSchema.parse(work), filingOutcomes };
 };
 const MobileBoard = lazy(() =>

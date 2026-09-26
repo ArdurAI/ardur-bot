@@ -97,7 +97,6 @@ export async function notificationActivity(prisma: PrismaClient, actor: Actor) {
         workspaceId,
         itemId,
         ...(row.changes.includes("close") ? { closeFailed: true } : {}),
-        ...(row.changes.includes("close-denied") ? { closeFailed: true, closeDenied: true } : {}),
       },
     });
   }

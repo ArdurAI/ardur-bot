@@ -134,7 +134,7 @@ and records the selected item. Once create returns an item id, that id stays on 
 Approval, Reject and Undo take the space's filing lock, so a proposal rejected while approval waited
 is never filed. Approval files as the proposal's bot; Reject and Undo read and close the item with
 the person's own board access, so they still work after that bot is archived or removed from the
-board's allowed bots. Unchanged means no edit and no new comment. Reject closes an unchanged new item with
+board's allowed bots. A close they leave pending is retried as that person too. Unchanged means no edit and no new comment. Reject closes an unchanged new item with
 `Rejected from Learning` and frees the cap slot. If the item changed but is still open, Reject leaves it open
 and says “This board item changed after it was filed, so it was left open for review on the Board.” If a
 person closed the item themselves for some other reason, Reject says “This board item was already closed

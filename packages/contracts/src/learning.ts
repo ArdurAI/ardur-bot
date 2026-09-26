@@ -208,8 +208,6 @@ export const LearningProposalSchema = z
     boardClosing: z.boolean().optional(),
     // The pending close kept failing and its notice was sent.
     boardCloseFailed: z.boolean().optional(),
-    // It failed because the bot that filed the item can no longer use the board.
-    boardCloseDenied: z.boolean().optional(),
     boardChanged: z.boolean().optional(),
     documentId: z.string().optional(),
     blockedReason: z.string().optional(),

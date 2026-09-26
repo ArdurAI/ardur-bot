@@ -22,9 +22,7 @@ import { createHostClient, usesHostBridge } from "../remote-host-sandbox.js";
 import { BeadsBoardProvider } from "./beads.js";
 import type { PendingCloseRow } from "./pending-close.js";
 import {
-  botDeniedCheckAt,
   closeNoticeOwner,
-  notifyUnclosedBoardItem,
   pendingCloseAction,
   recordPendingCloseFailure,
   releaseChangedBoardClose,
@@ -431,24 +429,16 @@ export class BoardService {
       this.showPendingCloseItem(filing, itemId),
     );
   }
-  /** The filing's bot, as a run's outcome delivery uses the run's bot, for its owner. */
-  private async pendingCloseScope(
-    filing: PendingCloseRow,
-    signal?: AbortSignal,
-    options: { withBot?: boolean } = {},
-  ) {
+  /**
+   * Reject and Undo left this close pending with the person's own board access, and only the
+   * board's owner gets past `workspace`, so the owner is that person. Every retry opens the
+   * board as them too, never through the filing's bot.
+   */
+  private async pendingCloseScope(filing: PendingCloseRow, signal?: AbortSignal) {
     if (!filing.workspaceId) throw new Error("This board close has no board.");
     const userId = await closeNoticeOwner(this.options.prisma, filing);
     if (!userId) throw new Error("This board close has no owner.");
-    return {
-      scope: {
-        userId,
-        spaceId: filing.spaceId,
-        ...((options.withBot ?? true) && filing.botId ? { botId: filing.botId } : {}),
-        signal,
-      },
-      workspaceId: filing.workspaceId,
-    };
+    return { scope: { userId, spaceId: filing.spaceId, signal }, workspaceId: filing.workspaceId };
   }
   private async showPendingCloseItem(
     filing: PendingCloseRow,
@@ -459,58 +449,14 @@ export class BoardService {
     return (await this.provider(scope, workspaceId)).show(itemId);
   }
   private async finishPendingClose(filing: PendingCloseRow, signal?: AbortSignal) {
-    const itemId = filing.itemId;
-    if (!filing.closePending || !itemId || !filing.workspaceId) return;
+    if (!filing.closePending || !filing.itemId || !filing.workspaceId) return;
     const { scope, workspaceId } = await this.pendingCloseScope(filing, signal);
-    try {
-      await this.finishClose(scope, filing, workspaceId);
-    } catch (error) {
-      if (!filing.botId || !(error instanceof BoardError) || error.problem.code !== "forbidden")
-        throw error;
-      await this.finishBotDeniedClose(filing, itemId, workspaceId, signal);
-    }
-  }
-  /**
-   * The filing's bot can no longer open the board at all (archived, moved, or no longer
-   * allowed on it), so its own scope cannot see whether the item closed. The owner can open
-   * their own board, so a read through the owner's scope decides instead: closed, for any
-   * reason, ends the pending close exactly as a normal close would. Otherwise the close is
-   * checked again in a day, and the owner is told once to close it on the Board. That next
-   * check tries the bot first, so a bot that can use the board again closes it normally.
-   */
-  private async finishBotDeniedClose(
-    filing: PendingCloseRow,
-    itemId: string,
-    workspaceId: string,
-    signal?: AbortSignal,
-  ) {
-    const owner = await this.pendingCloseScope(filing, signal, { withBot: false });
-    const item = await this.provider(owner.scope, workspaceId)
-      .then((provider) => provider.show(itemId))
-      .catch((error: unknown) => {
-        // The owner's board is out of reach too; the daily check reads it again.
-        getLogger().error("pending board close", error);
-        return null;
-      });
-    if (item?.status === "closed") {
-      await this.options.prisma.botBoardFiling.deleteMany({
-        where: { id: filing.id, spaceId: filing.spaceId },
-      });
-      return;
-    }
-    const denied = { ...filing, closeDeniedAt: filing.closeDeniedAt ?? new Date() };
-    const marked = await this.options.prisma.botBoardFiling.updateMany({
-      where: { id: filing.id, closePending: filing.closePending },
-      data: { closeDeniedAt: denied.closeDeniedAt, closeNextAt: botDeniedCheckAt() },
-    });
-    if (marked.count !== 1 || filing.closeNoticeAt) return;
-    await notifyUnclosedBoardItem(this.options.prisma, denied, async () => item, "close-denied");
+    await this.finishClose(scope, filing, workspaceId);
   }
   /**
    * Shows the item, decides whether it can close, and closes or releases it, then deletes the
    * filing row. Shared by the sweep, and by Reject and Undo retrying a close that already
-   * committed. The caller resolves the scope: the sweep opens the board as the owner, through
-   * the filing's bot; a retry opens it as the clicking person, with their own board access.
+   * committed. Both open the board as the person who asked for the close, with their own access.
    */
   async finishClose(
     scope: BoardScope,

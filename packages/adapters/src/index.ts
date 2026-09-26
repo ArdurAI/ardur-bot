@@ -8,7 +8,6 @@ export * from "./backfill-runtime-pins.js";
 export * from "./background-job-handlers.js";
 export * from "./board/beads.js";
 export * from "./board/notifications.js";
-export { pendingCloseFailure } from "./board/pending-close.js";
 export * from "./board/reconcile.js";
 export * from "./board/service.js";
 export * from "./board/worker.js";

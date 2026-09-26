@@ -94,3 +94,18 @@ for (const [action, path] of [
     });
   });
 }
+
+it("sends only a generic code for an error it has no sentence for, so screens show their own", async () => {
+  const { call } = await routerFixture({
+    reject: vi.fn().mockRejectedValue(new Error("This suggestion is no longer pending.")),
+  });
+  const response = await call("learning/reject", { proposalId: "proposal-1" });
+  expect(response.status).toBe(500);
+  await expect(response.json()).resolves.toEqual({
+    json: expect.objectContaining({
+      defined: false,
+      code: "INTERNAL_SERVER_ERROR",
+      message: "Internal server error",
+    }),
+  });
+});
