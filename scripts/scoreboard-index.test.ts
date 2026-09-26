@@ -1750,15 +1750,34 @@ describe("release publication gate", () => {
       expect(detail).not.toContain("candidate.json");
       expect(detail).not.toContain("No measured evidence exists for this release.");
       expect(detail).not.toContain("evidence_waiver");
-      // The sentence ends with an action, not a restatement of the same fact.
+      // The sentence ends with an action, names the files once, and doesn't restate the fact.
       expect(detail).not.toContain("Every report is required");
-      expect(detail).toContain(
-        "Upload parent.json, fixed-release.json and policy.json with the other reports and run the release again.",
+      expect(detail).toBe(
+        "This release run did not upload parent.json, fixed-release.json and policy.json. " +
+          "Upload them with the other reports and run the release again.",
       );
       const records = await readIndex(result.indexRoot);
       expect(records.map((record) => [record.status, record.pendingReason])).toEqual([
         ["pending", "reports-missing"],
       ]);
+    } finally {
+      await rm(partial.root, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("names a single missing report once, with the singular action", async () => {
+    const partial = await stagePassing();
+    try {
+      await rm(path.join(partial.reportsRoot, "policy.json"));
+      const result = await gate(partial, "index-single-partial");
+      expect(result.code).toBe(2);
+      expect(result.gate.allowPublication).toBe(false);
+      expect(codes(result.gate)).toEqual(["reports-missing"]);
+      const detail = result.gate.reasons[0]?.detail as string;
+      expect(detail).toBe(
+        "This release run did not upload policy.json. " +
+          "Upload it with the other reports and run the release again.",
+      );
     } finally {
       await rm(partial.root, { recursive: true, force: true });
     }
@@ -1796,10 +1815,10 @@ describe("release publication gate", () => {
       expect(result.gate.allowPublication).toBe(false);
       expect(codes(result.gate)).toEqual(["reports-missing"]);
       const detail = result.gate.reasons[0]?.detail as string;
-      expect(detail).toContain("parent.json");
-      expect(detail).toContain("candidate.json");
-      expect(detail).toContain("fixed-release.json");
-      expect(detail).toContain("policy.json");
+      expect(detail).toBe(
+        "This release run did not upload parent.json, candidate.json, fixed-release.json and " +
+          "policy.json. Upload them with the other reports and run the release again.",
+      );
       expect(detail).not.toContain("No measured evidence exists for this release.");
       expect(detail).not.toContain("evidence_waiver");
       const records = await readIndex(result.indexRoot);

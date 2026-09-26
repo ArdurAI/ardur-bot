@@ -1363,7 +1363,8 @@ function reportList(keys) {
 /** A partial set never suggests the waiver: the waiver only ever helps when nothing was uploaded. */
 function partialEvidenceDetail(absentKeys) {
   const list = reportList(absentKeys);
-  return `This release run did not upload ${list}. Upload ${list} with the other reports and run the release again.`;
+  const pronoun = absentKeys.length === 1 ? "it" : "them";
+  return `This release run did not upload ${list}. Upload ${pronoun} with the other reports and run the release again.`;
 }
 
 /** Distinct from `partialEvidenceDetail`: this file was uploaded, it just could not be parsed. */
