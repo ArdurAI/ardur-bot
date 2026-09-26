@@ -71,7 +71,7 @@ package is not installed. `pack` builds for the computer it runs on.
 The root version is the sole editable input. `scripts/desktop-version.mjs` copies it into the
 desktop package before every desktop build; that package field is derived packaging metadata.
 The executable's `--version` flag prints `app.getVersion()` and exits before taking the instance
-lock, opening a window, checking updates, or starting Docker. With the Homebrew cask or Linux deb,
+lock, opening a window, checking updates, or starting the embedded Postgres server. With the Homebrew cask or Linux deb,
 run `ardur-bot --version`; from a DMG install run the bundle executable with `--version`.
 
 Release notes count commits since the previous reachable `v*` tag (all ancestors for the first
@@ -194,5 +194,5 @@ visibility must be checked on the actual desktop.
 Unit tests stub the platform and Electron tray boundary. No real Windows or Linux installer,
 tray integration, DPI behavior, or window manager was exercised during this implementation.
 On macOS the sandbox blocked downloading Electron for the directory build; the installed app,
-Gatekeeper steps, tray/dock behavior, Docker-backed idle CPU, and update discovery still need a
+Gatekeeper steps, tray/dock behavior, idle CPU, and update discovery still need a
 real build. Do not interpret unit tests or generated YAML as that acceptance evidence.
