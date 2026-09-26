@@ -2523,6 +2523,10 @@ msgstr "Could not save this choice"
 msgid "Could not save this credential. Check it and try again."
 msgstr "Could not save this credential. Check it and try again."
 
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Could not save. Try again."
+msgstr "Could not save. Try again."
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not search catalog"
 msgstr "Could not search catalog"

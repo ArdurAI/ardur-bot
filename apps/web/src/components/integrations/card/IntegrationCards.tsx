@@ -46,6 +46,10 @@ export function IntegrationCards({
   const userCancelled = useRef(false);
   const oauthAttempt = useRef(0);
   const oauthAbort = useRef<AbortController | null>(null);
+  // A catalog Connect/Reconnect never shares reconnectCustom's controller or attempt
+  // counter: aborting or invalidating one flow must never touch the other's wait.
+  const catalogAttempt = useRef(0);
+  const catalogAbort = useRef<AbortController | null>(null);
   const [tokenFor, setTokenFor] = useState<string | null>(null);
   const [token, setToken] = useState("");
   const [hosts, setHosts] = useState<Record<string, string>>({});
@@ -64,6 +68,8 @@ export function IntegrationCards({
     () => () => {
       oauthAttempt.current += 1;
       oauthAbort.current?.abort();
+      catalogAttempt.current += 1;
+      catalogAbort.current?.abort();
     },
     [],
   );
@@ -112,11 +118,12 @@ export function IntegrationCards({
     authKind: "host" | "oauth" | "token" = descriptor.authKind,
     suppliedToken?: string,
   ): Promise<boolean> {
+    const mine = ++catalogAttempt.current;
     setBusy(descriptor.id);
     setError(null);
-    oauthAbort.current?.abort();
+    catalogAbort.current?.abort();
     const abort = new AbortController();
-    oauthAbort.current = abort;
+    catalogAbort.current = abort;
     try {
       const current = await connectIntegration(descriptor, connection, {
         authKind,
@@ -135,17 +142,22 @@ export function IntegrationCards({
           })),
         signal: abort.signal,
       });
+      if (mine !== catalogAttempt.current) return false;
       await refresh();
       if (current.state === "connected") setSelected(current.id);
       return current.state === "connected";
     } catch (caught) {
-      setError(mcpErrorCode(caught) === MCP_INVALID_TOKEN_CODE ? "token" : "load");
+      if (mine === catalogAttempt.current) {
+        setError(mcpErrorCode(caught) === MCP_INVALID_TOKEN_CODE ? "token" : "load");
+      }
       return false;
     } finally {
-      setBusy(null);
-      setToken("");
-      setTokenFor(null);
-      setClients((current) => ({ ...current, [descriptor.id]: { clientId: "" } }));
+      if (mine === catalogAttempt.current) {
+        setBusy(null);
+        setToken("");
+        setTokenFor(null);
+        setClients((current) => ({ ...current, [descriptor.id]: { clientId: "" } }));
+      }
     }
   }
   async function reconnectCustom(server: McpServer) {

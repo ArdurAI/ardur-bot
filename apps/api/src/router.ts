@@ -3586,6 +3586,10 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
                 data: {
                   enabled: input.enabled,
                   connectionState: "not-connected",
+                  // Disabling ends any in-flight sign-in wait for this server; nothing
+                  // else clears its pending id once the server is no longer enabled.
+                  pendingOauthSessionId: null,
+                  consentStartedAt: null,
                   revision: { increment: 1 },
                 },
               });

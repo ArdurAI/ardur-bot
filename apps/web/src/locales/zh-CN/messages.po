@@ -2523,6 +2523,10 @@ msgstr "无法保存此选择"
 msgid "Could not save this credential. Check it and try again."
 msgstr "无法保存此凭据。请检查后重试。"
 
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Could not save. Try again."
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not search catalog"
 msgstr ""

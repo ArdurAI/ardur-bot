@@ -556,7 +556,7 @@ it.each([
   expect(fake.update).toHaveBeenCalledExactlyOnceWith(call);
   expect(container.textContent).toContain(
     "This server has two credentials. Keep one.Keep tokenKeep header" +
-      "Could not save this credential. Check it and try again.",
+      "Could not save. Try again.",
   );
 });
 

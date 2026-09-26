@@ -400,6 +400,55 @@ describe("Settings integration catalog", () => {
       vi.useRealTimers();
     }
   });
+  it("never touches a custom server's waiting Reconnect when a catalog Connect starts", async () => {
+    vi.spyOn(window, "open").mockReturnValue({
+      close: vi.fn(),
+      location: { href: "" },
+    } as unknown as Window);
+    vi.useFakeTimers();
+    try {
+      const server = customServer("failed", "Failed server", "discovery-failed");
+      api.servers.mockImplementation(async () => [server]);
+      let customCancelled = false;
+      api.oauth.mockImplementation(
+        (
+          _serverId: string,
+          options?: {
+            onWaiting?: (waiting: { cancel: () => Promise<void> }) => void;
+            signal?: AbortSignal;
+          },
+        ) =>
+          new Promise((_resolve, reject) => {
+            options?.onWaiting?.({
+              cancel: async () => {
+                customCancelled = true;
+              },
+            });
+            // Real waitForMcpOauth rejects with the signal's reason once aborted; this
+            // mock must too, so a wrongly-shared abort controller is actually caught.
+            options?.signal?.addEventListener("abort", () => reject(options.signal!.reason));
+          }),
+      );
+      api.connect.mockResolvedValue({
+        connection: { ...connected, id: "github-1", catalogId: "github", state: "connected" },
+        authorizationUrl: null,
+        sessionId: null,
+      });
+      await mount();
+      await click(button("Reconnect", serverRow("Failed server")!));
+      expect(container.textContent).toContain("Waiting for sign-in in the other window.");
+      // Starting a catalog Connect must never touch the custom server's own wait.
+      await click(
+        button("Connect", container.querySelector('[data-testid="integration-github"]')!),
+      );
+      expect(container.querySelector('[role="alert"]')).toBeNull();
+      expect(container.textContent).toContain("Waiting for sign-in in the other window.");
+      expect(customCancelled).toBe(false);
+      expect(api.connect).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it("loads, changes, saves and reopens a per-connection read approval", async () => {
     connections = [{ ...connected, spaceToolPolicies: { synthetic_read: "allow" } }];
     api.grants.mockResolvedValue([

@@ -51,7 +51,7 @@ export function McpCredentialFix({
       onOpenChange(false);
       await onSaved();
     } catch {
-      setKeepError(t`Could not save this credential. Check it and try again.`);
+      setKeepError(t`Could not save. Try again.`);
     } finally {
       setBusy(false);
     }
@@ -68,7 +68,7 @@ export function McpCredentialFix({
       onOpenChange(false);
       await onSaved();
     } catch {
-      setKeepError(t`Could not save this credential. Check it and try again.`);
+      setKeepError(t`Could not save. Try again.`);
     } finally {
       setBusy(false);
     }

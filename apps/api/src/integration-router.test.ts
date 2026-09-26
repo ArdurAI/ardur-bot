@@ -140,7 +140,13 @@ describe("integration RPC boundaries", () => {
     expect(response?.status).toBe(200);
     expect(f.prisma.mcpServer.update).toHaveBeenCalledWith({
       where: { id: "server" },
-      data: { enabled: true, connectionState: "not-connected", revision: { increment: 1 } },
+      data: {
+        enabled: true,
+        connectionState: "not-connected",
+        pendingOauthSessionId: null,
+        consentStartedAt: null,
+        revision: { increment: 1 },
+      },
     });
     expect(f.prisma.botMcpServer.updateMany).toHaveBeenCalledWith({
       where: { serverId: "server", spaceId: "space", userId: "owner" },
@@ -148,6 +154,52 @@ describe("integration RPC boundaries", () => {
     });
     expect(f.prisma.mcpServer.findFirst).toHaveBeenCalledWith({
       where: { id: "server", spaceId: "space", userId: "owner" },
+    });
+  });
+  it("clears a pending sign-in wait when the server is disabled", async () => {
+    const f = fixture();
+    const row = {
+      id: "server",
+      spaceId: actor.spaceId,
+      userId: actor.userId,
+      catalogId: null,
+      managedBy: null,
+      slug: "reports",
+      name: "Reports",
+      description: "",
+      transport: "streamable_http",
+      endpoint: "https://example.test/mcp",
+      command: null,
+      args: [],
+      env: {},
+      headers: {},
+      secretId: null,
+      enabled: true,
+      pendingOauthSessionId: "attempt-session",
+      consentStartedAt: new Date(0),
+      revision: 1,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    };
+    f.prisma.mcpServer.findFirst.mockResolvedValueOnce(row as never);
+    f.prisma.mcpServer.update.mockResolvedValue({
+      ...row,
+      enabled: false,
+      pendingOauthSessionId: null,
+      consentStartedAt: null,
+      revision: 2,
+    });
+    const response = await f.request("mcp/servers/update", { id: "server", enabled: false });
+    expect(response?.status).toBe(200);
+    expect(f.prisma.mcpServer.update).toHaveBeenCalledWith({
+      where: { id: "server" },
+      data: {
+        enabled: false,
+        connectionState: "not-connected",
+        pendingOauthSessionId: null,
+        consentStartedAt: null,
+        revision: { increment: 1 },
+      },
     });
   });
   it.each([

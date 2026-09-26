@@ -61,6 +61,9 @@ export async function connectMcpOauth(
       const server = (await rpc.mcp.servers.list()).find((item) => item.id === serverId);
       // Deleted mid-wait: nothing will ever clear this attempt's pending id.
       if (!server) return "needs-sign-in";
+      // Disabling clears the pending id too, but this attempt can never succeed either
+      // way, so say so plainly instead of falling through to a generic sign-in outcome.
+      if (server.enabled === false) return "disabled";
       if (server.pendingOauthSessionId === started.sessionId) return null;
       if (server.pendingOauthSessionId) return "replaced";
       // Disconnecting mid-wait clears the oauth material without changing

@@ -46,8 +46,6 @@ export function mcpSignInDiagnostic(code?: string | null): string {
   return code ? `Needs sign-in (${code}).` : "Needs sign-in.";
 }
 
-const REAUTHORIZATION_DECLINED = /^Sign-in was declined\.$/;
-
 /**
  * Recorded as lastError when a person declines a re-authorization of a server that stays
  * connected on its prior tokens. Never a `mcpSignInDiagnostic`: the server does not need
@@ -57,9 +55,10 @@ export function mcpReauthorizationDeclinedDiagnostic(): string {
   return "Sign-in was declined.";
 }
 
-/** True when `recorded` is the declined-re-authorization diagnostic. */
+/** True when `recorded` is the declined-re-authorization diagnostic. One source of
+ * truth: compares against the sentence above instead of duplicating it in a regex. */
 export function isReauthorizationDeclined(recorded: string | null | undefined): boolean {
-  return REAUTHORIZATION_DECLINED.test(recorded?.trim() ?? "");
+  return recorded?.trim() === mcpReauthorizationDeclinedDiagnostic();
 }
 
 /** The ORPC error code for a typed token that fails basic validation before any attempt

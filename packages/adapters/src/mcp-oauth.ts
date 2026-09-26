@@ -1194,16 +1194,19 @@ export class McpOAuthBroker {
     }
     // An in-flight sign-in attempt for this server can no longer complete. Cleared only
     // after the credential material above is gone, so no poll in between sees a
-    // connected server with no pending id.
-    await this.prisma.mcpServer.updateMany({
-      where: {
-        id: input.serverId,
-        spaceId: input.spaceId,
-        userId: input.userId,
-        pendingOauthSessionId: { not: null },
-      },
-      data: { pendingOauthSessionId: null },
-    });
+    // connected server with no pending id. Compares against the id this call observed,
+    // the way claimSignIn/releaseAttempt do, so a newer id claimed in the gap survives.
+    if (server?.pendingOauthSessionId) {
+      await this.prisma.mcpServer.updateMany({
+        where: {
+          id: input.serverId,
+          spaceId: input.spaceId,
+          userId: input.userId,
+          pendingOauthSessionId: server.pendingOauthSessionId,
+        },
+        data: { pendingOauthSessionId: null },
+      });
+    }
   }
 
   private async loadMaterial(

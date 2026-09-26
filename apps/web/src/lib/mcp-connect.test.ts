@@ -408,6 +408,29 @@ describe("MCP browser consent", () => {
     await vi.advanceTimersByTimeAsync(1000);
     expect(await result).toBe("needs-sign-in");
   });
+  it("ends the wait as disabled when the server is disabled mid-wait", async () => {
+    begin.mockResolvedValue({
+      status: "authorization_required",
+      authorizationUrl: "https://auth.example.test/authorize",
+      sessionId: "ours",
+    });
+    const server = {
+      id: "connection",
+      connectionState: "not-connected",
+      oauthStatus: "none",
+      enabled: true,
+      pendingOauthSessionId: "ours" as string | null,
+      lastError: null as string | null,
+    };
+    list.mockImplementation(async () => [server]);
+    const result = connectMcpOauth("connection");
+    await vi.advanceTimersByTimeAsync(0);
+    // Disabling clears the pending id in the same write, without recording an outcome.
+    server.enabled = false;
+    server.pendingOauthSessionId = null;
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(await result).toBe("disabled");
+  });
   it("reports sign-in-failed when a connected server survives a probe error", async () => {
     begin.mockRejectedValue(new Error("timed out"));
     list.mockResolvedValue([
