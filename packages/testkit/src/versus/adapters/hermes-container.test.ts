@@ -8,7 +8,8 @@ import { RECEIPTS_NOT_READ, WORKSPACE_NOT_INSPECTED } from "./hermes-container.j
 
 const inspectImage = vi.hoisted(() => vi.fn());
 const open = vi.hoisted(() => vi.fn());
-vi.mock("../containers/session.js", () => ({
+vi.mock("../containers/session.js", async (original) => ({
+  ...(await original<Record<string, unknown>>()),
   inspectImage,
   ContainerSession: { open },
 }));
@@ -184,7 +185,13 @@ it("fails both probes when the receipts cannot be read after the loss", async ()
     expect(check.passed).toBe(false);
     expect(check.evidence.failure).toBe(RECEIPTS_NOT_READ);
   }
-  expect(report.failures.filter((failure) => failure === RECEIPTS_NOT_READ)).toHaveLength(2);
+  // Each failure names the probe that failed, so two probes with one sentence stay distinct.
+  expect(report.failures).toEqual(
+    expect.arrayContaining([
+      `container-cancel-retains-receipts-and-nonsuccess: ${RECEIPTS_NOT_READ}`,
+      `container-loss-retains-receipts-and-nonsuccess: ${RECEIPTS_NOT_READ}`,
+    ]),
+  );
 });
 
 it("fails both probes when the workspace contains an undeclared symlink", async () => {

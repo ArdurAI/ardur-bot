@@ -247,15 +247,15 @@ export function assessContainerCohort(input: {
   const manifest = gate(input.report, "dependency-manifest");
   const manifestEvidence =
     manifest?.evidence && typeof manifest.evidence === "object" ? record(manifest.evidence) : null;
+  const reportForPinnedImage =
+    input.pinnedImage !== null &&
+    input.pinnedImage.revision === HERMES_CONTAINER_REVISION &&
+    input.report?.image === HERMES_IMAGE &&
+    input.report.imageDigest === input.pinnedImage.id &&
+    input.report.runtimeRevision === HERMES_CONTAINER_REVISION;
   const gates = {
     approval: input.approval === "approved",
-    pinnedImage:
-      input.pinnedImage !== null &&
-      input.pinnedImage.revision === HERMES_CONTAINER_REVISION &&
-      input.report?.status === "product-qualified" &&
-      input.report.image === HERMES_IMAGE &&
-      input.report.imageDigest === input.pinnedImage.id &&
-      input.report.runtimeRevision === HERMES_CONTAINER_REVISION,
+    pinnedImage: reportForPinnedImage && input.report?.status === "product-qualified",
     containmentAndResources: unqualifiedChecks.length === 0,
     aggregateDisk:
       disk?.passed === true &&
@@ -288,9 +288,11 @@ export function assessContainerCohort(input: {
   if (!gates.approval) failures.push("Container cohort approval is absent");
   if (!input.report) failures.push("Container qualification report is absent");
   if (!input.pinnedImage) failures.push("The pinned Hermes image was not inspected");
+  else if (input.report && !reportForPinnedImage)
+    failures.push("The container report is not for the inspected pinned Hermes image and revision");
   else if (input.report && !gates.pinnedImage)
     failures.push(
-      `The container report (status ${String(input.report.status)}) is not for the inspected pinned Hermes image and revision`,
+      `The container report for the pinned Hermes image is ${String(input.report.status)}; re-run container qualification until it is product-qualified`,
     );
   if (input.report && !gates.containmentAndResources)
     failures.push(

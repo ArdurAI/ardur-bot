@@ -230,6 +230,24 @@ describe("non-generating live prerequisites", () => {
     expect(assessment.ready).toBe(false);
     expect(assessment.failures).not.toEqual([]);
   });
+  it("tells the researcher to re-run qualification for the pinned image's unqualified report", () => {
+    for (const status of ["failed", "container-boundary-qualified-product-unqualified"]) {
+      const failures = assessContainerCohort({
+        ...planned,
+        report: { ...productReport(), status },
+      }).failures;
+      expect(failures).toContain(
+        `The container report for the pinned Hermes image is ${status}; re-run container qualification until it is product-qualified`,
+      );
+      expect(failures.join("\n")).not.toContain("is not for the inspected pinned Hermes image");
+    }
+    expect(
+      assessContainerCohort({
+        ...planned,
+        report: { ...productReport(), imageDigest: `sha256:${contentDigest("other-image")}` },
+      }).failures,
+    ).toContain("The container report is not for the inspected pinned Hermes image and revision");
+  });
   it("blocks the cohort when the pinned image was not inspected or an earlier step failed", () => {
     const uninspected = assessContainerCohort({
       ...planned,

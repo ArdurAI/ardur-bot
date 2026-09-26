@@ -5,7 +5,7 @@ import { startBroker, TrialBroker } from "../broker.js";
 import type { BudgetLedger } from "../budget.js";
 import { requireValue } from "../budget.js";
 import { COMPUTER_IMAGE, HERMES_CONTAINER_REVISION, HERMES_IMAGE } from "../containers/policy.js";
-import { ContainerSession, inspectImage } from "../containers/session.js";
+import { ContainerSession, guestWorkspace, inspectImage } from "../containers/session.js";
 import { assertOwnedTrial } from "../isolation.js";
 import { sanitize } from "../provenance.js";
 import { hermesArguments, superviseHermesProcess, syntheticHermesConfig } from "./hermes.js";
@@ -15,23 +15,6 @@ import type { TrialArtifacts, TrialContext, VersusAdapter } from "./types.js";
 export const WORKSPACE_NOT_INSPECTED = "The workspace could not be inspected.";
 /** A lost guest's receipts come from the broker journal; this is the failure when they cannot. */
 export const RECEIPTS_NOT_READ = "The receipts could not be read after the loss.";
-
-/**
- * File contents stay in `files`. Symlink paths stay in `links`, sorted, and are never followed.
- * Every guest snapshot caller shares this split so an unknown entry kind always throws and the
- * same guest output is always judged the same way.
- */
-export function guestWorkspace(entries: Record<string, string | { kind: "link" }>) {
-  const files: Record<string, string> = {};
-  const links: string[] = [];
-  for (const [name, entry] of Object.entries(entries)) {
-    if (typeof entry === "string") files[name] = entry;
-    else if (entry.kind === "link") links.push(name);
-    else throw new Error("Unexpected guest snapshot entry");
-  }
-  links.sort();
-  return { files, links };
-}
 
 export class HermesContainerAdapter implements VersusAdapter {
   readonly product = "hermes" as const;

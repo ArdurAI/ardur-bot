@@ -150,6 +150,23 @@ export function assertContainerProof(proof: ContainerProof, policy: ContainerPol
 }
 type Waiter = { resolve: (value: unknown) => void; reject: (error: Error) => void };
 export type ContainerSnapshotEntry = string | { kind: "link" };
+
+/**
+ * File contents stay in `files`. Symlink paths stay in `links`, sorted, and are never followed.
+ * Every guest snapshot caller shares this split so an unknown entry kind always throws and the
+ * same guest output is always judged the same way.
+ */
+export function guestWorkspace(entries: Record<string, ContainerSnapshotEntry>) {
+  const files: Record<string, string> = {};
+  const links: string[] = [];
+  for (const [name, entry] of Object.entries(entries)) {
+    if (typeof entry === "string") files[name] = entry;
+    else if (entry.kind === "link") links.push(name);
+    else throw new Error("Unexpected guest snapshot entry");
+  }
+  links.sort();
+  return { files, links };
+}
 export class ContainerSession {
   readonly id: string;
   readonly policy: Readonly<ContainerPolicy>;

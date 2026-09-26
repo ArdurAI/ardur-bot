@@ -11,10 +11,10 @@ import type {
 import { DELEGATION_WORKSPACE_SCRIPT, teamBotWorkspaceDirectory } from "@ardurbot/adapters";
 import { unknownCapacity } from "@ardurbot/contracts/fleet";
 import type { TaskContract } from "../../scoreboard/tasks/catalog.js";
-import { guestWorkspace } from "../adapters/hermes-container.js";
 import { requireValue } from "../budget.js";
 import type { TrialAdmission } from "./admission.js";
 import type { ContainerSession } from "./session.js";
+import { guestWorkspace } from "./session.js";
 
 const CANCELLED_COMMAND = "Container command cancelled or exceeded output/deadline budget";
 const UNCERTAIN_STOP = "The command's cancellation timed out, so its outcome is uncertain.";

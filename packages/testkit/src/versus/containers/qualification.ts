@@ -534,7 +534,7 @@ print(json.dumps(out))
           .filter((check) => !check.passed)
           .map((check) => {
             const failure = (check.evidence as { failure?: unknown }).failure;
-            return typeof failure === "string" ? failure : check.name;
+            return typeof failure === "string" ? `${check.name}: ${failure}` : check.name;
           }),
       );
   } catch (error) {
