@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { denyExternalTcp } from "../scoreboard/replay/offline.js";
+import { isOwnedReplayDatabase } from "../scoreboard/replay/postgres.js";
 import { ArdurAdapter } from "./adapters/ardur.js";
 import { HermesContainerAdapter } from "./adapters/hermes-container.js";
 import { parseBudget, requireValue } from "./budget.js";
@@ -31,7 +32,14 @@ import { ServingWitness } from "./serving.js";
  */
 export async function openLiveProducts(root: string): Promise<LiveProducts> {
   const postgres = await provisionOwnedPostgres(root);
+  const databases: { trialId: string; port: number; disposableLease: boolean }[] = [];
   return {
+    describe: () => ({
+      ardur: "ordinary app, disposable database, confined container computer, pre-effect admission",
+      hermes: "pinned image in a confined container",
+      networkConfinement: "loopback-only while a product runs",
+      databases,
+    }),
     async create(setup) {
       if (setup.product === "hermes")
         return {
@@ -42,6 +50,11 @@ export async function openLiveProducts(root: string): Promise<LiveProducts> {
           }),
         };
       const database = await postgres.fresh();
+      databases.push({
+        trialId: setup.id,
+        port: Number(new URL(database.url).port),
+        disposableLease: isOwnedReplayDatabase(database.url),
+      });
       let session: ContainerSession | undefined;
       try {
         session = await ContainerSession.open({
@@ -127,6 +140,11 @@ async function liveChild(root: string, inputFile: string, resultFile: string) {
   }
 }
 
+/** The budget's global wall limit plus a fixed margin for provisioning, stop grace and cleanup. */
+export function liveChildTimeoutMs(budget: { global: { wallMs: number } }) {
+  return budget.global.wallMs + 600000;
+}
+
 /** Parent side: runs the trials in the allowlisted child and returns its retained run. */
 export async function runLiveChild(input: {
   budget: ReturnType<typeof parseBudget>;
@@ -143,8 +161,7 @@ export async function runLiveChild(input: {
       resource,
       module: fileURLToPath(import.meta.url),
       args: ["--live-child", resource.root, inputFile, resultFile],
-      // Provisioning and cleanup margin beyond the budget's own global wall limit.
-      timeoutMs: input.budget.global.wallMs + 600000,
+      timeoutMs: liveChildTimeoutMs(input.budget),
     });
     let result: { status: string; run?: LiveRun; failure?: string };
     try {

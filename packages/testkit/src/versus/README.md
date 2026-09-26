@@ -49,10 +49,18 @@ confined container computer; Hermes runs the pinned image in its own confined co
 explicit consent is a standing decision for both: Ardur's ordinary always-allow rule and the same
 scoped broker decision for Hermes. Tool and descendant admission, the per-run wall limit (the W0
 task's 30-second deadline still applies inside each product), container destruction and the shared
-graders are those described below. Every run is retained and none is retried or replaced: a run a
-counter or gateway limit refused is recorded as capped, one stopped by a deadline as timed out, and
-an infrastructure or serving-state failure as `invalid-infrastructure` in the denominator, never as
-a product loss. Request purposes are not observed at this boundary, so usage stays raw and is not
+graders are those described below. Every run is retained and none is retried or replaced. Only a
+budget counter (`budget-exhausted:`) or the request byte envelope counts as a cap. Protocol refusals
+such as sampling or model route drift stay on the run as diagnostics and never turn a completed,
+graded run into a cap. A deadline records the timer it used and whether the per-run limit or the
+remaining global limit bound it. An infrastructure or serving-state failure, including an endpoint
+that reports more tokens than a request reserved, is `invalid-infrastructure` in the denominator,
+never a product loss. Once the budget can admit nothing more, the next run is recorded as
+`invalid-infrastructure` and every remaining run as not run, with the same sentence; finished runs
+keep their evidence. The output directory must be new or empty and readable before anything runs.
+If evidence for a finished run cannot be written or validated, the raw run is saved beside `--out`
+(or in `versus-live-unwritten-runs` under the system temporary directory) and the command exits 2.
+Request purposes are not observed at this boundary, so usage stays raw and is not
 relabeled as main calls. Evidence is written like the self-test's, labelled `live` and T3, and
 validated. The summary line reports runs executed, acceptance, caps, deadlines and invalid runs.
 Exit 0 means all four runs executed and the evidence validated; 1 means they did and a cap or
@@ -333,4 +341,7 @@ pnpm exec vitest run packages/testkit/src/versus packages/testkit/src/performanc
 No desktop E2E, live provider, Hermes invocation or model download is needed for this validation.
 `live.test.ts` drives the live lane end to end with a fake Ollama and in-process product doubles;
 its one container case skips without Docker and the cached computer image.
+`live-products.docker.test.ts` runs the canary's real composition in the allowlisted child against
+a fake upstream: Ardur live with its container computer and admission on a disposable PostgreSQL
+testcontainer, and the pinned Hermes image. It skips without Docker or the cached images.
 Prime Agent and direct Claude Code/Codex remain extension adapters; no installation is required.

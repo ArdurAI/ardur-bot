@@ -1,4 +1,5 @@
-import { readdir, readFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { contentDigest } from "../scoreboard/manifest.js";
@@ -270,8 +271,16 @@ export async function runCli(args: string[], live: LiveDependencies = {}) {
 async function runContainerLive(options: CliOptions, budget: Budget, live: LiveDependencies) {
   const out = path.resolve(options.out);
   // A finished canary must never fail on its output directory, so check it before anything runs.
-  const existing = await readdir(out).catch(() => []);
-  requireValue(existing.length === 0, "Evidence output must be empty");
+  const existing = await readdir(out).catch((error: NodeJS.ErrnoException) => {
+    if (error.code === "ENOENT") return [];
+    throw new Error(
+      `Choose a new or empty --out directory; the one given could not be read (${error.code ?? "unknown error"}).`,
+    );
+  });
+  requireValue(
+    existing.length === 0,
+    "Choose a new or empty --out directory; the one given already holds files.",
+  );
   const gate = await assessLiveContainerGate({
     budget,
     approval: options.approval,
@@ -327,27 +336,57 @@ async function runContainerLive(options: CliOptions, budget: Budget, live: LiveD
   }
   const sourceUnchangedDuringRun =
     contentDigest(build.build) === contentDigest((await inspectBuild()).build);
-  await writeEvidence(out, {
-    mode: "live",
-    build,
-    hermes,
-    plan,
-    budget,
-    trials: run.trials,
-    results: run.results,
-    prerequisites: [
-      ...(sourceUnchangedDuringRun ? [] : ["Harness source changed during the run."]),
-      "Metadata attestation cannot prove the OpenAI-compatible transport served the declared context.",
-      "Request purposes are not observed at the gateway; usage stays raw and is not relabeled as main.",
-      "Resource, timing and paint coverage for either product remain unmeasured.",
-    ],
-    launchPlan,
-    budgetEvidence: run.budgetEvidence,
-    protocolResults: { ...run.protocolResults, sourceUnchangedDuringRun },
-  });
+  try {
+    await writeEvidence(out, {
+      mode: "live",
+      build,
+      hermes,
+      plan,
+      budget,
+      trials: run.trials,
+      results: run.results,
+      prerequisites: [
+        ...(sourceUnchangedDuringRun ? [] : ["Harness source changed during the run."]),
+        "Metadata attestation cannot prove the OpenAI-compatible transport served the declared context.",
+        "Request purposes are not observed at the gateway; usage stays raw and is not relabeled as main.",
+        "Resource, timing and paint coverage for either product remain unmeasured.",
+      ],
+      launchPlan,
+      budgetEvidence: run.budgetEvidence,
+      protocolResults: { ...run.protocolResults, sourceUnchangedDuringRun },
+    });
+  } catch (error) {
+    const failure = sanitize(error instanceof Error ? error.message : String(error));
+    const saved = await saveUnwrittenRun(out, {
+      failure,
+      build: build.build,
+      hermes,
+      budget,
+      plan,
+      run,
+    });
+    console.error(
+      `The live evidence could not be written or validated (${failure}); the finished run was saved to ${saved}. Keep that file and write its evidence from it; do not rerun the canary.`,
+    );
+    return 2;
+  }
   const verdict = liveVerdict(run);
   console.log(verdict.summary);
   return sourceUnchangedDuringRun ? verdict.code : 2;
+}
+/** Saves a finished run whose evidence could not be written: beside --out, else a named folder. */
+async function saveUnwrittenRun(out: string, value: unknown) {
+  const name = `${path.basename(out)}.unwritten-run-${Date.now()}.json`;
+  const bytes = `${JSON.stringify(value)}\n`;
+  for (const folder of [path.dirname(out), path.join(tmpdir(), "versus-live-unwritten-runs")])
+    try {
+      await mkdir(folder, { recursive: true, mode: 0o700 });
+      await writeFile(path.join(folder, name), bytes, { flag: "wx", mode: 0o600 });
+      return path.join(folder, name);
+    } catch {
+      /* Try the next folder. */
+    }
+  throw new Error("The finished run could not be saved anywhere; its evidence is lost.");
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   runCli(process.argv.slice(2))

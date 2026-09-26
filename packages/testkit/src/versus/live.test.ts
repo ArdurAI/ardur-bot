@@ -32,6 +32,7 @@ import { inspectLocalRoute } from "./qualification.js";
 import type { PairPlan } from "./scheduler.js";
 import { planPairs } from "./scheduler.js";
 import { ServingWitness } from "./serving.js";
+import { createBuildFixture } from "./test-build-fixture.js";
 
 // Build identity comes from a self-contained Git fixture, never this checkout's history.
 vi.mock("./manifest.js", async (importOriginal) => ({
@@ -103,6 +104,7 @@ async function fakeOllama() {
     requests: [] as string[],
     chat: [] as string[],
     afterChat: undefined as (() => void) | undefined,
+    promptTokens: (_index: number) => 100,
   };
   const tag = { name: APPROVED_CANARY.model.id, digest: APPROVED_CANARY.model.digest, size: 100 };
   const tasks = APPROVED_CANARY.tasks.map(getTask);
@@ -152,7 +154,7 @@ async function fakeOllama() {
             },
           },
         ],
-        usage: { prompt_tokens: 100, completion_tokens: 50 },
+        usage: { prompt_tokens: state.promptTokens(state.chat.length - 1), completion_tokens: 50 },
       });
     })().catch(() => response.writeHead(500).end());
   });
@@ -169,7 +171,7 @@ async function fakeOllama() {
   };
 }
 
-type Behavior = "reference" | "loop" | "hang";
+type Behavior = "reference" | "drift-then-reference" | "loop" | "hang";
 /** In-process product double speaking to the live gateway capability, as a product would. */
 class StandInAdapter implements VersusAdapter {
   readonly product;
@@ -202,7 +204,7 @@ class StandInAdapter implements VersusAdapter {
     });
     await this.broker.prepare();
   }
-  private chat(task: TaskContract) {
+  private chat(task: TaskContract, extra: Record<string, unknown> = {}) {
     return fetch(`${this.context!.providerUrl}/chat/completions`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -210,6 +212,7 @@ class StandInAdapter implements VersusAdapter {
         model: this.context!.budget.model.id,
         messages: [{ role: "user", content: task.prompt }],
         stream: false,
+        ...extra,
       }),
     });
   }
@@ -236,6 +239,12 @@ class StandInAdapter implements VersusAdapter {
         }
         this.terminal = "failed";
         return;
+      }
+      if (this.behavior === "drift-then-reference") {
+        // A product's own sampling setting the gateway refuses, then an ordinary request.
+        const drifted = await this.chat(context.task, { temperature: 0.7 });
+        requireValue(drifted.status === 403, "Drifted temperature must be refused");
+        this.refusal = await drifted.text();
       }
       const response = await this.chat(context.task);
       requireValue(response.ok, "Stand-in request refused");
@@ -315,34 +324,7 @@ describe("live container canary", () => {
   let reportFile: string;
   let metadataBaseline: number;
   beforeAll(async () => {
-    repository = await fs.mkdtemp(path.join(tmpdir(), "versus-live-build-"));
-    const sources = path.join(repository, "packages/testkit/src/versus");
-    await fs.mkdir(sources, { recursive: true });
-    await fs.writeFile(path.join(repository, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
-    const source = path.join(sources, "fixture.ts");
-    await fs.writeFile(source, 'export const revision = "baseline";\n');
-    const git = (...args: string[]) =>
-      childProcess.execFileSync(
-        "git",
-        [
-          "-c",
-          "user.name=Fixture",
-          "-c",
-          "user.email=fixture@example.test",
-          "-c",
-          "commit.gpgsign=false",
-          "-c",
-          "core.hooksPath=/dev/null",
-          ...args,
-        ],
-        { cwd: repository, stdio: "ignore" },
-      );
-    git("init");
-    git("add", ".");
-    git("commit", "-m", "Research baseline fixture");
-    git("update-ref", "refs/tags/research-baseline", "HEAD");
-    await fs.writeFile(source, 'export const revision = "candidate";\n');
-    git("commit", "-am", "Candidate fixture");
+    repository = await createBuildFixture();
   });
   beforeEach(async () => {
     vi.spyOn(provenance, "inspectBuild").mockImplementation(() =>
@@ -390,15 +372,18 @@ describe("live container canary", () => {
   ];
   function runner(behavior: (setup: LiveTrialSetup) => Behavior, before?: () => void) {
     const doubles = standIns(behavior);
+    const state = { root: "" };
     return {
       doubles,
+      state,
       runTrials: async (input: { budget: Budget; plan: PairPlan[]; graderHash: string }) => {
         before?.();
+        state.root = await directory();
         return runLiveTrials({
           ...input,
           products: doubles.products,
           serving: new ServingWitness(input.budget),
-          root: await directory(),
+          root: state.root,
         });
       },
     };
@@ -409,12 +394,12 @@ describe("live container canary", () => {
     expect(canaryDifferences(budget)).toEqual([]);
     const larger = parseBudget({ ...budget, perTrial: { ...budget.perTrial, requests: 13 } });
     expect(canaryDifferences(larger)).toEqual([
-      "The budget's per-run limits is not the owner-approved canary's",
+      "Use the canary-budget.json the container cohort planner wrote; its per-run limits differ from the approved canary.",
     ]);
     const other = parseBudget({ ...budget, model: { ...budget.model, id: "qwen3:8b" } });
-    expect(canaryDifferences(other)).toContain(
-      "The budget's model identity is not the owner-approved canary's",
-    );
+    expect(canaryDifferences(other)).toEqual([
+      "Use the canary-budget.json the container cohort planner wrote; its model differs from the approved llama3.1:8b Q4_K_M digest.",
+    ]);
   });
 
   it("treats task consent as a standing decision only for consented records", async () => {
@@ -665,16 +650,14 @@ describe("live container canary", () => {
     expect(manifest.protocolResults.classifications).toMatchObject({ cap: 1, completed: 3 });
   });
 
-  it("stops a run at the wall deadline, cancels the product and records it as timed out", async () => {
+  it("stops runs at the wall deadline, recording the timer used and the limit that bound it", async () => {
     const short = parseBudget({
       ...budget,
       perTrial: { ...budget.perTrial, wallMs: 1500 },
-      global: { ...budget.global, wallMs: 6000 },
+      global: { ...budget.global, wallMs: 2500 },
       cohort: { ...budget.cohort, tasks: ["task-01"] },
     });
-    const { created: doubles, products } = standIns((setup) =>
-      setup.product === "hermes" ? "hang" : "reference",
-    );
+    const { created: doubles, products } = standIns(() => "hang");
     const plan = planPairs(short.cohort);
     const started = performance.now();
     const run = await runLiveTrials({
@@ -686,13 +669,117 @@ describe("live container canary", () => {
       root: await directory(),
     });
     expect(performance.now() - started).toBeLessThan(10000);
-    const hung = doubles.find((adapter) => adapter.product === "hermes")!;
-    expect(hung.cancelled).toBe(true);
-    const trial = run.trials.find((item) => item.product === "hermes")!;
-    expect(trial.outcome).toBe("timed-out");
-    expect(run.results.find((item) => item.product === "hermes")!.reason).toMatch(/^deadline/);
-    expect(run.protocolResults.classifications).toMatchObject({ deadline: 1, completed: 1 });
+    expect(doubles.every((adapter) => adapter.cancelled)).toBe(true);
+    expect(run.trials.map((trial) => trial.outcome)).toEqual(["timed-out", "timed-out"]);
+    const [first, second] = run.trials.map(
+      (trial) => (trial.raw as { deadline: { timerMs: number; boundBy: string } }).deadline,
+    );
+    expect(first!.boundBy).toBe("per-run");
+    expect(first!.timerMs).toBeGreaterThan(1400);
+    expect(first!.timerMs).toBeLessThanOrEqual(1500);
+    expect(second!.boundBy).toBe("global");
+    expect(second!.timerMs).toBeLessThan(1000);
+    expect(run.results[0]!.reason).toBe(
+      `deadline: stopped at ${first!.timerMs} ms, bound by the per-run wall limit`,
+    );
+    expect(run.results[1]!.reason).toBe(
+      `deadline: stopped at ${second!.timerMs} ms, bound by the remaining global wall limit`,
+    );
+    expect(run.protocolResults.classifications).toMatchObject({ deadline: 2 });
     expect(liveVerdict(run).code).toBe(1);
+  });
+
+  it("keeps a completed run whose product sent a refused sampling setting as a success, not a cap", async () => {
+    const { doubles, runTrials } = runner(() => "drift-then-reference");
+    const list = await args("--container-cohort-approval", "approved");
+    expect(await runCli(list, { inspect, runTrials })).toBe(0);
+    expect(
+      doubles.created.every((adapter) => adapter.refusal.includes("Temperature route drift")),
+    ).toBe(true);
+    const out = outOf(list);
+    await validateEvidenceDirectory(out);
+    const manifest = JSON.parse(await fs.readFile(path.join(out, "versus-manifest.json"), "utf8"));
+    expect(manifest.results.map((result: { accepted: boolean }) => result.accepted)).toEqual(
+      Array(4).fill(true),
+    );
+    expect(manifest.protocolResults.classifications).toMatchObject({ completed: 4, cap: 0 });
+    const trials = (await fs.readFile(path.join(out, "trials.jsonl"), "utf8"))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    expect(trials.map((trial) => trial.outcome)).toEqual(Array(4).fill("success"));
+    const events = (await fs.readFile(path.join(out, "events.jsonl"), "utf8"))
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line) as VersusEvent);
+    expect(
+      events
+        .filter((event) => event.data.boundary === "gateway-refusal")
+        .map((event) => event.data.reason),
+    ).toEqual(Array(4).fill("Temperature route drift"));
+    expect(console.log).toHaveBeenCalledWith(expect.stringContaining("caps 0"));
+  });
+
+  it("keeps finished runs when the endpoint over-reports usage and poisons the budget", async () => {
+    ollama.state.promptTokens = (index) => (index === 0 ? 70000 : 100);
+    const { doubles, state, runTrials } = runner(() => "reference");
+    const list = await args("--container-cohort-approval", "approved");
+    expect(await runCli(list, { inspect, runTrials })).toBe(2);
+    expect(ollama.state.chat).toHaveLength(1);
+    expect(doubles.created).toHaveLength(1);
+    const out = outOf(list);
+    await validateEvidenceDirectory(out);
+    const manifest = JSON.parse(await fs.readFile(path.join(out, "versus-manifest.json"), "utf8"));
+    expect(manifest.mode).toBe("live");
+    const poisoned =
+      "The endpoint reported more tokens than a request reserved, so the budget stopped admitting runs; re-qualify the endpoint before another canary.";
+    expect(manifest.results.map((result: { reason: string }) => result.reason)).toEqual([
+      "invalid-infrastructure: The endpoint reported more tokens than the request reserved; re-qualify the endpoint before another canary.",
+      `invalid-infrastructure: ${poisoned}`,
+      `not run: ${poisoned}`,
+      `not run: ${poisoned}`,
+    ]);
+    expect(manifest.protocolResults.classifications).toMatchObject({
+      invalidInfrastructure: 2,
+      notRun: 2,
+    });
+    // Every trial directory the runner created was destroyed.
+    expect(await fs.readdir(state.root)).toEqual([]);
+  });
+
+  it("refuses an unreadable output path before any run", async () => {
+    const file = path.join(await directory(), "not-a-directory");
+    await fs.writeFile(file, "occupied");
+    const { doubles, runTrials } = runner(() => "reference");
+    const list = await args("--container-cohort-approval", "approved");
+    list[list.indexOf("--out") + 1] = file;
+    await expect(runCli(list, { inspect, runTrials })).rejects.toThrow(
+      "Choose a new or empty --out directory; the one given could not be read (ENOTDIR).",
+    );
+    expect(ollama.state.requests.length).toBe(metadataBaseline);
+    expect(doubles.created).toHaveLength(0);
+  });
+
+  it("saves a finished run beside the output when its evidence cannot be written", async () => {
+    const list = await args("--container-cohort-approval", "approved");
+    const out = outOf(list);
+    const { runTrials } = runner(() => "reference");
+    const occupying = async (input: { budget: Budget; plan: PairPlan[]; graderHash: string }) => {
+      const run = await runTrials(input);
+      // Something else writes into --out while the canary runs.
+      await fs.mkdir(out, { recursive: true });
+      await fs.writeFile(path.join(out, "stray.txt"), "occupied");
+      return run;
+    };
+    expect(await runCli(list, { inspect, runTrials: occupying })).toBe(2);
+    const saved = (await fs.readdir(path.dirname(out))).filter((name) =>
+      name.startsWith("evidence.unwritten-run-"),
+    );
+    expect(saved).toHaveLength(1);
+    const retained = JSON.parse(await fs.readFile(path.join(path.dirname(out), saved[0]!), "utf8"));
+    expect(retained.run.trials).toHaveLength(4);
+    expect(retained.failure).toContain("Evidence output must be empty");
+    expect(console.error).toHaveBeenCalledWith(expect.stringContaining("do not rerun the canary"));
   });
 
   it.skipIf(!imageReady)(

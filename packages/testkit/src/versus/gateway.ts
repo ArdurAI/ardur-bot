@@ -113,12 +113,18 @@ function assertServingWitness(budget: Budget, serving: ServingWitness | undefine
   throw error;
 }
 
+/** Wire-size refusals: limits on what a request may carry, counted as caps like budget counters. */
+export const BYTE_LIMIT_REFUSALS = [
+  "Request exceeds byte budget",
+  "Request exceeds conservative byte envelope",
+] as const;
+
 export async function readJson(request: IncomingMessage, maxBytes = 1024 * 1024) {
   const chunks: Buffer[] = [];
   let bytes = 0;
   for await (const chunk of request) {
     bytes += Buffer.byteLength(chunk);
-    requireValue(bytes <= maxBytes, "Request exceeds byte budget");
+    requireValue(bytes <= maxBytes, BYTE_LIMIT_REFUSALS[0]);
     chunks.push(Buffer.from(chunk));
   }
   return record(JSON.parse(Buffer.concat(chunks).toString("utf8")));
@@ -268,7 +274,7 @@ export async function startGateway(options: {
     // A too-large request is refused; bytes/4 is never an admission counter.
     requireValue(
       Buffer.byteLength(JSON.stringify(body)) <= budget.contextSize,
-      "Request exceeds conservative byte envelope",
+      BYTE_LIMIT_REFUSALS[1],
     );
     const forward: Record<string, unknown> = {
       ...body,

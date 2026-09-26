@@ -392,14 +392,25 @@ export class BudgetLedger {
     return trial;
   }
   remainingMs(trialId: string) {
+    return this.remainingWall(trialId).ms;
+  }
+  /** The wall time left for a trial and which limit binds it: its own, or the shared global one. */
+  remainingWall(trialId: string): { ms: number; boundBy: "per-run" | "global" } {
     const trial = this.active(trialId);
-    return Math.max(
-      1,
-      Math.min(
-        this.budget.global.wallMs - (this.now() - this.start),
-        this.budget.perTrial.wallMs - (this.now() - trial.start),
-      ),
-    );
+    const global = this.budget.global.wallMs - (this.now() - this.start);
+    const perRun = this.budget.perTrial.wallMs - (this.now() - trial.start);
+    return {
+      ms: Math.max(1, Math.min(global, perRun)),
+      boundBy: global < perRun ? "global" : "per-run",
+    };
+  }
+  /** Why a new trial cannot run at all, as one sentence, or null while it still can. */
+  stopped(): string | null {
+    if (this.poisoned)
+      return "The endpoint reported more tokens than a request reserved, so the budget stopped admitting runs; re-qualify the endpoint before another canary.";
+    if (this.now() - this.start >= this.budget.global.wallMs)
+      return "The global wall-clock limit for all runs was reached before this run could start.";
+    return null;
   }
   reserve(trialId: string, purpose: Purpose | null): Reservation {
     const trial = this.active(trialId);

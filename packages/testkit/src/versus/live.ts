@@ -9,7 +9,7 @@ import { BudgetLedger } from "./budget.js";
 import { HERMES_CONTAINER_REVISION, HERMES_IMAGE } from "./containers/policy.js";
 import type { inspectImage } from "./containers/session.js";
 import type { EvidenceTrial } from "./evidence.js";
-import { startGateway } from "./gateway.js";
+import { BYTE_LIMIT_REFUSALS, startGateway } from "./gateway.js";
 import { blindPacket, gradeBlind } from "./grading.js";
 import type { OwnedDirectory } from "./isolation.js";
 import { createTrialDirectory, destroyOwnedDirectory } from "./isolation.js";
@@ -51,35 +51,47 @@ export const APPROVED_CANARY = immutable({
   revision: HERMES_CONTAINER_REVISION,
 });
 
-/** Every way a budget differs from the approved canary; empty when it is exactly that canary. */
+/** Every way a budget differs from the approved canary, one actionable sentence each. */
 export function canaryDifferences(budget: Budget) {
   const differences: string[] = [];
-  const expect = (same: boolean, field: string) => {
-    if (!same) differences.push(`The budget's ${field} is not the owner-approved canary's`);
+  const expect = (same: boolean, difference: string) => {
+    if (!same)
+      differences.push(
+        `Use the canary-budget.json the container cohort planner wrote; ${difference}.`,
+      );
   };
   const approved = APPROVED_CANARY;
-  expect(!budget.endpoint.paid, "endpoint (local, unpaid)");
+  expect(!budget.endpoint.paid, "its endpoint is paid, and the approved canary is local and free");
   expect(
     budget.model.id === approved.model.id &&
       budget.model.digest === approved.model.digest &&
       budget.model.quantization === approved.model.quantization,
-    "model identity",
+    `its model differs from the approved ${approved.model.id} ${approved.model.quantization} digest`,
   );
-  expect(budget.contextSize === approved.contextSize, "context size");
-  expect(contentDigest(budget.perTrial) === contentDigest(approved.perTrial), "per-run limits");
+  expect(
+    budget.contextSize === approved.contextSize,
+    `its context size differs from the approved ${approved.contextSize} tokens`,
+  );
+  expect(
+    contentDigest(budget.perTrial) === contentDigest(approved.perTrial),
+    "its per-run limits differ from the approved canary",
+  );
   expect(
     Object.entries(approved.perTrial).every(
       ([key, limit]) => budget.global[key as keyof Limits] === limit * approved.runs,
     ),
-    "global limits",
+    `its global limits differ from ${approved.runs} times the approved per-run limits`,
   );
   expect(
     contentDigest(budget.cohort.tasks) === contentDigest(approved.tasks) &&
       budget.cohort.repetitions === approved.repetitions,
-    "task cohort",
+    `its tasks differ from the approved ${approved.tasks.join(" and ")}, once each`,
   );
-  expect(budget.concurrency === 1, "concurrency");
-  expect(budget.currency.cap === 0 && budget.currency.priceSchedule === null, "currency cap");
+  expect(budget.concurrency === 1, "its concurrency is not one run at a time");
+  expect(
+    budget.currency.cap === 0 && budget.currency.priceSchedule === null,
+    "its spending cap is not zero",
+  );
   return differences;
 }
 
@@ -141,7 +153,7 @@ export async function assessLiveContainerGate(input: {
   failures.push(...assessment.failures);
   if (route && contentDigest(route.budget) !== contentDigest(input.budget))
     failures.push(
-      "The budget is not the one the planner derives from the served model; re-run container cohort planning and pass its canary-budget.json",
+      "Re-run container cohort planning and pass the canary-budget.json it writes; this budget does not match the served model's metadata.",
     );
   return {
     ready: failures.length === 0,
@@ -188,6 +200,8 @@ export interface LiveProducts {
   create(setup: LiveTrialSetup): Promise<{ adapter: VersusAdapter; release?: () => Promise<void> }>;
   /** Installs the trial's network confinement around product execution; returns its undo. */
   confine?: () => () => void;
+  /** What the composition is, retained with the run. */
+  describe?: () => Record<string, unknown>;
   close(): Promise<void>;
 }
 export type LiveClassification =
@@ -195,7 +209,16 @@ export type LiveClassification =
   | "cap"
   | "deadline"
   | "serving-refused"
-  | "invalid-infrastructure";
+  | "invalid-infrastructure"
+  | "not-run";
+
+/** Only a budget counter or the wire-size envelope is a cap; wall time is a deadline. */
+function isCap(reason: string) {
+  return (
+    (reason.startsWith("budget-exhausted:") && reason !== "budget-exhausted: wall time") ||
+    (BYTE_LIMIT_REFUSALS as readonly string[]).includes(reason)
+  );
+}
 
 /** How long a cancelled adapter may take to stop, and to be collected, before the runner moves on. */
 const STOP_GRACE_MS = 15000;
@@ -267,6 +290,8 @@ export async function runLiveTrials(options: {
   const trials: EvidenceTrial[] = [];
   const results: PairedResult[] = [];
   const outcomes: { trialId: string; classification: LiveClassification; reason: string }[] = [];
+  // Once the budget can admit nothing more, every remaining run is recorded as not run.
+  let halted: string | null = null;
   try {
     for (const pair of options.plan)
       for (const product of pair.order) {
@@ -291,30 +316,27 @@ export async function runLiveTrials(options: {
         let reason = "completed";
         let artifacts: TrialArtifacts | null = null;
         let admitted = false;
-        try {
-          await gateway.admit(id);
-          admitted = true;
-        } catch (error) {
-          classification = "serving-refused";
-          reason = sanitize(error instanceof Error ? error.message : String(error));
-          emit("diagnostic", "provider-gateway", { boundary: "trial-admission", reason });
-        }
-        let deadline = false;
+        if (halted) {
+          classification = "not-run";
+          reason = `not run: ${halted}`;
+          emit("diagnostic", "provider-gateway", { boundary: "controller", reason });
+        } else
+          try {
+            await gateway.admit(id);
+            admitted = true;
+          } catch (error) {
+            classification = "serving-refused";
+            reason = sanitize(error instanceof Error ? error.message : String(error));
+            emit("diagnostic", "provider-gateway", { boundary: "trial-admission", reason });
+          }
+        let deadline: { timerMs: number; boundBy: "per-run" | "global" } | null = null;
+        let deadlineHit = false;
         let failure: string | null = null;
+        let protocolRefusals: string[] = [];
         if (admitted) {
-          const directory = await createTrialDirectory(options.root);
           const control = new AbortController();
-          const timer = setTimeout(
-            () => {
-              deadline = true;
-              emit("diagnostic", "provider-gateway", {
-                boundary: "controller-wall-deadline",
-                productPrevention: false,
-              });
-              control.abort();
-            },
-            Math.floor(ledger.remainingMs(id)),
-          );
+          let directory: OwnedDirectory | null = null;
+          let timer: NodeJS.Timeout | undefined;
           let revoked = false;
           const revokeProvider = () => {
             if (revoked) return;
@@ -339,6 +361,19 @@ export async function runLiveTrials(options: {
           let created: Awaited<ReturnType<LiveProducts["create"]>> | null = null;
           let restore: (() => void) | null = null;
           try {
+            // A poisoned ledger or an exhausted global wall refuses here, inside the trial.
+            const wall = ledger.remainingWall(id);
+            deadline = { timerMs: Math.floor(wall.ms), boundBy: wall.boundBy };
+            directory = await createTrialDirectory(options.root);
+            timer = setTimeout(() => {
+              deadlineHit = true;
+              emit("diagnostic", "provider-gateway", {
+                boundary: "controller-wall-deadline",
+                ...deadline,
+                productPrevention: false,
+              });
+              control.abort();
+            }, deadline.timerMs);
             created = await options.products.create({
               id,
               product,
@@ -381,27 +416,40 @@ export async function runLiveTrials(options: {
             await created?.release?.().catch((error: unknown) => {
               failure ??= sanitize(`Cleanup: ${String(error)}`);
             });
-            await destroyOwnedDirectory(directory).catch(() => undefined);
+            if (directory) await destroyOwnedDirectory(directory).catch(() => undefined);
           }
-          // A budget counter, or any gateway limit other than serving drift, refused an admission.
-          const capReason = [
+          const refusals = [
             ...ledger.refusals.filter((refusal) => refusal.trialId === id),
             ...gateway.refusals.filter((refusal) => refusal.trialId === id),
-          ]
+          ].map((refusal) => refusal.reason);
+          const capReason = refusals.find(isCap);
+          // Route drift, unsupported operations, parse errors and late requests after revocation
+          // are retained as diagnostics; they never turn a completed run into a cap.
+          protocolRefusals = gateway.refusals
+            .filter((refusal) => refusal.trialId === id)
             .map((refusal) => refusal.reason)
-            .find(
-              (item) =>
-                !item.startsWith("Serving state refused") && item !== "budget-exhausted: wall time",
-            );
+            .filter((item) => !isCap(item) && !item.startsWith("Serving state refused"));
           const drift = serving.observations.find(
             (observation) => observation.trialId === id && !observation.admitted,
           );
-          if (drift) {
+          const overrun = gateway.requests.some(
+            (request) => request.trialId === id && request.missingReason === "invalid-trial",
+          );
+          if (!deadline) {
+            const stop = ledger.stopped() ?? `The run could not start: ${failure}.`;
+            halted = stop;
+            classification = "invalid-infrastructure";
+            reason = `invalid-infrastructure: ${stop}`;
+          } else if (drift) {
             classification = "invalid-infrastructure";
             reason = `invalid-infrastructure: serving state changed during the trial (${drift.reason})`;
-          } else if (deadline) {
+          } else if (overrun) {
+            classification = "invalid-infrastructure";
+            reason =
+              "invalid-infrastructure: The endpoint reported more tokens than the request reserved; re-qualify the endpoint before another canary.";
+          } else if (deadlineHit) {
             classification = "deadline";
-            reason = `deadline: ${budget.perTrial.wallMs} ms per-run wall limit`;
+            reason = `deadline: stopped at ${deadline.timerMs} ms, bound by the ${deadline.boundBy === "global" ? "remaining global wall limit" : "per-run wall limit"}`;
           } else if (artifacts?.observation.terminal === "timed-out") {
             classification = "deadline";
             reason = `deadline: ${task.deadlineMs} ms task deadline`;
@@ -436,7 +484,7 @@ export async function runLiveTrials(options: {
           ? "success"
           : classification === "deadline"
             ? "timed-out"
-            : classification === "serving-refused" || classification === "invalid-infrastructure"
+            : ["serving-refused", "invalid-infrastructure", "not-run"].includes(classification)
               ? "uncertain"
               : terminal === "completed"
                 ? "failed"
@@ -464,6 +512,7 @@ export async function runLiveTrials(options: {
             classification,
             reason,
             elapsedMs,
+            deadline,
             outcomeReason: artifacts?.outcomeReason ?? null,
             userTtftMissingReason: artifacts?.userTtftMissingReason ?? null,
             requests,
@@ -471,6 +520,7 @@ export async function runLiveTrials(options: {
             refusals: {
               ledger: ledger.refusals.filter((refusal) => refusal.trialId === id),
               gateway: gateway.refusals.filter((refusal) => refusal.trialId === id),
+              protocol: protocolRefusals,
             },
             liveAgentSuccess: grade.passed,
           },
@@ -510,16 +560,22 @@ export async function runLiveTrials(options: {
         lane: "separately-labeled-Linux-container-cohort",
         order: "manifest-seeded-pairs-serial-concurrency-one",
         plannedRuns: options.plan.reduce((sum, pair) => sum + pair.order.length, 0),
-        executedRuns: outcomes.length - count("serving-refused") - count("invalid-infrastructure"),
+        executedRuns:
+          outcomes.length -
+          count("serving-refused") -
+          count("invalid-infrastructure") -
+          count("not-run"),
         classifications: {
           completed: count("completed"),
           cap: count("cap"),
           deadline: count("deadline"),
           servingRefused: count("serving-refused"),
           invalidInfrastructure: count("invalid-infrastructure"),
+          notRun: count("not-run"),
         },
         outcomes,
         forwardedModelRequests: gateway.requests.length,
+        products: options.products.describe?.() ?? null,
         retries: 0,
         replacements: 0,
       },
@@ -547,6 +603,6 @@ export function liveVerdict(run: Pick<LiveRun, "protocolResults" | "results">) {
     `${product} ${run.results.filter((result) => result.product === product && result.accepted).length}/${run.results.filter((result) => result.product === product).length}`;
   return {
     code,
-    summary: `Live canary: ${executedRuns}/${plannedRuns} runs executed; accepted ${accepted("ardur")}, ${accepted("hermes")}; caps ${classifications.cap}, deadlines ${classifications.deadline}, invalid infrastructure ${classifications.invalidInfrastructure + classifications.servingRefused}; model requests ${run.protocolResults.forwardedModelRequests}; exit ${code}.`,
+    summary: `Live canary: ${executedRuns}/${plannedRuns} runs executed; accepted ${accepted("ardur")}, ${accepted("hermes")}; caps ${classifications.cap}, deadlines ${classifications.deadline}, invalid infrastructure ${classifications.invalidInfrastructure + classifications.servingRefused}, not run ${classifications.notRun}; model requests ${run.protocolResults.forwardedModelRequests}; exit ${code}.`,
   };
 }
