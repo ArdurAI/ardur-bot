@@ -9,7 +9,12 @@ import { Id, MemoryScope, RunStatus, RunTriggerSchema, SandboxKind } from "./ids
 import { SpaceToolPoliciesSchema } from "./integration-catalog.js";
 import { LearningJourneyEntrySchema, LearningObservationSchema } from "./learning.js";
 import { ImportedProvenanceSchema } from "./local-import.js";
-import { McpHeadersSchema, McpRemoteEndpointSchema, McpTransportSchema } from "./mcp.js";
+import {
+  McpHeadersSchema,
+  McpRemoteEndpointSchema,
+  McpTransportSchema,
+  mcpCredentialConflict,
+} from "./mcp.js";
 import { ProviderErrorKindSchema } from "./provider-errors.js";
 import {
   RuntimeInfoSchema,
@@ -735,13 +740,11 @@ export const McpServerConfigInput = z
     }),
   ])
   .superRefine((value, ctx) => {
-    if (!("headers" in value) || !value.secret?.trim()) return;
-    const named = Object.values(value.headers).some((header) => header.trim());
-    if (!named) return;
-    ctx.addIssue({
-      code: "custom",
-      message: "Choose one credential: a token or a header.",
+    const conflict = mcpCredentialConflict({
+      secret: value.secret,
+      headers: "headers" in value ? value.headers : undefined,
     });
+    if (conflict) ctx.addIssue({ code: "custom", message: conflict });
   });
 export type McpServerConfigInput = z.infer<typeof McpServerConfigInput>;
 

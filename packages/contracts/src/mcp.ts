@@ -45,3 +45,30 @@ export const McpHeadersSchema = z
 export function mcpSignInDiagnostic(code?: string | null): string {
   return code ? `Needs sign-in (${code}).` : "Needs sign-in.";
 }
+
+/**
+ * Recorded as lastError when a person declines a re-authorization of a server that stays
+ * connected on its prior tokens. Never a `mcpSignInDiagnostic`: the server does not need
+ * sign-in.
+ */
+export function mcpReauthorizationDeclinedMessage(): string {
+  return "Sign-in was declined.";
+}
+
+/** Rejected before any attempt is made to use a typed token that fails basic validation. */
+export function mcpInvalidTokenMessage(): string {
+  return "Enter a valid token.";
+}
+
+export const MCP_ONE_CREDENTIAL = "Choose one credential: a token or a header.";
+
+/** A server stores either a bearer token or a named header, never both. */
+export function mcpCredentialConflict(input: {
+  secret?: string;
+  headers?: Record<string, string>;
+}): string | null {
+  const secret = input.secret?.trim() ?? "";
+  const headers = input.headers ?? {};
+  const named = Object.values(headers).some((value) => value.trim());
+  return secret && named ? MCP_ONE_CREDENTIAL : null;
+}

@@ -36,6 +36,7 @@ import {
   computerProfileNote,
   DelegationSnapshotSchema,
   isAttachmentImageMimeType,
+  mcpCredentialConflict,
   OLLAMA_NO_IMAGES,
   OPENAI_COMPATIBLE_PROVIDER_ID,
   ollamaThink,
@@ -259,7 +260,6 @@ import {
 } from "./lazy-tool-catalog.js";
 import {
   buildMcpCredentialBlob,
-  mcpCredentialConflict,
   needsOAuthProbe,
   parseMcpServerToolArgs,
 } from "./mcp-server-tool.js";

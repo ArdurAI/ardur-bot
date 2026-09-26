@@ -269,6 +269,7 @@ msgstr ""
 msgid "Accepted"
 msgstr ""
 
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Access token"
 msgstr ""
@@ -1191,6 +1192,7 @@ msgstr "无法连接服务器。"
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/customize/ConfigureExtension.tsx
 #: src/pages/customize/McpConfigEditor.tsx
+#: src/pages/customize/McpCredentialFix.tsx
 #: src/pages/customize/PluginsPage.tsx
 #: src/pages/fleet/FleetSettings.tsx
 #: src/pages/import/ImportedServerCredentials.tsx
@@ -2508,6 +2510,10 @@ msgstr "无法保存该语音"
 msgid "Could not save this choice"
 msgstr "无法保存此选择"
 
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Could not save this credential. Check it and try again."
+msgstr "无法保存此凭据。请检查后重试。"
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not search catalog"
 msgstr ""
@@ -3202,6 +3208,10 @@ msgstr "邮箱"
 msgid "Enable"
 msgstr ""
 
+#: src/lib/mcp-sign-in.ts
+msgid "Enable this server first, then sign in."
+msgstr "请先启用此服务器，然后登录。"
+
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Engage when... Ignore..."
 msgstr ""
@@ -3644,11 +3654,17 @@ msgstr "请挂断，然后输入屏幕上的代码。"
 msgid "header"
 msgstr "请求头"
 
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Header"
+msgstr "请求头"
+
+#: src/pages/customize/McpCredentialFix.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Header name"
 msgstr "请求头名称"
 
+#: src/pages/customize/McpCredentialFix.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Header value"
 msgstr "请求头值"
@@ -4013,6 +4029,10 @@ msgstr ""
 msgid "Keep for recovery"
 msgstr ""
 
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Keep header"
+msgstr "保留请求头"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Keep here"
 msgstr ""
@@ -4024,6 +4044,10 @@ msgstr "保留记忆"
 #: src/pages/MemoryImportExport.tsx
 msgid "Keep scope"
 msgstr ""
+
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Keep token"
+msgstr "保留令牌"
 
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Keep working when the window is closed"
@@ -4331,6 +4355,7 @@ msgstr "请确认这台电脑上没有仍在运行的任务。"
 #: src/pages/memory/MemorySettings.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/PrivacySettings.tsx
+#: src/pages/shell/message-cards.tsx
 msgid "Manage"
 msgstr ""
 
@@ -4788,6 +4813,10 @@ msgstr ""
 #: src/pages/DevicesSettings.tsx
 msgid "Never"
 msgstr ""
+
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "New access token"
+msgstr "新的访问令牌"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "New bot"
@@ -6405,6 +6434,7 @@ msgstr ""
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/board/ItemForm.tsx
 #: src/pages/customize/ConfigureExtension.tsx
+#: src/pages/customize/McpCredentialFix.tsx
 #: src/pages/DevicesSettings.tsx
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/GroupPanel.tsx
@@ -7398,7 +7428,7 @@ msgstr "此服务器未提供浏览器登录。请改为输入令牌。"
 msgid "This server did not request browser authorization."
 msgstr "此服务器未请求浏览器授权。"
 
-#: src/pages/McpServersOverlay.tsx
+#: src/pages/customize/McpCredentialFix.tsx
 msgid "This server has two credentials. Keep one."
 msgstr "此服务器有两种凭据。请只保留一种。"
 
@@ -7473,6 +7503,10 @@ msgstr "今天"
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "Today (UTC)"
 msgstr ""
+
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Token"
+msgstr "令牌"
 
 #: src/pages/CompareStart.tsx
 msgid "Token reservation"
@@ -7637,6 +7671,10 @@ msgstr "有可用更新"
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Update computer"
 msgstr "更新电脑"
+
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Update credential"
+msgstr "更新凭据"
 
 #: src/pages/import/ImportedServerCredentials.tsx
 msgid "Update credentials"

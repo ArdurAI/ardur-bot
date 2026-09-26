@@ -8,4 +8,5 @@ export type McpOauthResult =
   | "replaced"
   | "already_connected"
   | "authorization_not_requested"
-  | "oauth-unavailable";
+  | "oauth-unavailable"
+  | "disabled";

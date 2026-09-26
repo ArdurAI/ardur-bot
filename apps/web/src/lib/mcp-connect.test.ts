@@ -341,6 +341,45 @@ describe("MCP browser consent", () => {
     expect(await result).toBe("needs-sign-in");
     expect(server).toMatchObject({ connectionState: "connected", revision: 4 });
   });
+  it("ends the wait promptly when the server is deleted mid-wait", async () => {
+    begin.mockResolvedValue({
+      status: "authorization_required",
+      authorizationUrl: "https://auth.example.test/authorize",
+      sessionId: "ours",
+    });
+    list.mockImplementation(async () => [
+      { id: "connection", connectionState: "not-connected", pendingOauthSessionId: "ours" },
+    ]);
+    const result = connectMcpOauth("connection");
+    await vi.advanceTimersByTimeAsync(0);
+    // The row is gone: no future poll will ever find it.
+    list.mockImplementation(async () => []);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(await result).toBe("needs-sign-in");
+  });
+  it("ends the wait promptly when the server is disconnected mid-wait", async () => {
+    begin.mockResolvedValue({
+      status: "authorization_required",
+      authorizationUrl: "https://auth.example.test/authorize",
+      sessionId: "ours",
+    });
+    const server = {
+      id: "connection",
+      connectionState: "connected",
+      oauthStatus: "connected",
+      pendingOauthSessionId: "ours" as string | null,
+      lastError: null as string | null,
+    };
+    list.mockImplementation(async () => [server]);
+    const result = connectMcpOauth("connection");
+    await vi.advanceTimersByTimeAsync(0);
+    // Disconnect clears the pending id and the oauth material, without
+    // otherwise changing connectionState or lastError.
+    server.pendingOauthSessionId = null;
+    server.oauthStatus = "none";
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(await result).toBe("needs-sign-in");
+  });
   it("reports sign-in-failed when a connected server survives a probe error", async () => {
     begin.mockRejectedValue(new Error("timed out"));
     list.mockResolvedValue([

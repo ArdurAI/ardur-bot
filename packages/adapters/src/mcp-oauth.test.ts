@@ -505,6 +505,7 @@ describe("MCP OAuth", () => {
           endpoint: "https://mcp.example.test/mcp",
           secretId: "secret-current",
         }),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
       secret: {
         findFirst: vi.fn().mockResolvedValue({
@@ -538,6 +539,17 @@ describe("MCP OAuth", () => {
       data: { secretId: "secret-next", revision: { increment: 1 } },
     });
     expect(tx.secret.deleteMany).toHaveBeenCalledWith({ where: { id: "secret-current" } });
+    // A sign-in that is still waiting for this server can never complete once
+    // its material is gone; the pending attempt must not be left dangling.
+    expect(prisma.mcpServer.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: "server-1",
+        spaceId: "workspace-1",
+        userId: "user-1",
+        pendingOauthSessionId: { not: null },
+      },
+      data: { pendingOauthSessionId: null },
+    });
   });
 
   it("merges OAuth state into the latest static credential after acquiring the lock", async () => {

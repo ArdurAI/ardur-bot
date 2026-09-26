@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { isLocalMcpHost, mcpSignInDiagnostic } from "@ardurbot/contracts";
+import {
+  isLocalMcpHost,
+  mcpCredentialConflict,
+  mcpReauthorizationDeclinedMessage,
+  mcpSignInDiagnostic,
+} from "@ardurbot/contracts";
 import type { Prisma, PrismaClient } from "@ardurbot/db";
 import type {
   OAuthClientProvider,
@@ -14,7 +19,6 @@ import type {
   OAuthTokens,
 } from "@modelcontextprotocol/sdk/shared/auth.js";
 import { transientIntegrationError } from "./integration-lifecycle.js";
-import { mcpCredentialConflict } from "./mcp-server-tool.js";
 import { secureFetch, validateUrl, withEndpointOriginFallback } from "./mcp-transport.js";
 import type { RemoteTransportDependencies } from "./remote-mcp.js";
 import type { EncryptedSecretStore } from "./secrets.js";
@@ -700,7 +704,7 @@ export class McpOAuthBroker {
         consentStartedAt: null,
         lastError: keepConnection
           ? declined
-            ? "Sign-in was declined."
+            ? mcpReauthorizationDeclinedMessage()
             : "Could not complete sign-in. Connect again."
           : current.connectionState === "connected"
             ? mcpSignInDiagnostic()
@@ -1174,6 +1178,16 @@ export class McpOAuthBroker {
     }
     await this.prisma.mcpOAuthSession.deleteMany({
       where: { serverId: input.serverId, spaceId: input.spaceId, userId: input.userId },
+    });
+    // An in-flight sign-in attempt for this server can no longer complete.
+    await this.prisma.mcpServer.updateMany({
+      where: {
+        id: input.serverId,
+        spaceId: input.spaceId,
+        userId: input.userId,
+        pendingOauthSessionId: { not: null },
+      },
+      data: { pendingOauthSessionId: null },
     });
     const server = await this.prisma.mcpServer.findFirst({
       where: { id: input.serverId, spaceId: input.spaceId, userId: input.userId },

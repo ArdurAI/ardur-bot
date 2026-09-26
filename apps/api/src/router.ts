@@ -69,7 +69,6 @@ import {
   McpOAuthAttemptReplacedError,
   McpOAuthBroker,
   mapScratchpadItem,
-  mcpCredentialConflict,
   modelCredentialDto,
   NATIVE_HOST_OWNER_MESSAGE,
   nativeHostOwner,
@@ -3484,12 +3483,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           });
         }),
         create: authed.mcp.servers.create.handler(async ({ context, input }) => {
-          const credentialConflict = mcpCredentialConflict({
-            secret: "secret" in input ? input.secret : undefined,
-            headers: "headers" in input ? input.headers : undefined,
-          });
-          if (credentialConflict)
-            throw new ORPCError("BAD_REQUEST", { message: credentialConflict });
+          // The input schema already rejects a server with both a token and a header.
           const secretPayload = buildMcpCredentialBlob(input);
           const stored = secretPayload
             ? await deps.secrets.put(

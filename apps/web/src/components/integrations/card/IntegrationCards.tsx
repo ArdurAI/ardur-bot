@@ -4,6 +4,7 @@ import type {
   IntegrationDescriptor,
   McpServer,
 } from "@ardurbot/contracts";
+import { mcpInvalidTokenMessage } from "@ardurbot/contracts";
 import { Button, Input } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
 import { useEffect, useRef, useState } from "react";
@@ -41,6 +42,7 @@ export function IntegrationCards({
   const [error, setError] = useState<"load" | "token" | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [oauthWait, setOauthWait] = useState<McpOauthWait | null>(null);
+  const [findWaiting, setFindWaiting] = useState(false);
   const userCancelled = useRef(false);
   const oauthAttempt = useRef(0);
   const oauthAbort = useRef<AbortController | null>(null);
@@ -54,9 +56,9 @@ export function IntegrationCards({
   const popup = useRef<Window | null>(null);
   const requests = useRef<PageRequests>({ generation: 0, inFlight: 0 });
   useEffect(() => {
-    onBusyChange?.(busy !== null || oauthWait !== null);
+    onBusyChange?.(busy !== null || oauthWait !== null || findWaiting);
     return () => onBusyChange?.(false);
-  }, [busy, oauthWait, onBusyChange]);
+  }, [busy, oauthWait, findWaiting, onBusyChange]);
   // Leaving the page stops its polling. The sign-in finishes through its callback.
   useEffect(
     () => () => {
@@ -134,7 +136,7 @@ export function IntegrationCards({
       return current.state === "connected";
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "";
-      setError(message === "Enter a valid token." ? "token" : "load");
+      setError(message === mcpInvalidTokenMessage() ? "token" : "load");
       return false;
     } finally {
       setBusy(null);
@@ -295,10 +297,12 @@ export function IntegrationCards({
           catalog={data.catalog}
           connections={data.connections}
           onManage={(connection) => setSelected(connection.id)}
-          // Always a new connection: an existing one is managed, never replaced from here.
-          onConnectCatalog={async (descriptor, accessToken, hooks) => {
+          // A connected or needs-sign-in row is managed, never replaced from here. Anything
+          // else unfinished (cancelled, failed, awaiting consent, needs registration) is
+          // continued instead of piling up a second row for the same app.
+          onConnectCatalog={async (descriptor, accessToken, hooks, connection) => {
             try {
-              return await connectIntegration(descriptor, undefined, {
+              return await connectIntegration(descriptor, connection, {
                 token: accessToken,
                 host: hosts[descriptor.id] || undefined,
                 ...(descriptor.authKind === "oauth" && clients[descriptor.id]?.clientId
@@ -319,7 +323,7 @@ export function IntegrationCards({
               });
             } catch (caught) {
               const message = caught instanceof Error ? caught.message : "";
-              setError(message === "Enter a valid token." ? "token" : "load");
+              setError(message === mcpInvalidTokenMessage() ? "token" : "load");
               return null;
             }
           }}
@@ -330,6 +334,7 @@ export function IntegrationCards({
               setError("load");
             }
           }}
+          onWaitingChange={setFindWaiting}
         />
       ) : null}
       <CustomizeToolbar

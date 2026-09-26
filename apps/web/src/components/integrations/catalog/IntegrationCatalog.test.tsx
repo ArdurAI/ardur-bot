@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { IntegrationConnection, IntegrationDescriptor } from "@ardurbot/contracts";
-import { mcpSignInDiagnostic } from "@ardurbot/contracts";
+import { mcpInvalidTokenMessage, mcpSignInDiagnostic } from "@ardurbot/contracts";
 import type { ComponentProps, ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -985,7 +985,7 @@ describe("Settings integration catalog", () => {
     expect(api.tools).not.toHaveBeenCalled();
   });
 
-  it("shows the plain sentence when a custom server offers no browser sign-in", async () => {
+  it("opens the credential field for a Find apps result that offers no browser sign-in", async () => {
     const provider = "provider-denied-browser-sign-in";
     const servers = createdServers();
     api.oauth.mockImplementation(async () => {
@@ -998,10 +998,28 @@ describe("Settings integration catalog", () => {
     });
     await openResults([publicResult]);
     await click(resultConnect("Figma")!);
-    expect(container.textContent).toContain(
-      "This server did not offer browser sign-in. Enter a token instead.",
-    );
     expect(container.textContent).not.toContain(provider);
+    expect(container.querySelector('[aria-label="Credential"]')).not.toBeNull();
+    await fill("Credential", "a-personal-token");
+    await click(resultConnect("Figma")!);
+    expect(api.tools).toHaveBeenCalledExactlyOnceWith({ serverId: servers[0]!.id });
+  });
+
+  it("stops a Find apps sign-in wait when the panel closes, instead of polling on unseen", async () => {
+    createdServers();
+    let capturedSignal: AbortSignal | undefined;
+    api.oauth.mockImplementation(
+      (_serverId: string, options: { signal?: AbortSignal }) =>
+        new Promise(() => {
+          capturedSignal = options.signal;
+        }),
+    );
+    await openResults([publicResult]);
+    await click(resultConnect("Figma")!);
+    expect(capturedSignal).toBeDefined();
+    expect(capturedSignal?.aborted).toBe(false);
+    await click(button("Find apps"));
+    expect(capturedSignal?.aborted).toBe(true);
   });
 
   it("shows a declined catalog sign-in and a failed one in Find apps", async () => {
@@ -1059,6 +1077,11 @@ describe("Settings integration catalog", () => {
         lastError: "Could not complete sign-in. Connect again.",
       });
       await click(resultConnect("Notion")!);
+      // Reuses the cancelled row instead of starting a second Notion connection.
+      expect(api.connect).toHaveBeenLastCalledWith(
+        expect.objectContaining({ catalogId: "notion", connectionId: "notion-1" }),
+      );
+      expect(api.connect).toHaveBeenCalledTimes(2);
       await act(async () => {
         await vi.advanceTimersByTimeAsync(1000);
       });
@@ -1192,7 +1215,7 @@ describe("Settings integration catalog", () => {
       enabled: true,
       results: [listing("GitHub directory", "https://api.githubcopilot.com/mcp/")],
     });
-    api.connect.mockRejectedValue(new Error("Enter a valid token."));
+    api.connect.mockRejectedValue(new Error(mcpInvalidTokenMessage()));
     await mount();
     await click(button("Find apps"));
     await fill("Search apps", "GitHub");
@@ -1285,7 +1308,16 @@ describe("Settings integration catalog", () => {
     const details = container.querySelector("details")!;
     await fill("Server URL", "https://api.githubcopilot.com/mcp/");
     expect(details.textContent).toContain("GitHub");
-    await fill("Access token (optional)", "synthetic-test-value");
+    expect(details.textContent).toContain("Access token");
+    expect(details.textContent).not.toContain("Access token (optional)");
+    const tokenField = details.querySelector<HTMLInputElement>("#direct-mcp-url-token")!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+        tokenField,
+        "synthetic-test-value",
+      );
+      tokenField.dispatchEvent(new Event("input", { bubbles: true }));
+    });
     await click(button("Connect", details));
     expect(api.connect).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1307,7 +1339,7 @@ describe("Settings integration catalog", () => {
     const details = container.querySelector("details")!;
     await fill("Server URL", "https://mcp.atlassian.com/v2/mcp?tools=all");
     expect(details.textContent).toContain("Atlassian");
-    expect(details.querySelector('[aria-label="Access token (optional)"]')).toBeNull();
+    expect(details.querySelector("#direct-mcp-url-token")).toBeNull();
   });
 
   it("ignores an older server-list response that resolves after a refresh", async () => {

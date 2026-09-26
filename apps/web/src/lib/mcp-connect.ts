@@ -1,3 +1,4 @@
+import { mcpReauthorizationDeclinedMessage } from "@ardurbot/contracts";
 import { desktopBridge } from "./desktop";
 import type { McpOauthResult } from "./mcp-oauth-channel";
 import { MCP_OAUTH_CHANNEL } from "./mcp-oauth-channel";
@@ -7,7 +8,6 @@ export type { McpOauthResult };
 export { MCP_OAUTH_CHANNEL };
 
 const MCP_OAUTH_TIMEOUT_MS = 10 * 60 * 1000;
-const DECLINED_WHILE_CONNECTED = "Sign-in was declined.";
 
 export type McpOauthWait = {
   sessionId: string;
@@ -18,10 +18,14 @@ export type McpOauthWait = {
 function recordedOauthOutcome(server: {
   connectionState?: string;
   lastError?: string | null;
+  oauthStatus?: string;
 }): McpOauthResult | null {
   if (server.connectionState === "connected") {
+    // Disconnecting mid-wait clears the oauth material without changing this
+    // state; a genuine completion always leaves live tokens behind.
+    if (server.oauthStatus === "none") return "needs-sign-in";
     if (!server.lastError) return "connected";
-    if (server.lastError === DECLINED_WHILE_CONNECTED) return "cancelled";
+    if (server.lastError === mcpReauthorizationDeclinedMessage()) return "cancelled";
     return "sign-in-failed";
   }
   if (server.connectionState === "discovery-failed") return "sign-in-failed";
@@ -58,7 +62,8 @@ export async function connectMcpOauth(
     started.sessionId,
     async () => {
       const server = (await rpc.mcp.servers.list()).find((item) => item.id === serverId);
-      if (!server) return null;
+      // Deleted mid-wait: nothing will ever clear this attempt's pending id.
+      if (!server) return "needs-sign-in";
       if (server.pendingOauthSessionId === started.sessionId) return null;
       if (server.pendingOauthSessionId) return "replaced";
       return recordedOauthOutcome(server);
