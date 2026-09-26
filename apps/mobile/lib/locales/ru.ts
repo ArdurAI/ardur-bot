@@ -956,8 +956,18 @@ export const RU_MESSAGES: Record<string, string> = {
   "Source folder for {tool}": "Исходная папка для {tool}",
   "Update credentials": "Обновить учётные данные",
   "Use folder": "Использовать папку",
-  "{created} imported, {updated} updated, {unchanged} unchanged, {removed} removed, {skipped} skipped, {conflicts} conflicts.":
-    "Импортировано: {created}, обновлено: {updated}, без изменений: {unchanged}, удалено: {removed}, пропущено: {skipped}, конфликтов: {conflicts}.",
+  "{created} imported, {updated} updated, {unchanged} unchanged, {removed} removed, {skipped} skipped, {conflicts} conflicts, {failed} failed.":
+    "Импортировано: {created}, обновлено: {updated}, без изменений: {unchanged}, удалено: {removed}, пропущено: {skipped}, конфликтов: {conflicts}, с ошибкой: {failed}.",
+  "This scan is out of date. Re-scan, then try again.":
+    "Результаты сканирования устарели. Повторите сканирование и попробуйте снова.",
+  "Import stopped because of an unexpected error. Re-scan, then try again.":
+    "Импорт остановлен из-за непредвиденной ошибки. Повторите сканирование и попробуйте снова.",
+  "Looks like it contains a credential. Remove it from the file, then re-scan.":
+    "Похоже, здесь есть учётные данные. Удалите их из файла и повторите сканирование.",
+  "Could not be saved.": "Не удалось сохранить.",
+  "Some items exceeded the scan limits ({count} items were not scanned).":
+    "Некоторые элементы превысили ограничения сканирования (не просканировано элементов: {count}).",
+  "Retry {path}": "Повторить: {path}",
   "Found on this Mac": "Найдено на этом Mac",
   "Found on this computer": "Найдено на этом компьютере",
   "Ardur Bot reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history.":

@@ -37,11 +37,13 @@ export class LocalImportRequests {
       this.pending.delete(requestId);
     }
   }
-  complete(requestId: string, response: unknown, failed = false) {
+  complete(requestId: string, response: unknown) {
     const pending = this.pending.get(requestId);
     if (!pending) return;
-    if (failed) pending.reject(new Error("Import could not finish. Re-scan and try again."));
-    else pending.resolve(LocalImportResponseSchema.parse(response));
     this.pending.delete(requestId);
+    // A stopped run is a typed answer; only an unreadable reply becomes an error.
+    const parsed = LocalImportResponseSchema.safeParse(response);
+    if (parsed.success) pending.resolve(parsed.data);
+    else pending.reject(new Error("Import could not finish. Re-scan and try again."));
   }
 }

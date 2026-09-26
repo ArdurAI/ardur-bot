@@ -38,6 +38,8 @@ export class GraphileJobPublisher implements JobPublisher {
       runAt: job.availableAt,
       jobKey: job.replaceKey,
       ...(job.name === "memory.git-push" ? { jobKeyMode: "replace" as const } : {}),
+      // An import request is answered once; a retry would repeat the whole import unseen.
+      ...(job.name === "local-import.run" ? { maxAttempts: 1 } : {}),
       ...(["memory.deliver", "memory.git-push"].includes(job.name)
         ? { queueName: memoryDeliveryQueue(job) }
         : {}),
