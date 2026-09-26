@@ -2,6 +2,7 @@ import type { NotificationProvider } from "@ardurbot/adapter-kit";
 import type { Pool, PrismaClient } from "@ardurbot/db";
 import { getUserPreferences } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
+import { BOARD_CLOSE_FAILED_BODY } from "./pending-close.js";
 
 const BOARD_NOTIFICATION_LOCK_NAMESPACE = 1_380_019_075;
 const BOARD_NOTIFICATION_LOCK_ID = 3;
@@ -15,27 +16,30 @@ export async function deliverBoardNotifications(
   if (signal.aborted) return;
   const rows = await prisma.boardNotification.findMany({
     where: { deliveredAt: null },
-    include: { follow: { include: { workspace: true } } },
+    include: { follow: { include: { workspace: true } }, workspace: true },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     take: 50,
   });
   for (const row of rows) {
     if (signal.aborted) return;
-    const { follow } = row;
-    const { workspace } = follow;
+    // A failed-close notice may have no follow; it then names its owner, board and item.
+    const workspace = row.follow?.workspace ?? row.workspace;
+    const userId = row.follow?.userId ?? row.userId;
+    const itemId = row.follow?.itemId ?? row.itemId;
     try {
+      if (!workspace || !userId || !itemId) throw new Error("This board notice has no target.");
       const [member, deployment, preferences] = await Promise.all([
         prisma.spaceMember.findUnique({
-          where: { spaceId_userId: { spaceId: workspace.spaceId, userId: follow.userId } },
+          where: { spaceId_userId: { spaceId: workspace.spaceId, userId } },
         }),
         prisma.deploymentSettings.findUnique({ where: { id: "default" } }),
-        getUserPreferences(prisma, follow.userId),
+        getUserPreferences(prisma, userId),
       ]);
       if (
         member &&
         workspace.enabled &&
-        workspace.ownerUserId === follow.userId &&
-        deployment?.ownerUserId === follow.userId &&
+        workspace.ownerUserId === userId &&
+        deployment?.ownerUserId === userId &&
         preferences.notifications.responseCompletions
       ) {
         await notifications.send(
@@ -48,18 +52,20 @@ export async function deliverBoardNotifications(
                   ? "New comment"
                   : change === "assignee"
                     ? "Assignee changed"
-                    : "Status changed",
+                    : change === "close"
+                      ? BOARD_CLOSE_FAILED_BODY
+                      : "Status changed",
               )
               .join(" · "),
             botId: "",
-            threadId: `board:${workspace.id}:${follow.itemId}`,
-            board: { spaceId: workspace.spaceId, workspaceId: workspace.id, itemId: follow.itemId },
+            threadId: `board:${workspace.id}:${itemId}`,
+            board: { spaceId: workspace.spaceId, workspaceId: workspace.id, itemId },
           },
           {
             operationId: row.id,
             traceId: row.id,
             spaceId: workspace.spaceId,
-            userId: follow.userId,
+            userId,
             botId: "",
             signal,
           },
@@ -81,6 +87,7 @@ export async function deliverBoardNotifications(
 /**
  * One tick holds a transaction advisory lock and then returns the client.
  * Periodic delivery does not keep a session lock for the process lifetime.
+ * Resolves true when this worker held the lock for this tick.
  */
 async function deliverWithLock(pool: Pick<Pool, "connect">, deliver: () => Promise<void>) {
   const client = await pool.connect();
@@ -97,8 +104,10 @@ async function deliverWithLock(pool: Pick<Pool, "connect">, deliver: () => Promi
         "SELECT pg_try_advisory_xact_lock($1::integer, $2::integer) AS acquired",
         [BOARD_NOTIFICATION_LOCK_NAMESPACE, BOARD_NOTIFICATION_LOCK_ID],
       );
-      if (result.rows[0]?.acquired === true) await deliver();
+      const acquired = result.rows[0]?.acquired === true;
+      if (acquired) await deliver();
       await client.query("COMMIT");
+      return acquired;
     } catch (error) {
       await client.query("ROLLBACK").catch(() => finish(true));
       throw error;
@@ -108,29 +117,56 @@ async function deliverWithLock(pool: Pick<Pool, "connect">, deliver: () => Promi
   }
 }
 
-/** Push delivery has its own schedule, outside run recovery. */
+/**
+ * Push delivery has its own schedule, outside run recovery. Pending board closes are swept
+ * after the delivery transaction commits, under the same deadline. A slow host close never
+ * holds a transaction or the next delivery.
+ */
 export function createBoardNotificationDelivery(deps: {
   prisma: PrismaClient;
   notifications: NotificationProvider;
   pool: Pick<Pool, "connect">;
+  board?: { sweepPendingCloses: (options: { signal: AbortSignal }) => Promise<void> };
 }) {
   let timer: ReturnType<typeof setInterval> | undefined;
   let running: Promise<void> | undefined;
-  let controller: AbortController | undefined;
+  let sweeping: Promise<void> | undefined;
+  const controllers = new Set<AbortController>();
   let stopped = true;
   const tick = () => {
     if (stopped || running) return;
     const abort = new AbortController();
-    controller = abort;
+    controllers.add(abort);
     const deadline = setTimeout(() => abort.abort(), 15_000);
+    const settle = () => {
+      clearTimeout(deadline);
+      controllers.delete(abort);
+    };
+    // A failed delivery is logged and still lets this worker sweep; only losing the lock skips it.
     running = deliverWithLock(deps.pool, () =>
-      deliverBoardNotifications(deps.prisma, deps.notifications, abort.signal),
+      deliverBoardNotifications(deps.prisma, deps.notifications, abort.signal).catch((error) =>
+        getLogger().error("board notification delivery", error),
+      ),
     )
-      .catch((error) => getLogger().error("board notification delivery", error))
+      .then(
+        (held) => {
+          const board = deps.board;
+          if (!held || !board || sweeping || stopped || abort.signal.aborted) return settle();
+          sweeping = board
+            .sweepPendingCloses({ signal: abort.signal })
+            .catch((error) => getLogger().error("pending board close", error))
+            .finally(() => {
+              sweeping = undefined;
+              settle();
+            });
+        },
+        (error) => {
+          getLogger().error("board notification delivery", error);
+          settle();
+        },
+      )
       .finally(() => {
-        clearTimeout(deadline);
         running = undefined;
-        controller = undefined;
       });
   };
   return {
@@ -144,8 +180,9 @@ export function createBoardNotificationDelivery(deps: {
     async stop() {
       stopped = true;
       clearInterval(timer);
-      controller?.abort();
+      for (const controller of controllers) controller.abort();
       await running;
+      await sweeping;
     },
   };
 }

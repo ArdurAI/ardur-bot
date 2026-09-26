@@ -66,6 +66,15 @@ msgstr ""
 msgid "{0} documents, {1} revisions"
 msgstr ""
 
+#. placeholder {0}: row.name
+#. placeholder {1}: row.filed
+#. placeholder {2}: row.done
+#. placeholder {3}: row.open
+#. placeholder {4}: row.other
+#: src/pages/dashboard/WorkPanel.tsx
+msgid "{0} filed {1}: {2} done, {3} open, {4} closed without being completed."
+msgstr ""
+
 #. placeholder {0}: (memoryFree / 1024 ** 3).toFixed(1)
 #: src/pages/fleet/FleetSettings.tsx
 msgid "{0} GB free"
@@ -240,6 +249,10 @@ msgstr "7 Tage"
 msgid "A bit of everything"
 msgstr ""
 
+#: src/lib/board-close-copy.ts
+msgid "A board item filed by a bot could not be closed."
+msgstr ""
+
 #: src/components/DesktopUpdates.tsx
 msgid "A new version is available — download"
 msgstr ""
@@ -266,6 +279,7 @@ msgstr ""
 
 #: src/pages/board/Board.tsx
 #: src/pages/board/ItemForm.tsx
+#: src/pages/LearningInbox.tsx
 msgid "Acceptance criteria"
 msgstr ""
 
@@ -784,6 +798,10 @@ msgstr ""
 
 #: src/pages/import/LocalImportPage.tsx
 msgid "Ardur Bot reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history."
+msgstr ""
+
+#: src/lib/board-close-copy.ts
+msgid "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected."
 msgstr ""
 
 #: src/pages/customize/McpDiagnostics.tsx
@@ -1551,6 +1569,10 @@ msgstr "Stimmeinstellungen schließen"
 
 #: src/pages/board/Board.tsx
 msgid "Close when the bot reports done"
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Closing on the Board."
 msgstr ""
 
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
@@ -2937,6 +2959,7 @@ msgid "Describe what this bot does"
 msgstr "Beschreibe, was dieser Bot macht"
 
 #: src/pages/board/ItemForm.tsx
+#: src/pages/LearningInbox.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Description"
 msgstr "Beschreibung"
@@ -4081,6 +4104,7 @@ msgid "Label"
 msgstr ""
 
 #: src/pages/board/ItemForm.tsx
+#: src/pages/LearningInbox.tsx
 msgid "Labels"
 msgstr ""
 
@@ -7333,6 +7357,35 @@ msgstr "Denkmodus"
 msgid "This action could not finish; try again."
 msgstr ""
 
+#: src/pages/LearningInbox.tsx
+msgid "This board item changed after it was filed, so it was left open for review on the Board."
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "This board item changed after it was filed. Review it on the Board."
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "This board item is still open."
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "This board item was already closed on the Board."
+msgstr ""
+
+#. placeholder {0}: proposal.boardOutcome.closeReason
+#: src/pages/LearningInbox.tsx
+msgid "This board item was closed without being completed: {0}. Review it on the Board."
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "This board item was closed without being completed. Review it on the Board."
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "This board item was completed."
+msgstr ""
+
 #: src/pages/shell/provider-error-message.tsx
 msgid "This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin."
 msgstr ""
@@ -7500,6 +7553,7 @@ msgid "Timeline"
 msgstr ""
 
 #: src/pages/board/ItemForm.tsx
+#: src/pages/LearningInbox.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Title"
 msgstr "Titel"

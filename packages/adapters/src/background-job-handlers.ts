@@ -8,10 +8,11 @@ import type {
   SandboxProvider,
 } from "@ardurbot/adapter-kit";
 import { messagingDeliverJob } from "@ardurbot/adapter-kit";
-import type { PrismaClient, ThreadEvents } from "@ardurbot/db";
+import type { Pool, PrismaClient, ThreadEvents } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 import type { MemoryService } from "@ardurbot/memory";
 import { deliverMemory, maintainBriefs } from "@ardurbot/memory";
+import { BoardService } from "./board/service.js";
 import { executeBoardCommand } from "./board/worker.js";
 import type { CloudAgentConnection } from "./cloud-agent-factory.js";
 import { pollCloudAgent } from "./cloud-agent-poll.js";
@@ -48,6 +49,8 @@ export function createBackgroundJobHandlers(deps: {
   messaging?: MessagingSurface;
   cloudAgent?: CloudAgentConnection | null;
   dataDir?: string;
+  /** Filing locks only. Never the shared Prisma pool. */
+  lockPool?: Pick<Pool, "connect">;
 }): BackgroundJobHandlers {
   const recordUsage = async (sourceRunId: string, usage: AgentUsage) => {
     const run = await deps.prisma.run.findUniqueOrThrow({ where: { id: sourceRunId } });
@@ -70,7 +73,10 @@ export function createBackgroundJobHandlers(deps: {
 
   return {
     "board.run": ({ requestId }) =>
-      executeBoardCommand({ prisma: deps.prisma, dataDir: deps.dataDir ?? "./data" }, requestId),
+      executeBoardCommand(
+        { prisma: deps.prisma, dataDir: deps.dataDir ?? "./data", lockPool: deps.lockPool },
+        requestId,
+      ),
     ...(deps.localImport && deps.memoryDocuments
       ? createLocalImportJobs(deps.prisma, deps.memoryDocuments, deps.localImport)
       : {}),
@@ -87,6 +93,11 @@ export function createBackgroundJobHandlers(deps: {
           secretStore: deps.secretStore,
           memoryDocuments: deps.memoryDocuments,
           recordUsage,
+          boardService: new BoardService({
+            prisma: deps.prisma,
+            dataDir: deps.dataDir ?? "./data",
+            lockPool: deps.lockPool,
+          }),
         },
         payload,
       ),

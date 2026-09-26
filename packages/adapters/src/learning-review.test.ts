@@ -6,7 +6,11 @@ import { memoryServiceFixture, serialMemoryLock } from "@ardurbot/testkit/memory
 import { describe, expect, it, vi } from "vitest";
 import { LEARNING_POLICY_VERSION, loadLearningRecords } from "./learning-records.js";
 import type { LearningReviewDependencies } from "./learning-review.js";
-import { reviewLearning, validateLearningCandidate } from "./learning-review.js";
+import {
+  LEARNING_REVIEW_INSTRUCTION,
+  reviewLearning,
+  validateLearningCandidate,
+} from "./learning-review.js";
 
 const pin: RuntimePin = {
   provider: "openai-compatible",
@@ -133,6 +137,7 @@ function fixture() {
         return row;
       }),
     },
+    space: { findUnique: vi.fn(async () => ({ botUpkeep: true })) },
   };
   const prisma = {
     ...db,
@@ -184,6 +189,7 @@ function fixture() {
     memoryDocuments: memoryServiceFixture(scope).service,
     secretStore: {} as never,
     resolvePin,
+    boardService: { workspace: vi.fn(async () => ({ id: "workspace" })) } as never,
   };
   return {
     deps,
@@ -477,6 +483,7 @@ describe("proposal validation", () => {
     evidence,
     targets: [target] as never,
     fingerprints: new Set<string>(),
+    boardWorkspaceId: "workspace",
   };
   it("supersedes a stale base revision", () =>
     expect(validateLearningCandidate(candidate, input)).toBe("superseded"));
@@ -499,5 +506,276 @@ describe("proposal validation", () => {
         targets: [{ ...target, protected: true }] as never,
       }),
     ).toBe("rejected");
+  });
+  it("accepts a board item only when it cites an observed outcome", () => {
+    const board: LearningCandidate = {
+      type: "board-item",
+      scope,
+      target: {},
+      boardItem: {
+        title: "Finish the import follow-up",
+        description: "The run stopped before the import finished.",
+        acceptanceCriteria: "The import completes in the regression suite.",
+      },
+      rationale: "The follow-up remains unfinished.",
+      evidenceIds: ["outcome"],
+      confidence: { label: "model estimate", value: 0.7 },
+    };
+    const outcome = {
+      id: "outcome",
+      runId: "run",
+      threadId: "thread",
+      kind: "observed-outcome" as const,
+      sourceClass: "run" as const,
+      eventIds: ["event"],
+      redactionVersion: 1 as const,
+      outcome: { category: "failure" as const, classification: "execution" as const },
+    };
+    expect(validateLearningCandidate(board, { ...input, evidence: [outcome] })).toBe("pending");
+    expect(validateLearningCandidate(board, input)).toBe("rejected");
+    const retry = {
+      ...board,
+      boardItem: { ...board.boardItem!, description: "Run the import again after the fix." },
+    };
+    expect(validateLearningCandidate(retry, { ...input, evidence: [outcome] })).toBe("pending");
+  });
+  it("rejects a board item when the run's user and bot cannot file it", () => {
+    const board: LearningCandidate = {
+      type: "board-item",
+      scope,
+      target: {},
+      boardItem: {
+        title: "Finish the import follow-up",
+        description: "The run stopped before the import finished.",
+        acceptanceCriteria: "The import completes.",
+      },
+      rationale: "The follow-up remains unfinished.",
+      evidenceIds: ["outcome"],
+      confidence: { label: "model estimate", value: 0.7 },
+    };
+    const outcome = {
+      id: "outcome",
+      runId: "run",
+      threadId: "thread",
+      kind: "observed-outcome" as const,
+      sourceClass: "run" as const,
+      eventIds: ["event"],
+      redactionVersion: 1 as const,
+      outcome: { category: "failure" as const, classification: "execution" as const },
+    };
+    expect(
+      validateLearningCandidate(board, {
+        ...input,
+        evidence: [outcome],
+        boardWorkspaceId: null,
+      }),
+    ).toBe("rejected");
+  });
+  it.each<{
+    title?: string;
+    description?: string;
+    acceptanceCriteria?: string;
+    labels?: string[];
+    rationale?: string;
+  }>([
+    { title: "Track recurring failure" },
+    { description: "The integration failed again." },
+    { description: "The export keeps failing." },
+    { rationale: "The same failure recurred across runs." },
+    { acceptanceCriteria: "This failed again across runs." },
+    { labels: ["keeps failing"] },
+  ])("rejects a board item that claims recurrence from one run (%o)", (claim) => {
+    const outcome = {
+      id: "outcome",
+      runId: "run",
+      threadId: "thread",
+      kind: "observed-outcome" as const,
+      sourceClass: "run" as const,
+      eventIds: ["event"],
+      redactionVersion: 1 as const,
+      outcome: { category: "failure" as const, classification: "execution" as const },
+    };
+    const { rationale, labels, ...item } = claim;
+    const board: LearningCandidate = {
+      type: "board-item",
+      scope,
+      target: {},
+      boardItem: {
+        title: "Finish the import follow-up",
+        description: "The run stopped before the import finished.",
+        acceptanceCriteria: "The import completes.",
+        ...item,
+        ...(labels ? { labels } : {}),
+      } as LearningCandidate["boardItem"],
+      rationale: rationale ?? "The follow-up remains unfinished.",
+      evidenceIds: ["outcome"],
+      confidence: { label: "model estimate", value: 0.7 },
+    };
+    expect(validateLearningCandidate(board, { ...input, evidence: [outcome] })).toBe("rejected");
+  });
+  it.each<{ title?: string; description?: string; rationale?: string }>([
+    { title: "Remove the repeated header row from the export" },
+    { description: "Cache the auth token across runs." },
+    { description: "Log the duration each time the sync job runs." },
+    { title: "Keep error messages actionable" },
+    { description: "Show the error each time the import skips a row." },
+  ])(
+    "keeps an ordinary follow-up that mentions repetition but not a failure recurring (%o)",
+    (claim) => {
+      const outcome = {
+        id: "outcome",
+        runId: "run",
+        threadId: "thread",
+        kind: "observed-outcome" as const,
+        sourceClass: "run" as const,
+        eventIds: ["event"],
+        redactionVersion: 1 as const,
+        outcome: { category: "failure" as const, classification: "execution" as const },
+      };
+      const { rationale, ...item } = claim;
+      const board: LearningCandidate = {
+        type: "board-item",
+        scope,
+        target: {},
+        boardItem: {
+          title: "Finish the import follow-up",
+          description: "The run stopped before the import finished.",
+          acceptanceCriteria: "The import completes.",
+          ...item,
+        },
+        rationale: rationale ?? "The follow-up remains unfinished.",
+        evidenceIds: ["outcome"],
+        confidence: { label: "model estimate", value: 0.7 },
+      };
+      expect(validateLearningCandidate(board, { ...input, evidence: [outcome] })).toBe("pending");
+    },
+  );
+  it("drops a board item whose label the board would refuse and keeps the rest of the review", async () => {
+    const f = fixture();
+    f.records.events.push({
+      id: "event-failed",
+      type: "run.failed",
+      payload: {},
+      seq: 1,
+      createdAt: new Date(),
+    });
+    f.runtimeRun.mockImplementation(async function* (request: AgentRunRequest) {
+      const input = JSON.parse(request.prompt) as { evidence: Array<{ id: string; kind: string }> };
+      const outcome = input.evidence.find((item) => item.kind === "observed-outcome");
+      const board = (title: string, labels: string[]) => ({
+        type: "board-item",
+        scope,
+        target: {},
+        boardItem: {
+          title,
+          description: "The run stopped before the import finished.",
+          acceptanceCriteria: "The import completes.",
+          labels,
+        },
+        rationale: "The follow-up remains unfinished.",
+        evidenceIds: [outcome?.id],
+        confidence: { label: "model estimate", value: 0.7 },
+      });
+      yield {
+        type: "done" as const,
+        text: JSON.stringify({
+          proposals: [
+            board("Finish the import", ["bug, flaky"]),
+            board("Check the export", ["follow-up"]),
+          ],
+        }),
+      };
+    });
+    await reviewLearning(f.deps, await f.payload());
+    const titles = f.records.proposals.map(
+      (row) => (row.body as { boardItem?: { title?: string } }).boardItem?.title,
+    );
+    expect(titles).toEqual(["Check the export"]);
+  });
+  function boardCandidate(evidenceId: string | undefined, workspaceId?: string) {
+    return {
+      type: "board-item",
+      scope,
+      target: {},
+      boardItem: {
+        title: "Finish the import follow-up",
+        description: "The run stopped before the import finished.",
+        acceptanceCriteria: "The import completes.",
+        ...(workspaceId ? { workspaceId } : {}),
+      },
+      rationale: "The follow-up remains unfinished.",
+      evidenceIds: [evidenceId],
+      confidence: { label: "model estimate", value: 0.7 },
+    };
+  }
+  it("uses the run's own board workspace and ignores any workspace the model supplied", async () => {
+    const f = fixture();
+    f.records.events.push({
+      id: "event-failed",
+      type: "run.failed",
+      payload: {},
+      seq: 1,
+      createdAt: new Date(),
+    });
+    f.runtimeRun.mockImplementation(async function* (request: AgentRunRequest) {
+      const input = JSON.parse(request.prompt) as { evidence: Array<{ id: string; kind: string }> };
+      const outcome = input.evidence.find((item) => item.kind === "observed-outcome");
+      yield {
+        type: "done" as const,
+        text: JSON.stringify({
+          proposals: [boardCandidate(outcome?.id, "invented-workspace")],
+        }),
+      };
+    });
+    await reviewLearning(f.deps, await f.payload());
+    expect(f.records.proposals).toHaveLength(1);
+    const stored = f.records.proposals[0]!.body as { boardItem: { workspaceId?: string } };
+    expect(stored.boardItem.workspaceId).toBe("workspace");
+  });
+  it("drops a board item when the run's user and bot cannot file it, and keeps the rest of the review", async () => {
+    const f = fixture();
+    f.deps.boardService = undefined;
+    f.records.events.push({
+      id: "event-failed",
+      type: "run.failed",
+      payload: {},
+      seq: 1,
+      createdAt: new Date(),
+    });
+    f.runtimeRun.mockImplementation(async function* (request: AgentRunRequest) {
+      const input = JSON.parse(request.prompt) as { evidence: Array<{ id: string; kind: string }> };
+      const outcome = input.evidence.find((item) => item.kind === "observed-outcome");
+      yield {
+        type: "done" as const,
+        text: JSON.stringify({
+          proposals: [
+            boardCandidate(outcome?.id),
+            {
+              type: "memory",
+              scope,
+              target: {},
+              expectedBaseRevision: 0,
+              proposedContent: "Use numbered steps for repeatable procedures.",
+              rationale: "The owner requested a reusable format.",
+              evidenceIds: [input.evidence[0]!.id],
+              confidence: { label: "model estimate", value: 0.8 },
+            },
+          ],
+        }),
+      };
+    });
+    await reviewLearning(f.deps, await f.payload());
+    expect(f.records.proposals.map((row) => (row.body as { type: string }).type)).toEqual([
+      "memory",
+    ]);
+  });
+  it("asks for a single-run follow-up, matching the validator", () => {
+    expect(LEARNING_REVIEW_INSTRUCTION).not.toMatch(/recurring|across runs/);
+    expect(LEARNING_REVIEW_INSTRUCTION).toContain(
+      "one board item for an unfinished follow-up from this run",
+    );
+    expect(LEARNING_REVIEW_INSTRUCTION).toContain(
+      "Evidence covers this run only, so a board item never claims a failure recurred.",
+    );
   });
 });

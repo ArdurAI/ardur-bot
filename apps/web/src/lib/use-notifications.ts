@@ -1,6 +1,7 @@
 import { NotificationActivityTracker, notify } from "@ardurbot/core";
 import { useEffect } from "react";
 import { usePreferences } from "../components/PreferencesProvider";
+import { boardCloseFailedTitle, boardCloseTriedBody } from "./board-close-copy";
 import { desktopBridge } from "./desktop";
 import { i18n } from "./i18n";
 import { rpc } from "./rpc";
@@ -30,8 +31,10 @@ export function useNotifications() {
             (document.visibilityState === "visible" && document.hasFocus())
           )
             continue;
-          const title =
-            row.status === "board_changed"
+          const closeFailed = row.status === "board_changed" && row.board?.closeFailed === true;
+          const title = closeFailed
+            ? i18n._(boardCloseFailedTitle)
+            : row.status === "board_changed"
               ? row.name.slice(0, 200)
               : row.status === "completed"
                 ? i18n._({
@@ -50,12 +53,17 @@ export function useNotifications() {
                       message: "{name} needs your input",
                       values: { name: row.name },
                     });
+          const body = closeFailed ? i18n._(boardCloseTriedBody) : "";
           await notify(
-            { id: row.id, category: row.category, title, body: "", threadId: row.threadId },
+            { id: row.id, category: row.category, title, body, threadId: row.threadId },
             snapshot.preferences.notifications,
             async (event) => {
               if (desktop) await desktop.show(event);
-              else new Notification(event.title, { tag: event.threadId });
+              else
+                new Notification(event.title, {
+                  tag: event.threadId,
+                  ...(event.body ? { body: event.body } : {}),
+                });
             },
           );
         }

@@ -66,6 +66,15 @@ msgstr ""
 msgid "{0} documents, {1} revisions"
 msgstr ""
 
+#. placeholder {0}: row.name
+#. placeholder {1}: row.filed
+#. placeholder {2}: row.done
+#. placeholder {3}: row.open
+#. placeholder {4}: row.other
+#: src/pages/dashboard/WorkPanel.tsx
+msgid "{0} filed {1}: {2} done, {3} open, {4} closed without being completed."
+msgstr "{0} 提交了 {1} 项：{2} 项完成，{3} 项开放，{4} 项已关闭但未完成。"
+
 #. placeholder {0}: (memoryFree / 1024 ** 3).toFixed(1)
 #: src/pages/fleet/FleetSettings.tsx
 msgid "{0} GB free"
@@ -240,6 +249,10 @@ msgstr "7 天"
 msgid "A bit of everything"
 msgstr "什么都做一点"
 
+#: src/lib/board-close-copy.ts
+msgid "A board item filed by a bot could not be closed."
+msgstr "由机器人创建的看板事项无法关闭。"
+
 #: src/components/DesktopUpdates.tsx
 msgid "A new version is available — download"
 msgstr ""
@@ -266,6 +279,7 @@ msgstr ""
 
 #: src/pages/board/Board.tsx
 #: src/pages/board/ItemForm.tsx
+#: src/pages/LearningInbox.tsx
 msgid "Acceptance criteria"
 msgstr ""
 
@@ -785,6 +799,10 @@ msgstr ""
 #: src/pages/import/LocalImportPage.tsx
 msgid "Ardur Bot reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history."
 msgstr ""
+
+#: src/lib/board-close-copy.ts
+msgid "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected."
+msgstr "Ardur Bot 已尝试五次。请在看板上关闭它，或检查此电脑是否已连接。"
 
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/McpServersOverlay.tsx
@@ -1552,6 +1570,10 @@ msgstr "关闭语音设置"
 #: src/pages/board/Board.tsx
 msgid "Close when the bot reports done"
 msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Closing on the Board."
+msgstr "正在看板上关闭。"
 
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Cloud"
@@ -2937,6 +2959,7 @@ msgid "Describe what this bot does"
 msgstr "描述这个 Bot 做什么"
 
 #: src/pages/board/ItemForm.tsx
+#: src/pages/LearningInbox.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Description"
 msgstr "描述"
@@ -4081,6 +4104,7 @@ msgid "Label"
 msgstr ""
 
 #: src/pages/board/ItemForm.tsx
+#: src/pages/LearningInbox.tsx
 msgid "Labels"
 msgstr ""
 
@@ -7333,6 +7357,35 @@ msgstr "思考"
 msgid "This action could not finish; try again."
 msgstr ""
 
+#: src/pages/LearningInbox.tsx
+msgid "This board item changed after it was filed, so it was left open for review on the Board."
+msgstr "此看板事项在创建后已有变更，因此仍保持开放，供在看板上复查。"
+
+#: src/pages/LearningInbox.tsx
+msgid "This board item changed after it was filed. Review it on the Board."
+msgstr "此看板事项在创建后已有变更。请在看板上查看。"
+
+#: src/pages/LearningInbox.tsx
+msgid "This board item is still open."
+msgstr "此看板事项仍处于开放状态。"
+
+#: src/pages/LearningInbox.tsx
+msgid "This board item was already closed on the Board."
+msgstr "此看板事项已经关闭。"
+
+#. placeholder {0}: proposal.boardOutcome.closeReason
+#: src/pages/LearningInbox.tsx
+msgid "This board item was closed without being completed: {0}. Review it on the Board."
+msgstr "此看板事项已关闭但未完成：{0}。请在看板上查看。"
+
+#: src/pages/LearningInbox.tsx
+msgid "This board item was closed without being completed. Review it on the Board."
+msgstr "此看板事项已关闭但未完成。请在看板上查看。"
+
+#: src/pages/LearningInbox.tsx
+msgid "This board item was completed."
+msgstr "此看板事项已完成。"
+
 #: src/pages/shell/provider-error-message.tsx
 msgid "This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin."
 msgstr ""
@@ -7500,6 +7553,7 @@ msgid "Timeline"
 msgstr ""
 
 #: src/pages/board/ItemForm.tsx
+#: src/pages/LearningInbox.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Title"
 msgstr "标题"
