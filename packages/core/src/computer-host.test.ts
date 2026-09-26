@@ -1,12 +1,7 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { expect, it } from "vitest";
 import { isDesktopComposeStack, sandboxKindForBot } from "./computer-host.js";
 
-afterEach(() => vi.unstubAllEnvs());
-
 it("starts new computers on the host only on a desktop deployment or once the owner chose it", () => {
-  // The desktop app's own stack is no exception: until Set up saves the choice, Docker stays.
-  vi.stubEnv("ARDURBOT_HOST_BRIDGE", "api");
-  vi.stubEnv("ARDURBOT_DESKTOP_STACK", "1");
   expect(sandboxKindForBot("desktop", null)).toBe("desktop");
   expect(sandboxKindForBot("docker", null)).toBe("docker");
   expect(sandboxKindForBot("docker", "this-mac")).toBe("desktop");

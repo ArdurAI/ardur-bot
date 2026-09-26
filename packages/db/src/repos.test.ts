@@ -469,35 +469,17 @@ describe("createRepos.createBot computer kind", () => {
 
   afterEach(() => vi.unstubAllEnvs());
 
-  it("starts a new computer on this computer in the desktop app's local mode", async () => {
-    vi.stubEnv("SANDBOX_PROVIDER", "desktop");
-    vi.stubEnv("ARDURBOT_HOST_BRIDGE", "");
-    expect(await createdKind(null)).toBe("desktop");
-  });
-
-  // Set up saves this-mac on the desktop app's own stack; until then new computers stay on Docker.
+  // Existing behaviour: the deployment's provider and the saved host choice decide the kind.
   it.each([
-    [null, "docker"],
-    ["this-mac", "desktop"],
-    ["docker", "docker"],
+    ["desktop", null, "desktop"],
+    ["docker", null, "docker"],
+    ["docker", "this-mac", "desktop"],
+    ["docker", "docker", "docker"],
   ])(
-    "on the desktop app's own Compose stack, with the host choice %s, starts a new computer on %s",
-    async (computerHost, kind) => {
-      vi.stubEnv("SANDBOX_PROVIDER", "docker");
-      vi.stubEnv("ARDURBOT_HOST_BRIDGE", "api");
-      vi.stubEnv("ARDURBOT_DESKTOP_STACK", "1");
+    "on a %s deployment with host choice %s starts a new computer on %s",
+    async (provider, computerHost, kind) => {
+      vi.stubEnv("SANDBOX_PROVIDER", provider);
       expect(await createdKind(computerHost)).toBe(kind);
-    },
-  );
-
-  it.each(["api", ""])(
-    "keeps Docker the default on a server (host bridge %j) until the owner chooses the host",
-    async (bridge) => {
-      vi.stubEnv("SANDBOX_PROVIDER", "docker");
-      vi.stubEnv("ARDURBOT_HOST_BRIDGE", bridge);
-      vi.stubEnv("ARDURBOT_DESKTOP_STACK", "");
-      expect(await createdKind(null)).toBe("docker");
-      expect(await createdKind("this-mac")).toBe("desktop");
     },
   );
 });

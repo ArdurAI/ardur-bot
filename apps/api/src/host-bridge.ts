@@ -63,7 +63,15 @@ export class HostBridge {
     return { token };
   }
   async disconnect(userId: string) {
-    await this.prisma.hostRegistration.deleteMany({ where: { id: "default", userId } });
+    await this.prisma.$transaction(async (tx) => {
+      await tx.hostRegistration.deleteMany({ where: { id: "default", userId } });
+      // On the desktop app's own stack only Set up chooses the host, so Disconnect undoes it.
+      if (isDesktopComposeStack())
+        await tx.deploymentSettings.updateMany({
+          where: { id: "default", computerHost: "this-mac" },
+          data: { computerHost: null },
+        });
+    });
     this.hub.detach();
     return { ok: true as const };
   }

@@ -493,12 +493,12 @@ it("routes the run environment note to the host, leaving container notes alone",
   expect(await sandbox.environmentNote({ ...computer, kind: "docker" }, ctx)).toBeUndefined();
 });
 
-describe("the desktop app's own Compose stack", () => {
-  // Its host bridge reaches the computer the app is installed on, once Set up pairs it.
-  async function stackSandbox(computerHost: string | null, desktopStack = "1") {
+// Existing behaviour, as the desktop app's own Compose stack uses it: routing follows the saved
+// host choice, which Set up writes there.
+describe("a Docker deployment with a host bridge", () => {
+  async function stackSandbox(computerHost: string | null) {
     const { RemoteHostSandboxProvider } = await import("./remote-host-sandbox.js");
     vi.stubEnv("ARDURBOT_HOST_BRIDGE", "api");
-    vi.stubEnv("ARDURBOT_DESKTOP_STACK", desktopStack);
     const provisions = {
       docker: vi
         .spyOn(DockerSandboxProvider.prototype, "provision")
@@ -529,7 +529,7 @@ describe("the desktop app's own Compose stack", () => {
     vi.restoreAllMocks();
   });
 
-  it("starts and runs a new computer on Docker until a host is paired", async () => {
+  it("starts and runs a new computer on Docker until the host is chosen", async () => {
     const { sandbox, provisions } = await stackSandbox(null);
     const execute = vi
       .spyOn(DockerSandboxProvider.prototype, "execute")
@@ -543,6 +543,9 @@ describe("the desktop app's own Compose stack", () => {
       { type: "exit", code: 0 },
     ]);
     expect(execute).toHaveBeenCalledOnce();
+    await expect(owningSandbox(sandbox, { kind: "desktop" }, ctx)).rejects.toBeInstanceOf(
+      MissingComputerProviderError,
+    );
   });
 
   it("starts a new computer on this computer through the host bridge once Set up chose it", async () => {
@@ -581,15 +584,5 @@ describe("the desktop app's own Compose stack", () => {
     const computer = await sandbox.provision({ botId: "new", homePath: "/tmp/new" }, ctx);
     expect(computer.kind).toBe("docker");
     expect(provisions.host).not.toHaveBeenCalled();
-  });
-
-  it("keeps Docker the default on a server whose host bridge is on", async () => {
-    const { sandbox, provisions } = await stackSandbox(null, "");
-    const computer = await sandbox.provision({ botId: "new", homePath: "/tmp/new" }, ctx);
-    expect(computer.kind).toBe("docker");
-    expect(provisions.host).not.toHaveBeenCalled();
-    await expect(owningSandbox(sandbox, { kind: "desktop" }, ctx)).rejects.toBeInstanceOf(
-      MissingComputerProviderError,
-    );
   });
 });

@@ -1,5 +1,4 @@
 import type { HostStatus } from "@ardurbot/contracts";
-import { hostLabel } from "@ardurbot/contracts/fleet";
 import { Button } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useState } from "react";
@@ -57,7 +56,7 @@ export function HostComputerSettings() {
       setBusy(false);
     }
   }
-  const mac = hostLabel(status.health?.platform ?? desktop?.platform ?? "") === "This Mac";
+  const mac = (status.health?.platform ?? desktop?.platform) === "darwin";
   const versions = [
     status.health?.claude.version ? `claude ${status.health.claude.version}` : "",
     status.health?.codex.version ? `codex ${status.health.codex.version}` : "",

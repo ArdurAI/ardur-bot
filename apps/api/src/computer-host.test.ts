@@ -1,5 +1,6 @@
 import type { Actor } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
+import { createRepos } from "@ardurbot/db";
 import { RPCHandler } from "@orpc/server/fetch";
 import { afterEach, expect, it, vi } from "vitest";
 import { HostBridge } from "./host-bridge.js";
@@ -32,7 +33,13 @@ function deployment(sandboxProvider: string, computerHost: string | null) {
     deploymentSettings: {
       findUnique: vi.fn(async () => ({ ...settings })),
       updateMany: vi.fn(
-        async ({ where, data }: { where: { computerHost?: null }; data: typeof settings }) => {
+        async ({
+          where,
+          data,
+        }: {
+          where: { computerHost?: string | null };
+          data: Partial<typeof settings>;
+        }) => {
           if ("computerHost" in where && settings.computerHost !== where.computerHost)
             return { count: 0 };
           Object.assign(settings, data);
@@ -46,9 +53,54 @@ function deployment(sandboxProvider: string, computerHost: string | null) {
         registration = data;
         return data;
       }),
+      deleteMany: vi.fn(async () => {
+        registration = null;
+        return { count: 1 };
+      }),
     },
+    // What creating a bot writes; the computer row records the kind it starts on.
+    $queryRaw: vi.fn(async () => []),
+    spaceMember: {
+      findUnique: vi.fn(async () => ({ organizationId: "org", space: { deletingAt: null } })),
+    },
+    computer: {
+      upsert: vi.fn(async ({ create }: { create: { kind: string } }) => ({
+        id: "computer",
+        ...create,
+      })),
+    },
+    bot: {
+      aggregate: vi.fn(async () => ({ _max: { position: 0 } })),
+      create: vi.fn(async () => ({ id: "bot" })),
+      findFirstOrThrow: vi.fn(async () => ({
+        id: "bot",
+        spaceId: owner.spaceId,
+        userId: owner.userId,
+        name: "New",
+        title: "",
+        description: "",
+        instructions: "",
+        color: "#000",
+        notifyOnFinish: false,
+        pinned: false,
+        position: 1,
+        sectionId: null,
+        archivedAt: null,
+        parentBotId: null,
+        memoryScope: null,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        thread: { id: "thread", unread: false, messages: [] },
+        runs: [],
+        computer: null,
+      })),
+    },
+    thread: { create: vi.fn(async () => ({ id: "thread" })) },
+    browserProfile: { create: vi.fn(async () => ({})) },
+    memoryDocument: { create: vi.fn(async () => ({})) },
     $transaction: vi.fn(async (work: (tx: unknown) => Promise<unknown>) => work(prisma)),
   };
+  const bridge = new HostBridge(prisma as unknown as PrismaClient, "fixture-encryption-material");
   const handler = new RPCHandler(
     createRouter({
       prisma: prisma as unknown as PrismaClient,
@@ -85,14 +137,27 @@ function deployment(sandboxProvider: string, computerHost: string | null) {
       return me;
     },
     /** Set up on the desktop: the owner pairs this computer's host service. */
-    pair: () =>
-      new HostBridge(prisma as unknown as PrismaClient, "fixture-encryption-material").pair(
-        owner.userId,
-      ),
+    pair: () => bridge.pair(owner.userId),
+    /** Disconnect this computer in Settings. */
+    disconnect: () => bridge.disconnect(owner.userId),
+    /** The kind a new bot's computer starts on. */
+    async newBotKind() {
+      prisma.computer.upsert.mockClear();
+      await createRepos(prisma as unknown as PrismaClient).createBot(owner, {
+        name: "New",
+        title: "",
+        description: "",
+        instructions: "",
+        color: "#000",
+        notifyOnFinish: false,
+      });
+      return prisma.computer.upsert.mock.calls[0]?.[0].create.kind;
+    },
   };
 }
 
 function desktopStack() {
+  vi.stubEnv("SANDBOX_PROVIDER", "docker");
   vi.stubEnv("ARDURBOT_HOST_BRIDGE", "api");
   vi.stubEnv("ARDURBOT_DESKTOP_STACK", "1");
 }
@@ -147,3 +212,30 @@ it.each(["api", ""])(
     });
   },
 );
+
+it("on the desktop app's own Compose stack returns new bots to Docker when this computer is disconnected", async () => {
+  desktopStack();
+  const stack = deployment("docker", null);
+  expect(await stack.newBotKind()).toBe("docker");
+  await stack.pair();
+  expect(await stack.newBotKind()).toBe("desktop");
+  await stack.disconnect();
+  expect(await stack.hostChoice()).toEqual({ canChooseHostComputer: false, computerHost: null });
+  expect(await stack.newBotKind()).toBe("docker");
+  // Set up picks this computer again.
+  await stack.pair();
+  expect(await stack.newBotKind()).toBe("desktop");
+});
+
+it.each([
+  ["the desktop app's own Compose stack keeps an earlier Docker choice", "1", "docker", "docker"],
+  ["a server keeps the owner's choice of the host", "", "this-mac", "this-mac"],
+])("on disconnect, %s", async (_case, stack, stored, kept) => {
+  vi.stubEnv("SANDBOX_PROVIDER", "docker");
+  vi.stubEnv("ARDURBOT_HOST_BRIDGE", "api");
+  vi.stubEnv("ARDURBOT_DESKTOP_STACK", stack);
+  const deploymentWithChoice = deployment("docker", stored);
+  await deploymentWithChoice.pair();
+  await deploymentWithChoice.disconnect();
+  expect((await deploymentWithChoice.hostChoice()).computerHost).toBe(kept);
+});
