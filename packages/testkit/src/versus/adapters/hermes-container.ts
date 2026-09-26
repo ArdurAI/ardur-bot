@@ -16,7 +16,11 @@ export const WORKSPACE_NOT_INSPECTED = "The workspace could not be inspected.";
 /** A lost guest's receipts come from the broker journal; this is the failure when they cannot. */
 export const RECEIPTS_NOT_READ = "The receipts could not be read after the loss.";
 
-/** File contents stay in `files`. Symlink paths stay in `links` and are never followed. */
+/**
+ * File contents stay in `files`. Symlink paths stay in `links`, sorted, and are never followed.
+ * Every guest snapshot caller shares this split so an unknown entry kind always throws and the
+ * same guest output is always judged the same way.
+ */
 export function guestWorkspace(entries: Record<string, string | { kind: "link" }>) {
   const files: Record<string, string> = {};
   const links: string[] = [];
@@ -25,6 +29,7 @@ export function guestWorkspace(entries: Record<string, string | { kind: "link" }
     else if (entry.kind === "link") links.push(name);
     else throw new Error("Unexpected guest snapshot entry");
   }
+  links.sort();
   return { files, links };
 }
 

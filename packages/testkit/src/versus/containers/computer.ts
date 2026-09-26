@@ -11,6 +11,7 @@ import type {
 import { DELEGATION_WORKSPACE_SCRIPT, teamBotWorkspaceDirectory } from "@ardurbot/adapters";
 import { unknownCapacity } from "@ardurbot/contracts/fleet";
 import type { TaskContract } from "../../scoreboard/tasks/catalog.js";
+import { guestWorkspace } from "../adapters/hermes-container.js";
 import { requireValue } from "../budget.js";
 import type { TrialAdmission } from "./admission.js";
 import type { ContainerSession } from "./session.js";
@@ -350,15 +351,7 @@ export class ContainerComputer implements SandboxProvider {
     }
   }
   async snapshotFiles(_homeKey: string, botId: string) {
-    const snapshot = await this.session.snapshot(this.name(teamBotWorkspaceDirectory(botId)));
-    const files: Record<string, string> = {};
-    const links: string[] = [];
-    for (const [name, entry] of Object.entries(snapshot)) {
-      if (typeof entry === "string") files[name] = entry;
-      else if (entry.kind === "link") links.push(name);
-    }
-    links.sort();
-    return { files, links };
+    return guestWorkspace(await this.session.snapshot(this.name(teamBotWorkspaceDirectory(botId))));
   }
   async connectScreen(): Promise<never> {
     throw new Error("Graphical computer unsupported in controlled container lane");

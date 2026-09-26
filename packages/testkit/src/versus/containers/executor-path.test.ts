@@ -187,6 +187,30 @@ describe("container executor contract", () => {
     expect(listed.links).toEqual(["leak"]);
   });
 
+  it("sorts snapshot links and throws on an entry kind no guest caller can produce", async () => {
+    const session = stubSession();
+    session.snapshot = async () =>
+      ({ "notes.txt": "ok", zeta: { kind: "link" }, alpha: { kind: "link" } }) as unknown as Record<
+        string,
+        string
+      >;
+    const budget = selfTestBudget();
+    const ledger = new BudgetLedger(budget);
+    ledger.open("snapshot-split");
+    const admission = new TrialAdmission("snapshot-split", ledger, () => undefined, ["shell"]);
+    admission.bindModel(route, budget.model.id);
+    const computer = new ContainerComputer(session, getTask("task-01"), admission);
+    await computer.provision({ botId: "home-1", homePath: "unused" }, context());
+    const listed = await computer.snapshotFiles("home-1", "bot-1");
+    expect(listed.links).toEqual(["alpha", "zeta"]);
+
+    session.snapshot = async () =>
+      ({ weird: { kind: "socket" } }) as unknown as Record<string, string>;
+    await expect(computer.snapshotFiles("home-1", "bot-1")).rejects.toThrow(
+      "Unexpected guest snapshot entry",
+    );
+  });
+
   it("fails a success grade when the container snapshot contains an undeclared symlink", async () => {
     const task = getTask("task-01");
     const solution = referenceSolution(task);

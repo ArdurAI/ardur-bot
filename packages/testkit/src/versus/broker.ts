@@ -222,19 +222,29 @@ export class TrialBroker {
     this.options.emit("effect-receipt", "effect-broker", { ...receipt, layer: "synthetic-broker" });
     return receipt;
   }
-  async recover() {
+  /**
+   * Journal lines, parsed and checked for a duplicate receipt id, shared by `recover()` and
+   * `snapshotReceipts()` so the two readers never disagree on the same journal.
+   */
+  private async readJournal(): Promise<{ state: FixtureRecord; receipt: EffectReceipt }[]> {
     let journal = "";
     try {
       journal = await readFile(this.options.journal, "utf8");
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
+    const entries: { state: FixtureRecord; receipt: EffectReceipt }[] = [];
+    const seen = new Set<string>();
     for (const line of journal.split("\n").filter(Boolean)) {
       const item = JSON.parse(line) as { state: FixtureRecord; receipt: EffectReceipt };
-      requireValue(
-        !this.effects.some((effect) => effect.receiptId === item.receipt.receiptId),
-        "Duplicate journal receipt",
-      );
+      requireValue(!seen.has(item.receipt.receiptId), "Duplicate journal receipt");
+      seen.add(item.receipt.receiptId);
+      entries.push(item);
+    }
+    return entries;
+  }
+  async recover() {
+    for (const item of await this.readJournal()) {
       this.state = this.state.map((row) => (row.id === item.state.id ? item.state : row));
       this.effects.push(item.receipt);
     }
@@ -282,16 +292,9 @@ export class TrialBroker {
    */
   async snapshotReceipts() {
     await this.tail;
-    let journal = "";
-    try {
-      journal = await readFile(this.options.journal, "utf8");
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-    }
     let state: FixtureRecord[] = structuredClone([...this.options.task.initialState]);
     const effects: { id: string; revision: number; authorized: boolean }[] = [];
-    for (const line of journal.split("\n").filter(Boolean)) {
-      const item = JSON.parse(line) as { state: FixtureRecord; receipt: EffectReceipt };
+    for (const item of await this.readJournal()) {
       state = state.map((row) => (row.id === item.state.id ? item.state : row));
       effects.push({
         id: item.receipt.id,
