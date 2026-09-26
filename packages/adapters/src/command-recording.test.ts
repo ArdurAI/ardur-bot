@@ -53,6 +53,7 @@ function fixture(
     },
     threadId: "thread-1",
     attemptId: "attempt-1",
+    fence: 1,
     secrets,
     resolveCwd,
     ...resume,

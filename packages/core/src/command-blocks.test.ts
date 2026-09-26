@@ -94,6 +94,36 @@ describe("command projection", () => {
       blocks: [{ kind: "command", command: merged }],
     });
   });
+  it("keeps the highest fence's block when a lease-lost attempt finishes late", () => {
+    const card = { commandId: "card-a", executionId: "call-a" };
+    const first = { ...card, attemptId: "attempt-1", fence: 1 };
+    const second = { ...card, attemptId: "attempt-2", fence: 2 };
+    const finished = commandBlock({ ...second, startedAt: "2026-09-23T12:00:01.000Z" });
+    const events = sequence([
+      commandEvent("command.intent", { ...first, ...open("waiting", "12:00:00") }),
+      commandEvent("command.started", { ...first, ...open("running", "12:00:01") }),
+      commandEvent("command.started", { ...second, ...open("running", "12:00:01") }),
+      commandEvent("command.finished", finished),
+      // The attempt that lost its lease wakes and records its own, now stale, finish.
+      commandEvent("command.finished", { ...first, outcome: "cancelled" }),
+    ]);
+    // List, open, export and rerun all read this projection.
+    expect(projectCommandBlocks(events)).toEqual([finished]);
+    const live = events.reduce<ReturnType<typeof reduceCommandMessages>>(
+      (messages, event) => reduceCommandMessages(messages, event),
+      [],
+    );
+    expect(live).toEqual([
+      expect.objectContaining({
+        id: "command:card-a",
+        blocks: [{ kind: "command", command: finished }],
+      }),
+    ]);
+    // Equal fences keep the later event.
+    expect(projectCommandBlocks(events.slice(0, 2), new Set(["run-1"]))[0]?.outcome).toBe(
+      "running",
+    );
+  });
   it("keeps a killed card unknown when no call resumed it", () => {
     const events = sequence([
       commandEvent("command.started", {

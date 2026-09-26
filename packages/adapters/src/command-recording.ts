@@ -98,6 +98,8 @@ export function createCommandRecording(input: {
   context: AdapterContext & { runId: string; botId: string };
   threadId: string;
   attemptId: string;
+  /** Lease fence of this attempt; readers keep the block with the highest fence per command. */
+  fence: number;
   secrets: string[];
   replayOf?: string | null;
   resolveCwd?: (requested: string | undefined, executionId: string) => string | undefined;
@@ -195,6 +197,7 @@ export function createCommandRecording(input: {
       runId: input.context.runId,
       // The recovering attempt is the one whose fence matches the live lease.
       attemptId: input.attemptId,
+      fence: input.fence,
       executionId,
       command,
       cwd,

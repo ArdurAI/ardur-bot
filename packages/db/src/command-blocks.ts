@@ -5,6 +5,7 @@ import {
   isCommandEvent,
   mergeResumedCommand,
   projectCommandBlocks,
+  replacesCommandBlock,
   resumedCommandMessageId,
   settleCommandBlock,
 } from "@ardurbot/core";
@@ -26,37 +27,27 @@ export async function materializeCommandEvent(
   if (event.type === "agent.tool.resumed") return materializeResumedCall(tx, event);
   if (!isCommandEvent(event.type)) return;
   const { block } = CommandEventPayloadSchema.parse(event.payload);
-  // A late finish from an attempt that lost the lease is kept as an event for evidence, but
-  // never overrides or duplicates the card the recovering attempt now owns.
-  if (
-    event.type === "command.finished" &&
-    (await isSupersededAttempt(tx, event.runId, block.attemptId))
-  )
-    return;
   const own = `command:${block.commandId}`;
-  const existing = await tx.message.findUnique({ where: { id: own }, select: { id: true } });
-  if (existing) {
-    await tx.message.update({
-      where: { id: own },
-      data: { blocks: [{ kind: "command", command: block }] as Prisma.InputJsonValue },
-    });
-    return;
-  }
   // A resumed call finishes the card its killed call published, keeping that card's start.
-  const resumed = await tx.message.findUnique({
-    where: { id: resumedCommandMessageId(block.runId, block.executionId) },
-    select: { id: true, blocks: true },
-  });
-  if (resumed) {
-    const [earlier] = resumed.blocks as MessageBlocks;
-    const command =
-      earlier?.kind === "command" ? mergeResumedCommand(earlier.command, block) : block;
+  const resumed = resumedCommandMessageId(block.runId, block.executionId);
+  const row =
+    (await tx.message.findUnique({ where: { id: own }, select: { id: true, blocks: true } })) ??
+    (await tx.message.findUnique({ where: { id: resumed }, select: { id: true, blocks: true } }));
+  if (row) {
+    const [card] = row.blocks as MessageBlocks;
+    const shown = card?.kind === "command" ? card.command : undefined;
+    // A late event from an attempt that lost the lease stays stored as evidence only.
+    if (!replacesCommandBlock(shown, block)) return;
+    const command = row.id === resumed && shown ? mergeResumedCommand(shown, block) : block;
     await tx.message.update({
-      where: { id: resumed.id },
+      where: { id: row.id },
       data: { blocks: [{ kind: "command", command }] as Prisma.InputJsonValue },
     });
     return;
   }
+  // A card a resumed call took over lives on under that call's id and shows that call, from a
+  // later attempt. A late event from the earlier call never recreates the earlier card's row.
+  if (event.type !== "command.intent" && (await resumedAway(tx, event, block.executionId))) return;
   const thread = await tx.thread.update({
     where: { id: event.threadId },
     data: { nextMessageSeq: { increment: 1 } },
@@ -77,19 +68,22 @@ export async function materializeCommandEvent(
 
 type MessageBlocks = ThreadMessage["blocks"];
 
-/** A finish from an attempt whose fence no longer matches the run has lost the lease. */
-async function isSupersededAttempt(
+async function resumedAway(
   tx: Prisma.TransactionClient,
-  runId: string | null,
-  attemptId: string | null,
-): Promise<boolean> {
-  if (!runId || !attemptId) return false;
-  const [run, attempt] = await Promise.all([
-    tx.run.findUnique({ where: { id: runId }, select: { leaseFence: true } }),
-    tx.attempt.findUnique({ where: { id: attemptId }, select: { fence: true } }),
-  ]);
-  if (!run || !attempt) return false;
-  return attempt.fence !== run.leaseFence;
+  event: { threadId: string; runId: string | null },
+  executionId: string,
+) {
+  if (!event.runId) return false;
+  const link = await tx.event.findFirst({
+    where: {
+      threadId: event.threadId,
+      runId: event.runId,
+      type: "agent.tool.resumed",
+      payload: { path: ["from"], equals: executionId },
+    },
+    select: { id: true },
+  });
+  return link !== null;
 }
 
 /** The killed call's card row is renamed for the call that resumes it; nothing else changes. */

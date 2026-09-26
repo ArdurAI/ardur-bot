@@ -107,6 +107,7 @@ async function admittedRuntime(
     context: { ...context, runId, botId: persisted.botId },
     threadId: "ordinary-thread",
     attemptId: "attempt-1",
+    fence: 1,
     secrets: [],
   });
   let wrapped!: AgentRunRequest;

@@ -1650,6 +1650,26 @@ describe("web command projection", () => {
     expect(next?.messages).toMatchSnapshot();
     expect(reduceThreadSnapshot(next, event)?.messages).toEqual(next?.messages);
   });
+  it("keeps the recovering attempt's finish when a lease-lost attempt finishes late", () => {
+    const first = { attemptId: "attempt-1", fence: 1 };
+    const second = { attemptId: "attempt-2", fence: 2 };
+    const running = { outcome: "running" as const, exitCode: null, durationMs: null };
+    const finished = commandBlock(second);
+    const events = [
+      commandEvent("command.intent", { ...first, ...running, outcome: "waiting" }),
+      commandEvent("command.started", { ...first, ...running }),
+      commandEvent("command.started", { ...second, ...running }),
+      commandEvent("command.finished", second),
+      commandEvent("command.finished", { ...first, outcome: "cancelled" }),
+    ].map((event, index) => ({ ...event, id: `event-${index}`, seq: index + 1 }));
+    const live = events.reduce<ReturnType<typeof reduceThreadSnapshot>>(
+      (current, event) => reduceThreadSnapshot(current, event),
+      snapshot([]),
+    );
+    expect(live?.messages).toEqual([
+      expect.objectContaining({ blocks: [{ kind: "command", command: finished }] }),
+    ]);
+  });
 });
 
 function commandBlock(overrides: Partial<FixtureCommandBlock> = {}): FixtureCommandBlock {

@@ -77,6 +77,26 @@ describe("native command projection", () => {
       : started;
     expect(next?.messages[0]?.id).toBe("command:resumed:run-1:execution-2");
   });
+  it("keeps the recovering attempt's finish when a lease-lost attempt finishes late", () => {
+    const first = { attemptId: "attempt-1", fence: 1 };
+    const second = { attemptId: "attempt-2", fence: 2 };
+    const running = { outcome: "running" as const, exitCode: null, durationMs: null };
+    const events = [
+      commandEvent("command.intent", { ...first, ...running, outcome: "waiting" }),
+      commandEvent("command.started", { ...first, ...running }),
+      commandEvent("command.started", { ...second, ...running }),
+      commandEvent("command.finished", second),
+      commandEvent("command.finished", { ...first, outcome: "cancelled" }),
+    ].map((event, index) => ({ ...event, id: `event-${index}`, seq: index + 1 }));
+    const live = events.reduce<MobileSnapshot | null>(
+      (current, event) =>
+        isMobileThreadSnapshotEvent(event) ? applyMobileThreadEvent(current, event) : current,
+      { threadId: "thread-1", cursor: 0, messages: [], olderCursor: null, run: null },
+    );
+    expect(live?.messages).toEqual([
+      expect.objectContaining({ blocks: [{ kind: "command", command: commandBlock(second) }] }),
+    ]);
+  });
 });
 
 function commandBlock(overrides: Partial<FixtureCommandBlock> = {}): FixtureCommandBlock {

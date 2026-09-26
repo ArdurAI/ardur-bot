@@ -218,6 +218,7 @@ describePostgres("resumed command materialization (PostgreSQL)", () => {
       commandId: sameId,
       executionId: executionSame,
       attemptId: attempt1.id,
+      fence: attempt1.fence,
       outcome: "running",
       startedAt: startedAtEarlier,
     });
@@ -240,7 +241,7 @@ describePostgres("resumed command materialization (PostgreSQL)", () => {
 
     // Attempt 2 reclaims the run's lease and resumes the same command id.
     await prisma.run.update({ where: { id: runId }, data: { leaseFence: 11 } });
-    const byAttempt2 = { ...byAttempt1, attemptId: attempt2.id };
+    const byAttempt2 = { ...byAttempt1, attemptId: attempt2.id, fence: attempt2.fence };
     await appendEvent(prisma, {
       spaceId,
       threadId,
@@ -303,6 +304,7 @@ describePostgres("resumed command materialization (PostgreSQL)", () => {
       commandId: newIdCommand,
       executionId: executionOld,
       attemptId: attempt1.id,
+      fence: attempt1.fence,
       outcome: "running",
       startedAt: startedAtEarlier,
     });

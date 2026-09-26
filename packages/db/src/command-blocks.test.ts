@@ -15,8 +15,7 @@ describe("command event persistence", () => {
     const messages: Record<string, unknown>[] = [];
     const tx = {
       thread: { update: vi.fn(async () => ({ nextEventSeq: 2, nextMessageSeq: 2 })) },
-      run: { findUnique: vi.fn(async () => ({ status: "running", leaseFence: 1 })) },
-      attempt: { findUnique: vi.fn(async () => ({ fence: 1 })) },
+      run: { findUnique: vi.fn(async () => ({ status: "running" })) },
       event: {
         findFirst: vi.fn(
           async ({ where }: { where: { type: string } }) =>
@@ -102,66 +101,64 @@ describe("command event persistence", () => {
       expect.objectContaining({ blocks: [{ kind: "command", command: finished }] }),
     ]);
   });
-  it("keeps a lease-lost attempt's late finish as evidence, never letting it override the recovering attempt's card", async () => {
-    const store = eventStore({ leaseFence: 2, attemptFences: { "attempt-1": 1, "attempt-2": 2 } });
+  it("keeps the highest fence's block when a lease-lost attempt finishes late", async () => {
+    const store = eventStore();
     const card = { commandId: "card-a", executionId: "call-a" };
+    const by = (attemptId: string, fence: number, overrides: Partial<FixtureCommandBlock>) =>
+      commandBlock({ ...card, attemptId, fence, ...overrides });
+    const startedAt = "2026-09-23T12:00:01.000Z";
+    await store.append("command.intent", { block: by("attempt-1", 1, open("waiting", startedAt)) });
     await store.append("command.started", {
-      block: commandBlock({
-        ...card,
-        attemptId: "attempt-1",
-        ...open("running", "2026-09-23T12:00:01.000Z"),
-      }),
+      block: by("attempt-1", 1, open("running", startedAt)),
     });
     // Attempt 2 reclaims the run's lease and resumes the same command id.
     await store.append("command.started", {
-      block: commandBlock({
-        ...card,
-        attemptId: "attempt-2",
-        ...open("running", "2026-09-23T12:00:01.000Z"),
-      }),
+      block: by("attempt-2", 2, open("running", startedAt)),
     });
+    const finished = by("attempt-2", 2, { startedAt, stdout: "ok" });
+    await store.append("command.finished", { block: finished });
     // Attempt 1 wakes past its lost lease and records its own, now stale, finish.
-    const staleFinish = commandBlock({ ...card, attemptId: "attempt-1", outcome: "cancelled" });
-    await store.append("command.finished", { block: staleFinish });
-    // Stored as evidence...
+    await store.append("command.finished", {
+      block: by("attempt-1", 1, { startedAt, outcome: "cancelled" }),
+    });
+    // Stored as evidence, never applied to the card the recovering attempt owns.
     expect(store.events.map((event) => event.type)).toEqual([
+      "command.intent",
       "command.started",
       "command.started",
       "command.finished",
+      "command.finished",
     ]);
-    // ...but never applied to the card the recovering attempt owns.
     expect([...store.rows.values()]).toEqual([
-      expect.objectContaining({
-        blocks: [
-          {
-            kind: "command",
-            command: expect.objectContaining({ attemptId: "attempt-2", outcome: "running" }),
-          },
-        ],
-      }),
+      expect.objectContaining({ blocks: [{ kind: "command", command: finished }] }),
     ]);
-    // The recovering attempt's own finish always wins on the card people see.
-    const realFinish = commandBlock({
-      ...card,
+  });
+  it("keeps a lease-lost attempt's late finish off a card a resumed call took over", async () => {
+    const store = eventStore();
+    const killed = { commandId: "card-a", executionId: "call-a", attemptId: "attempt-1", fence: 1 };
+    const resumed = {
+      commandId: "card-b",
+      executionId: "call-b",
       attemptId: "attempt-2",
-      outcome: "completed",
-      stdout: "ok",
+      fence: 2,
+    };
+    await store.append("command.intent", {
+      block: commandBlock({ ...killed, ...open("waiting", "2026-09-23T12:00:00.000Z") }),
     });
-    await store.append("command.finished", { block: realFinish });
-    expect([...store.rows.values()]).toEqual([
-      expect.objectContaining({
-        blocks: [
-          {
-            kind: "command",
-            command: expect.objectContaining({
-              attemptId: "attempt-2",
-              outcome: "completed",
-              stdout: "ok",
-            }),
-          },
-        ],
-      }),
-    ]);
+    await store.append("command.started", {
+      block: commandBlock({ ...killed, ...open("running", "2026-09-23T12:00:01.000Z") }),
+    });
+    await store.append("agent.tool.resumed", { from: "call-a", to: "call-b" });
+    await store.append("command.intent", {
+      block: commandBlock({ ...resumed, ...open("waiting", "2026-09-23T12:00:30.000Z") }),
+    });
+    await store.append("command.finished", {
+      block: commandBlock({ ...killed, outcome: "cancelled" }),
+    });
+    expect([...store.rows.keys()]).toEqual([resumedCommandMessageId("run-1", "call-b")]);
+    expect([...store.rows.values()][0]).toMatchObject({
+      blocks: [{ kind: "command", command: { commandId: "card-b", outcome: "waiting" } }],
+    });
   });
   it("projects expired or superseded attempts as unknown on reload", async () => {
     const message: ThreadMessage = {
@@ -237,9 +234,7 @@ function open(outcome: "waiting" | "running", startedAt: string): Partial<Fixtur
 }
 
 /** Enough of a transaction to append events and materialize their command rows. */
-function eventStore(options: { leaseFence?: number; attemptFences?: Record<string, number> } = {}) {
-  const leaseFence = options.leaseFence ?? 1;
-  const attemptFences = options.attemptFences ?? {};
+function eventStore() {
   const events: { type: string; payload: unknown; seq: number }[] = [];
   const rows = new Map<string, Record<string, unknown>>();
   type PathFilter = { payload: { path: string[]; equals: unknown } };
@@ -261,12 +256,7 @@ function eventStore(options: { leaseFence?: number; attemptFences?: Record<strin
         nextMessageSeq: ++messageSeq,
       })),
     },
-    run: { findUnique: vi.fn(async () => ({ status: "running", leaseFence })) },
-    attempt: {
-      findUnique: vi.fn(async ({ where }: { where: { id: string } }) => ({
-        fence: attemptFences[where.id] ?? leaseFence,
-      })),
-    },
+    run: { findUnique: vi.fn(async () => ({ status: "running" })) },
     event: {
       findFirst: vi.fn(
         async ({ where }: { where: Parameters<typeof matches>[1] }) =>

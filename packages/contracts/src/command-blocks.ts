@@ -41,6 +41,8 @@ export const CommandBlockSchema = z.object({
   truncated: z.boolean(),
   replayOf: z.string().nullable(),
   rerunDisabledReason: z.string().nullable(),
+  /** Lease fence of the attempt that wrote this block; blocks recorded without one count as 0. */
+  fence: z.number().int().nonnegative().optional(),
 });
 export type CommandBlock = z.infer<typeof CommandBlockSchema>;
 

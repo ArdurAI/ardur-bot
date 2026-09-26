@@ -61,6 +61,16 @@ export function commandRecordingIsLive(
   );
 }
 
+/**
+ * Whether `next` may replace the block a card shows. One rule for every reader: for a command
+ * id the block with the highest attempt fence wins, and among equal fences the later event. A
+ * late event from an attempt that lost its lease never replaces the recovering attempt's block.
+ * A card showing another command id is a resumed call's card joining `next`.
+ */
+export function replacesCommandBlock(shown: CommandBlock | undefined, next: CommandBlock) {
+  return shown?.commandId !== next.commandId || (next.fence ?? 0) >= (shown.fence ?? 0);
+}
+
 /** Row id of a card that a resumed call `executionId` continues. */
 export function resumedCommandMessageId(runId: string, executionId: string) {
   return `command:resumed:${runId}:${executionId}`;
@@ -155,7 +165,8 @@ export function projectCommandBlocks(
       const parsed = CommandEventPayloadSchema.safeParse(event.payload);
       if (!parsed.success || parsed.data.block.runId !== event.runId) continue;
       const block = parsed.data.block;
-      blocks.set(block.commandId, block);
+      if (replacesCommandBlock(blocks.get(block.commandId), block))
+        blocks.set(block.commandId, block);
       recordedExecutions.add(`${block.runId}:${block.executionId}`);
       continue;
     }
@@ -240,9 +251,10 @@ export function reduceCommandMessages<
   const previous =
     messages.find((message) => message.id === `command:${projected.commandId}`) ??
     messages.find((message) => message.id === resumed);
-  const earlier = previous?.id === resumed ? previous.blocks[0] : undefined;
+  const shown = previous?.blocks[0]?.kind === "command" ? previous.blocks[0].command : undefined;
+  if (!replacesCommandBlock(shown, projected)) return messages;
   const block =
-    earlier?.kind === "command" ? mergeResumedCommand(earlier.command, projected) : projected;
+    previous?.id === resumed && shown ? mergeResumedCommand(shown, projected) : projected;
   const id = previous?.id ?? `command:${block.commandId}`;
   const next: ThreadMessage = {
     id,

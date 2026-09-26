@@ -1852,6 +1852,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           context,
           threadId: thread.id,
           attemptId: attempt.id,
+          fence,
           secrets: runSecrets,
           replayOf: commandReplay?.commandId,
           resolveCwd: (requested, executionId) => shellCwd(requested, executionId),
