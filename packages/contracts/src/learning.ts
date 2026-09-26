@@ -319,11 +319,14 @@ export const SpaceLearningConfigInput = z
   .object({
     enabled: z.boolean().default(false),
     consolidationEnabled: z.boolean().default(false),
+    /** Omitted leaves the saved choice alone. */
+    insightsEnabled: z.boolean().optional(),
     reviewerPin: RuntimePinSchema.nullable().default(null),
     budgets: LearningBudgetsSchema.default(() => LearningBudgetsSchema.parse({})),
   })
   .strict();
 export const SpaceLearningConfigSchema = SpaceLearningConfigInput.extend({
+  insightsEnabled: z.boolean().default(true),
   destination: RuntimePinSchema.nullable(),
   canConfigure: z.boolean().default(false),
 });
@@ -395,6 +398,7 @@ export function boardClosingProposal(result: LearningActionResult): LearningProp
 export const LearningCountsSchema = z.object({
   pendingCount: z.number(),
   appliedThisWeek: z.number(),
+  insightCount: z.number().default(0),
 });
 export const LearningInboxSchema = z.object({
   reviews: z.array(ReviewExecutionSchema),
@@ -402,6 +406,7 @@ export const LearningInboxSchema = z.object({
   botNames: z.record(z.string(), z.string()).default({}),
   pendingCount: z.number(),
   appliedThisWeek: z.number(),
+  insightCount: z.number().default(0),
 });
 export function learningApprovalBlock(proposal: LearningProposal): string | undefined {
   if (!proposal.scope.userId) return "Shared skills need a reviewer — coming later";

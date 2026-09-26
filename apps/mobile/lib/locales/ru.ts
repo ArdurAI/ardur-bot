@@ -1089,4 +1089,60 @@ export const RU_MESSAGES: Record<string, string> = {
     "Ardur Bot попытался пять раз. Закройте её на доске или проверьте, что этот компьютер подключён.",
   "{name} filed {filed}: {done} done, {open} open, {other} closed without being completed.":
     "{name} создал задач: {filed}; выполнено: {done}, открыто: {open}, закрыто без выполнения: {other}.",
+  Allow: "Разрешить",
+  Insights: "Советы",
+  "Change model": "Сменить модель",
+  Reconnect: "Подключить заново",
+  coding: "программирования",
+  research: "исследований",
+  "board and routine work": "задач с доски и регулярных задач",
+  conversation: "разговоров",
+  "{count} tokens": "токенов: {count}",
+  "Show insights": "Показывать советы",
+  "For {task}, {better} finished {finished} of {total} runs in your runs; {other} finished {otherFinished} of {otherTotal}.":
+    "Для {task} в ваших запусках {better} завершила {finished} из {total}; {other} — {otherFinished} из {otherTotal}.",
+  "For {task}, {better} on this machine did as well as {other} in your runs.":
+    "Для {task} {better} на этом компьютере справилась в ваших запусках не хуже, чем {other}.",
+  "For {task}, {better} finished as often as {other} in your runs with {percent}% fewer tokens.":
+    "Для {task} {better} завершала ваши запуски так же часто, как {other}, используя на {percent}% меньше токенов.",
+  "For {task}, {better} finished as often as {other} in your runs in {percent}% less time.":
+    "Для {task} {better} завершала ваши запуски так же часто, как {other}, и на {percent}% быстрее.",
+  "{bot}'s last {count} runs on {model} failed because it cannot use tools; {suggested} used tools in your runs.":
+    "Последние запуски {bot} на {model} ({count}) не удались: модель не умеет вызывать инструменты; {suggested} использовала инструменты в ваших запусках.",
+  "{bot}'s last {count} runs on {model} failed because it cannot use tools.":
+    "Последние запуски {bot} на {model} ({count}) не удались: модель не умеет вызывать инструменты.",
+  "{bot}'s last {count} runs on {model} failed because the conversation was too long for it; {suggested} takes a larger context.":
+    "Последние запуски {bot} на {model} ({count}) не удались: разговор слишком длинный для этой модели; {suggested} принимает больший контекст.",
+  "{bot}'s last {count} runs on {model} failed because the conversation was too long for it.":
+    "Последние запуски {bot} на {model} ({count}) не удались: разговор слишком длинный для этой модели.",
+  "{bot}'s last {count} runs on {model} were rate limited; {suggested}, on another provider, is available.":
+    "Последние запуски {bot} на {model} ({count}) упёрлись в лимит запросов; доступна {suggested} у другого провайдера.",
+  "{bot}'s last {count} runs on {model} were rate limited.":
+    "Последние запуски {bot} на {model} ({count}) упёрлись в лимит запросов.",
+  "{bot}'s last {count} runs on {model} failed because its sign-in was rejected.":
+    "Последние запуски {bot} на {model} ({count}) не удались: вход был отклонён.",
+  "{connection} rejected its sign-in; {count} runs could not use it.":
+    "{connection} отклонил вход; запусков, которые не смогли его использовать: {count}.",
+  "{count} runs needed {connection}, which is not connected.":
+    "Запускам ({count}) нужен {connection}, но он не подключён.",
+  "Most of your {count} memories never reach your bots.":
+    "Большинство из ваших записей памяти ({count}) не доходят до ботов.",
+  "You gave {count} thumbs with reasons in {days} days, but Learning is off.":
+    "За {days} дн. вы оставили оценок с причиной: {count}, но обучение выключено.",
+  "You approved {tool} for {bot} {count} times this week.":
+    "На этой неделе вы разрешили {tool} для {bot} {count} раз.",
+  "You sent {bot} the same request {count} times in {days} days.":
+    "За {days} дн. вы отправили {bot} один и тот же запрос {count} раз.",
+  "Based on {runs} runs in the last {days} days.": "По {runs} запускам за последние {days} дн.",
+  "{suggested} finished {count} of your runs.": "{suggested} завершила ваших запусков: {count}.",
+  "tokens of context": "токенов контекста",
+  "{documents} personal memories, {kb} KB, and memory search is not set up.":
+    "Личных записей памяти: {documents}, {kb} КБ; поиск по памяти не настроен.",
+  "Based on {reasons} thumbs with reasons in the last {days} days.":
+    "По {reasons} оценкам с причиной за последние {days} дн.",
+  "Based on {approvals} approvals and no denials in the last {days} days.":
+    "По {approvals} разрешениям без отказов за последние {days} дн.",
+  "Based on {count} requests in the last {days} days.":
+    "По {count} запросам за последние {days} дн.",
+  "Allow {tool} for {bot} without asking?": "Разрешать {tool} для {bot} без вопроса?",
 };

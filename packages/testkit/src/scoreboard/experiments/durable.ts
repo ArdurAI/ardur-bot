@@ -30,6 +30,7 @@ export function fixtureHandlers(overrides: Partial<BackgroundJobHandlers>): Back
     "board.run": ignored,
     "briefs.maintain": ignored,
     "learning.curate": ignored,
+    "learning.insights": ignored,
     "learning.review": ignored,
     "memory.git-push": ignored,
     "memory.deliver": ignored,

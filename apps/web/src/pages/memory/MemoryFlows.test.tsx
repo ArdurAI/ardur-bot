@@ -187,6 +187,7 @@ describe("memory generation consent", () => {
   const settings: SpaceLearningConfig = {
     enabled: true,
     consolidationEnabled: true,
+    insightsEnabled: true,
     canConfigure: true,
     reviewerPin: null,
     destination: null,
@@ -314,6 +315,7 @@ describe("memory page data", () => {
   const settings: SpaceLearningConfig = {
     enabled: true,
     consolidationEnabled: false,
+    insightsEnabled: true,
     canConfigure: false,
     reviewerPin: null,
     destination: null,

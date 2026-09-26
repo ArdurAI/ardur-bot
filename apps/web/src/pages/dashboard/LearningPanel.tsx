@@ -12,13 +12,23 @@ export default function LearningPanel({
 }: { data: Awaited<ReturnType<typeof load>> } & PanelActions) {
   const { t } = useLingui();
   const count = data.pendingCount;
+  const insights = data.insightCount;
   return (
     <div className="space-y-3 text-sm">
-      <Button
-        variant="link"
-        className="h-auto p-0"
-        onClick={openLearning}
-      >{t`Inbox (${count})`}</Button>
+      <div className="flex gap-4">
+        <Button
+          variant="link"
+          className="h-auto p-0"
+          onClick={openLearning}
+        >{t`Inbox (${count})`}</Button>
+        {insights > 0 ? (
+          <Button
+            variant="link"
+            className="h-auto p-0"
+            onClick={openLearning}
+          >{t`Insights (${insights})`}</Button>
+        ) : null}
+      </div>
       {!data.proposals.length ? (
         <p className="text-muted-foreground">
           <Trans>No proposals</Trans>

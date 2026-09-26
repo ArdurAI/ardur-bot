@@ -210,6 +210,7 @@ model Space {
   comparisons Comparison[]
   allowedModelDestinations Json?
   learningConfig SpaceLearningConfig?
+  learningInsights LearningInsight[]
   aiDataConsents AiDataConsent[]
   id                          String                       @id
   organizationId              String
@@ -1596,6 +1597,8 @@ model SpaceLearningConfig {
   space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
   enabled Boolean @default(false)
   consolidationEnabled Boolean @default(false)
+  /// Deterministic insights read only local records and call no model, so they default on.
+  insightsEnabled Boolean @default(true)
   reviewerPin Json?
   configuredBy String
   botDailyTokens Int @default(30000)
@@ -1606,6 +1609,26 @@ model SpaceLearningConfig {
   maxOutputChars Int @default(12000)
   updatedAt DateTime @updatedAt
   @@map("space_learning_config")
+}
+
+/// One row per person and fingerprint. Computed from the person's own records without a model;
+/// an insight never changes anything itself. Dismissed rows keep their fingerprint for suppression.
+model LearningInsight {
+  id String @id @default(cuid())
+  spaceId String
+  space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  userId String
+  botId String?
+  kind String
+  fingerprint String
+  evidence Json
+  action Json
+  status String @default("active")
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  @@unique([spaceId, userId, fingerprint])
+  @@index([spaceId, userId, status, expiresAt])
+  @@map("learning_insights")
 }
 
 model LearningProposal {

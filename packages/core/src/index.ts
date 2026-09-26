@@ -45,6 +45,7 @@ export * from "./group-mentions.js";
 export * from "./http-response.js";
 export * from "./ide-changes.js";
 export * from "./integration-policy.js";
+export * from "./learning-insights.js";
 export * from "./learning-journey.js";
 export * from "./learning-signals.js";
 export * from "./markdown-plain.js";

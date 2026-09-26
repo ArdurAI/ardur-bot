@@ -4,6 +4,51 @@ Learning is disabled by default. Enabling it lets a configured model produce pro
 run finishes or receives feedback. It cannot apply a proposal, change a pin, change an approval
 default, or call tools. A pass that changes nothing is a normal result.
 
+## Insights
+
+Insights tell a person how to get more out of Ardur Bot from their own work. Each is one plain
+sentence, the evidence behind it, and one action that opens the place to act. An insight never
+changes anything itself: the person makes the change there, as with pins.
+
+Insights are computed on the server by a pure function (`computeInsights` in
+`packages/core/src/learning-insights.ts`) from the person's own runs, usage, feedback, approvals
+and settings in the space. No model is called and nothing leaves the machine, so they are on by
+default. The space owner can turn them off with Show insights in Settings → Memory & Skills →
+Learning (and on the mobile Learning screen). Every threshold is a named constant in that file.
+Nothing appears below its minimum sample, and Details states the window and counts ("Based on 17
+runs in the last 30 days.").
+
+| Kind | When it appears | Action |
+| --- | --- | --- |
+| Which model for which work | A task kind (coding, research, board and routine work, conversation) where the person used at least two models or efforts with five or more finished runs each in 30 days, and an available one finished at least 25 points more often while the other failed three or more runs, or matched it with at least 40% fewer median tokens or less time. A local model that did as well as a hosted one is named as such. | Change model on the bot that used the weaker choice most |
+| A model that keeps failing the same way | A bot's last five finished runs on its current pin all failed with the same class: tool calling unsupported, context too long, rate limited, or credential rejected. A suggestion names only an available model: one that used tools in the person's runs, one with a larger context in the bundled capability data, or one on another provider. | Change model, or Reconnect |
+| Setup that is holding work back | A model connection that rejected its sign-in on two or more runs in 14 days since it last worked, or a provider two or more runs needed that is not connected. For the owner only: more than 50 personal memory documents or more than 32 KB of them without memory search, and three or more thumbs with reasons in 14 days while Learning is off. | Reconnect or Connect, Set up memory search, Enable |
+| Approvals you always give | The same action approved for the same bot five or more times in seven days with no denials and no existing allow rule. Secret access, payments, messages sent on the person's behalf and commands or writes outside a bot's folders are never suggested. | Always allow, confirmed before the bot-scoped rule is saved |
+| Repeated work that could be a routine | The same request (trimmed, case-folded, numbers and dates masked, at least 12 other characters) sent to the same bot three or more times in 14 days, with no routine already using it. | New routine, prefilled with the request and bot |
+
+Comparisons say "in your runs"; they are never general claims about a model. Tokens and time are
+medians of completed runs. A cost appears only when every usage record behind those runs has a
+price with provenance; otherwise Details shows tokens. A model counts as available when this space
+can run it now: its connection is still connected and has not been rejected since it last worked,
+its latest run finished, and the bot's locality policy allows where it ran.
+
+The `learning.insights` worker job recomputes one person's insights. A finished run or new
+feedback schedules a pass fifteen minutes later; further triggers before it runs join that pass,
+so a person is recomputed at most every fifteen minutes. A daily pass at 04:30 UTC covers every
+member of every space. Results live in `learning_insights`, one row per person and fingerprint.
+An active insight lapses after two days unless a pass confirms it, and one whose evidence no
+longer holds expires at the next pass. Dismiss hides an insight for 90 days unless its count at
+least doubles; a different suggested model is a different insight. Using the action records it
+the same way.
+
+The Learning page lists at most five active insights, highest impact first: failing work, then
+connections, model choice, approvals, routines and setup. A bot's Learning panel lists that bot's
+insights, and the dashboard Learning card shows Insights (n) beside Inbox (n) only when there are
+any. Another member never sees your insights, and memory search and Learning suggestions need
+the owner role when they are listed, not only when they were computed. Mobile shows the same list
+on its Learning screen; it has no routine editor or memory search setup, so those two insights
+keep only Dismiss there.
+
 ## Signals and documents
 
 Thumbs on bot messages are durable feedback, with an optional reason and edit/retract support.
