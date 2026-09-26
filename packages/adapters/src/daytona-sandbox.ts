@@ -101,6 +101,7 @@ export class DaytonaSandboxProvider implements SandboxProvider {
   describe() {
     return {
       id: "daytona",
+      kind: "daytona" as const,
       contractVersion: "1",
       adapterVersion: "0.1.0",
       capabilities: {

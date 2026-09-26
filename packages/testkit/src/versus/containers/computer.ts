@@ -31,6 +31,7 @@ export class ContainerComputer implements SandboxProvider {
   describe() {
     return {
       id: "versus-container",
+      kind: "docker" as const,
       contractVersion: "1",
       adapterVersion: "1",
       capabilities: {

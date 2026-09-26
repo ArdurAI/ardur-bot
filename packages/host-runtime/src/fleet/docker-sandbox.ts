@@ -89,6 +89,7 @@ export class FleetDockerSandboxProvider extends LinuxFleetSandbox {
   describe() {
     return {
       id: "remote-docker",
+      kind: "remote-docker" as const,
       contractVersion: "1",
       adapterVersion: "0.1.0",
       capabilities: FLEET_LINUX_CAPABILITIES,

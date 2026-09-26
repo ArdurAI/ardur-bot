@@ -55,7 +55,7 @@ import type {
   PageBrowserResult,
   PortableFile,
   ProcessEvent,
-  SandboxCapabilities,
+  SandboxDescriptor,
   ScreenRequest,
   ScreenSession,
   SecretRecord,
@@ -87,7 +87,7 @@ export interface SandboxProvider {
   /** Target capacity; older hosted providers may explicitly leave it unreported. */
   capacity(context: AdapterContext): Promise<CapacitySnapshot>;
   terminal?: TerminalProvider;
-  describe(): AdapterDescriptor<SandboxCapabilities>;
+  describe(): SandboxDescriptor;
   /** Optional live browser on the same leased screen as observe/act. */
   pageBrowser?(
     computer: ComputerRef,

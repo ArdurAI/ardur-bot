@@ -41,8 +41,11 @@ selected model and effort to be returned by the installed CLI.
 ## Build contract
 
 A `v*` tag push runs `.github/workflows/release-desktop.yml`. Manual dispatch accepts an existing
-`tag` input. Both routes validate that the tag matches the **root** `package.json` version and points
-to a commit on `dev`. They never move `main` or overwrite an existing release.
+`tag` input and an optional `evidence_waiver` reason. Both routes validate that the tag matches the
+**root** `package.json` version and points to a commit on `dev`. They never move `main` or overwrite
+an existing release. Publication requires validated
+[performance evidence](performance.md#evidence-index); only a dispatch with a waiver reason can
+publish without it, and a tag push cannot.
 
 | Platform | Architecture | Release assets |
 | --- | --- | --- |
@@ -108,17 +111,23 @@ builds come later and require an explicit change to this policy.
 
 1. Land and review the changes on `dev`. Set the root version to `0.1.0-alpha.1`, run
    `node scripts/desktop-version.mjs`, and include the derived desktop metadata in that change.
-2. Build and verify the app locally where possible. Push the approved `dev` revision, then:
+2. Build and verify the app locally where possible. Push the approved `dev` revision, then tag it:
 
    ```sh
    git tag v0.1.0-alpha.1
    git push origin v0.1.0-alpha.1
    ```
 
-3. Alternatively, dispatch the workflow on `dev` with the existing tag:
+   A tag push publishes only with validated performance evidence. No job produces that evidence
+   yet, so this run currently stops at the evidence gate.
+
+3. Until the physical evidence runner exists, dispatch the workflow on `dev` with the existing tag
+   and a waiver reason. The reason is recorded with the dispatching account and printed in the
+   release notes:
 
    ```sh
-   gh workflow run release-desktop.yml --ref dev -f tag=v0.1.0-alpha.1
+   gh workflow run release-desktop.yml --ref dev -f tag=v0.1.0-alpha.1 \
+     -f evidence_waiver="Physical release runners are not provisioned"
    ```
 
 4. Wait for the pre-release assets. Download the DMG matching the Mac architecture, drag

@@ -1,10 +1,12 @@
-import type { Actor, TeamRow } from "@ardurbot/contracts";
+import { deploymentHostLabel } from "@ardurbot/adapters";
+import type { Actor, HostLabel, TeamRow } from "@ardurbot/contracts";
 import {
   DelegationSnapshotSchema,
   RunFailurePayloadSchema,
   RuntimeInfoSchema,
   taskCardSentence,
 } from "@ardurbot/contracts";
+import { ENGINE_LABELS } from "@ardurbot/contracts/fleet";
 import { redactTaskValue } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import { acceptDelegation, delegationView } from "@ardurbot/db";
@@ -37,6 +39,14 @@ export function teamState(input: {
   if (["queued", "leased"].includes(input.runStatus ?? "") || input.delegationStatus === "queued")
     return "queued";
   return "idle";
+}
+
+/** A computer without a saved connection is named by the engine of its kind. */
+function engineName(kind: string, host: HostLabel) {
+  if (kind === "desktop") return host;
+  if (kind === "docker")
+    return host === "This Mac" ? "Docker on this Mac" : "Docker on this computer";
+  return ENGINE_LABELS[kind] ?? null;
 }
 
 /** No messages, prompt text or current model settings participate in this projection. */
@@ -111,6 +121,9 @@ export async function teamBoard(prisma: PrismaClient, actor: Actor): Promise<{ r
         select: { id: true, displayName: true },
       })
     : [];
+  const host = bots.some((bot) => bot.computer && !bot.computer.connectionId)
+    ? await deploymentHostLabel(prisma)
+    : "This computer";
   const rows = bots.map((bot): TeamRow => {
     const ownRuns = runs.filter((run) => run.botId === bot.id);
     const run = ownRuns.find((run) => active.includes(run.status)) ?? ownRuns[0];
@@ -164,11 +177,9 @@ export async function teamBoard(prisma: PrismaClient, actor: Actor): Promise<{ r
       computerName: bot.computer?.connectionId
         ? (computers.find((connection) => connection.id === bot.computer?.connectionId)
             ?.displayName ?? null)
-        : bot.computer?.kind === "desktop"
-          ? "This Mac"
-          : bot.computer
-            ? "Docker on this Mac"
-            : null,
+        : bot.computer
+          ? engineName(bot.computer.kind, host)
+          : null,
       threadId: bot.thread?.id ?? null,
       groupId: run?.thread?.groupId ?? null,
       cursor: (bot.thread?.nextEventSeq ?? 0) - 1,

@@ -180,6 +180,25 @@ describe("host pairing and grants", () => {
       }),
     );
     await bridge.hub.fromHost(host, { v: 1, type: "end", id: request.id });
+    // This Mac does not make a sandboxed computer a host computer.
+    prisma.deploymentSettings.findUnique.mockResolvedValue({
+      ownerUserId: "owner",
+      computerHost: "this-mac",
+    } as never);
+    for (const computer of [
+      { kind: "docker", connectionId: null, homeKey: "computer" },
+      { kind: "e2b", connectionId: null, homeKey: "computer" },
+    ]) {
+      prisma.run.findFirst.mockResolvedValueOnce({
+        id: "run",
+        botId: "bot",
+        threadId: "thread",
+        runtimePin: pin,
+        bot: { spaceId: "space", computer },
+      } as never);
+      await bridge.hub.request({ ...request, id: `sandboxed-${computer.kind}` }, worker);
+    }
+    expect(sent).toEqual([request]);
     if (request.operation.op !== "runtime.turn") throw new Error("Expected native turn");
     for (const operation of [
       { ...request.operation, homeKey: "foreign-home" },

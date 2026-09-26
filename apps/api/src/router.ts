@@ -50,6 +50,7 @@ import {
   defaultCatalogModelId,
   deletePushToken,
   deploymentAutoReviewDefault,
+  deploymentHostLabel,
   destroyBot,
   displayBotWorkspacePath,
   enqueueLearningReview,
@@ -61,6 +62,7 @@ import {
   isSandboxGoneError,
   isScratchpadStatus,
   kubernetesContexts,
+  LocalImportInvalidFolderError,
   LocalImportService,
   listPiCatalog,
   listScratchpadItems,
@@ -68,6 +70,7 @@ import {
   lockMcpServerRevision,
   McpOAuthAttemptReplacedError,
   McpOAuthBroker,
+  MissingComputerProviderError,
   mapScratchpadItem,
   mcpCredentialConflict,
   modelCredentialDto,
@@ -105,11 +108,13 @@ import {
 import type { Auth } from "@ardurbot/auth";
 import type { Actor, ComputerStatus, Me, SpaceNavigation } from "@ardurbot/contracts";
 import {
+  HOST_MOVE_UNAVAILABLE_MESSAGE,
   IntegrationManifestSchema,
   IntegrationProviderIdSchema,
   OPENAI_COMPATIBLE_PROVIDER_ID,
   usableModelId,
 } from "@ardurbot/contracts";
+import { LOCAL_IMPORT_INVALID_FOLDER_CODE } from "@ardurbot/contracts/local-import";
 import { appContract } from "@ardurbot/contracts/rpc";
 import {
   ACTIVE_RUN_STATUSES,
@@ -1995,13 +2000,13 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           where: { spaceId: context.actor.spaceId, userId: context.actor.userId, archivedAt: null },
           include: { computer: true },
         });
+        const hostLabel = await deploymentHostLabel(deps.prisma);
         const seen = new Set<string>();
         return bots.flatMap((bot) => {
           if (!bot.computer || seen.has(bot.computer.id)) return [];
           seen.add(bot.computer.id);
-          return [
-            { botId: bot.id, name: bot.name, status: toComputerStatus(bot.id, bot.computer) },
-          ];
+          const status = { ...toComputerStatus(bot.id, bot.computer), hostLabel };
+          return [{ botId: bot.id, name: bot.name, status }];
         });
       }),
       connections: authed.computer.connections.handler(({ context }) =>
@@ -2027,6 +2032,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           deps.prisma,
           context.actor.spaceId,
           input,
+          deps.env.sandboxProvider,
         );
         try {
           await releaseMaintenanceControl(deps, context.actor, bot.computer.id);
@@ -2037,9 +2043,10 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           throw error;
         }
       }),
-      status: authed.computer.status.handler(async ({ context, input }) =>
-        computerStatus(deps, context.actor, input.botId),
-      ),
+      status: authed.computer.status.handler(async ({ context, input }) => ({
+        ...(await computerStatus(deps, context.actor, input.botId)),
+        hostLabel: await deploymentHostLabel(deps.prisma),
+      })),
       boot: authed.computer.boot.handler(async ({ context, input }) => {
         const bot = await repos.getBot(context.actor, input.botId);
         if (!bot.computer) throw new IsolationError();
@@ -2072,7 +2079,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           if (error instanceof ComputerBusyError) {
             throw new ORPCError("CONFLICT", { message: "Computer is busy" });
           }
-          throw error;
+          throw engineRefusal(error);
         } finally {
           await releaseComputerExecutionLease(deps.prisma, lease);
         }
@@ -2646,9 +2653,15 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       status: authed.localImport.status.handler(({ context }) =>
         localImport.status(importOwner(context.actor)),
       ),
-      configure: authed.localImport.configure.handler(({ context, input }) =>
-        localImport.configure(importOwner(context.actor), input),
-      ),
+      configure: authed.localImport.configure.handler(async ({ context, input }) => {
+        try {
+          return await localImport.configure(importOwner(context.actor), input);
+        } catch (error) {
+          if (error instanceof LocalImportInvalidFolderError)
+            throw new ORPCError(LOCAL_IMPORT_INVALID_FOLDER_CODE, { message: error.message });
+          throw error;
+        }
+      }),
       run: authed.localImport.run.handler(async ({ context, input }) => {
         const owner = importOwner(context.actor);
         await assertLocalImportOwner(deps.prisma, owner);
@@ -5815,11 +5828,19 @@ async function runComputerReplace(
     if (error instanceof ComputerBusyError) {
       throw new ORPCError("CONFLICT", { message: "Computer is busy" });
     }
-    throw error;
+    throw engineRefusal(error);
   } finally {
     await releaseComputerExecutionLease(deps.prisma, lease);
   }
   return computerStatus(deps, context.actor, botId);
+}
+
+/** A missing engine or a refused host move already says what to do, so it reaches the user. */
+function engineRefusal(error: unknown) {
+  return error instanceof MissingComputerProviderError ||
+    (error instanceof Error && error.message === HOST_MOVE_UNAVAILABLE_MESSAGE)
+    ? new ORPCError("BAD_REQUEST", { message: error.message })
+    : error;
 }
 
 async function expireStaleComputerControl(

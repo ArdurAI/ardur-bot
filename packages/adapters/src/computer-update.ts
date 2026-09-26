@@ -7,7 +7,9 @@ import { scheduleComputerSleep } from "./computer-idle.js";
 import {
   ComputerBusyError,
   computerSupportsUpdate,
+  connectionlessConfigurationUnchanged,
   replaceComputer,
+  staysOnDeploymentEngine,
 } from "./computer-lifecycle.js";
 
 type Deps = Parameters<typeof replaceComputer>[0];
@@ -129,18 +131,29 @@ export async function performComputerUpdate(deps: Deps, updateId: string) {
       select: { userId: true },
     });
     if (!bot) throw new Error("Computer update target is unavailable");
+    const configuration = update.configuration
+      ? ComputerReplacementConfigurationSchema.parse(update.configuration)
+      : undefined;
+    const context = {
+      operationId: updateId,
+      traceId: updateId,
+      botId: update.botId,
+      spaceId: update.computer.spaceId,
+      userId: bot.userId,
+      signal: controller.signal,
+    };
+    if (
+      connectionlessConfigurationUnchanged(update.computer, configuration) &&
+      (await staysOnDeploymentEngine(deps, update.computer, context))
+    ) {
+      await finishUpdate(deps.prisma, updateId, update.computerId, "completed");
+      return;
+    }
     await replaceComputer(
       deps,
       update.computerId,
       update.action === "recover" ? "recover" : "update",
-      {
-        operationId: updateId,
-        traceId: updateId,
-        botId: update.botId,
-        spaceId: update.computer.spaceId,
-        userId: bot.userId,
-        signal: controller.signal,
-      },
+      context,
       "none",
       async (stage) => {
         controller.signal.throwIfAborted();
@@ -150,9 +163,7 @@ export async function performComputerUpdate(deps: Deps, updateId: string) {
         });
         if (result.count !== 1) throw new Error("Computer update interrupted");
       },
-      update.configuration
-        ? ComputerReplacementConfigurationSchema.parse(update.configuration)
-        : undefined,
+      configuration,
     );
     await finishUpdate(deps.prisma, updateId, update.computerId, "completed");
     scheduleComputerSleep(deps.jobs, update.computerId);

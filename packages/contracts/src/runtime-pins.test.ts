@@ -86,3 +86,10 @@ it("uses the real reason and offers Connect only for a hosted credential failure
   expect(missing.actions).toEqual(["connect", "change-pin"]);
   expect(new RuntimePinError(missing).message).toContain("connect it or change the pin");
 });
+
+it("offers no pin action for a local-import problem, unlike other problem codes", () => {
+  for (const code of ["local-import-rescan", "local-import-item"] as const) {
+    const problem = runtimePinProblem(pin, code, "Re-scan this computer before importing.");
+    expect(problem.actions).toEqual([]);
+  }
+});

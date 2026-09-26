@@ -89,6 +89,7 @@ export class DesktopSandboxProvider implements SandboxProvider {
   describe() {
     return {
       id: "desktop",
+      kind: "desktop" as const,
       contractVersion: "1",
       adapterVersion: "0.1.0",
       capabilities: {

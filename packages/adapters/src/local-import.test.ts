@@ -757,6 +757,14 @@ describe("local import lifecycle", () => {
     expect(f.records.rows.filter((row) => row.category === "memories")).toHaveLength(2);
     expect(f.journal().flatMap((doc) => doc.revisions)).toHaveLength(3);
   });
+  it("fails automatic refresh when the host goes away instead of reporting quiet success", async () => {
+    const f = await fixture();
+    await f.importAll();
+    await f.service.configure(owner, { autoImport: true });
+    await f.file(".claude/projects/example/memory/new.md", "A new fact.");
+    f.failReads(0, new LocalImportHostError());
+    await expect(f.service.refresh()).rejects.toThrow("stopped: host");
+  });
   it("splits a changed source from an equal body without overwriting the other source", async () => {
     const f = await fixture();
     await f.file(".claude/projects/example/memory/same.md", "Remember the offline command.");
@@ -990,14 +998,53 @@ describe("local import lifecycle", () => {
     const f = await fixture();
     const manifest = await f.scan();
     f.failReads(1, new LocalImportHostError());
-    await expect(
-      f.service.run(owner, {
-        action: "import",
-        scanId: manifest.scanId,
-        categories: ["memories", "skills", "servers"],
-      }),
-    ).rejects.toBeInstanceOf(LocalImportHostError);
+    const response = await f.service.run(owner, {
+      action: "import",
+      scanId: manifest.scanId,
+      categories: ["memories", "skills", "servers"],
+    });
+    expect(response).toEqual({
+      result: {
+        created: 1,
+        updated: 0,
+        unchanged: 0,
+        removed: 0,
+        skipped: 0,
+        conflicts: 0,
+        failed: 0,
+      },
+      stopped: "host",
+    });
     expect(f.records.rows).toHaveLength(1);
     expect((await f.service.status(owner)).importedAt).not.toBeNull();
+  });
+  it("keeps the failures found before a stop, and returns them with the partial result", async () => {
+    const f = await fixture();
+    const manifest = await f.scan();
+    let calls = 0;
+    const withCustomTransport = new LocalImportService({
+      prisma: f.prisma as unknown as PrismaClient,
+      documents: f.documents,
+      transport: {
+        scan: (_owner, roots) => f.scanner.scan(roots),
+        read: async (_owner, scanId, itemId) => {
+          calls++;
+          if (calls === 1) throw new Error("This item is not available for import.");
+          if (calls === 2) throw new LocalImportHostError();
+          return f.scanner.read(scanId, itemId);
+        },
+      },
+    });
+    const response = await withCustomTransport.run(owner, {
+      action: "import",
+      scanId: manifest.scanId,
+      categories: ["memories", "skills", "servers"],
+    });
+    expect(response).toEqual({
+      result: expect.objectContaining({ created: 0, failed: 1 }),
+      failures: [expect.objectContaining({ reason: "failed" })],
+      stopped: "host",
+    });
+    expect(f.records.rows).toHaveLength(0);
   });
 });

@@ -1,6 +1,7 @@
 import type { AdapterContext } from "@ardurbot/adapter-kit";
 import { choosePlacement, PlacementSettingsSchema } from "@ardurbot/contracts/fleet";
 import { appendEventInTransaction, createThreadMessageInTransaction, Prisma } from "@ardurbot/db";
+import { getLogger } from "@ardurbot/logging";
 import { ComputerBusyError, replaceComputer } from "../computer-lifecycle.js";
 import type { FleetCatalog } from "./catalog.js";
 import { fleetComputerTargetId } from "./catalog.js";
@@ -48,19 +49,24 @@ export async function placeRunComputer(
     userId: run.userId,
     signal,
   };
+  let family: string | null;
+  try {
+    family = await catalog.engineFamily(computer, context);
+  } catch {
+    return true; // A computer whose engine cannot be reached here is never moved automatically.
+  }
   const fleet = await catalog.list(context);
   const from = fleetComputerTargetId(computer, fleet);
   let candidates = fleet.targets.filter(
     (target) =>
       target.connectionId !== null || target.id === fleet.defaultTargetId || target.id === from,
   );
+  candidates = await catalog.compatibleTargets(family, candidates, context);
   if (computer.networkEgress === false) {
     const supported = new Set([from]);
     for (const target of candidates) {
       if (target.id === from || target.state !== "connected" || target.kind === "host") continue;
-      const provider = target.connectionId
-        ? await catalog.connections.resolve(target.connectionId, context)
-        : deps.sandbox;
+      const provider = await catalog.resolveTarget(target, context);
       if (
         await provider
           .supportsNetworkEgress?.(
@@ -79,6 +85,9 @@ export async function placeRunComputer(
     }
     candidates = candidates.filter((target) => supported.has(target.id));
   }
+  const fromTarget = fleet.targets.find((target) => target.id === from);
+  if (fromTarget && !candidates.some((target) => target.id === from))
+    candidates = [fromTarget, ...candidates];
   const decision = choosePlacement(policy, from, candidates);
   if (!decision) return true;
   const owners = computer.bots.filter((bot) => bot.archivedAt === null);
@@ -156,10 +165,23 @@ export async function placeRunComputer(
   signal.throwIfAborted();
   const target = candidates.find((target) => target.id === decision.targetId)!;
   const reason = `Moved to ${target.name}: ${decision.reason}`;
-  let updateId: string;
+  let updateId: string | null;
   try {
     updateId = await deps.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM computers WHERE id = ${computer.id} FOR UPDATE`;
+      // A computer that changed since this decision stays where it is. Only the run records it.
+      const current = await tx.computer.findUniqueOrThrow({ where: { id: computer.id } });
+      if (
+        current.kind !== computer.kind ||
+        current.providerRef !== computer.providerRef ||
+        current.connectionId !== computer.connectionId
+      ) {
+        await tx.run.updateMany({
+          where: ownedRun,
+          data: { placement: { ...decision, status: "skipped" } },
+        });
+        return null;
+      }
       const currentOwners = await tx.bot.findMany({
         where: { computerId: computer.id, archivedAt: null },
       });
@@ -218,6 +240,10 @@ export async function placeRunComputer(
     if (error instanceof ComputerBusyError) return true;
     throw error;
   }
+  if (updateId === null) {
+    getLogger().info("computer.placement.skipped", { runId, computerId: computer.id });
+    return true;
+  }
   const abort = new AbortController();
   const heartbeat = setInterval(() => {
     void Promise.all([
@@ -245,6 +271,7 @@ export async function placeRunComputer(
   try {
     const moveSignal = AbortSignal.any([signal, abort.signal]);
     moveSignal.throwIfAborted();
+    const destination = await catalog.placementTarget(family, target, context);
     await replaceComputer(
       deps,
       computer.id,
@@ -265,6 +292,7 @@ export async function placeRunComputer(
         connectionId: decision.connectionId,
         placementRunId: runId,
       },
+      destination,
     );
     const committed = await deps.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM threads WHERE id = ${run.threadId} FOR UPDATE`;

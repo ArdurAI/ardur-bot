@@ -92,9 +92,13 @@ export class RemoteFleetSandbox implements SandboxProvider {
       },
     };
   }
+  private get kind() {
+    return this.settings.engine === "ssh" ? ("ssh" as const) : ("remote-docker" as const);
+  }
   describe() {
     return {
-      id: this.settings.engine === "ssh" ? "ssh" : "remote-docker",
+      id: this.kind,
+      kind: this.kind,
       contractVersion: "1",
       adapterVersion: "0.1.0",
       capabilities: FLEET_LINUX_CAPABILITIES,

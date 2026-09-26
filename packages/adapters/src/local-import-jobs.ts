@@ -1,9 +1,22 @@
 import type { BackgroundJobHandlers } from "@ardurbot/adapter-kit";
-import type { LocalImportResponse } from "@ardurbot/contracts/local-import";
+import type { LocalImportResponse, LocalImportStop } from "@ardurbot/contracts/local-import";
 import type { PrismaClient } from "@ardurbot/db";
+import { LocalImportRescanError } from "@ardurbot/host-runtime/import/scanner";
 import { hostWorkerToken } from "@ardurbot/host-runtime/worker-auth";
 import type { MemoryService } from "@ardurbot/memory";
-import { createImportTransport, LocalImportService, localImportStop } from "./local-import.js";
+import {
+  createImportTransport,
+  LocalImportHostError,
+  LocalImportService,
+  localImportStop,
+} from "./local-import.js";
+
+/** The mirror of `localImportStop`: a returned stop needs an error to fail the job with. */
+function stopError(stopped: LocalImportStop): Error {
+  if (stopped === "host") return new LocalImportHostError();
+  if (stopped === "rescan") return new LocalImportRescanError();
+  return new Error("Import stopped because of an unexpected error.");
+}
 
 export type LocalImportJobOptions = {
   apiUrl: string;
@@ -28,6 +41,9 @@ export function createLocalImportJobs(
       let failure: unknown;
       try {
         response = await service.run({ spaceId: job.spaceId, userId: job.userId }, job.action);
+        // A run can stop partway through without throwing, but it still made no more
+        // progress than a thrown error would have; the job must log it the same way.
+        if (response.stopped) failure = stopError(response.stopped);
       } catch (error) {
         failure = error;
         response = { stopped: localImportStop(error) ?? "failed" };
