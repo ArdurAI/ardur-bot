@@ -111,6 +111,10 @@ export const ENGINE_LABELS: Readonly<Record<string, string>> = {
 };
 export const HostLabelSchema = /* @__PURE__ */ (() => z.enum(["This Mac", "This computer"]))();
 export type HostLabel = z.infer<typeof HostLabelSchema>;
+/** The host's name from its Node platform string. */
+export function hostLabel(platform: string): HostLabel {
+  return platform === "darwin" ? "This Mac" : "This computer";
+}
 export const FleetTargetSchema = /* @__PURE__ */ (() =>
   z.object({
     id: z.string(),

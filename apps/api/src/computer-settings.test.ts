@@ -59,12 +59,9 @@ describe("computer connection settings", () => {
       where: { id: "foreign", spaceId: "space", connectorId: "computer" },
     });
   });
-  it("rejects an empty connection for a connected computer when This Mac is the deployment default", async () => {
+  it("refuses the deployment default for any computer while This Mac is that default", async () => {
     const update = vi.fn();
     const prisma = {
-      bot: {
-        findFirst: vi.fn(async () => ({ computer: { connectionId: "office" } })),
-      },
       deploymentSettings: {
         findUnique: vi.fn(async () => ({ computerHost: "this-mac" })),
       },
@@ -82,13 +79,17 @@ describe("computer connection settings", () => {
       await expect(validateComputerConfiguration(prisma, "space", move, provider)).rejects.toThrow(
         "Moving a computer onto the machine running Ardur Bot is not available yet. Choose a saved connection or keep the current engine.",
       );
+    // Leaving the connection out keeps the computer where it is, so nothing is refused.
+    const { connectionId: _, ...stay } = move;
+    await expect(validateComputerConfiguration(prisma, "space", stay, "docker")).resolves.toEqual(
+      stay,
+    );
     expect(update).not.toHaveBeenCalled();
     expect(prisma.computerUpdate.create).not.toHaveBeenCalled();
     expect(prisma.connection.findFirst).not.toHaveBeenCalled();
   });
   it("accepts an empty connection when Docker is the deployment default", async () => {
     const prisma = {
-      bot: { findFirst: async () => ({ computer: { connectionId: "office" } }) },
       deploymentSettings: { findUnique: async () => ({ computerHost: "docker" }) },
       connection: { findFirst: vi.fn() },
     } as unknown as PrismaClient;

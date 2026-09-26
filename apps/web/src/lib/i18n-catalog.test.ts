@@ -262,12 +262,11 @@ describe("lingui catalogs", () => {
   it("extracts the fleet move sentences the code asks for into every catalog", () => {
     const sentences = [
       "Default computer",
-      "Deployment default (Docker)",
+      "Deployment default ({defaultLabel})",
       "Docker on this Mac",
       "Docker on this computer",
       "Moving a computer onto the machine running Ardur Bot is not available yet. Choose a saved connection or keep the current engine.",
       "This moves the computer from {sourceLabel} to {destinationLabel} and replaces its files. Continue?",
-      "this engine",
     ];
     const literal = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     for (const locale of ["en", "de", "ko", "tr", "hi", "pt-BR", "zh-CN", "es", "ru"]) {

@@ -18,7 +18,7 @@ import {
   parseComputerMode,
   type ThreadEvents,
 } from "@ardurbot/db";
-import { MissingComputerProviderError } from "./computer-connections.js";
+import { MissingComputerProviderError, ownsKind } from "./computer-connections.js";
 import {
   clearInactiveUserComputerControl,
   expireComputerControl,
@@ -649,7 +649,7 @@ function isUniqueConstraintError(error: unknown) {
 
 export type ComputerReplaceMode = "recover" | "reset" | "update";
 
-/** A null connection that stays null is not an engine move and must not rebuild the computer. */
+/** Only the deployment default is chosen, for a connectionless computer, with nothing else changed. */
 export function connectionlessConfigurationUnchanged(
   computer: {
     connectionId?: string | null;
@@ -676,21 +676,35 @@ export function connectionlessConfigurationUnchanged(
   return true;
 }
 
-/** The deployment's own engine. Clearing a connection is refused while that means the host. */
+/**
+ * The deployment's own engine. A computer is never moved onto the host, and choosing the
+ * deployment default is refused while new computers start on This Mac.
+ */
 async function deploymentEngine(
   deps: { prisma: PrismaClient; sandbox: SandboxProvider },
-  clearing: boolean,
+  chosen: boolean,
   context: AdapterContext,
 ) {
   const engine = deps.sandbox.describe().id;
-  if (clearing) {
+  if (chosen) {
     const deployment = await deps.prisma.deploymentSettings.findUnique({
       where: { id: "default" },
     });
     if (sandboxKindForBot(engine, deployment?.computerHost) === "desktop")
       throw new Error(HOST_MOVE_UNAVAILABLE_MESSAGE);
   }
-  return owningSandbox(deps.sandbox, { kind: engine }, context);
+  const provider = await owningSandbox(deps.sandbox, { kind: engine }, context);
+  if (provider.describe().kind === "desktop") throw new Error(HOST_MOVE_UNAVAILABLE_MESSAGE);
+  return provider;
+}
+
+/** Choosing the deployment default for a computer already on that engine changes nothing. */
+export async function staysOnDeploymentEngine(
+  deps: { prisma: PrismaClient; sandbox: SandboxProvider },
+  computer: { kind: string },
+  context: AdapterContext,
+) {
+  return ownsKind(await deploymentEngine(deps, true, context), computer.kind);
 }
 
 /** Tells the bot's conversation that its computer came back from the last save. */
@@ -837,14 +851,18 @@ export async function replaceComputer(
     if (error instanceof MissingComputerProviderError) return null;
     throw error;
   });
-  const connectionId =
-    configuration?.connectionId === undefined ? existing.connectionId : configuration.connectionId;
-  // Clearing a connection, or losing the engine, restores on the deployment's own engine.
+  const chosenDefault = configuration?.connectionId === null;
+  const connectionId = chosenDefault
+    ? null
+    : (configuration?.connectionId ?? existing.connectionId);
+  // Choosing the deployment default, or losing the engine, starts on the deployment's own engine.
   const destination =
     target ??
-    (connectionId === null && (existing.connectionId !== null || !source)
-      ? await deploymentEngine(deps, existing.connectionId !== null, context)
+    (chosenDefault || (connectionId === null && !source)
+      ? await deploymentEngine(deps, chosenDefault, context)
       : undefined);
+  const moving =
+    connectionId !== existing.connectionId || (destination !== undefined && destination !== source);
   const previousState = existing.state;
   const now = new Date();
   const claimStamp = new Date(Math.max(now.getTime(), existing.updatedAt.getTime() + 1));
@@ -904,8 +922,7 @@ export async function replaceComputer(
           existing.homeKey,
           oldRef,
           context,
-          configuration?.connectionId !== undefined &&
-            configuration.connectionId !== existing.connectionId,
+          moving,
         );
         const recorded = await deps.prisma.computer.updateMany({
           where: { id: computerId, state: "suspending", updatedAt: claimStamp },
@@ -965,8 +982,9 @@ export async function replaceComputer(
       context,
       controlHolder,
       onProgress,
-      connectionId !== existing.connectionId,
+      moving,
     );
+    // A lost engine always moves, so the saved workspace was written to the new computer.
     if (!source) await noteRestoredWorkspace(deps, context, botId).catch(() => undefined);
     return ref;
   } catch (error) {

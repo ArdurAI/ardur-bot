@@ -66,6 +66,7 @@ import {
   listScratchpadItems,
   loadPushToken,
   McpOAuthBroker,
+  MissingComputerProviderError,
   mapScratchpadItem,
   modelCredentialDto,
   NATIVE_HOST_OWNER_MESSAGE,
@@ -102,6 +103,7 @@ import {
 import type { Auth } from "@ardurbot/auth";
 import type { Actor, ComputerStatus, Me, SpaceNavigation } from "@ardurbot/contracts";
 import {
+  HOST_MOVE_UNAVAILABLE_MESSAGE,
   IntegrationManifestSchema,
   IntegrationProviderIdSchema,
   OPENAI_COMPATIBLE_PROVIDER_ID,
@@ -2071,7 +2073,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           if (error instanceof ComputerBusyError) {
             throw new ORPCError("CONFLICT", { message: "Computer is busy" });
           }
-          throw error;
+          throw engineRefusal(error);
         } finally {
           await releaseComputerExecutionLease(deps.prisma, lease);
         }
@@ -5783,11 +5785,19 @@ async function runComputerReplace(
     if (error instanceof ComputerBusyError) {
       throw new ORPCError("CONFLICT", { message: "Computer is busy" });
     }
-    throw error;
+    throw engineRefusal(error);
   } finally {
     await releaseComputerExecutionLease(deps.prisma, lease);
   }
   return computerStatus(deps, context.actor, botId);
+}
+
+/** A missing engine or a refused host move already says what to do, so it reaches the user. */
+function engineRefusal(error: unknown) {
+  return error instanceof MissingComputerProviderError ||
+    (error instanceof Error && error.message === HOST_MOVE_UNAVAILABLE_MESSAGE)
+    ? new ORPCError("BAD_REQUEST", { message: error.message })
+    : error;
 }
 
 async function expireStaleComputerControl(

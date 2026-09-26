@@ -9,6 +9,7 @@ import {
   computerSupportsUpdate,
   connectionlessConfigurationUnchanged,
   replaceComputer,
+  staysOnDeploymentEngine,
 } from "./computer-lifecycle.js";
 
 type Deps = Parameters<typeof replaceComputer>[0];
@@ -133,7 +134,18 @@ export async function performComputerUpdate(deps: Deps, updateId: string) {
     const configuration = update.configuration
       ? ComputerReplacementConfigurationSchema.parse(update.configuration)
       : undefined;
-    if (connectionlessConfigurationUnchanged(update.computer, configuration)) {
+    const context = {
+      operationId: updateId,
+      traceId: updateId,
+      botId: update.botId,
+      spaceId: update.computer.spaceId,
+      userId: bot.userId,
+      signal: controller.signal,
+    };
+    if (
+      connectionlessConfigurationUnchanged(update.computer, configuration) &&
+      (await staysOnDeploymentEngine(deps, update.computer, context))
+    ) {
       await finishUpdate(deps.prisma, updateId, update.computerId, "completed");
       return;
     }
@@ -141,14 +153,7 @@ export async function performComputerUpdate(deps: Deps, updateId: string) {
       deps,
       update.computerId,
       update.action === "recover" ? "recover" : "update",
-      {
-        operationId: updateId,
-        traceId: updateId,
-        botId: update.botId,
-        spaceId: update.computer.spaceId,
-        userId: bot.userId,
-        signal: controller.signal,
-      },
+      context,
       "none",
       async (stage) => {
         controller.signal.throwIfAborted();

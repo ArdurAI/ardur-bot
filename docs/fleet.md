@@ -41,7 +41,10 @@ stable key and the host label the API returns: This Mac when the paired desktop,
 server, runs macOS, and This computer elsewhere. The default row carries the kind its provider
 creates; kinds outside the fleet list, such as none or fake, stay on the default row. A
 connectionless E2B, Daytona, or Box computer on another deployment gets its own row while that
-provider's key is set. A computer whose engine is not configured is not listed on any row.
+provider's key is set. E2B, Daytona, and Box report no capacity, so a registered one is listed as
+available with unknown capacity, as a Kubernetes connection is. A computer whose engine is not
+configured is not listed on any row, and a host computer is listed only where the host runs
+computers.
 
 Docker context discovery accepts the CLI's JSON-lines output. OrbStack and Colima sockets are
 found at their standard locations. Podman machine discovery uses its reported socket. Tailscale
@@ -65,12 +68,16 @@ where they are. CPU load is reported separately and is not treated as memory cap
 
 Automatic moves stay inside one engine family until verified migration lands. Local Docker and
 remote Docker (a socket, an endpoint, or a Docker context) are one family, and Podman connections
-report those same kinds; every other kind is its own. Moving work to another family waits because today's move removes the old computer before the
-new one has accepted the workspace. Settings can move a computer to a saved connection, and a
-connected computer back to Docker when that is the deployment default. Moving a computer onto the
-machine running Ardur Bot is refused until verified migration lands. If the computer changes
-before an automatic move starts, the move is skipped: the run's placement records it, and no
-computer update is shown.
+report those same kinds; every other kind is its own. Moving work to another family waits because
+today's move removes the old computer before the new one has accepted the workspace. Settings can
+move a computer to a saved connection, or to the deployment default whenever the computer runs on
+another engine, named there as `Deployment default (E2B)` for example. That move saves the
+workspace from the old engine while that engine is configured here, and otherwise restores the last
+saved workspace. Choosing the deployment default for a computer already on that engine changes
+nothing. Moving a computer onto the machine running Ardur Bot is refused until verified migration
+lands, so the deployment default is not offered while new computers start on the host. If the
+computer changes before an automatic move starts, the move is skipped: the run's placement records
+it, and no computer update is shown.
 
 `placeRunComputer` runs before the first computer execution lease and before tool effects. It
 never moves an existing run snapshot. A first move pauses for that bot's consent unless `Move

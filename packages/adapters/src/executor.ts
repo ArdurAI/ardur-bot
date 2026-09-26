@@ -208,6 +208,7 @@ import {
   type PluginConnectionRow,
   planLiveConnectionSync,
 } from "./composio-connector.js";
+import { MissingComputerProviderError } from "./computer-connections.js";
 import { backgroundShellArgv, scheduleComputerSleep } from "./computer-idle.js";
 import {
   acquireComputerExecutionLease,
@@ -5186,7 +5187,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
       } catch (setupError) {
         if (
           setupError instanceof RuntimePinError ||
-          setupError instanceof CommandReplayUnavailableError
+          setupError instanceof CommandReplayUnavailableError ||
+          setupError instanceof MissingComputerProviderError
         ) {
           const finalized = await deps.events.finalizeRun({
             onCommitted: () =>

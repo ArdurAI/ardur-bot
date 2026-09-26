@@ -1,8 +1,10 @@
 import { expect, it } from "vitest";
+import { ComputerConfigurationSchema } from "./computer-connections.js";
 import type { FleetTarget } from "./fleet.js";
 import {
   choosePlacement,
   EngineEndpointSchema,
+  hostLabel,
   PlacementSettingsSchema,
   unknownCapacity,
 } from "./fleet.js";
@@ -81,4 +83,17 @@ it("admits sockets, SSH and TLS, and refuses unauthenticated TCP or URL credenti
     "ssh://computer.invalid?command=bad",
   ])
     expect(EngineEndpointSchema.safeParse(endpoint).success).toBe(false);
+});
+
+it("names the host from its platform", () => {
+  expect(hostLabel("darwin")).toBe("This Mac");
+  for (const platform of ["linux", "win32"]) expect(hostLabel(platform)).toBe("This computer");
+});
+
+it("keeps a computer where it is unless a connection or the deployment default is chosen", () => {
+  const stay = ComputerConfigurationSchema.parse({ botId: "bot", imageProfile: "developer" });
+  expect("connectionId" in stay).toBe(false);
+  expect(ComputerConfigurationSchema.parse({ botId: "bot", connectionId: null })).toMatchObject({
+    connectionId: null,
+  });
 });

@@ -61,7 +61,8 @@ export const HOST_MOVE_UNAVAILABLE_MESSAGE =
 export const ComputerConfigurationSchema = z.object({
   botId: z.string().min(1),
   imageProfile: ComputerProfileSchema.optional(),
-  connectionId: z.string().nullable(),
+  /** Omitted keeps the computer where it is; null chooses the deployment default. */
+  connectionId: z.string().nullable().optional(),
   confirmed: z.boolean().default(false),
 });
 export function computerCapabilities(kind: string) {
@@ -73,6 +74,4 @@ export function computerCapabilities(kind: string) {
 
 export const ComputerReplacementConfigurationSchema = ComputerConfigurationSchema.omit({
   botId: true,
-})
-  .partial({ imageProfile: true, connectionId: true })
-  .extend({ networkEgress: z.boolean().optional(), confirmed: z.literal(true) });
+}).extend({ networkEgress: z.boolean().optional(), confirmed: z.literal(true) });

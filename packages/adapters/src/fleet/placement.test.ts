@@ -97,7 +97,8 @@ function fixture(approved = false) {
   const targetSandbox = { supportsNetworkEgress } as unknown as SandboxProvider;
   const catalog = {
     list: vi.fn(async () => ({ targets, defaultTargetId: "host" })),
-    compatibleTargets: vi.fn(async (_computer, candidates) => candidates),
+    engineFamily: vi.fn(async () => "desktop"),
+    compatibleTargets: vi.fn(async (_family, candidates) => candidates),
     resolveTarget: vi.fn(async () => targetSandbox),
     placementTarget: vi.fn(async () => targetSandbox),
   };
@@ -198,6 +199,32 @@ it("uses the checkpoint lifecycle before execution and persists the move reason"
   expect(f.prisma.computer.updateMany).toHaveBeenLastCalledWith(
     expect.objectContaining({ data: { maintenanceId: null } }),
   );
+});
+it("resolves the computer's engine once and checks every candidate against its family", async () => {
+  const f = fixture(true);
+  expect(await placeRunComputer(f.deps, f.catalog, "run", new AbortController().signal)).toBe(true);
+  expect(f.catalog.engineFamily).toHaveBeenCalledOnce();
+  expect(f.catalog.compatibleTargets).toHaveBeenCalledWith(
+    "desktop",
+    expect.any(Array),
+    expect.any(Object),
+  );
+  expect(f.catalog.placementTarget).toHaveBeenCalledWith(
+    "desktop",
+    expect.objectContaining({ id: "remote" }),
+    expect.any(Object),
+  );
+  expect(replace).toHaveBeenCalledOnce();
+});
+it("never moves a computer whose engine is not configured here", async () => {
+  const f = fixture(true);
+  vi.mocked(f.catalog.engineFamily).mockRejectedValue(
+    new Error("This computer runs on E2B, which is not configured here."),
+  );
+  expect(await placeRunComputer(f.deps, f.catalog, "run", new AbortController().signal)).toBe(true);
+  expect(f.catalog.list).not.toHaveBeenCalled();
+  expect(replace).not.toHaveBeenCalled();
+  expect(f.prisma.computerUpdate.create).not.toHaveBeenCalled();
 });
 it("skips an automatic move without a computer update when Settings changed the computer", async () => {
   const f = fixture(true);

@@ -1,10 +1,14 @@
 import type { ComputerRef } from "@ardurbot/adapter-kit";
 import type { PrismaClient } from "@ardurbot/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ComputerConnections, ConnectedSandboxProvider } from "./computer-connections.js";
+import {
+  ComputerConnections,
+  ConnectedSandboxProvider,
+  MissingComputerProviderError,
+} from "./computer-connections.js";
 import { fakePodmanSupervisor } from "./docker-test-supervisor.js";
 import { FakeSandboxProvider } from "./fake-sandbox.js";
-import { createRunSandbox, HostAwareSandbox } from "./host-aware-sandbox.js";
+import { createRunSandbox, HostAwareSandbox, owningSandbox } from "./host-aware-sandbox.js";
 import { createKubernetesApi } from "./kubernetes-client.js";
 import { FakeKubernetesApi } from "./kubernetes-test-api.js";
 import { NoneSandboxProvider } from "./none-sandbox.js";
@@ -201,6 +205,26 @@ it("reuses one Daytona, E2B, and Box provider so a stop and a command share the 
   expect(cached.start).not.toHaveBeenCalled();
   expect(events).toContainEqual({ type: "stdout", data: "ok" });
   expect(events).toContainEqual({ type: "exit", code: 0 });
+});
+
+it("treats Docker without its supervisor token as not configured on another deployment", async () => {
+  vi.stubEnv("VITEST", "");
+  vi.stubEnv("NODE_ENV", "production");
+  vi.stubEnv("ARDURBOT_ALLOW_DEV_SECRETS", "");
+  vi.stubEnv("SANDBOX_SUPERVISOR_TOKEN", "");
+  try {
+    const sandbox = createRunSandbox("e2b-emulator", {
+      prisma: {} as PrismaClient,
+      secrets: { load: () => "" },
+    }) as ConnectedSandboxProvider;
+    await expect(owningSandbox(sandbox, { kind: "docker" }, context)).rejects.toThrow(
+      "This computer runs on Docker, which is not configured here. Reset it in Settings, Computers to start it on this deployment's engine, or configure Docker again.",
+    );
+    const keepAlive = sandbox.keepAlive({ id: "c", botId: "b", kind: "docker", providerRef: "r" });
+    await expect(keepAlive).rejects.toBeInstanceOf(MissingComputerProviderError);
+  } finally {
+    vi.unstubAllEnvs();
+  }
 });
 
 it("runs a hosted deployment's own computers on its one default provider", async () => {

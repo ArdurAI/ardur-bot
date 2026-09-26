@@ -95,7 +95,6 @@ it("does not request recreation until the profile confirmation is accepted", asy
   expect(api.configure).toHaveBeenCalledWith({
     botId: "bot",
     imageProfile: "developer",
-    connectionId: null,
     confirmed: true,
   });
   await act(async () => root.unmount());
@@ -142,7 +141,8 @@ it("keeps a connectionless computer on its engine and does not offer deployment 
   expect(element.textContent).toContain("Engine: Docker");
   expect(element.textContent).not.toContain("Deployment default");
   expect(element.textContent).not.toContain("Add a computer");
-  expect(api.engine).not.toHaveBeenCalled();
+  // Local Docker still answers the engine check, so a stopped engine can say so.
+  expect(api.engine).toHaveBeenCalledExactlyOnceWith({ connectionId: null });
   await act(async () => root.unmount());
 });
 
@@ -157,6 +157,7 @@ it("shows a desktop computer with the host label from the API and hides image pr
         name="Builder"
         status={{ ...status, kind: "desktop", hostLabel: "This computer" }}
         connections={[]}
+        deploymentDefault={null}
         onChanged={async () => {}}
       />,
     ),
@@ -227,19 +228,18 @@ it("moves a connectionless computer to a saved connection and hides the control 
   await act(async () => root.unmount());
 });
 
-it("treats This Mac as the deployment default only when that engine is selected", () => {
-  expect(deploymentDefaultEngine({ sandboxProvider: "docker", computerHost: "this-mac" })).toBe(
-    "this-mac",
-  );
-  expect(deploymentDefaultEngine({ sandboxProvider: "desktop", computerHost: null })).toBe(
-    "this-mac",
-  );
+it("names the engine new computers start on, and none while that is the host", () => {
+  expect(
+    deploymentDefaultEngine({ sandboxProvider: "docker", computerHost: "this-mac" }),
+  ).toBeNull();
+  expect(deploymentDefaultEngine({ sandboxProvider: "desktop", computerHost: null })).toBeNull();
   expect(deploymentDefaultEngine({ sandboxProvider: "docker", computerHost: null })).toBe("docker");
   expect(deploymentDefaultEngine({ sandboxProvider: "docker", computerHost: "docker" })).toBe(
     "docker",
   );
+  expect(deploymentDefaultEngine({ sandboxProvider: "e2b", computerHost: null })).toBe("e2b");
   expect(deploymentDefaultEngine({ sandboxProvider: "kubernetes", computerHost: null })).toBe(
-    "other",
+    "kubernetes",
   );
 });
 
@@ -254,6 +254,7 @@ it("labels a desktop computer with the host label the API returns, not the brows
         name="Builder"
         status={{ ...status, kind: "desktop", hostLabel }}
         connections={[{ id: "ssh", name: "Office", settings: { engine: "ssh" } as never }]}
+        deploymentDefault={null}
         onChanged={async () => {}}
       />,
     );
@@ -275,7 +276,7 @@ it("labels a desktop computer with the host label the API returns, not the brows
   await act(async () => root.unmount());
 });
 
-it("offers Deployment default (Docker) only when Docker is the deployment default", async () => {
+it("offers the deployment default by its engine name unless that is the host", async () => {
   const element = document.createElement("div");
   document.body.append(element);
   const root = createRoot(element);
@@ -286,45 +287,37 @@ it("offers Deployment default (Docker) only when Docker is the deployment defaul
     { id: "office", name: "Office", settings: { engine: "ssh" } as never },
     { id: "lab", name: "Lab", settings: { engine: "ssh" } as never },
   ];
-  await act(async () =>
+  const render = (deploymentDefault: string | null) =>
     root.render(
       <ComputerProfile
         botId="bot"
         name="Builder"
         status={ssh}
         connections={connections}
-        deploymentDefault="this-mac"
+        deploymentDefault={deploymentDefault}
         onChanged={async () => {}}
       />,
-    ),
-  );
-  const hidden = element.querySelector<HTMLSelectElement>('[aria-label="Connection"]')!;
-  expect([...hidden.options].map((option) => option.textContent)).toEqual(["Office", "Lab"]);
-  expect(hidden.value).toBe("office");
+    );
+  const select = () => element.querySelector<HTMLSelectElement>('[aria-label="Connection"]')!;
+  const options = () => [...select().options].map((option) => option.textContent);
+  await act(async () => render(null));
+  expect(options()).toEqual(["Office", "Lab"]);
+  expect(select().value).toBe("office");
   expect(element.textContent).not.toContain("Deployment default");
-  await act(async () =>
-    root.render(
-      <ComputerProfile
-        botId="bot"
-        name="Builder"
-        status={ssh}
-        connections={connections}
-        deploymentDefault="docker"
-        onChanged={async () => {}}
-      />,
-    ),
-  );
-  const shown = element.querySelector<HTMLSelectElement>('[aria-label="Connection"]')!;
-  expect([...shown.options].map((option) => option.textContent)).toEqual([
-    "Deployment default (Docker)",
-    "Office",
-    "Lab",
-  ]);
+  await act(async () => render("docker"));
+  expect(options()).toEqual(["Office", "Deployment default (Docker)", "Lab"]);
+  await act(async () => render("e2b"));
+  expect(options()).toEqual(["Office", "Deployment default (E2B)", "Lab"]);
   await act(async () => {
-    shown.value = "";
-    shown.dispatchEvent(new Event("change", { bubbles: true }));
+    select().value = [...select().options].find(
+      (option) => option.textContent === "Deployment default (E2B)",
+    )!.value;
+    select().dispatchEvent(new Event("change", { bubbles: true }));
   });
   await act(async () => button("Apply").click());
+  expect(element.querySelector('[role="alertdialog"]')?.textContent).toContain(
+    "This moves the computer from Office to Deployment default (E2B) and replaces its files. Continue?",
+  );
   await act(async () => button("Continue").click());
   expect(api.configure).toHaveBeenCalledWith({
     botId: "bot",
@@ -332,6 +325,71 @@ it("offers Deployment default (Docker) only when Docker is the deployment defaul
     connectionId: null,
     confirmed: true,
   });
+  await act(async () => root.unmount());
+});
+
+it("moves a connectionless Docker computer to an E2B deployment default and names Docker", async () => {
+  const element = document.createElement("div");
+  document.body.append(element);
+  const root = createRoot(element);
+  const button = (name: string) =>
+    [...element.querySelectorAll("button")].find((entry) => entry.textContent === name)!;
+  await act(async () =>
+    root.render(
+      <ComputerProfile
+        botId="bot"
+        name="Builder"
+        status={status}
+        connections={[]}
+        deploymentDefault="e2b"
+        onChanged={async () => {}}
+      />,
+    ),
+  );
+  const select = element.querySelector<HTMLSelectElement>('[aria-label="Connection"]')!;
+  expect([...select.options].map((option) => option.textContent)).toEqual([
+    "Docker",
+    "Deployment default (E2B)",
+  ]);
+  await act(async () => {
+    select.value = select.options[1]!.value;
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  expect(element.textContent).toContain("Engine: E2B");
+  // Only the Docker engine it runs on was checked; E2B is named, not probed.
+  expect(api.engine).toHaveBeenCalledExactlyOnceWith({ connectionId: null });
+  await act(async () => button("Apply").click());
+  expect(element.querySelector('[role="alertdialog"]')?.textContent).toContain(
+    "This moves the computer from Docker to Deployment default (E2B) and replaces its files. Continue?",
+  );
+  await act(async () => button("Continue").click());
+  expect(api.configure).toHaveBeenCalledWith({
+    botId: "bot",
+    imageProfile: "base",
+    connectionId: null,
+    confirmed: true,
+  });
+  api.configure.mockClear();
+  // A computer already on the deployment's engine is not offered it, and a host default never is.
+  for (const [kind, deploymentDefault] of [
+    ["e2b", "e2b"],
+    ["docker", null],
+    ["docker", "e2b-emulator"],
+  ] as const) {
+    await act(async () =>
+      root.render(
+        <ComputerProfile
+          botId="bot"
+          name="Builder"
+          status={{ ...status, kind }}
+          connections={[]}
+          deploymentDefault={deploymentDefault}
+          onChanged={async () => {}}
+        />,
+      ),
+    );
+    expect(element.querySelector('[aria-label="Connection"]')).toBeNull();
+  }
   await act(async () => root.unmount());
 });
 
@@ -355,8 +413,8 @@ it("still moves a connected computer to another saved connection or the deployme
   );
   const connection = element.querySelector<HTMLSelectElement>('[aria-label="Connection"]')!;
   expect([...connection.options].map((option) => option.textContent)).toEqual([
-    "Deployment default (Docker)",
     "Local",
+    "Deployment default (Docker)",
     "Remote",
   ]);
   expect(element.textContent).not.toContain("Moving this computer between engines");
@@ -399,7 +457,7 @@ it("shows the saved connection names and names both machines in the move dialog"
         name="Builder"
         status={home}
         connections={connections}
-        deploymentDefault="this-mac"
+        deploymentDefault={null}
         onChanged={async () => {}}
       />,
     ),
@@ -424,7 +482,7 @@ it("shows the saved connection names and names both machines in the move dialog"
         name="Builder"
         status={status}
         connections={[{ id: "office", name: "Office", settings: { engine: "ssh" } as never }]}
-        deploymentDefault="this-mac"
+        deploymentDefault={null}
         onChanged={async () => {}}
       />,
     ),
@@ -436,7 +494,7 @@ it("shows the saved connection names and names both machines in the move dialog"
   });
   await act(async () => button("Apply").click());
   expect(element.querySelector('[role="alertdialog"]')?.textContent).toContain(
-    "This moves the computer from this engine to Office and replaces its files. Continue?",
+    "This moves the computer from Docker to Office and replaces its files. Continue?",
   );
   await act(async () => root.unmount());
 });
@@ -494,7 +552,6 @@ it("hides image profiles on a desktop computer and still sends one for Docker", 
   expect(api.configure).toHaveBeenCalledWith({
     botId: "bot",
     imageProfile: "developer",
-    connectionId: null,
     confirmed: true,
   });
   await act(async () => root.unmount());
@@ -517,7 +574,7 @@ it("shows the host refusal as its own sentence instead of the generic failure", 
           { id: "home", name: "Home", settings: { engine: "ssh" } as never },
           { id: "office", name: "Office", settings: { engine: "ssh" } as never },
         ]}
-        deploymentDefault="this-mac"
+        deploymentDefault={null}
         onChanged={async () => {}}
       />,
     ),

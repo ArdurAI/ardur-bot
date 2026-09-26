@@ -49,13 +49,19 @@ export async function placeRunComputer(
     userId: run.userId,
     signal,
   };
+  let family: string | null;
+  try {
+    family = await catalog.engineFamily(computer, context);
+  } catch {
+    return true; // A computer whose engine cannot be reached here is never moved automatically.
+  }
   const fleet = await catalog.list(context);
   const from = fleetComputerTargetId(computer, fleet);
   let candidates = fleet.targets.filter(
     (target) =>
       target.connectionId !== null || target.id === fleet.defaultTargetId || target.id === from,
   );
-  candidates = await catalog.compatibleTargets(computer, candidates, context);
+  candidates = await catalog.compatibleTargets(family, candidates, context);
   if (computer.networkEgress === false) {
     const supported = new Set([from]);
     for (const target of candidates) {
@@ -265,7 +271,7 @@ export async function placeRunComputer(
   try {
     const moveSignal = AbortSignal.any([signal, abort.signal]);
     moveSignal.throwIfAborted();
-    const destination = await catalog.placementTarget(computer, target, context);
+    const destination = await catalog.placementTarget(family, target, context);
     await replaceComputer(
       deps,
       computer.id,

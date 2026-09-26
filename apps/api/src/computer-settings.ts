@@ -131,19 +131,14 @@ export async function validateComputerConfiguration(
     throw new ORPCError("BAD_REQUEST", {
       message: "This replaces the computer's files. Continue?",
     });
+  // Null chooses the deployment default, which is refused while new computers start on the host.
   if (configuration.connectionId === null) {
-    const bot = await prisma.bot.findFirst({
-      where: { id: configuration.botId, spaceId },
-      include: { computer: { select: { connectionId: true } } },
-    });
-    if (bot?.computer?.connectionId) {
-      const deployment =
-        sandboxProvider === "docker"
-          ? await prisma.deploymentSettings.findUnique({ where: { id: "default" } })
-          : null;
-      if (sandboxKindForBot(sandboxProvider, deployment?.computerHost) === "desktop")
-        throw new ORPCError("BAD_REQUEST", { message: HOST_MOVE_UNAVAILABLE_MESSAGE });
-    }
+    const deployment =
+      sandboxProvider === "docker"
+        ? await prisma.deploymentSettings.findUnique({ where: { id: "default" } })
+        : null;
+    if (sandboxKindForBot(sandboxProvider, deployment?.computerHost) === "desktop")
+      throw new ORPCError("BAD_REQUEST", { message: HOST_MOVE_UNAVAILABLE_MESSAGE });
   }
   if (
     configuration.connectionId &&

@@ -25,15 +25,16 @@ import { rpc } from "../lib/rpc";
 
 type Connection = { id: string; name: string; settings: ComputerConnectionSettings };
 
-export type DeploymentDefault = "docker" | "this-mac" | "other";
-
+/** The engine new computers start on, or null while that is the host. */
 export function deploymentDefaultEngine(
   me: Pick<Me, "computerHost" | "sandboxProvider">,
-): DeploymentDefault {
-  if (me.sandboxProvider === "desktop" || me.computerHost === "this-mac") return "this-mac";
-  if (me.sandboxProvider === "docker") return "docker";
-  return "other";
+): string | null {
+  return me.sandboxProvider === "desktop" || me.computerHost === "this-mac"
+    ? null
+    : me.sandboxProvider;
 }
+
+const DEPLOYMENT_DEFAULT = "deployment-default";
 
 export function ComputerProfilesSettings() {
   const { t } = useLingui();
@@ -41,7 +42,7 @@ export function ComputerProfilesSettings() {
     { botId: string; name: string; status: ComputerStatus }[]
   >([]);
   const [connections, setConnections] = useState<Connection[]>([]);
-  const [deploymentDefault, setDeploymentDefault] = useState<DeploymentDefault>("docker");
+  const [deploymentDefault, setDeploymentDefault] = useState<string | null>("docker");
   const [error, setError] = useState("");
   async function refresh() {
     const [computers, connections, me] = await Promise.all([
@@ -92,21 +93,27 @@ export function ComputerProfile({
   name: string;
   status: ComputerStatus;
   connections: Connection[];
-  deploymentDefault?: DeploymentDefault;
+  deploymentDefault?: string | null;
   onChanged: () => Promise<void>;
 }) {
   const { t } = useLingui();
-  const connectionless = !status.connectionId;
   const savedConnectionId = status.connectionId ?? "";
   const [profile, setProfile] = useState<ComputerProfileId>(status.imageProfile ?? "base");
-  const [connectionId, setConnectionId] = useState(savedConnectionId);
+  const [selection, setSelection] = useState(savedConnectionId);
   useEffect(() => {
-    setConnectionId(status.connectionId ?? "");
+    setSelection(status.connectionId ?? "");
   }, [status.connectionId, status.kind]);
   const [confirm, setConfirm] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
-  const connection = connections.find((entry) => entry.id === connectionId);
+  const connection = connections.find((entry) => entry.id === selection);
+  const choosingDefault = selection === DEPLOYMENT_DEFAULT;
+  // Local Docker and saved connections answer a probe; other engines are named by their kind.
+  const probed = choosingDefault
+    ? deploymentDefault === "docker"
+      ? ""
+      : null
+    : selection || (status.kind === "docker" ? "" : null);
   const [engineError, setEngineError] = useState("");
   const [engineRefresh, setEngineRefresh] = useState(0);
   const [detectedEngine, setDetectedEngine] = useState<{
@@ -114,7 +121,7 @@ export function ComputerProfile({
     name: string;
   } | null>(null);
   useEffect(() => {
-    if (connectionless && !connectionId) {
+    if (probed === null) {
       setEngineError("");
       setDetectedEngine(null);
       return;
@@ -122,9 +129,9 @@ export function ComputerProfile({
     let active = true;
     setEngineError("");
     void rpc.computer
-      .engine({ connectionId: connectionId || null })
+      .engine({ connectionId: probed || null })
       .then((engine) => {
-        if (active) setDetectedEngine({ connectionId, name: engine.name });
+        if (active) setDetectedEngine({ connectionId: probed, name: engine.name });
       })
       .catch((error: unknown) => {
         if (active)
@@ -140,13 +147,12 @@ export function ComputerProfile({
     return () => {
       active = false;
     };
-  }, [connectionless, connectionId, engineRefresh]);
-  const staying = connectionless && !connectionId;
-  const engine = staying
-    ? status.kind
-    : detectedEngine?.connectionId === connectionId
+  }, [probed, engineRefresh]);
+  const engine =
+    probed !== null && detectedEngine?.connectionId === probed
       ? detectedEngine.name
-      : (connection?.settings.engine ?? status.kind);
+      : (connection?.settings.engine ??
+        (choosingDefault && deploymentDefault ? deploymentDefault : status.kind));
   const hostComputer = status.kind === "desktop";
   const engineLabel = (kind: string) =>
     kind !== "desktop"
@@ -154,14 +160,15 @@ export function ComputerProfile({
       : status.hostLabel === "This Mac"
         ? t`This Mac`
         : t`This computer`;
-  const offerDeploymentDefault = !connectionless && deploymentDefault === "docker";
+  // The deployment's engine is offered when the computer runs elsewhere and it is not the host.
+  const defaultLabel = deploymentDefault ? ENGINE_LABELS[deploymentDefault] : undefined;
+  const offerDeploymentDefault =
+    defaultLabel !== undefined && (!!status.connectionId || status.kind !== deploymentDefault);
+  const defaultOption = t`Deployment default (${defaultLabel})`;
   const supported = ["docker", "podman", "kubernetes", "remote-docker"].includes(engine);
   const savedConnection = connections.find((entry) => entry.id === savedConnectionId);
-  const selectedConnection = connections.find((entry) => entry.id === connectionId);
-  const sourceLabel = savedConnection?.name ?? t`this engine`;
-  const destinationLabel = connectionId
-    ? (selectedConnection?.name ?? t`this engine`)
-    : t`Deployment default (Docker)`;
+  const sourceLabel = savedConnection?.name ?? engineLabel(status.kind);
+  const destinationLabel = choosingDefault ? defaultOption : (connection?.name ?? "");
   async function save() {
     setPending(true);
     setError("");
@@ -169,7 +176,9 @@ export function ComputerProfile({
       await rpc.computer.configure({
         botId,
         ...(hostComputer ? {} : { imageProfile: profile }),
-        connectionId: connectionId || null,
+        ...(selection === savedConnectionId
+          ? {}
+          : { connectionId: choosingDefault ? null : selection }),
         confirmed: true,
       });
       setConfirm(false);
@@ -200,7 +209,7 @@ export function ComputerProfile({
           </Button>
         </div>
       ) : null}
-      {connectionless && connections.length === 0 ? null : (
+      {!status.connectionId && !offerDeploymentDefault && connections.length === 0 ? null : (
         <label htmlFor={`connection-${botId}`} className="block space-y-1">
           <span>
             <Trans>Connection</Trans>
@@ -208,26 +217,16 @@ export function ComputerProfile({
           <NativeSelect
             id={`connection-${botId}`}
             aria-label={t`Connection`}
-            value={connectionId}
+            value={selection}
             disabled={pending}
-            onChange={(event) => setConnectionId(event.target.value)}
+            onChange={(event) => setSelection(event.target.value)}
           >
-            {connectionless ? (
-              <NativeSelectOption value="">{engineLabel(status.kind)}</NativeSelectOption>
-            ) : offerDeploymentDefault ? (
-              <NativeSelectOption value="">
-                <Trans>Deployment default (Docker)</Trans>
-              </NativeSelectOption>
-            ) : (
-              <NativeSelectOption value={savedConnectionId}>
-                {savedConnection?.name ?? t`this engine`}
-              </NativeSelectOption>
-            )}
+            <NativeSelectOption value={savedConnectionId}>{sourceLabel}</NativeSelectOption>
+            {offerDeploymentDefault ? (
+              <NativeSelectOption value={DEPLOYMENT_DEFAULT}>{defaultOption}</NativeSelectOption>
+            ) : null}
             {connections
-              .filter(
-                (entry) =>
-                  connectionless || offerDeploymentDefault || entry.id !== savedConnectionId,
-              )
+              .filter((entry) => entry.id !== savedConnectionId)
               .map((entry) => (
                 <NativeSelectOption key={entry.id} value={entry.id}>
                   {entry.name}
@@ -273,7 +272,7 @@ export function ComputerProfile({
         disabled={
           pending ||
           status.state === "booting" ||
-          (profile === (status.imageProfile ?? "base") && connectionId === savedConnectionId)
+          (profile === (status.imageProfile ?? "base") && selection === savedConnectionId)
         }
         onClick={() => setConfirm(true)}
       >
@@ -296,7 +295,7 @@ export function ComputerProfile({
               <Trans>Change computer</Trans>
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {connectionId !== savedConnectionId
+              {selection !== savedConnectionId
                 ? // biome-ignore format: one catalog sentence
                   t`This moves the computer from ${sourceLabel} to ${destinationLabel} and replaces its files. Continue?`
                 : t`This replaces the computer's files. Continue?`}

@@ -2894,8 +2894,8 @@ msgid "Deployment default"
 msgstr "Развертывание по умолчанию"
 
 #: src/pages/ComputerProfilesSettings.tsx
-msgid "Deployment default (Docker)"
-msgstr "Развертывание по умолчанию (Docker)"
+msgid "Deployment default ({defaultLabel})"
+msgstr "Развертывание по умолчанию ({defaultLabel})"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Describe what this bot does"
@@ -7297,10 +7297,6 @@ msgstr "этот компьютер"
 #: src/pages/ide/IdePage.tsx
 msgid "This computer"
 msgstr "Этот компьютер"
-
-#: src/pages/ComputerProfilesSettings.tsx
-msgid "this engine"
-msgstr "этот механизм"
 
 #: src/components/ArtifactFileCard.tsx
 msgid "This file is not valid UTF-8 Markdown."

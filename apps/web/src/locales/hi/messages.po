@@ -2894,7 +2894,7 @@ msgid "Deployment default"
 msgstr "डिप्लॉयमेंट डिफ़ॉल्ट"
 
 #: src/pages/ComputerProfilesSettings.tsx
-msgid "Deployment default (Docker)"
+msgid "Deployment default ({defaultLabel})"
 msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
@@ -7296,10 +7296,6 @@ msgstr "यह कंप्यूटर"
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/ide/IdePage.tsx
 msgid "This computer"
-msgstr ""
-
-#: src/pages/ComputerProfilesSettings.tsx
-msgid "this engine"
 msgstr ""
 
 #: src/components/ArtifactFileCard.tsx

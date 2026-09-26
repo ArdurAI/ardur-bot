@@ -1,9 +1,10 @@
 import type { AdapterContext, SandboxProvider } from "@ardurbot/adapter-kit";
-import type { FleetTarget, HostLabel } from "@ardurbot/contracts";
+import type { CapacitySnapshot, FleetTarget, HostLabel } from "@ardurbot/contracts";
 import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
 import {
   ENGINE_LABELS,
   FLEET_KINDS,
+  hostLabel,
   PlacementSettingsSchema,
   unknownCapacity,
 } from "@ardurbot/contracts/fleet";
@@ -22,13 +23,29 @@ function fleetKind(kind: string | null | undefined): FleetTarget["kind"] {
   return FLEET_KINDS.find((known) => known === kind) ?? "default";
 }
 
+/** Clusters and hosted providers report no capacity; a registered one is still available. */
+function rowState(kind: string, capacity: CapacitySnapshot): FleetTarget["state"] {
+  return capacity.source === "not-reported" &&
+    !["kubernetes", "e2b", "daytona", "box"].includes(kind)
+    ? "unavailable"
+    : "connected";
+}
+
+/** Probes four at a time; the shared host bridge also reserves slots for execution. */
+async function probeInBatches<T, R>(items: T[], probe: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = [];
+  for (let offset = 0; offset < items.length; offset += 4)
+    results.push(...(await Promise.all(items.slice(offset, offset + 4).map(probe))));
+  return results;
+}
+
 /** The paired desktop names the host; without one, the server running Ardur Bot does. */
 export async function deploymentHostLabel(prisma: PrismaClient): Promise<HostLabel> {
   const paired = await prisma.hostRegistration.findUnique({
     where: { id: "default" },
     select: { platform: true },
   });
-  return (paired?.platform ?? process.platform) === "darwin" ? "This Mac" : "This computer";
+  return hostLabel(paired?.platform ?? process.platform);
 }
 
 /** Built-in row for a computer with no saved connection. Each fleet kind keeps its own row. */
@@ -40,7 +57,9 @@ export function fleetComputerTargetId(
   },
 ): string {
   if (computer?.connectionId) return computer.connectionId;
-  if (computer?.kind === "desktop") return "host";
+  // Host computers belong to the host row only where the host runs computers.
+  if (computer?.kind === "desktop")
+    return fleet.defaultTargetId === "host" ? "host" : "kind:desktop";
   const kind = fleetKind(computer?.kind);
   if (kind === "default") return fleet.defaultTargetId;
   return (
@@ -94,31 +113,30 @@ export class FleetCatalog {
       return this.resolveComputer({ kind: target.kind }, context);
     return this.routing.target(target, context);
   }
-  /** An automatic move's destination. It stays in the computer's own engine family. */
+  /** The engine family an automatic move must stay in. */
+  async engineFamily(computer: ComputerIdentity, context: AdapterContext) {
+    return placementEngineFamily(await this.resolveComputer(computer, context));
+  }
+  /** An automatic move's destination. It stays in the source computer's engine family. */
   async placementTarget(
-    computer: ComputerIdentity,
+    family: string | null,
     target: Pick<FleetTarget, "kind" | "connectionId">,
     context: AdapterContext,
   ): Promise<SandboxProvider> {
-    const [source, destination] = await Promise.all([
-      this.resolveComputer(computer, context),
-      this.resolveTarget(target, context),
-    ]);
-    if (placementEngineFamily(destination) !== placementEngineFamily(source))
+    const destination = await this.resolveTarget(target, context);
+    if (placementEngineFamily(destination) !== family)
       throw new Error("Computer replacement target is unavailable");
     return destination;
   }
   async compatibleTargets(
-    computer: ComputerIdentity,
+    family: string | null,
     targets: FleetTarget[],
     context: AdapterContext,
   ): Promise<FleetTarget[]> {
-    const compatible = await Promise.all(
-      targets.map((target) =>
-        this.placementTarget(computer, target, context).then(
-          () => target,
-          () => null,
-        ),
+    const compatible = await probeInBatches(targets, (target) =>
+      this.placementTarget(family, target, context).then(
+        () => target,
+        () => null,
       ),
     );
     return compatible.filter((target): target is FleetTarget => target !== null);
@@ -157,7 +175,7 @@ export class FleetCatalog {
       name: ENGINE_LABELS[kind] ?? kind,
       kind,
       connectionId: null,
-      state: capacity.source === "not-reported" ? "unavailable" : "connected",
+      state: rowState(kind, capacity),
       capacity,
       bots: [],
     };
@@ -235,64 +253,58 @@ export class FleetCatalog {
     if (defaultRowIsDocker) {
       targets.push({ ...this.diagnostics.get("default"), ...dockerRow });
     } else {
+      const kind = fleetKind(this.fallback.describe().kind);
       targets.push({
         ...this.diagnostics.get("default"),
         id: "default",
         name: "Default computer",
-        kind: fleetKind(this.fallback.describe().kind),
+        kind,
         builtin: "default",
         connectionId: null,
-        state: defaultCapacity.source === "not-reported" ? "unavailable" : "connected",
+        state: rowState(kind, defaultCapacity),
         capacity: defaultCapacity,
         bots: [],
       });
       targets.push(dockerRow);
     }
-    // Bound per-list work; the shared host bridge also reserves slots for execution.
-    for (let offset = 0; offset < rows.length; offset += 4) {
-      const entries = await Promise.all(
-        rows.slice(offset, offset + 4).map(async (row): Promise<FleetTarget> => {
-          const settings = ComputerConnectionSettingsSchema.parse(row.metadata);
-          let state: FleetTarget["state"] =
-            row.status === "connected" ? "connected" : "unavailable";
-          const capacity = await this.connections
-            .resolve(row.id, context)
-            .then((provider) => provider.capacity?.(context) ?? unknownCapacity())
-            .catch(() => {
-              state = "unavailable";
-              return unknownCapacity();
-            });
-          if (capacity.source === "not-reported" && settings.engine !== "kubernetes")
+    targets.push(
+      ...(await probeInBatches(rows, async (row): Promise<FleetTarget> => {
+        const settings = ComputerConnectionSettingsSchema.parse(row.metadata);
+        let state: FleetTarget["state"] = row.status === "connected" ? "connected" : "unavailable";
+        const capacity = await this.connections
+          .resolve(row.id, context)
+          .then((provider) => provider.capacity?.(context) ?? unknownCapacity())
+          .catch(() => {
             state = "unavailable";
-          return {
-            ...this.diagnostics.get(row.id),
-            id: row.id,
-            name: row.displayName,
-            kind: settings.engine,
-            connectionId: row.id,
-            state,
-            capacity,
-            endpoint: settings.endpoint ?? settings.socket,
-            context: settings.context,
-            ssh: settings.ssh,
-            bots: [],
-          };
-        }),
-      );
-      targets.push(...entries);
-    }
+            return unknownCapacity();
+          });
+        if (rowState(settings.engine, capacity) === "unavailable") state = "unavailable";
+        return {
+          ...this.diagnostics.get(row.id),
+          id: row.id,
+          name: row.displayName,
+          kind: settings.engine,
+          connectionId: row.id,
+          state,
+          capacity,
+          endpoint: settings.endpoint ?? settings.socket,
+          context: settings.context,
+          ssh: settings.ssh,
+          bots: [],
+        };
+      })),
+    );
     const kinds = new Set(
       bots.flatMap(({ computer }) =>
         computer && !computer.connectionId ? [fleetKind(computer.kind)] : [],
       ),
     );
-    const kindRows = await Promise.all(
-      [...kinds]
-        .filter((kind) => {
-          const id = fleetComputerTargetId({ kind }, { defaultTargetId, targets });
-          return !targets.some((target) => target.id === id);
-        })
-        .map((kind) => this.kindTarget(kind, context)),
+    const kindRows = await probeInBatches(
+      [...kinds].filter((kind) => {
+        const id = fleetComputerTargetId({ kind }, { defaultTargetId, targets });
+        return !targets.some((target) => target.id === id);
+      }),
+      (kind) => this.kindTarget(kind, context),
     );
     targets.push(...kindRows.filter((target): target is FleetTarget => target !== null));
     for (const bot of bots) {

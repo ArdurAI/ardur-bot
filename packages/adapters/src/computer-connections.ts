@@ -5,7 +5,7 @@ import type {
   TerminalProvider,
 } from "@ardurbot/adapter-kit";
 import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
-import { ENGINE_LABELS, unknownCapacity } from "@ardurbot/contracts/fleet";
+import { ENGINE_LABELS, hostLabel, unknownCapacity } from "@ardurbot/contracts/fleet";
 import type { PrismaClient } from "@ardurbot/db";
 import { DockerSandboxProvider } from "./docker-sandbox.js";
 import { HostKubernetesSandboxProvider } from "./fleet/remote-kubernetes.js";
@@ -77,7 +77,7 @@ export class ComputerConnections {
 export type ComputerIdentity = { connectionId?: string | null; kind?: string | null };
 
 /** A computer that has not started yet carries the deployment's provider id as its kind. */
-function ownsKind(provider: SandboxProvider, kind: string) {
+export function ownsKind(provider: SandboxProvider, kind: string) {
   const described = provider.describe();
   return described.kind === kind || described.id === kind;
 }
@@ -85,9 +85,9 @@ function ownsKind(provider: SandboxProvider, kind: string) {
 /** A computer whose engine is not configured here: one sentence with the fix. */
 export class MissingComputerProviderError extends Error {
   constructor(kind: string) {
-    const engine = ENGINE_LABELS[kind] ?? kind;
+    const engine = kind === "desktop" ? hostLabel(process.platform) : (ENGINE_LABELS[kind] ?? kind);
     super(
-      `This computer runs on ${engine}, which is not configured here. Move it in Settings, Computers, or configure ${engine} again.`,
+      `This computer runs on ${engine}, which is not configured here. Reset it in Settings, Computers to start it on this deployment's engine, or configure ${engine} again.`,
     );
     this.name = "MissingComputerProviderError";
   }
@@ -128,10 +128,8 @@ export class ConnectedSandboxProvider implements SandboxProvider {
       },
     };
   }
-  keepAlive(computer: Parameters<NonNullable<SandboxProvider["keepAlive"]>>[0]) {
-    return !computer.connectionId
-      ? (this.connectionless(computer.kind).keepAlive?.(computer) ?? Promise.resolve())
-      : Promise.resolve();
+  async keepAlive(computer: Parameters<NonNullable<SandboxProvider["keepAlive"]>>[0]) {
+    if (!computer.connectionId) await this.connectionless(computer.kind).keepAlive?.(computer);
   }
   describe() {
     return this.fallback.describe();
@@ -146,11 +144,15 @@ export class ConnectedSandboxProvider implements SandboxProvider {
   target(subject: { connectionId?: string | null }, context: AdapterContext) {
     return this.owner({ connectionId: subject.connectionId }, context);
   }
-  private connectionless(kind: string | null | undefined) {
+  private connectionless(kind: string | null | undefined): SandboxProvider {
     // A computer with no saved kind is created on the deployment default.
     if (!kind || ownsKind(this.fallback, kind)) return this.fallback;
-    const local = this.local[kind]?.();
-    if (local) return local;
+    try {
+      const local = this.local[kind]?.();
+      if (local) return local;
+    } catch {
+      // An engine that cannot be built here, such as Docker without its supervisor token.
+    }
     throw new MissingComputerProviderError(kind);
   }
   async capacity(context: AdapterContext) {
