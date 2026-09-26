@@ -1,7 +1,7 @@
-import { homedir } from "node:os";
 import { nativeHostOwner } from "@ardurbot/adapters";
 import type { HostHealth, HostStatus } from "@ardurbot/contracts/host-bridge";
 import type { PrismaClient } from "@ardurbot/db";
+import { readRegisteredFolders } from "@ardurbot/host-runtime/desktop-sandbox";
 import {
   getHostEnvironment,
   inspectHostEnvironment,
@@ -13,7 +13,12 @@ import { probeCodex } from "@ardurbot/host-runtime/runtimes/codex-app-server-run
 let health: Promise<HostHealth> | undefined;
 let checkedAt = 0;
 
-/** Source deployments already run host adapters locally; never inspect a packaged API container. */
+/**
+ * Source deployments already run host adapters locally; never inspect a packaged API container.
+ * The roots are the folders the command sandbox allows beyond a computer's own workspace, read
+ * fresh so an added folder applies at once. There are none until someone adds a folder; the
+ * home directory is never one.
+ */
 export async function sourceHostStatus(
   prisma: PrismaClient,
   userId: string,
@@ -37,7 +42,7 @@ export async function sourceHostStatus(
     ])
       .then(([environment, claude, codex, integrations]) => ({
         platform: process.platform as HostHealth["platform"],
-        roots: [homedir()],
+        roots: [],
         load: 0,
         environment,
         integrations,
@@ -49,7 +54,10 @@ export async function sourceHostStatus(
         throw error;
       });
   }
-  const current = await health;
+  const [current, roots] = await Promise.all([
+    health,
+    readRegisteredFolders(process.env.ARDURBOT_HOST_ROOTS_FILE),
+  ]);
   // There is no paired registration to disconnect in source mode.
-  return { configured: false, connected: true, roots: current.roots, health: current };
+  return { configured: false, connected: true, roots, health: { ...current, roots } };
 }

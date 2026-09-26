@@ -2,7 +2,7 @@
 
 The builder can inspect, edit and hand off code without leaving the app. The operator can inspect a reachable computer and use its existing terminal. Researchers can inspect scripts and recorded file changes. The page runs in the web UI that Electron hosts; mobile navigation is unchanged.
 
-Open `/app/ide` in the authenticated app. The computer picker offers the deployment owner's registered host folders and the current space's accessible sandbox computer homes. A tree expansion lists one directory. Quick open searches file names by walking directories on demand. It stops when the dialog closes. Change notifications use the existing thread event streams; there is no filesystem polling.
+Open `/app/ide` in the authenticated app. The computer picker offers the deployment owner's registered host folders and the current space's accessible sandbox computer homes. Without a paired host service, the registered folders are the list at `ARDURBOT_HOST_ROOTS_FILE`, the same folders commands may use; the installed app sets it, and until a folder is added there are none. The home directory is never offered on its own. A tree expansion lists one directory. Quick open searches file names by walking directories on demand. It stops when the dialog closes. Change notifications use the existing thread event streams; there is no filesystem polling.
 
 The top navigation registry is absent in this branch. When `apps/web/src/pages/shell/top-nav.ts` arrives, register `IDE` with `registerTopNavItem` at order 40. This change deliberately adds only the route until that registry exists.
 

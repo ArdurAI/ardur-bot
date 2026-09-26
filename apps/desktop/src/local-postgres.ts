@@ -84,12 +84,40 @@ export async function loadEmbeddedPostgres(input: {
     }
     registerPostgresModuleHook();
   }
-  const imported = (await import("embedded-postgres")) as {
-    default?: EmbeddedPostgresConstructor;
-  };
-  const EmbeddedPostgres = imported.default;
-  if (!EmbeddedPostgres) throw new Error("Embedded Postgres could not be loaded.");
-  return EmbeddedPostgres;
+  // The wrapper imports its platform package as it loads but reports a missing one only
+  // when the server starts, so resolve both here, from where the wrapper would.
+  const binaries = embeddedPostgresPackage(process.platform, process.arch);
+  let wrapper: string;
+  let imported: { default?: EmbeddedPostgresConstructor };
+  try {
+    wrapper = createRequire(import.meta.url).resolve("embedded-postgres");
+  } catch {
+    throw new MissingDatabaseBinariesError("embedded-postgres");
+  }
+  try {
+    createRequire(wrapper).resolve(binaries);
+  } catch {
+    throw new MissingDatabaseBinariesError(binaries);
+  }
+  try {
+    imported = (await import("embedded-postgres")) as typeof imported;
+  } catch {
+    throw new MissingDatabaseBinariesError(binaries);
+  }
+  if (!imported.default) throw new MissingDatabaseBinariesError(binaries);
+  return imported.default;
+}
+
+export class MissingDatabaseBinariesError extends Error {
+  constructor(packageName: string) {
+    super(`The database binaries ${packageName} are missing.`);
+    this.name = "MissingDatabaseBinariesError";
+  }
+}
+
+/** The optional package `embedded-postgres` imports for this computer. */
+export function embeddedPostgresPackage(platform: NodeJS.Platform, arch: string): string {
+  return `@embedded-postgres/${platform === "win32" ? "windows" : platform}-${arch}`;
 }
 
 export async function readPersistedPort(file: string): Promise<number | null> {

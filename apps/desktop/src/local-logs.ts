@@ -4,6 +4,7 @@ export const LOG_CAP_BYTES = 10 * 1024 * 1024;
 
 const writers = new Map<string, Promise<void>>();
 
+/** A line that cannot be written (full disk, removed folder) is dropped, never thrown. */
 export function writeServiceLog(
   file: string,
   chunk: Buffer | string,
@@ -11,7 +12,7 @@ export function writeServiceLog(
 ): Promise<void> {
   const bytes = typeof chunk === "string" ? Buffer.from(chunk) : chunk;
   const previous = writers.get(file) ?? Promise.resolve();
-  const next = previous.catch(() => undefined).then(() => appendCappedLog(file, bytes, cap));
+  const next = previous.then(() => appendCappedLog(file, bytes, cap)).catch(() => undefined);
   writers.set(file, next);
   return next;
 }

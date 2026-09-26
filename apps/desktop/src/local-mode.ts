@@ -11,6 +11,7 @@ import {
   FORBIDDEN_PORTS,
   legacyStackEnvExists,
   livePostmaster,
+  MissingDatabaseBinariesError,
   POSTGRES_USER,
   pidIsAlive,
   readPersistedPort,
@@ -24,6 +25,8 @@ const STOP_TIMEOUT_MS = 5_000;
 const HEALTH_TIMEOUT_MS = 8_000;
 const READY_BUDGET_MS = 60_000;
 const RESTART_WINDOW_MS = 5 * 60_000;
+/** The worker's structured log line once its job host is running. */
+const WORKER_READY = '"message":"worker ready"';
 const SECRET_KEYS = {
   POSTGRES_PASSWORD: 16,
   BETTER_AUTH_SECRET: 32,
@@ -47,11 +50,16 @@ export interface LocalModeDependencies {
   fetch: (url: string, init: RequestInit) => Promise<Response>;
   openApp: (url: string) => Promise<boolean>;
   migrate: (databaseUrl: string) => Promise<void>;
-  postgresFactory: (options: EmbeddedPostgresOptions) => EmbeddedPostgresLike;
+  /** May load the embedded binaries first; a missing package rejects with its name. */
+  postgresFactory: (
+    options: EmbeddedPostgresOptions,
+  ) => EmbeddedPostgresLike | Promise<EmbeddedPostgresLike>;
   allocatePort: () => Promise<number>;
   portAvailable: (port: number) => Promise<boolean>;
   randomHex: (bytes: number) => string;
   now: () => number;
+  /** Delay before the next restart of a crashed service; doubles from one second by default. */
+  restartDelayMs?: (restarts: number) => number;
   postmasterAlive?: (pid: number) => boolean;
   stopPostmaster?: (pid: number) => Promise<void>;
   onState?: (state: DesktopLocalStackState) => void;
@@ -128,6 +136,8 @@ export class LocalModeController {
   private readonly children = new Map<ServiceName, ChildProcess>();
   private readonly restartMarks = new Map<ServiceName, number[]>();
   private readonly restartTimers = new Map<ServiceName, ReturnType<typeof setTimeout>>();
+  private workerOutput = "";
+  private workerReady = false;
   private stopped = true;
   private databaseReported = false;
 
@@ -150,6 +160,9 @@ export class LocalModeController {
     if (this.inflight) return this.inflight;
     this.stopped = false;
     this.databaseReported = false;
+    // Retry gives every service a fresh restart budget; run() starts whatever is not running.
+    this.restartMarks.clear();
+    this.clearRestartTimers();
     const run = this.run().finally(() => {
       if (this.inflight === run) this.inflight = null;
     });
@@ -175,8 +188,7 @@ export class LocalModeController {
 
   async stop(): Promise<void> {
     this.stopped = true;
-    for (const timer of this.restartTimers.values()) clearTimeout(timer);
-    this.restartTimers.clear();
+    this.clearRestartTimers();
     await this.stopChild("worker");
     await this.stopChild("api");
     const postgres = this.postgres;
@@ -195,20 +207,26 @@ export class LocalModeController {
       this.publish("services", null);
       if (!this.children.has("api")) this.spawn("api");
       if (!this.children.has("worker")) this.spawn("worker");
-      if (!(await this.waitForHealth())) {
-        this.failService("api");
-        return this.current;
-      }
+      if (!(await this.waitForServices())) return this.current;
       this.originUrl = `http://127.0.0.1:${this.apiPort}`;
       const opened = await this.deps.openApp(this.originUrl);
+      if (this.stopped || this.failed()) return this.current;
       if (!opened) {
         this.failService("api");
         return this.current;
       }
       this.publish("ready", null);
       return this.current;
-    } catch {
-      if (!this.stopped && !this.databaseReported) await this.reportDatabaseDown();
+    } catch (error) {
+      if (this.stopped || this.databaseReported) return this.current;
+      if (error instanceof MissingDatabaseBinariesError) {
+        this.fail(error.message);
+      } else if (this.current.phase === "migrations" && (await this.databaseAlive())) {
+        await this.releaseDatabase();
+        if (!this.stopped) this.fail(migrationFailureSentence(error));
+      } else {
+        await this.reportDatabaseDown();
+      }
       return this.current;
     }
   }
@@ -217,7 +235,10 @@ export class LocalModeController {
     const secrets = await this.loadSecrets();
     this.secrets = secrets;
     this.postgresPort = await this.choosePort(path.join(this.deps.userDataDir, "postgres.port"));
-    this.apiPort = await this.choosePort(path.join(this.deps.userDataDir, "api.port"));
+    // A Retry after the worker stopped keeps the running API, and with it the open window's origin.
+    if (!this.children.has("api")) {
+      this.apiPort = await this.choosePort(path.join(this.deps.userDataDir, "api.port"));
+    }
     this.originUrl = `http://127.0.0.1:${this.apiPort}`;
     this.databaseUrl = databaseUrl(secrets.POSTGRES_PASSWORD, this.postgresPort);
     const databaseDir = path.join(this.deps.userDataDir, "postgres");
@@ -235,7 +256,7 @@ export class LocalModeController {
       if (this.stopped) await this.releaseDatabase();
       return;
     }
-    const postgres = this.deps.postgresFactory({
+    const postgres = await this.deps.postgresFactory({
       databaseDir,
       port: this.postgresPort,
       user: POSTGRES_USER,
@@ -280,6 +301,12 @@ export class LocalModeController {
     if (postgres) await postgres.stop().catch(() => undefined);
   }
 
+  /** Whether the postmaster that owns this data directory is still running. */
+  private async databaseAlive(): Promise<boolean> {
+    const databaseDir = path.join(this.deps.userDataDir, "postgres");
+    return (await livePostmaster(databaseDir, this.deps.postmasterAlive ?? pidIsAlive)) !== null;
+  }
+
   private spawn(service: ServiceName): void {
     if (this.stopped || !this.secrets) return;
     const launch = localServiceLaunch({
@@ -306,19 +333,32 @@ export class LocalModeController {
       env,
     });
     this.children.set(service, child);
+    if (service === "worker") {
+      this.workerOutput = "";
+      this.workerReady = false;
+    }
     const log = path.join(this.deps.userDataDir, "logs", `${service}.log`);
-    child.stdout?.on("data", (chunk: Buffer) => {
+    const output = (chunk: Buffer) => {
       void writeServiceLog(log, chunk);
-    });
-    child.stderr?.on("data", (chunk: Buffer) => {
-      void writeServiceLog(log, chunk);
-    });
+      if (service === "worker" && this.children.get(service) === child) this.noteWorker(chunk);
+    };
+    child.stdout?.on("data", output);
+    child.stderr?.on("data", output);
     child.once("exit", () => this.onChildExit(service, child));
+  }
+
+  /** Keeps a short tail so the ready line is found even when split across chunks. */
+  private noteWorker(chunk: Buffer): void {
+    if (this.workerReady) return;
+    const text = this.workerOutput + chunk.toString("utf8");
+    this.workerReady = text.includes(WORKER_READY);
+    this.workerOutput = text.slice(-WORKER_READY.length);
   }
 
   private onChildExit(service: ServiceName, child: ChildProcess): void {
     if (this.children.get(service) !== child) return;
     this.children.delete(service);
+    if (service === "worker") this.workerReady = false;
     if (this.stopped) return;
     const now = this.deps.now();
     const marks = (this.restartMarks.get(service) ?? []).filter(
@@ -328,29 +368,53 @@ export class LocalModeController {
       this.failService(service);
       return;
     }
-    const delay = 1_000 * 2 ** marks.length;
+    const delay = this.deps.restartDelayMs?.(marks.length) ?? 1_000 * 2 ** marks.length;
     marks.push(now);
     this.restartMarks.set(service, marks);
     const timer = setTimeout(() => {
       this.restartTimers.delete(service);
-      if (!this.stopped) this.spawn(service);
+      if (!this.stopped && !this.children.has(service)) this.spawn(service);
     }, delay);
     this.restartTimers.set(service, timer);
   }
 
+  private clearRestartTimers(): void {
+    for (const timer of this.restartTimers.values()) clearTimeout(timer);
+    this.restartTimers.clear();
+  }
+
   private failService(service: ServiceName): void {
-    const message = service === "api" ? "The API stopped." : "The worker stopped.";
+    this.fail(service === "api" ? "The API stopped." : "The worker stopped.");
+  }
+
+  private fail(message: string): void {
     this.publish("failed", message);
     this.deps.onFailed?.(message);
   }
 
-  private async waitForHealth(): Promise<boolean> {
+  /** A service or the database gave up since this run published its last phase. */
+  private failed(): boolean {
+    return this.current.phase === "failed";
+  }
+
+  /**
+   * Ready needs the API's health answer and the worker's ready line. A service that
+   * gives up restarting during the wait ends it. One that is still not ready at the
+   * deadline is stopped, so the sentence that names it is true and Retry starts it fresh.
+   */
+  private async waitForServices(): Promise<boolean> {
     const deadline = this.deps.now() + READY_BUDGET_MS;
-    while (!this.stopped && this.deps.now() <= deadline) {
-      if (await this.probe()) return true;
+    let apiAnswered = false;
+    while (!this.stopped && !this.failed() && this.deps.now() <= deadline) {
+      apiAnswered = await this.probe();
+      if (apiAnswered && this.workerReady && !this.failed()) return true;
       if (this.deps.now() === deadline) break;
       await delay(200);
     }
+    if (this.stopped || this.failed()) return false;
+    const service = apiAnswered ? "worker" : "api";
+    await this.stopChild(service);
+    if (!this.stopped) this.failService(service);
     return false;
   }
 
@@ -435,6 +499,29 @@ function attachedPostgres(pid: number, stop: (pid: number) => Promise<void>): Em
   };
 }
 
+/** The migration and the database's first line, while the server itself is still up. */
+function migrationFailureSentence(error: unknown): string {
+  const failure = (typeof error === "object" && error !== null ? error : {}) as {
+    migrationName?: unknown;
+    databaseError?: unknown;
+    message?: unknown;
+  };
+  const raw =
+    typeof failure.databaseError === "string"
+      ? failure.databaseError
+      : typeof failure.message === "string"
+        ? failure.message
+        : "";
+  const detail = (raw.split("\n").find((line) => line.trim()) ?? "")
+    .trim()
+    .replace(/\.+$/u, "")
+    .slice(0, 200);
+  const at = typeof failure.migrationName === "string" ? ` at ${failure.migrationName}` : "";
+  return detail
+    ? `Preparing the database failed${at}: ${detail}.`
+    : `Preparing the database failed${at}.`;
+}
+
 function idleState(): DesktopLocalStackState {
   return { phase: "idle", message: null, output: [], layerBytes: {}, imageTag: "" };
 }
@@ -486,6 +573,8 @@ function serviceEnvironment(
     API_HOST: "127.0.0.1",
     API_PORT: String(settings.apiPort),
     NODE_ENV: source.NODE_ENV === "test" ? "production" : (source.NODE_ENV ?? "production"),
+    // The supervisor reads the worker's ready line from structured logs.
+    LOG_FORMAT: "json",
   };
   delete env.ARDURBOT_HOST_BRIDGE;
   if (platform === "win32") env.ELECTRON_NO_ATTACH_CONSOLE = "1";

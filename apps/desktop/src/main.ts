@@ -109,6 +109,7 @@ let currentSetup: DesktopSetup | null = null;
 let currentTargetUrl: string | null = null;
 let desktopSystem: Awaited<ReturnType<typeof installSystemRuntime>> | undefined;
 let setupError: string | null = null;
+let serviceFailurePrompt = false;
 let setupSaveInProgress = false;
 let openAppPromise: Promise<boolean> | null = null;
 /** Prior app window kept until setup is persisted (or the switch is abandoned). */
@@ -715,6 +716,31 @@ function showSetupWindow(error: string | null = null) {
   return win;
 }
 
+/**
+ * After setup, a stopped local service is a sheet on the app window with Retry.
+ * An open setup window already shows the same sentence and its own Retry.
+ */
+function showServiceFailure(message: string) {
+  if (setupWindow !== null && !setupWindow.isDestroyed()) return;
+  const win = mainWindow;
+  if (win === null || win.isDestroyed() || serviceFailurePrompt) return;
+  serviceFailurePrompt = true;
+  void dialog
+    .showMessageBox(win, {
+      type: "warning",
+      message,
+      buttons: ["Retry", "Close"],
+      defaultId: 0,
+      cancelId: 1,
+    })
+    .then(({ response }) => {
+      if (response === 0) void localMode.start();
+    })
+    .finally(() => {
+      serviceFailurePrompt = false;
+    });
+}
+
 function restoreAppWindowAfterSetup() {
   if (quitting) return;
   if (setupWindow !== null && !setupWindow.isDestroyed()) return;
@@ -1172,19 +1198,7 @@ app.whenReady().then(async () => {
     },
   });
   legacyCompose = await legacyStackEnvExists(userDataDir);
-  let EmbeddedPostgres: Awaited<ReturnType<typeof loadEmbeddedPostgres>>;
-  try {
-    EmbeddedPostgres = await loadEmbeddedPostgres({
-      packaged: app.isPackaged,
-      resourcesPath: process.resourcesPath,
-    });
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Embedded Postgres could not be loaded.";
-    setupError = message;
-    showSetupWindow(message);
-    return;
-  }
+  let EmbeddedPostgres: Awaited<ReturnType<typeof loadEmbeddedPostgres>> | undefined;
   localMode = new LocalModeController({
     userDataDir,
     packaged: app.isPackaged,
@@ -1207,7 +1221,15 @@ app.whenReady().then(async () => {
         }),
       });
     },
-    postgresFactory: (options) => new EmbeddedPostgres(options),
+    // Loaded when local mode first starts: a Compose launch never needs these binaries,
+    // and a missing package becomes one sentence in a window whose handlers exist.
+    postgresFactory: async (options) => {
+      EmbeddedPostgres ??= await loadEmbeddedPostgres({
+        packaged: app.isPackaged,
+        resourcesPath: process.resourcesPath,
+      });
+      return new EmbeddedPostgres(options);
+    },
     allocatePort: allocateLoopbackPort,
     portAvailable: loopbackPortAvailable,
     randomHex: (bytes) => randomBytes(bytes).toString("hex"),
@@ -1219,6 +1241,7 @@ app.whenReady().then(async () => {
     },
     onFailed: (message) => {
       setupError = message;
+      showServiceFailure(message);
     },
   });
   currentSetup = await readSetup(userDataDir);
@@ -1452,7 +1475,8 @@ app.whenReady().then(async () => {
     return {
       defaultLocalUrl: legacyCompose ? localStack.webUrl() : localMode.origin(),
       saved: currentSetup,
-      error: setupError ?? undefined,
+      // A local mode failure is already the stack line; show that sentence once.
+      error: (setupError !== localMode.state().message && setupError) || undefined,
     };
   });
 

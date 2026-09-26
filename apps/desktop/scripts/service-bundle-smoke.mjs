@@ -219,26 +219,31 @@ export async function runSmoke(env = process.env) {
     };
     handles.push(startService(path.join(copyDir, "api.mjs"), serviceEnv, copyDir));
     handles.push(startService(path.join(copyDir, "worker.mjs"), serviceEnv, copyDir));
-    const healthy = await waitFor(async () => {
+    // Ready means both services are up, as the desktop requires: the API's health answer
+    // and the worker's ready line, which can follow the API by several seconds on first boot.
+    let healthy = false;
+    const workerReady = () => handles[1].text().includes('"message":"worker ready"');
+    await waitFor(async () => {
       if (handles.some((handle) => handle.child.exitCode != null)) return "stop";
-      try {
-        const response = await fetch(`${origin}/rpc/health`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ json: {} }),
-        });
-        if (!response.ok) return false;
-        const body = await response.json();
-        return body?.json?.ok === true && typeof body?.json?.version === "string";
-      } catch {
-        return false;
+      if (!healthy) {
+        try {
+          const response = await fetch(`${origin}/rpc/health`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ json: {} }),
+          });
+          const body = response.ok ? await response.json() : null;
+          healthy = body?.json?.ok === true && typeof body?.json?.version === "string";
+        } catch {
+          healthy = false;
+        }
       }
+      return healthy && workerReady();
     }, 90_000);
-    const workerReady = handles[1].text().includes("worker ready");
-    if (!healthy || !workerReady) {
+    if (!healthy || !workerReady()) {
       const logs = handles.map((handle) => redact(handle.text())).join("\n");
       throw new Error(
-        `Service bundle smoke failed (health ${healthy}, worker ready ${workerReady}).\n${logs}`,
+        `Service bundle smoke failed (health ${healthy}, worker ready ${workerReady()}).\n${logs}`,
       );
     }
     process.stdout.write("health ok\nworker ready\n");

@@ -9,7 +9,10 @@ import { Client } from "pg";
  * the `migration.sql` files. A migration counts as applied only when `finished_at`
  * is set. Changing a file after that is the edited-migration case Prisma reports
  * as modified and will not ignore. A row with `finished_at` still null is a failed
- * migration (Prisma error P3009) and blocks later ones.
+ * migration (Prisma error P3009) and blocks later ones. This runner never leaves
+ * one behind on a failure it sees: the history row commits with the migration's
+ * SQL, and a failed `CONCURRENTLY` migration is marked `rolled_back_at`, which is
+ * what `prisma migrate resolve --rolled-back` records, so the next run applies it.
  *
  * https://www.prisma.io/docs/orm/prisma-migrate/understanding-prisma-migrate/migration-histories
  * https://www.prisma.io/docs/orm/reference/error-reference#p3009
@@ -27,6 +30,19 @@ export class MigrationHistoryError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "MigrationHistoryError";
+  }
+}
+
+/** The migration's SQL failed. `databaseError` is the database's own message. */
+export class MigrationApplyError extends MigrationHistoryError {
+  readonly migrationName: string;
+  readonly databaseError: string;
+
+  constructor(migrationName: string, databaseError: string) {
+    super(`Migration "${migrationName}" failed to apply. ${databaseError}`);
+    this.name = "MigrationApplyError";
+    this.migrationName = migrationName;
+    this.databaseError = databaseError;
   }
 }
 
@@ -181,29 +197,49 @@ function finishedRow(recorded: RecordedMigration[], name: string): boolean {
 
 async function applyOne(client: MigrationSqlClient, migration: SqlMigration): Promise<void> {
   const id = randomUUID();
-  await client.query(
-    `INSERT INTO "_prisma_migrations" ("id", "checksum", "migration_name", "started_at", "applied_steps_count")
-     VALUES ($1, $2, $3, CURRENT_TIMESTAMP, 0)`,
-    [id, migration.checksum, migration.name],
-  );
   const statements = splitSqlStatements(migration.sql);
-  const outside = statements.some((statement) => isConcurrentIndex(statement));
-  try {
-    if (!outside) await client.query("BEGIN");
-    for (const statement of statements) await client.query(statement);
-    if (!outside) await client.query("COMMIT");
-  } catch (error) {
-    if (!outside) await client.query("ROLLBACK").catch(() => undefined);
-    const message = error instanceof Error ? error.message : String(error);
-    await client
-      .query(`UPDATE "_prisma_migrations" SET "logs" = $2 WHERE "id" = $1`, [id, message])
-      .catch(() => undefined);
-    throw new MigrationHistoryError(`Migration "${migration.name}" failed to apply. ${message}`);
+  const record = () =>
+    client.query(
+      `INSERT INTO "_prisma_migrations" ("id", "checksum", "migration_name", "started_at", "applied_steps_count")
+     VALUES ($1, $2, $3, CURRENT_TIMESTAMP, 0)`,
+      [id, migration.checksum, migration.name],
+    );
+  const finish = () =>
+    client.query(
+      `UPDATE "_prisma_migrations" SET "finished_at" = CURRENT_TIMESTAMP, "applied_steps_count" = $2, "logs" = NULL WHERE "id" = $1`,
+      [id, Math.max(statements.length, 1)],
+    );
+  if (statements.some((statement) => isConcurrentIndex(statement))) {
+    await record();
+    try {
+      for (const statement of statements) await client.query(statement);
+    } catch (error) {
+      const message = errorMessage(error);
+      await client
+        .query(
+          `UPDATE "_prisma_migrations" SET "rolled_back_at" = CURRENT_TIMESTAMP, "logs" = $2 WHERE "id" = $1`,
+          [id, message],
+        )
+        .catch(() => undefined);
+      throw new MigrationApplyError(migration.name, message);
+    }
+    await finish();
+    return;
   }
-  await client.query(
-    `UPDATE "_prisma_migrations" SET "finished_at" = CURRENT_TIMESTAMP, "applied_steps_count" = $2, "logs" = NULL WHERE "id" = $1`,
-    [id, Math.max(statements.length, 1)],
-  );
+  await client.query("BEGIN");
+  try {
+    await record();
+    for (const statement of statements) await client.query(statement);
+    await finish();
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw new MigrationApplyError(migration.name, errorMessage(error));
+  }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 async function readRecorded(client: MigrationSqlClient): Promise<RecordedMigration[]> {

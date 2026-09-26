@@ -158,3 +158,62 @@ describe("main window host lifecycle", () => {
     expect(f.mainWindow).toBeNull();
   });
 });
+
+describe("local mode failures in the main process", () => {
+  const source = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
+
+  function serviceFailure(state: { setupOpen: boolean; response: number }) {
+    const start = source.indexOf("function showServiceFailure(");
+    expect(start).toBeGreaterThan(-1);
+    const end = source.indexOf("\nfunction ", start + 1);
+    const showMessageBox = vi.fn(async () => ({ response: state.response }));
+    const context = {
+      setupWindow: state.setupOpen ? new WindowFake() : null,
+      mainWindow: new WindowFake(),
+      serviceFailurePrompt: false,
+      dialog: { showMessageBox },
+      localMode: { start: vi.fn(async () => undefined) },
+    };
+    vm.runInNewContext(
+      `${stripTypeScriptTypes(source.slice(start, end))}\nthis.showServiceFailure = showServiceFailure;`,
+      context,
+    );
+    return context as typeof context & { showServiceFailure: (message: string) => void };
+  }
+
+  it("shows a stopped service on the app window after setup, and Retry starts local mode", async () => {
+    const f = serviceFailure({ setupOpen: false, response: 0 });
+    f.showServiceFailure("The worker stopped.");
+    f.showServiceFailure("The worker stopped.");
+    expect(f.dialog.showMessageBox).toHaveBeenCalledOnce();
+    expect(f.dialog.showMessageBox).toHaveBeenCalledWith(
+      f.mainWindow,
+      expect.objectContaining({ message: "The worker stopped.", buttons: ["Retry", "Close"] }),
+    );
+    await vi.waitFor(() => expect(f.localMode.start).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(f.serviceFailurePrompt).toBe(false));
+  });
+
+  it("leaves the sentence to an open setup window and does nothing on Close", async () => {
+    const setup = serviceFailure({ setupOpen: true, response: 0 });
+    setup.showServiceFailure("The API stopped.");
+    expect(setup.dialog.showMessageBox).not.toHaveBeenCalled();
+    const closed = serviceFailure({ setupOpen: false, response: 1 });
+    closed.showServiceFailure("The API stopped.");
+    await vi.waitFor(() => expect(closed.serviceFailurePrompt).toBe(false));
+    expect(closed.localMode.start).not.toHaveBeenCalled();
+  });
+
+  it("reports local service failures through that sheet", () => {
+    const failed = source.slice(source.indexOf("onFailed: (message) =>"));
+    expect(failed.slice(0, failed.indexOf("},"))).toContain("showServiceFailure(message)");
+  });
+
+  it("loads embedded Postgres only when local mode starts, never before the setup handlers", () => {
+    const calls = [...source.matchAll(/\bloadEmbeddedPostgres\(/g)];
+    expect(calls).toHaveLength(1);
+    const factory = source.indexOf("postgresFactory:");
+    expect(calls[0]!.index).toBeGreaterThan(factory);
+    expect(calls[0]!.index).toBeLessThan(source.indexOf("allocatePort:", factory));
+  });
+});

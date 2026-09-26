@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   applySqlMigrations,
   listSqlMigrations,
+  MigrationApplyError,
   MigrationHistoryError,
   migrationChecksum,
 } from "./migrate-sql.js";
@@ -25,7 +26,18 @@ interface RecordedMigration {
 class MemoryMigrations {
   readonly rows: RecordedMigration[] = [];
   readonly scripts: string[] = [];
+  /** A statement containing this text fails the way Postgres would. */
+  failOn: string | null = null;
+  private beforeTransaction: RecordedMigration[] | null = null;
   async query(text: string, values: readonly unknown[] = []): Promise<{ rows: unknown[] }> {
+    if (text === "BEGIN") this.beforeTransaction = this.rows.map((row) => ({ ...row }));
+    if (text === "COMMIT") this.beforeTransaction = null;
+    if (text === "ROLLBACK" && this.beforeTransaction) {
+      this.rows.splice(0, this.rows.length, ...this.beforeTransaction);
+      this.beforeTransaction = null;
+    }
+    if (this.failOn !== null && text.includes(this.failOn) && !text.includes("_prisma_migrations"))
+      throw new Error('relation "widgets" does not exist');
     if (text.includes("INSERT INTO") && text.includes("_prisma_migrations")) {
       const [id, checksum, migrationName] = values;
       this.rows.push({
@@ -46,6 +58,15 @@ class MemoryMigrations {
         row.finishedAt = "finished";
         row.appliedStepsCount = Number(appliedStepsCount);
         row.logs = null;
+      }
+      return { rows: [] };
+    }
+    if (text.includes("rolled_back_at") && text.includes("UPDATE")) {
+      const [id, logs] = values;
+      const row = this.rows.find((item) => item.id === id);
+      if (row) {
+        row.rolledBackAt = "rolled back";
+        row.logs = String(logs);
       }
       return { rows: [] };
     }
@@ -139,4 +160,63 @@ describe("sql migration runner", () => {
     expect(client.rows.map((row) => row.migrationName)).toEqual(["20260101000000_init"]);
     expect(client.rows[0]?.checksum).toBe("0".repeat(64));
   });
+
+  it("leaves no history row when a migration's SQL fails, and applies it once the cause is fixed", async () => {
+    const migrations = await fixtureMigrations({
+      "20260101000000_init": "CREATE TABLE widgets (id int);\n",
+      "20260102000000_next":
+        "INSERT INTO widgets SELECT 1;\nALTER TABLE widgets ADD COLUMN name text;\n",
+    });
+    const client = new MemoryMigrations();
+    client.failOn = "ALTER TABLE widgets";
+    const failure = await applySqlMigrations({ client, migrationsDir: migrations }).catch(
+      (error: unknown) => error,
+    );
+    expect(client.rows.map((row) => [row.migrationName, row.finishedAt])).toEqual([
+      ["20260101000000_init", "finished"],
+    ]);
+    expect(failure).toBeInstanceOf(MigrationApplyError);
+    expect(failure).toMatchObject({
+      migrationName: "20260102000000_next",
+      databaseError: 'relation "widgets" does not exist',
+    });
+
+    client.failOn = null;
+    const retried = await applySqlMigrations({ client, migrationsDir: migrations });
+    expect(retried.applied).toEqual(["20260102000000_next"]);
+    expect(client.rows.every((row) => row.finishedAt === "finished")).toBe(true);
+  });
+
+  it("marks a failed CONCURRENTLY migration rolled back so the next run applies it", async () => {
+    const migrations = await fixtureMigrations({
+      "20260101000000_idx_concurrent":
+        "CREATE INDEX CONCURRENTLY widgets_id_idx ON widgets (id);\n",
+    });
+    const client = new MemoryMigrations();
+    client.failOn = "CONCURRENTLY";
+    const failure = await applySqlMigrations({ client, migrationsDir: migrations }).catch(
+      (error: unknown) => error,
+    );
+    expect(client.rows).toMatchObject([{ finishedAt: null, rolledBackAt: "rolled back" }]);
+    expect(failure).toMatchObject({
+      name: "MigrationApplyError",
+      migrationName: "20260101000000_idx_concurrent",
+    });
+
+    client.failOn = null;
+    const retried = await applySqlMigrations({ client, migrationsDir: migrations });
+    expect(retried.applied).toEqual(["20260101000000_idx_concurrent"]);
+    expect(client.rows.at(-1)).toMatchObject({ finishedAt: "finished", rolledBackAt: null });
+  });
+
+  async function fixtureMigrations(files: Record<string, string>): Promise<string> {
+    const root = await mkdtemp(path.join(tmpdir(), "migrate-sql-"));
+    directories.push(root);
+    const migrations = path.join(root, "migrations");
+    for (const [name, sql] of Object.entries(files)) {
+      await mkdir(path.join(migrations, name), { recursive: true });
+      await writeFile(path.join(migrations, name, "migration.sql"), sql);
+    }
+    return migrations;
+  }
 });
