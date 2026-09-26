@@ -154,6 +154,10 @@ msgstr "{days} 天前"
 msgid "{failed} failed"
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "{hostLabel} is not available. Choose a saved connection or keep the current engine."
+msgstr "{hostLabel}尚不可用。请选择已保存的连接，或保留当前引擎。"
+
 #: src/pages/ActivityList.tsx
 msgid "{hours}h ago"
 msgstr "{hours} 小时前"
@@ -359,24 +363,6 @@ msgstr "添加"
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Add a computer under Settings, Computers, then choose it here to move this computer."
 msgstr "在“设置”的“电脑”中添加电脑，然后在此处选择它，以移动此电脑。"
-
-msgid "Add a connection under Settings, Connections, to move this computer to another machine."
-msgstr "在“设置”的“连接”中添加连接，即可将此电脑移到另一台机器。"
-
-msgid "Moving this computer onto This Mac is not available yet. Choose a saved connection or keep the current engine."
-msgstr "暂时无法将此电脑移到这台 Mac。请选择已保存的连接，或保留当前引擎。"
-
-msgid "This moves the computer from {0} to {1} and replaces its files. Continue?"
-msgstr "这将把电脑从 {0} 移到 {1}，并替换其中的文件。要继续吗？"
-
-msgid "this engine"
-msgstr "此引擎"
-
-msgid "Moving this computer onto {0} is not available yet. Choose a saved connection or keep the current engine."
-msgstr "暂时无法将此电脑移到{0}。请选择已保存的连接，或保留当前引擎。"
-
-msgid "{0} is not available. Choose a saved connection or keep the current engine."
-msgstr "{0}尚不可用。请选择已保存的连接，或保留当前引擎。"
 
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Add a model in Settings to use this."
@@ -2902,11 +2888,11 @@ msgstr ""
 msgid "Deploy private key"
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Deployment default"
 msgstr "部署默认"
 
+#: src/pages/ComputerProfilesSettings.tsx
 msgid "Deployment default (Docker)"
 msgstr "部署默认（Docker）"
 
@@ -3071,6 +3057,14 @@ msgstr "Docker"
 #: src/pages/HostComputerPrompt.tsx
 msgid "Docker limits access to your computer for added security. Using {hostLabel} lets bots work with your local files and tools."
 msgstr "Docker 限制对你电脑的访问，以提高安全性。使用{hostLabel}时，Bot 可以处理你的本地文件并使用本地工具。"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Docker on this computer"
+msgstr "这台电脑上的 Docker"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Docker on this Mac"
+msgstr "这台 Mac 上的 Docker"
 
 #: src/pages/KnowledgeSection.tsx
 msgid "Document"
@@ -4672,7 +4666,7 @@ msgstr "把它们移到共享记忆。"
 msgid "Move to"
 msgstr "移动到"
 
-#. placeholder {0}: targets.find((target) => target.id === bot.pending?.targetId)?.name ?? t`computer`
+#. placeholder {0}: pendingName(bot.pending.targetId) ?? t`computer`
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Move to {0}?"
 msgstr ""
@@ -4685,6 +4679,10 @@ msgstr ""
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Move when this Mac has under {0} GB free"
 msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Moving this computer onto {hostLabel} is not available yet. Choose a saved connection or keep the current engine."
+msgstr "暂时无法将此电脑移到{hostLabel}。请选择已保存的连接，或保留当前引擎。"
 
 #: src/pages/MemoryImportExport.tsx
 msgid "My documents"
@@ -7272,11 +7270,17 @@ msgstr "这台电脑"
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/account/AccountTables.tsx
 #: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/ide/IdePage.tsx
 msgid "This computer"
-msgstr ""
+msgstr "这台电脑"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "this engine"
+msgstr "此引擎"
 
 #: src/components/ArtifactFileCard.tsx
 msgid "This file is not valid UTF-8 Markdown."
@@ -7290,13 +7294,19 @@ msgstr ""
 msgid "this Mac"
 msgstr "这台 Mac"
 
+#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/HostComputerSettings.tsx
 msgid "This Mac"
-msgstr ""
+msgstr "这台 Mac"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "This model is not available on your account. Choose another model."
 msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "This moves the computer from {sourceLabel} to {destinationLabel} and replaces its files. Continue?"
+msgstr "这将把电脑从 {sourceLabel} 移到 {destinationLabel}，并替换其中的文件。要继续吗？"
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "This path is on your server, which may be a different machine."

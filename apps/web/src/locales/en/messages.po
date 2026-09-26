@@ -154,6 +154,10 @@ msgstr "{days}d ago"
 msgid "{failed} failed"
 msgstr "{failed} failed"
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "{hostLabel} is not available. Choose a saved connection or keep the current engine."
+msgstr "{hostLabel} is not available. Choose a saved connection or keep the current engine."
+
 #: src/pages/ActivityList.tsx
 msgid "{hours}h ago"
 msgstr "{hours}h ago"
@@ -359,24 +363,6 @@ msgstr "Add"
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Add a computer under Settings, Computers, then choose it here to move this computer."
 msgstr "Add a computer under Settings, Computers, then choose it here to move this computer."
-
-msgid "Add a connection under Settings, Connections, to move this computer to another machine."
-msgstr "Add a connection under Settings, Connections, to move this computer to another machine."
-
-msgid "Moving this computer onto This Mac is not available yet. Choose a saved connection or keep the current engine."
-msgstr "Moving this computer onto This Mac is not available yet. Choose a saved connection or keep the current engine."
-
-msgid "This moves the computer from {0} to {1} and replaces its files. Continue?"
-msgstr "This moves the computer from {0} to {1} and replaces its files. Continue?"
-
-msgid "this engine"
-msgstr "this engine"
-
-msgid "Moving this computer onto {0} is not available yet. Choose a saved connection or keep the current engine."
-msgstr "Moving this computer onto {0} is not available yet. Choose a saved connection or keep the current engine."
-
-msgid "{0} is not available. Choose a saved connection or keep the current engine."
-msgstr "{0} is not available. Choose a saved connection or keep the current engine."
 
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Add a model in Settings to use this."
@@ -2902,11 +2888,11 @@ msgstr "Dependencies"
 msgid "Deploy private key"
 msgstr "Deploy private key"
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Deployment default"
 msgstr "Deployment default"
 
+#: src/pages/ComputerProfilesSettings.tsx
 msgid "Deployment default (Docker)"
 msgstr "Deployment default (Docker)"
 
@@ -3071,6 +3057,14 @@ msgstr "Docker"
 #: src/pages/HostComputerPrompt.tsx
 msgid "Docker limits access to your computer for added security. Using {hostLabel} lets bots work with your local files and tools."
 msgstr "Docker limits access to your computer for added security. Using {hostLabel} lets bots work with your local files and tools."
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Docker on this computer"
+msgstr "Docker on this computer"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Docker on this Mac"
+msgstr "Docker on this Mac"
 
 #: src/pages/KnowledgeSection.tsx
 msgid "Document"
@@ -4672,7 +4666,7 @@ msgstr "Move them to your shared memory."
 msgid "Move to"
 msgstr "Move to"
 
-#. placeholder {0}: targets.find((target) => target.id === bot.pending?.targetId)?.name ?? t`computer`
+#. placeholder {0}: pendingName(bot.pending.targetId) ?? t`computer`
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Move to {0}?"
 msgstr "Move to {0}?"
@@ -4685,6 +4679,10 @@ msgstr "Move to {name}?"
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Move when this Mac has under {0} GB free"
 msgstr "Move when this Mac has under {0} GB free"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Moving this computer onto {hostLabel} is not available yet. Choose a saved connection or keep the current engine."
+msgstr "Moving this computer onto {hostLabel} is not available yet. Choose a saved connection or keep the current engine."
 
 #: src/pages/MemoryImportExport.tsx
 msgid "My documents"
@@ -7272,11 +7270,17 @@ msgstr "this computer"
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/account/AccountTables.tsx
 #: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/ide/IdePage.tsx
 msgid "This computer"
 msgstr "This computer"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "this engine"
+msgstr "this engine"
 
 #: src/components/ArtifactFileCard.tsx
 msgid "This file is not valid UTF-8 Markdown."
@@ -7290,6 +7294,8 @@ msgstr "This folder is managed by the server."
 msgid "this Mac"
 msgstr "this Mac"
 
+#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/HostComputerSettings.tsx
 msgid "This Mac"
 msgstr "This Mac"
@@ -7297,6 +7303,10 @@ msgstr "This Mac"
 #: src/pages/shell/bot-panel.tsx
 msgid "This model is not available on your account. Choose another model."
 msgstr "This model is not available on your account. Choose another model."
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "This moves the computer from {sourceLabel} to {destinationLabel} and replaces its files. Continue?"
+msgstr "This moves the computer from {sourceLabel} to {destinationLabel} and replaces its files. Continue?"
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "This path is on your server, which may be a different machine."

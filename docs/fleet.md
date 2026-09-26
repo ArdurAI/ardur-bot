@@ -35,6 +35,14 @@ Probes are cached for 30 seconds, have time and output limits, and run four at a
 | Linux machine | System SSH; agent, encrypted private key, or Tailscale SSH; optional jump host | Commands, files, interactive terminal, per-computer home | `nproc`, `/proc/loadavg`, `/proc/meminfo`, `df` | Bash, Python 3, SFTP and a verified SSH host key are required |
 | Tailscale peer | Existing host CLI login discovers online Linux peers; added as SSH | Same as SSH | Same as SSH after adding | Tailnet policy and SSH access must already permit the connection; no Tailscale keys are stored |
 
+Computers shows the host, the local Docker engine, the deployment default when it is neither of
+those, and each saved connection. The host row is This Mac on macOS and This computer elsewhere; the
+local Docker row is Docker on this Mac or Docker on this computer on the same terms. The default
+row carries its provider's kind, so a connectionless E2B, Daytona, Box, or Kubernetes computer on
+that deployment is listed there with that provider's capacity. A connectionless computer of
+another kind gets its own row, measured by that kind's provider. It is Unavailable only when no
+provider of that kind is registered or the provider reports no capacity.
+
 Docker context discovery accepts the CLI's JSON-lines output. OrbStack and Colima sockets are
 found at their standard locations. Podman machine discovery uses its reported socket. Tailscale
 rows show MagicDNS and the advertised address. Tags are not generally login names: only the
@@ -93,8 +101,11 @@ pin to make a destination work. Explicit connection changes retain the chosen de
 automatic placement evaluates first use after creation or replacement at the next new run.
 
 Every run, reset, update, recovery, sleep, screen and terminal operation uses the computer's saved
-kind and connection. A saved connection uses that connection. Otherwise Docker uses local Docker,
-This Mac uses the host, and E2B, Daytona, Box, and Kubernetes use that kind's provider. The kind is
+kind and connection. A saved connection uses that connection, even when the row still carries an
+older kind; the first successful start records the kind that connection reports. Otherwise Docker
+uses local Docker, This Mac uses the host, and E2B, Daytona, Box, and Kubernetes use that kind's
+provider. When that provider is not registered, the start is refused before the computer is
+claimed, and the computer row is left as it is. The kind is
 chosen when the computer is created: This Mac when that choice is on and there is no connection,
 otherwise the deployment default. Changing This Mac or the deployment default does not move a
 computer that already has a kind, including one whose machine is missing after a failed reset or

@@ -14,8 +14,23 @@ import { useEffect, useState } from "react";
 import { rpc } from "../../lib/rpc";
 
 type Fleet = Awaited<ReturnType<typeof rpc.fleet.list>>;
+
+/** The API names its built-in rows in English. */
+function useTargetName() {
+  const { t } = useLingui();
+  const names = new Map([
+    ["This Mac", t`This Mac`],
+    ["This computer", t`This computer`],
+    ["Docker on this Mac", t`Docker on this Mac`],
+    ["Docker on this computer", t`Docker on this computer`],
+  ]);
+  return (target: Pick<FleetTarget, "name" | "connectionId">) =>
+    (target.connectionId === null && names.get(target.name)) || target.name;
+}
+
 export function FleetSettings() {
   const { t } = useLingui();
+  const targetName = useTargetName();
   const [fleet, setFleet] = useState<Fleet | null>(null);
   const [discovered, setDiscovered] = useState<FleetTarget[]>([]);
   const [adding, setAdding] = useState<{ target?: FleetTarget } | null>(null);
@@ -70,6 +85,10 @@ export function FleetSettings() {
         ),
     ),
   ];
+  const pendingName = (id: string) => {
+    const target = targets.find((target) => target.id === id);
+    return target && targetName(target);
+  };
   return (
     <section className="space-y-4" data-testid="fleet-settings">
       <div className="flex items-center justify-between gap-3">
@@ -90,7 +109,7 @@ export function FleetSettings() {
           <li key={target.id} className="space-y-2 py-3" data-fleet-target={target.id}>
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <p className="truncate font-medium">{target.name}</p>
+                <p className="truncate font-medium">{targetName(target)}</p>
                 <p className="text-xs text-muted-foreground">
                   {target.state === "connected"
                     ? t`Connected`
@@ -172,12 +191,7 @@ export function FleetSettings() {
               {bot.pending ? (
                 <div className="flex flex-wrap items-center gap-2 text-sm">
                   <span>
-                    <Trans>
-                      Move to{" "}
-                      {targets.find((target) => target.id === bot.pending?.targetId)?.name ??
-                        t`computer`}
-                      ?
-                    </Trans>
+                    <Trans>Move to {pendingName(bot.pending.targetId) ?? t`computer`}?</Trans>
                   </span>
                   <Button
                     disabled={busy}
@@ -254,6 +268,7 @@ function PlacementControls({
   onSave: (value: PlacementSettings) => Promise<void>;
 }) {
   const { t } = useLingui();
+  const targetName = useTargetName();
   const [value, setValue] = useState(settings);
   useEffect(() => setValue(settings), [settings]);
   return (
@@ -295,7 +310,7 @@ function PlacementControls({
               .filter((target) => target.state === "connected")
               .map((target) => (
                 <NativeSelectOption key={target.id} value={target.id}>
-                  {target.name}
+                  {targetName(target)}
                 </NativeSelectOption>
               ))}
           </NativeSelect>

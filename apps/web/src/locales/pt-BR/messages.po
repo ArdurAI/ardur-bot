@@ -154,6 +154,10 @@ msgstr "{days}d atrás"
 msgid "{failed} failed"
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "{hostLabel} is not available. Choose a saved connection or keep the current engine."
+msgstr ""
+
 #: src/pages/ActivityList.tsx
 msgid "{hours}h ago"
 msgstr "{hours}h atrás"
@@ -358,24 +362,6 @@ msgstr "Adicionar"
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Add a computer under Settings, Computers, then choose it here to move this computer."
-msgstr ""
-
-msgid "Add a connection under Settings, Connections, to move this computer to another machine."
-msgstr ""
-
-msgid "Moving this computer onto This Mac is not available yet. Choose a saved connection or keep the current engine."
-msgstr ""
-
-msgid "This moves the computer from {0} to {1} and replaces its files. Continue?"
-msgstr ""
-
-msgid "this engine"
-msgstr ""
-
-msgid "Moving this computer onto {0} is not available yet. Choose a saved connection or keep the current engine."
-msgstr ""
-
-msgid "{0} is not available. Choose a saved connection or keep the current engine."
 msgstr ""
 
 #: src/components/ApprovalRulesSettings.tsx
@@ -2902,11 +2888,11 @@ msgstr ""
 msgid "Deploy private key"
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Deployment default"
 msgstr "Padrão de implantação"
 
+#: src/pages/ComputerProfilesSettings.tsx
 msgid "Deployment default (Docker)"
 msgstr ""
 
@@ -3071,6 +3057,14 @@ msgstr "Docker"
 #: src/pages/HostComputerPrompt.tsx
 msgid "Docker limits access to your computer for added security. Using {hostLabel} lets bots work with your local files and tools."
 msgstr "O Docker limita o acesso ao seu computador para maior segurança. Usar {hostLabel} permite que os bots trabalhem com seus arquivos e ferramentas locais."
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Docker on this computer"
+msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Docker on this Mac"
+msgstr ""
 
 #: src/pages/KnowledgeSection.tsx
 msgid "Document"
@@ -4672,7 +4666,7 @@ msgstr "Mova-os para a sua memória compartilhada."
 msgid "Move to"
 msgstr "Mover para"
 
-#. placeholder {0}: targets.find((target) => target.id === bot.pending?.targetId)?.name ?? t`computer`
+#. placeholder {0}: pendingName(bot.pending.targetId) ?? t`computer`
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Move to {0}?"
 msgstr ""
@@ -4684,6 +4678,10 @@ msgstr ""
 #. placeholder {0}: value.minimumFreeGb
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Move when this Mac has under {0} GB free"
+msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Moving this computer onto {hostLabel} is not available yet. Choose a saved connection or keep the current engine."
 msgstr ""
 
 #: src/pages/MemoryImportExport.tsx
@@ -7272,10 +7270,16 @@ msgstr "Este computador"
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/account/AccountTables.tsx
 #: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/ide/IdePage.tsx
 msgid "This computer"
+msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "this engine"
 msgstr ""
 
 #: src/components/ArtifactFileCard.tsx
@@ -7290,12 +7294,18 @@ msgstr ""
 msgid "this Mac"
 msgstr "esse Mac"
 
+#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/HostComputerSettings.tsx
 msgid "This Mac"
 msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
 msgid "This model is not available on your account. Choose another model."
+msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "This moves the computer from {sourceLabel} to {destinationLabel} and replaces its files. Continue?"
 msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx

@@ -15,9 +15,12 @@ const api = vi.hoisted(() => ({
   connect: vi.fn(),
 }));
 vi.mock("../../lib/rpc", () => ({ rpc: { fleet: api, computer: { connect: api.connect } } }));
+const catalog = vi.hoisted(() => new Map<string, string>());
 vi.mock("@lingui/react/macro", () => {
-  const t = (parts: TemplateStringsArray, ...values: unknown[]) =>
-    parts.reduce((out, part, i) => out + part + (values[i] ?? ""), "");
+  const t = (parts: TemplateStringsArray, ...values: unknown[]) => {
+    const text = parts.reduce((out, part, i) => out + part + (values[i] ?? ""), "");
+    return catalog.get(text) ?? text;
+  };
   return { useLingui: () => ({ t }), Trans: ({ children }: { children: ReactNode }) => children };
 });
 vi.mock("@ardurbot/ui-web", () => ({
@@ -40,6 +43,7 @@ import { FleetSettings } from "./FleetSettings";
 import { PlacementNotice } from "./PlacementNotice";
 
 afterEach(() => {
+  catalog.clear();
   vi.clearAllMocks();
   vi.unstubAllGlobals();
 });
@@ -96,6 +100,45 @@ it("renders capacity and assignments, applies placement, and requests explicit m
       preferredTargetId: "host",
       minimumFreeGb: 4,
     });
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+it("translates the local Docker row the API names for its platform", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  catalog.set("Docker on this computer", "Docker на этом компьютере");
+  const docker = {
+    id: "default",
+    name: "Docker on this computer",
+    kind: "docker",
+    connectionId: null,
+    state: "connected",
+    capacity: { ...unknownCapacity(), memoryFree: 1024 ** 3, memoryTotal: 8 * 1024 ** 3 },
+    bots: [],
+  };
+  api.list.mockResolvedValue({
+    targets: [
+      docker,
+      { ...docker, id: "office", name: "Docker on this computer", connectionId: "office" },
+    ],
+    placement: { mode: "threshold", preferredTargetId: "default", minimumFreeGb: 4 },
+    bots: [],
+  });
+  const element = document.createElement("div"),
+    root = createRoot(element);
+  try {
+    await act(async () => root.render(<FleetSettings />));
+    const names = [...element.querySelectorAll("[data-fleet-target] p.font-medium")].map(
+      (name) => name.textContent,
+    );
+    expect(names).toEqual(["Docker на этом компьютере", "Docker on this computer"]);
+    const preferred = element.querySelector<HTMLSelectElement>(
+      '[aria-label="Preferred computer"]',
+    )!;
+    expect([...preferred.options].map((option) => option.textContent)).toEqual([
+      "Docker на этом компьютере",
+      "Docker on this computer",
+    ]);
   } finally {
     await act(async () => root.unmount());
   }

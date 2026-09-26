@@ -154,6 +154,10 @@ msgstr "{days} дн. назад"
 msgid "{failed} failed"
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "{hostLabel} is not available. Choose a saved connection or keep the current engine."
+msgstr "{hostLabel} недоступен. Выберите сохранённое подключение или оставьте текущий механизм."
+
 #: src/pages/ActivityList.tsx
 msgid "{hours}h ago"
 msgstr "{hours} ч назад"
@@ -359,24 +363,6 @@ msgstr "Добавить"
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Add a computer under Settings, Computers, then choose it here to move this computer."
 msgstr "Добавьте компьютер в разделе «Настройки», «Компьютеры», затем выберите его здесь, чтобы перенести этот компьютер."
-
-msgid "Add a connection under Settings, Connections, to move this computer to another machine."
-msgstr "Добавьте подключение в разделе «Настройки», «Подключения», чтобы перенести этот компьютер на другую машину."
-
-msgid "Moving this computer onto This Mac is not available yet. Choose a saved connection or keep the current engine."
-msgstr "Перенос этого компьютера на этот Mac пока недоступен. Выберите сохранённое подключение или оставьте текущий механизм."
-
-msgid "This moves the computer from {0} to {1} and replaces its files. Continue?"
-msgstr "Это переносит компьютер с {0} на {1} и заменяет его файлы. Продолжить?"
-
-msgid "this engine"
-msgstr "этот механизм"
-
-msgid "Moving this computer onto {0} is not available yet. Choose a saved connection or keep the current engine."
-msgstr "Перенос этого компьютера на {0} пока недоступен. Выберите сохранённое подключение или оставьте текущий механизм."
-
-msgid "{0} is not available. Choose a saved connection or keep the current engine."
-msgstr "{0} недоступен. Выберите сохранённое подключение или оставьте текущий механизм."
 
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Add a model in Settings to use this."
@@ -2902,11 +2888,11 @@ msgstr ""
 msgid "Deploy private key"
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Deployment default"
 msgstr "Развертывание по умолчанию"
 
+#: src/pages/ComputerProfilesSettings.tsx
 msgid "Deployment default (Docker)"
 msgstr "Развертывание по умолчанию (Docker)"
 
@@ -3071,6 +3057,14 @@ msgstr "Docker"
 #: src/pages/HostComputerPrompt.tsx
 msgid "Docker limits access to your computer for added security. Using {hostLabel} lets bots work with your local files and tools."
 msgstr "Docker ограничивает доступ к вашему компьютеру для дополнительной безопасности. С помощью {hostLabel} боты могут работать с локальными файлами и инструментами."
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Docker on this computer"
+msgstr "Docker на этом компьютере"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Docker on this Mac"
+msgstr "Docker на этом Mac"
 
 #: src/pages/KnowledgeSection.tsx
 msgid "Document"
@@ -4672,7 +4666,7 @@ msgstr "Переместите их в свою общую память."
 msgid "Move to"
 msgstr "Переместить в"
 
-#. placeholder {0}: targets.find((target) => target.id === bot.pending?.targetId)?.name ?? t`computer`
+#. placeholder {0}: pendingName(bot.pending.targetId) ?? t`computer`
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Move to {0}?"
 msgstr ""
@@ -4685,6 +4679,10 @@ msgstr ""
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Move when this Mac has under {0} GB free"
 msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Moving this computer onto {hostLabel} is not available yet. Choose a saved connection or keep the current engine."
+msgstr "Перенос этого компьютера на {hostLabel} пока недоступен. Выберите сохранённое подключение или оставьте текущий механизм."
 
 #: src/pages/MemoryImportExport.tsx
 msgid "My documents"
@@ -7272,11 +7270,17 @@ msgstr "этот компьютер"
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/account/AccountTables.tsx
 #: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/ide/IdePage.tsx
 msgid "This computer"
-msgstr ""
+msgstr "Этот компьютер"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "this engine"
+msgstr "этот механизм"
 
 #: src/components/ArtifactFileCard.tsx
 msgid "This file is not valid UTF-8 Markdown."
@@ -7290,13 +7294,19 @@ msgstr ""
 msgid "this Mac"
 msgstr "этот Mac"
 
+#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/HostComputerSettings.tsx
 msgid "This Mac"
-msgstr ""
+msgstr "Этот Mac"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "This model is not available on your account. Choose another model."
 msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "This moves the computer from {sourceLabel} to {destinationLabel} and replaces its files. Continue?"
+msgstr "Это переносит компьютер с {sourceLabel} на {destinationLabel} и заменяет его файлы. Продолжить?"
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "This path is on your server, which may be a different machine."

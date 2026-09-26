@@ -27,7 +27,11 @@ import {
   restoreComputerWorkspace,
 } from "./computer-workspace.js";
 import { resolveAgentHomePath } from "./home.js";
-import { isComputerRouter, owningSandbox } from "./host-aware-sandbox.js";
+import {
+  assertConnectionlessProvider,
+  isComputerRouter,
+  owningSandbox,
+} from "./host-aware-sandbox.js";
 
 type ComputerUpdateProgress = (
   stage: Exclude<ComputerUpdate["stage"], "preparing">,
@@ -316,8 +320,9 @@ export async function provisionComputer(
   // otherwise a booting self-transition would leave the CAS token unchanged and a second
   // worker that observed the same stamp could also claim and provision.
   // A missing provider fails before the boot claim, so the saved machine stays as it is.
-  if (!existing.connectionId && existing.kind !== "docker" && existing.kind !== "desktop")
-    await owningSandbox(
+  // A saved connection decides. A caller that passes one provider has already chosen it.
+  if (isComputerRouter(deps.sandbox))
+    await assertConnectionlessProvider(
       deps.sandbox,
       { connectionId: existing.connectionId, kind: existing.kind },
       context,

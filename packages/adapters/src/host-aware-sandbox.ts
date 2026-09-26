@@ -90,6 +90,20 @@ export function owningSandbox(
   return isComputerRouter(provider) ? provider.owner(computer, context) : Promise.resolve(provider);
 }
 
+/**
+ * Refuses a connectionless computer whose own kind has no provider. A saved connection
+ * decides where a computer boots, whatever kind the row still carries.
+ */
+export async function assertConnectionlessProvider(
+  provider: SandboxProvider,
+  computer: ComputerIdentity,
+  context: AdapterContext,
+): Promise<void> {
+  if (computer.connectionId || !computer.kind) return;
+  const owner = await owningSandbox(provider, computer, context);
+  if (owner.describe().id !== computer.kind) throw new MissingComputerProviderError(computer.kind);
+}
+
 export class HostAwareSandbox implements SandboxProvider {
   get terminal() {
     return this.isolated.terminal;
@@ -168,12 +182,11 @@ export class HostAwareSandbox implements SandboxProvider {
       { connectionId: request.connectionId, kind: savedKind },
       savedKind ? undefined : await this.hostEnabled(),
     );
-    const owner = isComputerRouter(routed)
-      ? await routed.owner({ connectionId: request.connectionId, kind: savedKind }, context)
-      : routed;
-    // Compare the provider that owns this computer. A mismatch must not drop its machine.
-    if (savedKind && savedKind !== owner.describe().id)
-      throw new MissingComputerProviderError(savedKind);
+    await assertConnectionlessProvider(
+      routed,
+      { connectionId: request.connectionId, kind: savedKind },
+      context,
+    );
     return routed.provision(request, context);
   }
 

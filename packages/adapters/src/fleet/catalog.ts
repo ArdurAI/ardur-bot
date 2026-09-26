@@ -189,12 +189,12 @@ export class FleetCatalog {
     });
     this.recordTest("default", { version: info.version, os: info.os });
   }
-  /** In-cluster Kubernetes, listed only when that provider is registered for this deployment. */
-  private async deploymentClusterTarget(context: AdapterContext): Promise<FleetTarget> {
+  /** A connectionless kind with no row yet. Its registered provider reports the capacity. */
+  private async kindTarget(kind: string, context: AdapterContext): Promise<FleetTarget> {
     const signal = AbortSignal.any([context.signal, AbortSignal.timeout(10000)]);
     const timed = { ...context, signal };
     let state: FleetTarget["state"] = "connected";
-    const capacity = await this.resolveComputer({ kind: "kubernetes" }, timed)
+    const capacity = await this.resolveComputer({ kind }, timed)
       .then((provider) => provider.capacity?.(timed) ?? Promise.resolve(unknownCapacity()))
       .catch(() => {
         state = "unavailable";
@@ -202,9 +202,9 @@ export class FleetCatalog {
       });
     if (capacity.source === "not-reported") state = "unavailable";
     return {
-      id: "kind:kubernetes",
-      name: "Kubernetes",
-      kind: "kubernetes",
+      id: `kind:${kind}`,
+      name: connectionlessKindName(kind),
+      kind: fleetKind(kind),
       connectionId: null,
       state,
       capacity,
@@ -269,7 +269,10 @@ export class FleetCatalog {
           });
     const dockerRow = {
       id: defaultRowIsDocker ? "default" : "docker",
-      name: "Docker on this Mac",
+      name:
+        hostComputerLabel(this.hostPlatform) === "This Mac"
+          ? "Docker on this Mac"
+          : "Docker on this computer",
       kind: "docker" as const,
       connectionId: null,
       state: (dockerSnapshot.source === "not-reported"
@@ -285,7 +288,7 @@ export class FleetCatalog {
         ...this.diagnostics.get("default"),
         id: "default",
         name: "Default computer",
-        kind: defaultKind === "kubernetes" ? "kubernetes" : "default",
+        kind: fleetKind(defaultKind),
         connectionId: null,
         state: defaultCapacity.source === "not-reported" ? "unavailable" : "connected",
         capacity: defaultCapacity,
@@ -326,26 +329,18 @@ export class FleetCatalog {
       );
       targets.push(...entries);
     }
-    if (
-      kubernetesDeploymentConfigured() &&
-      !targets.some((target) => target.connectionId === null && target.kind === "kubernetes")
-    )
-      targets.push(await this.deploymentClusterTarget(context));
+    const kinds = new Set<string>();
+    if (kubernetesDeploymentConfigured()) kinds.add("kubernetes");
     for (const bot of bots) {
       const computer = bot.computer;
-      if (!computer || computer.connectionId || !computer.kind) continue;
-      const id = fleetComputerTargetId(computer, { defaultTargetId, targets });
-      if (targets.some((target) => target.id === id)) continue;
-      targets.push({
-        id,
-        name: connectionlessKindName(computer.kind),
-        kind: fleetKind(computer.kind),
-        connectionId: null,
-        state: "unavailable",
-        capacity: unknownCapacity(),
-        bots: [],
-      });
+      if (computer?.kind && !computer.connectionId) kinds.add(computer.kind);
     }
+    // A kind with no row yet is listed from its own provider; only an unregistered one is a stub.
+    const missing = [...kinds].filter((kind) => {
+      const id = fleetComputerTargetId({ kind }, { defaultTargetId, targets });
+      return !targets.some((target) => target.id === id);
+    });
+    targets.push(...(await Promise.all(missing.map((kind) => this.kindTarget(kind, context)))));
     for (const bot of bots) {
       const targetId = fleetComputerTargetId(bot.computer, { defaultTargetId, targets });
       targets.find((target) => target.id === targetId)?.bots.push({ id: bot.id, name: bot.name });

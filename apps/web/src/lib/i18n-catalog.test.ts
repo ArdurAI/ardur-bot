@@ -271,53 +271,49 @@ describe("lingui catalogs", () => {
   });
 
   it("ships the fleet move sentences in every catalog, with Russian and Chinese filled", () => {
-    const sentences = [
-      "Add a computer under Settings, Computers, then choose it here to move this computer.",
-      "Add a connection under Settings, Connections, to move this computer to another machine.",
-      "The computer changed before the move, so it stayed where it is.",
-      "Deployment default (Docker)",
-      "Moving this computer onto This Mac is not available yet. Choose a saved connection or keep the current engine.",
-      "This moves the computer from {0} to {1} and replaces its files. Continue?",
-      "this engine",
-      "Moving this computer onto {0} is not available yet. Choose a saved connection or keep the current engine.",
-      "{0} is not available. Choose a saved connection or keep the current engine.",
-    ];
     const translations: Record<string, Record<string, string>> = {
       ru: {
-        [sentences[0]!]:
+        "Add a computer under Settings, Computers, then choose it here to move this computer.":
           "Добавьте компьютер в разделе «Настройки», «Компьютеры», затем выберите его здесь, чтобы перенести этот компьютер.",
-        [sentences[1]!]:
-          "Добавьте подключение в разделе «Настройки», «Подключения», чтобы перенести этот компьютер на другую машину.",
-        [sentences[2]!]: "Компьютер изменился до переноса, поэтому он остался на месте.",
-        [sentences[3]!]: "Развертывание по умолчанию (Docker)",
-        [sentences[4]!]:
-          "Перенос этого компьютера на этот Mac пока недоступен. Выберите сохранённое подключение или оставьте текущий механизм.",
-        [sentences[5]!]: "Это переносит компьютер с {0} на {1} и заменяет его файлы. Продолжить?",
-        [sentences[6]!]: "этот механизм",
-        [sentences[7]!]:
-          "Перенос этого компьютера на {0} пока недоступен. Выберите сохранённое подключение или оставьте текущий механизм.",
-        [sentences[8]!]:
-          "{0} недоступен. Выберите сохранённое подключение или оставьте текущий механизм.",
+        "The computer changed before the move, so it stayed where it is.":
+          "Компьютер изменился до переноса, поэтому он остался на месте.",
+        "Deployment default (Docker)": "Развертывание по умолчанию (Docker)",
+        "This moves the computer from {sourceLabel} to {destinationLabel} and replaces its files. Continue?":
+          "Это переносит компьютер с {sourceLabel} на {destinationLabel} и заменяет его файлы. Продолжить?",
+        "this engine": "этот механизм",
+        "Moving this computer onto {hostLabel} is not available yet. Choose a saved connection or keep the current engine.":
+          "Перенос этого компьютера на {hostLabel} пока недоступен. Выберите сохранённое подключение или оставьте текущий механизм.",
+        "{hostLabel} is not available. Choose a saved connection or keep the current engine.":
+          "{hostLabel} недоступен. Выберите сохранённое подключение или оставьте текущий механизм.",
+        "Docker on this Mac": "Docker на этом Mac",
+        "Docker on this computer": "Docker на этом компьютере",
       },
       "zh-CN": {
-        [sentences[0]!]: "在“设置”的“电脑”中添加电脑，然后在此处选择它，以移动此电脑。",
-        [sentences[1]!]: "在“设置”的“连接”中添加连接，即可将此电脑移到另一台机器。",
-        [sentences[2]!]: "电脑在移动前已更改，因此仍留在原处。",
-        [sentences[3]!]: "部署默认（Docker）",
-        [sentences[4]!]: "暂时无法将此电脑移到这台 Mac。请选择已保存的连接，或保留当前引擎。",
-        [sentences[5]!]: "这将把电脑从 {0} 移到 {1}，并替换其中的文件。要继续吗？",
-        [sentences[6]!]: "此引擎",
-        [sentences[7]!]: "暂时无法将此电脑移到{0}。请选择已保存的连接，或保留当前引擎。",
-        [sentences[8]!]: "{0}尚不可用。请选择已保存的连接，或保留当前引擎。",
+        "Add a computer under Settings, Computers, then choose it here to move this computer.":
+          "在“设置”的“电脑”中添加电脑，然后在此处选择它，以移动此电脑。",
+        "The computer changed before the move, so it stayed where it is.":
+          "电脑在移动前已更改，因此仍留在原处。",
+        "Deployment default (Docker)": "部署默认（Docker）",
+        "This moves the computer from {sourceLabel} to {destinationLabel} and replaces its files. Continue?":
+          "这将把电脑从 {sourceLabel} 移到 {destinationLabel}，并替换其中的文件。要继续吗？",
+        "this engine": "此引擎",
+        "Moving this computer onto {hostLabel} is not available yet. Choose a saved connection or keep the current engine.":
+          "暂时无法将此电脑移到{hostLabel}。请选择已保存的连接，或保留当前引擎。",
+        "{hostLabel} is not available. Choose a saved connection or keep the current engine.":
+          "{hostLabel}尚不可用。请选择已保存的连接，或保留当前引擎。",
+        "Docker on this Mac": "这台 Mac 上的 Docker",
+        "Docker on this computer": "这台电脑上的 Docker",
       },
     };
+    const literal = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     for (const locale of ["en", "de", "ko", "tr", "hi", "pt-BR", "zh-CN", "es", "ru"]) {
       const catalog = readFileSync(
         fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url)),
         "utf8",
       );
-      for (const sentence of sentences) {
-        expect(catalog).toContain(`msgid "${sentence}"`);
+      for (const sentence of Object.keys(translations.ru!)) {
+        // Extraction writes the source reference; a hand-written id the code never asks for has none.
+        expect(catalog).toMatch(new RegExp(`#: src/\\S+\\nmsgid "${literal(sentence)}"`));
         const filled = translations[locale]?.[sentence];
         if (filled) expect(catalog).toContain(`msgid "${sentence}"\nmsgstr "${filled}"`);
       }
