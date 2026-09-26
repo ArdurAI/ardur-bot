@@ -2677,7 +2677,10 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           return await localImport.configure(importOwner(context.actor), input);
         } catch (error) {
           if (error instanceof LocalImportInvalidFolderError)
-            throw new ORPCError(LOCAL_IMPORT_INVALID_FOLDER_CODE, { message: error.message });
+            throw new ORPCError("BAD_REQUEST", {
+              message: error.message,
+              data: { code: LOCAL_IMPORT_INVALID_FOLDER_CODE },
+            });
           throw error;
         }
       }),

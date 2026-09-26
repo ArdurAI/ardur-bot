@@ -763,7 +763,7 @@ describe("local import lifecycle", () => {
     await f.service.configure(owner, { autoImport: true });
     await f.file(".claude/projects/example/memory/new.md", "A new fact.");
     f.failReads(0, new LocalImportHostError());
-    await expect(f.service.refresh()).rejects.toThrow("stopped: host");
+    await expect(f.service.refresh()).rejects.toThrow(LocalImportHostError);
   });
   it("splits a changed source from an equal body without overwriting the other source", async () => {
     const f = await fixture();

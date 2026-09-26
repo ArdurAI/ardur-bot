@@ -121,7 +121,8 @@ export default function LocalImport() {
       if (refresh !== false) setStatus(await localImport.status());
     } catch (error) {
       setError(
-        error instanceof RpcError && error.code === LOCAL_IMPORT_INVALID_FOLDER_CODE
+        error instanceof RpcError &&
+          (error.data as { code?: string } | undefined)?.code === LOCAL_IMPORT_INVALID_FOLDER_CODE
           ? "invalid-folder"
           : "unavailable",
       );
@@ -247,9 +248,11 @@ export default function LocalImport() {
         {manifest?.limited ? (
           <Text style={styles.muted}>
             {manifest.unscanned
-              ? t("{count} items were not scanned because of the scan limits.", {
-                  count: manifest.unscanned,
-                })
+              ? manifest.unscanned === 1
+                ? t("1 item was not scanned because of the scan limits.")
+                : t("{count} items were not scanned because of the scan limits.", {
+                    count: manifest.unscanned,
+                  })
               : t("Some items exceeded the scan limits.")}
           </Text>
         ) : null}

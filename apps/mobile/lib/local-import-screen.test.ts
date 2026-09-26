@@ -361,7 +361,16 @@ it("keeps the Source folder form visible with its error after a stopped re-scan"
     sources: [{ ...localImportFixture.sources[0]!, defaultMissing: true }],
   };
   fake.status.mockResolvedValue({ ...localImportStatusFixture, manifest });
-  fake.configure.mockResolvedValue({});
+  fake.configure.mockImplementation(async () => {
+    fake.status.mockResolvedValue({
+      ...localImportStatusFixture,
+      manifest: {
+        ...manifest,
+        sources: [{ ...manifest.sources[0]!, defaultMissing: false }],
+      },
+    });
+    return {};
+  });
   fake.run.mockResolvedValue({ stopped: "host" });
   const node = document.createElement("div");
   const root = createRoot(node);
@@ -399,7 +408,9 @@ it("names the fix for an invalid custom folder instead of suggesting a retry", a
   };
   fake.status.mockResolvedValue({ ...localImportStatusFixture, manifest });
   fake.configure.mockRejectedValue(
-    new RpcError("Choose a folder inside the owner's home.", LOCAL_IMPORT_INVALID_FOLDER_CODE),
+    new RpcError("Choose a folder inside the owner's home.", "BAD_REQUEST", {
+      code: LOCAL_IMPORT_INVALID_FOLDER_CODE,
+    }),
   );
   const node = document.createElement("div");
   const root = createRoot(node);

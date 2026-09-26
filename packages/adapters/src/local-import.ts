@@ -25,7 +25,7 @@ import {
 import { RuntimePinError } from "@ardurbot/contracts/runtime-pins";
 import { buildSkillMd, parseSkillMd } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
-import { IsolationError, Prisma, withTransactionRetry } from "@ardurbot/db";
+import { IsolationError, type Prisma, withTransactionRetry } from "@ardurbot/db";
 import { HostClient } from "@ardurbot/host-runtime/host-client";
 import type { LocalImportScanner } from "@ardurbot/host-runtime/import/scanner";
 import {
@@ -53,6 +53,12 @@ export class LocalImportInvalidFolderError extends Error {
   }
 }
 /** Only these stop a whole run; any other failure belongs to the item that caused it. */
+export function stopError(stopped: LocalImportStop): Error {
+  if (stopped === "host") return new LocalImportHostError();
+  if (stopped === "rescan") return new LocalImportRescanError();
+  return new Error("Import stopped because of an unexpected error.");
+}
+
 export function localImportStop(error: unknown): LocalImportStop | undefined {
   if (error instanceof LocalImportHostError) return "host";
   if (error instanceof LocalImportRescanError) return "rescan";
@@ -166,13 +172,15 @@ export class LocalImportService {
           ...(input.selection
             ? { selection: LocalImportSelectionSchema.parse(input.selection) }
             : {}),
-          ...(input.roots ? { roots: input.roots, manifest: Prisma.DbNull } : {}),
+          ...(input.roots ? { roots: input.roots } : {}),
         },
       });
     });
     return this.status(owner);
   }
   private manifest(config: { manifest: unknown }, scanId: string) {
+    if (!config.manifest)
+      throw new LocalImportRescanError("Re-scan this computer before importing.");
     const manifest = LocalImportManifestSchema.parse(config.manifest);
     if (manifest.scanId !== scanId)
       throw new LocalImportRescanError("Re-scan this computer before importing.");
@@ -696,7 +704,7 @@ export class LocalImportService {
           );
           // A stop made no more progress than a thrown error would have; retry next hour
           // instead of calling a lost host again for every other tool and tenant due now.
-          if (response.stopped) throw new Error(`Automatic import stopped: ${response.stopped}`);
+          if (response.stopped) throw stopError(response.stopped);
         }
       }
     }

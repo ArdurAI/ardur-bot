@@ -1,22 +1,16 @@
 import type { BackgroundJobHandlers } from "@ardurbot/adapter-kit";
-import type { LocalImportResponse, LocalImportStop } from "@ardurbot/contracts/local-import";
+import type { LocalImportResponse } from "@ardurbot/contracts/local-import";
 import type { PrismaClient } from "@ardurbot/db";
-import { LocalImportRescanError } from "@ardurbot/host-runtime/import/scanner";
 import { hostWorkerToken } from "@ardurbot/host-runtime/worker-auth";
 import type { MemoryService } from "@ardurbot/memory";
 import {
   createImportTransport,
-  LocalImportHostError,
   LocalImportService,
   localImportStop,
+  stopError,
 } from "./local-import.js";
 
 /** The mirror of `localImportStop`: a returned stop needs an error to fail the job with. */
-function stopError(stopped: LocalImportStop): Error {
-  if (stopped === "host") return new LocalImportHostError();
-  if (stopped === "rescan") return new LocalImportRescanError();
-  return new Error("Import stopped because of an unexpected error.");
-}
 
 export type LocalImportJobOptions = {
   apiUrl: string;

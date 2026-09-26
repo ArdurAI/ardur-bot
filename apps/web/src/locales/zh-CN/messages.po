@@ -99,8 +99,8 @@ msgstr "已导入 {0} 项，已更新 {1} 项，未更改 {2} 项，已移除 {3
 
 #. placeholder {0}: manifest.unscanned
 #: src/pages/import/LocalImportPage.tsx
-msgid "{0} items were not scanned because of the scan limits."
-msgstr "由于扫描限制，有 {0} 个项目未被扫描。"
+msgid "{0, plural, one {1 item was not scanned because of the scan limits.} other {# items were not scanned because of the scan limits.}}"
+msgstr "{0, plural, other {由于扫描限制，有 # 个项目未被扫描。}}"
 
 #. placeholder {0}: format(size / 1024)
 #: src/components/ArtifactFileCard.tsx

@@ -99,8 +99,8 @@ msgstr "Импортировано: {0}, обновлено: {1}, без изм�
 
 #. placeholder {0}: manifest.unscanned
 #: src/pages/import/LocalImportPage.tsx
-msgid "{0} items were not scanned because of the scan limits."
-msgstr "{0} элементов не были просканированы из-за ограничений сканирования."
+msgid "{0, plural, one {1 item was not scanned because of the scan limits.} other {# items were not scanned because of the scan limits.}}"
+msgstr "{0, plural, one {Не просканировано элементов из-за ограничений сканирования: #.} few {Не просканировано элементов из-за ограничений сканирования: #.} many {Не просканировано элементов из-за ограничений сканирования: #.} other {Не просканировано элементов из-за ограничений сканирования: #.}}"
 
 #. placeholder {0}: format(size / 1024)
 #: src/components/ArtifactFileCard.tsx
