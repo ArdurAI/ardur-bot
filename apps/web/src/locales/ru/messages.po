@@ -214,6 +214,10 @@ msgstr ""
 msgid "{hours}h ago"
 msgstr "{hours} ч назад"
 
+#: src/pages/storage/StorageSettings.tsx
+msgid "{location} · Docker not running"
+msgstr "{location} · Docker не запущен"
+
 #: src/pages/ActivityList.tsx
 msgid "{minutes}m ago"
 msgstr "{minutes} мин назад"
@@ -755,6 +759,10 @@ msgstr ""
 msgid "API key header"
 msgstr "Заголовок ключа API"
 
+#: src/pages/storage/StorageSettings.tsx
+msgid "App cache"
+msgstr "Кэш приложения"
+
 #: src/pages/ChannelPairingSettings.tsx
 msgid "App token"
 msgstr ""
@@ -864,6 +872,7 @@ msgstr "Ardur Bot попытался пять раз. Закройте её на
 msgid "Arguments"
 msgstr "Аргументы"
 
+#: src/pages/storage/StorageSettings.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Artifacts"
 msgstr ""
@@ -937,6 +946,10 @@ msgstr "в {0}"
 #: src/pages/RoutineSchedule.tsx
 msgid "at {timeSelect}"
 msgstr "в {timeSelect}"
+
+#: src/pages/storage/StorageSettings.tsx
+msgid "at least {size}"
+msgstr "не менее {size}"
 
 #: src/pages/Shell.tsx
 msgid "Attachment"
@@ -1141,6 +1154,7 @@ msgid "Board status"
 msgstr "Состояние доски"
 
 #: src/pages/settings-sections.ts
+#: src/pages/storage/StorageSettings.tsx
 msgid "Boards"
 msgstr "Доски"
 
@@ -1461,6 +1475,10 @@ msgstr "Проверка…"
 msgid "Checkout has local changes. Clean it before updating."
 msgstr "В checkout есть локальные изменения. Очистите его перед обновлением."
 
+#: src/pages/storage/StorageSettings.tsx
+msgid "Checkpoints"
+msgstr "Контрольные точки"
+
 #: src/pages/customize/ConfigureExtension.tsx
 msgid "Choose"
 msgstr ""
@@ -1546,6 +1564,10 @@ msgstr "Очистить"
 #: src/pages/shell/dialogs.tsx
 msgid "Clear {0}’s conversation?"
 msgstr "Очистить диалог {0}?"
+
+#: src/pages/storage/StorageSettings.tsx
+msgid "Clear caches"
+msgstr "Очистить кэш"
 
 #: src/pages/BotContextMenu.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -1762,6 +1784,10 @@ msgstr ""
 #: src/pages/Shell.tsx
 msgid "Computer failed to boot"
 msgstr "Компьютер не смог загрузиться"
+
+#: src/pages/storage/StorageSettings.tsx
+msgid "Computer homes"
+msgstr "Домашние папки компьютеров"
 
 #: src/pages/Shell.tsx
 msgid "Computer is asleep"
@@ -2157,6 +2183,10 @@ msgstr "Не удалось проверить статус преподаван
 msgid "Could not check this computer."
 msgstr ""
 
+#: src/pages/storage/StorageSettings.tsx
+msgid "Could not clear caches; try again."
+msgstr "Не удалось очистить кэш; повторите попытку."
+
 #: src/pages/shell/dialogs.tsx
 msgid "Could not clear conversation"
 msgstr "Не удалось очистить диалог"
@@ -2492,6 +2522,10 @@ msgstr "Не удалось связаться с сервером этой мо
 #: src/pages/system/DispatchSetting.tsx
 msgid "Could not read or change Dispatch; reopen System settings."
 msgstr ""
+
+#: src/pages/storage/StorageSettings.tsx
+msgid "Could not read storage usage; try again."
+msgstr "Не удалось получить данные об использовании хранилища; повторите попытку."
 
 #: src/pages/system/SystemPage.tsx
 msgid "Could not read system settings; try again."
@@ -2911,6 +2945,7 @@ msgid "Dashboard"
 msgstr ""
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/pages/storage/StorageSettings.tsx
 msgid "Database"
 msgstr ""
 
@@ -5804,6 +5839,10 @@ msgstr ""
 msgid "Previous"
 msgstr ""
 
+#: src/pages/storage/StorageSettings.tsx
+msgid "Previous Docker data"
+msgstr "Прежние данные Docker"
+
 #: src/pages/board/ItemForm.tsx
 msgid "Priority"
 msgstr ""
@@ -5959,6 +5998,10 @@ msgstr "Читать ответы вслух"
 #: src/pages/KnowledgeSection.tsx
 msgid "read-only"
 msgstr "только для чтения"
+
+#: src/pages/storage/StorageSettings.tsx
+msgid "Reading storage usage…"
+msgstr "Чтение данных об использовании хранилища…"
 
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "Reads can run without asking once you allow them. Writes always ask."
@@ -6365,6 +6408,10 @@ msgstr ""
 #: src/pages/TeamBoard.tsx
 msgid "Responsible human"
 msgstr ""
+
+#: src/pages/storage/StorageSettings.tsx
+msgid "Restart the desktop app to see storage usage."
+msgstr "Перезапустите настольное приложение, чтобы увидеть использование хранилища."
 
 #: src/pages/DevicesSettings.tsx
 #: src/pages/system/SystemPage.tsx
@@ -6922,6 +6969,10 @@ msgstr ""
 msgid "Session ended — open a new terminal"
 msgstr ""
 
+#: src/pages/storage/StorageSettings.tsx
+msgid "Sessions"
+msgstr "Сеансы"
+
 #: src/pages/HostComputerSettings.tsx
 msgid "Set up"
 msgstr ""
@@ -7310,6 +7361,10 @@ msgstr ""
 #: src/pages/DelegationLines.tsx
 msgid "Stopping"
 msgstr ""
+
+#: src/pages/settings-sections.ts
+msgid "Storage"
+msgstr "Хранилище"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Storage class"

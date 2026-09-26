@@ -1,5 +1,6 @@
 import * as z from "zod";
 import { BotAvatarValueSchema } from "./bot-avatar.js";
+import { ToolResumedPayloadSchema } from "./command-blocks.js";
 import { ComputerProfileSchema } from "./computer-profiles.js";
 import { ConcurrentRunsSchema, ContextSnapshotSchema, RoutingRuleSchema } from "./context.js";
 import { LocalityPolicySchema } from "./delegation.js";
@@ -959,6 +960,11 @@ export const ThreadSnapshotSchema = z.object({
   contextRun: RunSchema.nullable().optional(),
   activeRuns: z.array(RunSchema).optional(),
   computer: ComputerStatusSchema.optional(),
+  /**
+   * Resume links a reader has seen live, kept apart from `messages` so a live link can join a
+   * card the reader has not (yet) loaded. Client bookkeeping only; never sent by the server.
+   */
+  links: z.array(ToolResumedPayloadSchema).optional(),
 });
 export type ThreadSnapshot = z.infer<typeof ThreadSnapshotSchema>;
 

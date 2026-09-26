@@ -1,6 +1,7 @@
 import { performance } from "node:perf_hooks";
 import { setTimeout as delay } from "node:timers/promises";
 import { SCOREBOARD_MANIFEST } from "../manifest.js";
+import { REPLAY_CANCELLATION_MESSAGE } from "../replay/services.js";
 import type { ResourceFrame } from "./contracts.js";
 import { finite } from "./contracts.js";
 
@@ -36,7 +37,7 @@ function causedByCollectorAbort(signal: AbortSignal, error: unknown): boolean {
   return (
     error instanceof Error &&
     error.cause === signal.reason &&
-    (error.name === "AbortError" || error.message === "Synthetic call cancelled")
+    (error.name === "AbortError" || error.message === REPLAY_CANCELLATION_MESSAGE)
   );
 }
 

@@ -214,6 +214,10 @@ msgstr ""
 msgid "{hours}h ago"
 msgstr "hace {hours} h"
 
+#: src/pages/storage/StorageSettings.tsx
+msgid "{location} · Docker not running"
+msgstr ""
+
 #: src/pages/ActivityList.tsx
 msgid "{minutes}m ago"
 msgstr "hace {minutes} min"
@@ -755,6 +759,10 @@ msgstr ""
 msgid "API key header"
 msgstr "Encabezado de clave de API"
 
+#: src/pages/storage/StorageSettings.tsx
+msgid "App cache"
+msgstr ""
+
 #: src/pages/ChannelPairingSettings.tsx
 msgid "App token"
 msgstr ""
@@ -864,6 +872,7 @@ msgstr ""
 msgid "Arguments"
 msgstr "Argumentos"
 
+#: src/pages/storage/StorageSettings.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Artifacts"
 msgstr ""
@@ -937,6 +946,10 @@ msgstr "a las {0}"
 #: src/pages/RoutineSchedule.tsx
 msgid "at {timeSelect}"
 msgstr "a las {timeSelect}"
+
+#: src/pages/storage/StorageSettings.tsx
+msgid "at least {size}"
+msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Attachment"
@@ -1141,6 +1154,7 @@ msgid "Board status"
 msgstr "Estado del tablero"
 
 #: src/pages/settings-sections.ts
+#: src/pages/storage/StorageSettings.tsx
 msgid "Boards"
 msgstr "Tableros"
 
@@ -1461,6 +1475,10 @@ msgstr "Comprobando…"
 msgid "Checkout has local changes. Clean it before updating."
 msgstr "El checkout tiene cambios locales. Límpialo antes de actualizar."
 
+#: src/pages/storage/StorageSettings.tsx
+msgid "Checkpoints"
+msgstr ""
+
 #: src/pages/customize/ConfigureExtension.tsx
 msgid "Choose"
 msgstr ""
@@ -1546,6 +1564,10 @@ msgstr "Borrar"
 #: src/pages/shell/dialogs.tsx
 msgid "Clear {0}’s conversation?"
 msgstr "¿Borrar la conversación de {0}?"
+
+#: src/pages/storage/StorageSettings.tsx
+msgid "Clear caches"
+msgstr ""
 
 #: src/pages/BotContextMenu.tsx
 #: src/pages/shell/bot-panel.tsx
@@ -1762,6 +1784,10 @@ msgstr ""
 #: src/pages/Shell.tsx
 msgid "Computer failed to boot"
 msgstr "La computadora no pudo iniciarse"
+
+#: src/pages/storage/StorageSettings.tsx
+msgid "Computer homes"
+msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Computer is asleep"
@@ -2157,6 +2183,10 @@ msgstr "No se pudo comprobar el estado de enseñanza. Actualiza la vista para co
 msgid "Could not check this computer."
 msgstr ""
 
+#: src/pages/storage/StorageSettings.tsx
+msgid "Could not clear caches; try again."
+msgstr ""
+
 #: src/pages/shell/dialogs.tsx
 msgid "Could not clear conversation"
 msgstr "No se pudo borrar la conversación"
@@ -2491,6 +2521,10 @@ msgstr "No se pudo alcanzar este servidor de modelos"
 
 #: src/pages/system/DispatchSetting.tsx
 msgid "Could not read or change Dispatch; reopen System settings."
+msgstr ""
+
+#: src/pages/storage/StorageSettings.tsx
+msgid "Could not read storage usage; try again."
 msgstr ""
 
 #: src/pages/system/SystemPage.tsx
@@ -2911,6 +2945,7 @@ msgid "Dashboard"
 msgstr ""
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/pages/storage/StorageSettings.tsx
 msgid "Database"
 msgstr ""
 
@@ -5804,6 +5839,10 @@ msgstr ""
 msgid "Previous"
 msgstr ""
 
+#: src/pages/storage/StorageSettings.tsx
+msgid "Previous Docker data"
+msgstr ""
+
 #: src/pages/board/ItemForm.tsx
 msgid "Priority"
 msgstr ""
@@ -5959,6 +5998,10 @@ msgstr "Leer respuestas en voz alta"
 #: src/pages/KnowledgeSection.tsx
 msgid "read-only"
 msgstr "Solo lectura"
+
+#: src/pages/storage/StorageSettings.tsx
+msgid "Reading storage usage…"
+msgstr ""
 
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "Reads can run without asking once you allow them. Writes always ask."
@@ -6364,6 +6407,10 @@ msgstr ""
 
 #: src/pages/TeamBoard.tsx
 msgid "Responsible human"
+msgstr ""
+
+#: src/pages/storage/StorageSettings.tsx
+msgid "Restart the desktop app to see storage usage."
 msgstr ""
 
 #: src/pages/DevicesSettings.tsx
@@ -6922,6 +6969,10 @@ msgstr ""
 msgid "Session ended — open a new terminal"
 msgstr ""
 
+#: src/pages/storage/StorageSettings.tsx
+msgid "Sessions"
+msgstr ""
+
 #: src/pages/HostComputerSettings.tsx
 msgid "Set up"
 msgstr ""
@@ -7309,6 +7360,10 @@ msgstr ""
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/DelegationLines.tsx
 msgid "Stopping"
+msgstr ""
+
+#: src/pages/settings-sections.ts
+msgid "Storage"
 msgstr ""
 
 #: src/pages/fleet/FleetSettings.tsx

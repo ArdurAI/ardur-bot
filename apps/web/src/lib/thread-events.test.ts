@@ -1678,6 +1678,91 @@ describe("web command projection", () => {
     );
     expect(shownCards(live?.messages)).toEqual(RESUMED_CALL_CARDS);
   });
+  it("joins a resumed call's card by its link when the killed call's card is on an unloaded older page", () => {
+    // The thread has only recent messages loaded; the killed call's own card, if it ever
+    // published one, is further back than the page this reader fetched.
+    const resumed = { commandId: "card-z", executionId: "shell:1", command: "pnpm build" };
+    const open = { exitCode: null, durationMs: null, stdout: null, stderr: null };
+    const events = [
+      resumedEvent("shell:0", "shell:1", { fromCommandId: "card-y", toCommandId: "card-z" }),
+      commandEvent("command.intent", { ...resumed, ...open, outcome: "waiting" }),
+      commandEvent("command.finished", { ...resumed, stdout: "built\n" }),
+    ].map((live, index) => ({ ...live, id: `live-${index}`, seq: 10 + index }));
+    const initial = snapshot([message("m-1", [{ kind: "text", text: "building" }])], 3);
+    const live = events.reduce<ReturnType<typeof reduceThreadSnapshot>>(
+      (current, event) =>
+        isThreadSnapshotEvent(event) ? reduceThreadSnapshot(current, event) : current,
+      initial,
+    );
+    // The row already carries the id the server uses for the joined card, not a fresh one.
+    expect(shownCards(live?.messages)).toEqual([
+      ["m-1", undefined, undefined, undefined],
+      ["command:resumed:card-z", "pnpm build", "completed", "built\n"],
+    ]);
+    // Loading the older page returns the killed call's row, already renamed by the server to
+    // the same id: the merge must not add a second card for it.
+    const withOlderPage = prependThreadMessagePage(live, {
+      threadId: "thread-1",
+      messages: [
+        message(
+          "command:resumed:card-z",
+          [
+            {
+              kind: "command",
+              command: commandBlock({
+                commandId: "card-z",
+                command: "pnpm build",
+                stdout: "built\n",
+                resumedFrom: ["card-y"],
+              }),
+            },
+          ],
+          1,
+        ),
+      ],
+      olderCursor: null,
+    });
+    expect(shownCards(withOlderPage?.messages)).toEqual([
+      ["command:resumed:card-z", "pnpm build", "completed", "built\n"],
+      ["m-1", undefined, undefined, undefined],
+    ]);
+  });
+  it("keeps a live resume link across a refresh, so the resumed call still joins the old card", () => {
+    const initial = snapshot([message("m-1", [{ kind: "text", text: "building" }])], 3);
+    const afterLink = reduceThreadSnapshot(initial, {
+      ...resumedEvent("shell:0", "shell:1", { fromCommandId: "card-y", toCommandId: "card-z" }),
+      id: "link",
+      seq: 10,
+    });
+    expect(afterLink?.links).toEqual([
+      { from: "shell:0", to: "shell:1", fromCommandId: "card-y", toCommandId: "card-z" },
+    ]);
+    // A window-focus refresh returns the server's snapshot at the same point: the resumed call
+    // has not published its own card yet, and the killed call's card is still off this page.
+    // `threads.get` never sends `links`, so a naive merge would silently drop it here.
+    const refreshed = reconcileRefreshedThread(
+      afterLink,
+      { ...initial, cursor: afterLink!.cursor },
+      null,
+    );
+    expect(refreshed.snapshot.links).toEqual(afterLink?.links);
+    const resumed = { commandId: "card-z", executionId: "shell:1", command: "pnpm build" };
+    const open = { exitCode: null, durationMs: null, stdout: null, stderr: null };
+    const live = [
+      commandEvent("command.intent", { ...resumed, ...open, outcome: "waiting" }),
+      commandEvent("command.finished", { ...resumed, stdout: "built\n" }),
+    ]
+      .map((event, index) => ({ ...event, id: `live-${index}`, seq: 11 + index }))
+      .reduce<ReturnType<typeof reduceThreadSnapshot>>(
+        (current, event) => reduceThreadSnapshot(current, event),
+        refreshed.snapshot,
+      );
+    // One card, already at the id the server would use: the refresh never wiped the link.
+    expect(shownCards(live?.messages)).toEqual([
+      ["m-1", undefined, undefined, undefined],
+      ["command:resumed:card-z", "pnpm build", "completed", "built\n"],
+    ]);
+  });
 });
 
 /**

@@ -16,6 +16,7 @@ import {
   isActive,
   isCommandCardEvent,
   isRunTerminalEvent,
+  mergeCommandLinks,
   mergeThreadHistory,
   prependThreadHistoryPage,
   progressMessageId,
@@ -143,7 +144,11 @@ export function mergeThreadSnapshot(
   // A threads.get started before SSE caught up must not wipe newer live state
   // (e.g. ask cards applied after send's post-refresh request was already in flight).
   if (prev && prev.threadId === next.threadId && prev.cursor > next.cursor) return prev;
-  return mergeThreadHistory(prev, next, preserveLoadedHistory);
+  const merged = mergeThreadHistory(prev, next, preserveLoadedHistory);
+  // The server never sends `links`; a same-thread refresh must not drop the reader's own record
+  // of live resume links, which is how a partially loaded thread stays correct across a refresh.
+  const carried = prev && prev.threadId === next.threadId ? (prev.links ?? []) : [];
+  return { ...merged, links: mergeCommandLinks(carried, merged.messages) };
 }
 
 /**
@@ -259,10 +264,20 @@ export function reduceThreadSnapshot(
   if (!prev) return prev;
   if (event.type === "run.context") return reduceRunContext(prev, event);
   if (isCommandCardEvent(event.type) && event.seq <= (prev.cursor ?? -1)) return prev;
-  if (isCommandCardEvent(event.type))
-    return { ...prev, cursor: event.seq, messages: reduceCommandMessages(prev.messages, event) };
-  if (isRunTerminalEvent(event))
-    prev = { ...prev, messages: reduceCommandMessages(prev.messages, event) };
+  if (isCommandCardEvent(event.type)) {
+    const { messages, links } = reduceCommandMessages(
+      { messages: prev.messages, links: prev.links ?? [] },
+      event,
+    );
+    return { ...prev, cursor: event.seq, messages, links: [...links] };
+  }
+  if (isRunTerminalEvent(event)) {
+    const { messages } = reduceCommandMessages(
+      { messages: prev.messages, links: prev.links ?? [] },
+      event,
+    );
+    prev = { ...prev, messages };
+  }
   if (event.type === "thread.cleared") {
     return {
       ...prev,

@@ -113,12 +113,18 @@ function assertServingWitness(budget: Budget, serving: ServingWitness | undefine
   throw error;
 }
 
+/** Wire-size refusals: limits on what a request may carry, counted as caps like budget counters. */
+export const BYTE_LIMIT_REFUSALS = [
+  "Request exceeds byte budget",
+  "Request exceeds conservative byte envelope",
+] as const;
+
 export async function readJson(request: IncomingMessage, maxBytes = 1024 * 1024) {
   const chunks: Buffer[] = [];
   let bytes = 0;
   for await (const chunk of request) {
     bytes += Buffer.byteLength(chunk);
-    requireValue(bytes <= maxBytes, "Request exceeds byte budget");
+    requireValue(bytes <= maxBytes, BYTE_LIMIT_REFUSALS[0]);
     chunks.push(Buffer.from(chunk));
   }
   return record(JSON.parse(Buffer.concat(chunks).toString("utf8")));
@@ -133,6 +139,11 @@ export interface GatewayRequest {
   usage: UsageCategories;
   missingReason: string | null;
   authoritative: boolean;
+}
+/** A request refused before reservation; nothing reached upstream. */
+export interface GatewayRefusal {
+  trialId: string;
+  reason: string;
 }
 interface Capability {
   trialId: string;
@@ -171,6 +182,7 @@ export async function startGateway(options: {
   // trial: no further request is admitted on the stale pre-forward reading.
   const failedTrials = new Set<string>();
   const requests: GatewayRequest[] = [];
+  const refusals: GatewayRefusal[] = [];
   const transport = options.transport ?? fetch;
   const server = createServer((request, response) => {
     void handle(request, response).catch((error) => {
@@ -198,8 +210,29 @@ export async function startGateway(options: {
       cap && !cap.controller.signal.aborted && !failedTrials.has(cap.trialId),
       "Unknown or revoked trial capability",
     );
+    let reserved = false;
+    try {
+      await forwardAdmitted(cap, route![2]!, request, response, () => {
+        reserved = true;
+      });
+    } catch (error) {
+      if (!reserved) {
+        const reason = sanitize(error instanceof Error ? error.message : "Gateway refused request");
+        refusals.push({ trialId: cap.trialId, reason });
+        cap.emit("diagnostic", "provider-gateway", { boundary: "gateway-refusal", reason });
+      }
+      throw error;
+    }
+  }
+  async function forwardAdmitted(
+    cap: Capability,
+    operation: string,
+    request: IncomingMessage,
+    response: ServerResponse,
+    markReserved: () => void,
+  ) {
     options.ledger.remainingMs(cap.trialId);
-    if (request.method === "GET" && route![2] === "models") {
+    if (request.method === "GET" && operation === "models") {
       response.setHeader("content-type", "application/json");
       response.end(
         JSON.stringify({
@@ -210,7 +243,7 @@ export async function startGateway(options: {
       return;
     }
     requireValue(
-      request.method === "POST" && route![2] === "chat/completions",
+      request.method === "POST" && operation === "chat/completions",
       "Unsupported provider operation",
     );
     const body = await readJson(request);
@@ -241,7 +274,7 @@ export async function startGateway(options: {
     // A too-large request is refused; bytes/4 is never an admission counter.
     requireValue(
       Buffer.byteLength(JSON.stringify(body)) <= budget.contextSize,
-      "Request exceeds conservative byte envelope",
+      BYTE_LIMIT_REFUSALS[1],
     );
     const forward: Record<string, unknown> = {
       ...body,
@@ -256,6 +289,7 @@ export async function startGateway(options: {
     await options.serving?.attest("model-request", cap.trialId);
     const remainingMs = options.ledger.remainingMs(cap.trialId);
     const reservation = options.ledger.reserve(cap.trialId, cap.purpose);
+    markReserved();
     const requestHash = contentDigest(forward);
     const observation: GatewayRequest = {
       id: reservation.id,
@@ -413,6 +447,7 @@ export async function startGateway(options: {
   return {
     origin,
     requests,
+    refusals,
     /** Opens the trial's budget only while the serving state still matches the declared route. */
     async admit(trialId: string) {
       await options.serving?.attest("trial-admission", trialId);

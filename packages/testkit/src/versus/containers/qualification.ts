@@ -47,7 +47,8 @@ export async function capture(session: ContainerSession, script: string) {
   });
   return { code, stdout, stderr: sanitize(stderr) };
 }
-const STANDIN = String.raw`
+/** Scripted protocol double run inside the cached computer image; it proves no Hermes capability. */
+export const STANDIN = String.raw`
 import json, sys, urllib.request
 args = sys.argv[1:]
 assert args[0] == 'chat' and '--oneshot' in args and '--query-file' in args

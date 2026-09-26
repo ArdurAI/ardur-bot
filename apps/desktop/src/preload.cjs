@@ -85,6 +85,10 @@ contextBridge.exposeInMainWorld("ardurbotDesktop", {
     request: (pathname, body) =>
       ipcRenderer.invoke("desktop.localSettings.request", pathname, body),
   },
+  storage: {
+    usage: () => ipcRenderer.invoke("desktop.storage.usage"),
+    clearCaches: () => ipcRenderer.invoke("desktop.storage.clearCaches"),
+  },
   window: {
     setUnsavedChanges: (dirty) => ipcRenderer.invoke("desktop.window.unsaved", dirty),
     close: () => ipcRenderer.invoke("desktop.window.close"),

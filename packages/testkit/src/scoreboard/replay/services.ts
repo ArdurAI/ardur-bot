@@ -50,9 +50,12 @@ export const FIXTURE_TOOLS: ConnectorTool[] = [
   },
 ];
 
+/** Shared with the resource collector's check for the cancellation this file raises. */
+export const REPLAY_CANCELLATION_MESSAGE = "Synthetic call cancelled";
+
 /** Cancellation shape consumed by the resource collector when it stops replay work. */
 export function replayCancellation(signal: AbortSignal) {
-  return new Error("Synthetic call cancelled", { cause: signal.reason });
+  return new Error(REPLAY_CANCELLATION_MESSAGE, { cause: signal.reason });
 }
 
 /** Disposable fixture schema only; never applied to an owner database or Prisma migrations. */

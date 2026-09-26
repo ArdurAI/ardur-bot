@@ -1045,6 +1045,7 @@ it("keeps a resumed helper command in the helper workspace, checks and approval"
 /** A runtime that leaves tool-call ids out: every attempt numbers its calls from zero again. */
 const FIRST = `${RUN}:shell:0`;
 const SECOND = `${RUN}:shell:1`;
+const THIRD = `${RUN}:shell:2`;
 
 it("runs a different call on a reused finished id after a pause as its own card", async () => {
   const finished = harness("production");
@@ -1213,6 +1214,33 @@ it("runs a call again under its own card once a link took its earlier card", asy
     [FIRST, `attempt-${h.run.leaseFence}`],
   ]);
   expect(new Set(cards.map((card) => card.commandId)).size).toBe(2);
+});
+
+it("hands a card on again when the call that took it over is itself killed before publishing one", async () => {
+  const h = harness("production");
+  const build = { command: "pnpm build" };
+  // Attempt 1 is killed while running, leaving its card open.
+  await h.killAt([{ name: "shell", args: build, executionId: FIRST }], at("command.started"));
+  // Attempt 2 links to that open card, then is killed right there, before it publishes a card
+  // of its own for the call that resumes it.
+  await h.killAt(
+    [{ name: "shell", args: build, executionId: SECOND }],
+    at("agent.tool.resumed"),
+    false,
+  );
+  expect(cardsOn(h.log, SECOND)).toEqual([]);
+  // Attempt 3 links to the same open card again, and this time runs it to completion.
+  await h.resume([{ name: "shell", args: build, executionId: THIRD }]);
+  expect(links(h.log)).toEqual([
+    { from: FIRST, to: SECOND },
+    { from: SECOND, to: THIRD },
+  ]);
+  const [, handedOn] = linkedCards(h.log);
+  // The second link still names both cards: the killed call's card was found and handed on,
+  // never left stuck on the resumed call's id once that call was killed too.
+  expect(handedOn).toEqual([expect.any(String), expect.any(String)]);
+  const cards = projectedCommands(h.log);
+  expect(cards.map((card) => [card.command, card.outcome])).toEqual([["pnpm build", "completed"]]);
 });
 
 it("keys the stored argument digest to the deployment", async () => {

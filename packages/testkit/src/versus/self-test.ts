@@ -9,6 +9,7 @@ import type { ReplayFixture } from "../scoreboard/replay/protocol.js";
 import { StrictReplay } from "../scoreboard/replay/protocol.js";
 import { DEPARTMENT_TASKS, getTask } from "../scoreboard/tasks/catalog.js";
 import { referenceSolution } from "../scoreboard/tasks/reference.js";
+import { WORKSPACE_NOT_INSPECTED } from "./adapters/hermes-container.js";
 import type { Emit, VersusEvent } from "./adapters/types.js";
 import { SEMANTIC_TOOLS, startBroker, TrialBroker } from "./broker.js";
 import { BudgetLedger, budgetTemplate, parseBudget, requireValue } from "./budget.js";
@@ -271,7 +272,7 @@ export async function runOfflineSelfTest(plan: PairPlan[], graderHash: string) {
           },
         });
         const grade = gradeBlind(packet, { fixtureHash, graderHash });
-        if (grade.uninspected) throw new Error("The workspace could not be inspected.");
+        if (grade.uninspected) throw new Error(WORKSPACE_NOT_INSPECTED);
         trials.push({
           product,
           taskId: task.id,

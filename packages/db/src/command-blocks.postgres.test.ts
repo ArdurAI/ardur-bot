@@ -2,6 +2,7 @@ import type { CommandBlock } from "@ardurbot/contracts";
 import { resumedCommandMessageId } from "@ardurbot/core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, type PrismaClient } from "./client.js";
+import { finishedCommandIds } from "./command-blocks.js";
 import { appendEvent } from "./events.js";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -481,5 +482,62 @@ describePostgres("resumed command materialization (PostgreSQL)", () => {
     await expect(
       prisma.message.findUniqueOrThrow({ where: { id: resumedRowId } }),
     ).resolves.toMatchObject({ id: resumedRowId });
+  });
+
+  it("names every commandId a command.finished event recorded for the run, scoped to that run", async () => {
+    const finishedHere = `cb-cmd-finished-${suffix}`;
+    const stillOpen = `cb-cmd-open-${suffix}`;
+    const finishedElsewhere = `cb-cmd-elsewhere-${suffix}`;
+    await record("command.intent", finishedHere, 50, {
+      command: "pnpm test",
+      executionId: "cb-finished-ids:0",
+    });
+    await record("command.finished", finishedHere, 50, {
+      command: "pnpm test",
+      executionId: "cb-finished-ids:0",
+      stdout: "ok",
+    });
+    await record("command.intent", stillOpen, 51, {
+      command: "pnpm build",
+      executionId: "cb-finished-ids:1",
+    });
+    const otherTask = await prisma.task.create({
+      data: { spaceId, botId, threadId, userId, prompt: "Run another command", status: "running" },
+    });
+    const otherRun = await prisma.run.create({
+      data: {
+        spaceId,
+        botId,
+        threadId,
+        taskId: otherTask.id,
+        userId,
+        status: "running",
+        trigger: "user",
+      },
+    });
+    await appendEvent(prisma, {
+      spaceId,
+      threadId,
+      botId,
+      runId: otherRun.id,
+      type: "command.finished",
+      payload: {
+        block: block({
+          runId: otherRun.id,
+          commandId: finishedElsewhere,
+          executionId: "cb-finished-ids:elsewhere",
+          attemptId: "attempt-elsewhere",
+          outcome: "completed",
+        }),
+      },
+    });
+
+    // Other cases in this shared run already finished their own commandIds; this only checks
+    // that the real JSON-path query finds this one, and stays scoped to its own run.
+    const hereIds = await finishedCommandIds(prisma, runId);
+    expect(hereIds.has(finishedHere)).toBe(true);
+    expect(hereIds.has(stillOpen)).toBe(false);
+    expect(hereIds.has(finishedElsewhere)).toBe(false);
+    expect(await finishedCommandIds(prisma, otherRun.id)).toEqual(new Set([finishedElsewhere]));
   });
 });

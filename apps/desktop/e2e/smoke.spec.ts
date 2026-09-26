@@ -52,6 +52,7 @@ test("launches with a narrow preload bridge and an isolated renderer", async () 
       "notifications",
       "oauth",
       "platform",
+      "storage",
       "system",
       "update",
       "window",

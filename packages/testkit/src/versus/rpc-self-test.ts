@@ -9,9 +9,10 @@ import { startModelEmulator } from "../model-emulator.js";
 import { gradeOutcome } from "../scoreboard/graders/outcome.js";
 import { contentDigest } from "../scoreboard/manifest.js";
 import { startReplayHttp } from "../scoreboard/replay/http.js";
-import type { ProductionApp } from "../scoreboard/replay/production.js";
+import type { ProductionApp, ReplaySandbox } from "../scoreboard/replay/production.js";
 import type { ReplayFixture } from "../scoreboard/replay/protocol.js";
 import { startReferenceRecording } from "../scoreboard/replay/recording.js";
+import type { DepartmentServices } from "../scoreboard/replay/services.js";
 import { getTask } from "../scoreboard/tasks/catalog.js";
 import { referenceSolution } from "../scoreboard/tasks/reference.js";
 import type { TrialArtifacts, VersusEvent } from "./adapters/types.js";
@@ -40,73 +41,16 @@ export async function rpcSelfTest(output: string, containerMode = false) {
     }),
     { flag: "wx" },
   );
-  let child: ReturnType<typeof spawn> | undefined;
+  let image = "";
   try {
-    // Reuse an already-running local engine and image. Never pull or start an owner's service.
-    const endpoint = execFileSync(
-      "docker",
-      ["context", "inspect", "--format", '{{(index .Endpoints "docker").Host}}'],
-      { encoding: "utf8" },
-    ).trim();
-    requireValue(endpoint.startsWith("unix://"), "A local Docker engine is required");
-    const image = execFileSync(
-      "docker",
-      ["image", "inspect", "postgres:16-alpine", "--format", "{{.Id}}"],
-      { encoding: "utf8" },
-    ).trim();
-    requireValue(
-      /^sha256:[a-f0-9]{64}$/.test(image),
-      "Cached PostgreSQL image required; no download authorized",
-    );
-    const env = await prepareEnvironment(resource.state, process.execPath);
-    const pnpmDirectory = path.dirname(
-      execFileSync("/usr/bin/which", ["pnpm"], { encoding: "utf8" }).trim(),
-    );
-    const dockerDirectory = path.dirname(
-      execFileSync("/usr/bin/which", ["docker"], { encoding: "utf8" }).trim(),
-    );
-    env.PATH = [pnpmDirectory, dockerDirectory, env.PATH].join(path.delimiter);
-    Object.assign(env, {
-      DOCKER_HOST: endpoint,
-      TESTCONTAINERS_RYUK_DISABLED: "true",
-      NODE_ENV: "test",
-      BETTER_AUTH_SECRET: "synthetic-scoreboard-auth-secret-32",
-      ENCRYPTION_KEY: "scoreboard-synthetic-encryption-key",
-      LOG_LEVEL: "error",
+    image = cachedPostgresImage();
+    const { code, diagnostics } = await spawnHarnessChild({
+      resource,
+      module: new URL(import.meta.url).pathname,
+      args: [containerMode ? "--container-child" : "--child", resource.root, reportFile],
+      // Seven fresh database/app lifecycles have their own bounded trial deadlines.
+      timeoutMs: 600000,
     });
-    child = spawn(
-      process.execPath,
-      [
-        "--import",
-        "tsx",
-        new URL(import.meta.url).pathname,
-        containerMode ? "--container-child" : "--child",
-        resource.root,
-        reportFile,
-      ],
-      { cwd: repositoryRoot, env, shell: false, stdio: ["ignore", "pipe", "pipe"] },
-    );
-    let diagnostics = "";
-    const append = (chunk: Buffer) => {
-      diagnostics = (
-        diagnostics + sanitize(chunk.toString("utf8"), [resource.root, repositoryRoot])
-      ).slice(-24000);
-    };
-    child.stdout!.on("data", append);
-    child.stderr!.on("data", append);
-    // Seven fresh database/app lifecycles have their own bounded trial deadlines.
-    const timer = setTimeout(() => child?.kill("SIGTERM"), 600000);
-    const killTimer = setTimeout(() => child?.kill("SIGKILL"), 605000);
-    let code: number | null;
-    try {
-      code = await new Promise<number | null>((resolve, reject) => {
-        child!.once("error", reject);
-        child!.once("close", resolve);
-      });
-    } finally {
-      clearTimeout(timer);
-      clearTimeout(killTimer);
-    }
     await writeFile(path.join(out, "rpc-diagnostics.txt"), diagnostics, { flag: "wx" });
     const result = JSON.parse(await readFile(reportFile, "utf8"));
     const sourceUnchangedDuringRun =
@@ -121,21 +65,166 @@ export async function rpcSelfTest(output: string, containerMode = false) {
     );
     return result;
   } finally {
-    if (child?.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
-    const remaining = execFileSync(
-      "docker",
-      ["ps", "-aq", "--filter", `label=ardur.versus.owner=${resource.owner}`],
-      { encoding: "utf8" },
-    )
-      .trim()
-      .split("\n")
-      .filter(Boolean);
-    for (const id of remaining) {
-      requireValue(/^[a-f0-9]{12,64}$/.test(id), "Invalid owned container identity");
-      execFileSync("docker", ["rm", "-f", id], { stdio: "ignore" });
-    }
+    removeOwnedContainers(resource.owner);
     await destroyOwnedDirectory(resource);
   }
+}
+
+/** Reuse an already-running local engine and cached image. Never pull or start an owner's service. */
+export function cachedPostgresImage() {
+  const image = execFileSync(
+    "docker",
+    ["image", "inspect", "postgres:16-alpine", "--format", "{{.Id}}"],
+    { encoding: "utf8" },
+  ).trim();
+  requireValue(
+    /^sha256:[a-f0-9]{64}$/.test(image),
+    "Cached PostgreSQL image required; no download authorized",
+  );
+  return image;
+}
+
+/**
+ * Runs a harness module in a child with an allowlisted environment, a new HOME and no inherited
+ * credentials. The parent never imports the application or loads dotenv.
+ */
+export async function spawnHarnessChild(options: {
+  resource: Awaited<ReturnType<typeof createTrialDirectory>>;
+  module: string;
+  args: string[];
+  timeoutMs: number;
+}) {
+  const endpoint = execFileSync(
+    "docker",
+    ["context", "inspect", "--format", '{{(index .Endpoints "docker").Host}}'],
+    { encoding: "utf8" },
+  ).trim();
+  requireValue(endpoint.startsWith("unix://"), "A local Docker engine is required");
+  const env = await prepareEnvironment(options.resource.state, process.execPath);
+  const pnpmDirectory = path.dirname(
+    execFileSync("/usr/bin/which", ["pnpm"], { encoding: "utf8" }).trim(),
+  );
+  const dockerDirectory = path.dirname(
+    execFileSync("/usr/bin/which", ["docker"], { encoding: "utf8" }).trim(),
+  );
+  env.PATH = [pnpmDirectory, dockerDirectory, env.PATH].join(path.delimiter);
+  Object.assign(env, {
+    DOCKER_HOST: endpoint,
+    TESTCONTAINERS_RYUK_DISABLED: "true",
+    NODE_ENV: "test",
+    BETTER_AUTH_SECRET: "synthetic-scoreboard-auth-secret-32",
+    ENCRYPTION_KEY: "scoreboard-synthetic-encryption-key",
+    LOG_LEVEL: "error",
+  });
+  const child = spawn(process.execPath, ["--import", "tsx", options.module, ...options.args], {
+    cwd: repositoryRoot,
+    env,
+    shell: false,
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let diagnostics = "";
+  const append = (chunk: Buffer) => {
+    diagnostics = (
+      diagnostics + sanitize(chunk.toString("utf8"), [options.resource.root, repositoryRoot])
+    ).slice(-24000);
+  };
+  child.stdout.on("data", append);
+  child.stderr.on("data", append);
+  const timer = setTimeout(() => child.kill("SIGTERM"), options.timeoutMs);
+  const killTimer = setTimeout(() => child.kill("SIGKILL"), options.timeoutMs + 5000);
+  try {
+    const code = await new Promise<number | null>((resolve, reject) => {
+      child.once("error", reject);
+      child.once("close", resolve);
+    });
+    return { code, diagnostics };
+  } finally {
+    clearTimeout(timer);
+    clearTimeout(killTimer);
+    if (child.exitCode === null && child.signalCode === null) child.kill("SIGKILL");
+  }
+}
+
+/** Disposable PostgreSQL labeled with the invocation's owner, using a synthetic Prisma config. */
+export async function provisionOwnedPostgres(root: string) {
+  const prismaConfig = path.join(root, "prisma.config.ts");
+  await writeFile(
+    prismaConfig,
+    `export default { schema: ${JSON.stringify(path.join(repositoryRoot, "packages/db/prisma/schema.prisma"))}, migrations: { path: ${JSON.stringify(path.join(repositoryRoot, "packages/db/prisma/migrations"))} }, datasource: { url: process.env.DATABASE_URL } };\n`,
+    { flag: "wx" },
+  );
+  const { provisionReplayPostgres } = await import("../scoreboard/replay/postgres.js");
+  const ownerToken = await readFile(path.join(root, ".versus-owner"), "utf8");
+  return provisionReplayPostgres({ prismaConfig, ownerToken });
+}
+
+/** Removes only containers carrying this invocation's ownership label. */
+export function removeOwnedContainers(owner: string) {
+  const remaining = execFileSync(
+    "docker",
+    ["ps", "-aq", "--filter", `label=ardur.versus.owner=${owner}`],
+    { encoding: "utf8" },
+  )
+    .trim()
+    .split("\n")
+    .filter(Boolean);
+  for (const id of remaining) {
+    requireValue(/^[a-f0-9]{12,64}$/.test(id), "Invalid owned container identity");
+    execFileSync("docker", ["rm", "-f", id], { stdio: "ignore" });
+  }
+}
+
+/** The disposable application behind a loopback listener, as ordinary clients reach it. */
+export async function createFixtureApp(options: {
+  databaseUrl: string;
+  dataDir: string;
+  sandbox: ReplaySandbox;
+  services: DepartmentServices;
+  containerMode: boolean;
+}): Promise<ProductionApp> {
+  // The application is an optional runtime composition root outside the package's rootDir.
+  const applicationModule = new URL("../../../../apps/api/src/app.js", import.meta.url).href;
+  const { createApp } = (await import(applicationModule)) as {
+    createApp(
+      options: Record<string, unknown>,
+    ): Promise<ProductionApp & { app: { fetch(request: Request): Promise<Response> | Response } }>;
+  };
+  const { serve } = await import("@hono/node-server");
+  const { FIXTURE_ENCRYPTION_KEY } = await import("../scoreboard/replay/production.js");
+  const handles = await createApp({
+    databaseUrl: options.databaseUrl,
+    realtimeDatabaseUrl: options.databaseUrl,
+    dataDir: options.dataDir,
+    authUrl: "http://127.0.0.1:5173",
+    webOrigin: "http://127.0.0.1:5173",
+    authSecret: "synthetic-scoreboard-auth-secret-32",
+    encryptionKey: FIXTURE_ENCRYPTION_KEY,
+    sandbox: options.sandbox,
+    sandboxProvider: options.containerMode ? "docker" : "fake",
+    agentRuntime: "pi",
+    wakeupDriver: "graphile",
+    composio: options.services,
+    signupsEnabled: "true",
+    signupAllowlist: "",
+    cloudAgentProvider: "emulator",
+    piSessionRecording: false,
+  });
+  const server = serve({ fetch: handles.app.fetch, hostname: "127.0.0.1", port: 0 });
+  await new Promise<void>((resolve) =>
+    server.listening ? resolve() : server.once("listening", resolve),
+  );
+  const address = server.address();
+  requireValue(address && typeof address !== "string", "Disposable API listener missing");
+  const origin = `http://127.0.0.1:${address.port}`;
+  return {
+    ...handles,
+    app: { request: (input, init) => fetch(`${origin}${input}`, init) },
+    stop: async () => {
+      if ("closeAllConnections" in server) server.closeAllConnections();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await handles.stop();
+    },
+  };
 }
 
 async function childMain(root: string, reportFile: string, containerMode = false) {
@@ -158,33 +247,15 @@ async function childMain(root: string, reportFile: string, containerMode = false
   const save = () =>
     writeFile(reportFile, `${sanitize(JSON.stringify(report, null, 2), [root, repositoryRoot])}\n`);
   await save();
-  const prismaConfig = path.join(root, "prisma.config.ts");
-  await writeFile(
-    prismaConfig,
-    `export default { schema: ${JSON.stringify(path.join(repositoryRoot, "packages/db/prisma/schema.prisma"))}, migrations: { path: ${JSON.stringify(path.join(repositoryRoot, "packages/db/prisma/migrations"))} }, datasource: { url: process.env.DATABASE_URL } };\n`,
-    { flag: "wx" },
-  );
-  const { provisionReplayPostgres } = await import("../scoreboard/replay/postgres.js");
   const { denyExternalTcp } = await import("../scoreboard/replay/offline.js");
   const { DepartmentServices, DepartmentSandbox } = await import(
     "../scoreboard/replay/services.js"
   );
-  const { FIXTURE_ENCRYPTION_KEY, fixtureRpc } = await import("../scoreboard/replay/production.js");
+  const { fixtureRpc } = await import("../scoreboard/replay/production.js");
   const { ArdurAdapter } = await import("./adapters/ardur.js");
-  const ownerToken = await readFile(path.join(root, ".versus-owner"), "utf8");
-  const postgres = await provisionReplayPostgres({ prismaConfig, ownerToken });
+  const postgres = await provisionOwnedPostgres(root);
   await save();
   try {
-    // The application is an optional runtime composition root outside the package's rootDir.
-    const applicationModule = new URL("../../../../apps/api/src/app.js", import.meta.url).href;
-    const { createApp } = (await import(applicationModule)) as {
-      createApp(
-        options: Record<string, unknown>,
-      ): Promise<
-        ProductionApp & { app: { fetch(request: Request): Promise<Response> | Response } }
-      >;
-    };
-    const { serve } = await import("@hono/node-server");
     let recordedFixture: ReplayFixture | null = null;
     for (const scenario of (
       [
@@ -479,42 +550,14 @@ async function childMain(root: string, reportFile: string, containerMode = false
             decisions++;
             await adapter!.answer(message.id, scenario === "approval-denied" ? "deny" : "allow");
           },
-          createApp: async () => {
-            const handles = await createApp({
+          createApp: () =>
+            createFixtureApp({
               databaseUrl: database.url,
-              realtimeDatabaseUrl: database.url,
               dataDir: directory.state,
-              authUrl: "http://127.0.0.1:5173",
-              webOrigin: "http://127.0.0.1:5173",
-              authSecret: "synthetic-scoreboard-auth-secret-32",
-              encryptionKey: FIXTURE_ENCRYPTION_KEY,
               sandbox,
-              sandboxProvider: containerMode ? "docker" : "fake",
-              agentRuntime: "pi",
-              wakeupDriver: "graphile",
-              composio: services,
-              signupsEnabled: "true",
-              signupAllowlist: "",
-              cloudAgentProvider: "emulator",
-              piSessionRecording: false,
-            });
-            const server = serve({ fetch: handles.app.fetch, hostname: "127.0.0.1", port: 0 });
-            await new Promise<void>((resolve) =>
-              server.listening ? resolve() : server.once("listening", resolve),
-            );
-            const address = server.address();
-            requireValue(address && typeof address !== "string", "Disposable API listener missing");
-            const origin = `http://127.0.0.1:${address.port}`;
-            return {
-              ...handles,
-              app: { request: (input, init) => fetch(`${origin}${input}`, init) },
-              stop: async () => {
-                if ("closeAllConnections" in server) server.closeAllConnections();
-                await new Promise<void>((resolve) => server.close(() => resolve()));
-                await handles.stop();
-              },
-            };
-          },
+              services,
+              containerMode,
+            }),
         });
         restoreNetwork = denyExternalTcp();
         let revoked = false;

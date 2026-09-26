@@ -10,6 +10,7 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, net, session, shell } from "
 import type { ElectronAutoUpdater } from "./auto-update.js";
 import { DesktopUpdateController, LAUNCH_CHECK_DELAY_MS } from "./auto-update.js";
 import { openBrowserAuth } from "./browser-auth.js";
+import { capDiskCacheSize, clearAppCaches, clearOversizedCache } from "./cache-limits.js";
 import { cliVersion } from "./cli.js";
 import { applySqlMigrationsToDatabase, ensureApplicationDatabase } from "./db-migrate.js";
 import { installDevices } from "./devices-ipc.js";
@@ -71,6 +72,7 @@ import {
   sessionPartitionForServerUrl,
 } from "./setup-config.js";
 import { clearSetup, readSetup, writeSetup } from "./setup-store.js";
+import { collectStorageUsage } from "./storage-usage.js";
 import { readEnabledRoutines } from "./system/routines.js";
 import { installSystemRuntime } from "./system/runtime.js";
 import { systemTray } from "./system/tray.js";
@@ -158,6 +160,8 @@ if (PERFORMANCE_USER_DATA) {
   app.setPath("userData", PERFORMANCE_USER_DATA);
   app.setPath("sessionData", path.join(PERFORMANCE_USER_DATA, "session"));
 }
+// Chromium ignores this switch once ready; it must be appended before that.
+capDiskCacheSize(app.commandLine);
 if (!app.requestSingleInstanceLock()) process.exit(0);
 let pendingIntegrationReturn: string | null = null;
 function returnToIntegration(value: string) {
@@ -218,12 +222,14 @@ function legacyDefaultSessionFlag(partition: string) {
   );
 }
 
+type ResolvedSessionTarget = { partition: string | null; value: Session };
+
 /**
  * Prefer the default session when that origin already has cookies or site
  * storage there, so upgrades keep localStorage/IndexedDB. Fresh origins get
  * an isolated partition.
  */
-async function resolveSessionForTarget(targetUrl: string) {
+async function resolveSessionForTarget(targetUrl: string): Promise<ResolvedSessionTarget> {
   const partition = sessionPartitionKey(targetUrl);
   if (partition === null) {
     return { partition: null, value: session.defaultSession };
@@ -1040,9 +1046,21 @@ async function probeManagedStack(
   }
 }
 
-function openApp(targetUrl: string) {
+/**
+ * Fire-and-forget: the caller has already shown and loaded its window by the time this
+ * runs, and this never delays anything else. A failure is logged, never surfaced — the
+ * disk-cache-size switch already bounds cache growth going forward regardless.
+ */
+function scheduleLaunchCacheMaintenance(sessions: Session[]): void {
+  void Promise.all(sessions.map((value) => clearOversizedCache(value))).catch((error: unknown) => {
+    console.error("Could not clear an oversized cache.", error);
+  });
+}
+
+/** `resolved` skips a redundant `resolveSessionForTarget` when the caller already has one for this exact URL. */
+function openApp(targetUrl: string, resolved?: ResolvedSessionTarget) {
   if (openAppPromise !== null) return openAppPromise;
-  openAppPromise = openAppOnce(targetUrl).finally(() => {
+  openAppPromise = openAppOnce(targetUrl, resolved).finally(() => {
     openAppPromise = null;
   });
   return openAppPromise;
@@ -1064,8 +1082,8 @@ function openFailureDetail(error: unknown): string {
   return probeFailureMessage(error);
 }
 
-async function openAppOnce(targetUrl: string) {
-  const target = await resolveSessionForTarget(targetUrl);
+async function openAppOnce(targetUrl: string, resolved?: ResolvedSessionTarget) {
+  const target = resolved ?? (await resolveSessionForTarget(targetUrl));
   const previous = mainWindow;
   let win: BrowserWindow | null = null;
   try {
@@ -1400,11 +1418,12 @@ app.whenReady().then(async () => {
     saved: currentSetup,
     forceSetup: process.env.ARDURBOT_FORCE_SETUP === "1",
   });
+  // Resolved once; passed through to `openApp` below so the startup dispatch never
+  // re-derives the same session.
+  const launchAppSession = target.kind === "app" ? await resolveSessionForTarget(target.url) : null;
   if (process.env.ARDURBOT_PERFORMANCE_CLEAR_CACHE === "1") {
     const cacheSessions = new Set<Session>([session.defaultSession]);
-    if (target.kind === "app") {
-      cacheSessions.add((await resolveSessionForTarget(target.url)).value);
-    }
+    if (launchAppSession !== null) cacheSessions.add(launchAppSession.value);
     await Promise.all(
       [...cacheSessions].flatMap((value) => [value.clearCache(), value.clearCodeCaches({})]),
     );
@@ -1525,6 +1544,25 @@ app.whenReady().then(async () => {
     listener: remoteListener,
   });
   ipcMain.handle("desktop.platform", () => process.platform);
+  const storageUsage = () =>
+    collectStorageUsage({
+      userDataDir,
+      platform: process.platform,
+      env: process.env,
+      exists: existsSync,
+      run: runDocker,
+      cacheSession: mainWindow?.webContents.session ?? session.defaultSession,
+    });
+  ipcMain.handle("desktop.storage.usage", (event) => {
+    if (!fromMainWindow(event)) throw new Error("Storage usage is not available here.");
+    return storageUsage();
+  });
+  ipcMain.handle("desktop.storage.clearCaches", async (event) => {
+    const win = fromMainWindow(event) ? mainWindow : null;
+    if (win === null) throw new Error("Storage usage is not available here.");
+    await clearAppCaches(win.webContents.session);
+    return storageUsage();
+  });
   ipcMain.handle("desktop.memoryFolders.available", (event) =>
     memoryFolderBridgeAllowed({
       mainWindow: fromMainWindow(event),
@@ -1754,7 +1792,9 @@ app.whenReady().then(async () => {
       const managedStackReady =
         managedUrl !== null ? await localStack.matchesDesiredStack() : false;
       if (managedStackReady && managedUrl !== null) {
-        if (await openApp(managedUrl)) {
+        // `managedUrl` is `target.url` after normalization, so the session resolved for
+        // it above is still the right one.
+        if (await openApp(managedUrl, launchAppSession ?? undefined)) {
           commitPendingAppSwitch();
           destroySetupWindow();
         }
@@ -1767,7 +1807,7 @@ app.whenReady().then(async () => {
     } else {
       const reachability = await probeServer(target.url);
       if (reachability.ok) {
-        if (await openApp(target.url)) {
+        if (await openApp(target.url, launchAppSession ?? undefined)) {
           commitPendingAppSwitch();
           destroySetupWindow();
         }
@@ -1776,10 +1816,18 @@ app.whenReady().then(async () => {
       }
     }
   } else {
-    if (await openApp(target.url)) {
+    if (await openApp(target.url, launchAppSession ?? undefined)) {
       commitPendingAppSwitch();
       destroySetupWindow();
     }
+  }
+  // The window above, if any, has already loaded by this point. Scheduled here — after
+  // that load, and never awaited — so a session that already grew past the disk-cache-size
+  // cap (an upgrade, or the cap being lowered) cannot delay the window's appearance.
+  if (process.env.ARDURBOT_PERFORMANCE_CLEAR_CACHE !== "1") {
+    const cacheSessions = [session.defaultSession];
+    if (launchAppSession !== null) cacheSessions.push(launchAppSession.value);
+    scheduleLaunchCacheMaintenance(cacheSessions);
   }
 });
 

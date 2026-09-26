@@ -335,6 +335,33 @@ export function assessContainerCohort(input: {
   };
 }
 
+/** The pinned image and the container report: the planner's inputs that need no model endpoint. */
+export async function readContainerCohortInputs(
+  reportPath: string | undefined,
+  inspect: typeof inspectImage = inspectImage,
+) {
+  const failures: string[] = [];
+  let pinnedImage: { id: string; revision: string | null } | null = null;
+  try {
+    const image = await inspect(HERMES_IMAGE);
+    requireValue(image.revision === HERMES_CONTAINER_REVISION, "Hermes image revision drift");
+    pinnedImage = image;
+  } catch (error) {
+    failures.push(sanitize(String(error)));
+  }
+  let report: Record<string, unknown> | null = null;
+  if (reportPath) {
+    try {
+      const text = await readFile(reportPath, "utf8");
+      requireValue(text.length <= 8 * 1024 * 1024, "Container report exceeds byte cap");
+      report = record(JSON.parse(text));
+    } catch (error) {
+      failures.push(sanitize(`Container report: ${String(error)}`));
+    }
+  }
+  return { pinnedImage, report, failures };
+}
+
 export async function runQualification(args: string[]) {
   const options = parseQualificationArguments(args);
   if (!options) {
@@ -450,24 +477,9 @@ export async function runQualification(args: string[]) {
   }
   let containerCohort: Record<string, unknown> | null = null;
   if (containerLane) {
-    let pinnedImage: { id: string; revision: string | null } | null = null;
-    try {
-      const image = await inspectImage(HERMES_IMAGE);
-      requireValue(image.revision === HERMES_CONTAINER_REVISION, "Hermes image revision drift");
-      pinnedImage = image;
-    } catch (error) {
-      failures.push(sanitize(String(error)));
-    }
-    let containerReport: Record<string, unknown> | null = null;
-    if (options["--container-report"]) {
-      try {
-        const text = await readFile(options["--container-report"], "utf8");
-        requireValue(text.length <= 8 * 1024 * 1024, "Container report exceeds byte cap");
-        containerReport = record(JSON.parse(text));
-      } catch (error) {
-        failures.push(sanitize(`Container report: ${String(error)}`));
-      }
-    }
+    const inputs = await readContainerCohortInputs(options["--container-report"]);
+    failures.push(...inputs.failures);
+    const { pinnedImage, report: containerReport } = inputs;
     const assessment = assessContainerCohort({
       approval: options["--container-cohort-approval"],
       report: containerReport,
