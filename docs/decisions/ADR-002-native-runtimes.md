@@ -120,8 +120,14 @@ short-lived owner-scoped login handle and status. Completion, cancellation, expi
 and process cleanup are handled by `CodexConnections`; the vendor owns credentials.
 
 `thread/start` or `thread/resume` receives the exact model, OpenAI provider, instructions,
-read-only sandbox, and reasoning effort. The response must report the same model,
-provider, effort and sandbox. `turn/start` repeats the exact model and effort.
+reasoning effort, and an `ardur-read` permission profile through config overrides.
+The profile grants read access to `:minimal` platform paths and the native working
+directory, when set, with network access disabled. Ardur does not send the legacy
+`sandbox` field with the thread or `sandboxPolicy` with `turn/start`. The thread
+response must report the same model, provider and effort, the `ardur-read` active
+profile, and a `readOnly` sandbox with network access disabled. `turn/start` repeats
+the exact model and effort. A conflicting user profile or pinned default is rejected
+before starting a thread.
 `model/rerouted` immediately disables MCP effects and fails with `pin-model-unknown`.
 Steering uses `turn/steer` with `expectedTurnId`; stop uses `turn/interrupt` and bounded
 process termination. A failed steering delivery fails visibly rather than silently
@@ -223,12 +229,15 @@ protocol types are compatibility evidence, not evidence of a successful signed-i
 | `disableAllHooks` and managed-hook limitations | [Hooks reference](https://code.claude.com/docs/en/hooks#disable-or-remove-hooks), [settings precedence](https://code.claude.com/docs/en/settings) |
 | `app-server`, `initialize`, `initialized`; `account/read`, `account/login/start`, `account/login/completed`, `account/login/cancel`; `model/list`, `config/read` | [App-server protocol](https://learn.chatgpt.com/docs/app-server) |
 | `thread/start`, `thread/resume`, `turn/start`, `turn/steer`, `turn/interrupt`; `item/agentMessage/delta`, `turn/completed`, `model/rerouted`; typed command/file approval requests | [App-server protocol](https://learn.chatgpt.com/docs/app-server) |
-| `-c`, feature flags, `web_search`, `tools.view_image`, MCP configuration | [Configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference), [official configuration schema](https://raw.githubusercontent.com/openai/codex/main/codex-rs/core/config.schema.json) |
+| `-c`, feature flags, `web_search`, `features.view_image`, MCP configuration | [Configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference), [official configuration schema](https://raw.githubusercontent.com/openai/codex/main/codex-rs/core/config.schema.json) |
 
 Generated types from `codex app-server generate-ts` on version **0.156.1** were also
-checked. They use `on-request` for the approval policy and `read-only` for thread
-sandbox mode; the returned sandbox policy uses `readOnly`. These exact wire values
-take precedence over differently formatted examples in the prose documentation.
+checked. They use `on-request` for the approval policy; the returned sandbox policy
+uses `readOnly` with `networkAccess`. Version 0.156 rejects the former
+`readOnly.access` restricted-read shape. The active permission profile is an
+experimental response field, so Ardur initializes with `experimentalApi: true` and
+verifies its ID before starting a turn. Other experimental request fields are not
+used by this adapter; its existing event handling remains unchanged.
 
 ## Owner verification and release gates
 

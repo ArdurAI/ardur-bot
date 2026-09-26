@@ -40,6 +40,11 @@ function fixture(
     | "approval"
     | "wrong-model"
     | "mcp-conflict"
+    | "profile-conflict"
+    | "default-permissions-conflict"
+    | "profile-missing"
+    | "profile-network"
+    | "turn-rejected"
     | "skills-error"
     | "usage" = "success",
   scenario?: { beforeStart?: Message[]; duringTurn: Message[] },
@@ -81,6 +86,12 @@ function fixture(
               mcp_servers: {
                 [mode === "mcp-conflict" ? "ardur" : "untrusted"]: { command: "must-not-run" },
               },
+              ...(mode === "profile-conflict"
+                ? { permissions: { "ardur-read": { filesystem: { "/": "write" } } } }
+                : {}),
+              ...(mode === "default-permissions-conflict"
+                ? { default_permissions: "user-profile" }
+                : {}),
             },
           });
           break;
@@ -102,10 +113,17 @@ function fixture(
             model: mode === "wrong-model" ? "replacement" : "model",
             modelProvider: "openai",
             reasoningEffort: "high",
-            sandbox: { type: "readOnly" },
+            sandbox: { type: "readOnly", networkAccess: mode === "profile-network" },
+            ...(mode === "profile-missing"
+              ? {}
+              : { activePermissionProfile: { id: "ardur-read", extends: null } }),
           });
           break;
         case "turn/start":
+          if (mode === "turn-rejected") {
+            send({ id: message.id, error: { code: -32600 } });
+            break;
+          }
           result({ turn: { id: "turn-native" } });
           queueMicrotask(() => {
             if (mode === "reroute")
@@ -283,6 +301,7 @@ describe("Codex app-server protocol", () => {
   });
   it("initializes ardur-bot, keeps the exact model and effort, records the session and disables other MCPs", async () => {
     const f = fixture();
+    f.request.nativeCwd = "/safe-workspace";
     const events = await f.collect();
     expect(events.filter((event) => event.type !== "usage")).toEqual([
       { type: "text", text: "hello" },
@@ -293,19 +312,58 @@ describe("Codex app-server protocol", () => {
     });
     expect(f.messages[0]).toMatchObject({
       method: "initialize",
-      params: { clientInfo: { name: "ardur-bot" } },
+      params: { clientInfo: { name: "ardur-bot" }, capabilities: { experimentalApi: true } },
     });
     expect(f.messages[1]).toEqual({ method: "initialized" });
-    expect(f.messages.find((event) => event.method === "thread/start")).toMatchObject({
-      params: { model: "model", config: { mcp_servers: { untrusted: { enabled: false } } } },
+    const args = f.spawn.mock.calls[0] as unknown as [string, string[], string?];
+    expect(args[1]).toContain("features.view_image=false");
+    expect(args[1]).not.toContain("tools.view_image=false");
+    const threadStart = f.messages.find((event) => event.method === "thread/start");
+    expect(threadStart).toMatchObject({
+      params: {
+        model: "model",
+        config: {
+          mcp_servers: { untrusted: { enabled: false } },
+          default_permissions: "ardur-read",
+          permissions: {
+            "ardur-read": {
+              filesystem: { ":minimal": "read", "/safe-workspace": "read" },
+              network: { enabled: false },
+            },
+          },
+          features: { view_image: false },
+        },
+      },
     });
-    expect(f.messages.find((event) => event.method === "turn/start")).toMatchObject({
+    expect(threadStart?.params).not.toHaveProperty("sandbox");
+    const turnStart = f.messages.find((event) => event.method === "turn/start");
+    expect(turnStart).toMatchObject({
       params: { model: "model", effort: "high" },
     });
+    expect(turnStart?.params).not.toHaveProperty("sandboxPolicy");
     expect(f.info).toHaveBeenCalledWith({
       runtimeKind: "codex-app-server",
       sessionId: "thread-native",
     });
+  });
+  it("uses only the minimal readable roots without a native working directory", async () => {
+    const f = fixture();
+    await f.collect();
+    const config = f.messages.find((event) => event.method === "thread/start")?.params?.config as
+      | { permissions: { "ardur-read": { filesystem: Record<string, string> } } }
+      | undefined;
+    expect(config?.permissions?.["ardur-read"]?.filesystem).toEqual({ ":minimal": "read" });
+  });
+  it("applies the same profile when resuming a thread", async () => {
+    const f = fixture();
+    f.request.nativeSession = { runtimeKind: "codex-app-server", sessionId: "thread-native" };
+    await f.collect();
+    expect(f.messages.find((event) => event.method === "thread/resume")).toMatchObject({
+      params: { threadId: "thread-native", config: { default_permissions: "ardur-read" } },
+    });
+    expect(f.messages.find((event) => event.method === "thread/resume")?.params).not.toHaveProperty(
+      "sandbox",
+    );
   });
   it("fails without starting a thread when ChatGPT login is missing", async () => {
     const f = fixture("login");
@@ -318,6 +376,41 @@ describe("Codex app-server protocol", () => {
     const f = fixture("mcp-conflict");
     await expect(f.collect()).rejects.toMatchObject({ problem: { code: "runtime-unavailable" } });
     expect(f.messages.some((event) => event.method === "thread/start")).toBe(false);
+  });
+  it.each(["profile-conflict", "default-permissions-conflict"] as const)(
+    "refuses %s before starting a thread",
+    async (mode) => {
+      const f = fixture(mode);
+      await expect(f.collect()).rejects.toMatchObject({
+        problem: {
+          code: "runtime-unavailable",
+          reason: "Codex cannot enforce the requested sandbox — change the pin.",
+        },
+      });
+      expect(f.messages.some((event) => event.method === "thread/start")).toBe(false);
+    },
+  );
+  it.each(["profile-missing", "profile-network"] as const)(
+    "fails closed when the thread reports %s",
+    async (mode) => {
+      const f = fixture(mode);
+      await expect(f.collect()).rejects.toMatchObject({
+        problem: {
+          code: "runtime-unavailable",
+          reason: "Codex cannot enforce the requested sandbox — change the pin.",
+        },
+      });
+      expect(f.messages.some((event) => event.method === "turn/start")).toBe(false);
+    },
+  );
+  it("reports a rejected turn as a runtime protocol error", async () => {
+    const f = fixture("turn-rejected");
+    await expect(f.collect()).rejects.toMatchObject({
+      problem: {
+        code: "runtime-unavailable",
+        reason: "Codex rejected the request — update Ardur or Codex.",
+      },
+    });
   });
   it.each(["reroute", "wrong-model"] as const)(
     "fails closed for %s without rewriting the pin",

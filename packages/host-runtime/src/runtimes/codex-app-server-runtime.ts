@@ -97,7 +97,10 @@ export class CodexRpc {
     });
   }
   async initialize() {
-    await this.request("initialize", { clientInfo: { name: "ardur-bot", version: "0.1.0" } });
+    await this.request("initialize", {
+      clientInfo: { name: "ardur-bot", version: "0.1.0" },
+      capabilities: { experimentalApi: true },
+    });
     this.send({ method: "initialized" });
   }
   async close() {
@@ -124,7 +127,7 @@ export function codexArguments() {
     "-c",
     'web_search="disabled"',
     "-c",
-    "tools.view_image=false",
+    "features.view_image=false",
   ];
 }
 export async function openCodex(start: NativeSpawn = spawnNative) {
@@ -328,14 +331,25 @@ export class CodexAppServerRuntime implements AgentRuntime {
         throw problem("pin-effort-unsupported", "The pinned effort is unavailable in Codex.");
       // Disable every configured MCP before adding this run's private bridge. Never launch
       // user-configured servers and then try to police their effects after initialization.
-      const { config } = await rpc.request<{ config: { mcp_servers?: Record<string, unknown> } }>(
-        "config/read",
-        { includeLayers: false, cwd: request.nativeCwd },
-      );
+      const { config } = await rpc.request<{
+        config: {
+          mcp_servers?: Record<string, unknown>;
+          permissions?: Record<string, unknown>;
+          default_permissions?: string | null;
+        };
+      }>("config/read", { includeLayers: false, cwd: request.nativeCwd });
       if (Object.hasOwn(config.mcp_servers ?? {}, "ardur"))
         throw problem(
           "runtime-unavailable",
           "Codex already has an ardur MCP server configured — remove it or change the pin.",
+        );
+      if (
+        Object.hasOwn(config.permissions ?? {}, "ardur-read") ||
+        config.default_permissions != null
+      )
+        throw problem(
+          "runtime-unavailable",
+          "Codex cannot enforce the requested sandbox — change the pin.",
         );
       const mcpServers: Record<string, unknown> = Object.fromEntries(
         Object.keys(config.mcp_servers ?? {}).map((name) => [name, { enabled: false }]),
@@ -373,7 +387,6 @@ export class CodexAppServerRuntime implements AgentRuntime {
         modelProvider: "openai",
         cwd: request.nativeCwd,
         approvalPolicy: "on-request",
-        sandbox: "read-only",
         baseInstructions: request.instructions,
         config: {
           ...(request.controlledComparison
@@ -387,8 +400,20 @@ export class CodexAppServerRuntime implements AgentRuntime {
             : {}),
           mcp_servers: mcpServers,
           web_search: "disabled",
-          tools: { view_image: false },
-          features: Object.fromEntries(disabledFeatures.map((name) => [name, false])),
+          features: {
+            ...Object.fromEntries(disabledFeatures.map((name) => [name, false])),
+            view_image: false,
+          },
+          default_permissions: "ardur-read",
+          permissions: {
+            "ardur-read": {
+              filesystem: {
+                ":minimal": "read",
+                ...(request.nativeCwd ? { [request.nativeCwd]: "read" } : {}),
+              },
+              network: { enabled: false },
+            },
+          },
           model_reasoning_effort: pin.effort,
         },
       };
@@ -397,7 +422,8 @@ export class CodexAppServerRuntime implements AgentRuntime {
         model: string;
         modelProvider: string;
         reasoningEffort: string;
-        sandbox: { type: string };
+        sandbox?: { type: string; networkAccess?: boolean };
+        activePermissionProfile?: { id: string } | null;
       }>(request.nativeSession?.sessionId ? "thread/resume" : "thread/start", {
         ...options,
         ...(request.nativeSession?.sessionId ? { threadId: request.nativeSession.sessionId } : {}),
@@ -406,7 +432,11 @@ export class CodexAppServerRuntime implements AgentRuntime {
         throw problem("pin-model-unknown", "Codex returned a different model.");
       if (session.reasoningEffort !== pin.effort)
         throw problem("pin-effort-unsupported", "Codex returned a different effort.");
-      if (session.sandbox.type !== "readOnly")
+      if (
+        session.activePermissionProfile?.id !== "ardur-read" ||
+        session.sandbox?.type !== "readOnly" ||
+        session.sandbox.networkAccess !== false
+      )
         throw problem(
           "runtime-unavailable",
           "Codex cannot enforce the requested sandbox — change the pin.",
@@ -529,14 +559,6 @@ export class CodexAppServerRuntime implements AgentRuntime {
           model: pin.modelId,
           effort: pin.effort,
           approvalPolicy: "on-request",
-          sandboxPolicy: {
-            type: "readOnly",
-            access: {
-              type: "restricted",
-              includePlatformDefaults: true,
-              readableRoots: request.nativeCwd ? [request.nativeCwd] : [],
-            },
-          },
           input: [
             {
               type: "text",
@@ -550,9 +572,9 @@ export class CodexAppServerRuntime implements AgentRuntime {
         })
         .catch((error: unknown) => {
           throw problem(
-            error instanceof CodexRequestRejected ? "pin-model-unknown" : "runtime-unavailable",
+            "runtime-unavailable",
             error instanceof CodexRequestRejected
-              ? "Codex could not start the pinned model — change the pin."
+              ? "Codex rejected the request — update Ardur or Codex."
               : "Codex app-server unavailable",
           );
         });
