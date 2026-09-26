@@ -114,11 +114,11 @@ describe("the images compose file", () => {
     }
   });
 
-  it("tells api and worker when the desktop app runs the stack, and nothing else does", () => {
-    for (const name of ["api", "worker"] as const)
-      expect(compose.services[name]?.environment?.ARDURBOT_DESKTOP_STACK).toBe(
-        `\${ARDURBOT_DESKTOP_STACK:-}`,
-      );
+  it("tells the api when the desktop app runs the stack, and nothing else does", () => {
+    expect(compose.services.api?.environment?.ARDURBOT_DESKTOP_STACK).toBe(
+      `\${ARDURBOT_DESKTOP_STACK:-}`,
+    );
+    expect(compose.services.worker?.environment).not.toHaveProperty("ARDURBOT_DESKTOP_STACK");
     expect(
       readFileSync(path.resolve(repoRoot, "infra/compose/.env.images.example"), "utf8"),
     ).not.toContain("ARDURBOT_DESKTOP_STACK");

@@ -441,7 +441,7 @@ describe("LocalStackController", () => {
         ARDURBOT_IMAGE_TAG: "v1.2.3",
         ARDURBOT_COMPUTER_IMAGE_TAG: "v1.2.3",
         COMPOSE_PROGRESS: "plain",
-        // Tells the API and worker that new computers start on this computer.
+        // Tells the API that this stack runs on the owner's own computer.
         ARDURBOT_DESKTOP_STACK: "1",
         HOME: "/home/me",
       });

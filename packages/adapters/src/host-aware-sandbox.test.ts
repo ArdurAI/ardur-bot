@@ -10,12 +10,7 @@ import { MissingComputerProviderError } from "./computer-connections.js";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
 import { DockerSandboxProvider } from "./docker-sandbox.js";
 import { FakeSandboxProvider } from "./fake-sandbox.js";
-import {
-  createRunSandbox,
-  HostAwareSandbox,
-  owningSandbox,
-  sandboxKindForBot,
-} from "./host-aware-sandbox.js";
+import { createRunSandbox, HostAwareSandbox, owningSandbox } from "./host-aware-sandbox.js";
 import { KubernetesSandboxProvider } from "./kubernetes-sandbox.js";
 import { FakeKubernetesApi } from "./kubernetes-test-api.js";
 
@@ -382,13 +377,6 @@ describe("host-aware sandbox", () => {
     await desktop.destroy(computer, ctx);
   });
 
-  it("only switches docker deployments onto this Mac", () => {
-    expect(sandboxKindForBot("docker", "this-mac")).toBe("desktop");
-    expect(sandboxKindForBot("docker", "docker")).toBe("docker");
-    expect(sandboxKindForBot("e2b", "this-mac")).toBe("e2b");
-    expect(sandboxKindForBot("fake", "this-mac")).toBe("fake");
-  });
-
   it("forwards pageBrowser to the routed provider", async () => {
     const isolated: SandboxProvider = new FakeSandboxProvider();
     const calls: unknown[] = [];
@@ -506,7 +494,7 @@ it("routes the run environment note to the host, leaving container notes alone",
 });
 
 describe("the desktop app's own Compose stack", () => {
-  // Its host bridge reaches the computer the app is installed on.
+  // Its host bridge reaches the computer the app is installed on, once Set up pairs it.
   async function stackSandbox(computerHost: string | null, desktopStack = "1") {
     const { RemoteHostSandboxProvider } = await import("./remote-host-sandbox.js");
     vi.stubEnv("ARDURBOT_HOST_BRIDGE", "api");
@@ -541,8 +529,24 @@ describe("the desktop app's own Compose stack", () => {
     vi.restoreAllMocks();
   });
 
-  it("starts a new computer on this computer through the host bridge when no choice is saved", async () => {
-    const { sandbox, provisions, RemoteHostSandboxProvider } = await stackSandbox(null);
+  it("starts and runs a new computer on Docker until a host is paired", async () => {
+    const { sandbox, provisions } = await stackSandbox(null);
+    const execute = vi
+      .spyOn(DockerSandboxProvider.prototype, "execute")
+      .mockImplementation(async function* () {
+        yield { type: "exit" as const, code: 0 };
+      });
+    const computer = await sandbox.provision({ botId: "new", homePath: "/tmp/new" }, ctx);
+    expect(computer.kind).toBe("docker");
+    expect(provisions.host).not.toHaveBeenCalled();
+    await expect(collect(sandbox.execute(computer, { argv: ["true"] }, ctx))).resolves.toEqual([
+      { type: "exit", code: 0 },
+    ]);
+    expect(execute).toHaveBeenCalledOnce();
+  });
+
+  it("starts a new computer on this computer through the host bridge once Set up chose it", async () => {
+    const { sandbox, provisions, RemoteHostSandboxProvider } = await stackSandbox("this-mac");
     const computer = await sandbox.provision({ botId: "new", homePath: "/tmp/new" }, ctx);
     expect(computer.kind).toBe("desktop");
     expect(provisions.host).toHaveBeenCalledOnce();
@@ -552,7 +556,7 @@ describe("the desktop app's own Compose stack", () => {
     );
   });
 
-  it.each([null, "docker"])(
+  it.each([null, "this-mac", "docker"])(
     "keeps an existing Docker computer on Docker (host choice %s)",
     async (computerHost) => {
       const { sandbox, provisions } = await stackSandbox(computerHost);
@@ -588,15 +592,4 @@ describe("the desktop app's own Compose stack", () => {
       MissingComputerProviderError,
     );
   });
-});
-
-it("names the kind of a new computer for each deployment shape", () => {
-  const stack = { ARDURBOT_HOST_BRIDGE: "api", ARDURBOT_DESKTOP_STACK: "1" };
-  const server = { ARDURBOT_HOST_BRIDGE: "api" };
-  expect(sandboxKindForBot("desktop", null, {})).toBe("desktop");
-  expect(sandboxKindForBot("docker", null, stack)).toBe("desktop");
-  expect(sandboxKindForBot("docker", "docker", stack)).toBe("docker");
-  expect(sandboxKindForBot("docker", null, server)).toBe("docker");
-  expect(sandboxKindForBot("docker", null, {})).toBe("docker");
-  expect(sandboxKindForBot("e2b", null, stack)).toBe("e2b");
 });

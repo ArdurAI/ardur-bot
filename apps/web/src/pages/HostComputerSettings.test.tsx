@@ -20,9 +20,6 @@ vi.mock("@ardurbot/ui-web", () => ({
 
 import { HostComputerSettings } from "./HostComputerSettings";
 
-const WARNING =
-  "Local access lets bots run commands without asking. Avoid it on shared or public servers.";
-
 const containers: (() => Promise<void>)[] = [];
 afterEach(async () => {
   for (const cleanup of containers.splice(0)) await cleanup();
@@ -132,9 +129,10 @@ it("in local mode lists the folders this app granted, with Add folder and Remove
   expect(button("Set up")).toBeUndefined();
   expect(button("Disconnect this computer")).toBeUndefined();
   expect(container.querySelector("li")).toBeNull();
-  // The only sentence is the warning that belongs to Add folder; nothing explains standing here.
-  expect([...container.querySelectorAll("p")].map((p) => p.textContent)).toEqual([WARNING]);
-  expect(container.textContent).not.toMatch(/Bots can read|approvals|advisory/);
+  // The folder sentence belongs to the Add folder dialog, and the Fleet row above shows this
+  // computer's state: nothing stands here.
+  expect(container.querySelectorAll("p")).toHaveLength(0);
+  expect(container.textContent).not.toMatch(/Bots can read|approvals|advisory|Local access/);
 
   await act(async () => button("Add folder")!.click());
   expect(addRoot).toHaveBeenCalledOnce();
@@ -212,7 +210,7 @@ function localDesktop() {
 const buttons = (container: HTMLElement) =>
   [...container.querySelectorAll("button")].map((button) => button.textContent);
 
-it("in local mode shows this computer's capacity, not a host service to set up", async () => {
+it("in local mode leaves this computer's state to its Fleet row, with no host service to set up", async () => {
   localDesktop();
   fake.status.mockReturnValue(new Promise(() => undefined));
   const loading = await render();
@@ -242,10 +240,9 @@ it("in local mode shows this computer's capacity, not a host service to set up",
   });
   const container = await render();
   expect(container.querySelector("h4")?.textContent).toBe("This Mac");
-  expect(container.textContent).toContain("6.0 GB free · 8 CPU · Load 1.5 · Disk 200.0 GB");
-  expect(container.textContent).toContain("claude 2.1.259");
-  expect(container.textContent).not.toContain("Host service");
+  expect(container.textContent).not.toMatch(/Host service|GB free/);
   expect(buttons(container)).toEqual(["Add folder"]);
+  expect(container.querySelector("button")?.hasAttribute("aria-describedby")).toBe(false);
 });
 
 it("in local mode never offers Set up or Disconnect, even when this account cannot inspect the host", async () => {
@@ -254,23 +251,4 @@ it("in local mode never offers Set up or Disconnect, even when this account cann
   const container = await render();
   expect(container.textContent).not.toMatch(/Host service|Not set up|Not running/);
   expect(buttons(container)).toEqual(["Add folder"]);
-});
-
-it("puts the local access warning on Add folder and nowhere else", async () => {
-  localDesktop();
-  fake.status.mockResolvedValue({ configured: false, connected: true, health: null, roots: [] });
-  const container = await render();
-  const add = [...container.querySelectorAll("button")].find(
-    (button) => button.textContent === "Add folder",
-  )!;
-  const describedBy = add.getAttribute("aria-describedby");
-  expect(describedBy && document.getElementById(describedBy)?.textContent).toBe(WARNING);
-  expect(container.textContent?.split(WARNING)).toHaveLength(2);
-
-  // A browser has no Add folder, so it has no warning either.
-  delete window.ardurbotDesktop;
-  fake.status.mockResolvedValue({ configured: true, connected: true, health: null, roots: [] });
-  const browser = await render();
-  expect(buttons(browser)).not.toContain("Add folder");
-  expect(browser.textContent).not.toContain(WARNING);
 });

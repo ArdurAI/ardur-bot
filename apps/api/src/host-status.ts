@@ -4,7 +4,6 @@ import type { HostHealth, HostStatus } from "@ardurbot/contracts/host-bridge";
 import { sandboxKindForBot } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import { readRegisteredFolders } from "@ardurbot/host-runtime/desktop-sandbox";
-import { hostCapacity } from "@ardurbot/host-runtime/fleet/capacity";
 import {
   getHostEnvironment,
   inspectHostEnvironment,
@@ -57,11 +56,10 @@ export async function sourceHostStatus(
       });
   }
   const file = process.env.ARDURBOT_HOST_ROOTS_FILE;
-  const [current, roots, capacity] = await Promise.all([
+  const [current, roots] = await Promise.all([
     health,
     file ? readRegisteredFolders(file) : [homedir()],
-    hostCapacity(),
   ]);
   // There is no paired registration to disconnect in source mode.
-  return { configured: false, connected: true, roots, health: { ...current, roots, capacity } };
+  return { configured: false, connected: true, roots, health: { ...current, roots } };
 }

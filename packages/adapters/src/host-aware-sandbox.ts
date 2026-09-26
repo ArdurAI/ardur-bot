@@ -29,8 +29,6 @@ import {
 import type { SandboxProviderOptions } from "./sandbox-factory.js";
 import { createSandboxProvider } from "./sandbox-factory.js";
 
-export { sandboxKindForBot };
-
 function once<T>(create: () => T): () => T {
   let value: T | undefined;
   return () => (value ??= create());
@@ -48,7 +46,8 @@ export function createRunSandbox(
   );
   const selected = kind === "desktop" ? host() : createSandboxProvider(kind, opts);
   // Connectionless computers keep the engine of their kind; a hosted one needs its key here.
-  // The host is never one of these: only a desktop deployment, or Docker with This Mac on, has it.
+  // The host is never one of these. It runs computers on a desktop deployment, and on Docker once
+  // the owner chose it, which Set up does on the desktop app's own stack.
   const local: Partial<Record<string, () => SandboxProvider>> = {
     docker: once(() => createSandboxProvider("docker", opts)),
   };

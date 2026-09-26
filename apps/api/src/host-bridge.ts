@@ -10,6 +10,7 @@ import { BoardError, BoardRunResultSchema } from "@ardurbot/contracts/board";
 import type { HostOperation, HostRequest } from "@ardurbot/contracts/host-bridge";
 import { HOST_WRITE_FRAME_BYTES, HostOperationSchema } from "@ardurbot/contracts/host-bridge";
 import { RuntimePinSchema } from "@ardurbot/contracts/runtime-pins";
+import { isDesktopComposeStack } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import { requireMembership } from "@ardurbot/db";
 import type { HostWire } from "@ardurbot/host-runtime/bridge-wire";
@@ -46,9 +47,18 @@ export class HostBridge {
     if (deployment?.ownerUserId !== userId)
       throw new Error("Only the deployment owner can connect this computer.");
     const token = randomBytes(32).toString("base64url");
-    // Creation is deliberately not an upsert: a second desktop cannot silently replace the first.
-    await this.prisma.hostRegistration.create({
-      data: { id: "default", userId, tokenHash: hostTokenHash(token), generation: randomUUID() },
+    await this.prisma.$transaction(async (tx) => {
+      // Creation is deliberately not an upsert: a second desktop cannot silently replace the first.
+      await tx.hostRegistration.create({
+        data: { id: "default", userId, tokenHash: hostTokenHash(token), generation: randomUUID() },
+      });
+      // Setting up the desktop app's own host chooses it for new computers, unless the owner
+      // already chose Docker.
+      if (isDesktopComposeStack())
+        await tx.deploymentSettings.updateMany({
+          where: { id: "default", computerHost: null },
+          data: { computerHost: "this-mac" },
+        });
     });
     return { token };
   }

@@ -4306,7 +4306,6 @@ msgid "Local"
 msgstr "Local"
 
 #: src/pages/HostComputerPrompt.tsx
-#: src/pages/HostComputerSettings.tsx
 msgid "Local access lets bots run commands without asking. Avoid it on shared or public servers."
 msgstr "El acceso local permite que los bots ejecuten comandos sin preguntar. Evítalo en servidores compartidos o públicos."
 

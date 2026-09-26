@@ -559,7 +559,7 @@ export class LocalStackController {
       env: dockerSpawnEnv(this.deps.platform, this.deps.env, binary, {
         ARDURBOT_IMAGE_TAG: this.deps.imageTag,
         ARDURBOT_COMPUTER_IMAGE_TAG: this.deps.imageTag,
-        // New computers start on this computer, through the host bridge.
+        // The API never asks where bots run here; Set up makes this computer the default.
         ARDURBOT_DESKTOP_STACK: "1",
         ...(this.currentStackToken === null
           ? {}

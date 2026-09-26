@@ -475,8 +475,9 @@ describe("createRepos.createBot computer kind", () => {
     expect(await createdKind(null)).toBe("desktop");
   });
 
+  // Set up saves this-mac on the desktop app's own stack; until then new computers stay on Docker.
   it.each([
-    [null, "desktop"],
+    [null, "docker"],
     ["this-mac", "desktop"],
     ["docker", "docker"],
   ])(

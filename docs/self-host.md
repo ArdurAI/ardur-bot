@@ -331,9 +331,10 @@ computer starts depends on how Ardur Bot was installed:
   this computer. It never asks where bots should run. **Settings → Computers** shows this
   computer with its free memory, CPU and disk, and the folders you added.
 - **A desktop app that already runs a Docker Compose stack** (its data folder has `stack/.env`)
-  keeps that stack. New computers start on this computer through the host service, which you
-  connect once with **Set up** in **Settings → Computers → This computer**. Computers already on
-  Docker stay on Docker, and an owner who chose Docker earlier keeps Docker for new computers.
+  keeps that stack and never asks where bots run. New computers start on Docker until you connect
+  the host service with **Set up** in **Settings → Computers → This computer**; after that they
+  start on this computer. Computers already on Docker stay on Docker, and an owner who chose
+  Docker earlier keeps Docker for new computers.
 - **A server** (published images, production Compose, or a source checkout) keeps Docker as the
   default, because a shared server is not your own computer. An Electron app connected to it
   asks the owner once whether to keep Docker or run bots on the host, with a warning against the

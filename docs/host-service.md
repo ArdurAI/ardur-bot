@@ -288,7 +288,8 @@ The connection hub runs in the API process; the host package has no database cli
    release DMG into Applications and open it. This change does not publish a release.
 2. Start from a data folder that already runs the Compose stack, finish deployment-owner
    sign-in, and open **Settings → Computers → This Mac → Set up**. Nothing asks where bots
-   run: new computers start on this Mac. Allow the OS secure-storage prompt.
+   run; once Set up succeeds, new computers start on this Mac. Allow the OS secure-storage
+   prompt.
 3. Use **Add folder** to register a project folder. Confirm **Host service: Connected**,
    the detected CLI versions and **Tools:** inventory. Install and sign in to the unmodified vendor CLI
    separately if it is absent. Ardur does not collect vendor credentials.

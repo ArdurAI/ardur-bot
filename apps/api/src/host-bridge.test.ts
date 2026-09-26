@@ -45,6 +45,7 @@ function fixture() {
         needsReview: false,
       })),
     },
+    $transaction: vi.fn(async (work: (tx: unknown) => Promise<unknown>) => work(prisma)),
   };
   return {
     prisma,

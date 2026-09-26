@@ -1,9 +1,4 @@
-import type {
-  CapacitySnapshot,
-  FleetTarget,
-  HostLabel,
-  PlacementSettings,
-} from "@ardurbot/contracts";
+import type { FleetTarget, HostLabel, PlacementSettings } from "@ardurbot/contracts";
 import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
 import {
   Button,
@@ -242,29 +237,18 @@ export function FleetSettings() {
   );
 }
 
-/** One line: free memory, CPUs, load and free disk, as reported. */
-export function CapacitySummary({ capacity }: { capacity: CapacitySnapshot }) {
-  const { t } = useLingui();
-  const { memoryFree, cpuCount, cpuLoad1m, diskFree } = capacity;
-  return (
-    <>
-      {memoryFree === null
-        ? t`Memory not reported`
-        : t`${(memoryFree / 1024 ** 3).toFixed(1)} GB free`}
-      {cpuCount !== null ? ` · ${cpuCount} CPU` : ""}
-      {cpuLoad1m !== null ? ` · ${t`Load`} ${cpuLoad1m.toFixed(1)}` : ""}
-      {diskFree !== null ? ` · ${t`Disk`} ${(diskFree / 1024 ** 3).toFixed(1)} GB` : ""}
-    </>
-  );
-}
-
 export function CapacityBar({ target }: { target: FleetTarget }) {
   const { t } = useLingui();
-  const { memoryFree, memoryTotal } = target.capacity;
+  const { memoryFree, memoryTotal, cpuCount, cpuLoad1m, diskFree } = target.capacity;
   return (
     <div className="space-y-1 text-xs text-muted-foreground">
       <p>
-        <CapacitySummary capacity={target.capacity} />
+        {memoryFree === null
+          ? t`Memory not reported`
+          : t`${(memoryFree / 1024 ** 3).toFixed(1)} GB free`}
+        {cpuCount !== null ? ` · ${cpuCount} CPU` : ""}
+        {cpuLoad1m !== null ? ` · ${t`Load`} ${cpuLoad1m.toFixed(1)}` : ""}
+        {diskFree !== null ? ` · ${t`Disk`} ${(diskFree / 1024 ** 3).toFixed(1)} GB` : ""}
       </p>
       {memoryFree !== null && memoryTotal !== null && memoryTotal > 0 ? (
         <progress

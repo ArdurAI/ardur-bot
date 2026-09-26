@@ -13,16 +13,6 @@ vi.mock("@ardurbot/host-runtime/runtimes/claude-code-runtime", () => ({
 vi.mock("@ardurbot/host-runtime/runtimes/codex-app-server-runtime", () => ({
   probeCodex: async () => ({ runtimeKind: "codex-app-server", available: false, models: [] }),
 }));
-const capacity = vi.hoisted(() => ({
-  cpuCount: 8,
-  cpuLoad1m: 1.5,
-  memoryTotal: 16 * 1024 ** 3,
-  memoryFree: 6 * 1024 ** 3,
-  diskFree: 200 * 1024 ** 3,
-  sampledAt: "2026-09-26T00:00:00.000Z",
-  source: "host" as const,
-}));
-vi.mock("@ardurbot/host-runtime/fleet/capacity", () => ({ hostCapacity: async () => capacity }));
 
 import { sourceHostStatus } from "./host-status.js";
 
@@ -63,14 +53,3 @@ it("never probes a packaged API container, another user's host, or a container-o
 vi.mock("@ardurbot/host-runtime/host-integrations", () => ({
   inspectHostIntegrations: async () => [],
 }));
-
-it("reports this computer's capacity with its status", async () => {
-  vi.stubEnv("ARDURBOT_HOST_BRIDGE", "");
-  fake.owner.mockResolvedValue(true);
-  fake.inspect.mockResolvedValue({ tools: [], diagnostic: "" });
-  expect(await sourceHostStatus(prisma, "owner", "desktop")).toMatchObject({
-    configured: false,
-    connected: true,
-    health: { capacity },
-  });
-});
