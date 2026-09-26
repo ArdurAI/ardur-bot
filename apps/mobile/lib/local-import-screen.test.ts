@@ -248,3 +248,78 @@ it("lets the owner enter imported server credentials using secure native fields"
   await act(async () => root.unmount());
   node.remove();
 });
+it("lists failed items with their reason, retries one, and says why a run stopped", async () => {
+  vi.clearAllMocks();
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const [memory, skill] = localImportFixture.items;
+  const failure = (item: (typeof localImportFixture.items)[number], reason: string) => ({
+    itemId: item.id,
+    tool: item.tool,
+    category: item.category,
+    relativePath: item.relativePath,
+    reason,
+  });
+  fake.status.mockResolvedValue({
+    ...localImportStatusFixture,
+    manifest: { ...localImportFixture, limited: true, unscanned: 4 },
+  });
+  const counts = { updated: 0, unchanged: 0, removed: 0, skipped: 0, conflicts: 0 };
+  fake.run.mockImplementation(async (action) =>
+    action.itemId
+      ? { result: { ...counts, created: 1, failed: 0 } }
+      : {
+          result: { ...counts, created: 714, failed: 2 },
+          failures: [failure(memory!, "credential"), failure(skill!, "failed")],
+        },
+  );
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  const buttons = () => [...node.querySelectorAll("button")];
+  try {
+    await act(async () => root.render(createElement(LocalImport)));
+    expect(node.textContent).toContain(
+      "Some items exceeded the scan limits (4 items were not scanned).",
+    );
+    await act(async () =>
+      buttons()
+        .find((button) => button.textContent === "Import all")!
+        .click(),
+    );
+    expect(node.textContent).toContain(
+      "714 imported, 0 updated, 0 unchanged, 0 removed, 0 skipped, 0 conflicts, 2 failed.",
+    );
+    expect(node.textContent).toContain(memory!.relativePath);
+    expect(node.textContent).toContain(
+      "Looks like it contains a credential. Remove it from the file, then re-scan.",
+    );
+    expect(node.textContent).toContain("Could not be saved.");
+    const retries = buttons().filter((button) => button.textContent === "Retry");
+    expect(retries).toHaveLength(1);
+    await act(async () => retries[0]!.click());
+    expect(fake.run).toHaveBeenLastCalledWith({
+      action: "import",
+      scanId: localImportFixture.scanId,
+      tool: "claude-code",
+      categories: ["skills"],
+      itemId: skill!.id,
+    });
+    expect(node.textContent).toContain(
+      "715 imported, 0 updated, 0 unchanged, 0 removed, 0 skipped, 0 conflicts, 1 failed.",
+    );
+    expect(node.textContent).not.toContain(skill!.relativePath);
+    for (const [stopped, sentence] of [
+      ["host", "Import could not finish. Check this computer is connected, then re-scan."],
+      ["failed", "Import stopped because of an unexpected error. Re-scan, then try again."],
+    ]) {
+      fake.run.mockResolvedValueOnce({ stopped });
+      await act(async () =>
+        buttons()
+          .find((button) => button.textContent === "Import all")!
+          .click(),
+      );
+      expect(node.textContent).toContain(sentence);
+    }
+  } finally {
+    await act(async () => root.unmount());
+  }
+});

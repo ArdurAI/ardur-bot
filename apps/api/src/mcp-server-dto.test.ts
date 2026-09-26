@@ -29,6 +29,16 @@ it("retains import provenance and managed host metadata without exposing credent
     envKeys: ["ACCESS_TOKEN"],
     headerKeys: ["X-Workspace"],
     hasSecret: false,
+    lastError: null,
   });
   expect(JSON.stringify(server)).not.toContain("fixture-private-value");
+  expect(
+    mcpServerDto({
+      ...localImportServerFixture,
+      secretId: null,
+      lastError: "Could not reach this integration. Try again.",
+      createdAt: new Date(localImportServerFixture.createdAt),
+      updatedAt: new Date(localImportServerFixture.updatedAt),
+    }).lastError,
+  ).toBe("Could not reach this integration. Try again.");
 });

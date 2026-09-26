@@ -82,8 +82,9 @@ msgstr ""
 #. placeholder {3}: result.removed
 #. placeholder {4}: result.skipped
 #. placeholder {5}: result.conflicts
+#. placeholder {6}: result.failed
 #: src/pages/import/LocalImportPage.tsx
-msgid "{0} imported, {1} updated, {2} unchanged, {3} removed, {4} skipped, {5} conflicts."
+msgid "{0} imported, {1} updated, {2} unchanged, {3} removed, {4} skipped, {5} conflicts, {6} failed."
 msgstr ""
 
 #. placeholder {0}: format(size / 1024)
@@ -272,6 +273,7 @@ msgstr ""
 msgid "Access token"
 msgstr ""
 
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Access token (optional)"
 msgstr "Erişim token'ı (isteğe bağlı)"
@@ -1215,6 +1217,14 @@ msgstr "Yeni grubu iptal et"
 msgid "Cancel reply"
 msgstr "Yanıtı iptal et"
 
+#: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
+#: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/McpServersOverlay.tsx
+#: src/pages/shell/message-cards.tsx
+msgid "Cancel sign-in"
+msgstr ""
+
 #: src/pages/LearningObservation.tsx
 msgid "Cancellations"
 msgstr ""
@@ -1311,6 +1321,10 @@ msgstr ""
 msgid "Chat Settings"
 msgstr "Sohbet Ayarları"
 
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Check"
+msgstr ""
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Check again"
 msgstr ""
@@ -1392,6 +1406,10 @@ msgstr "Dosya seç"
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Choose folder"
+msgstr ""
+
+#: src/pages/McpServersOverlay.tsx
+msgid "Choose one credential: a token or a header."
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
@@ -1690,6 +1708,7 @@ msgstr "Dağıtım tarafından yapılandırıldı"
 msgid "Confirm"
 msgstr "Onayla"
 
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/settings/UploadedFiles.tsx
@@ -1966,6 +1985,10 @@ msgstr ""
 msgid "Could not authorize this app"
 msgstr "Bu uygulama yetkilendirilemedi"
 
+#: src/pages/import/LocalImportPage.tsx
+msgid "Could not be saved."
+msgstr ""
+
 #: src/pages/memory/MemoryGeneration.tsx
 msgid "Could not change memory generation. Try again."
 msgstr ""
@@ -2045,13 +2068,13 @@ msgstr ""
 msgid "Could not complete this action."
 msgstr ""
 
-#: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not connect"
 msgstr "Bağlanılamadı"
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 msgid "Could not connect or load integrations."
 msgstr ""
 
@@ -2292,6 +2315,8 @@ msgid "Could not load the server configuration."
 msgstr ""
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/lib/mcp-sign-in.ts
+#: src/pages/McpServersOverlay.tsx
 msgid "Could not load this account’s tools."
 msgstr ""
 
@@ -2487,6 +2512,10 @@ msgstr "Bu seçim kaydedilemedi"
 msgid "Could not search catalog"
 msgstr ""
 
+#: src/components/integrations/DirectMcpSearch.tsx
+msgid "Could not search integrations."
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Could not send reset email"
 msgstr "Sıfırlama e-postası gönderilemedi"
@@ -2680,6 +2709,7 @@ msgstr ""
 msgid "Creating…"
 msgstr "Oluşturuluyor…"
 
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Credential"
 msgstr "Kimlik bilgisi"
@@ -2809,6 +2839,7 @@ msgstr ""
 msgid "Deferred"
 msgstr ""
 
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/pages/BotContextMenu.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
@@ -3196,6 +3227,10 @@ msgstr ""
 msgid "Enter a valid destination and save again."
 msgstr ""
 
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Enter a valid token."
+msgstr ""
+
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Enter a whole number from 1 to {MAX_MODEL_CONTEXT_WINDOW} for the context limit."
@@ -3373,6 +3408,10 @@ msgstr "Başarısız"
 #. placeholder {0}: result.failure ?? "Not reported"
 #: src/pages/ComparePanel.tsx
 msgid "Failed — {0}"
+msgstr ""
+
+#: src/pages/import/LocalImportPage.tsx
+msgid "Failed items"
 msgstr ""
 
 #: src/pages/Shell.tsx
@@ -3750,6 +3789,10 @@ msgstr "OpenAPI JSON içe aktar"
 
 #: src/pages/memory/MemoryImport.tsx
 msgid "Import prompt"
+msgstr ""
+
+#: src/pages/import/LocalImportPage.tsx
+msgid "Import stopped because of an unexpected error. Re-scan, then try again."
 msgstr ""
 
 #. placeholder {0}: LOCAL_IMPORT_TOOL_NAMES[entry.importedFrom]
@@ -4266,6 +4309,10 @@ msgstr "Çıkış yap"
 msgid "Log out of all devices"
 msgstr ""
 
+#: src/pages/import/LocalImportPage.tsx
+msgid "Looks like it contains a credential. Remove it from the file, then re-scan."
+msgstr ""
+
 #: src/lib/thinking-level-options.ts
 msgid "low — quick, with a little checking"
 msgstr ""
@@ -4279,6 +4326,7 @@ msgid "Make sure nothing is still running on this computer."
 msgstr "Bu bilgisayarda hâlâ çalışan bir şey olmadığından emin ol."
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/pages/account/AccountMore.tsx
 #: src/pages/memory/MemorySettings.tsx
 #: src/pages/settings/GeneralSettings.tsx
@@ -4712,6 +4760,7 @@ msgid "Needs reconnection"
 msgstr ""
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/pages/dashboard/ConnectionsPanel.tsx
 msgid "Needs sign-in"
 msgstr ""
@@ -4991,6 +5040,10 @@ msgstr ""
 
 #: src/components/integrations/manage/IntegrationDetails.tsx
 msgid "Not checked"
+msgstr ""
+
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Not checked yet"
 msgstr ""
 
 #: src/pages/board/BoardsSettings.tsx
@@ -5721,6 +5774,7 @@ msgstr ""
 msgid "Recheck"
 msgstr ""
 
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/integrations/manage/IntegrationDetails.tsx
 #: src/pages/customize/IntegrationTable.tsx
 #: src/pages/shell/terminal-session.tsx
@@ -6108,6 +6162,7 @@ msgid "Restricted"
 msgstr ""
 
 #: src/components/Context.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -6115,6 +6170,7 @@ msgstr ""
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/dashboard/DashboardPage.tsx
 #: src/pages/GitMemorySettings.tsx
+#: src/pages/import/LocalImportPage.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/LearningObservation.tsx
@@ -6125,6 +6181,11 @@ msgstr ""
 #: src/pages/settings/UploadedFiles.tsx
 #: src/pages/system/SystemPage.tsx
 msgid "Retry"
+msgstr ""
+
+#. placeholder {0}: failure.relativePath
+#: src/pages/import/LocalImportPage.tsx
+msgid "Retry {0}"
 msgstr ""
 
 #: src/App.tsx
@@ -6752,6 +6813,10 @@ msgstr ""
 msgid "Sign up"
 msgstr "Kaydol"
 
+#: src/lib/mcp-sign-in.ts
+msgid "Sign-in did not finish. Try again."
+msgstr ""
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Sign-in expired. Connect Codex again."
 msgstr ""
@@ -6760,8 +6825,20 @@ msgstr ""
 msgid "Sign-in files (auth.json, credentials and oauth_creds.json), cookies, tokens, credential backups, session transcripts, chat histories, history.jsonl, telemetry and caches are never read; server lists retain environment variable names only."
 msgstr ""
 
+#: src/lib/mcp-sign-in.ts
+msgid "Sign-in is needed. Connect again."
+msgstr ""
+
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Sign-in timed out."
+msgstr ""
+
+#: src/lib/mcp-sign-in.ts
+msgid "Sign-in was cancelled."
+msgstr ""
+
+#: src/lib/mcp-sign-in.ts
+msgid "Sign-in was declined."
 msgstr ""
 
 #: src/pages/shell/runtime-settings.tsx
@@ -6819,6 +6896,11 @@ msgstr ""
 #: src/pages/ide/IdePage.tsx
 msgid "Some entries have unsupported names and are hidden ({hiddenCount})."
 msgstr "Bazı öğelerin adları desteklenmediği için gizlendi ({hiddenCount})."
+
+#. placeholder {0}: manifest.unscanned
+#: src/pages/import/LocalImportPage.tsx
+msgid "Some items exceeded the scan limits ({0} items were not scanned)."
+msgstr ""
 
 #: src/pages/import/LocalImportPage.tsx
 msgid "Some items exceeded the scan limits."
@@ -7167,6 +7249,11 @@ msgstr ""
 msgid "That shortcut is already in use; choose another."
 msgstr ""
 
+#: src/components/integrations/DirectMcpSearch.tsx
+#: src/lib/mcp-sign-in.ts
+msgid "That token was not accepted. Check it and try again."
+msgstr ""
+
 #: src/components/SoftwareUpdateSection.tsx
 msgid "The API did not come back. Refresh this page."
 msgstr ""
@@ -7181,6 +7268,14 @@ msgstr ""
 
 #: src/pages/memory/MemoryProposals.tsx
 msgid "The memory changed since this suggestion. Open History before trying again."
+msgstr ""
+
+#: src/lib/mcp-sign-in.ts
+msgid "The saved sign-in expired. Sign in again."
+msgstr ""
+
+#: src/lib/mcp-sign-in.ts
+msgid "The saved sign-in is no longer accepted. Sign in again."
 msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
@@ -7287,13 +7382,25 @@ msgstr ""
 msgid "This reset link is invalid or expired"
 msgstr "Bu sıfırlama bağlantısı geçersiz veya süresi dolmuş"
 
+#: src/pages/import/LocalImportPage.tsx
+msgid "This scan is out of date. Re-scan, then try again."
+msgstr ""
+
 #: src/pages/shell/message-cards.tsx
 msgid "This server cannot be assigned without a bot."
 msgstr "Bu sunucu bir bot olmadan atanamaz."
 
+#: src/lib/mcp-sign-in.ts
+msgid "This server did not offer browser sign-in. Enter a token instead."
+msgstr ""
+
 #: src/pages/McpServersOverlay.tsx
 msgid "This server did not request browser authorization."
 msgstr "Bu sunucu tarayıcı yetkilendirmesi istemedi."
+
+#: src/pages/McpServersOverlay.tsx
+msgid "This server has two credentials. Keep one."
+msgstr ""
 
 #: src/pages/McpServersOverlay.tsx
 msgid "This server is already connected. Disconnect it first to authorize again."
@@ -7308,7 +7415,13 @@ msgid "This server is managed by an extension"
 msgstr ""
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 msgid "This service needs client registration before you can connect."
+msgstr ""
+
+#: src/lib/mcp-sign-in.ts
+#: src/pages/McpOAuthCallback.tsx
+msgid "This sign-in window was replaced by a newer one. Finish signing in there, or start again."
 msgstr ""
 
 #: src/pages/account/AccountSettings.tsx
@@ -7672,6 +7785,14 @@ msgstr ""
 #: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Waiting for approval"
+msgstr ""
+
+#: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
+#: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/McpServersOverlay.tsx
+#: src/pages/shell/message-cards.tsx
+msgid "Waiting for sign-in in the other window."
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx

@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  McpClientRegistrationRequiredError,
   McpOAuthBroker,
+  McpOAuthUnavailableError,
   McpReauthorizationRequiredError,
   StoredMcpOAuthProvider,
 } from "./mcp-oauth.js";
@@ -226,6 +228,7 @@ describe("MCP OAuth", () => {
             secretId: null,
           }),
           update: vi.fn().mockResolvedValue({}),
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
         },
         secret: {
           findFirst: vi.fn(),
@@ -241,6 +244,7 @@ describe("MCP OAuth", () => {
             secretId: null,
           }),
           update: vi.fn().mockResolvedValue({}),
+          updateMany: vi.fn().mockResolvedValue({ count: 1 }),
         },
         secret: {
           findFirst: vi.fn(),
@@ -303,6 +307,13 @@ describe("MCP OAuth", () => {
       expect(second.status).toBe("authorization_required");
       if (second.status !== "authorization_required") throw new Error("OAuth was not requested");
       expect(second.sessionId).not.toBe(started.sessionId);
+      // The connection row, not the broker, names the attempt that may exchange a code.
+      prisma.mcpServer.findFirst.mockResolvedValue({
+        id: "server-1",
+        endpoint: `${mcpOrigin}/mcp`,
+        secretId: null,
+        pendingOauthSessionId: started.sessionId,
+      });
 
       await broker.complete({
         sessionId: started.sessionId,
@@ -318,7 +329,7 @@ describe("MCP OAuth", () => {
           .map((value) => JSON.parse(value))
           .some((value) => value.oauth?.tokens?.access_token === "access-token"),
       ).toBe(true);
-      expect(tx.mcpServer.update).toHaveBeenCalledWith({
+      expect(tx.mcpServer.updateMany).toHaveBeenCalledWith({
         where: { id: "server-1", spaceId: "workspace-1", userId: "user-1" },
         data: { revision: { increment: 1 } },
       });
@@ -353,6 +364,7 @@ describe("MCP OAuth", () => {
           secretId: null,
         }),
         update: vi.fn().mockResolvedValue({}),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
       secret: { findFirst: vi.fn(), create: vi.fn(), deleteMany: vi.fn() },
       mcpOAuthSession: oauthSessionStore(),
@@ -422,8 +434,10 @@ describe("MCP OAuth", () => {
           id: "server-1",
           endpoint: "https://mcp.example.test/mcp",
           secretId: "secret-1",
+          pendingOauthSessionId: sessionId,
         }),
         update: vi.fn().mockResolvedValue({}),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
       secret: {
         findFirst: vi.fn().mockResolvedValue({ id: "secret-1", ciphertext: "encrypted" }),
@@ -458,7 +472,7 @@ describe("MCP OAuth", () => {
       where: { id: sessionId, spaceId: "workspace-1", userId: "user-1" },
     });
     expect(new URLSearchParams(tokenRequestBody).get("code_verifier")).toBe("persisted-verifier");
-    expect(prisma.mcpServer.update).toHaveBeenCalledWith({
+    expect(prisma.mcpServer.updateMany).toHaveBeenCalledWith({
       where: { id: "server-1", spaceId: "workspace-1", userId: "user-1" },
       data: { revision: { increment: 1 } },
     });
@@ -473,6 +487,7 @@ describe("MCP OAuth", () => {
           secretId: "secret-current",
         }),
         update: vi.fn().mockResolvedValue({}),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
       secret: {
         findFirst: vi.fn().mockResolvedValue({
@@ -518,8 +533,8 @@ describe("MCP OAuth", () => {
     });
 
     expect(tx.$executeRaw).toHaveBeenCalledTimes(1);
-    expect(tx.mcpServer.update).toHaveBeenCalledWith({
-      where: { id: "server-1" },
+    expect(tx.mcpServer.updateMany).toHaveBeenCalledWith({
+      where: { id: "server-1", spaceId: "workspace-1", userId: "user-1" },
       data: { secretId: "secret-next", revision: { increment: 1 } },
     });
     expect(tx.secret.deleteMany).toHaveBeenCalledWith({ where: { id: "secret-current" } });
@@ -535,6 +550,7 @@ describe("MCP OAuth", () => {
           secretId: "secret-current",
         }),
         update: vi.fn().mockResolvedValue({}),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
       secret: {
         findFirst: vi.fn().mockResolvedValue({
@@ -636,6 +652,7 @@ describe("MCP OAuth", () => {
           secretId: null,
         }),
         update: vi.fn().mockResolvedValue({}),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
       secret: { findFirst: vi.fn(), create: vi.fn(), deleteMany: vi.fn() },
       mcpOAuthSession: oauthSessionStore(),
@@ -652,6 +669,101 @@ describe("MCP OAuth", () => {
       }),
     ).rejects.toThrow(/redirect/i);
     expect(requestedUrls.every((url) => !url.includes("attacker.example.test"))).toBe(true);
+  });
+
+  it("reports a sign-in challenge that offers no browser authorization", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) =>
+        logicalHref(input, init) === "https://mcp.example.test/mcp"
+          ? new Response(null, { status: 401 })
+          : new Response("not found", { status: 404 }),
+      ),
+    );
+    const prisma = {
+      mcpServer: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: "server-1",
+          endpoint: "https://mcp.example.test/mcp",
+          secretId: null,
+          catalogId: null,
+        }),
+        update: vi.fn().mockResolvedValue({}),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+      secret: { findFirst: vi.fn(), create: vi.fn(), deleteMany: vi.fn() },
+      mcpOAuthSession: oauthSessionStore(),
+      $transaction: vi.fn().mockResolvedValue([]),
+    };
+    const broker = new McpOAuthBroker(prisma as never, { put: vi.fn() } as never, TEST_NETWORK);
+
+    await expect(
+      broker.begin({
+        serverId: "server-1",
+        spaceId: "workspace-1",
+        userId: "user-1",
+        redirectUri: "http://127.0.0.1:5173/mcp/oauth/callback",
+      }),
+    ).rejects.toMatchObject({ code: "MCP_OAUTH_UNAVAILABLE" });
+  });
+
+  it("keeps a server without dynamic client registration on the client ID path", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = logicalHref(input, init);
+        if (url === "https://mcp.example.test/mcp")
+          return new Response(null, {
+            status: 401,
+            headers: {
+              "WWW-Authenticate":
+                'Bearer resource_metadata="https://mcp.example.test/.well-known/oauth-protected-resource/mcp"',
+            },
+          });
+        if (url === "https://mcp.example.test/.well-known/oauth-protected-resource/mcp")
+          return Response.json({
+            resource: "https://mcp.example.test/mcp",
+            authorization_servers: ["https://auth.example.test"],
+          });
+        if (url === "https://auth.example.test/.well-known/oauth-authorization-server")
+          // No registration_endpoint: a client ID must be registered by hand.
+          return Response.json({
+            issuer: "https://auth.example.test",
+            authorization_endpoint: "https://auth.example.test/authorize",
+            token_endpoint: "https://auth.example.test/token",
+            response_types_supported: ["code"],
+            code_challenge_methods_supported: ["S256"],
+          });
+        return new Response("not found", { status: 404 });
+      }),
+    );
+    const prisma = {
+      mcpServer: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: "server-1",
+          endpoint: "https://mcp.example.test/mcp",
+          secretId: null,
+          catalogId: null,
+        }),
+        update: vi.fn().mockResolvedValue({}),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+      secret: { findFirst: vi.fn(), create: vi.fn(), deleteMany: vi.fn() },
+      mcpOAuthSession: oauthSessionStore(),
+      $transaction: vi.fn().mockResolvedValue([]),
+    };
+    const broker = new McpOAuthBroker(prisma as never, { put: vi.fn() } as never, TEST_NETWORK);
+
+    const failure = await broker
+      .begin({
+        serverId: "server-1",
+        spaceId: "workspace-1",
+        userId: "user-1",
+        redirectUri: "http://127.0.0.1:5173/mcp/oauth/callback",
+      })
+      .catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(McpClientRegistrationRequiredError);
+    expect(failure).not.toBeInstanceOf(McpOAuthUnavailableError);
   });
 
   it("retries safe OAuth discovery reads without replaying DCR writes", async () => {
@@ -707,6 +819,7 @@ describe("MCP OAuth", () => {
           secretId: null,
         }),
         update: vi.fn().mockResolvedValue({}),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
       secret: {
         findFirst: vi.fn(),

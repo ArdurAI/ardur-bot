@@ -325,6 +325,22 @@ describe("contracts", () => {
     expect(RunSchema.safeParse({ ...run, trigger: "webhook" }).success).toBe(true);
   });
 
+  it("rejects a remote MCP server that carries both a token and a named header", () => {
+    const parsed = McpServerConfigInput.safeParse({
+      slug: "demo",
+      name: "Demo",
+      transport: "streamable_http",
+      endpoint: "https://mcp.example.test/mcp",
+      headers: { "X-Api-Key": "key" },
+      secret: "tok",
+    });
+    expect(parsed.success).toBe(false);
+    if (parsed.success) return;
+    expect(parsed.error.issues.map((issue) => issue.message)).toContain(
+      "Choose one credential: a token or a header.",
+    );
+  });
+
   it("caps remote MCP headers", () => {
     const headers = Object.fromEntries(
       Array.from({ length: 33 }, (_, index) => [`X-Test-${index}`, "value"]),
