@@ -190,6 +190,16 @@ export class BoardDeniedError extends BoardError {
     this.name = "BoardDeniedError";
   }
 }
+/**
+ * `forbidden` (a bot's own admission, a human-only action, process/connection topology) and
+ * `access_lost` (the person's own board access is gone for good) are both refusals of this
+ * identity, not a data problem — callers outside the pending-close classifier that need to tell
+ * "access denied" apart from "something about this request is wrong" should use this instead of
+ * comparing `code === "forbidden"` directly, so the two codes cannot drift apart.
+ */
+export function isBoardAccessDenied(problem: Pick<BoardProblem, "code">): boolean {
+  return problem.code === "forbidden" || problem.code === "access_lost";
+}
 
 const workspaceTarget = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("space") }),

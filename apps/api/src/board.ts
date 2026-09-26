@@ -15,7 +15,12 @@ import type {
   BoardWork,
   WorkItem,
 } from "@ardurbot/contracts/board";
-import { BoardError, BoardPatchSchema, boardColumn } from "@ardurbot/contracts/board";
+import {
+  BoardError,
+  BoardPatchSchema,
+  boardColumn,
+  isBoardAccessDenied,
+} from "@ardurbot/contracts/board";
 import { ACTIVE_RUN_STATUSES } from "@ardurbot/core";
 import type { Pool, PrismaClient } from "@ardurbot/db";
 import { ORPCError } from "@orpc/server";
@@ -29,7 +34,7 @@ export async function boardCall<T>(work: () => Promise<T>): Promise<T> {
     return await work();
   } catch (error) {
     if (error instanceof BoardError)
-      throw new ORPCError(error.problem.code === "forbidden" ? "FORBIDDEN" : "BAD_REQUEST", {
+      throw new ORPCError(isBoardAccessDenied(error.problem) ? "FORBIDDEN" : "BAD_REQUEST", {
         message: error.message,
         data: error.problem,
       });
@@ -109,7 +114,7 @@ export function createBoard(deps: RouterDeps) {
           try {
             selected = await (await service.provider(actor, workspace.id)).show(input.itemId);
           } catch (error) {
-            if (error instanceof BoardError && error.problem.code === "forbidden") throw error;
+            if (error instanceof BoardError && isBoardAccessDenied(error.problem)) throw error;
             selectionProblem =
               error instanceof BoardError
                 ? error.problem
