@@ -60,6 +60,12 @@ if (action === "view") {
   console.error("release not found");
   process.exit(1);
 }
+if (action === "create") {
+  const notesIndex = args.indexOf("--notes-file");
+  if (notesIndex !== -1 && process.env.GH_NOTES_CAPTURE) {
+    appendFileSync(process.env.GH_NOTES_CAPTURE, readFileSync(args[notesIndex + 1], "utf8"));
+  }
+}
 if (action === "upload" && process.env.GH_FIXTURE === "upload-fails") process.exit(1);
 if (action === "edit" && String(process.env.GH_FIXTURE).startsWith("edit-fails")) process.exit(1);
 process.exit(0);
@@ -70,10 +76,12 @@ process.exit(0);
   const notes = path.join(root, "notes.md");
   const waiver = path.join(root, "waiver-record.json");
   const installer = path.join(root, "synthetic.dmg");
+  const notesCapture = path.join(root, "notes-capture.log");
   await writeFile(notes, "notes\n");
   await writeFile(waiver, '{"reason":"fixture","actor":"release-operator"}\n');
   await writeFile(installer, "bytes");
-  return { root, log, bin, notes, waiver, installer, mode };
+  await writeFile(notesCapture, "");
+  return { root, log, bin, notes, waiver, installer, notesCapture, mode };
 }
 
 function publish(fixture: Awaited<ReturnType<typeof fakeGh>>) {
@@ -100,6 +108,7 @@ function publish(fixture: Awaited<ReturnType<typeof fakeGh>>) {
         PATH: `${fixture.bin}${path.delimiter}${process.env.PATH ?? ""}`,
         GH_LOG: fixture.log,
         GH_FIXTURE: fixture.mode,
+        GH_NOTES_CAPTURE: fixture.notesCapture,
       },
     },
   );
@@ -114,6 +123,18 @@ async function calls(log: string) {
 }
 
 describe("release publication retry", () => {
+  it("carries the workflow marker in the notes every release create call receives", async () => {
+    const missing = await fakeGh("missing");
+    try {
+      const created = publish(missing);
+      expect(created.status).toBe(0);
+      const capturedNotes = await readFile(missing.notesCapture, "utf8");
+      expect(capturedNotes).toContain(WORKFLOW_MARKER);
+    } finally {
+      await rm(missing.root, { recursive: true, force: true });
+    }
+  });
+
   it("refuses to delete a hand-written draft and leaves it in place", async () => {
     const foreign = await fakeGh("foreign-draft");
     try {

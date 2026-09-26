@@ -195,11 +195,15 @@ jobs:
         env:
           MISSING_REASON: ${{ steps.prior.outputs.missing_reason }}
           ARTIFACT_NAME: ${{ steps.prior.outputs.artifact_name }}
+          RUN_ID: ${{ steps.prior.outputs.run_id }}
         run: |
           set -euo pipefail
           args=(--source "$RUNNER_TEMP/scoreboard-index-restore" --root .context/performance/scoreboard-index --artifact "$ARTIFACT_NAME")
           if [[ -n "$MISSING_REASON" ]]; then
             args+=(--missing-reason "$MISSING_REASON")
+          fi
+          if [[ -n "$RUN_ID" ]]; then
+            args+=(--run-id "$RUN_ID")
           fi
           node scripts/scoreboard-index.mjs restore-index "${args[@]}"
       - name: Record every pushed commit as measured or pending
@@ -262,12 +266,16 @@ jobs:
         env:
           MISSING_REASON: ${{ steps.prior.outputs.missing_reason }}
           ARTIFACT_NAME: ${{ steps.prior.outputs.artifact_name }}
+          RUN_ID: ${{ steps.prior.outputs.run_id }}
         shell: bash
         run: |
           set -euo pipefail
           args=(--source "$RUNNER_TEMP/scoreboard-release-index-restore" --root publication/scoreboard-publication/index --artifact "$ARTIFACT_NAME")
           if [[ -n "$MISSING_REASON" ]]; then
             args+=(--missing-reason "$MISSING_REASON")
+          fi
+          if [[ -n "$RUN_ID" ]]; then
+            args+=(--run-id "$RUN_ID")
           fi
           node scripts/scoreboard-index.mjs restore-index "${args[@]}"
       - name: See whether this run uploaded measured reports
@@ -303,7 +311,6 @@ jobs:
           SCOREBOARD_OUTPUT: publication/scoreboard-publication/gate.json
           SCOREBOARD_INDEX: publication/scoreboard-publication/index
           SCOREBOARD_WAIVER: ${{ inputs.evidence_waiver }}
-          SCOREBOARD_REPORTS_PRESENT: ${{ steps.reports.outputs.present }}
         run: node scripts/scoreboard-index.mjs release-gate
       - name: Upload the publication gate
         if: always()
