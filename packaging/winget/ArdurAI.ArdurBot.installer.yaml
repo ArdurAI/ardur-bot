@@ -1,0 +1,10 @@
+PackageIdentifier: ArdurAI.ArdurBot
+PackageVersion: "@VERSION@"
+InstallerLocale: en-US
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/ArdurAI/ardur-bot/releases/download/v@VERSION@/ardur-bot-@VERSION@-win-x64.exe
+    InstallerSha256: "@X64_SHA256@"
+    InstallerType: nullsoft
+ManifestType: installer
+ManifestVersion: 1.6.0

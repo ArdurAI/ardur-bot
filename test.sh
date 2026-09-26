@@ -1,0 +1,24 @@
+cat << 'MOCK' > curl-mock
+#!/usr/bin/env bash
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    -o)
+      OUT="$2"
+      shift 2
+      ;;
+    *)
+      if [[ "$1" == *checksums.txt* ]]; then
+        URL="checksums.txt"
+      elif [[ "$1" == *ardur-bot-* ]]; then
+        URL="ardur-bot"
+      fi
+      shift
+      ;;
+  esac
+done
+if [[ "$URL" == "checksums.txt" ]]; then
+  cp checksums.txt "$OUT"
+else
+  echo "dummy" > "$OUT"
+fi
+MOCK

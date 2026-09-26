@@ -1,0 +1,9 @@
+PackageIdentifier: ArdurAI.ArdurBot
+PackageVersion: "@VERSION@"
+PackageLocale: en-US
+Publisher: ArdurAI
+PackageName: Ardur Bot
+License: Apache-2.0
+ShortDescription: Persistent bots on computers and models you choose
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0
