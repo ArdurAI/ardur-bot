@@ -87,6 +87,11 @@ msgstr "{0} handling"
 msgid "{0} imported, {1} updated, {2} unchanged, {3} removed, {4} skipped, {5} conflicts, {6} failed."
 msgstr "{0} imported, {1} updated, {2} unchanged, {3} removed, {4} skipped, {5} conflicts, {6} failed."
 
+#. placeholder {0}: manifest.unscanned
+#: src/pages/import/LocalImportPage.tsx
+msgid "{0} items were not scanned because of the scan limits."
+msgstr "{0} items were not scanned because of the scan limits."
+
 #. placeholder {0}: format(size / 1024)
 #: src/components/ArtifactFileCard.tsx
 msgid "{0} KB"
@@ -273,6 +278,7 @@ msgstr "Accepted"
 msgid "Access token"
 msgstr "Access token"
 
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Access token (optional)"
 msgstr "Access token (optional)"
@@ -1216,6 +1222,14 @@ msgstr "Cancel new group"
 msgid "Cancel reply"
 msgstr "Cancel reply"
 
+#: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
+#: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/McpServersOverlay.tsx
+#: src/pages/shell/message-cards.tsx
+msgid "Cancel sign-in"
+msgstr "Cancel sign-in"
+
 #: src/pages/LearningObservation.tsx
 msgid "Cancellations"
 msgstr "Cancellations"
@@ -1312,6 +1326,10 @@ msgstr "Chat service"
 msgid "Chat Settings"
 msgstr "Chat Settings"
 
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Check"
+msgstr "Check"
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Check again"
 msgstr "Check again"
@@ -1363,6 +1381,10 @@ msgstr "Choose a bot shape, color, or upload an image"
 msgid "Choose a bot…"
 msgstr "Choose a bot…"
 
+#: src/pages/import/LocalImportPage.tsx
+msgid "Choose a folder inside your home folder."
+msgstr "Choose a folder inside your home folder."
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Choose a model"
 msgstr "Choose a model"
@@ -1394,6 +1416,10 @@ msgstr "Choose file"
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Choose folder"
 msgstr "Choose folder"
+
+#: src/pages/McpServersOverlay.tsx
+msgid "Choose one credential: a token or a header."
+msgstr "Choose one credential: a token or a header."
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Choose which connected model Ardur Bot uses."
@@ -1691,6 +1717,7 @@ msgstr "Configured by deployment"
 msgid "Confirm"
 msgstr "Confirm"
 
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/settings/UploadedFiles.tsx
@@ -2050,13 +2077,13 @@ msgstr "Could not complete the update. Try again."
 msgid "Could not complete this action."
 msgstr "Could not complete this action."
 
-#: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not connect"
 msgstr "Could not connect"
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 msgid "Could not connect or load integrations."
 msgstr "Could not connect or load integrations."
 
@@ -2297,6 +2324,8 @@ msgid "Could not load the server configuration."
 msgstr "Could not load the server configuration."
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/lib/mcp-sign-in.ts
+#: src/pages/McpServersOverlay.tsx
 msgid "Could not load this account’s tools."
 msgstr "Could not load this account’s tools."
 
@@ -2492,6 +2521,10 @@ msgstr "Could not save this choice"
 msgid "Could not search catalog"
 msgstr "Could not search catalog"
 
+#: src/components/integrations/DirectMcpSearch.tsx
+msgid "Could not search integrations."
+msgstr "Could not search integrations."
+
 #: src/pages/Auth.tsx
 msgid "Could not send reset email"
 msgstr "Could not send reset email"
@@ -2685,6 +2718,7 @@ msgstr "Creates .beads/ with config.yaml, metadata.json, .gitignore, README.md, 
 msgid "Creating…"
 msgstr "Creating…"
 
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Credential"
 msgstr "Credential"
@@ -2818,6 +2852,7 @@ msgstr "Defer until"
 msgid "Deferred"
 msgstr "Deferred"
 
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/pages/BotContextMenu.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
@@ -3214,6 +3249,10 @@ msgstr "Enter a code instead"
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Enter a valid destination and save again."
 msgstr "Enter a valid destination and save again."
+
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Enter a valid token."
+msgstr "Enter a valid token."
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -3758,6 +3797,10 @@ msgstr "Import could not finish. Check this computer is connected, then re-scan.
 #: src/pages/import/LocalImportPage.tsx
 msgid "Import from {name}"
 msgstr "Import from {name}"
+
+#: src/pages/import/LocalImportPage.tsx
+msgid "Import is not available right now. Try again in a moment."
+msgstr "Import is not available right now. Try again in a moment."
 
 #: src/pages/MemoryImportExport.tsx
 msgid "Import memory bundle"
@@ -4310,6 +4353,7 @@ msgid "Make sure nothing is still running on this computer."
 msgstr "Make sure nothing is still running on this computer."
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/pages/account/AccountMore.tsx
 #: src/pages/memory/MemorySettings.tsx
 #: src/pages/settings/GeneralSettings.tsx
@@ -4747,6 +4791,7 @@ msgid "Needs reconnection"
 msgstr "Needs reconnection"
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/pages/dashboard/ConnectionsPanel.tsx
 msgid "Needs sign-in"
 msgstr "Needs sign-in"
@@ -5027,6 +5072,10 @@ msgstr "Not available on this computer"
 #: src/components/integrations/manage/IntegrationDetails.tsx
 msgid "Not checked"
 msgstr "Not checked"
+
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Not checked yet"
+msgstr "Not checked yet"
 
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
@@ -5756,6 +5805,7 @@ msgstr "Recent errors"
 msgid "Recheck"
 msgstr "Recheck"
 
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/integrations/manage/IntegrationDetails.tsx
 #: src/pages/customize/IntegrationTable.tsx
 #: src/pages/shell/terminal-session.tsx
@@ -6143,6 +6193,7 @@ msgid "Restricted"
 msgstr "Restricted"
 
 #: src/components/Context.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -6793,6 +6844,10 @@ msgstr "Sign out"
 msgid "Sign up"
 msgstr "Sign up"
 
+#: src/lib/mcp-sign-in.ts
+msgid "Sign-in did not finish. Try again."
+msgstr "Sign-in did not finish. Try again."
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Sign-in expired. Connect Codex again."
 msgstr "Sign-in expired. Connect Codex again."
@@ -6801,9 +6856,21 @@ msgstr "Sign-in expired. Connect Codex again."
 msgid "Sign-in files (auth.json, credentials and oauth_creds.json), cookies, tokens, credential backups, session transcripts, chat histories, history.jsonl, telemetry and caches are never read; server lists retain environment variable names only."
 msgstr "Sign-in files (auth.json, credentials and oauth_creds.json), cookies, tokens, credential backups, session transcripts, chat histories, history.jsonl, telemetry and caches are never read; server lists retain environment variable names only."
 
+#: src/lib/mcp-sign-in.ts
+msgid "Sign-in is needed. Connect again."
+msgstr "Sign-in is needed. Connect again."
+
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Sign-in timed out."
 msgstr "Sign-in timed out."
+
+#: src/lib/mcp-sign-in.ts
+msgid "Sign-in was cancelled."
+msgstr "Sign-in was cancelled."
+
+#: src/lib/mcp-sign-in.ts
+msgid "Sign-in was declined."
+msgstr "Sign-in was declined."
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Signed in"
@@ -6860,11 +6927,6 @@ msgstr "Software update"
 #: src/pages/ide/IdePage.tsx
 msgid "Some entries have unsupported names and are hidden ({hiddenCount})."
 msgstr "Some entries have unsupported names and are hidden ({hiddenCount})."
-
-#. placeholder {0}: manifest.unscanned
-#: src/pages/import/LocalImportPage.tsx
-msgid "Some items exceeded the scan limits ({0} items were not scanned)."
-msgstr "Some items exceeded the scan limits ({0} items were not scanned)."
 
 #: src/pages/import/LocalImportPage.tsx
 msgid "Some items exceeded the scan limits."
@@ -7213,6 +7275,11 @@ msgstr "Testing…"
 msgid "That shortcut is already in use; choose another."
 msgstr "That shortcut is already in use; choose another."
 
+#: src/components/integrations/DirectMcpSearch.tsx
+#: src/lib/mcp-sign-in.ts
+msgid "That token was not accepted. Check it and try again."
+msgstr "That token was not accepted. Check it and try again."
+
 #: src/components/SoftwareUpdateSection.tsx
 msgid "The API did not come back. Refresh this page."
 msgstr "The API did not come back. Refresh this page."
@@ -7228,6 +7295,14 @@ msgstr "The connection was cancelled."
 #: src/pages/memory/MemoryProposals.tsx
 msgid "The memory changed since this suggestion. Open History before trying again."
 msgstr "The memory changed since this suggestion. Open History before trying again."
+
+#: src/lib/mcp-sign-in.ts
+msgid "The saved sign-in expired. Sign in again."
+msgstr "The saved sign-in expired. Sign in again."
+
+#: src/lib/mcp-sign-in.ts
+msgid "The saved sign-in is no longer accepted. Sign in again."
+msgstr "The saved sign-in is no longer accepted. Sign in again."
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "The service may use its own embedding providers. Check its settings before saving private documents."
@@ -7349,9 +7424,17 @@ msgstr "This scan is out of date. Re-scan, then try again."
 msgid "This server cannot be assigned without a bot."
 msgstr "This server cannot be assigned without a bot."
 
+#: src/lib/mcp-sign-in.ts
+msgid "This server did not offer browser sign-in. Enter a token instead."
+msgstr "This server did not offer browser sign-in. Enter a token instead."
+
 #: src/pages/McpServersOverlay.tsx
 msgid "This server did not request browser authorization."
 msgstr "This server did not request browser authorization."
+
+#: src/pages/McpServersOverlay.tsx
+msgid "This server has two credentials. Keep one."
+msgstr "This server has two credentials. Keep one."
 
 #: src/pages/McpServersOverlay.tsx
 msgid "This server is already connected. Disconnect it first to authorize again."
@@ -7366,8 +7449,14 @@ msgid "This server is managed by an extension"
 msgstr "This server is managed by an extension"
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 msgid "This service needs client registration before you can connect."
 msgstr "This service needs client registration before you can connect."
+
+#: src/lib/mcp-sign-in.ts
+#: src/pages/McpOAuthCallback.tsx
+msgid "This sign-in window was replaced by a newer one. Finish signing in there, or start again."
+msgstr "This sign-in window was replaced by a newer one. Finish signing in there, or start again."
 
 #: src/pages/account/AccountSettings.tsx
 msgid "This signs out every other session and keeps this one signed in."
@@ -7731,6 +7820,14 @@ msgstr "Voice shortcut"
 #: src/pages/TeamBoard.tsx
 msgid "Waiting for approval"
 msgstr "Waiting for approval"
+
+#: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
+#: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/McpServersOverlay.tsx
+#: src/pages/shell/message-cards.tsx
+msgid "Waiting for sign-in in the other window."
+msgstr "Waiting for sign-in in the other window."
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx

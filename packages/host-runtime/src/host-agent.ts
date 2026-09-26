@@ -26,7 +26,7 @@ import {
 import { RuntimePinError } from "@ardurbot/contracts/runtime-pins";
 import { BoardRunner } from "./board/runner.js";
 import type { HostWire } from "./bridge-wire.js";
-import { hostLostProblem } from "./bridge-wire.js";
+import { hostLostProblem, importProblem } from "./bridge-wire.js";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
 import { hostCapacity } from "./fleet/capacity.js";
 import { discoverFleet } from "./fleet/discovery.js";
@@ -37,7 +37,7 @@ import { inspectHostIntegrations } from "./host-integrations.js";
 import { HostMcpServers } from "./host-mcp.js";
 import { confinedHostCwd } from "./host-policy.js";
 import type { LocalImportScanner } from "./import/scanner.js";
-import { createLocalImportScanner } from "./import/scanner.js";
+import { createLocalImportScanner, LocalImportRescanError } from "./import/scanner.js";
 import { ClaudeCodeRuntime, probeClaude } from "./runtimes/claude-code-runtime.js";
 import { CodexAppServerRuntime, probeCodex } from "./runtimes/codex-app-server-runtime.js";
 import type { NativeSpawn } from "./runtimes/native-process.js";
@@ -255,10 +255,22 @@ export class HostAgent {
         } else await send("result", result);
       } else if (op.op === "import.scan" || op.op === "import.read") {
         this.importer ??= await createLocalImportScanner(this.roots);
-        const result =
-          op.op === "import.scan"
-            ? await this.importer.scan(op.roots)
-            : this.importer.read(op.scanId, op.itemId);
+        let result: unknown;
+        if (op.op === "import.scan") result = await this.importer.scan(op.roots);
+        else
+          try {
+            result = this.importer.read(op.scanId, op.itemId);
+          } catch (error) {
+            // A stale scan or an unimportable item is answered, never treated as a lost host.
+            throw new RuntimePinError(
+              importProblem(
+                error instanceof LocalImportRescanError
+                  ? "local-import-rescan"
+                  : "local-import-item",
+                error instanceof Error ? error.message : "This item is not available for import.",
+              ),
+            );
+          }
         // Manifests can span frames; each frame and the complete request retain bridge bounds.
         const json = JSON.stringify(result);
         for (let offset = 0; offset < json.length; offset += 24 * 1024)

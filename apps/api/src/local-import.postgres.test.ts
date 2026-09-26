@@ -315,6 +315,11 @@ describePostgres("local import receipts, journal and credentials (PostgreSQL)", 
         oauthCiphertext: material.ciphertext,
       },
     });
+    // A real begin reserves this attempt as the server's pending sign-in.
+    await db.prisma.mcpServer.update({
+      where: { id: server.id },
+      data: { pendingOauthSessionId: material.id },
+    });
     const broker = new McpOAuthBroker(db.prisma, secrets, {
       fetch: async () => Response.json({ access_token: "fixture-access", token_type: "bearer" }),
       resolveHostname: async () => [{ address: "203.0.113.10", family: 4 }],

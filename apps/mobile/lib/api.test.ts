@@ -38,6 +38,7 @@ import {
   subscribeThread,
 } from "./api.js";
 import { resumeLiveNotifications } from "./live-notifications.js";
+import { RpcError } from "./rpc-error.js";
 import {
   clearSessionToken,
   restoreSessionToken,
@@ -459,6 +460,33 @@ describe("mobile API authentication", () => {
       }),
     );
     await expect(rpc("bots/get", { botId: "missing" })).rejects.toThrow("Bot does not exist");
+  });
+
+  it("carries the server's named error code so a caller can name a specific fix", async () => {
+    vi.mocked(SecureStore.getItemAsync).mockResolvedValue("session-token");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse(
+          {
+            json: {
+              defined: false,
+              code: "LOCAL_IMPORT_INVALID_FOLDER",
+              status: 500,
+              message: "Choose a folder inside the owner's home.",
+            },
+          },
+          { status: 500 },
+        ),
+      ),
+    );
+    const rejection = rpc("localImport/configure", { roots: { codex: "../outside" } });
+    await expect(rejection).rejects.toThrow("Choose a folder inside the owner's home.");
+    await expect(rejection).rejects.toBeInstanceOf(RpcError);
+    await rejection.catch((error: unknown) => {
+      expect(error).toBeInstanceOf(RpcError);
+      expect((error as RpcError).code).toBe("LOCAL_IMPORT_INVALID_FOLDER");
+    });
   });
 
   it("blocks mobile message and attachment submission when AI sharing is declined", async () => {

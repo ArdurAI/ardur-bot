@@ -280,6 +280,22 @@ it("opens the trusted registry from the integration deep link and preserves comp
   expect(container.querySelector('[data-testid="settings-nav-connectors"]')).toBeNull();
   expect(container.textContent).not.toContain("Search apps");
 });
+it("follows a new integration deep link while settings stay open", async () => {
+  const { container, root } = await renderSettings(
+    <SettingsOverlay {...props} initialSection="integrations" />,
+  );
+  await waitForSection(() => container.textContent!.includes("Connected apps"));
+  await act(async () =>
+    root.render(
+      <SettingsOverlay
+        {...props}
+        initialSection="integrations"
+        initialIntegration="connection-returned"
+      />,
+    ),
+  );
+  expect(container.querySelector('[data-reconnect-id="connection-returned"]')).not.toBeNull();
+});
 
 it("searches capability rows and opens Skills through the registry", async () => {
   const container = await render();

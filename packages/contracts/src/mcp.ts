@@ -35,3 +35,13 @@ export const McpHeadersSchema = z
       ctx.addIssue({ code: "custom", message: "At most 32 headers are allowed" });
     }
   });
+
+/**
+ * The lastError a server records when a person must act before it works again. The code
+ * says why: `credential_rejected` (a saved token or header was refused), `invalid_token`
+ * (an OAuth access token was refused), `refresh_unavailable` (a saved sign-in expired),
+ * `oauth_unavailable` (the server offers no browser sign-in), or an OAuth error code.
+ */
+export function mcpSignInDiagnostic(code?: string | null): string {
+  return code ? `Needs sign-in (${code}).` : "Needs sign-in.";
+}

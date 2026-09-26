@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { isLocalMcpHost } from "@ardurbot/contracts";
+import { isLocalMcpHost, mcpSignInDiagnostic } from "@ardurbot/contracts";
 import type { Prisma, PrismaClient } from "@ardurbot/db";
 import type {
   OAuthClientProvider,
@@ -13,6 +13,8 @@ import type {
   OAuthClientMetadata,
   OAuthTokens,
 } from "@modelcontextprotocol/sdk/shared/auth.js";
+import { transientIntegrationError } from "./integration-lifecycle.js";
+import { mcpCredentialConflict } from "./mcp-server-tool.js";
 import { secureFetch, validateUrl, withEndpointOriginFallback } from "./mcp-transport.js";
 import type { RemoteTransportDependencies } from "./remote-mcp.js";
 import type { EncryptedSecretStore } from "./secrets.js";
@@ -181,11 +183,46 @@ export class McpReauthorizationRequiredError extends Error {
   readonly code = "MCP_REAUTHORIZATION_REQUIRED";
   constructor(
     readonly serverId: string,
-    reason = "refresh_unavailable",
+    reason: string | null = "refresh_unavailable",
   ) {
-    super(`Needs sign-in (${reason}).`);
+    super(mcpSignInDiagnostic(reason));
     this.name = "McpReauthorizationRequiredError";
   }
+}
+
+/** The callback belongs to an attempt that was replaced or already finished. */
+export class McpOAuthAttemptReplacedError extends Error {
+  readonly code = "MCP_OAUTH_REPLACED";
+  readonly result = "replaced" as const;
+  constructor() {
+    super("replaced");
+    this.name = "McpOAuthAttemptReplacedError";
+  }
+}
+
+/** The server demanded sign-in but offered no authorization server. Provider text stays off the screen. */
+export class McpOAuthUnavailableError extends Error {
+  readonly code = "MCP_OAUTH_UNAVAILABLE";
+  constructor(cause: unknown) {
+    super("This server did not offer browser sign-in. Enter a token instead.", { cause });
+    this.name = "McpOAuthUnavailableError";
+  }
+}
+
+/** The authorization server has no dynamic client registration, so a client ID is needed. */
+export class McpClientRegistrationRequiredError extends Error {
+  readonly code = "MCP_CLIENT_REGISTRATION_REQUIRED";
+  constructor(cause: unknown) {
+    super(cause instanceof Error ? cause.message : String(cause), { cause });
+    this.name = "McpClientRegistrationRequiredError";
+  }
+}
+
+export function isMcpOAuthAttemptReplaced(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  if ("code" in error && error.code === "MCP_OAUTH_REPLACED") return true;
+  if ("result" in error && error.result === "replaced") return true;
+  return error instanceof Error && error.cause !== error && isMcpOAuthAttemptReplaced(error.cause);
 }
 
 type ProviderOptions = {
@@ -202,11 +239,20 @@ export class StoredMcpOAuthProvider implements OAuthClientProvider {
   private readonly runtimeState = randomUUID();
   private persistQueue = Promise.resolve();
   private refreshing?: Promise<void>;
+  private tokenSessionId?: string;
+
+  /** Token saves after this point match the attempt that is still pending. */
+  guardTokenWrite(sessionId: string): void {
+    this.tokenSessionId = sessionId;
+  }
 
   constructor(
     readonly serverId: string,
     private readonly material: OAuthMaterial,
-    private readonly persistMaterial: (material: OAuthMaterial) => Promise<void>,
+    private readonly persistMaterial: (
+      material: OAuthMaterial,
+      pendingSessionId?: string,
+    ) => Promise<void>,
     private readonly options: ProviderOptions = {},
   ) {
     if (options.redirectUri) {
@@ -361,7 +407,8 @@ export class StoredMcpOAuthProvider implements OAuthClientProvider {
 
   private async persist(): Promise<void> {
     const snapshot = structuredClone(this.material);
-    const next = this.persistQueue.then(() => this.persistMaterial(snapshot));
+    const pendingSessionId = this.tokenSessionId;
+    const next = this.persistQueue.then(() => this.persistMaterial(snapshot, pendingSessionId));
     this.persistQueue = next.catch(() => undefined);
     await next;
   }
@@ -413,8 +460,94 @@ function oauthFetch(
   };
 }
 
+/**
+ * Lock order for a write that bumps a server's revision: the import that owns the server
+ * first, then its credential material. Import, undo and credential setup use this order.
+ */
+export async function lockMcpServerRevision(
+  tx: Prisma.TransactionClient,
+  serverId: string,
+  owner: ActorRef,
+): Promise<void> {
+  const scope = { spaceId: owner.spaceId, userId: owner.userId };
+  const server = await tx.mcpServer.findFirst({
+    where: { id: serverId, ...scope },
+    select: { imported: true },
+  });
+  if (server?.imported) {
+    const receipt = await tx.localImportRecord.findFirst({
+      where: { targetId: serverId, removedAt: null, config: scope },
+    });
+    if (receipt)
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`local-import:${receipt.configId}`}, 0))`;
+  }
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('mcp-oauth-material'), hashtext(${serverId}))`;
+}
+
+/**
+ * The one way a connection change bumps a server's revision: credentials, discovered tools
+ * and grants. An imported server's current receipt moves with it, so import can still
+ * refresh and undo that server. Definition edits never come through here, so a receipt a
+ * manual edit left behind stays a conflict. Returns false when `where` matched nothing.
+ */
+export async function bumpMcpServerRevision(
+  tx: Prisma.TransactionClient,
+  serverId: string,
+  owner: ActorRef,
+  data: Prisma.McpServerUncheckedUpdateManyInput = {},
+  where: Prisma.McpServerWhereInput = {},
+): Promise<boolean> {
+  const scope = { spaceId: owner.spaceId, userId: owner.userId };
+  const saved = await tx.mcpServer.updateMany({
+    where: { ...where, id: serverId, ...scope },
+    data: { ...data, revision: { increment: 1 } },
+  });
+  if (!saved.count) return false;
+  const server = await tx.mcpServer.findFirst({
+    where: { id: serverId, ...scope },
+    select: { imported: true, revision: true },
+  });
+  if (server?.imported)
+    await tx.localImportRecord.updateMany({
+      where: {
+        targetId: serverId,
+        targetRevision: server.revision - 1,
+        removedAt: null,
+        config: scope,
+      },
+      data: { targetRevision: server.revision },
+    });
+  return true;
+}
+
+/**
+ * Why a challenged probe produced no authorization URL, decided by what discovery found
+ * and never by provider text: no authorization server, or one without dynamic client
+ * registration. A network failure, a refused redirect or a rejected registration stays
+ * the error it was.
+ */
+function signInFailure(error: unknown, provider: StoredMcpOAuthProvider): unknown {
+  const discovery = provider.discoveryState();
+  if (
+    !discovery ||
+    transientIntegrationError(error) ||
+    (error instanceof Error && transientIntegrationError(error.cause))
+  )
+    return error;
+  const metadata = discovery.authorizationServerMetadata;
+  if (!metadata) return new McpOAuthUnavailableError(error);
+  if (!metadata.registration_endpoint && !provider.clientInformation())
+    return new McpClientRegistrationRequiredError(error);
+  return error;
+}
+
 export class McpOAuthBroker {
   private readonly pending = new Map<string, Pending>();
+  /** Tokens that were working before this attempt, so a failed exchange can put them back. */
+  private readonly priorConnectedMaterial = new Map<
+    string,
+    { at: number; material: OAuthMaterial }
+  >();
 
   constructor(
     private readonly prisma: PrismaClient,
@@ -431,13 +564,17 @@ export class McpOAuthBroker {
     return material.oauth ? "reconnect" : "none";
   }
 
+  /** What a server listing may say about stored material, without returning any of it. */
   statusForCiphertext(
     ciphertext: string | undefined,
     recordId: string | undefined,
-  ): "none" | "connected" | "reconnect" {
+  ): { oauthStatus: "none" | "connected" | "reconnect"; credentialConflict: boolean } {
     const material = ciphertext && recordId ? this.read(ciphertext, recordId) : {};
-    if (material.oauth?.tokens) return "connected";
-    return material.oauth ? "reconnect" : "none";
+    return {
+      oauthStatus: material.oauth?.tokens ? "connected" : material.oauth ? "reconnect" : "none",
+      // Saved before one credential was enforced; both are still sent until one is removed.
+      credentialConflict: mcpCredentialConflict(material) !== null,
+    };
   }
 
   async providerFor(
@@ -480,7 +617,7 @@ export class McpOAuthBroker {
         data: {
           secretId: stored.id,
           connectionState: "needs-sign-in",
-          lastError: "Needs sign-in (invalid_token).",
+          lastError: mcpSignInDiagnostic("invalid_token"),
         },
       });
       await tx.secret.deleteMany({ where: { id: row.id, ...context } });
@@ -503,29 +640,111 @@ export class McpOAuthBroker {
         ...actor,
       });
       return { ...actor, serverId };
-    } catch {
+    } catch (error) {
+      if (error instanceof McpOAuthAttemptReplacedError) throw error;
       const pending = this.pending.get(input.state);
       if (pending) this.discardPending(input.state, pending);
       await this.prisma.mcpOAuthSession.deleteMany({ where: { id: input.state, ...actor } });
-      const material = this.read(session.oauthCiphertext, session.id);
-      if (material.oauth?.authorizationRevision !== undefined) {
-        await this.prisma.mcpServer.updateMany({
-          where: {
-            id: session.serverId,
-            ...actor,
-            enabled: true,
-            connectionState: "awaiting-consent",
-            revision: material.oauth.authorizationRevision,
-          },
-          data: {
-            connectionState: input.error === "access_denied" ? "cancelled" : "discovery-failed",
-            consentStartedAt: null,
-            lastError: "Could not complete sign-in. Connect again.",
-          },
-        });
-      }
+      await this.recordAttemptFailure({
+        serverId: session.serverId,
+        sessionId: input.state,
+        ...actor,
+        kind: input.error === "access_denied" ? "declined" : "failed",
+      });
       throw new Error("MCP OAuth sign-in failed");
     }
+  }
+
+  /**
+   * Record this attempt's outcome only when it is still the server's pending session.
+   * A connected server keeps that state when the person declined or the previous tokens
+   * were written back. Closing a popup never calls this.
+   */
+  async recordAttemptFailure(input: {
+    serverId?: string;
+    sessionId: string;
+    spaceId: string;
+    userId: string;
+    kind: "declined" | "failed";
+  }): Promise<void> {
+    const actor = { spaceId: input.spaceId, userId: input.userId };
+    const current = await this.prisma.mcpServer.findFirst({
+      where: {
+        ...(input.serverId ? { id: input.serverId } : {}),
+        ...actor,
+        enabled: true,
+        pendingOauthSessionId: input.sessionId,
+      },
+    });
+    if (!current || current.pendingOauthSessionId !== input.sessionId) return;
+    const declined = input.kind === "declined";
+    const kept =
+      current.connectionState === "connected" &&
+      (await this.restorePriorConnected(current.id, input.sessionId, actor));
+    const keepConnection = current.connectionState === "connected" && (declined || kept);
+    await this.prisma.mcpServer.updateMany({
+      where: {
+        id: current.id,
+        ...actor,
+        enabled: true,
+        pendingOauthSessionId: input.sessionId,
+      },
+      data: {
+        connectionState: keepConnection
+          ? "connected"
+          : current.connectionState === "connected"
+            ? "needs-sign-in"
+            : declined
+              ? "cancelled"
+              : "discovery-failed",
+        consentStartedAt: null,
+        lastError: keepConnection
+          ? declined
+            ? "Sign-in was declined."
+            : "Could not complete sign-in. Connect again."
+          : current.connectionState === "connected"
+            ? mcpSignInDiagnostic()
+            : "Could not complete sign-in. Connect again.",
+        pendingOauthSessionId: null,
+      },
+    });
+  }
+
+  discardPriorConnected(sessionId: string): void {
+    this.priorConnectedMaterial.delete(sessionId);
+  }
+
+  /** Put the pre-attempt tokens back. Returns false when this instance has no snapshot. */
+  async restorePriorConnected(
+    serverId: string,
+    sessionId: string,
+    context: ActorRef,
+  ): Promise<boolean> {
+    const prior = this.priorConnectedMaterial.get(sessionId);
+    if (!prior?.material.oauth?.tokens) return false;
+    const current = await this.prisma.mcpServer.findFirst({
+      where: {
+        id: serverId,
+        ...context,
+        enabled: true,
+        pendingOauthSessionId: sessionId,
+      },
+    });
+    if (!current || current.pendingOauthSessionId !== sessionId) {
+      this.priorConnectedMaterial.delete(sessionId);
+      return false;
+    }
+    const stored = await this.replaceMaterial(
+      serverId,
+      prior.material,
+      context,
+      true,
+      undefined,
+      undefined,
+      sessionId,
+    );
+    this.priorConnectedMaterial.delete(sessionId);
+    return stored !== undefined;
   }
 
   private async refreshMaterial(
@@ -630,7 +849,7 @@ export class McpOAuthBroker {
                 data: {
                   secretId: stored.id,
                   connectionState: "needs-sign-in",
-                  lastError: `Needs sign-in (${providerReason}).`,
+                  lastError: mcpSignInDiagnostic(providerReason),
                 },
               });
               await tx.secret.deleteMany({ where: { id: row.id, ...context } });
@@ -658,9 +877,10 @@ export class McpOAuthBroker {
     userId: string;
     redirectUri: string;
     clientInformation?: OAuthClientInformationMixed;
+    sessionId?: string;
   }): Promise<
     | { status: "authorization_required"; sessionId: string; authorizationUrl: string }
-    | { status: "already_connected" | "authorization_not_requested" }
+    | { status: "already_connected" | "authorization_not_requested" | "replaced" }
   > {
     const server = await this.prisma.mcpServer.findFirst({
       where: {
@@ -687,7 +907,7 @@ export class McpOAuthBroker {
     if (activeCount >= MAX_PENDING_SESSIONS) {
       throw new Error("Too many pending MCP authorization attempts; wait and try again");
     }
-    const sessionId = randomUUID();
+    const sessionId = input.sessionId ?? randomUUID();
     const context = { spaceId: input.spaceId, userId: input.userId };
     const loaded = await this.loadMaterial(server, context);
     if (server.catalogId || server.imported)
@@ -710,17 +930,26 @@ export class McpOAuthBroker {
     // invalidates dead tokens when a refresh is rejected with invalid_grant.
     const endpoint = new URL(server.endpoint);
     const networkFetch = oauthFetch(server.endpoint, this.network, loaded.material);
+    let challenged = false;
     const transport = new StreamableHTTPClientTransport(endpoint, {
       requestInit: { headers: networkFetch.headers },
       authProvider: provider,
-      fetch: networkFetch.fetch,
+      fetch: async (url, init) => {
+        const response = await networkFetch.fetch(url, init);
+        if (response.status === 401) challenged = true;
+        return response;
+      },
     });
     const client = new Client({ name: "ardurbot-oauth", version: "0.1.0" });
     const signal = AbortSignal.timeout(15_000);
+    // The caller reserved this session before the probe, so every credential
+    // write matches that pending id. A write that loses the reservation is dropped.
+    provider.guardTokenWrite(sessionId);
     try {
       await client.connect(transport, { signal, timeout: 15_000 });
     } catch (error) {
-      if (!authorizationUrl) throw error;
+      if (isMcpOAuthAttemptReplaced(error)) return { status: "replaced" };
+      if (!authorizationUrl) throw challenged ? signInFailure(error, provider) : error;
     } finally {
       await client.close().catch(() => undefined);
       await networkFetch.close().catch(() => undefined);
@@ -846,6 +1075,34 @@ export class McpOAuthBroker {
       },
     });
     if (consumed.count !== 1) throw new Error("MCP OAuth session is invalid or expired");
+    const context = { spaceId: input.spaceId, userId: input.userId };
+    const current = await this.prisma.mcpServer.findFirst({
+      where: { id: pending.serverId, ...context, enabled: true },
+    });
+    // Null and a different id are the same outcome: this attempt is not the one
+    // still pending, so the code is not exchanged and no tokens are written.
+    if (!current) throw new Error("MCP OAuth session is invalid or expired");
+    if (current.pendingOauthSessionId !== input.sessionId) {
+      throw new McpOAuthAttemptReplacedError();
+    }
+    if (current?.connectionState === "connected" && current.secretId && current.endpoint) {
+      const loaded = await this.loadMaterial(
+        {
+          id: pending.serverId,
+          endpoint: current.endpoint,
+          secretId: current.secretId,
+          revision: current.revision,
+        },
+        context,
+      );
+      if (loaded.material.oauth?.tokens) {
+        this.priorConnectedMaterial.set(input.sessionId, {
+          at: Date.now(),
+          material: structuredClone(loaded.material),
+        });
+      }
+    }
+    pending.provider.guardTokenWrite(input.sessionId);
     const endpoint = new URL(pending.endpoint);
     const networkFetch = oauthFetch(pending.endpoint, this.network);
     const transport = new StreamableHTTPClientTransport(endpoint, {
@@ -859,22 +1116,22 @@ export class McpOAuthBroker {
       await networkFetch.close().catch(() => undefined);
     }
     if (!pending.provider.tokens()) throw new Error("MCP OAuth authorization failed");
-    // Bump the revision so cached runtime sessions rebuild with the fresh tokens.
+    // Token commit rebuilds cached sessions. It does not record the attempt:
+    // connectionState and the pending session id stay until discovery finishes.
     const serverId = pending.serverId;
-    const context = { spaceId: input.spaceId, userId: input.userId };
     await this.prisma.$transaction(async (tx) => {
       await this.lockMaterial(tx, serverId, context, true);
-      const server = await tx.mcpServer.update({
-        where: { id: serverId, ...context },
-        data: { revision: { increment: 1 } },
-      });
-      if (server.imported) await this.advanceImportReceipts(tx, serverId, server.revision, context);
+      if (!(await bumpMcpServerRevision(tx, serverId, context)))
+        throw new Error("MCP OAuth session is invalid or expired");
     });
     return pending.serverId;
   }
 
   private async sweepExpiredPending(): Promise<void> {
     const cutoff = Date.now() - PENDING_TTL_MS;
+    for (const [sessionId, prior] of this.priorConnectedMaterial) {
+      if (prior.at < cutoff) this.priorConnectedMaterial.delete(sessionId);
+    }
     for (const [sessionId, pending] of this.pending) {
       if (pending.createdAt < cutoff) {
         this.discardPending(sessionId, pending);
@@ -888,6 +1145,11 @@ export class McpOAuthBroker {
   private discardPending(sessionId: string, pending: Pending): void {
     if (pending.expiry) clearTimeout(pending.expiry);
     this.pending.delete(sessionId);
+  }
+
+  discardSession(sessionId: string): void {
+    const pending = this.pending.get(sessionId);
+    if (pending) this.discardPending(sessionId, pending);
   }
 
   forgetPending(input: { serverId: string; spaceId: string; userId: string }): void {
@@ -948,15 +1210,19 @@ export class McpOAuthBroker {
     return new StoredMcpOAuthProvider(
       server.id,
       loaded.material,
-      async (material) => {
-        await this.replaceMaterial(
+      async (material, pendingSessionId) => {
+        const stored = await this.replaceMaterial(
           server.id,
           material,
           context,
           false,
           server.endpoint,
           server.catalogId || server.imported ? server.revision : undefined,
+          pendingSessionId,
         );
+        if (pendingSessionId !== undefined && stored === undefined) {
+          throw new McpOAuthAttemptReplacedError();
+        }
       },
       options,
     );
@@ -969,6 +1235,7 @@ export class McpOAuthBroker {
     incrementRevision: boolean,
     expectedEndpoint?: string | null,
     expectedRevision?: number,
+    expectedPendingSessionId?: string,
   ): Promise<string | undefined> {
     return this.prisma.$transaction(async (tx) => {
       // Serialize every credential rotation across API instances. OAuth
@@ -980,12 +1247,21 @@ export class McpOAuthBroker {
           id: serverId,
           spaceId: context.spaceId,
           userId: context.userId,
-          ...(expectedEndpoint !== undefined ? { enabled: true } : {}),
-          ...(expectedRevision !== undefined ? { revision: expectedRevision } : {}),
+          // A sign-in attempt's writes are guarded by its pending id alone: only a newer
+          // attempt takes that id, so a grant save or a disabled row never drops them.
+          ...(expectedPendingSessionId !== undefined
+            ? { pendingOauthSessionId: expectedPendingSessionId }
+            : {
+                ...(expectedEndpoint !== undefined ? { enabled: true } : {}),
+                ...(expectedRevision !== undefined ? { revision: expectedRevision } : {}),
+              }),
         },
         select: { endpoint: true, secretId: true },
       });
-      if (!server) throw new Error("MCP server is unavailable");
+      if (!server) {
+        if (expectedPendingSessionId !== undefined) return undefined;
+        throw new Error("MCP server is unavailable");
+      }
       if (expectedEndpoint !== undefined && server.endpoint !== expectedEndpoint) {
         throw new Error("MCP server endpoint changed during authorization; reconnect this server");
       }
@@ -1031,15 +1307,41 @@ export class McpOAuthBroker {
         });
       }
       const previousSecretId = server.secretId;
-      const saved = await tx.mcpServer.update({
-        where: { id: serverId },
-        data: {
-          secretId: stored?.id ?? null,
-          ...(incrementRevision ? { revision: { increment: 1 } } : {}),
-        },
-      });
-      if (incrementRevision && saved.imported)
-        await this.advanceImportReceipts(tx, serverId, saved.revision, context);
+      const secretData = { secretId: stored?.id ?? null };
+      let saved = true;
+      if (incrementRevision) {
+        saved = await bumpMcpServerRevision(
+          tx,
+          serverId,
+          context,
+          secretData,
+          expectedPendingSessionId !== undefined
+            ? { pendingOauthSessionId: expectedPendingSessionId }
+            : {},
+        );
+      } else if (expectedPendingSessionId !== undefined) {
+        const written = await tx.mcpServer.updateMany({
+          where: {
+            id: serverId,
+            spaceId: context.spaceId,
+            userId: context.userId,
+            pendingOauthSessionId: expectedPendingSessionId,
+          },
+          data: secretData,
+        });
+        saved = written.count > 0;
+      } else {
+        await tx.mcpServer.update({ where: { id: serverId }, data: secretData });
+      }
+      if (!saved) {
+        if (stored) {
+          await tx.secret.deleteMany({
+            where: { id: stored.id, spaceId: context.spaceId, userId: context.userId },
+          });
+        }
+        if (expectedPendingSessionId !== undefined) return undefined;
+        throw new Error("MCP server is unavailable");
+      }
       if (previousSecretId && previousSecretId !== stored?.id) {
         await tx.secret.deleteMany({ where: { id: previousSecretId } });
       }
@@ -1053,40 +1355,9 @@ export class McpOAuthBroker {
     context: ActorRef,
     incrementRevision: boolean,
   ) {
-    const owner = { spaceId: context.spaceId, userId: context.userId };
-    if (incrementRevision) {
-      const server = await tx.mcpServer.findFirst({
-        where: { id: serverId, ...owner },
-        select: { imported: true },
-      });
-      if (server?.imported) {
-        const receipt = await tx.localImportRecord.findFirst({
-          where: { targetId: serverId, removedAt: null, config: owner },
-        });
-        // Import and credential setup acquire these locks in this order too.
-        if (receipt)
-          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`local-import:${receipt.configId}`}, 0))`;
-      }
-    }
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('mcp-oauth-material'), hashtext(${serverId}))`;
-  }
-
-  private async advanceImportReceipts(
-    tx: Prisma.TransactionClient,
-    serverId: string,
-    revision: number,
-    context: ActorRef,
-  ) {
-    // Connection-cache invalidation preserves import ownership, but never forgives manual edits.
-    await tx.localImportRecord.updateMany({
-      where: {
-        targetId: serverId,
-        targetRevision: revision - 1,
-        removedAt: null,
-        config: { spaceId: context.spaceId, userId: context.userId },
-      },
-      data: { targetRevision: revision },
-    });
+    if (incrementRevision) await lockMcpServerRevision(tx, serverId, context);
+    else
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('mcp-oauth-material'), hashtext(${serverId}))`;
   }
 
   private read(ciphertext: string, recordId: string): OAuthMaterial {
