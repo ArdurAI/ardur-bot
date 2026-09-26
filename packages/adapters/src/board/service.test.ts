@@ -79,6 +79,18 @@ it("binds actor and workspace lookup to the owner, space and bot computer", asyn
   await expect(service.actor(scope)).rejects.toMatchObject({ problem: { code: "forbidden" } });
   await expect(service.start(scope, "workspace")).rejects.toThrow("app");
 });
+it("gives a bot the host board only when its computer is a host computer", async () => {
+  const { prisma, service } = fixture();
+  for (const computer of [
+    { kind: "docker", connectionId: null },
+    { kind: "e2b", connectionId: null },
+    null,
+  ]) {
+    prisma.bot.findFirst.mockResolvedValueOnce({ name: "Builder", computer } as never);
+    await expect(service.actor(scope)).rejects.toMatchObject({ problem: { code: "forbidden" } });
+  }
+  expect(await service.actor(scope)).toBe("bot:Builder");
+});
 it("prevents close and status-update bypasses when the dispatched item stays a human action", async () => {
   const { prisma, service } = fixture();
   prisma.run.findFirst.mockResolvedValue({

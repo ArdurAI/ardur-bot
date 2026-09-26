@@ -19,6 +19,7 @@ import type * as AutoReviewModule from "./auto-review.js";
 import { parseBeadsItem } from "./board/beads.js";
 import { BoardService } from "./board/service.js";
 import { commandComputerFingerprint } from "./command-replay.js";
+import { MissingComputerProviderError } from "./computer-connections.js";
 import type * as ComputerLifecycleModule from "./computer-lifecycle.js";
 import { acquireComputerExecutionLease, provisionComputer } from "./computer-lifecycle.js";
 import { checkpointRunComputerWorkspace } from "./computer-workspace.js";
@@ -1014,6 +1015,24 @@ it("keeps a malformed snapshot failed across retries instead of binding the curr
   }
   expect(f.runtimeRun).not.toHaveBeenCalled();
   expect(f.effects).toEqual([]);
+});
+
+it("fails a run whose computer engine is not configured with the fix instead of retrying", async () => {
+  const f = fixture();
+  vi.mocked(provisionComputer).mockRejectedValueOnce(new MissingComputerProviderError("e2b"));
+  f.runRecord.status = "queued";
+  await expect(f.executor.continueRun(f.runRecord.id, "worker-1")).resolves.toBeUndefined();
+  expect(f.finalizeRun).toHaveBeenCalledWith(
+    expect.objectContaining({
+      outcome: "failed",
+      error:
+        "This computer runs on E2B, which is not configured here. Reset it in Settings, Computers to start it on this deployment's engine, or configure E2B again.",
+    }),
+  );
+  expect(f.runtimeRun).not.toHaveBeenCalled();
+  expect(f.prisma.attempt.update).not.toHaveBeenCalledWith(
+    expect.objectContaining({ data: expect.objectContaining({ status: "setup_failed" }) }),
+  );
 });
 
 describe("command rerun through the authoritative executor", () => {

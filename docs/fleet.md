@@ -35,6 +35,17 @@ Probes are cached for 30 seconds, have time and output limits, and run four at a
 | Linux machine | System SSH; agent, encrypted private key, or Tailscale SSH; optional jump host | Commands, files, interactive terminal, per-computer home | `nproc`, `/proc/loadavg`, `/proc/meminfo`, `df` | Bash, Python 3, SFTP and a verified SSH host key are required |
 | Tailscale peer | Existing host CLI login discovers online Linux peers; added as SSH | Same as SSH | Same as SSH after adding | Tailnet policy and SSH access must already permit the connection; no Tailscale keys are stored |
 
+Computers shows the host, the local Docker engine, the deployment default when it is neither of
+those, and each saved connection. Clients name these built-in rows in their own language from a
+stable key and the host label the API returns: This Mac when the paired desktop, or else the
+server, runs macOS, and This computer elsewhere. The default row carries the kind its provider
+creates; kinds outside the fleet list, such as none or fake, stay on the default row. A
+connectionless E2B, Daytona, or Box computer on another deployment gets its own row while that
+provider's key is set. E2B, Daytona, and Box report no capacity, so a registered one is listed as
+available with unknown capacity, as a Kubernetes connection is. A computer whose engine is not
+configured is not listed on any row, and a host computer is listed only where the host runs
+computers.
+
 Docker context discovery accepts the CLI's JSON-lines output. OrbStack and Colima sockets are
 found at their standard locations. Podman machine discovery uses its reported socket. Tailscale
 rows show MagicDNS and the advertised address. Tags are not generally login names: only the
@@ -55,6 +66,19 @@ Threshold mode keeps the current target while it has at least the configured amo
 memory. It never chooses an unknown, stale, disconnected, or merely discovered target. Ties stay
 where they are. CPU load is reported separately and is not treated as memory capacity.
 
+Automatic moves stay inside one engine family until verified migration lands. Local Docker and
+remote Docker (a socket, an endpoint, or a Docker context) are one family, and Podman connections
+report those same kinds; every other kind is its own. Moving work to another family waits because
+today's move removes the old computer before the new one has accepted the workspace. Settings can
+move a computer to a saved connection, or to the deployment default whenever the computer runs on
+another engine, named there as `Deployment default (E2B)` for example. That move saves the
+workspace from the old engine while that engine is configured here, and otherwise restores the last
+saved workspace. Choosing the deployment default for a computer already on that engine changes
+nothing. Moving a computer onto the machine running Ardur Bot is refused until verified migration
+lands, so the deployment default is not offered while new computers start on the host. If the
+computer changes before an automatic move starts, the move is skipped: the run's placement records
+it, and no computer update is shown.
+
 `placeRunComputer` runs before the first computer execution lease and before tool effects. It
 never moves an existing run snapshot. A first move pauses for that bot's consent unless `Move
 automatically` is enabled. The conversation links to Computers while consent is pending.
@@ -67,13 +91,21 @@ and no other run is active. Use private computers for independently placed workl
 runtime pins retain their existing host restriction; placement never changes a runtime or model
 pin to make a destination work. Explicit connection changes retain the chosen destination;
 automatic placement evaluates first use after creation or replacement at the next new run.
-The deployment's saved default remains the meaning of an empty connection binding.
+
+Every run, reset, update, recovery, sleep, screen and terminal operation uses the computer's saved
+connection, or without one the provider of its saved kind. The kind is chosen when the computer is
+created, so changing This Mac or the deployment default does not move an existing computer. A
+computer whose engine is not configured is handled as described in
+[computer runtime](computer-runtime.md#daytona-backend).
 
 Moves reserve the computer using the existing maintenance record, save a checkpoint with the old
-connection, destroy the old computer, then provision and restore with the new connection. A failed
-checkpoint prevents teardown. A failed restore leaves the durable checkpoint and a failed
-maintenance record available for recovery. The run's `placement` snapshot and a conversation
-message retain `Moved to {computer}: {reason}`. There is no live process migration.
+connection, destroy the old computer, then provision and restore with the new connection. The
+destination is resolved once before the checkpoint, so switching This Mac during a move does not
+change where the new computer starts. Once the old computer is gone, the record names the
+destination, so a failed start is retried there. A failed checkpoint prevents teardown. A failed
+restore leaves the durable checkpoint and a failed maintenance record available for recovery. The
+run's `placement` snapshot and a conversation message retain `Moved to {computer}: {reason}`.
+There is no live process migration.
 
 Capacity is a recent observation, not a reservation. Kubernetes totals do not guarantee that a
 single node, a volume topology, or quota can satisfy a pod. SSH uses the remote account's existing
@@ -138,13 +170,14 @@ infrastructure charges; the feature does not provision machines or purchase serv
    workflow. Add and test it. Confirm pod/PVC ownership labels and persisted files. Remove
    metrics access temporarily on a disposable fixture and confirm CPU load is unknown while
    capacity based on requests remains available. Do not change production cluster permissions.
-7. Return a private, Pi-runtime bot to **This Mac**, create a small marker file, and set Placement
-   to **Prefer the most free memory**. Use a connected Linux target that reports more free
-   memory. Start new work, accept **Move** once, and confirm the Team board and fleet assignment
-   change, the marker survives, and the conversation records the reason. For threshold mode,
-   use a test threshold above the Mac's currently reported free memory and below the destination's
-   free memory; there is no need to deliberately exhaust the machine. Confirm a running command
-   stays on its original computer and the next new run evaluates placement.
+7. Put a private, Pi-runtime bot on one Linux machine, create a small marker file, and set
+   Placement to **Prefer the most free memory**. Use a second connected Linux machine that reports
+   more free memory. Start new work, accept **Move** once, and confirm the Team board and fleet
+   assignment change, the marker survives, and the conversation records the reason. For threshold
+   mode, use a test threshold above the first machine's reported free memory and below the
+   destination's free memory; there is no need to deliberately exhaust the machine. Confirm a
+   running command stays on its original computer and the next new run evaluates placement.
+   Confirm a Docker or This Mac computer is not moved automatically to a Linux machine.
 8. Open mobile account settings. Confirm the same computers, assignments and free-memory bars,
    with no Add, Test, placement or credential controls. Disconnect a test target and confirm
    that stale/unknown capacity does not become a placement candidate.

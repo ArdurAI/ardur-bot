@@ -15,9 +15,12 @@ const api = vi.hoisted(() => ({
   connect: vi.fn(),
 }));
 vi.mock("../../lib/rpc", () => ({ rpc: { fleet: api, computer: { connect: api.connect } } }));
+const catalog = vi.hoisted(() => new Map<string, string>());
 vi.mock("@lingui/react/macro", () => {
-  const t = (parts: TemplateStringsArray, ...values: unknown[]) =>
-    parts.reduce((out, part, i) => out + part + (values[i] ?? ""), "");
+  const t = (parts: TemplateStringsArray, ...values: unknown[]) => {
+    const text = parts.reduce((out, part, i) => out + part + (values[i] ?? ""), "");
+    return catalog.get(text) ?? text;
+  };
   return { useLingui: () => ({ t }), Trans: ({ children }: { children: ReactNode }) => children };
 });
 vi.mock("@ardurbot/ui-web", () => ({
@@ -40,6 +43,7 @@ import { FleetSettings } from "./FleetSettings";
 import { PlacementNotice } from "./PlacementNotice";
 
 afterEach(() => {
+  catalog.clear();
   vi.clearAllMocks();
   vi.unstubAllGlobals();
 });
@@ -96,6 +100,46 @@ it("renders capacity and assignments, applies placement, and requests explicit m
       preferredTargetId: "host",
       minimumFreeGb: 4,
     });
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+it("names built-in rows by their key and the API's host label, and saved connections as named", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  catalog.set("This Mac", "Этот Mac");
+  catalog.set("Docker on this Mac", "Docker на этом Mac");
+  catalog.set("Default computer", "Компьютер по умолчанию");
+  const row = {
+    kind: "docker",
+    connectionId: null,
+    state: "connected",
+    capacity: { ...unknownCapacity(), memoryFree: 1024 ** 3, memoryTotal: 8 * 1024 ** 3 },
+    bots: [],
+  };
+  api.list.mockResolvedValue({
+    targets: [
+      { ...row, id: "host", name: "This computer", kind: "host", builtin: "host" },
+      { ...row, id: "default", name: "Default computer", kind: "e2b", builtin: "default" },
+      { ...row, id: "docker", name: "Docker on this computer", builtin: "local-docker" },
+      { ...row, id: "office", name: "This Mac", connectionId: "office" },
+    ],
+    hostLabel: "This Mac",
+    placement: { mode: "threshold", preferredTargetId: "default", minimumFreeGb: 4 },
+    bots: [],
+  });
+  const element = document.createElement("div"),
+    root = createRoot(element);
+  try {
+    await act(async () => root.render(<FleetSettings />));
+    const names = [...element.querySelectorAll("[data-fleet-target] p.font-medium")].map(
+      (name) => name.textContent,
+    );
+    const translated = ["Этот Mac", "Компьютер по умолчанию", "Docker на этом Mac", "This Mac"];
+    expect(names).toEqual(translated);
+    const preferred = element.querySelector<HTMLSelectElement>(
+      '[aria-label="Preferred computer"]',
+    )!;
+    expect([...preferred.options].map((option) => option.textContent)).toEqual(translated);
   } finally {
     await act(async () => root.unmount());
   }

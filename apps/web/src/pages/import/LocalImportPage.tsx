@@ -11,10 +11,12 @@ import type {
 import {
   addLocalImportResult,
   LOCAL_IMPORT_CATEGORIES,
+  LOCAL_IMPORT_INVALID_FOLDER_CODE,
   LOCAL_IMPORT_TOOL_NAMES,
 } from "@ardurbot/contracts/local-import";
 import { Button, Checkbox, Input, Switch } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
+import { ORPCError } from "@orpc/client";
 import { useEffect, useState } from "react";
 import { rpc } from "../../lib/rpc";
 import { ImportedServerCredentials } from "./ImportedServerCredentials";
@@ -29,7 +31,9 @@ export function LocalImportPage() {
   const [selected, setSelected] = useState<Selection>({});
   const [folders, setFolders] = useState<Partial<Record<LocalImportTool, string>>>({});
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<LocalImportStop | null>(null);
+  const [error, setError] = useState<LocalImportStop | "unavailable" | "invalid-folder" | null>(
+    null,
+  );
   const [preview, setPreview] = useState<LocalImportRead | null>(null);
   const [summary, setSummary] = useState<LocalImportSummary | null>(null);
   const [servers, setServers] = useState<McpServer[] | null>(null);
@@ -41,10 +45,12 @@ export function LocalImportPage() {
     plugins: t`Plugins and extensions`,
     other: t`Other files`,
   };
-  const stops: Record<LocalImportStop, string> = {
+  const errorMessages: Record<LocalImportStop | "unavailable" | "invalid-folder", string> = {
     host: t`Import could not finish. Check this computer is connected, then re-scan.`,
     rescan: t`This scan is out of date. Re-scan, then try again.`,
     failed: t`Import stopped because of an unexpected error. Re-scan, then try again.`,
+    unavailable: t`Import is not available right now. Try again in a moment.`,
+    "invalid-folder": t`Choose a folder inside your home folder.`,
   };
   const reasons: Record<LocalImportFailure["reason"], string> = {
     credential: t`Looks like it contains a credential. Remove it from the file, then re-scan.`,
@@ -56,7 +62,16 @@ export function LocalImportPage() {
     void (async () => {
       const initial = await rpc.localImport.status();
       if (!active) return;
-      if (!initial.manifest) await rpc.localImport.run({ action: "scan" });
+      if (!initial.manifest) {
+        const response = await rpc.localImport.run({ action: "scan" });
+        if (!active) return;
+        if (response.stopped) {
+          setStatus(initial);
+          setSelected(initial.selection);
+          setError(response.stopped);
+          return;
+        }
+      }
       const fresh = await rpc.localImport.status();
       if (active) {
         setStatus(fresh);
@@ -64,7 +79,7 @@ export function LocalImportPage() {
       }
     })()
       .catch(() => {
-        if (active) setError("failed");
+        if (active) setError("unavailable");
       })
       .finally(() => {
         if (active) setBusy(false);
@@ -74,14 +89,18 @@ export function LocalImportPage() {
     };
   }, []);
 
-  async function work(action: () => Promise<void>) {
+  async function work(action: () => Promise<undefined | false>) {
     setBusy(true);
     setError(null);
     try {
-      await action();
-      setStatus(await rpc.localImport.status());
-    } catch {
-      setError("failed");
+      const refresh = await action();
+      if (refresh !== false) setStatus(await rpc.localImport.status());
+    } catch (error) {
+      setError(
+        error instanceof ORPCError && error.code === LOCAL_IMPORT_INVALID_FOLDER_CODE
+          ? "invalid-folder"
+          : "unavailable",
+      );
     } finally {
       setBusy(false);
     }
@@ -209,15 +228,13 @@ export function LocalImportPage() {
       ) : null}
       {error ? (
         <p role="alert" className="text-sm text-destructive">
-          {stops[error]}
+          {errorMessages[error]}
         </p>
       ) : null}
       {manifest?.limited ? (
         <p role="status" className="text-sm text-muted-foreground">
           {manifest.unscanned ? (
-            <Trans>
-              Some items exceeded the scan limits ({manifest.unscanned} items were not scanned).
-            </Trans>
+            <Trans>{manifest.unscanned} items were not scanned because of the scan limits.</Trans>
           ) : (
             <Trans>Some items exceeded the scan limits.</Trans>
           )}
@@ -425,7 +442,14 @@ export function LocalImportPage() {
                           [source.tool]: folders[source.tool] ?? status?.roots[source.tool] ?? "",
                         },
                       });
-                      await rpc.localImport.run({ action: "scan" });
+                      const response = await rpc.localImport.run({ action: "scan" });
+                      if (response.stopped) {
+                        setError(response.stopped);
+                        // configure() already cleared the manifest; keep showing this
+                        // form and the rest of what was found instead of refreshing
+                        // into an empty page.
+                        return false;
+                      }
                     });
                   }}
                 >

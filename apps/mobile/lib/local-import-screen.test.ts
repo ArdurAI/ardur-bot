@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import type { LocalImportStatusSchema } from "@ardurbot/contracts/local-import";
+import { LOCAL_IMPORT_INVALID_FOLDER_CODE } from "@ardurbot/contracts/local-import";
 import {
   localImportFixture,
   localImportServerFixture,
@@ -11,6 +12,7 @@ import { act, createElement, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 import LocalImport from "../app/import";
+import { RpcError } from "./rpc-error";
 
 type LocalImportStatus = ReturnType<typeof LocalImportStatusSchema.parse>;
 
@@ -277,9 +279,7 @@ it("lists failed items with their reason, retries one, and says why a run stoppe
   const buttons = () => [...node.querySelectorAll("button")];
   try {
     await act(async () => root.render(createElement(LocalImport)));
-    expect(node.textContent).toContain(
-      "Some items exceeded the scan limits (4 items were not scanned).",
-    );
+    expect(node.textContent).toContain("4 items were not scanned because of the scan limits.");
     await act(async () =>
       buttons()
         .find((button) => button.textContent === "Import all")!
@@ -319,6 +319,107 @@ it("lists failed items with their reason, retries one, and says why a run stoppe
       );
       expect(node.textContent).toContain(sentence);
     }
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+it("gives a neutral message when the first scan fails, not a stopped-import sentence", async () => {
+  vi.clearAllMocks();
+  fake.status.mockResolvedValue({ ...localImportStatusFixture, manifest: null });
+  fake.run.mockRejectedValue(new Error("private diagnostic"));
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  try {
+    await act(async () => root.render(createElement(LocalImport)));
+    // A failed first scan is not a run that stopped; it gets the neutral sentence.
+    expect(node.textContent).toContain("Import is not available right now. Try again in a moment.");
+    expect(node.textContent).not.toContain("private diagnostic");
+    expect(node.textContent).not.toContain("connected");
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+it("says why a stopped first scan ended instead of showing an empty screen", async () => {
+  vi.clearAllMocks();
+  fake.status.mockResolvedValue({ ...localImportStatusFixture, manifest: null });
+  fake.run.mockResolvedValue({ stopped: "host" });
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  try {
+    await act(async () => root.render(createElement(LocalImport)));
+    expect(node.textContent).toContain(
+      "Import could not finish. Check this computer is connected, then re-scan.",
+    );
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+it("keeps the Source folder form visible with its error after a stopped re-scan", async () => {
+  vi.clearAllMocks();
+  const manifest = {
+    ...localImportFixture,
+    sources: [{ ...localImportFixture.sources[0]!, defaultMissing: true }],
+  };
+  fake.status.mockResolvedValue({ ...localImportStatusFixture, manifest });
+  fake.configure.mockResolvedValue({});
+  fake.run.mockResolvedValue({ stopped: "host" });
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  const click = async (text: string) =>
+    act(async () => {
+      [...node.querySelectorAll("button")].find((button) => button.textContent === text)!.click();
+    });
+  try {
+    await act(async () => root.render(createElement(LocalImport)));
+    await click("Source folder for Claude Code");
+    const input = node.querySelector('[aria-label="Source folder"]') as HTMLInputElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+        input,
+        "custom",
+      );
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await click("Use folder");
+    expect(node.textContent).toContain(
+      "Import could not finish. Check this computer is connected, then re-scan.",
+    );
+    // configure() already cleared the manifest server-side; the screen must not
+    // have refreshed into that empty state and lost the form the user was using.
+    expect(node.querySelector('[aria-label="Source folder"]')).not.toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+it("names the fix for an invalid custom folder instead of suggesting a retry", async () => {
+  vi.clearAllMocks();
+  const manifest = {
+    ...localImportFixture,
+    sources: [{ ...localImportFixture.sources[0]!, defaultMissing: true }],
+  };
+  fake.status.mockResolvedValue({ ...localImportStatusFixture, manifest });
+  fake.configure.mockRejectedValue(
+    new RpcError("Choose a folder inside the owner's home.", LOCAL_IMPORT_INVALID_FOLDER_CODE),
+  );
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  const click = async (text: string) =>
+    act(async () => {
+      [...node.querySelectorAll("button")].find((button) => button.textContent === text)!.click();
+    });
+  try {
+    await act(async () => root.render(createElement(LocalImport)));
+    await click("Source folder for Claude Code");
+    const input = node.querySelector('[aria-label="Source folder"]') as HTMLInputElement;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+        input,
+        "../outside",
+      );
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await click("Use folder");
+    expect(node.textContent).toContain("Choose a folder inside your home folder.");
   } finally {
     await act(async () => root.unmount());
   }

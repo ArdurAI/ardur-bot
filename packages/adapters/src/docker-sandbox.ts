@@ -135,6 +135,7 @@ export class DockerSandboxProvider implements SandboxProvider {
   describe() {
     return {
       id: "docker",
+      kind: "docker" as const,
       contractVersion: "1",
       adapterVersion: "0.1.0",
       capabilities: {
