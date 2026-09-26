@@ -4,6 +4,7 @@ import { Trans, useLingui } from "@lingui/react/macro";
 import { Check } from "lucide-react";
 import { lazy, Suspense, useEffect, useId, useRef, useState } from "react";
 import type { McpOauthWait } from "../../lib/mcp-connect";
+import { mcpOutcomeSentence } from "../../lib/mcp-sign-in";
 import { rpc } from "../../lib/rpc";
 
 const DirectMcpSearch = lazy(() =>
@@ -242,25 +243,11 @@ export function IntegrationSetup({
                   },
                 });
                 setOauthWait(null);
-                if (typeof outcome === "object") {
-                  onServerConnected?.(outcome.serverId);
-                  return;
-                }
-                setError(
-                  outcome === "credential-rejected"
-                    ? t`That token was not accepted. Check it and try again.`
-                    : outcome === "needs-credential"
-                      ? t`Enter a credential for this server and try again.`
-                      : outcome === "cancelled"
-                        ? userCancelled.current
-                          ? t`Sign-in was cancelled.`
-                          : t`Sign-in was declined. Reconnect to try again.`
-                        : outcome === "needs-sign-in"
-                          ? t`Sign-in did not finish. Try again.`
-                          : outcome === "replaced"
-                            ? t`This sign-in window was replaced by a newer one. Finish signing in there, or start again.`
-                            : t`Could not finish sign-in. Try again.`,
-                );
+                if (outcome.result === "connected") onServerConnected?.(outcome.serverId);
+                else
+                  setError(
+                    mcpOutcomeSentence(outcome.result, userCancelled.current, outcome.recorded),
+                  );
               });
             }}
           >

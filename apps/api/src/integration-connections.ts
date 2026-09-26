@@ -18,9 +18,8 @@ import {
   integrationFailure,
   isMcpOAuthAttemptReplaced,
   lockMcpServerRevision,
-  MCP_OAUTH_PENDING_TTL_MS,
+  McpClientRegistrationRequiredError,
   McpConnector,
-  McpOAuthAttemptReplacedError,
   McpReauthorizationRequiredError,
 } from "@ardurbot/adapters";
 import type {
@@ -36,6 +35,7 @@ import {
   IntegrationManifestSchema,
   IntegrationResourceConstraintsSchema,
   IntegrationStateSchema,
+  mcpSignInDiagnostic,
   SpaceToolPoliciesSchema,
 } from "@ardurbot/contracts";
 import { integrationToolKind } from "@ardurbot/core";
@@ -66,15 +66,6 @@ export function connectionDto(server: McpServer, needsReview = false): Integrati
       IntegrationResourceConstraintsSchema.safeParse(server.resourceConstraints).data ?? {},
     spaceToolPolicies: SpaceToolPoliciesSchema.safeParse(server.spaceToolPolicies).data ?? {},
   };
-}
-
-export function needsClientRegistration(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    /dynamic client registration|client (information|registration)|register(ing| registration)? client/i.test(
-      error.message,
-    )
-  );
 }
 
 /** Trusted catalog lifecycle. All row lookups are scoped to the signed-in owner and space. */
@@ -190,29 +181,13 @@ export class IntegrationConnections {
   }
 
   /**
-   * Compare-and-set the pending session before any probe. An expired pending id
-   * is cleared first, so it cannot block the next begin or survive it. A live
-   * id is replaced only when it is still the value this call observed.
+   * Compare-and-set the pending session before any probe. The id this call observed,
+   * live or expired, is replaced only while it is still the stored value.
    */
   private async claimSignIn(
     actor: Owner,
     server: McpServer,
   ): Promise<{ status: "replaced" } | { sessionId: string }> {
-    let comparedPending = server.pendingOauthSessionId ?? null;
-    if (comparedPending && this.pendingAttemptExpired(server)) {
-      const cleared = await this.prisma.mcpServer.updateMany({
-        where: {
-          id: server.id,
-          spaceId: actor.spaceId,
-          userId: actor.userId,
-          enabled: true,
-          pendingOauthSessionId: comparedPending,
-        },
-        data: { pendingOauthSessionId: null },
-      });
-      if (!cleared.count) return { status: "replaced" };
-      comparedPending = null;
-    }
     const sessionId = randomUUID();
     const reserved = await this.prisma.mcpServer.updateMany({
       where: {
@@ -220,7 +195,7 @@ export class IntegrationConnections {
         spaceId: actor.spaceId,
         userId: actor.userId,
         enabled: true,
-        pendingOauthSessionId: comparedPending,
+        pendingOauthSessionId: server.pendingOauthSessionId ?? null,
       },
       data: {
         pendingOauthSessionId: sessionId,
@@ -231,12 +206,6 @@ export class IntegrationConnections {
     });
     if (!reserved.count) return { status: "replaced" };
     return { sessionId };
-  }
-
-  /** The reservation clock is the row's updatedAt. A missing clock is still live. */
-  private pendingAttemptExpired(server: McpServer): boolean {
-    const startedAt = server.updatedAt instanceof Date ? server.updatedAt.getTime() : Number.NaN;
-    return Number.isFinite(startedAt) && startedAt < Date.now() - MCP_OAUTH_PENDING_TTL_MS;
   }
 
   async beginAuthorization(actor: Owner, input: { serverId: string; redirectUri: string }) {
@@ -253,17 +222,14 @@ export class IntegrationConnections {
         sessionId,
       });
     } catch (error) {
-      if (error instanceof McpOAuthAttemptReplacedError || isMcpOAuthAttemptReplaced(error)) {
-        return { status: "replaced" as const };
-      }
       const released = await this.releaseAttempt(actor, server.id, sessionId);
+      if (isMcpOAuthAttemptReplaced(error)) return { status: "replaced" as const };
       if (released && !server.catalogId) await this.recordFailure(actor, server, error);
       throw error;
     }
-    if (started.status === "replaced") return { status: "replaced" as const };
     if (started.status !== "authorization_required") {
       const released = await this.releaseAttempt(actor, server.id, sessionId);
-      if (released) await this.capture(actor, input.serverId);
+      if (released && started.status !== "replaced") await this.capture(actor, input.serverId);
       return released ? started : { status: "replaced" as const };
     }
     const current = await this.owned(actor, server.id);
@@ -397,6 +363,12 @@ export class IntegrationConnections {
     await assertSafeRemoteUrl(descriptor.endpoint!, this.network.resolveHostname);
     let server: McpServer;
     let oauthSessionId = "";
+    const replaced = async () => ({
+      connection: connectionDto(await this.owned(actor, server.id)),
+      authorizationUrl: null,
+      sessionId: null,
+      status: "replaced" as const,
+    });
     if (input.connectionId) {
       server = await this.owned(actor, input.connectionId);
       if (
@@ -456,88 +428,56 @@ export class IntegrationConnections {
         };
       }
       const claimed = await this.claimSignIn(actor, server);
-      if ("status" in claimed) {
-        return {
-          connection: connectionDto(await this.owned(actor, server.id)),
-          authorizationUrl: null,
-          sessionId: null,
-          status: "replaced" as const,
-        };
-      }
-      const sessionId = claimed.sessionId;
-      oauthSessionId = sessionId;
+      if ("status" in claimed) return await replaced();
+      oauthSessionId = claimed.sessionId;
       const started = await this.oauth.begin({
         serverId: server.id,
         spaceId: actor.spaceId,
         userId: actor.userId,
         redirectUri: new URL("/api/oauth/done", this.webOrigin).toString(),
-        sessionId,
+        sessionId: oauthSessionId,
         ...(oauthApp ? { clientInformation: oauthApp } : {}),
       });
-      if (started.status === "replaced") {
-        return {
-          connection: connectionDto(await this.owned(actor, server.id)),
-          authorizationUrl: null,
-          sessionId: null,
-          status: "replaced" as const,
-        };
-      }
-      const current = await this.owned(actor, server.id);
-      if (current.pendingOauthSessionId !== sessionId) {
-        await this.releaseAttempt(actor, server.id, sessionId);
+      if (started.status === "authorization_required") {
+        const current = await this.owned(actor, server.id);
+        if (current.pendingOauthSessionId !== oauthSessionId) {
+          await this.releaseAttempt(actor, server.id, oauthSessionId);
+          return await replaced();
+        }
         return {
           connection: connectionDto(current),
-          authorizationUrl: null,
-          sessionId: null,
-          status: "replaced" as const,
+          authorizationUrl: started.authorizationUrl,
+          sessionId: started.sessionId,
         };
       }
+      // Every other result ends this attempt and releases its reservation.
       if (started.status === "already_connected") {
+        if (!(await this.releaseAttempt(actor, server.id, oauthSessionId))) return await replaced();
         await this.capture(actor, server.id);
-      } else if (started.status !== "authorization_required") {
-        const marked = await this.markAttemptFailed(
-          actor,
-          server.id,
-          sessionId,
-          "discovery-failed",
-        );
-        if (!marked) {
-          return {
-            connection: connectionDto(await this.owned(actor, server.id)),
-            authorizationUrl: null,
-            sessionId: null,
-            status: "replaced" as const,
-          };
-        }
+      } else if (
+        started.status === "replaced" ||
+        !(await this.markAttemptFailed(actor, server.id, oauthSessionId, "discovery-failed"))
+      ) {
+        await this.releaseAttempt(actor, server.id, oauthSessionId);
+        return await replaced();
       }
       return {
         connection: connectionDto(await this.owned(actor, server.id)),
-        authorizationUrl:
-          started.status === "authorization_required" ? started.authorizationUrl : null,
-        sessionId: started.status === "authorization_required" ? started.sessionId : null,
+        authorizationUrl: null,
+        sessionId: null,
       };
     } catch (error) {
-      if (error instanceof McpOAuthAttemptReplacedError || isMcpOAuthAttemptReplaced(error)) {
-        return {
-          connection: connectionDto(await this.owned(actor, server.id)),
-          authorizationUrl: null,
-          sessionId: null,
-          status: "replaced" as const,
-        };
+      if (isMcpOAuthAttemptReplaced(error)) {
+        if (oauthSessionId) await this.releaseAttempt(actor, server.id, oauthSessionId);
+        return await replaced();
       }
-      const failedState = needsClientRegistration(error)
-        ? "needs-client-registration"
-        : "discovery-failed";
+      const failedState =
+        error instanceof McpClientRegistrationRequiredError
+          ? "needs-client-registration"
+          : "discovery-failed";
       if (oauthSessionId) {
-        const marked = await this.markAttemptFailed(actor, server.id, oauthSessionId, failedState);
-        if (!marked) {
-          return {
-            connection: connectionDto(await this.owned(actor, server.id)),
-            authorizationUrl: null,
-            sessionId: null,
-            status: "replaced" as const,
-          };
-        }
+        if (!(await this.markAttemptFailed(actor, server.id, oauthSessionId, failedState)))
+          return await replaced();
       } else {
         await this.prisma.mcpServer.updateMany({
           where: { id: server.id, enabled: true, revision: server.revision },
@@ -691,11 +631,14 @@ export class IntegrationConnections {
                 ? {}
                 : { connectionState: "discovery-failed" }),
           lastCheckedAt: new Date(),
-          lastError: droppedReauth ? "Needs sign-in." : message,
+          lastError: droppedReauth ? mcpSignInDiagnostic() : message,
           ...(oauthSessionId ? { pendingOauthSessionId: null } : {}),
           recentErrors: [
             ...(Array.isArray(current.recentErrors) ? current.recentErrors : []),
-            { at: new Date().toISOString(), message: droppedReauth ? "Needs sign-in." : message },
+            {
+              at: new Date().toISOString(),
+              message: droppedReauth ? mcpSignInDiagnostic() : message,
+            },
           ].slice(-10),
         },
       });

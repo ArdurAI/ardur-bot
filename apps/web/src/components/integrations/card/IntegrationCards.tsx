@@ -7,10 +7,11 @@ import type {
 import { Button, Input } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
 import { useEffect, useRef, useState } from "react";
-import { connectIntegration } from "../../../lib/connect-integration";
+import { connectIntegration, remoteConnection } from "../../../lib/connect-integration";
 import { refreshIntegrationCatalog } from "../../../lib/integration-catalog-query";
 import type { McpOauthWait } from "../../../lib/mcp-connect";
 import { MCP_OAUTH_CHANNEL } from "../../../lib/mcp-oauth-channel";
+import { mcpFailureSentence, mcpOutcomeSentence, mcpSignIn } from "../../../lib/mcp-sign-in";
 import { rpc } from "../../../lib/rpc";
 import type { CatalogTab } from "../../../pages/customize/CustomizeControls";
 import { CustomizeToolbar } from "../../../pages/customize/CustomizeControls";
@@ -37,10 +38,12 @@ export function IntegrationCards({
   const [remoteServers, setRemoteServers] = useState<McpServer[]>([]);
   const [selected, setSelected] = useState<string | null>(reconnectId ?? null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<"load" | "token" | "replaced" | "cancelled" | null>(null);
+  const [error, setError] = useState<"load" | "token" | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [oauthWait, setOauthWait] = useState<McpOauthWait | null>(null);
   const userCancelled = useRef(false);
   const oauthAttempt = useRef(0);
+  const oauthAbort = useRef<AbortController | null>(null);
   const [tokenFor, setTokenFor] = useState<string | null>(null);
   const [token, setToken] = useState("");
   const [hosts, setHosts] = useState<Record<string, string>>({});
@@ -51,9 +54,17 @@ export function IntegrationCards({
   const popup = useRef<Window | null>(null);
   const requests = useRef<PageRequests>({ generation: 0, inFlight: 0 });
   useEffect(() => {
-    onBusyChange?.(busy !== null);
+    onBusyChange?.(busy !== null || oauthWait !== null);
     return () => onBusyChange?.(false);
-  }, [busy, onBusyChange]);
+  }, [busy, oauthWait, onBusyChange]);
+  // Leaving the page stops its polling. The sign-in finishes through its callback.
+  useEffect(
+    () => () => {
+      oauthAttempt.current += 1;
+      oauthAbort.current?.abort();
+    },
+    [],
+  );
   const refresh = async () => {
     const value = await readLatestIntegrationPage(requests.current);
     if (!value) return;
@@ -134,19 +145,24 @@ export function IntegrationCards({
   }
   async function reconnectCustom(server: McpServer) {
     if (!server.endpoint) return;
-    if (reconnectUsesCredential(server)) {
+    if (mcpSignIn(server.lastError)?.credential) {
       onOpenMcp?.(server.id);
       return;
     }
     const mine = ++oauthAttempt.current;
+    oauthAbort.current?.abort();
+    const abort = new AbortController();
+    oauthAbort.current = abort;
     setBusy(server.id);
     setOauthWait(null);
     setError(null);
+    setNotice(null);
     userCancelled.current = false;
     try {
       const outcome = await connectRemoteMcp({
         name: server.name,
         endpoint: server.endpoint,
+        signal: abort.signal,
         onWaiting: (waiting) => {
           if (mine !== oauthAttempt.current) return;
           setBusy(null);
@@ -156,8 +172,8 @@ export function IntegrationCards({
       if (mine !== oauthAttempt.current) return;
       setOauthWait(null);
       await refresh();
-      if (outcome === "replaced") setError("replaced");
-      if (outcome === "cancelled" && userCancelled.current) setError("cancelled");
+      if (outcome.result !== "connected")
+        setNotice(mcpOutcomeSentence(outcome.result, userCancelled.current, outcome.recorded));
     } catch {
       if (mine === oauthAttempt.current) setError("load");
     } finally {
@@ -165,6 +181,20 @@ export function IntegrationCards({
         setBusy(null);
         setOauthWait(null);
       }
+    }
+  }
+  /** Runs discovery once; the server records what it found. */
+  async function checkCustom(server: McpServer) {
+    setBusy(server.id);
+    setError(null);
+    setNotice(null);
+    try {
+      await rpc.mcp.servers.tools({ serverId: server.id }).catch(() => undefined);
+      await refresh();
+    } catch {
+      setError("load");
+    } finally {
+      setBusy(null);
     }
   }
   async function removeCustom(server: McpServer) {
@@ -263,36 +293,34 @@ export function IntegrationCards({
       {finding ? (
         <DirectMcpSearch
           catalog={data.catalog}
+          connections={data.connections}
+          onManage={(connection) => setSelected(connection.id)}
+          // Always a new connection: an existing one is managed, never replaced from here.
           onConnectCatalog={async (descriptor, accessToken, hooks) => {
             try {
-              return await connectIntegration(
-                descriptor,
-                data.connections.find((connection) => connection.catalogId === descriptor.id),
-                {
-                  authKind: accessToken?.trim() ? "token" : descriptor.authKind,
-                  token: accessToken ?? token,
-                  host: hosts[descriptor.id] || undefined,
-                  ...(descriptor.authKind === "oauth" && clients[descriptor.id]?.clientId
-                    ? { oauthClient: clients[descriptor.id] }
-                    : {}),
-                  onPopup: (value) => {
-                    popup.current = value;
-                  },
-                  onStarted: (value) =>
-                    setData((current) => ({
-                      ...current,
-                      connections: [
-                        value,
-                        ...current.connections.filter((row) => row.id !== value.id),
-                      ],
-                    })),
-                  onWaiting: hooks?.onWaiting,
+              return await connectIntegration(descriptor, undefined, {
+                token: accessToken,
+                host: hosts[descriptor.id] || undefined,
+                ...(descriptor.authKind === "oauth" && clients[descriptor.id]?.clientId
+                  ? { oauthClient: clients[descriptor.id] }
+                  : {}),
+                onPopup: (value) => {
+                  popup.current = value;
                 },
-              );
+                onStarted: (value) =>
+                  setData((current) => ({
+                    ...current,
+                    connections: [
+                      value,
+                      ...current.connections.filter((row) => row.id !== value.id),
+                    ],
+                  })),
+                onWaiting: hooks.onWaiting,
+              });
             } catch (caught) {
               const message = caught instanceof Error ? caught.message : "";
               setError(message === "Enter a valid token." ? "token" : "load");
-              return false;
+              return null;
             }
           }}
           onConnected={async () => {
@@ -324,16 +352,17 @@ export function IntegrationCards({
           >{t`Cancel sign-in`}</Button>
         </div>
       ) : null}
+      {notice ? (
+        <p className="text-sm text-destructive" role="alert">
+          {notice}
+        </p>
+      ) : null}
       {error ? (
         <div role="alert">
           <p className="text-sm text-destructive">
             {error === "token"
               ? t`Enter a valid token.`
-              : error === "cancelled"
-                ? t`Sign-in was cancelled.`
-                : error === "replaced"
-                  ? t`This sign-in window was replaced by a newer one. Finish signing in there, or start again.`
-                  : t`Could not connect or load integrations.`}
+              : t`Could not connect or load integrations.`}
           </p>
           <Button
             variant="outline"
@@ -367,23 +396,42 @@ export function IntegrationCards({
           if (!entry) {
             const server = remoteServers.find((item) => item.id === row.id);
             if (!server) return null;
-            const shown = customServers.find((item) => item.id === server.id);
+            const state = customServers.find((item) => item.id === server.id)?.connectionState;
+            const unchecked = state === "not-connected";
+            const statusText = unchecked
+              ? t`Not checked yet`
+              : state === "connected"
+                ? null
+                : (mcpFailureSentence(server.lastError) ??
+                  (state === "needs-sign-in" ? t`Needs sign-in` : null));
+            // A new token or header is entered in MCP settings, so it needs that page.
+            const reconnect =
+              row.status === "reconnect" &&
+              (onOpenMcp !== undefined || !mcpSignIn(server.lastError)?.credential);
             return (
               <div className="mt-2 flex flex-wrap gap-2">
-                {shown?.connectionState === "needs-sign-in" ? (
-                  <p className="w-full text-sm text-muted-foreground">{t`Needs sign-in`}</p>
+                {statusText ? (
+                  <p className="w-full text-sm text-muted-foreground">{statusText}</p>
                 ) : null}
-                {row.status === "reconnect" ? (
+                {unchecked ? (
+                  <Button
+                    variant="outline"
+                    disabled={busy !== null}
+                    onClick={() => void checkCustom(server)}
+                  >{t`Check`}</Button>
+                ) : reconnect ? (
                   <Button
                     variant="outline"
                     disabled={busy !== null}
                     onClick={() => void reconnectCustom(server)}
                   >{t`Reconnect`}</Button>
                 ) : null}
-                <Button
-                  variant="outline"
-                  onClick={() => onOpenMcp?.(server.id)}
-                >{t`Manage`}</Button>
+                {onOpenMcp ? (
+                  <Button
+                    variant="outline"
+                    onClick={() => onOpenMcp(server.id)}
+                  >{t`Manage`}</Button>
+                ) : null}
                 <Button
                   variant={confirmingDelete === server.id ? "destructive" : "outline"}
                   disabled={busy !== null}
@@ -394,9 +442,7 @@ export function IntegrationCards({
               </div>
             );
           }
-          const remote = data.connections.find(
-            (row) => row.catalogId === entry.id && row.transport !== "host-cli",
-          );
+          const remote = remoteConnection(data.connections, entry.id);
           const local = data.connections.find(
             (row) => row.catalogId === entry.id && row.transport === "host-cli",
           );
@@ -620,21 +666,15 @@ function customServerRows(data: IntegrationCatalogList, servers: McpServer[]): M
     const state = liveRemoteState(server);
     if (!state) return [];
     return [
-      state === "connected"
-        ? { ...server, enabled: true, oauthStatus: "connected", connectionState: "connected" }
-        : { ...server, enabled: true, oauthStatus: "reconnect", connectionState: state },
+      {
+        ...server,
+        enabled: true,
+        oauthStatus:
+          state === "connected" ? "connected" : state === "not-connected" ? "none" : "reconnect",
+        connectionState: state,
+      },
     ];
   });
-}
-
-function reconnectUsesCredential(server: McpServer): boolean {
-  const recorded = server.lastError ?? "";
-  if (recorded.includes("invalid_token") || recorded.includes("oauth_unavailable")) return true;
-  return (
-    server.oauthStatus === "none" &&
-    server.hasSecret === true &&
-    server.connectionState === "needs-sign-in"
-  );
 }
 
 function liveRemoteState(server: McpServer): IntegrationConnection["state"] | null {
@@ -645,10 +685,11 @@ function liveRemoteState(server: McpServer): IntegrationConnection["state"] | nu
   if (
     server.oauthStatus === "reconnect" ||
     server.connectionState === "needs-sign-in" ||
-    server.connectionState === "not-connected" ||
     server.connectionState === "cancelled"
   )
     return "needs-sign-in";
+  // Nothing has checked this server yet.
+  if (server.connectionState === "not-connected") return "not-connected";
   if (server.connectionState === "discovery-failed") return "discovery-failed";
   return null;
 }

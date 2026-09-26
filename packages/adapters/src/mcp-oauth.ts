@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { isLocalMcpHost } from "@ardurbot/contracts";
+import { isLocalMcpHost, mcpSignInDiagnostic } from "@ardurbot/contracts";
 import type { Prisma, PrismaClient } from "@ardurbot/db";
 import type {
   OAuthClientProvider,
@@ -183,9 +183,9 @@ export class McpReauthorizationRequiredError extends Error {
   readonly code = "MCP_REAUTHORIZATION_REQUIRED";
   constructor(
     readonly serverId: string,
-    reason = "refresh_unavailable",
+    reason: string | null = "refresh_unavailable",
   ) {
-    super(`Needs sign-in (${reason}).`);
+    super(mcpSignInDiagnostic(reason));
     this.name = "McpReauthorizationRequiredError";
   }
 }
@@ -200,16 +200,21 @@ export class McpOAuthAttemptReplacedError extends Error {
   }
 }
 
-/** Shown wherever a 401 has no browser authorization URL. Provider text stays off the screen. */
-export const MCP_BROWSER_SIGN_IN_UNAVAILABLE =
-  "This server did not offer browser sign-in. Enter a token instead.";
-
-/** The server demanded sign-in, but browser authorization could not start. */
+/** The server demanded sign-in but offered no authorization server. Provider text stays off the screen. */
 export class McpOAuthUnavailableError extends Error {
   readonly code = "MCP_OAUTH_UNAVAILABLE";
   constructor(cause: unknown) {
-    super(MCP_BROWSER_SIGN_IN_UNAVAILABLE, { cause });
+    super("This server did not offer browser sign-in. Enter a token instead.", { cause });
     this.name = "McpOAuthUnavailableError";
+  }
+}
+
+/** The authorization server has no dynamic client registration, so a client ID is needed. */
+export class McpClientRegistrationRequiredError extends Error {
+  readonly code = "MCP_CLIENT_REGISTRATION_REQUIRED";
+  constructor(cause: unknown) {
+    super(cause instanceof Error ? cause.message : String(cause), { cause });
+    this.name = "McpClientRegistrationRequiredError";
   }
 }
 
@@ -419,8 +424,7 @@ type Pending = {
   expiry?: ReturnType<typeof setTimeout>;
 };
 
-export const MCP_OAUTH_PENDING_TTL_MS = 10 * 60_000;
-const PENDING_TTL_MS = MCP_OAUTH_PENDING_TTL_MS;
+const PENDING_TTL_MS = 10 * 60_000;
 const MAX_PENDING_SESSIONS = 100;
 
 /** OAuth traffic runs through the same URL policy as runtime MCP requests
@@ -516,6 +520,27 @@ export async function bumpMcpServerRevision(
   return true;
 }
 
+/**
+ * Why a challenged probe produced no authorization URL, decided by what discovery found
+ * and never by provider text: no authorization server, or one without dynamic client
+ * registration. A network failure, a refused redirect or a rejected registration stays
+ * the error it was.
+ */
+function signInFailure(error: unknown, provider: StoredMcpOAuthProvider): unknown {
+  const discovery = provider.discoveryState();
+  if (
+    !discovery ||
+    transientIntegrationError(error) ||
+    (error instanceof Error && transientIntegrationError(error.cause))
+  )
+    return error;
+  const metadata = discovery.authorizationServerMetadata;
+  if (!metadata) return new McpOAuthUnavailableError(error);
+  if (!metadata.registration_endpoint && !provider.clientInformation())
+    return new McpClientRegistrationRequiredError(error);
+  return error;
+}
+
 export class McpOAuthBroker {
   private readonly pending = new Map<string, Pending>();
   /** Tokens that were working before this attempt, so a failed exchange can put them back. */
@@ -592,7 +617,7 @@ export class McpOAuthBroker {
         data: {
           secretId: stored.id,
           connectionState: "needs-sign-in",
-          lastError: "Needs sign-in (invalid_token).",
+          lastError: mcpSignInDiagnostic("invalid_token"),
         },
       });
       await tx.secret.deleteMany({ where: { id: row.id, ...context } });
@@ -678,7 +703,7 @@ export class McpOAuthBroker {
             ? "Sign-in was declined."
             : "Could not complete sign-in. Connect again."
           : current.connectionState === "connected"
-            ? "Needs sign-in."
+            ? mcpSignInDiagnostic()
             : "Could not complete sign-in. Connect again.",
         pendingOauthSessionId: null,
       },
@@ -824,7 +849,7 @@ export class McpOAuthBroker {
                 data: {
                   secretId: stored.id,
                   connectionState: "needs-sign-in",
-                  lastError: `Needs sign-in (${providerReason}).`,
+                  lastError: mcpSignInDiagnostic(providerReason),
                 },
               });
               await tx.secret.deleteMany({ where: { id: row.id, ...context } });
@@ -924,11 +949,7 @@ export class McpOAuthBroker {
       await client.connect(transport, { signal, timeout: 15_000 });
     } catch (error) {
       if (isMcpOAuthAttemptReplaced(error)) return { status: "replaced" };
-      const transient =
-        transientIntegrationError(error) ||
-        (error instanceof Error && transientIntegrationError(error.cause));
-      if (!authorizationUrl)
-        throw challenged && !transient ? new McpOAuthUnavailableError(error) : error;
+      if (!authorizationUrl) throw challenged ? signInFailure(error, provider) : error;
     } finally {
       await client.close().catch(() => undefined);
       await networkFetch.close().catch(() => undefined);
@@ -1226,11 +1247,14 @@ export class McpOAuthBroker {
           id: serverId,
           spaceId: context.spaceId,
           userId: context.userId,
-          ...(expectedEndpoint !== undefined ? { enabled: true } : {}),
-          ...(expectedRevision !== undefined ? { revision: expectedRevision } : {}),
+          // A sign-in attempt's writes are guarded by its pending id alone: only a newer
+          // attempt takes that id, so a grant save or a disabled row never drops them.
           ...(expectedPendingSessionId !== undefined
             ? { pendingOauthSessionId: expectedPendingSessionId }
-            : {}),
+            : {
+                ...(expectedEndpoint !== undefined ? { enabled: true } : {}),
+                ...(expectedRevision !== undefined ? { revision: expectedRevision } : {}),
+              }),
         },
         select: { endpoint: true, secretId: true },
       });

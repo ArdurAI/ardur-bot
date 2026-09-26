@@ -1320,6 +1320,10 @@ msgstr ""
 msgid "Chat Settings"
 msgstr "चैट सेटिंग्स"
 
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Check"
+msgstr ""
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Check again"
 msgstr ""
@@ -2175,10 +2179,6 @@ msgstr ""
 msgid "Could not export memory. Retry."
 msgstr ""
 
-#: src/components/integrations/IntegrationSetup.tsx
-msgid "Could not finish sign-in. Try again."
-msgstr ""
-
 #: src/pages/MemoryImportExport.tsx
 msgid "Could not import these documents. Check scopes and conflicts, then preview again."
 msgstr ""
@@ -2310,8 +2310,8 @@ msgid "Could not load the server configuration."
 msgstr ""
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/lib/mcp-sign-in.ts
 #: src/pages/McpServersOverlay.tsx
-#: src/pages/shell/message-cards.tsx
 msgid "Could not load this account’s tools."
 msgstr ""
 
@@ -3216,10 +3216,6 @@ msgstr ""
 
 #: src/pages/DevicesSettings.tsx
 msgid "Enter a code instead"
-msgstr ""
-
-#: src/components/integrations/IntegrationSetup.tsx
-msgid "Enter a credential for this server and try again."
 msgstr ""
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
@@ -4313,6 +4309,7 @@ msgid "Make sure nothing is still running on this computer."
 msgstr "सुनिश्चित करें कि इस कंप्यूटर पर कुछ भी चल नहीं रहा है।"
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/pages/account/AccountMore.tsx
 #: src/pages/memory/MemorySettings.tsx
 #: src/pages/settings/GeneralSettings.tsx
@@ -4746,6 +4743,7 @@ msgid "Needs reconnection"
 msgstr ""
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/pages/dashboard/ConnectionsPanel.tsx
 msgid "Needs sign-in"
 msgstr ""
@@ -5025,6 +5023,10 @@ msgstr ""
 
 #: src/components/integrations/manage/IntegrationDetails.tsx
 msgid "Not checked"
+msgstr ""
+
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Not checked yet"
 msgstr ""
 
 #: src/pages/board/BoardsSettings.tsx
@@ -6788,10 +6790,7 @@ msgstr ""
 msgid "Sign up"
 msgstr "साइन अप करें"
 
-#: src/components/integrations/DirectMcpSearch.tsx
-#: src/components/integrations/IntegrationSetup.tsx
-#: src/pages/McpServersOverlay.tsx
-#: src/pages/shell/message-cards.tsx
+#: src/lib/mcp-sign-in.ts
 msgid "Sign-in did not finish. Try again."
 msgstr ""
 
@@ -6811,22 +6810,12 @@ msgstr ""
 msgid "Sign-in timed out."
 msgstr ""
 
-#: src/components/integrations/card/IntegrationCards.tsx
-#: src/components/integrations/DirectMcpSearch.tsx
-#: src/components/integrations/IntegrationSetup.tsx
-#: src/pages/McpServersOverlay.tsx
-#: src/pages/shell/message-cards.tsx
+#: src/lib/mcp-sign-in.ts
 msgid "Sign-in was cancelled."
 msgstr ""
 
-#: src/pages/McpServersOverlay.tsx
-#: src/pages/shell/message-cards.tsx
+#: src/lib/mcp-sign-in.ts
 msgid "Sign-in was declined."
-msgstr ""
-
-#: src/components/integrations/DirectMcpSearch.tsx
-#: src/components/integrations/IntegrationSetup.tsx
-msgid "Sign-in was declined. Reconnect to try again."
 msgstr ""
 
 #: src/pages/shell/runtime-settings.tsx
@@ -7233,7 +7222,6 @@ msgid "That shortcut is already in use; choose another."
 msgstr ""
 
 #: src/components/integrations/DirectMcpSearch.tsx
-#: src/components/integrations/IntegrationSetup.tsx
 #: src/lib/mcp-sign-in.ts
 msgid "That token was not accepted. Check it and try again."
 msgstr ""
@@ -7255,7 +7243,11 @@ msgid "The memory changed since this suggestion. Open History before trying agai
 msgstr ""
 
 #: src/lib/mcp-sign-in.ts
-msgid "The saved sign-in expired. Connect again."
+msgid "The saved sign-in expired. Sign in again."
+msgstr ""
+
+#: src/lib/mcp-sign-in.ts
+msgid "The saved sign-in is no longer accepted. Sign in again."
 msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
@@ -7366,15 +7358,11 @@ msgstr "यह रीसेट लिंक अमान्य है या इ
 msgid "This server cannot be assigned without a bot."
 msgstr "बॉट के बिना यह सर्वर असाइन नहीं किया जा सकता।"
 
-#: src/components/integrations/DirectMcpSearch.tsx
 #: src/lib/mcp-sign-in.ts
-#: src/pages/McpServersOverlay.tsx
-#: src/pages/shell/message-cards.tsx
 msgid "This server did not offer browser sign-in. Enter a token instead."
 msgstr ""
 
 #: src/pages/McpServersOverlay.tsx
-#: src/pages/shell/message-cards.tsx
 msgid "This server did not request browser authorization."
 msgstr "इस सर्वर ने ब्राउज़र ऑथराइज़ेशन नहीं मांगा।"
 
@@ -7383,7 +7371,6 @@ msgid "This server has two credentials. Keep one."
 msgstr ""
 
 #: src/pages/McpServersOverlay.tsx
-#: src/pages/shell/message-cards.tsx
 msgid "This server is already connected. Disconnect it first to authorize again."
 msgstr "यह सर्वर पहले से कनेक्टेड है। पुनः ऑथराइज़ करने के लिए पहले इसे डिस्कनेक्ट करें।"
 
@@ -7396,15 +7383,12 @@ msgid "This server is managed by an extension"
 msgstr ""
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 msgid "This service needs client registration before you can connect."
 msgstr ""
 
-#: src/components/integrations/card/IntegrationCards.tsx
-#: src/components/integrations/DirectMcpSearch.tsx
-#: src/components/integrations/IntegrationSetup.tsx
+#: src/lib/mcp-sign-in.ts
 #: src/pages/McpOAuthCallback.tsx
-#: src/pages/McpServersOverlay.tsx
-#: src/pages/shell/message-cards.tsx
 msgid "This sign-in window was replaced by a newer one. Finish signing in there, or start again."
 msgstr ""
 

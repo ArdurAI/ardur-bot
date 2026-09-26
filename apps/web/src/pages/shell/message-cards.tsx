@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { BuiCard, SuccessPop } from "../../components/ai/primitives";
 import { type ArtifactTarget, decodeArtifactBase64 } from "../../lib/artifact-open";
 import { chartViewport } from "../../lib/chart-viewport";
-import { mcpFailureSentence, mcpSignInSentence } from "../../lib/mcp-sign-in";
+import { mcpOutcomeSentence, mcpSignIn } from "../../lib/mcp-sign-in";
 import { rpc } from "../../lib/rpc";
 
 export function ChoiceCard({
@@ -349,6 +349,12 @@ export function McpApprovalCard({
   const userCancelled = useRef(false);
   const attempt = useRef(0);
 
+  const recordedError = () =>
+    rpc.mcp.servers
+      .list()
+      .then((servers) => servers.find((server) => server.id === serverId)?.lastError)
+      .catch(() => null);
+
   async function authorize() {
     if (!botId) {
       setError(t`This server cannot be assigned without a bot.`);
@@ -369,35 +375,14 @@ export function McpApprovalCard({
           },
         });
         if (mine !== attempt.current) return;
-        if (result !== "connected") {
-          let recorded: string | null = null;
-          if (result === "sign-in-failed") {
-            try {
-              recorded = mcpFailureSentence(
-                (await rpc.mcp.servers.list()).find((server) => server.id === serverId)?.lastError,
-              );
-            } catch {
-              recorded = null;
-            }
-          }
-          setError(
-            result === "oauth-unavailable"
-              ? t`This server did not offer browser sign-in. Enter a token instead.`
-              : result === "replaced"
-                ? t`This sign-in window was replaced by a newer one. Finish signing in there, or start again.`
-                : result === "cancelled"
-                  ? userCancelled.current
-                    ? t`Sign-in was cancelled.`
-                    : t`Sign-in was declined.`
-                  : result === "needs-sign-in"
-                    ? t`Sign-in did not finish. Try again.`
-                    : (recorded ??
-                      (result === "already_connected"
-                        ? t`This server is already connected. Disconnect it first to authorize again.`
-                        : result === "authorization_not_requested"
-                          ? t`This server did not request browser authorization.`
-                          : t`Could not load this account’s tools.`)),
-          );
+        // A server that needs no browser sign-in, or is already connected, is approved.
+        if (
+          result !== "connected" &&
+          result !== "already_connected" &&
+          result !== "authorization_not_requested"
+        ) {
+          const recorded = result === "sign-in-failed" ? await recordedError() : null;
+          setError(mcpOutcomeSentence(result, userCancelled.current, recorded));
           setState("pending");
           return;
         }
@@ -407,15 +392,8 @@ export function McpApprovalCard({
       setState("connected");
     } catch (err) {
       if (mine !== attempt.current) return;
-      let recorded = "";
-      try {
-        recorded =
-          (await rpc.mcp.servers.list()).find((server) => server.id === serverId)?.lastError ?? "";
-      } catch {
-        recorded = "";
-      }
       setError(
-        mcpSignInSentence(recorded) ??
+        mcpSignIn(await recordedError())?.sentence ??
           (err instanceof Error ? err.message : t`Could not approve this server`),
       );
       setState("pending");

@@ -42,6 +42,7 @@ function fixture(overrides: Partial<RouterDeps> = {}) {
     complete: vi.fn(async () => "server"),
     begin: vi.fn(),
     statusFor: vi.fn(async () => "none"),
+    recordAttemptFailure: vi.fn(async () => undefined),
   };
   const handler = new RPCHandler(
     createRouter({
@@ -365,6 +366,127 @@ describe("integration RPC boundaries", () => {
     const updated = await f.request("mcp/servers/update", { id: "both", config });
     expect(updated?.status).toBe(400);
   });
+  it.each([
+    [
+      "a token replaces a header",
+      { secret: "new-token" },
+      { headers: { "X-Api-Key": "old-key" } },
+      { "X-Api-Key": true },
+      {},
+      { secret: "new-token" },
+    ],
+    [
+      "a header replaces a token",
+      { headers: { "X-Api-Key": "new-key" } },
+      { secret: "old-token" },
+      {},
+      { "X-Api-Key": true },
+      { headers: { "X-Api-Key": "new-key" } },
+    ],
+  ])(
+    "%s: one credential, its header names, and the import receipt follow",
+    async (_, change, before, namesBefore, namesAfter, after) => {
+      const store = new EncryptedSecretStore(randomBytes(32).toString("hex"));
+      const old = await store.put(JSON.stringify(before), {
+        spaceId: actor.spaceId,
+        userId: actor.userId,
+        operationId: "fixture",
+        traceId: "fixture",
+        signal: AbortSignal.timeout(10_000),
+      });
+      const row: Record<string, unknown> = {
+        id: "server",
+        spaceId: actor.spaceId,
+        userId: actor.userId,
+        catalogId: null,
+        managedBy: null,
+        imported: {
+          tool: "codex",
+          relativePath: "config.toml",
+          sourcePathHash: "a".repeat(64),
+          contentHash: "b".repeat(64),
+          modifiedAt: "2026-09-25T00:00:00.000Z",
+          importedAt: "2026-09-25T00:00:00.000Z",
+          kind: "servers",
+          authorizesIntent: false,
+        },
+        slug: "server",
+        name: "Server",
+        description: "",
+        transport: "streamable_http",
+        endpoint: "https://example.test/mcp",
+        command: null,
+        args: [],
+        env: {},
+        headers: namesBefore,
+        secretId: old.id,
+        enabled: true,
+        revision: 1,
+        createdAt: new Date(0),
+        updatedAt: new Date(0),
+      };
+      const apply = (data: Record<string, unknown>) => {
+        const { revision, ...rest } = data;
+        Object.assign(row, rest);
+        if (revision && typeof revision === "object") row.revision = Number(row.revision) + 1;
+      };
+      const secrets = new Map([[old.id, { id: old.id, ciphertext: old.ciphertext }]]);
+      const receipt = {
+        configId: "config",
+        targetId: "server",
+        targetRevision: 1,
+        removedAt: null,
+      };
+      const prisma = {
+        spaceMember: { findUnique: vi.fn(async () => ({ role: "owner" })) },
+        mcpServer: {
+          findFirst: vi.fn(async () => ({ ...row })),
+          findFirstOrThrow: vi.fn(async () => ({ ...row })),
+          update: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
+            apply(data);
+            return { ...row };
+          }),
+          updateMany: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
+            apply(data);
+            return { count: 1 };
+          }),
+        },
+        secret: {
+          findFirst: vi.fn(async ({ where }: { where: { id: string } }) => secrets.get(where.id)),
+          create: vi.fn(async ({ data }: { data: { id: string; ciphertext: string } }) => {
+            secrets.set(data.id, data);
+            return data;
+          }),
+          deleteMany: vi.fn(async ({ where }: { where: { id: string } }) => {
+            secrets.delete(where.id);
+            return { count: 1 };
+          }),
+        },
+        localImportRecord: {
+          findFirst: vi.fn(async () => receipt),
+          updateMany: vi.fn(
+            async ({ where, data }: { where: { targetRevision: number }; data: object }) => {
+              if (where.targetRevision !== receipt.targetRevision) return { count: 0 };
+              Object.assign(receipt, data);
+              return { count: 1 };
+            },
+          ),
+        },
+        $executeRaw: vi.fn(async () => 1),
+        $transaction: vi.fn(),
+      };
+      prisma.$transaction.mockImplementation(async (callback) => callback(prisma));
+      const f = fixture({ prisma, secrets: store } as never);
+      const response = await f.request("mcp/servers/update", { id: "server", ...change });
+      expect(response?.status).toBe(200);
+      expect(row.headers).toEqual(namesAfter);
+      const saved = secrets.get(String(row.secretId))!;
+      expect(JSON.parse(store.load(saved.ciphertext, saved.id))).toEqual(after);
+      expect(secrets.has(old.id)).toBe(false);
+      expect(row.revision).toBe(2);
+      expect(receipt.targetRevision).toBe(2);
+    },
+  );
   it("does not let generic MCP configuration replace a trusted endpoint or credentials", async () => {
     const f = fixture();
     expect(

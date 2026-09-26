@@ -225,7 +225,7 @@ function memoryDb() {
   };
 }
 
-function oauthFetch(resource = endpoint) {
+function oauthFetch(resource = endpoint, registration = true) {
   const resourceUrl = new URL(resource);
   const metadata = `${resourceUrl.origin}/.well-known/oauth-protected-resource${resourceUrl.pathname}`;
   return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
@@ -250,7 +250,7 @@ function oauthFetch(resource = endpoint) {
         issuer: "https://auth.example.test",
         authorization_endpoint: "https://auth.example.test/authorize",
         token_endpoint: "https://auth.example.test/token",
-        registration_endpoint: "https://auth.example.test/register",
+        ...(registration ? { registration_endpoint: "https://auth.example.test/register" } : {}),
         response_types_supported: ["code"],
         grant_types_supported: ["authorization_code", "refresh_token"],
         code_challenge_methods_supported: ["S256"],
@@ -279,7 +279,10 @@ const plainStore = {
   load: (ciphertext: string) => ciphertext,
 };
 
-function harness(resource = endpoint, options: { plainSecrets?: boolean } = {}) {
+function harness(
+  resource = endpoint,
+  options: { plainSecrets?: boolean; registration?: boolean } = {},
+) {
   const memory = memoryDb();
   const store = options.plainSecrets
     ? plainStore
@@ -296,7 +299,7 @@ function harness(resource = endpoint, options: { plainSecrets?: boolean } = {}) 
     fetch: (input: string | URL | Request, init?: RequestInit) => globalThis.fetch(input, init),
     resolveHostname: async () => [{ address: "203.0.113.10", family: 4 as const }],
   };
-  vi.stubGlobal("fetch", oauthFetch(resource));
+  vi.stubGlobal("fetch", oauthFetch(resource, options.registration ?? true));
   const oauth = new McpOAuthBroker(memory.db as never, secrets as never, network);
   const service = new IntegrationConnections(
     memory.db as never,
@@ -454,6 +457,39 @@ describe("MCP sign-in bind through real provider persistence", () => {
     expect(newer.sessionId).not.toBe(older.sessionId);
     expect(f.row().pendingOauthSessionId).toBe(newer.sessionId);
     for (const where of f.binds) expect(where).not.toHaveProperty("updatedAt");
+  });
+
+  it("asks a built-in app without dynamic client registration for a client ID, then signs in with it", async () => {
+    const f = harness("https://mcp.notion.com/mcp", { registration: false });
+    const first = await f.service.connect(actor, { catalogId: "notion" });
+    expect(first.connection.state).toBe("needs-client-registration");
+    expect(first.authorizationUrl).toBeNull();
+    expect(f.row().pendingOauthSessionId).toBeNull();
+    const second = await f.service.connect(actor, {
+      catalogId: "notion",
+      oauthClient: { clientId: "registered-by-hand" },
+    });
+    expect(new URL(String(second.authorizationUrl)).searchParams.get("client_id")).toBe(
+      "registered-by-hand",
+    );
+  });
+
+  it.each([
+    ["its revision changes (a grant save)", { revision: { increment: 1 } }],
+    ["it is disabled", { enabled: false }],
+  ])("does not call an attempt replaced when %s during the probe", async (_, change) => {
+    const f = harness("https://mcp.notion.com/mcp");
+    f.holdProbe();
+    const pending = f.service.connect(actor, { catalogId: "notion" });
+    await f.probeStarted;
+    const changed = await f.db.mcpServer.updateMany({ where: { id: f.row().id }, data: change });
+    expect(changed.count).toBe(1);
+    f.releaseProbe();
+    const result = await pending;
+    // Only a newer attempt takes the pending id, and only that is "replaced".
+    expect(result).not.toHaveProperty("status");
+    expect(result.authorizationUrl).toEqual(expect.any(String));
+    expect(f.row().pendingOauthSessionId).toBe(result.sessionId);
   });
 
   it("drops each replaced catalog connect, so 101 rapid clicks stay under the pending cap", async () => {

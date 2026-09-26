@@ -30,7 +30,7 @@ import { useEffect, useRef, useState } from "react";
 import { McpToolReview } from "../components/integrations/catalog/McpToolReview";
 import { desktopBridge } from "../lib/desktop";
 import { connectMcpOauth, MCP_OAUTH_CHANNEL } from "../lib/mcp-connect";
-import { mcpFailureSentence, mcpSignInSentence } from "../lib/mcp-sign-in";
+import { mcpFailureSentence, mcpOutcomeSentence, mcpSignIn } from "../lib/mcp-sign-in";
 import { rpc } from "../lib/rpc";
 import { McpConfigEditor } from "./customize/McpConfigEditor";
 import { McpDefaults } from "./customize/McpDefaults";
@@ -89,12 +89,23 @@ export function McpServersOverlay({
   } | null>(null);
   const userCancelled = useRef(false);
   const oauthAttempt = useRef(0);
+  const oauthAbort = useRef<AbortController | null>(null);
   const appliedFocus = useRef<number | undefined>(undefined);
 
   useEffect(() => {
-    onBusyChange?.(saving || defaultsBusy || editing || oauthPending !== null);
+    onBusyChange?.(
+      saving || defaultsBusy || editing || oauthPending !== null || oauthWait !== null,
+    );
     return () => onBusyChange?.(false);
-  }, [saving, defaultsBusy, editing, oauthPending, onBusyChange]);
+  }, [saving, defaultsBusy, editing, oauthPending, oauthWait, onBusyChange]);
+  // Leaving the page stops its polling. The sign-in finishes through its callback.
+  useEffect(
+    () => () => {
+      oauthAttempt.current += 1;
+      oauthAbort.current?.abort();
+    },
+    [],
+  );
 
   async function refresh(): Promise<McpServer[]> {
     const [nextServers, nextBots, assignments] = await Promise.all([
@@ -210,7 +221,15 @@ export function McpServersOverlay({
           });
         }),
       );
-      await refresh();
+      // A saved credential is checked once, so the server's state says whether it works.
+      const checked =
+        transport === "stdio" || !(secret.trim() || headerValue.trim())
+          ? true
+          : await rpc.mcp.servers.tools({ serverId: created.id }).then(
+              () => true,
+              () => false,
+            );
+      const listed = await refresh();
       setName("");
       setEndpoint("");
       setSecret("");
@@ -219,6 +238,11 @@ export function McpServersOverlay({
       setArgs("");
       setSelectedBotIds([]);
       setAdding(false);
+      if (!checked)
+        setError(
+          mcpFailureSentence(listed.find((item) => item.id === created.id)?.lastError) ??
+            t`Could not load this account’s tools.`,
+        );
     } catch (err) {
       setError(err instanceof Error ? err.message : t`Could not add MCP server`);
     } finally {
@@ -228,12 +252,16 @@ export function McpServersOverlay({
 
   async function connectOAuth(server: McpServer) {
     const mine = ++oauthAttempt.current;
+    oauthAbort.current?.abort();
+    const abort = new AbortController();
+    oauthAbort.current = abort;
     setError(null);
     setOauthPending(server.id);
     setOauthWait(null);
     userCancelled.current = false;
     try {
       const result = await connectMcpOauth(server.id, {
+        signal: abort.signal,
         onWaiting: (waiting) => {
           if (mine !== oauthAttempt.current) return;
           setOauthPending(null);
@@ -242,51 +270,29 @@ export function McpServersOverlay({
       });
       if (mine !== oauthAttempt.current) return;
       setOauthWait(null);
-      if (result !== "cancelled") setOauthPending(null);
+      setOauthPending(null);
       const listed = await refresh();
       if (result === "connected") return;
-      if (result === "oauth-unavailable") {
-        setError(t`This server did not offer browser sign-in. Enter a token instead.`);
-        return;
-      }
-      if (result === "sign-in-failed") {
-        setError(
-          mcpFailureSentence(listed.find((item) => item.id === server.id)?.lastError) ??
-            t`Could not load this account’s tools.`,
-        );
-        return;
-      }
-      if (result === "replaced") {
-        setError(
-          t`This sign-in window was replaced by a newer one. Finish signing in there, or start again.`,
-        );
-        return;
-      }
-      if (result === "cancelled") {
-        setError(userCancelled.current ? t`Sign-in was cancelled.` : t`Sign-in was declined.`);
-        return;
-      }
-      if (result === "needs-sign-in") {
-        setError(t`Sign-in did not finish. Try again.`);
-        return;
-      }
-      if (result === "already_connected") {
-        setError(t`This server is already connected. Disconnect it first to authorize again.`);
-        return;
-      }
-      if (result === "authorization_not_requested") {
-        setError(t`This server did not request browser authorization.`);
-        return;
-      }
-      setOauthPending((current) => (current === server.id ? null : current));
+      setError(
+        result === "already_connected"
+          ? t`This server is already connected. Disconnect it first to authorize again.`
+          : result === "authorization_not_requested"
+            ? t`This server did not request browser authorization.`
+            : mcpOutcomeSentence(
+                result,
+                userCancelled.current,
+                listed.find((item) => item.id === server.id)?.lastError,
+              ),
+      );
     } catch (err) {
       if (mine !== oauthAttempt.current) return;
       const listed = await refresh().catch(() => []);
-      const recorded = listed.find((item) => item.id === server.id)?.lastError ?? "";
+      const recorded = listed.find((item) => item.id === server.id)?.lastError;
       setError(
-        mcpSignInSentence(recorded) ??
+        mcpSignIn(recorded)?.sentence ??
           (err instanceof Error ? err.message : t`Could not start OAuth`),
       );
+      setOauthWait(null);
       setOauthPending(null);
     }
   }

@@ -1,5 +1,7 @@
 import { randomBytes } from "node:crypto";
+import { mcpSignInDiagnostic } from "@ardurbot/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { integrationFailure } from "./integration-lifecycle.js";
 import { captureIntegrationManifest } from "./integration-manifest.js";
 import { allowlistDrift, McpConnector } from "./mcp-connector.js";
 import type { McpOAuthBroker } from "./mcp-oauth.js";
@@ -170,38 +172,52 @@ describe("MCP connector session cache", () => {
           server as never,
           { userId: "u1", spaceId: "w1", signal: new AbortController().signal } as never,
         ),
-      ).rejects.toThrow("Needs sign-in (refresh_unavailable).");
+      ).rejects.toThrow(mcpSignInDiagnostic("credential_rejected"));
     } finally {
       await connector.close();
     }
   });
   it.each([
-    ["a rejected static token", "secret-1", { secret: "fake-token" }],
-    ["a sign-in challenge", null, null],
-  ])("requires sign-in when a custom server answers %s with 401", async (_, secretId, stored) => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => new Response("fake-private-provider-response", { status: 401 })),
-    );
-    const prisma = {
-      secret: { findFirst: vi.fn(async () => ({ id: "secret-1", ciphertext: "encrypted" })) },
-    };
-    const connector = new McpConnector(
-      prisma as never,
-      { load: () => JSON.stringify(stored) } as never,
-      { network: TEST_NETWORK },
-    );
-    try {
-      await expect(
-        connector.inspectServer(
-          { ...SERVER, catalogId: null, secretId } as never,
-          { userId: "u1", spaceId: "w1", signal: new AbortController().signal } as never,
-        ),
-      ).rejects.toMatchObject({ code: "MCP_REAUTHORIZATION_REQUIRED" });
-    } finally {
-      await connector.close();
-    }
-  });
+    ["a rejected static token", "secret-1", { secret: "fake-token" }, "credential_rejected"],
+    [
+      "a rejected header",
+      "secret-1",
+      { headers: { "x-api-key": "fake-key" } },
+      "credential_rejected",
+    ],
+    ["a sign-in challenge", null, null, null],
+  ])(
+    "requires sign-in when a custom server answers %s with 401",
+    async (_, secretId, stored, code) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => new Response("fake-private-provider-response", { status: 401 })),
+      );
+      const prisma = {
+        secret: { findFirst: vi.fn(async () => ({ id: "secret-1", ciphertext: "encrypted" })) },
+      };
+      const connector = new McpConnector(
+        prisma as never,
+        { load: () => JSON.stringify(stored) } as never,
+        { network: TEST_NETWORK },
+      );
+      try {
+        await expect(
+          connector.inspectServer(
+            { ...SERVER, catalogId: null, secretId } as never,
+            { userId: "u1", spaceId: "w1", signal: new AbortController().signal } as never,
+          ),
+        ).rejects.toSatisfy(
+          (error) =>
+            (error as { code?: string }).code === "MCP_REAUTHORIZATION_REQUIRED" &&
+            // What the connection records, and what the web sentence table reads.
+            integrationFailure(error) === mcpSignInDiagnostic(code),
+        );
+      } finally {
+        await connector.close();
+      }
+    },
+  );
   it("keeps large MCP schemas out of the initial runtime tool catalog", async () => {
     const state = {
       failNext: false,

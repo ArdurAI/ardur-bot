@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+
+import { mcpSignInDiagnostic } from "@ardurbot/contracts";
 import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -109,21 +111,31 @@ it("does not approve a bot when tool discovery failed", async () => {
   expect(container.textContent).not.toContain("Connected. Review tools in MCP settings.");
 });
 
-it("shows an expired sign-in as a sentence, never its diagnostic code", async () => {
+it.each([
+  ["refresh_unavailable", "The saved sign-in expired. Sign in again."],
+  ["invalid_token", "The saved sign-in is no longer accepted. Sign in again."],
+])("shows %s as a sentence, never its diagnostic code", async (code, sentence) => {
   api.oauth.mockResolvedValue("sign-in-failed");
   api.list.mockResolvedValue([
-    {
-      id: "server-1",
-      connectionState: "needs-sign-in",
-      lastError: "Needs sign-in (refresh_unavailable).",
-    },
+    { id: "server-1", connectionState: "needs-sign-in", lastError: mcpSignInDiagnostic(code) },
   ]);
   const container = await mount();
   await click("Authorize");
   expect(api.approve).not.toHaveBeenCalled();
-  expect(container.textContent).toContain("The saved sign-in expired. Connect again.");
-  expect(container.textContent).not.toContain("refresh_unavailable");
+  expect(container.textContent).toContain(sentence);
+  expect(container.textContent).not.toContain(code);
 });
+
+it.each(["authorization_not_requested", "already_connected"])(
+  "approves the bot when the server answers %s",
+  async (result) => {
+    api.oauth.mockResolvedValue(result);
+    const container = await mount();
+    await click("Authorize");
+    expect(api.approve).toHaveBeenCalledExactlyOnceWith({ botId: "bot", serverId: "server-1" });
+    expect(container.textContent).toContain("Connected. Review tools in MCP settings.");
+  },
+);
 
 it("says a replaced sign-in window was replaced and does not approve the bot", async () => {
   api.oauth.mockResolvedValue("replaced");

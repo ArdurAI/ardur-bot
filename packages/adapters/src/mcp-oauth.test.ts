@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  McpClientRegistrationRequiredError,
   McpOAuthBroker,
+  McpOAuthUnavailableError,
   McpReauthorizationRequiredError,
   StoredMcpOAuthProvider,
 } from "./mcp-oauth.js";
@@ -665,10 +667,7 @@ describe("MCP OAuth", () => {
         userId: "user-1",
         redirectUri: "http://127.0.0.1:5173/mcp/oauth/callback",
       }),
-    ).rejects.toMatchObject({
-      message: "This server did not offer browser sign-in. Enter a token instead.",
-      cause: expect.objectContaining({ message: expect.stringMatching(/redirect/i) }),
-    });
+    ).rejects.toThrow(/redirect/i);
     expect(requestedUrls.every((url) => !url.includes("attacker.example.test"))).toBe(true);
   });
 
@@ -706,6 +705,65 @@ describe("MCP OAuth", () => {
         redirectUri: "http://127.0.0.1:5173/mcp/oauth/callback",
       }),
     ).rejects.toMatchObject({ code: "MCP_OAUTH_UNAVAILABLE" });
+  });
+
+  it("keeps a server without dynamic client registration on the client ID path", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
+        const url = logicalHref(input, init);
+        if (url === "https://mcp.example.test/mcp")
+          return new Response(null, {
+            status: 401,
+            headers: {
+              "WWW-Authenticate":
+                'Bearer resource_metadata="https://mcp.example.test/.well-known/oauth-protected-resource/mcp"',
+            },
+          });
+        if (url === "https://mcp.example.test/.well-known/oauth-protected-resource/mcp")
+          return Response.json({
+            resource: "https://mcp.example.test/mcp",
+            authorization_servers: ["https://auth.example.test"],
+          });
+        if (url === "https://auth.example.test/.well-known/oauth-authorization-server")
+          // No registration_endpoint: a client ID must be registered by hand.
+          return Response.json({
+            issuer: "https://auth.example.test",
+            authorization_endpoint: "https://auth.example.test/authorize",
+            token_endpoint: "https://auth.example.test/token",
+            response_types_supported: ["code"],
+            code_challenge_methods_supported: ["S256"],
+          });
+        return new Response("not found", { status: 404 });
+      }),
+    );
+    const prisma = {
+      mcpServer: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: "server-1",
+          endpoint: "https://mcp.example.test/mcp",
+          secretId: null,
+          catalogId: null,
+        }),
+        update: vi.fn().mockResolvedValue({}),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+      secret: { findFirst: vi.fn(), create: vi.fn(), deleteMany: vi.fn() },
+      mcpOAuthSession: oauthSessionStore(),
+      $transaction: vi.fn().mockResolvedValue([]),
+    };
+    const broker = new McpOAuthBroker(prisma as never, { put: vi.fn() } as never, TEST_NETWORK);
+
+    const failure = await broker
+      .begin({
+        serverId: "server-1",
+        spaceId: "workspace-1",
+        userId: "user-1",
+        redirectUri: "http://127.0.0.1:5173/mcp/oauth/callback",
+      })
+      .catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(McpClientRegistrationRequiredError);
+    expect(failure).not.toBeInstanceOf(McpOAuthUnavailableError);
   });
 
   it("retries safe OAuth discovery reads without replaying DCR writes", async () => {

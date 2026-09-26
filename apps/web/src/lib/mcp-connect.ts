@@ -33,10 +33,11 @@ function recordedOauthOutcome(server: {
 /** Run the browser OAuth popup flow for an MCP server: request an
  * authorization URL, open the popup, and wait until this attempt's pending
  * session id is cleared or replaced. The popup's closed flag is not an
- * outcome; provider pages sever the opener while sign-in is still open. */
+ * outcome; provider pages sever the opener while sign-in is still open.
+ * Aborting `signal` stops this page's wait; the sign-in itself continues. */
 export async function connectMcpOauth(
   serverId: string,
-  options?: { onWaiting?: (waiting: McpOauthWait) => void },
+  options?: { onWaiting?: (waiting: McpOauthWait) => void; signal?: AbortSignal },
 ): Promise<McpOauthResult> {
   let started: Awaited<ReturnType<typeof rpc.mcp.oauth.begin>>;
   try {
@@ -67,6 +68,7 @@ export async function connectMcpOauth(
       cancel: async () => {
         await rpc.mcp.oauth.cancel({ serverId, sessionId: started.sessionId });
       },
+      signal: options?.signal,
     },
   );
 }
@@ -79,6 +81,7 @@ export async function waitForMcpOauth(
   hooks?: {
     onWaiting?: (waiting: McpOauthWait) => void;
     cancel?: () => Promise<void>;
+    signal?: AbortSignal;
   },
 ): Promise<McpOauthResult> {
   const desktop = desktopBridge()?.integrations;
@@ -95,21 +98,32 @@ export async function waitForMcpOauth(
     // Navigation owns completion; do not cancel the server-side session.
     return "authorization_not_requested";
   }
-  return await new Promise<McpOauthResult>((resolve) => {
+  return await new Promise<McpOauthResult>((resolve, reject) => {
     const channel = new BroadcastChannel(MCP_OAUTH_CHANNEL);
     let settled = false;
     let polling = false;
     let cancelRequested = false;
     let pollTimer = 0;
     let timeoutTimer = 0;
-    const finish = (result: McpOauthResult) => {
-      if (settled) return;
+    const settle = () => {
       settled = true;
       window.clearInterval(pollTimer);
       window.clearTimeout(timeoutTimer);
       channel.close();
+      hooks?.signal?.removeEventListener("abort", stop);
+    };
+    const finish = (result: McpOauthResult) => {
+      if (settled) return;
+      settle();
       resolve(result);
     };
+    // The page went away. The popup and the server-side attempt stay open.
+    function stop() {
+      if (settled) return;
+      settle();
+      reject(hooks?.signal?.reason);
+    }
+    hooks?.signal?.addEventListener("abort", stop);
     const cancel = async () => {
       if (settled || cancelRequested) return;
       cancelRequested = true;
@@ -160,6 +174,7 @@ export async function waitForMcpOauth(
         if (result && !cancelRequested) finish(result);
       });
     };
-    if (sessionId) hooks?.onWaiting?.({ sessionId, cancel });
+    if (hooks?.signal?.aborted) stop();
+    else if (sessionId) hooks?.onWaiting?.({ sessionId, cancel });
   });
 }

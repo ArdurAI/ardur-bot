@@ -74,3 +74,11 @@ export async function connectIntegration(
     options.onPopup?.(null);
   }
 }
+
+/** A built-in app's web connection. Its host sign-in connection is never this one. */
+export function remoteConnection(
+  connections: IntegrationConnection[],
+  catalogId: string,
+): IntegrationConnection | undefined {
+  return connections.find((row) => row.catalogId === catalogId && row.transport !== "host-cli");
+}

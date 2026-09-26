@@ -148,6 +148,7 @@ import {
   LocalImportSelectionSchema,
   LocalImportStatusSchema,
 } from "./local-import.js";
+import { McpHeadersSchema } from "./mcp.js";
 import {
   MemoryBundleSchema,
   MemoryDocumentHeadSchema,
@@ -1135,6 +1136,7 @@ export const appContract = {
           z.union([
             z.object({ id: Id, config: McpServerConfigInput }),
             z.object({ id: Id, secret: z.string().min(1).max(16384) }),
+            z.object({ id: Id, headers: McpHeadersSchema }),
             z.object({ id: Id, enabled: z.boolean() }),
           ]),
         )

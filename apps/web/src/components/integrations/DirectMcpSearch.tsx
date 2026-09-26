@@ -7,7 +7,8 @@ import type {
 import { Button, Input } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useRef, useState } from "react";
-import { mcpFailureSentence } from "../../lib/mcp-sign-in";
+import { remoteConnection } from "../../lib/connect-integration";
+import { mcpOutcomeSentence } from "../../lib/mcp-sign-in";
 import { rpc } from "../../lib/rpc";
 import { connectRemoteMcp, matchesCatalogEndpoint } from "./connect-remote-mcp";
 
@@ -18,19 +19,26 @@ type Target = {
   descriptor?: IntegrationDescriptor;
 };
 
+type Waiting = { cancel: () => Promise<void> };
+
 export function DirectMcpSearch({
   botId,
   catalog = [],
+  connections = [],
   onConnectCatalog,
+  onManage,
   onConnected,
 }: {
   botId?: string;
   catalog?: IntegrationDescriptor[];
+  connections?: IntegrationConnection[];
+  /** Starts a new connection for a built-in app. Null means the page already said why not. */
   onConnectCatalog?: (
     descriptor: IntegrationDescriptor,
-    token?: string,
-    hooks?: { onWaiting?: (waiting: { cancel: () => Promise<void> }) => void },
-  ) => Promise<boolean | IntegrationConnection>;
+    token: string | undefined,
+    hooks: { onWaiting: (waiting: Waiting) => void },
+  ) => Promise<IntegrationConnection | null>;
+  onManage?: (connection: IntegrationConnection) => void;
   onConnected?: (serverId: string) => void | Promise<void>;
 }) {
   const { t } = useLingui();
@@ -45,11 +53,8 @@ export function DirectMcpSearch({
   // A credential belongs to the one result it was typed for.
   const [credential, setCredential] = useState<{ endpoint: string; value: string } | null>(null);
   const [rejectedEndpoint, setRejectedEndpoint] = useState<string | null>(null);
-  const [notice, setNotice] = useState<
-    "declined" | "unfinished" | "replaced" | "waiting" | "cancelled" | "failed" | "token" | null
-  >(null);
-  const [failureText, setFailureText] = useState<string | null>(null);
-  const [waiting, setWaiting] = useState<{ cancel: () => Promise<void> } | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [waiting, setWaiting] = useState<Waiting | null>(null);
   const attempt = useRef(0);
   const userCancelled = useRef(false);
   const remoteResults = [
@@ -96,27 +101,16 @@ export function DirectMcpSearch({
   async function connect(target: Target, token: string) {
     const mine = ++attempt.current;
     userCancelled.current = false;
-    const auth = target.surface?.auth;
     if (credential && credential.endpoint !== target.endpoint) {
       setCredential(null);
       setRejectedEndpoint(null);
     }
-    if (
-      !target.descriptor &&
-      (auth?.type === "bearer" || auth?.type === "header") &&
-      !token.trim()
-    ) {
-      setCredential({ endpoint: target.endpoint, value: "" });
-      setRejectedEndpoint(null);
-      return;
-    }
-    const catalogToken = target.descriptor?.authKind === "token";
-    const catalogMixed = Boolean(target.descriptor) && auth?.type === "mixed";
-    if (
-      (catalogToken || catalogMixed) &&
-      !token.trim() &&
-      credential?.endpoint !== target.endpoint
-    ) {
+    const auth = target.surface?.auth;
+    // A built-in app's own sign-in decides. A listing's auth decides for any other server.
+    const needsToken = target.descriptor
+      ? target.descriptor.authKind === "token"
+      : auth?.type === "bearer" || auth?.type === "header";
+    if (needsToken && !token.trim()) {
       setCredential({ endpoint: target.endpoint, value: "" });
       setRejectedEndpoint(null);
       setNotice(null);
@@ -127,44 +121,36 @@ export function DirectMcpSearch({
     setRejectedEndpoint(null);
     setNotice(null);
     setWaiting(null);
+    const onWaiting = (wait: Waiting) => {
+      if (mine !== attempt.current) return;
+      setBusy(false);
+      setWaiting(wait);
+    };
     try {
       if (target.descriptor) {
-        const typedToken =
-          auth?.type === "mixed" || target.descriptor.authKind !== "oauth" ? token.trim() : "";
-        const outcome = await onConnectCatalog?.(target.descriptor, typedToken || undefined, {
-          onWaiting: (wait) => {
-            if (mine !== attempt.current) return;
-            setBusy(false);
-            setWaiting(wait);
-            setNotice("waiting");
-          },
-        });
-        if (mine !== attempt.current) return;
-        if (outcome === true || (isConnection(outcome) && outcome.state === "connected")) {
-          setWaiting(null);
-          setNotice(null);
-          setConnected((current) => [...current, target.endpoint]);
-          return;
-        }
-        if (!isConnection(outcome)) return;
-        if (outcome.state === "awaiting-consent") {
-          setNotice("waiting");
-          return;
-        }
+        const connection = await onConnectCatalog?.(
+          target.descriptor,
+          needsToken ? token.trim() : undefined,
+          { onWaiting },
+        );
+        if (mine !== attempt.current || !connection) return;
+        // Popup-blocked sign-in continues in this tab and finishes there.
+        if (connection.state === "awaiting-consent") return;
         setWaiting(null);
-        if (outcome.state === "cancelled") {
-          setNotice(userCancelled.current ? "cancelled" : "declined");
+        if (connection.state === "connected") {
+          setConnected((current) => [...current, target.endpoint]);
+          setCredential(null);
           return;
         }
-        if (outcome.lastError?.includes("oauth_unavailable")) {
-          setNotice("token");
-          return;
-        }
-        if (outcome.state === "discovery-failed" || outcome.state === "needs-sign-in") {
-          setFailureText(mcpFailureSentence(outcome.lastError));
-          setNotice("failed");
-          return;
-        }
+        setNotice(
+          connection.state === "needs-client-registration"
+            ? t`This service needs client registration before you can connect.`
+            : mcpOutcomeSentence(
+                connection.state === "cancelled" ? "cancelled" : "sign-in-failed",
+                userCancelled.current,
+                connection.lastError,
+              ),
+        );
         return;
       }
       const outcome = await connectRemoteMcp({
@@ -173,48 +159,23 @@ export function DirectMcpSearch({
         botId,
         auth: auth?.type === "none" ? "none" : auth?.type === "mixed" ? "mixed" : "oauth",
         credential: token.trim() ? { value: token, headerName: auth?.headerName } : undefined,
-        onWaiting: (wait) => {
-          if (mine !== attempt.current) return;
-          setBusy(false);
-          setWaiting(wait);
-          setNotice("waiting");
-        },
+        onWaiting,
       });
       if (mine !== attempt.current) return;
       setWaiting(null);
-      if (outcome === "credential-rejected") {
+      if (outcome.result === "connected") {
+        setConnected((current) => [...current, target.endpoint]);
+        setCredential(null);
+        setUrlToken("");
+        await onConnected?.(outcome.serverId);
+      } else if (outcome.result === "credential-rejected") {
         setCredential({ endpoint: target.endpoint, value: token });
         setRejectedEndpoint(target.endpoint);
-        return;
-      }
-      if (outcome === "needs-credential") {
+      } else if (outcome.result === "needs-credential") {
         setCredential({ endpoint: target.endpoint, value: "" });
-        return;
+      } else {
+        setNotice(mcpOutcomeSentence(outcome.result, userCancelled.current, outcome.recorded));
       }
-      if (outcome === "cancelled") {
-        setNotice(userCancelled.current ? "cancelled" : "declined");
-        return;
-      }
-      if (outcome === "needs-sign-in") {
-        setNotice("unfinished");
-        return;
-      }
-      if (outcome === "replaced") {
-        setNotice("replaced");
-        return;
-      }
-      if (typeof outcome !== "object") {
-        if (outcome === "oauth-unavailable") {
-          setNotice("token");
-          return;
-        }
-        if (outcome === "sign-in-failed") setError("connect");
-        return;
-      }
-      setConnected((current) => [...current, target.endpoint]);
-      setCredential(null);
-      setUrlToken("");
-      await onConnected?.(outcome.serverId);
     } catch {
       if (mine === attempt.current) setError("connect");
     } finally {
@@ -222,6 +183,27 @@ export function DirectMcpSearch({
     }
   }
 
+  /** "Connected" and Manage for a built-in app that already has a connection, as its card shows. */
+  function existing(descriptor: IntegrationDescriptor | undefined) {
+    const connection = descriptor ? remoteConnection(connections, descriptor.id) : undefined;
+    if (connection?.state !== "connected" && connection?.state !== "needs-sign-in") return null;
+    return (
+      <>
+        <span className="text-sm text-muted-foreground">
+          {connection.state === "connected" ? t`Connected` : t`Needs sign-in`}
+        </span>
+        {onManage ? (
+          <Button variant="outline" onClick={() => onManage(connection)}>{t`Manage`}</Button>
+        ) : null}
+      </>
+    );
+  }
+
+  const rejected = (
+    <p className="text-sm text-destructive" role="alert">
+      {t`That token was not accepted. Check it and try again.`}
+    </p>
+  );
   return (
     <div className="space-y-6">
       <form
@@ -245,24 +227,26 @@ export function DirectMcpSearch({
         <div key={result.endpoint} className="space-y-2">
           <div className="flex items-center justify-between gap-3">
             <span className="min-w-0 truncate">{result.name}</span>
-            <Button
-              variant="outline"
-              disabled={
-                (busy && !waiting) ||
-                connected.includes(result.endpoint) ||
-                (result.descriptor?.authKind === "token" &&
-                  credential?.endpoint === result.endpoint &&
-                  !credential.value.trim())
-              }
-              onClick={() =>
-                void connect(
-                  result,
-                  credential?.endpoint === result.endpoint ? credential.value : "",
-                )
-              }
-            >
-              {connected.includes(result.endpoint) ? t`Connected` : t`Connect`}
-            </Button>
+            {existing(result.descriptor) ?? (
+              <Button
+                variant="outline"
+                disabled={
+                  (busy && !waiting) ||
+                  connected.includes(result.endpoint) ||
+                  (result.descriptor?.authKind === "token" &&
+                    credential?.endpoint === result.endpoint &&
+                    !credential.value.trim())
+                }
+                onClick={() =>
+                  void connect(
+                    result,
+                    credential?.endpoint === result.endpoint ? credential.value : "",
+                  )
+                }
+              >
+                {connected.includes(result.endpoint) ? t`Connected` : t`Connect`}
+              </Button>
+            )}
           </div>
           {credential?.endpoint === result.endpoint ? (
             <Input
@@ -276,11 +260,7 @@ export function DirectMcpSearch({
               }
             />
           ) : null}
-          {rejectedEndpoint === result.endpoint ? (
-            <p className="text-sm text-destructive" role="alert">
-              {t`That token was not accepted. Check it and try again.`}
-            </p>
-          ) : null}
+          {rejectedEndpoint === result.endpoint ? rejected : null}
         </div>
       ))}
       {searched && !remoteResults.length ? (
@@ -311,33 +291,31 @@ export function DirectMcpSearch({
               onChange={(event) => setUrlToken(event.target.value)}
             />
           )}
-          {rejectedEndpoint === endpoint.trim() ? (
-            <p className="text-sm text-destructive" role="alert">
-              {t`That token was not accepted. Check it and try again.`}
-            </p>
-          ) : null}
-          <Button
-            disabled={
-              (busy && !waiting) ||
-              !endpoint.trim() ||
-              (typedDescriptor?.authKind === "token" && !urlToken.trim())
-            }
-            onClick={() =>
-              void connect(
-                {
-                  name: typedDescriptor?.name ?? "MCP server",
-                  endpoint: endpoint.trim(),
-                  descriptor: typedDescriptor,
-                },
-                urlToken,
-              )
-            }
-          >
-            <Trans>Connect</Trans>
-          </Button>
+          {rejectedEndpoint === endpoint.trim() ? rejected : null}
+          {existing(typedDescriptor) ?? (
+            <Button
+              disabled={
+                (busy && !waiting) ||
+                !endpoint.trim() ||
+                (typedDescriptor?.authKind === "token" && !urlToken.trim())
+              }
+              onClick={() =>
+                void connect(
+                  {
+                    name: typedDescriptor?.name ?? "MCP server",
+                    endpoint: endpoint.trim(),
+                    descriptor: typedDescriptor,
+                  },
+                  urlToken,
+                )
+              }
+            >
+              <Trans>Connect</Trans>
+            </Button>
+          )}
         </div>
       </details>
-      {notice === "waiting" && waiting ? (
+      {waiting ? (
         <div className="space-y-2">
           <p className="text-sm text-muted-foreground">{t`Waiting for sign-in in the other window.`}</p>
           <Button
@@ -350,30 +328,9 @@ export function DirectMcpSearch({
           >{t`Cancel sign-in`}</Button>
         </div>
       ) : null}
-      {notice === "cancelled" ? (
-        <p className="text-sm text-muted-foreground">{t`Sign-in was cancelled.`}</p>
-      ) : null}
-      {notice === "declined" ? (
-        <p className="text-sm text-muted-foreground">
-          {t`Sign-in was declined. Reconnect to try again.`}
-        </p>
-      ) : null}
-      {notice === "unfinished" ? (
-        <p className="text-sm text-muted-foreground">{t`Sign-in did not finish. Try again.`}</p>
-      ) : null}
-      {notice === "failed" ? (
+      {notice ? (
         <p className="text-sm text-destructive" role="alert">
-          {failureText ?? t`Could not connect or load integrations.`}
-        </p>
-      ) : null}
-      {notice === "token" ? (
-        <p className="text-sm text-destructive" role="alert">
-          {t`This server did not offer browser sign-in. Enter a token instead.`}
-        </p>
-      ) : null}
-      {notice === "replaced" ? (
-        <p className="text-sm text-muted-foreground">
-          {t`This sign-in window was replaced by a newer one. Finish signing in there, or start again.`}
+          {notice}
         </p>
       ) : null}
       {error ? (
@@ -390,12 +347,6 @@ export function DirectMcpSearch({
       ) : null}
     </div>
   );
-}
-
-function isConnection(
-  value: boolean | IntegrationConnection | undefined,
-): value is IntegrationConnection {
-  return typeof value === "object" && value !== null && "state" in value;
 }
 
 function matchingDescriptor(

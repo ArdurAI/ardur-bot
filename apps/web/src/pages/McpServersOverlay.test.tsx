@@ -1,11 +1,17 @@
 // @vitest-environment jsdom
 import type { McpServer } from "@ardurbot/contracts";
+import { mcpSignInDiagnostic } from "@ardurbot/contracts";
 import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-const fake = vi.hoisted(() => ({ list: vi.fn(), create: vi.fn(), remove: vi.fn() }));
+const fake = vi.hoisted(() => ({
+  list: vi.fn(),
+  create: vi.fn(),
+  remove: vi.fn(),
+  tools: vi.fn(),
+}));
 const oauth = vi.hoisted(() => vi.fn());
 vi.mock("../lib/rpc", () => ({
   rpc: {
@@ -56,7 +62,7 @@ afterEach(async () => {
   await cleanup?.();
   vi.unstubAllGlobals();
 });
-async function mount() {
+async function mount(onBusyChange?: (busy: boolean) => void) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -64,7 +70,9 @@ async function mount() {
     await act(async () => root.unmount());
     container.remove();
   };
-  await act(async () => root.render(<McpServersOverlay embedded onClose={vi.fn()} />));
+  await act(async () =>
+    root.render(<McpServersOverlay embedded onClose={vi.fn()} onBusyChange={onBusyChange} />),
+  );
   return container;
 }
 async function click(label: string) {
@@ -204,7 +212,7 @@ it("shows the plain sentence when the server offers no browser sign-in", async (
       {
         ...server,
         connectionState: "needs-sign-in",
-        lastError: "Needs sign-in (oauth_unavailable).",
+        lastError: mcpSignInDiagnostic("oauth_unavailable"),
       },
     ]);
     throw new Error(provider);
@@ -286,15 +294,102 @@ it("shows an expired sign-in as a sentence, never its diagnostic code", async ()
         ...server,
         oauthStatus: "reconnect",
         connectionState: "needs-sign-in",
-        lastError: "Needs sign-in (refresh_unavailable).",
+        lastError: mcpSignInDiagnostic("refresh_unavailable"),
       },
     ]);
     return "sign-in-failed";
   });
   const container = await mount();
   await click("Reconnect OAuth");
-  expect(container.textContent).toContain("The saved sign-in expired. Connect again.");
+  expect(container.textContent).toContain("The saved sign-in expired. Sign in again.");
   expect(container.textContent).not.toContain("refresh_unavailable");
+});
+
+const unchecked = {
+  id: "reports",
+  name: "Reports",
+  transport: "streamable_http",
+  oauthStatus: "none",
+  connectionState: "not-connected",
+  endpoint: "https://tools.example.test/mcp",
+  enabled: true,
+  catalogId: null,
+  lastError: null,
+} as McpServer;
+
+it("says a replaced sign-in window was replaced", async () => {
+  fake.list.mockResolvedValue([unchecked]);
+  oauth.mockResolvedValue("replaced");
+  const container = await mount();
+  await click("Connect OAuth");
+  expect(container.textContent).toContain(
+    "This sign-in window was replaced by a newer one. Finish signing in there, or start again.",
+  );
+});
+
+it("stays busy with Cancel while sign-in waits, and stops waiting when the page closes", async () => {
+  fake.list.mockResolvedValue([unchecked]);
+  let signal: AbortSignal | undefined;
+  oauth.mockImplementation(
+    (
+      _serverId: string,
+      options: {
+        signal?: AbortSignal;
+        onWaiting?: (waiting: { sessionId: string; cancel: () => Promise<void> }) => void;
+      },
+    ) =>
+      new Promise((_resolve, reject) => {
+        signal = options.signal;
+        signal?.addEventListener("abort", () => reject(signal?.reason));
+        options.onWaiting?.({ sessionId: "ours", cancel: async () => undefined });
+      }),
+  );
+  const busy = vi.fn();
+  const container = await mount(busy);
+  await click("Connect OAuth");
+  expect(container.textContent).toContain("Waiting for sign-in in the other window.");
+  expect([...container.querySelectorAll("button")].map((item) => item.textContent)).toContain(
+    "Cancel sign-in",
+  );
+  expect(busy).toHaveBeenLastCalledWith(true);
+  expect(signal?.aborted).toBe(false);
+  await cleanup();
+  expect(signal?.aborted).toBe(true);
+});
+
+it.each([
+  ["a token", "mcp-secret"],
+  ["a header", "header"],
+])("checks a server added with %s once and says what the check found", async (_, field) => {
+  const container = await mount();
+  await click("Add MCP server");
+  await fill("mcp-name", "Reports");
+  await fill("mcp-endpoint", "https://tools.example.test/mcp");
+  const input =
+    field === "header"
+      ? (document.querySelector('[aria-label="Header value"]') as HTMLInputElement)
+      : (document.getElementById(field) as HTMLInputElement);
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+      input,
+      "synthetic-value",
+    );
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  fake.create.mockResolvedValue(unchecked);
+  fake.tools.mockImplementation(async () => {
+    fake.list.mockResolvedValue([
+      {
+        ...unchecked,
+        connectionState: "needs-sign-in",
+        lastError: mcpSignInDiagnostic("credential_rejected"),
+      },
+    ]);
+    throw new Error("rejected");
+  });
+  await click("Add server");
+  expect(fake.tools).toHaveBeenCalledExactlyOnceWith({ serverId: "reports" });
+  expect(container.textContent).toContain("That token was not accepted. Check it and try again.");
 });
 
 it("asks to keep one credential when a saved server still has two", async () => {

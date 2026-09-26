@@ -1320,6 +1320,10 @@ msgstr "Chat service"
 msgid "Chat Settings"
 msgstr "Chat Settings"
 
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Check"
+msgstr "Check"
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Check again"
 msgstr "Check again"
@@ -2175,10 +2179,6 @@ msgstr "Could not export data. Try again."
 msgid "Could not export memory. Retry."
 msgstr "Could not export memory. Retry."
 
-#: src/components/integrations/IntegrationSetup.tsx
-msgid "Could not finish sign-in. Try again."
-msgstr "Could not finish sign-in. Try again."
-
 #: src/pages/MemoryImportExport.tsx
 msgid "Could not import these documents. Check scopes and conflicts, then preview again."
 msgstr "Could not import these documents. Check scopes and conflicts, then preview again."
@@ -2310,8 +2310,8 @@ msgid "Could not load the server configuration."
 msgstr "Could not load the server configuration."
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/lib/mcp-sign-in.ts
 #: src/pages/McpServersOverlay.tsx
-#: src/pages/shell/message-cards.tsx
 msgid "Could not load this account’s tools."
 msgstr "Could not load this account’s tools."
 
@@ -3217,10 +3217,6 @@ msgstr "Engineering"
 #: src/pages/DevicesSettings.tsx
 msgid "Enter a code instead"
 msgstr "Enter a code instead"
-
-#: src/components/integrations/IntegrationSetup.tsx
-msgid "Enter a credential for this server and try again."
-msgstr "Enter a credential for this server and try again."
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Enter a valid destination and save again."
@@ -4313,6 +4309,7 @@ msgid "Make sure nothing is still running on this computer."
 msgstr "Make sure nothing is still running on this computer."
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/pages/account/AccountMore.tsx
 #: src/pages/memory/MemorySettings.tsx
 #: src/pages/settings/GeneralSettings.tsx
@@ -4746,6 +4743,7 @@ msgid "Needs reconnection"
 msgstr "Needs reconnection"
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/pages/dashboard/ConnectionsPanel.tsx
 msgid "Needs sign-in"
 msgstr "Needs sign-in"
@@ -5026,6 +5024,10 @@ msgstr "Not available on this computer"
 #: src/components/integrations/manage/IntegrationDetails.tsx
 msgid "Not checked"
 msgstr "Not checked"
+
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Not checked yet"
+msgstr "Not checked yet"
 
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
@@ -6788,10 +6790,7 @@ msgstr "Sign out"
 msgid "Sign up"
 msgstr "Sign up"
 
-#: src/components/integrations/DirectMcpSearch.tsx
-#: src/components/integrations/IntegrationSetup.tsx
-#: src/pages/McpServersOverlay.tsx
-#: src/pages/shell/message-cards.tsx
+#: src/lib/mcp-sign-in.ts
 msgid "Sign-in did not finish. Try again."
 msgstr "Sign-in did not finish. Try again."
 
@@ -6811,23 +6810,13 @@ msgstr "Sign-in is needed. Connect again."
 msgid "Sign-in timed out."
 msgstr "Sign-in timed out."
 
-#: src/components/integrations/card/IntegrationCards.tsx
-#: src/components/integrations/DirectMcpSearch.tsx
-#: src/components/integrations/IntegrationSetup.tsx
-#: src/pages/McpServersOverlay.tsx
-#: src/pages/shell/message-cards.tsx
+#: src/lib/mcp-sign-in.ts
 msgid "Sign-in was cancelled."
 msgstr "Sign-in was cancelled."
 
-#: src/pages/McpServersOverlay.tsx
-#: src/pages/shell/message-cards.tsx
+#: src/lib/mcp-sign-in.ts
 msgid "Sign-in was declined."
 msgstr "Sign-in was declined."
-
-#: src/components/integrations/DirectMcpSearch.tsx
-#: src/components/integrations/IntegrationSetup.tsx
-msgid "Sign-in was declined. Reconnect to try again."
-msgstr "Sign-in was declined. Reconnect to try again."
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Signed in"
@@ -7233,7 +7222,6 @@ msgid "That shortcut is already in use; choose another."
 msgstr "That shortcut is already in use; choose another."
 
 #: src/components/integrations/DirectMcpSearch.tsx
-#: src/components/integrations/IntegrationSetup.tsx
 #: src/lib/mcp-sign-in.ts
 msgid "That token was not accepted. Check it and try again."
 msgstr "That token was not accepted. Check it and try again."
@@ -7255,8 +7243,12 @@ msgid "The memory changed since this suggestion. Open History before trying agai
 msgstr "The memory changed since this suggestion. Open History before trying again."
 
 #: src/lib/mcp-sign-in.ts
-msgid "The saved sign-in expired. Connect again."
-msgstr "The saved sign-in expired. Connect again."
+msgid "The saved sign-in expired. Sign in again."
+msgstr "The saved sign-in expired. Sign in again."
+
+#: src/lib/mcp-sign-in.ts
+msgid "The saved sign-in is no longer accepted. Sign in again."
+msgstr "The saved sign-in is no longer accepted. Sign in again."
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "The service may use its own embedding providers. Check its settings before saving private documents."
@@ -7366,15 +7358,11 @@ msgstr "This reset link is invalid or expired"
 msgid "This server cannot be assigned without a bot."
 msgstr "This server cannot be assigned without a bot."
 
-#: src/components/integrations/DirectMcpSearch.tsx
 #: src/lib/mcp-sign-in.ts
-#: src/pages/McpServersOverlay.tsx
-#: src/pages/shell/message-cards.tsx
 msgid "This server did not offer browser sign-in. Enter a token instead."
 msgstr "This server did not offer browser sign-in. Enter a token instead."
 
 #: src/pages/McpServersOverlay.tsx
-#: src/pages/shell/message-cards.tsx
 msgid "This server did not request browser authorization."
 msgstr "This server did not request browser authorization."
 
@@ -7383,7 +7371,6 @@ msgid "This server has two credentials. Keep one."
 msgstr "This server has two credentials. Keep one."
 
 #: src/pages/McpServersOverlay.tsx
-#: src/pages/shell/message-cards.tsx
 msgid "This server is already connected. Disconnect it first to authorize again."
 msgstr "This server is already connected. Disconnect it first to authorize again."
 
@@ -7396,15 +7383,12 @@ msgid "This server is managed by an extension"
 msgstr "This server is managed by an extension"
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 msgid "This service needs client registration before you can connect."
 msgstr "This service needs client registration before you can connect."
 
-#: src/components/integrations/card/IntegrationCards.tsx
-#: src/components/integrations/DirectMcpSearch.tsx
-#: src/components/integrations/IntegrationSetup.tsx
+#: src/lib/mcp-sign-in.ts
 #: src/pages/McpOAuthCallback.tsx
-#: src/pages/McpServersOverlay.tsx
-#: src/pages/shell/message-cards.tsx
 msgid "This sign-in window was replaced by a newer one. Finish signing in there, or start again."
 msgstr "This sign-in window was replaced by a newer one. Finish signing in there, or start again."
 

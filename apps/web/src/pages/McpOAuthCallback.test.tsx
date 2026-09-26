@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+
+import { mcpSignInDiagnostic } from "@ardurbot/contracts";
 import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -64,14 +66,15 @@ async function mount() {
 
 it.each([
   ["Could not reach this integration. Try again.", "Could not reach this integration. Try again."],
-  ["Needs sign-in (refresh_unavailable).", "The saved sign-in expired. Connect again."],
+  [mcpSignInDiagnostic("refresh_unavailable"), "The saved sign-in expired. Sign in again."],
+  [mcpSignInDiagnostic("invalid_token"), "The saved sign-in is no longer accepted. Sign in again."],
 ])("shows a failed discovery as %s instead of Connected", async (lastError, sentence) => {
   complete.mockResolvedValue({ ok: true, result: "failed", lastError });
   const container = await mount();
   expect(container.textContent).toContain("OAuth connection failed");
   expect(container.textContent).toContain(sentence);
   expect(container.textContent).not.toContain("Connected");
-  expect(container.textContent).not.toContain("refresh_unavailable");
+  expect(container.textContent).not.toContain("Needs sign-in (");
   expect(window.close).not.toHaveBeenCalled();
   // The opener re-reads the recorded state instead of treating the message as connected.
   expect(posted).toEqual([{ type: "mcp-oauth-complete", sessionId: "session" }]);
@@ -82,4 +85,15 @@ it("says Connected and closes after a clean completion", async () => {
   const container = await mount();
   expect(container.textContent).toContain("Connected");
   expect(window.close).toHaveBeenCalled();
+});
+
+it("says a replaced window was replaced and tells the opener", async () => {
+  complete.mockResolvedValue({ ok: true, result: "replaced" });
+  const container = await mount();
+  expect(container.textContent).toContain(
+    "This sign-in window was replaced by a newer one. Finish signing in there, or start again.",
+  );
+  expect(posted).toEqual([
+    { type: "mcp-oauth-complete", sessionId: "session", result: "replaced" },
+  ]);
 });

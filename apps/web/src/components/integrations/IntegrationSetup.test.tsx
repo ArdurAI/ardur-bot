@@ -145,11 +145,20 @@ describe("Executor connect", () => {
   });
 
   it.each([
-    ["needs-credential", "Enter a credential for this server and try again."],
-    ["cancelled", "Sign-in was declined. Reconnect to try again."],
+    ["needs-credential", "This server did not offer browser sign-in. Enter a token instead."],
+    ["cancelled", "Sign-in was declined."],
     ["needs-sign-in", "Sign-in did not finish. Try again."],
-  ] as const)("shows a sentence for %s and does not connect the bot", async (outcome, sentence) => {
-    vi.mocked(connectRemoteMcp).mockResolvedValueOnce(outcome);
+    [
+      "replaced",
+      "This sign-in window was replaced by a newer one. Finish signing in there, or start again.",
+    ],
+    ["sign-in-failed", "Could not complete sign-in. Connect again."],
+  ] as const)("shows a sentence for %s and does not connect the bot", async (result, sentence) => {
+    vi.mocked(connectRemoteMcp).mockResolvedValueOnce({
+      serverId: "executor-1",
+      result,
+      recorded: "Could not complete sign-in. Connect again.",
+    });
     await mount();
     await click("Executor");
     await fill("Server URL", "http://localhost:8000/mcp");
@@ -159,7 +168,11 @@ describe("Executor connect", () => {
   });
 
   it("connects the bot only when the server is connected", async () => {
-    vi.mocked(connectRemoteMcp).mockResolvedValueOnce({ serverId: "executor-1" });
+    vi.mocked(connectRemoteMcp).mockResolvedValueOnce({
+      serverId: "executor-1",
+      result: "connected",
+      recorded: null,
+    });
     await mount();
     await click("Executor");
     await fill("Server URL", "http://localhost:8000/mcp");

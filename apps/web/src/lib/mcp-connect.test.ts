@@ -276,6 +276,30 @@ describe("MCP browser consent", () => {
     expect(await result).toBe("connected");
     expect(vi.getTimerCount()).toBe(0);
   });
+  it("stops this page's polling when its signal aborts, and leaves the sign-in open", async () => {
+    begin.mockResolvedValue({
+      status: "authorization_required",
+      authorizationUrl: "https://auth.example.test/authorize",
+      sessionId: "ours",
+    });
+    list.mockResolvedValue([
+      { id: "connection", connectionState: "not-connected", pendingOauthSessionId: "ours" },
+    ]);
+    const abort = new AbortController();
+    const outcome = connectMcpOauth("connection", { signal: abort.signal }).catch(
+      (error: unknown) => error,
+    );
+    await vi.advanceTimersByTimeAsync(2_000);
+    const polls = list.mock.calls.length;
+    expect(polls).toBeGreaterThan(0);
+    abort.abort();
+    expect(await outcome).toBe(abort.signal.reason);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(list.mock.calls.length).toBe(polls);
+    expect(cancel).not.toHaveBeenCalled();
+    expect(popup.close).not.toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
   it("cancels the pending sign-in on the server and resolves cancelled", async () => {
     begin.mockResolvedValue({
       status: "authorization_required",

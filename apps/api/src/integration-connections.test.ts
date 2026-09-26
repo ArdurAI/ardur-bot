@@ -2,13 +2,14 @@ import { randomBytes } from "node:crypto";
 import {
   captureIntegrationManifest,
   EncryptedSecretStore,
+  McpClientRegistrationRequiredError,
   McpConnector,
   McpReauthorizationRequiredError,
 } from "@ardurbot/adapters";
 import type { McpServer } from "@ardurbot/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { McpSession } from "../../../packages/adapters/src/mcp-transport.js";
-import { IntegrationConnections, needsClientRegistration } from "./integration-connections.js";
+import { IntegrationConnections } from "./integration-connections.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -454,20 +455,53 @@ describe("catalog connection lifecycle", () => {
       expect(f.oauth.begin).not.toHaveBeenCalled();
     },
   );
-  it("reports client registration needs and redacts other provider failures", async () => {
+  it("reports client registration needs by error type and redacts other provider failures", async () => {
     const f = fixture();
+    f.oauth.begin.mockRejectedValueOnce(
+      new McpClientRegistrationRequiredError(new Error("synthetic provider text")),
+    );
+    expect((await f.service.connect(actor, { catalogId: "notion" })).connection.state).toBe(
+      "needs-client-registration",
+    );
+    // Provider wording never decides the state.
     f.oauth.begin.mockRejectedValueOnce(
       new Error("Incompatible auth server: does not support dynamic client registration"),
     );
     expect((await f.service.connect(actor, { catalogId: "notion" })).connection.state).toBe(
-      "needs-client-registration",
+      "discovery-failed",
     );
     f.oauth.begin.mockRejectedValueOnce(new Error("Bearer fake-secret"));
     const failed = await f.service.connect(actor, { catalogId: "notion" });
     expect(failed.connection.state).toBe("discovery-failed");
     expect(JSON.stringify(failed)).not.toContain("fake-secret");
-    expect(needsClientRegistration(new Error("network failed"))).toBe(false);
   });
+  it.each([
+    ["already_connected", "connected"],
+    ["authorization_not_requested", "discovery-failed"],
+    ["replaced", "awaiting-consent"],
+  ] as const)("releases the reservation when a catalog sign-in ends %s", async (status, state) => {
+    const f = fixture();
+    vi.spyOn(McpConnector.prototype, "inspectServer").mockResolvedValue(manifest);
+    f.setRow({ catalogId: "notion", pendingOauthSessionId: null });
+    f.oauth.begin.mockImplementationOnce(async () => ({ status }) as never);
+    const result = await f.service.connect(actor, { catalogId: "notion" });
+    expect(f.row().pendingOauthSessionId).toBeNull();
+    expect(result.connection.state).toBe(state);
+  });
+  it.each(["already_connected", "authorization_not_requested", "replaced"] as const)(
+    "releases the reservation when a sign-in ends %s",
+    async (status) => {
+      const f = fixture();
+      vi.spyOn(McpConnector.prototype, "inspectServer").mockResolvedValue(manifest);
+      f.setRow({ catalogId: null, connectionState: "not-connected", pendingOauthSessionId: null });
+      f.oauth.begin.mockImplementationOnce(async () => ({ status }) as never);
+      await f.service.beginAuthorization(actor, {
+        serverId: "connection",
+        redirectUri: "https://app.example.test/api/oauth/done",
+      });
+      expect(f.row().pendingOauthSessionId).toBeNull();
+    },
+  );
   it("stores encrypted token material, discovers before Connected, and revokes it with grants", async () => {
     const f = fixture();
     const token = randomBytes(24).toString("hex");
@@ -748,41 +782,6 @@ describe("catalog connection lifecycle", () => {
     const slow = await f.service.beginAuthorization(actor, input);
     expect(slow).toEqual({ status: "replaced" });
     expect(f.row().pendingOauthSessionId).toBeNull();
-  });
-  it("clears an expired pending id before a new begin and does not look up the session", async () => {
-    const f = fixture();
-    f.setRow({
-      catalogId: null,
-      connectionState: "not-connected",
-      pendingOauthSessionId: "stale",
-      updatedAt: new Date(Date.now() - 11 * 60 * 1000),
-    });
-    const result = await f.service.beginAuthorization(actor, {
-      serverId: "connection",
-      redirectUri: "https://app.example.test/mcp/oauth/callback",
-    });
-    const updates = f.db.mcpServer.updateMany.mock.calls.map(
-      (
-        call: [
-          {
-            where: { pendingOauthSessionId?: string | null };
-            data: { pendingOauthSessionId?: string | null };
-          },
-        ],
-      ) => call[0],
-    );
-    expect(updates[0]).toEqual(
-      expect.objectContaining({
-        where: expect.objectContaining({ pendingOauthSessionId: "stale" }),
-        data: { pendingOauthSessionId: null },
-      }),
-    );
-    expect(updates[1]?.where.pendingOauthSessionId).toBeNull();
-    expect(f.db.mcpOAuthSession.findFirst).not.toHaveBeenCalled();
-    expect(result).toMatchObject({ status: "authorization_required" });
-    if (result.status !== "authorization_required") throw new Error("sign-in was not requested");
-    expect(f.row().pendingOauthSessionId).toBe(result.sessionId);
-    expect(f.row().pendingOauthSessionId).not.toBe("stale");
   });
   it("replaces an expired pending sign-in when that id is still the one stored", async () => {
     const f = fixture();

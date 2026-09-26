@@ -38,6 +38,7 @@ import {
   autoReviewConfigurationWarning,
   buildMcpCredentialBlob,
   buildModelConnectPlaintext,
+  bumpMcpServerRevision,
   CodexConnections,
   ComputerBusyError,
   cancelComputerRunWork,
@@ -64,10 +65,9 @@ import {
   listPiCatalog,
   listScratchpadItems,
   loadPushToken,
-  MCP_BROWSER_SIGN_IN_UNAVAILABLE,
+  lockMcpServerRevision,
   McpOAuthAttemptReplacedError,
   McpOAuthBroker,
-  McpOAuthUnavailableError,
   mapScratchpadItem,
   mcpCredentialConflict,
   modelCredentialDto,
@@ -3539,10 +3539,14 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           return mcpServerDto(row, await mcpOAuth.statusFor(row, context.actor));
         }),
         update: authed.mcp.servers.update.handler(async ({ context, input }) => {
+          // A token or header on its own replaces the credential, not the definition.
+          const credentialOnly = "secret" in input || "headers" in input;
           const row = await deps.prisma.$transaction(async (tx) => {
             // Share the OAuth broker's per-server lock so a stale authorization
             // snapshot cannot overwrite a simultaneous credential edit.
-            await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('mcp-oauth-material'), hashtext(${input.id}))`;
+            if (credentialOnly) await lockMcpServerRevision(tx, input.id, context.actor);
+            else
+              await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('mcp-oauth-material'), hashtext(${input.id}))`;
             const existing = await tx.mcpServer.findFirst({
               where: {
                 id: input.id,
@@ -3610,8 +3614,9 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
                     enabled: existing.enabled,
                     transport: existing.transport as "streamable_http" | "sse",
                     endpoint: existing.endpoint!,
-                    headers: (existingMaterial.headers ?? {}) as Record<string, string>,
-                    secret: input.secret,
+                    // One credential: the new one replaces the other kind, header names included.
+                    headers: "headers" in input ? input.headers : {},
+                    secret: "secret" in input ? input.secret : undefined,
                   };
             if (!("config" in input) && existing.transport === "stdio") {
               throw new ORPCError("BAD_REQUEST", { message: "A remote MCP server is required" });
@@ -3639,32 +3644,35 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
                 },
               });
             }
-            const updated = await tx.mcpServer.update({
-              where: { id: existing.id },
-              data: {
-                slug: config.slug,
-                name: config.name,
-                description: config.description,
-                transport: config.transport,
-                endpoint: nextEndpoint,
-                command: "command" in config ? config.command : null,
-                args: ("args" in config
-                  ? redactMcpArguments(config.args, [
-                      ...Object.values(config.env),
-                      ...(config.secret ? [config.secret] : []),
-                    ])
-                  : []) as Prisma.InputJsonValue,
-                env: ("env" in config
-                  ? Object.fromEntries(Object.keys(config.env).map((key) => [key, true]))
-                  : {}) as Prisma.InputJsonValue,
-                headers: ("headers" in config
-                  ? Object.fromEntries(Object.keys(config.headers).map((key) => [key, true]))
-                  : {}) as Prisma.InputJsonValue,
-                enabled: config.enabled,
-                revision: { increment: 1 },
-                ...(stored ? { secretId: stored.id } : clearing ? { secretId: null } : {}),
-              },
-            });
+            const data = {
+              slug: config.slug,
+              name: config.name,
+              description: config.description,
+              transport: config.transport,
+              endpoint: nextEndpoint,
+              command: "command" in config ? config.command : null,
+              args: ("args" in config
+                ? redactMcpArguments(config.args, [
+                    ...Object.values(config.env),
+                    ...(config.secret ? [config.secret] : []),
+                  ])
+                : []) as Prisma.InputJsonValue,
+              env: ("env" in config
+                ? Object.fromEntries(Object.keys(config.env).map((key) => [key, true]))
+                : {}) as Prisma.InputJsonValue,
+              headers: ("headers" in config
+                ? Object.fromEntries(Object.keys(config.headers).map((key) => [key, true]))
+                : {}) as Prisma.InputJsonValue,
+              enabled: config.enabled,
+              ...(stored ? { secretId: stored.id } : clearing ? { secretId: null } : {}),
+            };
+            if (credentialOnly) await bumpMcpServerRevision(tx, existing.id, context.actor, data);
+            const updated = credentialOnly
+              ? await tx.mcpServer.findFirstOrThrow({ where: { id: existing.id } })
+              : await tx.mcpServer.update({
+                  where: { id: existing.id },
+                  data: { ...data, revision: { increment: 1 } },
+                });
             if (stored) {
               if (existing.secretId)
                 await tx.secret.deleteMany({
@@ -3849,15 +3857,8 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
             }
             return await integrations.beginAuthorization(context.actor, input);
           } catch (error) {
-            const unavailable =
-              error instanceof McpOAuthUnavailableError ||
-              (error instanceof Error && "code" in error && error.code === "MCP_OAUTH_UNAVAILABLE");
             throw new ORPCError("BAD_REQUEST", {
-              message: unavailable
-                ? MCP_BROWSER_SIGN_IN_UNAVAILABLE
-                : error instanceof Error
-                  ? error.message
-                  : "Could not start MCP OAuth",
+              message: error instanceof Error ? error.message : "Could not start MCP OAuth",
             });
           }
         }),
@@ -3878,16 +3879,14 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
             if (error instanceof McpOAuthAttemptReplacedError) {
               return { ok: true as const, result: "replaced" as const };
             }
-            if (mcpOAuth.recordAttemptFailure) {
-              await mcpOAuth
-                .recordAttemptFailure({
-                  sessionId: input.sessionId,
-                  spaceId: context.actor.spaceId,
-                  userId: context.actor.userId,
-                  kind: "failed",
-                })
-                .catch(() => undefined);
-            }
+            await mcpOAuth
+              .recordAttemptFailure({
+                sessionId: input.sessionId,
+                spaceId: context.actor.spaceId,
+                userId: context.actor.userId,
+                kind: "failed",
+              })
+              .catch(() => undefined);
             throw new ORPCError("BAD_REQUEST", {
               message: "Could not complete authorization. Try connecting again.",
             });

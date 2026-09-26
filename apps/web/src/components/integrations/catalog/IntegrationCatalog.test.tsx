@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import type { IntegrationConnection, IntegrationDescriptor } from "@ardurbot/contracts";
+import { mcpSignInDiagnostic } from "@ardurbot/contracts";
 import type { ComponentProps, ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -261,8 +262,9 @@ afterEach(async () => {
 });
 const button = (text: string, within: Element = container) =>
   [...within.querySelectorAll("button")].find((button) => button.textContent === text)!;
+const openMcp = vi.fn();
 const mount = async () => {
-  await act(async () => root.render(<IntegrationCatalog />));
+  await act(async () => root.render(<IntegrationCatalog onOpenMcp={openMcp} />));
 };
 const click = async (element: HTMLElement) => {
   await act(async () => element.click());
@@ -580,7 +582,7 @@ describe("Settings integration catalog", () => {
     expect(api.create).toHaveBeenCalled();
     expect(api.remove).not.toHaveBeenCalled();
     expect(api.update).not.toHaveBeenCalled();
-    expect(container.textContent).toContain("Sign-in was declined. Reconnect to try again.");
+    expect(container.textContent).toContain("Sign-in was declined.");
     await act(async () => polls[0]!());
     const row = serverRow("Figma");
     expect(row?.textContent).toContain("Needs sign-in");
@@ -662,15 +664,85 @@ describe("Settings integration catalog", () => {
         oauthStatus: "none",
         hasSecret: true,
         connectionState: "needs-sign-in",
-        lastError: "Needs sign-in (invalid_token).",
+        lastError: mcpSignInDiagnostic("credential_rejected"),
         catalogId: null,
       },
     ]);
     await act(async () => root.render(<IntegrationCatalog onOpenMcp={onOpenMcp} />));
+    expect(serverRow("Rejected token")?.textContent).toContain(
+      "That token was not accepted. Check it and try again.",
+    );
     await click(button("Reconnect"));
     expect(onOpenMcp).toHaveBeenCalledExactlyOnceWith("rejected-token");
     expect(api.oauth).not.toHaveBeenCalled();
     expect(api.create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["invalid_token", "The saved sign-in is no longer accepted. Sign in again."],
+    ["refresh_unavailable", "The saved sign-in expired. Sign in again."],
+  ])("signs in again in the browser when the saved sign-in is %s", async (code, sentence) => {
+    const onOpenMcp = vi.fn();
+    api.servers.mockResolvedValue([
+      {
+        ...customServer("expired", "Expired sign-in", "needs-sign-in"),
+        oauthStatus: "reconnect",
+        lastError: mcpSignInDiagnostic(code),
+      },
+    ]);
+    await act(async () => root.render(<IntegrationCatalog onOpenMcp={onOpenMcp} />));
+    expect(serverRow("Expired sign-in")?.textContent).toContain(sentence);
+    await click(button("Reconnect", serverRow("Expired sign-in")!));
+    expect(api.oauth).toHaveBeenCalledWith("expired", expect.anything());
+    expect(onOpenMcp).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["needs-sign-in", null, "Sign-in did not finish. Try again."],
+    ["cancelled", null, "Sign-in was declined."],
+    [
+      "replaced",
+      null,
+      "This sign-in window was replaced by a newer one. Finish signing in there, or start again.",
+    ],
+    [
+      "sign-in-failed",
+      "Could not complete sign-in. Connect again.",
+      "Could not complete sign-in. Connect again.",
+    ],
+  ])(
+    "says what happened when a custom row's Reconnect ends %s",
+    async (result, recorded, sentence) => {
+      const server = {
+        ...customServer("failed", "Failed server", "discovery-failed"),
+        slug: "failed",
+        description: "",
+        lastError: null as string | null,
+      };
+      api.servers.mockImplementation(async () => [server]);
+      api.oauth.mockImplementation(async () => {
+        server.lastError = recorded;
+        return result;
+      });
+      await mount();
+      await click(button("Reconnect", serverRow("Failed server")!));
+      expect(container.querySelector('[role="alert"]')?.textContent).toBe(sentence);
+      expect(api.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it("shows no Manage or token Reconnect where MCP settings cannot open", async () => {
+    api.servers.mockResolvedValue([
+      {
+        ...customServer("rejected", "Rejected server", "needs-sign-in"),
+        lastError: mcpSignInDiagnostic("credential_rejected"),
+      },
+      customServer("failed", "Failed server", "discovery-failed"),
+    ]);
+    await act(async () => root.render(<IntegrationCatalog />));
+    expect(button("Manage")).toBeUndefined();
+    expect(button("Reconnect", serverRow("Rejected server")!)).toBeUndefined();
+    expect(button("Reconnect", serverRow("Failed server")!)).toBeDefined();
   });
 
   it("opens the credential field when a server offers no browser sign-in", async () => {
@@ -684,7 +756,7 @@ describe("Settings integration catalog", () => {
         enabled: true,
         oauthStatus: "reconnect",
         connectionState: "needs-sign-in",
-        lastError: "Needs sign-in (oauth_unavailable).",
+        lastError: mcpSignInDiagnostic("oauth_unavailable"),
         catalogId: null,
       },
     ]);
@@ -814,6 +886,33 @@ describe("Settings integration catalog", () => {
     expect(added).toHaveLength(2);
   });
 
+  it("never reuses an imported server at the same address", async () => {
+    const added = createdServers([
+      {
+        id: "imported",
+        slug: "imported",
+        name: "Imported",
+        description: "",
+        endpoint: "https://keyed.example.test/mcp",
+        transport: "streamable_http",
+        enabled: true,
+        oauthStatus: "none",
+        connectionState: "connected",
+        catalogId: null,
+        imported: { tool: "codex" },
+      },
+    ]);
+    await openResults([listing("Keyed", "https://keyed.example.test/mcp", bearer)]);
+    await click(resultConnect("Keyed")!);
+    await fill("Credential", "synthetic-key");
+    await click(resultConnect("Keyed")!);
+    expect(api.update).not.toHaveBeenCalled();
+    expect(api.create).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ endpoint: "https://keyed.example.test/mcp" }),
+    );
+    expect(added).toHaveLength(2);
+  });
+
   it("sends a header credential under the advertised header name", async () => {
     createdServers();
     await openResults([
@@ -893,7 +992,7 @@ describe("Settings integration catalog", () => {
       const server = servers[0];
       if (server) {
         server.connectionState = "needs-sign-in";
-        server.lastError = "Needs sign-in (oauth_unavailable).";
+        server.lastError = mcpSignInDiagnostic("oauth_unavailable");
       }
       throw new Error(provider);
     });
@@ -949,7 +1048,7 @@ describe("Settings integration catalog", () => {
       await act(async () => {
         await vi.advanceTimersByTimeAsync(1000);
       });
-      expect(container.textContent).toContain("Sign-in was declined. Reconnect to try again.");
+      expect(container.textContent).toContain("Sign-in was declined.");
       expect(resultConnect("Notion")?.textContent).toBe("Connect");
 
       api.status.mockResolvedValue({
@@ -997,7 +1096,7 @@ describe("Settings integration catalog", () => {
         id: "notion-1",
         catalogId: "notion",
         state: "needs-sign-in",
-        lastError: "Needs sign-in (refresh_unavailable).",
+        lastError: mcpSignInDiagnostic("refresh_unavailable"),
       });
       await openResults([
         listing("Notion", "https://mcp.notion.example.test/mcp", {
@@ -1026,46 +1125,60 @@ describe("Settings integration catalog", () => {
       await act(async () => {
         await vi.advanceTimersByTimeAsync(1000);
       });
-      expect(container.textContent).toContain("The saved sign-in expired. Connect again.");
+      expect(container.textContent).toContain("The saved sign-in expired. Sign in again.");
       expect(container.textContent).not.toContain("refresh_unavailable");
     } finally {
       vi.useRealTimers();
     }
   });
 
-  it("sends a typed token for a mixed listing that matches a built-in app", async () => {
-    const notion = {
-      ...catalog[0]!,
-      id: "notion",
-      name: "Notion",
-      authKind: "oauth" as const,
-      endpoint: "https://mcp.notion.example.test/mcp",
+  it.each(["mixed", "bearer"])(
+    "goes straight to browser sign-in for a sign-in-only built-in app listed as %s",
+    async (type) => {
+      const notion = remoteApp("notion", "Notion", "https://mcp.notion.example.test/mcp");
+      api.list.mockImplementation(async () => ({ catalog: [notion], connections: [] }));
+      await openResults([
+        listing("Notion directory", "https://mcp.notion.example.test/mcp", {
+          type,
+          headerName: null,
+          note: null,
+        }),
+      ]);
+      await click(resultConnect("Notion")!);
+      expect(container.querySelector('[aria-label="Credential"]')).toBeNull();
+      expect(api.connect).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ catalogId: "notion", authKind: "oauth", token: undefined }),
+      );
+    },
+  );
+
+  it("shows Connected with Manage for a connected built-in app and never replaces it", async () => {
+    const notion = remoteApp("notion", "Notion", "https://mcp.notion.example.test/mcp");
+    const github = {
+      ...remoteApp("github", "GitHub", "https://api.githubcopilot.com/mcp/"),
+      hostCli: { command: "test-cli", installUrl: "https://example.test/install" },
     };
-    api.list.mockImplementation(async () => ({ catalog: [notion], connections: [] }));
-    api.connect.mockResolvedValue({
-      connection: { ...connected, catalogId: "notion", state: "connected" },
-      authorizationUrl: null,
-      sessionId: null,
-    });
+    connections = [
+      { ...connected, id: "notion-1", catalogId: "notion", transport: "streamable_http" },
+      { ...connected, id: "github-host", catalogId: "github", transport: "host-cli" },
+    ];
+    api.list.mockImplementation(async () => ({ catalog: [notion, github], connections }));
     await openResults([
-      listing("Notion directory", "https://mcp.notion.example.test/mcp", {
-        type: "mixed",
-        headerName: null,
-        note: null,
-      }),
+      listing("Notion directory", "https://mcp.notion.example.test/mcp"),
+      listing("GitHub directory", "https://api.githubcopilot.com/mcp/"),
     ]);
-    await click(resultConnect("Notion")!);
-    expect(api.connect).not.toHaveBeenCalled();
-    expect(container.querySelector('[aria-label="Credential"]')).not.toBeNull();
-    await fill("Credential", "synthetic-token");
-    await click(resultConnect("Notion")!);
-    expect(api.connect).toHaveBeenCalledWith(
-      expect.objectContaining({
-        catalogId: "notion",
-        authKind: "token",
-        token: "synthetic-token",
-      }),
+    const notionResult = resultBlock("Notion");
+    expect(notionResult?.textContent).toContain("Connected");
+    expect(resultConnect("Notion")).toBeUndefined();
+    // A host sign-in is a different connection, so GitHub on the web is still new.
+    await click(resultConnect("GitHub")!);
+    expect(api.connect).toHaveBeenCalledExactlyOnceWith(
+      expect.not.objectContaining({ connectionId: expect.anything() }),
     );
+    await click(button("Manage", notionResult!));
+    expect(api.connect).toHaveBeenCalledOnce();
+    expect(api.revoke).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("Synthetic fixture read");
   });
 
   it("asks for a GitHub token before connecting and shows the API sentence", async () => {
@@ -1301,10 +1414,13 @@ describe("Settings integration catalog", () => {
     const declined = customServer("declined", "Declined server", "cancelled");
     api.servers.mockResolvedValue([pending, declined]);
     await mount();
+    expect(serverRow("Pending server")?.textContent).toContain("Not checked yet");
+    expect(serverRow("Pending server")?.textContent).not.toContain("Needs sign-in");
+    expect(button("Check", serverRow("Pending server")!)).toBeDefined();
+    expect(serverRow("Declined server")?.textContent).toContain("Needs sign-in");
+    expect(button("Reconnect", serverRow("Declined server")!)).toBeDefined();
     for (const name of ["Pending server", "Declined server"]) {
       const row = serverRow(name);
-      expect(row?.textContent).toContain("Needs sign-in");
-      expect(row?.textContent).toContain("Reconnect");
       expect(row?.textContent).toContain("Manage");
       expect(row?.textContent).toContain("Delete");
     }
@@ -1315,6 +1431,35 @@ describe("Settings integration catalog", () => {
     expect(api.remove).not.toHaveBeenCalled();
     await click(button("Confirm delete", serverRow("Pending server")!));
     expect(api.remove).toHaveBeenCalledExactlyOnceWith({ id: "pending" });
+  });
+
+  it("checks a server nothing has checked yet and shows what discovery recorded", async () => {
+    const server = customServer("added", "Added server", "not-connected");
+    const rejected = customServer("keyed", "Keyed server", "not-connected");
+    api.servers.mockImplementation(async () => [server, rejected]);
+    api.tools.mockImplementation(async ({ serverId }: { serverId: string }) => {
+      if (serverId === "added") {
+        server.connectionState = "connected";
+        return { capturedAt: "", serverVersion: null, account: null, tools: [] };
+      }
+      Object.assign(rejected, {
+        connectionState: "needs-sign-in",
+        lastError: mcpSignInDiagnostic("credential_rejected"),
+      });
+      throw new Error("rejected");
+    });
+    await mount();
+    await click(button("Check", serverRow("Added server")!));
+    expect(api.tools).toHaveBeenCalledExactlyOnceWith({ serverId: "added" });
+    expect(serverRow("Added server")?.textContent).toContain("Connected");
+    expect(serverRow("Added server")?.textContent).not.toContain("Not checked yet");
+    await click(button("Check", serverRow("Keyed server")!));
+    expect(serverRow("Keyed server")?.textContent).toContain(
+      "That token was not accepted. Check it and try again.",
+    );
+    await click(button("Reconnect", serverRow("Keyed server")!));
+    expect(openMcp).toHaveBeenCalledExactlyOnceWith("keyed");
+    expect(api.oauth).not.toHaveBeenCalled();
   });
 
   it("matches a built-in app only when the query is empty or the catalog query", async () => {
@@ -1413,13 +1558,13 @@ describe("Settings integration catalog", () => {
     api.oauth.mockImplementationOnce(async (serverId: string) => {
       const server = added.find((entry) => entry.id === serverId)!;
       server.connectionState = "needs-sign-in";
-      server.lastError = "Needs sign-in (oauth_unavailable).";
+      server.lastError = mcpSignInDiagnostic("oauth_unavailable");
       throw new Error("fake-provider-response");
     });
     api.tools.mockImplementation(async ({ serverId }: { serverId: string }) => {
       const server = added.find((entry) => entry.id === serverId)!;
       server.connectionState = "needs-sign-in";
-      server.lastError = "Needs sign-in (invalid_token).";
+      server.lastError = mcpSignInDiagnostic("credential_rejected");
       throw new Error("rejected");
     });
     await openResults([
@@ -1441,7 +1586,7 @@ describe("Settings integration catalog", () => {
     const kept = added.find((entry) => entry.id === "created-1");
     expect(kept).toMatchObject({
       connectionState: "needs-sign-in",
-      lastError: "Needs sign-in (invalid_token).",
+      lastError: mcpSignInDiagnostic("credential_rejected"),
     });
     expect(api.remove).not.toHaveBeenCalled();
     expect(api.update).toHaveBeenCalledWith({ id: "created-1", secret: "synthetic-token" });
@@ -1457,7 +1602,7 @@ describe("Settings integration catalog", () => {
     await click(resultConnect("Bearer")!);
     expect(added.find((entry) => entry.id === "created-2")).toMatchObject({
       connectionState: "needs-sign-in",
-      lastError: "Needs sign-in (invalid_token).",
+      lastError: mcpSignInDiagnostic("credential_rejected"),
     });
     expect(api.remove).not.toHaveBeenCalledWith({ id: "created-2" });
     expect(resultBlock("Bearer")?.textContent).toContain(
