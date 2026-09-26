@@ -24,6 +24,7 @@ import { LocalAgentHomeStore } from "../home.js";
 import { createRunSandbox, HostAwareSandbox } from "../host-aware-sandbox.js";
 import { KubernetesSandboxProvider } from "../kubernetes-sandbox.js";
 import { FakeKubernetesApi } from "../kubernetes-test-api.js";
+import { createSandboxProvider } from "../sandbox-factory.js";
 import { FleetCatalog } from "./catalog.js";
 import { placeRunComputer } from "./placement.js";
 
@@ -128,6 +129,7 @@ it("uses the configured desktop fallback for null bindings and can place work ba
     },
     space: { findUniqueOrThrow: async () => ({ placement: { mode: "free-memory" } }) },
     deploymentSettings: { findUnique: async () => ({ computerHost: null }) },
+    hostRegistration: { findUnique: async () => null },
   };
   const context: AdapterContext = {
     userId: "owner",
@@ -224,6 +226,7 @@ it("lists a local Docker computer separately when Kubernetes is the default and 
       findUniqueOrThrow: async () => ({ placement: { mode: "threshold", minimumFreeGb: 4 } }),
     },
     deploymentSettings: { findUnique: async () => ({ computerHost: null }) },
+    hostRegistration: { findUnique: async () => null },
     run: {
       findUniqueOrThrow: async () => ({
         id: "run",
@@ -260,7 +263,7 @@ it("lists a local Docker computer separately when Kubernetes is the default and 
     signal: new AbortController().signal,
   };
   const fallback = {
-    describe: () => ({ id: "kubernetes" }),
+    describe: () => ({ id: "kubernetes", kind: "kubernetes" }),
     capacity: async () => kubernetesCapacity,
   } as unknown as SandboxProvider;
   const catalog = new FleetCatalog(
@@ -289,21 +292,9 @@ it("lists a local Docker computer separately when Kubernetes is the default and 
   await expect(
     catalog.compatibleTargets(computer, [docker!, kubernetes!], context),
   ).resolves.toEqual([docker]);
-  const settingsRouting = await catalog.resolveReplacementRouting(
-    computer,
-    { connectionId: null },
-    context,
+  await expect(catalog.placementTarget(computer, kubernetes!, context)).rejects.toThrow(
+    "Computer replacement target is unavailable",
   );
-  expect(settingsRouting.source).toBeInstanceOf(DockerSandboxProvider);
-  expect(settingsRouting.target).toBe(settingsRouting.source);
-  await expect(
-    catalog.resolveReplacementRouting(
-      computer,
-      { connectionId: null, targetId: kubernetes!.id },
-      context,
-      fleet,
-    ),
-  ).rejects.toThrow("Computer replacement target is unavailable");
   const deps = {
     prisma: prisma as unknown as PrismaClient,
     home: {} as AgentHomeStore,
@@ -380,6 +371,7 @@ it("does not automatically move a Docker computer onto This Mac through the host
       }),
     },
     deploymentSettings: { findUnique: async () => ({ computerHost: "this-mac" }) },
+    hostRegistration: { findUnique: async () => null },
     run: {
       findUniqueOrThrow: async () => ({
         id: "run",
@@ -443,21 +435,20 @@ it("does not automatically move a Docker computer onto This Mac through the host
   expect(prisma.computerUpdate.create).not.toHaveBeenCalled();
   expect(destroy).not.toHaveBeenCalled();
   expect(outcome).toBe(true);
-  await expect(
-    catalog.resolveReplacementRouting(
-      computer,
-      { connectionId: null, targetId: "host" },
-      context,
-      fleet,
-    ),
-  ).rejects.toThrow("Computer replacement target is unavailable");
+  await expect(catalog.placementTarget(computer, host!, context)).rejects.toThrow(
+    "Computer replacement target is unavailable",
+  );
 });
 
 it("completes a Settings connection change from Docker to Kubernetes and refuses that placement", async () => {
   const homeRoot = await mkdtemp(path.join(tmpdir(), "ardurbot-settings-home-"));
   const kubernetes = new FakeSandboxProvider();
   const described = kubernetes.describe();
-  vi.spyOn(kubernetes, "describe").mockReturnValue({ ...described, id: "kubernetes" });
+  vi.spyOn(kubernetes, "describe").mockReturnValue({
+    ...described,
+    id: "kubernetes",
+    kind: "kubernetes",
+  });
   vi.spyOn(DockerSandboxProvider.prototype, "exportWorkspace").mockImplementation(
     async function* () {
       yield { path: "notes/keep.txt", content: new TextEncoder().encode("saved") };
@@ -506,6 +497,7 @@ it("completes a Settings connection change from Docker to Kubernetes and refuses
     bot: { findMany: async () => [], findFirst: vi.fn(async () => ({ userId: "owner" })) },
     space: { findUniqueOrThrow: async () => ({ placement: {} }) },
     deploymentSettings: { findUnique: async () => ({ computerHost: null }) },
+    hostRegistration: { findUnique: async () => null },
     computer: {
       findUniqueOrThrow: vi
         .fn()
@@ -542,55 +534,27 @@ it("completes a Settings connection change from Docker to Kubernetes and refuses
     traceId: "update-1",
     signal: new AbortController().signal,
   };
-  const fallback = {
-    describe: () => ({ id: "kubernetes" }),
-    capacity: async () => unknownCapacity(),
-  } as unknown as SandboxProvider;
+  const { sandbox } = kubernetesDefault(prisma);
   const catalog = new FleetCatalog(
     prisma as unknown as PrismaClient,
     { load: () => "" },
     {},
-    fallback,
+    sandbox,
   );
-  vi.spyOn(catalog.connections, "resolve").mockResolvedValue(kubernetes);
-  const fleet = {
-    targets: [
-      {
-        id: "k8s",
-        name: "Cluster",
-        kind: "kubernetes" as const,
-        connectionId: "k8s",
-        state: "connected" as const,
-        capacity: unknownCapacity(),
-        bots: [],
-      },
-    ],
-    bots: [],
-    placement: { mode: "manual" as const, preferredTargetId: "host", minimumFreeGb: 4 },
-    defaultTargetId: "default",
-  };
+  vi.spyOn(ComputerConnections.prototype, "resolve").mockResolvedValue(kubernetes);
+  const cluster = { kind: "kubernetes" as const, connectionId: "k8s" };
   try {
-    await expect(
-      catalog.resolveReplacementRouting(
-        computer,
-        { connectionId: "k8s", targetId: "k8s" },
-        context,
-        fleet,
-      ),
-    ).rejects.toThrow("Computer replacement target is unavailable");
+    await expect(catalog.placementTarget(computer, cluster, context)).rejects.toThrow(
+      "Computer replacement target is unavailable",
+    );
     expect(destroy).not.toHaveBeenCalled();
-    const routing = await catalog.resolveReplacementRouting(computer, configuration, context);
-    expect(routing.source).toBeInstanceOf(DockerSandboxProvider);
-    expect(routing.source.describe().id).toBe("docker");
-    expect(routing.target.describe().id).toBe("kubernetes");
     await performComputerUpdate(
       {
         prisma: prisma as unknown as PrismaClient,
-        sandbox: fallback,
+        sandbox,
         home: new LocalAgentHomeStore(homeRoot),
         jobs: { enqueue: vi.fn(async () => undefined) } as unknown as JobPublisher,
         events: {} as ThreadEvents,
-        fleet: catalog,
       },
       row.id,
     );
@@ -662,6 +626,7 @@ it.each([
       bot: { findMany: async () => [{ ...movingBot, computer: computer.row }] },
       space: { findUniqueOrThrow: async () => ({ placement: { mode: "free-memory" } }) },
       deploymentSettings: { findUnique: async () => ({ computerHost: null }) },
+      hostRegistration: { findUnique: async () => null },
       run: { findUniqueOrThrow: async () => runRow(computer.row, placement) },
       computer,
     };
@@ -753,7 +718,7 @@ it("resets a local Docker computer under a Kubernetes default through Docker", a
 
 function savedPodman(onDestroy: () => void = () => undefined) {
   return {
-    describe: () => ({ id: "docker" }),
+    describe: () => ({ id: "docker", kind: "docker" }),
     capacity: async () => ({
       ...unknownCapacity(),
       source: "docker" as const,
@@ -806,6 +771,7 @@ it("provisions an automatic move where it was checked when This Mac turns on mid
       findUniqueOrThrow: async () => ({ placement: { mode: "threshold", minimumFreeGb: 4 } }),
     },
     deploymentSettings: { findUnique: async () => ({ computerHost }) },
+    hostRegistration: { findUnique: async () => null },
     run: {
       findUniqueOrThrow: async () => runRow(computer.row),
       findFirst: async ({ where }: { where: { id?: unknown } }) =>
@@ -881,7 +847,11 @@ it("keeps a failed Settings move to the deployment default pointed at that engin
     providerRef: "podman-computer",
     maintenanceId: "update-1",
   });
-  const prisma = { computer, run: { findFirst: async () => null } };
+  const prisma = {
+    computer,
+    run: { findFirst: async () => null },
+    deploymentSettings: { findUnique: async () => null },
+  };
   const { api, sandbox } = kubernetesDefault(prisma);
   vi.spyOn(KubernetesSandboxProvider.prototype, "provision").mockRejectedValue(
     new Error("cluster is full"),
@@ -894,11 +864,6 @@ it("keeps a failed Settings move to the deployment default pointed at that engin
   );
   const context = { ...runContext, runId: undefined, operationId: "update-1" };
   try {
-    const routing = await catalog.resolveReplacementRouting(
-      computer.row,
-      { connectionId: null },
-      context,
-    );
     await expect(
       replaceComputer(
         {
@@ -914,19 +879,20 @@ it("keeps a failed Settings move to the deployment default pointed at that engin
         "none",
         undefined,
         { imageProfile: "base", connectionId: null },
-        routing,
       ),
     ).rejects.toThrow("cluster is full");
     expect(podman.destroy).toHaveBeenCalledOnce();
     expect(computer.row).toMatchObject({ state: "error", connectionId: null, kind: "kubernetes" });
-    await expect(catalog.resolveComputer(computer.row, context)).resolves.toBe(routing.target);
+    await expect(catalog.resolveComputer(computer.row, context)).resolves.toBeInstanceOf(
+      KubernetesSandboxProvider,
+    );
   } finally {
     api.dispose();
     await rm(homeRoot, { recursive: true, force: true });
   }
 });
 
-it("refuses a Docker move onto This Mac when the host bridge is on and still exports that workspace", async () => {
+it("moves a Docker computer to a saved connection with the host bridge on, never through the host", async () => {
   vi.stubEnv("ARDURBOT_HOST_BRIDGE", "api");
   const homeRoot = await mkdtemp(path.join(tmpdir(), "ardurbot-host-bridge-move-"));
   const homeFile = path.join(homeRoot, "homes", "home", "notes", "keep.txt");
@@ -954,107 +920,37 @@ it("refuses a Docker move onto This Mac when the host bridge is on and still exp
   const destination = new FakeSandboxProvider();
   vi.spyOn(ComputerConnections.prototype, "resolve").mockResolvedValue(destination);
   const computer = storedComputer({ maintenanceId: "update-1", state: "running" });
-  const configuration = {
-    imageProfile: "base" as const,
-    connectionId: null,
-    confirmed: true as const,
-    thisMac: true as const,
-  };
-  const update = {
-    id: "update-1",
-    computerId: computer.row.id,
-    botId: "bot",
-    action: "update",
-    status: "queued",
-    stage: "preparing",
-    updatedAt: new Date(0),
-    configuration: configuration as object,
-    computer: computer.row,
-  };
   const prisma = {
-    connection: { findMany: async () => [], findFirst: async () => ({ id: "engine" }) },
-    bot: { findFirst: async () => ({ userId: "owner" }) },
     deploymentSettings: { findUnique: async () => ({ computerHost: "this-mac" }) },
     computer,
-    computerUpdate: {
-      findUniqueOrThrow: async () => update,
-      updateMany: vi.fn(async ({ where, data }: { where: { status?: unknown }; data: object }) => {
-        const status = where.status;
-        const matches =
-          !status ||
-          status === update.status ||
-          (typeof status === "object" &&
-            status !== null &&
-            "in" in status &&
-            (status as { in: string[] }).in.includes(update.status));
-        if (!matches) return { count: 0 };
-        Object.assign(update, data);
-        return { count: 1 };
-      }),
-    },
     run: { findFirst: async () => null },
-    $transaction: async <T>(work: (tx: unknown) => Promise<T>) => work(prisma),
   };
   const sandbox = createRunSandbox("docker", {
     prisma: prisma as unknown as PrismaClient,
     secrets: { load: () => "" },
     hostClient,
   });
-  const catalog = new FleetCatalog(
-    prisma as unknown as PrismaClient,
-    { load: () => "" },
-    { hostClient },
-    sandbox,
-    "darwin",
-  );
-  const context = { ...runContext, runId: undefined, operationId: "update-1" };
-  const deps = {
-    prisma: prisma as unknown as PrismaClient,
-    sandbox,
-    home: new LocalAgentHomeStore(homeRoot),
-    jobs: { enqueue: vi.fn(async () => undefined) } as unknown as JobPublisher,
-    events: {} as ThreadEvents,
-    fleet: catalog,
-  };
   try {
-    await expect(
-      catalog.resolveReplacementRouting(computer.row, configuration, context),
-    ).rejects.toThrow(
-      "This Mac is not available. Choose a saved connection or keep the current engine.",
-    );
-    await performComputerUpdate(deps, update.id);
-    expect(update.status).toBe("failed");
-    expect(destroy).not.toHaveBeenCalled();
-    expect(dockerExport).not.toHaveBeenCalled();
-    expect(hostCalls).toEqual([]);
-    expect(computer.row).toMatchObject({
-      state: "running",
-      kind: "docker",
-      connectionId: null,
-      providerRef: "docker-computer",
-    });
-    expect(await readFile(homeFile, "utf8")).toBe("saved");
-    const routing = await catalog.resolveReplacementRouting(
-      computer.row,
-      { connectionId: "engine" },
-      context,
-    );
     await replaceComputer(
-      deps,
+      {
+        prisma: prisma as unknown as PrismaClient,
+        sandbox,
+        home: new LocalAgentHomeStore(homeRoot),
+        jobs: {} as JobPublisher,
+        events: {} as ThreadEvents,
+      },
       computer.row.id,
       "update",
-      context,
+      { ...runContext, runId: undefined, operationId: "update-1" },
       "none",
       undefined,
       { imageProfile: "base", connectionId: "engine" },
-      routing,
     );
     expect(dockerExport).toHaveBeenCalledOnce();
     expect(hostCalls).toEqual([]);
     expect(destroy).toHaveBeenCalledOnce();
     expect(await readFile(homeFile, "utf8")).toBe("saved");
     const imported = [...destination.boxes.values()].flatMap((box) => [...box.files.entries()]);
-    expect(imported.map(([file]) => file)).toContain("notes/keep.txt");
     expect(
       new TextDecoder().decode(imported.find(([file]) => file === "notes/keep.txt")![1].content),
     ).toBe("saved");
@@ -1063,33 +959,6 @@ it("refuses a Docker move onto This Mac when the host bridge is on and still exp
   } finally {
     await rm(homeRoot, { recursive: true, force: true });
   }
-});
-
-it("does not suspend a connectionless computer when its connection stays empty", async () => {
-  const computer = storedComputer({ connectionId: null, imageProfile: "base", state: "running" });
-  const ref = await replaceComputer(
-    {
-      prisma: { computer, run: { findFirst: async () => null } } as unknown as PrismaClient,
-      home: {} as AgentHomeStore,
-      sandbox: {} as SandboxProvider,
-      jobs: {} as JobPublisher,
-      events: {} as ThreadEvents,
-    },
-    "computer",
-    "update",
-    runContext,
-    "none",
-    undefined,
-    { imageProfile: "base", connectionId: null },
-  );
-  expect(computer.updateMany).not.toHaveBeenCalled();
-  expect(computer.row).toMatchObject({
-    state: "running",
-    kind: "docker",
-    connectionId: null,
-    providerRef: "docker-computer",
-  });
-  expect(ref).toMatchObject({ kind: "docker", providerRef: "docker-computer" });
 });
 
 it("keeps an image profile change on the host when This Mac is off", async () => {
@@ -1133,6 +1002,7 @@ it("keeps an image profile change on the host when This Mac is off", async () =>
     connection: { findMany: async () => [] },
     bot: { findFirst: async () => ({ userId: "owner" }) },
     deploymentSettings: { findUnique: async () => ({ computerHost: "docker" }) },
+    hostRegistration: { findUnique: async () => null },
     computer,
     computerUpdate: {
       findUniqueOrThrow: async () => update,
@@ -1157,12 +1027,6 @@ it("keeps an image profile change on the host when This Mac is off", async () =>
     prisma: prisma as unknown as PrismaClient,
     secrets: { load: () => "" },
   });
-  const catalog = new FleetCatalog(
-    prisma as unknown as PrismaClient,
-    { load: () => "" },
-    {},
-    sandbox,
-  );
   try {
     await performComputerUpdate(
       {
@@ -1171,7 +1035,6 @@ it("keeps an image profile change on the host when This Mac is off", async () =>
         home: new LocalAgentHomeStore(homeRoot),
         jobs: { enqueue: vi.fn(async () => undefined) } as unknown as JobPublisher,
         events: {} as ThreadEvents,
-        fleet: catalog,
       },
       update.id,
     );
@@ -1193,104 +1056,168 @@ it("keeps an image profile change on the host when This Mac is off", async () =>
   }
 });
 
-it("keeps a started Kubernetes computer on Kubernetes and leaves the row when that provider is missing", async () => {
+it("runs a connectionless Kubernetes computer only on a Kubernetes deployment", async () => {
   vi.stubEnv("ARDURBOT_HOST_BRIDGE", "");
+  vi.stubEnv("KUBERNETES_SERVICE_HOST", "10.0.0.1");
   const homeRoot = await mkdtemp(path.join(tmpdir(), "ardurbot-k8s-kind-"));
-  const kubernetes = {
-    describe: () => ({ id: "kubernetes" }),
-    provision: vi.fn(
-      async (request: { botId: string; providerRef?: string; providerKind?: string }) => ({
-        id: "pod",
-        botId: request.botId,
-        kind: "kubernetes" as const,
-        providerRef: request.providerRef ?? "pod-1",
-        fresh: false,
-      }),
-    ),
-    prepare: vi.fn(async () => undefined),
-    execute: vi.fn(async function* (): AsyncGenerator<ProcessEvent> {
-      yield { type: "exit", code: 0 };
-    }),
-  };
-  const docker = vi.spyOn(DockerSandboxProvider.prototype, "provision");
-  const desktop = vi.spyOn(DesktopSandboxProvider.prototype, "provision");
-  const missing = storedComputer({
-    kind: "kubernetes",
-    providerRef: "pod-1",
-    state: "running",
-    connectionId: null,
-  });
-  const present = storedComputer({
-    id: "computer-k8s",
-    kind: "kubernetes",
-    providerRef: "pod-1",
-    state: "running",
-    connectionId: null,
-  });
-  const settings = { findUnique: async () => ({ computerHost: "this-mac" }) };
-  try {
-    const unavailable = createRunSandbox("docker", {
-      prisma: { deploymentSettings: settings, computer: missing } as unknown as PrismaClient,
-      secrets: { load: () => "" },
-    });
-    await expect(
-      provisionComputer(
-        {
-          prisma: { computer: missing } as unknown as PrismaClient,
-          home: new LocalAgentHomeStore(homeRoot),
-          sandbox: unavailable,
-          jobs: {} as JobPublisher,
-          events: {} as ThreadEvents,
-        },
-        "computer",
-        runContext,
-        "bot",
-      ),
-    ).rejects.toThrow(
-      "No Kubernetes provider is registered. Add a Kubernetes connection or run the deployment on Kubernetes.",
-    );
-    expect(missing.updateMany).not.toHaveBeenCalled();
-    expect(missing.row).toMatchObject({
-      state: "running",
+  const provision = vi
+    .spyOn(KubernetesSandboxProvider.prototype, "provision")
+    .mockImplementation(async (request) => ({
+      id: "pod",
+      botId: request.botId,
       kind: "kubernetes",
-      providerRef: "pod-1",
-    });
-    expect(docker).not.toHaveBeenCalled();
-    expect(desktop).not.toHaveBeenCalled();
-
-    const sandbox = createRunSandbox("docker", {
-      prisma: { deploymentSettings: settings, computer: present } as unknown as PrismaClient,
-      secrets: { load: () => "" },
-      providers: { kubernetes: () => kubernetes as never },
-    });
-    const ref = await provisionComputer(
-      {
-        prisma: { computer: present } as unknown as PrismaClient,
-        home: new LocalAgentHomeStore(homeRoot),
-        sandbox,
-        jobs: {} as JobPublisher,
-        events: {} as ThreadEvents,
-      },
-      "computer-k8s",
-      runContext,
-      "bot",
+      providerRef: request.providerRef ?? "pod-1",
+      fresh: false,
+    }));
+  vi.spyOn(KubernetesSandboxProvider.prototype, "prepare").mockResolvedValue(undefined);
+  const deps = (sandbox: SandboxProvider, computer: ReturnType<typeof storedComputer>) => ({
+    prisma: { computer } as unknown as PrismaClient,
+    home: new LocalAgentHomeStore(homeRoot),
+    sandbox,
+    jobs: {} as JobPublisher,
+    events: {} as ThreadEvents,
+  });
+  const onDocker = storedComputer({ kind: "kubernetes", providerRef: "pod-1" });
+  const dockerDeployment = createRunSandbox("docker", {
+    prisma: {
+      deploymentSettings: { findUnique: async () => null },
+      computer: onDocker,
+    } as unknown as PrismaClient,
+    secrets: { load: () => "" },
+  });
+  const onKubernetes = storedComputer({ kind: "kubernetes", providerRef: "pod-1" });
+  const { api, sandbox } = kubernetesDefault({ computer: onKubernetes });
+  try {
+    await expect(
+      provisionComputer(deps(dockerDeployment, onDocker), "computer", runContext, "bot"),
+    ).rejects.toThrow(
+      "This computer runs on Kubernetes, which is not configured here. Move it in Settings, Computers, or configure Kubernetes again.",
     );
-    expect(kubernetes.provision).toHaveBeenCalledWith(
+    expect(onDocker.updateMany).not.toHaveBeenCalled();
+    expect(provision).not.toHaveBeenCalled();
+    await provisionComputer(deps(sandbox, onKubernetes), "computer", runContext, "bot");
+    expect(provision).toHaveBeenCalledWith(
       expect.objectContaining({ providerRef: "pod-1", providerKind: "kubernetes" }),
       runContext,
     );
-    const events: ProcessEvent[] = [];
-    for await (const event of sandbox.execute(ref, { argv: ["true"] }, runContext))
-      events.push(event);
-    expect(events).toEqual([{ type: "exit", code: 0 }]);
-    expect(kubernetes.execute).toHaveBeenCalled();
-    expect(present.row).toMatchObject({
-      state: "running",
-      kind: "kubernetes",
-      providerRef: "pod-1",
+    expect(onKubernetes.row).toMatchObject({ state: "running", kind: "kubernetes" });
+  } finally {
+    api.dispose();
+    await rm(homeRoot, { recursive: true, force: true });
+  }
+});
+
+it("never traps a computer whose E2B key was removed", async () => {
+  vi.stubEnv("ARDURBOT_HOST_BRIDGE", "");
+  const homeRoot = await mkdtemp(path.join(tmpdir(), "ardurbot-missing-engine-"));
+  const homeFile = path.join(homeRoot, "homes", "home", "notes", "keep.txt");
+  await mkdir(path.dirname(homeFile), { recursive: true });
+  await writeFile(homeFile, "saved");
+  const e2b = [
+    vi.spyOn(E2BSandboxProvider.prototype, "provision"),
+    vi.spyOn(E2BSandboxProvider.prototype, "exportWorkspace"),
+    vi.spyOn(E2BSandboxProvider.prototype, "destroy"),
+  ];
+  const docker = localDocker({ id: "docker-new", providerRef: "docker-new", fresh: true });
+  const office = new FakeSandboxProvider();
+  vi.spyOn(ComputerConnections.prototype, "resolve").mockResolvedValue(office);
+  const notes: unknown[] = [];
+  const computerWithoutKey = () => {
+    const computer = storedComputer({ kind: "e2b", providerRef: "e2b-1" });
+    const prisma = {
+      computer,
+      run: { findFirst: async () => null },
+      deploymentSettings: { findUnique: async () => null },
+      thread: {
+        findFirst: async () => ({ id: "thread" }),
+        update: async () => ({ nextEventSeq: 2, nextMessageSeq: 2 }),
+      },
+      message: {
+        create: async ({ data }: { data: { blocks: unknown } }) => {
+          notes.push(data.blocks);
+          return { id: "message" };
+        },
+      },
+      event: { create: async () => ({ seq: 1, type: "thread.message.created" }) },
+      $transaction: async <T>(work: (tx: unknown) => Promise<T>) => work(prisma),
+    };
+    const deps = {
+      prisma: prisma as unknown as PrismaClient,
+      home: new LocalAgentHomeStore(homeRoot),
+      sandbox: createRunSandbox("docker", {
+        prisma: prisma as unknown as PrismaClient,
+        secrets: { load: () => "" },
+      }),
+      jobs: {} as JobPublisher,
+      events: { notify: vi.fn(async () => undefined) } as unknown as ThreadEvents,
+    };
+    return { computer, deps };
+  };
+  const restored = [
+    {
+      kind: "text",
+      text: "The previous engine was not available, so the last saved workspace was restored.",
+    },
+  ];
+  try {
+    const run = computerWithoutKey();
+    await expect(provisionComputer(run.deps, "computer", runContext, "bot")).rejects.toThrow(
+      "This computer runs on E2B, which is not configured here. Move it in Settings, Computers, or configure E2B again.",
+    );
+    expect(run.computer.updateMany).not.toHaveBeenCalled();
+
+    const moved = computerWithoutKey();
+    await replaceComputer(moved.deps, "computer", "update", runContext, "none", undefined, {
+      imageProfile: "base",
+      connectionId: "office",
     });
-    expect(docker).not.toHaveBeenCalled();
-    expect(desktop).not.toHaveBeenCalled();
+    expect(moved.computer.row).toMatchObject({ state: "running", connectionId: "office" });
+    const files = [...office.boxes.values()].flatMap((box) => [...box.files.entries()]);
+    expect(
+      new TextDecoder().decode(files.find(([file]) => file === "notes/keep.txt")![1].content),
+    ).toBe("saved");
+    expect(notes).toEqual([restored]);
+
+    const reset = computerWithoutKey();
+    await replaceComputer(reset.deps, "computer", "reset", runContext);
+    expect(docker.provision).toHaveBeenCalledOnce();
+    expect(reset.computer.row).toMatchObject({
+      state: "running",
+      kind: "docker",
+      connectionId: null,
+      providerRef: "docker-new",
+    });
+    expect(await readFile(homeFile, "utf8")).toBe("saved");
+    expect(notes).toEqual([restored, restored]);
+    for (const call of e2b) expect(call).not.toHaveBeenCalled();
+  } finally {
+    await rm(homeRoot, { recursive: true, force: true });
+  }
+});
+
+it("provisions, prepares and destroys an e2b-emulator computer on its own provider", async () => {
+  const homeRoot = await mkdtemp(path.join(tmpdir(), "ardurbot-emulator-"));
+  const computer = storedComputer({ kind: "e2b-emulator", providerRef: null, state: "stopped" });
+  const prisma = { computer, run: { findFirst: async () => null } };
+  const deps = {
+    prisma: prisma as unknown as PrismaClient,
+    home: new LocalAgentHomeStore(homeRoot),
+    sandbox: createRunSandbox("e2b-emulator", {
+      prisma: prisma as unknown as PrismaClient,
+      secrets: { load: () => "" },
+    }),
+    jobs: {} as JobPublisher,
+    events: {} as ThreadEvents,
+  };
+  const prepare = vi.spyOn(FakeSandboxProvider.prototype, "prepare");
+  const destroy = vi.spyOn(FakeSandboxProvider.prototype, "destroy");
+  try {
+    await provisionComputer(deps, "computer", runContext, "bot");
+    expect(computer.row).toMatchObject({ state: "running", kind: "e2b" });
+    await replaceComputer(deps, "computer", "reset", runContext);
+    expect(prepare).toHaveBeenCalledTimes(2);
+    expect(destroy).toHaveBeenCalledOnce();
+    expect(computer.row).toMatchObject({ state: "running", kind: "e2b" });
   } finally {
     await rm(homeRoot, { recursive: true, force: true });
   }
@@ -1340,7 +1267,9 @@ it("provisions a connectionless E2B computer when its key is set and leaves the 
         runContext,
         "bot",
       ),
-    ).rejects.toThrow("No E2B provider is registered.");
+    ).rejects.toThrow(
+      "This computer runs on E2B, which is not configured here. Move it in Settings, Computers, or configure E2B again.",
+    );
     expect(missing.updateMany).not.toHaveBeenCalled();
     expect(missing.row).toMatchObject({ state: "running", kind: "e2b", providerRef: "e2b-1" });
     expect(docker).not.toHaveBeenCalled();
@@ -1374,58 +1303,6 @@ it("provisions a connectionless E2B computer when its key is set and leaves the 
   }
 });
 
-it("checkpoints and destroys the loaded computer rather than a precomputed engine", async () => {
-  vi.stubEnv("ARDURBOT_HOST_BRIDGE", "");
-  const homeRoot = await mkdtemp(path.join(tmpdir(), "ardurbot-loaded-engine-"));
-  const stale = {
-    describe: () => ({ id: "docker" }),
-    destroy: vi.fn(async () => undefined),
-    releaseScreen: vi.fn(async () => undefined),
-  };
-  const hostDestroy = vi
-    .spyOn(DesktopSandboxProvider.prototype, "destroy")
-    .mockResolvedValue(undefined);
-  const computer = storedComputer({
-    kind: "desktop",
-    providerRef: "host:home",
-    state: "running",
-    connectionId: null,
-  });
-  const sandbox = createRunSandbox("docker", {
-    prisma: {
-      deploymentSettings: { findUnique: async () => ({ computerHost: "this-mac" }) },
-    } as unknown as PrismaClient,
-    secrets: { load: () => "" },
-  });
-  try {
-    await expect(
-      replaceComputer(
-        {
-          prisma: { computer, run: { findFirst: async () => null } } as unknown as PrismaClient,
-          home: new LocalAgentHomeStore(homeRoot),
-          sandbox,
-          jobs: {} as JobPublisher,
-          events: {} as ThreadEvents,
-        },
-        "computer",
-        "update",
-        runContext,
-        "none",
-        undefined,
-        { imageProfile: "developer", connectionId: null },
-        {
-          source: stale as unknown as SandboxProvider,
-          target: stale as unknown as SandboxProvider,
-        },
-      ),
-    ).rejects.toThrow();
-    expect(stale.destroy).not.toHaveBeenCalled();
-    expect(hostDestroy).toHaveBeenCalled();
-  } finally {
-    await rm(homeRoot, { recursive: true, force: true });
-  }
-});
-
 it("moves a local Docker computer to a remote Docker engine and never to SSH", async () => {
   vi.stubEnv("ARDURBOT_HOST_BRIDGE", "");
   const homeRoot = await mkdtemp(path.join(tmpdir(), "ardurbot-docker-family-"));
@@ -1443,7 +1320,7 @@ it("moves a local Docker computer to a remote Docker engine and never to SSH", a
     },
   );
   const measured = (id: "remote-docker" | "ssh", memoryFree: number) => ({
-    describe: () => ({ id }),
+    describe: () => ({ id, kind: id }),
     capacity: async () => ({
       ...unknownCapacity(),
       source: id === "ssh" ? ("ssh" as const) : ("docker" as const),
@@ -1492,6 +1369,7 @@ it("moves a local Docker computer to a remote Docker engine and never to SSH", a
     },
     space: { findUniqueOrThrow: async () => ({ placement: { mode: "free-memory" } }) },
     deploymentSettings: { findUnique: async () => ({ computerHost: null }) },
+    hostRegistration: { findUnique: async () => null },
     run: {
       findUniqueOrThrow: async () => runRow(computer.row),
       findFirst: async ({ where }: { where: { id?: unknown } }) =>
@@ -1563,140 +1441,125 @@ it("moves a local Docker computer to a remote Docker engine and never to SSH", a
   }
 });
 
-it("names the host row This Mac on darwin and This computer on linux", async () => {
+function listingPrisma(
+  computers: { kind: string; connectionId?: string | null }[],
+  pairedPlatform: string | null = null,
+) {
+  return {
+    connection: { findMany: async () => [] },
+    bot: {
+      findMany: async () =>
+        computers.map((computer, index) => ({
+          id: `bot-${index}`,
+          name: `Bot ${index}`,
+          computer: { connectionId: null, ...computer },
+        })),
+    },
+    space: { findUniqueOrThrow: async () => ({ placement: {} }) },
+    deploymentSettings: { findUnique: async () => ({ computerHost: null }) },
+    hostRegistration: {
+      findUnique: async () => (pairedPlatform ? { platform: pairedPlatform } : null),
+    },
+  } as unknown as PrismaClient;
+}
+
+function rows(fleet: Awaited<ReturnType<FleetCatalog["list"]>>) {
+  return fleet.targets.map(({ id, builtin, name, kind, bots }) => ({
+    id,
+    builtin,
+    name,
+    kind,
+    bots: bots.map((bot) => bot.id),
+  }));
+}
+
+it("keys the built-in rows and labels the host from the paired desktop, else the server", async () => {
   vi.stubEnv("ARDURBOT_HOST_BRIDGE", "");
   vi.spyOn(DockerSandboxProvider.prototype, "engineInfo").mockRejectedValue(new Error("offline"));
-  const prisma = {
-    connection: { findMany: async () => [] },
-    bot: { findMany: async () => [] },
-    space: { findUniqueOrThrow: async () => ({ placement: {} }) },
-    deploymentSettings: { findUnique: async () => ({ computerHost: "this-mac" }) },
-  };
-  const context: AdapterContext = {
-    userId: "owner",
-    spaceId: "space",
-    operationId: "list",
-    traceId: "list",
-    signal: new AbortController().signal,
-  };
-  const fallback = {
-    describe: () => ({ id: "docker" }),
-    capacity: async () => unknownCapacity(),
-  } as unknown as SandboxProvider;
-  const listed = async (platform: string) =>
-    new FleetCatalog(
-      prisma as unknown as PrismaClient,
-      { load: () => "" },
-      {},
-      fallback,
-      platform,
-    ).list(context);
-  expect((await listed("darwin")).targets.find((target) => target.id === "host")?.name).toBe(
-    "This Mac",
-  );
-  expect((await listed("linux")).targets.find((target) => target.id === "host")?.name).toBe(
-    "This computer",
-  );
-  expect((await listed("MacIntel")).targets.find((target) => target.id === "host")?.name).toBe(
-    "This Mac",
+  const provider = (kind: string) =>
+    ({
+      describe: () => ({ id: kind, kind }),
+      capacity: async () => unknownCapacity(),
+    }) as unknown as SandboxProvider;
+  const list = (fallback: SandboxProvider, paired: string | null) =>
+    new FleetCatalog(listingPrisma([], paired), { load: () => "" }, {}, fallback).list(runContext);
+  const onMac = await list(provider("docker"), "darwin");
+  expect(onMac.hostLabel).toBe("This Mac");
+  expect(rows(onMac)).toEqual([
+    { id: "host", builtin: "host", name: "This Mac", kind: "host", bots: [] },
+    {
+      id: "default",
+      builtin: "local-docker",
+      name: "Docker on this Mac",
+      kind: "docker",
+      bots: [],
+    },
+  ]);
+  const onLinux = await list(provider("e2b"), "linux");
+  expect(onLinux.hostLabel).toBe("This computer");
+  expect(rows(onLinux).map(({ id, builtin, name }) => ({ id, builtin, name }))).toEqual([
+    { id: "host", builtin: "host", name: "This computer" },
+    { id: "default", builtin: "default", name: "Default computer" },
+    { id: "docker", builtin: "local-docker", name: "Docker on this computer" },
+  ]);
+  expect((await list(provider("docker"), null)).hostLabel).toBe(
+    process.platform === "darwin" ? "This Mac" : "This computer",
   );
 });
 
-it.each(["kubernetes", "e2b", "daytona", "box"] as const)(
-  "keeps a connectionless %s computer off the Docker row and does not move it",
-  async (kind) => {
+it.each([
+  ["none", "none", null, "default"],
+  ["fake", "fake", "fake", "default"],
+  ["e2b-emulator", "e2b-emulator", "e2b", "e2b"],
+  ["e2b-emulator", "e2b", "e2b", "e2b"],
+] as const)(
+  "lists a %s deployment's %s computer on the default row",
+  async (provider, computerKind, created, rowKind) => {
     vi.stubEnv("ARDURBOT_HOST_BRIDGE", "");
-    vi.stubEnv("KUBERNETES_SERVICE_HOST", "");
-    const localMemory = 512 * 1024 ** 2;
-    const remoteMemory = 32 * 1024 ** 3;
-    vi.spyOn(DockerSandboxProvider.prototype, "engineInfo").mockResolvedValue({
-      name: "docker",
-      rootless: false,
-      version: "test",
-      os: "linux",
-      capacity: { ...unknownCapacity(), source: "docker", memoryFree: localMemory },
+    vi.spyOn(DockerSandboxProvider.prototype, "engineInfo").mockRejectedValue(new Error("offline"));
+    const fallback = createSandboxProvider(provider, {});
+    expect(fallback.describe().kind).toBe(created);
+    const fleet = await new FleetCatalog(
+      listingPrisma([{ kind: computerKind }]),
+      { load: () => "" },
+      {},
+      fallback,
+    ).list(runContext);
+    expect(fleet.targets.find((target) => target.id === "default")).toMatchObject({
+      builtin: "default",
+      kind: rowKind,
+      bots: [{ id: "bot-0", name: "Bot 0" }],
     });
-    const destroy = vi.fn(async () => undefined);
-    const capacity = vi.fn(async () => unknownCapacity());
-    const kindProvider = {
-      describe: () => ({ id: kind }),
-      capacity,
-      destroy,
-      exportWorkspace: async function* () {
-        yield* [];
-      },
-      releaseScreen: async () => undefined,
-      provision: vi.fn(async () => ({
-        id: `${kind}-next`,
-        botId: "home",
-        kind,
-        providerRef: `${kind}-next`,
-        fresh: true,
-      })),
-    } as unknown as SandboxProvider;
-    const connected = {
-      describe: () => ({ id: kind }),
-      capacity: async () => ({
-        ...unknownCapacity(),
-        source: "docker" as const,
-        memoryFree: remoteMemory,
-      }),
-      destroy: vi.fn(async () => undefined),
-      provision: vi.fn(),
-    } as unknown as SandboxProvider;
-    vi.spyOn(ComputerConnections.prototype, "resolve").mockResolvedValue(connected);
-    const bot = { ...movingBot };
-    const computer = storedComputer({ kind, providerRef: `${kind}-1`, connectionId: null });
-    const row = { ...computer.row, bots: [bot] };
+    expect(fleet.targets.filter((target) => target.id.startsWith("kind:"))).toEqual([]);
+  },
+);
+
+it("lists no row for a computer whose engine is not configured and never moves it", async () => {
+  vi.stubEnv("ARDURBOT_HOST_BRIDGE", "");
+  vi.stubEnv("KUBERNETES_SERVICE_HOST", "10.0.0.1");
+  vi.spyOn(DockerSandboxProvider.prototype, "engineInfo").mockResolvedValue({
+    name: "docker",
+    rootless: false,
+    version: "test",
+    os: "linux",
+    capacity: { ...unknownCapacity(), source: "docker", memoryFree: 32 * 1024 ** 3 },
+  });
+  for (const kind of ["kubernetes", "e2b"]) {
+    const computer = storedComputer({ kind, providerRef: `${kind}-1` });
+    const row = { ...computer.row, bots: [movingBot] };
     const prisma = {
-      connection: {
-        findMany: async () => [
-          {
-            id: "richer",
-            displayName: "Richer",
-            status: "connected",
-            metadata:
-              kind === "kubernetes"
-                ? { engine: "kubernetes", context: "cluster" }
-                : { engine: "ssh", ssh: { host: "computer.invalid", user: "runner" } },
-          },
-        ],
-      },
-      bot: {
-        findMany: async () => [{ ...bot, computer: row }],
-        update: vi.fn(async () => ({})),
-        updateMany: async () => ({ count: 1 }),
-      },
+      connection: { findMany: async () => [] },
+      bot: { findMany: async () => [{ ...movingBot, computer: row }], update: vi.fn() },
       space: { findUniqueOrThrow: async () => ({ placement: { mode: "free-memory" } }) },
       deploymentSettings: { findUnique: async () => ({ computerHost: null }) },
-      run: {
-        findUniqueOrThrow: async () => runRow(row),
-        findFirst: async () => null,
-        findUnique: async () => ({
-          status: "running",
-          startedAt: new Date(),
-          originDeviceGrantId: null,
-          remoteRootTaskId: null,
-          delegationId: null,
-        }),
-        updateMany: async () => ({ count: 1 }),
-      },
+      hostRegistration: { findUnique: async () => null },
+      run: { findUniqueOrThrow: async () => runRow(row), updateMany: vi.fn() },
       computer,
-      computerUpdate: {
-        create: async () => ({ id: "move" }),
-        update: async () => ({}),
-        updateMany: async () => ({ count: 1 }),
-      },
-      thread: { update: async () => ({ nextEventSeq: 2, nextMessageSeq: 2 }) },
-      message: { create: async () => ({ id: "message" }) },
-      event: { create: async () => ({ seq: 1 }) },
-      $queryRaw: async () => [],
-      $transaction: async <T>(work: (tx: unknown) => Promise<T>) => work(prisma),
+      computerUpdate: { create: vi.fn() },
     };
     const sandbox = createRunSandbox("docker", {
       prisma: prisma as unknown as PrismaClient,
       secrets: { load: () => "" },
-      providers: { [kind]: () => kindProvider },
     });
     const catalog = new FleetCatalog(
       prisma as unknown as PrismaClient,
@@ -1705,19 +1568,10 @@ it.each(["kubernetes", "e2b", "daytona", "box"] as const)(
       sandbox,
     );
     const fleet = await catalog.list(runContext);
-    const docker = fleet.targets.find(
-      (target) => target.connectionId === null && target.kind === "docker",
-    );
-    const own = fleet.targets.find(
-      (target) => target.connectionId === null && target.kind === kind && target.id !== docker?.id,
-    );
-    expect(docker?.bots ?? []).toEqual([]);
-    expect(own).toMatchObject({
-      state: "unavailable",
-      bots: [{ id: "bot", name: "Bot" }],
-    });
-    expect(own?.id).not.toBe(fleet.defaultTargetId);
-    expect(capacity).toHaveBeenCalled();
+    expect(rows(fleet).map(({ id, bots }) => ({ id, bots }))).toEqual([
+      { id: "host", bots: [] },
+      { id: "default", bots: [] },
+    ]);
     expect(
       await placeRunComputer(
         {
@@ -1725,21 +1579,55 @@ it.each(["kubernetes", "e2b", "daytona", "box"] as const)(
           home: {} as AgentHomeStore,
           sandbox,
           jobs: {} as JobPublisher,
-          events: {
-            append: vi.fn(),
-            notify: vi.fn(async () => undefined),
-          } as unknown as ThreadEvents,
+          events: {} as ThreadEvents,
         },
         catalog,
         "run",
         new AbortController().signal,
       ),
     ).toBe(true);
-    expect(destroy).not.toHaveBeenCalled();
-    expect(computer.row).toMatchObject({ connectionId: null, kind });
-    expect(prisma.bot.update).not.toHaveBeenCalled();
-  },
-);
+    expect(prisma.computerUpdate.create).not.toHaveBeenCalled();
+    expect(computer.updateMany).not.toHaveBeenCalled();
+  }
+});
+
+it("shows a registered E2B computer's capacity on a Docker deployment", async () => {
+  vi.stubEnv("ARDURBOT_HOST_BRIDGE", "");
+  const memoryFree = 16 * 1024 ** 3;
+  const capacity = vi
+    .spyOn(E2BSandboxProvider.prototype, "capacity")
+    .mockResolvedValue({ ...unknownCapacity(), source: "docker", memoryFree });
+  vi.spyOn(DockerSandboxProvider.prototype, "engineInfo").mockResolvedValue({
+    name: "docker",
+    rootless: false,
+    version: "test",
+    os: "linux",
+    capacity: { ...unknownCapacity(), source: "docker", memoryFree: 512 * 1024 ** 2 },
+  });
+  const prisma = listingPrisma([{ kind: "e2b" }]);
+  const sandbox = createRunSandbox("docker", {
+    prisma,
+    secrets: { load: () => "" },
+    e2bApiKey: "e2b-test",
+  });
+  const fleet = await new FleetCatalog(prisma, { load: () => "" }, {}, sandbox).list(runContext);
+  expect(capacity).toHaveBeenCalledOnce();
+  expect(rows(fleet)).toEqual([
+    { id: "host", builtin: "host", name: expect.any(String), kind: "host", bots: [] },
+    {
+      id: "default",
+      builtin: "local-docker",
+      name: expect.any(String),
+      kind: "docker",
+      bots: [],
+    },
+    { id: "kind:e2b", builtin: undefined, name: "E2B", kind: "e2b", bots: ["bot-0"] },
+  ]);
+  expect(fleet.targets.at(-1)).toMatchObject({
+    state: "connected",
+    capacity: expect.objectContaining({ memoryFree }),
+  });
+});
 
 it.each(["e2b", "daytona", "box"] as const)(
   "puts a connectionless %s computer on the deployment default with that provider's capacity",
@@ -1760,7 +1648,7 @@ it.each(["e2b", "daytona", "box"] as const)(
       capacity: { ...unknownCapacity(), source: "docker", memoryFree: 512 * 1024 ** 2 },
     });
     const fallback = {
-      describe: () => ({ id: kind }),
+      describe: () => ({ id: kind, kind }),
       capacity: async () => capacity,
     } as unknown as SandboxProvider;
     const prisma = {
@@ -1776,6 +1664,7 @@ it.each(["e2b", "daytona", "box"] as const)(
       },
       space: { findUniqueOrThrow: async () => ({ placement: {} }) },
       deploymentSettings: { findUnique: async () => ({ computerHost: null }) },
+      hostRegistration: { findUnique: async () => null },
     };
     const context: AdapterContext = {
       userId: "owner",
@@ -1807,104 +1696,12 @@ it.each(["e2b", "daytona", "box"] as const)(
   },
 );
 
-it("shows a registered E2B computer's capacity on a Docker deployment", async () => {
-  vi.stubEnv("ARDURBOT_HOST_BRIDGE", "");
-  vi.stubEnv("KUBERNETES_SERVICE_HOST", "");
-  const memoryFree = 16 * 1024 ** 3;
-  const capacity = vi.fn(async () => ({
-    ...unknownCapacity(),
-    source: "docker" as const,
-    memoryFree,
-  }));
-  vi.spyOn(DockerSandboxProvider.prototype, "engineInfo").mockResolvedValue({
-    name: "docker",
-    rootless: false,
-    version: "test",
-    os: "linux",
-    capacity: { ...unknownCapacity(), source: "docker", memoryFree: 512 * 1024 ** 2 },
-  });
-  const e2b = {
-    describe: () => ({ id: "e2b" }),
-    capacity,
-  } as unknown as SandboxProvider;
-  const prisma = {
-    connection: { findMany: async () => [] },
-    bot: {
-      findMany: async () => [
-        { id: "bot", name: "Bot", computer: { kind: "e2b", connectionId: null } },
-      ],
-    },
-    space: { findUniqueOrThrow: async () => ({ placement: {} }) },
-    deploymentSettings: { findUnique: async () => ({ computerHost: null }) },
-  };
-  const sandbox = createRunSandbox("docker", {
-    prisma: prisma as unknown as PrismaClient,
-    secrets: { load: () => "" },
-    providers: { e2b: () => e2b },
-  });
-  const fleet = await new FleetCatalog(
-    prisma as unknown as PrismaClient,
-    { load: () => "" },
-    {},
-    sandbox,
-  ).list(runContext);
-  const row = fleet.targets.find((target) => target.kind === "e2b");
-  expect(capacity).toHaveBeenCalled();
-  expect(row).toMatchObject({
-    state: "connected",
-    capacity: expect.objectContaining({ memoryFree, source: "docker" }),
-    bots: [{ id: "bot", name: "Bot" }],
-  });
-  expect(fleet.targets.filter((target) => target.kind === "e2b")).toHaveLength(1);
-  expect(
-    fleet.targets.find((target) => target.connectionId === null && target.kind === "docker")?.bots,
-  ).toEqual([]);
-});
-
-it("names the Docker row for the same platform as the host row", async () => {
-  vi.stubEnv("ARDURBOT_HOST_BRIDGE", "");
-  vi.spyOn(DockerSandboxProvider.prototype, "engineInfo").mockRejectedValue(new Error("offline"));
-  const prisma = {
-    connection: { findMany: async () => [] },
-    bot: { findMany: async () => [] },
-    space: { findUniqueOrThrow: async () => ({ placement: {} }) },
-    deploymentSettings: { findUnique: async () => ({ computerHost: null }) },
-  };
-  const context: AdapterContext = {
-    userId: "owner",
-    spaceId: "space",
-    operationId: "list",
-    traceId: "list",
-    signal: new AbortController().signal,
-  };
-  const fallback = {
-    describe: () => ({ id: "docker" }),
-    capacity: async () => unknownCapacity(),
-  } as unknown as SandboxProvider;
-  const listed = async (platform: string) =>
-    new FleetCatalog(
-      prisma as unknown as PrismaClient,
-      { load: () => "" },
-      {},
-      fallback,
-      platform,
-    ).list(context);
-  const dockerName = async (platform: string) =>
-    (await listed(platform)).targets.find(
-      (target) => target.connectionId === null && target.kind === "docker",
-    )?.name;
-  expect(await dockerName("linux")).toBe("Docker on this computer");
-  expect(await dockerName("win32")).toBe("Docker on this computer");
-  expect(await dockerName("darwin")).toBe("Docker on this Mac");
-  expect(await dockerName("MacIntel")).toBe("Docker on this Mac");
-});
-
 it("boots a docker row on its saved connection and keeps the kind that connection reports", async () => {
   vi.stubEnv("ARDURBOT_HOST_BRIDGE", "");
   const homeRoot = await mkdtemp(path.join(tmpdir(), "ardurbot-kind-connection-"));
   // Each fake reports the kind its real provider reports for a computer it boots.
   const connected = (id: "ssh" | "remote-docker") => ({
-    describe: () => ({ id }),
+    describe: () => ({ id, kind: id }),
     provision: vi.fn(async (request: { botId: string }) => ({
       id: `${id}-computer`,
       botId: request.botId,
@@ -1934,6 +1731,7 @@ it("boots a docker row on its saved connection and keeps the kind that connectio
     });
     const prisma = {
       deploymentSettings: { findUnique: async () => ({ computerHost: null }) },
+      hostRegistration: { findUnique: async () => null },
       computer,
     };
     const sandbox = createRunSandbox("docker", {
@@ -1991,79 +1789,39 @@ it("boots a docker row on its saved connection and keeps the kind that connectio
   }
 });
 
-it("refuses a connectionless kind its sandbox cannot run before the boot claim", async () => {
+it("refuses to clear a connection while the deployment default is the host", async () => {
   vi.stubEnv("ARDURBOT_HOST_BRIDGE", "");
-  const homeRoot = await mkdtemp(path.join(tmpdir(), "ardurbot-missing-kind-"));
-  const docker = vi.spyOn(DockerSandboxProvider.prototype, "provision");
-  const boot = async (secrets?: { load: () => string }) => {
-    const computer = storedComputer({
-      kind: "box",
-      providerRef: "box-1",
-      state: "stopped",
-      connectionId: null,
-    });
-    const settings = { findUnique: async () => ({ computerHost: null }) };
-    // Without saved connections the run sandbox is Docker alone, so only the kind check can refuse.
-    const sandbox = createRunSandbox("docker", {
-      prisma: { deploymentSettings: settings, computer } as unknown as PrismaClient,
-      secrets,
-    });
-    await expect(
-      provisionComputer(
-        {
-          prisma: { computer } as unknown as PrismaClient,
-          home: new LocalAgentHomeStore(homeRoot),
-          sandbox,
-          jobs: {} as JobPublisher,
-          events: {} as ThreadEvents,
-        },
-        "computer",
-        runContext,
-        "bot",
-      ),
-    ).rejects.toThrow("No Box provider is registered.");
-    expect(computer.updateMany).not.toHaveBeenCalled();
-    expect(computer.row).toMatchObject({ state: "stopped", kind: "box", providerRef: "box-1" });
+  const podman = savedPodman();
+  vi.spyOn(ComputerConnections.prototype, "resolve").mockResolvedValue(podman);
+  const computer = storedComputer({ connectionId: "engine", providerRef: "podman-computer" });
+  const prisma = {
+    computer,
+    run: { findFirst: async () => null },
+    deploymentSettings: { findUnique: async () => ({ computerHost: "this-mac" }) },
   };
-  try {
-    await boot({ load: () => "" });
-    await boot();
-    expect(docker).not.toHaveBeenCalled();
-  } finally {
-    await rm(homeRoot, { recursive: true, force: true });
-  }
-});
-
-it("refuses a host move with This computer on linux and This Mac on darwin", async () => {
-  const fallback = {
-    describe: () => ({ id: "docker" }),
-    capacity: async () => unknownCapacity(),
-  } as unknown as SandboxProvider;
-  const context: AdapterContext = {
-    userId: "owner",
-    spaceId: "space",
-    operationId: "move",
-    traceId: "move",
-    signal: new AbortController().signal,
-  };
-  const catalog = (platform: string) =>
-    new FleetCatalog({} as PrismaClient, { load: () => "" }, {}, fallback, platform);
+  const sandbox = createRunSandbox("docker", {
+    prisma: prisma as unknown as PrismaClient,
+    secrets: { load: () => "" },
+  });
   await expect(
-    catalog("linux").resolveReplacementRouting(
-      { kind: "docker", connectionId: null },
-      { thisMac: true },
-      context,
+    replaceComputer(
+      {
+        prisma: prisma as unknown as PrismaClient,
+        home: {} as AgentHomeStore,
+        sandbox,
+        jobs: {} as JobPublisher,
+        events: {} as ThreadEvents,
+      },
+      "computer",
+      "update",
+      runContext,
+      "none",
+      undefined,
+      { imageProfile: "base", connectionId: null },
     ),
   ).rejects.toThrow(
-    "This computer is not available. Choose a saved connection or keep the current engine.",
+    "Moving a computer onto the machine running Ardur Bot is not available yet. Choose a saved connection or keep the current engine.",
   );
-  await expect(
-    catalog("darwin").resolveReplacementRouting(
-      { kind: "docker", connectionId: null },
-      { thisMac: true },
-      context,
-    ),
-  ).rejects.toThrow(
-    "This Mac is not available. Choose a saved connection or keep the current engine.",
-  );
+  expect(podman.destroy).not.toHaveBeenCalled();
+  expect(computer.updateMany).not.toHaveBeenCalled();
 });

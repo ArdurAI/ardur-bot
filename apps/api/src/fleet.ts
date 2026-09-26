@@ -45,6 +45,7 @@ export async function fleetList(deps: RouterDeps, context: AdapterContext) {
   const fleet = await fleetCatalog(deps).list(context);
   return {
     targets: fleet.targets,
+    hostLabel: fleet.hostLabel,
     placement: fleet.placement,
     bots: fleet.bots.map((bot) => ({
       id: bot.id,

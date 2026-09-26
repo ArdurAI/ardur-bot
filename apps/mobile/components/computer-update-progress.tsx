@@ -29,19 +29,17 @@ export function ComputerUpdateProgress() {
     t("Reconnecting"),
   ];
   const title = (update: ComputerUpdate) =>
-    update.status === "skipped"
-      ? t("The computer changed before the move, so it stayed where it is.")
-      : computerUpdateNeedsAttention(update)
-        ? update.action === "recover"
-          ? t("Recovery failed")
-          : t("Update failed")
-        : update.action === "recover"
-          ? update.mode === "team"
-            ? t("Recovering Team Computer")
-            : t("Recovering {name}’s Computer", { name: update.name })
-          : update.mode === "team"
-            ? t("Updating Team Computer")
-            : t("Updating {name}’s Computer", { name: update.name });
+    computerUpdateNeedsAttention(update)
+      ? update.action === "recover"
+        ? t("Recovery failed")
+        : t("Update failed")
+      : update.action === "recover"
+        ? update.mode === "team"
+          ? t("Recovering Team Computer")
+          : t("Recovering {name}’s Computer", { name: update.name })
+        : update.mode === "team"
+          ? t("Updating Team Computer")
+          : t("Updating {name}’s Computer", { name: update.name });
   const selected = updates.find((item) => item.id === openId);
   if (!authenticated) return null;
   return (
@@ -57,16 +55,14 @@ export function ComputerUpdateProgress() {
             }}
             style={[styles.pill, { backgroundColor: tokens.card, borderColor: tokens.border }]}
           >
-            {update.status === "skipped" || computerUpdateNeedsAttention(update) ? null : (
+            {!computerUpdateNeedsAttention(update) ? (
               <ActivityIndicator color={tokens.foreground} />
-            )}
+            ) : null}
             <View>
               <Text style={{ color: tokens.foreground }}>{title(update)}</Text>
-              {update.status === "skipped" ? null : (
-                <Text style={[styles.secondary, { color: tokens.mutedForeground }]}>
-                  {labels[COMPUTER_UPDATE_STAGES.indexOf(update.stage)]}
-                </Text>
-              )}
+              <Text style={[styles.secondary, { color: tokens.mutedForeground }]}>
+                {labels[COMPUTER_UPDATE_STAGES.indexOf(update.stage)]}
+              </Text>
             </View>
           </Pressable>
         ))}
@@ -82,7 +78,7 @@ export function ComputerUpdateProgress() {
             <Text accessibilityRole="header" style={[styles.title, { color: tokens.foreground }]}>
               {title(selected)}
             </Text>
-            {selected.status === "skipped" ? null : computerUpdateNeedsAttention(selected) ? (
+            {computerUpdateNeedsAttention(selected) ? (
               <Text style={{ color: tokens.mutedForeground }}>
                 {selected.status === "interrupted"
                   ? t("Recovery is unavailable until the previous operation has stopped.")
@@ -167,15 +163,13 @@ export function ComputerUpdateProgress() {
               accessibilityRole="button"
               style={styles.button}
               onPress={() => {
-                if (selected.status === "failed" || selected.status === "skipped")
+                if (selected.status === "failed")
                   void computerUpdates.dismiss(selected.id).catch(() => setError(true));
                 else computerUpdates.open(null);
               }}
             >
               <Text style={{ color: tokens.foreground }}>
-                {selected.status === "failed" || selected.status === "skipped"
-                  ? t("Dismiss")
-                  : t("Continue in Background")}
+                {selected.status === "failed" ? t("Dismiss") : t("Continue in Background")}
               </Text>
             </Pressable>
           </View>

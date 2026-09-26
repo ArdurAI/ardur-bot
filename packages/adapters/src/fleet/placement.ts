@@ -1,7 +1,7 @@
 import type { AdapterContext } from "@ardurbot/adapter-kit";
-import { computerMoveSkippedReason } from "@ardurbot/contracts";
 import { choosePlacement, PlacementSettingsSchema } from "@ardurbot/contracts/fleet";
 import { appendEventInTransaction, createThreadMessageInTransaction, Prisma } from "@ardurbot/db";
+import { getLogger } from "@ardurbot/logging";
 import { ComputerBusyError, replaceComputer } from "../computer-lifecycle.js";
 import type { FleetCatalog } from "./catalog.js";
 import { fleetComputerTargetId } from "./catalog.js";
@@ -40,11 +40,6 @@ export async function placeRunComputer(
   if (policy.mode === "manual") return true;
   const computer = run.bot.computer;
   if (!computer || computer.maintenanceId || computer.controlHolder === "user") return true;
-  const listed = {
-    kind: computer.kind,
-    providerRef: computer.providerRef ?? null,
-    connectionId: computer.connectionId ?? null,
-  };
   const context: AdapterContext = {
     operationId: runId,
     traceId: runId,
@@ -164,10 +159,23 @@ export async function placeRunComputer(
   signal.throwIfAborted();
   const target = candidates.find((target) => target.id === decision.targetId)!;
   const reason = `Moved to ${target.name}: ${decision.reason}`;
-  let updateId: string;
+  let updateId: string | null;
   try {
     updateId = await deps.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM computers WHERE id = ${computer.id} FOR UPDATE`;
+      // A computer that changed since this decision stays where it is. Only the run records it.
+      const current = await tx.computer.findUniqueOrThrow({ where: { id: computer.id } });
+      if (
+        current.kind !== computer.kind ||
+        current.providerRef !== computer.providerRef ||
+        current.connectionId !== computer.connectionId
+      ) {
+        await tx.run.updateMany({
+          where: ownedRun,
+          data: { placement: { ...decision, status: "skipped" } },
+        });
+        return null;
+      }
       const currentOwners = await tx.bot.findMany({
         where: { computerId: computer.id, archivedAt: null },
       });
@@ -206,7 +214,6 @@ export async function placeRunComputer(
             imageProfile: computer.imageProfile,
             confirmed: true,
             placementRunId: runId,
-            targetId: decision.targetId,
           },
         },
       });
@@ -226,6 +233,10 @@ export async function placeRunComputer(
   } catch (error) {
     if (error instanceof ComputerBusyError) return true;
     throw error;
+  }
+  if (updateId === null) {
+    getLogger().info("computer.placement.skipped", { runId, computerId: computer.id });
+    return true;
   }
   const abort = new AbortController();
   const heartbeat = setInterval(() => {
@@ -252,46 +263,9 @@ export async function placeRunComputer(
     );
   }, 30_000);
   try {
-    const current = await deps.prisma.computer.findUniqueOrThrow({ where: { id: computer.id } });
-    if (
-      current.kind !== listed.kind ||
-      (current.providerRef ?? null) !== listed.providerRef ||
-      (current.connectionId ?? null) !== listed.connectionId
-    ) {
-      await deps.prisma.computerUpdate.updateMany({
-        where: { id: updateId, status: "running" },
-        data: {
-          status: "skipped",
-          configuration: {
-            connectionId: decision.connectionId,
-            imageProfile: computer.imageProfile,
-            confirmed: true,
-            placementRunId: runId,
-            targetId: decision.targetId,
-            reason: computerMoveSkippedReason,
-          },
-        },
-      });
-      await deps.prisma.run.updateMany({
-        where: ownedRun,
-        data: {
-          placement: {
-            ...decision,
-            status: "skipped",
-            reason: computerMoveSkippedReason,
-          },
-        },
-      });
-      return true;
-    }
     const moveSignal = AbortSignal.any([signal, abort.signal]);
     moveSignal.throwIfAborted();
-    const routing = await catalog.resolveReplacementRouting(
-      computer,
-      { connectionId: decision.connectionId, targetId: decision.targetId },
-      context,
-      fleet,
-    );
+    const destination = await catalog.placementTarget(computer, target, context);
     await replaceComputer(
       deps,
       computer.id,
@@ -311,9 +285,8 @@ export async function placeRunComputer(
         imageProfile: computer.imageProfile as "base" | "developer",
         connectionId: decision.connectionId,
         placementRunId: runId,
-        targetId: decision.targetId,
       },
-      routing,
+      destination,
     );
     const committed = await deps.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM threads WHERE id = ${run.threadId} FOR UPDATE`;

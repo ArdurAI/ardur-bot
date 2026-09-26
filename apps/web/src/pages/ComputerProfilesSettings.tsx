@@ -4,7 +4,8 @@ import type {
   ComputerStatus,
   Me,
 } from "@ardurbot/contracts";
-import { COMPUTER_PROFILES, hostComputerLabel, matchesHostRefusal } from "@ardurbot/contracts";
+import { COMPUTER_PROFILES, HOST_MOVE_UNAVAILABLE_MESSAGE } from "@ardurbot/contracts";
+import { ENGINE_LABELS } from "@ardurbot/contracts/fleet";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,12 +25,6 @@ import { rpc } from "../lib/rpc";
 
 type Connection = { id: string; name: string; settings: ComputerConnectionSettings };
 
-function hostPlatform() {
-  if (typeof window !== "undefined" && window.ardurbotDesktop?.platform)
-    return window.ardurbotDesktop.platform;
-  return typeof navigator !== "undefined" ? navigator.platform : "";
-}
-
 export type DeploymentDefault = "docker" | "this-mac" | "other";
 
 export function deploymentDefaultEngine(
@@ -38,17 +33,6 @@ export function deploymentDefaultEngine(
   if (me.sandboxProvider === "desktop" || me.computerHost === "this-mac") return "this-mac";
   if (me.sandboxProvider === "docker") return "docker";
   return "other";
-}
-
-function engineLabel(engine: string) {
-  if (engine === "desktop" || engine === "host") return hostComputerLabel(hostPlatform());
-  if (engine === "podman") return "Podman";
-  if (engine === "kubernetes") return "Kubernetes";
-  if (engine === "docker" || engine === "remote-docker") return "Docker";
-  if (engine === "e2b") return "E2B";
-  if (engine === "daytona") return "Daytona";
-  if (engine === "box") return "Box";
-  return engine;
 }
 
 export function ComputerProfilesSettings() {
@@ -163,18 +147,21 @@ export function ComputerProfile({
     : detectedEngine?.connectionId === connectionId
       ? detectedEngine.name
       : (connection?.settings.engine ?? status.kind);
-  const savedEngine = engineLabel(status.kind);
-  const offerDeploymentDefault = !connectionless && deploymentDefault === "docker";
   const hostComputer = status.kind === "desktop";
-  const supported = ["docker", "podman", "kubernetes", "remote-docker", "desktop"].includes(engine);
+  const engineLabel = (kind: string) =>
+    kind !== "desktop"
+      ? (ENGINE_LABELS[kind] ?? kind)
+      : status.hostLabel === "This Mac"
+        ? t`This Mac`
+        : t`This computer`;
+  const offerDeploymentDefault = !connectionless && deploymentDefault === "docker";
+  const supported = ["docker", "podman", "kubernetes", "remote-docker"].includes(engine);
   const savedConnection = connections.find((entry) => entry.id === savedConnectionId);
   const selectedConnection = connections.find((entry) => entry.id === connectionId);
   const sourceLabel = savedConnection?.name ?? t`this engine`;
   const destinationLabel = connectionId
     ? (selectedConnection?.name ?? t`this engine`)
     : t`Deployment default (Docker)`;
-  const hostLabel =
-    hostComputerLabel(hostPlatform()) === "This Mac" ? t`This Mac` : t`This computer`;
   async function save() {
     setPending(true);
     setError("");
@@ -188,15 +175,11 @@ export function ComputerProfile({
       setConfirm(false);
       await onChanged();
     } catch (caught: unknown) {
-      const message = caught instanceof Error ? caught.message : "";
       setError(
-        matchesHostRefusal(message, "move")
+        caught instanceof Error && caught.message === HOST_MOVE_UNAVAILABLE_MESSAGE
           ? // biome-ignore format: one catalog sentence
-            t`Moving this computer onto ${hostLabel} is not available yet. Choose a saved connection or keep the current engine.`
-          : matchesHostRefusal(message, "unavailable")
-            ? // biome-ignore format: one catalog sentence
-              t`${hostLabel} is not available. Choose a saved connection or keep the current engine.`
-            : t`Could not change the computer; stop its bots and try again.`,
+            t`Moving a computer onto the machine running Ardur Bot is not available yet. Choose a saved connection or keep the current engine.`
+          : t`Could not change the computer; stop its bots and try again.`,
       );
     } finally {
       setPending(false);
@@ -217,45 +200,42 @@ export function ComputerProfile({
           </Button>
         </div>
       ) : null}
-      <label htmlFor={`connection-${botId}`} className="block space-y-1">
-        <span>
-          <Trans>Connection</Trans>
-        </span>
-        <NativeSelect
-          id={`connection-${botId}`}
-          aria-label={t`Connection`}
-          value={connectionId}
-          disabled={pending || (connectionless && connections.length === 0)}
-          onChange={(event) => setConnectionId(event.target.value)}
-        >
-          {connectionless ? (
-            <NativeSelectOption value="">{savedEngine}</NativeSelectOption>
-          ) : offerDeploymentDefault ? (
-            <NativeSelectOption value="">
-              <Trans>Deployment default (Docker)</Trans>
-            </NativeSelectOption>
-          ) : (
-            <NativeSelectOption value={savedConnectionId}>
-              {savedConnection?.name ?? t`this engine`}
-            </NativeSelectOption>
-          )}
-          {connections
-            .filter(
-              (entry) => connectionless || offerDeploymentDefault || entry.id !== savedConnectionId,
-            )
-            .map((entry) => (
-              <NativeSelectOption key={entry.id} value={entry.id}>
-                {entry.name}
+      {connectionless && connections.length === 0 ? null : (
+        <label htmlFor={`connection-${botId}`} className="block space-y-1">
+          <span>
+            <Trans>Connection</Trans>
+          </span>
+          <NativeSelect
+            id={`connection-${botId}`}
+            aria-label={t`Connection`}
+            value={connectionId}
+            disabled={pending}
+            onChange={(event) => setConnectionId(event.target.value)}
+          >
+            {connectionless ? (
+              <NativeSelectOption value="">{engineLabel(status.kind)}</NativeSelectOption>
+            ) : offerDeploymentDefault ? (
+              <NativeSelectOption value="">
+                <Trans>Deployment default (Docker)</Trans>
               </NativeSelectOption>
-            ))}
-        </NativeSelect>
-      </label>
-      {connectionless && connections.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          {/* biome-ignore format: one catalog sentence */}
-          <Trans>Add a computer under Settings, Computers, then choose it here to move this computer.</Trans>
-        </p>
-      ) : null}
+            ) : (
+              <NativeSelectOption value={savedConnectionId}>
+                {savedConnection?.name ?? t`this engine`}
+              </NativeSelectOption>
+            )}
+            {connections
+              .filter(
+                (entry) =>
+                  connectionless || offerDeploymentDefault || entry.id !== savedConnectionId,
+              )
+              .map((entry) => (
+                <NativeSelectOption key={entry.id} value={entry.id}>
+                  {entry.name}
+                </NativeSelectOption>
+              ))}
+          </NativeSelect>
+        </label>
+      )}
       {supported && !hostComputer ? (
         <>
           <label htmlFor={`profile-${botId}`} className="block space-y-1">
@@ -284,11 +264,9 @@ export function ComputerProfile({
               <Trans>Screen and terminal: Not available on this computer</Trans>
             </p>
           ) : null}
-          {engine === "desktop" ? null : (
-            <p className="text-sm text-muted-foreground">
-              <Trans>Developer is a larger download and uses more disk space.</Trans>
-            </p>
-          )}
+          <p className="text-sm text-muted-foreground">
+            <Trans>Developer is a larger download and uses more disk space.</Trans>
+          </p>
         </>
       ) : null}
       <Button

@@ -36,12 +36,12 @@ Probes are cached for 30 seconds, have time and output limits, and run four at a
 | Tailscale peer | Existing host CLI login discovers online Linux peers; added as SSH | Same as SSH | Same as SSH after adding | Tailnet policy and SSH access must already permit the connection; no Tailscale keys are stored |
 
 Computers shows the host, the local Docker engine, the deployment default when it is neither of
-those, and each saved connection. The host row is This Mac on macOS and This computer elsewhere; the
-local Docker row is Docker on this Mac or Docker on this computer on the same terms. The default
-row carries its provider's kind, so a connectionless E2B, Daytona, Box, or Kubernetes computer on
-that deployment is listed there with that provider's capacity. A connectionless computer of
-another kind gets its own row, measured by that kind's provider. It is Unavailable only when no
-provider of that kind is registered or the provider reports no capacity.
+those, and each saved connection. Clients name these built-in rows in their own language from a
+stable key and the host label the API returns: This Mac when the paired desktop, or else the
+server, runs macOS, and This computer elsewhere. The default row carries the kind its provider
+creates; kinds outside the fleet list, such as none or fake, stay on the default row. A
+connectionless E2B, Daytona, or Box computer on another deployment gets its own row while that
+provider's key is set. A computer whose engine is not configured is not listed on any row.
 
 Docker context discovery accepts the CLI's JSON-lines output. OrbStack and Colima sockets are
 found at their standard locations. Podman machine discovery uses its reported socket. Tailscale
@@ -64,28 +64,13 @@ memory. It never chooses an unknown, stale, disconnected, or merely discovered t
 where they are. CPU load is reported separately and is not treated as memory capacity.
 
 Automatic moves stay inside one engine family until verified migration lands. Local Docker and
-remote Docker — a socket, an endpoint, or a Docker context — are one family, so a local Docker
-computer can move to a remote Docker engine. SSH, Kubernetes, and every other provider id stay in
-their own family. Podman has no provider id of its own: a Podman socket reports `docker` and a
-Podman endpoint or context reports `remote-docker`, so those connections share the Docker family.
-Moving work to another family remains the goal. It waits because today's move removes the old
-computer before the new one has accepted the workspace. Verified migration will start the
-destination, import and verify the workspace, point the computer at it, and only then remove the
-old one. Moving a connectionless computer between Docker and This Mac is not available until that
-migration lands. Settings shows the engine the computer runs on. A computer with no connection can
-move to a saved connection; with none, Settings says: Add a computer under Settings, Computers, then choose it here to move this computer.
-Deployment default and This Mac are not offered for that computer. A computer that already has a
-connection can move to another saved connection. The control names those machines. The selected
-option is the current connection's name, and every other saved connection is listed by name.
-Choosing one asks: This moves the computer from the current machine to the destination and
-replaces its files. A computer with no connection says "this engine" for the source. When Docker
-is the deployment default, it can also move back to that engine; the option reads Deployment
-default (Docker). When the host is the deployment default, that option is not offered, and an
-empty connection is refused. On macOS the refusal says This Mac. On Linux and Windows it says
-This computer: Moving this computer onto This computer is not available yet. Choose a saved
-connection or keep the current engine. If the computer changes before an automatic move starts,
-the move is skipped: the computer stays,
-and the update is not a failure.
+remote Docker (a socket, an endpoint, or a Docker context) are one family, and Podman connections
+report those same kinds; every other kind is its own. Moving work to another family waits because today's move removes the old computer before the
+new one has accepted the workspace. Settings can move a computer to a saved connection, and a
+connected computer back to Docker when that is the deployment default. Moving a computer onto the
+machine running Ardur Bot is refused until verified migration lands. If the computer changes
+before an automatic move starts, the move is skipped: the run's placement records it, and no
+computer update is shown.
 
 `placeRunComputer` runs before the first computer execution lease and before tool effects. It
 never moves an existing run snapshot. A first move pauses for that bot's consent unless `Move
@@ -101,16 +86,10 @@ pin to make a destination work. Explicit connection changes retain the chosen de
 automatic placement evaluates first use after creation or replacement at the next new run.
 
 Every run, reset, update, recovery, sleep, screen and terminal operation uses the computer's saved
-kind and connection. A saved connection uses that connection, even when the row still carries an
-older kind; the first successful start records the kind that connection reports. Otherwise Docker
-uses local Docker, This Mac uses the host, and E2B, Daytona, Box, and Kubernetes use that kind's
-provider. When that provider is not registered, the start is refused before the computer is
-claimed, and the computer row is left as it is. The kind is
-chosen when the computer is created: This Mac when that choice is on and there is no connection,
-otherwise the deployment default. Changing This Mac or the deployment default does not move a
-computer that already has a kind, including one whose machine is missing after a failed reset or
-update. Settings shows that saved engine. A connectionless computer can move to a saved
-connection. Moving one between Docker and This Mac waits for verified migration.
+connection, or without one the provider of its saved kind. The kind is chosen when the computer is
+created, so changing This Mac or the deployment default does not move an existing computer. A
+computer whose engine is not configured is handled as described in
+[computer runtime](computer-runtime.md#daytona-backend).
 
 Moves reserve the computer using the existing maintenance record, save a checkpoint with the old
 connection, destroy the old computer, then provision and restore with the new connection. The

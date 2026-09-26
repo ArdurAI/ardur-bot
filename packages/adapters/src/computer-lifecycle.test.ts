@@ -2122,7 +2122,7 @@ describe("computer replacement", () => {
       const moved = await replaceComputer(
         {
           prisma,
-          sandbox: target,
+          sandbox: source,
           home,
           jobs: {} as JobPublisher,
           events: {} as ThreadEvents,
@@ -2133,13 +2133,8 @@ describe("computer replacement", () => {
         { ...context, operationId: "move", runId: "run" },
         "none",
         undefined,
-        {
-          imageProfile: "base",
-          connectionId: null,
-          placementRunId: "run",
-          targetId: "default",
-        },
-        { source, target },
+        { imageProfile: "base", connectionId: null, placementRunId: "run" },
+        target,
       );
       expect(sourceDestroy).toHaveBeenCalledWith(
         expect.objectContaining({ providerRef: first.providerRef, kind: first.kind }),

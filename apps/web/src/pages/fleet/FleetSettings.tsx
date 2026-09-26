@@ -1,4 +1,4 @@
-import type { FleetTarget, PlacementSettings } from "@ardurbot/contracts";
+import type { FleetTarget, HostLabel, PlacementSettings } from "@ardurbot/contracts";
 import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
 import {
   Button,
@@ -15,23 +15,28 @@ import { rpc } from "../../lib/rpc";
 
 type Fleet = Awaited<ReturnType<typeof rpc.fleet.list>>;
 
-/** The API names its built-in rows in English. */
-function useTargetName() {
+/** Built-in rows are named here, in the reader's language. */
+function useTargetName(hostLabel: HostLabel | undefined) {
   const { t } = useLingui();
-  const names = new Map([
-    ["This Mac", t`This Mac`],
-    ["This computer", t`This computer`],
-    ["Docker on this Mac", t`Docker on this Mac`],
-    ["Docker on this computer", t`Docker on this computer`],
-  ]);
-  return (target: Pick<FleetTarget, "name" | "connectionId">) =>
-    (target.connectionId === null && names.get(target.name)) || target.name;
+  const mac = hostLabel === "This Mac";
+  return (target: Pick<FleetTarget, "name" | "builtin">) =>
+    target.builtin === "host"
+      ? mac
+        ? t`This Mac`
+        : t`This computer`
+      : target.builtin === "local-docker"
+        ? mac
+          ? t`Docker on this Mac`
+          : t`Docker on this computer`
+        : target.builtin === "default"
+          ? t`Default computer`
+          : target.name;
 }
 
 export function FleetSettings() {
   const { t } = useLingui();
-  const targetName = useTargetName();
   const [fleet, setFleet] = useState<Fleet | null>(null);
+  const targetName = useTargetName(fleet?.hostLabel);
   const [discovered, setDiscovered] = useState<FleetTarget[]>([]);
   const [adding, setAdding] = useState<{ target?: FleetTarget } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -165,6 +170,7 @@ export function FleetSettings() {
         <PlacementControls
           settings={fleet.placement}
           targets={fleet.targets}
+          targetName={targetName}
           disabled={busy}
           onSave={(settings) => perform(() => rpc.fleet.placement(settings))}
         />
@@ -259,16 +265,17 @@ export function CapacityBar({ target }: { target: FleetTarget }) {
 function PlacementControls({
   settings,
   targets,
+  targetName,
   disabled,
   onSave,
 }: {
   settings: PlacementSettings;
   targets: FleetTarget[];
+  targetName: (target: FleetTarget) => string;
   disabled: boolean;
   onSave: (value: PlacementSettings) => Promise<void>;
 }) {
   const { t } = useLingui();
-  const targetName = useTargetName();
   const [value, setValue] = useState(settings);
   useEffect(() => setValue(settings), [settings]);
   return (

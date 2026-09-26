@@ -104,12 +104,12 @@ it("renders capacity and assignments, applies placement, and requests explicit m
     await act(async () => root.unmount());
   }
 });
-it("translates the local Docker row the API names for its platform", async () => {
+it("names built-in rows by their key and the API's host label, and saved connections as named", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  catalog.set("Docker on this computer", "Docker на этом компьютере");
-  const docker = {
-    id: "default",
-    name: "Docker on this computer",
+  catalog.set("This Mac", "Этот Mac");
+  catalog.set("Docker on this Mac", "Docker на этом Mac");
+  catalog.set("Default computer", "Компьютер по умолчанию");
+  const row = {
     kind: "docker",
     connectionId: null,
     state: "connected",
@@ -118,9 +118,12 @@ it("translates the local Docker row the API names for its platform", async () =>
   };
   api.list.mockResolvedValue({
     targets: [
-      docker,
-      { ...docker, id: "office", name: "Docker on this computer", connectionId: "office" },
+      { ...row, id: "host", name: "This computer", kind: "host", builtin: "host" },
+      { ...row, id: "default", name: "Default computer", kind: "e2b", builtin: "default" },
+      { ...row, id: "docker", name: "Docker on this computer", builtin: "local-docker" },
+      { ...row, id: "office", name: "This Mac", connectionId: "office" },
     ],
+    hostLabel: "This Mac",
     placement: { mode: "threshold", preferredTargetId: "default", minimumFreeGb: 4 },
     bots: [],
   });
@@ -131,14 +134,12 @@ it("translates the local Docker row the API names for its platform", async () =>
     const names = [...element.querySelectorAll("[data-fleet-target] p.font-medium")].map(
       (name) => name.textContent,
     );
-    expect(names).toEqual(["Docker на этом компьютере", "Docker on this computer"]);
+    const translated = ["Этот Mac", "Компьютер по умолчанию", "Docker на этом Mac", "This Mac"];
+    expect(names).toEqual(translated);
     const preferred = element.querySelector<HTMLSelectElement>(
       '[aria-label="Preferred computer"]',
     )!;
-    expect([...preferred.options].map((option) => option.textContent)).toEqual([
-      "Docker на этом компьютере",
-      "Docker on this computer",
-    ]);
+    expect([...preferred.options].map((option) => option.textContent)).toEqual(translated);
   } finally {
     await act(async () => root.unmount());
   }

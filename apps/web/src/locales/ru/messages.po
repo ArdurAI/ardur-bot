@@ -154,10 +154,6 @@ msgstr "{days} дн. назад"
 msgid "{failed} failed"
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
-msgid "{hostLabel} is not available. Choose a saved connection or keep the current engine."
-msgstr "{hostLabel} недоступен. Выберите сохранённое подключение или оставьте текущий механизм."
-
 #: src/pages/ActivityList.tsx
 msgid "{hours}h ago"
 msgstr "{hours} ч назад"
@@ -359,10 +355,6 @@ msgstr "Активность"
 #: src/pages/ScratchpadSection.tsx
 msgid "Add"
 msgstr "Добавить"
-
-#: src/pages/ComputerProfilesSettings.tsx
-msgid "Add a computer under Settings, Computers, then choose it here to move this computer."
-msgstr "Добавьте компьютер в разделе «Настройки», «Компьютеры», затем выберите его здесь, чтобы перенести этот компьютер."
 
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Add a model in Settings to use this."
@@ -2800,6 +2792,10 @@ msgstr "По умолчанию ({0})"
 msgid "Default board"
 msgstr "Доска по умолчанию"
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Default computer"
+msgstr "Компьютер по умолчанию"
+
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Default scope"
 msgstr "Область действия по умолчанию"
@@ -4681,8 +4677,8 @@ msgid "Move when this Mac has under {0} GB free"
 msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
-msgid "Moving this computer onto {hostLabel} is not available yet. Choose a saved connection or keep the current engine."
-msgstr "Перенос этого компьютера на {hostLabel} пока недоступен. Выберите сохранённое подключение или оставьте текущий механизм."
+msgid "Moving a computer onto the machine running Ardur Bot is not available yet. Choose a saved connection or keep the current engine."
+msgstr "Перенос компьютера на машину, где работает Ardur Bot, пока недоступен. Выберите сохранённое подключение или оставьте текущий механизм."
 
 #: src/pages/MemoryImportExport.tsx
 msgid "My documents"
@@ -7196,10 +7192,6 @@ msgstr "API не вернулся. Обновите эту страницу."
 #: src/pages/shell/computer-terminal.tsx
 msgid "The bot is working — wait or stop it"
 msgstr ""
-
-#: src/components/ComputerUpdateProgress.tsx
-msgid "The computer changed before the move, so it stayed where it is."
-msgstr "Компьютер изменился до переноса, поэтому он остался на месте."
 
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "The connection was cancelled."

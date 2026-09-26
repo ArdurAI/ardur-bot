@@ -251,99 +251,11 @@ describe("host-aware sandbox", () => {
     }
   });
 
-  it("runs a started Kubernetes computer on its provider while This Mac is on", async () => {
-    vi.stubEnv("ARDURBOT_HOST_BRIDGE", "");
-    const kubernetes = {
-      describe: () => ({ id: "kubernetes" }),
-      provision: vi.fn(
-        async (request: { botId: string; providerRef?: string; providerKind?: string }) => ({
-          id: "pod",
-          botId: request.botId,
-          kind: "kubernetes" as const,
-          providerRef: request.providerRef ?? "pod-1",
-          fresh: false,
-        }),
-      ),
-      prepare: vi.fn(async () => undefined),
-      execute: vi.fn(async function* () {
-        yield { type: "exit" as const, code: 0 };
-      }),
-    };
-    const docker = vi.spyOn(DockerSandboxProvider.prototype, "provision");
-    const desktop = vi.spyOn(DesktopSandboxProvider.prototype, "provision");
-    const sandbox = createRunSandbox("docker", {
-      prisma: {
-        deploymentSettings: { findUnique: async () => ({ computerHost: "this-mac" }) },
-      } as unknown as PrismaClient,
-      secrets: { load: () => "" },
-      providers: { kubernetes: () => kubernetes as never },
-    });
-    try {
-      const computer = await sandbox.provision(
-        {
-          botId: "bot",
-          homePath: "/tmp/bot",
-          providerRef: "pod-1",
-          providerKind: "kubernetes",
-        },
-        ctx,
-      );
-      expect(kubernetes.provision).toHaveBeenCalledWith(
-        expect.objectContaining({ providerRef: "pod-1", providerKind: "kubernetes" }),
-        ctx,
-      );
-      expect(docker).not.toHaveBeenCalled();
-      expect(desktop).not.toHaveBeenCalled();
-      const events = [];
-      for await (const event of sandbox.execute(computer, { argv: ["true"] }, ctx))
-        events.push(event);
-      expect(kubernetes.execute).toHaveBeenCalled();
-      expect(events).toEqual([{ type: "exit", code: 0 }]);
-    } finally {
-      vi.unstubAllEnvs();
-    }
-  });
-
-  it("runs a connectionless Kubernetes computer on the deployment cluster when that env is set", async () => {
+  it("fails a connectionless Kubernetes computer on a Docker deployment, even inside a cluster", async () => {
     vi.stubEnv("ARDURBOT_HOST_BRIDGE", "");
     vi.stubEnv("KUBERNETES_SERVICE_HOST", "10.0.0.1");
     vi.stubEnv("KUBERNETES_SERVICE_PORT", "443");
-    const provision = vi.spyOn(KubernetesSandboxProvider.prototype, "provision").mockResolvedValue({
-      id: "pod",
-      botId: "bot",
-      kind: "kubernetes",
-      providerRef: "pod-1",
-      fresh: false,
-    });
-    const docker = vi.spyOn(DockerSandboxProvider.prototype, "provision");
-    const sandbox = createRunSandbox("docker", {
-      prisma: {
-        deploymentSettings: { findUnique: async () => ({ computerHost: "docker" }) },
-      } as unknown as PrismaClient,
-      secrets: { load: () => "" },
-    });
-    try {
-      await sandbox.provision(
-        {
-          botId: "bot",
-          homePath: "/tmp/bot",
-          providerRef: "pod-1",
-          providerKind: "kubernetes",
-        },
-        ctx,
-      );
-      expect(provision).toHaveBeenCalledWith(
-        expect.objectContaining({ providerKind: "kubernetes", providerRef: "pod-1" }),
-        ctx,
-      );
-      expect(docker).not.toHaveBeenCalled();
-    } finally {
-      vi.unstubAllEnvs();
-    }
-  });
-
-  it("fails a Kubernetes computer when that provider is not registered", async () => {
-    vi.stubEnv("ARDURBOT_HOST_BRIDGE", "");
+    const kubernetes = vi.spyOn(KubernetesSandboxProvider.prototype, "provision");
     const docker = vi.spyOn(DockerSandboxProvider.prototype, "provision");
     const desktop = vi.spyOn(DesktopSandboxProvider.prototype, "provision");
     const sandbox = createRunSandbox("docker", {
@@ -364,8 +276,9 @@ describe("host-aware sandbox", () => {
           ctx,
         ),
       ).rejects.toThrow(
-        "No Kubernetes provider is registered. Add a Kubernetes connection or run the deployment on Kubernetes.",
+        "This computer runs on Kubernetes, which is not configured here. Move it in Settings, Computers, or configure Kubernetes again.",
       );
+      expect(kubernetes).not.toHaveBeenCalled();
       expect(docker).not.toHaveBeenCalled();
       expect(desktop).not.toHaveBeenCalled();
     } finally {

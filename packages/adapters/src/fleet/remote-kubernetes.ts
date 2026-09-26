@@ -79,6 +79,7 @@ export class HostKubernetesSandboxProvider implements SandboxProvider {
   describe() {
     return {
       id: "kubernetes",
+      kind: "kubernetes" as const,
       contractVersion: "1",
       adapterVersion: "0.1.0",
       capabilities: {

@@ -5,7 +5,7 @@ import type {
   TerminalProvider,
 } from "@ardurbot/adapter-kit";
 import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
-import { unknownCapacity } from "@ardurbot/contracts/fleet";
+import { ENGINE_LABELS, unknownCapacity } from "@ardurbot/contracts/fleet";
 import type { PrismaClient } from "@ardurbot/db";
 import { DockerSandboxProvider } from "./docker-sandbox.js";
 import { HostKubernetesSandboxProvider } from "./fleet/remote-kubernetes.js";
@@ -76,28 +76,18 @@ export class ComputerConnections {
 
 export type ComputerIdentity = { connectionId?: string | null; kind?: string | null };
 
-/** Engines that keep connectionless computers of their own kind under any deployment default. */
-export type LocalSandboxes = {
-  docker?: () => SandboxProvider;
-  host?: () => SandboxProvider;
-  providers?: Partial<Record<string, () => SandboxProvider>>;
-};
+/** A computer that has not started yet carries the deployment's provider id as its kind. */
+function ownsKind(provider: SandboxProvider, kind: string) {
+  const described = provider.describe();
+  return described.kind === kind || described.id === kind;
+}
 
-const providerLabel: Record<string, string> = {
-  kubernetes: "Kubernetes",
-  e2b: "E2B",
-  daytona: "Daytona",
-  box: "Box",
-};
-
-/** One sentence naming the computer's kind and the provider that was not registered. */
+/** A computer whose engine is not configured here: one sentence with the fix. */
 export class MissingComputerProviderError extends Error {
   constructor(kind: string) {
-    const name = providerLabel[kind] ?? kind;
+    const engine = ENGINE_LABELS[kind] ?? kind;
     super(
-      kind === "kubernetes"
-        ? `No ${name} provider is registered. Add a Kubernetes connection or run the deployment on Kubernetes.`
-        : `No ${name} provider is registered.`,
+      `This computer runs on ${engine}, which is not configured here. Move it in Settings, Computers, or configure ${engine} again.`,
     );
     this.name = "MissingComputerProviderError";
   }
@@ -108,7 +98,8 @@ export class ConnectedSandboxProvider implements SandboxProvider {
   constructor(
     private readonly fallback: SandboxProvider,
     private readonly connections: ComputerConnections,
-    private readonly local: LocalSandboxes = {},
+    /** Engines for connectionless computers of other kinds, keyed by the kind they create. */
+    private readonly local: Partial<Record<string, () => SandboxProvider>> = {},
   ) {
     const sessions = new Map<string, TerminalProvider>();
     const session = (id: string) => {
@@ -145,24 +136,21 @@ export class ConnectedSandboxProvider implements SandboxProvider {
   describe() {
     return this.fallback.describe();
   }
-  /** Every operation on an existing computer: its connection, else the local engine of its kind. */
-  owner(computer: ComputerIdentity, context: AdapterContext): Promise<SandboxProvider> {
+  /** Every operation on an existing computer: its connection, else the engine of its kind. */
+  async owner(computer: ComputerIdentity, context: AdapterContext): Promise<SandboxProvider> {
     return computer.connectionId
       ? this.connections.resolve(computer.connectionId, context)
-      : Promise.resolve(this.connectionless(computer.kind));
+      : this.connectionless(computer.kind);
   }
   /** Where a new computer is created: the chosen connection, else the deployment default. */
   target(subject: { connectionId?: string | null }, context: AdapterContext) {
     return this.owner({ connectionId: subject.connectionId }, context);
   }
   private connectionless(kind: string | null | undefined) {
-    const local =
-      kind === "docker" ? this.local.docker : kind === "desktop" ? this.local.host : undefined;
-    if (local) return local();
-    const registered = kind ? this.local.providers?.[kind]?.() : undefined;
-    if (registered) return registered;
     // A computer with no saved kind is created on the deployment default.
-    if (!kind || this.fallback.describe().id === kind) return this.fallback;
+    if (!kind || ownsKind(this.fallback, kind)) return this.fallback;
+    const local = this.local[kind]?.();
+    if (local) return local;
     throw new MissingComputerProviderError(kind);
   }
   async capacity(context: AdapterContext) {

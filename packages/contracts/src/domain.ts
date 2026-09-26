@@ -4,7 +4,7 @@ import { ComputerProfileSchema } from "./computer-profiles.js";
 import { ConcurrentRunsSchema, ContextSnapshotSchema, RoutingRuleSchema } from "./context.js";
 import { LocalityPolicySchema } from "./delegation.js";
 import { ThreadMessageSchema } from "./events.js";
-import { RunPlacementSchema } from "./fleet.js";
+import { HostLabelSchema, RunPlacementSchema } from "./fleet.js";
 import { Id, MemoryScope, RunStatus, RunTriggerSchema, SandboxKind } from "./ids.js";
 import { SpaceToolPoliciesSchema } from "./integration-catalog.js";
 import { LearningJourneyEntrySchema, LearningObservationSchema } from "./learning.js";
@@ -813,9 +813,6 @@ export const COMPUTER_UPDATE_STAGES = [
   "restoring",
   "reconnecting",
 ] as const;
-/** A move that did not start because the computer changed. Not a failure. */
-export const computerMoveSkippedReason =
-  "The computer changed before the move, so it stayed where it is.";
 export const ComputerUpdateSchema = z.object({
   canReleaseReservation: z.boolean().optional(),
   action: z.enum(["update", "recover"]),
@@ -823,9 +820,8 @@ export const ComputerUpdateSchema = z.object({
   botId: Id,
   name: z.string(),
   mode: ComputerModeSchema,
-  status: z.enum(["queued", "running", "interrupted", "completed", "failed", "skipped"]),
+  status: z.enum(["queued", "running", "interrupted", "completed", "failed"]),
   stage: z.enum(COMPUTER_UPDATE_STAGES),
-  reason: z.string().max(500).optional(),
 });
 export type ComputerUpdate = z.infer<typeof ComputerUpdateSchema>;
 
@@ -847,6 +843,7 @@ export const ComputerStatusSchema = z.object({
   homeRevision: z.string().nullable(),
   busyBotName: z.string().nullable(),
   canUpdate: z.boolean(),
+  hostLabel: HostLabelSchema.optional(),
 });
 export type ComputerStatus = z.infer<typeof ComputerStatusSchema>;
 

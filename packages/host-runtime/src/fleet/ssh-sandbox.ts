@@ -65,6 +65,7 @@ export class SshSandboxProvider extends LinuxFleetSandbox {
   describe() {
     return {
       id: "ssh",
+      kind: "ssh" as const,
       contractVersion: "1",
       adapterVersion: "0.1.0",
       capabilities: FLEET_LINUX_CAPABILITIES,

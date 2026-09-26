@@ -154,10 +154,6 @@ msgstr "{days} g önce"
 msgid "{failed} failed"
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
-msgid "{hostLabel} is not available. Choose a saved connection or keep the current engine."
-msgstr ""
-
 #: src/pages/ActivityList.tsx
 msgid "{hours}h ago"
 msgstr "{hours} sa önce"
@@ -359,10 +355,6 @@ msgstr "Etkinlik"
 #: src/pages/ScratchpadSection.tsx
 msgid "Add"
 msgstr "Ekle"
-
-#: src/pages/ComputerProfilesSettings.tsx
-msgid "Add a computer under Settings, Computers, then choose it here to move this computer."
-msgstr ""
 
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Add a model in Settings to use this."
@@ -2800,6 +2792,10 @@ msgstr "Varsayılan ({0})"
 msgid "Default board"
 msgstr "Varsayılan pano"
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Default computer"
+msgstr ""
+
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Default scope"
 msgstr "Varsayılan kapsam"
@@ -4681,7 +4677,7 @@ msgid "Move when this Mac has under {0} GB free"
 msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
-msgid "Moving this computer onto {hostLabel} is not available yet. Choose a saved connection or keep the current engine."
+msgid "Moving a computer onto the machine running Ardur Bot is not available yet. Choose a saved connection or keep the current engine."
 msgstr ""
 
 #: src/pages/MemoryImportExport.tsx
@@ -7195,10 +7191,6 @@ msgstr ""
 
 #: src/pages/shell/computer-terminal.tsx
 msgid "The bot is working — wait or stop it"
-msgstr ""
-
-#: src/components/ComputerUpdateProgress.tsx
-msgid "The computer changed before the move, so it stayed where it is."
 msgstr ""
 
 #: src/components/integrations/card/IntegrationCards.tsx

@@ -85,22 +85,39 @@ export const PlacementSettingsSchema = /* @__PURE__ */ (() =>
     minimumFreeGb: z.number().finite().min(0.25).max(65536).default(4),
   }))();
 export type PlacementSettings = z.infer<typeof PlacementSettingsSchema>;
+export const FLEET_KINDS = [
+  "host",
+  "docker",
+  "podman",
+  "kubernetes",
+  "ssh",
+  "tailscale",
+  "default",
+  "e2b",
+  "daytona",
+  "box",
+] as const;
+/** Display names for engines and providers. The host is named by its `HostLabel`. */
+export const ENGINE_LABELS: Readonly<Record<string, string>> = {
+  docker: "Docker",
+  "remote-docker": "Docker",
+  podman: "Podman",
+  kubernetes: "Kubernetes",
+  ssh: "SSH",
+  tailscale: "Tailscale",
+  e2b: "E2B",
+  daytona: "Daytona",
+  box: "Box",
+};
+export const HostLabelSchema = /* @__PURE__ */ (() => z.enum(["This Mac", "This computer"]))();
+export type HostLabel = z.infer<typeof HostLabelSchema>;
 export const FleetTargetSchema = /* @__PURE__ */ (() =>
   z.object({
     id: z.string(),
     name: z.string(),
-    kind: z.enum([
-      "host",
-      "docker",
-      "podman",
-      "kubernetes",
-      "ssh",
-      "tailscale",
-      "default",
-      "e2b",
-      "daytona",
-      "box",
-    ]),
+    kind: z.enum(FLEET_KINDS),
+    /** Rows the deployment provides, named by clients in their own language. */
+    builtin: z.enum(["host", "local-docker", "default"]).optional(),
     connectionId: z.string().nullable(),
     state: z.enum(["connected", "discovered", "unavailable"]),
     capacity: CapacitySnapshotSchema,
@@ -130,6 +147,7 @@ export const RunPlacementSchema = z.union([
 export const FleetSchema = /* @__PURE__ */ (() =>
   z.object({
     targets: z.array(FleetTargetSchema),
+    hostLabel: HostLabelSchema,
     placement: PlacementSettingsSchema,
     bots: z
       .array(

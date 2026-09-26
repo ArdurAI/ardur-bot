@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { NO_SANDBOX_MESSAGE } from "./none-sandbox.js";
-import { createSandboxProvider, sandboxProvidersForKeys } from "./sandbox-factory.js";
+import { createSandboxProvider } from "./sandbox-factory.js";
 
 const ctx = {
   operationId: "op",
@@ -43,26 +43,24 @@ describe("createSandboxProvider", () => {
     expect(createSandboxProvider("box", { boxApiKey: "test-box-key" }).describe().id).toBe("box");
   });
 
-  it("registers E2B, Daytona, and Box only when their keys are set", () => {
-    expect(sandboxProvidersForKeys({})).toEqual({});
-    const providers = sandboxProvidersForKeys({
-      e2bApiKey: "e2b-test",
-      daytonaApiKey: "daytona-test",
-      boxApiKey: "box-test",
-    });
-    expect(providers.e2b!().describe().id).toBe("e2b");
-    expect(providers.daytona!().describe().id).toBe("daytona");
-    expect(providers.box!().describe().id).toBe("box");
-    expect(sandboxProvidersForKeys({ e2bApiKey: "  " }).e2b).toBeUndefined();
+  it("declares the kind of the computers each provider creates", () => {
+    const created = (kind: string, keys = {}) => createSandboxProvider(kind, keys).describe();
+    expect(created("e2b-emulator")).toMatchObject({ id: "e2b-emulator", kind: "e2b" });
+    expect(created("daytona-emulator")).toMatchObject({ id: "daytona-emulator", kind: "daytona" });
+    expect(created("box-emulator")).toMatchObject({ id: "box-emulator", kind: "box" });
+    expect(created("e2b", { e2bApiKey: "e2b-test" })).toMatchObject({ id: "e2b", kind: "e2b" });
+    expect(created("docker")).toMatchObject({ id: "docker", kind: "docker" });
+    expect(created("fake")).toMatchObject({ id: "fake", kind: "fake" });
+    expect(created("none")).toMatchObject({ id: "none", kind: null });
   });
 
-  it("registers Kubernetes when the deployment cluster env is set", () => {
-    expect(sandboxProvidersForKeys({}).kubernetes).toBeUndefined();
+  it("builds no Kubernetes provider from the process's own cluster credentials", () => {
     vi.stubEnv("KUBERNETES_SERVICE_HOST", "10.0.0.1");
     vi.stubEnv("KUBERNETES_SERVICE_PORT", "443");
     try {
-      expect(typeof sandboxProvidersForKeys({}).kubernetes).toBe("function");
-      expect(sandboxProvidersForKeys({ e2bApiKey: "e2b-test" }).kubernetes).toBeTypeOf("function");
+      expect(() => createSandboxProvider("kubernetes", {})).toThrow(
+        "Choose a Kubernetes connection in Settings → Computers.",
+      );
     } finally {
       vi.unstubAllEnvs();
     }

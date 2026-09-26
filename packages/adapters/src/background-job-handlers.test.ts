@@ -11,7 +11,6 @@ import type { MemoryService } from "@ardurbot/memory";
 import { describe, expect, it, vi } from "vitest";
 import { createBackgroundJobHandlers } from "./background-job-handlers.js";
 import { createRunExecutor } from "./executor.js";
-import type { FleetCatalog } from "./fleet/catalog.js";
 import { compactHistory } from "./history-compaction.js";
 import { deliverMessagingOutbound, mirrorMessagingOutbound } from "./messaging-delivery.js";
 import type { EncryptedSecretStore } from "./secrets.js";
@@ -46,7 +45,6 @@ describe("createBackgroundJobHandlers", () => {
         home: {} as AgentHomeStore,
         jobs: { enqueue } as unknown as JobPublisher,
         events: {} as ThreadEvents,
-        fleet: {} as FleetCatalog,
         workerId: "worker",
         runtime: {} as AgentRuntime,
         secretStore: {} as EncryptedSecretStore,
@@ -92,7 +90,6 @@ describe("createBackgroundJobHandlers", () => {
       home: {} as unknown as AgentHomeStore,
       jobs,
       events: {} as unknown as ThreadEvents,
-      fleet: {} as FleetCatalog,
       workerId: "worker-1",
       runtime: {} as unknown as AgentRuntime,
       secretStore: {} as unknown as EncryptedSecretStore,
@@ -131,7 +128,6 @@ describe("createBackgroundJobHandlers", () => {
       home: {} as unknown as AgentHomeStore,
       jobs,
       events: {} as unknown as ThreadEvents,
-      fleet: {} as FleetCatalog,
       workerId: "worker-1",
       runtime,
       secretStore,

@@ -1,4 +1,4 @@
-import type { FleetTarget } from "@ardurbot/contracts";
+import type { FleetTarget, HostLabel } from "@ardurbot/contracts";
 import { useEffect, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import { rpc } from "../lib/api";
@@ -9,14 +9,16 @@ export function FleetStatus() {
   const { t } = useI18n();
   const tokens = useMobileTokens();
   const [targets, setTargets] = useState<FleetTarget[]>([]);
+  const [hostLabel, setHostLabel] = useState<HostLabel>();
   const [error, setError] = useState(false);
   useEffect(() => {
     let active = true;
     const refresh = () =>
-      void rpc<{ targets: FleetTarget[] }>("fleet/list", {})
+      void rpc<{ targets: FleetTarget[]; hostLabel?: HostLabel }>("fleet/list", {})
         .then((value) => {
           if (active) {
             setTargets(value.targets);
+            setHostLabel(value.hostLabel);
             setError(false);
           }
         })
@@ -30,6 +32,19 @@ export function FleetStatus() {
       clearInterval(timer);
     };
   }, []);
+  const mac = hostLabel === "This Mac";
+  const name = (target: FleetTarget) =>
+    target.builtin === "host"
+      ? mac
+        ? t("This Mac")
+        : t("This computer")
+      : target.builtin === "local-docker"
+        ? mac
+          ? t("Docker on this Mac")
+          : t("Docker on this computer")
+        : target.builtin === "default"
+          ? t("Default computer")
+          : target.name;
   return (
     <View accessibilityLabel={t("Computers")} style={styles.section}>
       <Text style={{ color: tokens.foreground }}>{t("Computers")}</Text>
@@ -46,7 +61,7 @@ export function FleetStatus() {
             : null;
         return (
           <View key={target.id} style={styles.row}>
-            <Text style={{ color: tokens.foreground }}>{target.name}</Text>
+            <Text style={{ color: tokens.foreground }}>{name(target)}</Text>
             <Text style={{ color: tokens.mutedForeground }}>
               {target.state === "connected"
                 ? t("Connected")

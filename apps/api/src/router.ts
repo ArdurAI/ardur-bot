@@ -49,6 +49,7 @@ import {
   defaultCatalogModelId,
   deletePushToken,
   deploymentAutoReviewDefault,
+  deploymentHostLabel,
   destroyBot,
   displayBotWorkspacePath,
   enqueueLearningReview,
@@ -101,7 +102,6 @@ import {
 import type { Auth } from "@ardurbot/auth";
 import type { Actor, ComputerStatus, Me, SpaceNavigation } from "@ardurbot/contracts";
 import {
-  ConfigurationRefusal,
   IntegrationManifestSchema,
   IntegrationProviderIdSchema,
   OPENAI_COMPATIBLE_PROVIDER_ID,
@@ -1992,13 +1992,13 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           where: { spaceId: context.actor.spaceId, userId: context.actor.userId, archivedAt: null },
           include: { computer: true },
         });
+        const hostLabel = await deploymentHostLabel(deps.prisma);
         const seen = new Set<string>();
         return bots.flatMap((bot) => {
           if (!bot.computer || seen.has(bot.computer.id)) return [];
           seen.add(bot.computer.id);
-          return [
-            { botId: bot.id, name: bot.name, status: toComputerStatus(bot.id, bot.computer) },
-          ];
+          const status = { ...toComputerStatus(bot.id, bot.computer), hostLabel };
+          return [{ botId: bot.id, name: bot.name, status }];
         });
       }),
       connections: authed.computer.connections.handler(({ context }) =>
@@ -2025,7 +2025,6 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           context.actor.spaceId,
           input,
           deps.env.sandboxProvider,
-          deps.hostBridge?.hub.health?.platform || process.platform,
         );
         try {
           await releaseMaintenanceControl(deps, context.actor, bot.computer.id);
@@ -2033,14 +2032,13 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         } catch (error) {
           if (error instanceof ComputerBusyError)
             throw new ORPCError("CONFLICT", { message: "Computer is busy" });
-          if (error instanceof ConfigurationRefusal)
-            throw new ORPCError("BAD_REQUEST", { message: error.message });
           throw error;
         }
       }),
-      status: authed.computer.status.handler(async ({ context, input }) =>
-        computerStatus(deps, context.actor, input.botId),
-      ),
+      status: authed.computer.status.handler(async ({ context, input }) => ({
+        ...(await computerStatus(deps, context.actor, input.botId)),
+        hostLabel: await deploymentHostLabel(deps.prisma),
+      })),
       boot: authed.computer.boot.handler(async ({ context, input }) => {
         const bot = await repos.getBot(context.actor, input.botId);
         if (!bot.computer) throw new IsolationError();
@@ -2186,7 +2184,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       updates: authed.computer.updates.handler(async ({ context }) => {
         const rows = await deps.prisma.computerUpdate.findMany({
           where: {
-            status: { in: ["queued", "running", "interrupted", "failed", "skipped"] },
+            status: { in: ["queued", "running", "interrupted", "failed"] },
             computer: {
               spaceId: context.actor.spaceId,
               bots: { some: { userId: context.actor.userId, archivedAt: null } },
@@ -2239,7 +2237,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         await deps.prisma.computerUpdate.updateMany({
           where: {
             id: input.id,
-            status: { in: ["failed", "skipped"] },
+            status: "failed",
             computer: {
               spaceId: context.actor.spaceId,
               bots: { some: { userId: context.actor.userId, archivedAt: null } },

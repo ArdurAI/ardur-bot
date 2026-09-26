@@ -8,7 +8,6 @@ import { createRunSandbox, HostAwareSandbox } from "./host-aware-sandbox.js";
 import { createKubernetesApi } from "./kubernetes-client.js";
 import { FakeKubernetesApi } from "./kubernetes-test-api.js";
 import { NoneSandboxProvider } from "./none-sandbox.js";
-import { sandboxProvidersForKeys } from "./sandbox-factory.js";
 
 const daytonaSdk = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock("@daytona/sdk", () => ({
@@ -166,7 +165,6 @@ it("reuses one Daytona, E2B, and Box provider so a stop and a command share the 
     prisma: {} as PrismaClient,
     secrets: { load: () => "" },
     ...keys,
-    providers: sandboxProvidersForKeys(keys),
   });
   expect(created).toBeInstanceOf(HostAwareSandbox);
   const sandbox = created as HostAwareSandbox;
@@ -203,4 +201,19 @@ it("reuses one Daytona, E2B, and Box provider so a stop and a command share the 
   expect(cached.start).not.toHaveBeenCalled();
   expect(events).toContainEqual({ type: "stdout", data: "ok" });
   expect(events).toContainEqual({ type: "exit", code: 0 });
+});
+
+it("runs a hosted deployment's own computers on its one default provider", async () => {
+  for (const [kind, keys] of [
+    ["e2b", { e2bApiKey: "e2b-test" }],
+    ["daytona", { daytonaApiKey: "daytona-test" }],
+    ["box", { boxApiKey: "box-test" }],
+  ] as const) {
+    const sandbox = createRunSandbox(kind, {
+      prisma: {} as PrismaClient,
+      secrets: { load: () => "" },
+      ...keys,
+    }) as ConnectedSandboxProvider;
+    expect(await sandbox.owner({ kind }, context)).toBe(await sandbox.owner({}, context));
+  }
 });

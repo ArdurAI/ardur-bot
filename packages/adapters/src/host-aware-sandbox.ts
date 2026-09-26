@@ -14,11 +14,7 @@ import type {
 import { unknownCapacity } from "@ardurbot/contracts/fleet";
 import type { PrismaClient } from "@ardurbot/db";
 import type { ComputerIdentity, ComputerSecretLoader } from "./computer-connections.js";
-import {
-  ComputerConnections,
-  ConnectedSandboxProvider,
-  MissingComputerProviderError,
-} from "./computer-connections.js";
+import { ComputerConnections, ConnectedSandboxProvider } from "./computer-connections.js";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
 import {
   createHostClient,
@@ -26,44 +22,46 @@ import {
   usesHostBridge,
 } from "./remote-host-sandbox.js";
 import type { SandboxProviderOptions } from "./sandbox-factory.js";
-import {
-  createSandboxProvider,
-  lazy,
-  memoizeProviders,
-  sandboxProvidersForKeys,
-} from "./sandbox-factory.js";
+import { createSandboxProvider } from "./sandbox-factory.js";
 
 export function sandboxKindForBot(envKind: string, computerHost: string | null | undefined) {
   if (envKind === "docker" && computerHost === "this-mac") return "desktop";
   return envKind;
 }
 
+function once<T>(create: () => T): () => T {
+  let value: T | undefined;
+  return () => (value ??= create());
+}
+
 export function createRunSandbox(
   kind: string,
   opts: SandboxProviderOptions & { prisma?: PrismaClient; secrets?: ComputerSecretLoader },
 ): SandboxProvider {
-  // Local engines are built on first use: a non-Docker deployment may have no supervisor token.
-  const host = lazy(() =>
+  // Other engines are built on first use: a non-Docker deployment may have no supervisor token.
+  const host = once(() =>
     usesHostBridge()
       ? new RemoteHostSandboxProvider(opts.hostClient ?? createHostClient())
       : new DesktopSandboxProvider({ root: opts.dataDir, hostRoots: [homedir()] }),
   );
   const selected = kind === "desktop" ? host() : createSandboxProvider(kind, opts);
-  const docker =
-    kind === "docker" ? () => selected : lazy(() => createSandboxProvider("docker", opts));
+  // Connectionless computers keep the engine of their kind; a hosted one needs its key here.
+  const local: Partial<Record<string, () => SandboxProvider>> = {
+    docker: once(() => createSandboxProvider("docker", opts)),
+    desktop: host,
+  };
+  for (const [hosted, key] of [
+    ["e2b", opts.e2bApiKey],
+    ["daytona", opts.daytonaApiKey],
+    ["box", opts.boxApiKey],
+  ] as const)
+    if (key?.trim()) local[hosted] = once(() => createSandboxProvider(hosted, opts));
   const primary =
     opts.prisma && opts.secrets
       ? new ConnectedSandboxProvider(
           selected,
           new ComputerConnections(opts.prisma, opts.secrets, opts),
-          {
-            docker,
-            host,
-            providers: memoizeProviders({
-              ...sandboxProvidersForKeys(opts),
-              ...opts.providers,
-            }),
-          },
+          local,
         )
       : selected;
   if (kind !== "docker" || !opts.prisma) return primary;
@@ -88,20 +86,6 @@ export function owningSandbox(
   context: AdapterContext,
 ): Promise<SandboxProvider> {
   return isComputerRouter(provider) ? provider.owner(computer, context) : Promise.resolve(provider);
-}
-
-/**
- * Refuses a connectionless computer whose own kind has no provider. A saved connection
- * decides where a computer boots, whatever kind the row still carries.
- */
-export async function assertConnectionlessProvider(
-  provider: SandboxProvider,
-  computer: ComputerIdentity,
-  context: AdapterContext,
-): Promise<void> {
-  if (computer.connectionId || !computer.kind) return;
-  const owner = await owningSandbox(provider, computer, context);
-  if (owner.describe().id !== computer.kind) throw new MissingComputerProviderError(computer.kind);
 }
 
 export class HostAwareSandbox implements SandboxProvider {
@@ -178,16 +162,10 @@ export class HostAwareSandbox implements SandboxProvider {
     context: AdapterContext,
   ) {
     const savedKind = request.providerKind;
-    const routed = this.route(
+    return this.route(
       { connectionId: request.connectionId, kind: savedKind },
       savedKind ? undefined : await this.hostEnabled(),
-    );
-    await assertConnectionlessProvider(
-      routed,
-      { connectionId: request.connectionId, kind: savedKind },
-      context,
-    );
-    return routed.provision(request, context);
+    ).provision(request, context);
   }
 
   prepare(computer: ComputerRef, context: AdapterContext) {

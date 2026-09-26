@@ -56,64 +56,12 @@ export const ComputerConnectionInputSchema = z.object({
     .object({ ca: z.string().max(4096), cert: z.string().max(4096), key: z.string().max(4096) })
     .optional(),
 });
-/** One host label: darwin and any Mac platform string, otherwise this computer. */
-export function hostComputerLabel(
-  platform: string | null | undefined,
-): "This Mac" | "This computer" {
-  if (platform === "darwin" || (platform != null && /mac/i.test(platform))) return "This Mac";
-  return "This computer";
-}
-
-/** Older clients can still ask for the host. The next step is part of the refusal. */
-export function thisMacUnavailableMessage(platform: string | null | undefined) {
-  return `${hostComputerLabel(platform)} is not available. Choose a saved connection or keep the current engine.`;
-}
-
-/** An empty connection would place a connected computer on the host. That move stays withdrawn. */
-export function moveOntoThisMacUnavailableMessage(platform: string | null | undefined) {
-  return `Moving this computer onto ${hostComputerLabel(platform)} is not available yet. Choose a saved connection or keep the current engine.`;
-}
-
-/** The API may name the host for a different platform than the page that shows the error. */
-export function matchesHostRefusal(message: string, kind: "unavailable" | "move") {
-  const sentence = kind === "move" ? moveOntoThisMacUnavailableMessage : thisMacUnavailableMessage;
-  return (["darwin", "linux"] as const).some((platform) => message === sentence(platform));
-}
-
-const ORPC_ERROR_CONSTRUCTORS = Symbol.for("__@orpc/client@1.15.0/error/ORPC_ERROR_CONSTRUCTORS__");
-
-/** A refusal sentence. Registered with the RPC error constructors so the caller sees the sentence. */
-export class ConfigurationRefusal extends Error {
-  readonly code = "BAD_REQUEST" as const;
-  readonly status = 400;
-  readonly defined = false;
-  readonly data = undefined;
-  constructor(message: string) {
-    super(message);
-    this.name = "ORPCError";
-  }
-  toJSON() {
-    return {
-      defined: this.defined,
-      code: this.code,
-      status: this.status,
-      message: this.message,
-      data: this.data,
-    };
-  }
-}
-
-export function refuseConfiguration(message: string): never {
-  const set = (globalThis as Record<symbol, WeakSet<object> | undefined>)[ORPC_ERROR_CONSTRUCTORS];
-  set?.add(ConfigurationRefusal);
-  throw new ConfigurationRefusal(message);
-}
+export const HOST_MOVE_UNAVAILABLE_MESSAGE =
+  "Moving a computer onto the machine running Ardur Bot is not available yet. Choose a saved connection or keep the current engine.";
 export const ComputerConfigurationSchema = z.object({
   botId: z.string().min(1),
   imageProfile: ComputerProfileSchema.optional(),
   connectionId: z.string().nullable(),
-  /** Refused until verified migration can move a computer onto This Mac. */
-  thisMac: z.literal(true).optional(),
   confirmed: z.boolean().default(false),
 });
 export function computerCapabilities(kind: string) {
@@ -127,8 +75,4 @@ export const ComputerReplacementConfigurationSchema = ComputerConfigurationSchem
   botId: true,
 })
   .partial({ imageProfile: true, connectionId: true })
-  .extend({
-    networkEgress: z.boolean().optional(),
-    targetId: z.string().max(160).optional(),
-    confirmed: z.literal(true),
-  });
+  .extend({ networkEgress: z.boolean().optional(), confirmed: z.literal(true) });

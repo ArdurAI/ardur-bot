@@ -1,13 +1,12 @@
 import type { AdapterContext, SandboxProvider } from "@ardurbot/adapter-kit";
-import type { FleetTarget } from "@ardurbot/contracts";
+import type { FleetTarget, HostLabel } from "@ardurbot/contracts";
+import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
 import {
-  ComputerConnectionSettingsSchema,
-  hostComputerLabel,
-  moveOntoThisMacUnavailableMessage,
-  refuseConfiguration,
-  thisMacUnavailableMessage,
-} from "@ardurbot/contracts";
-import { PlacementSettingsSchema, unknownCapacity } from "@ardurbot/contracts/fleet";
+  ENGINE_LABELS,
+  FLEET_KINDS,
+  PlacementSettingsSchema,
+  unknownCapacity,
+} from "@ardurbot/contracts/fleet";
 import type { PrismaClient } from "@ardurbot/db";
 import type { ComputerIdentity, ComputerSecretLoader } from "../computer-connections.js";
 import { ComputerConnections, ConnectedSandboxProvider } from "../computer-connections.js";
@@ -16,38 +15,23 @@ import type { ComputerRouter } from "../host-aware-sandbox.js";
 import { isComputerRouter, sandboxKindForBot } from "../host-aware-sandbox.js";
 import { createHostClient, usesHostBridge } from "../remote-host-sandbox.js";
 import type { SandboxProviderOptions } from "../sandbox-factory.js";
-import { kubernetesDeploymentConfigured } from "../sandbox-factory.js";
 import { hostCapacity } from "./service.js";
 
-const FLEET_KINDS = new Set([
-  "host",
-  "docker",
-  "podman",
-  "kubernetes",
-  "ssh",
-  "tailscale",
-  "default",
-  "e2b",
-  "daytona",
-  "box",
-]);
-
-function fleetKind(kind: string): FleetTarget["kind"] {
-  return (FLEET_KINDS.has(kind) ? kind : "default") as FleetTarget["kind"];
+/** Kinds outside the fleet list, such as none and fake, belong to the default row. */
+function fleetKind(kind: string | null | undefined): FleetTarget["kind"] {
+  return FLEET_KINDS.find((known) => known === kind) ?? "default";
 }
 
-function connectionlessKindName(kind: string): string {
-  if (kind === "e2b") return "E2B";
-  if (kind === "daytona") return "Daytona";
-  if (kind === "box") return "Box";
-  if (kind === "kubernetes") return "Kubernetes";
-  if (kind === "ssh") return "SSH";
-  if (kind === "podman") return "Podman";
-  if (kind === "tailscale") return "Tailscale";
-  return kind;
+/** The paired desktop names the host; without one, the server running Ardur Bot does. */
+export async function deploymentHostLabel(prisma: PrismaClient): Promise<HostLabel> {
+  const paired = await prisma.hostRegistration.findUnique({
+    where: { id: "default" },
+    select: { platform: true },
+  });
+  return (paired?.platform ?? process.platform) === "darwin" ? "This Mac" : "This computer";
 }
 
-/** Built-in row for a computer with no saved connection. Each kind keeps its own row. */
+/** Built-in row for a computer with no saved connection. Each fleet kind keeps its own row. */
 export function fleetComputerTargetId(
   computer: { connectionId?: string | null; kind?: string | null } | null | undefined,
   fleet: {
@@ -57,18 +41,18 @@ export function fleetComputerTargetId(
 ): string {
   if (computer?.connectionId) return computer.connectionId;
   if (computer?.kind === "desktop") return "host";
-  if (!computer?.kind) return fleet.defaultTargetId;
-  const own = fleet.targets.find(
-    (target) => target.connectionId === null && target.kind === computer.kind,
+  const kind = fleetKind(computer?.kind);
+  if (kind === "default") return fleet.defaultTargetId;
+  return (
+    fleet.targets.find((target) => target.connectionId === null && target.kind === kind)?.id ??
+    `kind:${kind}`
   );
-  if (own) return own.id;
-  if (computer.kind === "docker") return fleet.defaultTargetId;
-  return `kind:${computer.kind}`;
 }
 
 /** Local Docker and remote Docker (socket, endpoint, or context) are one family. */
-export function placementEngineFamily(providerId: string): string {
-  return providerId === "docker" || providerId === "remote-docker" ? "docker" : providerId;
+function placementEngineFamily(provider: SandboxProvider) {
+  const kind = provider.describe().kind;
+  return kind === "remote-docker" ? "docker" : kind;
 }
 
 export class FleetCatalog {
@@ -84,7 +68,6 @@ export class FleetCatalog {
     secrets: ComputerSecretLoader,
     private readonly options: SandboxProviderOptions,
     private readonly fallback: SandboxProvider,
-    private readonly hostPlatform: string = process.platform,
   ) {
     this.connections = new ComputerConnections(prisma, secrets, options);
     const docker = new DockerSandboxProvider(
@@ -111,67 +94,34 @@ export class FleetCatalog {
       return this.resolveComputer({ kind: target.kind }, context);
     return this.routing.target(target, context);
   }
+  /** An automatic move's destination. It stays in the computer's own engine family. */
+  async placementTarget(
+    computer: ComputerIdentity,
+    target: Pick<FleetTarget, "kind" | "connectionId">,
+    context: AdapterContext,
+  ): Promise<SandboxProvider> {
+    const [source, destination] = await Promise.all([
+      this.resolveComputer(computer, context),
+      this.resolveTarget(target, context),
+    ]);
+    if (placementEngineFamily(destination) !== placementEngineFamily(source))
+      throw new Error("Computer replacement target is unavailable");
+    return destination;
+  }
   async compatibleTargets(
     computer: ComputerIdentity,
     targets: FleetTarget[],
     context: AdapterContext,
   ): Promise<FleetTarget[]> {
-    const sourceFamily = placementEngineFamily(
-      (await this.resolveComputer(computer, context)).describe().id,
-    );
     const compatible = await Promise.all(
-      targets.map(async (target) => {
-        const targetId = await this.resolveTarget(target, context)
-          .then((provider) => provider.describe().id)
-          .catch(() => null);
-        return targetId && placementEngineFamily(targetId) === sourceFamily ? target : null;
-      }),
+      targets.map((target) =>
+        this.placementTarget(computer, target, context).then(
+          () => target,
+          () => null,
+        ),
+      ),
     );
     return compatible.filter((target): target is FleetTarget => target !== null);
-  }
-  async resolveReplacementRouting(
-    computer: ComputerIdentity,
-    configuration: { connectionId?: string | null; targetId?: string; thisMac?: true },
-    context: AdapterContext,
-    listedFleet?: Awaited<ReturnType<FleetCatalog["list"]>>,
-  ): Promise<{ source: SandboxProvider; target: SandboxProvider }> {
-    const source = await this.resolveComputer(computer, context);
-    if (configuration.targetId === undefined) {
-      if (configuration.thisMac) refuseConfiguration(thisMacUnavailableMessage(this.hostPlatform));
-      if (
-        configuration.connectionId === undefined ||
-        configuration.connectionId === computer.connectionId
-      )
-        return { source, target: source };
-      if (!configuration.connectionId && computer.connectionId) {
-        const fallbackId = this.fallback.describe().id;
-        if (fallbackId === "desktop" || fallbackId === "docker") {
-          const deployment =
-            fallbackId === "desktop"
-              ? undefined
-              : await this.prisma.deploymentSettings.findUnique({ where: { id: "default" } });
-          if (sandboxKindForBot(fallbackId, deployment?.computerHost) === "desktop")
-            refuseConfiguration(moveOntoThisMacUnavailableMessage(this.hostPlatform));
-        }
-      }
-      // A Settings connection change is already confirmed and may cross kinds.
-      // Deployment default is Docker when that engine is the default, never This Mac.
-      const target = configuration.connectionId
-        ? await this.routing.target({ connectionId: configuration.connectionId }, context)
-        : await this.resolveComputer({ kind: this.fallback.describe().id }, context);
-      return { source, target };
-    }
-    const row = (listedFleet ?? (await this.list(context))).targets.find(
-      (candidate) => candidate.id === configuration.targetId,
-    );
-    const target = row && (await this.resolveTarget(row, context));
-    // Automatic placement stays on one kind of computer until verified migration lands.
-    if (
-      !target ||
-      placementEngineFamily(target.describe().id) !== placementEngineFamily(source.describe().id)
-    )
-      throw new Error("Computer replacement target is unavailable");
-    return { source, target };
   }
   async testDefault(context: AdapterContext) {
     const deployment = await this.prisma.deploymentSettings.findUnique({
@@ -189,30 +139,31 @@ export class FleetCatalog {
     });
     this.recordTest("default", { version: info.version, os: info.os });
   }
-  /** A connectionless kind with no row yet. Its registered provider reports the capacity. */
-  private async kindTarget(kind: string, context: AdapterContext): Promise<FleetTarget> {
-    const signal = AbortSignal.any([context.signal, AbortSignal.timeout(10000)]);
-    const timed = { ...context, signal };
-    let state: FleetTarget["state"] = "connected";
-    const capacity = await this.resolveComputer({ kind }, timed)
-      .then((provider) => provider.capacity?.(timed) ?? Promise.resolve(unknownCapacity()))
-      .catch(() => {
-        state = "unavailable";
-        return unknownCapacity();
-      });
-    if (capacity.source === "not-reported") state = "unavailable";
+  /** A row for connectionless computers of a kind this deployment runs beside its default. */
+  private async kindTarget(
+    kind: FleetTarget["kind"],
+    context: AdapterContext,
+  ): Promise<FleetTarget | null> {
+    const provider = await this.resolveComputer({ kind }, context).catch(() => null);
+    if (!provider) return null;
+    const capacity = await provider
+      .capacity({
+        ...context,
+        signal: AbortSignal.any([context.signal, AbortSignal.timeout(10000)]),
+      })
+      .catch(() => unknownCapacity());
     return {
       id: `kind:${kind}`,
-      name: connectionlessKindName(kind),
-      kind: fleetKind(kind),
+      name: ENGINE_LABELS[kind] ?? kind,
+      kind,
       connectionId: null,
-      state,
+      state: capacity.source === "not-reported" ? "unavailable" : "connected",
       capacity,
       bots: [],
     };
   }
   async list(context: AdapterContext) {
-    const [rows, bots, space, deployment] = await Promise.all([
+    const [rows, bots, space, deployment, hostLabel] = await Promise.all([
       this.prisma.connection.findMany({
         where: { spaceId: context.spaceId, userId: context.userId, connectorId: "computer" },
         take: 128,
@@ -226,6 +177,7 @@ export class FleetCatalog {
         select: { placement: true },
       }),
       this.prisma.deploymentSettings.findUnique({ where: { id: "default" } }),
+      deploymentHostLabel(this.prisma),
     ]);
     const defaultKind = sandboxKindForBot(this.fallback.describe().id, deployment?.computerHost);
     const defaultTargetId = defaultKind === "desktop" ? "host" : "default";
@@ -247,8 +199,9 @@ export class FleetCatalog {
     const targets: FleetTarget[] = [
       {
         id: "host",
-        name: hostComputerLabel(this.hostPlatform),
+        name: hostLabel,
         kind: "host",
+        builtin: "host",
         connectionId: null,
         state: usesHostBridge() && !host ? "unavailable" : "connected",
         capacity: hostSnapshot,
@@ -269,11 +222,9 @@ export class FleetCatalog {
           });
     const dockerRow = {
       id: defaultRowIsDocker ? "default" : "docker",
-      name:
-        hostComputerLabel(this.hostPlatform) === "This Mac"
-          ? "Docker on this Mac"
-          : "Docker on this computer",
+      name: hostLabel === "This Mac" ? "Docker on this Mac" : "Docker on this computer",
       kind: "docker" as const,
+      builtin: "local-docker" as const,
       connectionId: null,
       state: (dockerSnapshot.source === "not-reported"
         ? "unavailable"
@@ -288,7 +239,8 @@ export class FleetCatalog {
         ...this.diagnostics.get("default"),
         id: "default",
         name: "Default computer",
-        kind: fleetKind(defaultKind),
+        kind: fleetKind(this.fallback.describe().kind),
+        builtin: "default",
         connectionId: null,
         state: defaultCapacity.source === "not-reported" ? "unavailable" : "connected",
         capacity: defaultCapacity,
@@ -329,18 +281,20 @@ export class FleetCatalog {
       );
       targets.push(...entries);
     }
-    const kinds = new Set<string>();
-    if (kubernetesDeploymentConfigured()) kinds.add("kubernetes");
-    for (const bot of bots) {
-      const computer = bot.computer;
-      if (computer?.kind && !computer.connectionId) kinds.add(computer.kind);
-    }
-    // A kind with no row yet is listed from its own provider; only an unregistered one is a stub.
-    const missing = [...kinds].filter((kind) => {
-      const id = fleetComputerTargetId({ kind }, { defaultTargetId, targets });
-      return !targets.some((target) => target.id === id);
-    });
-    targets.push(...(await Promise.all(missing.map((kind) => this.kindTarget(kind, context)))));
+    const kinds = new Set(
+      bots.flatMap(({ computer }) =>
+        computer && !computer.connectionId ? [fleetKind(computer.kind)] : [],
+      ),
+    );
+    const kindRows = await Promise.all(
+      [...kinds]
+        .filter((kind) => {
+          const id = fleetComputerTargetId({ kind }, { defaultTargetId, targets });
+          return !targets.some((target) => target.id === id);
+        })
+        .map((kind) => this.kindTarget(kind, context)),
+    );
+    targets.push(...kindRows.filter((target): target is FleetTarget => target !== null));
     for (const bot of bots) {
       const targetId = fleetComputerTargetId(bot.computer, { defaultTargetId, targets });
       targets.find((target) => target.id === targetId)?.bots.push({ id: bot.id, name: bot.name });
@@ -351,6 +305,7 @@ export class FleetCatalog {
       bots,
       placement: PlacementSettingsSchema.parse(space.placement ?? {}),
       defaultTargetId,
+      hostLabel,
     };
   }
 }

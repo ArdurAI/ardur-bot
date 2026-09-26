@@ -259,64 +259,25 @@ describe("lingui catalogs", () => {
     );
   });
 
-  it("names Settings, Computers, and adding a computer in the fleet guide", () => {
-    const guide = readFileSync(
-      fileURLToPath(new URL("../../../../docs/fleet.md", import.meta.url)),
-      "utf8",
-    );
-    expect(guide).toContain(
-      "Add a computer under Settings, Computers, then choose it here to move this computer.",
-    );
-    expect(guide).not.toContain("Settings, Connections");
-  });
-
-  it("ships the fleet move sentences in every catalog, with Russian and Chinese filled", () => {
-    const translations: Record<string, Record<string, string>> = {
-      ru: {
-        "Add a computer under Settings, Computers, then choose it here to move this computer.":
-          "Добавьте компьютер в разделе «Настройки», «Компьютеры», затем выберите его здесь, чтобы перенести этот компьютер.",
-        "The computer changed before the move, so it stayed where it is.":
-          "Компьютер изменился до переноса, поэтому он остался на месте.",
-        "Deployment default (Docker)": "Развертывание по умолчанию (Docker)",
-        "This moves the computer from {sourceLabel} to {destinationLabel} and replaces its files. Continue?":
-          "Это переносит компьютер с {sourceLabel} на {destinationLabel} и заменяет его файлы. Продолжить?",
-        "this engine": "этот механизм",
-        "Moving this computer onto {hostLabel} is not available yet. Choose a saved connection or keep the current engine.":
-          "Перенос этого компьютера на {hostLabel} пока недоступен. Выберите сохранённое подключение или оставьте текущий механизм.",
-        "{hostLabel} is not available. Choose a saved connection or keep the current engine.":
-          "{hostLabel} недоступен. Выберите сохранённое подключение или оставьте текущий механизм.",
-        "Docker on this Mac": "Docker на этом Mac",
-        "Docker on this computer": "Docker на этом компьютере",
-      },
-      "zh-CN": {
-        "Add a computer under Settings, Computers, then choose it here to move this computer.":
-          "在“设置”的“电脑”中添加电脑，然后在此处选择它，以移动此电脑。",
-        "The computer changed before the move, so it stayed where it is.":
-          "电脑在移动前已更改，因此仍留在原处。",
-        "Deployment default (Docker)": "部署默认（Docker）",
-        "This moves the computer from {sourceLabel} to {destinationLabel} and replaces its files. Continue?":
-          "这将把电脑从 {sourceLabel} 移到 {destinationLabel}，并替换其中的文件。要继续吗？",
-        "this engine": "此引擎",
-        "Moving this computer onto {hostLabel} is not available yet. Choose a saved connection or keep the current engine.":
-          "暂时无法将此电脑移到{hostLabel}。请选择已保存的连接，或保留当前引擎。",
-        "{hostLabel} is not available. Choose a saved connection or keep the current engine.":
-          "{hostLabel}尚不可用。请选择已保存的连接，或保留当前引擎。",
-        "Docker on this Mac": "这台 Mac 上的 Docker",
-        "Docker on this computer": "这台电脑上的 Docker",
-      },
-    };
+  it("extracts the fleet move sentences the code asks for into every catalog", () => {
+    const sentences = [
+      "Default computer",
+      "Deployment default (Docker)",
+      "Docker on this Mac",
+      "Docker on this computer",
+      "Moving a computer onto the machine running Ardur Bot is not available yet. Choose a saved connection or keep the current engine.",
+      "This moves the computer from {sourceLabel} to {destinationLabel} and replaces its files. Continue?",
+      "this engine",
+    ];
     const literal = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     for (const locale of ["en", "de", "ko", "tr", "hi", "pt-BR", "zh-CN", "es", "ru"]) {
       const catalog = readFileSync(
         fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url)),
         "utf8",
       );
-      for (const sentence of Object.keys(translations.ru!)) {
-        // Extraction writes the source reference; a hand-written id the code never asks for has none.
+      // Extraction writes the source reference; a hand-written id the code never asks for has none.
+      for (const sentence of sentences)
         expect(catalog).toMatch(new RegExp(`#: src/\\S+\\nmsgid "${literal(sentence)}"`));
-        const filled = translations[locale]?.[sentence];
-        if (filled) expect(catalog).toContain(`msgid "${sentence}"\nmsgstr "${filled}"`);
-      }
     }
   });
 });

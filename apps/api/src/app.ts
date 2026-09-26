@@ -65,7 +65,6 @@ import {
   ScriptedAgentRuntime,
   SmtpEmailProvider,
   SpaceMemoryProviderResolver,
-  sandboxProvidersForKeys,
   toTeamChatInbound,
 } from "@ardurbot/adapters";
 import { blockedAuthPaths, createAuth } from "@ardurbot/auth";
@@ -261,14 +260,6 @@ export async function createApp(
       daytonaTarget: env.daytonaTarget,
       boxApiKey: env.boxApiKey,
       boxApiUrl: env.boxApiUrl,
-      providers: sandboxProvidersForKeys({
-        e2bApiKey: env.e2bApiKey,
-        daytonaApiKey: env.daytonaApiKey,
-        daytonaApiUrl: env.daytonaApiUrl,
-        daytonaTarget: env.daytonaTarget,
-        boxApiKey: env.boxApiKey,
-        boxApiUrl: env.boxApiUrl,
-      }),
       dataDir: env.dataDir,
       prisma,
       secrets,
@@ -483,7 +474,6 @@ export async function createApp(
     home,
     jobs,
     events,
-    fleet: fleetPlacementCatalog,
     workerId: "api",
     localImport: {
       apiUrl: process.env.API_INTERNAL_URL ?? process.env.API_URL ?? "http://127.0.0.1:3100",

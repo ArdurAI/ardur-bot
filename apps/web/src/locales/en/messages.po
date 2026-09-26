@@ -154,10 +154,6 @@ msgstr "{days}d ago"
 msgid "{failed} failed"
 msgstr "{failed} failed"
 
-#: src/pages/ComputerProfilesSettings.tsx
-msgid "{hostLabel} is not available. Choose a saved connection or keep the current engine."
-msgstr "{hostLabel} is not available. Choose a saved connection or keep the current engine."
-
 #: src/pages/ActivityList.tsx
 msgid "{hours}h ago"
 msgstr "{hours}h ago"
@@ -359,10 +355,6 @@ msgstr "Activity"
 #: src/pages/ScratchpadSection.tsx
 msgid "Add"
 msgstr "Add"
-
-#: src/pages/ComputerProfilesSettings.tsx
-msgid "Add a computer under Settings, Computers, then choose it here to move this computer."
-msgstr "Add a computer under Settings, Computers, then choose it here to move this computer."
 
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Add a model in Settings to use this."
@@ -2800,6 +2792,10 @@ msgstr "Default ({0})"
 msgid "Default board"
 msgstr "Default board"
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Default computer"
+msgstr "Default computer"
+
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Default scope"
 msgstr "Default scope"
@@ -4681,8 +4677,8 @@ msgid "Move when this Mac has under {0} GB free"
 msgstr "Move when this Mac has under {0} GB free"
 
 #: src/pages/ComputerProfilesSettings.tsx
-msgid "Moving this computer onto {hostLabel} is not available yet. Choose a saved connection or keep the current engine."
-msgstr "Moving this computer onto {hostLabel} is not available yet. Choose a saved connection or keep the current engine."
+msgid "Moving a computer onto the machine running Ardur Bot is not available yet. Choose a saved connection or keep the current engine."
+msgstr "Moving a computer onto the machine running Ardur Bot is not available yet. Choose a saved connection or keep the current engine."
 
 #: src/pages/MemoryImportExport.tsx
 msgid "My documents"
@@ -7196,10 +7192,6 @@ msgstr "The API did not come back. Refresh this page."
 #: src/pages/shell/computer-terminal.tsx
 msgid "The bot is working — wait or stop it"
 msgstr "The bot is working — wait or stop it"
-
-#: src/components/ComputerUpdateProgress.tsx
-msgid "The computer changed before the move, so it stayed where it is."
-msgstr "The computer changed before the move, so it stayed where it is."
 
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "The connection was cancelled."

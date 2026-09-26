@@ -2,7 +2,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type * as ComputerLifecycleModule from "./computer-lifecycle.js";
 import { replaceComputer } from "./computer-lifecycle.js";
 import {
-  computerUpdateView,
   performComputerUpdate,
   queueComputerUpdate,
   reconcileComputerUpdates,
@@ -31,7 +30,6 @@ function fixture(status = "queued") {
           imageProfile: "base" | "developer";
           connectionId: string | null;
           confirmed: true;
-          targetId?: string;
         }
       | undefined,
     computer: {
@@ -74,12 +72,8 @@ function fixture(status = "queued") {
     $transaction: vi.fn(async (fn) => fn(prisma)),
   };
   const jobs = { enqueue: vi.fn(async () => {}) };
-  const source = { describe: () => ({ id: "docker" }) };
-  const target = { describe: () => ({ id: "docker" }) };
-  const routing = { source, target };
-  const fleet = { resolveReplacementRouting: vi.fn(async () => routing) };
-  const deps = { prisma, jobs, fleet } as unknown as Parameters<typeof performComputerUpdate>[0];
-  return { row, computer, computerUpdate, deps, jobs, fleet, routing };
+  const deps = { prisma, jobs } as unknown as Parameters<typeof performComputerUpdate>[0];
+  return { row, computer, computerUpdate, deps, jobs };
 }
 describe("background computer maintenance", () => {
   it("persists stages and releases its reservation only after completion; redelivery is harmless", async () => {
@@ -201,71 +195,20 @@ describe("profile replacement intent", () => {
     });
     expect(row.status).toBe("completed");
   });
-  it("updates a connectionless Docker computer through its owning provider", async () => {
-    const { row, deps, fleet, routing } = fixture();
-    row.computer.kind = "docker";
-    row.configuration = {
-      imageProfile: "developer",
-      connectionId: null,
-      confirmed: true,
-    };
+  it("hands a Settings move to replacement, which routes it by the saved connection", async () => {
+    const { row, deps } = fixture();
+    row.configuration = { imageProfile: "base", connectionId: "remote-2", confirmed: true };
     await performComputerUpdate(deps, row.id);
-    expect(fleet.resolveReplacementRouting).toHaveBeenCalledWith(
-      row.computer,
-      row.configuration,
-      expect.objectContaining({ operationId: row.id, botId: row.botId }),
-    );
     expect(replacement).toHaveBeenCalledWith(
       deps,
       row.computerId,
       "update",
-      expect.any(Object),
-      "none",
-      expect.any(Function),
-      row.configuration,
-      routing,
-    );
-    expect(row.status).toBe("completed");
-  });
-  it("replays a consented same-kind move with resolved routing", async () => {
-    const { row, deps, fleet, routing } = fixture();
-    row.configuration = {
-      imageProfile: "base",
-      connectionId: "remote-2",
-      confirmed: true,
-      targetId: "remote-2",
-    };
-    await performComputerUpdate(deps, row.id);
-    expect(fleet.resolveReplacementRouting).toHaveBeenCalledWith(
-      row.computer,
-      row.configuration,
       expect.objectContaining({ operationId: row.id, botId: row.botId }),
-    );
-    expect(replacement).toHaveBeenCalledWith(
-      deps,
-      row.computerId,
-      "update",
-      expect.any(Object),
       "none",
       expect.any(Function),
       row.configuration,
-      routing,
     );
     expect(row.status).toBe("completed");
-  });
-  it("shows a skipped move with its reason instead of a failure", () => {
-    const reason = "The computer changed before the move, so it stayed where it is.";
-    expect(
-      computerUpdateView({
-        action: "update",
-        id: "move",
-        botId: "bot-1",
-        status: "skipped",
-        stage: "preparing",
-        configuration: { reason },
-        computer: { scope: "dedicated", bots: [{ id: "bot-1", name: "Writer" }] },
-      }),
-    ).toMatchObject({ status: "skipped", reason });
   });
 });
 

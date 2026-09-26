@@ -94,20 +94,12 @@ function fixture(approved = false) {
     },
   ];
   const supportsNetworkEgress = vi.fn(async () => false);
-  const sourceSandbox = { describe: () => ({ id: "desktop" }) } as SandboxProvider;
-  const targetSandbox = {
-    describe: () => ({ id: "ssh" }),
-    supportsNetworkEgress,
-  } as unknown as SandboxProvider;
+  const targetSandbox = { supportsNetworkEgress } as unknown as SandboxProvider;
   const catalog = {
     list: vi.fn(async () => ({ targets, defaultTargetId: "host" })),
     compatibleTargets: vi.fn(async (_computer, candidates) => candidates),
-    resolveComputer: vi.fn(async () => sourceSandbox),
     resolveTarget: vi.fn(async () => targetSandbox),
-    resolveReplacementRouting: vi.fn(async () => ({
-      source: sourceSandbox,
-      target: targetSandbox,
-    })),
+    placementTarget: vi.fn(async () => targetSandbox),
   };
   const deps = {
     prisma: prisma as unknown as PrismaClient,
@@ -122,7 +114,6 @@ function fixture(approved = false) {
     computer,
     deps,
     supportsNetworkEgress,
-    sourceSandbox,
     targetSandbox,
     catalog: catalog as unknown as FleetCatalog,
   };
@@ -191,16 +182,8 @@ it("uses the checkpoint lifecycle before execution and persists the move reason"
     expect.objectContaining({ operationId: "move", runId: "run" }),
     "none",
     expect.any(Function),
-    {
-      imageProfile: "base",
-      connectionId: "remote",
-      placementRunId: "run",
-      targetId: "remote",
-    },
-    {
-      source: f.sourceSandbox,
-      target: f.targetSandbox,
-    },
+    { imageProfile: "base", connectionId: "remote", placementRunId: "run" },
+    f.targetSandbox,
   );
   expect(f.prisma.run.updateMany).toHaveBeenCalledWith(
     expect.objectContaining({
@@ -216,18 +199,13 @@ it("uses the checkpoint lifecycle before execution and persists the move reason"
     expect.objectContaining({ data: { maintenanceId: null } }),
   );
 });
-it("aborts an automatic move when Settings changes the computer during listing", async () => {
+it("skips an automatic move without a computer update when Settings changed the computer", async () => {
   const f = fixture(true);
-  const sourceDestroy = vi.fn();
-  const targetDestroy = vi.fn();
-  f.sourceSandbox.destroy = sourceDestroy;
-  f.targetSandbox.destroy = targetDestroy;
   const moved = {
     ...f.computer,
     kind: "docker",
     providerRef: "docker-after-settings",
     connectionId: "engine",
-    state: "running",
   };
   const list = vi.mocked(f.catalog.list);
   const listed = list.getMockImplementation();
@@ -238,41 +216,14 @@ it("aborts an automatic move when Settings changes the computer during listing",
   });
   expect(await placeRunComputer(f.deps, f.catalog, "run", new AbortController().signal)).toBe(true);
   expect(replace).not.toHaveBeenCalled();
-  expect(vi.mocked(f.catalog.resolveReplacementRouting)).not.toHaveBeenCalled();
-  expect(sourceDestroy).not.toHaveBeenCalled();
-  expect(targetDestroy).not.toHaveBeenCalled();
-  expect(f.computer).toMatchObject({
-    state: "running",
-    kind: "desktop",
-    providerRef: "desktop-computer",
-    connectionId: null,
-  });
-  expect(moved).toMatchObject({ state: "running", providerRef: "docker-after-settings" });
-  const updates = f.prisma.computer.updateMany.mock.calls as unknown as { data: object }[][];
-  expect(updates.every((call) => call[0] !== undefined && !("state" in call[0].data))).toBe(true);
-  expect(f.prisma.computerUpdate.updateMany).toHaveBeenCalledWith(
-    expect.objectContaining({
-      where: { id: "move", status: "running" },
-      data: expect.objectContaining({
-        status: "skipped",
-        configuration: expect.objectContaining({
-          reason: "The computer changed before the move, so it stayed where it is.",
-        }),
-      }),
-    }),
-  );
-  const updateWrites = (
-    f.prisma.computerUpdate.updateMany.mock.calls as unknown as { data?: { status?: string } }[][]
-  ).map((call) => call[0]?.data?.status);
-  expect(updateWrites).not.toContain("failed");
+  expect(f.catalog.placementTarget).not.toHaveBeenCalled();
+  expect(f.prisma.computerUpdate.create).not.toHaveBeenCalled();
+  expect(f.prisma.computerUpdate.updateMany).not.toHaveBeenCalled();
+  expect(f.prisma.computer.updateMany).not.toHaveBeenCalled();
+  expect(f.prisma.run.updateMany).toHaveBeenCalledOnce();
   expect(f.prisma.run.updateMany).toHaveBeenCalledWith(
     expect.objectContaining({
-      data: {
-        placement: expect.objectContaining({
-          status: "skipped",
-          reason: "The computer changed before the move, so it stayed where it is.",
-        }),
-      },
+      data: { placement: expect.objectContaining({ targetId: "remote", status: "skipped" }) },
     }),
   );
 });

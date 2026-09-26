@@ -13,8 +13,7 @@ import {
   ComputerConnectionInputSchema,
   ComputerConnectionSettingsSchema,
   ComputerEngineUnavailableError,
-  moveOntoThisMacUnavailableMessage,
-  thisMacUnavailableMessage,
+  HOST_MOVE_UNAVAILABLE_MESSAGE,
 } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
 import { ORPCError } from "@orpc/server";
@@ -126,15 +125,12 @@ export async function validateComputerConfiguration(
   spaceId: string,
   raw: z.infer<typeof ComputerConfigurationSchema>,
   sandboxProvider = "docker",
-  platform: string | null | undefined = process.platform,
 ) {
   const configuration = ComputerConfigurationSchema.parse(raw);
   if (!configuration.confirmed)
     throw new ORPCError("BAD_REQUEST", {
       message: "This replaces the computer's files. Continue?",
     });
-  if (configuration.thisMac)
-    throw new ORPCError("BAD_REQUEST", { message: thisMacUnavailableMessage(platform) });
   if (configuration.connectionId === null) {
     const bot = await prisma.bot.findFirst({
       where: { id: configuration.botId, spaceId },
@@ -146,9 +142,7 @@ export async function validateComputerConfiguration(
           ? await prisma.deploymentSettings.findUnique({ where: { id: "default" } })
           : null;
       if (sandboxKindForBot(sandboxProvider, deployment?.computerHost) === "desktop")
-        throw new ORPCError("BAD_REQUEST", {
-          message: moveOntoThisMacUnavailableMessage(platform),
-        });
+        throw new ORPCError("BAD_REQUEST", { message: HOST_MOVE_UNAVAILABLE_MESSAGE });
     }
   }
   if (

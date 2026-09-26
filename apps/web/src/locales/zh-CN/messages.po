@@ -154,10 +154,6 @@ msgstr "{days} 天前"
 msgid "{failed} failed"
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
-msgid "{hostLabel} is not available. Choose a saved connection or keep the current engine."
-msgstr "{hostLabel}尚不可用。请选择已保存的连接，或保留当前引擎。"
-
 #: src/pages/ActivityList.tsx
 msgid "{hours}h ago"
 msgstr "{hours} 小时前"
@@ -359,10 +355,6 @@ msgstr "动态"
 #: src/pages/ScratchpadSection.tsx
 msgid "Add"
 msgstr "添加"
-
-#: src/pages/ComputerProfilesSettings.tsx
-msgid "Add a computer under Settings, Computers, then choose it here to move this computer."
-msgstr "在“设置”的“电脑”中添加电脑，然后在此处选择它，以移动此电脑。"
 
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Add a model in Settings to use this."
@@ -2800,6 +2792,10 @@ msgstr "默认（{0}）"
 msgid "Default board"
 msgstr "默认看板"
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Default computer"
+msgstr "默认电脑"
+
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Default scope"
 msgstr "默认范围"
@@ -4681,8 +4677,8 @@ msgid "Move when this Mac has under {0} GB free"
 msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
-msgid "Moving this computer onto {hostLabel} is not available yet. Choose a saved connection or keep the current engine."
-msgstr "暂时无法将此电脑移到{hostLabel}。请选择已保存的连接，或保留当前引擎。"
+msgid "Moving a computer onto the machine running Ardur Bot is not available yet. Choose a saved connection or keep the current engine."
+msgstr "暂时无法将电脑移到运行 Ardur Bot 的机器上。请选择已保存的连接，或保留当前引擎。"
 
 #: src/pages/MemoryImportExport.tsx
 msgid "My documents"
@@ -7196,10 +7192,6 @@ msgstr "API 未恢复。请刷新此页面。"
 #: src/pages/shell/computer-terminal.tsx
 msgid "The bot is working — wait or stop it"
 msgstr ""
-
-#: src/components/ComputerUpdateProgress.tsx
-msgid "The computer changed before the move, so it stayed where it is."
-msgstr "电脑在移动前已更改，因此仍留在原处。"
 
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "The connection was cancelled."
