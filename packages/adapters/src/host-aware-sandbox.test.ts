@@ -419,6 +419,71 @@ describe("host-aware sandbox", () => {
   });
 });
 
+it("restricts the local desktop sandbox to registered folders and follows each add and remove", async () => {
+  const root = mkdtempSync(path.join(tmpdir(), "ardurbot-registered-"));
+  const outside = path.join(root, "outside");
+  const added = path.join(root, "projects");
+  const { mkdir, writeFile } = await import("node:fs/promises");
+  await mkdir(outside);
+  await mkdir(added);
+  await mkdir(path.join(root, "data"));
+  const rootsFile = path.join(root, "host-roots.json");
+  await writeFile(rootsFile, "[]\n");
+  vi.stubEnv("ARDURBOT_HOST_BRIDGE", "");
+  vi.stubEnv("ARDURBOT_HOST_ROOTS_FILE", rootsFile);
+  try {
+    const sandbox = createRunSandbox("desktop", { dataDir: path.join(root, "data") });
+    const computer = await sandbox.provision({ botId: "local", homePath: "/tmp/ignored" }, ctx);
+    await expect(
+      collect(sandbox.execute(computer, { argv: ["mkdir", "nested"], cwd: outside }, ctx)),
+    ).rejects.toThrow("Path escapes registered folders.");
+    await writeFile(rootsFile, `${JSON.stringify([added])}\n`);
+    await expect(
+      collect(sandbox.execute(computer, { argv: ["mkdir", "-p", "nested"], cwd: added }, ctx)),
+    ).resolves.toEqual([{ type: "exit", code: 0 }]);
+    // Removing the folder applies to the next command.
+    await writeFile(rootsFile, "[]\n");
+    await expect(
+      collect(sandbox.execute(computer, { argv: ["mkdir", "-p", "again"], cwd: added }, ctx)),
+    ).rejects.toThrow("Path escapes registered folders.");
+    await sandbox.destroy(computer, ctx);
+  } finally {
+    vi.unstubAllEnvs();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+it("keeps a source checkout's host computer on the home folder when no folder list is set", async () => {
+  const home = mkdtempSync(path.join(tmpdir(), "ardurbot-source-home-"));
+  const project = path.join(home, "projects", "app");
+  const { mkdir, stat } = await import("node:fs/promises");
+  await mkdir(project, { recursive: true });
+  await mkdir(path.join(home, "data"));
+  // os.homedir() reads HOME, or USERPROFILE on Windows.
+  vi.stubEnv("HOME", home);
+  vi.stubEnv("USERPROFILE", home);
+  vi.stubEnv("ARDURBOT_HOST_BRIDGE", "");
+  vi.stubEnv("ARDURBOT_HOST_ROOTS_FILE", undefined);
+  try {
+    const sandbox = createRunSandbox("desktop", { dataDir: path.join(home, "data") });
+    const computer = await sandbox.provision({ botId: "source", homePath: "/tmp/ignored" }, ctx);
+    await expect(
+      collect(sandbox.execute(computer, { argv: ["mkdir", "-p", "nested"], cwd: project }, ctx)),
+    ).resolves.toEqual([{ type: "exit", code: 0 }]);
+    expect((await stat(path.join(project, "nested"))).isDirectory()).toBe(true);
+    await sandbox.destroy(computer, ctx);
+  } finally {
+    vi.unstubAllEnvs();
+    rmSync(home, { recursive: true, force: true });
+  }
+});
+
+async function collect<T>(source: AsyncIterable<T>) {
+  const values: T[] = [];
+  for await (const value of source) values.push(value);
+  return values;
+}
+
 it("selects the remote provider only for the packaged bridge setting", async () => {
   const { RemoteHostSandboxProvider } = await import("./remote-host-sandbox.js");
   vi.stubEnv("ARDURBOT_HOST_BRIDGE", "api");

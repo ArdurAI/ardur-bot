@@ -10,6 +10,7 @@
       "default": "./src/index.ts"
     },
     "./desktop-errors": "./src/desktop-errors.js",
+    "./host-folders": "./src/host-folders.js",
     "./device-paths": "./src/device-paths.js",
     "./local-settings": "./src/local-settings.js",
     "./runtime-pins": "./src/runtime-pins.ts",

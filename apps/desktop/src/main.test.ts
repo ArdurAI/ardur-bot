@@ -4,6 +4,9 @@ import { stripTypeScriptTypes } from "node:module";
 import path from "node:path";
 import vm from "node:vm";
 import { describe, expect, it, vi } from "vitest";
+import { localResetFailure } from "./local-mode.js";
+import { managedLocalOpenUrl, parseSetupInput } from "./setup-config.js";
+import { UnsavedFiles } from "./unsaved-files.js";
 
 class WindowFake extends EventEmitter {
   destroyed = false;
@@ -156,5 +159,286 @@ describe("main window host lifecycle", () => {
     expect(f.hostService.windowClosed).toHaveBeenCalledOnce();
     expect(f.stop).not.toHaveBeenCalled();
     expect(f.mainWindow).toBeNull();
+  });
+});
+
+describe("local mode failures in the main process", () => {
+  const source = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
+
+  function serviceFailure(state: { setupOpen: boolean; response: number }) {
+    const start = source.indexOf("function showServiceFailure(");
+    expect(start).toBeGreaterThan(-1);
+    const end = source.slice(start + 1).search(/\n(?:async )?function /u) + start + 1;
+    const responses = [state.response];
+    const showMessageBox = vi.fn(async () => ({ response: responses.shift() ?? 2 }));
+    const context = {
+      setupWindow: state.setupOpen ? new WindowFake() : null,
+      mainWindow: new WindowFake(),
+      serviceFailurePrompt: false,
+      dialog: { showMessageBox },
+      localMode: { start: vi.fn(async () => undefined) },
+      resetLocalDataAndStart: vi.fn(async () => true),
+    };
+    vm.runInNewContext(
+      `${stripTypeScriptTypes(source.slice(start, end))}\nthis.showServiceFailure = showServiceFailure;`,
+      context,
+    );
+    return context as typeof context & {
+      showServiceFailure: (message: string, offerReset?: boolean) => void;
+    };
+  }
+
+  it("shows a stopped service on the app window after setup, and Retry starts local mode", async () => {
+    const f = serviceFailure({ setupOpen: false, response: 0 });
+    f.showServiceFailure("The worker stopped.");
+    f.showServiceFailure("The worker stopped.");
+    expect(f.dialog.showMessageBox).toHaveBeenCalledOnce();
+    expect(f.dialog.showMessageBox).toHaveBeenCalledWith(
+      f.mainWindow,
+      expect.objectContaining({ message: "The worker stopped.", buttons: ["Retry", "Close"] }),
+    );
+    await vi.waitFor(() => expect(f.localMode.start).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(f.serviceFailurePrompt).toBe(false));
+  });
+
+  it("leaves the sentence to an open setup window and does nothing on Close", async () => {
+    const setup = serviceFailure({ setupOpen: true, response: 0 });
+    setup.showServiceFailure("The API stopped.");
+    expect(setup.dialog.showMessageBox).not.toHaveBeenCalled();
+    const closed = serviceFailure({ setupOpen: false, response: 1 });
+    closed.showServiceFailure("The API stopped.");
+    await vi.waitFor(() => expect(closed.serviceFailurePrompt).toBe(false));
+    expect(closed.localMode.start).not.toHaveBeenCalled();
+  });
+
+  it("offers Reset local data when only a reset clears the failure", async () => {
+    const sentence =
+      "The app's database settings are missing. Choose Reset local data, or restore secrets.env from a backup.";
+    const f = serviceFailure({ setupOpen: false, response: 1 });
+    f.showServiceFailure(sentence, true);
+    expect(f.dialog.showMessageBox).toHaveBeenCalledWith(
+      f.mainWindow,
+      expect.objectContaining({
+        message: sentence,
+        buttons: ["Retry", "Reset local data", "Close"],
+        cancelId: 2,
+      }),
+    );
+    await vi.waitFor(() => expect(f.resetLocalDataAndStart).toHaveBeenCalledWith(f.mainWindow));
+    expect(f.localMode.start).not.toHaveBeenCalled();
+  });
+
+  it("resets only after the same confirmation the setup window uses, then starts fresh", async () => {
+    const start = source.indexOf("async function resetLocalDataAndStart(");
+    expect(start).toBeGreaterThan(-1);
+    const end = source.slice(start + 1).search(/\n(?:async )?function /u) + start + 1;
+    const context = {
+      confirmLocalReset: vi.fn(async () => false),
+      showSetupWindow: vi.fn(),
+      showServiceFailure: vi.fn(),
+      localResetFailure,
+      localMode: { start: vi.fn(async () => undefined) },
+    };
+    vm.runInNewContext(
+      `${stripTypeScriptTypes(source.slice(start, end))}\nthis.reset = resetLocalDataAndStart;`,
+      context,
+    );
+    const reset = (context as typeof context & { reset: (win: unknown) => Promise<boolean> }).reset;
+    const win = new WindowFake();
+    expect(await reset(win)).toBe(false);
+    expect(context.confirmLocalReset).toHaveBeenCalledWith(win);
+    expect(context.localMode.start).not.toHaveBeenCalled();
+    context.confirmLocalReset.mockResolvedValue(true);
+    expect(await reset(win)).toBe(true);
+    expect(context.showSetupWindow).toHaveBeenCalledWith(null, { resume: true });
+    expect(context.localMode.start).toHaveBeenCalledOnce();
+    expect(context.showServiceFailure).not.toHaveBeenCalled();
+  });
+
+  it("says so when the reset fails, offers it again, and starts nothing", async () => {
+    const start = source.indexOf("async function resetLocalDataAndStart(");
+    const end = source.slice(start + 1).search(/\n(?:async )?function /u) + start + 1;
+    const context = {
+      confirmLocalReset: vi.fn(async () => {
+        throw new Error("EBUSY: resource busy or locked");
+      }),
+      showSetupWindow: vi.fn(),
+      showServiceFailure: vi.fn(),
+      localResetFailure,
+      localMode: { start: vi.fn(async () => undefined) },
+    };
+    vm.runInNewContext(
+      `${stripTypeScriptTypes(source.slice(start, end))}\nthis.reset = resetLocalDataAndStart;`,
+      context,
+    );
+    const reset = (context as typeof context & { reset: (win: unknown) => Promise<boolean> }).reset;
+    expect(await reset(new WindowFake())).toBe(false);
+    expect(context.showServiceFailure).toHaveBeenCalledWith(
+      "Could not reset local data. Try again.",
+      true,
+    );
+    expect(context.showSetupWindow).not.toHaveBeenCalled();
+    expect(context.localMode.start).not.toHaveBeenCalled();
+  });
+});
+
+describe("choosing an existing instance while local mode runs", () => {
+  const source = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
+  const local = "http://127.0.0.1:40123";
+  const team = "https://team.example.test";
+
+  function saveSetupFixture(reachable: boolean) {
+    const start = source.indexOf("async function saveSetup(");
+    expect(start).toBeGreaterThan(-1);
+    const end = source.indexOf("\nfunction ", start + 1);
+    const calls: string[] = [];
+    const context = {
+      setupSaveInProgress: false,
+      currentSetup: { mode: "new", serverUrl: local },
+      currentTargetUrl: local,
+      legacyCompose: false,
+      parseSetupInput,
+      managedLocalOpenUrl,
+      localMode: {
+        origin: () => local,
+        state: () => ({ phase: "ready" }),
+        stop: vi.fn(async () => {
+          calls.push("stop local mode");
+        }),
+      },
+      probeServer: vi.fn(async () => {
+        calls.push("check");
+        return reachable ? { ok: true } : { ok: false, error: "Nothing is listening there." };
+      }),
+      openApp: vi.fn(async () => {
+        calls.push("open");
+        return true;
+      }),
+      mainWindow: null,
+      watchRendererUntilCommitted: () => null,
+      writeSetup: vi.fn(async () => {
+        calls.push("save");
+      }),
+      commitPendingAppSwitch: vi.fn(),
+      destroySetupWindow: vi.fn(),
+      recoverFromCrashedSave: vi.fn(),
+      abandonPendingAppSwitch: vi.fn(),
+    };
+    vm.runInNewContext(
+      `${stripTypeScriptTypes(source.slice(start, end))}\nthis.saveSetup = saveSetup;`,
+      context,
+    );
+    return Object.assign(context, { calls }) as typeof context & {
+      calls: string[];
+      saveSetup: (payload: unknown, userDataDir: string) => Promise<{ ok: boolean }>;
+    };
+  }
+
+  it("keeps local mode running when the new server does not answer", async () => {
+    const f = saveSetupFixture(false);
+    expect(await f.saveSetup({ mode: "existing", serverUrl: team }, "/fixture")).toMatchObject({
+      ok: false,
+    });
+    expect(f.calls).toEqual(["check"]);
+    expect(f.localMode.stop).not.toHaveBeenCalled();
+  });
+
+  it("stops local mode only after the new server answered, opened, and was saved", async () => {
+    const f = saveSetupFixture(true);
+    expect(await f.saveSetup({ mode: "existing", serverUrl: team }, "/fixture")).toEqual({
+      ok: true,
+    });
+    expect(f.calls).toEqual(["check", "open", "save", "stop local mode"]);
+  });
+});
+
+describe("quitting while local mode runs", () => {
+  const source = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
+
+  function quitFixture() {
+    const prefix = 'app.on("before-quit", ';
+    const start = source.indexOf(`${prefix}(event) => {`);
+    expect(start).toBeGreaterThan(-1);
+    const end = source.indexOf("\n});\n", start);
+    const handler = source.slice(start + prefix.length, end + 2);
+    let running = true;
+    let finishStop: (() => void) | undefined;
+    const stop = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finishStop = () => {
+            running = false;
+            resolve();
+          };
+        }),
+    );
+    const mainWindow = new WindowFake();
+    const context = {
+      quitting: false,
+      mainWindow,
+      unsavedFiles: new UnsavedFiles<WindowFake>(),
+      dialog: { showMessageBoxSync: vi.fn(() => 0) },
+      legacyCompose: false,
+      localShutdown: null,
+      localMode: {
+        running: () => running,
+        start: () => {
+          running = true;
+        },
+        stop,
+        quit: stop,
+      },
+      app: { quit: vi.fn() },
+      hostService: { stop: vi.fn() },
+      desktopTray: null,
+      warmWindowTimer: undefined,
+      clearTimeout: vi.fn(),
+      remoteListener: { stop: vi.fn(async () => undefined) },
+      localStack: { abort: vi.fn() },
+    };
+    vm.runInNewContext(`this.beforeQuit = ${stripTypeScriptTypes(handler)};`, context);
+    const beforeQuit = (context as typeof context & { beforeQuit: (event: unknown) => void })
+      .beforeQuit;
+    const quit = () => {
+      const event = { preventDefault: vi.fn() };
+      beforeQuit(event);
+      return event.preventDefault.mock.calls.length > 0 ? "held" : "quits";
+    };
+    return Object.assign(context, {
+      quit,
+      finishStop: async () => {
+        finishStop?.();
+        await vi.waitFor(() => expect(context.app.quit).toHaveBeenCalled());
+        context.app.quit.mockClear();
+      },
+    });
+  }
+
+  it("stops local mode first, then quits", async () => {
+    const f = quitFixture();
+    expect(f.quit()).toBe("held");
+    expect(f.quit()).toBe("held");
+    expect(f.localMode.stop).toHaveBeenCalledOnce();
+    await f.finishStop();
+    expect(f.quit()).toBe("quits");
+    expect(f.localStack.abort).toHaveBeenCalledOnce();
+  });
+
+  it("stops and quits again after the follow-up quit was cancelled and local mode started again", async () => {
+    const f = quitFixture();
+    expect(f.quit()).toBe("held");
+    // A file was edited while local mode stopped; the person keeps it.
+    f.unsavedFiles.set(f.mainWindow, true);
+    await f.finishStop();
+    expect(f.quit()).toBe("held");
+    expect(f.dialog.showMessageBoxSync).toHaveBeenCalledOnce();
+    expect(f.localShutdown).toBeNull();
+
+    f.unsavedFiles.set(f.mainWindow, false);
+    f.localMode.start();
+    expect(f.quit()).toBe("held");
+    expect(f.localMode.stop).toHaveBeenCalledTimes(2);
+    await f.finishStop();
+    expect(f.quit()).toBe("quits");
   });
 });

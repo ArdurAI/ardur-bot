@@ -11,6 +11,8 @@ const IMAGE_TAG = "v9.9.9";
 const STACK_PROBE_PATH = "/.well-known/ardurbot-desktop-stack";
 const STACK_TOKEN_HEADER = "x-ardurbot-desktop-stack-token";
 const COMPOSE_DIR = path.resolve(import.meta.dirname, "..", "..", "..", "infra", "compose");
+/** The Compose env file an older install created; its presence keeps the Compose stack. */
+const COMPOSE_ENV = `POSTGRES_PASSWORD=${"0".repeat(32)}\nBETTER_AUTH_SECRET=${"1".repeat(64)}\n`;
 
 type FakeDockerMode =
   | "ok"
@@ -80,6 +82,8 @@ test.afterAll(async () => {
 test.beforeEach(async () => {
   // The fake docker logs $PWD, which is the resolved path (macOS /var is a symlink).
   userData = await realpath(await mkdtemp(path.join(tmpdir(), "ardurbot-desktop-stack-")));
+  await mkdir(path.join(userData, "stack"));
+  await writeFile(path.join(userData, "stack", ".env"), COMPOSE_ENV, { mode: 0o600 });
 });
 
 test.afterEach(async () => {
@@ -211,11 +215,7 @@ test("This computer installs and starts the stack, then opens the app", async ()
   expect((await stat(envFile)).mode & 0o777).toBe(0o600);
   expect((await stat(tokenFile)).mode & 0o777).toBe(0o600);
   expect(await readFile(tokenFile, "utf8")).toMatch(/^[0-9a-f]{64}\n$/);
-  const env = await readFile(envFile, "utf8");
-  expect(env).toMatch(/^POSTGRES_PASSWORD=[0-9a-f]{32}$/m);
-  expect(env).toMatch(/^BETTER_AUTH_SECRET=[0-9a-f]{64}$/m);
-  expect(env).not.toContain("ARDURBOT_IMAGE_TAG=");
-  expect(env).not.toContain("ARDURBOT_COMPUTER_IMAGE_TAG=");
+  await expect(readFile(envFile, "utf8")).resolves.toBe(COMPOSE_ENV);
   await expect(readFile(path.join(stackDir, "docker-compose.images.yml"), "utf8")).resolves.toBe(
     await readFile(path.join(COMPOSE_DIR, "docker-compose.images.yml"), "utf8"),
   );

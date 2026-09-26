@@ -26,6 +26,8 @@ export interface SystemState {
   startupSupported: boolean;
   awakeRoutines: number;
   storage: { path: string | null; canMove: boolean; progress: string | null };
+  /** Local mode: this app keeps the database and files, and can reset them. */
+  localData?: boolean;
   permissions: Record<Permission, PermissionStatus> | null;
   shortcutError: boolean;
   menuBarError?: boolean;
@@ -39,5 +41,7 @@ export interface SystemBridge {
   state(): Promise<SystemState>;
   set<K extends keyof SystemPreferences>(key: K, value: SystemPreferences[K]): Promise<SystemState>;
   moveStorage(recommended: boolean): Promise<SystemState>;
+  /** Asks to confirm in a native dialog; local mode then starts fresh in the setup window. */
+  resetLocalData?(): Promise<SystemState>;
   openPermission(permission: Permission): Promise<void>;
 }

@@ -13,15 +13,19 @@ export function HostComputerSettings() {
     roots: [],
   });
   const [roots, setRoots] = useState<string[]>([]);
+  const [unavailable, setUnavailable] = useState<string[]>([]);
+  /** This app keeps the folder list: a pairing it holds, or local mode. */
   const [local, setLocal] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const desktop = window.ardurbotDesktop;
   async function refresh() {
     const [remote, host] = await Promise.all([rpc.host.status(), desktop?.host?.state()]);
+    const owned = !!host?.configured || !!host?.local;
     setStatus(remote);
-    setRoots(host?.configured ? host.roots : remote.roots);
-    setLocal(!!host?.configured);
+    setRoots(owned && host ? host.roots : remote.roots);
+    setUnavailable(owned && host ? (host.unavailable ?? []) : []);
+    setLocal(owned);
   }
   useEffect(() => {
     let active = true;
@@ -47,17 +51,14 @@ export function HostComputerSettings() {
       setBusy(false);
     }
   }
+  const mac = (status.health?.platform ?? desktop?.platform) === "darwin";
   const versions = [
     status.health?.claude.version ? `claude ${status.health.claude.version}` : "",
     status.health?.codex.version ? `codex ${status.health.codex.version}` : "",
   ].filter(Boolean);
   return (
     <section className="space-y-3 py-4" data-testid="host-computer-settings">
-      <h4 className="text-sm font-medium">
-        {(status.health?.platform ?? desktop?.platform) === "darwin"
-          ? t`This Mac`
-          : t`This computer`}
-      </h4>
+      <h4 className="text-sm font-medium">{mac ? t`This Mac` : t`This computer`}</h4>
       <p className="text-sm text-muted-foreground">
         <Trans>Host service:</Trans>{" "}
         {status.connected
@@ -85,7 +86,14 @@ export function HostComputerSettings() {
         <ul className="space-y-2">
           {roots.map((root) => (
             <li key={root} className="flex items-center justify-between gap-3 text-sm">
-              <span className="break-all">{root}</span>
+              <span className="break-all">
+                {root}
+                {unavailable.includes(root) ? (
+                  <span className="block text-muted-foreground">
+                    <Trans>This folder is not available.</Trans>
+                  </span>
+                ) : null}
+              </span>
               {local && desktop?.host ? (
                 <Button
                   variant="ghost"

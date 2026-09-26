@@ -4314,6 +4314,10 @@ msgstr "Local"
 msgid "Local access lets bots run commands without asking. Avoid it on shared or public servers."
 msgstr "Local access lets bots run commands without asking. Avoid it on shared or public servers."
 
+#: src/pages/system/SystemPage.tsx
+msgid "Local data"
+msgstr "Local data"
+
 #: src/pages/customize/IntegrationTable.tsx
 msgid "Local dev"
 msgstr "Local dev"
@@ -6146,6 +6150,10 @@ msgstr "Reset computer"
 msgid "Reset computer?"
 msgstr "Reset computer?"
 
+#: src/pages/system/SystemPage.tsx
+msgid "Reset local data"
+msgstr "Reset local data"
+
 #: src/pages/Auth.tsx
 msgid "Reset password"
 msgstr "Reset password"
@@ -7387,6 +7395,10 @@ msgstr "This file is not valid UTF-8 Markdown."
 #: src/pages/system/SystemPage.tsx
 msgid "This folder is managed by the server."
 msgstr "This folder is managed by the server."
+
+#: src/pages/HostComputerSettings.tsx
+msgid "This folder is not available."
+msgstr "This folder is not available."
 
 #: src/pages/HostComputerPrompt.tsx
 msgid "this Mac"
