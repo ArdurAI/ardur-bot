@@ -54,11 +54,13 @@ type StoredComputer = {
 
 /**
  * Cards an earlier attempt left waiting or running, by execution id, so a call that resumes
- * on the same id finishes its own card. `finished` names calls that already completed by
- * `agent.tool.completed`. `finishedCommandIds` names a card whose commandId already has a
- * `command.finished`, even when that completion never reached `agent.tool.completed`: a rerun
- * on that id gets its own card and its own result instead of reopening a card already settled.
- * The caller loads `finishedCommandIds` without any finished command's stdout/stderr payload.
+ * on the same id finishes its own card. A card belongs to the latest call recorded on its id:
+ * an `agent.tool.called` with a different name or argument digest on that id drops it.
+ * `finished` names calls that already completed by `agent.tool.completed`.
+ * `finishedCommandIds` names a card whose commandId already has a `command.finished`, even when
+ * that completion never reached `agent.tool.completed`: a rerun on that id gets its own card and
+ * its own result instead of reopening a card already settled. The caller loads
+ * `finishedCommandIds` without any finished command's stdout/stderr payload.
  */
 export function adoptOpenCommands(
   target: Map<string, CommandBlock>,
@@ -66,7 +68,17 @@ export function adoptOpenCommands(
   finished: ReadonlySet<string>,
   finishedCommandIds: ReadonlySet<string> = new Set(),
 ) {
+  const calls = new Map<string, string>();
   for (const event of events) {
+    if (event.type === "agent.tool.called") {
+      const call = (event.payload ?? {}) as Record<string, unknown>;
+      if (typeof call.executionId !== "string") continue;
+      const identity = JSON.stringify([call.name, call.argumentDigest ?? null]);
+      if (calls.has(call.executionId) && calls.get(call.executionId) !== identity)
+        target.delete(call.executionId);
+      calls.set(call.executionId, identity);
+      continue;
+    }
     if (event.type !== "command.intent" && event.type !== "command.started") continue;
     const parsed = CommandEventPayloadSchema.safeParse(event.payload);
     if (!parsed.success) continue;

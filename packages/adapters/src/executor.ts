@@ -332,7 +332,7 @@ import {
 import { recordRunUsage } from "./run-usage.js";
 import type { RuntimeRegistry } from "./runtime-registry.js";
 import { createRuntimeRegistry } from "./runtime-registry.js";
-import { withRuntimeCleanup } from "./runtime-stream.js";
+import { reportRuntimeWaits, withRuntimeCleanup } from "./runtime-stream.js";
 import { accountRuntimeUsage } from "./runtime-usage.js";
 import { NATIVE_HOST_OWNER_MESSAGE, nativeHostOwner } from "./runtimes/native-host.js";
 import { runtimeSession } from "./runtimes/runtime-session.js";
@@ -398,12 +398,7 @@ import {
 import { createWebProvider } from "./web-provider-factory.js";
 import { webFetchFromTool, webSearchFromTool } from "./web-tools.js";
 
-/** Stable identity of a tool's arguments, the same digest `approvalEffectKey` inlines. */
-export function toolArgumentDigest(args: Record<string, unknown>): string {
-  return stableValueDigest(args);
-}
-
-export interface OpenToolCall {
+interface OpenToolCall {
   name: string;
   executionId: string;
   /** Calls recorded without a digest are never linked. */
@@ -412,19 +407,32 @@ export interface OpenToolCall {
   delegationId: string | null;
 }
 
+/** A repeated id is the same call only when its name and argument digest match too. */
+function sameToolCall(
+  recorded: Pick<OpenToolCall, "name" | "argumentDigest"> | undefined,
+  call: Pick<OpenToolCall, "name" | "argumentDigest">,
+) {
+  return (
+    recorded !== undefined &&
+    recorded.argumentDigest !== null &&
+    recorded.name === call.name &&
+    recorded.argumentDigest === call.argumentDigest
+  );
+}
+
 /**
- * Tool calls earlier attempts of this run recorded, in call order. `open` calls have no
- * completion and no later call linked to them. `finished` calls completed without pausing.
+ * Tool calls earlier attempts of this run recorded, in call order. `recorded` is the latest call
+ * on each id. `open` calls have no completion and no later call linked to them. `finished` names
+ * an id whose latest call completed without pausing; a different call on that id clears it.
  */
-export function priorToolCalls(events: readonly { type: string; payload: unknown }[]) {
-  const recorded = new Set<string>();
+function priorToolCalls(events: readonly { type: string; payload: unknown }[]) {
+  const recorded = new Map<string, Pick<OpenToolCall, "name" | "argumentDigest">>();
   const finished = new Set<string>();
   let open: OpenToolCall[] = [];
   for (const event of events) {
     if (event.type === "agent.tool.resumed") {
       const link = ToolResumedPayloadSchema.safeParse(event.payload);
       if (!link.success) continue;
-      recorded.add(link.data.to);
       open = open.filter((call) => call.executionId !== link.data.from);
       continue;
     }
@@ -439,8 +447,7 @@ export function priorToolCalls(events: readonly { type: string; payload: unknown
       else finished.add(executionId);
       continue;
     }
-    recorded.add(executionId);
-    open.push({
+    const call: OpenToolCall = {
       name: record.name,
       executionId,
       argumentDigest:
@@ -448,7 +455,10 @@ export function priorToolCalls(events: readonly { type: string; payload: unknown
           ? record.argumentDigest
           : null,
       delegationId: typeof record.delegationId === "string" ? record.delegationId : null,
-    });
+    };
+    if (!sameToolCall(recorded.get(executionId), call)) finished.delete(executionId);
+    recorded.set(executionId, call);
+    open.push(call);
   }
   return { open, recorded, finished };
 }
@@ -1830,7 +1840,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
           sandbox: deps.sandbox,
           context,
         });
-        // Filled from the event log before the runtime starts, for calls that resume on their own id.
+        // Filled from the event log before the runtime starts, for calls that resume on their own
+        // id. A different call on a reused id removes its id from both before it runs.
         const openCommands = new Map<string, CommandBlock>();
         const finishedCommands = new Set<string>();
         const commandRecording = createCommandRecording({
@@ -4416,10 +4427,17 @@ export function createRunExecutor(deps: ExecutorDeps) {
             executionId: string;
             delegationId?: string;
           }) => {
-            const argumentDigest = toolArgumentDigest(call.args);
+            const argumentDigest = stableValueDigest(call.args);
             const delegationId = call.delegationId ?? null;
-            // A known id is that call running again. A new id may repeat one open call.
-            const resumes = recordedCalls.has(call.executionId)
+            const recorded = recordedCalls.get(call.executionId);
+            // A known id with the same name and arguments is that call running again. A
+            // different call on a reused id is a new call: it inherits no card and no finish.
+            if (recorded && !sameToolCall(recorded, { name: call.name, argumentDigest })) {
+              finishedCommands.delete(call.executionId);
+              openCommands.delete(call.executionId);
+            }
+            // A new id may repeat one open call. A reused id never links; it already names a card.
+            const resumes = recorded
               ? undefined
               : openCalls.find(
                   (open) =>
@@ -4430,7 +4448,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             openCalls = openCalls.filter(
               (open) => open !== resumes && open.executionId !== call.executionId,
             );
-            recordedCalls.add(call.executionId);
+            recordedCalls.set(call.executionId, { name: call.name, argumentDigest });
             await deps.events.append({
               spaceId: run.spaceId,
               threadId: thread.id,
@@ -4473,9 +4491,12 @@ export function createRunExecutor(deps: ExecutorDeps) {
             else runtimeTurn += 1;
           };
           /**
-           * A runtime may start a tool beside its event stream. The loop stores the call when it
-           * reaches the tool event, after the narration before it. A queued event arrives within
-           * microtasks, so a stream still idle after a macrotask has no event for this call yet.
+           * A runtime may start a tool beside its event stream. The call waits until the loop
+           * reaches its tool event and stores it, after the narration before it. A runtime that
+           * reports a call only after running it has no such event, so its call goes once the
+           * runtime has nothing queued: the loop has then handled every earlier event. Waits are
+           * observed below usage accounting, so a usage save never counts as one. A queued event
+           * arrives within microtasks, so a wait that lasts a macrotask has no event behind it.
            */
           const toolCallTurn = (executionId: string) =>
             new Promise<void>((resolve, reject) => {
@@ -4840,10 +4861,14 @@ export function createRunExecutor(deps: ExecutorDeps) {
             },
             context,
           );
+          const observedEvents = reportRuntimeWaits(
+            scripted || commandReplay ? runtimeEvents : traceRuntime(runId, fence, runtimeEvents),
+            runtimeWaits,
+          );
           const accountedEvents =
             scripted || commandReplay
-              ? runtimeEvents
-              : accountRuntimeUsage(traceRuntime(runId, fence, runtimeEvents), {
+              ? observedEvents
+              : accountRuntimeUsage(observedEvents, {
                   provider: resolved.provider,
                   model: resolved.id,
                   purpose: run.delegationId ? "delegated" : "main",
@@ -4860,11 +4885,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                     }
                   },
                 });
-          for await (const event of withRuntimeCleanup(
-            accountedEvents,
-            runAbortController,
-            runtimeWaits,
-          )) {
+          for await (const event of withRuntimeCleanup(accountedEvents, runAbortController)) {
             if (approvalPausePending) return;
             if (!leaseValid) return;
             const now = Date.now();

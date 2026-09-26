@@ -1,26 +1,19 @@
 import type { AgentRuntimeEvent } from "@ardurbot/adapter-kit";
 
-/**
- * Cancel executor tool work before closing an interrupted runtime's iterator.
- * `waiting` reports while the consumer waits on the runtime for its next event, and stays true
- * once the runtime has no more events.
- */
+/** Cancel executor tool work before closing an interrupted runtime's iterator. */
 export async function* withRuntimeCleanup(
   events: AsyncIterable<AgentRuntimeEvent>,
   controller: AbortController,
-  waiting: (value: boolean) => void = () => {},
 ): AsyncIterable<AgentRuntimeEvent> {
   const iterator = events[Symbol.asyncIterator]();
   let complete = false;
   try {
     while (true) {
-      waiting(true);
       const next = await iterator.next();
       if (next.done) {
         complete = true;
         return;
       }
-      waiting(false);
       yield next.value;
     }
   } finally {
@@ -31,4 +24,30 @@ export async function* withRuntimeCleanup(
       await iterator.return?.();
     }
   }
+}
+
+/**
+ * Reports `true` while its consumer waits on the runtime for the next event, and stays true once
+ * the runtime has no more events. Its consumer asks only after handling every earlier event, so
+ * a wait means everything the runtime emitted so far has been handled.
+ */
+export function reportRuntimeWaits<T>(
+  events: AsyncIterable<T>,
+  waiting: (value: boolean) => void,
+): AsyncIterable<T> {
+  return {
+    [Symbol.asyncIterator]() {
+      const iterator = events[Symbol.asyncIterator]();
+      return {
+        async next() {
+          waiting(true);
+          const next = await iterator.next();
+          if (!next.done) waiting(false);
+          return next;
+        },
+        ...(iterator.return ? { return: (value?: unknown) => iterator.return!(value) } : {}),
+        ...(iterator.throw ? { throw: (error?: unknown) => iterator.throw!(error) } : {}),
+      };
+    },
+  };
 }

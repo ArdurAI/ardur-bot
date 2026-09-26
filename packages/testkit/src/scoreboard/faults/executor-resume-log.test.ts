@@ -37,6 +37,7 @@ import type * as ComputerLifecycleModule from "../../../../adapters/src/computer
 import { checkDelegationExecution } from "../../../../adapters/src/delegation-execution.js";
 import { taskWorkspacePath } from "../../../../adapters/src/delegation-workspace.js";
 import { createRunExecutor } from "../../../../adapters/src/executor.js";
+import { recordRunUsage } from "../../../../adapters/src/run-usage.js";
 import { startScoreboardTrace } from "../../../../adapters/src/scoreboard-trace.js";
 import { collectTraceEvidence, crashSpanUnmeasured } from "../trace-collector.js";
 
@@ -101,6 +102,8 @@ afterEach(() => {
   stopTrace?.();
   stopTrace = undefined;
   vi.mocked(checkDelegationExecution).mockClear();
+  vi.mocked(recordRunUsage).mockReset();
+  vi.mocked(recordRunUsage).mockImplementation(async () => null);
 });
 
 function executionIdOf(event: Logged) {
@@ -152,6 +155,19 @@ function commandBlockOf(event: Logged | undefined): CommandBlock {
   return block;
 }
 
+/** Rerun replays the request stored on the card's own intent, so it must be the card's command. */
+function rerunCommands(log: readonly Logged[], cards: readonly CommandBlock[]) {
+  return cards.map((card) => {
+    const intent = log.find(
+      (event) =>
+        event.type === "command.intent" && commandBlockOf(event).commandId === card.commandId,
+    );
+    const replay = (intent?.payload as { replay?: { request: { command: string } } | null })
+      ?.replay;
+    return [card.command, replay?.request.command ?? null];
+  });
+}
+
 /** A kill leaves committed rows behind, exactly as the database would. */
 function survivorsOf(effects: readonly Effect[]) {
   return effects
@@ -176,6 +192,8 @@ function harness(mode: Mode) {
   let calls: ToolCall[] = [];
   let rules: ActionApprovalRule[] = [];
   let slowProgress = false;
+  let askAfter = false;
+  let narration: string | null = null;
   let intentStored = () => {};
   let intentSeen = new Promise<void>((resolve) => {
     intentStored = resolve;
@@ -293,6 +311,14 @@ function harness(mode: Mode) {
     },
     event: {
       findFirst: vi.fn(async () => null),
+      // A published message is one stored event, exactly like `append`.
+      create: vi.fn(
+        async ({ data }: { data: { type: string; runId?: string; payload: unknown } }) => {
+          const logged = { type: data.type, runId: data.runId, payload: data.payload, seq: seq++ };
+          if (persist) log.push(logged);
+          return { ...data, seq: logged.seq };
+        },
+      ),
       findMany: vi.fn(
         async (query: { where?: { runId?: string; type?: { in?: string[] } } } = {}) => {
           const types = query.where?.type?.in;
@@ -334,6 +360,7 @@ function harness(mode: Mode) {
       updateMany: vi.fn(async () => ({ count: 1 })),
     },
     thread: {
+      update: vi.fn(async () => ({ nextMessageSeq: seq + 1, nextEventSeq: seq + 1 })),
       findUniqueOrThrow: vi.fn(async () => ({
         id: run.threadId,
         groupId: null as string | null,
@@ -343,6 +370,10 @@ function harness(mode: Mode) {
       })),
     },
     message: {
+      create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({
+        id: `message-${seq}`,
+        ...data,
+      })),
       findFirst: vi.fn(async () => null),
       findUnique: vi.fn(async () => ({ blocks: [] })),
       findMany: vi.fn(async () => []),
@@ -411,6 +442,11 @@ function harness(mode: Mode) {
     };
     const work = (async () => {
       push({ type: "progress", text: "Starting", activity: true });
+      if (narration) {
+        // Like Pi: a model response streams its text, reports usage, then starts its tools.
+        push({ type: "text", text: narration });
+        push({ type: "usage", inputTokens: 10, outputTokens: 5 });
+      }
       for (const call of batch) {
         push(toolEvent(call));
         await execute(request, call);
@@ -457,6 +493,11 @@ function harness(mode: Mode) {
       }
       yield toolEvent(call);
       if (!scripted) await execute(request, call);
+    }
+    if (askAfter) {
+      askAfter = false;
+      yield { type: "ask", text: "Which environment?" };
+      return;
     }
     yield { type: "done", text: "Done" };
   });
@@ -569,6 +610,18 @@ function harness(mode: Mode) {
     toolEvents,
     requireApproval() {
       rules = [{ effect: "require_approval", matchKind: "tool", matchValue: "shell", botId: null }];
+    },
+    /** The continuation after an approval runs the call without a second approval. */
+    approve() {
+      rules = [];
+    },
+    /** The next attempt asks the user a question after its calls and pauses there. */
+    askAfter() {
+      askAfter = true;
+    },
+    /** Each attempt streams this text and a usage report before its first call. */
+    narrate(text: string) {
+      narration = text;
     },
     slowProgress() {
       slowProgress = true;
@@ -956,4 +1009,142 @@ it("keeps a resumed helper command in the helper workspace, checks and approval"
   expect(projectedCommands(ran.log).map((block) => [block.executionId, block.outcome])).toEqual([
     [B, "completed"],
   ]);
+});
+
+/** A runtime that leaves tool-call ids out: every attempt numbers its calls from zero again. */
+const FIRST = `${RUN}:shell:0`;
+const SECOND = `${RUN}:shell:1`;
+
+it("runs a different call on a reused finished id after a pause as its own card", async () => {
+  const finished = harness("production");
+  finished.askAfter();
+  await finished.resume([{ name: "shell", args: ARGS_A, executionId: FIRST }]);
+  expect(finished.pauses).toHaveLength(1);
+  const ranBefore = finished.executions.length;
+  await finished.resume([{ name: "shell", args: ARGS_B, executionId: FIRST }]);
+  expect(finished.executions.length - ranBefore).toBe(1);
+  const settled = projectedCommands(finished.log);
+  expect(settled.map((card) => [card.command, card.outcome])).toEqual([
+    ["echo alpha", "completed"],
+    ["echo beta", "completed"],
+  ]);
+  expect(rerunCommands(finished.log, settled)).toEqual([
+    ["echo alpha", "echo alpha"],
+    ["echo beta", "echo beta"],
+  ]);
+});
+
+it("keeps a card waiting for approval when a different call reuses its id", async () => {
+  const waiting = harness("production");
+  waiting.requireApproval();
+  await waiting.resume([{ name: "shell", args: ARGS_A, executionId: FIRST }]);
+  expect(waiting.pauses).toHaveLength(1);
+  expect(projectedCommands(waiting.log).map((card) => card.command)).toEqual(["echo alpha"]);
+  waiting.approve();
+  await waiting.resume([{ name: "shell", args: ARGS_B, executionId: FIRST }]);
+  expect(waiting.executions).toHaveLength(1);
+  const cards = projectedCommands(waiting.log);
+  expect(cards.map((card) => [card.command, card.outcome])).toEqual([
+    ["echo alpha", "unknown"],
+    ["echo beta", "completed"],
+  ]);
+  expect(rerunCommands(waiting.log, cards)).toEqual([
+    ["echo alpha", "echo alpha"],
+    ["echo beta", "echo beta"],
+  ]);
+  expect(links(waiting.log)).toEqual([]);
+});
+
+it("runs a different call on a reused finished id after a crash as its own card", async () => {
+  const finished = harness("production");
+  await finished.killAt(
+    [
+      { name: "shell", args: ARGS_A, executionId: FIRST },
+      { name: "shell", args: ARGS_SAME, executionId: SECOND },
+    ],
+    at("command.intent", SECOND),
+    false,
+  );
+  expect(executionIds(finished.toolEvents(), "agent.tool.completed")).toEqual([FIRST]);
+  const ranBefore = finished.executions.length;
+  await finished.resume([{ name: "shell", args: ARGS_B, executionId: FIRST }]);
+  expect(finished.executions.length - ranBefore).toBe(1);
+  const settled = projectedCommands(finished.log);
+  expect(settled.map((card) => [card.command, card.outcome])).toEqual([
+    ["echo alpha", "completed"],
+    ["echo same", "unknown"],
+    ["echo beta", "completed"],
+  ]);
+  expect(rerunCommands(finished.log, settled)).toEqual([
+    ["echo alpha", "echo alpha"],
+    ["echo same", "echo same"],
+    ["echo beta", "echo beta"],
+  ]);
+});
+
+it("keeps a card running at a crash when a different call reuses its id", async () => {
+  const running = harness("production");
+  await running.killAt(
+    [{ name: "shell", args: ARGS_A, executionId: FIRST }],
+    at("command.started"),
+  );
+  const executionsBefore = running.executions.length;
+  await running.resume([{ name: "shell", args: ARGS_B, executionId: FIRST }]);
+  expect(running.executions.length - executionsBefore).toBe(1);
+  const cards = projectedCommands(running.log);
+  expect(cards.map((card) => [card.command, card.outcome])).toEqual([
+    ["echo alpha", "unknown"],
+    ["echo beta", "completed"],
+  ]);
+  expect(rerunCommands(running.log, cards)).toEqual([
+    ["echo alpha", "echo alpha"],
+    ["echo beta", "echo beta"],
+  ]);
+  expect(links(running.log)).toEqual([]);
+});
+
+it("keeps an earlier call's card when a later call on its id was killed before its own card", async () => {
+  const h = harness("production");
+  await h.killAt([{ name: "shell", args: ARGS_A, executionId: FIRST }], at("command.started"));
+  await h.killAt(
+    [{ name: "shell", args: ARGS_B, executionId: FIRST }],
+    at("agent.tool.called", FIRST),
+  );
+  const executionsBefore = h.executions.length;
+  await h.resume([{ name: "shell", args: ARGS_B, executionId: FIRST }]);
+  expect(h.executions.length - executionsBefore).toBe(1);
+  const cards = projectedCommands(h.log);
+  expect(cards.map((card) => [card.command, card.outcome])).toEqual([
+    ["echo alpha", "unknown"],
+    ["echo beta", "completed"],
+  ]);
+  expect(rerunCommands(h.log, cards)).toEqual([
+    ["echo alpha", "echo alpha"],
+    ["echo beta", "echo beta"],
+  ]);
+});
+
+it("stores narration before the call it introduces, however long the usage save takes", async () => {
+  for (const saveMs of [20, 0]) {
+    vi.mocked(recordRunUsage).mockImplementation(async () => {
+      if (saveMs) await new Promise((resolve) => setTimeout(resolve, saveMs));
+      return null;
+    });
+    const h = harness("beside");
+    h.narrate("Checking the logs first.");
+    await h.resume([{ name: "shell", args: ARGS_A, executionId: A }]);
+    const order = h.log
+      .filter(
+        (event) =>
+          event.type === "thread.message.created" ||
+          event.type === "agent.tool.called" ||
+          event.type === "command.intent",
+      )
+      .map((event) => event.type);
+    expect(order, `${saveMs} ms usage save`).toEqual([
+      "thread.message.created",
+      "agent.tool.called",
+      "command.intent",
+    ]);
+  }
 });
