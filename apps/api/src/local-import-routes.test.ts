@@ -67,6 +67,11 @@ function fixture() {
         return server;
       }),
       update: vi.fn(async () => server),
+      updateMany: vi.fn(async ({ where: { id, ...scope } }) => {
+        expect(id).toBe(server.id);
+        identity(scope);
+        return { count: 1 };
+      }),
     },
     secret: { create: vi.fn(async ({ data }) => data) },
     $executeRaw: vi.fn(),

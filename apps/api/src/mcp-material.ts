@@ -54,6 +54,7 @@ export function buildMcpUpdateMaterial(
   const secret = "secret" in config && config.secret ? config.secret : undefined;
   const env = "env" in config ? config.env : undefined;
   const headers = "headers" in config ? config.headers : undefined;
+  const namedHeaders = headers && Object.keys(headers).length > 0 ? headers : undefined;
   const existingHasMaterial = Boolean(
     material.secret ||
       (material.env && Object.keys(material.env).length > 0) ||
@@ -70,14 +71,19 @@ export function buildMcpUpdateMaterial(
   if (!existingHasMaterial && !suppliesMaterial) {
     return clearedOAuth ? { action: "store", material } : { action: "keep" };
   }
-  return {
-    action: "store",
-    material: {
-      ...material,
-      ...(args ? { args, command: config.transport === "stdio" ? config.command : undefined } : {}),
-      ...(secret ? { secret } : {}),
-      ...(env !== undefined ? { env } : {}),
-      ...(headers !== undefined ? { headers } : {}),
-    },
+  // One credential per server: a bearer replaces a named header, and a named header
+  // replaces a bearer. Echoing the previous header beside a new bearer still clears it.
+  const next: McpSecretMaterial = {
+    ...material,
+    ...(args ? { args, command: config.transport === "stdio" ? config.command : undefined } : {}),
+    ...(env !== undefined ? { env } : {}),
   };
+  if (secret) {
+    next.secret = secret;
+    delete next.headers;
+  } else if (namedHeaders) {
+    next.headers = namedHeaders;
+    delete next.secret;
+  } else if (headers !== undefined) next.headers = headers;
+  return { action: "store", material: next };
 }

@@ -112,14 +112,15 @@ function normalizeAuth(value: unknown): IntegrationCatalogSurface["auth"] {
   if (kind === "none") return { type: "none", headerName: null, note };
 
   const header = shortString(value.header, 200);
-  const headerName = header?.split(":", 1)[0]?.trim() || null;
-  if (headerName?.toLowerCase() === "authorization" && /:\s*bearer\b/i.test(header ?? "")) {
-    return { type: "bearer", headerName: null, note };
-  }
+  const named = header?.split(":", 1)[0]?.trim() || null;
+  const bearer = named?.toLowerCase() === "authorization" && /:\s*bearer\b/i.test(header ?? "");
+  // Credentials travel as MCP server headers, which only accept token-safe names.
+  const headerName = named && !bearer && /^[A-Za-z0-9-]+$/.test(named) ? named : null;
+  if (kind === "oauth" || kind === "oauth2") return { type: "oauth", headerName: null, note };
+  if (kind === "mixed") return { type: "mixed", headerName, note };
+  if (bearer) return { type: "bearer", headerName: null, note };
   if (headerName) return { type: "header", headerName, note };
-  if (kind && ["bearer", "token", "mixed", "oauth", "oauth2"].includes(kind)) {
-    return { type: "bearer", headerName: null, note };
-  }
+  if (kind === "bearer" || kind === "token") return { type: "bearer", headerName: null, note };
   return note ? { type: "bearer", headerName: null, note } : null;
 }
 

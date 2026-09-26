@@ -84,6 +84,19 @@ export function parseMcpServerToolArgs(
   };
 }
 
+export const MCP_ONE_CREDENTIAL = "Choose one credential: a token or a header.";
+
+/** A server stores either a bearer token or a named header, never both. */
+export function mcpCredentialConflict(input: {
+  secret?: string;
+  headers?: Record<string, string>;
+}): string | null {
+  const secret = input.secret?.trim() ?? "";
+  const headers = input.headers ?? {};
+  const named = Object.values(headers).some((value) => value.trim());
+  return secret && named ? MCP_ONE_CREDENTIAL : null;
+}
+
 /** Serialized credential blob for the encrypted secret store; null when the
  * server has no static credential material. */
 export function buildMcpCredentialBlob(parsed: {
@@ -92,6 +105,8 @@ export function buildMcpCredentialBlob(parsed: {
   env?: Record<string, string>;
   headers?: Record<string, string>;
 }): string | null {
+  const conflict = mcpCredentialConflict(parsed);
+  if (conflict) throw new Error(conflict);
   const env = parsed.env ?? {};
   const headers = parsed.headers ?? {};
   if (

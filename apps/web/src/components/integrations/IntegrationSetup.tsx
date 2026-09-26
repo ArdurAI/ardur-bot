@@ -2,9 +2,10 @@ import type { IntegrationSetupState } from "@ardurbot/contracts";
 import { Button, Input } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { Check } from "lucide-react";
-import { lazy, Suspense, useEffect, useId, useState } from "react";
+import { lazy, Suspense, useEffect, useId, useRef, useState } from "react";
+import type { McpOauthWait } from "../../lib/mcp-connect";
+import { mcpOutcomeSentence } from "../../lib/mcp-sign-in";
 import { rpc } from "../../lib/rpc";
-import { connectRemoteMcp } from "./connect-remote-mcp";
 
 const DirectMcpSearch = lazy(() =>
   import("./DirectMcpSearch").then((module) => ({ default: module.DirectMcpSearch })),
@@ -39,6 +40,8 @@ export function IntegrationSetup({
   const [endpoint, setEndpoint] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [oauthWait, setOauthWait] = useState<McpOauthWait | null>(null);
+  const userCancelled = useRef(false);
   const choices: { id: Choice; label: string }[] = [
     { id: "direct", label: t`Direct MCP` },
     { id: "composio", label: "Composio" },
@@ -197,11 +200,7 @@ export function IntegrationSetup({
       ) : null}
       {choice === "direct" ? (
         <Suspense fallback={null}>
-          <DirectMcpSearch
-            botId={botId}
-            secret={apiKey}
-            onConnected={(id) => onServerConnected?.(id)}
-          />
+          <DirectMcpSearch botId={botId} onConnected={(id) => onServerConnected?.(id)} />
         </Suspense>
       ) : null}
       {choice === "executor" ? (
@@ -228,21 +227,45 @@ export function IntegrationSetup({
             />
           </label>
           <Button
-            disabled={busy || !endpoint.trim()}
-            onClick={() =>
+            disabled={(busy && !oauthWait) || !endpoint.trim()}
+            onClick={() => {
+              userCancelled.current = false;
               void run(async () => {
-                const id = await connectRemoteMcp({
+                const { connectRemoteMcp } = await import("./connect-remote-mcp");
+                const outcome = await connectRemoteMcp({
                   name: "Executor",
                   endpoint,
-                  secret: apiKey,
+                  credential: apiKey.trim() ? { value: apiKey } : undefined,
                   botId,
+                  onWaiting: (waiting) => {
+                    setBusy(false);
+                    setOauthWait(waiting);
+                  },
                 });
-                if (id) onServerConnected?.(id);
-              })
-            }
+                setOauthWait(null);
+                if (outcome.result === "connected") onServerConnected?.(outcome.serverId);
+                else
+                  setError(
+                    mcpOutcomeSentence(outcome.result, userCancelled.current, outcome.recorded),
+                  );
+              });
+            }}
           >
             <Trans>Connect</Trans>
           </Button>
+          {oauthWait ? (
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">{t`Waiting for sign-in in the other window.`}</p>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  userCancelled.current = true;
+                  void oauthWait.cancel();
+                }}
+              >{t`Cancel sign-in`}</Button>
+            </div>
+          ) : null}
           <details className="text-sm text-muted-foreground">
             <summary className="cursor-pointer">
               <Trans>Setup help</Trans>

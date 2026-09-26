@@ -49,17 +49,22 @@ import type { EncryptedSecretStore } from "./secrets.js";
 type SessionEntry = { session: McpSessionPort; revision: number; material: OAuthMaterial };
 type PendingSession = { revision: number; promise: Promise<McpSessionPort> };
 
+/**
+ * A 401 without OAuth state: a saved token or header was refused (`credential_rejected`),
+ * or a custom server with nothing saved asks for sign-in.
+ */
 function connectionError(error: unknown, server: McpServer, material?: OAuthMaterial): unknown {
+  const headers = Object.keys(material?.headers ?? {});
+  const sent = Boolean(material?.secret) || headers.length > 0;
   if (
-    server.catalogId &&
     !material?.oauth &&
-    Object.keys(material?.headers ?? {}).some((key) => key.toLowerCase() === "authorization") &&
+    (!server.catalogId || headers.some((key) => key.toLowerCase() === "authorization")) &&
     error &&
     typeof error === "object" &&
     "code" in error &&
     error.code === 401
   )
-    return new McpReauthorizationRequiredError(server.id, "refresh_unavailable");
+    return new McpReauthorizationRequiredError(server.id, sent ? "credential_rejected" : null);
   return error;
 }
 
@@ -733,6 +738,7 @@ export class McpConnector implements ConnectorProvider {
           !localHttp && this.oauth
             ? await this.oauth.providerFor(server, context, loaded)
             : undefined;
+        // New servers hold one credential. A blob saved earlier may hold both; send both.
         const staticToken = material.secret
           ? material.secret.startsWith("Bearer ")
             ? material.secret

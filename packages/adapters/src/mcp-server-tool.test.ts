@@ -92,15 +92,24 @@ describe("parseMcpServerToolArgs", () => {
 });
 
 describe("buildMcpCredentialBlob", () => {
+  it("rejects a token stored beside a named header", () => {
+    expect(() =>
+      buildMcpCredentialBlob({ secret: "tok", headers: { "X-Api-Key": "key" }, env: {} }),
+    ).toThrow("Choose one credential: a token or a header.");
+  });
+
   it("returns null when no credential material exists", () => {
     expect(buildMcpCredentialBlob({})).toBeNull();
     expect(buildMcpCredentialBlob({ headers: {}, env: {} })).toBeNull();
   });
 
-  it("serializes secret, env, and headers into the encrypted blob shape", () => {
-    expect(
-      buildMcpCredentialBlob({ secret: "tok", headers: { Authorization: "Bearer tok" }, env: {} }),
-    ).toEqual(JSON.stringify({ secret: "tok", env: {}, headers: { Authorization: "Bearer tok" } }));
+  it("serializes one credential into the encrypted blob shape", () => {
+    expect(buildMcpCredentialBlob({ secret: "tok", headers: {}, env: {} })).toEqual(
+      JSON.stringify({ secret: "tok", env: {}, headers: {} }),
+    );
+    expect(buildMcpCredentialBlob({ headers: { "X-Api-Key": "key" }, env: { A: "b" } })).toEqual(
+      JSON.stringify({ env: { A: "b" }, headers: { "X-Api-Key": "key" } }),
+    );
   });
 });
 
