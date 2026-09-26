@@ -1,0 +1,141 @@
+---
+title: "Self-host secrets checklist"
+description: "Required and optional credentials for published-images and Compose deploys."
+source_path: "docs/self-host-secrets.md"
+---
+
+> [Source: docs/self-host-secrets.md](https://github.com/ArdurAI/ardur-bot/blob/__ARDUR_BOT_SOURCE_REF__/docs/self-host-secrets.md). Edit the source file, then run `python3 site/scripts/sync_docs.py` to refresh this page.
+
+Required and optional credentials for published-images and Compose deploys.
+
+**Never commit `.env`, never paste secret values into issues/PRs, and never
+overwrite an existing `.env` without an explicit backup and operator consent.**
+
+## Published images: what the installer fills
+
+`bash install-images.sh` (without a pre-existing `.env`) copies
+`.env.images.example` and fills empty required keys with `openssl`:
+
+| Key | Installer fill | Role |
+| --- | --- | --- |
+| `POSTGRES_PASSWORD` | `openssl rand -hex 16` | Postgres role password inside Compose |
+| `BETTER_AUTH_SECRET` | `openssl rand -hex 32` | Auth/session signing |
+| `ENCRYPTION_KEY` | `openssl rand -hex 32` | Encrypts stored credentials at rest |
+| `SCREEN_PROXY_SECRET` | `openssl rand -hex 32` | Signs short-lived `/novnc/*` screen capabilities |
+| `SANDBOX_SUPERVISOR_TOKEN` | `openssl rand -hex 32` | API ↔ sandbox supervisor auth |
+
+Re-runs **preserve** an existing `.env` (they do not rotate secrets). Empty
+required keys still fail closed at Compose validate time
+(`${VAR:?Set … in .env}`).
+
+Manual generation (same shapes the installer uses):
+
+```bash
+openssl rand -hex 16   # POSTGRES_PASSWORD
+openssl rand -hex 32   # BETTER_AUTH_SECRET, ENCRYPTION_KEY, SCREEN_PROXY_SECRET, SANDBOX_SUPERVISOR_TOKEN
+```
+
+Source-checkout `.env.example` also requires `POSTGRES_PASSWORD` (same
+`openssl rand -hex 16` shape) for `infra/compose/docker-compose.yml`. Put the
+same value in host-side `DATABASE_URL` when using the optional
+`docker-compose.postgres-host.yml` overlay. Keep the password URI-safe: Compose
+interpolates it into `DATABASE_URL` the same way the images stack does. Hex from
+`openssl rand` is safe; characters such as `@ : / ? # %` are not.
+
+Existing source-checkout `pgdata` volumes keep the user, password, and database
+from first init (often the former hardcoded `ardurbot` / `ardurbot`). Keep those
+values in `.env`, or change them in place with `ALTER ROLE` / rename. Recreate
+the volume only after a backup (or when the data is disposable);
+`docker compose down -v` deletes all Postgres state.
+
+Source-checkout `.env.example` asks for a **64-hex** `ENCRYPTION_KEY` in
+comments; published-images installer uses 32 bytes of hex (64 hex chars) via
+`openssl rand -hex 32`. Prefer long independent random values either way.
+Do not reuse one string across keys.
+
+## Distinctness rules
+
+These must be **independent** random values (do not copy-paste the same
+secret into multiple keys):
+
+- `BETTER_AUTH_SECRET`
+- `ENCRYPTION_KEY`
+- `SCREEN_PROXY_SECRET`
+- `SANDBOX_SUPERVISOR_TOKEN`
+- `ARDURBOT_UPDATER_TOKEN` (only if the updater profile is enabled; ≥32 chars,
+  also distinct from the four above)
+
+Rotating `ENCRYPTION_KEY` after credentials were stored makes old ciphertext
+unreadable. Keep the original key for an existing deployment unless you
+intentionally wipe encrypted material.
+
+## Optional keys (leave blank if unused)
+
+From `.env.images.example` (images installer). Leave blank if unused:
+
+| Key(s) | When needed |
+| --- | --- |
+| `OPENROUTER_API_KEY` | Deployment-wide OpenRouter models |
+| `TYPESAFE_API_KEY` | Optional TypeSafe Jev Auto Review verifier (`ARDURBOT_AUTO_REVIEW_PROVIDER=jev`) |
+| `COMPOSIO_API_KEY` | Composio managed catalog |
+| `E2B_API_KEY` / `DAYTONA_API_KEY` / `BOX_API_KEY` | Remote computers when `SANDBOX_PROVIDER` is not `docker` |
+| `SMTP_URL` / `EMAIL_FROM` | Password-recovery email |
+| Messaging tokens (Slack, Telegram, …) | Only if you enable those surfaces |
+
+If `ARDURBOT_AUTO_REVIEW_PROVIDER=jev` is selected while `TYPESAFE_API_KEY` is
+empty, Auto Review shows “Jev needs a TypeSafe API key.” and the API logs it once.
+The existing LLM checker remains the fallback; this configuration warning does
+not approve actions or bypass Ask-first rules.
+
+Blank optional keys are normal for a minimal published-images boot. Pipedream
+Connect keys appear only in source/Compose `.env.example`, not the images
+example.
+
+## Operator workflow
+
+```bash
+bash install-images.sh --prepare-only   # creates .env + fills empties
+# inspect key NAMES only if debugging; never log values
+bash install-images.sh                  # pull + up; preserves .env
+curl -fsS http://127.0.0.1:3100/health
+```
+
+If `sandbox` in `/health` is `"none"` or the supervisor never becomes healthy,
+check that `SANDBOX_SUPERVISOR_TOKEN` is set and non-empty for the Docker
+computer path. A missing token is a setup failure, not an "optional tighten
+later" item.
+
+## Recovery without reprinting secrets
+
+- Lost UI password: use SMTP recovery if configured; otherwise operator
+  identity recovery is out of band (DB). Prefer not to rotate
+  `BETTER_AUTH_SECRET` casually on a live deploy.
+- Lost `.env`: from backup only. Recreating random secrets on a volume that
+  still holds Postgres data will desynchronize passwords and encryption.
+- Moving hosts: copy `.env` and volumes together; treat `.env` as secret
+  material in transit.
+
+## Integration OAuth and host accounts
+
+The API owns `/api/oauth/done`. Route that path to the API at the configured
+public web origin and register the exact resulting HTTPS callback URL with
+providers that require registration. Local development can use the provider's
+permitted loopback callback. The callback resolves the owner from expiring state,
+not browser cookies; do not require a separate web login on this route.
+
+GitHub and Azure can use a pre-registered OAuth client through the connection's
+advanced fields. Client secrets, PKCE and refresh tokens use the existing
+encrypted secret store. Existing deployment-level GitHub registration is retained
+for compatibility. Do not print registration responses or callback query strings
+in proxy logs. The API's request logger records paths without OAuth query values.
+
+Host integration accounts use existing CLI configuration/keychains. The database
+stores only the selected identity, workspace and tool grants. No CLI token is
+exported into an API secret or environment variable. The owner remains responsible
+for CLI sign-in and its refresh mechanism. See
+[integration lifecycle](/docs/decisions/integration-lifecycle/) and
+[host environment](/docs/host-service/#owner-environment-and-tool-inventory).
+
+## Related
+
+- [Self-hosting](/docs/self-host-guide/)

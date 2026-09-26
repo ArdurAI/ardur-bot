@@ -1,0 +1,79 @@
+baseURL: "https://bot.ardur.ai/"
+locale: "en-US"
+enableRobotsTXT: true
+disableKinds:
+  - RSS
+  - taxonomy
+  - term
+summaryLength: 28
+
+sitemap:
+  filename: "sitemap-index.xml"
+
+outputFormats:
+  LLMS:
+    mediaType: "text/plain"
+    baseName: "llms"
+    isPlainText: true
+    notAlternative: true
+
+outputs:
+  home:
+    - html
+    - llms
+
+params:
+  # The product name lives in exactly this one place. Templates read
+  # {{ .Site.Params.productName }} and content uses the {{< product >}}
+  # shortcode, so a rename is a one-line change here.
+  productName: "Ardur Bot"
+  repoURL: "https://github.com/ArdurAI/ardur-bot"
+  # CI overrides this with the commit SHA via HUGO_PARAMS_SOURCEREF.
+  sourceRef: "dev"
+  tagline: "Open-source desktop bots that run on your own AI subscriptions and keys."
+  supportEmail: "support@ardur.ai"
+  securityEmail: "security@ardur.ai"
+
+menus:
+  main:
+    - name: "Docs"
+      pageRef: "/docs"
+      weight: 10
+    - name: "Download"
+      pageRef: "/download"
+      weight: 20
+    - name: "Status"
+      pageRef: "/status"
+      weight: 30
+    - name: "Benchmarks"
+      pageRef: "/benchmarks"
+      weight: 40
+    - name: "About"
+      pageRef: "/about"
+      weight: 50
+  footer:
+    - name: "Docs"
+      pageRef: "/docs"
+      weight: 10
+    - name: "Status"
+      pageRef: "/status"
+      weight: 20
+    - name: "Support"
+      pageRef: "/support"
+      weight: 30
+    - name: "Privacy"
+      pageRef: "/privacy"
+      weight: 40
+
+markup:
+  goldmark:
+    renderer:
+      unsafe: false
+
+caches:
+  images:
+    dir: ":cacheDir/images"
+
+imaging:
+  quality: 82
+  resampleFilter: "Lanczos"

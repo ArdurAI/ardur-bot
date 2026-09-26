@@ -49,3 +49,8 @@ playwright-report-www
 
 # Local measurements and browser traces
 .context/performance/
+
+# Hugo build output (site/ source is tracked; generated output is not)
+site/public/
+site/resources/
+site/.hugo_build.lock

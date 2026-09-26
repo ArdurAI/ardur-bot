@@ -1,0 +1,12 @@
+<header class="site-header">
+  <a class="brand" href="{{ "" | absURL }}" aria-label="{{ .Site.Params.productName }} home">
+    <span class="brand-mark" aria-hidden="true">{{ substr .Site.Params.productName 0 1 }}</span>
+    <span>{{ .Site.Params.productName }}</span>
+  </a>
+  <nav class="site-nav" aria-label="Primary">
+    {{ range .Site.Menus.main }}
+      <a href="{{ .URL | absURL }}"{{ if $.IsMenuCurrent "main" . }} aria-current="page"{{ end }}>{{ .Name }}</a>
+    {{ end }}
+    <a href="{{ .Site.Params.repoURL }}">GitHub</a>
+  </nav>
+</header>

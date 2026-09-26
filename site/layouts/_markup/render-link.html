@@ -1,0 +1,11 @@
+{{- $href := .Destination -}}
+{{- $repoURL := strings.TrimSuffix "/" .Page.Site.Params.repoURL -}}
+{{- $sourceRef := .Page.Site.Params.sourceRef | default "dev" -}}
+{{- $placeholder := printf "%s/blob/__ARDUR_BOT_SOURCE_REF__/" $repoURL -}}
+{{- $treePlaceholder := printf "%s/tree/__ARDUR_BOT_SOURCE_REF__/" $repoURL -}}
+{{- if strings.HasPrefix $href $placeholder -}}
+  {{- $href = replace $href $placeholder (printf "%s/blob/%s/" $repoURL $sourceRef) -}}
+{{- else if strings.HasPrefix $href $treePlaceholder -}}
+  {{- $href = replace $href $treePlaceholder (printf "%s/tree/%s/" $repoURL $sourceRef) -}}
+{{- end -}}
+<a href="{{ $href | safeURL }}"{{ with .Title }} title="{{ . }}"{{ end }}>{{ .Text | safeHTML }}</a>

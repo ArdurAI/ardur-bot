@@ -1,4 +1,10 @@
-# Ardur Bot
+---
+title: "Ardur Bot"
+description: "Open-source desktop bots that run on your own AI subscriptions and keys."
+source_path: "README.md"
+---
+
+> [Source: README.md](https://github.com/ArdurAI/ardur-bot/blob/__ARDUR_BOT_SOURCE_REF__/README.md). Edit the source file, then run `python3 site/scripts/sync_docs.py` to refresh this page.
 
 Open-source desktop bots that run on your own AI subscriptions and keys.
 
@@ -10,7 +16,7 @@ Ollama. Bots work on computers you control: your machine, Docker, and (planned) 
 Kubernetes.
 
 Ardur Bot is a fork of [Rakazo](https://github.com/elie222/rakazo) (Apache-2.0). See
-[NOTICE](NOTICE) and [ADR-001](docs/decisions/ADR-001-fork-and-rename.md).
+[NOTICE](https://github.com/ArdurAI/ardur-bot/blob/__ARDUR_BOT_SOURCE_REF__/NOTICE) and [ADR-001](/docs/decisions/adr-001-fork-and-rename/).
 
 > **Status: pre-alpha.** Everything lands on the `dev` branch; `main` moves only after a
 > human has verified a build. The release workflow produces unsigned desktop previews;
@@ -28,7 +34,7 @@ Inherited from Rakazo and working:
   Z.ai, and local Ollama, LM Studio or llama.cpp
 - Computers: the computer Ardur Bot is installed on, plus Docker, Podman, Kubernetes or SSH
   machines you add, and E2B, Daytona or Box on a server, with a browser, terminal, files and a
-  graphical desktop ([where bots run](docs/self-host.md#where-bots-run))
+  graphical desktop ([where bots run](/docs/self-host-guide/#where-bots-run))
 - Connectors: MCP servers, OpenAPI documents, Composio, Pipedream Connect
 - Approvals before consequential actions, voice mode, and web, Electron desktop and Expo
   mobile clients of the same API
@@ -84,11 +90,11 @@ Only approve a download you trust from the official release page.
 
 **This computer** starts the app's own database and services. Docker is not required for that
 first launch. You can still connect the client to an existing server. See
-[what commands can do on this computer](docs/self-host.md#what-commands-can-do-on-this-computer).
+[what commands can do on this computer](/docs/self-host-guide/#what-commands-can-do-on-this-computer).
 Docker remains available later as an added computer, and Compose remains the way
 to run a server. Unsigned previews use manual downloads for updates on every OS.
 
-After the owner publishes the [Homebrew tap](docs/desktop-release.md#homebrew-tap-handoff):
+After the owner publishes the [Homebrew tap](/docs/desktop-release/#homebrew-tap-handoff):
 
 ```sh
 brew install --cask ardurai/tap/ardur-bot
@@ -96,7 +102,7 @@ ardur-bot --version
 ```
 
 The cask does not bypass macOS quarantine. The tap is a separate publication step; no existing
-tap or published release is assumed by this checkout. See [desktop releases](docs/desktop-release.md)
+tap or published release is assumed by this checkout. See [desktop releases](/docs/desktop-release/)
 for build and acceptance instructions.
 
 ## Run from source
@@ -156,16 +162,16 @@ pnpm test    # offline unit tests, no keys needed
 ```
 
 More checks, the branch policy and how to sync with upstream Rakazo are in
-[CONTRIBUTING.md](CONTRIBUTING.md). Design notes are under [docs/](docs/) where
-present and decisions under [docs/decisions/](docs/decisions/).
+[CONTRIBUTING.md](/docs/contributing/). Design notes are under [docs/](https://github.com/ArdurAI/ardur-bot/tree/__ARDUR_BOT_SOURCE_REF__/docs) where
+present and decisions under [docs/decisions/](/docs/decisions/).
 
 ## Community
 
 - Website: [bot.ardur.ai](https://bot.ardur.ai)
 - Bugs and feature requests: [Issues](https://github.com/ArdurAI/ardur-bot/issues)
 - Questions, ideas, roadmap: [Discussions](https://github.com/ArdurAI/ardur-bot/discussions)
-- Security reports: [SECURITY.md](SECURITY.md)
+- Security reports: [SECURITY.md](/docs/security/)
 
 ## License
 
-Apache-2.0. Derived from Rakazo; see [NOTICE](NOTICE).
+Apache-2.0. Derived from Rakazo; see [NOTICE](https://github.com/ArdurAI/ardur-bot/blob/__ARDUR_BOT_SOURCE_REF__/NOTICE).

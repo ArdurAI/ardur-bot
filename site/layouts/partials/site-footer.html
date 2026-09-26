@@ -1,0 +1,13 @@
+<footer class="site-footer">
+  <div>
+    <strong>{{ .Site.Params.productName }}</strong>
+    <p>{{ .Site.Params.tagline }} This site publishes no analytics and sets no cookies.</p>
+  </div>
+  <div class="footer-links">
+    {{ range .Site.Menus.footer }}
+      <a href="{{ .URL | absURL }}">{{ .Name }}</a>
+    {{ end }}
+    <a href="{{ .Site.Params.repoURL }}">Source</a>
+    <a href="{{ "llms.txt" | absURL }}">llms.txt</a>
+  </div>
+</footer>

@@ -1,0 +1,146 @@
+---
+title: "Computer runtime"
+description: "For Fleet targets, capacity, placement, transport limits and verification, see [Fleet P1](fleet.md)."
+source_path: "docs/computer-runtime.md"
+---
+
+> [Source: docs/computer-runtime.md](https://github.com/ArdurAI/ardur-bot/blob/__ARDUR_BOT_SOURCE_REF__/docs/computer-runtime.md). Edit the source file, then run `python3 site/scripts/sync_docs.py` to refresh this page.
+
+For Fleet targets, capacity, placement, transport limits and verification, see [Fleet P1](/docs/fleet/).
+
+Ardur Bot keeps the agent runtime and the computer runtime separate:
+
+```text
+chat/API -> one Pi agent session -> Ardur Bot computer tools -> SandboxProvider -> E2B / Daytona / Box
+                                                   |-> Docker
+                                                   |-> desktop/fake
+
+SandboxProvider workspace <-> AgentHomeStore <-> Ardur Bot-owned DATA_DIR
+```
+
+Pi runs in the Ardur Bot API/worker process. It is not installed in, or executed by, E2B. The built-in tools are ordinary Pi tools, not Claude- or MCP-specific tools, so any model exposed through Pi can call them. Screen operation still requires a model that can accept image tool results and reason about screenshots.
+
+## Computer contract
+
+Each workspace gets one Team Computer by default. Bots share its files and installed tools. Each Team bot starts in `bots/<bot-id>/`, while deliberately shared work belongs in `shared/`. These folders organize work but are not security boundaries: every Team bot can access the full Team workspace. A bot can instead use a Private Computer, where the whole workspace is its home.
+
+Each active Team bot gets its own X display and Chrome process, with a persistent Chrome profile keyed to the bot's identity. Logins, cookies, and browser history are independent. Profiles are never cloned from another bot, merged, or deleted when a desktop is released. Both bots keep their changes; reopening a bot uses its existing profile even when its display slot changes. Team runs use fenced per-bot database leases: different bots can operate concurrently, and one bot has only one computer driver at a time.
+
+Docker, E2B, Daytona, and Box use the same Linux desktop lifecycle commands. Remote adapters share allocation, observation, actions, and control handling; provider code supplies command execution, persistent workspace paths, and screen URLs. Box exposes the shared runtime through protected `host <port> --private` routes instead of its default desktop API. View and control use separate revocable websocket capabilities; teardown disconnects clients before a display slot is reused. A failed teardown keeps the slot reserved for retry.
+
+Desktop stacks start lazily when a bot uses graphical tools. There is no configured desktop cap by default; a computer can host 100 or more bot profiles, and simultaneous desktops are bounded by its RAM, CPU, process capacity, and available local debugger ports. Docker operators can set a positive `SANDBOX_TEAM_SCREEN_LIMIT` to cap active desktops (`0` leaves it unset). Requests beyond an explicit limit return `MULTI_SCREEN_UNAVAILABLE`; shell and file tools remain available. All desktops share one token-protected screen gateway, so adding desktops does not require publishing more ports. Each view/control capability targets a unique local Unix socket; recycling a display cannot redirect an old connection to its next bot. Inactive bots do not each run Chrome. Closing a viewer leaves the desktop intact. Run completion releases that bot's desktop, and whole-computer idle shutdown stops remaining processes while preserving the workspace. There is no separate inactivity timer per desktop. Persistent profiles consume disk but do not require a running Chrome process.
+
+`SandboxProvider` is the provider boundary. A backend must implement:
+
+- lifecycle: provision/reconnect, stop, and destroy;
+- desktop: observe, ordered batched actions, user input, and a live screen session;
+- execution: commands inside the machine;
+- files: list/read/write plus complete workspace import/export.
+
+On supported graphical computers the model gets `browser_navigate`, `browser_snapshot`, and `browser_act` for page text and element refs. The default `computer` browser provider drives the visible Chromium tab through the sandbox's optional `pageBrowser` contract. Docker implements that contract through the same managed-screen and lease checks as desktop controls; update the computer image to install the helper. Other providers keep their existing desktop tools until they implement the contract. No hosted browser service or API key is required.
+
+The computer container is the security boundary. Team bots share the OS user, workspace, browser profiles, and shell/X11 access; screen leases coordinate tool calls, not mutually untrusted processes inside that computer. CDP binds only to the container's loopback interface and is not published as a host port. Use separate computers when workloads require isolation.
+
+The helper uses an isolated script world, masks password values, and rejects stale refs instead of retargeting replacement elements. Snapshots include bounded page text and up to 80 interactive elements. Frames and unsupported interactions require desktop tools. A failed action reports confirmed progress and whether its outcome is uncertain: inspect the current state before continuing and never replay completed or uncertain actions automatically. For models without vision, request takeover if page tools cannot operate.
+
+Fake computers and explicit `BROWSER_PROVIDER=fake|emulator` use an in-process session for tests. These sessions are not the live logged-in browser. Browser mutations share the existing teaching guard and workspace checkpoint flow. `computer_observe`, batched `computer_act`, `open_path`, `launch_app`, `shell`, and file tools remain available according to the computer and model capabilities. Identical consecutive desktop frames keep their metadata but omit duplicate image bytes from model context.
+
+Human input and agent input may coexist on distinct Team screens. “Take control” grants the user an exclusive control lease on that bot’s screen so the embedded viewer accepts input. For a Team bot, takeover is refused with HTTP 409 (“Stop the bot first”) while that bot holds a live computer execution lease or an active run, unless the run is `waiting_takeover` (the bot asked for protected input). Stop the bot first, then take control; after release, the agent may continue. `request_takeover` remains available when the model explicitly needs protected input or human judgment.
+
+## E2B backend
+
+The E2B adapter uses `@e2b/desktop` for machine lifecycle, shell commands, files, and port URLs. Every bot desktop uses the shared Linux runtime, including the first bot. Its X display, screenshots, input, and view/control transports follow the same lifecycle as the other managed providers.
+
+## Daytona backend
+
+The database stores the provider kind and opaque `providerRef`. That reference is an acceleration path, not durable data. It is passed back only to the same provider kind. A missing machine or a provider-kind change creates a replacement and restores its workspace through the provider-neutral contract. A computer without a saved connection keeps the provider of its own kind: Docker stays on local Docker while its supervisor is configured, and E2B, Daytona, or Box on that provider while its API key is set. A host computer runs on the host only where the host runs computers: `SANDBOX_PROVIDER=desktop`, or `SANDBOX_PROVIDER=docker` with This Mac on. On any other deployment, including Docker with This Mac off, its engine is not configured, and it never runs on the server. A connectionless Kubernetes computer uses the deployment's provider only when `SANDBOX_PROVIDER=kubernetes`. There is no automatic in-cluster provider, because agent pods must use a separately issued, namespace-limited credential (see [compute profiles](/docs/compute-profiles/)), never the app's own service account and namespace. When a computer's engine is not configured, its run fails before the computer is claimed with "This computer runs on E2B, which is not configured here. Reset it in Settings, Computers to start it on this deployment's engine, or configure E2B again." The run stops, so it does not hold the computer. Move, Reset, and Recover then treat the computer as having no reachable machine: they restore its last saved workspace on the chosen connection, or on the deployment's own engine, without calling the missing engine. After the files are restored, the bot's conversation says "The previous engine was not available, so the last saved workspace was restored." A computer is never restored onto the host: where the deployment's own engine is the host, Reset and Recover of such a computer are refused, and a saved connection is the way out.
+
+## Box backend
+
+The Box adapter uses ASCII's official TypeScript SDK for lifecycle, command, and file operations. It creates and resumes boxes with `noEnv: true`, as required when a third party supplies the API key, and keeps a two-hour TTL refreshed while the computer is active. The shared runtime creates each bot's display and noVNC transports, exposed through protected Box port hosting. Ardur Bot's encrypted screen capability proxy binds the view/control policy and keeps the provider credentials out of browser-visible URLs. Observations and actions target the assigned bot display.
+
+Box stop archives the machine and resume reconnects the same opaque box id. Each bot’s Chrome profile lives under the portable workspace and is included in checkpoint/export. The Box emulator uses the same multi-screen contract as the other managed-provider emulators.
+
+## Persistence
+
+The portable computer workspace is the durable boundary. E2B uses `/home/user/ardurbot-home`; Docker and local providers expose the equivalent home. Browser profiles are rooted under `.browser-profiles` in that workspace on E2B. Ardur Bot checkpoints transferred workspaces into `AgentHomeStore` at run completion or failure, before explicit stop, and before idle suspension. Docker mounts the Ardur Bot-owned home directly and only advances its revision marker at those boundaries. New or replacement machines import the latest stored workspace before use.
+
+`LocalAgentHomeStore` currently keeps the latest workspace under `DATA_DIR/homes/<computer-home-key>` and checkpoint metadata separately under `DATA_DIR/home-revisions`. Replacements are staged before the current copy is swapped, and checkpoints are serialized per computer. This implementation is latest-only rather than an immutable revision archive. Production deployments must put `DATA_DIR` on a Ardur Bot-owned persistent volume, encrypt that volume at rest, and include it in off-host backups. The storage interface is deliberately independent of E2B so an object-store-backed implementation can replace the local volume without changing agent tools or sandbox providers.
+
+Before exporting a remote workspace, remote backends quiesce desktop browsers so profile databases and login state are copied consistently. Run checkpoints defer while another bot holds an execution or user-control lease; the last finishing run or idle job saves the shared workspace. Idle shutdown claims the computer before exporting, preventing a new bot from starting during the snapshot. They exclude only transient cache/lock files inside `.browser-profiles`; similarly named project files remain durable.
+
+The disposable OS image is not a portable disk snapshot. System packages installed outside the workspace are lost when moving to another provider; durable machine customization should be represented by a reproducible image or setup recipe. This is what makes a future backend switch practical instead of trying to translate vendor-specific VM snapshots.
+
+## Verification
+
+The [agent verification guide](/docs/agent-verification/) also describes a deterministic
+contacts-export replay through real Pi, with either a stateful fake computer or
+real Docker Chromium. It requires no inference and complements the vision
+acceptance test below.
+
+Offline tests cover tool-result images, action parsing, provider conformance (including the page-browser adapter and computer_act fallback), workspace checkpoint/restore, provider SDK translation, lifecycle integration, and multi-screen managed-provider emulators. They never call a model or live sandbox.
+
+The explicit acceptance test requires Docker (for temporary Postgres), `E2B_API_KEY`, `OPENROUTER_API_KEY`, and a vision-capable OpenRouter model id:
+
+```bash
+COMPUTER_E2E_MODEL=<vision-capable-openrouter-model-id> pnpm test:computer
+```
+
+It starts the full API, provisions a real E2B desktop, serves a deterministic page inside the sandbox, and asks a real model to observe and click a button. The button creates a server-side marker; the test then requires the model to use terminal and file tools and verifies both the marker and recorded tool calls. Finally, it destroys the provider machine, boots a replacement through the stale provider reference, and verifies that the external checkpoint restored the model-created file. The command is opt-in and is not run by `pnpm test` or CI unless invoked explicitly.
+
+### Docker desktop lifecycle regression
+
+Build the computer image, then run `VERIFY_DOCKER_TEAM_SCREENS=1 pnpm exec vitest run infra/sandboxes/supervisor/src/team-desktops.docker.test.ts`. Set `ARDURBOT_COMPUTER_IMAGE` to select a prebuilt image. The test uses an isolated Docker container with networking disabled and fake browser state; it verifies parallel Chrome desktops visiting local fixture sites, independent cookies, profile persistence after release, transport teardown, and rejection of old view/control tokens after slot reuse. It runs both Docker supervision and the command path used by remote providers. Default unit tests exercise profile persistence, allocation, and lease fencing offline without Docker.
+
+## Computer maintenance
+
+Update and recovery run as durable background jobs. A computer-wide reservation
+excludes new execution leases, stop, takeover, idle suspension, and computer-mode
+changes while the operation saves and replaces the workspace. Progress is stored
+separately from the computer's provisioning fence. Web and Electron show a dialog
+or compact background pill; mobile uses a native sheet. Reopening the app restores
+active operations and failures from the API.
+
+Update explicitly rebuilds with the configured provider/image; `canUpdate` means
+the computer supports that action, not that a newer image was detected. Provider
+migration and image-version discovery are not part of this UI. Updates checkpoint
+live work before teardown. Recovery can fall back to the last saved workspace,
+so its failure action warns that unsaved work may be lost.
+
+The reconciler republishes queued operations after a missed enqueue. Jobs already
+claimed are never destructively replayed. A worker that stops heartbeating for ten
+minutes is marked interrupted and remains reserved until its provider calls settle.
+Only then is recovery available. If a worker has permanently disappeared, an operator
+must stop the affected workers and verify that provider operations have stopped before
+using the server-owner-only **Release computer** action in the interrupted dialog.
+Its confirmation requires an explicit assertion that workers and provider operations
+have stopped, then makes normal recovery available. The corresponding RPC is
+`computer/releaseInterrupted` with `{ id, workersStopped: true }`; it accepts only
+interrupted operations in the owner’s current workspace. A stale heartbeat alone
+never authorizes takeover. Progress reports
+actual lifecycle stages rather than estimated percentages; workspace files and
+browser profiles are portable, while system packages outside the workspace are not.
+
+## Compute profiles and local engines
+
+Docker computers now carry an explicit Standard or Developer image profile and may bind to a
+shared Docker/Podman socket connection. Image profiles do not apply to a host computer. Settings
+hides that control, and Apply does not send a profile, so a settings save does not replace the
+host computer to install nothing. Install the tools on the machine when the host needs them.
+Kubernetes/kind computers implement the same lifecycle
+and portable file contract through the Kubernetes API, retaining a home PVC during sleep. Their
+screen and interactive-terminal capability flags are false. Profile and connection changes use
+confirmed background maintenance and preserve the external workspace checkpoint.
+
+See [profiles, connection boundaries, official sources and manual acceptance](/docs/compute-profiles/)
+for build tags, engine discovery, Kubernetes resource/RBAC settings, and the macOS/Linux checks.
+The profile registry is `packages/contracts/src/computer-profiles.ts`; unpublished digest fields
+remain null. No image is built implicitly during provisioning, and no vendor credentials are
+installed in these profiles.
+
+## Packaged host computers
+
+The desktop-managed [host service](/docs/host-service/) connects outward to the API so
+container workers can use the owner's host computer and native runtimes. Its protocol,
+local folder grants, packaging, offline checks and platform limits are documented
+there. Host data remains on the host; window closure does not stop the service.
