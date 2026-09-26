@@ -53,6 +53,10 @@ vi.mock("../../../lib/mcp-connect", () => ({
   waitForMcpOauth: api.consent,
   connectMcpOauth: api.oauth,
 }));
+vi.mock("@lingui/core/macro", () => ({
+  t: (parts: TemplateStringsArray, ...values: unknown[]) =>
+    parts.reduce((text, part, index) => text + part + (values[index] ?? ""), ""),
+}));
 vi.mock("@lingui/react/macro", () => ({
   useLingui: () => ({
     t: (parts: TemplateStringsArray, ...values: unknown[]) =>
@@ -961,6 +965,69 @@ describe("Settings integration catalog", () => {
       });
       expect(container.textContent).toContain("Could not complete sign-in. Connect again.");
       expect(resultConnect("Notion")?.textContent).toBe("Connect");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("disables Connect until sign-in starts and shows an expired sign-in as a sentence", async () => {
+    const notion = {
+      ...catalog[0]!,
+      id: "notion",
+      name: "Notion",
+      authKind: "oauth" as const,
+      endpoint: "https://mcp.notion.example.test/mcp",
+    };
+    api.list.mockImplementation(async () => ({ catalog: [notion], connections: [] }));
+    vi.spyOn(window, "open").mockReturnValue({
+      close: vi.fn(),
+      location: { href: "" },
+    } as unknown as Window);
+    vi.useFakeTimers();
+    try {
+      let started: (value: unknown) => void = () => undefined;
+      api.connect.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            started = resolve;
+          }),
+      );
+      api.status.mockResolvedValue({
+        ...connected,
+        id: "notion-1",
+        catalogId: "notion",
+        state: "needs-sign-in",
+        lastError: "Needs sign-in (refresh_unavailable).",
+      });
+      await openResults([
+        listing("Notion", "https://mcp.notion.example.test/mcp", {
+          type: "oauth",
+          headerName: null,
+          note: null,
+        }),
+      ]);
+      await click(resultConnect("Notion")!);
+      expect(resultConnect("Notion")?.disabled).toBe(true);
+      await act(async () => {
+        started({
+          connection: {
+            ...connected,
+            id: "notion-1",
+            catalogId: "notion",
+            state: "awaiting-consent",
+            lastError: null,
+          },
+          authorizationUrl: "https://auth.example.test/authorize",
+          sessionId: "session",
+        });
+      });
+      expect(container.textContent).toContain("Waiting for sign-in in the other window.");
+      expect(resultConnect("Notion")?.disabled).toBe(false);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1000);
+      });
+      expect(container.textContent).toContain("The saved sign-in expired. Connect again.");
+      expect(container.textContent).not.toContain("refresh_unavailable");
     } finally {
       vi.useRealTimers();
     }

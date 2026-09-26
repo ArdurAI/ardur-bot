@@ -32,6 +32,7 @@ export function mcpServerDto(
     updatedAt: Date;
   },
   oauthStatus: McpServer["oauthStatus"] = "none",
+  credentialConflict = false,
 ): McpServer {
   const args = Array.isArray(row.args)
     ? row.args.filter((item): item is string => typeof item === "string")
@@ -65,6 +66,7 @@ export function mcpServerDto(
     envKeys,
     headerKeys,
     hasSecret: row.secretId !== null,
+    ...(credentialConflict ? { credentialConflict } : {}),
     ...(row.imported ? { imported: ImportedProvenanceSchema.parse(row.imported) } : {}),
     oauthStatus,
     enabled: row.enabled,

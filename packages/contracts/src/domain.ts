@@ -767,6 +767,8 @@ export const McpServerSchema = z.object({
   envKeys: z.array(z.string()),
   headerKeys: z.array(z.string()),
   hasSecret: z.boolean(),
+  /** A stored credential from before one was enforced still holds a token and a header. */
+  credentialConflict: z.boolean().optional(),
   oauthStatus: z.enum(["none", "connected", "reconnect"]),
   enabled: z.boolean(),
   revision: z.number().int().positive(),

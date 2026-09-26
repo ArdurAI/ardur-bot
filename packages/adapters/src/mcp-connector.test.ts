@@ -904,7 +904,7 @@ describe("MCP connector session cache", () => {
     await bearerConnector.close();
   });
 
-  it("sends a named header and no Authorization bearer when that is the only credential", async () => {
+  it("sends both credentials from a blob saved before the one-credential rule", async () => {
     const state = { failNext: false, initializations: 0, headers: [] as Record<string, string>[] };
     const localAssignment = {
       ...ASSIGNMENT,
@@ -921,7 +921,7 @@ describe("MCP connector session cache", () => {
         load: vi
           .fn()
           .mockReturnValue(
-            JSON.stringify({ secret: "stale-bearer", headers: { "X-Api-Key": "local-key" } }),
+            JSON.stringify({ secret: "legacy-bearer", headers: { "X-Api-Key": "local-key" } }),
           ),
       } as never,
     );
@@ -932,7 +932,7 @@ describe("MCP connector session cache", () => {
       signal: new AbortController().signal,
     } as never);
     expect(state.headers[0]?.["x-api-key"]).toBe("local-key");
-    expect(state.headers[0]?.authorization).toBeUndefined();
+    expect(state.headers[0]?.authorization).toBe("Bearer legacy-bearer");
     await connector.close();
   });
 

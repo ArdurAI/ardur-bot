@@ -6803,6 +6803,10 @@ msgstr ""
 msgid "Sign-in files (auth.json, credentials and oauth_creds.json), cookies, tokens, credential backups, session transcripts, chat histories, history.jsonl, telemetry and caches are never read; server lists retain environment variable names only."
 msgstr ""
 
+#: src/lib/mcp-sign-in.ts
+msgid "Sign-in is needed. Connect again."
+msgstr ""
+
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Sign-in timed out."
 msgstr ""
@@ -7230,6 +7234,7 @@ msgstr ""
 
 #: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
+#: src/lib/mcp-sign-in.ts
 msgid "That token was not accepted. Check it and try again."
 msgstr ""
 
@@ -7247,6 +7252,10 @@ msgstr ""
 
 #: src/pages/memory/MemoryProposals.tsx
 msgid "The memory changed since this suggestion. Open History before trying again."
+msgstr ""
+
+#: src/lib/mcp-sign-in.ts
+msgid "The saved sign-in expired. Connect again."
 msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
@@ -7358,6 +7367,7 @@ msgid "This server cannot be assigned without a bot."
 msgstr "Este servidor não pode ser atribuído sem um bot."
 
 #: src/components/integrations/DirectMcpSearch.tsx
+#: src/lib/mcp-sign-in.ts
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/shell/message-cards.tsx
 msgid "This server did not offer browser sign-in. Enter a token instead."
@@ -7367,6 +7377,10 @@ msgstr ""
 #: src/pages/shell/message-cards.tsx
 msgid "This server did not request browser authorization."
 msgstr "Este servidor não solicitou autorização do navegador."
+
+#: src/pages/McpServersOverlay.tsx
+msgid "This server has two credentials. Keep one."
+msgstr ""
 
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/shell/message-cards.tsx

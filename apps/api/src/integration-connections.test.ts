@@ -232,6 +232,52 @@ describe("catalog connection lifecycle", () => {
     ]);
     expect(f.row().spaceToolPolicies).toEqual({});
   });
+  it("keeps an imported server's receipt current when discovery or grants bump its revision", async () => {
+    const f = fixture();
+    f.setRow({
+      catalogId: null,
+      imported: { tool: "claude-code" },
+      revision: 3,
+      manifest: null,
+    } as unknown as Partial<McpServer>);
+    const receipt = { targetId: "connection", targetRevision: 3 };
+    Object.assign(f.db, {
+      localImportRecord: {
+        findFirst: vi.fn(async () => ({ configId: "config" })),
+        updateMany: vi.fn(
+          async ({
+            where,
+            data,
+          }: {
+            where: { targetId: string; targetRevision: number };
+            data: { targetRevision: number };
+          }) => {
+            if (
+              where.targetId !== receipt.targetId ||
+              where.targetRevision !== receipt.targetRevision
+            )
+              return { count: 0 };
+            receipt.targetRevision = data.targetRevision;
+            return { count: 1 };
+          },
+        ),
+      },
+    });
+    vi.spyOn(f.service, "tools").mockResolvedValue(manifest);
+    await f.service.capture(actor, "connection");
+    expect(f.row().revision).toBe(4);
+    expect(receipt.targetRevision).toBe(4);
+    await f.service.assign(
+      actor,
+      { connectionId: "connection", botIds: ["bot"], toolIds: ["synthetic_read"] },
+      "mcp",
+    );
+    expect(f.row().revision).toBe(5);
+    expect(receipt.targetRevision).toBe(5);
+    // Import reads its receipt before the server lock, so these writes take its lock first.
+    const locks = f.db.$executeRaw.mock.calls.map((call: unknown[]) => call[1]);
+    expect(locks.filter((key: unknown) => key === "local-import:config")).toHaveLength(2);
+  });
   it("keeps catalog and MCP permission mutations in their owning sections", async () => {
     const f = fixture();
     const input = { connectionId: "connection", botIds: [], toolIds: [] };

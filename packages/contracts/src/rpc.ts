@@ -1182,7 +1182,9 @@ export const appContract = {
         .output(
           z.object({
             ok: z.literal(true),
-            result: z.enum(["connected", "replaced"]).default("connected"),
+            result: z.enum(["connected", "replaced", "failed"]).default("connected"),
+            /** What discovery recorded when the result is failed. */
+            lastError: z.string().nullable().optional(),
           }),
         ),
       cancel: oc

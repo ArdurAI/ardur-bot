@@ -327,7 +327,7 @@ describe("MCP OAuth", () => {
           .map((value) => JSON.parse(value))
           .some((value) => value.oauth?.tokens?.access_token === "access-token"),
       ).toBe(true);
-      expect(tx.mcpServer.update).toHaveBeenCalledWith({
+      expect(tx.mcpServer.updateMany).toHaveBeenCalledWith({
         where: { id: "server-1", spaceId: "workspace-1", userId: "user-1" },
         data: { revision: { increment: 1 } },
       });
@@ -470,7 +470,7 @@ describe("MCP OAuth", () => {
       where: { id: sessionId, spaceId: "workspace-1", userId: "user-1" },
     });
     expect(new URLSearchParams(tokenRequestBody).get("code_verifier")).toBe("persisted-verifier");
-    expect(prisma.mcpServer.update).toHaveBeenCalledWith({
+    expect(prisma.mcpServer.updateMany).toHaveBeenCalledWith({
       where: { id: "server-1", spaceId: "workspace-1", userId: "user-1" },
       data: { revision: { increment: 1 } },
     });
@@ -531,8 +531,8 @@ describe("MCP OAuth", () => {
     });
 
     expect(tx.$executeRaw).toHaveBeenCalledTimes(1);
-    expect(tx.mcpServer.update).toHaveBeenCalledWith({
-      where: { id: "server-1" },
+    expect(tx.mcpServer.updateMany).toHaveBeenCalledWith({
+      where: { id: "server-1", spaceId: "workspace-1", userId: "user-1" },
       data: { secretId: "secret-next", revision: { increment: 1 } },
     });
     expect(tx.secret.deleteMany).toHaveBeenCalledWith({ where: { id: "secret-current" } });

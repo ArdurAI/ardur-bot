@@ -7,6 +7,7 @@ import type {
 import { Button, Input } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useRef, useState } from "react";
+import { mcpFailureSentence } from "../../lib/mcp-sign-in";
 import { rpc } from "../../lib/rpc";
 import { connectRemoteMcp, matchesCatalogEndpoint } from "./connect-remote-mcp";
 
@@ -160,7 +161,7 @@ export function DirectMcpSearch({
           return;
         }
         if (outcome.state === "discovery-failed" || outcome.state === "needs-sign-in") {
-          setFailureText(outcome.lastError ?? null);
+          setFailureText(mcpFailureSentence(outcome.lastError));
           setNotice("failed");
           return;
         }
@@ -362,7 +363,7 @@ export function DirectMcpSearch({
       ) : null}
       {notice === "failed" ? (
         <p className="text-sm text-destructive" role="alert">
-          {failureText?.trim() || t`Could not connect or load integrations.`}
+          {failureText ?? t`Could not connect or load integrations.`}
         </p>
       ) : null}
       {notice === "token" ? (

@@ -7,6 +7,7 @@ import type {
 } from "@ardurbot/adapters";
 import {
   assertSafeRemoteUrl,
+  bumpMcpServerRevision,
   CONSENT_TTL_MS,
   captureIntegrationManifest,
   connectableIntegration,
@@ -16,6 +17,7 @@ import {
   integrationCatalog,
   integrationFailure,
   isMcpOAuthAttemptReplaced,
+  lockMcpServerRevision,
   MCP_OAUTH_PENDING_TTL_MS,
   McpConnector,
   McpOAuthAttemptReplacedError,
@@ -266,16 +268,17 @@ export class IntegrationConnections {
     }
     const current = await this.owned(actor, server.id);
     if (current.pendingOauthSessionId !== sessionId) {
-      this.oauth.discardSession(started.sessionId);
-      await this.prisma.mcpOAuthSession.deleteMany({
-        where: { id: started.sessionId, spaceId: actor.spaceId, userId: actor.userId },
-      });
+      await this.releaseAttempt(actor, server.id, sessionId);
       return { status: "replaced" as const };
     }
     return { ...started, sessionId };
   }
 
-  /** Drop this attempt when it is still the pending one. A newer id stays. */
+  /**
+   * Drop this attempt's OAuth session row and in-memory state, and its pending id when it
+   * still holds it. A newer id stays. An attempt that lost the id after its session was
+   * stored calls this too, so repeated connects never pile up against the pending limit.
+   */
   private async releaseAttempt(actor: Owner, serverId: string, sessionId: string) {
     const released = await this.prisma.mcpServer.updateMany({
       where: {
@@ -481,6 +484,7 @@ export class IntegrationConnections {
       }
       const current = await this.owned(actor, server.id);
       if (current.pendingOauthSessionId !== sessionId) {
+        await this.releaseAttempt(actor, server.id, sessionId);
         return {
           connection: connectionDto(current),
           authorizationUrl: null,
@@ -589,30 +593,36 @@ export class IntegrationConnections {
         previous.data.account !== manifest.account ||
         previous.data.workspace !== manifest.workspace;
       await this.prisma.$transaction(async (tx) => {
-        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('mcp-oauth-material'), hashtext(${id}))`;
-        const captured = await tx.mcpServer.updateMany({
-          where: {
-            id,
-            spaceId: actor.spaceId,
-            userId: actor.userId,
-            enabled: true,
-            revision: server.revision,
-            ...(oauthSessionId ? { pendingOauthSessionId: oauthSessionId } : {}),
-          },
-          data: {
-            manifest,
-            connectionState: "connected",
-            consentStartedAt: null,
-            lastCheckedAt: new Date(),
-            lastSuccessAt: new Date(),
-            lastError: null,
-            ...(oauthSessionId ? { pendingOauthSessionId: null } : {}),
-            ...(changed
-              ? { spaceAllowedTools: [], spaceToolPolicies: {}, revision: { increment: 1 } }
-              : {}),
-          },
-        });
-        if (!captured.count) return;
+        await lockMcpServerRevision(tx, id, actor);
+        const where = {
+          enabled: true,
+          revision: server.revision,
+          ...(oauthSessionId ? { pendingOauthSessionId: oauthSessionId } : {}),
+        };
+        const data = {
+          manifest,
+          connectionState: "connected",
+          consentStartedAt: null,
+          lastCheckedAt: new Date(),
+          lastSuccessAt: new Date(),
+          lastError: null,
+          ...(oauthSessionId ? { pendingOauthSessionId: null } : {}),
+        };
+        const captured = changed
+          ? await bumpMcpServerRevision(
+              tx,
+              id,
+              actor,
+              { ...data, spaceAllowedTools: [], spaceToolPolicies: {} },
+              where,
+            )
+          : (
+              await tx.mcpServer.updateMany({
+                where: { ...where, id, spaceId: actor.spaceId, userId: actor.userId },
+                data,
+              })
+            ).count > 0;
+        if (!captured) return;
         if (oauthSessionId) this.oauth.discardPriorConnected(oauthSessionId);
         if (!changed) return;
         // A refreshed manifest never silently inherits grants to an older tool definition.
@@ -775,7 +785,7 @@ export class IntegrationConnections {
     kind: "catalog" | "mcp" = "catalog",
   ) {
     await this.prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('mcp-oauth-material'), hashtext(${input.connectionId}))`;
+      await lockMcpServerRevision(tx, input.connectionId, actor);
       const server = await tx.mcpServer.findFirst({
         where: {
           id: input.connectionId,
@@ -871,14 +881,10 @@ export class IntegrationConnections {
             allowedTools: toolIds,
           })),
         });
-      await tx.mcpServer.update({
-        where: { id: server.id },
-        data: {
-          spaceAllowedTools: toolIds,
-          ...(constraints === undefined ? {} : { resourceConstraints: constraints }),
-          ...(spaceToolPolicies === undefined ? {} : { spaceToolPolicies }),
-          revision: { increment: 1 },
-        },
+      await bumpMcpServerRevision(tx, server.id, actor, {
+        spaceAllowedTools: toolIds,
+        ...(constraints === undefined ? {} : { resourceConstraints: constraints }),
+        ...(spaceToolPolicies === undefined ? {} : { spaceToolPolicies }),
       });
       await this.invalidateApprovals(tx, actor, server);
     });

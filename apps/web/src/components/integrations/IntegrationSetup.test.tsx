@@ -32,6 +32,10 @@ vi.mock("./connect-remote-mcp", async () => {
     await vi.importActual<typeof import("./connect-remote-mcp")>("./connect-remote-mcp");
   return { ...actual, connectRemoteMcp: vi.fn(actual.connectRemoteMcp) };
 });
+vi.mock("@lingui/core/macro", () => ({
+  t: (parts: TemplateStringsArray, ...values: unknown[]) =>
+    parts.reduce((text, part, index) => text + part + (values[index] ?? ""), ""),
+}));
 vi.mock("@lingui/react/macro", () => ({
   useLingui: () => ({
     t: (parts: TemplateStringsArray, ...values: unknown[]) =>

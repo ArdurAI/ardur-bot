@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { BuiCard, SuccessPop } from "../../components/ai/primitives";
 import { type ArtifactTarget, decodeArtifactBase64 } from "../../lib/artifact-open";
 import { chartViewport } from "../../lib/chart-viewport";
+import { mcpFailureSentence, mcpSignInSentence } from "../../lib/mcp-sign-in";
 import { rpc } from "../../lib/rpc";
 
 export function ChoiceCard({
@@ -369,15 +370,14 @@ export function McpApprovalCard({
         });
         if (mine !== attempt.current) return;
         if (result !== "connected") {
-          let recorded = "";
+          let recorded: string | null = null;
           if (result === "sign-in-failed") {
             try {
-              recorded =
-                (await rpc.mcp.servers.list())
-                  .find((server) => server.id === serverId)
-                  ?.lastError?.trim() ?? "";
+              recorded = mcpFailureSentence(
+                (await rpc.mcp.servers.list()).find((server) => server.id === serverId)?.lastError,
+              );
             } catch {
-              recorded = "";
+              recorded = null;
             }
           }
           setError(
@@ -391,12 +391,12 @@ export function McpApprovalCard({
                     : t`Sign-in was declined.`
                   : result === "needs-sign-in"
                     ? t`Sign-in did not finish. Try again.`
-                    : recorded ||
+                    : (recorded ??
                       (result === "already_connected"
                         ? t`This server is already connected. Disconnect it first to authorize again.`
                         : result === "authorization_not_requested"
                           ? t`This server did not request browser authorization.`
-                          : t`Could not load this account’s tools.`),
+                          : t`Could not load this account’s tools.`)),
           );
           setState("pending");
           return;
@@ -415,11 +415,8 @@ export function McpApprovalCard({
         recorded = "";
       }
       setError(
-        recorded.includes("oauth_unavailable")
-          ? t`This server did not offer browser sign-in. Enter a token instead.`
-          : err instanceof Error
-            ? err.message
-            : t`Could not approve this server`,
+        mcpSignInSentence(recorded) ??
+          (err instanceof Error ? err.message : t`Could not approve this server`),
       );
       setState("pending");
     }

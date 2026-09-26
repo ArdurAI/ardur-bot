@@ -15,6 +15,10 @@ vi.mock("../../lib/rpc", () => ({
   },
 }));
 vi.mock("../../lib/mcp-connect", () => ({ connectMcpOauth: api.oauth }));
+vi.mock("@lingui/core/macro", () => ({
+  t: (parts: TemplateStringsArray, ...values: unknown[]) =>
+    parts.reduce((text, part, index) => text + part + (values[index] ?? ""), ""),
+}));
 vi.mock("@lingui/react/macro", () => ({
   useLingui: () => ({
     t: (parts: TemplateStringsArray, ...values: unknown[]) =>
@@ -103,6 +107,22 @@ it("does not approve a bot when tool discovery failed", async () => {
   expect(api.approve).not.toHaveBeenCalled();
   expect(container.textContent).toContain("Could not complete sign-in. Connect again.");
   expect(container.textContent).not.toContain("Connected. Review tools in MCP settings.");
+});
+
+it("shows an expired sign-in as a sentence, never its diagnostic code", async () => {
+  api.oauth.mockResolvedValue("sign-in-failed");
+  api.list.mockResolvedValue([
+    {
+      id: "server-1",
+      connectionState: "needs-sign-in",
+      lastError: "Needs sign-in (refresh_unavailable).",
+    },
+  ]);
+  const container = await mount();
+  await click("Authorize");
+  expect(api.approve).not.toHaveBeenCalled();
+  expect(container.textContent).toContain("The saved sign-in expired. Connect again.");
+  expect(container.textContent).not.toContain("refresh_unavailable");
 });
 
 it("says a replaced sign-in window was replaced and does not approve the bot", async () => {

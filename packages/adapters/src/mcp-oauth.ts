@@ -14,6 +14,7 @@ import type {
   OAuthTokens,
 } from "@modelcontextprotocol/sdk/shared/auth.js";
 import { transientIntegrationError } from "./integration-lifecycle.js";
+import { mcpCredentialConflict } from "./mcp-server-tool.js";
 import { secureFetch, validateUrl, withEndpointOriginFallback } from "./mcp-transport.js";
 import type { RemoteTransportDependencies } from "./remote-mcp.js";
 import type { EncryptedSecretStore } from "./secrets.js";
@@ -455,6 +456,66 @@ function oauthFetch(
   };
 }
 
+/**
+ * Lock order for a write that bumps a server's revision: the import that owns the server
+ * first, then its credential material. Import, undo and credential setup use this order.
+ */
+export async function lockMcpServerRevision(
+  tx: Prisma.TransactionClient,
+  serverId: string,
+  owner: ActorRef,
+): Promise<void> {
+  const scope = { spaceId: owner.spaceId, userId: owner.userId };
+  const server = await tx.mcpServer.findFirst({
+    where: { id: serverId, ...scope },
+    select: { imported: true },
+  });
+  if (server?.imported) {
+    const receipt = await tx.localImportRecord.findFirst({
+      where: { targetId: serverId, removedAt: null, config: scope },
+    });
+    if (receipt)
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`local-import:${receipt.configId}`}, 0))`;
+  }
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('mcp-oauth-material'), hashtext(${serverId}))`;
+}
+
+/**
+ * The one way a connection change bumps a server's revision: credentials, discovered tools
+ * and grants. An imported server's current receipt moves with it, so import can still
+ * refresh and undo that server. Definition edits never come through here, so a receipt a
+ * manual edit left behind stays a conflict. Returns false when `where` matched nothing.
+ */
+export async function bumpMcpServerRevision(
+  tx: Prisma.TransactionClient,
+  serverId: string,
+  owner: ActorRef,
+  data: Prisma.McpServerUncheckedUpdateManyInput = {},
+  where: Prisma.McpServerWhereInput = {},
+): Promise<boolean> {
+  const scope = { spaceId: owner.spaceId, userId: owner.userId };
+  const saved = await tx.mcpServer.updateMany({
+    where: { ...where, id: serverId, ...scope },
+    data: { ...data, revision: { increment: 1 } },
+  });
+  if (!saved.count) return false;
+  const server = await tx.mcpServer.findFirst({
+    where: { id: serverId, ...scope },
+    select: { imported: true, revision: true },
+  });
+  if (server?.imported)
+    await tx.localImportRecord.updateMany({
+      where: {
+        targetId: serverId,
+        targetRevision: server.revision - 1,
+        removedAt: null,
+        config: scope,
+      },
+      data: { targetRevision: server.revision },
+    });
+  return true;
+}
+
 export class McpOAuthBroker {
   private readonly pending = new Map<string, Pending>();
   /** Tokens that were working before this attempt, so a failed exchange can put them back. */
@@ -478,13 +539,17 @@ export class McpOAuthBroker {
     return material.oauth ? "reconnect" : "none";
   }
 
+  /** What a server listing may say about stored material, without returning any of it. */
   statusForCiphertext(
     ciphertext: string | undefined,
     recordId: string | undefined,
-  ): "none" | "connected" | "reconnect" {
+  ): { oauthStatus: "none" | "connected" | "reconnect"; credentialConflict: boolean } {
     const material = ciphertext && recordId ? this.read(ciphertext, recordId) : {};
-    if (material.oauth?.tokens) return "connected";
-    return material.oauth ? "reconnect" : "none";
+    return {
+      oauthStatus: material.oauth?.tokens ? "connected" : material.oauth ? "reconnect" : "none",
+      // Saved before one credential was enforced; both are still sent until one is removed.
+      credentialConflict: mcpCredentialConflict(material) !== null,
+    };
   }
 
   async providerFor(
@@ -1035,11 +1100,8 @@ export class McpOAuthBroker {
     const serverId = pending.serverId;
     await this.prisma.$transaction(async (tx) => {
       await this.lockMaterial(tx, serverId, context, true);
-      const server = await tx.mcpServer.update({
-        where: { id: serverId, ...context },
-        data: { revision: { increment: 1 } },
-      });
-      if (server.imported) await this.advanceImportReceipts(tx, serverId, server.revision, context);
+      if (!(await bumpMcpServerRevision(tx, serverId, context)))
+        throw new Error("MCP OAuth session is invalid or expired");
     });
     return pending.serverId;
   }
@@ -1221,12 +1283,20 @@ export class McpOAuthBroker {
         });
       }
       const previousSecretId = server.secretId;
-      const secretData = {
-        secretId: stored?.id ?? null,
-        ...(incrementRevision ? { revision: { increment: 1 } } : {}),
-      };
-      if (expectedPendingSessionId !== undefined) {
-        const saved = await tx.mcpServer.updateMany({
+      const secretData = { secretId: stored?.id ?? null };
+      let saved = true;
+      if (incrementRevision) {
+        saved = await bumpMcpServerRevision(
+          tx,
+          serverId,
+          context,
+          secretData,
+          expectedPendingSessionId !== undefined
+            ? { pendingOauthSessionId: expectedPendingSessionId }
+            : {},
+        );
+      } else if (expectedPendingSessionId !== undefined) {
+        const written = await tx.mcpServer.updateMany({
           where: {
             id: serverId,
             spaceId: context.spaceId,
@@ -1235,21 +1305,18 @@ export class McpOAuthBroker {
           },
           data: secretData,
         });
-        if (!saved.count) {
-          if (stored) {
-            await tx.secret.deleteMany({
-              where: { id: stored.id, spaceId: context.spaceId, userId: context.userId },
-            });
-          }
-          return undefined;
-        }
+        saved = written.count > 0;
       } else {
-        const saved = await tx.mcpServer.update({
-          where: { id: serverId },
-          data: secretData,
-        });
-        if (incrementRevision && saved.imported)
-          await this.advanceImportReceipts(tx, serverId, saved.revision, context);
+        await tx.mcpServer.update({ where: { id: serverId }, data: secretData });
+      }
+      if (!saved) {
+        if (stored) {
+          await tx.secret.deleteMany({
+            where: { id: stored.id, spaceId: context.spaceId, userId: context.userId },
+          });
+        }
+        if (expectedPendingSessionId !== undefined) return undefined;
+        throw new Error("MCP server is unavailable");
       }
       if (previousSecretId && previousSecretId !== stored?.id) {
         await tx.secret.deleteMany({ where: { id: previousSecretId } });
@@ -1264,40 +1331,9 @@ export class McpOAuthBroker {
     context: ActorRef,
     incrementRevision: boolean,
   ) {
-    const owner = { spaceId: context.spaceId, userId: context.userId };
-    if (incrementRevision) {
-      const server = await tx.mcpServer.findFirst({
-        where: { id: serverId, ...owner },
-        select: { imported: true },
-      });
-      if (server?.imported) {
-        const receipt = await tx.localImportRecord.findFirst({
-          where: { targetId: serverId, removedAt: null, config: owner },
-        });
-        // Import and credential setup acquire these locks in this order too.
-        if (receipt)
-          await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`local-import:${receipt.configId}`}, 0))`;
-      }
-    }
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('mcp-oauth-material'), hashtext(${serverId}))`;
-  }
-
-  private async advanceImportReceipts(
-    tx: Prisma.TransactionClient,
-    serverId: string,
-    revision: number,
-    context: ActorRef,
-  ) {
-    // Connection-cache invalidation preserves import ownership, but never forgives manual edits.
-    await tx.localImportRecord.updateMany({
-      where: {
-        targetId: serverId,
-        targetRevision: revision - 1,
-        removedAt: null,
-        config: { spaceId: context.spaceId, userId: context.userId },
-      },
-      data: { targetRevision: revision },
-    });
+    if (incrementRevision) await lockMcpServerRevision(tx, serverId, context);
+    else
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('mcp-oauth-material'), hashtext(${serverId}))`;
   }
 
   private read(ciphertext: string, recordId: string): OAuthMaterial {

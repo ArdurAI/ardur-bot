@@ -3475,15 +3475,13 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
               })
             : [];
           const ciphertextById = new Map(secrets.map((secret) => [secret.id, secret.ciphertext]));
-          return rows.map((row) =>
-            mcpServerDto(
-              row,
-              mcpOAuth.statusForCiphertext(
-                row.secretId ? ciphertextById.get(row.secretId) : undefined,
-                row.secretId ?? undefined,
-              ),
-            ),
-          );
+          return rows.map((row) => {
+            const status = mcpOAuth.statusForCiphertext(
+              row.secretId ? ciphertextById.get(row.secretId) : undefined,
+              row.secretId ?? undefined,
+            );
+            return mcpServerDto(row, status.oauthStatus, status.credentialConflict);
+          });
         }),
         create: authed.mcp.servers.create.handler(async ({ context, input }) => {
           const credentialConflict = mcpCredentialConflict({
@@ -3870,8 +3868,12 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
               spaceId: context.actor.spaceId,
               userId: context.actor.userId,
             });
-            if (serverId) await integrations.capture(context.actor, serverId, input.sessionId);
-            return { ok: true as const, result: "connected" as const };
+            await integrations.capture(context.actor, serverId, input.sessionId);
+            // A catalog capture records a failed discovery instead of throwing.
+            const recorded = await integrations.owned(context.actor, serverId);
+            return recorded.connectionState === "connected" && !recorded.lastError
+              ? { ok: true as const, result: "connected" as const }
+              : { ok: true as const, result: "failed" as const, lastError: recorded.lastError };
           } catch (error) {
             if (error instanceof McpOAuthAttemptReplacedError) {
               return { ok: true as const, result: "replaced" as const };

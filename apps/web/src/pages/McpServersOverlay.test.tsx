@@ -266,3 +266,69 @@ it("shows a recorded discovery failure instead of a connected label", async () =
   expect(container.textContent).toContain("Could not reach this integration. Try again.");
   expect(container.textContent).not.toContain("OAuth connected");
 });
+
+it("shows an expired sign-in as a sentence, never its diagnostic code", async () => {
+  const server = {
+    id: "reports",
+    name: "Reports",
+    transport: "streamable_http",
+    oauthStatus: "connected",
+    connectionState: "connected",
+    endpoint: "https://tools.example.test/mcp",
+    enabled: true,
+    catalogId: null,
+    lastError: null,
+  } as McpServer;
+  fake.list.mockResolvedValue([server]);
+  oauth.mockImplementation(async () => {
+    fake.list.mockResolvedValue([
+      {
+        ...server,
+        oauthStatus: "reconnect",
+        connectionState: "needs-sign-in",
+        lastError: "Needs sign-in (refresh_unavailable).",
+      },
+    ]);
+    return "sign-in-failed";
+  });
+  const container = await mount();
+  await click("Reconnect OAuth");
+  expect(container.textContent).toContain("The saved sign-in expired. Connect again.");
+  expect(container.textContent).not.toContain("refresh_unavailable");
+});
+
+it("asks to keep one credential when a saved server still has two", async () => {
+  fake.list.mockResolvedValue([
+    {
+      id: "reports",
+      name: "Reports",
+      transport: "streamable_http",
+      oauthStatus: "none",
+      connectionState: "connected",
+      endpoint: "https://tools.example.test/mcp",
+      enabled: true,
+      catalogId: null,
+      hasSecret: true,
+      credentialConflict: true,
+      lastError: null,
+    } as McpServer,
+    {
+      id: "notes",
+      name: "Notes",
+      transport: "streamable_http",
+      oauthStatus: "none",
+      connectionState: "connected",
+      endpoint: "https://notes.example.test/mcp",
+      enabled: true,
+      catalogId: null,
+      hasSecret: true,
+      lastError: null,
+    } as McpServer,
+  ]);
+  const container = await mount();
+  const reports = document.getElementById("mcp-server-reports");
+  const notes = document.getElementById("mcp-server-notes");
+  expect(reports?.textContent).toContain("This server has two credentials. Keep one.");
+  expect(notes?.textContent).not.toContain("two credentials");
+  expect(container.querySelectorAll('[role="alert"]')).toHaveLength(1);
+});

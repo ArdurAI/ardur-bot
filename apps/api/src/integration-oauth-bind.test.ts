@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { EncryptedSecretStore, McpOAuthBroker } from "@ardurbot/adapters";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { IntegrationConnections } from "./integration-connections.js";
@@ -58,6 +58,7 @@ function memoryDb() {
   };
   const secretRows = new Map<string, { id: string; ciphertext: string }>();
   const sessions: Row[] = [];
+  let afterSession: (() => void) | undefined;
 
   function bump() {
     clock += 1000;
@@ -86,6 +87,12 @@ function memoryDb() {
 
   const db = {
     mcpServer: {
+      // One row stands in for each new catalog server a connect creates.
+      create: vi.fn(async ({ data }: { data: Row }) => {
+        Object.assign(row, { pendingOauthSessionId: null, secretId: null, revision: 1 }, data);
+        bump();
+        return copy();
+      }),
       findFirst: vi.fn(async ({ where }: { where: Row }) => {
         if (!loggedRead) {
           loggedRead = true;
@@ -165,7 +172,9 @@ function memoryDb() {
       }),
       create: vi.fn(async ({ data }: { data: Row }) => {
         sessions.push({ ...data, createdAt: new Date() });
-        return sessions.at(-1);
+        const created = sessions.at(-1);
+        afterSession?.();
+        return created;
       }),
       deleteMany: vi.fn(async ({ where }: { where: Row }) => {
         const before = sessions.length;
@@ -203,30 +212,36 @@ function memoryDb() {
     holdProbe() {
       holdProbe = true;
     },
+    afterSession(hook: (() => void) | undefined) {
+      afterSession = hook;
+    },
+    reserve(sessionId: string) {
+      row.pendingOauthSessionId = sessionId;
+      bump();
+    },
     releaseProbe() {
       releaseProbe?.();
     },
   };
 }
 
-function oauthFetch() {
+function oauthFetch(resource = endpoint) {
+  const resourceUrl = new URL(resource);
+  const metadata = `${resourceUrl.origin}/.well-known/oauth-protected-resource${resourceUrl.pathname}`;
   return vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
     const request = input instanceof Request ? input : new Request(input, init);
     const url = new URL(request.url);
     const host = new Headers(input instanceof Request ? input.headers : init?.headers).get("host");
     if (host) url.host = host;
-    if (url.href === endpoint && request.method === "POST") {
+    if (url.href === resource && request.method === "POST") {
       return new Response(null, {
         status: 401,
-        headers: {
-          "WWW-Authenticate":
-            'Bearer resource_metadata="https://mcp.example.test/.well-known/oauth-protected-resource/mcp"',
-        },
+        headers: { "WWW-Authenticate": `Bearer resource_metadata="${metadata}"` },
       });
     }
-    if (url.href === "https://mcp.example.test/.well-known/oauth-protected-resource/mcp") {
+    if (url.href === metadata) {
       return Response.json({
-        resource: endpoint,
+        resource,
         authorization_servers: ["https://auth.example.test"],
       });
     }
@@ -255,9 +270,20 @@ function oauthFetch() {
   });
 }
 
-function harness() {
+/** Keeps ciphertext readable; each real encryption derives a key, which a long loop cannot afford. */
+const plainStore = {
+  put: async (plaintext: string, _context: never, id?: string) => ({
+    id: id ?? randomUUID(),
+    ciphertext: plaintext,
+  }),
+  load: (ciphertext: string) => ciphertext,
+};
+
+function harness(resource = endpoint, options: { plainSecrets?: boolean } = {}) {
   const memory = memoryDb();
-  const store = new EncryptedSecretStore(randomBytes(32).toString("hex"));
+  const store = options.plainSecrets
+    ? plainStore
+    : new EncryptedSecretStore(randomBytes(32).toString("hex"));
   const secrets = {
     put: async (plaintext: string, context: never, id?: string) => {
       if (plaintext.includes('"codeVerifier"') && !memory.order.includes("verifier"))
@@ -270,7 +296,7 @@ function harness() {
     fetch: (input: string | URL | Request, init?: RequestInit) => globalThis.fetch(input, init),
     resolveHostname: async () => [{ address: "203.0.113.10", family: 4 as const }],
   };
-  vi.stubGlobal("fetch", oauthFetch());
+  vi.stubGlobal("fetch", oauthFetch(resource));
   const oauth = new McpOAuthBroker(memory.db as never, secrets as never, network);
   const service = new IntegrationConnections(
     memory.db as never,
@@ -428,5 +454,22 @@ describe("MCP sign-in bind through real provider persistence", () => {
     expect(newer.sessionId).not.toBe(older.sessionId);
     expect(f.row().pendingOauthSessionId).toBe(newer.sessionId);
     for (const where of f.binds) expect(where).not.toHaveProperty("updatedAt");
+  });
+
+  it("drops each replaced catalog connect, so 101 rapid clicks stay under the pending cap", async () => {
+    const f = harness("https://mcp.notion.com/mcp", { plainSecrets: true });
+    let click = 0;
+    // A newer click reserves the sign-in right after this attempt stores its session.
+    f.afterSession(() => f.reserve(`newer-click-${click}`));
+    for (click = 1; click <= 101; click += 1) {
+      const result = await f.service.connect(actor, { catalogId: "notion" });
+      expect(result, `click ${click}`).toMatchObject({ status: "replaced", sessionId: null });
+      expect(f.sessions, `click ${click}`).toEqual([]);
+    }
+    f.afterSession(undefined);
+    const last = await f.service.connect(actor, { catalogId: "notion" });
+    expect(last.authorizationUrl).toEqual(expect.any(String));
+    expect(f.sessions.map((session) => session.id)).toEqual([last.sessionId]);
+    expect(f.row().pendingOauthSessionId).toBe(last.sessionId);
   });
 });

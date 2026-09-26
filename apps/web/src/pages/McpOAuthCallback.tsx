@@ -3,6 +3,7 @@ import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { MCP_OAUTH_CHANNEL } from "../lib/mcp-oauth-channel";
+import { mcpFailureSentence } from "../lib/mcp-sign-in";
 import { rpc } from "../lib/rpc";
 
 // The window.open name set by the OAuth popup flow. Providers whose login
@@ -42,8 +43,16 @@ export function McpOAuthCallbackPage() {
           return;
         }
         const channel = new BroadcastChannel(POPUP_NAME);
+        // The opener reads the recorded state, so a failure is not taken for connected.
         channel.postMessage({ type: "mcp-oauth-complete", sessionId: state });
         channel.close();
+        if (completed.result === "failed") {
+          setError(
+            mcpFailureSentence(completed.lastError) ??
+              t`Could not complete authorization. Try connecting again.`,
+          );
+          return;
+        }
         if (window.name === POPUP_NAME) {
           setDone(true);
           window.close();

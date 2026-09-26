@@ -30,6 +30,7 @@ import { useEffect, useRef, useState } from "react";
 import { McpToolReview } from "../components/integrations/catalog/McpToolReview";
 import { desktopBridge } from "../lib/desktop";
 import { connectMcpOauth, MCP_OAUTH_CHANNEL } from "../lib/mcp-connect";
+import { mcpFailureSentence, mcpSignInSentence } from "../lib/mcp-sign-in";
 import { rpc } from "../lib/rpc";
 import { McpConfigEditor } from "./customize/McpConfigEditor";
 import { McpDefaults } from "./customize/McpDefaults";
@@ -250,7 +251,7 @@ export function McpServersOverlay({
       }
       if (result === "sign-in-failed") {
         setError(
-          listed.find((item) => item.id === server.id)?.lastError?.trim() ||
+          mcpFailureSentence(listed.find((item) => item.id === server.id)?.lastError) ??
             t`Could not load this account’s tools.`,
         );
         return;
@@ -283,11 +284,8 @@ export function McpServersOverlay({
       const listed = await refresh().catch(() => []);
       const recorded = listed.find((item) => item.id === server.id)?.lastError ?? "";
       setError(
-        recorded.includes("oauth_unavailable")
-          ? t`This server did not offer browser sign-in. Enter a token instead.`
-          : err instanceof Error
-            ? err.message
-            : t`Could not start OAuth`,
+        mcpSignInSentence(recorded) ??
+          (err instanceof Error ? err.message : t`Could not start OAuth`),
       );
       setOauthPending(null);
     }
@@ -577,6 +575,11 @@ export function McpServersOverlay({
                         <p className="mt-1 text-xs text-muted-foreground">
                           {server.endpoint ?? server.command ?? server.slug}
                         </p>
+                        {server.credentialConflict ? (
+                          <p className="mt-2 text-sm text-destructive" role="alert">
+                            {t`This server has two credentials. Keep one.`}
+                          </p>
+                        ) : null}
                         {server.imported ? (
                           <p className="mt-1 text-xs text-muted-foreground">
                             <Trans>
