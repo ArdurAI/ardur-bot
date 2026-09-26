@@ -5,11 +5,16 @@ import { startBroker, TrialBroker } from "../broker.js";
 import type { BudgetLedger } from "../budget.js";
 import { requireValue } from "../budget.js";
 import { COMPUTER_IMAGE, HERMES_CONTAINER_REVISION, HERMES_IMAGE } from "../containers/policy.js";
-import { ContainerSession, inspectImage } from "../containers/session.js";
+import { ContainerSession, guestWorkspace, inspectImage } from "../containers/session.js";
 import { assertOwnedTrial } from "../isolation.js";
 import { sanitize } from "../provenance.js";
 import { hermesArguments, superviseHermesProcess, syntheticHermesConfig } from "./hermes.js";
 import type { TrialArtifacts, TrialContext, VersusAdapter } from "./types.js";
+
+/** Cancel and loss probes use this sentence when the guest workspace was not read. */
+export const WORKSPACE_NOT_INSPECTED = "The workspace could not be inspected.";
+/** A lost guest's receipts come from the broker journal; this is the failure when they cannot. */
+export const RECEIPTS_NOT_READ = "The receipts could not be read after the loss.";
 
 export class HermesContainerAdapter implements VersusAdapter {
   readonly product = "hermes" as const;
@@ -23,7 +28,13 @@ export class HermesContainerAdapter implements VersusAdapter {
   private operation: Promise<void> | null = null;
   private control = new AbortController();
   private elapsedMs = 0;
-  private snapshot: Awaited<ReturnType<TrialBroker["snapshot"]>> | null = null;
+  private snapshot:
+    | (Awaited<ReturnType<TrialBroker["snapshot"]>> & { snapshot?: { error: string } })
+    | (Awaited<ReturnType<TrialBroker["snapshotReceipts"]>> & {
+        snapshot: { error: string };
+      })
+    | null = null;
+  private receiptsLost = false;
   constructor(
     private readonly options: {
       ledger: BudgetLedger;
@@ -77,7 +88,7 @@ export class HermesContainerAdapter implements VersusAdapter {
         files: {
           write: (name, content) => session.write(`workspace/${name}`, content),
           read: async (name) => (await session.read(`workspace/${name}`)).toString("utf8"),
-          snapshot: () => session.snapshot(),
+          snapshot: async () => guestWorkspace(await session.snapshot()),
         },
       });
       await this.broker.prepare();
@@ -165,7 +176,16 @@ export class HermesContainerAdapter implements VersusAdapter {
           artifactCollection: "guest-files-unavailable",
           receiptsRetained: true,
         });
-        return { ...(await this.broker!.snapshotReceipts()), files: {} };
+        try {
+          return {
+            ...(await this.broker!.snapshotReceipts()),
+            snapshot: { error: WORKSPACE_NOT_INSPECTED },
+          };
+        } catch {
+          // Unread receipts are not an empty receipt list.
+          this.receiptsLost = true;
+          return null;
+        }
       });
       // Killing a docker client alone cannot cancel its guest process. Destroy the owned namespace.
       await session.destroy();
@@ -188,10 +208,12 @@ export class HermesContainerAdapter implements VersusAdapter {
   async collect(): Promise<TrialArtifacts> {
     requireValue(this.context && this.operation, "No submitted container trial");
     await this.operation.catch(() => undefined);
-    const snapshot = this.snapshot ?? { files: {}, state: [], effects: [], tools: [] };
+    if (this.receiptsLost) throw new Error(RECEIPTS_NOT_READ);
+    const snapshot = this.snapshot ?? { files: {}, links: [], state: [], effects: [], tools: [] };
+    const files = "files" in snapshot ? snapshot.files : undefined;
     let result: unknown = null;
     try {
-      result = JSON.parse(snapshot.files["result.json"] ?? "null");
+      result = JSON.parse(files?.["result.json"] ?? "null");
     } catch {
       /* Retain invalid artifacts. */
     }

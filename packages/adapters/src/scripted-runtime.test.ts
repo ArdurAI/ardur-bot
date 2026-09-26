@@ -57,6 +57,35 @@ describe("inferScript quote markdown fixture", () => {
   });
 });
 
+describe("inferScript propose an mcp server", () => {
+  it("posts an add_mcp_server call with no static credential", () => {
+    expect(inferScript("propose an mcp server for reports")).toEqual([
+      {
+        assistant: "posting an approval card for that server.",
+        toolCalls: [
+          {
+            name: "add_mcp_server",
+            args: {
+              name: "Proposed MCP fixture",
+              transport: "streamable_http",
+              endpoint: "https://mcp-fixture.example.test/reports",
+            },
+          },
+        ],
+        complete: true,
+      },
+    ]);
+  });
+
+  it("uses the caller's name when the prompt names the server", () => {
+    expect(
+      inferScript("propose an mcp server named Reports Server")[0]?.toolCalls?.[0]?.args,
+    ).toMatchObject({
+      name: "Reports Server",
+    });
+  });
+});
+
 describe("inferScript request_secret", () => {
   it("opens a masked api key card via request_secret", () => {
     expect(inferScript("show a secret card for a masked api key")).toEqual([

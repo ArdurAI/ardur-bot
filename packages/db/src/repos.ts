@@ -7,8 +7,7 @@ import {
   RuntimeKindSchema,
   type SpaceBot,
 } from "@ardurbot/contracts";
-import { sandboxKindForBot } from "@ardurbot/contracts/fleet";
-import { userVisibleMessages } from "@ardurbot/core";
+import { sandboxKindForBot, userVisibleMessages } from "@ardurbot/core";
 import type { Prisma, PrismaClient } from "./client.js";
 import { type ComputerMode, ensureComputerRecord, parseComputerMode } from "./computers.js";
 import { createThreadMessageInTransaction } from "./messages.js";
@@ -450,8 +449,10 @@ export function createRepos(prisma: PrismaClient) {
         if (thinkingLevel == null) thinkingLevel = parent.thinkingLevel ?? null;
       }
       const settings = await prisma.deploymentSettings.findUnique({ where: { id: "default" } });
-      const envKind = process.env.SANDBOX_PROVIDER ?? "docker";
-      const kind = sandboxKindForBot(envKind, settings?.computerHost);
+      const kind = sandboxKindForBot(
+        process.env.SANDBOX_PROVIDER ?? "docker",
+        settings?.computerHost,
+      );
       const insertBot = () =>
         prisma.$transaction(async (tx) => {
           await lockSpaceForContentCreation(tx, {

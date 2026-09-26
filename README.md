@@ -26,8 +26,9 @@ Inherited from Rakazo and working:
 - Providers: OpenRouter, OpenAI Codex (ChatGPT account), Anthropic (API key), OpenAI,
   Google, Vercel AI Gateway, and any OpenAI-compatible server, which covers Kimi Code,
   Z.ai, and local Ollama, LM Studio or llama.cpp
-- Computers: this computer from the installed desktop app, plus Docker, E2B, Daytona, or Box,
-  with a browser, terminal, files and a graphical desktop
+- Computers: the computer Ardur Bot is installed on, plus Docker, Podman, Kubernetes or SSH
+  machines you add, and E2B, Daytona or Box on a server, with a browser, terminal, files and a
+  graphical desktop ([where bots run](docs/self-host.md#where-bots-run))
 - Connectors: MCP servers, OpenAPI documents, Composio, Pipedream Connect
 - Approvals before consequential actions, voice mode, and web, Electron desktop and Expo
   mobile clients of the same API
@@ -82,10 +83,9 @@ Only approve a download you trust from the official release page.
   guarantee. Run `ardur-bot --version` after installing it.
 
 **This computer** starts the app's own database and services. Docker is not required for that
-first launch. You can still connect the client to an existing server. On this computer, commands
-start in the bot's own folder or a folder you add, and file tools stay inside those folders; the
-approvals you require are what keep a command away from other files. Known secrets are hidden from
-command output. Disk and CPU use are not capped; a command stops after five minutes. Docker remains available later as an added computer, and Compose remains the way
+first launch. You can still connect the client to an existing server. See
+[what commands can do on this computer](docs/self-host.md#what-commands-can-do-on-this-computer).
+Docker remains available later as an added computer, and Compose remains the way
 to run a server. Unsigned previews use manual downloads for updates on every OS.
 
 After the owner publishes the [Homebrew tap](docs/desktop-release.md#homebrew-tap-handoff):
@@ -144,8 +144,8 @@ running:
 pnpm --filter @ardurbot/desktop dev
 ```
 
-On first run it asks whether to run the backend on this computer (needs Docker) or connect
-to an existing server.
+On first run it starts its own database and services on this computer; its setup window can
+connect it to an existing server instead.
 
 ## Development
 

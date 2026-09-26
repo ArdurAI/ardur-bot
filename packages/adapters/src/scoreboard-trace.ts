@@ -1,18 +1,53 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import type { TraceBatch, TraceBoundary, TracePoint } from "@ardurbot/contracts";
-import { TRACE_BOUNDARIES } from "@ardurbot/contracts";
+import { DEFAULT_CLOCK_UNCERTAINTY_MS, TRACE_BOUNDARIES } from "@ardurbot/contracts";
 
 type Detail = Pick<TracePoint, "attempt" | "operationId" | "requestId" | "outcome" | "scheduledMs">;
 const boundaries = new Set<string>(TRACE_BOUNDARIES);
+/** Tool execution ids include the tool name, which may contain a dot. */
 const opaque = (value: unknown): value is string =>
-  typeof value === "string" && /^[a-zA-Z0-9_:-]{1,128}$/.test(value);
+  typeof value === "string" && /^[a-zA-Z0-9_.:-]{1,128}$/.test(value);
+/** One sample of how far the wall clock and the monotonic clock disagree, in milliseconds. */
+function measureClockUncertaintyMs(): number {
+  try {
+    const before = Date.now();
+    const monotonic = performance.now();
+    const after = Date.now();
+    const estimated = performance.timeOrigin + monotonic;
+    const uncertainty = Math.max(
+      Math.abs(estimated - before),
+      Math.abs(estimated - after),
+      Math.max(0, after - before),
+    );
+    if (!Number.isFinite(uncertainty) || uncertainty < 0) return DEFAULT_CLOCK_UNCERTAINTY_MS;
+    return uncertainty;
+  } catch {
+    return DEFAULT_CLOCK_UNCERTAINTY_MS;
+  }
+}
+
 const context = new AsyncLocalStorage<{ traceId: string; attempt: number }>();
 let active: ReturnType<typeof createTraceBuffer> | undefined;
 
 /** Fixed-size, drop-new buffer. There is no exporter, I/O, timer or promise on the record path. */
 export function createTraceBuffer(
-  options: { capacity?: number; sampleRate?: number; processId?: string; now?: () => number } = {},
+  options: {
+    capacity?: number;
+    sampleRate?: number;
+    processId?: string;
+    now?: () => number;
+    /** Wall-clock milliseconds of this process time origin. Defaults to `performance.timeOrigin`. */
+    timeOrigin?: number;
+    /**
+     * Recorded uncertainty of this process clock, in milliseconds. Sampled from the wall clock
+     * and the monotonic clock when omitted, and re-sampled at every `snapshot()` and `drain()`
+     * so a later clock step (an NTP correction, a suspend) still widens the published bound.
+     */
+    clockUncertaintyMs?: number;
+    /** Test seam for the re-sample at `snapshot()`/`drain()`; defaults to the real clock read. */
+    measureClockUncertaintyMs?: () => number;
+  } = {},
 ) {
   const capacity = options.capacity ?? 8192;
   const sampleRate = options.sampleRate ?? 1;
@@ -27,6 +62,22 @@ export function createTraceBuffer(
     !opaque(processId)
   )
     throw new Error("Invalid trace buffer options");
+  const timeOrigin = options.timeOrigin ?? performance.timeOrigin;
+  const measure = options.measureClockUncertaintyMs ?? measureClockUncertaintyMs;
+  let clockUncertaintyMs = options.clockUncertaintyMs ?? measure();
+  if (
+    !Number.isFinite(timeOrigin) ||
+    timeOrigin < 0 ||
+    !Number.isFinite(clockUncertaintyMs) ||
+    clockUncertaintyMs < 0
+  )
+    throw new Error("Invalid trace buffer options");
+  // A step in the wall clock after the buffer started (an NTP correction, a suspend) can widen
+  // the true uncertainty; a fresh sample never narrows the published bound.
+  const widenClockUncertainty = () => {
+    const sample = measure();
+    if (Number.isFinite(sample) && sample > clockUncertaintyMs) clockUncertaintyMs = sample;
+  };
   const now = options.now ?? (() => performance.now());
   let points: TracePoint[] = [];
   let sequence = 0;
@@ -86,15 +137,26 @@ export function createTraceBuffer(
       }
     },
     snapshot(): TraceBatch {
+      widenClockUncertainty();
       return {
         version: 1,
         processId,
+        timeOrigin,
+        clockUncertaintyMs,
         points: points.map((point) => ({ ...point })),
         counters: { ...counters },
       };
     },
     drain(): TraceBatch {
-      const batch = { version: 1 as const, processId, points, counters: { ...counters } };
+      widenClockUncertainty();
+      const batch = {
+        version: 1 as const,
+        processId,
+        timeOrigin,
+        clockUncertaintyMs,
+        points,
+        counters: { ...counters },
+      };
       points = [];
       return batch;
     },

@@ -2,14 +2,137 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import type { CrashEvidence, ExperimentEvidence } from "../../performance-report.js";
+import type { TraceBatch, TraceBoundary } from "@ardurbot/contracts";
+import { TRACE_BOUNDARIES } from "@ardurbot/contracts";
+import type {
+  CrashEvidence,
+  ExperimentEvidence,
+  PerformanceEvidenceReport,
+} from "../../performance-report.js";
 import {
   CRASH_BOUNDARIES,
   canonicalSerialize,
   contentDigest,
   EXPERIMENT_DEFINITIONS,
 } from "../manifest.js";
+import {
+  collectTraceEvidence,
+  crashSpanUnmeasured,
+  LOCAL_TRACE_BOUNDARIES,
+  traceTerminals,
+} from "../trace-collector.js";
 import type { MatrixResult } from "./catalog.js";
+
+const CRASH_CONTROLS: Record<string, readonly string[]> = {
+  "crash-03": ["crash-03-revoke", "crash-03-pin"],
+};
+
+function reachedBoundary(result: MatrixResult | undefined): result is MatrixResult {
+  return Boolean(result && result.status !== "incomplete" && result.checks.killedAtBoundary);
+}
+function observedUnsafe(result: MatrixResult | undefined) {
+  return (
+    reachedBoundary(result) &&
+    (result.status === "finding" || Object.values(result.checks).includes(false))
+  );
+}
+const boundaryNames = new Set<string>(TRACE_BOUNDARIES);
+interface PhaseTrace {
+  raw?: { batches?: unknown };
+  requiredBoundaries?: unknown;
+}
+function phaseTrace(result: MatrixResult, phase: "before" | "after"): PhaseTrace | undefined {
+  const measurements = result.measurements[phase];
+  if (!measurements || typeof measurements !== "object") return undefined;
+  const trace = (measurements as { trace?: unknown }).trace;
+  if (!trace || typeof trace !== "object") return undefined;
+  return trace as PhaseTrace;
+}
+function batchesOf(trace: PhaseTrace | undefined): TraceBatch[] {
+  const batches = trace?.raw?.batches;
+  return Array.isArray(batches) ? (batches as TraceBatch[]) : [];
+}
+/** A missing list means the fault worker's local boundaries. An empty or unknown list is unusable. */
+function recordedBoundaries(value: unknown): readonly TraceBoundary[] | null | undefined {
+  if (value === undefined) return undefined;
+  if (
+    !Array.isArray(value) ||
+    value.length === 0 ||
+    value.some((item) => typeof item !== "string" || !boundaryNames.has(item))
+  )
+    return null;
+  return value as TraceBoundary[];
+}
+function sameBoundaries(left: readonly TraceBoundary[], right: readonly TraceBoundary[]) {
+  return left.length === right.length && left.every((boundary, index) => boundary === right[index]);
+}
+/**
+ * Both processes must contribute a batch with points, except that the recovering process has
+ * nothing to trace when the killed process's own trace already reached the run's terminal
+ * boundary, such as a run killed while it waits for approval. Crash recollection pairs a start
+ * with a finish on the recovering process whose attempt is the next lease fence. A finish on any
+ * other fence does not pair. A cross-process span is a wall-clock interval only when its lower
+ * bound stays at or above zero. The merged trace is complete when that recollection reports
+ * exactly one terminal, every stored boundary, no drop, and a measured crash span. An
+ * interrupted start, a clock that was not calibrated, clock skew, or an uncertainty interval
+ * that crosses zero leaves the span unmeasured.
+ */
+function crashTraces(
+  boundaryId: string,
+  attempts: readonly MatrixResult[],
+):
+  | { status: "complete"; fragment: ReturnType<typeof collectTraceEvidence> }
+  | { status: "unmeasured" }
+  | { status: "missing" } {
+  const phaseOf = (attempt: MatrixResult, phase: "before" | "after") => {
+    const trace = phaseTrace(attempt, phase);
+    return { batches: batchesOf(trace), recorded: recordedBoundaries(trace?.requiredBoundaries) };
+  };
+  const runs = attempts.map((attempt) => ({
+    before: phaseOf(attempt, "before"),
+    after: phaseOf(attempt, "after"),
+  }));
+  const traced = (phase: { batches: TraceBatch[] }) =>
+    phase.batches.some((batch) => batch.points.length);
+  if (
+    runs.some(
+      ({ before, after }) =>
+        before.recorded === null ||
+        after.recorded === null ||
+        !after.batches.length ||
+        !traced(before) ||
+        (!traced(after) &&
+          traceTerminals(before.batches.flatMap((batch) => batch.points)).length !== 1),
+    )
+  )
+    return { status: "missing" };
+  const phases = runs.flatMap(({ before, after }) => [before, after]);
+  const boundaries = phases.map((phase) => phase.recorded ?? LOCAL_TRACE_BOUNDARIES);
+  const requiredBoundaries = boundaries[0];
+  if (!requiredBoundaries || boundaries.some((list) => !sameBoundaries(requiredBoundaries, list)))
+    return { status: "missing" };
+  try {
+    const fragment = collectTraceEvidence(
+      phases.flatMap((phase) => phase.batches),
+      { sessionId: boundaryId, pairId: null, requiredBoundaries, pairAcrossProcesses: true },
+    );
+    if (
+      fragment.derived.some((trace) =>
+        trace.operations.some((operation) => crashSpanUnmeasured(operation.duration.reason)),
+      )
+    )
+      return { status: "unmeasured" };
+    if (
+      fragment.derived.length === 0 ||
+      fragment.coverage.dropped ||
+      fragment.derived.some((trace) => !trace.complete)
+    )
+      return { status: "missing" };
+    return { status: "complete", fragment };
+  } catch {
+    return { status: "missing" };
+  }
+}
 
 /** W0-1 report fragments, alongside detailed raw probes; never an alternate release contract. */
 export function matrixEvidence(results: readonly MatrixResult[]) {
@@ -22,38 +145,69 @@ export function matrixEvidence(results: readonly MatrixResult[]) {
       traceIds: [],
     })),
   }));
+  const traces = new Map<string, PerformanceEvidenceReport["traces"][number]>();
+  const artifacts = new Map<string, PerformanceEvidenceReport["artifacts"][number]>();
+  const rawTraces: unknown[] = [];
   const crashes: CrashEvidence[] = CRASH_BOUNDARIES.map((boundary) => {
     const result = results.find((item) => item.id === boundary.id);
-    const controls = results.filter((item) => item.id.startsWith(`${boundary.id}-`));
-    const measured = Boolean(
-      result && result.status !== "incomplete" && result.checks.killedAtBoundary,
-    );
+    const controls = (CRASH_CONTROLS[boundary.id] ?? []).map((id) => ({
+      id,
+      result: results.find((item) => item.id === id),
+    }));
+    // A control counts only when it reached its boundary and passed; its id alone proves nothing.
+    const missingControls = controls
+      .filter((control) => !reachedBoundary(control.result))
+      .map((control) => control.id);
+    const candidates = [result, ...controls.map((control) => control.result)];
+    const unsafe = candidates.some(observedUnsafe);
+    const attempts = candidates.filter(reachedBoundary);
     const after = result?.measurements.after as { autonomousCompletion?: boolean } | undefined;
-    const controlFailed = controls.some(
-      (control) => control.status !== "passed" || Object.values(control.checks).includes(false),
-    );
+    const traced = reachedBoundary(result) ? crashTraces(boundary.id, attempts) : null;
+    const fragment = traced?.status === "complete" ? traced.fragment : null;
+    const complete =
+      reachedBoundary(result) &&
+      missingControls.length === 0 &&
+      !unsafe &&
+      fragment !== null &&
+      typeof after?.autonomousCompletion === "boolean";
+    const missingReason: CrashEvidence["missingReason"] = complete
+      ? null
+      : !reachedBoundary(result)
+        ? "not-measured"
+        : unsafe
+          ? "invalid-trial"
+          : missingControls.length === 2
+            ? "missing-revoke-and-pin-controls"
+            : missingControls[0] === "crash-03-revoke"
+              ? "missing-revoke-control"
+              : missingControls[0] === "crash-03-pin"
+                ? "missing-pin-control"
+                : traced?.status === "unmeasured"
+                  ? "crash-span-unmeasured"
+                  : "trace-links-missing";
+    if (complete && fragment) {
+      for (const trace of fragment.traces) traces.set(trace.id, trace);
+      for (const artifact of fragment.artifacts) artifacts.set(artifact.sha256, artifact);
+      rawTraces.push(fragment.raw);
+    }
     return {
       id: boundary.id,
-      status: measured ? "complete" : "incomplete",
-      missingReason: measured ? null : "not-measured",
-      recovery:
-        measured && result?.status === "passed"
-          ? (boundary.expected as CrashEvidence["recovery"])
-          : null,
-      // A failed control is a safety failure even when the base attempt was not measured.
-      safetyPassed: controlFailed
-        ? false
-        : measured
-          ? Object.values(result!.checks).every(Boolean)
-          : null,
-      taskCompleted:
-        measured && typeof after?.autonomousCompletion === "boolean"
-          ? after.autonomousCompletion
-          : null,
-      traceIds: [],
+      status: complete ? "complete" : "incomplete",
+      missingReason,
+      recovery: complete ? (boundary.expected as CrashEvidence["recovery"]) : null,
+      // An observed unsafe effect fails safety even when the base attempt was not measured.
+      safetyPassed: unsafe ? false : complete ? true : null,
+      taskCompleted: complete ? after!.autonomousCompletion! : null,
+      traceIds: complete && fragment ? fragment.traces.map((trace) => trace.id) : [],
     };
   });
-  return { experiments, crashes };
+  return {
+    experiments,
+    crashes,
+    traces: [...traces.values()],
+    artifacts: [...artifacts.values()],
+    rawTraces,
+  };
 }
 
 export async function matrixSourceBinding() {
@@ -90,6 +244,15 @@ export async function writeMatrixArtifact(directory: string, kind: string, paylo
   const envelope = { algorithm: "sha256", sha256, payload };
   await writeFile(path.join(directory, file), `${canonicalSerialize(envelope)}\n`, { flag: "wx" });
   return { path: file, sha256 };
+}
+
+/** Writes the fragments and each merged trace their crash links cite, under the same digest. */
+export async function writeMatrixEvidence(directory: string, results: readonly MatrixResult[]) {
+  const { rawTraces, ...fragments } = matrixEvidence(results);
+  const written = [];
+  for (const raw of rawTraces) written.push(await writeMatrixArtifact(directory, "trace", raw));
+  written.push(await writeMatrixArtifact(directory, "scoreboard-fragments", fragments));
+  return written;
 }
 
 /** Never allow the existing provisioner to implicitly download a missing image. */

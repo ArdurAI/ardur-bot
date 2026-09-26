@@ -140,7 +140,13 @@ describe("integration RPC boundaries", () => {
     expect(response?.status).toBe(200);
     expect(f.prisma.mcpServer.update).toHaveBeenCalledWith({
       where: { id: "server" },
-      data: { enabled: true, connectionState: "not-connected", revision: { increment: 1 } },
+      data: {
+        enabled: true,
+        connectionState: "not-connected",
+        pendingOauthSessionId: null,
+        consentStartedAt: null,
+        revision: { increment: 1 },
+      },
     });
     expect(f.prisma.botMcpServer.updateMany).toHaveBeenCalledWith({
       where: { serverId: "server", spaceId: "space", userId: "owner" },
@@ -148,6 +154,52 @@ describe("integration RPC boundaries", () => {
     });
     expect(f.prisma.mcpServer.findFirst).toHaveBeenCalledWith({
       where: { id: "server", spaceId: "space", userId: "owner" },
+    });
+  });
+  it("clears a pending sign-in wait when the server is disabled", async () => {
+    const f = fixture();
+    const row = {
+      id: "server",
+      spaceId: actor.spaceId,
+      userId: actor.userId,
+      catalogId: null,
+      managedBy: null,
+      slug: "reports",
+      name: "Reports",
+      description: "",
+      transport: "streamable_http",
+      endpoint: "https://example.test/mcp",
+      command: null,
+      args: [],
+      env: {},
+      headers: {},
+      secretId: null,
+      enabled: true,
+      pendingOauthSessionId: "attempt-session",
+      consentStartedAt: new Date(0),
+      revision: 1,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    };
+    f.prisma.mcpServer.findFirst.mockResolvedValueOnce(row as never);
+    f.prisma.mcpServer.update.mockResolvedValue({
+      ...row,
+      enabled: false,
+      pendingOauthSessionId: null,
+      consentStartedAt: null,
+      revision: 2,
+    });
+    const response = await f.request("mcp/servers/update", { id: "server", enabled: false });
+    expect(response?.status).toBe(200);
+    expect(f.prisma.mcpServer.update).toHaveBeenCalledWith({
+      where: { id: "server" },
+      data: {
+        enabled: false,
+        connectionState: "not-connected",
+        pendingOauthSessionId: null,
+        consentStartedAt: null,
+        revision: { increment: 1 },
+      },
     });
   });
   it.each([
@@ -383,6 +435,14 @@ describe("integration RPC boundaries", () => {
       { "X-Api-Key": true },
       { headers: { "X-Api-Key": "new-key" } },
     ],
+    [
+      "secret: null drops a stale token, keeping the header it can't retype",
+      { secret: null },
+      { secret: "stale-token", headers: { "X-Api-Key": "kept-key" } },
+      { "X-Api-Key": true },
+      { "X-Api-Key": true },
+      { headers: { "X-Api-Key": "kept-key" } },
+    ],
   ])(
     "%s: one credential, its header names, and the import receipt follow",
     async (_, change, before, namesBefore, namesAfter, after) => {
@@ -492,5 +552,62 @@ describe("integration RPC boundaries", () => {
     expect(
       (await f.request("mcp/servers/update", { id: "server", secret: "synthetic-token" }))?.status,
     ).toBe(400);
+  });
+  it("refuses to drop a token that would leave no credential behind", async () => {
+    const store = new EncryptedSecretStore(randomBytes(32).toString("hex"));
+    const old = await store.put(JSON.stringify({ secret: "only-token" }), {
+      spaceId: actor.spaceId,
+      userId: actor.userId,
+      operationId: "fixture",
+      traceId: "fixture",
+      signal: AbortSignal.timeout(10_000),
+    });
+    const row = {
+      id: "server",
+      spaceId: actor.spaceId,
+      userId: actor.userId,
+      catalogId: null,
+      managedBy: null,
+      imported: null,
+      slug: "server",
+      name: "Server",
+      description: "",
+      transport: "streamable_http",
+      endpoint: "https://example.test/mcp",
+      command: null,
+      args: [],
+      env: {},
+      headers: {},
+      secretId: old.id,
+      enabled: true,
+      revision: 1,
+      createdAt: new Date(0),
+      updatedAt: new Date(0),
+    };
+    const secrets = new Map([[old.id, { id: old.id, ciphertext: old.ciphertext }]]);
+    const prisma = {
+      spaceMember: { findUnique: vi.fn(async () => ({ role: "owner" })) },
+      mcpServer: {
+        findFirst: vi.fn(async () => ({ ...row })),
+        update: vi.fn(),
+        updateMany: vi.fn(),
+      },
+      secret: {
+        findFirst: vi.fn(async ({ where }: { where: { id: string } }) => secrets.get(where.id)),
+        create: vi.fn(),
+      },
+      $executeRaw: vi.fn(async () => 1),
+      $transaction: vi.fn(),
+    };
+    prisma.$transaction.mockImplementation(async (callback) => callback(prisma));
+    const put = vi.spyOn(store, "put");
+    const f = fixture({ prisma, secrets: store } as never);
+    const response = await f.request("mcp/servers/update", { id: "server", secret: null });
+    expect(response?.status).toBe(400);
+    expect(await response?.text()).toContain("This server would be left with no credential.");
+    expect(prisma.mcpServer.update).not.toHaveBeenCalled();
+    expect(prisma.mcpServer.updateMany).not.toHaveBeenCalled();
+    expect(prisma.secret.create).not.toHaveBeenCalled();
+    expect(put).not.toHaveBeenCalled();
   });
 });

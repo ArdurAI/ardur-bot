@@ -1135,7 +1135,9 @@ export const appContract = {
         .input(
           z.union([
             z.object({ id: Id, config: McpServerConfigInput }),
-            z.object({ id: Id, secret: z.string().min(1).max(16384) }),
+            // `secret: null` drops a stale token while a header remains, since the
+            // header's value can never be shown back for a person to retype.
+            z.object({ id: Id, secret: z.string().min(1).max(16384).nullable() }),
             z.object({ id: Id, headers: McpHeadersSchema }),
             z.object({ id: Id, enabled: z.boolean() }),
           ]),
@@ -1175,7 +1177,12 @@ export const appContract = {
             authorizationUrl: z.string().url(),
           }),
           z.object({
-            status: z.enum(["already_connected", "authorization_not_requested", "replaced"]),
+            status: z.enum([
+              "already_connected",
+              "authorization_not_requested",
+              "replaced",
+              "disabled",
+            ]),
           }),
         ]),
       ),

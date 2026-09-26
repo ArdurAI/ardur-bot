@@ -5,7 +5,8 @@ import type {
   Me,
 } from "@ardurbot/contracts";
 import { COMPUTER_PROFILES, HOST_MOVE_UNAVAILABLE_MESSAGE } from "@ardurbot/contracts";
-import { ENGINE_LABELS, sandboxKindForBot } from "@ardurbot/contracts/fleet";
+import { ENGINE_LABELS } from "@ardurbot/contracts/fleet";
+import { sandboxKindForBot } from "@ardurbot/core";
 import {
   AlertDialog,
   AlertDialogAction,

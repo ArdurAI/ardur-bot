@@ -3426,6 +3426,7 @@ export function ShellPage({
             speakingMessageId={speakingMessageId}
             onSpeak={speakMessage}
             onOpenComputer={onOpenComputer}
+            onOpenMcp={(serverId) => openSettings("mcp", undefined, serverId)}
           />
         )}
         {recordingSkill ? (
@@ -4553,6 +4554,7 @@ const Transcript = memo(function Transcript({
   speakingMessageId,
   onSpeak,
   onOpenComputer,
+  onOpenMcp,
 }: {
   scrollRef: RefObject<HTMLDivElement | null>;
   artifactTarget: ArtifactTarget;
@@ -4583,6 +4585,7 @@ const Transcript = memo(function Transcript({
   speakingMessageId: string | null;
   onSpeak: (message: ThreadMessage) => void;
   onOpenComputer: (botId?: string) => void;
+  onOpenMcp?: (serverId: string) => void;
 }) {
   const { t } = useLingui();
   const [atEnd, setAtEnd] = useState(true);
@@ -4860,6 +4863,7 @@ const Transcript = memo(function Transcript({
                     speaking={speakingMessageId === message.id}
                     onSpeak={() => onSpeak(message)}
                     onOpenComputer={onOpenComputer}
+                    onOpenMcp={onOpenMcp}
                   />
                 </div>
               </div>
@@ -5965,6 +5969,7 @@ const MessageView = memo(function MessageView({
   speaking,
   onSpeak,
   onOpenComputer,
+  onOpenMcp,
 }: {
   artifactTarget: ArtifactTarget;
   canAnswer: boolean;
@@ -5985,6 +5990,7 @@ const MessageView = memo(function MessageView({
   speaking: boolean;
   onSpeak: () => void;
   onOpenComputer: (botId?: string) => void;
+  onOpenMcp?: (serverId: string) => void;
 }) {
   const { t } = useLingui();
   const isNarration =
@@ -6259,6 +6265,7 @@ const MessageView = memo(function MessageView({
                 transport={block.transport}
                 endpoint={block.endpoint}
                 needsOAuth={block.needsOAuth}
+                onOpenMcp={onOpenMcp}
               />
             </div>
           );

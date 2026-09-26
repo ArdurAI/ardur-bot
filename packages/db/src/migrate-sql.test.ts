@@ -190,10 +190,9 @@ describe("sql migration runner", () => {
       ["20260101000000_init", "finished"],
     ]);
     expect(failure).toBeInstanceOf(MigrationApplyError);
-    expect(failure).toMatchObject({
-      migrationName: "20260102000000_next",
-      databaseError: 'relation "widgets" does not exist',
-    });
+    expect((failure as Error).message).toBe(
+      'Migration "20260102000000_next" failed to apply. relation "widgets" does not exist',
+    );
 
     client.failOn = null;
     const retried = await applySqlMigrations({ client, migrationsDir: migrations });
@@ -214,7 +213,7 @@ describe("sql migration runner", () => {
     expect(client.rows).toMatchObject([{ finishedAt: null, rolledBackAt: "rolled back" }]);
     expect(failure).toMatchObject({
       name: "MigrationApplyError",
-      migrationName: "20260101000000_idx_concurrent",
+      message: expect.stringContaining("20260101000000_idx_concurrent"),
     });
 
     client.failOn = null;

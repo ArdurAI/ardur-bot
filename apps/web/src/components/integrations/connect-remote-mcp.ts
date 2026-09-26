@@ -12,7 +12,8 @@ export type RemoteMcpResult =
   | "credential-rejected"
   | "sign-in-failed"
   | "replaced"
-  | "oauth-unavailable";
+  | "oauth-unavailable"
+  | "disabled";
 
 /** `recorded` is the server's lastError after the attempt, for the sentence it is shown as. */
 export type RemoteMcpOutcome = {
@@ -31,6 +32,7 @@ export type RemoteMcpOutcome = {
  * sign-in finished.
  * "sign-in-failed" means token exchange or discovery failed after consent.
  * "replaced" means a newer sign-in window took over this attempt.
+ * "disabled" means the server was disabled before sign-in could start.
  */
 export async function connectRemoteMcp(input: {
   name: string;
@@ -93,7 +95,8 @@ export async function connectRemoteMcp(input: {
     oauth === "cancelled" ||
     oauth === "needs-sign-in" ||
     oauth === "sign-in-failed" ||
-    oauth === "replaced"
+    oauth === "replaced" ||
+    oauth === "disabled"
   )
     return done(oauth);
   if (oauth === "oauth-unavailable" || listed?.lastError?.includes("oauth_unavailable"))

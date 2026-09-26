@@ -1,7 +1,7 @@
 import { homedir } from "node:os";
 import { nativeHostOwner } from "@ardurbot/adapters";
-import { sandboxKindForBot } from "@ardurbot/contracts/fleet";
 import type { HostHealth, HostStatus } from "@ardurbot/contracts/host-bridge";
+import { sandboxKindForBot } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import { readRegisteredFolders } from "@ardurbot/host-runtime/desktop-sandbox";
 import {

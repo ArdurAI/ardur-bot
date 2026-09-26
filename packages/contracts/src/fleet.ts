@@ -115,11 +115,6 @@ export type HostLabel = z.infer<typeof HostLabelSchema>;
 export function hostLabel(platform: string): HostLabel {
   return platform === "darwin" ? "This Mac" : "This computer";
 }
-/** A saved kind of "docker" is really the host when it was created with This Mac chosen. */
-export function sandboxKindForBot(envKind: string, computerHost: string | null | undefined) {
-  if (envKind === "docker" && computerHost === "this-mac") return "desktop";
-  return envKind;
-}
 export const FleetTargetSchema = /* @__PURE__ */ (() =>
   z.object({
     id: z.string(),

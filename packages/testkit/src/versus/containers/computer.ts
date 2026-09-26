@@ -14,6 +14,7 @@ import type { TaskContract } from "../../scoreboard/tasks/catalog.js";
 import { requireValue } from "../budget.js";
 import type { TrialAdmission } from "./admission.js";
 import type { ContainerSession } from "./session.js";
+import { guestWorkspace } from "./session.js";
 
 const CANCELLED_COMMAND = "Container command cancelled or exceeded output/deadline budget";
 const UNCERTAIN_STOP = "The command's cancellation timed out, so its outcome is uncertain.";
@@ -138,19 +139,22 @@ export class ContainerComputer implements SandboxProvider {
           !name.includes("\0"),
         "Container listing unavailable",
       );
+      const kind = record.kind;
       requireValue(
-        record.kind === "file" || record.kind === "dir",
+        kind === "file" || kind === "dir" || kind === "link",
         "Container listing unavailable",
       );
       requireValue(
         typeof record.size === "number" && record.size >= 0,
         "Container listing unavailable",
       );
+      // Consumers read every non-directory entry as content and links are never followed.
+      if (kind === "link") continue;
       entries.push({
         path: relative ? `${relative}/${name}` : name,
-        kind: record.kind,
-        size: record.kind === "dir" ? 0 : record.size,
-        ...(record.kind === "file" && record.executable === true ? { executable: true } : {}),
+        kind,
+        size: kind === "dir" ? 0 : record.size,
+        ...(kind === "file" && record.executable === true ? { executable: true } : {}),
       });
     }
     return entries.sort((left, right) => left.path.localeCompare(right.path));
@@ -158,7 +162,7 @@ export class ContainerComputer implements SandboxProvider {
   async *exportWorkspace(computer: ComputerRef): AsyncIterable<PortableFile> {
     this.check(computer);
     for (const [file, content] of Object.entries(await this.session.snapshot()))
-      yield { path: file, content: Buffer.from(content) };
+      if (typeof content === "string") yield { path: file, content: Buffer.from(content) };
   }
   async importWorkspace(
     computer: ComputerRef,
@@ -348,7 +352,7 @@ export class ContainerComputer implements SandboxProvider {
     }
   }
   async snapshotFiles(_homeKey: string, botId: string) {
-    return this.session.snapshot(this.name(teamBotWorkspaceDirectory(botId)));
+    return guestWorkspace(await this.session.snapshot(this.name(teamBotWorkspaceDirectory(botId))));
   }
   async connectScreen(): Promise<never> {
     throw new Error("Graphical computer unsupported in controlled container lane");

@@ -4,6 +4,7 @@ import {
   CommandAuditPayloadSchema,
   CommandBlockSchema,
   CommandEventPayloadSchema,
+  ToolResumedPayloadSchema,
 } from "./command-blocks.js";
 import { ContextSnapshotSchema } from "./context.js";
 import { Id } from "./ids.js";
@@ -53,6 +54,7 @@ export const ProductEventType = z.enum([
   "command.shared",
   "agent.tool.called",
   "agent.tool.completed",
+  "agent.tool.resumed",
   "effect.reconciled",
   "usage.recorded",
   "delegation.progress",
@@ -316,6 +318,12 @@ export const ProductEventSchema = z
           ? CommandAuditPayloadSchema
           : CommandEventPayloadSchema;
       const parsed = schema.safeParse(event.payload);
+      if (!parsed.success)
+        for (const issue of parsed.error.issues)
+          ctx.addIssue({ ...issue, path: ["payload", ...issue.path] });
+    }
+    if (event.type === "agent.tool.resumed") {
+      const parsed = ToolResumedPayloadSchema.safeParse(event.payload);
       if (!parsed.success)
         for (const issue of parsed.error.issues)
           ctx.addIssue({ ...issue, path: ["payload", ...issue.path] });

@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
-import { isLocalMcpHost, mcpSignInDiagnostic } from "@ardurbot/contracts";
+import {
+  isLocalMcpHost,
+  mcpCredentialConflict,
+  mcpReauthorizationDeclinedDiagnostic,
+  mcpSignInDiagnostic,
+} from "@ardurbot/contracts";
 import type { Prisma, PrismaClient } from "@ardurbot/db";
 import type {
   OAuthClientProvider,
@@ -14,7 +19,6 @@ import type {
   OAuthTokens,
 } from "@modelcontextprotocol/sdk/shared/auth.js";
 import { transientIntegrationError } from "./integration-lifecycle.js";
-import { mcpCredentialConflict } from "./mcp-server-tool.js";
 import { secureFetch, validateUrl, withEndpointOriginFallback } from "./mcp-transport.js";
 import type { RemoteTransportDependencies } from "./remote-mcp.js";
 import type { EncryptedSecretStore } from "./secrets.js";
@@ -700,7 +704,7 @@ export class McpOAuthBroker {
         consentStartedAt: null,
         lastError: keepConnection
           ? declined
-            ? "Sign-in was declined."
+            ? mcpReauthorizationDeclinedDiagnostic()
             : "Could not complete sign-in. Connect again."
           : current.connectionState === "connected"
             ? mcpSignInDiagnostic()
@@ -1178,14 +1182,31 @@ export class McpOAuthBroker {
     const server = await this.prisma.mcpServer.findFirst({
       where: { id: input.serverId, spaceId: input.spaceId, userId: input.userId },
     });
-    if (!server?.secretId) return;
-    const row = await this.prisma.secret.findFirst({
-      where: { id: server.secretId, spaceId: input.spaceId, userId: input.userId },
-    });
-    if (!row) return;
-    const material = this.read(row.ciphertext, row.id);
-    delete material.oauth;
-    await this.replaceMaterial(server.id, material, input, true);
+    if (server?.secretId) {
+      const row = await this.prisma.secret.findFirst({
+        where: { id: server.secretId, spaceId: input.spaceId, userId: input.userId },
+      });
+      if (row) {
+        const material = this.read(row.ciphertext, row.id);
+        delete material.oauth;
+        await this.replaceMaterial(server.id, material, input, true);
+      }
+    }
+    // An in-flight sign-in attempt for this server can no longer complete. Cleared only
+    // after the credential material above is gone, so no poll in between sees a
+    // connected server with no pending id. Compares against the id this call observed,
+    // the way claimSignIn/releaseAttempt do, so a newer id claimed in the gap survives.
+    if (server?.pendingOauthSessionId) {
+      await this.prisma.mcpServer.updateMany({
+        where: {
+          id: input.serverId,
+          spaceId: input.spaceId,
+          userId: input.userId,
+          pendingOauthSessionId: server.pendingOauthSessionId,
+        },
+        data: { pendingOauthSessionId: null },
+      });
+    }
   }
 
   private async loadMaterial(

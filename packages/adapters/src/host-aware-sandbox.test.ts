@@ -10,12 +10,7 @@ import { MissingComputerProviderError } from "./computer-connections.js";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
 import { DockerSandboxProvider } from "./docker-sandbox.js";
 import { FakeSandboxProvider } from "./fake-sandbox.js";
-import {
-  createRunSandbox,
-  HostAwareSandbox,
-  owningSandbox,
-  sandboxKindForBot,
-} from "./host-aware-sandbox.js";
+import { createRunSandbox, HostAwareSandbox, owningSandbox } from "./host-aware-sandbox.js";
 import { KubernetesSandboxProvider } from "./kubernetes-sandbox.js";
 import { FakeKubernetesApi } from "./kubernetes-test-api.js";
 
@@ -388,13 +383,6 @@ describe("host-aware sandbox", () => {
     await desktop.destroy(computer, ctx);
   });
 
-  it("only switches docker deployments onto this Mac", () => {
-    expect(sandboxKindForBot("docker", "this-mac")).toBe("desktop");
-    expect(sandboxKindForBot("docker", "docker")).toBe("docker");
-    expect(sandboxKindForBot("e2b", "this-mac")).toBe("e2b");
-    expect(sandboxKindForBot("fake", "this-mac")).toBe("fake");
-  });
-
   it("forwards pageBrowser to the routed provider", async () => {
     const isolated: SandboxProvider = new FakeSandboxProvider();
     const calls: unknown[] = [];
@@ -509,4 +497,100 @@ it("routes the run environment note to the host, leaving container notes alone",
   expect(await sandbox.environmentNote(computer, ctx)).toContain("gh (signed in)");
   expect(host.environmentNote).toHaveBeenCalledOnce();
   expect(await sandbox.environmentNote({ ...computer, kind: "docker" }, ctx)).toBeUndefined();
+});
+
+// Existing behaviour, as the desktop app's own Compose stack uses it: routing follows the saved
+// host choice, which Set up writes there.
+describe("a Docker deployment with a host bridge", () => {
+  async function stackSandbox(computerHost: string | null) {
+    const { RemoteHostSandboxProvider } = await import("./remote-host-sandbox.js");
+    vi.stubEnv("ARDURBOT_HOST_BRIDGE", "api");
+    const provisions = {
+      docker: vi
+        .spyOn(DockerSandboxProvider.prototype, "provision")
+        .mockImplementation(async (request) => ({
+          id: "container",
+          botId: request.botId,
+          kind: "docker" as const,
+          providerRef: "container",
+        })),
+      host: vi.spyOn(RemoteHostSandboxProvider.prototype, "provision"),
+    };
+    const sandbox = createRunSandbox("docker", {
+      hostClient: {
+        request: vi.fn(),
+        result: vi.fn(async () => undefined),
+        health: vi.fn(async () => null),
+      } as never,
+      prisma: {
+        deploymentSettings: { findUnique: async () => ({ computerHost }) },
+        hostRegistration: { findUnique: async () => ({ platform: "darwin" }) },
+      } as unknown as PrismaClient,
+      secrets: { load: () => "" },
+    });
+    return { sandbox, provisions, RemoteHostSandboxProvider };
+  }
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  it("starts and runs a new computer on Docker until the host is chosen", async () => {
+    const { sandbox, provisions } = await stackSandbox(null);
+    const execute = vi
+      .spyOn(DockerSandboxProvider.prototype, "execute")
+      .mockImplementation(async function* () {
+        yield { type: "exit" as const, code: 0 };
+      });
+    const computer = await sandbox.provision({ botId: "new", homePath: "/tmp/new" }, ctx);
+    expect(computer.kind).toBe("docker");
+    expect(provisions.host).not.toHaveBeenCalled();
+    await expect(collect(sandbox.execute(computer, { argv: ["true"] }, ctx))).resolves.toEqual([
+      { type: "exit", code: 0 },
+    ]);
+    expect(execute).toHaveBeenCalledOnce();
+    const missing = owningSandbox(sandbox, { kind: "desktop" }, ctx);
+    await expect(missing).rejects.toBeInstanceOf(MissingComputerProviderError);
+    // The sentence names the paired desktop, not the platform the API happens to run on.
+    await expect(missing).rejects.toThrow("This computer runs on This Mac");
+  });
+
+  it("starts a new computer on this computer through the host bridge once Set up chose it", async () => {
+    const { sandbox, provisions, RemoteHostSandboxProvider } = await stackSandbox("this-mac");
+    const computer = await sandbox.provision({ botId: "new", homePath: "/tmp/new" }, ctx);
+    expect(computer.kind).toBe("desktop");
+    expect(provisions.host).toHaveBeenCalledOnce();
+    expect(provisions.docker).not.toHaveBeenCalled();
+    await expect(owningSandbox(sandbox, computer, ctx)).resolves.toBeInstanceOf(
+      RemoteHostSandboxProvider,
+    );
+  });
+
+  it.each([null, "this-mac", "docker"])(
+    "keeps an existing Docker computer on Docker (host choice %s)",
+    async (computerHost) => {
+      const { sandbox, provisions } = await stackSandbox(computerHost);
+      const computer = await sandbox.provision(
+        { botId: "old", homePath: "/tmp/old", providerRef: "container", providerKind: "docker" },
+        ctx,
+      );
+      expect(computer.kind).toBe("docker");
+      expect(provisions.docker).toHaveBeenCalledWith(
+        expect.objectContaining({ providerRef: "container", providerKind: "docker" }),
+        ctx,
+      );
+      expect(provisions.host).not.toHaveBeenCalled();
+      await expect(owningSandbox(sandbox, { kind: "docker" }, ctx)).resolves.toBeInstanceOf(
+        DockerSandboxProvider,
+      );
+    },
+  );
+
+  it("respects an earlier choice of Docker for new computers", async () => {
+    const { sandbox, provisions } = await stackSandbox("docker");
+    const computer = await sandbox.provision({ botId: "new", homePath: "/tmp/new" }, ctx);
+    expect(computer.kind).toBe("docker");
+    expect(provisions.host).not.toHaveBeenCalled();
+  });
 });

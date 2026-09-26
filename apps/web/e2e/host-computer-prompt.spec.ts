@@ -1,15 +1,15 @@
 import { expect, test } from "@playwright/test";
-import { captureScreenshot, completeOnboarding, signup } from "./helpers";
+import { captureScreenshot } from "./helpers";
+import { installPerformanceFixture } from "./performance-fixture";
 
+// A Docker server's owner, in an Electron client, has not chosen where bots run yet.
 for (const platform of ["darwin", "win32"]) {
   test(`host computer choice explains file access on ${platform}`, async ({ page }, testInfo) => {
-    await signup(
-      page,
-      `host-choice-${platform}-${Date.now()}@ardurbot.test`,
-      "password12",
-      "Host Tester",
-    );
-    await completeOnboarding(page);
+    await installPerformanceFixture(page, false, false, {
+      sandboxProvider: "docker",
+      canChooseHostComputer: true,
+      computerHost: null,
+    });
     await page.addInitScript((platform) => {
       Object.defineProperty(window, "ardurbotDesktop", {
         value: {
@@ -27,15 +27,7 @@ for (const platform of ["darwin", "win32"]) {
         },
       });
     }, platform);
-    await page.route(/\/rpc\/(me|bootstrap)$/, async (route) => {
-      const response = await route.fetch();
-      const body = await response.json();
-      const me = route.request().url().endsWith("/me") ? body.json : body.json.me;
-      me.canChooseHostComputer = true;
-      me.computerHost = null;
-      await route.fulfill({ response, json: body });
-    });
-    await page.reload();
+    await page.goto("/app");
     const dialog = page.getByRole("dialog", { name: "Where should bots run?" });
     await expect(dialog).toBeVisible();
     await expect(dialog).toHaveAccessibleDescription(

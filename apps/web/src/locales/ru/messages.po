@@ -288,6 +288,7 @@ msgstr ""
 msgid "Accepted"
 msgstr ""
 
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Access token"
 msgstr "Токен доступа"
@@ -1214,6 +1215,7 @@ msgstr "Не удаётся связаться с сервером."
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/customize/ConfigureExtension.tsx
 #: src/pages/customize/McpConfigEditor.tsx
+#: src/pages/customize/McpCredentialFix.tsx
 #: src/pages/customize/PluginsPage.tsx
 #: src/pages/fleet/FleetSettings.tsx
 #: src/pages/import/ImportedServerCredentials.tsx
@@ -2539,6 +2541,14 @@ msgstr "Не удалось сохранить этот голос"
 msgid "Could not save this choice"
 msgstr "Не удалось сохранить этот выбор."
 
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Could not save this credential. Check it and try again."
+msgstr "Не удалось сохранить эти учётные данные. Проверьте их и повторите попытку."
+
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Could not save. Try again."
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not search catalog"
 msgstr "Не удалось выполнить поиск по каталогу"
@@ -3249,6 +3259,10 @@ msgstr "Электронная почта"
 msgid "Enable"
 msgstr ""
 
+#: src/lib/mcp-sign-in.ts
+msgid "Enable this server first, then sign in."
+msgstr "Сначала включите этот сервер, затем войдите."
+
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Engage when... Ignore..."
 msgstr "Включайтесь, когда... Игнорируйте..."
@@ -3690,11 +3704,17 @@ msgstr "Повесьте трубку, затем введите код на э�
 msgid "header"
 msgstr "заголовок"
 
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Header"
+msgstr "Заголовок"
+
+#: src/pages/customize/McpCredentialFix.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Header name"
 msgstr "Название заголовка"
 
+#: src/pages/customize/McpCredentialFix.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Header value"
 msgstr "Значение заголовка"
@@ -4063,6 +4083,10 @@ msgstr ""
 msgid "Keep for recovery"
 msgstr ""
 
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Keep header"
+msgstr "Оставить заголовок"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Keep here"
 msgstr ""
@@ -4074,6 +4098,10 @@ msgstr "Сохранить память"
 #: src/pages/MemoryImportExport.tsx
 msgid "Keep scope"
 msgstr ""
+
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Keep token"
+msgstr "Оставить токен"
 
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Keep working when the window is closed"
@@ -4386,6 +4414,7 @@ msgstr ""
 #: src/pages/memory/MemorySettings.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/PrivacySettings.tsx
+#: src/pages/shell/message-cards.tsx
 msgid "Manage"
 msgstr ""
 
@@ -4847,6 +4876,10 @@ msgstr ""
 #: src/pages/DevicesSettings.tsx
 msgid "Never"
 msgstr ""
+
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "New access token"
+msgstr "Новый токен доступа"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "New bot"
@@ -6468,6 +6501,7 @@ msgstr ""
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/board/ItemForm.tsx
 #: src/pages/customize/ConfigureExtension.tsx
+#: src/pages/customize/McpCredentialFix.tsx
 #: src/pages/DevicesSettings.tsx
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/GroupPanel.tsx
@@ -7497,7 +7531,7 @@ msgstr "Этот сервер не предложил вход через бра
 msgid "This server did not request browser authorization."
 msgstr "Этот сервер не запрашивал авторизацию браузера."
 
-#: src/pages/McpServersOverlay.tsx
+#: src/pages/customize/McpCredentialFix.tsx
 msgid "This server has two credentials. Keep one."
 msgstr "У этого сервера сохранены два способа входа. Оставьте один."
 
@@ -7573,6 +7607,10 @@ msgstr "Сегодня"
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "Today (UTC)"
 msgstr ""
+
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Token"
+msgstr "Токен"
 
 #: src/pages/CompareStart.tsx
 msgid "Token reservation"
@@ -7737,6 +7775,10 @@ msgstr "Доступно обновление"
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Update computer"
 msgstr "Обновить компьютер"
+
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Update credential"
+msgstr "Обновить учётные данные"
 
 #: src/pages/import/ImportedServerCredentials.tsx
 msgid "Update credentials"

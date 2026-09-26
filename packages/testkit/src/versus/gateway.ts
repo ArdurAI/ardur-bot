@@ -9,6 +9,7 @@ import type { Emit } from "./adapters/types.js";
 import type { Budget, Purpose, Reservation } from "./budget.js";
 import { type BudgetLedger, record, requireValue } from "./budget.js";
 import { sanitize } from "./provenance.js";
+import type { ServingWitness } from "./serving.js";
 
 const categoryNames = [
   "logicalInput",
@@ -95,6 +96,23 @@ export class UsageCounter {
   }
 }
 
+function assertServingWitness(budget: Budget, serving: ServingWitness | undefined) {
+  if (!serving) return;
+  const identity = serving.identity();
+  if (
+    identity.origin === budget.endpoint.origin &&
+    identity.model === budget.model.id &&
+    identity.digest === budget.model.digest &&
+    identity.contextSize === budget.contextSize
+  )
+    return;
+  const error = new Error(
+    "Serving witness origin, model, digest, or context does not match the gateway budget",
+  ) as Error & { code: string };
+  error.code = "serving-witness-mismatch";
+  throw error;
+}
+
 export async function readJson(request: IncomingMessage, maxBytes = 1024 * 1024) {
   const chunks: Buffer[] = [];
   let bytes = 0;
@@ -130,17 +148,35 @@ export async function startGateway(options: {
   transport?: (url: string, init: RequestInit) => Promise<Response>;
   credential?: () => string | undefined;
   evidenceKind: "virtual" | "provider-live";
+  /**
+   * Re-attests the loaded model and context before each trial admission and model request,
+   * and again after each response, since the request itself may have reloaded the model.
+   */
+  serving?: ServingWitness;
 }) {
   const budget = options.ledger.budget;
   requireValue(
     contentDigest(options.budget) === contentDigest(budget),
     "Gateway and admission budget differ",
   );
+  requireValue(
+    options.evidenceKind === "virtual" || options.serving,
+    "Live inference requires serving-state attestation at admission",
+  );
+  // The witness and the budget are both fixed, so their route identity is checked once, here.
+  assertServingWitness(budget, options.serving);
   const capabilities = new Map<string, Capability>();
+  const admitted = new Set<string>();
+  // A post-response re-attestation mismatch cannot un-send that response, but it fails the
+  // trial: no further request is admitted on the stale pre-forward reading.
+  const failedTrials = new Set<string>();
   const requests: GatewayRequest[] = [];
   const transport = options.transport ?? fetch;
   const server = createServer((request, response) => {
     void handle(request, response).catch((error) => {
+      // A failure discovered after the response was already forwarded cannot be reported to
+      // this request's client; only the trial's next request sees the refusal.
+      if (response.writableEnded) return;
       if (!response.headersSent) response.writeHead(403, { "content-type": "application/json" });
       response.end(
         JSON.stringify({
@@ -158,7 +194,10 @@ export async function startGateway(options: {
       request.url ?? "",
     );
     const cap = route ? capabilities.get(route[1]!) : undefined;
-    requireValue(cap && !cap.controller.signal.aborted, "Unknown or revoked trial capability");
+    requireValue(
+      cap && !cap.controller.signal.aborted && !failedTrials.has(cap.trialId),
+      "Unknown or revoked trial capability",
+    );
     options.ledger.remainingMs(cap.trialId);
     if (request.method === "GET" && route![2] === "models") {
       response.setHeader("content-type", "application/json");
@@ -214,6 +253,7 @@ export async function startGateway(options: {
     };
     delete forward.max_completion_tokens;
     if (body.stream) forward.stream_options = { include_usage: true };
+    await options.serving?.attest("model-request", cap.trialId);
     const remainingMs = options.ledger.remainingMs(cap.trialId);
     const reservation = options.ledger.reserve(cap.trialId, cap.purpose);
     const requestHash = contentDigest(forward);
@@ -320,6 +360,16 @@ export async function startGateway(options: {
         requireValue(done && !pending.trim(), "Malformed or incomplete provider stream");
         response.end();
       }
+      // The transport cannot pin the loaded context, so this request may have just reloaded
+      // the model at the server's default. A mismatch here cannot un-send the response already
+      // forwarded, but it fails this request's authoritativeness and this trial's remaining
+      // requests instead of admitting them on the stale pre-forward reading.
+      try {
+        await options.serving?.attest("model-response", cap.trialId);
+      } catch (error) {
+        failedTrials.add(cap.trialId);
+        throw error;
+      }
       observation.outcome = "success";
       observation.missingReason = receivedUsage ? null : "provider-omitted";
     } catch (error) {
@@ -363,7 +413,17 @@ export async function startGateway(options: {
   return {
     origin,
     requests,
+    /** Opens the trial's budget only while the serving state still matches the declared route. */
+    async admit(trialId: string) {
+      await options.serving?.attest("trial-admission", trialId);
+      options.ledger.open(trialId);
+      admitted.add(trialId);
+    },
     capability(trialId: string, purpose: Purpose | null, emit: Emit) {
+      requireValue(
+        !options.serving || admitted.has(trialId),
+        "Trial was not admitted against the serving state",
+      );
       const token = `cap_${randomBytes(24).toString("hex")}`;
       capabilities.set(token, { trialId, purpose, emit, controller: new AbortController() });
       return `${origin}/c/${token}/v1`;
@@ -374,6 +434,7 @@ export async function startGateway(options: {
           cap.controller.abort();
           capabilities.delete(token);
         }
+      failedTrials.delete(trialId);
       options.ledger.close(trialId);
     },
     async close() {

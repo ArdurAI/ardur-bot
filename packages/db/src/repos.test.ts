@@ -1,5 +1,5 @@
 import type { Actor } from "@ardurbot/contracts";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "./client.js";
 import { createRepos } from "./repos.js";
 import { IsolationError } from "./scope.js";
@@ -432,4 +432,54 @@ describe("createRepos.reorderBots", () => {
     );
     expect(update).not.toHaveBeenCalled();
   });
+});
+
+describe("createRepos.createBot computer kind", () => {
+  async function createdKind(computerHost: string | null) {
+    const upsert = vi.fn(async (_args: { create: { kind: string } }) => ({ id: "computer" }));
+    const tx = {
+      $queryRaw: vi.fn(async () => []),
+      spaceMember: {
+        findUnique: vi.fn(async () => ({ organizationId: "org", space: { deletingAt: null } })),
+      },
+      computer: { upsert },
+      bot: {
+        aggregate: vi.fn(async () => ({ _max: { position: 0 } })),
+        create: vi.fn(async () => baseBot),
+        findFirstOrThrow: vi.fn(async () => baseBot),
+      },
+      thread: { create: vi.fn(async () => baseBot.thread) },
+      browserProfile: { create: vi.fn(async () => ({})) },
+      memoryDocument: { create: vi.fn(async () => ({})) },
+    };
+    const prisma = {
+      deploymentSettings: { findUnique: vi.fn(async () => ({ computerHost })) },
+      $transaction: vi.fn((work: (client: typeof tx) => Promise<unknown>) => work(tx)),
+    };
+    await createRepos(prisma as unknown as PrismaClient).createBot(actor, {
+      name: "New",
+      title: "",
+      description: "",
+      instructions: "",
+      color: baseBot.color,
+      notifyOnFinish: false,
+    });
+    return upsert.mock.calls[0]?.[0].create.kind;
+  }
+
+  afterEach(() => vi.unstubAllEnvs());
+
+  // Existing behaviour: the deployment's provider and the saved host choice decide the kind.
+  it.each([
+    ["desktop", null, "desktop"],
+    ["docker", null, "docker"],
+    ["docker", "this-mac", "desktop"],
+    ["docker", "docker", "docker"],
+  ])(
+    "on a %s deployment with host choice %s starts a new computer on %s",
+    async (provider, computerHost, kind) => {
+      vi.stubEnv("SANDBOX_PROVIDER", provider);
+      expect(await createdKind(computerHost)).toBe(kind);
+    },
+  );
 });

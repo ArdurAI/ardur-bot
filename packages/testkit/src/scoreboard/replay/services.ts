@@ -50,6 +50,11 @@ export const FIXTURE_TOOLS: ConnectorTool[] = [
   },
 ];
 
+/** Cancellation shape consumed by the resource collector when it stops replay work. */
+export function replayCancellation(signal: AbortSignal) {
+  return new Error("Synthetic call cancelled", { cause: signal.reason });
+}
+
 /** Disposable fixture schema only; never applied to an owner database or Prisma migrations. */
 export async function initializeFixtureDatabase(prisma: PrismaClient) {
   await prisma.$executeRaw`CREATE SCHEMA IF NOT EXISTS scoreboard_fixture`;
@@ -187,7 +192,7 @@ export class DepartmentServices extends ComposioEmulator {
       !(await this.discoverTools(context)).some((tool) => tool.name === call.tool)
     )
       throw new Error("Synthetic tool permission denied");
-    if (context.signal.aborted) throw new Error("Synthetic call cancelled");
+    if (context.signal.aborted) throw replayCancellation(context.signal);
     if (call.tool === "SCOREBOARD_READ") {
       if (Object.keys(call.args).length) throw new Error("Unexpected read arguments");
       yield { type: "result", data: await this.snapshot() };
@@ -208,7 +213,7 @@ export class DepartmentServices extends ComposioEmulator {
         FixtureRecord[]
       >`UPDATE scoreboard_fixture.records SET revision = revision + 1, value = ${JSON.stringify(value)}::jsonb WHERE scope = ${this.scope} AND id = ${id} AND revision = ${revision as number} AND consent = true RETURNING id, revision, value`;
       if (updated.length !== 1) throw new Error("Stale revision or revoked consent");
-      if (context.signal.aborted) throw new Error("Synthetic call cancelled");
+      if (context.signal.aborted) throw replayCancellation(context.signal);
       await tx.$executeRaw`INSERT INTO scoreboard_fixture.effects (scope, execution_id, id, revision) VALUES (${this.scope}, ${call.executionId}, ${id}, ${updated[0]!.revision})`;
       return updated[0]!;
     });
@@ -291,17 +296,20 @@ export class DepartmentSandbox extends FakeSandboxProvider {
     yield { type: "exit", code: 126 };
   }
 
-  async snapshotFiles(homeKey: string, botId: string): Promise<Record<string, string>> {
+  async snapshotFiles(
+    homeKey: string,
+    botId: string,
+  ): Promise<{ files: Record<string, string>; links: readonly string[] }> {
     const box = this.boxes.get(`fake-${homeKey}`);
-    const result: Record<string, string> = {};
-    if (!box) return result;
+    const files: Record<string, string> = {};
+    if (!box) return { files, links: [] };
     const prefix = `${teamBotWorkspaceDirectory(botId)}/`;
     for (const file of box.files.keys())
-      result[file.startsWith(prefix) ? file.slice(prefix.length) : file] = await readFile(
+      files[file.startsWith(prefix) ? file.slice(prefix.length) : file] = await readFile(
         this.filePath(box.ref, file),
         "utf8",
       );
-    return result;
+    return { files, links: [] };
   }
 }
 

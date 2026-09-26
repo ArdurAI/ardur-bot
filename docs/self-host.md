@@ -6,11 +6,15 @@ The signed-in product is a long-running API, a Graphile Worker, Postgres, and a 
 
 Same as the README quick start: `.env` from `.env.example`, Postgres via Compose, `pnpm sandbox:build`, `pnpm dev`, then [http://127.0.0.1:5173](http://127.0.0.1:5173) (or `http://localhost:5173` — both loopback hosts are trusted). Electron during source development: `pnpm --filter @ardurbot/desktop dev` while that stack is up, choosing **Existing instance** with that address.
 
-The installed desktop app's **This computer** choice does not use Compose. It starts an embedded Postgres on a loopback port, applies the database migrations, and runs the API and worker on this computer. On this computer, commands start in the bot's own folder or a folder you add, and file tools stay inside those folders; the approvals you require are what keep a command away from other files. Known secrets are hidden from command output. Disk and CPU use are not capped; a command stops after five minutes. See [Local mode data](#local-mode-data) for what it keeps and how to reset it. A data folder that already contains `stack/.env` keeps the Docker Compose stack, including its remembered web port (45173 unless that port was taken). **Existing instance** is unchanged. Compose below remains the way to run a server or to add Docker.
+The installed desktop app's **This computer** choice does not use Compose. It starts an embedded Postgres on a loopback port, applies the database migrations, and runs the API and worker on this computer. See [What commands can do on this computer](#what-commands-can-do-on-this-computer) and [Local mode data](#local-mode-data) for what it keeps and how to reset it. A data folder that already contains `stack/.env` keeps the Docker Compose stack, including its remembered web port (45173 unless that port was taken). **Existing instance** is unchanged. Compose below remains the way to run a server or to add Docker.
 
 For source development in WSL, keep the checkout and `data` directory in the Linux filesystem (for example, `~/ardurbot`), and run `pnpm dev` as your normal user. The host-run supervisor matches bot container UID/GID to that user. If Docker Desktop container IPs are unreachable, set `SANDBOX_CONTROL_VIA_LOOPBACK=true` in `.env`; this publishes the token-protected control service on a random loopback port. Leave this unset for the Compose-hosted supervisor.
 
 Compose bot homes mount only their own subdirectory of the application volume using Docker volume semantics. Docker's internal volume paths are never used as host bind mounts.
+
+### What commands can do on this computer
+
+On this computer, commands start in the bot's own folder or a folder you add, and file tools stay inside those folders; the approvals you require are what keep a command away from other files. Known secrets are hidden from command output. Disk and CPU use are not capped; a command stops after five minutes.
 
 ### Local mode data
 
@@ -321,9 +325,32 @@ Do not commit `.env`. Never put `COMPOSIO_API_KEY`, OpenRouter keys, or provider
 
 Optional messaging platforms (iMessage, Slack, WhatsApp, Telegram, Feishu/Lark) mount when their env credentials are set — see `.env.example`. Point a Feishu/Lark bot event subscription at `/api/v1/messaging/webhook/lark` (webhook/HTTP inbound only; do not enable long connection). Groups stay iMessage-only.
 
+## Where bots run
+
+The installed desktop app runs bots' work on the computer it is installed on. Docker, Podman,
+Kubernetes and SSH machines are computers you add in **Settings → Computers**. Where a new
+computer starts depends on how Ardur Bot was installed:
+
+- **The installed desktop app** runs its own database and services, and new computers start on
+  this computer. It never asks where bots should run. **Settings → Computers** shows this
+  computer with its free memory, CPU and disk, and the folders you added.
+- **A desktop app that already runs a Docker Compose stack** (its data folder has `stack/.env`)
+  keeps that stack and never asks where bots run. New computers start on Docker until you connect
+  the host service with **Set up** in **Settings → Computers → This computer**; after that they
+  start on this computer. **Disconnect this computer** returns new computers to Docker. Computers
+  already on Docker stay on Docker, and an owner who chose Docker earlier keeps Docker for new
+  computers.
+- **A server** (published images, production Compose, or a source checkout) keeps Docker as the
+  default, because a shared server is not your own computer. An Electron app connected to it
+  asks the owner once whether to keep Docker or run bots on the host, with a warning against the
+  host on shared or public servers.
+
+A computer keeps the engine it was created on. Moving an existing computer onto this computer is
+not available until verified migration lands; see [Fleet](./fleet.md).
+
 ## Choosing a computer provider
 
-The Electron desktop app is a client of the same API. Docker and E2B still apply. On first launch, Electron asks the deployment owner whether bots should keep using Docker or run on this Mac as you. `SANDBOX_PROVIDER=desktop` is a separate, explicit provider that always runs commands on the service host. The installed app's **This computer** path runs its API and worker with that provider and a folder list of its own.
+The Electron desktop app is a client of the same API; [where bots run](#where-bots-run) says what each way of installing starts new computers on. `SANDBOX_PROVIDER=desktop` is a separate, explicit provider that always runs commands on the service host. The installed app's **This computer** path runs its API and worker with that provider and a folder list of its own.
 
 - **Published images** (`docker-compose.images.yml`) default to `SANDBOX_PROVIDER=docker` with a
   local supervisor and published `ghcr.io/ardurai/ardur-bot/computer` image. No E2B account required.
@@ -341,20 +368,17 @@ The Electron desktop app is a client of the same API. Docker and E2B still apply
   workspace under `/home/user/ardurbot-home`, and refreshes a two-hour TTL. Box uses the shared Linux
   desktop runtime and protected port routes for concurrent bot desktops. Each bot has its own
   persistent Chrome profile; logins are not shared between bots.
-- **Desktop provider** / **This Mac** runs commands on the API/worker host. Docker stays the default.
-  The Electron app asks once; if you choose This Mac, bots can use working directories under your home
-  folder. Do not enable it on a public or shared service. macOS does not show its own permission
+- **Desktop provider** / **This Mac** runs commands on the API/worker host. On a server Docker stays
+  the default, and an Electron app asks its owner once; if they choose This Mac, bots can use
+  working directories under the home folder. Do not enable it on a public or shared service. macOS does not show its own permission
   dialog for this.
 - **This computer** in the installed app uses the desktop provider with the app's own folder list.
-  The API and worker run on that machine. On this computer, commands start in the bot's own folder
-  or a folder you add, and file tools stay inside those folders; the approvals you require are what
-  keep a command away from other files. Known secrets are hidden from command output. Disk and CPU
-  use are not capped; a command stops after five minutes. A folder
-  you added that is missing (an unplugged drive, a renamed folder) is skipped until it returns,
+  The API and worker run on that machine; see [What commands can do on this computer](#what-commands-can-do-on-this-computer).
+  A folder you added that is missing (an unplugged drive, a renamed folder) is skipped until it returns,
   and Settings marks it. Do not point a public or shared service at this provider. macOS does not show its own permission dialog for these commands.
   On Windows, stopping the embedded database uses the library's forced process-tree kill; the next
-  start uses Postgres crash recovery. Docker stays the default for Compose and for a setup that
-  already has a Compose environment file.
+  start uses Postgres crash recovery. Compose stays the way to run a server, and a setup that
+  already has a Compose environment file keeps its stack.
 - **Fake** is only an emulator for verification.
 - **None** boots the product without a computer host (fallback when Docker/supervisor is not
   configured, or when a remote provider is selected without its API key).

@@ -7,6 +7,7 @@ import {
   PlacementSettingsSchema,
   unknownCapacity,
 } from "@ardurbot/contracts/fleet";
+import { sandboxKindForBot } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import type { ComputerIdentity, ComputerSecretLoader } from "../computer-connections.js";
 import {
@@ -16,7 +17,7 @@ import {
 } from "../computer-connections.js";
 import { DockerSandboxProvider } from "../docker-sandbox.js";
 import type { ComputerRouter } from "../host-aware-sandbox.js";
-import { isComputerRouter, sandboxKindForBot } from "../host-aware-sandbox.js";
+import { isComputerRouter } from "../host-aware-sandbox.js";
 import { createHostClient, usesHostBridge } from "../remote-host-sandbox.js";
 import type { SandboxProviderOptions } from "../sandbox-factory.js";
 import { hostCapacity } from "./service.js";

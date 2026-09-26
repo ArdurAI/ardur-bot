@@ -9,7 +9,12 @@ import type {
 } from "@ardurbot/adapter-kit";
 import type { ComputerUpdate } from "@ardurbot/contracts";
 import { HostMoveUnavailableError } from "@ardurbot/contracts";
-import { ACTIVE_RUN_STATUSES, parseScreenLeaseId, screenLeaseId } from "@ardurbot/core";
+import {
+  ACTIVE_RUN_STATUSES,
+  parseScreenLeaseId,
+  sandboxKindForBot,
+  screenLeaseId,
+} from "@ardurbot/core";
 import {
   appendEventInTransaction,
   createThreadMessageInTransaction,
@@ -31,7 +36,7 @@ import {
   restoreComputerWorkspace,
 } from "./computer-workspace.js";
 import { resolveAgentHomePath } from "./home.js";
-import { owningSandbox, sandboxKindForBot } from "./host-aware-sandbox.js";
+import { owningSandbox } from "./host-aware-sandbox.js";
 
 type ComputerUpdateProgress = (
   stage: Exclude<ComputerUpdate["stage"], "preparing">,

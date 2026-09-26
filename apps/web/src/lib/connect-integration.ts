@@ -1,9 +1,11 @@
 import type { IntegrationConnection, IntegrationDescriptor } from "@ardurbot/contracts";
+import { abortableDelay } from "@ardurbot/core";
 import { desktopBridge } from "./desktop";
 import { MCP_OAUTH_CHANNEL } from "./mcp-oauth-channel";
 import { rpc } from "./rpc";
 
-/** Polling survives browser-profile changes and providers that sever the popup opener. */
+/** Polling survives browser-profile changes and providers that sever the popup opener.
+ * Aborting `signal` stops this page's polling; the sign-in itself continues. */
 export async function connectIntegration(
   descriptor: IntegrationDescriptor,
   connection?: IntegrationConnection,
@@ -15,6 +17,7 @@ export async function connectIntegration(
     onPopup?: (popup: Window | null) => void;
     onStarted?: (connection: IntegrationConnection) => void;
     onWaiting?: (waiting: { cancel: () => Promise<void> }) => void;
+    signal?: AbortSignal;
   } = {},
 ) {
   const authKind = options.authKind ?? descriptor.authKind;
@@ -52,7 +55,9 @@ export async function connectIntegration(
     });
     const deadline = Date.now() + 10 * 60_000;
     while (Date.now() < deadline) {
-      await new Promise((resolve) => window.setTimeout(resolve, 1000));
+      await abortableDelay(1000, options.signal);
+      // Leaving the page stops this loop here; the sign-in itself keeps running.
+      if (options.signal?.aborted) return started.connection;
       let current: IntegrationConnection;
       try {
         current = await rpc.integrations.status({ connectionId: started.connection.id });
@@ -66,6 +71,7 @@ export async function connectIntegration(
       }
       return current;
     }
+    if (options.signal?.aborted) return started.connection;
     return await rpc.integrations.status({ connectionId: started.connection.id });
   } catch (error) {
     popup?.close();

@@ -1395,12 +1395,21 @@ export async function appendEventInTransaction(
     const payload = CommandEventPayloadSchema.parse(input.payload);
     if (payload.block.runId !== input.runId)
       throw new Error("Command run does not match event run");
+    // Redelivery is idempotent and an attempt's own first finish is final. Dedupe is scoped to
+    // the attempt that wrote it: a lease-lost attempt's late finish is not the recovering
+    // attempt's redelivery, so it is still stored as evidence rather than dropped or merged.
+    const attemptId = payload.block.attemptId;
     const existing = await tx.event.findFirst({
       where: {
         threadId: input.threadId,
         runId: input.runId,
         type: input.type,
-        payload: { path: ["block", "commandId"], equals: payload.block.commandId },
+        AND: [
+          { payload: { path: ["block", "commandId"], equals: payload.block.commandId } },
+          ...(attemptId === null
+            ? []
+            : [{ payload: { path: ["block", "attemptId"], equals: attemptId } }]),
+        ],
       },
     });
     if (existing) return existing;
@@ -1503,8 +1512,16 @@ function mapProductEvent(event: {
     type: event.type as ProductEvent["type"],
     runId: event.runId ?? undefined,
     createdAt: event.createdAt.toISOString(),
-    payload: event.payload as Record<string, unknown>,
+    payload: clientPayload(event.type, event.payload as Record<string, unknown>),
   };
+}
+
+/** Only the server compares a tool call's argument digest; no reader of the thread receives it. */
+function clientPayload(type: string, payload: Record<string, unknown>) {
+  if (type !== "agent.tool.called" || typeof payload !== "object" || payload === null)
+    return payload;
+  const { argumentDigest: _digest, ...rest } = payload;
+  return rest;
 }
 
 class ChangeLatch {

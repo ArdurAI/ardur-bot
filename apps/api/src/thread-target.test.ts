@@ -176,7 +176,11 @@ describe("threadSnapshot", () => {
         seq: 4,
         type: "agent.tool.called",
         runId: "run-1",
-        payload: { name: "SLACK_FIND_CHANNELS" },
+        payload: {
+          name: "SLACK_FIND_CHANNELS",
+          executionId: "call-1",
+          argumentDigest: "d".repeat(64),
+        },
         createdAt: new Date("2026-08-23T00:00:00.000Z"),
       },
     ]);
@@ -211,6 +215,8 @@ describe("threadSnapshot", () => {
         }),
       }),
     );
+    // Only the server compares a tool call's argument digest.
+    expect(JSON.stringify(snapshot)).not.toContain("d".repeat(64));
     expect(snapshot.messages).toEqual([
       expect.objectContaining({
         id: "progress:run-1",

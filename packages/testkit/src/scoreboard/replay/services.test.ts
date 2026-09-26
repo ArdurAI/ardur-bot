@@ -31,8 +31,11 @@ it("seeds the production team workspace, preserves actual writes and refuses pat
       context,
     );
     expect(await sandbox.snapshotFiles("fixture-team", "fixture-bot")).toEqual({
-      ...task.files,
-      "result.json": "{}",
+      files: {
+        ...task.files,
+        "result.json": "{}",
+      },
+      links: [],
     });
     await expect(sandbox.readFile(computer, "../grader.ts", context)).rejects.toThrow(
       "outside workspace",

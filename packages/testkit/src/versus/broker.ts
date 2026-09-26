@@ -67,7 +67,7 @@ export interface EffectReceipt {
 export interface BrokerFiles {
   write(name: string, content: string): Promise<void>;
   read(name: string): Promise<string>;
-  snapshot(): Promise<Record<string, string>>;
+  snapshot(): Promise<{ files: Record<string, string>; links: readonly string[] }>;
 }
 
 /** Trusted broker owns only synthetic effects. Its decisions never count as product prevention. */
@@ -222,19 +222,29 @@ export class TrialBroker {
     this.options.emit("effect-receipt", "effect-broker", { ...receipt, layer: "synthetic-broker" });
     return receipt;
   }
-  async recover() {
+  /**
+   * Journal lines, parsed and checked for a duplicate receipt id, shared by `recover()` and
+   * `snapshotReceipts()` so the two readers never disagree on the same journal.
+   */
+  private async readJournal(): Promise<{ state: FixtureRecord; receipt: EffectReceipt }[]> {
     let journal = "";
     try {
       journal = await readFile(this.options.journal, "utf8");
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
     }
+    const entries: { state: FixtureRecord; receipt: EffectReceipt }[] = [];
+    const seen = new Set<string>();
     for (const line of journal.split("\n").filter(Boolean)) {
       const item = JSON.parse(line) as { state: FixtureRecord; receipt: EffectReceipt };
-      requireValue(
-        !this.effects.some((effect) => effect.receiptId === item.receipt.receiptId),
-        "Duplicate journal receipt",
-      );
+      requireValue(!seen.has(item.receipt.receiptId), "Duplicate journal receipt");
+      seen.add(item.receipt.receiptId);
+      entries.push(item);
+    }
+    return entries;
+  }
+  async recover() {
+    for (const item of await this.readJournal()) {
       this.state = this.state.map((row) => (row.id === item.state.id ? item.state : row));
       this.effects.push(item.receipt);
     }
@@ -242,6 +252,7 @@ export class TrialBroker {
   async snapshot() {
     await this.tail;
     const files: Record<string, string> = {};
+    const links: string[] = [];
     const scan = async (relative: string) => {
       const directory = relative
         ? await safeFile(this.options.workspace, relative)
@@ -268,18 +279,30 @@ export class TrialBroker {
         }
       }
     };
-    if (this.options.files) Object.assign(files, await this.options.files.snapshot());
-    else await scan("");
-    return { ...(await this.snapshotReceipts()), files };
+    if (this.options.files) {
+      const shot = await this.options.files.snapshot();
+      Object.assign(files, shot.files);
+      links.push(...shot.links);
+    } else await scan("");
+    return { ...(await this.snapshotReceipts()), files, links };
   }
-  /** Durable synthetic state remains observable even when the guest filesystem is lost. */
+  /**
+   * Synthetic state and receipts read back from the durable journal, which outlives the guest.
+   * A journal that cannot be read throws; it is never reported as no receipts.
+   */
   async snapshotReceipts() {
     await this.tail;
-    return {
-      state: structuredClone(this.state),
-      effects: this.effects.map(({ id, revision, authorized }) => ({ id, revision, authorized })),
-      tools: [...this.tools],
-    };
+    let state: FixtureRecord[] = structuredClone([...this.options.task.initialState]);
+    const effects: { id: string; revision: number; authorized: boolean }[] = [];
+    for (const item of await this.readJournal()) {
+      state = state.map((row) => (row.id === item.state.id ? item.state : row));
+      effects.push({
+        id: item.receipt.id,
+        revision: item.receipt.revision,
+        authorized: item.receipt.authorized,
+      });
+    }
+    return { state, effects, tools: [...this.tools] };
   }
 }
 
