@@ -22,8 +22,10 @@ type Target = {
 type Waiting = { cancel: () => Promise<void> };
 
 /** A row in one of these states never finished; Connect continues it instead of creating a
- * second row. A connected or needs-sign-in row shows Manage instead (see `existing`). */
+ * second row. `not-connected` is what Disconnect or a timed-out sign-in leaves behind. A
+ * connected or needs-sign-in row shows Manage instead (see `existing`). */
 const REUSABLE_STATES = new Set([
+  "not-connected",
   "cancelled",
   "discovery-failed",
   "awaiting-consent",
@@ -50,7 +52,7 @@ export function DirectMcpSearch({
   onConnectCatalog?: (
     descriptor: IntegrationDescriptor,
     token: string | undefined,
-    hooks: { onWaiting: (waiting: Waiting) => void },
+    hooks: { onWaiting: (waiting: Waiting) => void; signal: AbortSignal },
     connection?: IntegrationConnection,
   ) => Promise<IntegrationConnection | null>;
   onManage?: (connection: IntegrationConnection) => void;
@@ -164,7 +166,7 @@ export function DirectMcpSearch({
         const connection = await onConnectCatalog?.(
           target.descriptor,
           needsToken ? token.trim() : undefined,
-          { onWaiting },
+          { onWaiting, signal: controller.signal },
           reusable && REUSABLE_STATES.has(reusable.state) ? reusable : undefined,
         );
         if (mine !== attempt.current || !connection) return;

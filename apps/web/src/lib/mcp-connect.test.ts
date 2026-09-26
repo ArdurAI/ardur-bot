@@ -386,11 +386,30 @@ describe("MCP browser consent", () => {
       {
         id: "connection",
         connectionState: "connected",
+        // A static-credential server is always oauthStatus "none"; the rule that
+        // treats "connected" + "none" as a mid-disconnect race applies only while
+        // polling an open attempt, not to this immediate probe-failure classification.
+        oauthStatus: "none",
+        enabled: true,
         lastError: "Could not reach this integration. Try again.",
         pendingOauthSessionId: null,
       },
     ]);
     await expect(connectMcpOauth("connection")).resolves.toBe("sign-in-failed");
+    expect(window.open).not.toHaveBeenCalled();
+  });
+  it("reports disabled instead of the raw begin error for a disabled server", async () => {
+    begin.mockRejectedValue(new Error("MCP server endpoint is required for OAuth"));
+    list.mockResolvedValue([
+      {
+        id: "connection",
+        connectionState: "not-connected",
+        oauthStatus: "none",
+        enabled: false,
+        lastError: null,
+      },
+    ]);
+    await expect(connectMcpOauth("connection")).resolves.toBe("disabled");
     expect(window.open).not.toHaveBeenCalled();
   });
   it("reports a post-consent failure instead of a completed sign-in", async () => {

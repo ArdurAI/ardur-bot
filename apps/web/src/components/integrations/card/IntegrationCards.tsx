@@ -4,7 +4,7 @@ import type {
   IntegrationDescriptor,
   McpServer,
 } from "@ardurbot/contracts";
-import { mcpInvalidTokenMessage } from "@ardurbot/contracts";
+import { MCP_INVALID_TOKEN_CODE, mcpErrorCode } from "@ardurbot/contracts";
 import { Button, Input } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
 import { useEffect, useRef, useState } from "react";
@@ -135,8 +135,7 @@ export function IntegrationCards({
       if (current.state === "connected") setSelected(current.id);
       return current.state === "connected";
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "";
-      setError(message === mcpInvalidTokenMessage() ? "token" : "load");
+      setError(mcpErrorCode(caught) === MCP_INVALID_TOKEN_CODE ? "token" : "load");
       return false;
     } finally {
       setBusy(null);
@@ -320,10 +319,10 @@ export function IntegrationCards({
                     ],
                   })),
                 onWaiting: hooks.onWaiting,
+                signal: hooks.signal,
               });
             } catch (caught) {
-              const message = caught instanceof Error ? caught.message : "";
-              setError(message === mcpInvalidTokenMessage() ? "token" : "load");
+              setError(mcpErrorCode(caught) === MCP_INVALID_TOKEN_CODE ? "token" : "load");
               return null;
             }
           }}

@@ -144,6 +144,16 @@ it("does not offer Manage for a sign-in that just needs another try", async () =
   );
 });
 
+it("offers Manage for a disabled server, since enabling it needs MCP settings", async () => {
+  api.oauth.mockResolvedValue("disabled");
+  const onOpenMcp = vi.fn();
+  const container = await mount(onOpenMcp);
+  await click("Authorize");
+  expect(container.textContent).toContain("Enable this server first, then sign in.");
+  await click("Manage");
+  expect(onOpenMcp).toHaveBeenCalledExactlyOnceWith("server-1");
+});
+
 it("does not approve a bot when tool discovery failed", async () => {
   api.oauth.mockResolvedValue("sign-in-failed");
   api.list.mockResolvedValue([

@@ -35,7 +35,7 @@ import {
   IntegrationManifestSchema,
   IntegrationResourceConstraintsSchema,
   IntegrationStateSchema,
-  mcpInvalidTokenMessage,
+  MCP_INVALID_TOKEN_CODE,
   mcpSignInDiagnostic,
   SpaceToolPoliciesSchema,
 } from "@ardurbot/contracts";
@@ -356,7 +356,10 @@ export class IntegrationConnections {
         input.token.length > 16_384 ||
         /\s/.test(input.token))
     )
-      throw new ORPCError("BAD_REQUEST", { message: mcpInvalidTokenMessage() });
+      throw new ORPCError("BAD_REQUEST", {
+        message: "Enter a valid token.",
+        data: { code: MCP_INVALID_TOKEN_CODE },
+      });
     if (authKind === "oauth" && (input.token || (descriptor.authKind === "token" && !oauthApp)))
       throw new ORPCError("BAD_REQUEST", {
         message: "Sign-in is not configured for this integration.",

@@ -2,11 +2,13 @@ import type { McpServer } from "@ardurbot/contracts";
 import { Button, Input, Tabs, TabsList, TabsTrigger } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useState } from "react";
+import { mcpSignIn } from "../../lib/mcp-sign-in";
 import { rpc } from "../../lib/rpc";
 
 /**
  * Replaces a custom server's stored token or header. Imported servers keep their own
- * credential form (ImportedServerCredentials); this one is for everything else.
+ * credential form (ImportedServerCredentials); managed, stdio and host-cli servers have
+ * no static credential of this kind; a healthy server has nothing to fix.
  */
 export function McpCredentialFix({
   server,
@@ -27,7 +29,9 @@ export function McpCredentialFix({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
 
-  if (server.imported) return null;
+  if (server.imported || server.managedBy) return null;
+  if (server.transport === "stdio" || server.transport === "host-cli") return null;
+  if (!server.credentialConflict && !mcpSignIn(server.lastError)?.credential) return null;
 
   async function keepToken() {
     setBusy(true);
@@ -36,6 +40,22 @@ export function McpCredentialFix({
       // Headers use full-replace semantics: an empty set drops the stored header
       // without needing its value, and leaves the token untouched.
       await rpc.mcp.servers.update({ id: server.id, headers: {} });
+      onOpenChange(false);
+      await onSaved();
+    } catch {
+      setError(true);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function keepHeader() {
+    setBusy(true);
+    setError(false);
+    try {
+      // `secret: null` drops the stored token without needing its value, and leaves
+      // whichever header is already stored untouched.
+      await rpc.mcp.servers.update({ id: server.id, secret: null });
       onOpenChange(false);
       await onSaved();
     } catch {
@@ -55,6 +75,10 @@ export function McpCredentialFix({
           id: server.id,
           headers: { [headerName.trim() || "Authorization"]: headerValue.trim() },
         });
+      // A saved credential is checked once, the way the add flow does, so the
+      // server's own state says whether it works instead of sending Reconnect
+      // straight back to this form.
+      await rpc.mcp.servers.tools({ serverId: server.id }).catch(() => undefined);
       setToken("");
       setHeaderValue("");
       onOpenChange(false);
@@ -87,10 +111,7 @@ export function McpCredentialFix({
             variant="outline"
             size="sm"
             disabled={busy}
-            onClick={() => {
-              setMode("header");
-              onOpenChange(true);
-            }}
+            onClick={() => void keepHeader()}
           >
             <Trans>Keep header</Trans>
           </Button>

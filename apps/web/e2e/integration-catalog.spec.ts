@@ -262,10 +262,18 @@ test("Find apps connects a token app, waits for an OAuth app, and manages custom
       },
     });
   });
-  await page.route("**/rpc/integrations/status", (route) =>
-    route.fulfill({ json: { json: notionConnection } }),
-  );
   let cancelled = false;
+  // Cancel is a real state transition, not just a dismissed wait: the mocked status
+  // must reflect it so the wait's own poll is what ends it, the way the API does.
+  await page.route("**/rpc/integrations/status", (route) =>
+    route.fulfill({
+      json: {
+        json: cancelled
+          ? { ...notionConnection, state: "cancelled", lastError: "Sign-in was cancelled." }
+          : notionConnection,
+      },
+    }),
+  );
   await page.route("**/rpc/integrations/cancel", (route) => {
     cancelled = true;
     return route.fulfill({ json: { json: { ok: true } } });

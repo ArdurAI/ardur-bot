@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import {
   isLocalMcpHost,
   mcpCredentialConflict,
-  mcpReauthorizationDeclinedMessage,
+  mcpReauthorizationDeclinedDiagnostic,
   mcpSignInDiagnostic,
 } from "@ardurbot/contracts";
 import type { Prisma, PrismaClient } from "@ardurbot/db";
@@ -704,7 +704,7 @@ export class McpOAuthBroker {
         consentStartedAt: null,
         lastError: keepConnection
           ? declined
-            ? mcpReauthorizationDeclinedMessage()
+            ? mcpReauthorizationDeclinedDiagnostic()
             : "Could not complete sign-in. Connect again."
           : current.connectionState === "connected"
             ? mcpSignInDiagnostic()

@@ -488,6 +488,7 @@ it("replaces a custom server's token from its own card, without navigating away"
   } as McpServer;
   fake.list.mockResolvedValue([server]);
   fake.update.mockResolvedValue({});
+  fake.tools.mockResolvedValue({ capturedAt: "", serverVersion: null, account: null, tools: [] });
   await mount();
   await click("Update credential");
   const field = document.querySelector('[aria-label="New access token"]') as HTMLInputElement;
@@ -501,6 +502,63 @@ it("replaces a custom server's token from its own card, without navigating away"
   });
   await click("Save");
   expect(fake.update).toHaveBeenCalledExactlyOnceWith({ id: "reports", secret: "fresh-token" });
+  // A saved credential is checked once, the way the add flow does, so Reconnect
+  // isn't sent straight back to this same form.
+  expect(fake.tools).toHaveBeenCalledExactlyOnceWith({ serverId: "reports" });
+});
+
+it("keeps the header and drops the stale token with one click", async () => {
+  fake.list.mockResolvedValue([
+    {
+      id: "reports",
+      name: "Reports",
+      transport: "streamable_http",
+      oauthStatus: "none",
+      connectionState: "connected",
+      endpoint: "https://tools.example.test/mcp",
+      enabled: true,
+      catalogId: null,
+      hasSecret: true,
+      headerKeys: ["Authorization"],
+      credentialConflict: true,
+      lastError: null,
+    } as McpServer,
+  ]);
+  fake.update.mockResolvedValue({});
+  await mount();
+  await click("Keep header");
+  expect(fake.update).toHaveBeenCalledExactlyOnceWith({ id: "reports", secret: null });
+});
+
+it.each([
+  ["a managed server", { managedBy: "extension" as const }],
+  ["a stdio server", { transport: "stdio" as const }],
+  ["a host-cli server", { transport: "host-cli" as const }],
+  ["a healthy server", {}],
+])("hides Update credential for %s", async (_, override) => {
+  fake.list.mockResolvedValue([
+    {
+      id: "reports",
+      name: "Reports",
+      transport: "streamable_http",
+      oauthStatus: "none",
+      connectionState: "connected",
+      endpoint: "https://tools.example.test/mcp",
+      enabled: true,
+      catalogId: null,
+      hasSecret: true,
+      headerKeys: [] as string[],
+      envKeys: [] as string[],
+      lastError: null,
+      ...override,
+    } as McpServer,
+  ]);
+  const container = await mount();
+  expect(
+    [...container.querySelectorAll("button")].some(
+      (node) => node.textContent === "Update credential",
+    ),
+  ).toBe(false);
 });
 
 it("opens the credential control already focused when Reconnect needs a credential", async () => {

@@ -1,4 +1,4 @@
-import { mcpReauthorizationDeclinedMessage } from "@ardurbot/contracts";
+import { isReauthorizationDeclined } from "@ardurbot/contracts";
 import { desktopBridge } from "./desktop";
 import type { McpOauthResult } from "./mcp-oauth-channel";
 import { MCP_OAUTH_CHANNEL } from "./mcp-oauth-channel";
@@ -18,14 +18,10 @@ export type McpOauthWait = {
 function recordedOauthOutcome(server: {
   connectionState?: string;
   lastError?: string | null;
-  oauthStatus?: string;
 }): McpOauthResult | null {
   if (server.connectionState === "connected") {
-    // Disconnecting mid-wait clears the oauth material without changing this
-    // state; a genuine completion always leaves live tokens behind.
-    if (server.oauthStatus === "none") return "needs-sign-in";
     if (!server.lastError) return "connected";
-    if (server.lastError === mcpReauthorizationDeclinedMessage()) return "cancelled";
+    if (isReauthorizationDeclined(server.lastError)) return "cancelled";
     return "sign-in-failed";
   }
   if (server.connectionState === "discovery-failed") return "sign-in-failed";
@@ -51,6 +47,7 @@ export async function connectMcpOauth(
     });
   } catch (error) {
     const server = (await rpc.mcp.servers.list()).find((item) => item.id === serverId);
+    if (server && !server.enabled) return "disabled";
     if (server && recordedOauthOutcome(server) === "sign-in-failed") return "sign-in-failed";
     if (server?.lastError?.includes("oauth_unavailable")) return "oauth-unavailable";
     throw error;
@@ -66,6 +63,10 @@ export async function connectMcpOauth(
       if (!server) return "needs-sign-in";
       if (server.pendingOauthSessionId === started.sessionId) return null;
       if (server.pendingOauthSessionId) return "replaced";
+      // Disconnecting mid-wait clears the oauth material without changing
+      // connectionState; a genuine completion always leaves live tokens behind.
+      if (server.connectionState === "connected" && server.oauthStatus === "none")
+        return "needs-sign-in";
       return recordedOauthOutcome(server);
     },
     {

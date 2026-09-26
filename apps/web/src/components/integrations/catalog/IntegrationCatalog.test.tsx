@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import type { IntegrationConnection, IntegrationDescriptor } from "@ardurbot/contracts";
-import { mcpInvalidTokenMessage, mcpSignInDiagnostic } from "@ardurbot/contracts";
+import { MCP_INVALID_TOKEN_CODE, mcpSignInDiagnostic } from "@ardurbot/contracts";
+import { ORPCError } from "@orpc/client";
 import type { ComponentProps, ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -1092,6 +1093,41 @@ describe("Settings integration catalog", () => {
     }
   });
 
+  it("reuses a built-in connection Disconnect or a timed-out sign-in left not-connected", async () => {
+    const notion = {
+      ...catalog[0]!,
+      id: "notion",
+      name: "Notion",
+      authKind: "oauth" as const,
+      endpoint: "https://mcp.notion.example.test/mcp",
+    };
+    const unfinished: IntegrationConnection = {
+      ...connected,
+      id: "notion-1",
+      catalogId: "notion",
+      state: "not-connected",
+      manifest: null,
+    };
+    api.list.mockImplementation(async () => ({ catalog: [notion], connections: [unfinished] }));
+    api.connect.mockResolvedValue({
+      connection: { ...unfinished, state: "awaiting-consent" },
+      authorizationUrl: "https://auth.example.test/authorize",
+      sessionId: "session",
+    });
+    await openResults([
+      listing("Notion", "https://mcp.notion.example.test/mcp", {
+        type: "oauth",
+        headerName: null,
+        note: null,
+      }),
+    ]);
+    // Its own card would resume this row too; Find apps must not start a second one.
+    await click(resultConnect("Notion")!);
+    expect(api.connect).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ catalogId: "notion", connectionId: "notion-1" }),
+    );
+  });
+
   it("disables Connect until sign-in starts and shows an expired sign-in as a sentence", async () => {
     const notion = {
       ...catalog[0]!,
@@ -1150,6 +1186,58 @@ describe("Settings integration catalog", () => {
       });
       expect(container.textContent).toContain("The saved sign-in expired. Sign in again.");
       expect(container.textContent).not.toContain("refresh_unavailable");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("stops polling a built-in app's sign-in wait when Find apps closes", async () => {
+    const notion = remoteApp("notion", "Notion", "https://mcp.notion.example.test/mcp");
+    api.list.mockImplementation(async () => ({ catalog: [notion], connections: [] }));
+    vi.spyOn(window, "open").mockReturnValue({
+      close: vi.fn(),
+      location: { href: "" },
+    } as unknown as Window);
+    vi.useFakeTimers();
+    try {
+      api.connect.mockResolvedValue({
+        connection: {
+          ...connected,
+          id: "notion-1",
+          catalogId: "notion",
+          state: "awaiting-consent",
+          lastError: null,
+        },
+        authorizationUrl: "https://auth.example.test/authorize",
+        sessionId: "session",
+      });
+      api.status.mockResolvedValue({
+        ...connected,
+        id: "notion-1",
+        catalogId: "notion",
+        state: "awaiting-consent",
+        lastError: null,
+      });
+      await openResults([
+        listing("Notion", "https://mcp.notion.example.test/mcp", {
+          type: "oauth",
+          headerName: null,
+          note: null,
+        }),
+      ]);
+      await click(resultConnect("Notion")!);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000);
+      });
+      const polls = api.status.mock.calls.length;
+      expect(polls).toBeGreaterThan(0);
+      // Closing Find apps unmounts the wait; the sign-in itself keeps running on the
+      // server, but this page must stop asking about it.
+      await click(button("Find apps"));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(30_000);
+      });
+      expect(api.status.mock.calls.length).toBe(polls);
     } finally {
       vi.useRealTimers();
     }
@@ -1215,7 +1303,12 @@ describe("Settings integration catalog", () => {
       enabled: true,
       results: [listing("GitHub directory", "https://api.githubcopilot.com/mcp/")],
     });
-    api.connect.mockRejectedValue(new Error(mcpInvalidTokenMessage()));
+    api.connect.mockRejectedValue(
+      new ORPCError("BAD_REQUEST", {
+        message: "Enter a valid token.",
+        data: { code: MCP_INVALID_TOKEN_CODE },
+      }),
+    );
     await mount();
     await click(button("Find apps"));
     await fill("Search apps", "GitHub");
@@ -1290,6 +1383,19 @@ describe("Settings integration catalog", () => {
       "This sign-in window was replaced by a newer one. Finish signing in there, or start again.",
     );
     expect(resultConnect("Figma")?.disabled).toBe(false);
+  });
+
+  it("says to enable a disabled server first, instead of the generic connect failure", async () => {
+    api.catalogSearch.mockResolvedValue({ enabled: true, results: [publicResult] });
+    createdServers();
+    api.oauth.mockResolvedValue("disabled");
+    await mount();
+    await click(button("Find apps"));
+    await fill("Search apps", "Figma");
+    await click(button("Search integrations.sh"));
+    await click(resultConnect("Figma")!);
+    expect(container.textContent).toContain("Enable this server first, then sign in.");
+    expect(container.textContent).not.toContain("Could not connect or load integrations.");
   });
 
   it("starts the catalog flow with a token typed beside a built-in URL", async () => {

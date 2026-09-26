@@ -46,18 +46,34 @@ export function mcpSignInDiagnostic(code?: string | null): string {
   return code ? `Needs sign-in (${code}).` : "Needs sign-in.";
 }
 
+const REAUTHORIZATION_DECLINED = /^Sign-in was declined(?: \(([a-z_]+)\))?\.$/;
+
 /**
  * Recorded as lastError when a person declines a re-authorization of a server that stays
  * connected on its prior tokens. Never a `mcpSignInDiagnostic`: the server does not need
- * sign-in.
+ * sign-in. Follows the same bracketed-code shape so a reader checks the code, not the
+ * sentence, the way `mcpSignInDiagnostic`/`mcpSignIn` already do.
  */
-export function mcpReauthorizationDeclinedMessage(): string {
-  return "Sign-in was declined.";
+export function mcpReauthorizationDeclinedDiagnostic(reason?: string | null): string {
+  return reason ? `Sign-in was declined (${reason}).` : "Sign-in was declined.";
 }
 
-/** Rejected before any attempt is made to use a typed token that fails basic validation. */
-export function mcpInvalidTokenMessage(): string {
-  return "Enter a valid token.";
+/** True when `recorded` is a declined-re-authorization diagnostic, any reason or none. */
+export function isReauthorizationDeclined(recorded: string | null | undefined): boolean {
+  return REAUTHORIZATION_DECLINED.test(recorded?.trim() ?? "");
+}
+
+/** The ORPC error code for a typed token that fails basic validation before any attempt
+ * is made to use it. Carried in the error's `data`, not its message. */
+export const MCP_INVALID_TOKEN_CODE = "invalid_token";
+
+/** The machine-readable code an ORPC error carries in its `data`, when present. */
+export function mcpErrorCode(error: unknown): string | undefined {
+  if (!error || typeof error !== "object" || !("data" in error)) return undefined;
+  const data = (error as { data?: unknown }).data;
+  if (!data || typeof data !== "object" || !("code" in data)) return undefined;
+  const code = (data as { code?: unknown }).code;
+  return typeof code === "string" ? code : undefined;
 }
 
 export const MCP_ONE_CREDENTIAL = "Choose one credential: a token or a header.";

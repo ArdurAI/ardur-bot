@@ -3611,6 +3611,17 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
                 /* Existing malformed secrets are replaced only when new credentials are supplied. */
               }
             }
+            // `secret: null` drops a stale token without a new value, so the header
+            // it leaves behind must be the one already stored, not a blank slate.
+            const existingHeaders = (existingMaterial.headers as Record<string, string>) ?? {};
+            if (
+              "secret" in input &&
+              input.secret === null &&
+              Object.keys(existingHeaders).length === 0
+            )
+              throw new ORPCError("BAD_REQUEST", {
+                message: "This server would be left with no credential.",
+              });
             const config =
               "config" in input
                 ? input.config
@@ -3622,8 +3633,15 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
                     transport: existing.transport as "streamable_http" | "sse",
                     endpoint: existing.endpoint!,
                     // One credential: the new one replaces the other kind, header names included.
-                    headers: "headers" in input ? input.headers : {},
-                    secret: "secret" in input ? input.secret : undefined,
+                    // Dropping a token via `secret: null` re-supplies the stored header
+                    // unchanged, since nothing new was typed for it.
+                    headers:
+                      "headers" in input
+                        ? input.headers
+                        : "secret" in input && input.secret === null
+                          ? existingHeaders
+                          : {},
+                    secret: "secret" in input ? (input.secret ?? undefined) : undefined,
                   };
             if (!("config" in input) && existing.transport === "stdio") {
               throw new ORPCError("BAD_REQUEST", { message: "A remote MCP server is required" });

@@ -400,7 +400,9 @@ export function McpApprovalCard({
           const recorded = result === "sign-in-failed" ? await recordedError() : null;
           setError(mcpOutcomeSentence(result, userCancelled.current, recorded));
           setCredentialFix(
-            result === "oauth-unavailable" || mcpSignIn(recorded)?.credential === true,
+            result === "oauth-unavailable" ||
+              result === "disabled" ||
+              mcpSignIn(recorded)?.credential === true,
           );
           setState("pending");
           return;
