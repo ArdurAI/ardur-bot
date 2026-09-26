@@ -23,6 +23,8 @@ export type LocalImportTool = z.infer<typeof LocalImportToolSchema>;
 export type LocalImportCategory = z.infer<typeof LocalImportCategorySchema>;
 export const LOCAL_IMPORT_BYTES = 96 * 1024;
 export const LOCAL_IMPORT_ITEMS = 4096;
+/** A run reports every failed item in its count and lists at most this many. */
+export const LOCAL_IMPORT_FAILURES = 20;
 export const LOCAL_IMPORT_PRIVACY =
   "Ardur Bot reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history.";
 export const LOCAL_IMPORT_EXCLUSIONS =
@@ -78,6 +80,8 @@ export const LocalImportManifestSchema = z.strictObject({
     .max(7),
   items: z.array(LocalImportItemSchema).max(LOCAL_IMPORT_ITEMS),
   limited: z.boolean(),
+  // Present when every limit that applied could count the files it left out.
+  unscanned: z.number().int().positive().optional(),
 });
 export type LocalImportManifest = z.infer<typeof LocalImportManifestSchema>;
 export const ImportedProvenanceSchema = z.strictObject({
@@ -127,6 +131,8 @@ export const LocalImportActionSchema = z.discriminatedUnion("action", [
     scanId: id,
     categories: z.array(LocalImportCategorySchema).min(1).max(6),
     tool: LocalImportToolSchema.optional(),
+    // Retries one listed item without changing the saved selection.
+    itemId: id.optional(),
   }),
   z.strictObject({ action: z.literal("undo"), tool: LocalImportToolSchema }),
 ]);
@@ -138,8 +144,21 @@ export const LocalImportResultSchema = z.strictObject({
   removed: z.number().int().nonnegative(),
   skipped: z.number().int().nonnegative(),
   conflicts: z.number().int().nonnegative(),
+  failed: z.number().int().nonnegative(),
 });
 export type LocalImportResult = z.infer<typeof LocalImportResultSchema>;
+export const LocalImportFailureSchema = z.strictObject({
+  itemId: id,
+  tool: LocalImportToolSchema,
+  category: LocalImportCategorySchema,
+  relativePath: z.string().max(1024),
+  // "credential": the text looks like it holds a credential. Details stay in the worker log.
+  reason: z.enum(["credential", "failed"]),
+});
+export type LocalImportFailure = z.infer<typeof LocalImportFailureSchema>;
+/** Why a whole run stopped: the host transport failed, the scan is stale, or anything else. */
+export const LocalImportStopSchema = z.enum(["host", "rescan", "failed"]);
+export type LocalImportStop = z.infer<typeof LocalImportStopSchema>;
 export const LocalImportStatusSchema = z.strictObject({
   manifest: LocalImportManifestSchema.nullable(),
   autoImport: z.boolean(),
@@ -154,8 +173,36 @@ export const LocalImportResponseSchema = z.strictObject({
   manifest: LocalImportManifestSchema.optional(),
   preview: LocalImportReadSchema.optional(),
   result: LocalImportResultSchema.optional(),
+  failures: z.array(LocalImportFailureSchema).max(LOCAL_IMPORT_FAILURES).optional(),
+  stopped: LocalImportStopSchema.optional(),
 });
 export type LocalImportResponse = z.infer<typeof LocalImportResponseSchema>;
+export type LocalImportSummary = { result: LocalImportResult; failures: LocalImportFailure[] };
+/** Adds one import response to what the page shows; a retried item leaves the failure list. */
+export function addLocalImportResult(
+  summary: LocalImportSummary | null,
+  response: LocalImportResponse,
+  retried?: LocalImportFailure,
+): LocalImportSummary {
+  const result: LocalImportResult = {
+    created: 0,
+    updated: 0,
+    unchanged: 0,
+    removed: 0,
+    skipped: 0,
+    conflicts: 0,
+    failed: 0,
+    ...summary?.result,
+  };
+  if (retried) result.failed = Math.max(0, result.failed - 1);
+  for (const key of Object.keys(result) as (keyof LocalImportResult)[])
+    result[key] += response.result?.[key] ?? 0;
+  const failures = [
+    ...(summary?.failures ?? []).filter((failure) => failure.itemId !== retried?.itemId),
+    ...(response.failures ?? []),
+  ].slice(0, LOCAL_IMPORT_FAILURES);
+  return { result, failures };
+}
 export const LocalImportJobSchema = z.strictObject({
   requestId: z.string().uuid(),
   spaceId: z.string().min(1).max(160),

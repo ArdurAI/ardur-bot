@@ -17,6 +17,7 @@ test("owner previews, imports and removes local tool data", async ({ page }, tes
   });
   await page.goto("/app");
   let imported = false;
+  const skill = localImportFixture.items[1]!;
   await page.route("**/rpc/localImport/**", async (route) => {
     const endpoint = new URL(route.request().url()).pathname.split("/").at(-1);
     const action = route.request().postDataJSON()?.json;
@@ -38,13 +39,27 @@ test("owner previews, imports and removes local tool data", async ({ page }, tes
             }
           : {
               result: {
-                created: imported ? 2 : 0,
+                created: action?.itemId ? 1 : imported ? 1 : 0,
                 removed: imported ? 0 : 2,
                 updated: 0,
                 unchanged: 0,
                 skipped: 0,
                 conflicts: 0,
+                failed: imported && !action?.itemId ? 1 : 0,
               },
+              ...(imported && !action?.itemId
+                ? {
+                    failures: [
+                      {
+                        itemId: skill.id,
+                        tool: skill.tool,
+                        category: skill.category,
+                        relativePath: skill.relativePath,
+                        reason: "failed",
+                      },
+                    ],
+                  }
+                : {}),
             };
     await route.fulfill({ contentType: "application/json", body: JSON.stringify({ json }) });
   });
@@ -58,6 +73,17 @@ test("owner previews, imports and removes local tool data", async ({ page }, tes
   await page.getByRole("button", { name: "Import all", exact: true }).click();
   await expect(page.getByText("Auto-import changes", { exact: true })).toBeVisible();
   await expect(page.getByRole("switch", { name: "Auto-import changes" })).not.toBeChecked();
+  await expect(page.getByText("Could not be saved.", { exact: true })).toBeVisible();
+  await captureScreenshot(page, testInfo, "local-import-failed-item");
+  await page.getByRole("button", { name: `Retry ${skill.relativePath}` }).click();
+  await expect(
+    page.getByText(
+      "2 imported, 0 updated, 0 unchanged, 0 removed, 0 skipped, 0 conflicts, 0 failed.",
+      {
+        exact: true,
+      },
+    ),
+  ).toBeVisible();
   await captureScreenshot(page, testInfo, "local-import-imported");
   await page.getByRole("button", { name: "Remove imported items from Claude Code" }).click();
   await expect(
