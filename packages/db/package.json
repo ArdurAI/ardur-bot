@@ -9,7 +9,12 @@
       "development": "./src/index.ts",
       "default": "./src/index.ts"
     },
-    "./testing/delegation": "./src/delegation-test-fixture.ts"
+    "./testing/delegation": "./src/delegation-test-fixture.ts",
+    "./migrate": {
+      "types": "./src/migrate-sql.ts",
+      "development": "./src/migrate-sql.ts",
+      "default": "./src/migrate-sql.ts"
+    }
   },
   "scripts": {
     "generate": "prisma generate",

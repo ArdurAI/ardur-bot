@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -55,6 +55,12 @@ test.afterAll(async () => {
 
 test.beforeEach(async () => {
   userData = await mkdtemp(path.join(tmpdir(), "ardurbot-desktop-e2e-"));
+  // A Compose install: This computer waits for Continue instead of starting local mode.
+  // local-mode.spec.ts covers a fresh install.
+  await mkdir(path.join(userData, "stack"));
+  await writeFile(path.join(userData, "stack", ".env"), "POSTGRES_PASSWORD=fixture\n", {
+    mode: 0o600,
+  });
 });
 
 test.afterEach(async () => {

@@ -98,6 +98,22 @@ describe("system controller", () => {
     expect(f.controller.state().storage).toEqual({ path: null, canMove: false, progress: null });
     await expect(f.controller.moveStorage(false)).rejects.toThrow("managed by the server");
   });
+  it("resets local data only while this app keeps it", async () => {
+    const f = fixture();
+    let local = false;
+    const reset = vi.fn(async () => true);
+    const controller = new SystemController({
+      ...f.deps,
+      localData: { available: () => local, reset },
+    });
+    await controller.initialize();
+    expect(controller.state().localData).toBe(false);
+    await expect(controller.resetLocalData()).rejects.toThrow("managed by the server");
+    expect(reset).not.toHaveBeenCalled();
+    local = true;
+    expect((await controller.resetLocalData()).localData).toBe(true);
+    expect(reset).toHaveBeenCalledOnce();
+  });
   it("ignores a delayed routine result after quitting", async () => {
     const f = fixture();
     await f.controller.initialize();

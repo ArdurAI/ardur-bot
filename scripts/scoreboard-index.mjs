@@ -403,6 +403,13 @@ async function exists(file) {
     return false;
   }
 }
+async function directoryHasEntries(directory) {
+  try {
+    return (await readdir(directory)).length > 0;
+  } catch {
+    return false;
+  }
+}
 
 /** A run that does not extend a durable chain indexes only its own commits: base to head, or head. */
 export function selectCommitRange({ base, head }) {
@@ -462,7 +469,6 @@ export function planEvidenceRecords({ commits, pendingReason, headCommit = null 
       commit: commit.commit,
       parentCommit: commit.parentCommit,
       pendingReason: attempted ? pendingReason : "not-measured",
-      envelope: null,
     };
   });
 }
@@ -862,12 +868,14 @@ async function startNewChain(root, origin) {
  * A restored chain that fails verification never blocks a later run: it starts a fresh chain
  * instead of rethrowing, named `schema-upgrade` for a schema-version mismatch (expected after a
  * bump; the versioned artifact name means this should be rare) and `restore-failed` for any other
- * verification failure (a corrupted or tampered upload). `warn` names the failure code and the
- * artifact so a maintainer can find and delete the unreadable upload.
+ * verification failure (a corrupted or tampered upload). `warn` names the failure code, the
+ * artifact, and (when known) the run that uploaded it, so a maintainer can find and delete the
+ * unreadable upload.
  */
 export async function restoreIndex(source, root, missingReason, options = {}) {
   const warn = options.warn ?? defaultWarn;
   const artifact = options.artifact ?? "the restored index";
+  const runId = Number.isSafeInteger(options.runId) ? options.runId : null;
   const foundChain = missingReason == null || missingReason === "";
   if (await exists(recordsPath(source))) {
     try {
@@ -876,9 +884,10 @@ export async function restoreIndex(source, root, missingReason, options = {}) {
       if (!(error instanceof ScoreboardIndexError)) throw error;
       const origin =
         error.code === "unsupported-index-schema" ? "schema-upgrade" : "restore-failed";
+      const runLabel = runId !== null ? ` from run ${runId}` : "";
       warn(
-        `${artifact} failed verification (${error.code}) and was not restored; starting a new ` +
-          `chain instead. Delete that artifact once its replacement has uploaded.`,
+        `${artifact}${runLabel} failed verification (${error.code}) and was not restored; ` +
+          `starting a new chain instead. Delete that artifact once its replacement has uploaded.`,
       );
       return startNewChain(root, origin);
     }
@@ -1338,14 +1347,40 @@ const NO_EVIDENCE_DETAIL =
   "No measured evidence exists for this release. To publish a preview now, run the release " +
   "workflow by hand with an evidence_waiver reason.";
 
+/** The four reports a release comparison requires, keyed as `evaluatePublicationGate`'s input is. */
+const REPORT_NAME_BY_KEY = {
+  parent: "parent.json",
+  candidate: "candidate.json",
+  fixedRelease: "fixed-release.json",
+  policy: "policy.json",
+};
+
+function reportList(keys) {
+  const names = keys.map((key) => REPORT_NAME_BY_KEY[key]);
+  return names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
+}
+
+/** A partial set never suggests the waiver: the waiver only ever helps when nothing was uploaded. */
+function partialEvidenceDetail(absentKeys) {
+  const list = reportList(absentKeys);
+  const pronoun = absentKeys.length === 1 ? "it" : "them";
+  return `This release run did not upload ${list}. Upload ${pronoun} with the other reports and run the release again.`;
+}
+
+/** Distinct from `partialEvidenceDetail`: this file was uploaded, it just could not be parsed. */
+function unreadableReportDetail(key) {
+  const name = REPORT_NAME_BY_KEY[key];
+  return `${name} could not be read. Fix or re-upload it and run the release again.`;
+}
+
 export async function evaluatePublicationGate(input) {
   const scoreboard = await loadScoreboard();
   const reasons = [];
   const unknowns = [];
-  const push = (code, scope, detail = code) => {
+  const push = (code, scope, detail = code, extra = {}) => {
     let text = typeof detail === "string" ? detail : code;
     if (text.length > 240 || PRIVATE_MARKERS.some((marker) => text.includes(marker))) text = code;
-    reasons.push({ code, scope, detail: text });
+    reasons.push({ code, scope, detail: text, ...extra });
   };
   if (input.unmapped) push("unmapped-artifact", "artifacts");
   for (const name of input.energyRejections ?? [])
@@ -1359,8 +1394,27 @@ export async function evaluatePublicationGate(input) {
   let tiered = false;
   let tierMetricIds = null;
   const undeclaredIds = [];
-  if (!input.parent || !input.candidate || !input.fixedRelease || !input.policy) {
-    push("reports-missing", "reports", NO_EVIDENCE_DETAIL);
+  const missingReports = Object.keys(REPORT_NAME_BY_KEY).filter((key) => !input[key]);
+  if (missingReports.length > 0) {
+    const unreadableKeys = missingReports.filter((key) =>
+      (input.unreadableReports ?? []).includes(key),
+    );
+    const absentKeys = missingReports.filter((key) => !unreadableKeys.includes(key));
+    // A file that exists but failed to parse is never "not uploaded": name it and tell the
+    // operator to fix or re-upload it, rather than sending them looking for an upload problem.
+    for (const key of unreadableKeys) push("reports-missing", key, unreadableReportDetail(key));
+    if (absentKeys.length > 0)
+      push(
+        "reports-missing",
+        "reports",
+        // The waiver only ever helps an operator who uploaded nothing at all: offer it only when
+        // every report is absent and the reports directory itself is empty, never when it holds
+        // an unreadable file or an unrelated one.
+        absentKeys.length === Object.keys(REPORT_NAME_BY_KEY).length &&
+          !input.reportsDirectoryHasEntries
+          ? NO_EVIDENCE_DETAIL
+          : partialEvidenceDetail(absentKeys),
+      );
   } else {
     if (
       releasePolicy &&
@@ -1392,16 +1446,19 @@ export async function evaluatePublicationGate(input) {
         candidate: input.candidate,
         fixedRelease: input.fixedRelease,
       });
+    // An undeclared budget blocks the run unless the comparison is tiered by report: tiered
+    // scoring already excludes it from the blockers below, so it is only ever advisory there.
     for (const reason of verdict?.reasons ?? [])
       push(
         reason.code,
         reason.scope,
         reason.code === "undeclared-budget" ? undeclaredDetail(reason.scope) : reason.detail,
+        reason.code === "undeclared-budget" ? { blocks: !tiered } : {},
       );
     candidateReport = verdict?.evidence?.candidate.report ?? null;
     if (tiered)
       for (const id of undeclaredIds)
-        push("undeclared-budget", `candidate:${id}`, undeclaredDetail(id));
+        push("undeclared-budget", `candidate:${id}`, undeclaredDetail(id), { blocks: false });
   }
   const candidateSet = candidateEvidenceSet(input.candidateEvidence, input.candidateReports);
   const satisfiedBy = new Map();
@@ -1834,6 +1891,21 @@ async function readJson(file) {
   }
 }
 
+/** Like `readJson`, but tells a missing file apart from one that exists and failed to parse. */
+async function loadReport(file) {
+  let text;
+  try {
+    text = await readFile(file, "utf8");
+  } catch {
+    return { value: null, unreadable: false };
+  }
+  try {
+    return { value: JSON.parse(text), unreadable: false };
+  } catch {
+    return { value: null, unreadable: true };
+  }
+}
+
 /**
  * The extra candidate reports the gate judges: a public, parseable envelope of the same build as
  * `candidate.json`. Any other `candidate-*.json` is unjudged; the gate refuses it by name and
@@ -1983,14 +2055,10 @@ async function runWaivedRelease(options, files, unmapped) {
   if (options.trigger !== "workflow_dispatch") push("waiver-not-permitted", "trigger");
   const waiver = parseEvidenceWaiver(options.waiver, options.actor ?? "");
   if (!waiver) push("invalid-waiver", "waiver");
-  const supplied = await Promise.all(
-    [...REPORT_FILES, "energy.json"].map((name) => exists(path.join(options.reportsRoot, name))),
-  );
-  const extras = await judgeCandidateReports(options.reportsRoot, null);
+  // A report the waiver must refuse beside is any entry at all in the reports directory, whatever
+  // it is named or how deeply it is nested — no naming check can be blind to it.
   if (
-    options.reportsPresent === true ||
-    supplied.some(Boolean) ||
-    extras.unjudged.length ||
+    (await directoryHasEntries(options.reportsRoot)) ||
     files.some((file) => file.name.startsWith("scoreboard-"))
   )
     push("waiver-with-evidence", "reports");
@@ -2070,9 +2138,13 @@ export async function runReleaseGate(options) {
     energyTargets = energy.observed;
     energyRejections = energy.rejections;
   }
-  const [parent, candidate, fixedRelease, policy] = await Promise.all(
-    REPORT_FILES.map((name) => readJson(path.join(options.reportsRoot, name))),
+  const loadedReports = await Promise.all(
+    REPORT_FILES.map((name) => loadReport(path.join(options.reportsRoot, name))),
   );
+  const [parent, candidate, fixedRelease, policy] = loadedReports.map((report) => report.value);
+  const reportKeys = Object.keys(REPORT_NAME_BY_KEY);
+  const unreadableReports = reportKeys.filter((_key, index) => loadedReports[index].unreadable);
+  const reportsDirectoryHasEntries = await directoryHasEntries(options.reportsRoot);
   const attachedCandidate = files.find((file) => file.name === "scoreboard-candidate.json");
   let attachedEvidenceDigest = null;
   let attachedEvidenceValid = false;
@@ -2111,6 +2183,8 @@ export async function runReleaseGate(options) {
     energyTargets,
     energyRejections,
     unmapped,
+    unreadableReports,
+    reportsDirectoryHasEntries,
     attachedEvidenceDigest,
     attachedEvidenceValid,
     candidateSha: options.candidateSha,
@@ -2324,7 +2398,7 @@ export async function runIndexPush(options) {
     });
     const indexedAt = options.indexedAt ?? now.toISOString();
     const inputs = planned.map((item) => {
-      const { prior, attempt, supersedes } = nextFor(existing, {
+      const { attempt, supersedes } = nextFor(existing, {
         commit: item.commit,
         suiteHash: scoreboard.suiteHash,
         environment: options.environment,
@@ -2332,7 +2406,9 @@ export async function runIndexPush(options) {
         tier,
       });
       return {
-        status: prior.some((entry) => entry.status === "measured") ? "rejected" : "pending",
+        // No caller supplies an actual measurement for this push, so no prior record here is ever
+        // `measured`, and this record is always `pending`.
+        status: "pending",
         tier,
         mode,
         commit: item.commit,
@@ -2350,7 +2426,6 @@ export async function runIndexPush(options) {
         enumerationStart,
         enumerationReason,
         pendingReason: item.pendingReason,
-        envelope: null,
       };
     });
     const appended = await normalizeRecords(options.root, inputs, existing);
@@ -2503,21 +2578,30 @@ export async function findPriorIndexArtifact({
       );
     let expired = false;
     let sawRun = false;
-    let newestCandidateRunId = null;
+    let schemaUpgrade = false;
     for (const run of candidates) {
       seen.add(run.id);
       const createdAt = Date.parse(run.created_at);
       if (!Number.isFinite(createdAt) || createdAt < windowStart.getTime()) break;
       sawRun = true;
-      if (newestCandidateRunId === null) newestCandidateRunId = run.id;
-      const artifacts = (
-        await listRunArtifacts(request, repository, run.id, scope.artifact)
-      ).filter((artifact) => artifact.workflow_run?.id === run.id);
-      if (artifacts.some((artifact) => artifact.expired === false))
-        return { live: run.id, expired, sawRun, newestCandidateRunId };
-      if (artifacts.some((artifact) => artifact.expired === true)) expired = true;
+      // One unfiltered listing per run covers both the current-schema search and, should that
+      // fail for every run in the window, whether any of them uploaded an older schema's name.
+      const artifacts = (await listRunArtifacts(request, repository, run.id, undefined)).filter(
+        (artifact) => artifact.workflow_run?.id === run.id,
+      );
+      const current = artifacts.filter((artifact) => artifact.name === scope.artifact);
+      if (current.some((artifact) => artifact.expired === false))
+        return { live: run.id, expired, sawRun, schemaUpgrade };
+      if (current.some((artifact) => artifact.expired === true)) expired = true;
+      if (
+        !schemaUpgrade &&
+        artifacts.some(
+          (artifact) => scope.otherSchema.test(artifact.name) && artifact.name !== scope.artifact,
+        )
+      )
+        schemaUpgrade = true;
     }
-    return { live: null, expired, sawRun, newestCandidateRunId };
+    return { live: null, expired, sawRun, schemaUpgrade };
   }
 
   async function inspectRange(start, end, root) {
@@ -2541,7 +2625,7 @@ export async function findPriorIndexArtifact({
         live: older.live,
         expired: newer.expired || older.expired,
         sawRun: newer.sawRun || older.sawRun,
-        newestCandidateRunId: newer.newestCandidateRunId ?? older.newestCandidateRunId,
+        schemaUpgrade: newer.schemaUpgrade || older.schemaUpgrade,
       };
     }
     return walkSlice(listed.runs);
@@ -2550,20 +2634,11 @@ export async function findPriorIndexArtifact({
   const found = await inspectRange(listedFrom, now, true);
   if (found.live != null) return { runId: found.live, missingReason: null };
   if (found.expired) return { runId: null, missingReason: "expired-after-90-days-inactivity" };
-  if (found.sawRun) {
-    // The current-schema artifact was never found. Before calling it truly missing, check
-    // whether the newest candidate uploaded an older schema's name instead of nothing at all.
-    const all = (
-      await listRunArtifacts(request, repository, found.newestCandidateRunId, undefined)
-    ).filter((artifact) => artifact.workflow_run?.id === found.newestCandidateRunId);
-    if (
-      all.some(
-        (artifact) => scope.otherSchema.test(artifact.name) && artifact.name !== scope.artifact,
-      )
-    )
-      return { runId: null, missingReason: "schema-upgrade" };
-    return { runId: null, missingReason: "prior-artifact-missing" };
-  }
+  if (found.sawRun)
+    return {
+      runId: null,
+      missingReason: found.schemaUpgrade ? "schema-upgrade" : "prior-artifact-missing",
+    };
   return {
     runId: null,
     missingReason: indexJobPredates(windowStart) ? "expired-after-90-days-inactivity" : "first-run",
@@ -2633,9 +2708,10 @@ function githubRequest(apiUrl, token) {
 const WAIVER_ALLOWED_CHARACTERS = "letters, numbers, spaces, and . , ; : ' \" ( ) ! ? & % + -";
 
 /**
- * One plain sentence per reason. `reports-missing` and `undeclared-budget` already read as
- * complete, actionable sentences on their own — they are printed as-is, with no "refused this
- * run" framing, because an undeclared budget does not refuse the run.
+ * One plain sentence per reason. `reports-missing` already reads as a complete, actionable
+ * sentence on its own — it is printed as-is, with no "refused this run" framing. `undeclared-budget`
+ * does too, except when it actually blocks the run (a comparison that is not tiered by report):
+ * there it also names the fix, because the caller prints it as an error rather than a warning.
  */
 export function gateErrorLine(reason) {
   if (reason.code === "invalid-waiver")
@@ -2644,8 +2720,11 @@ export function gateErrorLine(reason) {
       `sentence using only ${WAIVER_ALLOWED_CHARACTERS}, with no slash, "www." host, ` +
       "://scheme, or email address. Rewrite the waiver reason and dispatch again."
     );
-  if (reason.code === "reports-missing" || reason.code === "undeclared-budget")
-    return reason.detail;
+  if (reason.code === "reports-missing") return reason.detail;
+  if (reason.code === "undeclared-budget")
+    return reason.blocks === true
+      ? `${reason.detail} Declare that budget in the release policy before this release can pass.`
+      : reason.detail;
   const what =
     typeof reason.detail === "string" && reason.detail !== reason.code
       ? reason.detail
@@ -2709,7 +2788,10 @@ async function main(argv) {
     return;
   }
   if (command === "restore-index") {
-    await restoreIndex(args.source, args.root, args["missing-reason"], { artifact: args.artifact });
+    await restoreIndex(args.source, args.root, args["missing-reason"], {
+      artifact: args.artifact,
+      runId: Number(args["run-id"]),
+    });
     return;
   }
   if (command === "prior-index") {
@@ -2764,13 +2846,15 @@ async function main(argv) {
       trigger: env("GITHUB_EVENT_NAME"),
       actor: env("GITHUB_TRIGGERING_ACTOR"),
       runId: /^\d+$/.test(env("GITHUB_RUN_ID")) ? Number(env("GITHUB_RUN_ID")) : null,
-      // Whatever this run uploaded as scoreboard-reports, whatever it is named or nested under.
-      reportsPresent: env("SCOREBOARD_REPORTS_PRESENT") === "true",
     });
     if (process.exitCode) {
       const gate = await readJson(outputPath);
-      for (const reason of gate?.reasons ?? [])
-        process.stdout.write(`::error title=Scoreboard release gate::${gateErrorLine(reason)}\n`);
+      for (const reason of gate?.reasons ?? []) {
+        // A non-blocking undeclared budget is a warning, never an error: it did not refuse the run.
+        const warning = reason.code === "undeclared-budget" && reason.blocks !== true;
+        const title = warning ? "::warning" : "::error";
+        process.stdout.write(`${title} title=Scoreboard release gate::${gateErrorLine(reason)}\n`);
+      }
     }
     return;
   }

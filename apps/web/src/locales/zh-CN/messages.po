@@ -4333,6 +4333,10 @@ msgstr "本地"
 msgid "Local access lets bots run commands without asking. Avoid it on shared or public servers."
 msgstr "本地访问权限允许 Bot 无需询问就执行命令。请勿在共享或公开服务器上启用。"
 
+#: src/pages/system/SystemPage.tsx
+msgid "Local data"
+msgstr ""
+
 #: src/pages/customize/IntegrationTable.tsx
 msgid "Local dev"
 msgstr ""
@@ -6165,6 +6169,10 @@ msgstr "重置电脑"
 msgid "Reset computer?"
 msgstr "重置电脑？"
 
+#: src/pages/system/SystemPage.tsx
+msgid "Reset local data"
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Reset password"
 msgstr "重置密码"
@@ -7432,6 +7440,10 @@ msgstr "此文件不是有效的 UTF-8 Markdown。"
 
 #: src/pages/system/SystemPage.tsx
 msgid "This folder is managed by the server."
+msgstr ""
+
+#: src/pages/HostComputerSettings.tsx
+msgid "This folder is not available."
 msgstr ""
 
 #: src/pages/HostComputerPrompt.tsx

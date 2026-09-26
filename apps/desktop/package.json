@@ -7,8 +7,8 @@
   "main": "dist/main.js",
   "scripts": {
     "dev": "pnpm build && electron .",
-    "build": "pnpm --filter @ardurbot/host-service build && node ../../scripts/desktop-version.mjs && tsc -p tsconfig.json && node scripts/copy-static.mjs",
-    "pack": "pnpm --filter @ardurbot/web build && pnpm build && electron-builder --mac --win --linux",
+    "build": "pnpm --filter @ardurbot/host-service build && node ../../scripts/desktop-version.mjs && tsc -p tsconfig.json && node scripts/copy-static.mjs && node scripts/bundle-services.mjs",
+    "pack": "pnpm --filter @ardurbot/web build && pnpm build && electron-builder",
     "pack:dir": "pnpm --filter @ardurbot/web build && pnpm build && electron-builder --dir",
     "check": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run --root ../.. apps/desktop/src",
@@ -17,11 +17,15 @@
   },
   "dependencies": {
     "@ardurbot/contracts": "workspace:*",
-    "electron-updater": "6.8.9"
+    "electron-updater": "6.8.9",
+    "embedded-postgres": "16.14.0-beta.17",
+    "pg": "8.23.0"
   },
   "devDependencies": {
-    "@playwright/test": "1.63.0",
+    "@ardurbot/db": "workspace:*",
     "@ardurbot/ui-tokens": "workspace:*",
+    "@playwright/test": "1.63.0",
+    "@types/pg": "8.23.1",
     "electron": "44.3.0",
     "electron-builder": "26.15.3",
     "typescript": "7.0.2",
@@ -35,8 +39,10 @@
     },
     "files": [
       "dist/**/*",
-      "package.json"
+      "package.json",
+      "!node_modules/@embedded-postgres/**"
     ],
+    "beforePack": "./scripts/stage-embedded-postgres.mjs",
     "extraResources": [
       {
         "from": "../web/dist",
@@ -68,6 +74,18 @@
         "filter": [
           "koffi.node"
         ]
+      },
+      {
+        "from": "build/postgres-modules",
+        "to": "postgres-modules"
+      },
+      {
+        "from": "../../packages/db/prisma/migrations",
+        "to": "migrations"
+      },
+      {
+        "from": "build/services",
+        "to": "services"
       }
     ],
     "extraMetadata": {

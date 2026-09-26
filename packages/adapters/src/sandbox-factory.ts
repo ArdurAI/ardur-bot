@@ -5,7 +5,7 @@ import { BoxSandboxEmulator } from "./box-emulator.js";
 import { BoxSandboxProvider } from "./box-sandbox.js";
 import { DaytonaSandboxEmulator } from "./daytona-emulator.js";
 import { DaytonaSandboxProvider } from "./daytona-sandbox.js";
-import { DesktopSandboxProvider } from "./desktop-sandbox.js";
+import { localDesktopSandbox } from "./desktop-sandbox.js";
 import { DockerSandboxProvider } from "./docker-sandbox.js";
 import { ManagedSandboxEmulator } from "./e2b-emulator.js";
 import { E2BSandboxProvider } from "./e2b-sandbox.js";
@@ -68,9 +68,7 @@ export function createSandboxProvider(kind: string, opts: SandboxProviderOptions
     case "box-emulator":
       return new BoxSandboxEmulator();
     case "desktop":
-      return new DesktopSandboxProvider({
-        root: opts.dataDir,
-      });
+      return localDesktopSandbox(opts.dataDir);
     case "fake":
       return new FakeSandboxProvider();
     default:
