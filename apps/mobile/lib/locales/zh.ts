@@ -1025,4 +1025,6 @@ export const ZH_MESSAGES: Record<string, string> = {
   Comment: "评论",
   "{created} imported, {updated} updated, {unchanged} unchanged, {removed} removed, {skipped} skipped, {conflicts} conflicts.":
     "已导入 {created} 项，已更新 {updated} 项，未更改 {unchanged} 项，已移除 {removed} 项，已跳过 {skipped} 项，冲突 {conflicts} 项。",
+  "Some items exceeded the scan limits ({count} items were not scanned).":
+    "部分项目超出了扫描限制（{count} 项未扫描）。",
 };

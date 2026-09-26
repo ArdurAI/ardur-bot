@@ -1064,4 +1064,6 @@ export const RU_MESSAGES: Record<string, string> = {
   Comment: "Комментарий",
   "{created} imported, {updated} updated, {unchanged} unchanged, {removed} removed, {skipped} skipped, {conflicts} conflicts.":
     "Импортировано: {created}, обновлено: {updated}, без изменений: {unchanged}, удалено: {removed}, пропущено: {skipped}, конфликтов: {conflicts}.",
+  "Some items exceeded the scan limits ({count} items were not scanned).":
+    "Некоторые элементы превысили ограничения сканирования (не просканировано элементов: {count}).",
 };
