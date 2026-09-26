@@ -163,23 +163,30 @@ describe("main window host lifecycle", () => {
 describe("local mode failures in the main process", () => {
   const source = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
 
-  function serviceFailure(state: { setupOpen: boolean; response: number }) {
+  function serviceFailure(state: { setupOpen: boolean; response: number; resetFails?: boolean }) {
     const start = source.indexOf("function showServiceFailure(");
     expect(start).toBeGreaterThan(-1);
-    const end = source.indexOf("\nfunction ", start + 1);
-    const showMessageBox = vi.fn(async () => ({ response: state.response }));
+    const end = source.slice(start + 1).search(/\n(?:async )?function /u) + start + 1;
+    const responses = [state.response];
+    const showMessageBox = vi.fn(async () => ({ response: responses.shift() ?? 2 }));
     const context = {
       setupWindow: state.setupOpen ? new WindowFake() : null,
       mainWindow: new WindowFake(),
       serviceFailurePrompt: false,
       dialog: { showMessageBox },
       localMode: { start: vi.fn(async () => undefined) },
+      resetLocalDataAndStart: vi.fn(async () => {
+        if (state.resetFails) throw new Error("EBUSY");
+        return true;
+      }),
     };
     vm.runInNewContext(
       `${stripTypeScriptTypes(source.slice(start, end))}\nthis.showServiceFailure = showServiceFailure;`,
       context,
     );
-    return context as typeof context & { showServiceFailure: (message: string) => void };
+    return context as typeof context & {
+      showServiceFailure: (message: string, offerReset?: boolean) => void;
+    };
   }
 
   it("shows a stopped service on the app window after setup, and Retry starts local mode", async () => {
@@ -203,6 +210,60 @@ describe("local mode failures in the main process", () => {
     closed.showServiceFailure("The API stopped.");
     await vi.waitFor(() => expect(closed.serviceFailurePrompt).toBe(false));
     expect(closed.localMode.start).not.toHaveBeenCalled();
+  });
+
+  it("offers Reset local data when only a reset clears the failure", async () => {
+    const sentence =
+      "The app's database settings are missing. Choose Reset local data, or restore secrets.env from a backup.";
+    const f = serviceFailure({ setupOpen: false, response: 1 });
+    f.showServiceFailure(sentence, true);
+    expect(f.dialog.showMessageBox).toHaveBeenCalledWith(
+      f.mainWindow,
+      expect.objectContaining({
+        message: sentence,
+        buttons: ["Retry", "Reset local data", "Close"],
+        cancelId: 2,
+      }),
+    );
+    await vi.waitFor(() => expect(f.resetLocalDataAndStart).toHaveBeenCalledWith(f.mainWindow));
+    expect(f.localMode.start).not.toHaveBeenCalled();
+  });
+
+  it("says so when the reset fails, and offers it again", async () => {
+    const f = serviceFailure({ setupOpen: false, response: 1, resetFails: true });
+    f.showServiceFailure("An earlier database update did not finish.", true);
+    await vi.waitFor(() => expect(f.dialog.showMessageBox).toHaveBeenCalledTimes(2));
+    expect(f.dialog.showMessageBox).toHaveBeenLastCalledWith(
+      f.mainWindow,
+      expect.objectContaining({
+        message: "Could not reset local data. Try again.",
+        buttons: ["Retry", "Reset local data", "Close"],
+      }),
+    );
+  });
+
+  it("resets only after the same confirmation the setup window uses, then starts fresh", async () => {
+    const start = source.indexOf("async function resetLocalDataAndStart(");
+    expect(start).toBeGreaterThan(-1);
+    const end = source.slice(start + 1).search(/\n(?:async )?function /u) + start + 1;
+    const context = {
+      confirmLocalReset: vi.fn(async () => false),
+      showSetupWindow: vi.fn(),
+      localMode: { start: vi.fn(async () => undefined) },
+    };
+    vm.runInNewContext(
+      `${stripTypeScriptTypes(source.slice(start, end))}\nthis.reset = resetLocalDataAndStart;`,
+      context,
+    );
+    const reset = (context as typeof context & { reset: (win: unknown) => Promise<boolean> }).reset;
+    const win = new WindowFake();
+    expect(await reset(win)).toBe(false);
+    expect(context.confirmLocalReset).toHaveBeenCalledWith(win);
+    expect(context.localMode.start).not.toHaveBeenCalled();
+    context.confirmLocalReset.mockResolvedValue(true);
+    expect(await reset(win)).toBe(true);
+    expect(context.showSetupWindow).toHaveBeenCalledWith(null, { resume: true });
+    expect(context.localMode.start).toHaveBeenCalledOnce();
   });
 });
 

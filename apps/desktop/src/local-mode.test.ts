@@ -683,7 +683,7 @@ describe("database lifecycle", () => {
     expect(controller.running()).toBe(false);
   });
 
-  it("names the migration and the database error, and Retry applies it once fixed", async () => {
+  it("says in plain words that the database could not be updated, logs the details, and Retry applies it once fixed", async () => {
     const root = await userData();
     const databaseDir = path.join(root, "postgres");
     let stops = 0;
@@ -720,11 +720,16 @@ describe("database lifecycle", () => {
       }),
     );
     const sentence =
-      'Preparing the database failed at 20260101000000_init: relation "widgets" does not exist. Retry, or install the latest version if it happens again.';
+      "The database could not be updated. Retry, or install the latest version if it happens again.";
     expect(await controller.start()).toMatchObject({ phase: "failed", message: sentence });
     expect(failed).toEqual([sentence]);
     expect(stops).toBe(1);
     expect(controller.running()).toBe(false);
+    await vi.waitFor(async () => {
+      const log = await readFile(path.join(root, "logs", "local-mode.log"), "utf8");
+      expect(log).toContain("20260101000000_init");
+      expect(log).toContain('relation "widgets" does not exist');
+    });
 
     broken = false;
     expect(await controller.start()).toMatchObject({ phase: "ready" });
@@ -745,13 +750,14 @@ describe("database lifecycle", () => {
     ],
     [
       "unfinished",
-      "An earlier database update did not finish. Reset local data in Settings, System, or restore the app data folder from a backup.",
+      "An earlier database update did not finish. Choose Reset local data, or restore the app data folder from a backup.",
       true,
     ],
   ] as const)(
     "says what to do about a %s migration history, and logs the details",
     async (reason, sentence, offerReset) => {
       const root = await userData();
+      const failed: Array<[string, boolean]> = [];
       const controller = new LocalModeController(
         harness(root, {
           allocatePort: async () => 23456,
@@ -761,11 +767,15 @@ describe("database lifecycle", () => {
           migrate: async () => {
             throw new MigrationHistoryError(`Migration "20260101000000_init" (${reason})`, reason);
           },
+          onFailed: (message, offered) => {
+            failed.push([message, offered]);
+          },
         }),
       );
       const state = await controller.start();
       expect(state).toMatchObject({ phase: "failed", message: sentence });
       expect(state.offerReset).toBe(offerReset);
+      expect(failed).toEqual([[sentence, offerReset === true]]);
       await new Promise((resolve) => setTimeout(resolve, 20));
       expect(await readFile(path.join(root, "logs", "local-mode.log"), "utf8")).toContain(
         `Migration "20260101000000_init" (${reason})`,
@@ -792,7 +802,7 @@ describe("database lifecycle", () => {
     });
   });
 
-  it("names missing database binaries, and quit is not held for a database", async () => {
+  it("says part of the installation is missing, logs which package, and quit is not held for a database", async () => {
     const root = await userData();
     const failed: string[] = [];
     const controller = new LocalModeController(
@@ -807,11 +817,15 @@ describe("database lifecycle", () => {
         },
       }),
     );
-    const sentence =
-      "The database binaries @embedded-postgres/linux-x64 are missing. Reinstall Ardur Bot.";
+    const sentence = "Part of this installation is missing. Reinstall Ardur Bot.";
     expect(await controller.start()).toMatchObject({ phase: "failed", message: sentence });
     expect(failed).toEqual([sentence]);
     expect(controller.running()).toBe(false);
+    await vi.waitFor(async () => {
+      expect(await readFile(path.join(root, "logs", "local-mode.log"), "utf8")).toContain(
+        "@embedded-postgres/linux-x64",
+      );
+    });
   });
 });
 
@@ -955,11 +969,15 @@ describe("saved database settings", () => {
   it("does not write new secrets when the file is missing but the database exists", async () => {
     const root = await userData();
     await cluster(root);
+    const failed: Array<[string, boolean]> = [];
     const controller = new LocalModeController(
       harness(root, {
         allocatePort: async () => 23456,
         portAvailable: async () => true,
         postgresFactory: () => runningPostgres(),
+        onFailed: (message, offerReset) => {
+          failed.push([message, offerReset]);
+        },
       }),
     );
     expect(await controller.start()).toMatchObject({
@@ -967,6 +985,8 @@ describe("saved database settings", () => {
       message: SETTINGS_MISSING,
       offerReset: true,
     });
+    // The dialog on the app window offers the same Reset local data the sentence names.
+    expect(failed).toEqual([[SETTINGS_MISSING, true]]);
     await expect(stat(path.join(root, "secrets.env"))).rejects.toThrow();
   });
 
@@ -1135,17 +1155,37 @@ describe("service readiness", () => {
     const states: string[] = [];
     // Each worker either dies as soon as it starts or reports ready.
     const workerFates: Array<"dies" | "ready"> = ["dies", "dies", "dies", "dies"];
-    // Only a running API holds its port and answers on it.
+    // Only a running API or database holds its port; only the API answers health checks.
     const listening = new Set<number>();
     let nextPort = 23456;
     let apiStarts = 0;
+    const databases: Array<{ port: number; process: EventEmitter & { exitCode: number | null } }> =
+      [];
     const controller = new LocalModeController(
       harness(root, {
         workerReady: false,
         restartDelayMs: () => 0,
         allocatePort: async () => nextPort++,
         portAvailable: async (port) => !listening.has(port),
-        postgresFactory: () => runningPostgres(),
+        postgresFactory: (options) => {
+          const database = {
+            port: options.port,
+            process: Object.assign(new EventEmitter(), { exitCode: null, signalCode: null }),
+          };
+          databases.push(database);
+          return {
+            process: database.process,
+            initialise: async () => undefined,
+            start: async () => {
+              // A second server on a port the first still holds could not start.
+              if (listening.has(options.port)) throw new Error("port in use");
+              listening.add(options.port);
+            },
+            stop: async () => {
+              listening.delete(options.port);
+            },
+          } as EmbeddedPostgresLike;
+        },
         fetch: async (url) => {
           if (!listening.has(Number(new URL(url).port))) throw new Error("ECONNREFUSED");
           return healthResponse();
@@ -1178,13 +1218,28 @@ describe("service readiness", () => {
     expect(failed).toEqual(["The worker stopped."]);
     const origin = controller.origin();
 
-    // Retry keeps the running API on its port, and one early worker death is restarted
-    // again instead of failing at once.
+    // Retry keeps the running API and database on their ports, and one early worker death
+    // is restarted again instead of failing at once.
     workerFates.push("dies", "ready");
     expect(await controller.start()).toMatchObject({ phase: "ready" });
     expect(failed).toEqual(["The worker stopped."]);
     expect(apiStarts).toBe(1);
+    expect(databases).toHaveLength(1);
     expect(controller.origin()).toBe(origin);
+    expect(await readFile(path.join(root, "postgres.port"), "utf8")).toBe(
+      `${databases[0]!.port}\n`,
+    );
+
+    // The same server is still watched after the Retry.
+    Object.assign(databases[0]!.process, { exitCode: 1 });
+    databases[0]!.process.emit("exit", 1, null);
+    await vi.waitFor(() =>
+      expect(controller.state()).toMatchObject({
+        phase: "failed",
+        message: "The database stopped.",
+      }),
+    );
+    expect(failed).toEqual(["The worker stopped.", "The database stopped."]);
     await controller.stop();
   });
 
@@ -1234,7 +1289,7 @@ describe("service logs", () => {
 });
 
 const SETTINGS_MISSING =
-  "The app's database settings are missing. Reset local data in Settings, System, or restore the file from a backup.";
+  "The app's database settings are missing. Choose Reset local data, or restore secrets.env from a backup.";
 
 const WORKER_READY_LINE = '{"level":"info","message":"worker ready","service.name":"worker"}';
 

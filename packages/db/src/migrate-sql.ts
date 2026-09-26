@@ -25,9 +25,11 @@ import { Client } from "pg";
  * Prisma can apply applies here unchanged. Every file runs inside a transaction with
  * its history row, except one that builds or drops an index `CONCURRENTLY`: that
  * cannot run in a transaction block, and Prisma keeps it as the only statement in
- * its file. Such a file can be interrupted halfway (a cancel, or the server
- * stopping), which leaves an INVALID index and possibly an unfinished history row.
- * Both are cleared before it is applied again, so a retry always works.
+ * its file. Such a file can be interrupted halfway (a cancel, the server stopping, or
+ * the app quitting), which leaves an INVALID index, or a finished index whose history row
+ * was never marked. Before it is applied again, an INVALID leftover is dropped, and an
+ * index already in place is recorded as finished instead of built again, so a retry
+ * always works.
  */
 export class MigrationHistoryError extends Error {
   /**
@@ -110,6 +112,10 @@ export async function listSqlMigrations(migrationsDir: string): Promise<SqlMigra
   return migrations;
 }
 
+/**
+ * `applied` lists the migrations whose SQL ran. One an earlier attempt already built is
+ * recorded as finished without being listed.
+ */
 export async function applySqlMigrations(input: {
   client: MigrationSqlClient;
   migrationsDir: string;
@@ -122,22 +128,22 @@ export async function applySqlMigrations(input: {
   try {
     const migrations = await listSqlMigrations(input.migrationsDir);
     const recorded = await readRecorded(input.client);
-    await releaseInterrupted(input.client, migrations, recorded);
+    await settleInterrupted(input.client, migrations, recorded);
     assertHistory(migrations, recorded);
     const applied: string[] = [];
     for (const migration of migrations) {
       if (finishedRow(recorded, migration.name)) continue;
       input.signal?.throwIfAborted();
+      // An earlier attempt built it but was rolled back before its row was marked finished.
+      if (
+        triedConcurrently(recorded, migration) &&
+        (await indexesInPlace(input.client, migration.sql))
+      ) {
+        await recordFinished(input.client, await recordStarted(input.client, migration));
+        continue;
+      }
       await applyOne(input.client, migration, input.signal);
       applied.push(migration.name);
-      recorded.push({
-        id: "applied",
-        checksum: migration.checksum,
-        migrationName: migration.name,
-        finishedAt: new Date(),
-        rolledBackAt: null,
-        logs: null,
-      });
     }
     return { applied };
   } finally {
@@ -153,9 +159,8 @@ const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
  * initdb creates only the `postgres` database and its superuser. The application database
  * belongs to its own login role, named by `databaseUrl`, which migrations and the services
  * use; the superuser in `adminUrl` is kept for maintenance. The role's password is set from
- * `databaseUrl` on every call, so a regenerated password takes effect. A database an
- * earlier build created as the superuser is handed to the role, with everything in its
- * public schema. When both URLs name the same user, only the database is created.
+ * `databaseUrl` on every call, so a regenerated password takes effect. When both URLs name
+ * the same user, only the database is created.
  */
 export async function ensureApplicationDatabase(input: {
   adminUrl: string;
@@ -171,7 +176,7 @@ export async function ensureApplicationDatabase(input: {
   const admin = new URL(input.adminUrl);
   const separate = decodeURIComponent(admin.username) !== owner;
   admin.pathname = "/postgres";
-  const found = await withClient(admin.toString(), input.signal, async (client) => {
+  await withClient(admin.toString(), input.signal, async (client) => {
     if (separate) {
       const role = await client.query("SELECT 1 FROM pg_roles WHERE rolname = $1", [owner]);
       const password = client.escapeLiteral(decodeURIComponent(target.password));
@@ -179,54 +184,10 @@ export async function ensureApplicationDatabase(input: {
         `${role.rowCount ? "ALTER" : "CREATE"} ROLE "${owner}" LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD ${password}`,
       );
     }
-    const existing = await client.query<{ owner: string }>(
-      "SELECT pg_get_userbyid(datdba) AS owner FROM pg_database WHERE datname = $1",
-      [database],
-    );
-    if (existing.rows[0]) return existing.rows[0].owner;
+    const existing = await client.query("SELECT 1 FROM pg_database WHERE datname = $1", [database]);
+    if (existing.rowCount) return;
     await client.query(`CREATE DATABASE "${database}"${separate ? ` OWNER "${owner}"` : ""}`);
-    return null;
   });
-  if (!separate || found === null || found === owner) return;
-  // The owner changes last, so an interrupted hand-over runs again on the next start.
-  admin.pathname = `/${database}`;
-  await withClient(admin.toString(), input.signal, (client) =>
-    client.query(
-      `BEGIN; ${handOverSql(owner)} ALTER DATABASE "${database}" OWNER TO "${owner}"; COMMIT;`,
-    ),
-  );
-}
-
-/** Everything in the public schema not yet owned by `owner`; linked sequences follow their table. */
-function handOverSql(owner: string): string {
-  return `DO $$
-DECLARE item record;
-BEGIN
-  FOR item IN
-    SELECT format('ALTER %s %s OWNER TO "${owner}"',
-             CASE c.relkind WHEN 'S' THEN 'SEQUENCE' WHEN 'v' THEN 'VIEW'
-               WHEN 'm' THEN 'MATERIALIZED VIEW' WHEN 'f' THEN 'FOREIGN TABLE' ELSE 'TABLE' END,
-             c.oid::regclass) AS statement
-      FROM pg_class c
-     WHERE c.relnamespace = 'public'::regnamespace
-       AND c.relkind IN ('r', 'p', 'v', 'm', 'f', 'S')
-       AND pg_get_userbyid(c.relowner) <> '${owner}'
-       AND NOT (c.relkind = 'S' AND EXISTS (
-         SELECT 1 FROM pg_depend d
-          WHERE d.classid = 'pg_class'::regclass AND d.objid = c.oid AND d.deptype IN ('a', 'i')))
-    UNION ALL
-    SELECT format('ALTER TYPE %s OWNER TO "${owner}"', t.oid::regtype)
-      FROM pg_type t
-     WHERE t.typnamespace = 'public'::regnamespace AND t.typtype IN ('e', 'd')
-       AND pg_get_userbyid(t.typowner) <> '${owner}'
-    UNION ALL
-    SELECT format('ALTER ROUTINE %s OWNER TO "${owner}"', p.oid::regprocedure)
-      FROM pg_proc p
-     WHERE p.pronamespace = 'public'::regnamespace AND pg_get_userbyid(p.proowner) <> '${owner}'
-  LOOP
-    EXECUTE item.statement;
-  END LOOP;
-END $$;`;
 }
 
 export async function applySqlMigrationsToDatabase(input: {
@@ -289,11 +250,13 @@ async function cancelBackend(connectionString: string, pid: number): Promise<voi
 
 /**
  * With the advisory lock held no other run is active, so a CONCURRENTLY row with neither
- * `finished_at` nor `rolled_back_at` was cut off (the server stopped mid-build). It is
- * marked rolled back, as `prisma migrate resolve --rolled-back` would, and applied again.
- * A transactional migration cannot leave such a row: its row commits with its SQL.
+ * `finished_at` nor `rolled_back_at` was cut off: the server stopped, or the app quit,
+ * before the row was marked. When what the file builds or drops is already in place, only
+ * the record is missing, and the row is marked finished. Otherwise it is marked rolled
+ * back, as `prisma migrate resolve --rolled-back` would, and applied again. A
+ * transactional migration cannot leave such a row: its row commits with its SQL.
  */
-async function releaseInterrupted(
+async function settleInterrupted(
   client: MigrationSqlClient,
   migrations: SqlMigration[],
   recorded: RecordedMigration[],
@@ -303,6 +266,11 @@ async function releaseInterrupted(
     if (row.finishedAt != null || row.rolledBackAt != null) continue;
     const file = files.get(row.migrationName);
     if (!file || !buildsIndexConcurrently(file.sql)) continue;
+    if (row.checksum === file.checksum && (await indexesInPlace(client, file.sql))) {
+      await recordFinished(client, row.id);
+      row.finishedAt = new Date();
+      continue;
+    }
     await client.query(
       `UPDATE "_prisma_migrations" SET "rolled_back_at" = CURRENT_TIMESTAMP WHERE "id" = $1`,
       [row.id],
@@ -343,29 +311,44 @@ function finishedRow(recorded: RecordedMigration[], name: string): boolean {
   );
 }
 
+/** A CONCURRENTLY migration this database has a history row for, so an earlier run began it. */
+function triedConcurrently(recorded: RecordedMigration[], migration: SqlMigration): boolean {
+  return (
+    buildsIndexConcurrently(migration.sql) &&
+    recorded.some((row) => row.migrationName === migration.name)
+  );
+}
+
+async function recordStarted(client: MigrationSqlClient, migration: SqlMigration) {
+  const id = randomUUID();
+  await client.query(
+    `INSERT INTO "_prisma_migrations" ("id", "checksum", "migration_name", "started_at", "applied_steps_count")
+     VALUES ($1, $2, $3, CURRENT_TIMESTAMP, 0)`,
+    [id, migration.checksum, migration.name],
+  );
+  return id;
+}
+
+async function recordFinished(client: MigrationSqlClient, id: string): Promise<void> {
+  await client.query(
+    `UPDATE "_prisma_migrations" SET "finished_at" = CURRENT_TIMESTAMP, "applied_steps_count" = 1, "logs" = NULL WHERE "id" = $1`,
+    [id],
+  );
+}
+
 async function applyOne(
   client: MigrationSqlClient,
   migration: SqlMigration,
   signal: AbortSignal | undefined,
 ): Promise<void> {
-  const id = randomUUID();
-  const record = () =>
-    client.query(
-      `INSERT INTO "_prisma_migrations" ("id", "checksum", "migration_name", "started_at", "applied_steps_count")
-     VALUES ($1, $2, $3, CURRENT_TIMESTAMP, 0)`,
-      [id, migration.checksum, migration.name],
-    );
-  const finish = () =>
-    client.query(
-      `UPDATE "_prisma_migrations" SET "finished_at" = CURRENT_TIMESTAMP, "applied_steps_count" = 1, "logs" = NULL WHERE "id" = $1`,
-      [id],
-    );
   if (buildsIndexConcurrently(migration.sql)) {
     await dropInvalidIndexes(client, migration.sql);
-    await record();
+    const id = await recordStarted(client, migration);
     try {
       signal?.throwIfAborted();
       await client.query(migration.sql);
+      // A row that cannot be marked finished is rolled back too, never left open.
+      await recordFinished(client, id);
     } catch (error) {
       const message = errorMessage(error);
       await client
@@ -376,15 +359,14 @@ async function applyOne(
         .catch(() => undefined);
       throw new MigrationApplyError(migration.name, message);
     }
-    await finish();
     return;
   }
   await client.query("BEGIN");
   try {
-    await record();
+    const id = await recordStarted(client, migration);
     signal?.throwIfAborted();
     await client.query(migration.sql);
-    await finish();
+    await recordFinished(client, id);
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK").catch(() => undefined);
@@ -422,6 +404,76 @@ function buildsIndexConcurrently(sql: string): boolean {
   return /\bINDEX\s+CONCURRENTLY\b/i.test(withoutComments(sql));
 }
 
+const IDENTIFIER_TOKEN = '"(?:[^"]|"")+"|[A-Za-z_][A-Za-z0-9_$]*';
+const CREATES = new RegExp(
+  String.raw`\bCREATE\s+(?:UNIQUE\s+)?INDEX\s+CONCURRENTLY\s+(?:IF\s+NOT\s+EXISTS\s+)?(${IDENTIFIER_TOKEN})`,
+  "gi",
+);
+const DROPS = new RegExp(
+  String.raw`\bDROP\s+INDEX\s+CONCURRENTLY\s+(?:IF\s+EXISTS\s+)?(${IDENTIFIER_TOKEN})(?:\s*\.\s*(${IDENTIFIER_TOKEN}))?`,
+  "gi",
+);
+
+interface IndexName {
+  /** Null for the current schema. */
+  schema: string | null;
+  name: string;
+}
+
+/**
+ * The indexes a CONCURRENTLY file builds and drops. An unnamed build (`... CONCURRENTLY ON t`)
+ * is null: it gets a fresh name on every attempt.
+ */
+function indexTargets(sql: string): { created: (IndexName | null)[]; dropped: IndexName[] } {
+  const text = withoutComments(sql);
+  return {
+    created: [...text.matchAll(CREATES)].map((match) =>
+      /^on$/i.test(match[1]!) ? null : { schema: null, name: identifier(match[1]!) },
+    ),
+    dropped: [...text.matchAll(DROPS)].map((match) =>
+      match[2]
+        ? { schema: identifier(match[1]!), name: identifier(match[2]) }
+        : { schema: null, name: identifier(match[1]!) },
+    ),
+  };
+}
+
+function identifier(token: string): string {
+  return token.startsWith('"') ? token.slice(1, -1).replaceAll('""', '"') : token.toLowerCase();
+}
+
+/** The index as a quoted `schema.name`, and whether it is valid; null when there is none. */
+async function findIndex(
+  client: MigrationSqlClient,
+  target: IndexName,
+): Promise<{ index: string; valid: boolean } | null> {
+  const result = await client.query(
+    `SELECT format('%I.%I', n.nspname, c.relname) AS "index", i.indisvalid AS "valid"
+       FROM pg_catalog.pg_class c
+       JOIN pg_catalog.pg_index i ON i.indexrelid = c.oid
+       JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+      WHERE c.relname = $1 AND n.nspname = COALESCE($2, current_schema())`,
+    [target.name, target.schema],
+  );
+  return (result.rows[0] as { index: string; valid: boolean } | undefined) ?? null;
+}
+
+/**
+ * Whether the file's work is already done: every index it builds exists and is valid, and
+ * every index it drops is gone. A file with an unnamed build cannot be checked, so it is not.
+ */
+async function indexesInPlace(client: MigrationSqlClient, sql: string): Promise<boolean> {
+  const { created, dropped } = indexTargets(sql);
+  if (created.length + dropped.length === 0 || created.includes(null)) return false;
+  for (const target of created) {
+    if (!(await findIndex(client, target!))?.valid) return false;
+  }
+  for (const target of dropped) {
+    if (await findIndex(client, target)) return false;
+  }
+  return true;
+}
+
 /**
  * An interrupted `CREATE INDEX CONCURRENTLY` leaves an INVALID index behind. A plain retry
  * then fails with "already exists", and one with IF NOT EXISTS succeeds over the broken
@@ -429,23 +481,10 @@ function buildsIndexConcurrently(sql: string): boolean {
  * `20260828090002a_group_organization_repair_invalid_idx` does.
  */
 async function dropInvalidIndexes(client: MigrationSqlClient, sql: string): Promise<void> {
-  const created =
-    /\bCREATE\s+(?:UNIQUE\s+)?INDEX\s+CONCURRENTLY\s+(?:IF\s+NOT\s+EXISTS\s+)?("(?:[^"]|"")+"|[A-Za-z_][A-Za-z0-9_$]*)/gi;
-  for (const match of withoutComments(sql).matchAll(created)) {
-    const raw = match[1] ?? "";
-    // An unnamed index (`... CONCURRENTLY ON t`) gets a fresh name on every attempt.
-    if (/^on$/i.test(raw)) continue;
-    const name = raw.startsWith('"') ? raw.slice(1, -1).replaceAll('""', '"') : raw.toLowerCase();
-    const invalid = await client.query(
-      `SELECT format('%I.%I', n.nspname, c.relname) AS "index"
-         FROM pg_catalog.pg_class c
-         JOIN pg_catalog.pg_index i ON i.indexrelid = c.oid
-         JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-        WHERE c.relname = $1 AND n.nspname = current_schema() AND NOT i.indisvalid`,
-      [name],
-    );
-    for (const row of invalid.rows) {
-      await client.query(`DROP INDEX CONCURRENTLY IF EXISTS ${(row as { index: string }).index}`);
+  for (const target of indexTargets(sql).created) {
+    const found = target && (await findIndex(client, target));
+    if (found && !found.valid) {
+      await client.query(`DROP INDEX CONCURRENTLY IF EXISTS ${found.index}`);
     }
   }
 }

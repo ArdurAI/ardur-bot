@@ -722,27 +722,34 @@ function showSetupWindow(error: string | null = null, options: { resume?: boolea
 }
 
 /**
- * After setup, a stopped local service is a sheet on the app window with Retry.
- * An open setup window already shows the same sentence and its own Retry.
+ * After setup, a stopped local service is a sheet on the app window with Retry, and with
+ * Reset local data when only a reset clears it. An open setup window already shows the
+ * same sentence and its own buttons.
  */
-function showServiceFailure(message: string) {
+function showServiceFailure(message: string, offerReset = false) {
   if (setupWindow !== null && !setupWindow.isDestroyed()) return;
   const win = mainWindow;
   if (win === null || win.isDestroyed() || serviceFailurePrompt) return;
   serviceFailurePrompt = true;
+  const buttons = offerReset ? ["Retry", "Reset local data", "Close"] : ["Retry", "Close"];
   void dialog
     .showMessageBox(win, {
       type: "warning",
       message,
-      buttons: ["Retry", "Close"],
+      buttons,
       defaultId: 0,
-      cancelId: 1,
-    })
-    .then(({ response }) => {
-      if (response === 0) void localMode.start();
+      cancelId: buttons.length - 1,
     })
     .finally(() => {
       serviceFailurePrompt = false;
+    })
+    .then(({ response }) => {
+      if (response === 0) void localMode.start();
+      else if (offerReset && response === 1) {
+        resetLocalDataAndStart(win).catch(() =>
+          showServiceFailure("Could not reset local data. Try again.", true),
+        );
+      }
     });
 }
 
@@ -759,6 +766,14 @@ async function confirmLocalReset(parent: BrowserWindow): Promise<boolean> {
   });
   if (response !== 1) return false;
   await localMode.resetData();
+  return true;
+}
+
+/** Once the person confirms, moves local data aside and starts fresh behind the setup window. */
+async function resetLocalDataAndStart(parent: BrowserWindow): Promise<boolean> {
+  if (!(await confirmLocalReset(parent))) return false;
+  showSetupWindow(null, { resume: true });
+  void localMode.start();
   return true;
 }
 
@@ -1341,9 +1356,9 @@ app.whenReady().then(async () => {
         setupWindow.webContents.send("desktop.setup.stack.changed", state);
       }
     },
-    onFailed: (message) => {
+    onFailed: (message, offerReset) => {
       setupError = message;
-      showServiceFailure(message);
+      showServiceFailure(message, offerReset);
     },
   });
   currentSetup = await readSetup(userDataDir);
@@ -1656,10 +1671,7 @@ app.whenReady().then(async () => {
       available: () => currentTargetUrl !== null && localModeOwns(currentTargetUrl),
       reset: async () => {
         if (mainWindow === null || mainWindow.isDestroyed()) return false;
-        if (!(await confirmLocalReset(mainWindow))) return false;
-        showSetupWindow(null, { resume: true });
-        void localMode.start();
-        return true;
+        return resetLocalDataAndStart(mainWindow);
       },
     },
     preload: path.join(import.meta.dirname, "preload.cjs"),

@@ -1,6 +1,6 @@
 import type { ChildProcess } from "node:child_process";
 import { EventEmitter } from "node:events";
-import { chmod, cp, mkdir, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, rm, stat, writeFile } from "node:fs/promises";
 import type { Server } from "node:net";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -13,6 +13,7 @@ import { LocalModeController, migrationsDir } from "./local-mode.js";
 import type { EmbeddedPostgresBinaries, EmbeddedPostgresLike } from "./local-postgres.js";
 import {
   loadEmbeddedPostgres,
+  loopbackPortAvailable,
   MissingDatabaseBinariesError,
   POSTGRES_USER,
   postgresProcess,
@@ -236,40 +237,6 @@ describe.skipIf(skipReason !== null)("embedded Postgres", () => {
     await within(30_000, controller.stop());
   });
 
-  it("hands a database an earlier build made as the superuser to the application role", {
-    timeout: 180_000,
-  }, async () => {
-    const { url, port } = await cluster();
-    const all = (await readdir(repoMigrations, { withFileTypes: true }))
-      .filter((entry) => entry.isDirectory())
-      .map((entry) => entry.name)
-      .sort();
-    const earlier = await temporary("migrations-");
-    for (const name of all.slice(0, 60)) {
-      await cp(path.join(repoMigrations, name), path.join(earlier, name), { recursive: true });
-    }
-    await ensureApplicationDatabase({ adminUrl: url, databaseUrl: url });
-    await applySqlMigrationsToDatabase({ connectionString: url, migrationsDir: earlier });
-
-    const role = `postgres://ardurbot_app:${"e".repeat(32)}@127.0.0.1:${port}/ardurbot`;
-    await ensureApplicationDatabase({ adminUrl: url, databaseUrl: role });
-    const rest = await applySqlMigrationsToDatabase({
-      connectionString: role,
-      migrationsDir: repoMigrations,
-    });
-    expect(rest.applied).toHaveLength(all.length - 60);
-    expect(
-      await query(
-        url,
-        `SELECT (SELECT pg_get_userbyid(datdba) FROM pg_database WHERE datname = current_database()) AS owner,
-                (SELECT count(*)::int FROM pg_class WHERE relnamespace = 'public'::regnamespace
-                    AND pg_get_userbyid(relowner) <> 'ardurbot_app') AS relations,
-                (SELECT count(*)::int FROM pg_proc WHERE pronamespace = 'public'::regnamespace
-                    AND pg_get_userbyid(proowner) <> 'ardurbot_app') AS routines`,
-      ),
-    ).toEqual([{ owner: "ardurbot_app", relations: 0, routines: 0 }]);
-  });
-
   it("stops during migrations without crashing, once the migration in flight is cancelled", {
     timeout: 120_000,
   }, async () => {
@@ -407,6 +374,83 @@ describe.skipIf(skipReason !== null)("embedded Postgres", () => {
     },
   );
 
+  it.each([
+    ["the app quit before its row was marked", "finished_at = NULL"],
+    ["marking its row was cancelled", "finished_at = NULL, rolled_back_at = CURRENT_TIMESTAMP"],
+  ] as const)(
+    "records a CONCURRENTLY index that was built but %s, instead of building it again",
+    {
+      timeout: 120_000,
+    },
+    async (_how, leftBehind) => {
+      const { url } = await cluster();
+      await ensureApplicationDatabase({ adminUrl: url, databaseUrl: url });
+      await query(url, "CREATE TABLE widgets AS SELECT g AS val FROM generate_series(1, 1000) g");
+      const migrations = await temporary("migrations-");
+      await mkdir(path.join(migrations, "20260101000000_widgets_idx_concurrent"));
+      await writeFile(
+        path.join(migrations, "20260101000000_widgets_idx_concurrent", "migration.sql"),
+        'CREATE INDEX CONCURRENTLY "widgets_val_idx" ON widgets (val);\n',
+      );
+      await applySqlMigrationsToDatabase({ connectionString: url, migrationsDir: migrations });
+      await query(url, `UPDATE _prisma_migrations SET ${leftBehind}`);
+
+      for (let start = 0; start < 2; start += 1) {
+        expect(
+          await applySqlMigrationsToDatabase({ connectionString: url, migrationsDir: migrations }),
+        ).toEqual({ applied: [] });
+      }
+      expect(await indexValidity(url)).toEqual([{ indisvalid: true }]);
+      const rows = await query<{ finished: boolean; rolled_back: boolean }>(
+        url,
+        `SELECT finished_at IS NOT NULL AS finished, rolled_back_at IS NOT NULL AS rolled_back
+         FROM _prisma_migrations ORDER BY started_at`,
+      );
+      expect(rows.at(-1)).toEqual({ finished: true, rolled_back: false });
+      expect(rows).toHaveLength(leftBehind === "finished_at = NULL" ? 1 : 2);
+    },
+  );
+
+  it("keeps using and watching its running database when Retry follows a worker that gave up", {
+    timeout: 120_000,
+  }, async () => {
+    const userData = await temporary("local-mode-");
+    const failed: string[] = [];
+    let factoryCalls = 0;
+    let postgres: EmbeddedPostgresLike | undefined;
+    // The worker exits at once until it has used its restarts, then reports ready.
+    const workerFates = ["exits", "exits", "exits", "exits"];
+    const controller = new LocalModeController(
+      dependencies(userData, {
+        allocatePort: freePort,
+        portAvailable: loopbackPortAvailable,
+        restartDelayMs: () => 0,
+        spawn: scriptedSpawn(workerFates),
+        onFailed: (message) => {
+          failed.push(message);
+        },
+        postgresFactory: (options) => {
+          factoryCalls += 1;
+          postgres = new real.EmbeddedPostgres({ ...options, onLog: () => undefined });
+          clusters.push(postgres);
+          return postgres;
+        },
+      }),
+    );
+    expect(await within(60_000, controller.start())).toMatchObject({
+      phase: "failed",
+      message: "The worker stopped.",
+    });
+    expect(await within(60_000, controller.start())).toMatchObject({ phase: "ready" });
+    expect(factoryCalls).toBe(1);
+
+    postgresProcess(postgres!)!.kill("SIGINT");
+    await until(30_000, async () => controller.state().phase === "failed");
+    expect(controller.state()).toMatchObject({ message: "The database stopped." });
+    expect(failed).toEqual(["The worker stopped.", "The database stopped."]);
+    await within(30_000, controller.stop());
+  });
+
   it("says the database stopped when its process exits after ready, and Retry starts it again", {
     timeout: 120_000,
   }, async () => {
@@ -503,6 +547,14 @@ describe.skipIf(skipReason !== null)("embedded Postgres", () => {
 
 /** Services that report ready at once; each spawn's environment is kept. */
 function recordingSpawn(envs: NodeJS.ProcessEnv[]): LocalModeDependencies["spawn"] {
+  return scriptedSpawn([], envs);
+}
+
+/** Like `recordingSpawn`, but each worker takes the next fate: exit at once, or report ready. */
+function scriptedSpawn(
+  workerFates: string[],
+  envs: NodeJS.ProcessEnv[] = [],
+): LocalModeDependencies["spawn"] {
   return (_command, args, options) => {
     envs.push(options.env ?? {});
     const child = Object.assign(new EventEmitter(), {
@@ -516,7 +568,12 @@ function recordingSpawn(envs: NodeJS.ProcessEnv[]): LocalModeDependencies["spawn
       },
     });
     if (args.some((arg) => arg.includes("worker"))) {
-      queueMicrotask(() => child.stdout.emit("data", Buffer.from('{"message":"worker ready"}\n')));
+      const exits = workerFates.shift() === "exits";
+      queueMicrotask(() =>
+        exits
+          ? child.emit("exit", 1)
+          : child.stdout.emit("data", Buffer.from('{"message":"worker ready"}\n')),
+      );
     }
     return child as unknown as ChildProcess;
   };

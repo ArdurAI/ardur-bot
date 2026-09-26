@@ -53,8 +53,9 @@ const SETTINGS_UNSAVED =
   "The app could not save its database settings. Check free disk space, then Retry.";
 const SETTINGS_UNREADABLE =
   "The app could not read its database settings. Check the permissions of the app data folder, then Retry.";
+/** Shown where a Reset local data button sits beside it: the setup window and the failure dialog. */
 const SETTINGS_MISSING =
-  "The app's database settings are missing. Reset local data in Settings, System, or restore the file from a backup.";
+  "The app's database settings are missing. Choose Reset local data, or restore secrets.env from a backup.";
 /** What a reset moves aside; ports and granted folders are kept. */
 const LOCAL_DATA = ["postgres", "data", "secrets.env"] as const;
 
@@ -109,7 +110,8 @@ export interface LocalModeDependencies {
   /** Delay before the next restart of a crashed service; doubles from one second by default. */
   restartDelayMs?: (restarts: number) => number;
   onState?: (state: DesktopLocalStackState) => void;
-  onFailed?: (message: string) => void;
+  /** `offerReset`: only Reset local data clears this failure, so the sentence names it. */
+  onFailed?: (message: string, offerReset: boolean) => void;
 }
 
 export function migrationsDir(input: {
@@ -224,7 +226,7 @@ export class LocalModeController {
     if (this.databaseReported || this.stopped) return Promise.resolve();
     this.databaseReported = true;
     this.publish("failed", DATABASE_STOPPED);
-    this.deps.onFailed?.(DATABASE_STOPPED);
+    this.deps.onFailed?.(DATABASE_STOPPED, false);
     return this.releaseDatabase();
   }
 
@@ -314,6 +316,7 @@ export class LocalModeController {
         this.log(error.detail);
         this.fail(error.message, error.offerReset);
       } else if (error instanceof MissingDatabaseBinariesError) {
+        this.log(`${error.packageName} could not be loaded`);
         this.fail(error.message);
       } else if (this.current.phase === "migrations" && (await this.databaseAlive())) {
         await this.releaseDatabase();
@@ -343,13 +346,20 @@ export class LocalModeController {
     await this.prepareFolders();
     const secrets = await this.loadSecrets();
     this.secrets = secrets;
-    this.postgresPort = await this.choosePort(path.join(this.deps.userDataDir, "postgres.port"));
+    // A Retry after the API or worker gave up keeps the database this run still has, and
+    // the watch on its exit with it.
+    const running = await this.postgresRunning();
+    if (!running) {
+      await this.releaseDatabase();
+      this.postgresPort = await this.choosePort(path.join(this.deps.userDataDir, "postgres.port"));
+    }
     // A Retry after the worker stopped keeps the running API, and with it the open window's origin.
     if (!this.children.has("api")) {
       this.apiPort = await this.choosePort(path.join(this.deps.userDataDir, "api.port"));
     }
     this.originUrl = `http://127.0.0.1:${this.apiPort}`;
     this.useDatabasePort(this.postgresPort);
+    if (running) return;
     // A server left running by an earlier run is used only if it proves it serves this
     // folder. Anything else in postmaster.pid is left to Postgres's own lock-file check.
     const recorded = await recordedPostmasterPort(databaseDir);
@@ -415,6 +425,18 @@ export class LocalModeController {
     postgresProcess(postgres)?.once("exit", () => {
       if (this.postgres === postgres) void this.reportDatabaseDown();
     });
+  }
+
+  /**
+   * Whether the server this controller holds is still up: the process it spawned has not
+   * exited, or, for one it adopted, that server still answers for this folder.
+   */
+  private async postgresRunning(): Promise<boolean> {
+    const postgres = this.postgres;
+    if (!postgres || !this.secrets) return false;
+    const child = postgresProcess(postgres);
+    if (child) return child.exitCode === null && child.signalCode === null;
+    return this.serves(this.postgresPort, this.secrets.POSTGRES_PASSWORD);
   }
 
   /** A server this run did not start. It is stopped only after proving, again, that it is ours. */
@@ -542,7 +564,7 @@ export class LocalModeController {
 
   private fail(message: string, offerReset = false): void {
     this.publish("failed", message, offerReset);
-    this.deps.onFailed?.(message);
+    this.deps.onFailed?.(message, offerReset);
   }
 
   /** A service or the database gave up since this run published its last phase. */
@@ -730,14 +752,11 @@ const INSTALL_LATEST = "Install the latest version of Ardur Bot, then Retry.";
 
 /**
  * The sentence for a failed migration while the server itself is still up. The migration's
- * own error keeps its name and first line; the full text is in the local-mode log.
+ * name and the database's own error are in the local-mode log, not the sentence.
  */
 function migrationFailure(error: unknown): { message: string; offerReset: boolean } {
   const failure = (typeof error === "object" && error !== null ? error : {}) as {
     reason?: unknown;
-    migrationName?: unknown;
-    databaseError?: unknown;
-    message?: unknown;
   };
   if (failure.reason === "newer") {
     return {
@@ -754,26 +773,13 @@ function migrationFailure(error: unknown): { message: string; offerReset: boolea
   if (failure.reason === "unfinished") {
     return {
       message:
-        "An earlier database update did not finish. Reset local data in Settings, System, or restore the app data folder from a backup.",
+        "An earlier database update did not finish. Choose Reset local data, or restore the app data folder from a backup.",
       offerReset: true,
     };
   }
-  const raw =
-    typeof failure.databaseError === "string"
-      ? failure.databaseError
-      : typeof failure.message === "string"
-        ? failure.message
-        : "";
-  const detail = (raw.split("\n").find((line) => line.trim()) ?? "")
-    .trim()
-    .replace(/\.+$/u, "")
-    .slice(0, 200);
-  const at = typeof failure.migrationName === "string" ? ` at ${failure.migrationName}` : "";
-  const action = "Retry, or install the latest version if it happens again.";
   return {
-    message: detail
-      ? `Preparing the database failed${at}: ${detail}. ${action}`
-      : `Preparing the database failed${at}. ${action}`,
+    message:
+      "The database could not be updated. Retry, or install the latest version if it happens again.",
     offerReset: false,
   };
 }

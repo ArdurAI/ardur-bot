@@ -28,8 +28,10 @@ class MemoryMigrations {
   readonly scripts: string[] = [];
   /** A statement containing this text fails the way Postgres would. */
   failOn: string | null = null;
-  /** Index names an interrupted CONCURRENTLY build left INVALID, as `schema.name`. */
-  readonly invalid: string[] = [];
+  /** Indexes by `schema.name`, and whether each is valid; false is an interrupted build's leftover. */
+  readonly indexes = new Map<string, boolean>();
+  /** Marking a history row finished fails, as a cancel that reaches that UPDATE would. */
+  failFinish = false;
   private beforeTransaction: RecordedMigration[] | null = null;
   async query(text: string, values: readonly unknown[] = []): Promise<{ rows: unknown[] }> {
     if (text === "BEGIN") this.beforeTransaction = this.rows.map((row) => ({ ...row }));
@@ -41,16 +43,13 @@ class MemoryMigrations {
     if (this.failOn !== null && text.includes(this.failOn) && !text.includes("_prisma_migrations"))
       throw new Error('relation "widgets" does not exist');
     if (text.includes("indisvalid")) {
-      const [name] = values;
-      return {
-        rows: this.invalid
-          .filter((index) => index === `public.${String(name)}`)
-          .map((index) => ({ index })),
-      };
+      const [name, schema] = values;
+      const index = `${schema ?? "public"}.${String(name)}`;
+      const valid = this.indexes.get(index);
+      return { rows: valid === undefined ? [] : [{ index, valid }] };
     }
     if (text.startsWith("DROP INDEX CONCURRENTLY IF EXISTS ")) {
-      const index = text.slice("DROP INDEX CONCURRENTLY IF EXISTS ".length);
-      this.invalid.splice(this.invalid.indexOf(index), 1);
+      this.indexes.delete(text.slice("DROP INDEX CONCURRENTLY IF EXISTS ".length));
     }
     if (text.includes("INSERT INTO") && text.includes("_prisma_migrations")) {
       const [id, checksum, migrationName] = values;
@@ -66,6 +65,7 @@ class MemoryMigrations {
       return { rows: [] };
     }
     if (text.includes("finished_at") && text.includes("UPDATE")) {
+      if (this.failFinish) throw new Error("canceling statement due to user request");
       const [id] = values;
       const row = this.rows.find((item) => item.id === id);
       if (row) {
@@ -230,10 +230,10 @@ describe("sql migration runner", () => {
       "20260102000000_unnamed_idx_concurrent": "CREATE INDEX CONCURRENTLY ON widgets (name);\n",
     });
     const client = new MemoryMigrations();
-    client.invalid.push("public.Widgets_Id_idx", "public.other_idx");
+    client.indexes.set("public.Widgets_Id_idx", false).set("public.other_idx", false);
     const result = await applySqlMigrations({ client, migrationsDir: migrations });
     expect(result.applied).toHaveLength(2);
-    expect(client.invalid).toEqual(["public.other_idx"]);
+    expect([...client.indexes.keys()]).toEqual(["public.other_idx"]);
     const drop = client.scripts.indexOf("DROP INDEX CONCURRENTLY IF EXISTS public.Widgets_Id_idx");
     const build = client.scripts.findIndex((script) => script.includes("CREATE UNIQUE INDEX"));
     expect(drop).toBeGreaterThanOrEqual(0);
@@ -265,6 +265,72 @@ describe("sql migration runner", () => {
       { id: "cut-off", finishedAt: null, rolledBackAt: "rolled back" },
       { finishedAt: "finished", rolledBackAt: null },
     ]);
+  });
+
+  it.each([
+    [
+      "an index it built",
+      'CREATE INDEX CONCURRENTLY "Widgets_Id_idx" ON widgets (id);\n',
+      (client: MemoryMigrations) => client.indexes.set("public.Widgets_Id_idx", true),
+    ],
+    [
+      "an index it dropped",
+      "DROP INDEX CONCURRENTLY IF EXISTS public.old_idx;\n",
+      (_client: MemoryMigrations) => undefined,
+    ],
+  ])(
+    "marks a cut-off CONCURRENTLY row finished when %s is already in place",
+    async (_what, sql, done) => {
+      const migrations = await fixtureMigrations({ "20260101000000_idx_concurrent": sql });
+      const client = new MemoryMigrations();
+      const [migration] = await listSqlMigrations(migrations);
+      done(client);
+      // The build finished, but the app quit before the row was marked.
+      client.rows.push({
+        id: "cut-off",
+        checksum: migration!.checksum,
+        migrationName: migration!.name,
+        finishedAt: null,
+        rolledBackAt: null,
+        logs: null,
+        appliedStepsCount: 0,
+      });
+      for (let start = 0; start < 2; start += 1) {
+        expect(await applySqlMigrations({ client, migrationsDir: migrations })).toEqual({
+          applied: [],
+        });
+      }
+      expect(client.rows).toMatchObject([
+        { id: "cut-off", finishedAt: "finished", rolledBackAt: null, appliedStepsCount: 1 },
+      ]);
+      expect(client.scripts.filter((script) => script.includes("CONCURRENTLY"))).toEqual([]);
+    },
+  );
+
+  it("rolls a CONCURRENTLY row back when it cannot be marked finished, and records it next time", async () => {
+    const migrations = await fixtureMigrations({
+      "20260101000000_idx_concurrent":
+        "CREATE INDEX CONCURRENTLY widgets_id_idx ON widgets (id);\n",
+    });
+    const client = new MemoryMigrations();
+    client.failFinish = true;
+    const failure = await applySqlMigrations({ client, migrationsDir: migrations }).catch(
+      (error: unknown) => error,
+    );
+    expect(failure).toBeInstanceOf(MigrationApplyError);
+    expect(client.rows).toMatchObject([{ finishedAt: null, rolledBackAt: "rolled back" }]);
+
+    // The build itself had finished.
+    client.failFinish = false;
+    client.indexes.set("public.widgets_id_idx", true);
+    expect(await applySqlMigrations({ client, migrationsDir: migrations })).toEqual({
+      applied: [],
+    });
+    expect(client.rows).toMatchObject([
+      { rolledBackAt: "rolled back" },
+      { finishedAt: "finished", rolledBackAt: null },
+    ]);
+    expect(client.scripts.filter((script) => script.includes("CREATE INDEX"))).toHaveLength(1);
   });
 
   it("still refuses an unfinished transactional migration another tool left", async () => {
