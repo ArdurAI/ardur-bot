@@ -259,10 +259,20 @@ export function reduceThreadSnapshot(
   if (!prev) return prev;
   if (event.type === "run.context") return reduceRunContext(prev, event);
   if (isCommandCardEvent(event.type) && event.seq <= (prev.cursor ?? -1)) return prev;
-  if (isCommandCardEvent(event.type))
-    return { ...prev, cursor: event.seq, messages: reduceCommandMessages(prev.messages, event) };
-  if (isRunTerminalEvent(event))
-    prev = { ...prev, messages: reduceCommandMessages(prev.messages, event) };
+  if (isCommandCardEvent(event.type)) {
+    const { messages, links } = reduceCommandMessages(
+      { messages: prev.messages, links: prev.links ?? [] },
+      event,
+    );
+    return { ...prev, cursor: event.seq, messages, links: [...links] };
+  }
+  if (isRunTerminalEvent(event)) {
+    const { messages } = reduceCommandMessages(
+      { messages: prev.messages, links: prev.links ?? [] },
+      event,
+    );
+    prev = { ...prev, messages };
+  }
   if (event.type === "thread.cleared") {
     return {
       ...prev,

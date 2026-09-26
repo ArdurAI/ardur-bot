@@ -4,8 +4,12 @@ import type {
   ThreadMessage,
 } from "@ardurbot/contracts";
 import { describe, expect, it, vi } from "vitest";
-import type { MobileSnapshot } from "./api.js";
-import { applyMobileThreadEvent, isMobileThreadSnapshotEvent } from "./api.js";
+import type { MobileMessage, MobileSnapshot } from "./api.js";
+import {
+  applyMobileThreadEvent,
+  isMobileThreadSnapshotEvent,
+  prependMobileMessagePage,
+} from "./api.js";
 
 vi.mock("expo-secure-store", () => ({
   getItemAsync: vi.fn(),
@@ -107,6 +111,67 @@ describe("native command projection", () => {
       { threadId: "thread-1", cursor: 0, messages: [], olderCursor: null, run: null },
     );
     expect(shownCards(live?.messages as ThreadMessage[] | undefined)).toEqual(RESUMED_CALL_CARDS);
+  });
+  it("joins a resumed call's card by its link when the killed call's card is on an unloaded older page", () => {
+    const resumed = { commandId: "card-z", executionId: "shell:1", command: "pnpm build" };
+    const open = { exitCode: null, durationMs: null, stdout: null, stderr: null };
+    const events = [
+      resumedEvent("shell:0", "shell:1", { fromCommandId: "card-y", toCommandId: "card-z" }),
+      commandEvent("command.intent", { ...resumed, ...open, outcome: "waiting" }),
+      commandEvent("command.finished", { ...resumed, stdout: "built\n" }),
+    ].map((event, index) => ({ ...event, id: `live-${index}`, seq: 10 + index }));
+    const olderMessage: MobileMessage = {
+      id: "m-1",
+      threadId: "thread-1",
+      seq: 3,
+      role: "bot",
+      blocks: [{ kind: "text", text: "building" }],
+    };
+    const initial: MobileSnapshot = {
+      threadId: "thread-1",
+      cursor: 3,
+      messages: [olderMessage],
+      olderCursor: 3,
+      run: null,
+    };
+    const live = events.reduce<MobileSnapshot | null>(
+      (current, event) =>
+        isMobileThreadSnapshotEvent(event) ? applyMobileThreadEvent(current, event) : current,
+      initial,
+    );
+    // The row already carries the id the server uses for the joined card, not a fresh one.
+    expect(shownCards(live?.messages as ThreadMessage[] | undefined)).toEqual([
+      ["m-1", undefined, undefined, undefined],
+      ["command:resumed:card-z", "pnpm build", "completed", "built\n"],
+    ]);
+    // Loading the older page returns the killed call's row, already renamed by the server to
+    // the same id: the merge must not add a second card for it.
+    const renamedRow: MobileMessage = {
+      id: "command:resumed:card-z",
+      threadId: "thread-1",
+      seq: 1,
+      role: "bot",
+      blocks: [
+        {
+          kind: "command",
+          command: commandBlock({
+            commandId: "card-z",
+            command: "pnpm build",
+            stdout: "built\n",
+            resumedFrom: ["card-y"],
+          }),
+        },
+      ],
+    };
+    const withOlderPage = prependMobileMessagePage(live, {
+      threadId: "thread-1",
+      messages: [renamedRow],
+      olderCursor: null,
+    });
+    expect(shownCards(withOlderPage?.messages as ThreadMessage[] | undefined)).toEqual([
+      ["command:resumed:card-z", "pnpm build", "completed", "built\n"],
+      ["m-1", undefined, undefined, undefined],
+    ]);
   });
 });
 

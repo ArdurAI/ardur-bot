@@ -14,6 +14,7 @@ import type {
   RuntimeProblem,
   Space,
   SpaceNavigation,
+  ToolResumedPayload,
 } from "@ardurbot/contracts";
 import { RuntimeProblemSchema } from "@ardurbot/contracts";
 import type { ThreadHistory } from "@ardurbot/core";
@@ -835,6 +836,8 @@ export type MobileSnapshot = {
   threadId: string;
   cursor?: number;
   messages: MobileMessage[];
+  /** Resume links seen live, kept so a link can join a card outside the loaded page. */
+  links?: readonly ToolResumedPayload[];
   olderCursor: number | null;
   run: {
     id: string;
@@ -1039,31 +1042,34 @@ export function applyMobileThreadEvent(
   if (!prev) return prev;
   if (event.type === "run.context") return reduceRunContext(prev, event);
   if (isCommandCardEvent(event.type) && (event.seq ?? -1) <= (prev.cursor ?? -1)) return prev;
-  if (isCommandCardEvent(event.type))
-    return {
-      ...prev,
-      cursor: event.seq,
-      messages: reduceCommandMessages(prev.messages, {
+  if (isCommandCardEvent(event.type)) {
+    const { messages, links } = reduceCommandMessages(
+      { messages: prev.messages, links: prev.links ?? [] },
+      {
         ...event,
         id: event.id ?? String(event.seq),
         seq: event.seq ?? 0,
         payload: event.payload ?? {},
         threadId: prev.threadId,
         createdAt: event.createdAt ?? new Date().toISOString(),
-      }),
-    };
-  if (isRunTerminalEvent(event))
-    prev = {
-      ...prev,
-      messages: reduceCommandMessages(prev.messages, {
+      },
+    );
+    return { ...prev, cursor: event.seq, messages, links: [...links] };
+  }
+  if (isRunTerminalEvent(event)) {
+    const { messages } = reduceCommandMessages(
+      { messages: prev.messages, links: prev.links ?? [] },
+      {
         ...event,
         id: event.id ?? String(event.seq),
         seq: event.seq ?? 0,
         payload: event.payload ?? {},
         threadId: prev.threadId,
         createdAt: event.createdAt ?? new Date().toISOString(),
-      }),
-    };
+      },
+    );
+    prev = { ...prev, messages };
+  }
   if (event.type === "thread.cleared") {
     return {
       ...prev,
