@@ -35,9 +35,15 @@ function jobs(options: { packaged?: boolean; reply?: (...args: unknown[]) => voi
     deploymentSettings: { findUnique: async () => ({ ownerUserId: job.userId }) },
     spaceMember: { findUnique: async () => ({ role: "owner" }) },
     localImportConfig: {
-      upsert: async () => ({ id: "config", roots: {}, manifest: localImportFixture }),
+      upsert: async () => ({
+        id: "config",
+        roots: {},
+        selection: {},
+        manifest: localImportFixture,
+      }),
+      update: async () => ({}),
     },
-    localImportRecord: { findMany: async () => [] },
+    localImportRecord: { findMany: async () => [], findUnique: async () => null },
   };
   return createLocalImportJobs(prisma as unknown as PrismaClient, {} as MemoryService, {
     apiUrl: "http://api:3100",
@@ -117,6 +123,23 @@ it("reports a lost host as a host failure, distinct from other failures", async 
   expect(events.at(-1)).toMatchObject({
     "job.outcome": "error",
     error: { name: "LocalImportHostError", cause: { name: "RuntimePinError" } },
+  });
+});
+it("fails the job for a mid-run host loss, even though the run resolved with a partial result", async () => {
+  const reply = vi.fn();
+  const { outcome, events } = await runJob(jobs({ packaged: true, reply }), {
+    ...job,
+    action: {
+      action: "import",
+      scanId: localImportFixture.scanId,
+      categories: ["memories", "skills"],
+    },
+  });
+  expect(reply).toHaveBeenCalledWith(job.requestId, expect.objectContaining({ stopped: "host" }));
+  expect(outcome).toBe("LocalImportHostError");
+  expect(events.at(-1)).toMatchObject({
+    "job.outcome": "error",
+    error: { name: "LocalImportHostError" },
   });
 });
 it("gives an actionable worker error when the API callback cannot be reached", async () => {

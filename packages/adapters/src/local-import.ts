@@ -45,6 +45,13 @@ export class LocalImportHostError extends Error {
     this.name = "LocalImportHostError";
   }
 }
+/** A custom folder is outside the owner's home; re-scanning will fail the same way. */
+export class LocalImportInvalidFolderError extends Error {
+  constructor() {
+    super("Choose a folder inside the owner's home.");
+    this.name = "LocalImportInvalidFolderError";
+  }
+}
 /** Only these stop a whole run; any other failure belongs to the item that caused it. */
 export function localImportStop(error: unknown): LocalImportStop | undefined {
   if (error instanceof LocalImportHostError) return "host";
@@ -147,7 +154,7 @@ export class LocalImportService {
         if (!manifest?.sources.some((source) => source.tool === tool && source.defaultMissing))
           throw new Error("A custom folder is available only when the default is missing.");
         if (!root || root.includes("\0") || root.split(/[/\\]/u).includes(".."))
-          throw new Error("Choose a folder inside the owner's home.");
+          throw new LocalImportInvalidFolderError();
       }
     await this.deps.prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`local-import:${config.id}`}, 0))`;
@@ -211,7 +218,7 @@ export class LocalImportService {
       return { preview: await this.read(owner, manifest, action.itemId) };
     const result = counts();
     const failures: LocalImportFailure[] = [];
-    let stopped: unknown;
+    let stopped: LocalImportStop | undefined;
     for (const item of manifest.items.filter(
       (item) =>
         action.categories.includes(item.category) &&
@@ -245,8 +252,9 @@ export class LocalImportService {
           "import.category": item.category,
           "import.path": item.relativePath,
         });
-        if (localImportStop(error)) {
-          stopped = error;
+        const reason = localImportStop(error);
+        if (reason) {
+          stopped = reason;
           break;
         }
         result.failed++;
@@ -273,9 +281,13 @@ export class LocalImportService {
         ...(!automatic && !action.itemId ? { selection } : {}),
       },
     });
-    // Items written before the stop stay imported and recorded above.
-    if (stopped) throw stopped;
-    return { result, ...(failures.length ? { failures } : {}) };
+    // Items written before the stop stay imported and recorded above; the caller gets the
+    // partial result and the failures found so far along with why the run stopped.
+    return {
+      result,
+      ...(failures.length ? { failures } : {}),
+      ...(stopped ? { stopped } : {}),
+    };
   }
   private async importItem(
     owner: ImportOwner,
@@ -671,8 +683,8 @@ export class LocalImportService {
       for (const [tool, categories] of Object.entries(
         LocalImportSelectionSchema.parse(config.selection),
       )) {
-        if (categories?.length)
-          await this.run(
+        if (categories?.length) {
+          const response = await this.run(
             owner,
             {
               action: "import",
@@ -682,6 +694,10 @@ export class LocalImportService {
             },
             true,
           );
+          // A stop made no more progress than a thrown error would have; retry next hour
+          // instead of calling a lost host again for every other tool and tenant due now.
+          if (response.stopped) throw new Error(`Automatic import stopped: ${response.stopped}`);
+        }
       }
     }
   }
@@ -723,7 +739,11 @@ export function createImportTransport(
       }
     } catch (error) {
       // HostClient reports a lost, busy or failed host this way; other errors are ours.
-      throw error instanceof RuntimePinError ? new LocalImportHostError({ cause: error }) : error;
+      if (!(error instanceof RuntimePinError)) throw error;
+      if (error.problem.code === "local-import-rescan")
+        throw new LocalImportRescanError(error.problem.reason);
+      if (error.problem.code === "local-import-item") throw new Error(error.problem.reason);
+      throw new LocalImportHostError({ cause: error });
     }
     return JSON.parse(text) as unknown;
   };

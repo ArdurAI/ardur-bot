@@ -8,6 +8,7 @@ import type {
   ControlLeaseRef,
   PortableFile,
   ProcessEvent,
+  SandboxDescriptor,
   SandboxProvider,
   ScreenRequest,
   ScreenSession,
@@ -36,9 +37,10 @@ export class FakeSandboxProvider implements SandboxProvider {
   }
   readonly boxes = new Map<string, FakeBox>();
 
-  describe() {
+  describe(): SandboxDescriptor {
     return {
       id: "fake",
+      kind: "fake",
       contractVersion: "1",
       adapterVersion: "0.1.0",
       capabilities: {

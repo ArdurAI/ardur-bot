@@ -44,6 +44,7 @@ import type { EndpointResult } from "./endpoint";
 import { defaultApiBase, normalizeApiBase } from "./endpoint";
 import { t } from "./i18n";
 import { resumeLiveNotifications } from "./live-notifications";
+import { RpcError } from "./rpc-error";
 import {
   clearSessionToken,
   loadSessionToken,
@@ -654,6 +655,13 @@ export async function rpc<T>(
         typeof payload.message === "string"
           ? payload.message
           : `rpc ${proc} failed`);
+      const code =
+        payload &&
+        typeof payload === "object" &&
+        "code" in payload &&
+        typeof payload.code === "string"
+          ? payload.code
+          : undefined;
       const unauthorized = res.status === 401 || /unauthorized/i.test(message);
       // After a delete where SecureStore could not clear the stale id, restart
       // reloads it and the first RPCs 401. Probe once without a Space header:
@@ -723,9 +731,9 @@ export async function rpc<T>(
           throw retryError;
         }
         if (!selectedSpaceId()) await clearStaleSpaceSelection();
-        throw new Error(message);
+        throw new RpcError(message, code);
       }
-      throw new Error(message);
+      throw new RpcError(message, code);
     }
     return parsed.json as T;
   } finally {

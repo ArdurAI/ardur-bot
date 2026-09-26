@@ -29,6 +29,7 @@ function fixture(approved = false) {
   const computer = {
     id: "computer",
     homeKey: "home",
+    providerRef: "desktop-computer",
     state: "running",
     networkEgress: true,
     kind: "desktop",
@@ -59,7 +60,10 @@ function fixture(approved = false) {
       updateMany: vi.fn(async () => ({ count: 1 })),
     },
     space: { findUniqueOrThrow: vi.fn(async () => ({ placement: { mode: "threshold" } })) },
-    computer: { updateMany: vi.fn(async () => ({ count: 1 })) },
+    computer: {
+      updateMany: vi.fn(async () => ({ count: 1 })),
+      findUniqueOrThrow: vi.fn(async () => computer),
+    },
     computerUpdate: {
       create: vi.fn(async () => ({ id: "move" })),
       update: vi.fn(),
@@ -90,9 +94,13 @@ function fixture(approved = false) {
     },
   ];
   const supportsNetworkEgress = vi.fn(async () => false);
+  const targetSandbox = { supportsNetworkEgress } as unknown as SandboxProvider;
   const catalog = {
     list: vi.fn(async () => ({ targets, defaultTargetId: "host" })),
-    connections: { resolve: vi.fn(async () => ({ supportsNetworkEgress })) },
+    engineFamily: vi.fn(async () => "desktop"),
+    compatibleTargets: vi.fn(async (_family, candidates) => candidates),
+    resolveTarget: vi.fn(async () => targetSandbox),
+    placementTarget: vi.fn(async () => targetSandbox),
   };
   const deps = {
     prisma: prisma as unknown as PrismaClient,
@@ -107,6 +115,7 @@ function fixture(approved = false) {
     computer,
     deps,
     supportsNetworkEgress,
+    targetSandbox,
     catalog: catalog as unknown as FleetCatalog,
   };
 }
@@ -175,6 +184,7 @@ it("uses the checkpoint lifecycle before execution and persists the move reason"
     "none",
     expect.any(Function),
     { imageProfile: "base", connectionId: "remote", placementRunId: "run" },
+    f.targetSandbox,
   );
   expect(f.prisma.run.updateMany).toHaveBeenCalledWith(
     expect.objectContaining({
@@ -189,6 +199,99 @@ it("uses the checkpoint lifecycle before execution and persists the move reason"
   expect(f.prisma.computer.updateMany).toHaveBeenLastCalledWith(
     expect.objectContaining({ data: { maintenanceId: null } }),
   );
+});
+it("resolves the computer's engine once and checks every candidate against its family", async () => {
+  const f = fixture(true);
+  expect(await placeRunComputer(f.deps, f.catalog, "run", new AbortController().signal)).toBe(true);
+  expect(f.catalog.engineFamily).toHaveBeenCalledOnce();
+  expect(f.catalog.compatibleTargets).toHaveBeenCalledWith(
+    "desktop",
+    expect.any(Array),
+    expect.any(Object),
+  );
+  expect(f.catalog.placementTarget).toHaveBeenCalledWith(
+    "desktop",
+    expect.objectContaining({ id: "remote" }),
+    expect.any(Object),
+  );
+  expect(replace).toHaveBeenCalledOnce();
+});
+it("never moves a computer whose engine is not configured here", async () => {
+  const f = fixture(true);
+  vi.mocked(f.catalog.engineFamily).mockRejectedValue(
+    new Error("This computer runs on E2B, which is not configured here."),
+  );
+  expect(await placeRunComputer(f.deps, f.catalog, "run", new AbortController().signal)).toBe(true);
+  expect(f.catalog.list).not.toHaveBeenCalled();
+  expect(replace).not.toHaveBeenCalled();
+  expect(f.prisma.computerUpdate.create).not.toHaveBeenCalled();
+});
+it("skips an automatic move without a computer update when Settings changed the computer", async () => {
+  const f = fixture(true);
+  const moved = {
+    ...f.computer,
+    kind: "docker",
+    providerRef: "docker-after-settings",
+    connectionId: "engine",
+  };
+  const list = vi.mocked(f.catalog.list);
+  const listed = list.getMockImplementation();
+  if (!listed) throw new Error("listing is unavailable");
+  list.mockImplementation(async (context) => {
+    f.prisma.computer.findUniqueOrThrow.mockResolvedValue(moved as never);
+    return listed(context);
+  });
+  expect(await placeRunComputer(f.deps, f.catalog, "run", new AbortController().signal)).toBe(true);
+  expect(replace).not.toHaveBeenCalled();
+  expect(f.catalog.placementTarget).not.toHaveBeenCalled();
+  expect(f.prisma.computerUpdate.create).not.toHaveBeenCalled();
+  expect(f.prisma.computerUpdate.updateMany).not.toHaveBeenCalled();
+  expect(f.prisma.computer.updateMany).not.toHaveBeenCalled();
+  expect(f.prisma.run.updateMany).toHaveBeenCalledOnce();
+  expect(f.prisma.run.updateMany).toHaveBeenCalledWith(
+    expect.objectContaining({
+      data: { placement: expect.objectContaining({ targetId: "remote", status: "skipped" }) },
+    }),
+  );
+});
+it("keeps an automatic local Docker computer when only Kubernetes has room", async () => {
+  const f = fixture();
+  f.computer.kind = "docker";
+  f.computer.providerRef = "docker-computer";
+  f.computer.bots[0]!.moveAutomatically = true;
+  f.computer.bots[0]!.placementConsent = true;
+  f.run.bot.moveAutomatically = true;
+  f.run.bot.placementConsent = true;
+  f.run.bot.computer = f.computer;
+  const docker = {
+    id: "docker",
+    name: "Docker on this Mac",
+    kind: "docker",
+    connectionId: null,
+    state: "connected",
+    capacity: { ...unknownCapacity(), memoryFree: 512 * 1024 ** 2 },
+    bots: [{ id: "bot", name: "Bot" }],
+  };
+  const kubernetes = {
+    id: "default",
+    name: "Default computer",
+    kind: "kubernetes",
+    connectionId: null,
+    state: "connected",
+    capacity: { ...unknownCapacity(), memoryFree: 16 * 1024 ** 3 },
+    bots: [],
+  };
+  vi.mocked(f.catalog.list).mockResolvedValue({
+    targets: [docker, kubernetes],
+    defaultTargetId: "default",
+  } as never);
+  vi.mocked(f.catalog.compatibleTargets).mockResolvedValue([docker] as never);
+
+  expect(await placeRunComputer(f.deps, f.catalog, "run", new AbortController().signal)).toBe(true);
+  expect(replace).not.toHaveBeenCalled();
+  expect(f.computer.state).toBe("running");
+  expect(f.prisma.computerUpdate.create).not.toHaveBeenCalled();
+  expect(f.prisma.run.updateMany).not.toHaveBeenCalled();
 });
 it("never moves an existing run snapshot or a pinned native runtime", async () => {
   const f = fixture(true);

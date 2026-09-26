@@ -47,7 +47,7 @@ The E2B adapter uses `@e2b/desktop` for machine lifecycle, shell commands, files
 
 ## Daytona backend
 
-The database stores the provider kind and opaque `providerRef`. That reference is an acceleration path, not durable data. It is passed back only to the same provider kind. A missing machine or a provider-kind change creates a replacement and restores its workspace through the provider-neutral contract.
+The database stores the provider kind and opaque `providerRef`. That reference is an acceleration path, not durable data. It is passed back only to the same provider kind. A missing machine or a provider-kind change creates a replacement and restores its workspace through the provider-neutral contract. A computer without a saved connection keeps the provider of its own kind: Docker stays on local Docker while its supervisor is configured, and E2B, Daytona, or Box on that provider while its API key is set. A host computer runs on the host only where the host runs computers: `SANDBOX_PROVIDER=desktop`, or `SANDBOX_PROVIDER=docker` with This Mac on. On any other deployment, including Docker with This Mac off, its engine is not configured, and it never runs on the server. A connectionless Kubernetes computer uses the deployment's provider only when `SANDBOX_PROVIDER=kubernetes`. There is no automatic in-cluster provider, because agent pods must use a separately issued, namespace-limited credential (see [compute profiles](compute-profiles.md)), never the app's own service account and namespace. When a computer's engine is not configured, its run fails before the computer is claimed with "This computer runs on E2B, which is not configured here. Reset it in Settings, Computers to start it on this deployment's engine, or configure E2B again." The run stops, so it does not hold the computer. Move, Reset, and Recover then treat the computer as having no reachable machine: they restore its last saved workspace on the chosen connection, or on the deployment's own engine, without calling the missing engine. After the files are restored, the bot's conversation says "The previous engine was not available, so the last saved workspace was restored." A computer is never restored onto the host: where the deployment's own engine is the host, Reset and Recover of such a computer are refused, and a saved connection is the way out.
 
 ## Box backend
 
@@ -118,7 +118,10 @@ browser profiles are portable, while system packages outside the workspace are n
 ## Compute profiles and local engines
 
 Docker computers now carry an explicit Standard or Developer image profile and may bind to a
-shared Docker/Podman socket connection. Kubernetes/kind computers implement the same lifecycle
+shared Docker/Podman socket connection. Image profiles do not apply to a host computer. Settings
+hides that control, and Apply does not send a profile, so a settings save does not replace the
+host computer to install nothing. Install the tools on the machine when the host needs them.
+Kubernetes/kind computers implement the same lifecycle
 and portable file contract through the Kubernetes API, retaining a home PVC during sleep. Their
 screen and interactive-terminal capability flags are false. Profile and connection changes use
 confirmed background maintenance and preserve the external workspace checkpoint.

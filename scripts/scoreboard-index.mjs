@@ -9,7 +9,6 @@ import {
   readFile,
   rename,
   rm,
-  stat,
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
@@ -18,8 +17,7 @@ import { tsImport } from "tsx/esm/api";
 
 /** Local historical scoreboard. Workflow artifacts are a transport copy, not this store. */
 export const SCOREBOARD_INDEX_RELATIVE_PATH = ".context/performance/scoreboard-index";
-export const INDEX_SCHEMA_VERSION = 6;
-export const COMMIT_OBJECT_RETENTION_DAYS = 180;
+export const INDEX_SCHEMA_VERSION = 7;
 export const WORKFLOW_ARTIFACT_RETENTION_DAYS = 90;
 /** Changing the committed release policy is a reviewed change to this digest. */
 export const RELEASE_POLICY_SHA256 =
@@ -39,6 +37,7 @@ const INDEX_SCOPES = {
   commit: {
     workflow: "performance.yml",
     artifact: INDEX_ARTIFACT,
+    otherSchema: /^scoreboard-index-schema-\d+$/,
     events: ["push"],
     status: "success",
     marker: { file: "scripts/scoreboard-index.mjs", text: null },
@@ -46,6 +45,7 @@ const INDEX_SCOPES = {
   release: {
     workflow: "release-desktop.yml",
     artifact: RELEASE_INDEX_ARTIFACT,
+    otherSchema: /^scoreboard-release-index-schema-\d+$/,
     events: ["push", "workflow_dispatch"],
     status: "completed",
     // A schema-versioned artifact name never appears literally in the workflow text, so this
@@ -60,6 +60,7 @@ const CHAIN_ORIGINS = [
   "non-durable-check",
   "history-rewritten",
   "schema-upgrade",
+  "restore-failed",
 ];
 const ENUMERATION_REASONS = ["empty-chain-retention-window", "chain-without-ancestor"];
 /** The release evidence run must produce both reports for the same commit and build. */
@@ -110,7 +111,7 @@ export const PENDING_REASONS = Object.freeze([
   "inconclusive-interval",
 ]);
 const GENESIS = "0".repeat(64);
-const RECORD_KEYS = [
+export const RECORD_KEYS = [
   "schemaVersion",
   "status",
   "tier",
@@ -135,7 +136,6 @@ const RECORD_KEYS = [
   "pendingReason",
   "gateCodes",
   "supersedes",
-  "expiresRecord",
   "chainOrigin",
   "enumerationStart",
   "enumerationReason",
@@ -395,9 +395,6 @@ function sameKey(record, key) {
 function recordsPath(root) {
   return path.join(root, "records.jsonl");
 }
-function objectPath(root, digestValue) {
-  return path.join(root, "objects", digestValue);
-}
 async function exists(file) {
   try {
     await access(file);
@@ -439,7 +436,6 @@ export function baselineMeasurementPlan({ baseHarnessPresent, candidateSha, base
   if (typeof baseHarnessPresent !== "boolean") fail("invalid-harness", "invalid-harness");
   const pendingReason = baseHarnessPresent ? null : "benchmark-runner-incompatible";
   return {
-    copyProductionIntoBaseline: false,
     measureBaseline: pendingReason === null,
     pendingReason,
   };
@@ -447,44 +443,28 @@ export function baselineMeasurementPlan({ baseHarnessPresent, candidateSha, base
 
 /**
  * `pendingReason` is the budgets job's verdict for `headCommit` alone. A commit reached only by
- * backfill or by a multi-commit push was never individually attempted, so it is `not-measured`
- * unless a measurement supplies its own reason. With no `headCommit`, every commit uses
- * `pendingReason`, for callers that plan a single attempted commit.
+ * backfill or by a multi-commit push was never individually attempted, so it is `not-measured`.
+ * With no `headCommit`, every commit uses `pendingReason`, for callers that plan a single
+ * attempted commit. No caller can supply an actual measurement for a commit-tier push today, so
+ * every planned commit is `pending`, never `measured`.
  */
-export function planEvidenceRecords({
-  commits,
-  measurements = [],
-  pendingReason,
-  headCommit = null,
-}) {
+export function planEvidenceRecords({ commits, pendingReason, headCommit = null }) {
   if (!Array.isArray(commits)) fail("invalid-commits", "invalid-commits");
   if (!PENDING_REASONS.includes(pendingReason)) fail("invalid-reason", "invalid-reason");
   const seen = new Set();
-  const supplied = new Map();
-  for (const measurement of measurements) {
-    sha40(measurement?.commit);
-    if (supplied.has(measurement.commit)) fail("duplicate-measurement", "duplicate-measurement");
-    if (measurement.pendingReason && !PENDING_REASONS.includes(measurement.pendingReason))
-      fail("invalid-reason", "invalid-reason");
-    supplied.set(measurement.commit, measurement);
-  }
-  const planned = commits.map((commit) => {
+  return commits.map((commit) => {
     sha40(commit?.commit);
     if (commit.parentCommit !== null) sha40(commit.parentCommit);
     if (seen.has(commit.commit)) fail("duplicate-commit", "duplicate-commit");
     seen.add(commit.commit);
-    const measurement = supplied.get(commit.commit);
-    supplied.delete(commit.commit);
     const attempted = headCommit === null || commit.commit === headCommit;
     return {
       commit: commit.commit,
       parentCommit: commit.parentCommit,
-      pendingReason: measurement?.pendingReason ?? (attempted ? pendingReason : "not-measured"),
-      envelope: measurement?.envelope ?? null,
+      pendingReason: attempted ? pendingReason : "not-measured",
+      envelope: null,
     };
   });
-  if (supplied.size) fail("unenumerated-commit", "unenumerated-commit");
-  return planned;
 }
 
 export async function samplePlanFor(mode) {
@@ -506,81 +486,32 @@ export async function samplePlanFor(mode) {
   fail("invalid-mode", "invalid-mode");
 }
 
+/**
+ * Every writer of one index root runs as a single step of a single job on its own runner; no two
+ * processes ever hold this lock at once in production. The lock exists only to fail loudly if
+ * that assumption is ever wrong (or a test deliberately races), so it is a plain mutex with a
+ * timeout and no heartbeat or stale-lock takeover.
+ */
 async function withIndexLock(root, fn, options = {}) {
   const timeoutMs = options.timeoutMs ?? 10_000;
-  const staleMs = options.staleMs ?? 30_000;
-  const heartbeatMs = options.heartbeatMs ?? Math.max(5, Math.floor(staleMs / 3));
-  if (heartbeatMs >= staleMs) fail("invalid-lock", "Lock heartbeat must precede stale takeover.");
   await mkdir(root, { recursive: true });
   const lockDir = path.join(root, "lock");
-  const ownerPath = path.join(lockDir, "owner");
-  const token = `${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const started = Date.now();
   for (;;) {
     try {
       await mkdir(lockDir);
-      await writeFile(ownerPath, token);
       break;
     } catch (error) {
       if (error.code !== "EEXIST") throw error;
-      let stale = false;
-      try {
-        stale = Date.now() - (await stat(ownerPath)).mtimeMs > staleMs;
-      } catch {
-        try {
-          stale = Date.now() - (await stat(lockDir)).mtimeMs > staleMs;
-        } catch {
-          stale = false;
-        }
-      }
-      if (stale) {
-        await rm(lockDir, { recursive: true, force: true });
-        continue;
-      }
       if (Date.now() - started > timeoutMs)
         fail("lock-timeout", "Scoreboard index lock timed out.");
       await new Promise((resolve) => setTimeout(resolve, 20));
     }
   }
-  const ownerHandle = await open(ownerPath, "r+");
-  let heartbeatFailure = null;
-  let heartbeat = Promise.resolve();
-  const timer = setInterval(() => {
-    heartbeat = heartbeat
-      .then(async () => {
-        if ((await readFile(ownerPath, "utf8")) !== token)
-          fail("lock-lost", "Scoreboard index lock ownership was lost.");
-        const now = new Date();
-        await ownerHandle.utimes(now, now);
-      })
-      .catch((error) => {
-        heartbeatFailure = error;
-      });
-  }, heartbeatMs);
-  timer.unref?.();
-  const assertOwner = async () => {
-    await heartbeat;
-    if (heartbeatFailure) throw heartbeatFailure;
-    let owner = null;
-    try {
-      owner = await readFile(path.join(lockDir, "owner"), "utf8");
-    } catch {
-      /* A stale-lock takeover can remove the old owner before this check. */
-    }
-    if (owner !== token) fail("lock-lost", "Scoreboard index lock ownership was lost.");
-  };
   try {
-    return await fn(assertOwner);
+    return await fn();
   } finally {
-    clearInterval(timer);
-    await heartbeat;
-    await ownerHandle.close();
-    try {
-      if ((await readFile(ownerPath, "utf8")) === token)
-        await rm(lockDir, { recursive: true, force: true });
-    } catch {
-      /* A stale lock was already replaced. */
-    }
+    await rm(lockDir, { recursive: true, force: true });
   }
 }
 
@@ -645,7 +576,6 @@ export function auditCommits(records, commits) {
     return {
       commit: id,
       status: current?.status ?? "missing",
-      retention: history.some((record) => record.status === "expired") ? "expired" : "current",
       history: history.length,
       rejections: history.filter((record) => record.status === "rejected").length,
     };
@@ -763,7 +693,7 @@ async function normalizeRecord(input, existing) {
   if (input.fixedReleaseCommit !== null) sha40(input.fixedReleaseCommit);
   sha40(input.runnerCommit);
   timestamp(input.indexedAt);
-  if (!["measured", "pending", "expired", "rejected", "refused", "waived"].includes(input.status))
+  if (!["measured", "pending", "rejected", "refused", "waived"].includes(input.status))
     fail("invalid-status", "invalid-status");
   if (!["commit", "release"].includes(input.tier)) fail("invalid-tier", "invalid-tier");
   if (input.status === "waived" && input.tier !== "release")
@@ -801,7 +731,6 @@ async function normalizeRecord(input, existing) {
     gateCodes: [],
     metricIds: storedMetricIds(input.metricIds),
     supersedes: input.supersedes,
-    expiresRecord: input.expiresRecord ?? null,
     chainOrigin: existing.length === 0 ? (input.chainOrigin ?? "first-run") : null,
     enumerationStart: input.enumerationStart ?? null,
     enumerationReason: input.enumerationReason ?? null,
@@ -828,24 +757,9 @@ async function normalizeRecord(input, existing) {
     if (!PENDING_REASONS.includes(input.pendingReason)) fail("invalid-reason", "invalid-reason");
     body.pendingReason = input.pendingReason;
     body.gateCodes = storedGateCodes(input.gateCodes, false);
-    if (input.expiresRecord !== undefined && input.expiresRecord !== null)
-      fail("invalid-record", "invalid-record");
-    body.expiresRecord = null;
   } else if (input.status === "refused") {
     if (input.pendingReason !== null) fail("invalid-reason", "invalid-reason");
     body.gateCodes = storedGateCodes(input.gateCodes, true);
-  } else if (input.status === "expired") {
-    digest(input.expiresRecord);
-    body.expiresRecord = input.expiresRecord;
-    body.pendingReason = null;
-    if (input.objectDigest) {
-      digest(input.objectDigest);
-      body.objectDigest = input.objectDigest;
-    }
-    if (input.reportDigest) {
-      digest(input.reportDigest);
-      body.reportDigest = input.reportDigest;
-    }
   } else if (input.status === "waived") {
     if (input.pendingReason !== null) fail("invalid-reason", "invalid-reason");
     body.waiver = parseEvidenceWaiver(input.waiver?.reason, input.waiver?.actor);
@@ -923,11 +837,9 @@ async function normalizeRecords(root, inputs, existing) {
 export async function appendIndexRecords(root, build, options = {}) {
   return withIndexLock(
     root,
-    async (assertOwner) => {
+    async () => {
       const existing = await readIndexUnlocked(root);
       const appended = await normalizeRecords(root, await build(existing), existing);
-      await options.beforeAppend?.();
-      await assertOwner();
       await writeLines(root, appended);
       return { existing, appended };
     },
@@ -936,6 +848,8 @@ export async function appendIndexRecords(root, build, options = {}) {
 }
 
 const CHAIN_ORIGIN_FILE = ".chain-origin";
+const defaultWarn = (message) =>
+  process.stdout.write(`::warning title=Scoreboard index::${message}\n`);
 
 /** Starts a fresh chain in `root` naming why the prior chain was not restored. */
 async function startNewChain(root, origin) {
@@ -944,17 +858,29 @@ async function startNewChain(root, origin) {
   return origin;
 }
 
-export async function restoreIndex(source, root, missingReason) {
+/**
+ * A restored chain that fails verification never blocks a later run: it starts a fresh chain
+ * instead of rethrowing, named `schema-upgrade` for a schema-version mismatch (expected after a
+ * bump; the versioned artifact name means this should be rare) and `restore-failed` for any other
+ * verification failure (a corrupted or tampered upload). `warn` names the failure code and the
+ * artifact so a maintainer can find and delete the unreadable upload.
+ */
+export async function restoreIndex(source, root, missingReason, options = {}) {
+  const warn = options.warn ?? defaultWarn;
+  const artifact = options.artifact ?? "the restored index";
   const foundChain = missingReason == null || missingReason === "";
   if (await exists(recordsPath(source))) {
     try {
       await readIndex(source);
     } catch (error) {
-      if (!(error instanceof ScoreboardIndexError) || error.code !== "unsupported-index-schema")
-        throw error;
-      // The artifact name carries the schema version, so this should not happen in production;
-      // it is a safety net that never blocks a release on evidence the current code cannot read.
-      return startNewChain(root, "schema-upgrade");
+      if (!(error instanceof ScoreboardIndexError)) throw error;
+      const origin =
+        error.code === "unsupported-index-schema" ? "schema-upgrade" : "restore-failed";
+      warn(
+        `${artifact} failed verification (${error.code}) and was not restored; starting a new ` +
+          `chain instead. Delete that artifact once its replacement has uploaded.`,
+      );
+      return startNewChain(root, origin);
     }
     if (await exists(root)) {
       const entries = await readdir(root);
@@ -978,79 +904,6 @@ async function chainOrigin(root) {
     if (error.code !== "ENOENT") throw error;
     return "first-run";
   }
-}
-
-export async function pruneCommitObjects(root, now, retentionDays = COMMIT_OBJECT_RETENTION_DAYS) {
-  if (!(now instanceof Date) || Number.isNaN(now.getTime()))
-    fail("invalid-timestamp", "invalid-timestamp");
-  if (!Number.isSafeInteger(retentionDays) || retentionDays < 1)
-    fail("invalid-retention", "invalid-retention");
-  return withIndexLock(root, async (assertOwner) => {
-    const existing = await readIndexUnlocked(root);
-    const cutoff = now.getTime() - retentionDays * 24 * 60 * 60 * 1000;
-    const protectedDigests = new Set(
-      existing
-        .filter((record) => {
-          if (!record.objectDigest) return false;
-          if (record.tier === "release") return true;
-          const indexedAt = Date.parse(record.indexedAt);
-          return Number.isFinite(indexedAt) && indexedAt >= cutoff;
-        })
-        .map((record) => record.objectDigest),
-    );
-    const tombstoned = new Set(
-      existing
-        .filter((record) => record.status === "expired")
-        .map((record) => record.expiresRecord),
-    );
-    const records = [...existing];
-    const doomed = [];
-    for (const record of existing) {
-      if (record.tier !== "commit" || record.status !== "measured" || !record.objectDigest)
-        continue;
-      if (Date.parse(record.indexedAt) >= cutoff) continue;
-      if (protectedDigests.has(record.objectDigest)) continue;
-      doomed.push(objectPath(root, record.objectDigest));
-      if (!tombstoned.has(record.recordHash)) {
-        const tombstone = await normalizeRecord(
-          {
-            root,
-            status: "expired",
-            tier: "commit",
-            mode: "commit",
-            commit: record.commit,
-            parentCommit: record.parentCommit,
-            fixedReleaseCommit: record.fixedReleaseCommit,
-            suiteVersion: record.suiteVersion,
-            environment: record.environment,
-            environmentHash: record.environmentHash,
-            attempt: nextAttempt(records, record),
-            role: record.role,
-            indexedAt: now.toISOString(),
-            runnerCommit: record.runnerCommit,
-            supersedes: records.filter((item) => sameKey(item, record)).at(-1)?.recordHash ?? null,
-            expiresRecord: record.recordHash,
-            objectDigest: record.objectDigest,
-            reportDigest: record.reportDigest,
-          },
-          records,
-        );
-        records.push(tombstone);
-        tombstoned.add(record.recordHash);
-      }
-    }
-    // Expiry records are written before any object bytes are removed.
-    await assertOwner();
-    await writeLines(root, records.slice(existing.length));
-    let removed = 0;
-    for (const file of doomed) {
-      if (await exists(file)) {
-        await rm(file);
-        removed += 1;
-      }
-    }
-    return { removed, records: records.length };
-  });
 }
 
 function installerRank(name) {
@@ -1480,6 +1333,11 @@ function undeclaredDetail(scope) {
   return `The ${budgetName(scope)} budget is not declared.`;
 }
 
+/** The working path today, until a physical evidence runner exists (see docs/performance.md). */
+const NO_EVIDENCE_DETAIL =
+  "No measured evidence exists for this release. To publish a preview now, run the release " +
+  "workflow by hand with an evidence_waiver reason.";
+
 export async function evaluatePublicationGate(input) {
   const scoreboard = await loadScoreboard();
   const reasons = [];
@@ -1502,7 +1360,7 @@ export async function evaluatePublicationGate(input) {
   let tierMetricIds = null;
   const undeclaredIds = [];
   if (!input.parent || !input.candidate || !input.fixedRelease || !input.policy) {
-    push("reports-missing", "reports");
+    push("reports-missing", "reports", NO_EVIDENCE_DETAIL);
   } else {
     if (
       releasePolicy &&
@@ -1623,15 +1481,19 @@ export async function evaluatePublicationGate(input) {
   } catch {
     push("missing-platform", "coverage");
   }
-  for (const target of REQUIRED_RELEASE_TARGETS) {
-    const cell = coverage.find((item) => item.target === target);
-    if (cell?.packaged !== "observed") push("missing-platform", target);
-    if (cell?.energy !== "observed") push("missing-energy", target);
-  }
-  for (const cell of coverage) {
-    if (REQUIRED_RELEASE_TARGETS.includes(cell.target)) continue;
-    if (cell.packaged !== "observed") unknowns.push(`${cell.target} packaged: not-measured`);
-    if (cell.energy !== "observed") unknowns.push(`${cell.target} energy: not-measured`);
+  // Without any report at all there is nothing to judge platform coverage or energy against;
+  // `reports-missing` already says so, and piling on those codes would be noise.
+  if (input.candidate) {
+    for (const target of REQUIRED_RELEASE_TARGETS) {
+      const cell = coverage.find((item) => item.target === target);
+      if (cell?.packaged !== "observed") push("missing-platform", target);
+      if (cell?.energy !== "observed") push("missing-energy", target);
+    }
+    for (const cell of coverage) {
+      if (REQUIRED_RELEASE_TARGETS.includes(cell.target)) continue;
+      if (cell.packaged !== "observed") unknowns.push(`${cell.target} packaged: not-measured`);
+      if (cell.energy !== "observed") unknowns.push(`${cell.target} energy: not-measured`);
+    }
   }
   let observedSamples = null;
   let observedStartupSamples = Object.fromEntries(
@@ -1705,7 +1567,7 @@ export async function evaluatePublicationGate(input) {
     if (!installersMatchBuildArtifacts(files, buildArtifacts))
       push("artifact-digest-mismatch", "artifacts");
   }
-  if (input.attachedEvidenceValid !== true)
+  if (input.candidate && input.attachedEvidenceValid !== true)
     push("artifact-digest-mismatch", "scoreboard-candidate.json");
   for (const item of candidateSet) {
     const name = `scoreboard-${item.source}`;
@@ -2126,6 +1988,7 @@ async function runWaivedRelease(options, files, unmapped) {
   );
   const extras = await judgeCandidateReports(options.reportsRoot, null);
   if (
+    options.reportsPresent === true ||
     supplied.some(Boolean) ||
     extras.unjudged.length ||
     files.some((file) => file.name.startsWith("scoreboard-"))
@@ -2430,7 +2293,7 @@ export async function runIndexPush(options) {
     options.warn ??
     ((message) => process.stdout.write(`::warning title=Scoreboard index::${message}\n`));
   const tier = mode === "release" ? "release" : "commit";
-  return withIndexLock(options.root, async (assertOwner) => {
+  return withIndexLock(options.root, async () => {
     let existing = await readIndexUnlocked(options.root);
     let enumerationStart = null;
     let enumerationReason = null;
@@ -2456,7 +2319,6 @@ export async function runIndexPush(options) {
     }
     const planned = planEvidenceRecords({
       commits,
-      measurements: options.measurements ?? [],
       pendingReason: options.pendingReason ?? "schema-3-evidence-not-produced",
       headCommit,
     });
@@ -2470,11 +2332,7 @@ export async function runIndexPush(options) {
         tier,
       });
       return {
-        status: item.envelope
-          ? "measured"
-          : prior.some((entry) => entry.status === "measured")
-            ? "rejected"
-            : "pending",
+        status: prior.some((entry) => entry.status === "measured") ? "rejected" : "pending",
         tier,
         mode,
         commit: item.commit,
@@ -2492,11 +2350,10 @@ export async function runIndexPush(options) {
         enumerationStart,
         enumerationReason,
         pendingReason: item.pendingReason,
-        envelope: item.envelope,
+        envelope: null,
       };
     });
     const appended = await normalizeRecords(options.root, inputs, existing);
-    await assertOwner();
     await writeLines(options.root, appended, { replace: reset });
     const audit = auditCommits(
       [...existing, ...appended],
@@ -2543,16 +2400,15 @@ export function durableIndexScope({ eventName, ref }) {
   return eventName === "push" && (ref === "refs/heads/dev" || ref === "refs/heads/main");
 }
 
+/** `name` undefined lists every artifact of the run, unfiltered. */
 async function listRunArtifacts(request, repository, runId, name) {
   const artifacts = [];
   for (let page = 1; artifacts.length < 1000; page += 1) {
-    const response = await request(`/repos/${repository}/actions/runs/${runId}/artifacts`, {
-      name,
-      per_page: 100,
-      page,
-    });
+    const query = { per_page: 100, page };
+    if (name !== undefined) query.name = name;
+    const response = await request(`/repos/${repository}/actions/runs/${runId}/artifacts`, query);
     const listed = (Array.isArray(response?.artifacts) ? response.artifacts : []).filter(
-      (artifact) => artifact?.name === name,
+      (artifact) => name === undefined || artifact?.name === name,
     );
     artifacts.push(...listed);
     const pageLength = Array.isArray(response?.artifacts) ? response.artifacts.length : 0;
@@ -2647,19 +2503,21 @@ export async function findPriorIndexArtifact({
       );
     let expired = false;
     let sawRun = false;
+    let newestCandidateRunId = null;
     for (const run of candidates) {
       seen.add(run.id);
       const createdAt = Date.parse(run.created_at);
       if (!Number.isFinite(createdAt) || createdAt < windowStart.getTime()) break;
       sawRun = true;
+      if (newestCandidateRunId === null) newestCandidateRunId = run.id;
       const artifacts = (
         await listRunArtifacts(request, repository, run.id, scope.artifact)
       ).filter((artifact) => artifact.workflow_run?.id === run.id);
       if (artifacts.some((artifact) => artifact.expired === false))
-        return { live: run.id, expired, sawRun };
+        return { live: run.id, expired, sawRun, newestCandidateRunId };
       if (artifacts.some((artifact) => artifact.expired === true)) expired = true;
     }
-    return { live: null, expired, sawRun };
+    return { live: null, expired, sawRun, newestCandidateRunId };
   }
 
   async function inspectRange(start, end, root) {
@@ -2683,6 +2541,7 @@ export async function findPriorIndexArtifact({
         live: older.live,
         expired: newer.expired || older.expired,
         sawRun: newer.sawRun || older.sawRun,
+        newestCandidateRunId: newer.newestCandidateRunId ?? older.newestCandidateRunId,
       };
     }
     return walkSlice(listed.runs);
@@ -2691,7 +2550,20 @@ export async function findPriorIndexArtifact({
   const found = await inspectRange(listedFrom, now, true);
   if (found.live != null) return { runId: found.live, missingReason: null };
   if (found.expired) return { runId: null, missingReason: "expired-after-90-days-inactivity" };
-  if (found.sawRun) return { runId: null, missingReason: "prior-artifact-missing" };
+  if (found.sawRun) {
+    // The current-schema artifact was never found. Before calling it truly missing, check
+    // whether the newest candidate uploaded an older schema's name instead of nothing at all.
+    const all = (
+      await listRunArtifacts(request, repository, found.newestCandidateRunId, undefined)
+    ).filter((artifact) => artifact.workflow_run?.id === found.newestCandidateRunId);
+    if (
+      all.some(
+        (artifact) => scope.otherSchema.test(artifact.name) && artifact.name !== scope.artifact,
+      )
+    )
+      return { runId: null, missingReason: "schema-upgrade" };
+    return { runId: null, missingReason: "prior-artifact-missing" };
+  }
   return {
     runId: null,
     missingReason: indexJobPredates(windowStart) ? "expired-after-90-days-inactivity" : "first-run",
@@ -2760,14 +2632,20 @@ function githubRequest(apiUrl, token) {
 /** Allowed characters for a public waiver reason, quoted for the gate's own error line. */
 const WAIVER_ALLOWED_CHARACTERS = "letters, numbers, spaces, and . , ; : ' \" ( ) ! ? & % + -";
 
-/** One plain sentence per refused reason: what happened, and what to do about it. */
-function gateErrorLine(reason) {
+/**
+ * One plain sentence per reason. `reports-missing` and `undeclared-budget` already read as
+ * complete, actionable sentences on their own — they are printed as-is, with no "refused this
+ * run" framing, because an undeclared budget does not refuse the run.
+ */
+export function gateErrorLine(reason) {
   if (reason.code === "invalid-waiver")
     return (
       "The evidence waiver was refused because it is not a valid reason: it must be a single " +
       `sentence using only ${WAIVER_ALLOWED_CHARACTERS}, with no slash, "www." host, ` +
       "://scheme, or email address. Rewrite the waiver reason and dispatch again."
     );
+  if (reason.code === "reports-missing" || reason.code === "undeclared-budget")
+    return reason.detail;
   const what =
     typeof reason.detail === "string" && reason.detail !== reason.code
       ? reason.detail
@@ -2806,7 +2684,6 @@ async function main(argv) {
       candidateSha: args["candidate-sha"],
       baseSha: args["base-sha"],
     });
-    if (plan.copyProductionIntoBaseline) fail("production-copy", "production-copy");
     process.stdout.write(plan.measureBaseline ? "measure\n" : `pending:${plan.pendingReason}\n`);
     return;
   }
@@ -2832,7 +2709,7 @@ async function main(argv) {
     return;
   }
   if (command === "restore-index") {
-    await restoreIndex(args.source, args.root, args["missing-reason"]);
+    await restoreIndex(args.source, args.root, args["missing-reason"], { artifact: args.artifact });
     return;
   }
   if (command === "prior-index") {
@@ -2887,6 +2764,8 @@ async function main(argv) {
       trigger: env("GITHUB_EVENT_NAME"),
       actor: env("GITHUB_TRIGGERING_ACTOR"),
       runId: /^\d+$/.test(env("GITHUB_RUN_ID")) ? Number(env("GITHUB_RUN_ID")) : null,
+      // Whatever this run uploaded as scoreboard-reports, whatever it is named or nested under.
+      reportsPresent: env("SCOREBOARD_REPORTS_PRESENT") === "true",
     });
     if (process.exitCode) {
       const gate = await readJson(outputPath);
@@ -2923,18 +2802,9 @@ async function main(argv) {
     process.stdout.write(`present=${present}\n`);
     return;
   }
-  if (command === "prune") {
-    const now = args.now ? new Date(args.now) : new Date();
-    const result = await pruneCommitObjects(
-      args.root || env("SCOREBOARD_ROOT") || SCOREBOARD_INDEX_RELATIVE_PATH,
-      now,
-    );
-    process.stdout.write(`${JSON.stringify({ removed: result.removed })}\n`);
-    return;
-  }
   fail(
     "invalid-argument",
-    "Expected baseline-decision, restore-index, prior-index, index-push, prune, stage-reports, release-gate, report-artifact, verify-publication, or list-upload.",
+    "Expected baseline-decision, restore-index, prior-index, index-push, stage-reports, release-gate, report-artifact, verify-publication, or list-upload.",
   );
 }
 

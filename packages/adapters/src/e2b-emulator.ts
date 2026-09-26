@@ -12,7 +12,7 @@ export class ManagedSandboxEmulator extends FakeSandboxProvider {
     super();
   }
   override describe() {
-    return { ...super.describe(), id: this.emulator.id };
+    return { ...super.describe(), id: this.emulator.id, kind: this.emulator.kind };
   }
   override async provision(
     request: { botId: string; homePath: string },

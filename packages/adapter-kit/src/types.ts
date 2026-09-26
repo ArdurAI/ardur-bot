@@ -194,6 +194,11 @@ export interface SnapshotRef {
   createdAt: string;
 }
 
+export interface SandboxDescriptor extends AdapterDescriptor<SandboxCapabilities> {
+  /** Kind recorded on the computers this provider creates; null when it creates none. */
+  kind: SandboxKind | null;
+}
+
 export interface SandboxCapabilities {
   graphical: boolean;
   pty: boolean;

@@ -96,6 +96,20 @@ it("checks board workspace, space, identity and registered root on the bridge", 
   await bridge.hub.request({ ...request, id: "revoked" }, worker);
   expect(host.send).not.toHaveBeenCalled();
 });
+it("refuses a bot's board command unless its computer is a host computer", async () => {
+  const { prisma, bridge, host, worker, request } = fixture();
+  for (const computer of [{ kind: "docker", connectionId: null }, { kind: "e2b" }, null])
+    prisma.run.findFirst.mockResolvedValueOnce({
+      id: "run",
+      status: "running",
+      bot: { spaceId: "space", name: "Builder", computer },
+    } as never);
+  for (const index of [0, 1, 2])
+    await bridge.hub.request({ ...request, id: `docker-${index}` }, worker);
+  expect(host.send).not.toHaveBeenCalled();
+  await bridge.hub.request(request, worker);
+  expect(host.send).toHaveBeenCalledWith(request);
+});
 it("round-trips an authenticated owner's streamed result without granting a worker a manual identity", async () => {
   const { bridge, host, command } = fixture();
   host.send.mockImplementation(async (frame) => {

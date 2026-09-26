@@ -72,6 +72,32 @@ it("renders capacity, unknown memory and bot placement without write controls", 
   }
 });
 
+it("names built-in rows by key and the API's host label, not their English names", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const row = { state: "connected", capacity: unknownCapacity(), bots: [] };
+  request.mockResolvedValue({
+    hostLabel: "This computer",
+    targets: [
+      { ...row, id: "host", name: "This Mac", builtin: "host" },
+      { ...row, id: "docker", name: "Docker on this Mac", builtin: "local-docker" },
+      { ...row, id: "default", name: "Default computer", builtin: "default" },
+      { ...row, id: "office", name: "Office" },
+    ],
+  });
+  const element = document.createElement("div"),
+    root = createRoot(element);
+  try {
+    await act(async () => root.render(createElement(FleetStatus)));
+    expect(element.textContent).toContain("This computer");
+    expect(element.textContent).toContain("Docker on this computer");
+    expect(element.textContent).toContain("Default computer");
+    expect(element.textContent).toContain("Office");
+    expect(element.textContent).not.toContain("Mac");
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
 it("has translations for every new fleet string", () => {
   for (const catalog of [RU_MESSAGES, ZH_MESSAGES])
     for (const text of [
@@ -83,6 +109,11 @@ it("has translations for every new fleet string", () => {
       "Memory not reported",
       "{amount} GB free",
       "Free memory",
+      "This Mac",
+      "This computer",
+      "Docker on this Mac",
+      "Docker on this computer",
+      "Default computer",
     ])
       expect(catalog[text]?.trim()).toBeTruthy();
 });

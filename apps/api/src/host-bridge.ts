@@ -271,8 +271,7 @@ export class HostBridge {
         !run ||
         run.bot.spaceId !== request.scope.spaceId ||
         op.actor !== `bot:${run.bot.name}` ||
-        (run.bot.computer?.kind !== "desktop" &&
-          (deployment.computerHost !== "this-mac" || run.bot.computer?.connectionId))
+        run.bot.computer?.kind !== "desktop"
       )
         return false;
     }
@@ -425,12 +424,7 @@ export class HostBridge {
       },
       include: { bot: { include: { computer: true } } },
     });
-    if (
-      !run ||
-      (run.bot.computer?.kind !== "desktop" &&
-        (deployment.computerHost !== "this-mac" || run.bot.computer?.connectionId)) ||
-      run.bot.spaceId !== request.scope.spaceId
-    )
+    if (run?.bot.computer?.kind !== "desktop" || run.bot.spaceId !== request.scope.spaceId)
       return false;
     if ("homeKey" in request.operation && run.bot.computer?.homeKey !== request.operation.homeKey)
       return false;

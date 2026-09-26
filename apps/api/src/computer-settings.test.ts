@@ -59,6 +59,50 @@ describe("computer connection settings", () => {
       where: { id: "foreign", spaceId: "space", connectorId: "computer" },
     });
   });
+  it("refuses the deployment default for any computer while This Mac is that default", async () => {
+    const update = vi.fn();
+    const prisma = {
+      deploymentSettings: {
+        findUnique: vi.fn(async () => ({ computerHost: "this-mac" })),
+      },
+      computer: { update },
+      computerUpdate: { create: vi.fn() },
+      connection: { findFirst: vi.fn() },
+    } as unknown as PrismaClient;
+    const move = {
+      botId: "bot",
+      imageProfile: "base" as const,
+      connectionId: null,
+      confirmed: true as const,
+    };
+    for (const provider of ["docker", "desktop"])
+      await expect(validateComputerConfiguration(prisma, "space", move, provider)).rejects.toThrow(
+        "Moving a computer onto the machine running Ardur Bot is not available yet. Choose a saved connection or keep the current engine.",
+      );
+    // Leaving the connection out keeps the computer where it is, so nothing is refused.
+    const { connectionId: _, ...stay } = move;
+    await expect(validateComputerConfiguration(prisma, "space", stay, "docker")).resolves.toEqual(
+      stay,
+    );
+    expect(update).not.toHaveBeenCalled();
+    expect(prisma.computerUpdate.create).not.toHaveBeenCalled();
+    expect(prisma.connection.findFirst).not.toHaveBeenCalled();
+  });
+  it("accepts an empty connection when Docker is the deployment default", async () => {
+    const prisma = {
+      deploymentSettings: { findUnique: async () => ({ computerHost: "docker" }) },
+      connection: { findFirst: vi.fn() },
+    } as unknown as PrismaClient;
+    await expect(
+      validateComputerConfiguration(prisma, "space", {
+        botId: "bot",
+        imageProfile: "base",
+        connectionId: null,
+        confirmed: true,
+      }),
+    ).resolves.toMatchObject({ connectionId: null, confirmed: true });
+    expect(prisma.connection.findFirst).not.toHaveBeenCalled();
+  });
   it("stores a generic engine socket without a credential or provider-specific variable", async () => {
     const create = vi.fn(async ({ data }) => ({ id: "connection", ...data }));
     const tx = { connection: { create }, secret: { create: vi.fn() } };

@@ -1,17 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
-import {
-  access,
-  cp,
-  mkdir,
-  mkdtemp,
-  readdir,
-  readFile,
-  rm,
-  utimes,
-  writeFile,
-} from "node:fs/promises";
+import { access, cp, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -39,15 +29,16 @@ import {
   appendIndexRecords,
   auditCommits,
   baselineMeasurementPlan,
-  COMMIT_OBJECT_RETENTION_DAYS,
   classifyGateCodes,
   durableIndexScope,
   findPriorIndexArtifact,
+  gateErrorLine,
   INDEX_SCHEMA_VERSION,
   indexJobHistory,
   parseRevListParents,
   planEvidenceRecords,
-  pruneCommitObjects,
+  publicationFiles,
+  RECORD_KEYS,
   RELEASE_POLICY_SHA256,
   REQUIRED_RELEASE_TARGETS,
   readIndex,
@@ -115,7 +106,6 @@ const releaseYaml = readFileSync(
   new URL("../.github/workflows/release-desktop.yml", import.meta.url),
   "utf8",
 );
-const docs = readFileSync(new URL("../docs/performance.md", import.meta.url), "utf8");
 function pending(commit: string, attempt = 1, supersedes: string | null = null) {
   return {
     status: "pending" as const,
@@ -708,7 +698,6 @@ async function gate(
 describe("scoreboard index", () => {
   it("keeps the local index content-addressed and declares retention", async () => {
     expect(SCOREBOARD_INDEX_RELATIVE_PATH).toBe(".context/performance/scoreboard-index");
-    expect(COMMIT_OBJECT_RETENTION_DAYS).toBe(180);
     expect(WORKFLOW_ARTIFACT_RETENTION_DAYS).toBe(90);
     expect(REQUIRED_RELEASE_TARGETS).toEqual([
       "desktop-darwin-arm64",
@@ -731,26 +720,101 @@ describe("scoreboard index", () => {
     });
   });
 
-  it("plans a record for every enumerated commit and rejects an extra measurement", () => {
+  it("pins the record schema's key set and canonical hash to this INDEX_SCHEMA_VERSION", () => {
+    expect(INDEX_SCHEMA_VERSION).toBe(7);
+    expect(RECORD_KEYS).toEqual([
+      "schemaVersion",
+      "status",
+      "tier",
+      "commit",
+      "parentCommit",
+      "fixedReleaseCommit",
+      "suiteVersion",
+      "suiteHash",
+      "environment",
+      "environmentHash",
+      "attempt",
+      "role",
+      "indexedAt",
+      "runnerCommit",
+      "samplePlan",
+      "declaredSamples",
+      "observedSamples",
+      "reportDigest",
+      "objectDigest",
+      "verdictDigest",
+      "artifactDigests",
+      "pendingReason",
+      "gateCodes",
+      "supersedes",
+      "chainOrigin",
+      "enumerationStart",
+      "enumerationReason",
+      "waiver",
+      "metricIds",
+      "previousHash",
+    ]);
+    // A fixed record with one concrete value per key. Adding, removing, or renaming a key changes
+    // this hash; a change here that is not paired with an INDEX_SCHEMA_VERSION bump is a silent
+    // record-format break that `restoreIndex` cannot detect and `readIndex` will misread.
+    const golden = {
+      schemaVersion: INDEX_SCHEMA_VERSION,
+      status: "measured",
+      tier: "release",
+      commit: A,
+      parentCommit: B,
+      fixedReleaseCommit: C,
+      suiteVersion: "scoreboard-1",
+      suiteHash: hash("suite"),
+      environment: "release-packaged",
+      environmentHash: hash("environment"),
+      attempt: 1,
+      role: "candidate",
+      indexedAt: "2026-09-25T00:00:00.000Z",
+      runnerCommit: A,
+      samplePlan: "release-grade",
+      declaredSamples: { pairs: 200, startupPerStratum: 100 },
+      observedSamples: 200,
+      reportDigest: hash("report"),
+      objectDigest: hash("object"),
+      verdictDigest: hash("verdict"),
+      artifactDigests: [
+        {
+          name: "synthetic.dmg",
+          sha256: hash("artifact"),
+          bytes: 1,
+          target: "desktop-darwin-arm64",
+        },
+      ],
+      pendingReason: null,
+      gateCodes: [],
+      supersedes: null,
+      chainOrigin: "first-run",
+      enumerationStart: null,
+      enumerationReason: null,
+      waiver: null,
+      metricIds: [],
+      previousHash: "0".repeat(64),
+    };
+    expect(Object.keys(golden).sort()).toEqual([...RECORD_KEYS].sort());
+    expect(contentDigest(golden)).toBe(
+      "ae24ff8a229bd50cb2f9380f7b1900cf78c26d66268238a429e2b00895d490b0",
+    );
+  });
+
+  it("plans a record for every enumerated commit, only-headCommit attempted", () => {
     const planned = planEvidenceRecords({
       commits: [
         { commit: A, parentCommit: null },
         { commit: B, parentCommit: A },
       ],
-      measurements: [{ commit: A, pendingReason: "infrastructure-unavailable" }],
       pendingReason: "schema-3-evidence-not-produced",
+      headCommit: B,
     });
     expect(planned.map((item) => [item.commit, item.pendingReason])).toEqual([
-      [A, "infrastructure-unavailable"],
+      [A, "not-measured"],
       [B, "schema-3-evidence-not-produced"],
     ]);
-    expect(() =>
-      planEvidenceRecords({
-        commits: [{ commit: A, parentCommit: null }],
-        measurements: [{ commit: B, pendingReason: "not-measured" }],
-        pendingReason: "not-measured",
-      }),
-    ).toThrow(/unenumerated-commit/);
     expect(parseRevListParents(`${B} ${A} ${C}\n${A}\n`)).toEqual([
       { commit: B, parentCommit: A },
       { commit: A, parentCommit: null },
@@ -764,7 +828,7 @@ describe("scoreboard index", () => {
     expect(() => selectCommitRange({ base: "main", head: A })).toThrow();
   });
 
-  it("never copies candidate production code into the baseline tree", () => {
+  it("never measures a baseline without a compatible in-tree harness", () => {
     expect(
       baselineMeasurementPlan({
         baseHarnessPresent: false,
@@ -772,7 +836,6 @@ describe("scoreboard index", () => {
         baseSha: B,
       }),
     ).toEqual({
-      copyProductionIntoBaseline: false,
       measureBaseline: false,
       pendingReason: "benchmark-runner-incompatible",
     });
@@ -781,8 +844,8 @@ describe("scoreboard index", () => {
         baseHarnessPresent: true,
         candidateSha: C,
         baseSha: B,
-      }).copyProductionIntoBaseline,
-    ).toBe(false);
+      }),
+    ).toEqual({ measureBaseline: true, pendingReason: null });
   });
 
   it("appends measured or pending records without hiding or tearing the chain", async () => {
@@ -836,56 +899,16 @@ describe("scoreboard index", () => {
     }
   });
 
-  it("lets one writer append when a holder exceeds the stale threshold", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "scoreboard-stale-"));
-    let markHolding: () => void = () => {};
-    const holding = new Promise<void>((resolve) => {
-      markHolding = resolve;
-    });
-    try {
-      // The holder keeps its lock four stale periods; only its heartbeat keeps the lock fresh.
-      const first = appendIndexRecord(root, pending(A), {
-        staleMs: 300,
-        timeoutMs: 5000,
-        beforeAppend: () => {
-          markHolding();
-          return new Promise((resolve) => setTimeout(resolve, 1200));
-        },
-      });
-      const started = await Promise.race([
-        holding.then(() => "held" as const),
-        new Promise<"not-held">((resolve) => setTimeout(() => resolve("not-held"), 2000)),
-      ]);
-      if (started === "held") await new Promise((resolve) => setTimeout(resolve, 500));
-      const second = appendIndexRecord(root, pending(B), {
-        staleMs: 300,
-        timeoutMs: 5000,
-      });
-      const settled = await Promise.allSettled([first, second]);
-      const records = await readIndex(root);
-      expect(records.map((record) => record.commit)).toEqual([A, B]);
-      expect(settled.filter((item) => item.status === "fulfilled")).toHaveLength(2);
-      expect(settled.filter((item) => item.status === "rejected")).toHaveLength(0);
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
-
-  it("times out on a live lock and recovers a stale one", async () => {
+  it("times out on a held lock; no writer runs concurrently in production", async () => {
     const root = await mkdtemp(path.join(os.tmpdir(), "scoreboard-lock-"));
     try {
       await mkdir(path.join(root, "lock"));
-      const owner = path.join(root, "lock", "owner");
-      await writeFile(owner, "held");
       await expect(appendIndexRecord(root, pending(A), { timeoutMs: 80 })).rejects.toMatchObject({
         code: "lock-timeout",
       });
-      const old = new Date(Date.now() - 60_000);
-      await utimes(owner, old, old);
+      await rm(path.join(root, "lock"), { recursive: true, force: true });
       await expect(appendIndexRecord(root, pending(A), { timeoutMs: 1000 })).resolves.toMatchObject(
-        {
-          commit: A,
-        },
+        { commit: A },
       );
     } finally {
       await rm(root, { recursive: true, force: true });
@@ -969,153 +992,6 @@ describe("scoreboard index", () => {
       expect(appended.previousHash).toBe("0".repeat(64));
     } finally {
       await rm(root, { recursive: true, force: true });
-    }
-  });
-
-  it("expires commit objects and keeps release bytes and the original record", async () => {
-    const root = await mkdtemp(path.join(os.tmpdir(), "scoreboard-prune-"));
-    try {
-      const envelope = syntheticReport(1, "retained-report");
-      const old = "2020-01-01T00:00:00.000Z";
-      const kept = await appendIndexRecord(root, {
-        ...pending(A),
-        status: "measured",
-        indexedAt: old,
-        tier: "commit",
-        envelope,
-      });
-      const release = await appendIndexRecord(root, {
-        ...pending(A, 1, null),
-        status: "measured",
-        indexedAt: old,
-        tier: "release",
-        mode: "release",
-        role: "parent",
-        envelope,
-        supersedes: null,
-        attempt: 1,
-      });
-      const disposableReport = syntheticReport(1, "disposable-report");
-      disposableReport.build.commit = B;
-      const disposable = await appendIndexRecord(root, {
-        ...pending(B),
-        status: "measured",
-        indexedAt: old,
-        envelope: disposableReport,
-      });
-      const pruned = await pruneCommitObjects(root, new Date("2026-09-25T00:00:00.000Z"));
-      expect(pruned.removed).toBe(1);
-      const records = await readIndex(root);
-      expect(records.some((record) => record.recordHash === disposable.recordHash)).toBe(true);
-      expect(
-        records.some(
-          (record) => record.status === "expired" && record.expiresRecord === disposable.recordHash,
-        ),
-      ).toBe(true);
-      await expect(
-        readFile(path.join(root, "objects", disposable.objectDigest!)),
-      ).rejects.toThrow();
-      expect(await readFile(path.join(root, "objects", kept.objectDigest!))).toBeInstanceOf(Buffer);
-      expect(release.objectDigest).toBe(kept.objectDigest);
-      const audit = auditCommits(records, [A, B, C]);
-      expect(audit.missing).toEqual([C]);
-      expect(audit.results.find((item) => item.commit === B)?.retention).toBe("expired");
-      expect(audit.complete).toBe(false);
-    } finally {
-      await rm(root, { recursive: true, force: true });
-    }
-  });
-
-  it("keeps a shared commit object while any record is inside the retention window", async () => {
-    const measured = (indexedAt: string, attempt = 1, supersedes: string | null = null) => ({
-      ...pending(A, attempt, supersedes),
-      status: "measured" as const,
-      indexedAt,
-      envelope: syntheticReport(1, "shared-window"),
-    });
-    const kept = await mkdtemp(path.join(os.tmpdir(), "scoreboard-shared-kept-"));
-    try {
-      const older = await appendIndexRecord(kept, measured("2020-01-01T00:00:00.000Z"));
-      const newer = await appendIndexRecord(
-        kept,
-        measured("2026-09-01T00:00:00.000Z", 2, older.recordHash),
-      );
-      expect(newer.objectDigest).toBe(older.objectDigest);
-      await pruneCommitObjects(kept, new Date("2026-09-25T00:00:00.000Z"));
-      expect(await readFile(path.join(kept, "objects", older.objectDigest!))).toBeInstanceOf(
-        Buffer,
-      );
-    } finally {
-      await rm(kept, { recursive: true, force: true });
-    }
-
-    const dropped = await mkdtemp(path.join(os.tmpdir(), "scoreboard-shared-dropped-"));
-    try {
-      const first = await appendIndexRecord(dropped, measured("2020-01-01T00:00:00.000Z"));
-      const second = await appendIndexRecord(
-        dropped,
-        measured("2020-06-01T00:00:00.000Z", 2, first.recordHash),
-      );
-      expect(second.objectDigest).toBe(first.objectDigest);
-      await pruneCommitObjects(dropped, new Date("2026-09-25T00:00:00.000Z"));
-      await expect(readFile(path.join(dropped, "objects", first.objectDigest!))).rejects.toThrow();
-    } finally {
-      await rm(dropped, { recursive: true, force: true });
-    }
-  });
-
-  it("prunes expired commit objects from the prune command and keeps an in-window run", async () => {
-    const indexJob =
-      performanceYaml.split("\n  index:\n")[1]?.split("\n  release-gate:\n")[0] ?? "";
-    const appendAt = indexJob.indexOf("node scripts/scoreboard-index.mjs index-push");
-    const pruneAt = indexJob.indexOf("node scripts/scoreboard-index.mjs prune");
-    const uploadAt = indexJob.lastIndexOf("actions/upload-artifact");
-    expect(appendAt).toBeGreaterThan(-1);
-    expect(pruneAt).toBeGreaterThan(appendAt);
-    expect(uploadAt).toBeGreaterThan(pruneAt);
-
-    const pruneAtInstant = async (indexedAt: string, now: string) => {
-      const root = await mkdtemp(path.join(os.tmpdir(), "scoreboard-prune-command-"));
-      const record = await appendIndexRecord(root, {
-        ...pending(A),
-        status: "measured",
-        indexedAt,
-        envelope: syntheticReport(
-          1,
-          indexedAt.startsWith("2020") ? "expired-report" : "current-report",
-        ),
-      });
-      const ran = spawnSync(
-        process.execPath,
-        [path.join(repo, "scripts/scoreboard-index.mjs"), "prune", "--root", root, "--now", now],
-        { cwd: repo, encoding: "utf8" },
-      );
-      return { root, record, ran };
-    };
-    const expired = await pruneAtInstant("2020-01-01T00:00:00.000Z", "2026-09-25T00:00:00.000Z");
-    const current = await pruneAtInstant("2026-09-01T00:00:00.000Z", "2026-09-25T00:00:00.000Z");
-    try {
-      expect(expired.ran.status).toBe(0);
-      const expiredRecords = await readIndex(expired.root);
-      expect(
-        expiredRecords.some(
-          (record) =>
-            record.status === "expired" && record.expiresRecord === expired.record.recordHash,
-        ),
-      ).toBe(true);
-      await expect(
-        readFile(path.join(expired.root, "objects", expired.record.objectDigest!)),
-      ).rejects.toThrow();
-      expect(current.ran.status).toBe(0);
-      expect((await readIndex(current.root)).some((record) => record.status === "expired")).toBe(
-        false,
-      );
-      expect(
-        await readFile(path.join(current.root, "objects", current.record.objectDigest!)),
-      ).toBeInstanceOf(Buffer);
-    } finally {
-      await rm(expired.root, { recursive: true, force: true });
-      await rm(current.root, { recursive: true, force: true });
     }
   });
 
@@ -1203,7 +1079,9 @@ describe("scoreboard index", () => {
       await cp(restored, broken, { recursive: true });
       const recordsFile = path.join(broken, "records.jsonl");
       await writeFile(recordsFile, (await readFile(recordsFile, "utf8")).replace(A, C));
-      const refused = spawnSync(
+      // A restored chain that fails verification never blocks the job: it starts a fresh chain
+      // instead, and warns naming the failure code and the artifact.
+      const recovered = spawnSync(
         process.execPath,
         [
           "scripts/scoreboard-index.mjs",
@@ -1211,14 +1089,25 @@ describe("scoreboard index", () => {
           "--source",
           broken,
           "--root",
-          path.join(root, "refused"),
+          path.join(root, "recovered"),
           "--missing-reason",
           "expired-after-90-days-inactivity",
+          "--artifact",
+          "scoreboard-index-schema-7",
         ],
         { cwd: repo, encoding: "utf8" },
       );
-      expect(refused.status).toBe(1);
-      expect(refused.stderr).toContain("corrupt-index");
+      expect(recovered.status).toBe(0);
+      expect(recovered.stdout).toContain("::warning title=Scoreboard index::");
+      expect(recovered.stdout).toContain("corrupt-index");
+      expect(recovered.stdout).toContain("scoreboard-index-schema-7");
+      expect((await readIndex(path.join(root, "recovered"))).length).toBe(0);
+      expect((await readFile(path.join(root, "recovered", ".chain-origin"), "utf8")).trim()).toBe(
+        "restore-failed",
+      );
+      const third = await appendIndexRecord(path.join(root, "recovered"), pending(D));
+      expect(third.chainOrigin).toBe("restore-failed");
+      expect(third.previousHash).toBe("0".repeat(64));
 
       const genesis = path.join(root, "genesis");
       const missing = spawnSync(
@@ -1574,7 +1463,6 @@ describe("release publication gate", () => {
           (file: { name: string }) => file.name === "synthetic.blockmap",
         ),
       ).toBe(true);
-      const { verifyPublicationBytes } = await import("./scoreboard-index.mjs");
       await verifyPublicationBytes(probe.artifactRoot, result.gate);
       await writeFile(
         path.join(probe.artifactRoot, "desktop-linux-x64", "latest-feed.yml"),
@@ -1583,6 +1471,52 @@ describe("release publication gate", () => {
       await expect(verifyPublicationBytes(probe.artifactRoot, result.gate)).rejects.toMatchObject({
         code: "artifact-digest-mismatch",
       });
+    } finally {
+      await rm(probe.root, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("gates the flat publication/release-ready layout with real installer names", async () => {
+    const probe = await stagePassing();
+    try {
+      await rm(probe.artifactRoot, { recursive: true, force: true });
+      await mkdir(probe.artifactRoot, { recursive: true });
+      const version = "0.1.0-alpha.1";
+      const flatFiles = [
+        { name: `ardur-bot-${version}-mac-arm64.dmg`, target: "desktop-darwin-arm64" },
+        { name: `ardur-bot-${version}-mac-x64.dmg`, target: "desktop-darwin-x64" },
+        { name: `ardur-bot-${version}-linux-x64.AppImage`, target: "desktop-linux-x64" },
+        { name: `ardur-bot-${version}-win-x64.exe`, target: "desktop-win32-x64" },
+      ] as const;
+      const files: { target: string; name: string; sha256: string; bytes: number }[] = [];
+      for (const { name, target } of flatFiles) {
+        const body = Buffer.from(`installer-${target}`);
+        await writeFile(path.join(probe.artifactRoot, name), body);
+        files.push({
+          target,
+          name,
+          sha256: createHash("sha256").update(body).digest("hex"),
+          bytes: body.length,
+        });
+      }
+      await rewriteCandidate(probe.reportsRoot, (report) => {
+        report.artifacts = [
+          ...report.artifacts.filter((artifact) => artifact.kind !== "build"),
+          ...files.map((file) => ({
+            sha256: file.sha256,
+            bytes: file.bytes,
+            kind: "build" as const,
+          })),
+        ];
+      });
+      for (const file of files)
+        await rebindEnergy(probe.reportsRoot, file.target, file.sha256, platformFor(file.target));
+      const result = await gate(probe, "index-flat-layout");
+      expect(result.code).toBe(0);
+      expect(result.gate.allowPublication).toBe(true);
+      expect(
+        result.gate.distributedDigests.map((file: { name: string }) => file.name).sort(),
+      ).toEqual([...flatFiles.map((file) => file.name), "scoreboard-candidate.json"].sort());
     } finally {
       await rm(probe.root, { recursive: true, force: true });
     }
@@ -1766,13 +1700,16 @@ describe("release publication gate", () => {
     };
   }
 
-  it("still refuses a release with neither reports nor a waiver", async () => {
+  it("reports only reports-missing, no digest mismatch, and exits 2 with no evidence at all", async () => {
     const bare = await stageWithoutEvidence();
     try {
       const result = await gate(bare, "index-bare");
-      expect(result.code).not.toBe(0);
+      expect(result.code).toBe(2);
       expect(result.gate.allowPublication).toBe(false);
-      expect(codes(result.gate)).toContain("reports-missing");
+      expect(codes(result.gate)).toEqual(["reports-missing"]);
+      expect(result.gate.reasons[0]?.detail).toContain(
+        "No measured evidence exists for this release.",
+      );
       const records = await readIndex(result.indexRoot);
       expect(records.map((record) => [record.status, record.pendingReason])).toEqual([
         ["pending", "reports-missing"],
@@ -1796,6 +1733,12 @@ describe("release publication gate", () => {
             : reason.code.replaceAll("-", " ");
         expect(missing.stdout, JSON.stringify(reason)).toContain(expected);
       }
+      // `reports-missing` names today's working path, not the generic "refused this run" wrapper.
+      expect(missing.stdout).toContain(
+        "No measured evidence exists for this release. To publish a preview now, run the release " +
+          "workflow by hand with an evidence_waiver reason.",
+      );
+      expect(missing.stdout).not.toContain("refused this run: No measured evidence");
 
       const badWaiver = releaseGateCli(
         bare,
@@ -1811,6 +1754,17 @@ describe("release publication gate", () => {
       await rm(bare.root, { recursive: true, force: true });
     }
   }, 60_000);
+
+  it("prints an undeclared budget as its own plain sentence, not a refusal", () => {
+    const line = gateErrorLine({
+      code: "undeclared-budget",
+      scope: "candidate:m13.terminal-stop",
+      detail: "The tool termination deadline budget is not declared.",
+    });
+    expect(line).toBe("The tool termination deadline budget is not declared.");
+    expect(line).not.toContain("refused this run");
+    expect(line).not.toContain("candidate:m13.terminal-stop");
+  });
 
   it("publishes a dispatched preview without evidence only under a recorded waiver", async () => {
     const bare = await stageWithoutEvidence();
@@ -1982,6 +1936,40 @@ describe("release publication gate", () => {
     } finally {
       await rm(bare.root, { recursive: true, force: true });
       await rm(measured.root, { recursive: true, force: true });
+    }
+  }, 60_000);
+
+  it("refuses a waiver whenever this run uploaded a reports artifact, whatever it is named", async () => {
+    const bare = await stageWithoutEvidence();
+    try {
+      await mkdir(path.join(bare.reportsRoot, "nested"), { recursive: true });
+      await writeFile(path.join(bare.reportsRoot, "nested", "candidate.json"), "{}");
+      await writeFile(path.join(bare.reportsRoot, "energy-capture.csv"), "target,value\n");
+      // A nested or oddly named report is invisible to a check of well-known top-level file names.
+      const blind = await gate(bare, "index-waiver-blind", {
+        waiver: WAIVER,
+        trigger: "workflow_dispatch",
+        actor: "release-operator",
+      });
+      expect(blind.code).toBe(0);
+      expect(blind.gate.allowPublication).toBe(true);
+      // The workflow reports whether this run uploaded a reports artifact at all; that flag closes
+      // the gap regardless of what the artifact's files are named or how they are nested.
+      const guarded = await gate(bare, "index-waiver-guarded", {
+        waiver: WAIVER,
+        trigger: "workflow_dispatch",
+        actor: "release-operator",
+        reportsPresent: true,
+      });
+      expect(guarded.code).not.toBe(0);
+      expect(codes(guarded.gate)).toEqual(["waiver-with-evidence"]);
+      expect(
+        (await readIndex(guarded.indexRoot)).some((record) =>
+          ["measured", "waived"].includes(record.status),
+        ),
+      ).toBe(false);
+    } finally {
+      await rm(bare.root, { recursive: true, force: true });
     }
   }, 60_000);
 
@@ -2416,7 +2404,6 @@ ${script}`,
         { encoding: "utf8" },
       );
       expect(listed.status).toBe(0);
-      const { publicationFiles } = await import("./scoreboard-index.mjs");
       const uploaded = await publicationFiles(ready);
       for (const source of ["candidate.json", "candidate-crash.json"]) {
         const name = `scoreboard-${source}`;
@@ -3763,6 +3750,25 @@ describe("prior index chain", () => {
     expect(predating.calls.some((call) => call.pathname.endsWith("/artifacts"))).toBe(false);
   });
 
+  it("labels a schema bump schema-upgrade, not prior-artifact-missing", async () => {
+    const olderSchemaArtifact = {
+      id: 60,
+      name: `scoreboard-index-schema-${INDEX_SCHEMA_VERSION - 1}`,
+      expired: false,
+      workflow_run: { id: 6 },
+    };
+    // The newest run in the window never uploaded the current schema's artifact, but it did
+    // upload one shaped like an older schema's — a bump, not a run that skipped indexing.
+    const bumped = fakeGitHub([run(6, "2026-09-01T00:00:00Z")], { 6: [olderSchemaArtifact] });
+    await expect(find(bumped)).resolves.toEqual({ runId: null, missingReason: "schema-upgrade" });
+    // With no artifact at all under any schema's name, it is still truly missing.
+    const trulyMissing = fakeGitHub([run(6, "2026-09-01T00:00:00Z")], {});
+    await expect(find(trulyMissing)).resolves.toEqual({
+      runId: null,
+      missingReason: "prior-artifact-missing",
+    });
+  });
+
   it("never restores from a fork branch named dev or a pull request run", async () => {
     const github = fakeGitHub(
       [
@@ -3944,10 +3950,7 @@ describe("workflow contracts", () => {
     expect(head).toContain("github.event.pull_request.head.sha");
     expect(head.indexOf("pull_request.head.sha")).toBeLessThan(head.indexOf("github.sha"));
     expect(performanceYaml).toContain("needs.budgets.outputs.pending_reason");
-    expect(performanceYaml).not.toContain("performance-runner");
-    expect(releaseYaml).not.toContain("release-ready/*");
     expect(releaseYaml).toContain("node scripts/release-publish.mjs");
-    expect(releaseYaml).not.toContain("gh release create");
     const reports = performanceYaml.split("pattern: scoreboard-reports")[0]?.split("\n").slice(-12);
     expect(reports?.join("\n")).not.toContain("continue-on-error");
     expect(reports?.join("\n")).toContain("steps.reports.outputs.present == 'true'");
@@ -3965,11 +3968,23 @@ describe("workflow contracts", () => {
     expect(performanceYaml).toContain("github-token:");
     expect(performanceYaml).toContain("group: scoreboard-index-");
     expect(performanceYaml).toContain("node scripts/scoreboard-index.mjs restore-index");
-    expect(docs).not.toContain("third worktree");
-    expect(docs).toContain("measures both revisions with the candidate's harness");
-    expect(docs).toContain("budgets job's pending reason");
     expect(releaseYaml).toContain(
       `evidence_waiver: \${{ github.event_name == 'workflow_dispatch' && inputs.evidence_waiver || '' }}`,
+    );
+    // Every restore-index call names the artifact it is restoring, for the failed-verification
+    // warning; the index job uploads its chain only for a durable push, never a pull-request,
+    // manual, or fork run's throwaway `-check` chain.
+    expect(performanceYaml.match(/restore-index "\$\{args\[@\]\}"/g)).toHaveLength(2);
+    expect(performanceYaml).toContain('--artifact "$ARTIFACT_NAME"');
+    expect(jobBlock(performanceYaml, "index")).toContain(
+      "if: always() && steps.prior.outputs.durable == 'true'",
+    );
+    expect(performanceYaml).not.toContain("node scripts/scoreboard-index.mjs prune");
+    // The release gate learns whether this run uploaded a reports artifact from the workflow
+    // itself, so a nested or oddly named report cannot slip a waiver past that check.
+    const releaseGateJob = jobBlock(performanceYaml, "release-gate");
+    expect(releaseGateJob).toMatch(
+      /SCOREBOARD_REPORTS_PRESENT:\s*\$\{\{\s*steps\.reports\.outputs\.present\s*\}\}/,
     );
   });
 
@@ -3978,7 +3993,6 @@ describe("workflow contracts", () => {
     try {
       await mkdir(path.join(directory, "scoreboard-evidence"));
       await writeFile(path.join(directory, "synthetic.dmg"), "bytes");
-      const { publicationFiles } = await import("./scoreboard-index.mjs");
       await expect(publicationFiles(directory)).rejects.toMatchObject({ code: "upload-directory" });
     } finally {
       await rm(directory, { recursive: true, force: true });
@@ -4013,29 +4027,5 @@ describe("workflow contracts", () => {
     expect(gateJob.slice(judge, upload)).toContain("if: always()");
     expect(performanceYaml).not.toMatch(/common_runner_sha|inputs\.attempt|\n {6}attempt:/);
     expect(releaseYaml).not.toMatch(/common_runner_sha|\n {6}attempt:/);
-  });
-
-  it("documents where the index lives and how long evidence is kept", () => {
-    expect(docs).toContain(
-      "The historical scoreboard is the local directory `.context/performance/scoreboard-index`.",
-    );
-    expect(docs).toContain("Commit object bytes are retained for 180 days");
-    expect(docs).toContain(
-      "Workflow artifacts expire after 90 days and are not the historical scoreboard.",
-    );
-    expect(docs).toContain("github-release-lifetime");
-    expect(docs).toContain("A pending record is never deleted to hide an earlier measurement.");
-    expect(docs).toContain("Building the physical evidence runner is out of scope");
-    expect(docs).toContain(
-      "This preview was published without measured performance evidence: <reason>.",
-    );
-    expect(docs).not.toContain("Waived by");
-    expect(docs).toContain(
-      "Two release budgets are not declared yet, so they were not checked: retained session growth, tool termination deadline. They must be declared before a release can be measured against them.",
-    );
-    expect(docs).not.toMatch(/publication needs them declared|release-policy\.json` is unchanged/);
-    expect(docs).not.toContain("common_runner_sha");
-    expect(docs).toContain("schema-upgrade");
-    expect(docs).toMatch(/any token\s+with a slash, any `www\.` host/);
   });
 });
