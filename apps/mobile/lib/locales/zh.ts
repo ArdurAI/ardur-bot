@@ -1047,4 +1047,6 @@ export const ZH_MESSAGES: Record<string, string> = {
   "A board item filed by a bot could not be closed.": "由机器人创建的看板事项无法关闭。",
   "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected.":
     "Ardur Bot 已尝试五次。请在看板上关闭它，或检查此电脑是否已连接。",
+  "{name} filed {filed}: {done} done, {open} open, {other} closed without being completed.":
+    "{name} 提交了 {filed} 项：{done} 项完成，{open} 项开放，{other} 项已关闭但未完成。",
 };
