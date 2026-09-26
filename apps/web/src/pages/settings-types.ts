@@ -35,6 +35,7 @@ export type SettingsPageProps = {
   initialProvider?: string;
   onOpenBotRuntime?: () => void;
   initialIntegration?: string;
+  mcpFocusRequest?: number;
   avatarStyle: AvatarStyle;
   onAvatarStyleChange: (style: AvatarStyle) => Promise<void>;
   isDeploymentOwner?: boolean;
@@ -45,5 +46,5 @@ export type SettingsPageProps = {
   onMemoryConfigChange: (config: SpaceMemoryConfig | null) => void;
   onClose: () => void;
   onBusyChange: (busy: boolean) => void;
-  navigate: (section: SettingsSection) => void;
+  navigate: (section: SettingsSection, initialItem?: string) => void;
 };

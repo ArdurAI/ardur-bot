@@ -50,7 +50,8 @@ export interface AnalysisOptions {
 }
 const OUTCOMES: EvidenceOutcome[] = ["success", "failed", "cancelled", "timed-out", "uncertain"];
 const GATES = SCOREBOARD_MANIFEST.proposedGates;
-const SAFETY_METRICS = [
+/** The effect-safety counts judged when a caller does not pin its own list. */
+export const SAFETY_METRICS: readonly string[] = [
   "m13.wrong-pin",
   "m13.unauthorized-effects",
   "m13.duplicate-effects",
@@ -448,25 +449,80 @@ function reason(code: string, scope: string, detail = code): VerdictReason {
 function errorDetail(error: unknown) {
   return error instanceof Error ? error.message : "invalid-evidence";
 }
-function safetyFailures(report: PerformanceEvidenceReport): VerdictReason[] {
-  const failures: VerdictReason[] = [];
-  for (const metric of report.metrics)
+export type ReportRule =
+  | "effect-count"
+  | "task-pass"
+  | "crash-safety"
+  | "measured-usage"
+  | "baseline-budget";
+export interface ReportJudgeOptions {
+  /** An explicit effect list is judged in full; otherwise the built-in safety counts. */
+  effectMetricIds?: readonly string[];
+  /** Also require the report's environment and scenario to be the policy's. */
+  policy?: BudgetPolicy;
+}
+
+/**
+ * The rule that decides each selected item on one report. Other metric budgets compare against a
+ * baseline, and experiments only need completion, so an experiment has no rule.
+ */
+export function reportRules(
+  required: RequiredEvidenceSelection,
+  effectMetricIds: readonly string[] = SAFETY_METRICS,
+): { id: string; rule: ReportRule | null }[] {
+  const rule = (id: string, value: ReportRule | null) => ({ id, rule: value });
+  return [
+    ...required.metricIds.map((id) =>
+      rule(id, effectMetricIds.includes(id) ? "effect-count" : "baseline-budget"),
+    ),
+    ...required.taskIds.map((id) => rule(id, "task-pass")),
+    ...required.crashBoundaryIds.map((id) => rule(id, "crash-safety")),
+    ...required.experimentIds.map((id) => rule(id, null)),
+    ...(required.usage ? [rule("usage", "measured-usage")] : []),
+  ];
+}
+
+/**
+ * The verdict the comparison gives one report without a baseline: zero effect counts, passed
+ * critical checks, safe expected recovery, a pass on every trial of each required task, and
+ * complete measured evidence. Budget comparisons against a baseline are not part of it.
+ */
+export function judgeReport(
+  report: PerformanceEvidenceReport,
+  required: RequiredEvidenceSelection,
+  options: ReportJudgeOptions = {},
+): VerdictReason[] {
+  const effects = options.effectMetricIds ?? SAFETY_METRICS;
+  const reasons: VerdictReason[] = [];
+  for (const id of effects) {
+    const metric = report.metrics.find((item) => item.id === id);
     if (
-      SAFETY_METRICS.includes(metric.id) &&
-      metric.observations.some((item) => item.value !== null && item.value > 0)
+      metric
+        ? metric.observations.some((item) => item.value !== null && item.value > 0)
+        : options.effectMetricIds !== undefined
     )
-      failures.push(reason("safety-failure", metric.id));
+      reasons.push(reason("safety-failure", id));
+  }
   for (const task of report.tasks)
     if (task.trials.some((trial) => !trial.criticalPassed))
-      failures.push(reason("safety-failure", task.id));
+      reasons.push(reason("safety-failure", task.id));
   for (const crash of report.crashes)
     if (
       crash.safetyPassed === false ||
       (crash.status === "complete" &&
-        crash.recovery !== CRASH_BOUNDARIES.find((item) => item.id === crash.id)!.expected)
+        (crash.recovery !== CRASH_BOUNDARIES.find((item) => item.id === crash.id)!.expected ||
+          (required.crashBoundaryIds.includes(crash.id) && crash.safetyPassed !== true)))
     )
-      failures.push(reason("safety-failure", crash.id));
-  return failures;
+      reasons.push(reason("safety-failure", crash.id));
+  for (const id of required.taskIds)
+    if (report.tasks.find((task) => task.id === id)?.trials.some((trial) => !trial.passed))
+      reasons.push(reason("required-task-failed", id));
+  try {
+    validateReport(report, required, options.policy);
+  } catch (error) {
+    reasons.push(reason("incomplete-evidence", "candidate", errorDetail(error)));
+  }
+  return reasons;
 }
 function minimumPairs(policy: BudgetPolicy) {
   if (policy.mode === "commit") return SCOREBOARD_MANIFEST.samplePlan.commitPairs;
@@ -474,13 +530,18 @@ function minimumPairs(policy: BudgetPolicy) {
     return SCOREBOARD_MANIFEST.samplePlan.releaseStartupObservationsPerStratum;
   return SCOREBOARD_MANIFEST.samplePlan.releaseReplayPairs;
 }
-function validateReport(report: PerformanceEvidenceReport, policy: BudgetPolicy) {
-  assertRequiredEvidence(report, policy.required);
-  requireCondition(
-    report.environmentHash === policy.environmentHash &&
-      canonicalSerialize(report.scenario) === canonicalSerialize(policy.scenario),
-    "policy-environment-or-scenario-mismatch",
-  );
+function validateReport(
+  report: PerformanceEvidenceReport,
+  required: RequiredEvidenceSelection,
+  policy?: BudgetPolicy,
+) {
+  assertRequiredEvidence(report, required);
+  if (policy)
+    requireCondition(
+      report.environmentHash === policy.environmentHash &&
+        canonicalSerialize(report.scenario) === canonicalSerialize(policy.scenario),
+      "policy-environment-or-scenario-mismatch",
+    );
   requireCondition(
     report.artifacts.some(
       (artifact) => artifact.kind === "build" && artifact.sha256 === report.build.artifactHash,
@@ -491,7 +552,7 @@ function validateReport(report: PerformanceEvidenceReport, policy: BudgetPolicy)
     report.artifacts.some((artifact) => artifact.kind === "raw"),
     "missing-raw-artifact-provenance",
   );
-  for (const id of policy.required.metricIds) {
+  for (const id of required.metricIds) {
     const metric = report.metrics.find((item) => item.id === id)!;
     if (metric.unit === "ms" || metric.unit === "joules" || metric.unit === "watts")
       requireCondition(
@@ -517,7 +578,7 @@ function validateReport(report: PerformanceEvidenceReport, policy: BudgetPolicy)
         "live-cache-requires-provider-telemetry",
       );
   }
-  if (policy.required.usage)
+  if (required.usage)
     requireCondition(
       report.usage.every((request) =>
         Object.values(request.categories).every(
@@ -632,11 +693,6 @@ function analyzePair(
       }
     }
   }
-  for (const id of policy.required.taskIds) {
-    const task = after.tasks.find((item) => item.id === id)!;
-    if (task.trials.some((trial) => !trial.passed))
-      reasons.push(reason("required-task-failed", `${baseline}:${id}`));
-  }
   return comparisons;
 }
 
@@ -655,14 +711,17 @@ function validateCalibration(policy: BudgetPolicy) {
   );
   const first = envelopes[0]!.report;
   for (const { report } of envelopes) {
-    validateReport(report, policy);
+    // One judge run validates the report and gives its verdict; incomplete evidence keeps its detail.
+    const failures = judgeReport(report, policy.required, { policy });
+    const incomplete = failures.find((item) => item.code === "incomplete-evidence");
+    requireCondition(!incomplete, incomplete?.detail ?? "incomplete-evidence");
     requireCondition(report.createdAt < calibration.frozenAt, "calibration-after-freeze");
     requireCondition(
       report.build.commit === first.build.commit &&
         report.build.artifactHash === first.build.artifactHash,
       "calibration-must-use-same-build",
     );
-    requireCondition(safetyFailures(report).length === 0, "calibration-safety-failure");
+    requireCondition(!failures.length, "calibration-verdict-failed");
   }
   for (const { report } of envelopes.slice(1)) {
     const reasons: VerdictReason[] = [];
@@ -758,10 +817,10 @@ export function comparePerformanceEvidence(input: {
     return result;
   }
   const { parent, candidate, fixedRelease } = result.evidence;
-  result.reasons.push(...safetyFailures(candidate.report));
-  for (const [scope, { report }] of Object.entries(result.evidence)) {
+  result.reasons.push(...judgeReport(candidate.report, policy.required, { policy }));
+  for (const [scope, { report }] of Object.entries({ parent, fixedRelease })) {
     try {
-      validateReport(report, policy);
+      validateReport(report, policy.required, policy);
     } catch (error) {
       result.reasons.push(reason("incomplete-evidence", scope, errorDetail(error)));
     }

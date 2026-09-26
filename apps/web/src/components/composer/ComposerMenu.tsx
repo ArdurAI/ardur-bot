@@ -19,7 +19,7 @@ import {
   refreshIntegrationCatalog,
   subscribeIntegrationCatalog,
 } from "../../lib/integration-catalog-query";
-import { MCP_OAUTH_CHANNEL } from "../../lib/mcp-connect";
+import { MCP_OAUTH_CHANNEL } from "../../lib/mcp-oauth-channel";
 import { rpc } from "../../lib/rpc";
 
 export type ComposerMenuProps = {

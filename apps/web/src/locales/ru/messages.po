@@ -273,6 +273,7 @@ msgstr ""
 msgid "Access token"
 msgstr "Токен доступа"
 
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Access token (optional)"
 msgstr "Токен доступа (необязательно)"
@@ -1216,6 +1217,14 @@ msgstr "Отменить создание группы"
 msgid "Cancel reply"
 msgstr "Отменить ответ"
 
+#: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
+#: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/McpServersOverlay.tsx
+#: src/pages/shell/message-cards.tsx
+msgid "Cancel sign-in"
+msgstr "Отменить вход"
+
 #: src/pages/LearningObservation.tsx
 msgid "Cancellations"
 msgstr ""
@@ -1312,6 +1321,10 @@ msgstr ""
 msgid "Chat Settings"
 msgstr "Настройки чата"
 
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Check"
+msgstr "Проверить"
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Check again"
 msgstr ""
@@ -1394,6 +1407,10 @@ msgstr "Выбрать файл"
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Choose folder"
 msgstr ""
+
+#: src/pages/McpServersOverlay.tsx
+msgid "Choose one credential: a token or a header."
+msgstr "Выберите один способ: токен или заголовок."
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Choose which connected model Ardur Bot uses."
@@ -1691,6 +1708,7 @@ msgstr "Настраивается путем развертывания"
 msgid "Confirm"
 msgstr "Подтвердить"
 
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/settings/UploadedFiles.tsx
@@ -2050,13 +2068,13 @@ msgstr "Не удалось завершить обновление. Попро�
 msgid "Could not complete this action."
 msgstr ""
 
-#: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not connect"
 msgstr "Не удалось подключиться"
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 msgid "Could not connect or load integrations."
 msgstr ""
 
@@ -2297,6 +2315,8 @@ msgid "Could not load the server configuration."
 msgstr ""
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/lib/mcp-sign-in.ts
+#: src/pages/McpServersOverlay.tsx
 msgid "Could not load this account’s tools."
 msgstr ""
 
@@ -2492,6 +2512,10 @@ msgstr "Не удалось сохранить этот выбор."
 msgid "Could not search catalog"
 msgstr "Не удалось выполнить поиск по каталогу"
 
+#: src/components/integrations/DirectMcpSearch.tsx
+msgid "Could not search integrations."
+msgstr "Не удалось найти интеграции."
+
 #: src/pages/Auth.tsx
 msgid "Could not send reset email"
 msgstr "Не удалось отправить электронное письмо для сброса"
@@ -2685,6 +2709,7 @@ msgstr ""
 msgid "Creating…"
 msgstr "Создание…"
 
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Credential"
 msgstr "Учётные данные"
@@ -2814,6 +2839,7 @@ msgstr ""
 msgid "Deferred"
 msgstr ""
 
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/pages/BotContextMenu.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
@@ -3200,6 +3226,10 @@ msgstr ""
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Enter a valid destination and save again."
 msgstr ""
+
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Enter a valid token."
+msgstr "Введите действительный токен."
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -4296,6 +4326,7 @@ msgid "Make sure nothing is still running on this computer."
 msgstr ""
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/pages/account/AccountMore.tsx
 #: src/pages/memory/MemorySettings.tsx
 #: src/pages/settings/GeneralSettings.tsx
@@ -4729,6 +4760,7 @@ msgid "Needs reconnection"
 msgstr ""
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/pages/dashboard/ConnectionsPanel.tsx
 msgid "Needs sign-in"
 msgstr ""
@@ -5009,6 +5041,10 @@ msgstr ""
 #: src/components/integrations/manage/IntegrationDetails.tsx
 msgid "Not checked"
 msgstr ""
+
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Not checked yet"
+msgstr "Ещё не проверен"
 
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
@@ -5738,6 +5774,7 @@ msgstr ""
 msgid "Recheck"
 msgstr ""
 
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/integrations/manage/IntegrationDetails.tsx
 #: src/pages/customize/IntegrationTable.tsx
 #: src/pages/shell/terminal-session.tsx
@@ -6125,6 +6162,7 @@ msgid "Restricted"
 msgstr ""
 
 #: src/components/Context.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -6775,6 +6813,10 @@ msgstr ""
 msgid "Sign up"
 msgstr "Зарегистрироваться"
 
+#: src/lib/mcp-sign-in.ts
+msgid "Sign-in did not finish. Try again."
+msgstr "Вход не завершён. Попробуйте снова."
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Sign-in expired. Connect Codex again."
 msgstr ""
@@ -6783,9 +6825,21 @@ msgstr ""
 msgid "Sign-in files (auth.json, credentials and oauth_creds.json), cookies, tokens, credential backups, session transcripts, chat histories, history.jsonl, telemetry and caches are never read; server lists retain environment variable names only."
 msgstr ""
 
+#: src/lib/mcp-sign-in.ts
+msgid "Sign-in is needed. Connect again."
+msgstr "Нужно войти. Подключитесь снова."
+
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Sign-in timed out."
 msgstr ""
+
+#: src/lib/mcp-sign-in.ts
+msgid "Sign-in was cancelled."
+msgstr "Вход отменён."
+
+#: src/lib/mcp-sign-in.ts
+msgid "Sign-in was declined."
+msgstr "Вход отклонён."
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Signed in"
@@ -7195,6 +7249,11 @@ msgstr ""
 msgid "That shortcut is already in use; choose another."
 msgstr ""
 
+#: src/components/integrations/DirectMcpSearch.tsx
+#: src/lib/mcp-sign-in.ts
+msgid "That token was not accepted. Check it and try again."
+msgstr "Этот токен не принят. Проверьте его и попробуйте снова."
+
 #: src/components/SoftwareUpdateSection.tsx
 msgid "The API did not come back. Refresh this page."
 msgstr "API не вернулся. Обновите эту страницу."
@@ -7210,6 +7269,14 @@ msgstr ""
 #: src/pages/memory/MemoryProposals.tsx
 msgid "The memory changed since this suggestion. Open History before trying again."
 msgstr ""
+
+#: src/lib/mcp-sign-in.ts
+msgid "The saved sign-in expired. Sign in again."
+msgstr "Сохранённый вход истёк. Войдите снова."
+
+#: src/lib/mcp-sign-in.ts
+msgid "The saved sign-in is no longer accepted. Sign in again."
+msgstr "Сохранённый вход больше не принимается. Войдите снова."
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "The service may use its own embedding providers. Check its settings before saving private documents."
@@ -7323,9 +7390,17 @@ msgstr "Результаты сканирования устарели. Повт
 msgid "This server cannot be assigned without a bot."
 msgstr "Этот сервер невозможно назначить без бота."
 
+#: src/lib/mcp-sign-in.ts
+msgid "This server did not offer browser sign-in. Enter a token instead."
+msgstr "Этот сервер не предложил вход через браузер. Введите токен."
+
 #: src/pages/McpServersOverlay.tsx
 msgid "This server did not request browser authorization."
 msgstr "Этот сервер не запрашивал авторизацию браузера."
+
+#: src/pages/McpServersOverlay.tsx
+msgid "This server has two credentials. Keep one."
+msgstr "У этого сервера сохранены два способа входа. Оставьте один."
 
 #: src/pages/McpServersOverlay.tsx
 msgid "This server is already connected. Disconnect it first to authorize again."
@@ -7340,8 +7415,14 @@ msgid "This server is managed by an extension"
 msgstr ""
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 msgid "This service needs client registration before you can connect."
 msgstr ""
+
+#: src/lib/mcp-sign-in.ts
+#: src/pages/McpOAuthCallback.tsx
+msgid "This sign-in window was replaced by a newer one. Finish signing in there, or start again."
+msgstr "Это окно входа заменено более новым. Завершите вход там или начните снова."
 
 #: src/pages/account/AccountSettings.tsx
 msgid "This signs out every other session and keeps this one signed in."
@@ -7705,6 +7786,14 @@ msgstr ""
 #: src/pages/TeamBoard.tsx
 msgid "Waiting for approval"
 msgstr ""
+
+#: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
+#: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/McpServersOverlay.tsx
+#: src/pages/shell/message-cards.tsx
+msgid "Waiting for sign-in in the other window."
+msgstr "Ожидание входа в другом окне."
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx

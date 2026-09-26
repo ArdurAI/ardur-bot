@@ -7,6 +7,7 @@ import type {
 } from "@ardurbot/adapters";
 import {
   assertSafeRemoteUrl,
+  bumpMcpServerRevision,
   CONSENT_TTL_MS,
   captureIntegrationManifest,
   connectableIntegration,
@@ -15,6 +16,9 @@ import {
   integrationById,
   integrationCatalog,
   integrationFailure,
+  isMcpOAuthAttemptReplaced,
+  lockMcpServerRevision,
+  McpClientRegistrationRequiredError,
   McpConnector,
   McpReauthorizationRequiredError,
 } from "@ardurbot/adapters";
@@ -31,6 +35,7 @@ import {
   IntegrationManifestSchema,
   IntegrationResourceConstraintsSchema,
   IntegrationStateSchema,
+  mcpSignInDiagnostic,
   SpaceToolPoliciesSchema,
 } from "@ardurbot/contracts";
 import { integrationToolKind } from "@ardurbot/core";
@@ -61,15 +66,6 @@ export function connectionDto(server: McpServer, needsReview = false): Integrati
       IntegrationResourceConstraintsSchema.safeParse(server.resourceConstraints).data ?? {},
     spaceToolPolicies: SpaceToolPoliciesSchema.safeParse(server.spaceToolPolicies).data ?? {},
   };
-}
-
-export function needsClientRegistration(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    /dynamic client registration|client (information|registration)|register(ing| registration)? client/i.test(
-      error.message,
-    )
-  );
 }
 
 /** Trusted catalog lifecycle. All row lookups are scoped to the signed-in owner and space. */
@@ -184,15 +180,110 @@ export class IntegrationConnections {
     return { connection: connectionDto(server), authorizationUrl: null, sessionId: null };
   }
 
-  async beginAuthorization(actor: Owner, input: { serverId: string; redirectUri: string }) {
-    await this.owned(actor, input.serverId);
-    const started = await this.oauth.begin({
-      ...input,
-      spaceId: actor.spaceId,
-      userId: actor.userId,
+  /**
+   * Compare-and-set the pending session before any probe. The id this call observed,
+   * live or expired, is replaced only while it is still the stored value.
+   */
+  private async claimSignIn(
+    actor: Owner,
+    server: McpServer,
+  ): Promise<{ status: "replaced" } | { sessionId: string }> {
+    const sessionId = randomUUID();
+    const reserved = await this.prisma.mcpServer.updateMany({
+      where: {
+        id: server.id,
+        spaceId: actor.spaceId,
+        userId: actor.userId,
+        enabled: true,
+        pendingOauthSessionId: server.pendingOauthSessionId ?? null,
+      },
+      data: {
+        pendingOauthSessionId: sessionId,
+        ...(!server.catalogId && server.connectionState !== "connected"
+          ? { connectionState: "not-connected" }
+          : {}),
+      },
     });
-    if (started.status !== "authorization_required") await this.capture(actor, input.serverId);
-    return started;
+    if (!reserved.count) return { status: "replaced" };
+    return { sessionId };
+  }
+
+  async beginAuthorization(actor: Owner, input: { serverId: string; redirectUri: string }) {
+    const server = await this.owned(actor, input.serverId);
+    const claimed = await this.claimSignIn(actor, server);
+    if ("status" in claimed) return claimed;
+    const sessionId = claimed.sessionId;
+    let started: Awaited<ReturnType<McpOAuthBroker["begin"]>>;
+    try {
+      started = await this.oauth.begin({
+        ...input,
+        spaceId: actor.spaceId,
+        userId: actor.userId,
+        sessionId,
+      });
+    } catch (error) {
+      const released = await this.releaseAttempt(actor, server.id, sessionId);
+      if (isMcpOAuthAttemptReplaced(error)) return { status: "replaced" as const };
+      if (released && !server.catalogId) await this.recordFailure(actor, server, error);
+      throw error;
+    }
+    if (started.status !== "authorization_required") {
+      const released = await this.releaseAttempt(actor, server.id, sessionId);
+      if (released && started.status !== "replaced") await this.capture(actor, input.serverId);
+      return released ? started : { status: "replaced" as const };
+    }
+    const current = await this.owned(actor, server.id);
+    if (current.pendingOauthSessionId !== sessionId) {
+      await this.releaseAttempt(actor, server.id, sessionId);
+      return { status: "replaced" as const };
+    }
+    return { ...started, sessionId };
+  }
+
+  /**
+   * Drop this attempt's OAuth session row and in-memory state, and its pending id when it
+   * still holds it. A newer id stays. An attempt that lost the id after its session was
+   * stored calls this too, so repeated connects never pile up against the pending limit.
+   */
+  private async releaseAttempt(actor: Owner, serverId: string, sessionId: string) {
+    const released = await this.prisma.mcpServer.updateMany({
+      where: {
+        id: serverId,
+        spaceId: actor.spaceId,
+        userId: actor.userId,
+        enabled: true,
+        pendingOauthSessionId: sessionId,
+      },
+      data: { pendingOauthSessionId: null },
+    });
+    this.oauth.discardSession(sessionId);
+    await this.prisma.mcpOAuthSession.deleteMany({
+      where: { id: sessionId, spaceId: actor.spaceId, userId: actor.userId },
+    });
+    return released.count > 0;
+  }
+
+  /** Drop this attempt's pending id. A different id is left alone. */
+  async cancelAuthorization(actor: Owner, input: { serverId: string; sessionId: string }) {
+    await this.prisma.mcpServer.updateMany({
+      where: {
+        id: input.serverId,
+        spaceId: actor.spaceId,
+        userId: actor.userId,
+        enabled: true,
+        pendingOauthSessionId: input.sessionId,
+      },
+      data: { pendingOauthSessionId: null, consentStartedAt: null },
+    });
+    await this.prisma.mcpOAuthSession.deleteMany({
+      where: {
+        id: input.sessionId,
+        serverId: input.serverId,
+        spaceId: actor.spaceId,
+        userId: actor.userId,
+      },
+    });
+    this.oauth.discardSession(input.sessionId);
   }
 
   private oauthApp(catalogId: string) {
@@ -271,6 +362,13 @@ export class IntegrationConnections {
     // Uses the existing DNS/IP checks, without a vendor exemption.
     await assertSafeRemoteUrl(descriptor.endpoint!, this.network.resolveHostname);
     let server: McpServer;
+    let oauthSessionId = "";
+    const replaced = async () => ({
+      connection: connectionDto(await this.owned(actor, server.id)),
+      authorizationUrl: null,
+      sessionId: null,
+      status: "replaced" as const,
+    });
     if (input.connectionId) {
       server = await this.owned(actor, input.connectionId);
       if (
@@ -329,36 +427,63 @@ export class IntegrationConnections {
           sessionId: null,
         };
       }
+      const claimed = await this.claimSignIn(actor, server);
+      if ("status" in claimed) return await replaced();
+      oauthSessionId = claimed.sessionId;
       const started = await this.oauth.begin({
         serverId: server.id,
         spaceId: actor.spaceId,
         userId: actor.userId,
         redirectUri: new URL("/api/oauth/done", this.webOrigin).toString(),
+        sessionId: oauthSessionId,
         ...(oauthApp ? { clientInformation: oauthApp } : {}),
       });
+      if (started.status === "authorization_required") {
+        const current = await this.owned(actor, server.id);
+        if (current.pendingOauthSessionId !== oauthSessionId) {
+          await this.releaseAttempt(actor, server.id, oauthSessionId);
+          return await replaced();
+        }
+        return {
+          connection: connectionDto(current),
+          authorizationUrl: started.authorizationUrl,
+          sessionId: started.sessionId,
+        };
+      }
+      // Every other result ends this attempt and releases its reservation.
       if (started.status === "already_connected") {
+        if (!(await this.releaseAttempt(actor, server.id, oauthSessionId))) return await replaced();
         await this.capture(actor, server.id);
-      } else if (started.status !== "authorization_required") {
-        await this.prisma.mcpServer.update({
-          where: { id: server.id },
-          data: { connectionState: "discovery-failed" },
-        });
+      } else if (
+        started.status === "replaced" ||
+        !(await this.markAttemptFailed(actor, server.id, oauthSessionId, "discovery-failed"))
+      ) {
+        await this.releaseAttempt(actor, server.id, oauthSessionId);
+        return await replaced();
       }
       return {
         connection: connectionDto(await this.owned(actor, server.id)),
-        authorizationUrl:
-          started.status === "authorization_required" ? started.authorizationUrl : null,
-        sessionId: started.status === "authorization_required" ? started.sessionId : null,
+        authorizationUrl: null,
+        sessionId: null,
       };
     } catch (error) {
-      await this.prisma.mcpServer.updateMany({
-        where: { id: server.id, enabled: true, revision: server.revision },
-        data: {
-          connectionState: needsClientRegistration(error)
-            ? "needs-client-registration"
-            : "discovery-failed",
-        },
-      });
+      if (isMcpOAuthAttemptReplaced(error)) {
+        if (oauthSessionId) await this.releaseAttempt(actor, server.id, oauthSessionId);
+        return await replaced();
+      }
+      const failedState =
+        error instanceof McpClientRegistrationRequiredError
+          ? "needs-client-registration"
+          : "discovery-failed";
+      if (oauthSessionId) {
+        if (!(await this.markAttemptFailed(actor, server.id, oauthSessionId, failedState)))
+          return await replaced();
+      } else {
+        await this.prisma.mcpServer.updateMany({
+          where: { id: server.id, enabled: true, revision: server.revision },
+          data: { connectionState: failedState },
+        });
+      }
       // Provider errors may contain authorization codes or tokens. Return only a state.
       return {
         connection: connectionDto(await this.owned(actor, server.id)),
@@ -368,7 +493,28 @@ export class IntegrationConnections {
     }
   }
 
-  async capture(actor: Owner, id: string): Promise<void> {
+  /** Mark this attempt failed only while it still holds the pending id. */
+  private async markAttemptFailed(
+    actor: Owner,
+    serverId: string,
+    sessionId: string,
+    state: "discovery-failed" | "needs-client-registration",
+  ) {
+    if (!sessionId) return false;
+    const marked = await this.prisma.mcpServer.updateMany({
+      where: {
+        id: serverId,
+        spaceId: actor.spaceId,
+        userId: actor.userId,
+        enabled: true,
+        pendingOauthSessionId: sessionId,
+      },
+      data: { connectionState: state, pendingOauthSessionId: null },
+    });
+    return marked.count > 0;
+  }
+
+  async capture(actor: Owner, id: string, oauthSessionId?: string): Promise<void> {
     const server = await this.owned(actor, id);
     if (!server.enabled) return;
     try {
@@ -387,28 +533,37 @@ export class IntegrationConnections {
         previous.data.account !== manifest.account ||
         previous.data.workspace !== manifest.workspace;
       await this.prisma.$transaction(async (tx) => {
-        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('mcp-oauth-material'), hashtext(${id}))`;
-        const captured = await tx.mcpServer.updateMany({
-          where: {
-            id,
-            spaceId: actor.spaceId,
-            userId: actor.userId,
-            enabled: true,
-            revision: server.revision,
-          },
-          data: {
-            manifest,
-            connectionState: "connected",
-            consentStartedAt: null,
-            lastCheckedAt: new Date(),
-            lastSuccessAt: new Date(),
-            lastError: null,
-            ...(changed
-              ? { spaceAllowedTools: [], spaceToolPolicies: {}, revision: { increment: 1 } }
-              : {}),
-          },
-        });
-        if (!captured.count) return;
+        await lockMcpServerRevision(tx, id, actor);
+        const where = {
+          enabled: true,
+          revision: server.revision,
+          ...(oauthSessionId ? { pendingOauthSessionId: oauthSessionId } : {}),
+        };
+        const data = {
+          manifest,
+          connectionState: "connected",
+          consentStartedAt: null,
+          lastCheckedAt: new Date(),
+          lastSuccessAt: new Date(),
+          lastError: null,
+          ...(oauthSessionId ? { pendingOauthSessionId: null } : {}),
+        };
+        const captured = changed
+          ? await bumpMcpServerRevision(
+              tx,
+              id,
+              actor,
+              { ...data, spaceAllowedTools: [], spaceToolPolicies: {} },
+              where,
+            )
+          : (
+              await tx.mcpServer.updateMany({
+                where: { ...where, id, spaceId: actor.spaceId, userId: actor.userId },
+                data,
+              })
+            ).count > 0;
+        if (!captured) return;
+        if (oauthSessionId) this.oauth.discardPriorConnected(oauthSessionId);
         if (!changed) return;
         // A refreshed manifest never silently inherits grants to an older tool definition.
         await tx.botMcpServer.updateMany({
@@ -419,45 +574,75 @@ export class IntegrationConnections {
       });
       await McpConnector.invalidateConnection(id, actor);
     } catch (error) {
-      const message = integrationFailure(error);
-      await this.prisma.$transaction(async (tx) => {
-        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('mcp-oauth-material'), hashtext(${id}))`;
-        const where = {
-          id,
-          spaceId: actor.spaceId,
-          userId: actor.userId,
-          enabled: true,
-          revision: server.revision,
-        };
-        const current = await tx.mcpServer.findFirst({ where });
-        if (!current || current.revision !== server.revision) return;
-        // A rejected older token must not invalidate a successful concurrent refresh.
-        if (
-          error instanceof McpReauthorizationRequiredError &&
-          current.secretId !== server.secretId &&
-          current.connectionState === "connected"
-        )
-          return;
-        await tx.mcpServer.updateMany({
-          where,
-          data: {
-            ...(message.startsWith("Needs sign-in")
+      await this.recordFailure(actor, server, error, oauthSessionId);
+      if (!server.catalogId)
+        throw new Error("Could not connect this server. Check its configuration and try again.");
+    }
+  }
+
+  private async recordFailure(
+    actor: Owner,
+    server: McpServer,
+    error: unknown,
+    oauthSessionId?: string,
+  ) {
+    const message = integrationFailure(error);
+    const kept = oauthSessionId
+      ? await this.oauth.restorePriorConnected(server.id, oauthSessionId, actor)
+      : false;
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('mcp-oauth-material'), hashtext(${server.id}))`;
+      const where = {
+        id: server.id,
+        spaceId: actor.spaceId,
+        userId: actor.userId,
+        enabled: true,
+        ...(oauthSessionId
+          ? { pendingOauthSessionId: oauthSessionId }
+          : { revision: server.revision }),
+      };
+      const current = await tx.mcpServer.findFirst({ where });
+      if (!current) return;
+      if (oauthSessionId && current.pendingOauthSessionId !== oauthSessionId) return;
+      if (!oauthSessionId && current.revision !== server.revision) return;
+      // A rejected older token must not invalidate a successful concurrent refresh.
+      if (
+        error instanceof McpReauthorizationRequiredError &&
+        current.secretId !== server.secretId &&
+        current.connectionState === "connected"
+      )
+        return;
+      const wasConnected =
+        server.connectionState === "connected" || current.connectionState === "connected";
+      const keep = kept && wasConnected;
+      const needsSignIn = message.startsWith("Needs sign-in");
+      const droppedReauth = Boolean(oauthSessionId) && wasConnected && !keep && !needsSignIn;
+      await tx.mcpServer.updateMany({
+        where,
+        data: {
+          // A connected server, catalog or custom, stays connected through a failed
+          // read. A failed re-authorization keeps it too when the previous tokens
+          // were written back. A server that is not connected is marked failed.
+          ...(keep
+            ? { connectionState: "connected" }
+            : needsSignIn || droppedReauth
               ? { connectionState: "needs-sign-in" }
               : current.connectionState === "connected"
                 ? {}
                 : { connectionState: "discovery-failed" }),
-            lastCheckedAt: new Date(),
-            lastError: message,
-            recentErrors: [
-              ...(Array.isArray(current.recentErrors) ? current.recentErrors : []),
-              { at: new Date().toISOString(), message },
-            ].slice(-10),
-          },
-        });
+          lastCheckedAt: new Date(),
+          lastError: droppedReauth ? mcpSignInDiagnostic() : message,
+          ...(oauthSessionId ? { pendingOauthSessionId: null } : {}),
+          recentErrors: [
+            ...(Array.isArray(current.recentErrors) ? current.recentErrors : []),
+            {
+              at: new Date().toISOString(),
+              message: droppedReauth ? mcpSignInDiagnostic() : message,
+            },
+          ].slice(-10),
+        },
       });
-      if (!server.catalogId)
-        throw new Error("Could not connect this server. Check its configuration and try again.");
-    }
+    });
   }
 
   async expireConsent(actor?: Owner) {
@@ -543,7 +728,7 @@ export class IntegrationConnections {
     kind: "catalog" | "mcp" = "catalog",
   ) {
     await this.prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('mcp-oauth-material'), hashtext(${input.connectionId}))`;
+      await lockMcpServerRevision(tx, input.connectionId, actor);
       const server = await tx.mcpServer.findFirst({
         where: {
           id: input.connectionId,
@@ -639,14 +824,10 @@ export class IntegrationConnections {
             allowedTools: toolIds,
           })),
         });
-      await tx.mcpServer.update({
-        where: { id: server.id },
-        data: {
-          spaceAllowedTools: toolIds,
-          ...(constraints === undefined ? {} : { resourceConstraints: constraints }),
-          ...(spaceToolPolicies === undefined ? {} : { spaceToolPolicies }),
-          revision: { increment: 1 },
-        },
+      await bumpMcpServerRevision(tx, server.id, actor, {
+        spaceAllowedTools: toolIds,
+        ...(constraints === undefined ? {} : { resourceConstraints: constraints }),
+        ...(spaceToolPolicies === undefined ? {} : { spaceToolPolicies }),
       });
       await this.invalidateApprovals(tx, actor, server);
     });

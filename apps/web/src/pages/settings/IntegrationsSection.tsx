@@ -10,6 +10,13 @@ const IntegrationCatalog = lazy(() =>
 export default function IntegrationsSection({
   initialIntegration,
   onBusyChange,
+  navigate,
 }: SettingsPageProps) {
-  return <IntegrationCatalog reconnectId={initialIntegration} onBusyChange={onBusyChange} />;
+  return (
+    <IntegrationCatalog
+      reconnectId={initialIntegration}
+      onBusyChange={onBusyChange}
+      onOpenMcp={(serverId) => navigate("mcp", serverId)}
+    />
+  );
 }

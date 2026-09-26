@@ -273,6 +273,7 @@ msgstr ""
 msgid "Access token"
 msgstr ""
 
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Access token (optional)"
 msgstr "액세스 토큰(선택 사항)"
@@ -1216,6 +1217,14 @@ msgstr "새 그룹 만들기 취소"
 msgid "Cancel reply"
 msgstr "답장 취소"
 
+#: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
+#: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/McpServersOverlay.tsx
+#: src/pages/shell/message-cards.tsx
+msgid "Cancel sign-in"
+msgstr ""
+
 #: src/pages/LearningObservation.tsx
 msgid "Cancellations"
 msgstr ""
@@ -1312,6 +1321,10 @@ msgstr ""
 msgid "Chat Settings"
 msgstr "채팅 설정"
 
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Check"
+msgstr ""
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Check again"
 msgstr ""
@@ -1393,6 +1406,10 @@ msgstr "파일 선택"
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Choose folder"
+msgstr ""
+
+#: src/pages/McpServersOverlay.tsx
+msgid "Choose one credential: a token or a header."
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
@@ -1691,6 +1708,7 @@ msgstr "서버에서 설정됨"
 msgid "Confirm"
 msgstr "확인"
 
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/settings/UploadedFiles.tsx
@@ -2050,13 +2068,13 @@ msgstr ""
 msgid "Could not complete this action."
 msgstr ""
 
-#: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not connect"
 msgstr "연결하지 못했습니다."
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 msgid "Could not connect or load integrations."
 msgstr ""
 
@@ -2297,6 +2315,8 @@ msgid "Could not load the server configuration."
 msgstr ""
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/lib/mcp-sign-in.ts
+#: src/pages/McpServersOverlay.tsx
 msgid "Could not load this account’s tools."
 msgstr ""
 
@@ -2492,6 +2512,10 @@ msgstr "선택 내용을 저장하지 못했습니다."
 msgid "Could not search catalog"
 msgstr ""
 
+#: src/components/integrations/DirectMcpSearch.tsx
+msgid "Could not search integrations."
+msgstr ""
+
 #: src/pages/Auth.tsx
 msgid "Could not send reset email"
 msgstr "재설정 이메일을 보낼 수 없습니다"
@@ -2685,6 +2709,7 @@ msgstr ""
 msgid "Creating…"
 msgstr "만드는 중…"
 
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Credential"
 msgstr "인증 정보"
@@ -2814,6 +2839,7 @@ msgstr ""
 msgid "Deferred"
 msgstr ""
 
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/pages/BotContextMenu.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/McpServersOverlay.tsx
@@ -3199,6 +3225,10 @@ msgstr ""
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Enter a valid destination and save again."
+msgstr ""
+
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Enter a valid token."
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
@@ -4296,6 +4326,7 @@ msgid "Make sure nothing is still running on this computer."
 msgstr "이 컴퓨터에서 실행 중인 작업이 없는지 확인하세요."
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/pages/account/AccountMore.tsx
 #: src/pages/memory/MemorySettings.tsx
 #: src/pages/settings/GeneralSettings.tsx
@@ -4729,6 +4760,7 @@ msgid "Needs reconnection"
 msgstr ""
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/pages/dashboard/ConnectionsPanel.tsx
 msgid "Needs sign-in"
 msgstr ""
@@ -5008,6 +5040,10 @@ msgstr ""
 
 #: src/components/integrations/manage/IntegrationDetails.tsx
 msgid "Not checked"
+msgstr ""
+
+#: src/components/integrations/card/IntegrationCards.tsx
+msgid "Not checked yet"
 msgstr ""
 
 #: src/pages/board/BoardsSettings.tsx
@@ -5738,6 +5774,7 @@ msgstr ""
 msgid "Recheck"
 msgstr ""
 
+#: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/integrations/manage/IntegrationDetails.tsx
 #: src/pages/customize/IntegrationTable.tsx
 #: src/pages/shell/terminal-session.tsx
@@ -6125,6 +6162,7 @@ msgid "Restricted"
 msgstr ""
 
 #: src/components/Context.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -6775,6 +6813,10 @@ msgstr ""
 msgid "Sign up"
 msgstr "가입하기"
 
+#: src/lib/mcp-sign-in.ts
+msgid "Sign-in did not finish. Try again."
+msgstr ""
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Sign-in expired. Connect Codex again."
 msgstr ""
@@ -6783,8 +6825,20 @@ msgstr ""
 msgid "Sign-in files (auth.json, credentials and oauth_creds.json), cookies, tokens, credential backups, session transcripts, chat histories, history.jsonl, telemetry and caches are never read; server lists retain environment variable names only."
 msgstr ""
 
+#: src/lib/mcp-sign-in.ts
+msgid "Sign-in is needed. Connect again."
+msgstr ""
+
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Sign-in timed out."
+msgstr ""
+
+#: src/lib/mcp-sign-in.ts
+msgid "Sign-in was cancelled."
+msgstr ""
+
+#: src/lib/mcp-sign-in.ts
+msgid "Sign-in was declined."
 msgstr ""
 
 #: src/pages/shell/runtime-settings.tsx
@@ -7195,6 +7249,11 @@ msgstr ""
 msgid "That shortcut is already in use; choose another."
 msgstr ""
 
+#: src/components/integrations/DirectMcpSearch.tsx
+#: src/lib/mcp-sign-in.ts
+msgid "That token was not accepted. Check it and try again."
+msgstr ""
+
 #: src/components/SoftwareUpdateSection.tsx
 msgid "The API did not come back. Refresh this page."
 msgstr "API가 다시 작동하지 않습니다. 이 페이지를 새로 고침하세요."
@@ -7209,6 +7268,14 @@ msgstr ""
 
 #: src/pages/memory/MemoryProposals.tsx
 msgid "The memory changed since this suggestion. Open History before trying again."
+msgstr ""
+
+#: src/lib/mcp-sign-in.ts
+msgid "The saved sign-in expired. Sign in again."
+msgstr ""
+
+#: src/lib/mcp-sign-in.ts
+msgid "The saved sign-in is no longer accepted. Sign in again."
 msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx
@@ -7323,9 +7390,17 @@ msgstr ""
 msgid "This server cannot be assigned without a bot."
 msgstr "연결할 Bot이 없어 이 서버를 배정할 수 없습니다."
 
+#: src/lib/mcp-sign-in.ts
+msgid "This server did not offer browser sign-in. Enter a token instead."
+msgstr ""
+
 #: src/pages/McpServersOverlay.tsx
 msgid "This server did not request browser authorization."
 msgstr "이 서버는 브라우저 인증을 요청하지 않았습니다."
+
+#: src/pages/McpServersOverlay.tsx
+msgid "This server has two credentials. Keep one."
+msgstr ""
 
 #: src/pages/McpServersOverlay.tsx
 msgid "This server is already connected. Disconnect it first to authorize again."
@@ -7340,7 +7415,13 @@ msgid "This server is managed by an extension"
 msgstr ""
 
 #: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
 msgid "This service needs client registration before you can connect."
+msgstr ""
+
+#: src/lib/mcp-sign-in.ts
+#: src/pages/McpOAuthCallback.tsx
+msgid "This sign-in window was replaced by a newer one. Finish signing in there, or start again."
 msgstr ""
 
 #: src/pages/account/AccountSettings.tsx
@@ -7704,6 +7785,14 @@ msgstr ""
 #: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Waiting for approval"
+msgstr ""
+
+#: src/components/integrations/card/IntegrationCards.tsx
+#: src/components/integrations/DirectMcpSearch.tsx
+#: src/components/integrations/IntegrationSetup.tsx
+#: src/pages/McpServersOverlay.tsx
+#: src/pages/shell/message-cards.tsx
+msgid "Waiting for sign-in in the other window."
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx

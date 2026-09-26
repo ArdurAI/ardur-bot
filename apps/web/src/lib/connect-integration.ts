@@ -1,6 +1,6 @@
 import type { IntegrationConnection, IntegrationDescriptor } from "@ardurbot/contracts";
 import { desktopBridge } from "./desktop";
-import { MCP_OAUTH_CHANNEL } from "./mcp-connect";
+import { MCP_OAUTH_CHANNEL } from "./mcp-oauth-channel";
 import { rpc } from "./rpc";
 
 /** Polling survives browser-profile changes and providers that sever the popup opener. */
@@ -14,6 +14,7 @@ export async function connectIntegration(
     oauthClient?: { clientId: string; clientSecret?: string };
     onPopup?: (popup: Window | null) => void;
     onStarted?: (connection: IntegrationConnection) => void;
+    onWaiting?: (waiting: { cancel: () => Promise<void> }) => void;
   } = {},
 ) {
   const authKind = options.authKind ?? descriptor.authKind;
@@ -43,6 +44,12 @@ export async function connectIntegration(
       window.location.assign(started.authorizationUrl);
       return started.connection;
     }
+    options.onWaiting?.({
+      cancel: async () => {
+        await rpc.integrations.cancel({ connectionId: started.connection.id });
+        popup?.close();
+      },
+    });
     const deadline = Date.now() + 10 * 60_000;
     while (Date.now() < deadline) {
       await new Promise((resolve) => window.setTimeout(resolve, 1000));
@@ -66,4 +73,12 @@ export async function connectIntegration(
   } finally {
     options.onPopup?.(null);
   }
+}
+
+/** A built-in app's web connection. Its host sign-in connection is never this one. */
+export function remoteConnection(
+  connections: IntegrationConnection[],
+  catalogId: string,
+): IntegrationConnection | undefined {
+  return connections.find((row) => row.catalogId === catalogId && row.transport !== "host-cli");
 }
