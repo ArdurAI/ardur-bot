@@ -1,5 +1,6 @@
 import type { ChildProcess } from "node:child_process";
 import { spawn as nodeSpawn } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -106,8 +107,41 @@ export async function runDev(options: DevOptions = {}): Promise<ChildProcess> {
       port = candidate;
     }
 
-    const adminPassword = env.POSTGRES_PASSWORD || "ardurbot";
-    const appPassword = env.POSTGRES_PASSWORD || "ardurbot";
+    const credentialsPath = path.join(dataDir, "credentials.json");
+    let adminPassword = "";
+    let appPassword = "";
+    try {
+      const content = await fs.readFile(credentialsPath, "utf8");
+      const parsed = JSON.parse(content) as { adminPassword?: string; appPassword?: string };
+      if (
+        typeof parsed.adminPassword === "string" &&
+        typeof parsed.appPassword === "string" &&
+        parsed.adminPassword.length > 0 &&
+        parsed.appPassword.length > 0 &&
+        parsed.adminPassword !== parsed.appPassword
+      ) {
+        adminPassword = parsed.adminPassword;
+        appPassword = parsed.appPassword;
+      }
+    } catch {
+      // Credentials missing or invalid; generate new values below.
+    }
+
+    if (!adminPassword || !appPassword) {
+      adminPassword = randomBytes(24).toString("hex");
+      appPassword = randomBytes(24).toString("hex");
+      while (appPassword === adminPassword) {
+        appPassword = randomBytes(24).toString("hex");
+      }
+      await fs.writeFile(credentialsPath, JSON.stringify({ adminPassword, appPassword }, null, 2), {
+        mode: 0o600,
+        encoding: "utf8",
+      });
+      if (process.platform !== "win32") {
+        await fs.chmod(credentialsPath, 0o600).catch(() => undefined);
+      }
+    }
+
     const adminUrl = `postgres://${localPostgres.POSTGRES_USER}:${encodeURIComponent(adminPassword)}@127.0.0.1:${port}/postgres`;
     const databaseUrl = `postgres://${localPostgres.APP_DATABASE_USER}:${encodeURIComponent(appPassword)}@127.0.0.1:${port}/${localPostgres.DATABASE_NAME}`;
 

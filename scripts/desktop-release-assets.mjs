@@ -1,7 +1,7 @@
 import { copyFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import path from "node:path";
-import { generateCask, releaseVersion } from "./desktop-release.mjs";
+import { generateCask, generateWinget, releaseVersion } from "./desktop-release.mjs";
 
 // Reuse electron-builder's YAML codec; no new dependency or runtime code.
 const require = createRequire(import.meta.url);
@@ -52,8 +52,14 @@ for (const [file, feed] of feeds) {
   }
   await writeFile(path.join(destination, file), yaml.dump(feed));
 }
+await copyFile("scripts/install.sh", path.join(destination, "install.sh"));
+await generateCask(version, destination, path.join(destination, "ardur-bot.rb"));
+await generateWinget(version, destination, destination);
+
 const crypto = await import("node:crypto");
 let checksums = "";
+// Exclude update feeds (.yml) and blockmaps (.blockmap) managed by electron-builder,
+// the Homebrew cask (ardur-bot.rb), and checksums.txt itself.
 const allFiles = (await readdir(destination)).filter(
   (f) => !f.endsWith(".yml") && !f.endsWith(".blockmap"),
 );
@@ -61,17 +67,6 @@ for (const f of allFiles.sort()) {
   if (f === "checksums.txt" || f === "ardur-bot.rb") continue;
   const content = await readFile(path.join(destination, f));
   const hash = crypto.createHash("sha256").update(content).digest("hex");
-  checksums += `${hash}  ${f}
-`;
+  checksums += `${hash}  ${f}\n`;
 }
 await writeFile(path.join(destination, "checksums.txt"), checksums);
-await copyFile("scripts/install.sh", path.join(destination, "install.sh"));
-await copyFile(
-  "packaging/winget/ArdurAI.ArdurBot.installer.yaml",
-  path.join(destination, "ArdurAI.ArdurBot.installer.yaml"),
-);
-await generateCask(version, destination, path.join(destination, "ardur-bot.rb"));
-
-import { generateWinget } from "./desktop-release.mjs";
-
-await generateWinget(version, destination, destination);

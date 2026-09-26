@@ -164,7 +164,9 @@ describe("release metadata", () => {
     const installSectionMatch = readme.match(
       /## Install a desktop preview\n([\s\S]*?)## Run from source/,
     );
-    expect(installSectionMatch).not.toBeNull();
+    if (!installSectionMatch?.[1]) {
+      throw new Error("Could not find the 'Install a desktop preview' section in README.md");
+    }
     const installSection = installSectionMatch[1];
     expect(installSection.toLowerCase()).not.toContain("requires docker");
     expect(installSection.toLowerCase()).not.toContain("docker desktop");

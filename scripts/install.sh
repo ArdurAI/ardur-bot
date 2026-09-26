@@ -93,7 +93,28 @@ fi
 
 echo "Verifying checksum..."
 cd "$TMP_DIR"
-if ! grep "$ASSET_NAME" checksums.txt | shasum -a 256 -c > /dev/null 2>&1; then
+if [[ "$OS" == "Darwin" ]]; then
+  if command -v shasum >/dev/null 2>&1; then
+    SHA_CMD="shasum -a 256 -c"
+  elif command -v sha256sum >/dev/null 2>&1; then
+    SHA_CMD="sha256sum -c -"
+  else
+    echo "Neither sha256sum nor shasum is available." >&2
+    exit 1
+  fi
+else
+  if command -v sha256sum >/dev/null 2>&1; then
+    SHA_CMD="sha256sum -c -"
+  elif command -v shasum >/dev/null 2>&1; then
+    SHA_CMD="shasum -a 256 -c"
+  else
+    echo "Neither sha256sum nor shasum is available." >&2
+    exit 1
+  fi
+fi
+
+CHECKSUM_ENTRY="$(grep -F "$ASSET_NAME" checksums.txt || true)"
+if [[ -z "$CHECKSUM_ENTRY" ]] || ! [[ "$CHECKSUM_ENTRY" =~ ^[0-9a-fA-F]{64}[[:space:]] ]] || ! echo "$CHECKSUM_ENTRY" | $SHA_CMD > /dev/null 2>&1; then
   echo "Checksum verification failed for $ASSET_NAME." >&2
   exit 1
 fi
