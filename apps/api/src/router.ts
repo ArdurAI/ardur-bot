@@ -53,6 +53,7 @@ import {
   deploymentHostLabel,
   destroyBot,
   displayBotWorkspacePath,
+  enqueueLearningInsights,
   enqueueLearningReview,
   enqueueTakeoverContinuation,
   expireComputerControl,
@@ -585,6 +586,13 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
     dataDir: deps.dataDir,
   });
   const learning = createLearningService({ ...deps, boardService: board.service });
+  /** Cleared requests must stop being quoted now, not at the next debounced or daily pass. */
+  const refreshInsightsAfterClear = (actor: { spaceId: string; userId: string }) =>
+    enqueueLearningInsights(
+      deps,
+      { spaceId: actor.spaceId, userId: actor.userId },
+      { immediate: true },
+    ).catch((error) => getLogger().error("learning.insights enqueue error", error));
   const agentSkills = createAgentSkillsService(deps.prisma, deps.memoryDocuments);
   const localImport = new LocalImportService({
     prisma: deps.prisma,
@@ -1748,8 +1756,13 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
             getLogger().error("thread reaction realtime notification", error);
           });
         }
-        if ("feedbackRunId" in result && result.feedbackRunId)
+        if ("feedbackRunId" in result && result.feedbackRunId) {
           await enqueueLearningReview(deps, result.feedbackRunId);
+          await enqueueLearningInsights(deps, {
+            spaceId: context.actor.spaceId,
+            userId: context.actor.userId,
+          }).catch((error) => getLogger().error("learning.insights enqueue error", error));
+        }
         return { ok: true as const };
       }),
       stop: authed.threads.stop.handler(async ({ context, input }) => {
@@ -1772,6 +1785,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
             deps.jobs.cancel(runJobKey(runId)).catch(() => undefined),
           ),
         );
+        await refreshInsightsAfterClear(context.actor);
         return { ok: true as const };
       }),
       clear: authed.threads.clear.handler(async ({ context, input }) => {
@@ -1821,6 +1835,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
             getLogger().error("semantic memory purge after thread clear failed", error);
           }
         }
+        await refreshInsightsAfterClear(context.actor);
         return { ok: true as const };
       }),
       followUp: authed.threads.followUp.handler(async ({ context, input }) => {
@@ -3237,6 +3252,18 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       ),
       review: authed.learning.review.handler(({ context, input }) =>
         learning.review(context.actor, input.runId),
+      ),
+      insights: authed.learning.insights.handler(({ context, input }) =>
+        learning.insights(context.actor, input.botId),
+      ),
+      dismissInsight: authed.learning.dismissInsight.handler(({ context, input }) =>
+        learning.dismissInsight(context.actor, input.insightId),
+      ),
+      actOnInsight: authed.learning.actOnInsight.handler(({ context, input }) =>
+        learning.actOnInsight(context.actor, input.insightId),
+      ),
+      allowInsightTool: authed.learning.allowInsightTool.handler(({ context, input }) =>
+        learning.allowInsightTool(context.actor, input.insightId),
       ),
     },
     agentSkills: {

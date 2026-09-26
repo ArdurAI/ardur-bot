@@ -17,13 +17,15 @@ import {
   Textarea,
 } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { boardCloseFailedTitle, boardCloseTriedBody } from "../lib/board-close-copy";
 import { actionMessage } from "../lib/orpc-action-message";
 import { rpc } from "../lib/rpc";
 import { LearningCurator } from "./LearningCurator";
 import { LearningObservations, LearningObservationView } from "./LearningObservation";
 import { LearningTimeline } from "./LearningTimeline";
+
+const LearningInsights = lazy(() => import("./LearningInsights"));
 
 type Inbox = Awaited<ReturnType<typeof rpc.learning.list>>;
 type Conflict = NonNullable<Awaited<ReturnType<typeof rpc.learning.revert>>["conflict"]>;
@@ -186,8 +188,34 @@ export function LearningInbox({ botId }: { botId?: string }) {
         </div>
       ) : null}
       {settings?.canConfigure ? (
+        <div className="flex items-center gap-3 text-sm">
+          <Switch
+            aria-label={t`Show insights`}
+            checked={settings.insightsEnabled}
+            disabled={busy}
+            onCheckedChange={(insightsEnabled) =>
+              void change(() =>
+                rpc.learning.configure({
+                  enabled: settings.enabled,
+                  consolidationEnabled: settings.consolidationEnabled,
+                  insightsEnabled,
+                  reviewerPin: settings.reviewerPin,
+                  budgets: settings.budgets,
+                }),
+              )
+            }
+          />
+          <span aria-hidden>
+            <Trans>Show insights</Trans>
+          </span>
+        </div>
+      ) : null}
+      {settings?.canConfigure ? (
         <LearningCurator settings={settings} busy={busy} change={change} />
       ) : null}
+      <Suspense fallback={null}>
+        <LearningInsights botId={botId} />
+      </Suspense>
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList aria-label={t`Learning views`}>
           <TabsTrigger value="inbox">

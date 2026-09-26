@@ -82,6 +82,8 @@ it("lists scoped proposals with separate counts and opens only linked, surviving
       findFirst: vi.fn(async () => row),
     },
     reviewExecution: { findMany: vi.fn(async () => []) },
+    spaceLearningConfig: { findUnique: vi.fn(async () => null) },
+    learningInsight: { findMany: vi.fn(async () => []) },
     thread: { findFirst: vi.fn(async () => ({ id: "thread" }) as { id: string } | null) },
     proposalEvidence: {
       findFirst: vi.fn(async () => ({
@@ -304,6 +306,8 @@ it("loads board outcomes for every listed proposal in one query", async () => {
       },
       learningProposal: { findMany: vi.fn(async () => rows), count: vi.fn(async () => 0) },
       reviewExecution: { findMany: vi.fn(async () => []) },
+      spaceLearningConfig: { findUnique: vi.fn(async () => null) },
+      learningInsight: { findMany: vi.fn(async () => []) },
       botBoardFiling: { findFirst, findMany },
     } as unknown as PrismaClient,
     jobs: {} as never,
@@ -397,4 +401,175 @@ it("checks membership before exposing observations and passes the actor to the d
   });
   await expect(service.observation(actor, "doc", 2)).rejects.toThrow();
   expect(memoryDocuments.history).not.toHaveBeenCalled();
+});
+
+function insightsPrisma(role: string, rows: Array<Record<string, unknown>> = []) {
+  const findMany = vi.fn(async ({ where }: { where: Record<string, unknown> }) =>
+    rows.filter(
+      (row) =>
+        row.spaceId === where.spaceId &&
+        row.userId === where.userId &&
+        (!where.botId || row.botId === where.botId) &&
+        !(where.kind as { notIn?: string[] } | undefined)?.notIn?.includes(String(row.kind)),
+    ),
+  );
+  const updateMany = vi.fn(async ({ where }: { where: Record<string, unknown> }) => ({
+    count: rows.filter(
+      (row) =>
+        row.id === where.id &&
+        row.spaceId === where.spaceId &&
+        row.userId === where.userId &&
+        !(where.kind as { notIn?: string[] } | undefined)?.notIn?.includes(String(row.kind)),
+    ).length,
+  }));
+  return {
+    spaceMember: {
+      findUnique: vi.fn(async ({ where }: { where: { spaceId_userId: { userId: string } } }) =>
+        where.spaceId_userId.userId === "stranger" ? null : { role },
+      ),
+    },
+    spaceLearningConfig: { findUnique: vi.fn(async () => null) },
+    learningProposal: { count: vi.fn(async () => 0) },
+    learningInsight: { findMany, updateMany },
+    bot: {
+      findFirst: vi.fn(async ({ where }: { where: { id: string; userId: string } }) =>
+        where.id === "mine" && where.userId === "user" ? { id: "mine" } : null,
+      ),
+      findMany: vi.fn(async () => [{ id: "mine" }]),
+    },
+  };
+}
+const insightRow = (id: string, kind: string, userId = "user", botId: string | null = null) => ({
+  id,
+  spaceId: "space",
+  userId,
+  botId,
+  kind,
+  status: "active",
+  evidence:
+    kind === "memory-search"
+      ? { kind, documents: 450, bytes: 90_000 }
+      : { kind: "approval", botName: "Mine", tool: "notion_search_pages", approvals: 6, days: 7 },
+  action:
+    kind === "memory-search"
+      ? { kind: "memory-settings" }
+      : { kind: "approval-rule", botId: "mine", tool: "notion_search_pages" },
+  createdAt: new Date(),
+  expiresAt: new Date(Date.now() + 86_400_000),
+});
+
+it("lists only the caller's insights, and space setup insights only for the owner", async () => {
+  const rows = [
+    insightRow("approval", "approval", "user", "mine"),
+    insightRow("setup", "memory-search"),
+    insightRow("theirs", "approval", "someone-else", "mine"),
+  ];
+  const actor = { spaceId: "space", userId: "user" } as Actor;
+  const asMember = createLearningService({
+    prisma: insightsPrisma("member", rows) as unknown as PrismaClient,
+    jobs: {} as never,
+  });
+  expect((await asMember.insights(actor)).insights.map((i) => i.id)).toEqual(["approval"]);
+  await expect(asMember.dismissInsight(actor, "setup")).rejects.toThrow();
+  await expect(asMember.dismissInsight(actor, "theirs")).rejects.toThrow();
+  await expect(asMember.insights(actor, "not-mine")).rejects.toThrow();
+  await expect(
+    asMember.insights({ spaceId: "space", userId: "stranger" } as Actor),
+  ).rejects.toThrow();
+  expect(await asMember.summary(actor)).toMatchObject({ insightCount: 1 });
+
+  const asOwner = createLearningService({
+    prisma: insightsPrisma("owner", rows) as unknown as PrismaClient,
+    jobs: {} as never,
+  });
+  expect((await asOwner.insights(actor)).insights.map((i) => i.id)).toEqual(["approval", "setup"]);
+  expect((await asOwner.insights(actor, "mine")).insights.map((i) => i.id)).toEqual(["approval"]);
+  await expect(asOwner.actOnInsight(actor, "setup")).resolves.toEqual({ ok: true });
+});
+
+it("keeps the insight switch unless it is sent, and lets only the owner change it", async () => {
+  const actor = { spaceId: "space", userId: "owner" } as Actor;
+  let row: Record<string, unknown> | null = { insightsEnabled: false, enabled: false };
+  const member = vi.fn(async () => ({ role: "owner" }));
+  const enqueue = vi.fn(async () => undefined);
+  const prisma = {
+    spaceMember: { findUnique: member },
+    spaceLearningConfig: {
+      findUnique: vi.fn(async () => row),
+      upsert: vi.fn(async ({ update }: { update: Record<string, unknown> }) => {
+        row = { ...row, ...update };
+        return row;
+      }),
+    },
+    spaceModelPreference: { findFirst: vi.fn(async () => null) },
+  };
+  const service = createLearningService({
+    prisma: prisma as unknown as PrismaClient,
+    jobs: { enqueue } as never,
+  });
+  expect(await service.configure(actor, { enabled: true })).toMatchObject({
+    insightsEnabled: false,
+  });
+  expect(enqueue).not.toHaveBeenCalled();
+  expect(await service.configure(actor, { enabled: true, insightsEnabled: true })).toMatchObject({
+    insightsEnabled: true,
+  });
+  expect(enqueue).toHaveBeenCalledWith(
+    expect.objectContaining({ name: "learning.insights", payload: { spaceId: "space" } }),
+  );
+  member.mockResolvedValue({ role: "member" });
+  await expect(service.configure(actor, { insightsEnabled: false })).rejects.toMatchObject({
+    code: "FORBIDDEN",
+  });
+  expect(row).toMatchObject({ insightsEnabled: true });
+});
+
+it("saves Always allow only for a read tool, re-checked on the server", async () => {
+  const actor = { spaceId: "space", userId: "user" } as Actor;
+  let action: Record<string, unknown> = {
+    kind: "approval-rule",
+    botId: "mine",
+    tool: "github_delete_repo",
+  };
+  const upsert = vi.fn(async () => ({}));
+  const update = vi.fn(async () => ({}));
+  const prisma = {
+    spaceMember: { findUnique: vi.fn(async () => ({ role: "member" })) },
+    learningInsight: {
+      findFirst: vi.fn(async ({ where }: { where: { userId: string } }) =>
+        where.userId === "user" ? { action } : null,
+      ),
+      update,
+    },
+    bot: { findFirst: vi.fn(async () => ({ id: "mine" })) },
+    actionApprovalRule: { upsert },
+  };
+  const client = {
+    ...prisma,
+    $transaction: async (fn: (tx: typeof prisma) => Promise<unknown>) => fn(prisma),
+  };
+  const service = createLearningService({
+    prisma: client as unknown as PrismaClient,
+    jobs: {} as never,
+  });
+  await expect(service.allowInsightTool(actor, "insight")).rejects.toMatchObject({
+    code: "FORBIDDEN",
+  });
+  expect(upsert).not.toHaveBeenCalled();
+  action = { kind: "approval-rule", botId: "mine", tool: "notion_search_pages" };
+  await expect(service.allowInsightTool(actor, "insight")).resolves.toEqual({ ok: true });
+  expect(upsert).toHaveBeenCalledWith(
+    expect.objectContaining({
+      create: expect.objectContaining({
+        effect: "always_allow",
+        matchKind: "tool",
+        matchValue: "notion_search_pages",
+        botId: "mine",
+        scopeKey: "bot:mine",
+      }),
+    }),
+  );
+  expect(update).toHaveBeenCalledWith(
+    expect.objectContaining({ data: expect.objectContaining({ status: "acted" }) }),
+  );
 });

@@ -1049,4 +1049,59 @@ export const ZH_MESSAGES: Record<string, string> = {
     "Ardur Bot 已尝试五次。请在看板上关闭它，或检查此电脑是否已连接。",
   "{name} filed {filed}: {done} done, {open} open, {other} closed without being completed.":
     "{name} 提交了 {filed} 项：{done} 项完成，{open} 项开放，{other} 项已关闭但未完成。",
+  Allow: "允许",
+  Insights: "建议",
+  "Change model": "更换模型",
+  Reconnect: "重新连接",
+  coding: "编程",
+  research: "调研",
+  "board and routine work": "看板和例行任务",
+  conversation: "对话",
+  "{count} tokens": "{count} 个令牌",
+  "Show insights": "显示建议",
+  "For {task}, {better} finished {finished} of {total} runs in your runs; {other} finished {otherFinished} of {otherTotal}.":
+    "在你的{task}运行中，{better} 完成了 {total} 次中的 {finished} 次；{other} 完成了 {otherTotal} 次中的 {otherFinished} 次。",
+  "For {task}, {better} on this machine did as well as {other} in your runs.":
+    "在你的{task}运行中，本机上的 {better} 表现与 {other} 一样好。",
+  "For {task}, {better} finished as often as {other} in your runs with {percent}% fewer tokens.":
+    "在你的{task}运行中，{better} 的完成率与 {other} 相当，令牌少用 {percent}%。",
+  "For {task}, {better} finished as often as {other} in your runs in {percent}% less time.":
+    "在你的{task}运行中，{better} 的完成率与 {other} 相当，用时少 {percent}%。",
+  "{bot}'s last {count} runs on {model} failed because it cannot use tools; {suggested} used tools in your runs.":
+    "{bot} 最近在 {model} 上的 {count} 次运行失败，因为它无法使用工具；{suggested} 在你的运行中使用过工具。",
+  "{bot}'s last {count} runs on {model} failed because it cannot use tools.":
+    "{bot} 最近在 {model} 上的 {count} 次运行失败，因为它无法使用工具。",
+  "{bot}'s last {count} runs on {model} failed because the conversation was too long for it; {suggested} takes a larger context.":
+    "{bot} 最近在 {model} 上的 {count} 次运行失败，因为对话超出了它的上下文；{suggested} 支持更大的上下文。",
+  "{bot}'s last {count} runs on {model} failed because the conversation was too long for it.":
+    "{bot} 最近在 {model} 上的 {count} 次运行失败，因为对话超出了它的上下文。",
+  "{bot}'s last {count} runs on {model} were rate limited; {suggested}, on another provider, is available.":
+    "{bot} 最近在 {model} 上的 {count} 次运行受到速率限制；可以使用其他提供商的 {suggested}。",
+  "{bot}'s last {count} runs on {model} were rate limited.":
+    "{bot} 最近在 {model} 上的 {count} 次运行受到速率限制。",
+  "{bot}'s last {count} runs on {model} failed because its sign-in was rejected.":
+    "{bot} 最近在 {model} 上的 {count} 次运行失败，因为登录被拒绝。",
+  "{connection} rejected its sign-in; {count} runs could not use it.":
+    "{connection} 拒绝了登录；有 {count} 次运行无法使用它。",
+  "{count} runs needed {connection}, which is not connected.":
+    "有 {count} 次运行需要 {connection}，但它尚未连接。",
+  "Most of your {count} memories never reach your bots.":
+    "你的 {count} 条记忆中，大部分从未传到你的机器人。",
+  "You gave {count} thumbs with reasons in {days} days, but Learning is off.":
+    "你在 {days} 天内给出了 {count} 个附带理由的评价，但学习功能已关闭。",
+  "You approved {tool} for {bot} {count} times this week.":
+    "本周你为 {bot} 批准了 {tool} {count} 次。",
+  "You sent {bot} the same request {count} times in {days} days.":
+    "你在 {days} 天内向 {bot} 发送了 {count} 次相同的请求。",
+  "Based on {runs} runs in the last {days} days.": "基于最近 {days} 天的 {runs} 次运行。",
+  "{suggested} finished {count} of your runs.": "{suggested} 完成了你的 {count} 次运行。",
+  "tokens of context": "个上下文令牌",
+  "{documents} personal memories, {kb} KB, and memory search is not set up.":
+    "{documents} 条个人记忆，{kb} KB，尚未设置记忆搜索。",
+  "Based on {reasons} thumbs with reasons in the last {days} days.":
+    "基于最近 {days} 天内 {reasons} 个附带理由的评价。",
+  "Based on {approvals} approvals and no denials in the last {days} days.":
+    "基于最近 {days} 天内 {approvals} 次批准且没有拒绝。",
+  "Based on {count} requests in the last {days} days.": "基于最近 {days} 天内的 {count} 次请求。",
+  "Allow {tool} for {bot} without asking?": "允许 {bot} 使用 {tool} 而不再询问？",
 };

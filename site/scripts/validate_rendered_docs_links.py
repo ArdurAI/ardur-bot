@@ -66,6 +66,9 @@ def repo_markdown_target(href: str) -> str | None:
 
 
 def is_mirrored_doc(target: str) -> bool:
+    # sync_docs.py leaves decision records on GitHub, so links to them are expected there.
+    if target.startswith("docs/decisions/"):
+        return False
     return target in ROOT_DOCS or target.startswith("docs/")
 
 

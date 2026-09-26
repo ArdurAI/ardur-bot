@@ -16,7 +16,7 @@ Ollama. Bots work on computers you control: your machine, Docker, and (planned) 
 Kubernetes.
 
 Ardur Bot is a fork of [Rakazo](https://github.com/elie222/rakazo) (Apache-2.0). See
-[NOTICE](https://github.com/ArdurAI/ardur-bot/blob/__ARDUR_BOT_SOURCE_REF__/NOTICE) and [ADR-001](/docs/decisions/adr-001-fork-and-rename/).
+[NOTICE](https://github.com/ArdurAI/ardur-bot/blob/__ARDUR_BOT_SOURCE_REF__/NOTICE) and [ADR-001](https://github.com/ArdurAI/ardur-bot/blob/__ARDUR_BOT_SOURCE_REF__/docs/decisions/ADR-001-fork-and-rename.md).
 
 > **Status: pre-alpha.** Everything lands on the `dev` branch; `main` moves only after a
 > human has verified a build. The release workflow produces unsigned desktop previews;
@@ -163,7 +163,7 @@ pnpm test    # offline unit tests, no keys needed
 
 More checks, the branch policy and how to sync with upstream Rakazo are in
 [CONTRIBUTING.md](/docs/contributing/). Design notes are under [docs/](https://github.com/ArdurAI/ardur-bot/tree/__ARDUR_BOT_SOURCE_REF__/docs) where
-present and decisions under [docs/decisions/](/docs/decisions/).
+present and decisions under [docs/decisions/](https://github.com/ArdurAI/ardur-bot/tree/__ARDUR_BOT_SOURCE_REF__/docs/decisions).
 
 ## Community
 

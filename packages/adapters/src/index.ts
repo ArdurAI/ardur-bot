@@ -91,6 +91,7 @@ export * from "./kubernetes-sandbox.js";
 export * from "./learning-apply.js";
 export * from "./learning-curator.js";
 export * from "./learning-grants.js";
+export * from "./learning-insights.js";
 export * from "./learning-outcomes.js";
 export * from "./learning-pin.js";
 export * from "./learning-queue.js";

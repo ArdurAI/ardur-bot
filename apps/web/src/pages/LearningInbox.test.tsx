@@ -29,6 +29,7 @@ const api = vi.hoisted(() => ({
   curator: vi.fn(),
   curate: vi.fn(),
   skillCare: vi.fn(),
+  insights: vi.fn(async () => ({ insights: [] })),
 }));
 vi.mock("../lib/rpc", () => ({ rpc: { learning: api } }));
 vi.mock("@lingui/core/macro", () => ({
@@ -767,6 +768,33 @@ it("shows the empty state and permits only the owner to enable learning", async 
   expect(container.textContent).toContain("Nothing to review.");
   expect(container.textContent).toContain("Learning is off for this space.");
   expect(container.querySelector("input")).toBeNull();
+});
+it("lets only the owner turn insights off, keeping the rest of the learning settings", async () => {
+  const settings = {
+    enabled: false,
+    consolidationEnabled: false,
+    insightsEnabled: true,
+    canConfigure: true,
+    reviewerPin: null,
+    destination: null,
+    budgets: { botDailyTokens: 1 },
+  };
+  api.settings.mockResolvedValue(settings);
+  api.configure.mockResolvedValue({ ...settings, insightsEnabled: false });
+  await act(async () => root.render(<LearningInbox />));
+  const toggle = container.querySelector('input[aria-label="Show insights"]') as HTMLInputElement;
+  expect(toggle.checked).toBe(true);
+  await act(async () => toggle.click());
+  expect(api.configure).toHaveBeenCalledWith({
+    enabled: false,
+    consolidationEnabled: false,
+    insightsEnabled: false,
+    reviewerPin: null,
+    budgets: { botDailyTokens: 1 },
+  });
+  api.settings.mockResolvedValue({ ...settings, canConfigure: false });
+  await act(async () => root.render(<LearningInbox botId="other" />));
+  expect(container.textContent).not.toContain("Show insights");
 });
 it("sends edited content for a server diff before approval", async () => {
   await act(async () => root.render(<LearningInbox />));

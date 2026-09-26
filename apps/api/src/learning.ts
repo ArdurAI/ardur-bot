@@ -2,13 +2,17 @@ import { randomUUID } from "node:crypto";
 import type { JobPublisher } from "@ardurbot/adapter-kit";
 import type { BoardService, EncryptedSecretStore } from "@ardurbot/adapters";
 import {
+  allowInsightTool,
   createLearningApplyService,
   createLearningGrants,
   enqueueLearningReview,
+  InsightRuleRefusedError,
   learningMember,
+  listLearningInsights,
   observeLearningRevision,
   proposalView,
   reviewerDestination,
+  settleLearningInsight,
   skillDocumentContext,
 } from "@ardurbot/adapters";
 import type { Actor, SpaceLearningConfig } from "@ardurbot/contracts";
@@ -22,6 +26,7 @@ import { learningJourney } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import { IsolationError } from "@ardurbot/db";
 import type { MemoryService } from "@ardurbot/memory";
+import { ORPCError } from "@orpc/server";
 import { requireSpaceOwner } from "./memory-provider-config.js";
 
 export function createLearningService(deps: {
@@ -44,6 +49,7 @@ export function createLearningService(deps: {
         ? {
             enabled: row.enabled,
             consolidationEnabled: row.consolidationEnabled,
+            insightsEnabled: row.insightsEnabled,
             reviewerPin: row.reviewerPin,
             budgets: {
               botDailyTokens: row.botDailyTokens,
@@ -58,6 +64,7 @@ export function createLearningService(deps: {
     );
     return {
       ...config,
+      insightsEnabled: config.insightsEnabled ?? true,
       canConfigure: member.role
         .split(",")
         .map((role) => role.trim())
@@ -69,10 +76,11 @@ export function createLearningService(deps: {
       ),
     };
   }
+  const identity = (actor: Actor) => ({ spaceId: actor.spaceId, userId: actor.userId });
   async function summary(actor: Actor, botId?: string) {
     await learningMember(deps.prisma, { spaceId: actor.spaceId, userId: actor.userId }, botId);
     const where = { spaceId: actor.spaceId, userId: actor.userId, ...(botId ? { botId } : {}) };
-    const [pendingCount, appliedThisWeek] = await Promise.all([
+    const [pendingCount, appliedThisWeek, insights] = await Promise.all([
       deps.prisma.learningProposal.count({
         where: { ...where, status: "pending", expiresAt: { gt: new Date() } },
       }),
@@ -83,10 +91,10 @@ export function createLearningService(deps: {
           appliedAt: { gte: new Date(Date.now() - 7 * 86400000) },
         },
       }),
+      listLearningInsights(deps.prisma, identity(actor), botId),
     ]);
-    return { pendingCount, appliedThisWeek };
+    return { pendingCount, appliedThisWeek, insightCount: insights.length };
   }
-  const identity = (actor: Actor) => ({ spaceId: actor.spaceId, userId: actor.userId });
   /**
    * Board items carry a filing outcome. A pending close stays visible until it finishes, and says
    * it could not be closed once its notice was sent.
@@ -293,9 +301,16 @@ export function createLearningService(deps: {
       const pin = config.enabled
         ? await reviewerDestination(deps.prisma, actor, config.reviewerPin)
         : config.reviewerPin;
+      const previous = await deps.prisma.spaceLearningConfig.findUnique({
+        where: { spaceId: actor.spaceId },
+        select: { insightsEnabled: true },
+      });
       const data = {
         enabled: config.enabled,
         consolidationEnabled: config.consolidationEnabled,
+        ...(config.insightsEnabled === undefined
+          ? {}
+          : { insightsEnabled: config.insightsEnabled }),
         ...(pin ? { reviewerPin: pin } : {}),
         configuredBy: actor.userId,
         ...config.budgets,
@@ -305,6 +320,13 @@ export function createLearningService(deps: {
         create: { spaceId: actor.spaceId, ...data },
         update: data,
       });
+      // Turning insights back on recomputes them for the space's members.
+      if (config.insightsEnabled && previous?.insightsEnabled === false)
+        await deps.jobs.enqueue({
+          name: "learning.insights",
+          payload: { spaceId: actor.spaceId },
+          replaceKey: `learning.insights:${actor.spaceId}`,
+        });
       return settings(actor);
     },
     async list(actor: Actor, botId?: string) {
@@ -337,6 +359,28 @@ export function createLearningService(deps: {
         ),
         ...counts,
       };
+    },
+    async insights(actor: Actor, botId?: string) {
+      await learningMember(deps.prisma, identity(actor), botId);
+      return { insights: await listLearningInsights(deps.prisma, identity(actor), botId) };
+    },
+    async dismissInsight(actor: Actor, insightId: string) {
+      await settleLearningInsight(deps.prisma, identity(actor), insightId, "dismissed");
+      return { ok: true as const };
+    },
+    async actOnInsight(actor: Actor, insightId: string) {
+      await settleLearningInsight(deps.prisma, identity(actor), insightId, "acted");
+      return { ok: true as const };
+    },
+    /** The confirmed "Always allow": the server re-checks that the stored tool only reads. */
+    async allowInsightTool(actor: Actor, insightId: string) {
+      try {
+        await allowInsightTool(deps.prisma, identity(actor), insightId);
+      } catch (error) {
+        if (error instanceof InsightRuleRefusedError) throw new ORPCError("FORBIDDEN");
+        throw error;
+      }
+      return { ok: true as const };
     },
     async review(actor: Actor, runId: string) {
       const run = await deps.prisma.run.findFirst({

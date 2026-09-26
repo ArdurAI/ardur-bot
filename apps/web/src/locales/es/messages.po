@@ -154,17 +154,57 @@ msgstr "Pantalla de {0}"
 msgid "{after} corrections in {0} exposed runs; before: {before} in {1} comparable runs"
 msgstr ""
 
+#: src/pages/LearningInsights.tsx
+msgid "{bot}'s last {count} runs on {model} failed because it cannot use tools; {suggested} used tools in your runs."
+msgstr ""
+
+#: src/pages/LearningInsights.tsx
+msgid "{bot}'s last {count} runs on {model} failed because it cannot use tools."
+msgstr ""
+
+#: src/pages/LearningInsights.tsx
+msgid "{bot}'s last {count} runs on {model} failed because its sign-in was rejected."
+msgstr ""
+
+#: src/pages/LearningInsights.tsx
+msgid "{bot}'s last {count} runs on {model} failed because the conversation was too long for it; {suggested} takes a larger context."
+msgstr ""
+
+#: src/pages/LearningInsights.tsx
+msgid "{bot}'s last {count} runs on {model} failed because the conversation was too long for it."
+msgstr ""
+
+#: src/pages/LearningInsights.tsx
+msgid "{bot}'s last {count} runs on {model} were rate limited; {suggested}, on another provider, is available."
+msgstr ""
+
+#: src/pages/LearningInsights.tsx
+msgid "{bot}'s last {count} runs on {model} were rate limited."
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "{botName}’s computer"
 msgstr "Computadora de {botName}"
+
+#: src/pages/LearningInsights.tsx
+msgid "{connection} rejected its sign-in; {count} runs could not use it."
+msgstr ""
 
 #: src/pages/dashboard/ComputersPanel.tsx
 msgid "{count} folders"
 msgstr ""
 
+#: src/pages/LearningInsights.tsx
+msgid "{count} runs needed {connection}, which is not connected."
+msgstr ""
+
 #: src/pages/ActivityList.tsx
 msgid "{days}d ago"
 msgstr "hace {days} d"
+
+#: src/pages/LearningInsights.tsx
+msgid "{documents} personal memories, {kb} KB, and memory search is not set up."
+msgstr ""
 
 #: src/pages/MemoryDeliveryProgress.tsx
 msgid "{failed} failed"
@@ -220,6 +260,10 @@ msgstr ""
 #: src/components/ArtifactFileCard.tsx
 msgid "{size} B"
 msgstr "{size} B"
+
+#: src/pages/LearningInsights.tsx
+msgid "{suggested} finished {suggestedRuns} of your runs."
+msgstr ""
 
 #: src/pages/ActivityList.tsx
 msgid "{title}, {label}"
@@ -551,6 +595,7 @@ msgstr ""
 
 #: src/components/integrations/catalog/ToolPicker.tsx
 #: src/components/integrations/manage/ToolPermissions.tsx
+#: src/pages/LearningInsights.tsx
 msgid "Allow"
 msgstr ""
 
@@ -568,6 +613,10 @@ msgstr "Permitir el conector {0} sin preguntar"
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Allow {0} without asking"
 msgstr "Permitir {0} sin preguntar"
+
+#: src/pages/LearningInsights.tsx
+msgid "Allow {tool} for {bot} without asking?"
+msgstr ""
 
 #: src/pages/DevicesSettings.tsx
 msgid "Allow actions after presence confirmation"
@@ -649,6 +698,10 @@ msgstr "¿Ya tienes una cuenta?"
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Always act"
+msgstr ""
+
+#: src/pages/LearningInsights.tsx
+msgid "Always allow"
 msgstr ""
 
 #: src/components/AskCard.tsx
@@ -1006,6 +1059,22 @@ msgstr ""
 msgid "Base URL"
 msgstr "URL base"
 
+#: src/pages/LearningInsights.tsx
+msgid "Based on {approvals} approvals and no denials in the last {days} days."
+msgstr ""
+
+#: src/pages/LearningInsights.tsx
+msgid "Based on {count} requests in the last {days} days."
+msgstr ""
+
+#: src/pages/LearningInsights.tsx
+msgid "Based on {reasons} thumbs with reasons in the last {days} days."
+msgstr ""
+
+#: src/pages/LearningInsights.tsx
+msgid "Based on {runs} runs in the last {days} days."
+msgstr ""
+
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/settings-sections.ts
 msgid "Beads"
@@ -1070,6 +1139,10 @@ msgstr ""
 #: src/pages/dashboard/DashboardPage.tsx
 #: src/pages/shell/TopNav.tsx
 msgid "Board"
+msgstr ""
+
+#: src/pages/LearningInsights.tsx
+msgid "board and routine work"
 msgstr ""
 
 #: src/pages/board/BoardsSettings.tsx
@@ -1236,6 +1309,7 @@ msgstr "No se puede alcanzar el servidor."
 #: src/pages/import/ImportedServerCredentials.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/LearningInbox.tsx
+#: src/pages/LearningInsights.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/memory/MemoryImport.tsx
 #: src/pages/MemoryImportExport.tsx
@@ -1299,6 +1373,7 @@ msgstr ""
 msgid "Change computer"
 msgstr ""
 
+#: src/pages/LearningInsights.tsx
 #: src/pages/shell/provider-error-message.tsx
 msgid "Change model"
 msgstr ""
@@ -1624,6 +1699,10 @@ msgstr ""
 msgid "Codex runs on host computers for now — change the bot's computer or its runtime."
 msgstr ""
 
+#: src/pages/LearningInsights.tsx
+msgid "coding"
+msgstr ""
+
 #. placeholder {0}: group.title
 #: src/pages/Shell.tsx
 msgid "Collapse {0}"
@@ -1805,6 +1884,7 @@ msgstr ""
 #: src/components/integrations/IntegrationSetup.tsx
 #: src/pages/capabilities/ConnectorSuggestion.tsx
 #: src/pages/customize/IntegrationTable.tsx
+#: src/pages/LearningInsights.tsx
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 #: src/pages/shell/provider-error-message.tsx
@@ -1969,6 +2049,10 @@ msgstr "Continuar con el correo"
 msgid "Controls how connector tools are loaded in new conversations."
 msgstr ""
 
+#: src/pages/LearningInsights.tsx
+msgid "conversation"
+msgstr ""
+
 #: src/pages/GroupPanel.tsx
 msgid "Coordinator"
 msgstr "Coordinador"
@@ -2013,6 +2097,7 @@ msgstr ""
 
 #: src/pages/ComparePanel.tsx
 #: src/pages/dashboard/UsagePanel.tsx
+#: src/pages/LearningInsights.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Cost"
 msgstr ""
@@ -2669,6 +2754,7 @@ msgid "Could not update computer"
 msgstr "No se pudo actualizar la computadora"
 
 #: src/pages/LearningInbox.tsx
+#: src/pages/LearningInsights.tsx
 msgid "Could not update learning. Try again."
 msgstr ""
 
@@ -3039,6 +3125,7 @@ msgstr ""
 
 #: src/components/AskCard.tsx
 #: src/pages/LearningInbox.tsx
+#: src/pages/LearningInsights.tsx
 #: src/pages/memory/MemoryProposals.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Details"
@@ -3127,6 +3214,7 @@ msgstr ""
 #: src/components/ComputerUpdateProgress.tsx
 #: src/components/teach/TeachComputerOverlay.tsx
 #: src/pages/board/Board.tsx
+#: src/pages/LearningInsights.tsx
 #: src/pages/shell/message-cards.tsx
 msgid "Dismiss"
 msgstr "Descartar"
@@ -3291,6 +3379,7 @@ msgstr "Correo"
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/customize/McpDefaults.tsx
 #: src/pages/customize/SkillsPage.tsx
+#: src/pages/LearningInsights.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Enable"
 msgstr ""
@@ -3578,6 +3667,10 @@ msgstr ""
 msgid "finished"
 msgstr "finalizado"
 
+#: src/pages/LearningInsights.tsx
+msgid "Finished"
+msgstr ""
+
 #: src/pages/McpOAuthCallback.tsx
 msgid "Finishing MCP connection…"
 msgstr "Finalizando conexión MCP…"
@@ -3601,6 +3694,22 @@ msgstr ""
 #: src/pages/board/Board.tsx
 msgid "Follow"
 msgstr "Seguir"
+
+#: src/pages/LearningInsights.tsx
+msgid "For {task}, {better} finished {finished} of {total} runs in your runs; {other} finished {otherFinished} of {otherTotal}."
+msgstr ""
+
+#: src/pages/LearningInsights.tsx
+msgid "For {task}, {better} finished as often as {other} in your runs in {percent}% less time."
+msgstr ""
+
+#: src/pages/LearningInsights.tsx
+msgid "For {task}, {better} finished as often as {other} in your runs with {percent}% fewer tokens."
+msgstr ""
+
+#: src/pages/LearningInsights.tsx
+msgid "For {task}, {better} on this machine did as well as {other} in your runs."
+msgstr ""
 
 #: src/pages/Auth.tsx
 msgid "Forgot password?"
@@ -3965,6 +4074,14 @@ msgstr "Entradas"
 
 #: src/pages/TeamBoard.tsx
 msgid "Inputs and boundaries"
+msgstr ""
+
+#: src/pages/LearningInsights.tsx
+msgid "Insights"
+msgstr ""
+
+#: src/pages/dashboard/LearningPanel.tsx
+msgid "Insights ({insights})"
 msgstr ""
 
 #: src/pages/customize/ConfigureExtension.tsx
@@ -4532,6 +4649,14 @@ msgstr ""
 msgid "Measurement details"
 msgstr ""
 
+#: src/pages/LearningInsights.tsx
+msgid "Median time"
+msgstr ""
+
+#: src/pages/LearningInsights.tsx
+msgid "Median tokens"
+msgstr ""
+
 #: src/lib/thinking-level-options.ts
 msgid "medium — balances speed and care"
 msgstr ""
@@ -4705,6 +4830,7 @@ msgstr "minuto"
 msgid "minutes"
 msgstr "minutos"
 
+#: src/pages/LearningInsights.tsx
 #: src/pages/MemoryHistory.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -4793,6 +4919,10 @@ msgstr ""
 
 #: src/pages/memory/MemoryPage.tsx
 msgid "More memory"
+msgstr ""
+
+#: src/pages/LearningInsights.tsx
+msgid "Most of your {count} memories never reach your bots."
 msgstr ""
 
 #: src/pages/settings-sections.ts
@@ -4935,6 +5065,10 @@ msgstr "Nuevo elemento de trabajo abierto"
 #: src/pages/Auth.tsx
 msgid "New password"
 msgstr "Nueva contraseña"
+
+#: src/pages/LearningInsights.tsx
+msgid "New routine"
+msgstr ""
 
 #: src/pages/BotContextMenu.tsx
 #: src/pages/shell/dialogs.tsx
@@ -5909,6 +6043,7 @@ msgstr ""
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/components/integrations/manage/IntegrationDetails.tsx
 #: src/pages/customize/IntegrationTable.tsx
+#: src/pages/LearningInsights.tsx
 #: src/pages/shell/terminal-session.tsx
 msgid "Reconnect"
 msgstr ""
@@ -6215,6 +6350,10 @@ msgstr ""
 
 #: src/components/ThreadCommandBlock.tsx
 msgid "Rerun requested."
+msgstr ""
+
+#: src/pages/LearningInsights.tsx
+msgid "research"
 msgstr ""
 
 #: src/pages/account/AccountProfile.tsx
@@ -6847,6 +6986,10 @@ msgstr "Configurar un tablero"
 msgid "Set up credentials"
 msgstr ""
 
+#: src/pages/LearningInsights.tsx
+msgid "Set up memory search"
+msgstr ""
+
 #: src/pages/import/LocalImportPage.tsx
 msgid "Set up servers"
 msgstr ""
@@ -6907,6 +7050,10 @@ msgstr ""
 
 #: src/pages/system/SystemPage.tsx
 msgid "Show in the menu bar."
+msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Show insights"
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx
@@ -7634,6 +7781,10 @@ msgstr ""
 msgid "This week (UTC)"
 msgstr ""
 
+#: src/pages/LearningInsights.tsx
+msgid "Thumbs"
+msgstr ""
+
 #: src/pages/RoutineSchedule.tsx
 msgid "Time of day"
 msgstr "Hora del día"
@@ -7684,6 +7835,10 @@ msgstr ""
 #: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Tokens"
+msgstr ""
+
+#: src/pages/LearningInsights.tsx
+msgid "tokens of context"
 msgstr ""
 
 #: src/pages/dashboard/UsagePanel.tsx
@@ -8173,6 +8328,10 @@ msgstr "Ayer"
 msgid "You"
 msgstr "Tú"
 
+#: src/pages/LearningInsights.tsx
+msgid "You approved {tool} for {bot} {count} times this week."
+msgstr ""
+
 #: src/pages/McpOAuthCallback.tsx
 msgid "You can close this tab if it does not redirect automatically."
 msgstr "Puedes cerrar esta pestaña si no redirige automáticamente."
@@ -8181,9 +8340,17 @@ msgstr "Puedes cerrar esta pestaña si no redirige automáticamente."
 msgid "You can close this window."
 msgstr "Puedes cerrar esta ventana."
 
+#: src/pages/LearningInsights.tsx
+msgid "You gave {count} thumbs with reasons in {days} days, but Learning is off."
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "You have control"
 msgstr "Tienes el control"
+
+#: src/pages/LearningInsights.tsx
+msgid "You sent {bot} the same request {count} times in {days} days."
+msgstr ""
 
 #. placeholder {0}: state.storage.path
 #: src/pages/system/SystemPage.tsx

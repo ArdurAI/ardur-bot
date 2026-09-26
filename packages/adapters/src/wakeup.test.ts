@@ -7,6 +7,7 @@ function handlers(): BackgroundJobHandlers {
     "board.run": vi.fn(async () => undefined),
     "briefs.maintain": async () => undefined,
     "learning.curate": async () => undefined,
+    "learning.insights": async () => undefined,
     "learning.review": async () => undefined,
     "memory.git-push": async () => undefined,
     "memory.deliver": async () => undefined,
@@ -110,6 +111,31 @@ describe("InMemoryJobQueue", () => {
     await queue.cancel("computer.sleep:2");
     await vi.advanceTimersByTimeAsync(1_000);
     expect(target["computer.sleep"]).toHaveBeenCalledTimes(1);
+    await queue.close();
+  });
+
+  it("lets a later trigger join a pending debounced job instead of delaying it", async () => {
+    vi.useFakeTimers();
+    const queue = new InMemoryJobQueue();
+    const insights = vi.fn(async () => undefined);
+    await queue.start({ ...handlers(), "learning.insights": insights });
+    const job = (payload: { spaceId: string; userId: string }) => ({
+      name: "learning.insights" as const,
+      payload,
+      replaceKey: "learning.insights:space:user",
+      preserveRunAt: true,
+      availableAt: new Date(Date.now() + 1_000),
+    });
+    await queue.enqueue(job({ spaceId: "space", userId: "user" }));
+    await vi.advanceTimersByTimeAsync(600);
+    await queue.enqueue(job({ spaceId: "space", userId: "user" }));
+    await vi.advanceTimersByTimeAsync(400);
+    expect(insights).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(insights).toHaveBeenCalledTimes(1);
+    await queue.enqueue(job({ spaceId: "space", userId: "user" }));
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(insights).toHaveBeenCalledTimes(2);
     await queue.close();
   });
 

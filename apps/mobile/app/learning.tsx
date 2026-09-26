@@ -1,5 +1,6 @@
 import type {
   LearningActionResult,
+  LearningInsight,
   LearningJourneyEntry,
   LearningProposal,
   ProposalEvidence,
@@ -28,6 +29,7 @@ import { rpc } from "../lib/api";
 import { mobileTokens } from "../lib/appearance";
 import { useI18n } from "../lib/i18n";
 import { LearningCurator } from "../lib/LearningCurator";
+import { LearningInsights } from "../lib/LearningInsights";
 import { LearningObservations, LearningObservationView } from "../lib/LearningObservations";
 import {
   actionMessage,
@@ -38,6 +40,7 @@ import {
   loadLearningProposal,
   loadLearningSettings,
 } from "../lib/learning";
+import { loadLearningInsights } from "../lib/learning-insights";
 import { native, useThemedStyles } from "../lib/native";
 
 export default function Learning() {
@@ -52,6 +55,7 @@ export default function Learning() {
   const [selected, setSelected] = useState<LearningProposal | null>(null);
   const [counts, setCounts] = useState({ pendingCount: 0, appliedThisWeek: 0 });
   const [settings, setSettings] = useState<SpaceLearningConfig | null>(null);
+  const [insights, setInsights] = useState<LearningInsight[]>([]);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(busy);
   busyRef.current = busy;
@@ -61,11 +65,13 @@ export default function Learning() {
   const [conflict, setConflict] =
     useState<Awaited<ReturnType<typeof learningAction>>["conflict"]>();
   const load = useCallback(async () => {
-    const [inbox, config, proposal] = await Promise.all([
+    const [inbox, config, proposal, found] = await Promise.all([
       loadLearning(botId),
       loadLearningSettings(),
       selectedId ? loadLearningProposal(selectedId) : null,
+      loadLearningInsights(botId).catch(() => []),
     ]);
+    setInsights(found);
     setItems(inbox.proposals);
     setSelected(proposal);
     setBotNames(inbox.botNames);
@@ -132,8 +138,36 @@ export default function Learning() {
           </Text>
         ) : null}
         {settings?.canConfigure ? (
+          <View style={styles.actions}>
+            <Text style={styles.body}>{t("Show insights")}</Text>
+            <Switch
+              accessibilityLabel={t("Show insights")}
+              value={settings.insightsEnabled}
+              disabled={busy}
+              onValueChange={(insightsEnabled) =>
+                void change(() =>
+                  rpc("learning/configure", {
+                    enabled: settings.enabled,
+                    consolidationEnabled: settings.consolidationEnabled,
+                    insightsEnabled,
+                    reviewerPin: settings.reviewerPin,
+                    budgets: settings.budgets,
+                  }),
+                )
+              }
+            />
+          </View>
+        ) : null}
+        {settings?.canConfigure ? (
           <LearningCurator settings={settings} busy={busy} change={change} />
         ) : null}
+        <LearningInsights
+          insights={insights}
+          settings={settings}
+          busy={busy}
+          change={change}
+          styles={styles}
+        />
         {counts.pendingCount > 0 ? (
           <Text style={styles.secondary}>
             {counts.pendingCount} {t("suggestions to review")}

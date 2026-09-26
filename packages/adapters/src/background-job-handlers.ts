@@ -22,7 +22,8 @@ import { performComputerUpdate } from "./computer-update.js";
 import type { createRunExecutor } from "./executor.js";
 import { compactHistory } from "./history-compaction.js";
 import { curateLearningSpaces } from "./learning-curator.js";
-import { enqueueLearningReview } from "./learning-queue.js";
+import { learningInsightsJob } from "./learning-insights.js";
+import { enqueueLearningInsights, enqueueLearningReview } from "./learning-queue.js";
 import { reviewLearning } from "./learning-review.js";
 import type { LocalImportJobOptions } from "./local-import-jobs.js";
 import { createLocalImportJobs } from "./local-import-jobs.js";
@@ -31,6 +32,19 @@ import { deliverMessagingOutbound, mirrorMessagingOutbound } from "./messaging-d
 import { recordRunUsage } from "./run-usage.js";
 import type { EncryptedSecretStore } from "./secrets.js";
 import { expireTaughtSkillTeaching } from "./teaching-session.js";
+
+/** A finished run is new evidence for its person's insights; the pass itself is debounced. */
+async function enqueueFinishedRunInsights(
+  deps: { prisma: PrismaClient; jobs: JobPublisher },
+  runId: string,
+) {
+  const run = await deps.prisma.run.findUnique({
+    where: { id: runId },
+    select: { spaceId: true, userId: true, status: true },
+  });
+  if (run && (run.status === "completed" || run.status === "failed"))
+    await enqueueLearningInsights(deps, { spaceId: run.spaceId, userId: run.userId });
+}
 
 export function createBackgroundJobHandlers(deps: {
   executor: ReturnType<typeof createRunExecutor>;
@@ -85,6 +99,7 @@ export function createBackgroundJobHandlers(deps: {
       else await maintainBriefs(deps.prisma, deps.executor.refreshBrief);
     },
     "learning.curate": (payload) => curateLearningSpaces(deps, payload),
+    "learning.insights": (payload) => learningInsightsJob(deps.prisma, payload),
     "learning.review": (payload) =>
       reviewLearning(
         {
@@ -132,6 +147,9 @@ export function createBackgroundJobHandlers(deps: {
     "run.continue": async (payload) => {
       await deps.executor.continueRun(payload.runId, deps.workerId);
       await enqueueLearningReview(deps, payload.runId);
+      await enqueueFinishedRunInsights(deps, payload.runId).catch((error) =>
+        getLogger().error("learning.insights enqueue error", error),
+      );
       // Automatic messaging mirror: once the run's bot messages are durable,
       // copy them into the outbox. Never let mirror failures fail the run.
       if (deps.messaging) {

@@ -73,6 +73,11 @@ def discover_docs() -> list[Path]:
     if docs_dir.is_dir():
         for path in docs_dir.rglob("*.md"):
             rel = path.relative_to(REPO_ROOT)
+            # Decision records keep historical credential references that
+            # scripts/credential-boundary.test.ts exempts only at docs/decisions/.
+            # They stay on GitHub; links to them resolve there.
+            if rel.parts[:2] == ("docs", "decisions"):
+                continue
             if not is_private_or_generated(rel):
                 paths.add(rel)
     return sorted(paths, key=lambda p: p.as_posix())
