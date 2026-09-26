@@ -222,13 +222,10 @@ named by the SHA-256 of their canonical bytes. A record is appended only after t
 The directory is local-first and is not a hosted telemetry store. Public records use synthetic
 tasks and hardware-class labels.
 
-Commit object bytes are retained for 180 days. An object stays while any record inside that
-window, commit or release, references its digest. A release record also keeps its object after
-the window. The index job runs `prune` after it appends the new lines and before it uploads the
-chain. Pruning removes only bytes that fail both of those checks, writes an expiry record
-first, and leaves the original line in place.
-A pending record is never deleted to hide an earlier measurement. A later rejection is a new line;
-the measured line remains.
+Nothing today supplies a commit-tier push with an actual measurement, so a commit-tier record is
+always `pending` or `rejected`, never `measured`, and its object bytes are never pruned. A pending
+record is never deleted to hide an earlier measurement. A later rejection is a new line; the
+measured line remains.
 
 Workflow artifacts expire after 90 days and are not the historical scoreboard. Release evidence is
 attached to the GitHub release and kept for the github-release-lifetime of that release. Development
@@ -273,16 +270,24 @@ A new genesis names why no chain was restored. `first-run` means git history sho
 not exist on the branch before the retention window, so no older chain can exist.
 `expired-after-90-days-inactivity` means the walk saw an expired artifact, or an older chain existed
 and GitHub has since deleted the runs; an empty run list alone does not prove a first run.
-`prior-artifact-missing` means a successful run inside the window exists but none of them uploaded
-the artifact. `history-rewritten` means a chain was restored but none of its commits remain in the
-branch history. `schema-upgrade` means a restored chain's records use a record schema version the
-current code does not read.
+`prior-artifact-missing` means a successful run inside the window exists, uploaded no artifact
+under any schema's name, and none of the runs behind it uploaded a same-shaped artifact under an
+older schema version either. `schema-upgrade` means either the newest candidate run uploaded an
+older schema version's artifact name instead of the current one, or a chain was restored anyway
+and its records use a schema version the current code does not read. `history-rewritten` means a
+chain was restored but none of its commits remain in the branch history. `restore-failed` means a
+restored chain failed verification for any other reason (a corrupted or tampered upload); the job
+prints a warning naming the failure code and the artifact so a maintainer can find and delete it.
 
-The workflow artifact name carries the record schema version (`scoreboard-index-schema-6`,
-`scoreboard-release-index-schema-6`), so a schema version bump changes the name the job searches
+The workflow artifact name carries the record schema version (`scoreboard-index-schema-7`,
+`scoreboard-release-index-schema-7`), so a schema version bump changes the name the job searches
 for and never finds an older-schema artifact to restore; the index and the release gate simply
-start a fresh chain instead of failing. A schema change is never a reason a release is blocked: the
-waiver path appends to whatever chain it is given, empty or not.
+start a fresh chain instead of failing. Before falling back to `prior-artifact-missing`, the search
+also checks whether the newest run in the window uploaded a same-shaped artifact under a different
+schema number, and labels that `schema-upgrade` instead. A schema change is never a reason a
+release is blocked: the waiver path appends to whatever chain it is given, empty or not. A restored
+chain that fails to read for any other reason never blocks a later run either: it starts a fresh
+chain with origin `restore-failed` instead of failing the job.
 
 The release gate keeps its own durable chain, `scoreboard-release-index`, restored the same way
 before it judges: the job lists this repository's completed push and manual runs of the release
@@ -379,31 +384,41 @@ update feeds and writes the cask before the gate. The gate requires the measured
 equal the candidate report, records every derived publication file, and publication re-hashes that
 exact flat file set before upload. Release notes and the gate label the SHA-256 of the exact
 attached `scoreboard-candidate.json` bytes separately from the canonical evidence-envelope SHA-256.
-A leftover draft for the same tag is deleted and publication continues. A published release is left
-in place. If clearing the draft flag reports an error after the release is already public,
-publication keeps that release and exits successfully with a warning that the edit reported an
-error after publishing. A draft created by a failed upload, or an edit that fails while the
-release is still a draft, is deleted so the same tag can be retried.
+A leftover draft this workflow created for the same tag is deleted and publication continues; every
+draft and release this workflow creates carries a hidden marker in its body so a later run can
+recognize its own leftovers. A hand-written draft for the same tag has no marker, so publication
+stops with a plain sentence and leaves that draft in place. A published release is left in place. If
+clearing the draft flag reports an error after the release is already public, publication keeps
+that release and exits successfully with a warning that the edit reported an error after
+publishing. A draft created by a failed upload, or an edit that fails while the release is still a
+draft, is deleted so the same tag can be retried.
 Credential-free pull-request runners do not receive provider credentials. Live provider evaluation
 stays explicit and budgeted.
 
 Building the physical evidence runner is out of scope for this workflow. No job produces
-`scoreboard-reports` yet, so a tag push stops with the missing evidence visible. Until a runner
-exists, a preview can be published only by a manual `workflow_dispatch` with a non-empty
-`evidence_waiver` reason. The gate accepts a waiver only from a dispatch, and only when this run
-uploaded no `scoreboard-reports` artifact. If that artifact exists, its download must succeed and
-the waiver is refused as `waiver-with-evidence`. The gate also refuses a waiver beside any report
-or attached evidence file, and records a `waived` entry in the durable release index with the
-reason and the account that triggered the run. That account stays in the index record and the
-gate's workflow artifact; no public release asset names it. A waived release carries no
-measurements; its evidence section starts with
+`scoreboard-reports` yet, so a tag push stops with no reports at all: the gate records only
+`reports-missing`, with no digest-mismatch or coverage noise stacked on top, and exits 2
+(inconclusive). Until a runner exists, a preview can be published only by a manual
+`workflow_dispatch` with a non-empty `evidence_waiver` reason. The gate reads whether this run
+uploaded a `scoreboard-reports` artifact at all from the workflow, not from the files it
+downloaded, so a report nested under a subdirectory or saved under an unexpected name still
+refuses the waiver as `waiver-with-evidence`; the gate also refuses a waiver beside any report or
+attached evidence file it can see directly. A waiver only ever publishes when this run's evidence
+job produced nothing at all. An accepted waiver records a `waived` entry in the durable release
+index with the reason and the account that triggered the run. That account stays in the index
+record and the gate's workflow artifact; no public release asset names it. A waived release
+carries no measurements; its evidence section starts with
 `This preview was published without measured performance evidence: <reason>.`
 The `waiver-record.json` release asset carries the reason, the run id, the index line number and
 that line's record hash, so the record outlives the 90-day workflow artifact. A waiver reason is
 one plain sentence of letters, numbers, spaces, and `. , ; : ' " ( ) ! ? & % + -` only; any token
 with a slash, any `www.` host, a `://` scheme, or an email address is refused as `invalid-waiver`.
-When the gate refuses a run, it prints every reason as a job-log `::error::` line: one sentence
-saying what happened and, for `invalid-waiver`, which characters are allowed.
+When the gate refuses a run, it prints every reason as a job-log `::error::` line. Most reasons are
+printed as "The release gate refused this run: ... Fix the evidence and run the release again.",
+plus, for `invalid-waiver`, which characters are allowed. `reports-missing` prints its own sentence
+naming today's only path to publication (the hand-dispatched waiver). An `undeclared-budget` line
+is not a refusal — it never blocks the run — so it prints as the plain sentence it already is,
+with no "refused this run" wording.
 
 The commit sample plan is 20 paired observations. The release plan is 200 replay pairs and 100
 observations for every required startup stratum. Missing or short startup strata fail with

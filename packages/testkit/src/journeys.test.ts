@@ -9,6 +9,7 @@ import {
   FakeSandboxProvider,
   handoffToGroupBot,
   ManagedSandboxEmulator,
+  owningSandbox,
   toComputerRef,
 } from "@ardurbot/adapters";
 import type { MemoryPage, TaughtSkill } from "@ardurbot/contracts";
@@ -173,10 +174,14 @@ describeJourneys("required product journeys", () => {
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
-    const destroyed = vi.spyOn(sandbox, "destroy");
-    const exportWorkspace = sandbox.exportWorkspace.bind(sandbox);
+    // A computer router (ConnectedSandboxProvider here) dispatches every operation on an
+    // existing computer to the provider owningSandbox resolves, not to itself; spying on the
+    // router would never see the checkpoint or destroy calls replaceComputer makes on it.
+    const owner = await owningSandbox(sandbox, original.computer!, ctx);
+    const destroyed = vi.spyOn(owner, "destroy");
+    const exportWorkspace = owner.exportWorkspace.bind(owner);
     const spy = vi
-      .spyOn(sandbox, "exportWorkspace")
+      .spyOn(owner, "exportWorkspace")
       .mockImplementation(async function* (ref, context) {
         await gate;
         yield* exportWorkspace(ref, context);
