@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 import { nativeHostOwner } from "@ardurbot/adapters";
+import { sandboxKindForBot } from "@ardurbot/contracts/fleet";
 import type { HostHealth, HostStatus } from "@ardurbot/contracts/host-bridge";
 import type { PrismaClient } from "@ardurbot/db";
 import {
@@ -22,8 +23,7 @@ export async function sourceHostStatus(
   if (process.env.ARDURBOT_HOST_BRIDGE === "api") return null;
   const deployment = await prisma.deploymentSettings.findUnique({ where: { id: "default" } });
   if (
-    (sandboxKind !== "desktop" &&
-      !(sandboxKind === "docker" && deployment?.computerHost === "this-mac")) ||
+    sandboxKindForBot(sandboxKind, deployment?.computerHost) !== "desktop" ||
     !(await nativeHostOwner(prisma, userId))
   )
     return null;

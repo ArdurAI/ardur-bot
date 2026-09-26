@@ -7,6 +7,7 @@ import {
   RuntimeKindSchema,
   type SpaceBot,
 } from "@ardurbot/contracts";
+import { sandboxKindForBot } from "@ardurbot/contracts/fleet";
 import { userVisibleMessages } from "@ardurbot/core";
 import type { Prisma, PrismaClient } from "./client.js";
 import { type ComputerMode, ensureComputerRecord, parseComputerMode } from "./computers.js";
@@ -450,8 +451,7 @@ export function createRepos(prisma: PrismaClient) {
       }
       const settings = await prisma.deploymentSettings.findUnique({ where: { id: "default" } });
       const envKind = process.env.SANDBOX_PROVIDER ?? "docker";
-      const kind =
-        envKind === "docker" && settings?.computerHost === "this-mac" ? "desktop" : envKind;
+      const kind = sandboxKindForBot(envKind, settings?.computerHost);
       const insertBot = () =>
         prisma.$transaction(async (tx) => {
           await lockSpaceForContentCreation(tx, {

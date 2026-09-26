@@ -3171,8 +3171,8 @@ describe("computer replacement", () => {
     const row = {
       id: "computer-1",
       homeKey: "bot-1",
-      providerRef: "e2b-ref",
-      kind: "e2b",
+      providerRef: "docker-ref",
+      kind: "remote-docker",
       connectionId: null,
       networkEgress: true,
       imageProfile: "base",

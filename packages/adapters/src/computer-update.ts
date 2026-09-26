@@ -3,6 +3,7 @@ import { ComputerReplacementConfigurationSchema, ComputerUpdateSchema } from "@a
 import { ACTIVE_RUN_STATUSES } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
+import { MissingComputerProviderError } from "./computer-connections.js";
 import { scheduleComputerSleep } from "./computer-idle.js";
 import {
   ComputerBusyError,
@@ -22,6 +23,7 @@ export function computerUpdateView(
     botId: string;
     status: string;
     stage: string;
+    failureReason?: string | null;
     computer: { scope: string; bots: { id: string; name: string }[] };
   },
   isDeploymentOwner = false,
@@ -37,6 +39,7 @@ export function computerUpdateView(
     mode: row.computer.scope === "team" ? "team" : "dedicated",
     status: row.status,
     stage: row.stage,
+    ...(row.failureReason ? { failureReason: row.failureReason } : {}),
   });
 }
 
@@ -169,8 +172,11 @@ export async function performComputerUpdate(deps: Deps, updateId: string) {
     scheduleComputerSleep(deps.jobs, update.computerId);
   } catch (error) {
     getLogger().error("computer update failed", error, { updateId, computerId: update.computerId });
-    // Provider errors may contain credentials or private URLs. Expose only the failed stage.
-    await finishUpdate(deps.prisma, updateId, update.computerId, "failed");
+    // Provider errors may contain credentials or private URLs. Expose only the failed stage,
+    // except the missing-engine sentence, which never carries either and tells the user what to
+    // do next (the queued job discovered its engine gone after admission already let it through).
+    const failureReason = error instanceof MissingComputerProviderError ? error.message : undefined;
+    await finishUpdate(deps.prisma, updateId, update.computerId, "failed", failureReason);
   } finally {
     clearInterval(heartbeat);
   }
@@ -181,11 +187,12 @@ async function finishUpdate(
   id: string,
   computerId: string,
   status: "completed" | "failed",
+  failureReason?: string,
 ) {
   await prisma.$transaction(async (tx) => {
     const finished = await tx.computerUpdate.updateMany({
       where: { id, status: { in: ["running", "interrupted"] } },
-      data: { status },
+      data: { status, ...(failureReason ? { failureReason } : {}) },
     });
     if (finished.count !== 1) return;
     await tx.computer.updateMany({

@@ -15,8 +15,8 @@ import { rpc } from "../../lib/rpc";
 
 type Fleet = Awaited<ReturnType<typeof rpc.fleet.list>>;
 
-/** Built-in rows are named here, in the reader's language. */
-function useTargetName(hostLabel: HostLabel | undefined) {
+/** Built-in rows are named here, in the reader's language. The one source of truth for it. */
+export function useTargetName(hostLabel: HostLabel | undefined) {
   const { t } = useLingui();
   const mac = hostLabel === "This Mac";
   return (target: Pick<FleetTarget, "name" | "builtin">) =>

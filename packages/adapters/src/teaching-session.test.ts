@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { MissingComputerProviderError } from "./computer-connections.js";
 import {
   appendRecordingEvent,
   applyTeachingDesktopInput,
@@ -174,6 +175,44 @@ describe("expireTaughtSkillTeaching", () => {
       }),
     );
     expect(deps.events.notify).toHaveBeenCalled();
+  });
+
+  it("finishes releasing a leftover computer lease once its engine has gone missing", async () => {
+    const { deps, tx } = recordingDeps(
+      skillRow({
+        status: "draft",
+        expiresAt: new Date(Date.now() - 1000),
+        recording: { ...emptyRecording(), controlLeaseId: "lease-1" },
+      }),
+    );
+    const bot = {
+      id: "bot-1",
+      thread: { id: "thread-1" },
+      computer: {
+        id: "computer-1",
+        homeKey: "bot-1",
+        kind: "e2b",
+        providerRef: "box-1",
+        controlHolder: "user",
+        controlBotId: "bot-1",
+        controlLeaseId: "lease-1",
+      },
+    };
+    deps.prisma.bot.findUnique = vi.fn().mockResolvedValue(bot);
+    deps.sandbox.setScreenControl = vi
+      .fn()
+      .mockRejectedValue(new MissingComputerProviderError("e2b"));
+    await expireTaughtSkillTeaching(deps as never, "skill-1");
+    expect(deps.jobs.cancel).toHaveBeenCalledWith("computer.control-expire:computer-1:lease-1");
+    expect(deps.events.finalizeComputerControlRelease).toHaveBeenCalled();
+    expect(tx.event.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          type: "skill.draft.created",
+          payload: expect.objectContaining({ skillId: "skill-1" }),
+        }),
+      }),
+    );
   });
 
   it("does not steal a later manual takeover when retrying a draft", async () => {

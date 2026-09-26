@@ -839,6 +839,8 @@ export const ComputerUpdateSchema = z.object({
   mode: ComputerModeSchema,
   status: z.enum(["queued", "running", "interrupted", "completed", "failed"]),
   stage: z.enum(COMPUTER_UPDATE_STAGES),
+  /** Only ever the missing-engine sentence; every other provider error stays server-side. */
+  failureReason: z.string().optional(),
 });
 export type ComputerUpdate = z.infer<typeof ComputerUpdateSchema>;
 

@@ -4,6 +4,7 @@ import { StyleSheet, Text, View } from "react-native";
 import { rpc } from "../lib/api";
 import { useI18n } from "../lib/i18n";
 import { useMobileTokens } from "../lib/native";
+import { mobileTargetName } from "../lib/team";
 
 export function FleetStatus() {
   const { t } = useI18n();
@@ -32,19 +33,7 @@ export function FleetStatus() {
       clearInterval(timer);
     };
   }, []);
-  const mac = hostLabel === "This Mac";
-  const name = (target: FleetTarget) =>
-    target.builtin === "host"
-      ? mac
-        ? t("This Mac")
-        : t("This computer")
-      : target.builtin === "local-docker"
-        ? mac
-          ? t("Docker on this Mac")
-          : t("Docker on this computer")
-        : target.builtin === "default"
-          ? t("Default computer")
-          : target.name;
+  const name = (target: FleetTarget) => mobileTargetName(target, t, hostLabel);
   return (
     <View accessibilityLabel={t("Computers")} style={styles.section}>
       <Text style={{ color: tokens.foreground }}>{t("Computers")}</Text>

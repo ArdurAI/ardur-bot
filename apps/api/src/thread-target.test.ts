@@ -225,6 +225,43 @@ describe("threadSnapshot", () => {
     ]);
   });
 
+  it("names the active bot's computer host the way Fleet settings and Team do", async () => {
+    const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([{ id: "thread-1" }]),
+      message: { findMany: vi.fn().mockResolvedValue([]) },
+      event: {
+        findFirst: vi.fn().mockResolvedValue(null),
+        findMany: vi.fn().mockResolvedValue([]),
+      },
+      run: { findFirst: botRunFindFirst([]) },
+    };
+    const prisma = {
+      $transaction: vi.fn(async (callback: (client: typeof tx) => unknown) => callback(tx)),
+      computerExecutionLease: { findUnique: vi.fn().mockResolvedValue(null) },
+      hostRegistration: { findUnique: vi.fn().mockResolvedValue({ platform: "darwin" }) },
+    } as unknown as PrismaClient;
+    const target = {
+      kind: "bot",
+      botId: "bot-1",
+      threadId: "thread-1",
+      bot: {
+        name: "Builder",
+        computer: {
+          id: "computer-1",
+          kind: "docker",
+          state: "running",
+          scope: "team",
+          controlHolder: "none",
+          homeRevision: "1",
+        },
+      },
+    } as ThreadTarget;
+
+    const snapshot = await threadSnapshot({ prisma }, target);
+
+    expect(snapshot.computer?.hostLabel).toBe("This Mac");
+  });
+
   it("returns the latest failed run so the client can show its error", async () => {
     const run = {
       id: "run-failed",

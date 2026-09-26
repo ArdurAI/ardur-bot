@@ -158,6 +158,8 @@ export function ComputerUpdateProgress({ onCompleted }: { onCompleted: () => voi
               >
                 {selected.status === "interrupted" ? (
                   <Trans>Recovery is unavailable until the previous operation has stopped.</Trans>
+                ) : selected.failureReason ? (
+                  selected.failureReason
                 ) : (
                   <Trans>
                     Recovery restores the last saved workspace. Unsaved work may be lost.

@@ -93,6 +93,7 @@ import {
   replaceComputer,
   resolveAutoReviewChecker,
   resolveBotWorkspacePath,
+  revokeScreenControl,
   sanitizeComposioError,
   savePushToken,
   scheduleComputerControlExpiry,
@@ -185,7 +186,7 @@ import { botProfileLabelsChanged, commitBotUpdate } from "./bot-update.js";
 import { createCapabilitySettings } from "./capability-settings.js";
 import { createCommandRoutes } from "./command-routes.js";
 import { createComparisons } from "./comparisons.js";
-import { releaseMaintenanceControl } from "./computer-maintenance.js";
+import { refuseIfEngineMissing, releaseMaintenanceControl } from "./computer-maintenance.js";
 import {
   computerEngineInfo,
   listComputerConnections,
@@ -2036,6 +2037,14 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         );
         try {
           await releaseMaintenanceControl(deps, context.actor, bot.computer.id);
+          // A configuration that does not itself choose a destination stays on the computer's own
+          // connection, which a genuinely missing engine can never reach.
+          if (configuration.connectionId === undefined)
+            await refuseIfEngineMissing(
+              deps.sandbox,
+              bot.computer,
+              computerContext(context.actor, bot.id, "configure"),
+            );
           return await queueComputerUpdate(deps, bot.computer.id, bot.id, "update", configuration);
         } catch (error) {
           if (error instanceof ComputerBusyError)
@@ -2182,6 +2191,11 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           });
         try {
           await releaseMaintenanceControl(deps, context.actor, bot.computer.id);
+          await refuseIfEngineMissing(
+            deps.sandbox,
+            bot.computer,
+            computerContext(context.actor, bot.id, "update"),
+          );
           return await queueComputerUpdate(deps, bot.computer.id, bot.id);
         } catch (error) {
           if (error instanceof ComputerBusyError)
@@ -2432,18 +2446,12 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           data: { controlHolder: "none" },
         });
         if (bot.computer.providerRef) {
-          try {
-            await deps.sandbox.setScreenControl?.(
-              toComputerRef(bot.computer),
-              false,
-              computerContext(context.actor, controlBotId, "screen.release"),
-              controlLeaseId,
-            );
-          } catch (error) {
-            if (!(error instanceof MissingComputerProviderError)) throw error;
-            // Its own engine is not configured here: there is nothing to revoke on the
-            // provider side, so finish releasing the lease record.
-          }
+          await revokeScreenControl(
+            deps.sandbox,
+            toComputerRef(bot.computer),
+            computerContext(context.actor, controlBotId, "screen.release"),
+            controlLeaseId,
+          );
         }
 
         const released = await deps.events.finalizeComputerControlRelease({

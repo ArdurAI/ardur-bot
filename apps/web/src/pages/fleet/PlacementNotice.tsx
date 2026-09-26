@@ -1,6 +1,7 @@
 import type { HostLabel, Run } from "@ardurbot/contracts";
 import { Button } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
+import { useTargetName } from "./FleetSettings";
 
 export function PlacementNotice({
   run,
@@ -12,20 +13,12 @@ export function PlacementNotice({
   onOpen: () => void;
 }) {
   const { t } = useLingui();
+  const targetName = useTargetName(hostLabel);
   if (run.status !== "waiting_input" || run.placement?.status !== "pending") return null;
-  const mac = hostLabel === "This Mac";
-  const name =
-    run.placement.targetBuiltin === "host"
-      ? mac
-        ? t`This Mac`
-        : t`This computer`
-      : run.placement.targetBuiltin === "local-docker"
-        ? mac
-          ? t`Docker on this Mac`
-          : t`Docker on this computer`
-        : run.placement.targetBuiltin === "default"
-          ? t`Default computer`
-          : (run.placement.targetName ?? t`computer`);
+  const name = targetName({
+    name: run.placement.targetName ?? t`computer`,
+    builtin: run.placement.targetBuiltin,
+  });
   return (
     <div
       className="flex items-center justify-between gap-3 border-t border-border px-4 py-2 text-sm"

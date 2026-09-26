@@ -8,6 +8,7 @@ import {
 } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
 import { ORPCError } from "@orpc/server";
+import { refuseIfEngineMissing } from "./computer-maintenance.js";
 import { requireSpaceOwner } from "./memory-provider-config.js";
 
 type Dependencies = { prisma: PrismaClient; jobs: JobPublisher; sandbox: SandboxProvider };
@@ -113,6 +114,13 @@ export function createCapabilitySettings(deps: Dependencies) {
         throw new ORPCError("BAD_REQUEST", {
           message: "Network egress control is unsupported on this computer.",
         });
+      await refuseIfEngineMissing(deps.sandbox, computer, {
+        ...identity(actor),
+        botId,
+        operationId: "capabilities.network",
+        traceId: "capabilities.network",
+        signal: new AbortController().signal,
+      });
       return queueComputerUpdate(deps, computer.id, botId, "update", {
         networkEgress: request.networkEgress,
         confirmed: true,

@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { MissingComputerProviderError } from "./computer-connections.js";
 import type * as ComputerLifecycleModule from "./computer-lifecycle.js";
 import { replaceComputer } from "./computer-lifecycle.js";
 import {
+  computerUpdateView,
   performComputerUpdate,
   queueComputerUpdate,
   reconcileComputerUpdates,
@@ -25,6 +27,7 @@ function fixture(status = "queued") {
     status,
     stage: "preparing",
     updatedAt: new Date(0),
+    failureReason: undefined as string | undefined,
     configuration: undefined as
       | {
           imageProfile: "base" | "developer";
@@ -100,6 +103,18 @@ describe("background computer maintenance", () => {
     expect(JSON.stringify(row)).not.toContain("provider-private-detail");
     await performComputerUpdate(deps, row.id);
     expect(replacement).toHaveBeenCalledOnce();
+  });
+  it("records the missing-engine sentence as the failure reason the progress UI shows", async () => {
+    const { row, deps } = fixture();
+    replacement.mockRejectedValueOnce(new MissingComputerProviderError("e2b"));
+    await performComputerUpdate(deps, row.id);
+    expect(row.status).toBe("failed");
+    expect(row).toMatchObject({
+      failureReason:
+        "This computer runs on E2B, which is not configured here. Reset it in Settings, " +
+        "Computers to start it on this deployment's engine, or configure E2B again.",
+    });
+    expect(computerUpdateView(row).failureReason).toBe(row.failureReason);
   });
   it("republishes queued intent after an enqueue failure", async () => {
     const { row, deps, jobs } = fixture();

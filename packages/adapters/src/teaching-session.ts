@@ -22,6 +22,7 @@ import {
   type PrismaClient,
   type ThreadEvents,
 } from "@ardurbot/db";
+import { revokeScreenControl } from "./computer-control.js";
 import { scheduleComputerSleep } from "./computer-idle.js";
 import { toComputerRef } from "./computer-support.js";
 
@@ -310,9 +311,9 @@ async function releaseTeachingComputerControl(
   if (!expectedLeaseId || computer.controlLeaseId !== expectedLeaseId) return;
   const leaseId = computer.controlLeaseId;
   if (computer.providerRef) {
-    await deps.sandbox.setScreenControl?.(
+    await revokeScreenControl(
+      deps.sandbox,
       toComputerRef(computer as never),
-      false,
       computerContext(actor, bot.id, "skills.release"),
       leaseId,
     );

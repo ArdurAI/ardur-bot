@@ -1,5 +1,6 @@
 import {
   type AdapterContext,
+  type ComputerRef,
   computerControlExpireJob,
   type JobPublisher,
   runContinueJob,
@@ -9,6 +10,24 @@ import type { PrismaClient, ThreadEvents } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 import { MissingComputerProviderError } from "./computer-connections.js";
 import { toComputerRef } from "./computer-support.js";
+
+/**
+ * Revokes a screen-control lease on the provider. A missing engine means there is nothing to
+ * revoke there: the lease is already gone as far as this deployment can reach it, so that one
+ * error is swallowed; every other provider error still propagates for the caller to retry.
+ */
+export async function revokeScreenControl(
+  sandbox: SandboxProvider,
+  ref: ComputerRef,
+  context: AdapterContext,
+  leaseId: string,
+): Promise<void> {
+  try {
+    await sandbox.setScreenControl?.(ref, false, context, leaseId);
+  } catch (error) {
+    if (!(error instanceof MissingComputerProviderError)) throw error;
+  }
+}
 
 export const DEFAULT_TAKEOVER_LEASE_MS = 15 * 60 * 1000;
 
@@ -162,24 +181,20 @@ export async function expireComputerControl(
         signal: new AbortController().signal,
       };
       try {
-        await deps.sandbox.setScreenControl?.(toComputerRef(computer), false, context, leaseId);
-      } catch (error) {
-        if (!(error instanceof MissingComputerProviderError)) {
-          // Keep the lease id and try to reschedule so reconciler/status can retry.
-          try {
-            await scheduleComputerControlExpiry(
-              deps.jobs,
-              computer.id,
-              leaseId,
-              new Date(now.getTime() + 30_000),
-            );
-          } catch (rescheduleError) {
-            getLogger().error("orphan computer control expiry reschedule", rescheduleError);
-          }
-          return false;
+        await revokeScreenControl(deps.sandbox, toComputerRef(computer), context, leaseId);
+      } catch {
+        // Keep the lease id and try to reschedule so reconciler/status can retry.
+        try {
+          await scheduleComputerControlExpiry(
+            deps.jobs,
+            computer.id,
+            leaseId,
+            new Date(now.getTime() + 30_000),
+          );
+        } catch (rescheduleError) {
+          getLogger().error("orphan computer control expiry reschedule", rescheduleError);
         }
-        // Its own engine is not configured here: there is nothing to revoke on the
-        // provider side, so clear the lease record directly.
+        return false;
       }
     }
     const cleared = await deps.prisma.computer.updateMany({
@@ -222,13 +237,7 @@ export async function expireComputerControl(
       botId,
       signal: new AbortController().signal,
     };
-    try {
-      await deps.sandbox.setScreenControl?.(toComputerRef(computer), false, context, leaseId);
-    } catch (error) {
-      if (!(error instanceof MissingComputerProviderError)) throw error;
-      // Its own engine is not configured here: there is nothing to revoke on the
-      // provider side, so finish clearing the lease record.
-    }
+    await revokeScreenControl(deps.sandbox, toComputerRef(computer), context, leaseId);
   }
 
   const released = await deps.events.finalizeComputerControlRelease({

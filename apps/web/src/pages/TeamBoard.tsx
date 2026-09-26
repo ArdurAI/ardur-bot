@@ -10,6 +10,7 @@ import { rpc } from "../lib/rpc";
 import { ComparisonList } from "./ComparePanel";
 import { CompareStart } from "./CompareStart";
 import { useThreadRefresh } from "./dashboard/use-thread-refresh";
+import { useTargetName } from "./fleet/FleetSettings";
 
 export function TeamBoard({ navigation }: { navigation?: ReactNode }) {
   const [rows, setRows] = useState<TeamRow[]>([]);
@@ -108,17 +109,10 @@ export function TeamBoardRow({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
   const card = row.delegations.find((item) => item.id === row.delegationId)?.card;
-  const mac = hostLabel === "This Mac";
-  const computerName =
-    row.computerBuiltin === "host"
-      ? mac
-        ? t`This Mac`
-        : t`This computer`
-      : row.computerBuiltin === "local-docker"
-        ? mac
-          ? t`Docker on this Mac`
-          : t`Docker on this computer`
-        : row.computerName;
+  const targetName = useTargetName(hostLabel);
+  const computerName = row.computerBuiltin
+    ? targetName({ name: row.computerName ?? "", builtin: row.computerBuiltin })
+    : row.computerName;
   const act = async (action: "stop" | "accept") => {
     setBusy(true);
     setError(false);

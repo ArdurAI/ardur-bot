@@ -1,6 +1,7 @@
 import { type JobPublisher, runContinueJob, type SandboxProvider } from "@ardurbot/adapter-kit";
 import {
   cancelComputerRunWork,
+  deploymentHostLabel,
   routeIncoming,
   screenLeaseIdForRun,
   toComputerRef,
@@ -353,12 +354,14 @@ export async function threadSnapshot(
   // otherwise advance the client cursor past thread.message.created while the
   // ask message page still omits it — leaving waiting_input with no AskCard.
   if (target.kind === "bot") {
-    const [busyBotName, core] = await Promise.all([
+    const [busyBotName, hostLabel, core] = await Promise.all([
       resolveBusyBotName(deps.prisma, {
         computerId: target.bot.computer?.id,
         botId: target.botId,
         botName: target.bot.name,
       }),
+      // Named like the Team board and Fleet settings, and only once there is a computer to name.
+      target.bot.computer ? deploymentHostLabel(deps.prisma) : Promise.resolve(undefined),
       deps.prisma.$transaction(async (tx) => {
         await tx.$queryRaw`SELECT id FROM threads WHERE id = ${target.threadId} FOR SHARE`;
         const [messagePage, last, waitingRun, busyOrFailed, contextRun] = await Promise.all([
@@ -457,7 +460,10 @@ export async function threadSnapshot(
             ...core.failure,
           }
         : null,
-      computer: toComputerStatus(target.botId, target.bot.computer, busyBotName),
+      computer: {
+        ...toComputerStatus(target.botId, target.bot.computer, busyBotName),
+        ...(hostLabel ? { hostLabel } : {}),
+      },
     };
   }
 

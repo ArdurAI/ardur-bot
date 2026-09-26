@@ -200,3 +200,145 @@ it("says which engine is missing when a computer is started", async () => {
     await rm(dataDir, { recursive: true, force: true });
   }
 });
+
+const missingEngineSentence =
+  "This computer runs on E2B, which is not configured here. Reset it in Settings, Computers " +
+  "to start it on this deployment's engine, or configure E2B again.";
+
+it("refuses computer.update synchronously on a lost-engine computer instead of queueing it", async () => {
+  const computer = {
+    id: "computer",
+    kind: "e2b",
+    state: "stopped",
+    scope: "dedicated",
+    homeKey: "home",
+    providerRef: null,
+    connectionId: null,
+    maintenanceId: null,
+    controlHolder: "none",
+    controlLeaseId: null,
+    updatedAt: new Date(0),
+  };
+  const prisma = {
+    bot: {
+      findFirst: async () => ({
+        id: "bot",
+        spaceId: "space",
+        userId: "owner",
+        archivedAt: null,
+        thread: { id: "thread" },
+        computer,
+      }),
+    },
+    computer: { findUniqueOrThrow: async () => computer },
+  } as unknown as PrismaClient;
+  const handler = new RPCHandler(
+    createRouter({
+      prisma,
+      env: { sandboxProvider: "docker" },
+      sandbox: createRunSandbox("docker", { prisma, secrets: { load: () => "" } }),
+    } as unknown as RouterDeps),
+    { clientInterceptors: [onError((error, { path }) => logUnexpectedRpcError(error, path))] },
+  );
+  const { response } = await handler.handle(
+    new Request("http://127.0.0.1/rpc/computer/update", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ json: { botId: "bot" } }),
+    }),
+    { prefix: "/rpc", context: { actor } },
+  );
+  expect(response?.status).toBe(400);
+  const body = (await response?.json()) as { json?: { code?: string; message?: string } };
+  expect(body.json).toMatchObject({ code: "BAD_REQUEST", message: missingEngineSentence });
+});
+
+it("refuses a profile-only computer.configure synchronously on a lost-engine computer", async () => {
+  const computer = {
+    id: "computer",
+    kind: "e2b",
+    state: "stopped",
+    scope: "dedicated",
+    homeKey: "home",
+    providerRef: null,
+    connectionId: null,
+    maintenanceId: null,
+    controlHolder: "none",
+    controlLeaseId: null,
+    updatedAt: new Date(0),
+  };
+  const prisma = {
+    bot: {
+      findFirst: async () => ({
+        id: "bot",
+        spaceId: "space",
+        userId: "owner",
+        archivedAt: null,
+        thread: { id: "thread" },
+        computer,
+      }),
+    },
+    computer: { findUniqueOrThrow: async () => computer },
+  } as unknown as PrismaClient;
+  const handler = new RPCHandler(
+    createRouter({
+      prisma,
+      env: { sandboxProvider: "docker" },
+      sandbox: createRunSandbox("docker", { prisma, secrets: { load: () => "" } }),
+    } as unknown as RouterDeps),
+    { clientInterceptors: [onError((error, { path }) => logUnexpectedRpcError(error, path))] },
+  );
+  const { response } = await handler.handle(
+    new Request("http://127.0.0.1/rpc/computer/configure", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ json: { botId: "bot", imageProfile: "developer", confirmed: true } }),
+    }),
+    { prefix: "/rpc", context: { actor } },
+  );
+  expect(response?.status).toBe(400);
+  const body = (await response?.json()) as { json?: { code?: string; message?: string } };
+  expect(body.json).toMatchObject({ code: "BAD_REQUEST", message: missingEngineSentence });
+});
+
+it("refuses capabilities.network synchronously on a lost-engine Docker computer", async () => {
+  const computer = {
+    id: "computer",
+    kind: "remote-docker",
+    connectionId: null,
+    providerRef: "docker-ref",
+    networkEgress: true,
+    maintenanceId: null,
+    bots: [{ id: "bot" }],
+  };
+  const prisma = {
+    spaceMember: { findUnique: async () => ({ role: "owner" }) },
+    computer: { findFirst: async () => computer },
+  } as unknown as PrismaClient;
+  const handler = new RPCHandler(
+    createRouter({
+      prisma,
+      env: { sandboxProvider: "docker" },
+      sandbox: createRunSandbox("docker", { prisma, secrets: { load: () => "" } }),
+    } as unknown as RouterDeps),
+    { clientInterceptors: [onError((error, { path }) => logUnexpectedRpcError(error, path))] },
+  );
+  const { response } = await handler.handle(
+    new Request("http://127.0.0.1/rpc/capabilities/network", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        json: { computerId: "computer", networkEgress: false, confirmed: true },
+      }),
+    }),
+    { prefix: "/rpc", context: { actor } },
+  );
+  expect(response?.status).toBe(400);
+  const body = (await response?.json()) as { json?: { code?: string; message?: string } };
+  expect(body.json).toMatchObject({
+    code: "BAD_REQUEST",
+    message:
+      "This computer runs on Docker, which is not configured here. Reset it in Settings, " +
+      "Computers to start it on this deployment's engine, or configure Docker again.",
+  });
+});

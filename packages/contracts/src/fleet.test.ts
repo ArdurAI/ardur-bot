@@ -39,6 +39,17 @@ it("keeps manual placement, ranks fresh free memory and never selects unavailabl
   expect(choosePlacement(policy, "host", targets, now + 31000)).toBeNull();
   expect(choosePlacement(policy, "host", [target("host", 8), target("tie", 8)], now)).toBeNull();
 });
+it("names the chosen target's built-in kind so clients can translate it", () => {
+  const policy = PlacementSettingsSchema.parse({ mode: "free-memory" });
+  const targets = [
+    target("host", 1),
+    { ...target("local-docker", 32), builtin: "local-docker" as const },
+  ];
+  expect(choosePlacement(policy, "host", targets, now)).toMatchObject({
+    targetId: "local-docker",
+    targetBuiltin: "local-docker",
+  });
+});
 it("does not leave a computer whose current row is unreachable", () => {
   const policy = PlacementSettingsSchema.parse({ mode: "free-memory" });
   const current = {

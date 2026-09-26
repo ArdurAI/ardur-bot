@@ -1,7 +1,35 @@
+import type { AdapterContext, SandboxProvider } from "@ardurbot/adapter-kit";
 import { computerControlExpireJobKey } from "@ardurbot/adapter-kit";
-import { ComputerBusyError, MissingComputerProviderError, toComputerRef } from "@ardurbot/adapters";
+import {
+  ComputerBusyError,
+  MissingComputerProviderError,
+  owningSandbox,
+  revokeScreenControl,
+  toComputerRef,
+} from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
+import { ORPCError } from "@orpc/server";
 import type { RouterDeps } from "./router.js";
+
+/**
+ * Resolves a connectionless computer's own engine before anything is queued, so a genuinely
+ * missing one refuses synchronously with the missing-engine sentence instead of failing silently
+ * behind a queued job. A computer with a saved connection is never at risk of this: its
+ * connection either resolves or fails with its own (unrelated) error, so it is left alone here.
+ */
+export async function refuseIfEngineMissing(
+  sandbox: SandboxProvider,
+  computer: { connectionId: string | null; kind: string },
+  context: AdapterContext,
+): Promise<void> {
+  if (computer.connectionId) return;
+  try {
+    await owningSandbox(sandbox, computer, context);
+  } catch (error) {
+    if (!(error instanceof MissingComputerProviderError)) throw error;
+    throw new ORPCError("BAD_REQUEST", { message: error.message });
+  }
+}
 
 /** Explicit maintenance may release the caller's idle screen, never another person's lease. */
 export async function releaseMaintenanceControl(
@@ -39,25 +67,19 @@ export async function releaseMaintenanceControl(
   });
   if (claimed.count !== 1) throw new ComputerBusyError();
   if (computer.providerRef) {
-    try {
-      await deps.sandbox.setScreenControl?.(
-        toComputerRef(computer),
-        false,
-        {
-          operationId: "computer.maintenance",
-          traceId: "computer.maintenance",
-          spaceId: actor.spaceId,
-          userId: actor.userId,
-          botId: owner.id,
-          signal: new AbortController().signal,
-        },
-        leaseId,
-      );
-    } catch (error) {
-      if (!(error instanceof MissingComputerProviderError)) throw error;
-      // Its own engine is not configured here: there is nothing to revoke on the
-      // provider side, so finish releasing the lease record.
-    }
+    await revokeScreenControl(
+      deps.sandbox,
+      toComputerRef(computer),
+      {
+        operationId: "computer.maintenance",
+        traceId: "computer.maintenance",
+        spaceId: actor.spaceId,
+        userId: actor.userId,
+        botId: owner.id,
+        signal: new AbortController().signal,
+      },
+      leaseId,
+    );
   }
   const released = await deps.events.finalizeComputerControlRelease({
     spaceId: actor.spaceId,
