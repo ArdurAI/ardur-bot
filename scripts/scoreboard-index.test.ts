@@ -720,86 +720,48 @@ describe("scoreboard index", () => {
     });
   });
 
-  it("pins the record schema's key set and canonical hash to this INDEX_SCHEMA_VERSION", () => {
+  it("pins the record schema's key set and canonical hash to this INDEX_SCHEMA_VERSION", async () => {
     expect(INDEX_SCHEMA_VERSION).toBe(7);
-    expect(RECORD_KEYS).toEqual([
-      "schemaVersion",
-      "status",
-      "tier",
-      "commit",
-      "parentCommit",
-      "fixedReleaseCommit",
-      "suiteVersion",
-      "suiteHash",
-      "environment",
-      "environmentHash",
-      "attempt",
-      "role",
-      "indexedAt",
-      "runnerCommit",
-      "samplePlan",
-      "declaredSamples",
-      "observedSamples",
-      "reportDigest",
-      "objectDigest",
-      "verdictDigest",
-      "artifactDigests",
-      "pendingReason",
-      "gateCodes",
-      "supersedes",
-      "chainOrigin",
-      "enumerationStart",
-      "enumerationReason",
-      "waiver",
-      "metricIds",
-      "previousHash",
-    ]);
-    // A fixed record with one concrete value per key. Adding, removing, or renaming a key changes
-    // this hash; a change here that is not paired with an INDEX_SCHEMA_VERSION bump is a silent
-    // record-format break that `restoreIndex` cannot detect and `readIndex` will misread.
-    const golden = {
-      schemaVersion: INDEX_SCHEMA_VERSION,
-      status: "measured",
-      tier: "release",
-      commit: A,
-      parentCommit: B,
-      fixedReleaseCommit: C,
-      suiteVersion: "scoreboard-1",
-      suiteHash: hash("suite"),
-      environment: "release-packaged",
-      environmentHash: hash("environment"),
-      attempt: 1,
-      role: "candidate",
-      indexedAt: "2026-09-25T00:00:00.000Z",
-      runnerCommit: A,
-      samplePlan: "release-grade",
-      declaredSamples: { pairs: 200, startupPerStratum: 100 },
-      observedSamples: 200,
-      reportDigest: hash("report"),
-      objectDigest: hash("object"),
-      verdictDigest: hash("verdict"),
-      artifactDigests: [
-        {
-          name: "synthetic.dmg",
-          sha256: hash("artifact"),
-          bytes: 1,
-          target: "desktop-darwin-arm64",
-        },
-      ],
-      pendingReason: null,
-      gateCodes: [],
-      supersedes: null,
-      chainOrigin: "first-run",
-      enumerationStart: null,
-      enumerationReason: null,
-      waiver: null,
-      metricIds: [],
-      previousHash: "0".repeat(64),
-    };
-    expect(Object.keys(golden).sort()).toEqual([...RECORD_KEYS].sort());
-    expect(contentDigest(golden)).toBe(
-      "ae24ff8a229bd50cb2f9380f7b1900cf78c26d66268238a429e2b00895d490b0",
-    );
+    const root = await mkdtemp(path.join(os.tmpdir(), "scoreboard-golden-"));
+    try {
+      // Built through the real record builder (appendIndexRecords/normalizeRecord), not a
+      // hand-made object, so a key added to or removed from the real record shape shows up here
+      // without a matching edit to this fixture. The pinned recordHash below is a tripwire for any
+      // change to that shape or its canonical serialization — whether or not it comes with an
+      // INDEX_SCHEMA_VERSION bump; it does not itself enforce that a bump happens.
+      const record = await appendIndexRecord(root, {
+        status: "measured",
+        tier: "release",
+        mode: "release",
+        commit: A,
+        parentCommit: B,
+        fixedReleaseCommit: C,
+        suiteVersion: SCOREBOARD_MANIFEST.suiteVersion,
+        environment: "release-packaged",
+        environmentHash: hash("environment"),
+        attempt: 1,
+        role: "candidate",
+        indexedAt: "2026-09-25T00:00:00.000Z",
+        runnerCommit: A,
+        supersedes: null,
+        metricIds: [],
+        verdictDigest: hash("verdict"),
+        artifactDigests: [
+          {
+            name: "synthetic.dmg",
+            sha256: hash("build"),
+            bytes: 1,
+            target: "desktop-darwin-arm64",
+          },
+        ],
+        envelope: syntheticReport(1, "golden-report"),
+      });
+      const { recordHash, ...body } = record;
+      expect(Object.keys(body).sort()).toEqual([...RECORD_KEYS].sort());
+      expect(recordHash).toBe("e50e198cfffa1d7d2d7d559a3262893159b93d2688c2859a4a1ac00edfbbf4f8");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it("plans a record for every enumerated commit, only-headCommit attempted", () => {
@@ -1080,7 +1042,7 @@ describe("scoreboard index", () => {
       const recordsFile = path.join(broken, "records.jsonl");
       await writeFile(recordsFile, (await readFile(recordsFile, "utf8")).replace(A, C));
       // A restored chain that fails verification never blocks the job: it starts a fresh chain
-      // instead, and warns naming the failure code and the artifact.
+      // instead, and warns naming the failure code, the artifact, and the run that uploaded it.
       const recovered = spawnSync(
         process.execPath,
         [
@@ -1094,6 +1056,8 @@ describe("scoreboard index", () => {
           "expired-after-90-days-inactivity",
           "--artifact",
           "scoreboard-index-schema-7",
+          "--run-id",
+          "4242",
         ],
         { cwd: repo, encoding: "utf8" },
       );
@@ -1101,6 +1065,7 @@ describe("scoreboard index", () => {
       expect(recovered.stdout).toContain("::warning title=Scoreboard index::");
       expect(recovered.stdout).toContain("corrupt-index");
       expect(recovered.stdout).toContain("scoreboard-index-schema-7");
+      expect(recovered.stdout).toContain("run 4242");
       expect((await readIndex(path.join(root, "recovered"))).length).toBe(0);
       expect((await readFile(path.join(root, "recovered", ".chain-origin"), "utf8")).trim()).toBe(
         "restore-failed",
@@ -1720,6 +1685,31 @@ describe("release publication gate", () => {
     }
   }, 60_000);
 
+  it("names the missing reports without waiver advice when only some reports are missing", async () => {
+    const partial = await stagePassing();
+    try {
+      for (const name of ["parent.json", "fixed-release.json", "policy.json"])
+        await rm(path.join(partial.reportsRoot, name));
+      const result = await gate(partial, "index-partial");
+      expect(result.code).toBe(2);
+      expect(result.gate.allowPublication).toBe(false);
+      expect(codes(result.gate)).toEqual(["reports-missing"]);
+      const detail = result.gate.reasons[0]?.detail as string;
+      expect(detail).toContain("parent.json");
+      expect(detail).toContain("fixed-release.json");
+      expect(detail).toContain("policy.json");
+      expect(detail).not.toContain("candidate.json");
+      expect(detail).not.toContain("No measured evidence exists for this release.");
+      expect(detail).not.toContain("evidence_waiver");
+      const records = await readIndex(result.indexRoot);
+      expect(records.map((record) => [record.status, record.pendingReason])).toEqual([
+        ["pending", "reports-missing"],
+      ]);
+    } finally {
+      await rm(partial.root, { recursive: true, force: true });
+    }
+  }, 60_000);
+
   it("prints every refusal reason as a job-log error line, and the allowed waiver characters", async () => {
     const bare = await stageWithoutEvidence();
     try {
@@ -1755,7 +1745,7 @@ describe("release publication gate", () => {
     }
   }, 60_000);
 
-  it("prints an undeclared budget as its own plain sentence, not a refusal", () => {
+  it("prints a non-blocking undeclared budget as its own plain sentence, not a refusal", () => {
     const line = gateErrorLine({
       code: "undeclared-budget",
       scope: "candidate:m13.terminal-stop",
@@ -1765,6 +1755,80 @@ describe("release publication gate", () => {
     expect(line).not.toContain("refused this run");
     expect(line).not.toContain("candidate:m13.terminal-stop");
   });
+
+  it("prints a blocking undeclared budget with the action to declare it", () => {
+    const line = gateErrorLine({
+      code: "undeclared-budget",
+      scope: "candidate:m13.terminal-stop",
+      detail: "The tool termination deadline budget is not declared.",
+      blocks: true,
+    });
+    expect(line).toContain("The tool termination deadline budget is not declared.");
+    expect(line).toContain("Declare that budget in the release policy");
+    expect(line).not.toContain("candidate:m13.terminal-stop");
+  });
+
+  it("prints a non-blocking undeclared budget as a warning beside a real error", async () => {
+    const tiered = await stagePassing();
+    try {
+      for (const name of ["parent.json", "candidate.json", "fixed-release.json"]) {
+        const file = path.join(tiered.reportsRoot, name);
+        const envelope = JSON.parse(await readFile(file, "utf8")) as {
+          report: ReturnType<typeof syntheticReport>;
+        };
+        envelope.report.scenario.tier = "T2";
+        const bytes = JSON.stringify(createPerformanceEvidenceEnvelope(envelope.report));
+        await writeFile(file, bytes);
+        if (name === "candidate.json")
+          await writeFile(path.join(tiered.artifactRoot, "scoreboard-candidate.json"), bytes);
+      }
+      const candidateReport = JSON.parse(
+        await readFile(path.join(tiered.reportsRoot, "candidate.json"), "utf8"),
+      ).report as ReturnType<typeof syntheticReport>;
+      // The committed release policy's real T2 guardrails ("memory", "absolute-targets") already
+      // cover these two metric ids with a null declaration each; a comparison that requires them
+      // and is tiered by report leaves them undeclared but never blocks on them. `m01.acknowledgement`
+      // keeps the derived policy's required selection non-empty without adding a declared budget
+      // this fixture's reports would fail.
+      const submittedPolicy = createBudgetPolicy(
+        {
+          metricIds: ["m10.post-idle-retained", "m13.terminal-stop", "m01.acknowledgement"],
+          taskIds: [],
+          experimentIds: [],
+          crashBoundaryIds: ["crash-01"],
+          usage: false,
+        },
+        {
+          mode: "release",
+          environmentHash: candidateReport.environmentHash,
+          scenario: candidateReport.scenario,
+          nominalQueue: false,
+          retainedSessionGrowthBytes: null,
+          toolTerminationDeadlineMs: null,
+        },
+      );
+      await writeFile(
+        path.join(tiered.reportsRoot, "policy.json"),
+        JSON.stringify(submittedPolicy),
+      );
+      const result = releaseGateCli(tiered, {}, "index-tiered-undeclared");
+      expect(result.status).not.toBe(0);
+      const reasons = result.gate.reasons as { code: string; blocks?: boolean }[];
+      const undeclared = reasons.filter((reason) => reason.code === "undeclared-budget");
+      expect(undeclared.length).toBeGreaterThan(0);
+      expect(undeclared.every((reason) => reason.blocks === false)).toBe(true);
+      expect(reasons.some((reason) => reason.code !== "undeclared-budget")).toBe(true);
+      expect(result.stdout).toContain("::error title=Scoreboard release gate::");
+      expect(result.stdout).toContain(
+        "::warning title=Scoreboard release gate::The tool termination deadline budget is not declared.",
+      );
+      expect(result.stdout).not.toContain(
+        "::error title=Scoreboard release gate::The tool termination deadline budget is not declared.",
+      );
+    } finally {
+      await rm(tiered.root, { recursive: true, force: true });
+    }
+  }, 60_000);
 
   it("publishes a dispatched preview without evidence only under a recorded waiver", async () => {
     const bare = await stageWithoutEvidence();
@@ -1939,27 +2003,17 @@ describe("release publication gate", () => {
     }
   }, 60_000);
 
-  it("refuses a waiver whenever this run uploaded a reports artifact, whatever it is named", async () => {
+  it("refuses a waiver whenever the reports folder has any entry, nested or oddly named", async () => {
     const bare = await stageWithoutEvidence();
     try {
       await mkdir(path.join(bare.reportsRoot, "nested"), { recursive: true });
       await writeFile(path.join(bare.reportsRoot, "nested", "candidate.json"), "{}");
-      await writeFile(path.join(bare.reportsRoot, "energy-capture.csv"), "target,value\n");
-      // A nested or oddly named report is invisible to a check of well-known top-level file names.
-      const blind = await gate(bare, "index-waiver-blind", {
-        waiver: WAIVER,
-        trigger: "workflow_dispatch",
-        actor: "release-operator",
-      });
-      expect(blind.code).toBe(0);
-      expect(blind.gate.allowPublication).toBe(true);
-      // The workflow reports whether this run uploaded a reports artifact at all; that flag closes
-      // the gap regardless of what the artifact's files are named or how they are nested.
+      // No well-known top-level file name and no environment variable is needed: any entry at all
+      // in the reports directory refuses the waiver.
       const guarded = await gate(bare, "index-waiver-guarded", {
         waiver: WAIVER,
         trigger: "workflow_dispatch",
         actor: "release-operator",
-        reportsPresent: true,
       });
       expect(guarded.code).not.toBe(0);
       expect(codes(guarded.gate)).toEqual(["waiver-with-evidence"]);
@@ -2156,12 +2210,15 @@ describe("release publication gate", () => {
       expect(record?.pendingReason).not.toBe("reports-missing");
       expect(record?.metricIds).toEqual(undeclaredIds);
       expect(record?.gateCodes).toContain("undeclared-budget");
+      // This comparison is not tiered by report (crashBoundaryIds is empty), so both budgets
+      // block the run: `blocks: true` is what tells the CLI to print them as errors, not
+      // warnings, and to add the "declare it" action.
       for (const detail of [
         "The retained session growth budget is not declared.",
         "The tool termination deadline budget is not declared.",
       ])
         expect(result.gate.reasons).toContainEqual(
-          expect.objectContaining({ code: "undeclared-budget", detail }),
+          expect.objectContaining({ code: "undeclared-budget", detail, blocks: true }),
         );
       expect(JSON.stringify(result.gate)).not.toMatch(
         /retainedSessionGrowthBytes|toolTerminationDeadlineMs/,
@@ -3633,7 +3690,8 @@ describe("prior index chain", () => {
       `/repos/${REPOSITORY}/actions/runs/30/artifacts`,
       `/repos/${REPOSITORY}/actions/runs/20/artifacts`,
     ]);
-    expect(lookups[0]?.query).toMatchObject({ name: COMMIT_ARTIFACT });
+    // Unfiltered: one listing per run also covers the older-schema check, without a second call.
+    expect(lookups[0]?.query).not.toHaveProperty("name");
     expect(result).toEqual({ runId: 20, missingReason: null });
   });
 
@@ -3769,6 +3827,27 @@ describe("prior index chain", () => {
     });
   });
 
+  it("labels a schema bump schema-upgrade even when only an older run in the window has it", async () => {
+    const olderSchemaArtifact = {
+      id: 60,
+      name: `scoreboard-index-schema-${INDEX_SCHEMA_VERSION - 1}`,
+      expired: false,
+      workflow_run: { id: 6 },
+    };
+    // The newest run in the window uploaded nothing at all; only an older run behind it uploaded
+    // an older-schema artifact. One unfiltered listing per run is enough to find it.
+    const github = fakeGitHub([run(7, "2026-09-02T00:00:00Z"), run(6, "2026-09-01T00:00:00Z")], {
+      7: [],
+      6: [olderSchemaArtifact],
+    });
+    await expect(find(github)).resolves.toEqual({ runId: null, missingReason: "schema-upgrade" });
+    const lookups = github.calls.filter((call) => call.pathname.endsWith("/artifacts"));
+    expect(lookups.map((call) => call.pathname)).toEqual([
+      `/repos/${REPOSITORY}/actions/runs/7/artifacts`,
+      `/repos/${REPOSITORY}/actions/runs/6/artifacts`,
+    ]);
+  });
+
   it("never restores from a fork branch named dev or a pull request run", async () => {
     const github = fakeGitHub(
       [
@@ -3860,7 +3939,7 @@ describe("prior index chain", () => {
       `/repos/${REPOSITORY}/actions/runs/52/artifacts`,
       `/repos/${REPOSITORY}/actions/runs/51/artifacts`,
     ]);
-    expect(lookups[0]?.query).toMatchObject({ name: RELEASE_ARTIFACT });
+    expect(lookups[0]?.query).not.toHaveProperty("name");
   });
 
   it("proves a first run from git history that predates the retention window", async () => {
@@ -3971,21 +4050,22 @@ describe("workflow contracts", () => {
     expect(releaseYaml).toContain(
       `evidence_waiver: \${{ github.event_name == 'workflow_dispatch' && inputs.evidence_waiver || '' }}`,
     );
-    // Every restore-index call names the artifact it is restoring, for the failed-verification
-    // warning; the index job uploads its chain only for a durable push, never a pull-request,
-    // manual, or fork run's throwaway `-check` chain.
+    // Every restore-index call names the artifact it is restoring and, when known, the run that
+    // uploaded it, for the failed-verification warning; the index job uploads its chain only for
+    // a durable push, never a pull-request, manual, or fork run's throwaway `-check` chain.
     expect(performanceYaml.match(/restore-index "\$\{args\[@\]\}"/g)).toHaveLength(2);
     expect(performanceYaml).toContain('--artifact "$ARTIFACT_NAME"');
+    expect(
+      performanceYaml.match(/RUN_ID: \$\{\{ steps\.prior\.outputs\.run_id \}\}/g),
+    ).toHaveLength(2);
+    expect(performanceYaml.match(/--run-id "\$RUN_ID"/g)).toHaveLength(2);
     expect(jobBlock(performanceYaml, "index")).toContain(
       "if: always() && steps.prior.outputs.durable == 'true'",
     );
     expect(performanceYaml).not.toContain("node scripts/scoreboard-index.mjs prune");
-    // The release gate learns whether this run uploaded a reports artifact from the workflow
-    // itself, so a nested or oddly named report cannot slip a waiver past that check.
-    const releaseGateJob = jobBlock(performanceYaml, "release-gate");
-    expect(releaseGateJob).toMatch(
-      /SCOREBOARD_REPORTS_PRESENT:\s*\$\{\{\s*steps\.reports\.outputs\.present\s*\}\}/,
-    );
+    // The release gate refuses a waiver whenever this run's reports directory has any entry, so
+    // it no longer needs the workflow to report whether it uploaded a reports artifact at all.
+    expect(performanceYaml).not.toContain("SCOREBOARD_REPORTS_PRESENT");
   });
 
   it("rejects a directory in the upload set", async () => {
