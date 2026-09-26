@@ -476,7 +476,11 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
       where: { spaceId: actor.spaceId, learningProposalId: proposalId },
     });
   }
-  /** Finishes a board close after the learning status has already committed. */
+  /**
+   * Finishes a board close after the learning status has already committed. Reject and Undo
+   * are the person's own actions, so they use the person's own board access: a bot that was
+   * archived or removed from the board cannot block them.
+   */
   async function finishBoardClose(
     actor: Identity,
     proposalId: string,
@@ -490,10 +494,7 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
     const proposal = proposalView(row);
     if (!filing?.closePending || !filing.itemId || !filing.workspaceId) return { proposal };
     try {
-      const action = await service.finishClose(
-        { ...actor, ...(proposal.scope.botId ? { botId: proposal.scope.botId } : {}) },
-        filing,
-      );
+      const action = await service.finishClose(actor, filing);
       return action === "changed"
         ? { proposal: { ...proposal, boardChanged: true } }
         : { proposal };
@@ -517,10 +518,7 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
         return finishBoardClose(actor, id);
       if ((await proposalStatus(id, actor)) !== "applied")
         throw new Error("This suggestion has no applied board item to undo.");
-      const provider = await service.provider(
-        { ...actor, botId: proposal.scope.botId! },
-        applied.workspaceId,
-      );
+      const provider = await service.provider(actor, applied.workspaceId);
       const item = await provider.show(applied.itemId);
       const undone = item.status === "closed" && item.closeReason === BOARD_UNDO_REASON;
       const changed = !undone && (item.status === "closed" || !boardItemUnchanged(item, applied));
@@ -836,7 +834,7 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
         where: { id, ...identity },
         select: { body: true },
       });
-      const body = row?.body as { type?: unknown; scope?: { botId?: string } } | undefined;
+      const body = row?.body as { type?: unknown } | undefined;
       // Approval holds the filing lock through its save, so this read sees that result.
       if (body?.type !== "board-item" || !deps.boardService) return reject();
       const boardService = deps.boardService;
@@ -853,15 +851,7 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
         const hollow = Boolean(filing && !filing.itemId);
         let provider: Awaited<ReturnType<BoardService["provider"]>> | undefined;
         if (filing?.itemId && filing.workspaceId && !filing.reused) {
-          provider = await boardService.provider(
-            {
-              ...identity,
-              ...(body.scope?.botId || filing.botId
-                ? { botId: body.scope?.botId ?? filing.botId ?? undefined }
-                : {}),
-            },
-            filing.workspaceId,
-          );
+          provider = await boardService.provider(identity, filing.workspaceId);
           const item = await provider.show(filing.itemId);
           closeUpdatedAt = item.updatedAt;
           closeCommentCount = item.commentCount;

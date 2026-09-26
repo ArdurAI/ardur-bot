@@ -1,4 +1,5 @@
 import type { LearningProposal, RuntimePin } from "@ardurbot/contracts";
+import type { BoardRun } from "@ardurbot/contracts/board";
 import { IsolationError, observeBoardItems, type Pool, type PrismaClient } from "@ardurbot/db";
 import { MemoryService, PostgresDocumentStore } from "@ardurbot/memory";
 import { memoryDatabaseFake, serialMemoryLock } from "@ardurbot/testkit/memory-fakes";
@@ -1183,6 +1184,115 @@ it("closes an unchanged filed item on Reject, leaves a changed item, and never c
   expect(reused.show).not.toHaveBeenCalled();
   expect(kept.proposal.status).toBe("rejected");
   expect(reused.f.filings.map((row) => row.itemId)).toEqual(["board-a"]);
+});
+
+it("closes the item on Undo and Reject with the person's own board access after the bot is unticked from the board", async () => {
+  const f = fixture();
+  const workspace = {
+    id: "workspace",
+    spaceId: actor.spaceId,
+    ownerUserId: actor.userId,
+    kind: "space",
+    path: "",
+    prefix: "work",
+    name: "Board",
+    enabled: true,
+    initialized: true,
+    isDefault: true,
+    allowAllBots: true,
+    allowedBotIds: [] as string[],
+  };
+  Object.assign(f.deps.prisma, {
+    deploymentSettings: { findUnique: async () => ({ ownerUserId: actor.userId }) },
+    user: { findUniqueOrThrow: async () => ({ name: "Owner" }) },
+    boardWorkspace: table([workspace]),
+    boardFollow: { findMany: async () => [] },
+  });
+  const bot = await f.deps.prisma.bot.findFirst({ where: { id: "bot" } });
+  Object.assign(bot!, { name: "Builder", computer: { kind: "desktop" } });
+  const status: Record<string, string> = { "board-a": "open", "board-b": "open" };
+  const requests: BoardRun[] = [];
+  const beads = (id: string) => ({
+    id,
+    title: `Follow-up ${id}`,
+    description: "",
+    issue_type: "task",
+    status: status[id],
+    priority: 2,
+    created_at: "2026-09-25T12:00:00Z",
+    updated_at: "2026-09-25T12:00:00Z",
+    comment_count: 0,
+    close_reason: status[id] === "closed" ? "Closed" : "",
+  });
+  const localRun = vi.fn(async (request: BoardRun) => {
+    requests.push(request);
+    const [command, ...rest] = request.argv;
+    const id = rest.find((arg) => arg.startsWith("board-")) ?? "board-a";
+    if (command === "close") status[id] = "closed";
+    return {
+      ok: true as const,
+      stdout: command === "show" || command === "close" ? JSON.stringify([beads(id)]) : "[]",
+    };
+  });
+  const board = new BoardService({ prisma: f.deps.prisma, dataDir: "/fixture", localRun });
+  vi.spyOn(board, "fileLearningProposal").mockImplementation(async (_scope, proposalId) => {
+    f.filings.push({
+      id: "filing-a",
+      ...actor,
+      botId: "bot",
+      workspaceId: "workspace",
+      itemId: "board-a",
+      learningProposalId: proposalId,
+      reused: false,
+    });
+    return {
+      workspaceId: "workspace",
+      duplicate: false,
+      item: { id: "board-a", updatedAt: "2026-09-25T12:00:00Z", commentCount: 0 } as never,
+    };
+  });
+  const apply = createLearningApplyService({ ...f.deps, boardService: board });
+  const boardItem = {
+    type: "board-item" as const,
+    proposedContent: undefined,
+    boardItem: {
+      title: "Finish the import follow-up",
+      description: "The run stopped before the import finished.",
+      acceptanceCriteria: "The import completes.",
+    },
+  };
+  const approved = await f.proposal(undefined, boardItem);
+  await apply.approve(approved.id, actor);
+  const pending = await f.proposal(undefined, boardItem);
+  // An earlier approval created this item, then its save failed, so the suggestion is pending.
+  f.filings.push({
+    id: "filing-b",
+    ...actor,
+    botId: "bot",
+    workspaceId: "workspace",
+    itemId: "board-b",
+    learningProposalId: pending.id,
+    reused: false,
+  });
+  // Untick the suggestion's bot from the board's allowed bots.
+  workspace.allowAllBots = false;
+  await expect(board.provider({ ...actor, botId: "bot" }, "workspace")).rejects.toMatchObject({
+    problem: { code: "forbidden" },
+  });
+
+  const undone = await apply.revert(approved.id, actor);
+  expect(undone.proposal.status).toBe("reverted");
+  expect(undone).not.toHaveProperty("code");
+  const rejected = await apply.reject(pending.id, actor);
+  expect(rejected.proposal.status).toBe("rejected");
+  expect(rejected).not.toHaveProperty("code");
+
+  const closes = requests.filter((request) => request.argv[0] === "close");
+  expect(closes.map((request) => [request.argv, request.actor])).toEqual([
+    [["close", "board-a", "--reason", "Undone from Learning"], "Owner"],
+    [["close", "board-b", "--reason", "Rejected from Learning"], "Owner"],
+  ]);
+  expect(f.filings).toEqual([]);
 });
 
 it("refuses to edit a board item and leaves its content unchanged", async () => {

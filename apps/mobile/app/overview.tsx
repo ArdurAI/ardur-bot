@@ -25,7 +25,6 @@ import { loadOverviewConnections, loadOverviewNow, loadOverviewUsage } from "../
 const loadWork = async () => {
   const work = await rpc("board/work", {});
   let filingOutcomes: BoardFilingOutcomeCount[] = [];
-  let outcomesUnavailable = false;
   try {
     const outcomes = await rpc("board/filingOutcomes", {});
     const parsed = BoardFilingOutcomeCountSchema.array().safeParse(
@@ -33,14 +32,9 @@ const loadWork = async () => {
     );
     filingOutcomes = parsed.success ? parsed.data : [];
   } catch {
-    // The work list stays. The quiet line says the counts could not be read.
-    outcomesUnavailable = true;
+    // The work list stays; the counts are simply left out.
   }
-  return {
-    ...BoardWorkSchema.parse(work),
-    filingOutcomes,
-    outcomesUnavailable,
-  };
+  return { ...BoardWorkSchema.parse(work), filingOutcomes };
 };
 const MobileBoard = lazy(() =>
   import("../components/board-view").then((module) => ({ default: module.MobileBoard })),
@@ -108,9 +102,6 @@ export default function OverviewScreen() {
                     ) : null}
                   </View>
                 ))}
-                {data.outcomesUnavailable ? (
-                  <Line>{t("Board outcomes are unavailable right now.")}</Line>
-                ) : null}
                 {data.filingOutcomes.map((row) => (
                   <Line key={row.botId}>
                     {t(

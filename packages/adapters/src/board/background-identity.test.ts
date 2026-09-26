@@ -2,7 +2,7 @@ import type { BoardRun } from "@ardurbot/contracts/board";
 import { getLogger } from "@ardurbot/logging";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ExecutorDeps } from "../executor.js";
-import { NO_AUTOMATIC_RETRY_AT } from "./pending-close.js";
+import { BOARD_CLOSE_DENIED_BODY, pendingCloseFailure } from "./pending-close.js";
 import { BoardService } from "./service.js";
 
 const beadsItem = {
@@ -27,12 +27,20 @@ beforeEach(() => {
   vi.stubEnv("ENCRYPTION_KEY", "fixture-encryption-material-for-tests-only");
 });
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
 });
 
-/** A learning filing whose Reject already committed, owned by bot "bot" in space "space". */
+/**
+ * A learning filing whose Reject already committed, owned by bot "bot" in space "space". The
+ * returned state lets a test archive the bot or close the item between sweeps.
+ */
 function fixture(options: { archivedBot?: boolean; itemStatus?: string } = {}) {
+  const state = {
+    archivedBot: options.archivedBot ?? false,
+    itemStatus: options.itemStatus ?? beadsItem.status,
+  };
   const filing = {
     id: "filing",
     spaceId: "space",
@@ -47,6 +55,7 @@ function fixture(options: { archivedBot?: boolean; itemStatus?: string } = {}) {
     closeAttempts: null as number | null,
     closeNextAt: null as Date | null,
     closeNoticeAt: null as Date | null,
+    closeDeniedAt: null as Date | null,
     reused: false,
     createdAt: new Date(),
   };
@@ -73,7 +82,7 @@ function fixture(options: { archivedBot?: boolean; itemStatus?: string } = {}) {
     user: { findUniqueOrThrow: async () => ({ name: "Owner" }) },
     bot: {
       findFirst: async () =>
-        options.archivedBot ? null : { id: "bot", name: "Builder", computer: { kind: "desktop" } },
+        state.archivedBot ? null : { id: "bot", name: "Builder", computer: { kind: "desktop" } },
     },
     boardWorkspace: { findFirst: async () => workspace, findUnique: async () => workspace },
     learningProposal: { findUnique: async () => ({ id: "proposal", userId: "owner" }) },
@@ -119,7 +128,13 @@ function fixture(options: { archivedBot?: boolean; itemStatus?: string } = {}) {
     if (command === "show")
       return {
         ok: true as const,
-        stdout: JSON.stringify([{ ...beadsItem, status: options.itemStatus ?? beadsItem.status }]),
+        stdout: JSON.stringify([
+          {
+            ...beadsItem,
+            status: state.itemStatus,
+            ...(state.itemStatus === "closed" ? { close_reason: "Handled by hand" } : {}),
+          },
+        ]),
       };
     if (command === "close")
       return {
@@ -128,7 +143,7 @@ function fixture(options: { archivedBot?: boolean; itemStatus?: string } = {}) {
       };
     return { ok: true as const, stdout: "[]" };
   });
-  return { prisma, filing, filings, requests, ownerRun };
+  return { prisma, filing, filings, requests, ownerRun, state };
 }
 
 it("leaves a pending close for the app when this process has no owner connection to the host", async () => {
@@ -167,7 +182,7 @@ it("finishes the close through the owner's host connection in the app", async ()
 it("reads a bot's board outside a run through the owner's host connection", async () => {
   const { prisma, requests, ownerRun } = fixture();
   const app = new BoardService({ prisma: prisma as never, dataDir: "/fixture", ownerRun });
-  // Approve, Reject and Undo open the proposal's bot board without a run.
+  // Approve opens the proposal's bot board without a run.
   const provider = await app.provider({ userId: "owner", spaceId: "space", botId: "bot" });
   await expect(provider.show("board-a")).resolves.toMatchObject({ id: "board-a" });
   expect(ownerRun).toHaveBeenCalledWith(
@@ -194,8 +209,12 @@ it("finishes a pending close quietly through the owner's connection when the fil
   expect(prisma.boardNotification.create).not.toHaveBeenCalled();
 });
 
-it("notifies once and stops the scheduled retry when the filing's bot is archived and the item is still open", async () => {
-  const { prisma, filing, filings, requests, ownerRun } = fixture({
+it("checks a denied bot's open item through the owner once a day, and ends the close once a person closes it", async () => {
+  // The reviewer's confirmed scenario: archived bot, open item, sweep, the person closes the
+  // item as the notice asks, sweep again.
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-09-25T12:00:00.000Z"));
+  const { prisma, filing, filings, requests, ownerRun, state } = fixture({
     archivedBot: true,
     itemStatus: "open",
   });
@@ -203,14 +222,46 @@ it("notifies once and stops the scheduled retry when the filing's bot is archive
   await app.sweepPendingCloses();
   expect(filings).toEqual([filing]);
   expect(filing.closePending).toBe("Rejected from Learning");
-  expect(filing.closeNextAt).toEqual(NO_AUTOMATIC_RETRY_AT);
+  expect(filing.closeNextAt).toEqual(new Date("2026-09-26T12:00:00.000Z"));
+  expect(filing.closeDeniedAt).toEqual(new Date("2026-09-25T12:00:00.000Z"));
+  expect(filing.closeAttempts).toBeNull();
+  // Learning and the notice say the bot can no longer use the board, never five tries.
+  expect(pendingCloseFailure(filing)).toBe("denied");
   expect(prisma.boardNotification.create).toHaveBeenCalledTimes(1);
-  const requestsAfterFirstSweep = requests.length;
-  // A later sweep does not reach the bot's board again or send a second notice: the person
-  // acts through their own Reject or Undo click, which does not consult closeNextAt.
+  expect(prisma.boardNotification.create).toHaveBeenCalledWith({
+    data: expect.objectContaining({ changes: ["close-denied"] }),
+  });
+  expect(BOARD_CLOSE_DENIED_BODY).toBe(
+    "The bot that filed this item can no longer use the board. Close it on the Board.",
+  );
+  const checked = requests.length;
   await app.sweepPendingCloses();
-  expect(requests).toHaveLength(requestsAfterFirstSweep);
+  expect(requests).toHaveLength(checked);
+
+  state.itemStatus = "closed";
+  vi.setSystemTime(new Date("2026-09-26T12:00:01.000Z"));
+  await app.sweepPendingCloses();
+  expect(requests.slice(checked).map((request) => request.argv[0])).not.toContain("close");
+  // The filing row is what Learning reads; with it gone the failure is no longer shown.
+  expect(filings).toEqual([]);
   expect(prisma.boardNotification.create).toHaveBeenCalledTimes(1);
+});
+
+it("closes a denied bot's item normally at the next check once the bot can use the board again", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-09-25T12:00:00.000Z"));
+  const { prisma, filings, requests, ownerRun, state } = fixture({
+    archivedBot: true,
+    itemStatus: "open",
+  });
+  const app = new BoardService({ prisma: prisma as never, dataDir: "/fixture", ownerRun });
+  await app.sweepPendingCloses();
+  expect(requests.map((request) => request.argv[0])).not.toContain("close");
+  state.archivedBot = false;
+  vi.setSystemTime(new Date("2026-09-26T12:00:01.000Z"));
+  await app.sweepPendingCloses();
+  expect(requests.at(-1)?.argv).toEqual(["close", "board-a", "--reason", "Rejected from Learning"]);
+  expect(filings).toEqual([]);
 });
 
 it("gives the executor only the filing lock pool", () => {

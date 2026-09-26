@@ -18,6 +18,11 @@ import {
 } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  boardCloseDeniedBody,
+  boardCloseFailedTitle,
+  boardCloseTriedBody,
+} from "../lib/board-close-copy";
 import { actionMessage } from "../lib/orpc-action-message";
 import { rpc } from "../lib/rpc";
 import { LearningCurator } from "./LearningCurator";
@@ -311,7 +316,7 @@ function LearningCard({
   change: (action: () => Promise<unknown>) => Promise<void>;
   settle: (result: LearningActionResult) => void;
 }) {
-  const { t } = useLingui();
+  const { t, i18n } = useLingui();
   const [detailsOpen, setDetailsOpen] = useState(expanded);
   useEffect(() => {
     if (expanded) setDetailsOpen(true);
@@ -413,7 +418,7 @@ function LearningCard({
             {proposal.boardChanged ? (
               <Trans>This board item changed after it was filed. Review it on the Board.</Trans>
             ) : proposal.boardCloseFailed ? (
-              <Trans>A board item filed by a bot could not be closed.</Trans>
+              i18n._(boardCloseFailedTitle)
             ) : proposal.boardClosing ? (
               <Trans>Closing on the Board.</Trans>
             ) : proposal.status === "reverted" ? (
@@ -430,10 +435,7 @@ function LearningCard({
       </div>
       {proposal.boardCloseFailed && !proposal.boardChanged ? (
         <p className="text-xs text-muted-foreground">
-          <Trans>
-            Ardur Bot tried five times. Close it on the Board, or check that this computer is
-            connected.
-          </Trans>
+          {i18n._(proposal.boardCloseDenied ? boardCloseDeniedBody : boardCloseTriedBody)}
         </p>
       ) : null}
       {blocked ? <p className="text-xs text-muted-foreground">{blocked}</p> : null}

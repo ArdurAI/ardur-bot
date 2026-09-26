@@ -3,6 +3,7 @@ import type { BoardRun } from "@ardurbot/contracts/board";
 import type { HostFrame } from "@ardurbot/contracts/host-bridge";
 import type { PrismaClient } from "@ardurbot/db";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { boardCloseRetry } from "./board.js";
 import { HostBridge } from "./host-bridge.js";
 import type { RouterDeps } from "./router.js";
 
@@ -142,7 +143,7 @@ function fixture() {
     dataDir: "/fixture",
     ownerRun: (request, scope) => bridge.runBoard(request, scope),
   });
-  return { service, received, filings, host };
+  return { service, received, filings, host, prisma, bridge };
 }
 
 it("reads a learning proposal's board as the owner through the desktop connection", async () => {
@@ -167,6 +168,33 @@ it("finishes a bot's pending close through the desktop connection", async () => 
     argv: ["close", "board-a", "--reason", "Undone from Learning"],
   });
   expect(filings).toEqual([]);
+});
+
+it.each(["graphile", "memory"])(
+  "retries a failed close on its own schedule with the host bridge on (WAKEUP_DRIVER=%s)",
+  async (driver) => {
+    vi.stubEnv("WAKEUP_DRIVER", driver);
+    const { received, filings, prisma, bridge } = fixture();
+    const retry = boardCloseRetry({ prisma, dataDir: "/fixture", hostBridge: bridge });
+    expect(retry).toBeDefined();
+    retry?.start();
+    try {
+      await vi.waitFor(() => expect(filings).toEqual([]));
+    } finally {
+      await retry?.stop();
+    }
+    expect(received.find((request) => request.argv[0] === "close")?.argv).toEqual([
+      "close",
+      "board-a",
+      "--reason",
+      "Undone from Learning",
+    ]);
+  },
+);
+
+it("leaves pending closes to the worker without the host bridge", () => {
+  const { prisma, bridge } = fixture();
+  expect(boardCloseRetry({ prisma, dataDir: "/fixture", hostBridge: bridge }, {})).toBeUndefined();
 });
 
 it("gives the router only the filing lock pool", () => {

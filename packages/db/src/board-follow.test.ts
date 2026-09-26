@@ -101,6 +101,12 @@ function filingTable(rows: Array<Record<string, unknown>>) {
         return { count: found.length };
       },
     ),
+    deleteMany: vi.fn(async ({ where }: { where: Record<string, unknown> }) => {
+      const kept = rows.filter((row) => !matches(row, where));
+      const count = rows.length - kept.length;
+      rows.splice(0, rows.length, ...kept);
+      return { count };
+    }),
   };
 }
 function proposalRow(body: Record<string, unknown>) {
@@ -180,6 +186,53 @@ it("records a closed filing outcome once, and a reopened item clears it so the n
   expect(boardFilingOutcome("No longer needed")).toBe("closed-other");
   expect(boardFilingOutcome("")).toBe("completed");
 });
+
+it.each([
+  ["with no outcome yet", null, null],
+  ["after its outcome was recorded", new Date("2026-09-25T12:00:00.000Z"), "closed-other"],
+])(
+  "ends a pending close once a board read shows the item closed by anyone (%s)",
+  async (_label, closedAt, outcome) => {
+    const rows: Array<Record<string, unknown>> = [
+      {
+        id: "filing",
+        workspaceId: "board",
+        itemId: "item",
+        learningProposalId: "proposal",
+        closedAt,
+        outcome,
+        closePending: "Rejected from Learning",
+      },
+      {
+        id: "other",
+        workspaceId: "board",
+        itemId: "open-item",
+        learningProposalId: null,
+        closedAt: null,
+        outcome: null,
+        closePending: "Undone from Learning",
+      },
+    ];
+    const botBoardFiling = filingTable(rows);
+    const client = {
+      botBoardFiling,
+      learningProposal: { findUnique: vi.fn(async () => null), update: vi.fn() },
+      boardFollow: { findMany: vi.fn(async () => []) },
+      $executeRaw: vi.fn(async () => 1),
+    };
+    const prisma = {
+      ...client,
+      $transaction: vi.fn(async (work: (tx: typeof client) => Promise<unknown>) => work(client)),
+    } as unknown as PrismaClient;
+    await observeBoardItems(prisma, "board", [
+      item({ status: "closed", closedAt: "2026-09-26T09:00:00.000Z", closeReason: "Done by hand" }),
+      item({ id: "open-item", status: "open" }),
+    ]);
+    // The closed item's filing goes, as a finished close deletes it; the open one still waits.
+    expect(rows.map((row) => row.id)).toEqual(["other"]);
+    expect(botBoardFiling.findMany).toHaveBeenCalledTimes(1);
+  },
+);
 
 it("truncates a close reason longer than the stored limit so the inbox never breaks", async () => {
   const filing = {
@@ -294,12 +347,36 @@ it.each([
 ])("classifies the negated close reason %j as closed otherwise", (reason) => {
   expect(boardFilingOutcome(reason)).toBe("closed-other");
 });
-it.each(["Done", "Fixed in the next build", "Resolved, not a duplicate", "Completed", "  "])(
-  "classifies the close reason %j as completed",
-  (reason) => {
-    expect(boardFilingOutcome(reason)).toBe("completed");
-  },
-);
+it.each([
+  "Done",
+  "Fixed",
+  "Resolved",
+  "Fixed in the next build",
+  "Resolved, not a duplicate",
+  "Not a duplicate, done",
+  "Completed",
+  "Closed",
+  "",
+  "  ",
+])("classifies the close reason %j as completed", (reason) => {
+  expect(boardFilingOutcome(reason)).toBe("completed");
+});
+it.each([
+  "Resolved: won't fix",
+  "Resolved as won't fix",
+  "Duplicate, fixed in board-12",
+  "Not needed, done elsewhere",
+  "wontfix, resolved",
+  "Won’t fix — resolved upstream",
+  "Resolved as duplicate",
+  "Done: not planned",
+  "Obsolete, done in the rewrite",
+  "Invalid; resolved",
+  "Cannot reproduce, closing as fixed",
+  "can't reproduce - done",
+])("lets the negative close reason in %j win over its completion word", (reason) => {
+  expect(boardFilingOutcome(reason)).toBe("closed-other");
+});
 it.each([
   "nothing was resolved",
   "nothing fixed",

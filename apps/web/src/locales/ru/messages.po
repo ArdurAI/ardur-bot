@@ -249,12 +249,7 @@ msgstr "7 дней"
 msgid "A bit of everything"
 msgstr ""
 
-#: src/pages/LearningInbox.tsx
-msgid "A board item filed by a bot could not be closed."
-msgstr "Не удалось закрыть задачу на доске, созданную ботом."
-
-#. js-lingui-explicit-id
-#: src/lib/use-notifications.ts
+#: src/lib/board-close-copy.ts
 msgid "A board item filed by a bot could not be closed."
 msgstr "Не удалось закрыть задачу на доске, созданную ботом."
 
@@ -805,12 +800,7 @@ msgstr ""
 msgid "Ardur Bot reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history."
 msgstr ""
 
-#: src/pages/LearningInbox.tsx
-msgid "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected."
-msgstr "Ardur Bot попытался пять раз. Закройте её на доске или проверьте, что этот компьютер подключён."
-
-#. js-lingui-explicit-id
-#: src/lib/use-notifications.ts
+#: src/lib/board-close-copy.ts
 msgid "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected."
 msgstr "Ardur Bot попытался пять раз. Закройте её на доске или проверьте, что этот компьютер подключён."
 
@@ -1070,10 +1060,6 @@ msgstr ""
 #: src/pages/board/BoardsSettings.tsx
 msgid "Board files will be kept."
 msgstr "Файлы доски будут сохранены."
-
-#: src/pages/dashboard/WorkPanel.tsx
-msgid "Board outcomes are unavailable right now."
-msgstr "Результаты доски сейчас недоступны."
 
 #: src/pages/board/BoardsSettings.tsx
 msgid "Board status"
@@ -7325,6 +7311,10 @@ msgstr "API не вернулся. Обновите эту страницу."
 #: src/pages/shell/computer-terminal.tsx
 msgid "The bot is working — wait or stop it"
 msgstr ""
+
+#: src/lib/board-close-copy.ts
+msgid "The bot that filed this item can no longer use the board. Close it on the Board."
+msgstr "Бот, создавший эту задачу, больше не может пользоваться доской. Закройте её на доске."
 
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "The connection was cancelled."

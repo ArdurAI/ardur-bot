@@ -22,8 +22,8 @@ import { createHostClient, usesHostBridge } from "../remote-host-sandbox.js";
 import { BeadsBoardProvider } from "./beads.js";
 import type { PendingCloseRow } from "./pending-close.js";
 import {
+  botDeniedCheckAt,
   closeNoticeOwner,
-  NO_AUTOMATIC_RETRY_AT,
   notifyUnclosedBoardItem,
   pendingCloseAction,
   recordPendingCloseFailure,
@@ -472,11 +472,11 @@ export class BoardService {
   }
   /**
    * The filing's bot can no longer open the board at all (archived, moved, or no longer
-   * allowed on it), so its own scope can never see whether the item closed. The owner can
-   * always open their own board, so a read through the owner's scope decides instead: closed,
-   * for any reason, ends the pending close exactly as a normal close would. Still open sends
-   * the one notice and then stops the scheduled sweep from picking this filing back up; the
-   * person's own Reject or Undo click still retries it through their own scope.
+   * allowed on it), so its own scope cannot see whether the item closed. The owner can open
+   * their own board, so a read through the owner's scope decides instead: closed, for any
+   * reason, ends the pending close exactly as a normal close would. Otherwise the close is
+   * checked again in a day, and the owner is told once to close it on the Board. That next
+   * check tries the bot first, so a bot that can use the board again closes it normally.
    */
   private async finishBotDeniedClose(
     filing: PendingCloseRow,
@@ -485,25 +485,32 @@ export class BoardService {
     signal?: AbortSignal,
   ) {
     const owner = await this.pendingCloseScope(filing, signal, { withBot: false });
-    const provider = await this.provider(owner.scope, workspaceId);
-    const item = await provider.show(itemId);
-    if (item.status === "closed") {
+    const item = await this.provider(owner.scope, workspaceId)
+      .then((provider) => provider.show(itemId))
+      .catch((error: unknown) => {
+        // The owner's board is out of reach too; the daily check reads it again.
+        getLogger().error("pending board close", error);
+        return null;
+      });
+    if (item?.status === "closed") {
       await this.options.prisma.botBoardFiling.deleteMany({
         where: { id: filing.id, spaceId: filing.spaceId },
       });
       return;
     }
-    await notifyUnclosedBoardItem(this.options.prisma, filing, async () => item);
-    await this.options.prisma.botBoardFiling.updateMany({
+    const denied = { ...filing, closeDeniedAt: filing.closeDeniedAt ?? new Date() };
+    const marked = await this.options.prisma.botBoardFiling.updateMany({
       where: { id: filing.id, closePending: filing.closePending },
-      data: { closeNextAt: NO_AUTOMATIC_RETRY_AT },
+      data: { closeDeniedAt: denied.closeDeniedAt, closeNextAt: botDeniedCheckAt() },
     });
+    if (marked.count !== 1 || filing.closeNoticeAt) return;
+    await notifyUnclosedBoardItem(this.options.prisma, denied, async () => item, "close-denied");
   }
   /**
    * Shows the item, decides whether it can close, and closes or releases it, then deletes the
    * filing row. Shared by the sweep, and by Reject and Undo retrying a close that already
    * committed. The caller resolves the scope: the sweep opens the board as the owner, through
-   * the filing's bot; a retry opens it as the clicking user, through the proposal's bot.
+   * the filing's bot; a retry opens it as the clicking person, with their own board access.
    */
   async finishClose(
     scope: BoardScope,

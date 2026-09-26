@@ -195,6 +195,7 @@ it("says a pending close could not be finished once its notice was sent", async 
     closedAt: null,
     outcome: null,
     closePending: "Rejected from Learning",
+    closeAttempts: 1,
     closeNoticeAt: null as Date | null,
   };
   const service = createLearningService({
@@ -210,10 +211,48 @@ it("says a pending close could not be finished once its notice was sent", async 
   expect(closing).toMatchObject({ boardClosing: true });
   expect(closing).not.toHaveProperty("boardCloseFailed");
   filing.closeNoticeAt = new Date("2026-09-25T13:00:00.000Z");
+  filing.closeAttempts = 5;
+  const failed = await service.proposal(actor, "proposal");
+  expect(failed).toMatchObject({ boardClosing: true, boardCloseFailed: true });
+  expect(failed).not.toHaveProperty("boardCloseDenied");
+});
+
+it("says the bot can no longer use the board, not five tries, when that is why the close failed", async () => {
+  const actor = { spaceId: "space", userId: "user" } as Actor;
+  const row = boardProposalRow(actor, "proposal", "applied");
+  row.status = "rejected";
+  row.body.status = "rejected";
+  const filing = {
+    learningProposalId: "proposal",
+    closedAt: null,
+    outcome: null,
+    closePending: "Rejected from Learning",
+    closeAttempts: null as number | null,
+    closeNoticeAt: new Date("2026-09-25T13:00:00.000Z"),
+    closeDeniedAt: new Date("2026-09-25T13:00:00.000Z") as Date | null,
+  };
+  const service = createLearningService({
+    prisma: {
+      spaceMember: { findUnique: async () => ({ role: "member" }) },
+      bot: { findFirst: async () => ({ id: "bot" }) },
+      learningProposal: { findFirst: async () => row },
+      botBoardFiling: { findMany: async () => [filing] },
+    } as unknown as PrismaClient,
+    jobs: {} as never,
+  });
   await expect(service.proposal(actor, "proposal")).resolves.toMatchObject({
     boardClosing: true,
     boardCloseFailed: true,
+    boardCloseDenied: true,
   });
+  // The bot can use the board again and the next try failed for another reason: the notice
+  // already went out, but one try is not five, so the card says it is still closing.
+  filing.closeDeniedAt = null;
+  filing.closeAttempts = 1;
+  const retrying = await service.proposal(actor, "proposal");
+  expect(retrying).toMatchObject({ boardClosing: true });
+  expect(retrying).not.toHaveProperty("boardCloseFailed");
+  expect(retrying).not.toHaveProperty("boardCloseDenied");
 });
 
 it("reports the recorded outcome for an applied board-item proposal", async () => {
@@ -244,7 +283,9 @@ it("reports the recorded outcome for an applied board-item proposal", async () =
       closedAt: true,
       outcome: true,
       closePending: true,
+      closeAttempts: true,
       closeNoticeAt: true,
+      closeDeniedAt: true,
     },
   });
 });
@@ -288,7 +329,9 @@ it("loads board outcomes for every listed proposal in one query", async () => {
       closedAt: true,
       outcome: true,
       closePending: true,
+      closeAttempts: true,
       closeNoticeAt: true,
+      closeDeniedAt: true,
     },
   });
   expect(list.proposals.map((proposal) => [proposal.id, proposal.boardOutcome])).toEqual([

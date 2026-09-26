@@ -175,7 +175,7 @@ it.each(["needs-sign-in", "not-connected"])(
     expect(node.textContent).toContain("Calendar · Needs sign-in");
   },
 );
-it("shows the quiet line and the work list when filing outcomes fail", async () => {
+it("shows the work list and leaves the counts out when filing outcomes fail", async () => {
   const original = vi.mocked(rpc).getMockImplementation()!;
   vi.mocked(rpc).mockImplementation(async (procedure: string, input?: unknown) => {
     if (procedure === "board/filingOutcomes") throw new Error("outcomes unavailable");
@@ -227,7 +227,8 @@ it("shows the quiet line and the work list when filing outcomes fail", async () 
   });
   try {
     await act(async () => root.render(createElement(OverviewScreen)));
-    expect(node.textContent).toContain("Board outcomes are unavailable right now.");
+    expect(node.textContent).not.toContain("Board outcomes");
+    expect(node.textContent).not.toContain("closed without being completed");
     expect(node.textContent).toContain("Ready work");
     expect(node.textContent).toContain("Ready: 2");
     expect(node.textContent).not.toContain("Could not load");

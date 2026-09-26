@@ -1,5 +1,10 @@
 import type { BoardScope } from "@ardurbot/adapters";
-import { BoardService, requestBoardCommand } from "@ardurbot/adapters";
+import {
+  BoardService,
+  createPendingCloseRetry,
+  requestBoardCommand,
+  usesHostBridge,
+} from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
 import type {
   BoardFilter,
@@ -12,6 +17,7 @@ import type {
 } from "@ardurbot/contracts/board";
 import { BoardError, BoardPatchSchema, boardColumn } from "@ardurbot/contracts/board";
 import { ACTIVE_RUN_STATUSES } from "@ardurbot/core";
+import type { Pool, PrismaClient } from "@ardurbot/db";
 import { ORPCError } from "@orpc/server";
 import type { HostBridge } from "./host-bridge.js";
 import type { RouterDeps } from "./router.js";
@@ -40,6 +46,30 @@ export function boardOwnerRun(hostBridge: HostBridge | undefined) {
       });
     return hostBridge.runBoard(request, scope);
   };
+}
+/**
+ * With the host bridge on, only the API reaches the host outside a run, so it retries failed
+ * board closes on its own schedule, whatever the wakeup driver. Without the bridge, the worker
+ * (or the API's in-memory reconciler) sweeps them instead.
+ */
+export function boardCloseRetry(
+  deps: {
+    prisma: PrismaClient;
+    dataDir: string;
+    lockPool?: Pick<Pool, "connect">;
+    hostBridge?: HostBridge;
+  },
+  env: NodeJS.ProcessEnv = process.env,
+) {
+  if (!usesHostBridge(env)) return undefined;
+  return createPendingCloseRetry(
+    new BoardService({
+      prisma: deps.prisma,
+      dataDir: deps.dataDir,
+      lockPool: deps.lockPool,
+      ownerRun: boardOwnerRun(deps.hostBridge),
+    }),
+  );
 }
 export function createBoard(deps: RouterDeps) {
   const pendingSends = new Set<string>();

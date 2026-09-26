@@ -21,6 +21,8 @@ ALTER TABLE "bot_board_filings"
   ADD COLUMN "closeUpdatedAt" TEXT,
   -- When the notice for a close that keeps failing was stored.
   ADD COLUMN "closeNoticeAt" TIMESTAMP(3),
+  -- When a check found the filing's bot could no longer use the board.
+  ADD COLUMN "closeDeniedAt" TIMESTAMP(3),
   ADD COLUMN "closeCommentCount" INTEGER;
 
 -- One owning filing per item; a reused link does not own it.

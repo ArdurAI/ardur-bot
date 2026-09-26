@@ -41,13 +41,17 @@ describe("mobile i18n", () => {
     vi.unstubAllEnvs();
   });
 
-  it("translates the quiet board-outcomes line and the closing card in Russian and Chinese", async () => {
+  it("translates the closing card and the denied-bot sentence in Russian and Chinese", async () => {
     const { ZH_MESSAGES } = await import("./locales/zh");
     const { RU_MESSAGES } = await import("./locales/ru");
-    expect(RU_MESSAGES["Board outcomes are unavailable right now."]).toBe(
-      "Результаты доски сейчас недоступны.",
+    const denied =
+      "The bot that filed this item can no longer use the board. Close it on the Board.";
+    expect(RU_MESSAGES[denied]).toBe(
+      "Бот, создавший эту задачу, больше не может пользоваться доской. Закройте её на доске.",
     );
-    expect(ZH_MESSAGES["Board outcomes are unavailable right now."]).toBe("看板结果暂时无法获取。");
+    expect(ZH_MESSAGES[denied]).toBe("创建此事项的机器人已无法使用看板。请在看板上关闭它。");
+    expect(RU_MESSAGES).not.toHaveProperty(["Board outcomes are unavailable right now."]);
+    expect(ZH_MESSAGES).not.toHaveProperty(["Board outcomes are unavailable right now."]);
     expect(RU_MESSAGES["Closing on the Board."]).toBe("Закрывается на доске.");
     expect(ZH_MESSAGES["Closing on the Board."]).toBe("正在看板上关闭。");
   });

@@ -412,6 +412,35 @@ it("says a board close that keeps failing could not be closed, and what to do", 
     await act(async () => root.unmount());
   }
 });
+it("says the bot that filed the item can no longer use the board, never five tries, when that is why", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const denied = {
+    ...pendingBoard,
+    status: "rejected",
+    boardClosing: true,
+    boardCloseFailed: true,
+    boardCloseDenied: true,
+  };
+  request.mockImplementation(async (path: string) => {
+    if (path === "learning/journey") return [];
+    if (path === "learning/settings")
+      return { enabled: true, reviewerPin: null, destination: null, budgets: {} };
+    return { reviews: [], proposals: [denied], pendingCount: 0, appliedThisWeek: 0 };
+  });
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  try {
+    await act(async () => root.render(createElement(Learning)));
+    expect(container.textContent).toContain("A board item filed by a bot could not be closed.");
+    expect(container.textContent).toContain(
+      "The bot that filed this item can no longer use the board. Close it on the Board.",
+    );
+    expect(container.textContent).not.toContain("five times");
+    expect(container.textContent).not.toContain("Closing on the Board.");
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
 it("shows the changed sentence after a pending close was left with the person", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const board = {

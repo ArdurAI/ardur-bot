@@ -23,6 +23,7 @@ it("adds every filing column in one migration without rewriting existing rows", 
     '"closeNextAt" TIMESTAMP(3)',
     '"closeUpdatedAt" TEXT',
     '"closeNoticeAt" TIMESTAMP(3)',
+    '"closeDeniedAt" TIMESTAMP(3)',
     '"closeCommentCount" INTEGER',
   ])
     expect(sql).toContain(`ADD COLUMN ${column}`);

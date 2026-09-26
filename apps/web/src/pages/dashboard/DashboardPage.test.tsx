@@ -642,10 +642,35 @@ it("shows ready work when filing outcomes fail", async () => {
   const panel = node.querySelector('[data-panel="work"]')!;
   expect(panel.textContent).toContain("Ready: 2");
   expect(panel.textContent).toContain("Next work");
-  expect(panel.textContent).toContain("Board outcomes are unavailable right now.");
+  expect(panel.textContent).not.toContain("Board outcomes");
   expect(panel.textContent).not.toContain("Could not load");
   expect(panel.textContent).not.toContain("closed without being completed");
 });
+
+it.each([
+  ["missing", []],
+  ["malformed", { bots: [{ botId: "bot", name: "Helper", filed: "three" }] }],
+  ["empty", null],
+])(
+  "shows ready work and no counts when the filing outcomes answer is %s",
+  async (_label, answer) => {
+    api.work.mockResolvedValue({
+      workspace: { id: "planning", name: "Planning" },
+      ready: 2,
+      inProgress: 1,
+      blocked: 0,
+      items: [{ id: "work-1", title: "Next work" }],
+    });
+    // The e2e dashboard fixture answers any procedure it does not know with [].
+    api.filingOutcomes.mockResolvedValue(answer);
+    await renderPage();
+    const panel = node.querySelector('[data-panel="work"]')!;
+    expect(panel.textContent).toContain("Ready: 2");
+    expect(panel.textContent).toContain("Next work");
+    expect(panel.textContent).not.toContain("Could not load");
+    expect(panel.textContent).not.toContain("closed without being completed");
+  },
+);
 
 it("shows default-board work and item links without adding subscriptions", async () => {
   api.work.mockResolvedValue({

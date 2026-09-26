@@ -1080,10 +1080,11 @@ export const RU_MESSAGES: Record<string, string> = {
     "Эта задача на доске изменилась после создания. Проверьте её на доске.",
   "This board item changed after it was filed, so it was left open for review on the Board.":
     "Эта задача на доске изменилась после создания, поэтому она оставлена открытой для проверки на доске.",
-  "Board outcomes are unavailable right now.": "Результаты доски сейчас недоступны.",
   "Closing on the Board.": "Закрывается на доске.",
   "A board item filed by a bot could not be closed.":
     "Не удалось закрыть задачу на доске, созданную ботом.",
   "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected.":
     "Ardur Bot попытался пять раз. Закройте её на доске или проверьте, что этот компьютер подключён.",
+  "The bot that filed this item can no longer use the board. Close it on the Board.":
+    "Бот, создавший эту задачу, больше не может пользоваться доской. Закройте её на доске.",
 };

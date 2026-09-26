@@ -30,6 +30,9 @@ const api = vi.hoisted(() => ({
   skillCare: vi.fn(),
 }));
 vi.mock("../lib/rpc", () => ({ rpc: { learning: api } }));
+vi.mock("@lingui/core/macro", () => ({
+  msg: (parts: TemplateStringsArray) => ({ id: parts.join(""), message: parts.join("") }),
+}));
 vi.mock("@lingui/react/macro", () => ({
   Trans: ({ children }: { children: ReactNode }) => {
     if (typeof children !== "string" || i18n.locale === "en") return children;
@@ -41,6 +44,10 @@ vi.mock("@lingui/react/macro", () => ({
       const text = parts.reduce((message, part, i) => message + part + (values[i] ?? ""), "");
       if (i18n.locale === "en") return text;
       return i18n.messages[text] || text;
+    },
+    i18n: {
+      _: ({ message }: { message: string }) =>
+        i18n.locale === "en" ? message : i18n.messages[message] || message,
     },
   }),
 }));
@@ -366,6 +373,37 @@ it("says a board close that keeps failing could not be closed, and what to do", 
       "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected.",
     ),
   ).not.toBe("");
+});
+it("says the bot that filed the item can no longer use the board, never five tries, when that is why", async () => {
+  api.list.mockResolvedValue({
+    reviews: [],
+    proposals: [
+      {
+        ...pendingBoard,
+        status: "rejected",
+        boardClosing: true,
+        boardCloseFailed: true,
+        boardCloseDenied: true,
+      },
+    ],
+    pendingCount: 0,
+    appliedThisWeek: 0,
+  });
+  await act(async () => root.render(<LearningInbox botId="bot" />));
+  expect(container.textContent).toContain("A board item filed by a bot could not be closed.");
+  expect(container.textContent).toContain(
+    "The bot that filed this item can no longer use the board. Close it on the Board.",
+  );
+  expect(container.textContent).not.toContain("five times");
+  expect(container.textContent).not.toContain("connected");
+  for (const locale of ["ru", "zh-CN"])
+    expect(
+      catalogTranslation(
+        locale,
+        "The bot that filed this item can no longer use the board. Close it on the Board.",
+      ),
+      locale,
+    ).not.toBe("");
 });
 it("shows the changed sentence after a pending close was left with the person", async () => {
   const board = {

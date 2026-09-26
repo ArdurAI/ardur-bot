@@ -6,15 +6,14 @@ import { getLogger } from "@ardurbot/logging";
 export const BOARD_CLOSE_FAILED_TITLE = "A board item filed by a bot could not be closed.";
 export const BOARD_CLOSE_FAILED_BODY =
   "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected.";
+export const BOARD_CLOSE_DENIED_BODY =
+  "The bot that filed this item can no longer use the board. Close it on the Board.";
+/** The notice's change: repeated failures, or a bot that can no longer use the board. */
+export type CloseNoticeChange = "close" | "close-denied";
 const CLOSE_NOTIFY_ATTEMPT = 5;
 const CLOSE_BACKOFF_MS = 30_000;
 const CLOSE_BACKOFF_CAP_MS = 15 * 60_000;
-/**
- * Once the filing's bot can never open the board again, the scheduled sweep stops picking the
- * row back up. The person's own Reject or Undo click retries through their own scope and does
- * not consult this field, so it still works.
- */
-export const NO_AUTOMATIC_RETRY_AT = new Date("9999-12-31T00:00:00.000Z");
+const BOT_DENIED_CHECK_MS = 24 * 60 * 60_000;
 
 export type PendingCloseRow = {
   id: string;
@@ -28,6 +27,7 @@ export type PendingCloseRow = {
   closeCommentCount?: number | null;
   closeAttempts?: number | null;
   closeNoticeAt?: Date | null;
+  closeDeniedAt?: Date | null;
 };
 
 /**
@@ -102,6 +102,22 @@ export function pendingCloseRetryAt(attempts: number, now = Date.now()): Date {
   return new Date(now + delay);
 }
 
+/** A close whose bot can no longer use the board is checked through the owner once a day. */
+export function botDeniedCheckAt(now = Date.now()): Date {
+  return new Date(now + BOT_DENIED_CHECK_MS);
+}
+
+/** What screens say about a pending close: nothing yet, five failed tries, or a denied bot. */
+export function pendingCloseFailure(
+  filing: Pick<PendingCloseRow, "closeAttempts" | "closeNoticeAt" | "closeDeniedAt">,
+): "tries" | "denied" | null {
+  if (filing.closeDeniedAt) return "denied";
+  // A notice sent for an earlier denial is not five tries once the bot can use the board again.
+  return filing.closeNoticeAt && (filing.closeAttempts ?? 0) >= CLOSE_NOTIFY_ATTEMPT
+    ? "tries"
+    : null;
+}
+
 function isUniqueConflict(error: unknown): boolean {
   return Boolean(error && typeof error === "object" && "code" in error && error.code === "P2002");
 }
@@ -134,6 +150,7 @@ async function insertCloseNotice(
   filing: PendingCloseRow,
   target: NoticeTarget,
   shown: Pick<WorkItem, "status" | "assignee" | "commentCount"> | null,
+  change: CloseNoticeChange,
 ) {
   await prisma.$transaction(async (tx) => {
     // Claims the filing's one notice. A failed insert rolls the claim back for the next failure.
@@ -142,7 +159,7 @@ async function insertCloseNotice(
       data: { closeNoticeAt: new Date() },
     });
     if (claimed.count !== 1) return;
-    const notice = { title: BOARD_CLOSE_FAILED_TITLE, changes: ["close"] };
+    const notice = { title: BOARD_CLOSE_FAILED_TITLE, changes: [change] };
     const follow =
       (await tx.boardFollow.findUnique({ where: { workspaceId_itemId_userId: target } })) ??
       (shown
@@ -173,7 +190,8 @@ async function insertCloseNotice(
 export async function notifyUnclosedBoardItem(
   prisma: PrismaClient,
   filing: PendingCloseRow,
-  show?: (itemId: string) => Promise<WorkItem>,
+  show?: (itemId: string) => Promise<WorkItem | null>,
+  change: CloseNoticeChange = "close",
 ) {
   if (!filing.workspaceId || !filing.itemId) return;
   const userId = await closeNoticeOwner(prisma, filing);
@@ -185,16 +203,17 @@ export async function notifyUnclosedBoardItem(
   // The follow starts from the item's real state, as the Follow button does.
   const shown = following || !show ? null : await show(filing.itemId).catch(() => null);
   try {
-    await insertCloseNotice(prisma, filing, target, shown);
+    await insertCloseNotice(prisma, filing, target, shown, change);
   } catch (error) {
     if (!isUniqueConflict(error)) throw error;
-    await insertCloseNotice(prisma, filing, target, shown);
+    await insertCloseNotice(prisma, filing, target, shown, change);
   }
 }
 
 /**
  * Counts one failed close. From the fifth failure on, each failure sends the owner's notice
- * until one is stored, and none after that. `show` reads the item for a new follow.
+ * until one is stored, and none after that. `show` reads the item for a new follow. A failure
+ * of this kind means the bot got past its board access, so the denial mark clears.
  */
 export async function recordPendingCloseFailure(
   prisma: PrismaClient,
@@ -213,6 +232,7 @@ export async function recordPendingCloseFailure(
     data: {
       closeAttempts: attempts,
       closeNextAt: pendingCloseRetryAt(attempts),
+      closeDeniedAt: null,
     },
   });
   if (claimed.count !== 1 || attempts < CLOSE_NOTIFY_ATTEMPT || filing.closeNoticeAt) return;

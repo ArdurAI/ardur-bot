@@ -96,7 +96,7 @@ import { cors } from "hono/cors";
 import { mountExportRoutes } from "./account-export.js";
 import { warnAutoReviewConfiguration } from "./auto-review-status.js";
 import { backfillRuntimePins } from "./backfill-runtime-pins.js";
-import { boardOwnerRun } from "./board.js";
+import { boardCloseRetry } from "./board.js";
 import type { AppEnv } from "./env.js";
 import { loadEnv } from "./env.js";
 import { HostBridge } from "./host-bridge.js";
@@ -507,12 +507,7 @@ export async function createApp(
         reconcileComputerUpdates: () => reconcileComputerUpdates({ prisma, jobs }),
         reconcileMemory: () => reconcileMemoryDelivery(memoryLifecycleDeps, memoryDocuments),
         reconcileBoardOutcomes: () =>
-          reconcileBoardOutcomes({
-            prisma,
-            dataDir: env.dataDir,
-            lockPool: created.lockPool,
-            ownerRun: boardOwnerRun(hostBridge),
-          }),
+          reconcileBoardOutcomes({ prisma, dataDir: env.dataDir, lockPool: created.lockPool }),
         reconcileLocalImport: async () => {
           await jobs.enqueue({
             name: "local-import.refresh",
@@ -529,6 +524,13 @@ export async function createApp(
       })
     : undefined;
   reconciler?.start();
+  const boardCloses = boardCloseRetry({
+    prisma,
+    dataDir: env.dataDir,
+    lockPool: created.lockPool,
+    hostBridge,
+  });
+  boardCloses?.start();
 
   const terminals = createTerminalRoutes({
     prisma,
@@ -1103,6 +1105,7 @@ export async function createApp(
       await teamChatBridge?.stop();
       await email?.drain?.();
       await reconciler?.stop();
+      await boardCloses?.stop();
       await jobs.close();
       await realtime.close();
       await connector.stop();

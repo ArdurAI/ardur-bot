@@ -176,7 +176,7 @@ describe.skipIf(!hasDb)("Board filings (PostgreSQL)", () => {
     }
   });
 
-  it("orders the proposal row lock before the filing row for concurrent writers", async () => {
+  it("ends a pending close from a board read without waiting on a writer that holds the proposal row", async () => {
     const { id, workspace, proposal } = await fixture();
     const filing = await db.prisma.botBoardFiling.create({
       data: {
@@ -201,9 +201,7 @@ describe.skipIf(!hasDb)("Board filings (PostgreSQL)", () => {
       { timeout: 20_000 },
     );
     await held.promise;
-    const outcome = observeBoardItems(other.prisma, workspace.id, [
-      closedItem("work-a", "Kept for the shop"),
-    ]);
+    // A sweep saw the item changed and queues on the proposal row, as Reject and Undo do.
     const changed = releaseChangedBoardClose(db.prisma, {
       id: filing.id,
       spaceId: id,
@@ -212,17 +210,20 @@ describe.skipIf(!hasDb)("Board filings (PostgreSQL)", () => {
       learningProposalId: proposal.id,
       closePending: "Undone from Learning",
     });
-    await new Promise((resolve) => setTimeout(resolve, 200));
+    // A person closed the item meanwhile: the next read ends the pending close at once.
+    await observeBoardItems(other.prisma, workspace.id, [
+      closedItem("work-a", "Kept for the shop"),
+    ]);
+    await expect(
+      db.prisma.botBoardFiling.findUnique({ where: { id: filing.id } }),
+    ).resolves.toBeNull();
     holder.resolve();
     await blocking;
-    await Promise.all([outcome, changed]);
+    await changed;
     const saved = await db.prisma.learningProposal.findUniqueOrThrow({
       where: { id: proposal.id },
     });
-    expect(saved.body).toMatchObject({
-      boardChanged: true,
-      appliedBoardItem: { closeReason: "Kept for the shop" },
-    });
+    expect(saved.body).toMatchObject({ boardChanged: true });
   });
 
   it("records an outcome with one read, and clears it when the item reopens", async () => {
@@ -319,11 +320,16 @@ describe.skipIf(!hasDb)("Board filings (PostgreSQL)", () => {
         learningProposalId: proposal.id,
         closePending: "Rejected from Learning",
         closeAttempts: 4,
+        // An earlier check found the bot denied; this failure is of another kind.
+        closeDeniedAt: new Date(),
       },
     });
     await recordPendingCloseFailure(db.prisma, filing, async () => {
       throw new Error("Open the desktop app to use this board.");
     });
+    await expect(
+      db.prisma.botBoardFiling.findUniqueOrThrow({ where: { id: filing.id } }),
+    ).resolves.toMatchObject({ closeAttempts: 5, closeDeniedAt: null });
     const notices = await db.prisma.boardNotification.findMany({
       where: { workspaceId: workspace.id },
     });

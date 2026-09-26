@@ -1,4 +1,5 @@
-import type { BoardWork } from "@ardurbot/contracts/board";
+import type { BoardFilingOutcomeCount, BoardWork } from "@ardurbot/contracts/board";
+import { BoardFilingOutcomeCountSchema } from "@ardurbot/contracts/board";
 import { Button } from "@ardurbot/ui-web";
 import { Trans } from "@lingui/react/macro";
 import { Link } from "react-router-dom";
@@ -6,24 +7,22 @@ import { rpc } from "../../lib/rpc";
 import { FiledBy } from "../board/FiledBy";
 import type { PanelActions, PanelContext } from "./panels";
 
+/** The work list, and the per-bot filing counts when they could be read; otherwise none. */
 export async function load({ signal, spaceId }: PanelContext) {
   const work = await rpc.board.work({}, { signal, context: { spaceId } });
+  let filingOutcomes: BoardFilingOutcomeCount[] = [];
   try {
-    const outcomes = await rpc.board.filingOutcomes({}, { signal, context: { spaceId } });
-    return { ...work, filingOutcomes: outcomes.bots, outcomesUnavailable: false };
+    const outcomes: unknown = await rpc.board.filingOutcomes({}, { signal, context: { spaceId } });
+    const parsed = BoardFilingOutcomeCountSchema.array().safeParse(
+      (outcomes as { bots?: unknown } | null)?.bots,
+    );
+    if (parsed.success) filingOutcomes = parsed.data;
   } catch (error) {
     if (signal.aborted || (error instanceof Error && error.name === "AbortError")) throw error;
-    return {
-      ...work,
-      filingOutcomes: [] as Awaited<ReturnType<typeof rpc.board.filingOutcomes>>["bots"],
-      outcomesUnavailable: true,
-    };
   }
+  return { ...work, filingOutcomes };
 }
-type WorkData = BoardWork & {
-  filingOutcomes: Awaited<ReturnType<typeof load>>["filingOutcomes"];
-  outcomesUnavailable?: boolean;
-};
+type WorkData = BoardWork & { filingOutcomes: BoardFilingOutcomeCount[] };
 export default function WorkPanel({ data, openSettings }: { data: WorkData } & PanelActions) {
   if (!data.workspace)
     return (
@@ -31,7 +30,7 @@ export default function WorkPanel({ data, openSettings }: { data: WorkData } & P
         <Button variant="ghost" onClick={() => openSettings("boards")}>
           <Trans>Set up a board</Trans>
         </Button>
-        <OutcomeLine data={data} />
+        <FilingOutcomes rows={data.filingOutcomes} />
       </div>
     );
   return (
@@ -72,20 +71,11 @@ export default function WorkPanel({ data, openSettings }: { data: WorkData } & P
           <Trans>No ready work</Trans>
         </p>
       )}
-      <OutcomeLine data={data} />
+      <FilingOutcomes rows={data.filingOutcomes} />
     </div>
   );
 }
-function OutcomeLine({ data }: { data: WorkData }) {
-  if (data.outcomesUnavailable)
-    return (
-      <p className="text-muted-foreground">
-        <Trans>Board outcomes are unavailable right now.</Trans>
-      </p>
-    );
-  return <FilingOutcomes rows={data.filingOutcomes} />;
-}
-function FilingOutcomes({ rows }: { rows: WorkData["filingOutcomes"] }) {
+function FilingOutcomes({ rows }: { rows: BoardFilingOutcomeCount[] }) {
   return rows.map((row) => (
     <p key={row.botId}>
       <Trans>

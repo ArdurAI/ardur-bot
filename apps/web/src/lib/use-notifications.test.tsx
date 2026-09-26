@@ -143,6 +143,36 @@ it("delivers followed Board changes through the shared preference gate", async (
   expect(fake.show).toHaveBeenCalledOnce();
 });
 
+it("says the filing bot can no longer use the board when that is why the close failed", async () => {
+  fake.activity.mockResolvedValueOnce(snapshot([])).mockResolvedValue(
+    snapshot([
+      {
+        ...row,
+        id: "denied-notice",
+        name: "A board item filed by a bot could not be closed.",
+        status: "board_changed",
+        threadId: "board:workspace:item",
+        board: {
+          spaceId: "space",
+          workspaceId: "workspace",
+          itemId: "item",
+          closeFailed: true,
+          closeDenied: true,
+        },
+      },
+    ]),
+  );
+  await renderSettings(<Harness />);
+  await poll();
+  expect(fake.show).toHaveBeenCalledExactlyOnceWith(
+    "A board item filed by a bot could not be closed.",
+    {
+      tag: "board:workspace:item",
+      body: "The bot that filed this item can no longer use the board. Close it on the Board.",
+    },
+  );
+});
+
 it("says a board close that keeps failing could not be closed, and what to do, in the reader's language", async () => {
   fake.activity.mockResolvedValueOnce(snapshot([])).mockResolvedValue(
     snapshot([

@@ -10,21 +10,30 @@ const NEGATED_COMPLETION = new RegExp(
   `\\b(?:nothing|nobody|nowhere|none|never|not|no(?!\\s+\\d)|cannot|unable to|(?:can|couldn|won|didn|isn|wasn|hasn|haven)['’]?t)(?:\\s+[\\w'’]+){0,3}?\\s+(?:${COMPLETION_WORD})\\b`,
   "iu",
 );
+const NOT_COMPLETED =
+  /\b(?:won['’]?t[\s-]*fix|duplicate[ds]?|not\s+needed|not\s+planned|obsolete|invalid|can(?:not|\s+not|['’]?t)\s+reproduce)\b/iu;
+// "not a duplicate" denies a negative reason instead of giving one.
+const DENIED_NOT_COMPLETED =
+  /\b(?:not|isn['’]?t|wasn['’]?t)\s+(?:an?\s+)?(?:duplicate[ds]?|obsolete|invalid)\b/giu;
 
 /**
  * An empty reason, Beads' default "Closed" (from `bd close` with no reason or an empty one),
- * or a completion word means done, unless a negation comes up to three words before any
- * completion word. Completion words are done, complete, completed, fixed, resolved,
- * implemented, shipped, merged, finished, delivered and landed. Negations are not, never,
- * no, nothing, nobody, none, nowhere, cannot, can't, couldn't, won't, didn't, isn't, wasn't,
- * hasn't, haven't, and unable to ("not done", "can't get it fixed", "never shipped"). "no"
- * followed by a number is a label, not a negation ("ticket no 12 resolved"). A completion
- * word with an un- prefix (unresolved, unfinished, undone) is negated. Every other reason,
- * including "won't fix" and "Closed as duplicate", is closed otherwise.
+ * or a completion word means done. A negative reason wins over any completion word: won't
+ * fix (also wontfix), duplicate, not needed, not planned, obsolete, invalid, cannot
+ * reproduce and can't reproduce are closed otherwise ("Resolved: won't fix", "Duplicate,
+ * fixed in board-12"), unless the reason denies it ("Resolved, not a duplicate"). A negation
+ * up to three words before any completion word also means closed otherwise. Completion
+ * words are done, complete, completed, fixed, resolved, implemented, shipped, merged,
+ * finished, delivered and landed. Negations are not, never, no, nothing, nobody, none,
+ * nowhere, cannot, can't, couldn't, won't, didn't, isn't, wasn't, hasn't, haven't, and
+ * unable to ("not done", "can't get it fixed", "never shipped"). "no" followed by a number
+ * is a label, not a negation ("ticket no 12 resolved"). A completion word with an un- prefix
+ * (unresolved, unfinished, undone) is negated. Every other reason is closed otherwise.
  */
 export function boardFilingOutcome(reason = ""): "completed" | "closed-other" {
   const trimmed = reason.trim();
   if (!trimmed || trimmed.toLowerCase() === "closed") return "completed";
+  if (NOT_COMPLETED.test(reason.replace(DENIED_NOT_COMPLETED, " "))) return "closed-other";
   const withoutUn = reason.replace(UN_COMPLETION, " ");
   if (UN_COMPLETION.test(reason) && !COMPLETION.test(withoutUn)) return "closed-other";
   return COMPLETION.test(withoutUn) && !NEGATED_COMPLETION.test(reason)
@@ -91,10 +100,12 @@ export async function observeBoardItems(
 }
 
 /**
- * One query per board read finds the closed items' unrecorded filings and the open items'
- * recorded ones. A close records the outcome and the proposal's close reason; a reopen clears
- * both so the next close records afresh. Each write locks the proposal row before the filing
- * row, the same order as Reject and Undo.
+ * One query per board read finds the closed items' unrecorded filings, their pending closes,
+ * and the open items' recorded ones. A close records the outcome and the proposal's close
+ * reason; a reopen clears both so the next close records afresh. A close that Reject or Undo
+ * left pending ends once anyone closes the item, as a finished close does: the filing goes,
+ * with no proposal write. Each write that touches the proposal locks its row before the
+ * filing row, the same order as Reject and Undo.
  */
 async function observeFilingOutcomes(prisma: PrismaClient, workspaceId: string, items: WorkItem[]) {
   const closedIds = items.filter((item) => item.status === "closed").map((item) => item.id);
@@ -104,17 +115,22 @@ async function observeFilingOutcomes(prisma: PrismaClient, workspaceId: string, 
       workspaceId,
       OR: [
         { itemId: { in: closedIds }, closedAt: null, outcome: null },
+        { itemId: { in: closedIds }, closePending: { not: null } },
         { itemId: { in: openIds }, NOT: { closedAt: null, outcome: null } },
       ],
     },
-    select: { id: true, itemId: true, learningProposalId: true },
+    select: { id: true, itemId: true, learningProposalId: true, closePending: true },
   });
   const byId = new Map(items.map((item) => [item.id, item]));
   for (const filing of filings) {
     const item = filing.itemId ? byId.get(filing.itemId) : undefined;
     if (!item) continue;
     try {
-      if (item.status === "closed") await recordFilingClose(prisma, filing, item);
+      if (item.status === "closed" && filing.closePending)
+        await prisma.botBoardFiling.deleteMany({
+          where: { id: filing.id, closePending: { not: null } },
+        });
+      else if (item.status === "closed") await recordFilingClose(prisma, filing, item);
       else await clearFilingClose(prisma, filing);
     } catch (error) {
       // Leave the filing as it was so the next board read retries the outcome and the reason together.

@@ -1,6 +1,11 @@
 import { NotificationActivityTracker, notify } from "@ardurbot/core";
 import { useEffect } from "react";
 import { usePreferences } from "../components/PreferencesProvider";
+import {
+  boardCloseDeniedBody,
+  boardCloseFailedTitle,
+  boardCloseTriedBody,
+} from "./board-close-copy";
 import { desktopBridge } from "./desktop";
 import { i18n } from "./i18n";
 import { rpc } from "./rpc";
@@ -32,10 +37,7 @@ export function useNotifications() {
             continue;
           const closeFailed = row.status === "board_changed" && row.board?.closeFailed === true;
           const title = closeFailed
-            ? i18n._({
-                id: "A board item filed by a bot could not be closed.",
-                message: "A board item filed by a bot could not be closed.",
-              })
+            ? i18n._(boardCloseFailedTitle)
             : row.status === "board_changed"
               ? row.name.slice(0, 200)
               : row.status === "completed"
@@ -56,11 +58,7 @@ export function useNotifications() {
                       values: { name: row.name },
                     });
           const body = closeFailed
-            ? i18n._({
-                id: "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected.",
-                message:
-                  "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected.",
-              })
+            ? i18n._(row.board?.closeDenied ? boardCloseDeniedBody : boardCloseTriedBody)
             : "";
           await notify(
             { id: row.id, category: row.category, title, body, threadId: row.threadId },

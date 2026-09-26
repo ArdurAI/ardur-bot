@@ -2256,6 +2256,9 @@ model BotBoardFiling {
   closeNextAt DateTime?
   // When the failed-close notice was stored. Later failures retry the notice until this is set.
   closeNoticeAt DateTime?
+  // When a check found the filing's bot could no longer use the board. The owner then checks
+  // the item once a day; a later failure of any other kind clears it.
+  closeDeniedAt DateTime?
   createdAt DateTime @default(now())
 
   @@index([runId])
