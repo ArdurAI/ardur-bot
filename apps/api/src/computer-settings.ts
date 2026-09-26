@@ -2,12 +2,18 @@ import { homedir } from "node:os";
 import path from "node:path";
 import type { AdapterContext } from "@ardurbot/adapter-kit";
 import type { EncryptedSecretStore } from "@ardurbot/adapters";
-import { DockerSandboxProvider, kubernetesContexts, snapshotKubeconfig } from "@ardurbot/adapters";
+import {
+  DockerSandboxProvider,
+  kubernetesContexts,
+  sandboxKindForBot,
+  snapshotKubeconfig,
+} from "@ardurbot/adapters";
 import {
   ComputerConfigurationSchema,
   ComputerConnectionInputSchema,
   ComputerConnectionSettingsSchema,
   ComputerEngineUnavailableError,
+  HOST_MOVE_UNAVAILABLE_MESSAGE,
 } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
 import { ORPCError } from "@orpc/server";
@@ -118,16 +124,29 @@ export async function validateComputerConfiguration(
   prisma: PrismaClient,
   spaceId: string,
   raw: z.infer<typeof ComputerConfigurationSchema>,
+  sandboxProvider = "docker",
 ) {
   const configuration = ComputerConfigurationSchema.parse(raw);
-  if (!configuration.confirmed) throw new Error("This replaces the computer's files. Continue?");
+  if (!configuration.confirmed)
+    throw new ORPCError("BAD_REQUEST", {
+      message: "This replaces the computer's files. Continue?",
+    });
+  // Null chooses the deployment default, which is refused while new computers start on the host.
+  if (configuration.connectionId === null) {
+    const deployment =
+      sandboxProvider === "docker"
+        ? await prisma.deploymentSettings.findUnique({ where: { id: "default" } })
+        : null;
+    if (sandboxKindForBot(sandboxProvider, deployment?.computerHost) === "desktop")
+      throw new ORPCError("BAD_REQUEST", { message: HOST_MOVE_UNAVAILABLE_MESSAGE });
+  }
   if (
     configuration.connectionId &&
     !(await prisma.connection.findFirst({
       where: { id: configuration.connectionId, spaceId, connectorId: "computer" },
     }))
   )
-    throw new Error("Choose an available computer connection.");
+    throw new ORPCError("BAD_REQUEST", { message: "Choose an available computer connection." });
   return configuration;
 }
 

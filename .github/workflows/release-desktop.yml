@@ -9,9 +9,18 @@ on:
         description: Existing v-prefixed tag to package from dev
         required: true
         type: string
+      evidence_waiver:
+        description: >-
+          Reason to publish this preview without measured performance evidence. One plain
+          sentence: letters, numbers, spaces, and . , ; : ' " ( ) ! ? & % + - only. No slash,
+          "www." host, ://scheme, or email address.
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: release-desktop
@@ -25,6 +34,8 @@ jobs:
       tag: ${{ steps.release.outputs.tag }}
       sha: ${{ steps.release.outputs.sha }}
       version: ${{ steps.release.outputs.version }}
+      parent: ${{ steps.release.outputs.parent }}
+      fixed_release: ${{ steps.release.outputs.fixed_release }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
@@ -42,10 +53,23 @@ jobs:
           git merge-base --is-ancestor "$sha" origin/dev
           git checkout --detach "$sha"
           version="$(node scripts/desktop-release.mjs validate "$RELEASE_TAG")"
+          parent="$(git rev-parse "${sha}^" 2>/dev/null || true)"
+          if [[ ! "$parent" =~ ^[0-9a-f]{40}$ ]]; then parent=""; fi
+          fixed_sha=""
+          # --first-parent follows only the first parent of a merge, so a tag on a
+          # merged side branch is not the previous desktop release.
+          # https://git-scm.com/docs/git-describe#Documentation/git-describe.txt---first-parent
+          fixed_tag="$(git describe --tags --abbrev=0 --match 'v*' --first-parent "${sha}^" 2>/dev/null || true)"
+          if [[ -n "$fixed_tag" ]]; then
+            fixed_sha="$(git rev-parse "${fixed_tag}^{commit}" 2>/dev/null || true)"
+            if [[ ! "$fixed_sha" =~ ^[0-9a-f]{40}$ ]]; then fixed_sha=""; fi
+          fi
           {
             echo "tag=$RELEASE_TAG"
             echo "sha=$sha"
             echo "version=$version"
+            echo "parent=$parent"
+            echo "fixed_release=$fixed_sha"
           } >> "$GITHUB_OUTPUT"
 
   build:
@@ -98,11 +122,25 @@ jobs:
             apps/desktop/out/*.blockmap
             apps/desktop/out/latest*.yml
 
+  evidence:
+    name: Require validated scoreboard evidence
+    needs: [validate, build]
+    uses: ./.github/workflows/performance.yml
+    with:
+      candidate_sha: ${{ needs.validate.outputs.sha }}
+      base_sha: ${{ needs.validate.outputs.parent }}
+      fixed_release_sha: ${{ needs.validate.outputs.fixed_release }}
+      environment: release-packaged
+      gate: required
+      release_version: ${{ needs.validate.outputs.version }}
+      evidence_waiver: ${{ github.event_name == 'workflow_dispatch' && inputs.evidence_waiver || '' }}
+
   publish:
     name: Publish unsigned pre-release
-    needs: [validate, build]
+    needs: [validate, build, evidence]
     runs-on: ubuntu-24.04
     permissions:
+      actions: read
       contents: write
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
@@ -112,18 +150,14 @@ jobs:
           persist-credentials: false
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          pattern: desktop-*
-          path: release-artifacts
+          name: scoreboard-publication
+          path: publication
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
       - run: pnpm install --frozen-lockfile
-      - name: Validate assets, merge macOS feeds, and generate the tap cask
-        env:
-          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
-        run: node scripts/desktop-release-assets.mjs "$RELEASE_VERSION" release-artifacts release-ready
-      - name: Generate private-detail-free notes and publish
+      - name: Render notes from the validated scoreboard and publish
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_TAG: ${{ needs.validate.outputs.tag }}
@@ -131,10 +165,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          node scripts/desktop-release.mjs notes "$RELEASE_TAG" > release-notes.md
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            echo "Release already exists; refusing to replace its assets." >&2
-            exit 1
-          fi
-          gh release create "$RELEASE_TAG" release-ready/* --verify-tag --target "$RELEASE_SHA" --draft --prerelease --latest=false --title "$RELEASE_TAG" --notes-file release-notes.md
-          gh release edit "$RELEASE_TAG" --draft=false --prerelease --latest=false
+          node scripts/desktop-release.mjs notes "$RELEASE_TAG" publication/scoreboard-publication/gate.json > release-notes.md
+          node scripts/scoreboard-index.mjs verify-publication --directory publication/release-ready --gate publication/scoreboard-publication/gate.json
+          mapfile -t upload_files < <(node scripts/scoreboard-index.mjs list-upload --directory publication/release-ready)
+          [[ "${#upload_files[@]}" -gt 0 ]]
+          node scripts/release-publish.mjs --tag "$RELEASE_TAG" --target "$RELEASE_SHA" --notes release-notes.md --waiver-record publication/scoreboard-publication/waiver-record.json -- "${upload_files[@]}"

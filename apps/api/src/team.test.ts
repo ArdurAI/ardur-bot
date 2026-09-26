@@ -175,6 +175,32 @@ describe("team.board", () => {
       action: "Choose a source",
     });
   });
+  it("names each computer by its connection, else by the engine of its kind", async () => {
+    const f = fixture();
+    const bots = [
+      ["e2b", null],
+      ["docker", null],
+      ["desktop", null],
+      ["remote-docker", "office"],
+    ].map(([kind, connectionId], index) => ({
+      id: `bot-${index}`,
+      name: `Bot ${index}`,
+      thread: null,
+      computer: { kind, connectionId },
+    }));
+    f.db.bot.findMany.mockResolvedValue(bots);
+    Object.assign(f.db, {
+      connection: { findMany: vi.fn(async () => [{ id: "office", displayName: "Office" }]) },
+      hostRegistration: { findUnique: vi.fn(async () => ({ platform: "linux" })) },
+    });
+    const { rows } = await teamBoard(f.prisma, actor);
+    expect(rows.map((row) => row.computerName)).toEqual([
+      "E2B",
+      "Docker on this computer",
+      "This computer",
+      "Office",
+    ]);
+  });
   it("rejects non-members before reading any records or accepting a task", async () => {
     const f = fixture();
     f.db.spaceMember.findUnique.mockResolvedValue(null);

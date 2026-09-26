@@ -87,6 +87,11 @@ msgstr ""
 msgid "{0} imported, {1} updated, {2} unchanged, {3} removed, {4} skipped, {5} conflicts, {6} failed."
 msgstr ""
 
+#. placeholder {0}: manifest.unscanned
+#: src/pages/import/LocalImportPage.tsx
+msgid "{0} items were not scanned because of the scan limits."
+msgstr ""
+
 #. placeholder {0}: format(size / 1024)
 #: src/components/ArtifactFileCard.tsx
 msgid "{0} KB"
@@ -1376,6 +1381,10 @@ msgstr "Bir bot şekli ve rengi seçin veya görüntü yükleyin"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Choose a bot…"
+msgstr ""
+
+#: src/pages/import/LocalImportPage.tsx
+msgid "Choose a folder inside your home folder."
 msgstr ""
 
 #: src/pages/shell/runtime-settings.tsx
@@ -2828,6 +2837,10 @@ msgstr "Varsayılan ({0})"
 msgid "Default board"
 msgstr "Varsayılan pano"
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Default computer"
+msgstr ""
+
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Default scope"
 msgstr "Varsayılan kapsam"
@@ -2917,10 +2930,13 @@ msgstr ""
 msgid "Deploy private key"
 msgstr ""
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Deployment default"
 msgstr "Dağıtım varsayılanı"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Deployment default ({defaultLabel})"
+msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Describe what this bot does"
@@ -3084,6 +3100,14 @@ msgstr "Docker"
 msgid "Docker limits access to your computer for added security. Using {hostLabel} lets bots work with your local files and tools."
 msgstr "Docker, ek güvenlik için bilgisayarına erişimi sınırlar. {hostLabel} kullanıldığında botlar yerel dosyaların ve araçlarınla çalışabilir."
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Docker on this computer"
+msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Docker on this Mac"
+msgstr ""
+
 #: src/pages/KnowledgeSection.tsx
 msgid "Document"
 msgstr ""
@@ -3220,9 +3244,8 @@ msgstr ""
 msgid "Engine endpoint"
 msgstr ""
 
-#. placeholder {0}: engine === "podman" ? "Podman" : engine === "kubernetes" ? "Kubernetes" : engine === "docker" ? "Docker" : engine
 #: src/pages/ComputerProfilesSettings.tsx
-msgid "Engine: {0}"
+msgid "Engine: {label}"
 msgstr ""
 
 #: src/pages/account/AccountProfile.tsx
@@ -3789,6 +3812,10 @@ msgstr ""
 
 #: src/pages/import/LocalImportPage.tsx
 msgid "Import from {name}"
+msgstr ""
+
+#: src/pages/import/LocalImportPage.tsx
+msgid "Import is not available right now. Try again in a moment."
 msgstr ""
 
 #: src/pages/MemoryImportExport.tsx
@@ -4721,7 +4748,7 @@ msgstr "Bunları ortak hafızana taşı."
 msgid "Move to"
 msgstr "Taşı"
 
-#. placeholder {0}: targets.find((target) => target.id === bot.pending?.targetId)?.name ?? t`computer`
+#. placeholder {0}: pendingName(bot.pending.targetId) ?? t`computer`
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Move to {0}?"
 msgstr ""
@@ -4733,6 +4760,10 @@ msgstr ""
 #. placeholder {0}: value.minimumFreeGb
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Move when this Mac has under {0} GB free"
+msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Moving a computer onto the machine running Ardur Bot is not available yet. Choose a saved connection or keep the current engine."
 msgstr ""
 
 #: src/pages/MemoryImportExport.tsx
@@ -6927,11 +6958,6 @@ msgstr ""
 msgid "Some entries have unsupported names and are hidden ({hiddenCount})."
 msgstr "Bazı öğelerin adları desteklenmediği için gizlendi ({hiddenCount})."
 
-#. placeholder {0}: manifest.unscanned
-#: src/pages/import/LocalImportPage.tsx
-msgid "Some items exceeded the scan limits ({0} items were not scanned)."
-msgstr ""
-
 #: src/pages/import/LocalImportPage.tsx
 msgid "Some items exceeded the scan limits."
 msgstr ""
@@ -7369,7 +7395,9 @@ msgstr "bu bilgisayar"
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/account/AccountTables.tsx
 #: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/ide/IdePage.tsx
 msgid "This computer"
@@ -7387,12 +7415,18 @@ msgstr ""
 msgid "this Mac"
 msgstr "bu Mac"
 
+#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/HostComputerSettings.tsx
 msgid "This Mac"
 msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
 msgid "This model is not available on your account. Choose another model."
+msgstr ""
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "This moves the computer from {sourceLabel} to {destinationLabel} and replaces its files. Continue?"
 msgstr ""
 
 #: src/pages/MemorySettingsOverlay.tsx

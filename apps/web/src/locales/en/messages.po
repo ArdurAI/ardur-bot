@@ -87,6 +87,11 @@ msgstr "{0} handling"
 msgid "{0} imported, {1} updated, {2} unchanged, {3} removed, {4} skipped, {5} conflicts, {6} failed."
 msgstr "{0} imported, {1} updated, {2} unchanged, {3} removed, {4} skipped, {5} conflicts, {6} failed."
 
+#. placeholder {0}: manifest.unscanned
+#: src/pages/import/LocalImportPage.tsx
+msgid "{0} items were not scanned because of the scan limits."
+msgstr "{0} items were not scanned because of the scan limits."
+
 #. placeholder {0}: format(size / 1024)
 #: src/components/ArtifactFileCard.tsx
 msgid "{0} KB"
@@ -1377,6 +1382,10 @@ msgstr "Choose a bot shape, color, or upload an image"
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Choose a bot…"
 msgstr "Choose a bot…"
+
+#: src/pages/import/LocalImportPage.tsx
+msgid "Choose a folder inside your home folder."
+msgstr "Choose a folder inside your home folder."
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Choose a model"
@@ -2828,6 +2837,10 @@ msgstr "Default ({0})"
 msgid "Default board"
 msgstr "Default board"
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Default computer"
+msgstr "Default computer"
+
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Default scope"
 msgstr "Default scope"
@@ -2917,10 +2930,13 @@ msgstr "Dependencies"
 msgid "Deploy private key"
 msgstr "Deploy private key"
 
-#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Deployment default"
 msgstr "Deployment default"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Deployment default ({defaultLabel})"
+msgstr "Deployment default ({defaultLabel})"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Describe what this bot does"
@@ -3084,6 +3100,14 @@ msgstr "Docker"
 msgid "Docker limits access to your computer for added security. Using {hostLabel} lets bots work with your local files and tools."
 msgstr "Docker limits access to your computer for added security. Using {hostLabel} lets bots work with your local files and tools."
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Docker on this computer"
+msgstr "Docker on this computer"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Docker on this Mac"
+msgstr "Docker on this Mac"
+
 #: src/pages/KnowledgeSection.tsx
 msgid "Document"
 msgstr "Document"
@@ -3220,10 +3244,9 @@ msgstr "Engage when... Ignore..."
 msgid "Engine endpoint"
 msgstr "Engine endpoint"
 
-#. placeholder {0}: engine === "podman" ? "Podman" : engine === "kubernetes" ? "Kubernetes" : engine === "docker" ? "Docker" : engine
 #: src/pages/ComputerProfilesSettings.tsx
-msgid "Engine: {0}"
-msgstr "Engine: {0}"
+msgid "Engine: {label}"
+msgstr "Engine: {label}"
 
 #: src/pages/account/AccountProfile.tsx
 msgid "Engineering"
@@ -3790,6 +3813,10 @@ msgstr "Import could not finish. Check this computer is connected, then re-scan.
 #: src/pages/import/LocalImportPage.tsx
 msgid "Import from {name}"
 msgstr "Import from {name}"
+
+#: src/pages/import/LocalImportPage.tsx
+msgid "Import is not available right now. Try again in a moment."
+msgstr "Import is not available right now. Try again in a moment."
 
 #: src/pages/MemoryImportExport.tsx
 msgid "Import memory bundle"
@@ -4721,7 +4748,7 @@ msgstr "Move them to your shared memory."
 msgid "Move to"
 msgstr "Move to"
 
-#. placeholder {0}: targets.find((target) => target.id === bot.pending?.targetId)?.name ?? t`computer`
+#. placeholder {0}: pendingName(bot.pending.targetId) ?? t`computer`
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Move to {0}?"
 msgstr "Move to {0}?"
@@ -4734,6 +4761,10 @@ msgstr "Move to {name}?"
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Move when this Mac has under {0} GB free"
 msgstr "Move when this Mac has under {0} GB free"
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "Moving a computer onto the machine running Ardur Bot is not available yet. Choose a saved connection or keep the current engine."
+msgstr "Moving a computer onto the machine running Ardur Bot is not available yet. Choose a saved connection or keep the current engine."
 
 #: src/pages/MemoryImportExport.tsx
 msgid "My documents"
@@ -6927,11 +6958,6 @@ msgstr "Software update"
 msgid "Some entries have unsupported names and are hidden ({hiddenCount})."
 msgstr "Some entries have unsupported names and are hidden ({hiddenCount})."
 
-#. placeholder {0}: manifest.unscanned
-#: src/pages/import/LocalImportPage.tsx
-msgid "Some items exceeded the scan limits ({0} items were not scanned)."
-msgstr "Some items exceeded the scan limits ({0} items were not scanned)."
-
 #: src/pages/import/LocalImportPage.tsx
 msgid "Some items exceeded the scan limits."
 msgstr "Some items exceeded the scan limits."
@@ -7369,7 +7395,9 @@ msgstr "this computer"
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/account/AccountTables.tsx
 #: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/ide/IdePage.tsx
 msgid "This computer"
@@ -7387,6 +7415,8 @@ msgstr "This folder is managed by the server."
 msgid "this Mac"
 msgstr "this Mac"
 
+#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/HostComputerSettings.tsx
 msgid "This Mac"
 msgstr "This Mac"
@@ -7394,6 +7424,10 @@ msgstr "This Mac"
 #: src/pages/shell/bot-panel.tsx
 msgid "This model is not available on your account. Choose another model."
 msgstr "This model is not available on your account. Choose another model."
+
+#: src/pages/ComputerProfilesSettings.tsx
+msgid "This moves the computer from {sourceLabel} to {destinationLabel} and replaces its files. Continue?"
+msgstr "This moves the computer from {sourceLabel} to {destinationLabel} and replaces its files. Continue?"
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "This path is on your server, which may be a different machine."

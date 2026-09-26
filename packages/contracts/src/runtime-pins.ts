@@ -69,6 +69,10 @@ export const RuntimeProblemSchema = z.object({
     "locality-denied",
     "runtime-unavailable",
     "runtime-unsupported-computer",
+    // The host's own local-import scan is stale, or one item is not importable; neither is
+    // a lost host, so the transport must not treat them as one.
+    "local-import-rescan",
+    "local-import-item",
   ]),
   pin: RuntimePinSchema,
   reason: z.string(),
@@ -87,9 +91,11 @@ export function runtimePinProblem(
     pin,
     reason,
     actions:
-      pin.runtimeKind === "pi" && code === "pin-credential-missing"
-        ? ["connect", "change-pin"]
-        : ["change-pin"],
+      code === "local-import-rescan" || code === "local-import-item"
+        ? []
+        : pin.runtimeKind === "pi" && code === "pin-credential-missing"
+          ? ["connect", "change-pin"]
+          : ["change-pin"],
   };
 }
 

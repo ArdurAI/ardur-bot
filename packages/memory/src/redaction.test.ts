@@ -59,5 +59,12 @@ describe("memory credential gate", () => {
     expect(() => assertMemorySafe(commit('use a"b\nc now'), ['a"b\nc'])).toThrow(
       MemoryRedactionError,
     );
+    // A known secret stored as a number or boolean, not a string, is still found.
+    expect(() => assertMemorySafe({ ...commit("fine"), pin: 445566 }, ["445566"])).toThrow(
+      MemoryRedactionError,
+    );
+    expect(() => assertMemorySafe({ ...commit("fine"), locked: false }, ["false"])).toThrow(
+      MemoryRedactionError,
+    );
   });
 });

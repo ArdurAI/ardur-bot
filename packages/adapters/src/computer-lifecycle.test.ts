@@ -2061,6 +2061,95 @@ describe("computer replacement", () => {
     }
   });
 
+  it("destroys a same-kind move through its source provider and restores on the target", async () => {
+    const dataDir = await mkdtemp(path.join(tmpdir(), "ardurbot-move-"));
+    const homeRoot = await mkdtemp(path.join(tmpdir(), "ardurbot-move-home-"));
+    const home = new LocalAgentHomeStore(homeRoot);
+    const source = new FakeSandboxProvider();
+    const target = new FakeSandboxProvider();
+    const first = await source.provision({ botId: "bot-1", homePath: dataDir }, context);
+    await source.writeFile(
+      first,
+      { path: "notes/keep.txt", content: new TextEncoder().encode("saved") },
+      context,
+    );
+    const revision = await checkpointComputerWorkspace(home, source, "bot-1", first, context);
+    const computerRecord = {
+      id: "computer-1",
+      homeKey: "bot-1",
+      providerRef: first.providerRef,
+      kind: first.kind,
+      scope: "dedicated",
+      state: "running",
+      connectionId: null,
+      imageProfile: "base",
+      networkEgress: true,
+      controlLeaseId: null,
+      updatedAt: new Date("2024-01-01T00:00:00.000Z"),
+      homeRevision: revision,
+      maintenanceId: "move",
+    };
+    const findUniqueOrThrow = vi
+      .fn()
+      .mockResolvedValueOnce(computerRecord)
+      .mockResolvedValue({
+        ...computerRecord,
+        state: "stopped",
+        providerRef: null,
+      });
+    const prisma = {
+      computer: {
+        findUniqueOrThrow,
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+      computerExecutionLease: { deleteMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      run: {
+        findFirst: vi
+          .fn()
+          .mockResolvedValueOnce({
+            id: "run",
+            botId: "bot-1",
+            status: "running",
+            runtimeComputer: null,
+            placement: { status: "moving" },
+          })
+          .mockResolvedValue(null),
+      },
+    } as unknown as PrismaClient;
+    const sourceDestroy = vi.spyOn(source, "destroy");
+    const targetDestroy = vi.spyOn(target, "destroy");
+    try {
+      const moved = await replaceComputer(
+        {
+          prisma,
+          sandbox: source,
+          home,
+          jobs: {} as JobPublisher,
+          events: {} as ThreadEvents,
+          dataDir,
+        },
+        "computer-1",
+        "update",
+        { ...context, operationId: "move", runId: "run" },
+        "none",
+        undefined,
+        { imageProfile: "base", connectionId: null, placementRunId: "run" },
+        target,
+      );
+      expect(sourceDestroy).toHaveBeenCalledWith(
+        expect.objectContaining({ providerRef: first.providerRef, kind: first.kind }),
+        expect.any(Object),
+      );
+      expect(targetDestroy).not.toHaveBeenCalled();
+      expect(
+        new TextDecoder().decode(await target.readFile(moved, "notes/keep.txt", context)),
+      ).toBe("saved");
+    } finally {
+      await rm(dataDir, { recursive: true, force: true });
+      await rm(homeRoot, { recursive: true, force: true });
+    }
+  });
+
   it("rejects replacement while another team bot holds the computer", async () => {
     const prisma = {
       computer: {

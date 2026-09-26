@@ -25,6 +25,7 @@ export class NoneSandboxProvider implements SandboxProvider {
   describe() {
     return {
       id: "none",
+      kind: null,
       contractVersion: "1",
       adapterVersion: "0.1.0",
       capabilities: {

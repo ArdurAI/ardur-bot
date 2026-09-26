@@ -4,7 +4,7 @@ import { ComputerProfileSchema } from "./computer-profiles.js";
 import { ConcurrentRunsSchema, ContextSnapshotSchema, RoutingRuleSchema } from "./context.js";
 import { LocalityPolicySchema } from "./delegation.js";
 import { ThreadMessageSchema } from "./events.js";
-import { RunPlacementSchema } from "./fleet.js";
+import { HostLabelSchema, RunPlacementSchema } from "./fleet.js";
 import { Id, MemoryScope, RunStatus, RunTriggerSchema, SandboxKind } from "./ids.js";
 import { SpaceToolPoliciesSchema } from "./integration-catalog.js";
 import { LearningJourneyEntrySchema, LearningObservationSchema } from "./learning.js";
@@ -863,6 +863,7 @@ export const ComputerStatusSchema = z.object({
   homeRevision: z.string().nullable(),
   busyBotName: z.string().nullable(),
   canUpdate: z.boolean(),
+  hostLabel: HostLabelSchema.optional(),
 });
 export type ComputerStatus = z.infer<typeof ComputerStatusSchema>;
 

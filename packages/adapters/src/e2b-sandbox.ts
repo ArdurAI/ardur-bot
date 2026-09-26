@@ -97,6 +97,7 @@ export class E2BSandboxProvider implements SandboxProvider {
   describe() {
     return {
       id: "e2b",
+      kind: "e2b" as const,
       contractVersion: "1",
       adapterVersion: "0.1.0",
       capabilities: {

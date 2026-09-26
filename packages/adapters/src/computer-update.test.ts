@@ -25,9 +25,19 @@ function fixture(status = "queued") {
     status,
     stage: "preparing",
     updatedAt: new Date(0),
+    configuration: undefined as
+      | {
+          imageProfile: "base" | "developer";
+          connectionId: string | null;
+          confirmed: true;
+        }
+      | undefined,
     computer: {
       id: "computer-1",
       kind: "fake",
+      imageProfile: "base" as "base" | "developer",
+      connectionId: null as string | null,
+      providerRef: "computer-ref",
       scope: "team",
       spaceId: "space",
       userId: "user",
@@ -166,6 +176,62 @@ describe("profile replacement intent", () => {
         configuration: { imageProfile: "developer", connectionId: "engine-1", confirmed: true },
       },
     });
+  });
+  const onDeployment = (deps: Parameters<typeof performComputerUpdate>[0], kind: string) =>
+    Object.assign(deps, {
+      sandbox: { describe: () => ({ id: kind, kind }) },
+      prisma: Object.assign(deps.prisma, {
+        deploymentSettings: { findUnique: async () => ({ computerHost: null }) },
+      }),
+    });
+  it("does not suspend or recreate a computer already on the deployment default", async () => {
+    const { row, deps, computer } = fixture();
+    row.computer.kind = "docker";
+    row.computer.connectionId = null;
+    row.computer.imageProfile = "base";
+    row.configuration = { imageProfile: "base", connectionId: null, confirmed: true };
+    await performComputerUpdate(onDeployment(deps, "docker"), row.id);
+    expect(replacement).not.toHaveBeenCalled();
+    expect(computer.updateMany).not.toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ state: "suspending" }) }),
+    );
+    expect(row.computer).toMatchObject({
+      kind: "docker",
+      connectionId: null,
+      providerRef: "computer-ref",
+    });
+    expect(row.status).toBe("completed");
+  });
+  it("moves a connectionless computer on another engine to the deployment default", async () => {
+    const { row, deps } = fixture();
+    row.computer.kind = "docker";
+    row.configuration = { imageProfile: "base", connectionId: null, confirmed: true };
+    await performComputerUpdate(onDeployment(deps, "e2b"), row.id);
+    expect(replacement).toHaveBeenCalledWith(
+      deps,
+      row.computerId,
+      "update",
+      expect.objectContaining({ operationId: row.id }),
+      "none",
+      expect.any(Function),
+      row.configuration,
+    );
+    expect(row.status).toBe("completed");
+  });
+  it("hands a Settings move to replacement, which routes it by the saved connection", async () => {
+    const { row, deps } = fixture();
+    row.configuration = { imageProfile: "base", connectionId: "remote-2", confirmed: true };
+    await performComputerUpdate(deps, row.id);
+    expect(replacement).toHaveBeenCalledWith(
+      deps,
+      row.computerId,
+      "update",
+      expect.objectContaining({ operationId: row.id, botId: row.botId }),
+      "none",
+      expect.any(Function),
+      row.configuration,
+    );
+    expect(row.status).toBe("completed");
   });
 });
 

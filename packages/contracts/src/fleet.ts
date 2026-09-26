@@ -85,11 +85,43 @@ export const PlacementSettingsSchema = /* @__PURE__ */ (() =>
     minimumFreeGb: z.number().finite().min(0.25).max(65536).default(4),
   }))();
 export type PlacementSettings = z.infer<typeof PlacementSettingsSchema>;
+export const FLEET_KINDS = [
+  "host",
+  "docker",
+  "podman",
+  "kubernetes",
+  "ssh",
+  "tailscale",
+  "default",
+  "e2b",
+  "daytona",
+  "box",
+] as const;
+/** Display names for engines and providers. The host is named by its `HostLabel`. */
+export const ENGINE_LABELS: Readonly<Record<string, string>> = {
+  docker: "Docker",
+  "remote-docker": "Docker",
+  podman: "Podman",
+  kubernetes: "Kubernetes",
+  ssh: "SSH",
+  tailscale: "Tailscale",
+  e2b: "E2B",
+  daytona: "Daytona",
+  box: "Box",
+};
+export const HostLabelSchema = /* @__PURE__ */ (() => z.enum(["This Mac", "This computer"]))();
+export type HostLabel = z.infer<typeof HostLabelSchema>;
+/** The host's name from its Node platform string. */
+export function hostLabel(platform: string): HostLabel {
+  return platform === "darwin" ? "This Mac" : "This computer";
+}
 export const FleetTargetSchema = /* @__PURE__ */ (() =>
   z.object({
     id: z.string(),
     name: z.string(),
-    kind: z.enum(["host", "docker", "podman", "kubernetes", "ssh", "tailscale", "default"]),
+    kind: z.enum(FLEET_KINDS),
+    /** Rows the deployment provides, named by clients in their own language. */
+    builtin: z.enum(["host", "local-docker", "default"]).optional(),
     connectionId: z.string().nullable(),
     state: z.enum(["connected", "discovered", "unavailable"]),
     capacity: CapacitySnapshotSchema,
@@ -111,12 +143,15 @@ export const PlacementDecisionSchema = z.object({
 });
 export type PlacementDecision = z.infer<typeof PlacementDecisionSchema>;
 export const RunPlacementSchema = z.union([
-  PlacementDecisionSchema.extend({ status: z.enum(["pending", "moving", "moved", "failed"]) }),
+  PlacementDecisionSchema.extend({
+    status: z.enum(["pending", "moving", "moved", "failed", "skipped"]),
+  }),
   z.object({ status: z.literal("declined") }),
 ]);
 export const FleetSchema = /* @__PURE__ */ (() =>
   z.object({
     targets: z.array(FleetTargetSchema),
+    hostLabel: HostLabelSchema,
     placement: PlacementSettingsSchema,
     bots: z
       .array(
@@ -148,9 +183,11 @@ export function choosePlacement(
     );
   });
   const current = valid.find((target) => target.id === currentTargetId);
+  // A missing or unreachable current row is not a reason to leave. Free-memory and threshold
+  // both stay put until that computer's own row is connected and fresh.
+  if (!current) return null;
   const threshold = settings.minimumFreeGb * 1024 ** 3;
-  if (settings.mode === "threshold" && (!current || current.capacity.memoryFree! >= threshold))
-    return null;
+  if (settings.mode === "threshold" && current.capacity.memoryFree! >= threshold) return null;
   const ranked = [...valid].sort(
     (a, b) =>
       b.capacity.memoryFree! - a.capacity.memoryFree! ||
@@ -164,13 +201,13 @@ export function choosePlacement(
   if (
     !best ||
     best.id === currentTargetId ||
-    (current && best.capacity.memoryFree! <= current.capacity.memoryFree!)
+    best.capacity.memoryFree! <= current.capacity.memoryFree!
   )
     return null;
   if (settings.mode === "threshold" && best.capacity.memoryFree! < threshold) return null;
   const reason =
     settings.mode === "threshold"
-      ? `${current!.name} had ${(current!.capacity.memoryFree! / 1024 ** 3).toFixed(1)} GB free`
+      ? `${current.name} had ${(current.capacity.memoryFree! / 1024 ** 3).toFixed(1)} GB free`
       : "it had the most free memory";
   return {
     targetId: best.id,

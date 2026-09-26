@@ -191,6 +191,54 @@ describe("host process operations", () => {
     expect(body.content).toBe("A fixture note.");
     expect(provision).not.toHaveBeenCalled();
   });
+  it("reports a stale scan as a distinct rescan problem, not a lost host", async () => {
+    const { agent, frames, root: home, completed } = await fixture();
+    const scanner = new LocalImportScanner({ home, platform: "darwin" });
+    vi.mocked(createLocalImportScanner).mockResolvedValueOnce(scanner);
+    // No scan has run yet, so any scanId is stale: the reviewer's own reproduction.
+    await agent.receive(
+      request({
+        op: "import.read",
+        scanId: "00000000-0000-4000-8000-000000000000",
+        itemId: "00000000-0000-4000-8000-000000000001",
+      }),
+    );
+    await completed("req");
+    expect(frames.at(-1)).toMatchObject({
+      type: "end",
+      id: "req",
+      problem: { code: "local-import-rescan" },
+    });
+  });
+  it("reports an unavailable item as a distinct per-item problem, not a lost host", async () => {
+    const { agent, frames, root: home, completed } = await fixture();
+    const folder = path.join(home, ".claude/projects/fixture/memory");
+    await mkdir(folder, { recursive: true });
+    await writeFile(path.join(folder, "fact.md"), "A fixture note.");
+    const scanner = new LocalImportScanner({ home, platform: "darwin" });
+    vi.mocked(createLocalImportScanner).mockResolvedValueOnce(scanner);
+    await agent.receive(request({ op: "import.scan" }));
+    await completed("req");
+    const manifest = JSON.parse(
+      frames.flatMap((frame) => (frame.type === "stream" ? [String(frame.data)] : [])).join(""),
+    );
+    frames.splice(0);
+    // The scan is current, but this itemId was never in it.
+    await agent.receive({
+      ...request({
+        op: "import.read",
+        scanId: manifest.scanId,
+        itemId: "00000000-0000-4000-8000-000000000099",
+      }),
+      id: "read-request",
+    });
+    await completed("read-request");
+    expect(frames.at(-1)).toMatchObject({
+      type: "end",
+      id: "read-request",
+      problem: { code: "local-import-item" },
+    });
+  });
   it("streams exec stdout, stderr, and exit through the existing provider", async () => {
     vi.spyOn(DesktopSandboxProvider.prototype, "execute").mockImplementation(async function* () {
       yield { type: "stdout", data: "ok" };

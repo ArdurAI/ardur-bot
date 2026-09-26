@@ -56,10 +56,13 @@ export const ComputerConnectionInputSchema = z.object({
     .object({ ca: z.string().max(4096), cert: z.string().max(4096), key: z.string().max(4096) })
     .optional(),
 });
+export const HOST_MOVE_UNAVAILABLE_MESSAGE =
+  "Moving a computer onto the machine running Ardur Bot is not available yet. Choose a saved connection or keep the current engine.";
 export const ComputerConfigurationSchema = z.object({
   botId: z.string().min(1),
-  imageProfile: ComputerProfileSchema,
-  connectionId: z.string().nullable(),
+  imageProfile: ComputerProfileSchema.optional(),
+  /** Omitted keeps the computer where it is; null chooses the deployment default. */
+  connectionId: z.string().nullable().optional(),
   confirmed: z.boolean().default(false),
 });
 export function computerCapabilities(kind: string) {
@@ -71,6 +74,4 @@ export function computerCapabilities(kind: string) {
 
 export const ComputerReplacementConfigurationSchema = ComputerConfigurationSchema.omit({
   botId: true,
-})
-  .partial({ imageProfile: true, connectionId: true })
-  .extend({ networkEgress: z.boolean().optional(), confirmed: z.literal(true) });
+}).extend({ networkEgress: z.boolean().optional(), confirmed: z.literal(true) });
