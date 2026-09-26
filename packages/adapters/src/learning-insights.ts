@@ -154,7 +154,8 @@ export async function loadInsightFacts(
           spaceId,
           userId,
           createdAt: { gte: since(ROUTINE_WINDOW_DAYS) },
-          runs: { some: { trigger: "user", userId } },
+          // A cleared thread deletes its messages; its requests stop counting here too.
+          runs: { some: { trigger: "user", userId, sourceMessageId: { not: null } } },
         },
         select: { botId: true, prompt: true, createdAt: true },
       }),
@@ -412,21 +413,47 @@ export async function refreshLearningInsights(
       : [];
   await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`learning-insights:${identity.spaceId}:${identity.userId}`}, 0))`;
+    // Rows about deleted bots go, including any request text they carried.
+    const bots = await tx.bot.findMany({ where: identity, select: { id: true } });
+    await tx.learningInsight.deleteMany({
+      where: { ...identity, botId: { not: null, notIn: bots.map((bot) => bot.id) } },
+    });
     const stored = await tx.learningInsight.findMany({
       where: identity,
-      select: { id: true, fingerprint: true, status: true, evidence: true, expiresAt: true },
+      select: {
+        id: true,
+        kind: true,
+        fingerprint: true,
+        status: true,
+        evidence: true,
+        expiresAt: true,
+      },
     });
-    const rows = stored.flatMap((row) => {
+    const rows = stored.map((row) => {
       const evidence = InsightEvidenceSchema.safeParse(row.evidence);
-      const status = row.status as "active" | "dismissed" | "acted" | "expired";
-      return evidence.success ? [{ ...row, status, evidence: evidence.data }] : [];
+      // Evidence from an older shape cannot be compared; the row stays reopenable, never duplicated.
+      return evidence.success
+        ? {
+            ...row,
+            status: row.status as "active" | "dismissed" | "acted" | "expired",
+            evidence: evidence.data,
+          }
+        : {
+            ...row,
+            status: "expired" as const,
+            evidence: { kind: "memory-search" as const, documents: 0, bytes: 0 },
+          };
     });
     for (const change of reconcileInsights(rows, computed, now)) {
       if (change.op === "expire") {
-        await tx.learningInsight.updateMany({
-          where: { id: change.id, status: "active" },
-          data: { status: "expired" },
-        });
+        // An expired routine insight has nothing to suppress, so its request text is not kept.
+        if (rows.find((row) => row.id === change.id)?.kind === "routine")
+          await tx.learningInsight.deleteMany({ where: { id: change.id, status: "active" } });
+        else
+          await tx.learningInsight.updateMany({
+            where: { id: change.id, status: "active" },
+            data: { status: "expired" },
+          });
         continue;
       }
       const data = {
@@ -443,7 +470,7 @@ export async function refreshLearningInsights(
       else if (change.op === "refresh")
         await tx.learningInsight.updateMany({ where: { id: change.id, status: "active" }, data });
       else {
-        const previous = rows.find((row) => row.id === change.id)!;
+        const previous = stored.find((row) => row.id === change.id)!;
         await tx.learningInsight.updateMany({
           where: { id: change.id, status: previous.status },
           data: { ...data, status: "active", createdAt: now },

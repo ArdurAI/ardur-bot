@@ -39,7 +39,8 @@ member of every space. Results live in `learning_insights`, one row per person a
 An active insight lapses after two days unless a pass confirms it, and one whose evidence no
 longer holds expires at the next pass. Dismiss hides an insight for 90 days unless its count at
 least doubles; a different suggested model is a different insight. Using the action records it
-the same way.
+the same way. Requests from a cleared thread stop counting, an expired routine insight keeps no
+request text, and insights about a deleted bot are removed.
 
 The Learning page lists at most five active insights, highest impact first: failing work, then
 connections, model choice, approvals, routines and setup. A bot's Learning panel lists that bot's

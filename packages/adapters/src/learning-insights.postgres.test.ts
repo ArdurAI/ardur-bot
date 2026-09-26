@@ -88,6 +88,16 @@ describePostgres("learning insights aggregation (PostgreSQL)", () => {
         status: "done",
       },
     });
+    const message = await prisma.message.create({
+      data: {
+        threadId,
+        seq: next(),
+        role: "user",
+        origin: "human-typed",
+        actorId: userId,
+        blocks: [{ kind: "text", text: input.prompt ?? "Fix the build" }],
+      },
+    });
     const created = await prisma.run.create({
       data: {
         spaceId,
@@ -97,6 +107,7 @@ describePostgres("learning insights aggregation (PostgreSQL)", () => {
         userId,
         status: input.status,
         trigger: "user",
+        sourceMessageId: message.id,
         runtimePin: input.pin,
         error: input.error ?? null,
         startedAt,
@@ -254,7 +265,7 @@ describePostgres("learning insights aggregation (PostgreSQL)", () => {
       });
     for (let i = 0; i < 3; i += 1) {
       const message = await prisma.message.create({
-        data: { threadId: `thread-${coder.id}`, seq: i + 1, role: "bot", blocks: [] },
+        data: { threadId: `thread-${coder.id}`, seq: next(), role: "bot", blocks: [] },
       });
       await prisma.feedback.create({
         data: {
@@ -385,6 +396,46 @@ describePostgres("learning insights aggregation (PostgreSQL)", () => {
     ).toMatchObject({
       status: "expired",
     });
+  });
+
+  it("drops cleared requests and deleted bots, and reopens rows from an older evidence shape", async () => {
+    const routine = (await listLearningInsights(prisma, owner)).find(
+      (insight) => insight.evidence.kind === "routine",
+    )!;
+    const { fingerprint } = await prisma.learningInsight.findUniqueOrThrow({
+      where: { id: routine.id },
+    });
+    await prisma.learningInsight.update({
+      where: { id: routine.id },
+      data: { evidence: { kind: "routine", shape: "older" } },
+    });
+    await refreshLearningInsights(prisma, owner);
+    const rows = await prisma.learningInsight.findMany({ where: { ...owner, fingerprint } });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ id: routine.id, status: "active", evidence: { count: 3 } });
+
+    const temporary = await bot(ownerId, "Temporary", gpt);
+    await prisma.learningInsight.create({
+      data: {
+        ...owner,
+        botId: temporary.id,
+        kind: "routine",
+        fingerprint: `routine:deleted-${suffix}`,
+        status: "dismissed",
+        evidence: { kind: "routine", botName: "Temporary", prompt: "Private", count: 3, days: 14 },
+        action: { kind: "routine", botId: temporary.id, prompt: "Private" },
+        expiresAt: new Date(Date.now() + 86_400_000),
+      },
+    });
+    await prisma.bot.delete({ where: { id: temporary.id } });
+    await refreshLearningInsights(prisma, owner);
+    expect(await prisma.learningInsight.count({ where: { botId: temporary.id } })).toBe(0);
+
+    // Clearing the thread deletes its messages; those requests no longer count, and the
+    // expired routine insight does not keep their text.
+    await prisma.message.deleteMany({ where: { threadId: `thread-${coderId}` } });
+    await refreshLearningInsights(prisma, owner);
+    expect(await prisma.learningInsight.count({ where: { ...owner, fingerprint } })).toBe(0);
   });
 
   it("shows nothing and computes nothing while the owner has insights turned off", async () => {
