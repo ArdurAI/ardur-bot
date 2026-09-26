@@ -1,4 +1,11 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes, scryptSync } from "node:crypto";
+import {
+  createCipheriv,
+  createDecipheriv,
+  createHash,
+  createHmac,
+  randomBytes,
+  scryptSync,
+} from "node:crypto";
 import type { AdapterContext, SecretRecord, SecretStore } from "@ardurbot/adapter-kit";
 
 const VERSION_PREFIX = "v2:";
@@ -42,6 +49,17 @@ export class EncryptedSecretStore implements SecretStore {
     const enc = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
     const tag = cipher.getAuthTag();
     return `${VERSION_PREFIX}${Buffer.concat([salt, iv, tag, enc]).toString("base64")}`;
+  }
+
+  /**
+   * A keyed digest of `value` for one purpose, for values the server compares but never shows.
+   * Without this deployment's key nobody can confirm a guess against it.
+   */
+  digest(purpose: string, value: string): string {
+    const key = createHmac("sha256", this.encryptionKey)
+      .update(`ardurbot:digest:${purpose}:v1`)
+      .digest();
+    return createHmac("sha256", key).update(value).digest("hex");
   }
 
   async get(id: string, _context: AdapterContext): Promise<string> {

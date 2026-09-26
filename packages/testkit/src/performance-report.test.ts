@@ -1,3 +1,4 @@
+import { nextFence } from "@ardurbot/core";
 import { describe, expect, it } from "vitest";
 import { createTraceBuffer } from "../../adapters/src/scoreboard-trace.js";
 import {
@@ -24,6 +25,7 @@ import {
   parsePerformanceEvidenceReport,
   readPerformanceReport,
 } from "./performance-report.js";
+import { matrixEvidence } from "./scoreboard/experiments/evidence.js";
 import {
   CRASH_BOUNDARIES,
   contentDigest,
@@ -32,7 +34,7 @@ import {
   SCOREBOARD_MANIFEST,
   TASK_DEFINITIONS,
 } from "./scoreboard/manifest.js";
-import { collectTraceEvidence } from "./scoreboard/trace-collector.js";
+import { collectTraceEvidence, SCRIPTED_TRACE_BOUNDARIES } from "./scoreboard/trace-collector.js";
 
 describe("performance report statistics", () => {
   it("summarizes a distribution without mutating it", () => {
@@ -629,6 +631,115 @@ describe("request usage attribution", () => {
 });
 
 describe("task, experiment and recovery evidence", () => {
+  it("accepts a measured crash finding emitted by the matrix evidence adapter", () => {
+    const report = evidence();
+    report.crashes = matrixEvidence([
+      {
+        id: "crash-04",
+        experiment: "O9",
+        tier: "T1",
+        status: "finding",
+        checks: { killedAtBoundary: true, noDuplicateEffect: false },
+        measurements: {},
+        coverage: [],
+        gaps: [],
+      },
+    ]).crashes;
+    expect(() => parsePerformanceEvidenceReport(report, "matrix-finding")).not.toThrow();
+  });
+  it("accepts a complete crash from the matrix adapter only with trace links", () => {
+    const stored = SCRIPTED_TRACE_BOUNDARIES;
+    const killedOrigin = 1_700_000_000_000;
+    const recoveredOrigin = 1_700_000_004_000;
+    const phase = (
+      processId: string,
+      points: readonly (typeof stored)[number][],
+      attempt: number,
+      timeOrigin: number,
+    ) => {
+      const buffer = createTraceBuffer({ processId, now: () => 1, timeOrigin });
+      let at = 0;
+      for (const boundary of points) {
+        const operation =
+          boundary.startsWith("provider.") || boundary.startsWith("tool.")
+            ? { operationId: boundary.startsWith("tool.") ? "tool-1" : "provider-1", attempt }
+            : {};
+        buffer.record(
+          "fixture-run",
+          boundary,
+          boundary === "terminal.committed" ? { outcome: "success" } : operation,
+          at,
+        );
+        at += 1;
+      }
+      return {
+        ...collectTraceEvidence([buffer.snapshot()], {
+          sessionId: "matrix-fault",
+          pairId: null,
+          requiredBoundaries: stored,
+        }),
+        requiredBoundaries: [...stored],
+      };
+    };
+    const crash = {
+      id: "crash-04",
+      experiment: "O9" as const,
+      tier: "T1" as const,
+      status: "passed" as const,
+      checks: { killedAtBoundary: true, noDuplicateEffect: true },
+      measurements: {
+        before: {
+          trace: phase(
+            "interrupted-worker",
+            stored.filter(
+              (boundary) => boundary !== "tool.finished" && boundary !== "terminal.committed",
+            ),
+            0,
+            killedOrigin,
+          ),
+        },
+        after: {
+          autonomousCompletion: false,
+          trace: phase(
+            "recovered-worker",
+            ["tool.finished", "terminal.committed"],
+            nextFence(0),
+            recoveredOrigin,
+          ),
+        },
+      },
+      coverage: [],
+      gaps: [],
+    };
+    const fragments = matrixEvidence([crash]);
+    const report = evidence();
+    report.crashes = fragments.crashes;
+    expect(report.crashes[3]).toMatchObject({
+      status: "complete",
+      recovery: "explicit-uncertainty",
+      safetyPassed: true,
+      taskCompleted: false,
+    });
+    expect(report.crashes[3]!.traceIds).toHaveLength(1);
+    report.traces.push(...fragments.traces);
+    report.artifacts.push(...fragments.artifacts);
+    expect(() =>
+      assertRequiredEvidence(report, required({ crashBoundaryIds: ["crash-04"] })),
+    ).not.toThrow();
+    const untraced = evidence();
+    untraced.crashes = matrixEvidence([
+      { ...crash, measurements: { after: { autonomousCompletion: false } } },
+    ]).crashes;
+    expect(untraced.crashes[3]).toMatchObject({
+      status: "incomplete",
+      missingReason: "trace-links-missing",
+      traceIds: [],
+    });
+    expect(() => parsePerformanceEvidenceReport(untraced, "untraced-crash")).not.toThrow();
+    expect(() =>
+      assertRequiredEvidence(untraced, required({ crashBoundaryIds: ["crash-04"] })),
+    ).toThrow();
+  });
   it("preserves task failures separately from evidence completeness", () => {
     const report = evidence();
     const task = report.tasks[0]!;

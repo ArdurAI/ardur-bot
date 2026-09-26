@@ -20,6 +20,7 @@ describe("bounded production trace", () => {
     buffer.record("run-a", "tool.started", detail);
     buffer.record("run-a", "tool.finished", { outcome: "failed" });
     buffer.record("run-a", "terminal.committed", { outcome: "failed" });
+    expect(buffer.snapshot().timeOrigin).toBe(performance.timeOrigin);
     expect(buffer.snapshot().counters).toEqual({
       recorded: 2,
       dropped: 1,
@@ -44,6 +45,21 @@ describe("bounded production trace", () => {
       second.snapshot().points.map((p) => p.traceId),
     );
     expect(first.snapshot().counters.sampledOut).toBeGreaterThan(0);
+  });
+
+  it("widens the published clock uncertainty from a later re-sample, and never narrows it", () => {
+    let sample = 5;
+    const buffer = createTraceBuffer({
+      clockUncertaintyMs: 5,
+      measureClockUncertaintyMs: () => sample,
+    });
+    expect(buffer.snapshot().clockUncertaintyMs).toBe(5);
+    // A wall-clock step after the buffer started (an NTP correction, a suspend) widens the bound.
+    sample = 400;
+    expect(buffer.snapshot().clockUncertaintyMs).toBe(400);
+    // A later, smaller sample never narrows what has already been published.
+    sample = 10;
+    expect(buffer.drain().clockUncertaintyMs).toBe(400);
   });
 
   it("keeps telemetry clock failures and invalid values off the product failure path", () => {

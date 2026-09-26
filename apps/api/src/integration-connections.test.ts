@@ -307,6 +307,17 @@ describe("catalog connection lifecycle", () => {
       expect(f.row()).toMatchObject({ connectionState: "connected", manifest });
     },
   );
+  it("reports a disabled row as disabled, not as replaced by a newer attempt", async () => {
+    const f = fixture();
+    f.setRow({ catalogId: null, enabled: false, connectionState: "not-connected" });
+    expect(
+      await f.service.beginAuthorization(actor, {
+        serverId: "connection",
+        redirectUri: "https://app.example.test/mcp/oauth/callback",
+      }),
+    ).toEqual({ status: "disabled" });
+    expect(f.oauth.begin).not.toHaveBeenCalled();
+  });
   it("waits for OAuth consent before discovering a custom server", async () => {
     const f = fixture();
     const tools = vi.spyOn(f.service, "tools");
@@ -711,6 +722,32 @@ describe("catalog connection lifecycle", () => {
       connectionState: "needs-sign-in",
       pendingOauthSessionId: null,
       lastError: "Needs sign-in.",
+    });
+  });
+  it("settles a re-authorization attempt even when restoring the old tokens changes the secret id", async () => {
+    const f = fixture();
+    f.setRow({
+      catalogId: null,
+      secretId: "old-secret",
+      connectionState: "connected",
+      pendingOauthSessionId: "session",
+      lastError: null,
+    });
+    vi.spyOn(McpConnector.prototype, "inspectServer").mockRejectedValue(
+      new McpReauthorizationRequiredError("connection"),
+    );
+    // A real restore writes the prior tokens back under a new secret id while the pending
+    // id is still reserved, exactly like a live restorePriorConnected would.
+    f.oauth.restorePriorConnected.mockImplementation(async () => {
+      f.setRow({ secretId: "restored-secret" });
+      return true;
+    });
+    await expect(f.service.capture(actor, "connection", "session")).rejects.toThrow();
+    expect(f.row()).toMatchObject({
+      connectionState: "connected",
+      pendingOauthSessionId: null,
+      secretId: "restored-secret",
+      lastError: "Needs sign-in (refresh_unavailable).",
     });
   });
   it("does not let an older oauth session change a newer attempt", async () => {

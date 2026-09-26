@@ -66,6 +66,15 @@ msgstr "{0} default"
 msgid "{0} documents, {1} revisions"
 msgstr "{0} documents, {1} revisions"
 
+#. placeholder {0}: row.name
+#. placeholder {1}: row.filed
+#. placeholder {2}: row.done
+#. placeholder {3}: row.open
+#. placeholder {4}: row.other
+#: src/pages/dashboard/WorkPanel.tsx
+msgid "{0} filed {1}: {2} done, {3} open, {4} closed without being completed."
+msgstr "{0} filed {1}: {2} done, {3} open, {4} closed without being completed."
+
 #. placeholder {0}: (memoryFree / 1024 ** 3).toFixed(1)
 #: src/pages/fleet/FleetSettings.tsx
 msgid "{0} GB free"
@@ -240,6 +249,10 @@ msgstr "7 days"
 msgid "A bit of everything"
 msgstr "A bit of everything"
 
+#: src/lib/board-close-copy.ts
+msgid "A board item filed by a bot could not be closed."
+msgstr "A board item filed by a bot could not be closed."
+
 #: src/components/DesktopUpdates.tsx
 msgid "A new version is available — download"
 msgstr "A new version is available — download"
@@ -266,6 +279,7 @@ msgstr "Acceptance"
 
 #: src/pages/board/Board.tsx
 #: src/pages/board/ItemForm.tsx
+#: src/pages/LearningInbox.tsx
 msgid "Acceptance criteria"
 msgstr "Acceptance criteria"
 
@@ -274,6 +288,7 @@ msgstr "Acceptance criteria"
 msgid "Accepted"
 msgstr "Accepted"
 
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Access token"
 msgstr "Access token"
@@ -786,6 +801,10 @@ msgstr "Ardur (built-in)"
 msgid "Ardur Bot reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history."
 msgstr "Ardur Bot reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history."
 
+#: src/lib/board-close-copy.ts
+msgid "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected."
+msgstr "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected."
+
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Arguments"
@@ -1196,6 +1215,7 @@ msgstr "Can't reach the server."
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/customize/ConfigureExtension.tsx
 #: src/pages/customize/McpConfigEditor.tsx
+#: src/pages/customize/McpCredentialFix.tsx
 #: src/pages/customize/PluginsPage.tsx
 #: src/pages/fleet/FleetSettings.tsx
 #: src/pages/import/ImportedServerCredentials.tsx
@@ -1552,6 +1572,10 @@ msgstr "Close voice settings"
 #: src/pages/board/Board.tsx
 msgid "Close when the bot reports done"
 msgstr "Close when the bot reports done"
+
+#: src/pages/LearningInbox.tsx
+msgid "Closing on the Board."
+msgstr "Closing on the Board."
 
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Cloud"
@@ -2517,6 +2541,14 @@ msgstr "Could not save that voice"
 msgid "Could not save this choice"
 msgstr "Could not save this choice"
 
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Could not save this credential. Check it and try again."
+msgstr "Could not save this credential. Check it and try again."
+
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Could not save. Try again."
+msgstr "Could not save. Try again."
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not search catalog"
 msgstr "Could not search catalog"
@@ -2937,6 +2969,7 @@ msgid "Describe what this bot does"
 msgstr "Describe what this bot does"
 
 #: src/pages/board/ItemForm.tsx
+#: src/pages/LearningInbox.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Description"
 msgstr "Description"
@@ -3225,6 +3258,10 @@ msgstr "Email"
 #: src/pages/McpServersOverlay.tsx
 msgid "Enable"
 msgstr "Enable"
+
+#: src/lib/mcp-sign-in.ts
+msgid "Enable this server first, then sign in."
+msgstr "Enable this server first, then sign in."
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Engage when... Ignore..."
@@ -3667,11 +3704,17 @@ msgstr "Hang up, then enter the code on screen."
 msgid "header"
 msgstr "header"
 
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Header"
+msgstr "Header"
+
+#: src/pages/customize/McpCredentialFix.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Header name"
 msgstr "Header name"
 
+#: src/pages/customize/McpCredentialFix.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Header value"
 msgstr "Header value"
@@ -4040,6 +4083,10 @@ msgstr "Keep computer awake"
 msgid "Keep for recovery"
 msgstr "Keep for recovery"
 
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Keep header"
+msgstr "Keep header"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Keep here"
 msgstr "Keep here"
@@ -4051,6 +4098,10 @@ msgstr "Keep memories"
 #: src/pages/MemoryImportExport.tsx
 msgid "Keep scope"
 msgstr "Keep scope"
+
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Keep token"
+msgstr "Keep token"
 
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Keep working when the window is closed"
@@ -4081,6 +4132,7 @@ msgid "Label"
 msgstr "Label"
 
 #: src/pages/board/ItemForm.tsx
+#: src/pages/LearningInbox.tsx
 msgid "Labels"
 msgstr "Labels"
 
@@ -4362,6 +4414,7 @@ msgstr "Make sure nothing is still running on this computer."
 #: src/pages/memory/MemorySettings.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/PrivacySettings.tsx
+#: src/pages/shell/message-cards.tsx
 msgid "Manage"
 msgstr "Manage"
 
@@ -4823,6 +4876,10 @@ msgstr "Network control is unavailable on this computer."
 #: src/pages/DevicesSettings.tsx
 msgid "Never"
 msgstr "Never"
+
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "New access token"
+msgstr "New access token"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "New bot"
@@ -6444,6 +6501,7 @@ msgstr "Sans"
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/board/ItemForm.tsx
 #: src/pages/customize/ConfigureExtension.tsx
+#: src/pages/customize/McpCredentialFix.tsx
 #: src/pages/DevicesSettings.tsx
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/GroupPanel.tsx
@@ -7333,6 +7391,35 @@ msgstr "Thinking"
 msgid "This action could not finish; try again."
 msgstr "This action could not finish; try again."
 
+#: src/pages/LearningInbox.tsx
+msgid "This board item changed after it was filed, so it was left open for review on the Board."
+msgstr "This board item changed after it was filed, so it was left open for review on the Board."
+
+#: src/pages/LearningInbox.tsx
+msgid "This board item changed after it was filed. Review it on the Board."
+msgstr "This board item changed after it was filed. Review it on the Board."
+
+#: src/pages/LearningInbox.tsx
+msgid "This board item is still open."
+msgstr "This board item is still open."
+
+#: src/pages/LearningInbox.tsx
+msgid "This board item was already closed on the Board."
+msgstr "This board item was already closed on the Board."
+
+#. placeholder {0}: proposal.boardOutcome.closeReason
+#: src/pages/LearningInbox.tsx
+msgid "This board item was closed without being completed: {0}. Review it on the Board."
+msgstr "This board item was closed without being completed: {0}. Review it on the Board."
+
+#: src/pages/LearningInbox.tsx
+msgid "This board item was closed without being completed. Review it on the Board."
+msgstr "This board item was closed without being completed. Review it on the Board."
+
+#: src/pages/LearningInbox.tsx
+msgid "This board item was completed."
+msgstr "This board item was completed."
+
 #: src/pages/shell/provider-error-message.tsx
 msgid "This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin."
 msgstr "This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin."
@@ -7444,7 +7531,7 @@ msgstr "This server did not offer browser sign-in. Enter a token instead."
 msgid "This server did not request browser authorization."
 msgstr "This server did not request browser authorization."
 
-#: src/pages/McpServersOverlay.tsx
+#: src/pages/customize/McpCredentialFix.tsx
 msgid "This server has two credentials. Keep one."
 msgstr "This server has two credentials. Keep one."
 
@@ -7500,6 +7587,7 @@ msgid "Timeline"
 msgstr "Timeline"
 
 #: src/pages/board/ItemForm.tsx
+#: src/pages/LearningInbox.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Title"
 msgstr "Title"
@@ -7519,6 +7607,10 @@ msgstr "Today"
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "Today (UTC)"
 msgstr "Today (UTC)"
+
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Token"
+msgstr "Token"
 
 #: src/pages/CompareStart.tsx
 msgid "Token reservation"
@@ -7683,6 +7775,10 @@ msgstr "Update available"
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Update computer"
 msgstr "Update computer"
+
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Update credential"
+msgstr "Update credential"
 
 #: src/pages/import/ImportedServerCredentials.tsx
 msgid "Update credentials"

@@ -1,5 +1,6 @@
 import { oc } from "@orpc/contract";
 import { z } from "zod";
+import { BoardLabelSchema } from "./board-label.js";
 
 export const BOARD_TYPES = [
   "task",
@@ -43,11 +44,7 @@ const text = z
   .string()
   .max(32_000)
   .refine((s) => !s.includes("\0"));
-const label = z
-  .string()
-  .min(1)
-  .max(100)
-  .regex(/^[^,\r\n\0]+$/);
+const label = BoardLabelSchema;
 export const BoardDependencySchema = z.object({
   id: z.string(),
   type: z.string(),
@@ -92,6 +89,7 @@ export const WorkItemSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string(),
   closedAt: z.string().nullable(),
+  closeReason: z.string().optional(),
   commentCount: z.number().int(),
   comments: z.array(BoardCommentSchema),
   history: z.array(BoardHistorySchema),
@@ -256,6 +254,15 @@ export const BoardWorkSchema = z.object({
   items: z.array(WorkItemSchema),
 });
 export type BoardWork = z.infer<typeof BoardWorkSchema>;
+export const BoardFilingOutcomeCountSchema = z.object({
+  botId: z.string(),
+  name: z.string(),
+  filed: z.number().int().nonnegative(),
+  done: z.number().int().nonnegative(),
+  open: z.number().int().nonnegative(),
+  other: z.number().int().nonnegative(),
+});
+export type BoardFilingOutcomeCount = z.infer<typeof BoardFilingOutcomeCountSchema>;
 export const BoardConfigurationSchema = z.object({
   name: text.min(1).max(100).optional(),
   enabled: z.boolean().optional(),
@@ -271,6 +278,9 @@ export const boardContract = {
     .input(z.object({ workspaceId: z.string().optional(), itemId: BoardItemIdSchema.optional() }))
     .output(BoardViewSchema),
   work: oc.input(z.object({})).output(BoardWorkSchema),
+  filingOutcomes: oc
+    .input(z.object({}))
+    .output(z.object({ bots: z.array(BoardFilingOutcomeCountSchema) })),
   configure: oc
     .input(workspaceInput.extend({ patch: BoardConfigurationSchema }))
     .output(BoardWorkspaceSchema),

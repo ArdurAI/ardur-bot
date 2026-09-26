@@ -133,11 +133,9 @@ builds come later and require an explicit change to this policy.
 4. Wait for the pre-release assets. Download the DMG matching the Mac architecture, drag
    **Ardur Bot.app** to **Applications**, eject the DMG, and follow the unsigned-opening steps
    in the [README](../README.md#install-a-desktop-preview). Open it, confirm the version in update
-   settings, and complete setup. **This computer** starts the app's own database and services.
-   On this computer, commands start in the bot's own folder or a folder you add, and file tools
-   stay inside those folders; the approvals you require are what keep a command away from other
-   files. Known secrets are hidden from command output. Disk and CPU use are not capped; a command
-   stops after five minutes. Connecting to an existing server is
+   settings, and complete setup. **This computer** starts the app's own database and services; see
+   [what commands can do on this computer](self-host.md#what-commands-can-do-on-this-computer).
+   Connecting to an existing server is
    unchanged. On Windows, stopping that database uses the embedded Postgres library's forced
    process-tree kill, and the next start uses Postgres crash recovery.
 5. Verify a real installed build before deciding whether `main` should move. Create a bot and

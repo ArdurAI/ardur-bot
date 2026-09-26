@@ -66,6 +66,15 @@ msgstr "{0} по умолчанию"
 msgid "{0} documents, {1} revisions"
 msgstr ""
 
+#. placeholder {0}: row.name
+#. placeholder {1}: row.filed
+#. placeholder {2}: row.done
+#. placeholder {3}: row.open
+#. placeholder {4}: row.other
+#: src/pages/dashboard/WorkPanel.tsx
+msgid "{0} filed {1}: {2} done, {3} open, {4} closed without being completed."
+msgstr "{0} создал задач: {1}; выполнено: {2}, открыто: {3}, закрыто без выполнения: {4}."
+
 #. placeholder {0}: (memoryFree / 1024 ** 3).toFixed(1)
 #: src/pages/fleet/FleetSettings.tsx
 msgid "{0} GB free"
@@ -240,6 +249,10 @@ msgstr "7 дней"
 msgid "A bit of everything"
 msgstr ""
 
+#: src/lib/board-close-copy.ts
+msgid "A board item filed by a bot could not be closed."
+msgstr "Не удалось закрыть задачу на доске, созданную ботом."
+
 #: src/components/DesktopUpdates.tsx
 msgid "A new version is available — download"
 msgstr ""
@@ -266,6 +279,7 @@ msgstr ""
 
 #: src/pages/board/Board.tsx
 #: src/pages/board/ItemForm.tsx
+#: src/pages/LearningInbox.tsx
 msgid "Acceptance criteria"
 msgstr ""
 
@@ -274,6 +288,7 @@ msgstr ""
 msgid "Accepted"
 msgstr ""
 
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Access token"
 msgstr "Токен доступа"
@@ -786,6 +801,10 @@ msgstr ""
 msgid "Ardur Bot reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history."
 msgstr ""
 
+#: src/lib/board-close-copy.ts
+msgid "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected."
+msgstr "Ardur Bot попытался пять раз. Закройте её на доске или проверьте, что этот компьютер подключён."
+
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Arguments"
@@ -1196,6 +1215,7 @@ msgstr "Не удаётся связаться с сервером."
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/customize/ConfigureExtension.tsx
 #: src/pages/customize/McpConfigEditor.tsx
+#: src/pages/customize/McpCredentialFix.tsx
 #: src/pages/customize/PluginsPage.tsx
 #: src/pages/fleet/FleetSettings.tsx
 #: src/pages/import/ImportedServerCredentials.tsx
@@ -1552,6 +1572,10 @@ msgstr "Закрыть настройки голоса"
 #: src/pages/board/Board.tsx
 msgid "Close when the bot reports done"
 msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Closing on the Board."
+msgstr "Закрывается на доске."
 
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Cloud"
@@ -2517,6 +2541,14 @@ msgstr "Не удалось сохранить этот голос"
 msgid "Could not save this choice"
 msgstr "Не удалось сохранить этот выбор."
 
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Could not save this credential. Check it and try again."
+msgstr "Не удалось сохранить эти учётные данные. Проверьте их и повторите попытку."
+
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Could not save. Try again."
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not search catalog"
 msgstr "Не удалось выполнить поиск по каталогу"
@@ -2937,6 +2969,7 @@ msgid "Describe what this bot does"
 msgstr "Опишите, что делает этот бот"
 
 #: src/pages/board/ItemForm.tsx
+#: src/pages/LearningInbox.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Description"
 msgstr "Описание"
@@ -3225,6 +3258,10 @@ msgstr "Электронная почта"
 #: src/pages/McpServersOverlay.tsx
 msgid "Enable"
 msgstr ""
+
+#: src/lib/mcp-sign-in.ts
+msgid "Enable this server first, then sign in."
+msgstr "Сначала включите этот сервер, затем войдите."
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Engage when... Ignore..."
@@ -3667,11 +3704,17 @@ msgstr "Повесьте трубку, затем введите код на э�
 msgid "header"
 msgstr "заголовок"
 
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Header"
+msgstr "Заголовок"
+
+#: src/pages/customize/McpCredentialFix.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Header name"
 msgstr "Название заголовка"
 
+#: src/pages/customize/McpCredentialFix.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Header value"
 msgstr "Значение заголовка"
@@ -4040,6 +4083,10 @@ msgstr ""
 msgid "Keep for recovery"
 msgstr ""
 
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Keep header"
+msgstr "Оставить заголовок"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Keep here"
 msgstr ""
@@ -4051,6 +4098,10 @@ msgstr "Сохранить память"
 #: src/pages/MemoryImportExport.tsx
 msgid "Keep scope"
 msgstr ""
+
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Keep token"
+msgstr "Оставить токен"
 
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Keep working when the window is closed"
@@ -4081,6 +4132,7 @@ msgid "Label"
 msgstr ""
 
 #: src/pages/board/ItemForm.tsx
+#: src/pages/LearningInbox.tsx
 msgid "Labels"
 msgstr ""
 
@@ -4362,6 +4414,7 @@ msgstr ""
 #: src/pages/memory/MemorySettings.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/PrivacySettings.tsx
+#: src/pages/shell/message-cards.tsx
 msgid "Manage"
 msgstr ""
 
@@ -4823,6 +4876,10 @@ msgstr ""
 #: src/pages/DevicesSettings.tsx
 msgid "Never"
 msgstr ""
+
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "New access token"
+msgstr "Новый токен доступа"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "New bot"
@@ -6444,6 +6501,7 @@ msgstr ""
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/board/ItemForm.tsx
 #: src/pages/customize/ConfigureExtension.tsx
+#: src/pages/customize/McpCredentialFix.tsx
 #: src/pages/DevicesSettings.tsx
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/GroupPanel.tsx
@@ -7333,6 +7391,35 @@ msgstr "рассуждение"
 msgid "This action could not finish; try again."
 msgstr ""
 
+#: src/pages/LearningInbox.tsx
+msgid "This board item changed after it was filed, so it was left open for review on the Board."
+msgstr "Эта задача на доске изменилась после создания, поэтому она оставлена открытой для проверки на доске."
+
+#: src/pages/LearningInbox.tsx
+msgid "This board item changed after it was filed. Review it on the Board."
+msgstr "Эта задача на доске изменилась после создания. Проверьте её на доске."
+
+#: src/pages/LearningInbox.tsx
+msgid "This board item is still open."
+msgstr "Эта задача на доске всё ещё открыта."
+
+#: src/pages/LearningInbox.tsx
+msgid "This board item was already closed on the Board."
+msgstr "Эта задача на доске уже закрыта."
+
+#. placeholder {0}: proposal.boardOutcome.closeReason
+#: src/pages/LearningInbox.tsx
+msgid "This board item was closed without being completed: {0}. Review it on the Board."
+msgstr "Эта задача на доске закрыта без выполнения: {0}. Проверьте её на доске."
+
+#: src/pages/LearningInbox.tsx
+msgid "This board item was closed without being completed. Review it on the Board."
+msgstr "Эта задача на доске закрыта без выполнения. Проверьте её на доске."
+
+#: src/pages/LearningInbox.tsx
+msgid "This board item was completed."
+msgstr "Эта задача на доске выполнена."
+
 #: src/pages/shell/provider-error-message.tsx
 msgid "This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin."
 msgstr ""
@@ -7444,7 +7531,7 @@ msgstr "Этот сервер не предложил вход через бра
 msgid "This server did not request browser authorization."
 msgstr "Этот сервер не запрашивал авторизацию браузера."
 
-#: src/pages/McpServersOverlay.tsx
+#: src/pages/customize/McpCredentialFix.tsx
 msgid "This server has two credentials. Keep one."
 msgstr "У этого сервера сохранены два способа входа. Оставьте один."
 
@@ -7500,6 +7587,7 @@ msgid "Timeline"
 msgstr ""
 
 #: src/pages/board/ItemForm.tsx
+#: src/pages/LearningInbox.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Title"
 msgstr "Заголовок"
@@ -7519,6 +7607,10 @@ msgstr "Сегодня"
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "Today (UTC)"
 msgstr ""
+
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Token"
+msgstr "Токен"
 
 #: src/pages/CompareStart.tsx
 msgid "Token reservation"
@@ -7683,6 +7775,10 @@ msgstr "Доступно обновление"
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Update computer"
 msgstr "Обновить компьютер"
+
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Update credential"
+msgstr "Обновить учётные данные"
 
 #: src/pages/import/ImportedServerCredentials.tsx
 msgid "Update credentials"

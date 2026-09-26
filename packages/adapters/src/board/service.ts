@@ -2,22 +2,39 @@ import path from "node:path";
 import type { AdapterContext } from "@ardurbot/adapter-kit";
 import type {
   BoardConfiguration,
+  BoardCreate,
   BoardRun,
   BoardRunResult,
   BoardWorkspace,
   WorkItem,
 } from "@ardurbot/contracts/board";
 import { BoardDeniedError, BoardError, BoardRunResultSchema } from "@ardurbot/contracts/board";
-import { observeBoardItems, Prisma, type PrismaClient } from "@ardurbot/db";
+import type { Pool } from "@ardurbot/db";
+import {
+  isTooManyDatabaseConnections,
+  observeBoardItems,
+  Prisma,
+  type PrismaClient,
+} from "@ardurbot/db";
 import { BoardRunner } from "@ardurbot/host-runtime/board/runner";
 import { getLogger } from "@ardurbot/logging";
 import { createHostClient, usesHostBridge } from "../remote-host-sandbox.js";
 import { BeadsBoardProvider } from "./beads.js";
+import type { PendingCloseRow } from "./pending-close.js";
 import {
+  closeNoticeOwner,
+  pendingCloseAction,
+  recordPendingCloseFailure,
+  releaseChangedBoardClose,
+} from "./pending-close.js";
+import {
+  normalizeBoardTitle,
   RUN_FILING_CAP,
   RUN_FILING_LIMIT,
+  redactBoardText,
   SPACE_FILING_CAP,
   SPACE_FILING_LIMIT,
+  withBotFiledLabel,
 } from "./upkeep.js";
 
 export type BoardScope = {
@@ -30,10 +47,50 @@ export type BoardScope = {
 export type BoardServiceOptions = {
   prisma: PrismaClient;
   dataDir: string;
+  /**
+   * Filing locks only. Production passes the pool from createFilingLockPool so a held lock never
+   * borrows from the shared Prisma pool. Without it, tests use an in-process lock.
+   */
+  lockPool?: Pick<Pool, "connect">;
+  /** The owner's connection to the host. Only the API has one. */
   ownerRun?: (request: BoardRun, scope: BoardScope) => Promise<BoardRunResult>;
   localRun?: (request: BoardRun, scope: BoardScope) => Promise<BoardRunResult>;
 };
+// Namespace 1380019075 is shared: ids 1-3 are process-wide locks. Filing locks put id 4 in
+// the low three bits and the space hash above them.
+const FILING_LOCK_NAMESPACE = 1_380_019_075;
+const FILING_LOCK_ID = 4;
+const FILING_LOCK_KEY = "(hashtext($2::text) & -8) | $3::integer";
+const FILING_LOCK_WAIT_MS = 15_000;
+const FILING_LOCK_POLL_MS = 250;
+/** Long enough to open a connection, short enough that a full lock pool skips an item at once. */
+const FILING_TRY_CHECKOUT_MS = 100;
+const FILING_BUSY = "Another write is in progress. Try again in a few seconds.";
+const FILING_RECORD_ATTEMPTS = 3;
+const FILING_RECORD_BACKOFF_MS = 25;
+const HOLLOW_RESERVATION_MS = 15 * 60 * 1000;
+const localFilingLocks = new Map<string, Promise<void>>();
+/** Spaces whose pooled filing lock this process holds, so a nested try never waits on itself. */
+const heldFilingLocks = new Set<string>();
+
+async function withLocalFilingLock<T>(spaceId: string, work: () => Promise<T>): Promise<T> {
+  const previous = localFilingLocks.get(spaceId) ?? Promise.resolve();
+  let release = () => {};
+  const current = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const tail = previous.then(() => current);
+  localFilingLocks.set(spaceId, tail);
+  await previous;
+  try {
+    return await work();
+  } finally {
+    release();
+    if (localFilingLocks.get(spaceId) === tail) localFilingLocks.delete(spaceId);
+  }
+}
 export class BoardService {
+  private sweeping = false;
   constructor(private readonly options: BoardServiceOptions) {}
   async actor(scope: BoardScope) {
     const [deployment, member] = await Promise.all([
@@ -77,10 +134,16 @@ export class BoardService {
     const actor = await this.actor(scope);
     request = { ...request, actor };
     if (usesHostBridge()) {
-      if (!scope.botId) {
+      // The host admits a bot only inside one of its runs. Board work outside a run, such as a
+      // learning proposal's item or its pending close, goes through the owner's connection.
+      if (!scope.botId || !scope.runId) {
         if (!this.options.ownerRun)
           throw new BoardError({ code: "forbidden", message: "Open Board from the app." });
-        return this.options.ownerRun(request, scope);
+        const owner = { ...scope, botId: undefined };
+        return this.options.ownerRun(
+          scope.botId ? { ...request, actor: await this.actor(owner) } : request,
+          owner,
+        );
       }
       let stdout = "";
       let result: BoardRunResult | undefined;
@@ -280,12 +343,143 @@ export class BoardService {
       workspace,
       actor,
       run: (request) => this.run(request, scope),
-      observe: (items) =>
-        observeBoardItems(this.options.prisma, workspace.id, items).catch((error) => {
+      observe: async (items) => {
+        await observeBoardItems(this.options.prisma, workspace.id, items).catch((error) => {
           // A notification failure cannot turn a successful Beads write into a failed item edit.
           getLogger().error("board follow observation", error);
-        }),
+        });
+        await this.sweepPendingCloses({ workspaceId: workspace.id, signal: scope.signal }).catch(
+          (error) => {
+            getLogger().error("pending board close", error);
+          },
+        );
+      },
     });
+  }
+  /**
+   * Closes filings whose Reject or Undo already committed. No database transaction is open
+   * here: each item holds its space's filing lock around the host show and close, a space
+   * another write holds is left for the next sweep, and the signal stops the sweep.
+   * A nested board read does not start another sweep. With the host bridge on, only the API
+   * can reach the host outside a run; elsewhere the sweep leaves every close for it.
+   */
+  async sweepPendingCloses(options: { workspaceId?: string; signal?: AbortSignal } = {}) {
+    if (this.sweeping) return;
+    if (usesHostBridge() && !this.options.ownerRun) {
+      getLogger().debug("pending board close", {
+        reason: "This process has no owner connection to the host. The app finishes the close.",
+      });
+      return;
+    }
+    this.sweeping = true;
+    try {
+      const now = new Date();
+      const filings = await this.options.prisma.botBoardFiling.findMany({
+        where: {
+          ...(options.workspaceId ? { workspaceId: options.workspaceId } : {}),
+          closePending: { not: null },
+          itemId: { not: null },
+          OR: [{ closeNextAt: null }, { closeNextAt: { lte: now } }],
+        },
+      });
+      for (const listed of filings) {
+        if (options.signal?.aborted) return;
+        if (!listed.closePending || !listed.itemId || !listed.workspaceId) continue;
+        const attempt: { filing?: PendingCloseRow } = {};
+        try {
+          await this.withFilingLock(
+            { spaceId: listed.spaceId, signal: options.signal },
+            async () => {
+              // Another sweep may have finished or counted this close since the list was read.
+              const filing = await this.options.prisma.botBoardFiling.findUnique({
+                where: { id: listed.id },
+              });
+              if (filing?.closePending !== listed.closePending) return;
+              if (filing.closeNextAt && filing.closeNextAt > now) return;
+              attempt.filing = filing;
+              await this.finishPendingClose(filing, options.signal);
+            },
+            { waitMs: 0 },
+          );
+        } catch (error) {
+          if (!attempt.filing) {
+            if (!isFilingBusy(error) && !options.signal?.aborted)
+              getLogger().error("pending board close", error);
+            continue;
+          }
+          getLogger().error("pending board close", error);
+          const failed = attempt.filing;
+          await recordPendingCloseFailure(this.options.prisma, failed, (itemId) =>
+            this.showPendingCloseItem(failed, itemId, options.signal),
+          ).catch((recordError) => {
+            getLogger().error("pending board close retry", recordError);
+          });
+        }
+      }
+    } finally {
+      this.sweeping = false;
+    }
+  }
+  async notePendingCloseFailure(filingId: string) {
+    const filing = await this.options.prisma.botBoardFiling.findUnique({
+      where: { id: filingId },
+    });
+    if (!filing?.closePending || !filing.itemId) return;
+    await recordPendingCloseFailure(this.options.prisma, filing, (itemId) =>
+      this.showPendingCloseItem(filing, itemId),
+    );
+  }
+  /**
+   * Reject and Undo left this close pending with the person's own board access, and only the
+   * board's owner gets past `workspace`, so the owner is that person. Every retry opens the
+   * board as them too, never through the filing's bot.
+   */
+  private async pendingCloseScope(filing: PendingCloseRow, signal?: AbortSignal) {
+    if (!filing.workspaceId) throw new Error("This board close has no board.");
+    const userId = await closeNoticeOwner(this.options.prisma, filing);
+    if (!userId) throw new Error("This board close has no owner.");
+    return { scope: { userId, spaceId: filing.spaceId, signal }, workspaceId: filing.workspaceId };
+  }
+  private async showPendingCloseItem(
+    filing: PendingCloseRow,
+    itemId: string,
+    signal?: AbortSignal,
+  ) {
+    const { scope, workspaceId } = await this.pendingCloseScope(filing, signal);
+    return (await this.provider(scope, workspaceId)).show(itemId);
+  }
+  private async finishPendingClose(filing: PendingCloseRow, signal?: AbortSignal) {
+    if (!filing.closePending || !filing.itemId || !filing.workspaceId) return;
+    const { scope, workspaceId } = await this.pendingCloseScope(filing, signal);
+    await this.finishClose(scope, filing, workspaceId);
+  }
+  /**
+   * Shows the item, decides whether it can close, and closes or releases it, then deletes the
+   * filing row. Shared by the sweep, and by Reject and Undo retrying a close that already
+   * committed. Both open the board as the person who asked for the close, with their own access.
+   */
+  async finishClose(
+    scope: BoardScope,
+    filing: PendingCloseRow,
+    workspaceId = filing.workspaceId ?? undefined,
+  ): Promise<"close" | "done" | "changed"> {
+    if (!filing.closePending || !filing.itemId || !workspaceId) return "done";
+    const provider = await this.provider(scope, workspaceId);
+    const item = await provider.show(filing.itemId);
+    const action = pendingCloseAction(item, {
+      closePending: filing.closePending,
+      closeUpdatedAt: filing.closeUpdatedAt,
+      closeCommentCount: filing.closeCommentCount,
+    });
+    if (action === "changed") {
+      await releaseChangedBoardClose(this.options.prisma, filing);
+      return action;
+    }
+    if (action === "close") await provider.close([item.id], filing.closePending);
+    await this.options.prisma.botBoardFiling.deleteMany({
+      where: { id: filing.id, spaceId: filing.spaceId },
+    });
+    return action;
   }
   async workspaces(scope: BoardScope) {
     const actor = await this.actor(scope);
@@ -379,35 +573,379 @@ export class BoardService {
     });
     return { enabled: saved.botUpkeep };
   }
-  /** Holds the space row across the title check, reservation and host create. */
+  /**
+   * Serializes a space's title check, reservation, host create and metadata. Host commands
+   * can outlast any database transaction, so the lock is a session advisory lock on one
+   * pooled connection. Waiters poll without holding a connection and give up after a bound;
+   * `waitMs: 0` tries once.
+   */
   async withFilingLock<T>(
-    scope: BoardScope,
-    work: (tx: Prisma.TransactionClient) => Promise<T>,
+    scope: Pick<BoardScope, "spaceId" | "signal">,
+    work: () => Promise<T>,
+    { waitMs = FILING_LOCK_WAIT_MS }: { waitMs?: number } = {},
   ): Promise<T> {
-    return this.options.prisma.$transaction(
-      async (tx) => {
-        await tx.$executeRaw`SELECT id FROM spaces WHERE id = ${scope.spaceId} FOR UPDATE`;
-        return work(tx);
-      },
-      { maxWait: 15_000, timeout: 15_000 },
-    );
+    const busy = () => new BoardError({ code: "busy", message: FILING_BUSY });
+    const pool = this.options.lockPool;
+    if (!pool) {
+      // The in-process lock does not exclude another process, so it is for tests only.
+      if (process.env.NODE_ENV === "production")
+        throw new Error("Board filings need the filing lock pool.");
+      if (waitMs === 0 && localFilingLocks.has(scope.spaceId)) throw busy();
+      return withLocalFilingLock(scope.spaceId, work);
+    }
+    if (waitMs === 0 && heldFilingLocks.has(scope.spaceId)) throw busy();
+    const key = [FILING_LOCK_NAMESPACE, scope.spaceId, FILING_LOCK_ID];
+    const deadline = Date.now() + waitMs;
+    for (;;) {
+      scope.signal?.throwIfAborted();
+      // A try, such as a board read's sweep, waits almost no time for a connection.
+      const connected = await checkout(
+        pool,
+        Math.max(FILING_TRY_CHECKOUT_MS, deadline - Date.now()),
+      ).then(
+        (client) =>
+          client ? { ok: true as const, client } : { ok: false as const, error: undefined },
+        (error: unknown) => ({ ok: false as const, error }),
+      );
+      if (connected.ok) {
+        const client = connected.client;
+        let locked = false;
+        let lost = false;
+        try {
+          locked =
+            (
+              await client.query<{ acquired: boolean }>(
+                `SELECT pg_try_advisory_lock($1::integer, ${FILING_LOCK_KEY}) AS acquired`,
+                key,
+              )
+            ).rows[0]?.acquired === true;
+          if (locked) {
+            heldFilingLocks.add(scope.spaceId);
+            return await work();
+          }
+        } finally {
+          if (locked) {
+            heldFilingLocks.delete(scope.spaceId);
+            await client
+              .query(`SELECT pg_advisory_unlock($1::integer, ${FILING_LOCK_KEY})`, key)
+              .catch(() => {
+                lost = true;
+              });
+          }
+          // A connection that could not unlock still holds the lock until it closes.
+          client.release(lost);
+        }
+      } else if (connected.error !== undefined && !isFilingPoolBusy(connected.error))
+        throw connected.error;
+      // Waiting does not need a free connection. A full lock pool or a full Postgres server
+      // refuses the checkout; that is still "busy" until the deadline.
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) throw busy();
+      await new Promise((resolve) => setTimeout(resolve, Math.min(FILING_LOCK_POLL_MS, remaining)));
+    }
   }
-  async reserveBotFiling(scope: BoardScope, tx: Prisma.TransactionClient) {
-    if (!scope.runId) return { ok: false as const, message: RUN_FILING_LIMIT };
+  /** Checks the caps and inserts the reservation in one short transaction. */
+  async reserveBotFiling(scope: BoardScope, titleKey: string) {
+    const runId = scope.runId;
+    if (!runId) return { ok: false as const, message: RUN_FILING_LIMIT };
+    return this.options.prisma.$transaction(async (tx) => {
+      const runCount = await tx.botBoardFiling.count({
+        where: { spaceId: scope.spaceId, runId, ...countedFilingWhere() },
+      });
+      if (runCount >= RUN_FILING_CAP) return { ok: false as const, message: RUN_FILING_LIMIT };
+      if (await this.spaceFilingCapReached(tx, scope.spaceId))
+        return { ok: false as const, message: SPACE_FILING_LIMIT };
+      const row = await tx.botBoardFiling.create({
+        data: { spaceId: scope.spaceId, runId, botId: scope.botId ?? null, titleKey },
+      });
+      return { ok: true as const, id: row.id };
+    });
+  }
+  async recordFilingItem(filingId: string, workspaceId: string, itemId: string) {
+    let last: unknown;
+    for (let attempt = 0; attempt < FILING_RECORD_ATTEMPTS; attempt += 1) {
+      try {
+        await this.options.prisma.botBoardFiling.update({
+          where: { id: filingId },
+          data: { workspaceId, itemId },
+        });
+        return;
+      } catch (error) {
+        last = error;
+        if (attempt === FILING_RECORD_ATTEMPTS - 1) break;
+        await new Promise((resolve) =>
+          setTimeout(resolve, FILING_RECORD_BACKOFF_MS * (attempt + 1)),
+        );
+      }
+    }
+    throw last;
+  }
+  /**
+   * Keeps a reservation whose item exists, whatever the error type. Deletes it only when
+   * no item id is known. Recording retries before this gives up and leaves the row.
+   */
+  async settleFailedFiling(
+    filingId: string,
+    workspaceId: string,
+    error: unknown,
+    createdItemId?: string,
+  ) {
+    const itemId =
+      createdItemId ?? (error instanceof BoardError ? error.problem.itemId : undefined);
+    try {
+      if (itemId) await this.recordFilingItem(filingId, workspaceId, itemId);
+      else await this.options.prisma.botBoardFiling.delete({ where: { id: filingId } });
+    } catch (settleError) {
+      getLogger().error("board filing cleanup", settleError);
+    }
+  }
+  /**
+   * This run's fresh reservation for the same normalized title, when it never received an item id.
+   * Claims only an open item with no filer, no filing row, and a created time from the
+   * reservation's second through the next 15 minutes. A reservation older than 15 minutes
+   * is deleted. That delete permits a new item only when no open item has the title.
+   */
+  async claimHollowFiling(
+    scope: BoardScope,
+    workspaceId: string,
+    item: Pick<WorkItem, "id" | "createdAt" | "filedBy">,
+    titleKey: string,
+  ) {
+    if (!scope.runId || item.filedBy) return null;
+    const hollow = await this.options.prisma.botBoardFiling.findFirst({
+      where: { spaceId: scope.spaceId, runId: scope.runId, itemId: null, titleKey },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!hollow?.createdAt || !createdWithinReservation(item.createdAt, hollow.createdAt))
+      return null;
+    const taken = await this.options.prisma.botBoardFiling.findFirst({
+      where: { workspaceId, itemId: item.id },
+    });
+    if (taken) return null;
+    await this.recordFilingItem(hollow.id, workspaceId, item.id);
+    return hollow;
+  }
+  /** Deletes this run's hollow reservation once it is older than 15 minutes. */
+  async discardStaleHollow(scope: BoardScope, titleKey: string) {
+    if (!scope.runId) return false;
+    const hollow = await this.options.prisma.botBoardFiling.findFirst({
+      where: { spaceId: scope.spaceId, runId: scope.runId, itemId: null, titleKey },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!hollow?.createdAt || !reservationIsStale(hollow.createdAt)) return false;
+    await this.options.prisma.botBoardFiling.delete({ where: { id: hollow.id } });
+    return true;
+  }
+  /** The run's own filing for an item, when an earlier attempt created it. */
+  async runFiling(scope: BoardScope, workspaceId: string, itemId: string) {
+    if (!scope.runId) return null;
+    return this.options.prisma.botBoardFiling.findFirst({
+      where: { spaceId: scope.spaceId, runId: scope.runId, workspaceId, itemId },
+    });
+  }
+  private async spaceFilingCapReached(tx: Prisma.TransactionClient, spaceId: string) {
     const since = new Date(Date.now() - 60 * 60 * 1000);
-    const runCount = await tx.botBoardFiling.count({
-      where: { spaceId: scope.spaceId, runId: scope.runId },
+    const freshHollow = new Date(Date.now() - HOLLOW_RESERVATION_MS);
+    const count = await tx.botBoardFiling.count({
+      where: {
+        spaceId,
+        reused: false,
+        createdAt: { gte: since },
+        OR: [{ itemId: { not: null } }, { createdAt: { gte: freshHollow } }],
+      },
     });
-    if (runCount >= RUN_FILING_CAP) return { ok: false as const, message: RUN_FILING_LIMIT };
-    const hourCount = await tx.botBoardFiling.count({
-      where: { spaceId: scope.spaceId, createdAt: { gte: since } },
-    });
-    if (hourCount >= SPACE_FILING_CAP) return { ok: false as const, message: SPACE_FILING_LIMIT };
-    const row = await tx.botBoardFiling.create({
-      data: { spaceId: scope.spaceId, runId: scope.runId },
-    });
-    return { ok: true as const, id: row.id };
+    return count >= SPACE_FILING_CAP;
   }
+  /** Call inside withFilingLock. A retry returns the item this proposal already filed or reused. */
+  async fileLearningProposal(
+    scope: BoardScope & { botId: string },
+    proposalId: string,
+    input: Pick<BoardCreate, "title" | "description" | "acceptanceCriteria" | "labels"> & {
+      workspaceId?: string;
+    },
+    secrets: string[],
+  ) {
+    const prisma = this.options.prisma;
+    const own = await prisma.botBoardFiling.findFirst({
+      where: { spaceId: scope.spaceId, learningProposalId: proposalId },
+    });
+    if (own?.workspaceId && own.itemId) {
+      const provider = await this.provider(scope, own.workspaceId);
+      return {
+        item: await provider.show(own.itemId),
+        duplicate: own.reused === true,
+        workspaceId: own.workspaceId,
+      };
+    }
+    const workspace = await this.workspace(scope, input.workspaceId);
+    const provider = await this.provider(scope, workspace.id);
+    const item = {
+      title: redactBoardText(input.title, secrets),
+      description: redactBoardText(input.description ?? "", secrets),
+      acceptanceCriteria: redactBoardText(input.acceptanceCriteria ?? "", secrets),
+    };
+    const title = normalizeBoardTitle(item.title);
+    const existing = (await provider.list()).find(
+      (row) => row.status !== "closed" && normalizeBoardTitle(row.title) === title,
+    );
+    const stale = Boolean(own && !own.itemId && own.createdAt && reservationIsStale(own.createdAt));
+    if (
+      !stale &&
+      own &&
+      !own.itemId &&
+      own.titleKey === title &&
+      own.createdAt &&
+      existing &&
+      !existing.filedBy
+    ) {
+      const taken = await prisma.botBoardFiling.findFirst({
+        where: { workspaceId: workspace.id, itemId: existing.id },
+      });
+      if (!taken && createdWithinReservation(existing.createdAt, own.createdAt)) {
+        await this.recordFilingItem(own.id, workspace.id, existing.id);
+        return { item: existing, duplicate: false, workspaceId: workspace.id };
+      }
+    }
+    if (own && !own.itemId) await prisma.botBoardFiling.delete({ where: { id: own.id } });
+    const link = {
+      spaceId: scope.spaceId,
+      runId: null,
+      botId: scope.botId,
+      workspaceId: workspace.id,
+      learningProposalId: proposalId,
+      titleKey: title,
+      reused: false,
+    };
+    if (existing) {
+      await prisma.botBoardFiling.create({
+        data: { ...link, itemId: existing.id, reused: true },
+      });
+      return { item: existing, duplicate: true, workspaceId: workspace.id };
+    }
+    const filing = await prisma.$transaction(async (tx) => {
+      if (await this.spaceFilingCapReached(tx, scope.spaceId))
+        throw new BoardError({ code: "busy", message: SPACE_FILING_LIMIT });
+      return tx.botBoardFiling.create({ data: link });
+    });
+    let createdId: string | undefined;
+    try {
+      const created = await provider.create({
+        ...item,
+        type: "task",
+        priority: 2,
+        labels: withBotFiledLabel(input.labels?.map((label) => redactBoardText(label, secrets))),
+      });
+      createdId = created.id;
+      await this.recordFilingItem(filing.id, workspace.id, created.id);
+      return { item: created, duplicate: false, workspaceId: workspace.id };
+    } catch (error) {
+      await this.settleFailedFiling(filing.id, workspace.id, error, createdId);
+      throw error;
+    }
+  }
+  async filingOutcomes(scope: BoardScope) {
+    await this.actor(scope);
+    const since = new Date(Date.now() - 30 * 86400_000);
+    const rows = await this.options.prisma.$queryRaw<
+      Array<{
+        botId: string;
+        name: string;
+        filed: bigint;
+        done: bigint;
+        open: bigint;
+        other: bigint;
+      }>
+    >(Prisma.sql`
+      SELECT f."botId" AS "botId", COALESCE(b.name, 'Bot') AS name,
+        COUNT(*) AS filed,
+        COUNT(*) FILTER (WHERE f.outcome = 'completed') AS done,
+        COUNT(*) FILTER (WHERE f.outcome IS NULL) AS open,
+        COUNT(*) FILTER (WHERE f.outcome = 'closed-other') AS other
+      FROM bot_board_filings f
+      LEFT JOIN bots b ON b.id = f."botId" AND b."spaceId" = f."spaceId"
+      WHERE f."spaceId" = ${scope.spaceId}
+        AND f."botId" IS NOT NULL
+        AND f."itemId" IS NOT NULL
+        AND NOT f.reused
+        AND f."createdAt" >= ${since}
+      GROUP BY f."botId", b.name
+      ORDER BY COALESCE(b.name, 'Bot'), f."botId"
+    `);
+    return {
+      bots: rows.map((row) => ({
+        botId: row.botId,
+        name: row.name,
+        filed: Number(row.filed),
+        done: Number(row.done),
+        open: Number(row.open),
+        other: Number(row.other),
+      })),
+    };
+  }
+}
+
+/** Resolves null when no connection arrives in time. A late one goes straight back to the pool. */
+async function checkout(pool: Pick<Pool, "connect">, timeoutMs: number) {
+  const pending = pool.connect();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), timeoutMs);
+  });
+  try {
+    const client = await Promise.race([pending, late]);
+    if (!client)
+      void pending.then(
+        (arrived) => arrived.release(),
+        () => undefined,
+      );
+    return client;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function isFilingPoolBusy(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    message.includes("timeout exceeded when trying to connect") ||
+    isTooManyDatabaseConnections(error)
+  );
+}
+
+function isFilingBusy(error: unknown): boolean {
+  return error instanceof BoardError && error.problem.code === "busy";
+}
+
+/**
+ * Beads lists created_at as a whole second. A reservation stores milliseconds.
+ * An item counts when its created time, at whole-second precision, is at or after
+ * the reservation's second and at or before the reservation plus 15 minutes, and
+ * the reservation itself is still inside those 15 minutes. A human item created
+ * in that same second, with no filer and no filing row, is claimed; that is accepted.
+ */
+function createdWithinReservation(itemCreatedAt: string, reservedAt: Date): boolean {
+  const created = new Date(itemCreatedAt).getTime();
+  const reserved = reservedAt.getTime();
+  if (Number.isNaN(created) || Number.isNaN(reserved) || reservationIsStale(reservedAt))
+    return false;
+  return (
+    Math.floor(created / 1000) >= Math.floor(reserved / 1000) &&
+    created <= reserved + HOLLOW_RESERVATION_MS
+  );
+}
+
+/** A hollow reservation older than 15 minutes is never claimed. */
+function reservationIsStale(reservedAt: Date, now = Date.now()): boolean {
+  const reserved = reservedAt.getTime();
+  return !Number.isNaN(reserved) && reserved < now - HOLLOW_RESERVATION_MS;
+}
+
+/** A hollow reservation counts only for its first 15 minutes. An attached item always counts. */
+function countedFilingWhere() {
+  const freshHollow = new Date(Date.now() - HOLLOW_RESERVATION_MS);
+  return {
+    OR: [{ itemId: { not: null } }, { itemId: null, createdAt: { gte: freshHollow } }],
+  };
 }
 
 function boardAdmits(row: { allowAllBots: boolean; allowedBotIds: string[] }, botId?: string) {

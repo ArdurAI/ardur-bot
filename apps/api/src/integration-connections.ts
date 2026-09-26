@@ -35,6 +35,7 @@ import {
   IntegrationManifestSchema,
   IntegrationResourceConstraintsSchema,
   IntegrationStateSchema,
+  MCP_INVALID_TOKEN_CODE,
   mcpSignInDiagnostic,
   SpaceToolPoliciesSchema,
 } from "@ardurbot/contracts";
@@ -187,7 +188,8 @@ export class IntegrationConnections {
   private async claimSignIn(
     actor: Owner,
     server: McpServer,
-  ): Promise<{ status: "replaced" } | { sessionId: string }> {
+  ): Promise<{ status: "replaced" | "disabled" } | { sessionId: string }> {
+    if (!server.enabled) return { status: "disabled" };
     const sessionId = randomUUID();
     const reserved = await this.prisma.mcpServer.updateMany({
       where: {
@@ -354,7 +356,10 @@ export class IntegrationConnections {
         input.token.length > 16_384 ||
         /\s/.test(input.token))
     )
-      throw new ORPCError("BAD_REQUEST", { message: "Enter a valid token." });
+      throw new ORPCError("BAD_REQUEST", {
+        message: "Enter a valid token.",
+        data: { code: MCP_INVALID_TOKEN_CODE },
+      });
     if (authKind === "oauth" && (input.token || (descriptor.authKind === "token" && !oauthApp)))
       throw new ORPCError("BAD_REQUEST", {
         message: "Sign-in is not configured for this integration.",
@@ -606,7 +611,10 @@ export class IntegrationConnections {
       if (oauthSessionId && current.pendingOauthSessionId !== oauthSessionId) return;
       if (!oauthSessionId && current.revision !== server.revision) return;
       // A rejected older token must not invalidate a successful concurrent refresh.
+      // An attempt with its own oauthSessionId always settles below instead: it already
+      // matched on that id, so it cannot be the stale read this guard protects against.
       if (
+        !oauthSessionId &&
         error instanceof McpReauthorizationRequiredError &&
         current.secretId !== server.secretId &&
         current.connectionState === "connected"

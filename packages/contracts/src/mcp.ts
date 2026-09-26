@@ -45,3 +45,44 @@ export const McpHeadersSchema = z
 export function mcpSignInDiagnostic(code?: string | null): string {
   return code ? `Needs sign-in (${code}).` : "Needs sign-in.";
 }
+
+/**
+ * Recorded as lastError when a person declines a re-authorization of a server that stays
+ * connected on its prior tokens. Never a `mcpSignInDiagnostic`: the server does not need
+ * sign-in.
+ */
+export function mcpReauthorizationDeclinedDiagnostic(): string {
+  return "Sign-in was declined.";
+}
+
+/** True when `recorded` is the declined-re-authorization diagnostic. One source of
+ * truth: compares against the sentence above instead of duplicating it in a regex. */
+export function isReauthorizationDeclined(recorded: string | null | undefined): boolean {
+  return recorded?.trim() === mcpReauthorizationDeclinedDiagnostic();
+}
+
+/** The ORPC error code for a typed token that fails basic validation before any attempt
+ * is made to use it. Carried in the error's `data`, not its message. */
+export const MCP_INVALID_TOKEN_CODE = "invalid_token";
+
+/** The machine-readable code an ORPC error carries in its `data`, when present. */
+export function mcpErrorCode(error: unknown): string | undefined {
+  if (!error || typeof error !== "object" || !("data" in error)) return undefined;
+  const data = (error as { data?: unknown }).data;
+  if (!data || typeof data !== "object" || !("code" in data)) return undefined;
+  const code = (data as { code?: unknown }).code;
+  return typeof code === "string" ? code : undefined;
+}
+
+export const MCP_ONE_CREDENTIAL = "Choose one credential: a token or a header.";
+
+/** A server stores either a bearer token or a named header, never both. */
+export function mcpCredentialConflict(input: {
+  secret?: string;
+  headers?: Record<string, string>;
+}): string | null {
+  const secret = input.secret?.trim() ?? "";
+  const headers = input.headers ?? {};
+  const named = Object.values(headers).some((value) => value.trim());
+  return secret && named ? MCP_ONE_CREDENTIAL : null;
+}

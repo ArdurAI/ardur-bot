@@ -99,6 +99,7 @@ export function parseBeadsItem(value: unknown): WorkItem {
     createdAt: str(raw.created_at),
     updatedAt: str(raw.updated_at),
     closedAt: str(raw.closed_at) || null,
+    closeReason: str(raw.close_reason),
     commentCount: num(raw.comment_count, array(raw.comments).length),
     comments: array(raw.comments).map(parseBeadsComment),
     history: [],
@@ -281,10 +282,17 @@ export class BeadsBoardProvider implements ProjectBoardProvider {
         code: "forbidden",
         message: "This run cannot be recorded on the board.",
       });
-    const name = filingBotName(filing.botName);
-    await this.json(["update", id, "--set-metadata", `ardur_run_id=${filing.runId}`]);
-    await this.json(["update", id, "--set-metadata", `ardur_bot_id=${filing.botId}`]);
-    await this.json(["update", id, "--set-metadata", `ardur_filed_by=${name}`]);
+    // Beads 1.2 repeats --set-metadata within one update, so the link is written at once.
+    await this.json([
+      "update",
+      id,
+      "--set-metadata",
+      `ardur_run_id=${filing.runId}`,
+      "--set-metadata",
+      `ardur_bot_id=${filing.botId}`,
+      "--set-metadata",
+      `ardur_filed_by=${filingBotName(filing.botName)}`,
+    ]);
     return this.show(id);
   }
   async link(from: string, to: string, type: string) {

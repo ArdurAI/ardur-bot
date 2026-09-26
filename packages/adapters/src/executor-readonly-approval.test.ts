@@ -28,8 +28,12 @@ import { catalogEntries, resolveCatalogCall } from "./lazy-tool-catalog.js";
 import { approvalRequestRoute } from "./remote-execution.js";
 import { recordRunUsage } from "./run-usage.js";
 import { startScoreboardTrace } from "./scoreboard-trace.js";
+import { EncryptedSecretStore } from "./secrets.js";
 
 vi.mock("./runtimes/native-host.js", () => ({ nativeHostOwner: async () => true }));
+
+const digests = new EncryptedSecretStore("test-encryption-key");
+const testDigest = digests.digest.bind(digests);
 
 const fleetComputer = vi.hoisted(() => ({ kind: "desktop" }));
 
@@ -210,7 +214,7 @@ function fixture({
       })),
     },
     user: { findUniqueOrThrow: vi.fn(async () => ({ displayName: "", workType: "" })) },
-
+    $queryRaw: vi.fn(async () => []),
     computer: {
       findFirstOrThrow: vi.fn(async () => ({
         id: "computer-1",
@@ -273,6 +277,7 @@ function fixture({
     scratchpadItem: { findMany: vi.fn(async () => []) },
     actionApprovalRule: { findMany: vi.fn(async () => rules) },
     actionAutoReviewPreference: { findUnique: vi.fn(async () => ({ enabled: autoReview })) },
+    event: { findMany: vi.fn(async () => []) },
     externalEffect,
   };
   const pauseRunForInput = vi.fn(async () => {
@@ -311,7 +316,7 @@ function fixture({
   });
   const executor = createRunExecutor({
     prisma,
-    secretStore: { load: () => "test-key" },
+    secretStore: { load: () => "test-key", digest: testDigest },
     runtime: { describe: () => ({ capabilities: { scripted: false } }), run: runtimeRun },
     connector: {
       discoverTools: async () =>

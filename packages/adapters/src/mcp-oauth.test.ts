@@ -504,7 +504,9 @@ describe("MCP OAuth", () => {
           id: "server-1",
           endpoint: "https://mcp.example.test/mcp",
           secretId: "secret-current",
+          pendingOauthSessionId: "attempt-session",
         }),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
       secret: {
         findFirst: vi.fn().mockResolvedValue({
@@ -538,6 +540,141 @@ describe("MCP OAuth", () => {
       data: { secretId: "secret-next", revision: { increment: 1 } },
     });
     expect(tx.secret.deleteMany).toHaveBeenCalledWith({ where: { id: "secret-current" } });
+    // A sign-in that is still waiting for this server can never complete once
+    // its material is gone; the pending attempt must not be left dangling. Cleared
+    // by the exact id this call observed, the way claimSignIn/releaseAttempt do.
+    expect(prisma.mcpServer.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: "server-1",
+        spaceId: "workspace-1",
+        userId: "user-1",
+        pendingOauthSessionId: "attempt-session",
+      },
+      data: { pendingOauthSessionId: null },
+    });
+  });
+
+  it("clears the pending sign-in only after the credential material is gone", async () => {
+    const tx = {
+      $executeRaw: vi.fn().mockResolvedValue(1),
+      mcpServer: {
+        findFirst: vi.fn().mockResolvedValue({
+          endpoint: "https://mcp.example.test/mcp",
+          secretId: "secret-current",
+        }),
+        update: vi.fn().mockResolvedValue({}),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+      secret: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: "secret-current",
+          ciphertext: "encrypted-current",
+        }),
+        create: vi.fn().mockResolvedValue({}),
+        deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+    };
+    const prisma = {
+      mcpServer: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: "server-1",
+          endpoint: "https://mcp.example.test/mcp",
+          secretId: "secret-current",
+          pendingOauthSessionId: "attempt-session",
+        }),
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+      secret: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: "secret-current",
+          ciphertext: "encrypted-current",
+        }),
+      },
+      $transaction: vi.fn(async (callback: (client: typeof tx) => unknown) => callback(tx)),
+    };
+    const secrets = {
+      load: vi.fn(() =>
+        JSON.stringify({
+          secret: "static-token",
+          oauth: { tokens: { access_token: "oauth-token", token_type: "bearer" } },
+        }),
+      ),
+      put: vi.fn(async () => ({ id: "secret-next", ciphertext: "encrypted-next" })),
+    };
+    Object.assign(prisma, { mcpOAuthSession: oauthSessionStore() });
+    const broker = new McpOAuthBroker(prisma as never, secrets as never, TEST_NETWORK);
+
+    await broker.disconnect({
+      serverId: "server-1",
+      spaceId: "workspace-1",
+      userId: "user-1",
+    });
+
+    // The locked transaction that removes the oauth material must finish before the
+    // pending id is cleared, so no poll can land in a gap where the old tokens are
+    // still stored but nothing marks the sign-in as pending anymore.
+    expect(tx.mcpServer.updateMany.mock.invocationCallOrder).toHaveLength(1);
+    expect(prisma.mcpServer.updateMany.mock.invocationCallOrder).toHaveLength(1);
+    expect(prisma.mcpServer.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: "server-1",
+        spaceId: "workspace-1",
+        userId: "user-1",
+        pendingOauthSessionId: "attempt-session",
+      },
+      data: { pendingOauthSessionId: null },
+    });
+    const materialRemovedAt = tx.mcpServer.updateMany.mock.invocationCallOrder[0] as number;
+    const pendingClearedAt = prisma.mcpServer.updateMany.mock.invocationCallOrder[0] as number;
+    expect(materialRemovedAt).toBeLessThan(pendingClearedAt);
+  });
+
+  it("clears only the pending id it observed, so a newer claim in the gap survives", async () => {
+    const row: { pendingOauthSessionId: string | null } = { pendingOauthSessionId: "old-session" };
+    const prisma = {
+      mcpServer: {
+        findFirst: vi.fn(async () => {
+          const observed = { id: "server-1", secretId: null, ...row };
+          // A newer sign-in (claimSignIn, on a different request) claims a fresh id in
+          // the gap between this read and disconnect's later write.
+          row.pendingOauthSessionId = "new-session";
+          return observed;
+        }),
+        updateMany: vi.fn(
+          async ({
+            where,
+            data,
+          }: {
+            where: Record<string, unknown>;
+            data: { pendingOauthSessionId: string | null };
+          }) => {
+            const condition = where.pendingOauthSessionId;
+            const matches =
+              condition && typeof condition === "object" && "not" in condition
+                ? row.pendingOauthSessionId !== null
+                : row.pendingOauthSessionId === condition;
+            if (!matches) return { count: 0 };
+            row.pendingOauthSessionId = data.pendingOauthSessionId;
+            return { count: 1 };
+          },
+        ),
+      },
+      mcpOAuthSession: oauthSessionStore(),
+    };
+    const broker = new McpOAuthBroker(prisma as never, {} as never, TEST_NETWORK);
+
+    await broker.disconnect({ serverId: "server-1", spaceId: "workspace-1", userId: "user-1" });
+
+    expect(prisma.mcpServer.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: "server-1",
+        spaceId: "workspace-1",
+        userId: "user-1",
+        pendingOauthSessionId: "old-session",
+      },
+      data: { pendingOauthSessionId: null },
+    });
+    expect(row.pendingOauthSessionId).toBe("new-session");
   });
 
   it("merges OAuth state into the latest static credential after acquiring the lock", async () => {

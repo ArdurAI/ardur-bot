@@ -60,6 +60,20 @@ describe("integration completion delivery", () => {
     await vi.advanceTimersByTimeAsync(1000);
     expect((await result).lastError).toBe("Sign-in timed out.");
   });
+  it("stops polling when its signal aborts, without closing the popup or cancelling the sign-in", async () => {
+    api.status.mockResolvedValue(awaiting);
+    const controller = new AbortController();
+    const result = connectIntegration(descriptor, undefined, { signal: controller.signal });
+    await vi.advanceTimersByTimeAsync(2000);
+    const polls = api.status.mock.calls.length;
+    expect(polls).toBeGreaterThan(0);
+    controller.abort();
+    expect(await result).toEqual(awaiting);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(api.status.mock.calls.length).toBe(polls);
+    expect(popup.close).not.toHaveBeenCalled();
+    expect(api.connect).toHaveBeenCalledOnce();
+  });
   it("passes host intent without opening a browser or sending a token", async () => {
     api.connect.mockResolvedValue({
       connection: connected,

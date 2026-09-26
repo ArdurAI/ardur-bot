@@ -41,6 +41,10 @@ export const CommandBlockSchema = z.object({
   truncated: z.boolean(),
   replayOf: z.string().nullable(),
   rerunDisabledReason: z.string().nullable(),
+  /** Lease fence of the attempt that wrote this block; blocks recorded without one count as 0. */
+  fence: z.number().int().nonnegative().optional(),
+  /** Command ids of earlier calls whose cards this card continues; their late events never change it. */
+  resumedFrom: z.array(z.string()).optional(),
 });
 export type CommandBlock = z.infer<typeof CommandBlockSchema>;
 
@@ -55,6 +59,25 @@ export const CommandEventPayloadSchema = z.object({
     .optional(),
 });
 export type CommandEventPayload = z.infer<typeof CommandEventPayloadSchema>;
+
+/**
+ * `agent.tool.resumed`: the call `to` repeats the call `from` that a killed attempt left open.
+ * Both ids stay as their runtimes minted them. When the killed call left a card open, the link
+ * also names that card's command id and the command id the resumed call records; readers join
+ * those two cards and no others.
+ */
+export const ToolResumedPayloadSchema = z
+  .object({
+    from: z.string().min(1),
+    to: z.string().min(1),
+    fromCommandId: z.string().min(1).optional(),
+    toCommandId: z.string().min(1).optional(),
+  })
+  .strict()
+  .refine((link) => (link.fromCommandId === undefined) === (link.toCommandId === undefined), {
+    message: "A resumed call links both cards or neither",
+  });
+export type ToolResumedPayload = z.infer<typeof ToolResumedPayloadSchema>;
 
 export const CommandAuditPayloadSchema = z.object({
   actorUserId: z.string(),

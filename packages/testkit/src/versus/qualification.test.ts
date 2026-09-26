@@ -1,19 +1,66 @@
 import { describe, expect, it, vi } from "vitest";
 import { contentDigest } from "../scoreboard/manifest.js";
+import { BudgetLedger } from "./budget.js";
+import {
+  HERMES_CONTAINER_CHECKS,
+  HERMES_CONTAINER_REVISION,
+  HERMES_IMAGE,
+} from "./containers/policy.js";
+import { startGateway } from "./gateway.js";
 import {
   assessContainerCohort,
   inspectLocalRoute,
   parseQualificationArguments,
+  routeFailure,
   runQualification,
 } from "./qualification.js";
 import { planPairs } from "./scheduler.js";
+import { parseServingContext, ServingWitness } from "./serving.js";
+
+const pinnedImage = {
+  id: `sha256:${contentDigest("synthetic-hermes-image")}`,
+  revision: HERMES_CONTAINER_REVISION,
+};
+function productReport() {
+  const counter = { cap: 2, admitted: 2, nextRefused: true, effectAfterRefusal: false };
+  const evidence: Record<string, unknown> = {
+    "aggregate-disk-cap": { mechanism: "tmpfs-size", capBytes: 8388608, containerAlive: true },
+    "tool-and-descendant-admission": {
+      toolCalls: counter,
+      descendants: { helpers: counter, commands: counter },
+    },
+    "dependency-manifest": { missingPackages: [], missingBytes: 0 },
+  };
+  return {
+    status: "product-qualified",
+    image: HERMES_IMAGE,
+    imageDigest: pinnedImage.id,
+    runtimeRevision: HERMES_CONTAINER_REVISION,
+    realModelCalls: 0,
+    imagePulls: 0,
+    packageDownloads: 0,
+    checks: HERMES_CONTAINER_CHECKS.map((name) => ({
+      name,
+      passed: true,
+      evidence: evidence[name] ?? {},
+    })),
+  };
+}
+const planned = {
+  approval: "approved",
+  pinnedImage,
+  preflightFailures: [] as string[],
+  routeContext: 64000,
+  architectureMaximum: 131072,
+  servingContext: 64000,
+};
 
 const expected = {
   origin: "http://127.0.0.1:11434",
   model: "qwen3:8b",
   digest: contentDigest("synthetic-model"),
   quantization: "Q4_K_M",
-  contextSize: 32768,
+  contextSize: 64000,
 };
 function fixture() {
   const tag = { name: expected.model, digest: expected.digest, size: 100 };
@@ -22,7 +69,7 @@ function fixture() {
     details: { quantization_level: expected.quantization },
     model_info: {
       "general.architecture": "qwen3",
-      "qwen3.context_length": 40960,
+      "qwen3.context_length": 131072,
       "tokenizer.ggml.tokens": ["synthetic"],
     },
     capabilities: ["completion", "tools"],
@@ -31,6 +78,7 @@ function fixture() {
     { models: [tag] },
     { version: "0.0.0-test" },
     show,
+    { models: [{ ...tag, context_length: 64000 }] },
     { models: [tag] },
     { version: "0.0.0-test" },
   ];
@@ -91,38 +139,12 @@ describe("non-generating live prerequisites", () => {
     ).toThrow("explicit value approved");
   });
   it("keeps the container canary blocked when the approved context is below the Hermes minimum", () => {
-    const counter = { cap: 2, admitted: 2, nextRefused: true, effectAfterRefusal: false };
-    const report = {
-      realModelCalls: 0,
-      imagePulls: 0,
-      packageDownloads: 0,
-      checks: [
-        {
-          name: "aggregate-disk-cap",
-          passed: true,
-          evidence: { mechanism: "tmpfs-size", capBytes: 8388608, containerAlive: true },
-        },
-        {
-          name: "tool-and-descendant-admission",
-          passed: true,
-          evidence: {
-            toolCalls: counter,
-            descendants: { helpers: counter, commands: counter },
-          },
-        },
-        { name: "product-tool-round-trip", passed: true, evidence: {} },
-        {
-          name: "dependency-manifest",
-          passed: true,
-          evidence: { missingPackages: [], missingBytes: 0 },
-        },
-      ],
-    };
     const blocked = assessContainerCohort({
-      approval: "approved",
-      report,
+      ...planned,
+      report: productReport(),
       routeContext: 32768,
       architectureMaximum: 40960,
+      servingContext: null,
     });
     expect(blocked.ready).toBe(false);
     expect(blocked.gates.aggregateDisk).toBe(true);
@@ -132,12 +154,410 @@ describe("non-generating live prerequisites", () => {
     expect(blocked.failures.join("\n")).toContain("active context");
     expect(
       assessContainerCohort({
+        ...planned,
         approval: undefined,
         report: null,
         routeContext: 32768,
         architectureMaximum: 40960,
+        servingContext: null,
       }).gates.approval,
     ).toBe(false);
+  });
+  it("makes the approved cohort ready only with an attested context inside both bounds", () => {
+    expect(assessContainerCohort({ ...planned, report: productReport() })).toMatchObject({
+      ready: true,
+      failures: [],
+      gates: { contextPin: true, pinnedImage: true, containmentAndResources: true },
+    });
+    for (const servingContext of [null, 32768, 131072])
+      expect(
+        assessContainerCohort({ ...planned, report: productReport(), servingContext }).ready,
+      ).toBe(false);
+  });
+  it.each([
+    [
+      "an unqualified status",
+      (report: ReturnType<typeof productReport>) => {
+        report.status = "container-boundary-qualified-product-unqualified";
+      },
+    ],
+    [
+      "a failed status",
+      (report: ReturnType<typeof productReport>) => {
+        report.status = "failed";
+      },
+    ],
+    [
+      "an unrelated image digest",
+      (report: ReturnType<typeof productReport>) => {
+        report.imageDigest = `sha256:${contentDigest("other-image")}`;
+      },
+    ],
+    [
+      "a drifted runtime revision",
+      (report: ReturnType<typeof productReport>) => {
+        report.runtimeRevision = "0".repeat(40);
+      },
+    ],
+    [
+      "a failed containment check",
+      (report: ReturnType<typeof productReport>) => {
+        report.checks.find((check) => check.name === "forbidden-egress")!.passed = false;
+      },
+    ],
+    [
+      "a failed resource check",
+      (report: ReturnType<typeof productReport>) => {
+        report.checks.find((check) => check.name === "memory-limit-kill")!.passed = false;
+      },
+    ],
+    [
+      "a missing containment check",
+      (report: ReturnType<typeof productReport>) => {
+        report.checks = report.checks.filter((check) => check.name !== "outside-write");
+      },
+    ],
+    [
+      "an extra failed check",
+      (report: ReturnType<typeof productReport>) => {
+        report.checks.push({ name: "unlisted-probe", passed: false, evidence: {} });
+      },
+    ],
+  ])("blocks the cohort for %s even when every planning gate passes", (_label, change) => {
+    const report = productReport();
+    change(report);
+    const assessment = assessContainerCohort({ ...planned, report });
+    expect(assessment.ready).toBe(false);
+    expect(assessment.failures).not.toEqual([]);
+  });
+  it("tells the researcher to re-run qualification for the pinned image's unqualified report", () => {
+    for (const status of ["failed", "container-boundary-qualified-product-unqualified"]) {
+      const failures = assessContainerCohort({
+        ...planned,
+        report: { ...productReport(), status },
+      }).failures;
+      expect(failures).toContain(
+        `The container report for the pinned Hermes image is ${status}; re-run container qualification until it is product-qualified`,
+      );
+      expect(failures.join("\n")).not.toContain("is not for the inspected pinned Hermes image");
+    }
+    expect(
+      assessContainerCohort({
+        ...planned,
+        report: { ...productReport(), imageDigest: `sha256:${contentDigest("other-image")}` },
+      }).failures,
+    ).toContain("The container report is not for the inspected pinned Hermes image and revision");
+  });
+  it("blocks the cohort when the pinned image was not inspected or an earlier step failed", () => {
+    const uninspected = assessContainerCohort({
+      ...planned,
+      report: productReport(),
+      pinnedImage: null,
+    });
+    expect(uninspected.ready).toBe(false);
+    expect(uninspected.failures.join("\n")).toContain("pinned Hermes image was not inspected");
+    expect(
+      assessContainerCohort({
+        ...planned,
+        report: productReport(),
+        pinnedImage: { ...pinnedImage, revision: "0".repeat(40) },
+      }).ready,
+    ).toBe(false);
+    expect(
+      assessContainerCohort({
+        ...planned,
+        report: productReport(),
+        preflightFailures: ["Native isolation: unavailable"],
+      }).ready,
+    ).toBe(false);
+  });
+  it("refuses admission with zero model requests when the context shrinks after planning", async () => {
+    const f = fixture();
+    const route = await inspectLocalRoute(expected, f.transport);
+    expect(
+      assessContainerCohort({
+        ...planned,
+        report: productReport(),
+        routeContext: route.budget.contextSize,
+        servingContext: route.effectiveContext,
+      }).ready,
+    ).toBe(true);
+    const tag = { name: expected.model, digest: expected.digest };
+    const ps = [
+      { models: [{ ...tag, context_length: 32768 }] },
+      { models: [{ ...tag, context_length: 64000 }] },
+      { models: [{ ...tag, context_length: 64000 }] },
+      { models: [{ ...tag, context_length: 64000 }] },
+      { models: [] },
+    ];
+    const metadata: string[] = [];
+    const serving = new ServingWitness(route.budget, (async (url: string | URL | Request) => {
+      metadata.push(new URL(String(url)).pathname);
+      return Response.json(ps.shift());
+    }) as typeof fetch);
+    const upstream = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            model: expected.model,
+            choices: [],
+            usage: { prompt_tokens: 10, completion_tokens: 1 },
+          }),
+          { headers: { "content-type": "application/json" } },
+        ),
+    );
+    const ledger = new BudgetLedger(route.budget);
+    await expect(
+      startGateway({
+        budget: route.budget,
+        ledger,
+        transport: upstream,
+        evidenceKind: "provider-live",
+      }),
+    ).rejects.toThrow("serving-state attestation");
+    const gateway = await startGateway({
+      budget: route.budget,
+      ledger,
+      transport: upstream,
+      evidenceKind: "provider-live",
+      serving,
+    });
+    const send = (url: string) =>
+      fetch(`${url}/chat/completions`, {
+        method: "POST",
+        body: JSON.stringify({
+          model: expected.model,
+          messages: [{ role: "user", content: "synthetic" }],
+        }),
+      });
+    try {
+      await expect(gateway.admit("trial-a")).rejects.toThrow(
+        "Loaded serving context 32768 does not match declared context 64000",
+      );
+      expect(() => gateway.capability("trial-a", "main", () => undefined)).toThrow("not admitted");
+      expect(ledger.snapshot()).toMatchObject({ trials: [], reservations: [] });
+      expect(upstream).not.toHaveBeenCalled();
+      expect(gateway.requests).toEqual([]);
+      expect(serving.observations[0]).toMatchObject({
+        stage: "trial-admission",
+        trialId: "trial-a",
+        declaredContext: 64000,
+        observedContext: 32768,
+        admitted: false,
+      });
+      await gateway.admit("trial-b");
+      const url = gateway.capability("trial-b", "main", () => undefined);
+      expect((await send(url)).status).toBe(200);
+      expect((await send(url)).status).toBe(403);
+      expect(upstream).toHaveBeenCalledTimes(1);
+      expect(serving.observations.map(({ stage, admitted }) => [stage, admitted])).toEqual([
+        ["trial-admission", false],
+        ["trial-admission", true],
+        ["model-request", true],
+        ["model-response", true],
+        ["model-request", false],
+      ]);
+      expect(metadata).toEqual(["/api/ps", "/api/ps", "/api/ps", "/api/ps", "/api/ps"]);
+    } finally {
+      await gateway.close();
+    }
+  });
+  it("re-attests after forwarding and fails the trial, not just the request, on a reload", async () => {
+    const f = fixture();
+    const route = await inspectLocalRoute(expected, f.transport);
+    const tag = { name: expected.model, digest: expected.digest };
+    // The response is forwarded on a matching pre-request reading; the server reloads the
+    // model to a different context before the post-response re-attestation reads `/api/ps`.
+    const ps = [
+      { models: [{ ...tag, context_length: 64000 }] },
+      { models: [{ ...tag, context_length: 64000 }] },
+      { models: [{ ...tag, context_length: 32768 }] },
+    ];
+    const metadata: string[] = [];
+    const serving = new ServingWitness(route.budget, (async (url: string | URL | Request) => {
+      metadata.push(new URL(String(url)).pathname);
+      return Response.json(ps.shift());
+    }) as typeof fetch);
+    const upstream = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            model: expected.model,
+            choices: [],
+            usage: { prompt_tokens: 10, completion_tokens: 1 },
+          }),
+          { headers: { "content-type": "application/json" } },
+        ),
+    );
+    const ledger = new BudgetLedger(route.budget);
+    const gateway = await startGateway({
+      budget: route.budget,
+      ledger,
+      transport: upstream,
+      evidenceKind: "provider-live",
+      serving,
+    });
+    const send = (url: string) =>
+      fetch(`${url}/chat/completions`, {
+        method: "POST",
+        body: JSON.stringify({
+          model: expected.model,
+          messages: [{ role: "user", content: "synthetic" }],
+        }),
+      });
+    try {
+      await gateway.admit("trial-a");
+      const url = gateway.capability("trial-a", "main", () => undefined);
+      // The response is already forwarded to the client before the reload is detected, so the
+      // client still sees it: this failure is internal bookkeeping, not a dropped response.
+      expect((await send(url)).status).toBe(200);
+      expect(gateway.requests).toMatchObject([{ outcome: "failed", authoritative: false }]);
+      expect(serving.observations.map(({ stage, admitted }) => [stage, admitted])).toEqual([
+        ["trial-admission", true],
+        ["model-request", true],
+        ["model-response", false],
+      ]);
+      // The trial itself is failed: a second request is refused before any new attestation.
+      expect((await send(url)).status).toBe(403);
+      expect(upstream).toHaveBeenCalledTimes(1);
+      expect(metadata).toHaveLength(3);
+    } finally {
+      await gateway.close();
+    }
+  });
+  it("refuses a serving witness for the same model, digest, and context on another port", async () => {
+    const f = fixture();
+    const route = await inspectLocalRoute(expected, f.transport);
+    const upstream = vi.fn(async () => new Response("not-called", { status: 500 }));
+    const ps = {
+      models: [{ name: expected.model, digest: expected.digest, context_length: 64000 }],
+    };
+    const metadata = (async () => Response.json(ps)) as typeof fetch;
+    const otherPort = {
+      ...route.budget,
+      endpoint: { ...route.budget.endpoint, origin: "http://127.0.0.1:11435" },
+    };
+    let startCode = "accepted";
+    try {
+      const opened = await startGateway({
+        budget: route.budget,
+        ledger: new BudgetLedger(route.budget),
+        transport: upstream,
+        evidenceKind: "provider-live",
+        serving: new ServingWitness(otherPort, metadata),
+      });
+      await opened.close();
+    } catch (error) {
+      startCode = (error as { code?: string }).code ?? "error";
+    }
+    expect({ startCode, upstream: upstream.mock.calls.length }).toEqual({
+      startCode: "serving-witness-mismatch",
+      upstream: 0,
+    });
+  });
+  it("refuses a serving witness built for a different model, digest, or context", async () => {
+    const f = fixture();
+    const route = await inspectLocalRoute(expected, f.transport);
+    const upstream = vi.fn(async () => new Response("not-called", { status: 500 }));
+    const ps = {
+      models: [{ name: expected.model, digest: expected.digest, context_length: 64000 }],
+    };
+    const metadata = (async () => Response.json(ps)) as typeof fetch;
+    const altered = (field: "model" | "digest" | "context") => {
+      if (field === "context") return { ...route.budget, contextSize: 32768 };
+      return {
+        ...route.budget,
+        model: {
+          ...route.budget.model,
+          ...(field === "model" ? { id: "other:8b" } : { digest: contentDigest("other-model") }),
+        },
+      };
+    };
+    for (const field of ["model", "digest", "context"] as const) {
+      const ledger = new BudgetLedger(route.budget);
+      await expect(
+        startGateway({
+          budget: route.budget,
+          ledger,
+          transport: upstream,
+          evidenceKind: "provider-live",
+          serving: new ServingWitness(altered(field), metadata),
+        }),
+      ).rejects.toMatchObject({ code: "serving-witness-mismatch" });
+    }
+    expect(upstream).not.toHaveBeenCalled();
+    // A matching witness is checked once when the gateway starts; admission re-reads only `/api/ps`.
+    const ledger = new BudgetLedger(route.budget);
+    const gateway = await startGateway({
+      budget: route.budget,
+      ledger,
+      transport: upstream,
+      evidenceKind: "provider-live",
+      serving: new ServingWitness(route.budget, metadata),
+    });
+    upstream.mockImplementation(
+      async () =>
+        new Response(
+          JSON.stringify({
+            model: expected.model,
+            choices: [],
+            usage: { prompt_tokens: 3, completion_tokens: 1 },
+          }),
+          { headers: { "content-type": "application/json" } },
+        ),
+    );
+    try {
+      await gateway.admit("trial-match");
+      const url = gateway.capability("trial-match", "main", () => undefined);
+      const response = await fetch(`${url}/chat/completions`, {
+        method: "POST",
+        body: JSON.stringify({
+          model: expected.model,
+          messages: [{ role: "user", content: "synthetic" }],
+        }),
+      });
+      expect(response.status).toBe(200);
+      expect(upstream).toHaveBeenCalledTimes(1);
+    } finally {
+      await gateway.close();
+    }
+  });
+  it("tells the researcher to load the model when it is not loaded", async () => {
+    const f = fixture();
+    f.responses[3] = { models: [] };
+    const sentence =
+      "Load qwen3:8b with a context of 64000 tokens first, for example by setting the server's default context (Ollama's OLLAMA_CONTEXT_LENGTH) to that value and issuing one request, then run qualification again. Preloading with a request whose transport cannot pin the context risks a later reload back to the server default.";
+    const failure = await inspectLocalRoute(expected, f.transport).then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+    expect(failure).toBeInstanceOf(Error);
+    expect((failure as Error).message).toBe(sentence);
+    expect(routeFailure(failure)).toBe(sentence);
+    expect(routeFailure(new Error("Model digest drift"))).toBe(
+      "Model metadata: Error: Model digest drift",
+    );
+  });
+  it("parses recorded serving-state fixtures without loading a model", () => {
+    const tag = { name: expected.model, digest: expected.digest };
+    expect(
+      parseServingContext(
+        { models: [{ ...tag, context_length: 64000, size_vram: 1234 }] },
+        expected,
+      ),
+    ).toBe(64000);
+    for (const value of [
+      { models: [] },
+      { models: [{ ...tag, digest: contentDigest("other"), context_length: 64000 }] },
+      { models: [{ ...tag, context_length: 0 }] },
+      {
+        models: [
+          { ...tag, context_length: 64000 },
+          { ...tag, context_length: 64000 },
+        ],
+      },
+    ])
+      expect(() => parseServingContext(value, expected)).toThrow();
   });
   it("prints help without probing or discovery and rejects accidental live options", async () => {
     const output = vi.spyOn(console, "log").mockImplementation(() => undefined);
@@ -157,6 +577,7 @@ describe("non-generating live prerequisites", () => {
       "/api/tags",
       "/api/version",
       "/api/show",
+      "/api/ps",
       "/api/tags",
       "/api/version",
     ]);
@@ -175,10 +596,10 @@ describe("non-generating live prerequisites", () => {
     ).toBe(true);
     expect(result).toMatchObject({
       toolRoundTrip: "not-run",
-      effectiveContext: null,
+      effectiveContext: 64000,
       generationRequests: 0,
     });
-    expect(result.budget.contextSize).toBe(32768);
+    expect(result.budget.contextSize).toBe(64000);
     expect(result.budget.model.digest).toBe(expected.digest);
     expect(result.budget.model.tokenizerHash).toBe(
       contentDigest({ "tokenizer.ggml.tokens": ["synthetic"] }),
@@ -209,7 +630,7 @@ describe("non-generating live prerequisites", () => {
     async (version) => {
       const f = fixture();
       f.responses[1] = { version };
-      f.responses[4] = { version };
+      f.responses[5] = { version };
       await expect(inspectLocalRoute(expected, f.transport)).rejects.toThrow("serverVersion");
       expect(f.requests.map(({ url }) => new URL(url).pathname)).toEqual([
         "/api/tags",
@@ -222,13 +643,13 @@ describe("non-generating live prerequisites", () => {
     async (version) => {
       const f = fixture();
       f.responses[1] = { version };
-      f.responses[4] = { version };
+      f.responses[5] = { version };
       expect((await inspectLocalRoute(expected, f.transport)).budget.model.serverVersion).toBe(
         version,
       );
       const changed = fixture();
       changed.responses[1] = { version };
-      changed.responses[4] = { version: null };
+      changed.responses[5] = { version: null };
       await expect(inspectLocalRoute(expected, changed.transport)).rejects.toThrow("version drift");
     },
   );
@@ -239,10 +660,10 @@ describe("non-generating live prerequisites", () => {
       if (change === "quantization") f.show.details.quantization_level = "Q8";
       if (change === "context") f.show.model_info["qwen3.context_length"] = 4096;
       if (change === "tokenizer") f.show.model_info["tokenizer.ggml.tokens"] = [];
-      if (change === "tag-race") f.responses[3] = { models: [] };
-      if (change === "server-race") f.responses[4] = { version: "changed" };
+      if (change === "tag-race") f.responses[4] = { models: [] };
+      if (change === "server-race") f.responses[5] = { version: "changed" };
       await expect(inspectLocalRoute(expected, f.transport)).rejects.toThrow();
-      expect(f.requests.length).toBeLessThanOrEqual(5);
+      expect(f.requests.length).toBeLessThanOrEqual(6);
       expect(f.requests.some(({ url }) => /generate|chat|pull|create/.test(url))).toBe(false);
     },
   );

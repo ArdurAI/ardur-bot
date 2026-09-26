@@ -1,8 +1,12 @@
 import type { LearningProposal, RuntimePin } from "@ardurbot/contracts";
-import type { PrismaClient } from "@ardurbot/db";
+import type { BoardRun } from "@ardurbot/contracts/board";
+import { IsolationError, observeBoardItems, type Pool, type PrismaClient } from "@ardurbot/db";
 import { MemoryService, PostgresDocumentStore } from "@ardurbot/memory";
 import { memoryDatabaseFake, serialMemoryLock } from "@ardurbot/testkit/memory-fakes";
 import { describe, expect, it, vi } from "vitest";
+import { createBoardNotificationDelivery } from "./board/notifications.js";
+import { pendingCloseAction, releaseChangedBoardClose } from "./board/pending-close.js";
+import { BoardService } from "./board/service.js";
 import { createLearningApplyService } from "./learning-apply.js";
 import { applyGrantedLearning } from "./learning-auto-apply.js";
 import { createLearningGrants } from "./learning-grants.js";
@@ -30,6 +34,20 @@ function matches(row: Row, where: Row = {}): boolean {
       return matches(row, value as Row);
     if (value && typeof value === "object" && !(value instanceof Date)) {
       const condition = value as Row;
+      if ("not" in condition) {
+        if (condition.not === null) return row[key] != null;
+        return row[key] !== condition.not;
+      }
+      if ("lte" in condition) {
+        const left = row[key];
+        if (left == null || condition.lte == null) return false;
+        const leftMs = left instanceof Date ? left.getTime() : Date.parse(String(left));
+        const rightMs =
+          condition.lte instanceof Date
+            ? condition.lte.getTime()
+            : Date.parse(String(condition.lte));
+        return leftMs <= rightMs;
+      }
       if ("gte" in condition) return Number(row[key]) >= Number(condition.gte);
       if ("gt" in condition) return Number(row[key]) > Number(condition.gt);
       if ("in" in condition) return (condition.in as unknown[]).includes(row[key]);
@@ -61,6 +79,12 @@ function table(rows: Row[]) {
       rows.push(row);
       return row;
     }),
+    delete: vi.fn(async ({ where }: { where: Row }) => {
+      const index = rows.findIndex((row) => matches(row, where));
+      if (index < 0) throw new Error("Missing");
+      const [row] = rows.splice(index, 1);
+      return row;
+    }),
     update: vi.fn(async ({ where, data }: { where: Row; data: Row }) => {
       const row = rows.find((row) => matches(row, where));
       if (!row) throw new Error("Missing");
@@ -80,6 +104,12 @@ function table(rows: Row[]) {
       else rows.push(create);
       return row ?? create;
     }),
+    deleteMany: vi.fn(async ({ where }: { where: Row }) => {
+      const kept = rows.filter((row) => !matches(row, where));
+      const count = rows.length - kept.length;
+      rows.splice(0, rows.length, ...kept);
+      return { count };
+    }),
   };
 }
 function fixture() {
@@ -87,7 +117,9 @@ function fixture() {
     audits: Row[] = [],
     grants: Row[] = [],
     suppressions: Row[] = [],
-    skills: Row[] = [];
+    skills: Row[] = [],
+    filings: Row[] = [];
+  const transactions = { open: 0 };
   const bot = { id: "bot", ...actor, notifyOnFinish: true, autoSpeak: false };
   const thread = { id: "thread", ...actor, historyCompactionGeneration: 0 };
   const memoryDb = memoryDatabaseFake();
@@ -99,6 +131,8 @@ function fixture() {
     learningGrant: table(grants),
     learningSuppression: table(suppressions),
     agentSkill: table(skills),
+    botBoardFiling: table(filings),
+    boardWorkspace: table([{ id: "workspace", ownerUserId: actor.userId }]),
     actionApprovalRule: {
       upsert: vi.fn(async ({ create }: { create: Row }) => ({ id: "rule", ...create })),
     },
@@ -116,10 +150,11 @@ function fixture() {
     ...db,
     $transaction: (action: (tx: typeof db) => Promise<unknown>) =>
       mutex(async () => {
-        const collections = [proposals, audits, grants, suppressions, skills];
+        const collections = [proposals, audits, grants, suppressions, skills, filings];
         const snapshot = collections.map((rows) => structuredClone(rows));
         const docs = structuredClone(memoryDb.documents),
           revisions = structuredClone(memoryDb.revisions);
+        transactions.open += 1;
         try {
           return await action(db);
         } catch (error) {
@@ -130,6 +165,8 @@ function fixture() {
           for (const [id, doc] of docs) memoryDb.documents.set(id, doc);
           memoryDb.revisions.splice(0, memoryDb.revisions.length, ...revisions);
           throw error;
+        } finally {
+          transactions.open -= 1;
         }
       }),
   } as unknown as PrismaClient;
@@ -223,6 +260,8 @@ function fixture() {
     grants,
     suppressions,
     skills,
+    filings,
+    transactions,
     bot,
     thread,
     enqueue,
@@ -855,6 +894,418 @@ it("preserves current citations when undoing a category change", async () => {
   });
 });
 
+function boardFixture(filed: { duplicate: boolean; updatedAt?: string }) {
+  const f = fixture();
+  const item = {
+    id: "board-a",
+    status: "open",
+    createdAt: "2026-09-25T12:00:00.000Z",
+    updatedAt: filed.updatedAt ?? "2026-09-25T12:00:00.000Z",
+  };
+  const hostCalls: Array<{ call: string; transactions: number }> = [];
+  const host = (call: string) => hostCalls.push({ call, transactions: f.transactions.open });
+  const close = vi.fn(async (..._args: unknown[]) => {
+    host("close");
+    return [{ ...item, status: "closed" }];
+  });
+  const show = vi.fn(async () => {
+    host("show");
+    return item;
+  });
+  const boardService = {
+    withFilingLock: vi.fn(async (_scope: unknown, work: () => Promise<unknown>) => work()),
+    fileLearningProposal: vi.fn(async (_scope: unknown, proposalId: string) => {
+      host("file");
+      f.filings.push({
+        id: `filing-${f.filings.length}`,
+        ...actor,
+        botId: "bot",
+        workspaceId: "workspace",
+        itemId: "board-a",
+        learningProposalId: proposalId,
+        reused: filed.duplicate,
+      });
+      return {
+        workspaceId: "workspace",
+        duplicate: filed.duplicate,
+        item: { ...item, updatedAt: "2026-09-25T12:00:00.000Z", commentCount: 0 },
+      };
+    }),
+    provider: vi.fn(async () => ({ show, close })),
+    notePendingCloseFailure: vi.fn(async (filingId: string) => {
+      const row = f.filings.find((filing) => filing.id === filingId);
+      if (!row?.closePending) return;
+      const previous = typeof row.closeAttempts === "number" ? row.closeAttempts : 0;
+      row.closeAttempts = previous + 1;
+      row.closeNextAt = new Date();
+    }),
+    finishClose: vi.fn(
+      async (
+        _scope: unknown,
+        filing: {
+          id: string;
+          spaceId: string;
+          closePending?: string | null;
+          itemId?: string | null;
+          workspaceId?: string | null;
+          closeUpdatedAt?: string | null;
+          closeCommentCount?: number | null;
+        },
+      ) => {
+        if (!filing.closePending || !filing.itemId || !filing.workspaceId) return "done";
+        const current = await show();
+        const action = pendingCloseAction(current, {
+          closePending: filing.closePending,
+          closeUpdatedAt: filing.closeUpdatedAt,
+          closeCommentCount: filing.closeCommentCount,
+        });
+        if (action === "changed") {
+          await releaseChangedBoardClose(f.deps.prisma, filing as never);
+          return action;
+        }
+        if (action === "close") await close([current.id], filing.closePending);
+        await f.deps.prisma.botBoardFiling.deleteMany({
+          where: { id: filing.id, spaceId: filing.spaceId },
+        });
+        return action;
+      },
+    ),
+  };
+  const apply = createLearningApplyService({ ...f.deps, boardService: boardService as never });
+  const proposal = () =>
+    f.proposal(undefined, {
+      type: "board-item",
+      proposedContent: undefined,
+      boardItem: {
+        title: "Finish the import follow-up",
+        description: "The run stopped before the import finished.",
+        acceptanceCriteria: "The import completes.",
+      },
+    });
+  return { f, apply, boardService, close, show, hostCalls, proposal };
+}
+
+it.each([false, true])(
+  "undoes an unchanged board item and leaves a changed item alone (changed=%s)",
+  async (changed) => {
+    const {
+      f,
+      apply,
+      boardService,
+      close,
+      hostCalls,
+      proposal: create,
+    } = boardFixture({
+      duplicate: false,
+      updatedAt: changed ? "2026-09-25T13:00:00.000Z" : undefined,
+    });
+    const proposal = await create();
+    await expect(apply.autoApply(proposal.id, f.grant().id as string)).rejects.toThrow();
+    expect(boardService.fileLearningProposal).not.toHaveBeenCalled();
+    const applied = await apply.approve(proposal.id, actor);
+    expect(applied.proposal).toMatchObject({
+      status: "applied",
+      appliedBoardItem: { workspaceId: "workspace", itemId: "board-a", duplicate: false },
+    });
+    const undone = await apply.revert(proposal.id, actor);
+    if (changed) {
+      expect(close).not.toHaveBeenCalled();
+      expect(undone.conflict?.current).toBe(
+        "This board item changed after it was filed. Review it on the Board.",
+      );
+    } else {
+      expect(close).toHaveBeenCalledWith(["board-a"], "Undone from Learning");
+      expect(undone.proposal.status).toBe("reverted");
+    }
+    expect(hostCalls.map((call) => call.call)).toEqual(
+      changed ? ["file", "show"] : ["file", "show", "close"],
+    );
+    expect(hostCalls.every((call) => call.transactions === 0)).toBe(true);
+    expect(boardService.withFilingLock).toHaveBeenCalledTimes(2);
+  },
+);
+
+it("undoes a reused, human-created board item by removing only the association", async () => {
+  const { f, apply, close, show, proposal: create } = boardFixture({ duplicate: true });
+  const proposal = await create();
+  f.filings.push({
+    id: "human",
+    ...actor,
+    botId: null,
+    workspaceId: "workspace",
+    itemId: "board-a",
+    learningProposalId: null,
+    reused: false,
+  });
+  const applied = await apply.approve(proposal.id, actor);
+  expect(applied.proposal.appliedBoardItem).toMatchObject({ itemId: "board-a", duplicate: true });
+  const undone = await apply.revert(proposal.id, actor);
+  expect(undone.conflict).toBeUndefined();
+  expect(undone.proposal.status).toBe("reverted");
+  expect(close).not.toHaveBeenCalled();
+  expect(show).not.toHaveBeenCalled();
+  expect(f.filings.map((row) => row.id)).toEqual(["human"]);
+  expect(f.audits.map((row) => row.action)).toEqual(["approve", "revert"]);
+});
+
+it("keeps a created item when recording its id fails, then the next approval owns it and Undo closes it", async () => {
+  const f = fixture();
+  const created = {
+    id: "board-a",
+    status: "open",
+    createdAt: "2026-09-25T12:00:00.000Z",
+    updatedAt: "2026-09-25T12:00:00.000Z",
+    title: "Finish the import follow-up",
+  };
+  const close = vi.fn(async () => [{ ...created, status: "closed" }]);
+  const show = vi.fn(async () => created);
+  let listed = 0;
+  const board = new BoardService({ prisma: f.deps.prisma, dataDir: "/fixture" });
+  vi.spyOn(board, "workspace").mockResolvedValue({ id: "workspace" } as never);
+  vi.spyOn(board, "provider").mockResolvedValue({
+    list: vi.fn(async () => {
+      listed += 1;
+      return listed === 1 ? [] : [created];
+    }),
+    create: vi.fn(async () => created),
+    show,
+    close,
+  } as never);
+  let updates = 0;
+  const update = f.db.botBoardFiling.update.getMockImplementation()!;
+  f.db.botBoardFiling.update.mockImplementation(async (args: { where: Row; data: Row }) => {
+    updates += 1;
+    if (updates <= 3) throw new Error("timeout exceeded when trying to connect");
+    return update(args);
+  });
+  const apply = createLearningApplyService({ ...f.deps, boardService: board });
+  const proposal = await f.proposal(undefined, {
+    type: "board-item",
+    proposedContent: undefined,
+    boardItem: {
+      title: "Finish the import follow-up",
+      description: "The run stopped before the import finished.",
+      acceptanceCriteria: "The import completes.",
+    },
+  });
+  await expect(apply.approve(proposal.id, actor)).rejects.toThrow(
+    /timeout exceeded when trying to connect/,
+  );
+  expect(f.filings).toEqual([
+    expect.objectContaining({ learningProposalId: proposal.id, itemId: "board-a", reused: false }),
+  ]);
+  const applied = await apply.approve(proposal.id, actor);
+  expect(applied.proposal).toMatchObject({
+    status: "applied",
+    appliedBoardItem: { itemId: "board-a", duplicate: false },
+  });
+  const undone = await apply.revert(proposal.id, actor);
+  expect(undone.proposal.status).toBe("reverted");
+  expect(close).toHaveBeenCalledWith(["board-a"], "Undone from Learning");
+});
+
+it("does not file a board item for a proposal rejected while approval waited", async () => {
+  const { f, apply, boardService, proposal: create } = boardFixture({ duplicate: false });
+  const proposal = await create();
+  boardService.withFilingLock.mockImplementationOnce(async (_scope, work) => {
+    await apply.reject(proposal.id, actor);
+    return work();
+  });
+  await expect(apply.approve(proposal.id, actor)).rejects.toThrow(
+    "This suggestion is no longer pending.",
+  );
+  expect(boardService.fileLearningProposal).not.toHaveBeenCalled();
+  expect(f.proposals[0]).toMatchObject({ status: "rejected" });
+});
+
+it("closes an unchanged filed item on Reject, leaves a changed item, and never closes a reused item", async () => {
+  const unchanged = boardFixture({ duplicate: false });
+  const pending = await unchanged.proposal();
+  unchanged.f.filings.push({
+    id: "filing",
+    ...actor,
+    botId: "bot",
+    workspaceId: "workspace",
+    itemId: "board-a",
+    learningProposalId: pending.id,
+    reused: false,
+  });
+  unchanged.show.mockResolvedValue({
+    id: "board-a",
+    status: "open",
+    createdAt: "2026-09-25T12:00:00.000Z",
+    updatedAt: "2026-09-25T12:00:00.000Z",
+  });
+  const rejected = await unchanged.apply.reject(pending.id, actor);
+  expect(unchanged.close).toHaveBeenCalledWith(["board-a"], "Rejected from Learning");
+  expect(rejected.proposal.status).toBe("rejected");
+  expect(unchanged.f.filings).toEqual([]);
+
+  const changed = boardFixture({ duplicate: false });
+  const edited = await changed.proposal();
+  changed.f.filings.push({
+    id: "filing",
+    ...actor,
+    botId: "bot",
+    workspaceId: "workspace",
+    itemId: "board-a",
+    learningProposalId: edited.id,
+    reused: false,
+  });
+  changed.show.mockResolvedValue({
+    id: "board-a",
+    status: "open",
+    createdAt: "2026-09-25T12:00:00.000Z",
+    updatedAt: "2026-09-25T13:00:00.000Z",
+  });
+  const left = await changed.apply.reject(edited.id, actor);
+  expect(changed.close).not.toHaveBeenCalled();
+  expect(changed.f.filings).toHaveLength(1);
+  expect(left.proposal.status).toBe("rejected");
+  expect(left.conflict).toMatchObject({
+    code: "board-left-open",
+    current:
+      "This board item changed after it was filed, so it was left open for review on the Board.",
+  });
+
+  const reused = boardFixture({ duplicate: true });
+  const linked = await reused.proposal();
+  reused.f.filings.push({
+    id: "filing",
+    ...actor,
+    botId: "bot",
+    workspaceId: "workspace",
+    itemId: "board-a",
+    learningProposalId: linked.id,
+    reused: true,
+  });
+  const kept = await reused.apply.reject(linked.id, actor);
+  expect(reused.close).not.toHaveBeenCalled();
+  expect(reused.show).not.toHaveBeenCalled();
+  expect(kept.proposal.status).toBe("rejected");
+  expect(reused.f.filings.map((row) => row.itemId)).toEqual(["board-a"]);
+});
+
+it("closes the item on Undo and Reject with the person's own board access after the bot is unticked from the board", async () => {
+  const f = fixture();
+  const workspace = {
+    id: "workspace",
+    spaceId: actor.spaceId,
+    ownerUserId: actor.userId,
+    kind: "space",
+    path: "",
+    prefix: "work",
+    name: "Board",
+    enabled: true,
+    initialized: true,
+    isDefault: true,
+    allowAllBots: true,
+    allowedBotIds: [] as string[],
+  };
+  Object.assign(f.deps.prisma, {
+    deploymentSettings: { findUnique: async () => ({ ownerUserId: actor.userId }) },
+    user: { findUniqueOrThrow: async () => ({ name: "Owner" }) },
+    boardWorkspace: table([workspace]),
+    boardFollow: { findMany: async () => [] },
+  });
+  const bot = await f.deps.prisma.bot.findFirst({ where: { id: "bot" } });
+  Object.assign(bot!, { name: "Builder", computer: { kind: "desktop" } });
+  const status: Record<string, string> = { "board-a": "open", "board-b": "open" };
+  const requests: BoardRun[] = [];
+  const beads = (id: string) => ({
+    id,
+    title: `Follow-up ${id}`,
+    description: "",
+    issue_type: "task",
+    status: status[id],
+    priority: 2,
+    created_at: "2026-09-25T12:00:00Z",
+    updated_at: "2026-09-25T12:00:00Z",
+    comment_count: 0,
+    close_reason: status[id] === "closed" ? "Closed" : "",
+  });
+  const localRun = vi.fn(async (request: BoardRun) => {
+    requests.push(request);
+    const [command, ...rest] = request.argv;
+    const id = rest.find((arg) => arg.startsWith("board-")) ?? "board-a";
+    if (command === "close") status[id] = "closed";
+    return {
+      ok: true as const,
+      stdout: command === "show" || command === "close" ? JSON.stringify([beads(id)]) : "[]",
+    };
+  });
+  const board = new BoardService({ prisma: f.deps.prisma, dataDir: "/fixture", localRun });
+  vi.spyOn(board, "fileLearningProposal").mockImplementation(async (_scope, proposalId) => {
+    f.filings.push({
+      id: "filing-a",
+      ...actor,
+      botId: "bot",
+      workspaceId: "workspace",
+      itemId: "board-a",
+      learningProposalId: proposalId,
+      reused: false,
+    });
+    return {
+      workspaceId: "workspace",
+      duplicate: false,
+      item: { id: "board-a", updatedAt: "2026-09-25T12:00:00Z", commentCount: 0 } as never,
+    };
+  });
+  const apply = createLearningApplyService({ ...f.deps, boardService: board });
+  const boardItem = {
+    type: "board-item" as const,
+    proposedContent: undefined,
+    boardItem: {
+      title: "Finish the import follow-up",
+      description: "The run stopped before the import finished.",
+      acceptanceCriteria: "The import completes.",
+    },
+  };
+  const approved = await f.proposal(undefined, boardItem);
+  await apply.approve(approved.id, actor);
+  const pending = await f.proposal(undefined, boardItem);
+  // An earlier approval created this item, then its save failed, so the suggestion is pending.
+  f.filings.push({
+    id: "filing-b",
+    ...actor,
+    botId: "bot",
+    workspaceId: "workspace",
+    itemId: "board-b",
+    learningProposalId: pending.id,
+    reused: false,
+  });
+  // Untick the suggestion's bot from the board's allowed bots.
+  workspace.allowAllBots = false;
+  await expect(board.provider({ ...actor, botId: "bot" }, "workspace")).rejects.toMatchObject({
+    problem: { code: "forbidden" },
+  });
+
+  const undone = await apply.revert(approved.id, actor);
+  expect(undone.proposal.status).toBe("reverted");
+  expect(undone).not.toHaveProperty("code");
+  const rejected = await apply.reject(pending.id, actor);
+  expect(rejected.proposal.status).toBe("rejected");
+  expect(rejected).not.toHaveProperty("code");
+
+  const closes = requests.filter((request) => request.argv[0] === "close");
+  expect(closes.map((request) => [request.argv, request.actor])).toEqual([
+    [["close", "board-a", "--reason", "Undone from Learning"], "Owner"],
+    [["close", "board-b", "--reason", "Rejected from Learning"], "Owner"],
+  ]);
+  expect(f.filings).toEqual([]);
+});
+
+it("refuses to edit a board item and leaves its content unchanged", async () => {
+  const { f, apply, proposal: create } = boardFixture({ duplicate: false });
+  const proposal = await create();
+  const before = structuredClone(f.proposals[0]?.body);
+  await expect(
+    apply.edit(proposal.id, actor, { proposedContent: "A different follow-up." }),
+  ).rejects.toThrow("This suggestion cannot be edited here.");
+  expect(f.proposals[0]?.body).toEqual(before);
+  expect(f.audits.map((row) => row.action)).not.toContain("edit");
+});
+
 it("undoes an approved category edit without overwriting later category changes", async () => {
   const f = fixture();
   f.db.reviewExecution.findFirst.mockResolvedValue({
@@ -911,4 +1362,1201 @@ it("undoes an approved category edit without overwriting later category changes"
     kind: "profile",
     content: "Studies plants.",
   });
+});
+
+function panelCounts(rows: Row[]) {
+  const counted = rows.filter((row) => row.botId && row.itemId && row.reused !== true);
+  return {
+    filed: counted.length,
+    done: counted.filter((row) => row.outcome === "completed").length,
+    open: counted.filter((row) => row.outcome == null).length,
+    other: counted.filter((row) => row.outcome === "closed-other").length,
+  };
+}
+
+it("owns the item created after a reservation when recording the id never landed, and reuses an older item", async () => {
+  const f = fixture();
+  const createdAt = new Date(Date.now() + 60_000).toISOString();
+  const created = {
+    id: "board-a",
+    status: "open",
+    createdAt,
+    updatedAt: createdAt,
+    title: "Finish the import follow-up",
+  };
+  const close = vi.fn(async () => [{ ...created, status: "closed" }]);
+  const show = vi.fn(async () => created);
+  let listed = 0;
+  const board = new BoardService({ prisma: f.deps.prisma, dataDir: "/fixture" });
+  vi.spyOn(board, "workspace").mockResolvedValue({ id: "workspace" } as never);
+  vi.spyOn(board, "provider").mockResolvedValue({
+    list: vi.fn(async () => {
+      listed += 1;
+      return listed === 1 ? [] : [created];
+    }),
+    create: vi.fn(async () => created),
+    show,
+    close,
+  } as never);
+  const update = f.db.botBoardFiling.update.getMockImplementation()!;
+  f.db.botBoardFiling.update.mockImplementation(async () => {
+    throw new Error("timeout exceeded when trying to connect");
+  });
+  const apply = createLearningApplyService({ ...f.deps, boardService: board });
+  const proposal = await f.proposal(undefined, {
+    type: "board-item",
+    proposedContent: undefined,
+    boardItem: {
+      title: "Finish the import follow-up",
+      description: "The run stopped before the import finished.",
+      acceptanceCriteria: "The import completes.",
+    },
+  });
+  await expect(apply.approve(proposal.id, actor)).rejects.toThrow(
+    /timeout exceeded when trying to connect/,
+  );
+  expect(f.filings[0]?.itemId ?? null).toBeNull();
+  expect(f.filings[0]?.reused).toBe(false);
+  f.db.botBoardFiling.update.mockImplementation(update);
+  const applied = await apply.approve(proposal.id, actor);
+  expect(applied.proposal.appliedBoardItem).toMatchObject({
+    itemId: "board-a",
+    duplicate: false,
+  });
+  expect(f.filings).toEqual([
+    expect.objectContaining({ itemId: "board-a", learningProposalId: proposal.id, reused: false }),
+  ]);
+  const undone = await apply.revert(proposal.id, actor);
+  expect(undone.proposal.status).toBe("reverted");
+  expect(close).toHaveBeenCalledWith(["board-a"], "Undone from Learning");
+
+  const older = fixture();
+  const previous = {
+    id: "board-b",
+    status: "open",
+    createdAt: "2020-01-01T00:00:00.000Z",
+    updatedAt: "2020-01-01T00:00:00.000Z",
+    title: "Finish the import follow-up",
+  };
+  const olderClose = vi.fn(async () => [{ ...previous, status: "closed" }]);
+  const olderBoard = new BoardService({ prisma: older.deps.prisma, dataDir: "/fixture" });
+  vi.spyOn(olderBoard, "workspace").mockResolvedValue({ id: "workspace" } as never);
+  vi.spyOn(olderBoard, "provider").mockResolvedValue({
+    list: vi.fn(async () => [previous]),
+    create: vi.fn(async () => previous),
+    show: vi.fn(async () => previous),
+    close: olderClose,
+  } as never);
+  const olderApply = createLearningApplyService({ ...older.deps, boardService: olderBoard });
+  const earlier = await older.proposal(undefined, {
+    type: "board-item",
+    proposedContent: undefined,
+    boardItem: {
+      title: "Finish the import follow-up",
+      description: "The run stopped before the import finished.",
+      acceptanceCriteria: "The import completes.",
+    },
+  });
+  older.filings.push({
+    id: "reservation",
+    ...actor,
+    botId: "bot",
+    workspaceId: null,
+    itemId: null,
+    learningProposalId: earlier.id,
+    reused: false,
+    titleKey: "finish the import follow-up",
+    createdAt: new Date(),
+  });
+  const reused = await olderApply.approve(earlier.id, actor);
+  expect(reused.proposal.appliedBoardItem).toMatchObject({ duplicate: true });
+  expect(older.filings.some((row) => row.reused === true && row.itemId === "board-b")).toBe(true);
+  await olderApply.revert(earlier.id, actor);
+  expect(olderClose).not.toHaveBeenCalled();
+});
+
+it("drops an undone filing so the Work panel and Overview do not count it as closed otherwise", async () => {
+  const { f, apply, close, proposal: create } = boardFixture({ duplicate: false });
+  const proposal = await create();
+  await apply.approve(proposal.id, actor);
+  expect(f.filings).toHaveLength(1);
+  const undone = await apply.revert(proposal.id, actor);
+  expect(undone.proposal.status).toBe("reverted");
+  expect(close).toHaveBeenCalledWith(["board-a"], "Undone from Learning");
+  Object.assign(f.deps.prisma, { boardFollow: { findMany: vi.fn(async () => []) } });
+  await observeBoardItems(f.deps.prisma, "workspace", [
+    {
+      id: "board-a",
+      title: "Finish the import follow-up",
+      status: "closed",
+      assignee: null,
+      commentCount: 0,
+      closedAt: "2026-09-25T12:00:00.000Z",
+      closeReason: "Undone from Learning",
+    } as never,
+  ]);
+  expect(panelCounts(f.filings)).toEqual({ filed: 0, done: 0, open: 0, other: 0 });
+});
+
+function deferred() {
+  let resolve: () => void = () => {};
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+async function flushMicrotasks() {
+  for (let i = 0; i < 20; i += 1) await Promise.resolve();
+}
+
+function racingBoard(f: ReturnType<typeof fixture>) {
+  const item = {
+    id: "board-a",
+    status: "open",
+    createdAt: "2026-09-25T12:00:00.000Z",
+    updatedAt: "2026-09-25T12:00:00.000Z",
+    title: "Finish the import follow-up",
+  };
+  const close = vi.fn(async () => [{ ...item, status: "closed" }]);
+  const show = vi.fn(async () => item);
+  const create = vi.fn(async () => item);
+  const board = new BoardService({ prisma: f.deps.prisma, dataDir: "/fixture" });
+  vi.spyOn(board, "workspace").mockResolvedValue({ id: "workspace" } as never);
+  vi.spyOn(board, "provider").mockResolvedValue({
+    list: vi.fn(async () => []),
+    create,
+    show,
+    close,
+  } as never);
+  const apply = createLearningApplyService({ ...f.deps, boardService: board });
+  return { item, close, show, create, apply };
+}
+
+async function pendingBoard(f: ReturnType<typeof fixture>) {
+  const proposal = await f.proposal(undefined, {
+    type: "board-item",
+    proposedContent: undefined,
+    boardItem: {
+      title: "Finish the import follow-up",
+      description: "The run stopped before the import finished.",
+      acceptanceCriteria: "The import completes.",
+    },
+  });
+  f.filings.push({
+    id: "filing",
+    ...actor,
+    botId: "bot",
+    workspaceId: "workspace",
+    itemId: "board-a",
+    learningProposalId: proposal.id,
+    reused: false,
+    titleKey: "finish the import follow-up",
+  });
+  return proposal;
+}
+
+it("owns a Beads item listed at the reservation's whole second and reuses the previous second", async () => {
+  const reservedAt = new Date(Date.now() - 2_000);
+  reservedAt.setMilliseconds(171);
+  const sameSecond = new Date(Math.floor(reservedAt.getTime() / 1000) * 1000)
+    .toISOString()
+    .replace(/\.\d{3}Z$/, "Z");
+  const f = fixture();
+  const created = {
+    id: "board-a",
+    status: "open",
+    createdAt: sameSecond,
+    updatedAt: sameSecond,
+    title: "Finish the import follow-up",
+  };
+  const close = vi.fn(async () => [{ ...created, status: "closed" }]);
+  const board = new BoardService({ prisma: f.deps.prisma, dataDir: "/fixture" });
+  vi.spyOn(board, "workspace").mockResolvedValue({ id: "workspace" } as never);
+  vi.spyOn(board, "provider").mockResolvedValue({
+    list: vi.fn(async () => [created]),
+    create: vi.fn(async () => created),
+    show: vi.fn(async () => created),
+    close,
+  } as never);
+  const apply = createLearningApplyService({ ...f.deps, boardService: board });
+  const proposal = await f.proposal(undefined, {
+    type: "board-item",
+    proposedContent: undefined,
+    boardItem: {
+      title: "Finish the import follow-up",
+      description: "The run stopped before the import finished.",
+      acceptanceCriteria: "The import completes.",
+    },
+  });
+  f.filings.push({
+    id: "reservation",
+    ...actor,
+    botId: "bot",
+    workspaceId: null,
+    itemId: null,
+    learningProposalId: proposal.id,
+    reused: false,
+    titleKey: "finish the import follow-up",
+    createdAt: reservedAt,
+  });
+  const applied = await apply.approve(proposal.id, actor);
+  expect(applied.proposal.appliedBoardItem).toMatchObject({
+    itemId: "board-a",
+    duplicate: false,
+  });
+  expect(f.filings).toEqual([
+    expect.objectContaining({ itemId: "board-a", learningProposalId: proposal.id, reused: false }),
+  ]);
+  const undone = await apply.revert(proposal.id, actor);
+  expect(undone.proposal.status).toBe("reverted");
+  expect(close).toHaveBeenCalledWith(["board-a"], "Undone from Learning");
+
+  const older = fixture();
+  const previousSecond = new Date(Math.floor(reservedAt.getTime() / 1000) * 1000 - 1000)
+    .toISOString()
+    .replace(/\.\d{3}Z$/, "Z");
+  const previous = {
+    id: "board-b",
+    status: "open",
+    createdAt: previousSecond,
+    updatedAt: previousSecond,
+    title: "Finish the import follow-up",
+  };
+  const olderClose = vi.fn(async () => [{ ...previous, status: "closed" }]);
+  const olderBoard = new BoardService({ prisma: older.deps.prisma, dataDir: "/fixture" });
+  vi.spyOn(olderBoard, "workspace").mockResolvedValue({ id: "workspace" } as never);
+  vi.spyOn(olderBoard, "provider").mockResolvedValue({
+    list: vi.fn(async () => [previous]),
+    create: vi.fn(async () => previous),
+    show: vi.fn(async () => previous),
+    close: olderClose,
+  } as never);
+  const olderApply = createLearningApplyService({ ...older.deps, boardService: olderBoard });
+  const earlier = await older.proposal(undefined, {
+    type: "board-item",
+    proposedContent: undefined,
+    boardItem: {
+      title: "Finish the import follow-up",
+      description: "The run stopped before the import finished.",
+      acceptanceCriteria: "The import completes.",
+    },
+  });
+  older.filings.push({
+    id: "reservation",
+    ...actor,
+    botId: "bot",
+    workspaceId: null,
+    itemId: null,
+    learningProposalId: earlier.id,
+    reused: false,
+    titleKey: "finish the import follow-up",
+    createdAt: reservedAt,
+  });
+  const reused = await olderApply.approve(earlier.id, actor);
+  expect(reused.proposal.appliedBoardItem).toMatchObject({ duplicate: true });
+  expect(older.filings.some((row) => row.reused === true && row.itemId === "board-b")).toBe(true);
+  await olderApply.revert(earlier.id, actor);
+  expect(olderClose).not.toHaveBeenCalled();
+});
+
+it("stops a racing Reject before it closes an item approval still holds", async () => {
+  const f = fixture();
+  const { close, create, apply } = racingBoard(f);
+  const proposal = await pendingBoard(f);
+  const gate = deferred();
+  let saves = 0;
+  const original = f.deps.prisma.$transaction.bind(f.deps.prisma);
+  f.deps.prisma.$transaction = (async (fn: (tx: unknown) => Promise<unknown>) => {
+    saves += 1;
+    if (saves === 2) {
+      await gate.promise;
+    }
+    return original(fn);
+  }) as typeof f.deps.prisma.$transaction;
+  const approved = apply.approve(proposal.id, actor).then(
+    (value) => ({ ok: true as const, value }),
+    (error: unknown) => ({ ok: false as const, error }),
+  );
+  await flushMicrotasks();
+  const rejected = apply.reject(proposal.id, actor).then(
+    (value) => ({ ok: true as const, value }),
+    (error: unknown) => ({ ok: false as const, error }),
+  );
+  await flushMicrotasks();
+  expect(close).not.toHaveBeenCalled();
+  gate.resolve();
+  const approveResult = await approved;
+  const rejectResult = await rejected;
+  expect(approveResult.ok).toBe(true);
+  if (approveResult.ok) expect(approveResult.value.proposal.status).toBe("applied");
+  expect(rejectResult.ok).toBe(false);
+  if (!rejectResult.ok) {
+    expect(rejectResult.error).toBeInstanceOf(Error);
+    expect((rejectResult.error as Error).message).toBe("This suggestion is no longer pending.");
+  }
+  expect(close).not.toHaveBeenCalled();
+  expect(create).not.toHaveBeenCalled();
+  expect(f.filings).toEqual([
+    expect.objectContaining({ itemId: "board-a", learningProposalId: proposal.id, reused: false }),
+  ]);
+  expect(f.proposals[0]?.status).toBe("applied");
+});
+
+it("stops a racing approval before it files an item Reject already settled", async () => {
+  const f = fixture();
+  const { close, create, show, apply } = racingBoard(f);
+  const proposal = await pendingBoard(f);
+  const gate = deferred();
+  show.mockImplementationOnce(async () => {
+    await gate.promise;
+    return {
+      id: "board-a",
+      status: "open",
+      createdAt: "2026-09-25T12:00:00.000Z",
+      updatedAt: "2026-09-25T12:00:00.000Z",
+      title: "Finish the import follow-up",
+    };
+  });
+  const rejected = apply.reject(proposal.id, actor).then(
+    (value) => ({ ok: true as const, value }),
+    (error: unknown) => ({ ok: false as const, error }),
+  );
+  await flushMicrotasks();
+  const approved = apply.approve(proposal.id, actor).then(
+    (value) => ({ ok: true as const, value }),
+    (error: unknown) => ({ ok: false as const, error }),
+  );
+  await flushMicrotasks();
+  expect(create).not.toHaveBeenCalled();
+  gate.resolve();
+  const rejectResult = await rejected;
+  const approveResult = await approved;
+  expect(rejectResult.ok).toBe(true);
+  if (rejectResult.ok) expect(rejectResult.value.proposal.status).toBe("rejected");
+  expect(approveResult.ok).toBe(false);
+  if (!approveResult.ok) {
+    expect((approveResult.error as Error).message).toBe("This suggestion is no longer pending.");
+  }
+  expect(close).toHaveBeenCalledTimes(1);
+  expect(close).toHaveBeenCalledWith(["board-a"], "Rejected from Learning");
+  expect(create).not.toHaveBeenCalled();
+  expect(f.filings).toEqual([]);
+  expect(f.proposals[0]?.status).toBe("rejected");
+});
+
+it("stops a racing Undo before it closes an item approval still holds, then undoes once approval finishes", async () => {
+  const f = fixture();
+  const { close, apply } = racingBoard(f);
+  const proposal = await pendingBoard(f);
+  const gate = deferred();
+  const parked = deferred();
+  let saves = 0;
+  const original = f.deps.prisma.$transaction.bind(f.deps.prisma);
+  f.deps.prisma.$transaction = (async (fn: (tx: unknown) => Promise<unknown>) => {
+    saves += 1;
+    if (saves === 2) {
+      const result = await original(fn);
+      parked.resolve();
+      await gate.promise;
+      return result;
+    }
+    return original(fn);
+  }) as typeof f.deps.prisma.$transaction;
+  const approved = apply.approve(proposal.id, actor);
+  await parked.promise;
+  const undone = apply.revert(proposal.id, actor).then(
+    (value) => ({ ok: true as const, value }),
+    (error: unknown) => ({ ok: false as const, error }),
+  );
+  for (let i = 0; i < 500 && close.mock.calls.length === 0; i += 1) await Promise.resolve();
+  expect(close).not.toHaveBeenCalled();
+  expect(f.filings).toHaveLength(1);
+  gate.resolve();
+  await approved;
+  const undoResult = await undone;
+  expect(undoResult.ok).toBe(true);
+  if (undoResult.ok) expect(undoResult.value.proposal.status).toBe("reverted");
+  expect(close).toHaveBeenCalledTimes(1);
+  expect(close).toHaveBeenCalledWith(["board-a"], "Undone from Learning");
+  expect(f.filings).toEqual([]);
+  expect(f.proposals[0]?.status).toBe("reverted");
+});
+
+it("stops a racing approval before it files an item Undo already settled", async () => {
+  const f = fixture();
+  const { close, create, show, apply } = racingBoard(f);
+  const proposal = await pendingBoard(f);
+  await apply.approve(proposal.id, actor);
+  close.mockClear();
+  create.mockClear();
+  const gate = deferred();
+  show.mockImplementationOnce(async () => {
+    await gate.promise;
+    return {
+      id: "board-a",
+      status: "open",
+      createdAt: "2026-09-25T12:00:00.000Z",
+      updatedAt: "2026-09-25T12:00:00.000Z",
+      title: "Finish the import follow-up",
+    };
+  });
+  const undone = apply.revert(proposal.id, actor).then(
+    (value) => ({ ok: true as const, value }),
+    (error: unknown) => ({ ok: false as const, error }),
+  );
+  await flushMicrotasks();
+  const approved = apply.approve(proposal.id, actor).then(
+    (value) => ({ ok: true as const, value }),
+    (error: unknown) => ({ ok: false as const, error }),
+  );
+  await flushMicrotasks();
+  expect(close).not.toHaveBeenCalled();
+  expect(create).not.toHaveBeenCalled();
+  expect(f.filings).toHaveLength(1);
+  gate.resolve();
+  const undoResult = await undone;
+  const approveResult = await approved;
+  expect(undoResult.ok).toBe(true);
+  if (undoResult.ok) expect(undoResult.value.proposal.status).toBe("reverted");
+  expect(approveResult.ok).toBe(false);
+  if (!approveResult.ok) {
+    expect((approveResult.error as Error).message).toBe("This suggestion is no longer pending.");
+  }
+  expect(close).toHaveBeenCalledTimes(1);
+  expect(close).toHaveBeenCalledWith(["board-a"], "Undone from Learning");
+  expect(create).not.toHaveBeenCalled();
+  expect(f.filings).toEqual([]);
+  expect(f.proposals[0]?.status).toBe("reverted");
+});
+
+it("holds the filing lock through the learning save", async () => {
+  const state = { open: 0 };
+  const held = new Map<string, number>();
+  let clients = 0;
+  const pool = {
+    connect: vi.fn(async () => {
+      const id = ++clients;
+      state.open += 1;
+      return {
+        query: vi.fn(async (sql: string, values: unknown[] = []) => {
+          const key = String(values[1]);
+          if (sql.includes("pg_try_advisory_lock")) {
+            if (held.has(key)) return { rows: [{ acquired: false }] };
+            held.set(key, id);
+            return { rows: [{ acquired: true }] };
+          }
+          if (sql.includes("pg_advisory_unlock")) {
+            if (held.get(key) === id) held.delete(key);
+            return { rows: [{ released: true }] };
+          }
+          throw new Error(sql);
+        }),
+        release: vi.fn(() => {
+          state.open -= 1;
+        }),
+      };
+    }),
+  };
+  const f = fixture();
+  const created = {
+    id: "board-a",
+    status: "open",
+    createdAt: "2026-09-25T12:00:00.000Z",
+    updatedAt: "2026-09-25T12:00:00.000Z",
+    title: "Finish the import follow-up",
+  };
+  const board = new BoardService({
+    prisma: f.deps.prisma,
+    dataDir: "/fixture",
+    lockPool: pool as never,
+  });
+  vi.spyOn(board, "workspace").mockResolvedValue({ id: "workspace" } as never);
+  vi.spyOn(board, "provider").mockResolvedValue({
+    list: vi.fn(async () => []),
+    create: vi.fn(async () => created),
+    show: vi.fn(async () => created),
+    close: vi.fn(async () => [{ ...created, status: "closed" }]),
+  } as never);
+  const opens: number[] = [];
+  const original = f.deps.prisma.$transaction.bind(f.deps.prisma);
+  f.deps.prisma.$transaction = (async (fn: (tx: unknown) => Promise<unknown>) => {
+    opens.push(state.open);
+    return original(fn);
+  }) as typeof f.deps.prisma.$transaction;
+  const apply = createLearningApplyService({ ...f.deps, boardService: board });
+  const proposal = await f.proposal(undefined, {
+    type: "board-item",
+    proposedContent: undefined,
+    boardItem: {
+      title: "Finish the import follow-up",
+      description: "The run stopped before the import finished.",
+      acceptanceCriteria: "The import completes.",
+    },
+  });
+  await apply.approve(proposal.id, actor);
+  expect(opens.at(-1)).toBe(1);
+  expect(opens).toContain(0);
+});
+
+const BOARD_TITLE = "Finish the import follow-up";
+
+async function hollowProposal(f: ReturnType<typeof fixture>, reservedAt: Date) {
+  const proposal = await f.proposal(undefined, {
+    type: "board-item",
+    proposedContent: undefined,
+    boardItem: {
+      title: BOARD_TITLE,
+      description: "The run stopped before the import finished.",
+      acceptanceCriteria: "The import completes.",
+    },
+  });
+  f.filings.push({
+    id: "reservation",
+    ...actor,
+    botId: "bot",
+    workspaceId: null,
+    itemId: null,
+    learningProposalId: proposal.id,
+    reused: false,
+    titleKey: "finish the import follow-up",
+    createdAt: reservedAt,
+  });
+  return proposal;
+}
+
+function listedBoard(
+  f: ReturnType<typeof fixture>,
+  listed: {
+    id: string;
+    createdAt: string;
+    filedBy?: { runId: string; botId: string; botName: string } | null;
+  },
+) {
+  const open = {
+    id: listed.id,
+    status: "open",
+    createdAt: listed.createdAt,
+    updatedAt: listed.createdAt,
+    title: BOARD_TITLE,
+    filedBy: listed.filedBy ?? null,
+  };
+  const created = {
+    id: "board-new",
+    status: "open",
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    title: BOARD_TITLE,
+  };
+  const close = vi.fn(async (ids: string[]) => [
+    { ...(ids[0] === created.id ? created : open), status: "closed" },
+  ]);
+  const create = vi.fn(async () => created);
+  const board = new BoardService({ prisma: f.deps.prisma, dataDir: "/fixture" });
+  vi.spyOn(board, "workspace").mockResolvedValue({ id: "workspace" } as never);
+  vi.spyOn(board, "provider").mockResolvedValue({
+    list: vi.fn(async () => [open]),
+    create,
+    show: vi.fn(async (id: string) => (id === created.id ? created : open)),
+    close,
+  } as never);
+  const apply = createLearningApplyService({ ...f.deps, boardService: board });
+  return { apply, create, close, open };
+}
+
+it("does not claim a next-day same-title item", async () => {
+  const f = fixture();
+  const reservedAt = new Date(Date.now() - 60_000);
+  const { apply, create, close } = listedBoard(f, {
+    id: "board-human",
+    createdAt: new Date(Date.now() + 86_400_000).toISOString(),
+  });
+  const proposal = await hollowProposal(f, reservedAt);
+  const applied = await apply.approve(proposal.id, actor);
+  expect(applied.proposal.appliedBoardItem).toMatchObject({
+    itemId: "board-human",
+    duplicate: true,
+  });
+  expect(create).not.toHaveBeenCalled();
+  await apply.revert(proposal.id, actor);
+  expect(close).not.toHaveBeenCalled();
+});
+
+it("does not claim an item that another run already filed", async () => {
+  const f = fixture();
+  const reservedAt = new Date(Date.now() - 60_000);
+  const { apply, create, close } = listedBoard(f, {
+    id: "board-other",
+    createdAt: new Date(reservedAt.getTime() + 30_000).toISOString(),
+    filedBy: { runId: "other-run", botId: "other", botName: "Other" },
+  });
+  const proposal = await hollowProposal(f, reservedAt);
+  const applied = await apply.approve(proposal.id, actor);
+  expect(applied.proposal.appliedBoardItem).toMatchObject({
+    itemId: "board-other",
+    duplicate: true,
+  });
+  expect(create).not.toHaveBeenCalled();
+  expect(f.filings.some((row) => row.itemId === "board-other" && row.reused === false)).toBe(false);
+  await apply.revert(proposal.id, actor);
+  expect(close).not.toHaveBeenCalled();
+});
+
+it("owns an item created inside the reservation window when it has no filer", async () => {
+  const f = fixture();
+  const reservedAt = new Date(Date.now() - 60_000);
+  const { apply, create, close } = listedBoard(f, {
+    id: "board-owned",
+    createdAt: new Date(reservedAt.getTime() + 30_000).toISOString(),
+  });
+  const proposal = await hollowProposal(f, reservedAt);
+  const applied = await apply.approve(proposal.id, actor);
+  expect(applied.proposal.appliedBoardItem).toMatchObject({
+    itemId: "board-owned",
+    duplicate: false,
+  });
+  expect(create).not.toHaveBeenCalled();
+  const undone = await apply.revert(proposal.id, actor);
+  expect(undone.proposal.status).toBe("reverted");
+  expect(close).toHaveBeenCalledWith(["board-owned"], "Undone from Learning");
+});
+
+it("links an open item as reused when its hollow reservation is older than 15 minutes", async () => {
+  const f = fixture();
+  const reservedAt = new Date(Date.now() - 20 * 60_000);
+  const { apply, create, close } = listedBoard(f, {
+    id: "board-later",
+    createdAt: new Date(reservedAt.getTime() + 60_000).toISOString(),
+  });
+  const proposal = await hollowProposal(f, reservedAt);
+  const applied = await apply.approve(proposal.id, actor);
+  expect(f.filings.some((row) => row.id === "reservation")).toBe(false);
+  expect(create).not.toHaveBeenCalled();
+  expect(applied.proposal.appliedBoardItem).toMatchObject({
+    itemId: "board-later",
+    duplicate: true,
+  });
+  expect(f.filings.some((row) => row.itemId === "board-later" && row.reused === true)).toBe(true);
+  const undone = await apply.revert(proposal.id, actor);
+  expect(undone.proposal.status).toBe("reverted");
+  expect(close).not.toHaveBeenCalled();
+});
+
+it("leaves the item open and the filing intact when Undo's learning save loses the compaction generation", async () => {
+  const { f, apply, close, show, proposal: create } = boardFixture({ duplicate: false });
+  const proposal = await create();
+  await apply.approve(proposal.id, actor);
+  show.mockImplementation(async () => {
+    f.thread.historyCompactionGeneration += 1;
+    return {
+      id: "board-a",
+      status: "open",
+      createdAt: "2026-09-25T12:00:00.000Z",
+      updatedAt: "2026-09-25T12:00:00.000Z",
+    };
+  });
+  await expect(apply.revert(proposal.id, actor)).rejects.toBeInstanceOf(IsolationError);
+  expect(close).not.toHaveBeenCalled();
+  expect(f.filings).toHaveLength(1);
+  expect(f.filings[0]).toMatchObject({ itemId: "board-a", learningProposalId: proposal.id });
+  expect(f.proposals[0]?.status).toBe("applied");
+});
+
+it("leaves Undo reverted with a close marker when the board close fails, and a retry finishes it", async () => {
+  const { f, apply, close, show, proposal: create } = boardFixture({ duplicate: false });
+  const proposal = await create();
+  await apply.approve(proposal.id, actor);
+  const item = {
+    id: "board-a",
+    status: "open",
+    createdAt: "2026-09-25T12:00:00.000Z",
+    updatedAt: "2026-09-25T12:00:00.000Z",
+    closeReason: null as string | null,
+  };
+  show.mockImplementation(async () => item);
+  close.mockRejectedValueOnce(new Error("beads down"));
+  const pending = await apply.revert(proposal.id, actor);
+  expect(pending).toMatchObject({ code: "board-closing" });
+  expect(pending).not.toHaveProperty("sentence");
+  expect(f.proposals[0]?.status).toBe("reverted");
+  expect(f.filings).toEqual([
+    expect.objectContaining({ itemId: "board-a", closePending: "Undone from Learning" }),
+  ]);
+  close.mockImplementation(async () => {
+    item.status = "closed";
+    item.closeReason = "Undone from Learning";
+    return [{ ...item }];
+  });
+  const undone = await apply.revert(proposal.id, actor);
+  expect(undone.proposal.status).toBe("reverted");
+  expect(close).toHaveBeenCalledWith(["board-a"], "Undone from Learning");
+  expect(f.filings).toEqual([]);
+});
+
+it("treats a board item already closed as Undone from Learning as a finished Undo", async () => {
+  const { f, apply, close, show, proposal: create } = boardFixture({ duplicate: false });
+  const proposal = await create();
+  await apply.approve(proposal.id, actor);
+  const item = {
+    id: "board-a",
+    status: "open",
+    createdAt: "2026-09-25T12:00:00.000Z",
+    updatedAt: "2026-09-25T12:00:00.000Z",
+    closeReason: null as string | null,
+  };
+  show.mockImplementation(async () => ({ ...item }));
+  close.mockRejectedValueOnce(new Error("beads down"));
+  const pending = await apply.revert(proposal.id, actor);
+  expect(pending).toMatchObject({ code: "board-closing" });
+  expect(pending).not.toHaveProperty("sentence");
+  expect(f.proposals[0]?.status).toBe("reverted");
+  expect(f.filings[0]).toMatchObject({ closePending: "Undone from Learning" });
+  item.status = "closed";
+  item.closeReason = "Undone from Learning";
+  close.mockClear();
+  const finished = await apply.revert(proposal.id, actor);
+  expect(finished.proposal.status).toBe("reverted");
+  expect(close).not.toHaveBeenCalled();
+  expect(f.filings).toEqual([]);
+});
+
+it("leaves the item open and the filing intact when Reject's learning save loses the compaction generation", async () => {
+  const { f, apply, close, show, proposal: create } = boardFixture({ duplicate: false });
+  const proposal = await create();
+  f.filings.push({
+    id: "filing",
+    ...actor,
+    botId: "bot",
+    workspaceId: "workspace",
+    itemId: "board-a",
+    learningProposalId: proposal.id,
+    reused: false,
+  });
+  show.mockImplementation(async () => {
+    f.thread.historyCompactionGeneration += 1;
+    return {
+      id: "board-a",
+      status: "open",
+      createdAt: "2026-09-25T12:00:00.000Z",
+      updatedAt: "2026-09-25T12:00:00.000Z",
+    };
+  });
+  await expect(apply.reject(proposal.id, actor)).rejects.toBeInstanceOf(IsolationError);
+  expect(close).not.toHaveBeenCalled();
+  expect(f.filings).toHaveLength(1);
+  expect(f.proposals[0]?.status).toBe("pending");
+});
+
+it("leaves Reject rejected with a close marker when the board close fails, and a retry finishes it", async () => {
+  const { f, apply, close, show, proposal: create } = boardFixture({ duplicate: false });
+  const proposal = await create();
+  f.filings.push({
+    id: "filing",
+    ...actor,
+    botId: "bot",
+    workspaceId: "workspace",
+    itemId: "board-a",
+    learningProposalId: proposal.id,
+    reused: false,
+  });
+  const item = {
+    id: "board-a",
+    status: "open",
+    createdAt: "2026-09-25T12:00:00.000Z",
+    updatedAt: "2026-09-25T12:00:00.000Z",
+    closeReason: null as string | null,
+  };
+  show.mockImplementation(async () => item);
+  close.mockRejectedValueOnce(new Error("beads down"));
+  const pending = await apply.reject(proposal.id, actor);
+  expect(pending).toMatchObject({ code: "board-closing" });
+  expect(pending).not.toHaveProperty("sentence");
+  expect(f.proposals[0]?.status).toBe("rejected");
+  expect(f.filings).toEqual([
+    expect.objectContaining({ itemId: "board-a", closePending: "Rejected from Learning" }),
+  ]);
+  close.mockImplementation(async () => {
+    item.status = "closed";
+    item.closeReason = "Rejected from Learning";
+    return [{ ...item }];
+  });
+  const rejected = await apply.reject(proposal.id, actor);
+  expect(rejected.proposal.status).toBe("rejected");
+  expect(close).toHaveBeenCalledWith(["board-a"], "Rejected from Learning");
+  expect(f.filings).toEqual([]);
+});
+
+it("names an Undo board conflict board-changed", async () => {
+  const { apply, proposal: create } = boardFixture({
+    duplicate: false,
+    updatedAt: "2026-09-25T13:00:00.000Z",
+  });
+  const proposal = await create();
+  await apply.approve(proposal.id, actor);
+  const undone = await apply.revert(proposal.id, actor);
+  expect(undone.conflict).toMatchObject({
+    code: "board-changed",
+    current: "This board item changed after it was filed. Review it on the Board.",
+  });
+});
+
+it("treats a comment as a change: Undo, Reject and the retry leave a discussed item open", async () => {
+  // In Beads a comment raises the comment count and leaves updatedAt as it was.
+  const discussed = {
+    id: "board-a",
+    status: "open",
+    createdAt: "2026-09-25T12:00:00.000Z",
+    updatedAt: "2026-09-25T12:00:00.000Z",
+    commentCount: 1,
+    closeReason: null as string | null,
+  };
+  const undo = boardFixture({ duplicate: false });
+  const applied = await undo.proposal();
+  await undo.apply.approve(applied.id, actor);
+  expect(undo.f.proposals[0]?.body).toMatchObject({
+    appliedBoardItem: { itemId: "board-a", commentCount: 0 },
+  });
+  undo.show.mockResolvedValue({ ...discussed });
+  const undone = await undo.apply.revert(applied.id, actor);
+  expect(undo.close).not.toHaveBeenCalled();
+  expect(undone.conflict).toMatchObject({ code: "board-changed" });
+  expect(undo.f.proposals[0]?.status).toBe("applied");
+
+  const reject = boardFixture({ duplicate: false });
+  const pending = await reject.proposal();
+  reject.f.filings.push({
+    id: "filing",
+    ...actor,
+    botId: "bot",
+    workspaceId: "workspace",
+    itemId: "board-a",
+    learningProposalId: pending.id,
+    reused: false,
+  });
+  reject.show.mockResolvedValue({ ...discussed });
+  const left = await reject.apply.reject(pending.id, actor);
+  expect(reject.close).not.toHaveBeenCalled();
+  expect(left.conflict).toMatchObject({ code: "board-left-open" });
+
+  const retry = boardFixture({ duplicate: false });
+  const again = await retry.proposal();
+  await retry.apply.approve(again.id, actor);
+  const quiet = { ...discussed, commentCount: 0 };
+  retry.show.mockImplementation(async () => ({ ...quiet }));
+  retry.close.mockRejectedValueOnce(new Error("beads down"));
+  const closing = await retry.apply.revert(again.id, actor);
+  expect(closing.code).toBe("board-closing");
+  expect(retry.f.filings[0]).toMatchObject({
+    closePending: "Undone from Learning",
+    closeCommentCount: 0,
+  });
+  quiet.commentCount = 1;
+  retry.close.mockClear();
+  const released = await retry.apply.revert(again.id, actor);
+  expect(retry.close).not.toHaveBeenCalled();
+  expect(released.proposal.boardChanged).toBe(true);
+  expect(retry.f.filings).toEqual([]);
+});
+
+function notificationPool() {
+  return {
+    connect: async () => ({
+      query: async (sql: string) => {
+        if (sql.includes("pg_try_advisory_xact_lock")) return { rows: [{ acquired: true }] };
+        return { rows: [] };
+      },
+      release: () => undefined,
+    }),
+  } as unknown as Pick<Pool, "connect">;
+}
+
+/** One tick: delivery commits, then the sweep runs as its own step; stop only after it ends. */
+async function runBoardTick(board: BoardService, prisma: PrismaClient) {
+  vi.useFakeTimers();
+  const sweep = vi.spyOn(board, "sweepPendingCloses");
+  const delivery = createBoardNotificationDelivery({
+    prisma,
+    notifications: { send: async () => undefined } as never,
+    pool: notificationPool(),
+    board,
+  } as never);
+  try {
+    delivery.start();
+    await vi.waitFor(() => expect(sweep).toHaveBeenCalled());
+    await sweep.mock.results[0]?.value;
+  } finally {
+    await delivery.stop();
+    sweep.mockRestore();
+    vi.useRealTimers();
+  }
+}
+
+function ownedFiling(proposalId: string, reason: string) {
+  return {
+    id: "filing",
+    ...actor,
+    botId: "bot",
+    workspaceId: "workspace",
+    itemId: "board-a",
+    learningProposalId: proposalId,
+    reused: false,
+    closePending: reason,
+    closeUpdatedAt: "2026-09-25T12:00:00.000Z",
+    createdAt: new Date(),
+  };
+}
+
+it("returns the closing code when Reject's close fails, and the tick closes it without another click", async () => {
+  const { f, apply, close, show, proposal: create } = boardFixture({ duplicate: false });
+  const proposal = await create();
+  f.filings.push({
+    id: "filing",
+    ...actor,
+    botId: "bot",
+    workspaceId: "workspace",
+    itemId: "board-a",
+    learningProposalId: proposal.id,
+    reused: false,
+    createdAt: new Date(),
+  });
+  const item = {
+    id: "board-a",
+    status: "open",
+    createdAt: "2026-09-25T12:00:00.000Z",
+    updatedAt: "2026-09-25T12:00:00.000Z",
+    closeReason: null as string | null,
+  };
+  show.mockImplementation(async () => item);
+  close.mockRejectedValueOnce(new Error("beads down"));
+  const result = await apply.reject(proposal.id, actor).catch(() => null);
+  expect(result).toMatchObject({ code: "board-closing", proposal: { status: "rejected" } });
+  expect(result).not.toHaveProperty("sentence");
+  expect(f.filings).toEqual([
+    expect.objectContaining({ itemId: "board-a", closePending: "Rejected from Learning" }),
+  ]);
+  close.mockImplementation(async () => {
+    item.status = "closed";
+    item.closeReason = "Rejected from Learning";
+    return [{ ...item }];
+  });
+  const board = new BoardService({ prisma: f.deps.prisma, dataDir: "/fixture" });
+  vi.spyOn(board, "provider").mockResolvedValue({ show, close } as never);
+  await runBoardTick(board, f.deps.prisma);
+  expect(close).toHaveBeenCalledWith(["board-a"], "Rejected from Learning");
+  expect(f.filings).toEqual([]);
+});
+
+it("returns the closing code when Undo's close fails, and the tick closes it without another click", async () => {
+  const { f, apply, close, show, proposal: create } = boardFixture({ duplicate: false });
+  const proposal = await create();
+  await apply.approve(proposal.id, actor);
+  const item = {
+    id: "board-a",
+    status: "open",
+    createdAt: "2026-09-25T12:00:00.000Z",
+    updatedAt: "2026-09-25T12:00:00.000Z",
+    closeReason: null as string | null,
+  };
+  show.mockImplementation(async () => item);
+  close.mockRejectedValueOnce(new Error("beads down"));
+  const result = await apply.revert(proposal.id, actor).catch(() => null);
+  expect(result).toMatchObject({ code: "board-closing", proposal: { status: "reverted" } });
+  expect(result).not.toHaveProperty("sentence");
+  expect(f.filings).toEqual([
+    expect.objectContaining({ itemId: "board-a", closePending: "Undone from Learning" }),
+  ]);
+  close.mockImplementation(async () => {
+    item.status = "closed";
+    item.closeReason = "Undone from Learning";
+    return [{ ...item }];
+  });
+  const board = new BoardService({ prisma: f.deps.prisma, dataDir: "/fixture" });
+  vi.spyOn(board, "provider").mockResolvedValue({ show, close } as never);
+  await runBoardTick(board, f.deps.prisma);
+  expect(close).toHaveBeenCalledWith(["board-a"], "Undone from Learning");
+  expect(f.filings).toEqual([]);
+});
+
+it("the board notification tick closes a pending filing and frees its hourly slot", async () => {
+  const { f, close, show, proposal: create } = boardFixture({ duplicate: false });
+  const proposal = await create();
+  f.filings.push(ownedFiling(proposal.id, "Rejected from Learning"));
+  const item = {
+    id: "board-a",
+    status: "open",
+    createdAt: "2026-09-25T12:00:00.000Z",
+    updatedAt: "2026-09-25T12:00:00.000Z",
+    closeReason: null as string | null,
+  };
+  show.mockImplementation(async () => item);
+  close.mockImplementation(async () => {
+    item.status = "closed";
+    item.closeReason = "Rejected from Learning";
+    return [{ ...item }];
+  });
+  const board = new BoardService({ prisma: f.deps.prisma, dataDir: "/fixture" });
+  vi.spyOn(board, "provider").mockResolvedValue({ show, close } as never);
+  await runBoardTick(board, f.deps.prisma);
+  expect(close).toHaveBeenCalledWith(["board-a"], "Rejected from Learning");
+  expect(f.filings).toEqual([]);
+});
+
+it("ends a pending close quietly when the person closes it with a different reason, even after editing it", async () => {
+  const { f, apply, close, show, proposal: create } = boardFixture({ duplicate: false });
+  const proposal = await create();
+  f.filings.push({
+    id: "filing",
+    ...actor,
+    botId: "bot",
+    workspaceId: "workspace",
+    itemId: "board-a",
+    learningProposalId: proposal.id,
+    reused: false,
+    createdAt: new Date(),
+  });
+  const item = {
+    id: "board-a",
+    status: "open",
+    createdAt: "2026-09-25T12:00:00.000Z",
+    updatedAt: "2026-09-25T12:00:00.000Z",
+    closeReason: null as string | null,
+  };
+  show.mockImplementation(async () => item);
+  close.mockRejectedValueOnce(new Error("beads down"));
+  const pending = await apply.reject(proposal.id, actor);
+  expect(pending.code).toBe("board-closing");
+  item.updatedAt = "2026-09-25T13:00:00.000Z";
+  item.status = "closed";
+  item.closeReason = "Kept for the shop";
+  close.mockReset();
+  close.mockImplementation(async () => {
+    item.closeReason = "Rejected from Learning";
+    return [{ ...item }];
+  });
+  const board = new BoardService({ prisma: f.deps.prisma, dataDir: "/fixture" });
+  vi.spyOn(board, "provider").mockResolvedValue({ show, close } as never);
+  await runBoardTick(board, f.deps.prisma);
+  expect(close).not.toHaveBeenCalled();
+  expect(item.closeReason).toBe("Kept for the shop");
+  expect(f.filings).toEqual([]);
+  expect(f.proposals[0]?.body).not.toHaveProperty("boardChanged");
+});
+
+it("ends a pending close quietly on a later Reject when someone else already closed the item", async () => {
+  const { f, apply, close, show, proposal: create } = boardFixture({ duplicate: false });
+  const proposal = await create();
+  f.filings.push({
+    id: "filing",
+    ...actor,
+    botId: "bot",
+    workspaceId: "workspace",
+    itemId: "board-a",
+    learningProposalId: proposal.id,
+    reused: false,
+    createdAt: new Date(),
+  });
+  const item = {
+    id: "board-a",
+    status: "open",
+    createdAt: "2026-09-25T12:00:00.000Z",
+    updatedAt: "2026-09-25T12:00:00.000Z",
+    closeReason: null as string | null,
+  };
+  show.mockImplementation(async () => item);
+  close.mockRejectedValueOnce(new Error("beads down"));
+  await apply.reject(proposal.id, actor);
+  item.updatedAt = "2026-09-25T13:00:00.000Z";
+  item.status = "closed";
+  item.closeReason = "Kept for the shop";
+  close.mockReset();
+  const again = await apply.reject(proposal.id, actor);
+  expect(close).not.toHaveBeenCalled();
+  expect(item.closeReason).toBe("Kept for the shop");
+  expect(f.filings).toEqual([]);
+  expect(again.code).toBeUndefined();
+  expect(again.proposal.boardClosing).toBeUndefined();
+  expect(again.proposal.boardChanged).toBeUndefined();
+});
+
+it("surfaces a board notification after five failed closes", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-09-25T12:00:00.000Z"));
+  const notices: Array<{ title: string; changes: string[] }> = [];
+  const { f, apply, close, show, proposal: create } = boardFixture({ duplicate: false });
+  const proposal = await create();
+  f.filings.push({
+    id: "filing",
+    ...actor,
+    botId: "bot",
+    workspaceId: "workspace",
+    itemId: "board-a",
+    learningProposalId: proposal.id,
+    reused: false,
+    createdAt: new Date(),
+  });
+  show.mockImplementation(async () => ({
+    id: "board-a",
+    status: "open",
+    createdAt: "2026-09-25T12:00:00.000Z",
+    updatedAt: "2026-09-25T12:00:00.000Z",
+    closeReason: null,
+  }));
+  close.mockRejectedValue(new Error("beads down"));
+  await apply.reject(proposal.id, actor).catch(() => undefined);
+  Object.assign(f.deps.prisma, {
+    boardFollow: {
+      findUnique: async () => null,
+      create: async ({ data }: { data: Record<string, unknown> }) => ({
+        id: "follow",
+        version: 0,
+        ...data,
+      }),
+      update: async () => ({}),
+      updateMany: async () => ({ count: 1 }),
+      findMany: async () => [],
+    },
+    boardNotification: {
+      findMany: async () => [],
+      findFirst: async () => null,
+      create: async ({ data }: { data: { title: string; changes: string[] } }) => {
+        notices.push(data);
+        return data;
+      },
+      update: async () => ({}),
+    },
+    boardWorkspace: {
+      findUnique: async () => ({ id: "workspace", ownerUserId: actor.userId }),
+    },
+  });
+  Object.assign(f.db, {
+    boardFollow: f.deps.prisma.boardFollow,
+    boardNotification: f.deps.prisma.boardNotification,
+  });
+  const board = new BoardService({ prisma: f.deps.prisma, dataDir: "/fixture" });
+  vi.spyOn(board, "provider").mockResolvedValue({ show, close } as never);
+  const delivery = createBoardNotificationDelivery({
+    prisma: f.deps.prisma,
+    notifications: { send: async () => undefined } as never,
+    pool: notificationPool(),
+    board,
+  } as never);
+  try {
+    delivery.start();
+    await vi.advanceTimersByTimeAsync(0);
+    for (let attempt = 0; attempt < 6; attempt += 1) {
+      vi.setSystemTime(new Date(Date.now() + 16 * 60_000));
+      await vi.advanceTimersByTimeAsync(30_000);
+    }
+  } finally {
+    await delivery.stop();
+    vi.useRealTimers();
+  }
+  expect(notices).toEqual([
+    expect.objectContaining({
+      followId: "follow",
+      title: "A board item filed by a bot could not be closed.",
+      changes: ["close"],
+    }),
+  ]);
+  expect(f.filings).toHaveLength(1);
 });

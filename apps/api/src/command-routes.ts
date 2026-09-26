@@ -65,6 +65,7 @@ export function createCommandRoutes(deps: Deps) {
             "command.finished",
             "agent.tool.called",
             "agent.tool.completed",
+            "agent.tool.resumed",
             "run.completed",
             "run.failed",
             "run.cancelled",

@@ -66,6 +66,15 @@ msgstr ""
 msgid "{0} documents, {1} revisions"
 msgstr ""
 
+#. placeholder {0}: row.name
+#. placeholder {1}: row.filed
+#. placeholder {2}: row.done
+#. placeholder {3}: row.open
+#. placeholder {4}: row.other
+#: src/pages/dashboard/WorkPanel.tsx
+msgid "{0} filed {1}: {2} done, {3} open, {4} closed without being completed."
+msgstr "{0} 提交了 {1} 项：{2} 项完成，{3} 项开放，{4} 项已关闭但未完成。"
+
 #. placeholder {0}: (memoryFree / 1024 ** 3).toFixed(1)
 #: src/pages/fleet/FleetSettings.tsx
 msgid "{0} GB free"
@@ -240,6 +249,10 @@ msgstr "7 天"
 msgid "A bit of everything"
 msgstr "什么都做一点"
 
+#: src/lib/board-close-copy.ts
+msgid "A board item filed by a bot could not be closed."
+msgstr "由机器人创建的看板事项无法关闭。"
+
 #: src/components/DesktopUpdates.tsx
 msgid "A new version is available — download"
 msgstr ""
@@ -266,6 +279,7 @@ msgstr ""
 
 #: src/pages/board/Board.tsx
 #: src/pages/board/ItemForm.tsx
+#: src/pages/LearningInbox.tsx
 msgid "Acceptance criteria"
 msgstr ""
 
@@ -274,6 +288,7 @@ msgstr ""
 msgid "Accepted"
 msgstr ""
 
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Access token"
 msgstr ""
@@ -786,6 +801,10 @@ msgstr ""
 msgid "Ardur Bot reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history."
 msgstr ""
 
+#: src/lib/board-close-copy.ts
+msgid "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected."
+msgstr "Ardur Bot 已尝试五次。请在看板上关闭它，或检查此电脑是否已连接。"
+
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Arguments"
@@ -1196,6 +1215,7 @@ msgstr "无法连接服务器。"
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/customize/ConfigureExtension.tsx
 #: src/pages/customize/McpConfigEditor.tsx
+#: src/pages/customize/McpCredentialFix.tsx
 #: src/pages/customize/PluginsPage.tsx
 #: src/pages/fleet/FleetSettings.tsx
 #: src/pages/import/ImportedServerCredentials.tsx
@@ -1552,6 +1572,10 @@ msgstr "关闭语音设置"
 #: src/pages/board/Board.tsx
 msgid "Close when the bot reports done"
 msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Closing on the Board."
+msgstr "正在看板上关闭。"
 
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Cloud"
@@ -2517,6 +2541,14 @@ msgstr "无法保存该语音"
 msgid "Could not save this choice"
 msgstr "无法保存此选择"
 
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Could not save this credential. Check it and try again."
+msgstr "无法保存此凭据。请检查后重试。"
+
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Could not save. Try again."
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not search catalog"
 msgstr ""
@@ -2937,6 +2969,7 @@ msgid "Describe what this bot does"
 msgstr "描述这个 Bot 做什么"
 
 #: src/pages/board/ItemForm.tsx
+#: src/pages/LearningInbox.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Description"
 msgstr "描述"
@@ -3225,6 +3258,10 @@ msgstr "邮箱"
 #: src/pages/McpServersOverlay.tsx
 msgid "Enable"
 msgstr ""
+
+#: src/lib/mcp-sign-in.ts
+msgid "Enable this server first, then sign in."
+msgstr "请先启用此服务器，然后登录。"
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Engage when... Ignore..."
@@ -3667,11 +3704,17 @@ msgstr "请挂断，然后输入屏幕上的代码。"
 msgid "header"
 msgstr "请求头"
 
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Header"
+msgstr "请求头"
+
+#: src/pages/customize/McpCredentialFix.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Header name"
 msgstr "请求头名称"
 
+#: src/pages/customize/McpCredentialFix.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Header value"
 msgstr "请求头值"
@@ -4040,6 +4083,10 @@ msgstr ""
 msgid "Keep for recovery"
 msgstr ""
 
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Keep header"
+msgstr "保留请求头"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Keep here"
 msgstr ""
@@ -4051,6 +4098,10 @@ msgstr "保留记忆"
 #: src/pages/MemoryImportExport.tsx
 msgid "Keep scope"
 msgstr ""
+
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Keep token"
+msgstr "保留令牌"
 
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Keep working when the window is closed"
@@ -4081,6 +4132,7 @@ msgid "Label"
 msgstr ""
 
 #: src/pages/board/ItemForm.tsx
+#: src/pages/LearningInbox.tsx
 msgid "Labels"
 msgstr ""
 
@@ -4362,6 +4414,7 @@ msgstr "请确认这台电脑上没有仍在运行的任务。"
 #: src/pages/memory/MemorySettings.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/PrivacySettings.tsx
+#: src/pages/shell/message-cards.tsx
 msgid "Manage"
 msgstr ""
 
@@ -4823,6 +4876,10 @@ msgstr ""
 #: src/pages/DevicesSettings.tsx
 msgid "Never"
 msgstr ""
+
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "New access token"
+msgstr "新的访问令牌"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "New bot"
@@ -6444,6 +6501,7 @@ msgstr ""
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/board/ItemForm.tsx
 #: src/pages/customize/ConfigureExtension.tsx
+#: src/pages/customize/McpCredentialFix.tsx
 #: src/pages/DevicesSettings.tsx
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/GroupPanel.tsx
@@ -7333,6 +7391,35 @@ msgstr "思考"
 msgid "This action could not finish; try again."
 msgstr ""
 
+#: src/pages/LearningInbox.tsx
+msgid "This board item changed after it was filed, so it was left open for review on the Board."
+msgstr "此看板事项在创建后已有变更，因此仍保持开放，供在看板上复查。"
+
+#: src/pages/LearningInbox.tsx
+msgid "This board item changed after it was filed. Review it on the Board."
+msgstr "此看板事项在创建后已有变更。请在看板上查看。"
+
+#: src/pages/LearningInbox.tsx
+msgid "This board item is still open."
+msgstr "此看板事项仍处于开放状态。"
+
+#: src/pages/LearningInbox.tsx
+msgid "This board item was already closed on the Board."
+msgstr "此看板事项已经关闭。"
+
+#. placeholder {0}: proposal.boardOutcome.closeReason
+#: src/pages/LearningInbox.tsx
+msgid "This board item was closed without being completed: {0}. Review it on the Board."
+msgstr "此看板事项已关闭但未完成：{0}。请在看板上查看。"
+
+#: src/pages/LearningInbox.tsx
+msgid "This board item was closed without being completed. Review it on the Board."
+msgstr "此看板事项已关闭但未完成。请在看板上查看。"
+
+#: src/pages/LearningInbox.tsx
+msgid "This board item was completed."
+msgstr "此看板事项已完成。"
+
 #: src/pages/shell/provider-error-message.tsx
 msgid "This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin."
 msgstr ""
@@ -7444,7 +7531,7 @@ msgstr "此服务器未提供浏览器登录。请改为输入令牌。"
 msgid "This server did not request browser authorization."
 msgstr "此服务器未请求浏览器授权。"
 
-#: src/pages/McpServersOverlay.tsx
+#: src/pages/customize/McpCredentialFix.tsx
 msgid "This server has two credentials. Keep one."
 msgstr "此服务器有两种凭据。请只保留一种。"
 
@@ -7500,6 +7587,7 @@ msgid "Timeline"
 msgstr ""
 
 #: src/pages/board/ItemForm.tsx
+#: src/pages/LearningInbox.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Title"
 msgstr "标题"
@@ -7519,6 +7607,10 @@ msgstr "今天"
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "Today (UTC)"
 msgstr ""
+
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Token"
+msgstr "令牌"
 
 #: src/pages/CompareStart.tsx
 msgid "Token reservation"
@@ -7683,6 +7775,10 @@ msgstr "有可用更新"
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Update computer"
 msgstr "更新电脑"
+
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Update credential"
+msgstr "更新凭据"
 
 #: src/pages/import/ImportedServerCredentials.tsx
 msgid "Update credentials"

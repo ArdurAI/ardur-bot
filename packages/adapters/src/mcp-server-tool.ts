@@ -5,6 +5,7 @@ import {
   McpRemoteEndpointSchema,
   type McpTransport,
   McpTransportSchema,
+  mcpCredentialConflict,
 } from "@ardurbot/contracts";
 import { deriveMcpSlug } from "@ardurbot/core";
 import { toStringRecord } from "./memory-provider-factory.js";
@@ -82,19 +83,6 @@ export function parseMcpServerToolArgs(
       typeof args.secret === "string" && args.secret ? args.secret.slice(0, 16384) : undefined,
     assignToSelf: args.assign_to_self !== false,
   };
-}
-
-export const MCP_ONE_CREDENTIAL = "Choose one credential: a token or a header.";
-
-/** A server stores either a bearer token or a named header, never both. */
-export function mcpCredentialConflict(input: {
-  secret?: string;
-  headers?: Record<string, string>;
-}): string | null {
-  const secret = input.secret?.trim() ?? "";
-  const headers = input.headers ?? {};
-  const named = Object.values(headers).some((value) => value.trim());
-  return secret && named ? MCP_ONE_CREDENTIAL : null;
 }
 
 /** Serialized credential blob for the encrypted secret store; null when the

@@ -22,7 +22,7 @@ import {
   aiDataUsesForProcedure,
   cancelResponseBody,
   ensureAiDataConsent,
-  isCommandEvent,
+  isCommandCardEvent,
   isRunTerminalEvent,
   mergeThreadHistory,
   prependThreadHistoryPage,
@@ -569,6 +569,9 @@ export async function deleteAccount(password: string) {
   await clearSpace();
 }
 
+/** The message came from the server's own response body, not a client-side transport failure. */
+export class RpcServerError extends RpcError {}
+
 export async function rpc<T>(
   proc: string,
   body: unknown = {},
@@ -647,14 +650,15 @@ export async function rpc<T>(
     });
     if (!res.ok || parsed.error) {
       const payload = parsed.json;
-      const message =
+      const serverMessage =
         parsed.error?.message ??
         (payload &&
         typeof payload === "object" &&
         "message" in payload &&
         typeof payload.message === "string"
           ? payload.message
-          : `rpc ${proc} failed`);
+          : undefined);
+      const message = serverMessage ?? `rpc ${proc} failed`;
       const code =
         payload &&
         typeof payload === "object" &&
@@ -662,6 +666,10 @@ export async function rpc<T>(
         typeof payload.code === "string"
           ? payload.code
           : undefined;
+      const throwRpcError = () =>
+        serverMessage !== undefined
+          ? new RpcServerError(serverMessage, code)
+          : new RpcError(message, code);
       const unauthorized = res.status === 401 || /unauthorized/i.test(message);
       // After a delete where SecureStore could not clear the stale id, restart
       // reloads it and the first RPCs 401. Probe once without a Space header:
@@ -731,9 +739,9 @@ export async function rpc<T>(
           throw retryError;
         }
         if (!selectedSpaceId()) await clearStaleSpaceSelection();
-        throw new RpcError(message, code);
+        throw throwRpcError();
       }
-      throw new RpcError(message, code);
+      throw throwRpcError();
     }
     return parsed.json as T;
   } finally {
@@ -1005,6 +1013,7 @@ export async function subscribeThread(
 
 export function isMobileThreadSnapshotEvent(event: ThreadEvent): boolean {
   return (
+    isCommandCardEvent(event.type) ||
     event.type === "run.context" ||
     event.type === "thread.progress" ||
     event.type === "agent.tool.called" ||
@@ -1027,8 +1036,8 @@ export function applyMobileThreadEvent(
 ): MobileSnapshot | null {
   if (!prev) return prev;
   if (event.type === "run.context") return reduceRunContext(prev, event);
-  if (isCommandEvent(event.type) && (event.seq ?? -1) <= (prev.cursor ?? -1)) return prev;
-  if (isCommandEvent(event.type))
+  if (isCommandCardEvent(event.type) && (event.seq ?? -1) <= (prev.cursor ?? -1)) return prev;
+  if (isCommandCardEvent(event.type))
     return {
       ...prev,
       cursor: event.seq,

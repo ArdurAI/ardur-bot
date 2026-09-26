@@ -1027,4 +1027,22 @@ export const ZH_MESSAGES: Record<string, string> = {
     "已导入 {created} 项，已更新 {updated} 项，未更改 {unchanged} 项，已移除 {removed} 项，已跳过 {skipped} 项，冲突 {conflicts} 项。",
   "Some items exceeded the scan limits ({count} items were not scanned).":
     "部分项目超出了扫描限制（{count} 项未扫描）。",
+  Labels: "标签",
+  "{name} filed {filed}: {done} done, {open} open, {other} closed without being completed.":
+    "{name} 提交了 {filed} 项：{done} 项完成，{open} 项开放，{other} 项已关闭但未完成。",
+  "This board item is still open.": "此看板事项仍处于开放状态。",
+  "This board item was already closed on the Board.": "此看板事项已经关闭。",
+  "This board item was completed.": "此看板事项已完成。",
+  "This board item was closed without being completed. Review it on the Board.":
+    "此看板事项已关闭但未完成。请在看板上查看。",
+  "This board item was closed without being completed: {reason}. Review it on the Board.":
+    "此看板事项已关闭但未完成：{reason}。请在看板上查看。",
+  "This board item changed after it was filed. Review it on the Board.":
+    "此看板事项在创建后已有变更。请在看板上查看。",
+  "This board item changed after it was filed, so it was left open for review on the Board.":
+    "此看板事项在创建后已有变更，因此仍保持开放，供在看板上复查。",
+  "Closing on the Board.": "正在看板上关闭。",
+  "A board item filed by a bot could not be closed.": "由机器人创建的看板事项无法关闭。",
+  "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected.":
+    "Ardur Bot 已尝试五次。请在看板上关闭它，或检查此电脑是否已连接。",
 };

@@ -11,6 +11,37 @@ export const HERMES_CONTAINER_REVISION = "29112bef099274229cadff79cdff7bf7b99c4b
 export const HERMES_MINIMUM_CONTEXT_TOKENS = 64_000;
 export const HERMES_IMAGE_PAYLOAD_BYTES = 938742461;
 export const HERMES_PULL = `docker pull --platform linux/arm64 ${HERMES_IMAGE}`;
+/** Containment, resource and product checks a Hermes container report must record as passed. */
+export const HERMES_CONTAINER_CHECKS = [
+  "inspected-policy-and-cgroup-binding",
+  "non-root",
+  "positive-read",
+  "positive-write",
+  "outside-read",
+  "outside-write",
+  "hidden-grader",
+  "symlink-read",
+  "symlink-write",
+  "unadmitted-child",
+  "relay-control-fds-invisible",
+  "relay-signal-denied",
+  "admitted-process-cgroup",
+  "daemon-socket-invisible",
+  "pid-namespace",
+  "no-shared-memory-volume",
+  "forbidden-egress",
+  "host-gateway-denied",
+  "other-loopback-port",
+  "external-dns-denied",
+  "trial-state-separation",
+  "tool-and-descendant-admission",
+  "cpu-quota-throttles",
+  "pids-limit-enforced",
+  "aggregate-disk-cap",
+  "memory-limit-kill",
+  "dependency-manifest",
+  "product-tool-round-trip",
+] as const;
 export const CONTAINER_ROOT = "/opt/data";
 
 /** No agent fork/exec chain can evade descendant admission: processes enter through docker exec.

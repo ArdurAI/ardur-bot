@@ -1,6 +1,6 @@
 import type { AgentRuntimeEvent } from "@ardurbot/adapter-kit";
 import { describe, expect, it, vi } from "vitest";
-import { withRuntimeCleanup } from "./runtime-stream.js";
+import { reportRuntimeWaits, withRuntimeCleanup } from "./runtime-stream.js";
 
 describe("executor runtime cleanup", () => {
   it.each(["cancelled", "lease lost", "pause", "consumer error"])(
@@ -73,6 +73,45 @@ describe("executor runtime cleanup", () => {
       }
     };
     await expect(consume()).rejects.toThrow("runtime failed");
+    expect(close).toHaveBeenCalledOnce();
+  });
+});
+
+describe("runtime waits", () => {
+  it("reports a wait only while its consumer asks the runtime for the next event", async () => {
+    const waits: boolean[] = [];
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    async function* runtime(): AsyncIterable<AgentRuntimeEvent> {
+      yield { type: "text", text: "narration" };
+      await held;
+      yield { type: "done" };
+    }
+    const iterator = reportRuntimeWaits(runtime(), (value) => waits.push(value))[
+      Symbol.asyncIterator
+    ]();
+    await iterator.next();
+    // The consumer is still handling the text event, such as saving usage: no wait.
+    expect(waits).toEqual([true, false]);
+    const pending = iterator.next();
+    expect(waits).toEqual([true, false, true]);
+    release();
+    await pending;
+    expect(await iterator.next()).toEqual({ done: true, value: undefined });
+    expect(waits).toEqual([true, false, true, false, true]);
+  });
+
+  it("closes the runtime when its consumer stops early", async () => {
+    const close = vi.fn(async () => ({ done: true as const, value: undefined }));
+    const events = {
+      [Symbol.asyncIterator]: () => ({
+        next: async () => ({ done: false as const, value: { type: "done" as const } }),
+        return: close,
+      }),
+    };
+    for await (const _event of reportRuntimeWaits(events, () => {})) break;
     expect(close).toHaveBeenCalledOnce();
   });
 });

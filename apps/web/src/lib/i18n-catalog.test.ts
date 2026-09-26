@@ -259,6 +259,28 @@ describe("lingui catalogs", () => {
     );
   });
 
+  it("catalogs each failed board close sentence once, from its one shared definition", () => {
+    const sentences = [
+      "A board item filed by a bot could not be closed.",
+      "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected.",
+    ];
+    for (const locale of ["en", "de", "ko", "tr", "hi", "pt-BR", "zh-CN", "es", "ru"]) {
+      const catalog = readFileSync(
+        fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url)),
+        "utf8",
+      );
+      for (const sentence of sentences) {
+        const entries = catalog.split(`msgid ${JSON.stringify(sentence)}\n`).length - 1;
+        expect(entries, `${locale}: ${sentence}`).toBe(1);
+        expect(catalog, `${locale}: ${sentence}`).toContain(
+          `#: src/lib/board-close-copy.ts\nmsgid ${JSON.stringify(sentence)}`,
+        );
+      }
+      // A pending close is retried as the person who asked for it, so no bot denial is shown.
+      expect(catalog, locale).not.toContain("can no longer use the board");
+    }
+  });
+
   it("extracts the fleet move sentences the code asks for into every catalog", () => {
     const sentences = [
       "Default computer",

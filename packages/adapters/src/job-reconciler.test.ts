@@ -94,6 +94,50 @@ describe("createJobReconciler", () => {
     expect(prisma.messagingOutbound.findFirst).toHaveBeenCalled();
   });
 
+  it("recovers runs and routines first, never waits on a hung board pass, and stops it on stop", async () => {
+    const scheduledFor = new Date(Date.now() + 30_000);
+    const prisma = fakePrisma(
+      [{ id: "run-1", updatedAt: new Date() }],
+      [{ id: "routine-1", nextRunAt: scheduledFor }],
+    );
+    const { jobs, enqueue } = publisher();
+    const signals: Array<AbortSignal | undefined> = [];
+    // A board command that never answers until it is stopped.
+    const reconcileBoardOutcomes = vi.fn(
+      (signal?: AbortSignal) =>
+        new Promise<void>((resolve) => {
+          signals.push(signal);
+          signal?.addEventListener("abort", () => resolve(), { once: true });
+        }),
+    );
+    const reconciler = createJobReconciler({ prisma, jobs, reconcileBoardOutcomes });
+    const first = await Promise.race([
+      reconciler.reconcileOnce().then(() => "recovered" as const),
+      new Promise<"waiting on the board">((resolve) =>
+        setTimeout(() => resolve("waiting on the board"), 1_000),
+      ),
+    ]);
+    expect(first).toBe("recovered");
+    expect(enqueue).toHaveBeenCalledWith({
+      name: "run.continue",
+      payload: { runId: "run-1" },
+      replaceKey: "run:run-1",
+    });
+    expect(enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "routine.wakeup", replaceKey: "routine:routine-1" }),
+    );
+    expect(reconcileBoardOutcomes.mock.invocationCallOrder[0]).toBeGreaterThan(
+      Math.max(...enqueue.mock.invocationCallOrder),
+    );
+    // The next tick recovers again without starting a second board pass beside the hung one.
+    enqueue.mockClear();
+    await reconciler.reconcileOnce();
+    expect(enqueue).toHaveBeenCalledWith(expect.objectContaining({ name: "run.continue" }));
+    expect(reconcileBoardOutcomes).toHaveBeenCalledOnce();
+    await reconciler.stop();
+    expect(signals[0]?.aborted).toBe(true);
+  });
+
   it("restores a due pending messaging outbox drain", async () => {
     const prisma = fakePrisma();
     vi.mocked(prisma.messagingOutbound.findFirst).mockResolvedValue({ id: "outbound-1" } as never);

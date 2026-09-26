@@ -72,7 +72,6 @@ import {
   McpOAuthBroker,
   MissingComputerProviderError,
   mapScratchpadItem,
-  mcpCredentialConflict,
   modelCredentialDto,
   NATIVE_HOST_OWNER_MESSAGE,
   nativeHostOwner,
@@ -127,7 +126,7 @@ import {
   nextCronDateAcrossStrict,
   sandboxKindForBot,
 } from "@ardurbot/core";
-import type { PrismaClient, ThreadEvents } from "@ardurbot/db";
+import type { Pool, PrismaClient, ThreadEvents } from "@ardurbot/db";
 import {
   appendEventInTransaction,
   BotSectionNameConflictError,
@@ -463,6 +462,8 @@ export interface RouterDeps {
   terminals?: ReturnType<typeof createTerminalRoutes>;
   cloudAgent?: CloudAgentConnection | null;
   prisma: PrismaClient;
+  /** Filing locks only. Never the shared Prisma pool. */
+  lockPool?: Pick<Pool, "connect">;
   events: ThreadEvents;
   auth: Auth;
   jobs: JobPublisher;
@@ -580,7 +581,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
     home: deps.home,
     dataDir: deps.dataDir,
   });
-  const learning = createLearningService(deps);
+  const learning = createLearningService({ ...deps, boardService: board.service });
   const agentSkills = createAgentSkillsService(deps.prisma, deps.memoryDocuments);
   const localImport = new LocalImportService({
     prisma: deps.prisma,
@@ -3187,16 +3188,16 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         learning.summary(context.actor, input.botId),
       ),
       approve: authed.learning.approve.handler(({ context, input }) =>
-        learning.approve(input.proposalId, context.actor, input.edits),
+        boardCall(() => learning.approve(input.proposalId, context.actor, input.edits)),
       ),
       reject: authed.learning.reject.handler(({ context, input }) =>
-        learning.reject(input.proposalId, context.actor, input.reason),
+        boardCall(() => learning.reject(input.proposalId, context.actor, input.reason)),
       ),
       edit: authed.learning.edit.handler(({ context, input }) =>
         learning.edit(input.proposalId, context.actor, input.edits),
       ),
       revert: authed.learning.revert.handler(({ context, input }) =>
-        learning.revert(input.proposalId, context.actor),
+        boardCall(() => learning.revert(input.proposalId, context.actor)),
       ),
       evidence: authed.learning.evidence.handler(({ context, input }) =>
         learning.evidence(context.actor, input.proposalId, input.evidenceId),
@@ -3499,12 +3500,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           });
         }),
         create: authed.mcp.servers.create.handler(async ({ context, input }) => {
-          const credentialConflict = mcpCredentialConflict({
-            secret: "secret" in input ? input.secret : undefined,
-            headers: "headers" in input ? input.headers : undefined,
-          });
-          if (credentialConflict)
-            throw new ORPCError("BAD_REQUEST", { message: credentialConflict });
+          // The input schema already rejects a server with both a token and a header.
           const secretPayload = buildMcpCredentialBlob(input);
           const stored = secretPayload
             ? await deps.secrets.put(
@@ -3594,6 +3590,10 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
                 data: {
                   enabled: input.enabled,
                   connectionState: "not-connected",
+                  // Disabling ends any in-flight sign-in wait for this server; nothing
+                  // else clears its pending id once the server is no longer enabled.
+                  pendingOauthSessionId: null,
+                  consentStartedAt: null,
                   revision: { increment: 1 },
                 },
               });
@@ -3619,6 +3619,17 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
                 /* Existing malformed secrets are replaced only when new credentials are supplied. */
               }
             }
+            // `secret: null` drops a stale token without a new value, so the header
+            // it leaves behind must be the one already stored, not a blank slate.
+            const existingHeaders = (existingMaterial.headers as Record<string, string>) ?? {};
+            if (
+              "secret" in input &&
+              input.secret === null &&
+              Object.keys(existingHeaders).length === 0
+            )
+              throw new ORPCError("BAD_REQUEST", {
+                message: "This server would be left with no credential.",
+              });
             const config =
               "config" in input
                 ? input.config
@@ -3630,8 +3641,15 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
                     transport: existing.transport as "streamable_http" | "sse",
                     endpoint: existing.endpoint!,
                     // One credential: the new one replaces the other kind, header names included.
-                    headers: "headers" in input ? input.headers : {},
-                    secret: "secret" in input ? input.secret : undefined,
+                    // Dropping a token via `secret: null` re-supplies the stored header
+                    // unchanged, since nothing new was typed for it.
+                    headers:
+                      "headers" in input
+                        ? input.headers
+                        : "secret" in input && input.secret === null
+                          ? existingHeaders
+                          : {},
+                    secret: "secret" in input ? (input.secret ?? undefined) : undefined,
                   };
             if (!("config" in input) && existing.transport === "stdio") {
               throw new ORPCError("BAD_REQUEST", { message: "A remote MCP server is required" });
@@ -5332,6 +5350,9 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         boardCall(() => board.view(context.actor, input)),
       ),
       work: authed.board.work.handler(({ context }) => boardCall(() => board.work(context.actor))),
+      filingOutcomes: authed.board.filingOutcomes.handler(({ context }) =>
+        boardCall(() => board.service.filingOutcomes(context.actor)),
+      ),
       configure: authed.board.configure.handler(({ context, input }) =>
         boardCall(() => board.service.configure(context.actor, input.workspaceId, input.patch)),
       ),

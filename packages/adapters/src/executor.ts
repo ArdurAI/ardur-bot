@@ -22,7 +22,7 @@ import type {
   WebProvider,
 } from "@ardurbot/adapter-kit";
 import { routineJobKey, routineWakeupJob, runContinueJob } from "@ardurbot/adapter-kit";
-import type { MessageBlock, RunStatus, RuntimePin } from "@ardurbot/contracts";
+import type { CommandBlock, MessageBlock, RunStatus, RuntimePin } from "@ardurbot/contracts";
 import {
   ATTACHMENT_MAX_BYTES,
   BOT_DESCRIPTION_MAX_LENGTH,
@@ -36,12 +36,14 @@ import {
   computerProfileNote,
   DelegationSnapshotSchema,
   isAttachmentImageMimeType,
+  mcpCredentialConflict,
   OLLAMA_NO_IMAGES,
   OPENAI_COMPATIBLE_PROVIDER_ID,
   ollamaThink,
   RoutingRuleSchema,
   RuntimePinError,
   runtimePinProblem,
+  ToolResumedPayloadSchema,
 } from "@ardurbot/contracts";
 import { BoardError } from "@ardurbot/contracts/board";
 import {
@@ -93,6 +95,7 @@ import {
   stableJsonValue,
   toolEffectIdempotencyKey,
 } from "@ardurbot/core/node/approval-effect-key";
+import type { Pool } from "@ardurbot/db";
 import {
   acceptDelegation,
   appendEventInTransaction,
@@ -101,6 +104,7 @@ import {
   createThreadMessageInTransaction,
   effectiveMemoryScope,
   findModelCredential,
+  finishedCommandIds,
   getUserPreferences,
   InvalidSpaceNameError,
   isTooManyDatabaseConnections,
@@ -194,7 +198,7 @@ import { type CloudAgentConnection, cloudAgentsEnabled } from "./cloud-agent-fac
 import { executeCloudAgentTool } from "./cloud-agent-service.js";
 import { validCloudAgentArgs } from "./cloud-agent-tools.js";
 import { selectCloudAgentTools } from "./cloud-agent-tools-select.js";
-import { createCommandRecording } from "./command-recording.js";
+import { adoptOpenCommands, createCommandRecording } from "./command-recording.js";
 import {
   CommandReplayUnavailableError,
   commandReplayEvents,
@@ -260,7 +264,6 @@ import {
 } from "./lazy-tool-catalog.js";
 import {
   buildMcpCredentialBlob,
-  mcpCredentialConflict,
   needsOAuthProbe,
   parseMcpServerToolArgs,
 } from "./mcp-server-tool.js";
@@ -329,7 +332,7 @@ import {
 import { recordRunUsage } from "./run-usage.js";
 import type { RuntimeRegistry } from "./runtime-registry.js";
 import { createRuntimeRegistry } from "./runtime-registry.js";
-import { withRuntimeCleanup } from "./runtime-stream.js";
+import { reportRuntimeWaits, withRuntimeCleanup } from "./runtime-stream.js";
 import { accountRuntimeUsage } from "./runtime-usage.js";
 import { NATIVE_HOST_OWNER_MESSAGE, nativeHostOwner } from "./runtimes/native-host.js";
 import { runtimeSession } from "./runtimes/runtime-session.js";
@@ -394,6 +397,71 @@ import {
 } from "./user-progress.js";
 import { createWebProvider } from "./web-provider-factory.js";
 import { webFetchFromTool, webSearchFromTool } from "./web-tools.js";
+
+interface OpenToolCall {
+  name: string;
+  executionId: string;
+  /** Calls recorded without a digest are never linked. */
+  argumentDigest: string | null;
+  /** The helper delegation that issued the call. */
+  delegationId: string | null;
+}
+
+/** A repeated id is the same call only when its name and argument digest match too. */
+function sameToolCall(
+  recorded: Pick<OpenToolCall, "name" | "argumentDigest"> | undefined,
+  call: Pick<OpenToolCall, "name" | "argumentDigest">,
+) {
+  return (
+    recorded !== undefined &&
+    recorded.argumentDigest !== null &&
+    recorded.name === call.name &&
+    recorded.argumentDigest === call.argumentDigest
+  );
+}
+
+/**
+ * Tool calls earlier attempts of this run recorded, in call order. `recorded` is the latest call
+ * on each id. `open` calls have no completion and no later call linked to them. `finished` names
+ * an id whose latest call completed without pausing; a different call on that id clears it.
+ */
+function priorToolCalls(events: readonly { type: string; payload: unknown }[]) {
+  const recorded = new Map<string, Pick<OpenToolCall, "name" | "argumentDigest">>();
+  const finished = new Set<string>();
+  let open: OpenToolCall[] = [];
+  for (const event of events) {
+    if (event.type === "agent.tool.resumed") {
+      const link = ToolResumedPayloadSchema.safeParse(event.payload);
+      if (!link.success) continue;
+      open = open.filter((call) => call.executionId !== link.data.from);
+      continue;
+    }
+    if (event.type !== "agent.tool.called" && event.type !== "agent.tool.completed") continue;
+    if (!event.payload || typeof event.payload !== "object") continue;
+    const record = event.payload as Record<string, unknown>;
+    if (typeof record.name !== "string" || typeof record.executionId !== "string") continue;
+    const executionId = record.executionId;
+    open = open.filter((call) => call.executionId !== executionId);
+    if (event.type === "agent.tool.completed") {
+      if (record.outcome === "paused") finished.delete(executionId);
+      else finished.add(executionId);
+      continue;
+    }
+    const call: OpenToolCall = {
+      name: record.name,
+      executionId,
+      argumentDigest:
+        typeof record.argumentDigest === "string" && /^[a-f0-9]{64}$/.test(record.argumentDigest)
+          ? record.argumentDigest
+          : null,
+      delegationId: typeof record.delegationId === "string" ? record.delegationId : null,
+    };
+    if (!sameToolCall(recorded.get(executionId), call)) finished.delete(executionId);
+    recorded.set(executionId, call);
+    open.push(call);
+  }
+  return { open, recorded, finished };
+}
 
 const modelCredentialLocks = new Map<string, Promise<void>>();
 const READ_ONLY_AGENT_TOOLS = new Set([
@@ -633,6 +701,8 @@ export interface ExecutorDeps {
   secretStore: EncryptedSecretStore;
   deploymentModelKey?: string;
   dataDir?: string;
+  /** Filing locks only. Never the shared Prisma pool. */
+  lockPool?: Pick<Pool, "connect">;
   notifications?: NotificationProvider;
   jobs: JobPublisher;
   /** Messaging surface; absent means zero identity queries and no chat prompts. */
@@ -1772,6 +1842,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
           sandbox: deps.sandbox,
           context,
         });
+        // Filled from the event log before the runtime starts, for calls that resume on their own
+        // id. A different call on a reused id removes its id from both before it runs.
+        const openCommands = new Map<string, CommandBlock>();
+        const finishedCommands = new Set<string>();
         const commandRecording = createCommandRecording({
           events: deps.events,
           sandbox: deps.sandbox,
@@ -1780,9 +1854,12 @@ export function createRunExecutor(deps: ExecutorDeps) {
           context,
           threadId: thread.id,
           attemptId: attempt.id,
+          fence,
           secrets: runSecrets,
           replayOf: commandReplay?.commandId,
           resolveCwd: (requested, executionId) => shellCwd(requested, executionId),
+          openCommands,
+          finishedCommands,
         });
         let currentTurnFiles: Awaited<ReturnType<typeof materializeCurrentTurnFiles>>;
         try {
@@ -1892,7 +1969,11 @@ export function createRunExecutor(deps: ExecutorDeps) {
         const upkeepEnabled = contextSettings?.botUpkeep === true && !comparisonRun;
         const boardAccess = upkeepEnabled
           ? await resolveBoardAccess(
-              new BoardService({ prisma: deps.prisma, dataDir: deps.dataDir ?? "./data" }),
+              new BoardService({
+                prisma: deps.prisma,
+                dataDir: deps.dataDir ?? "./data",
+                lockPool: deps.lockPool,
+              }),
               deps.prisma,
               {
                 userId: run.userId,
@@ -3785,7 +3866,11 @@ export function createRunExecutor(deps: ExecutorDeps) {
             try {
               return finish(
                 await executeBoardTool(
-                  new BoardService({ prisma: deps.prisma, dataDir: deps.dataDir ?? "./data" }),
+                  new BoardService({
+                    prisma: deps.prisma,
+                    dataDir: deps.dataDir ?? "./data",
+                    lockPool: deps.lockPool,
+                  }),
                   {
                     userId: run.userId,
                     spaceId: run.spaceId,
@@ -4309,18 +4394,180 @@ export function createRunExecutor(deps: ExecutorDeps) {
             computer.kind === "desktop" && !commandReplay
               ? await deps.sandbox.environmentNote?.(computer, context)
               : undefined;
-          const recordedApplyTool = async (
+          // The first lease has no earlier tool calls. A settled card's commandId is loaded on
+          // its own, never its stdout/stderr, only to let adoption skip a card that already
+          // finished, never to feed the model.
+          const [priorToolEvents, priorFinishedCommandIds] =
+            fence > 1
+              ? await Promise.all([
+                  deps.prisma.event.findMany({
+                    where: {
+                      runId,
+                      type: {
+                        in: [
+                          "agent.tool.called",
+                          "agent.tool.completed",
+                          "agent.tool.resumed",
+                          "command.intent",
+                          "command.started",
+                        ],
+                      },
+                    },
+                    orderBy: { seq: "asc" },
+                    select: { type: true, payload: true },
+                  }),
+                  finishedCommandIds(deps.prisma, runId),
+                ])
+              : [[], new Set<string>()];
+          const priorCalls = priorToolCalls(priorToolEvents);
+          for (const executionId of priorCalls.finished) finishedCommands.add(executionId);
+          adoptOpenCommands(
+            openCommands,
+            priorToolEvents,
+            priorCalls.finished,
+            priorFinishedCommandIds,
+          );
+          let openCalls = priorCalls.open;
+          const recordedCalls = priorCalls.recorded;
+          /** Minted id of a call to the open call it repeats. */
+          const resumedCalls = new Map<string, string>();
+          const toolCalls = new Map<string, Promise<void>>();
+          const storeToolCall = async (call: {
+            name: string;
+            args: Record<string, unknown>;
+            executionId: string;
+            delegationId?: string;
+          }) => {
+            const argumentDigest = deps.secretStore.digest(
+              "tool-call-arguments",
+              stableJsonValue(call.args),
+            );
+            const delegationId = call.delegationId ?? null;
+            const recorded = recordedCalls.get(call.executionId);
+            // A known id with the same name and arguments is that call running again. A
+            // different call on a reused id is a new call: it inherits no card and no finish.
+            if (recorded && !sameToolCall(recorded, { name: call.name, argumentDigest })) {
+              finishedCommands.delete(call.executionId);
+              openCommands.delete(call.executionId);
+            }
+            // A new id may repeat one open call. A reused id never links; it already names a card.
+            const resumes = recorded
+              ? undefined
+              : openCalls.find(
+                  (open) =>
+                    open.name === call.name &&
+                    open.argumentDigest === argumentDigest &&
+                    open.delegationId === delegationId,
+                );
+            openCalls = openCalls.filter(
+              (open) => open !== resumes && open.executionId !== call.executionId,
+            );
+            recordedCalls.set(call.executionId, { name: call.name, argumentDigest });
+            await deps.events.append({
+              spaceId: run.spaceId,
+              threadId: thread.id,
+              botId: bot.id,
+              type: "agent.tool.called",
+              runId,
+              payload: {
+                name: call.name,
+                executionId: call.executionId,
+                argumentDigest,
+                ...(delegationId ? { delegationId } : {}),
+              },
+            });
+            if (!resumes) return;
+            // The card the killed call left open, if any, is the one the resumed call's card joins.
+            const card = openCommands.get(resumes.executionId);
+            openCommands.delete(resumes.executionId);
+            await deps.events.append({
+              spaceId: run.spaceId,
+              threadId: thread.id,
+              botId: bot.id,
+              type: "agent.tool.resumed",
+              runId,
+              payload: {
+                from: resumes.executionId,
+                to: call.executionId,
+                ...(card
+                  ? {
+                      fromCommandId: card.commandId,
+                      toCommandId: commandRecording.commandIdFor(call.executionId),
+                    }
+                  : {}),
+              },
+            });
+            resumedCalls.set(call.executionId, resumes.executionId);
+          };
+          const toolCallWaiters = new Set<() => void>();
+          let runtimeWaiting = false;
+          let runtimeTurn = 0;
+          const recordToolCall = (call: Parameters<typeof storeToolCall>[0]) => {
+            let stored = toolCalls.get(call.executionId);
+            if (!stored) {
+              stored = storeToolCall(call);
+              toolCalls.set(call.executionId, stored);
+              for (const wake of [...toolCallWaiters]) wake();
+            }
+            return stored;
+          };
+          const runtimeWaits = (value: boolean) => {
+            runtimeWaiting = value;
+            if (value) for (const wake of [...toolCallWaiters]) wake();
+            else runtimeTurn += 1;
+          };
+          /**
+           * A runtime may start a tool beside its event stream. The call waits until the loop
+           * reaches its tool event and stores it, after the narration before it. A runtime that
+           * reports a call only after running it has no such event, so its call goes once the
+           * runtime has nothing queued: the loop has then handled every earlier event. Waits are
+           * observed below usage accounting, so a usage save never counts as one. A queued event
+           * arrives within microtasks, so a wait that lasts a macrotask has no event behind it.
+           */
+          const toolCallTurn = (executionId: string) =>
+            new Promise<void>((resolve, reject) => {
+              const done = () => {
+                toolCallWaiters.delete(check);
+                context.signal.removeEventListener("abort", stop);
+              };
+              const stop = () => {
+                done();
+                reject(context.signal.reason);
+              };
+              const check = () => {
+                if (toolCalls.has(executionId)) {
+                  done();
+                  resolve();
+                  return;
+                }
+                if (!runtimeWaiting) return;
+                const turn = runtimeTurn;
+                setImmediate(() => {
+                  if (!toolCallWaiters.has(check) || !runtimeWaiting || runtimeTurn !== turn)
+                    return;
+                  done();
+                  resolve();
+                });
+              };
+              if (context.signal.aborted) return stop();
+              context.signal.addEventListener("abort", stop, { once: true });
+              toolCallWaiters.add(check);
+              check();
+            });
+          const runRecordedTool = async (
             name: string,
             args: Record<string, unknown>,
             executionId: string,
           ) => {
-            tracePoint(runId, "tool.started", { attempt: fence, operationId: executionId });
+            // A resumed call keeps its own id; the id it repeats joins the two in the trace.
+            const resumes = resumedCalls.get(executionId);
+            const trace = { attempt: fence, operationId: executionId, requestId: resumes };
+            tracePoint(runId, "tool.started", trace);
             try {
               const result = await commandRecording.invoke(name, args, executionId, applyTool);
               briefToolResults = appendBriefToolResult(briefToolResults, name, result, runSecrets);
               tracePoint(runId, "tool.finished", {
-                attempt: fence,
-                operationId: executionId,
+                ...trace,
                 outcome: isToolPauseResult(result)
                   ? "uncertain"
                   : toolResultError(result) !== undefined
@@ -4330,16 +4577,22 @@ export function createRunExecutor(deps: ExecutorDeps) {
               if (isToolPauseResult(result)) tracePoint(runId, "wait.approval", { attempt: fence });
               return result;
             } catch (error) {
-              tracePoint(runId, "tool.finished", {
-                attempt: fence,
-                operationId: executionId,
-                outcome: "failed",
-              });
+              tracePoint(runId, "tool.finished", { ...trace, outcome: "failed" });
               throw error;
             }
           };
+          const recordedApplyTool = async (
+            name: string,
+            args: Record<string, unknown>,
+            executionId: string,
+            delegationId?: string,
+          ) => {
+            await toolCallTurn(executionId);
+            await recordToolCall({ name, args, executionId, delegationId });
+            return runRecordedTool(name, args, executionId);
+          };
           const runRuntime: AgentRuntime["run"] = commandReplay
-            ? () => commandReplayEvents(commandReplay, runId, recordedApplyTool)
+            ? () => commandReplayEvents(commandReplay, runId, runRecordedTool)
             : runtime.run.bind(runtime);
           const stableInstructions = [
             botInstructionText(bot, accountContext),
@@ -4543,7 +4796,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               },
               executeHelperTool: async (id, name, args, executionId) => {
                 helperToolDelegations.set(executionId, id);
-                return recordedApplyTool(name, args, executionId);
+                return recordedApplyTool(name, args, executionId, id);
               },
               recordHelperUsage: async (id, usage) => {
                 await recordRunUsage(deps, { ...run, delegationId: id }, usage);
@@ -4556,7 +4809,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   redactSecrets(result, runSecrets),
                   deps.events,
                 ),
-              executeTool: scripted ? undefined : recordedApplyTool,
+              executeTool: scripted
+                ? undefined
+                : (name, args, executionId) => recordedApplyTool(name, args, executionId),
               resolveModel: scripted
                 ? undefined
                 : (provider, modelId) =>
@@ -4632,10 +4887,14 @@ export function createRunExecutor(deps: ExecutorDeps) {
             },
             context,
           );
+          const observedEvents = reportRuntimeWaits(
+            scripted || commandReplay ? runtimeEvents : traceRuntime(runId, fence, runtimeEvents),
+            runtimeWaits,
+          );
           const accountedEvents =
             scripted || commandReplay
-              ? runtimeEvents
-              : accountRuntimeUsage(traceRuntime(runId, fence, runtimeEvents), {
+              ? observedEvents
+              : accountRuntimeUsage(observedEvents, {
                   provider: resolved.provider,
                   model: resolved.id,
                   purpose: run.delegationId ? "delegated" : "main",
@@ -4842,14 +5101,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
               if (event.name !== "message_user") {
                 await publishMidTurnNarration();
               }
-              await deps.events.append({
-                spaceId: run.spaceId,
-                threadId: thread.id,
-                botId: bot.id,
-                type: "agent.tool.called",
-                runId,
-                payload: { name: event.name, executionId: event.executionId },
-              });
+              // A tool already running waits for this record, so its card never lands first.
+              await recordToolCall(event);
               pendingToolNames.push(event.name);
               tryFlushPendingTools();
               const loopGuard = advanceToolCallLoopGuard(toolCallStreak, event.name, event.args);
@@ -4898,7 +5151,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               if (scripted) {
                 const startedAt = Date.now();
                 try {
-                  const result = await recordedApplyTool(event.name, event.args, event.executionId);
+                  const result = await runRecordedTool(event.name, event.args, event.executionId);
                   await appendToolCompletionAudit(
                     deps,
                     {
