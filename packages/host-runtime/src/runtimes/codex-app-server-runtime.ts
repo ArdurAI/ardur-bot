@@ -335,7 +335,6 @@ export class CodexAppServerRuntime implements AgentRuntime {
         config: {
           mcp_servers?: Record<string, unknown>;
           permissions?: Record<string, unknown>;
-          default_permissions?: string | null;
         };
       }>("config/read", { includeLayers: false, cwd: request.nativeCwd });
       if (Object.hasOwn(config.mcp_servers ?? {}, "ardur"))
@@ -343,13 +342,13 @@ export class CodexAppServerRuntime implements AgentRuntime {
           "runtime-unavailable",
           "Codex already has an ardur MCP server configured — remove it or change the pin.",
         );
-      if (
-        Object.hasOwn(config.permissions ?? {}, "ardur-read") ||
-        config.default_permissions != null
-      )
+      // A user profile with the same id is merged into this run's profile and can widen it
+      // (a "/" write entry turns it into workspace-write). A user default_permissions is fine:
+      // this run's override replaces it, and the thread check below verifies the result.
+      if (Object.hasOwn(config.permissions ?? {}, "ardur-read"))
         throw problem(
           "runtime-unavailable",
-          "Codex cannot enforce the requested sandbox — change the pin.",
+          "Codex already has an ardur-read permission profile configured — remove it or change the pin.",
         );
       const mcpServers: Record<string, unknown> = Object.fromEntries(
         Object.keys(config.mcp_servers ?? {}).map((name) => [name, { enabled: false }]),

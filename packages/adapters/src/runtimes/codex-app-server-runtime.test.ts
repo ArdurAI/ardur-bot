@@ -41,7 +41,7 @@ function fixture(
     | "wrong-model"
     | "mcp-conflict"
     | "profile-conflict"
-    | "default-permissions-conflict"
+    | "user-default-permissions"
     | "profile-missing"
     | "profile-network"
     | "turn-rejected"
@@ -89,7 +89,7 @@ function fixture(
               ...(mode === "profile-conflict"
                 ? { permissions: { "ardur-read": { filesystem: { "/": "write" } } } }
                 : {}),
-              ...(mode === "default-permissions-conflict"
+              ...(mode === "user-default-permissions"
                 ? { default_permissions: "user-profile" }
                 : {}),
             },
@@ -377,19 +377,24 @@ describe("Codex app-server protocol", () => {
     await expect(f.collect()).rejects.toMatchObject({ problem: { code: "runtime-unavailable" } });
     expect(f.messages.some((event) => event.method === "thread/start")).toBe(false);
   });
-  it.each(["profile-conflict", "default-permissions-conflict"] as const)(
-    "refuses %s before starting a thread",
-    async (mode) => {
-      const f = fixture(mode);
-      await expect(f.collect()).rejects.toMatchObject({
-        problem: {
-          code: "runtime-unavailable",
-          reason: "Codex cannot enforce the requested sandbox — change the pin.",
-        },
-      });
-      expect(f.messages.some((event) => event.method === "thread/start")).toBe(false);
-    },
-  );
+  it("refuses a user profile that would merge into the run's read profile", async () => {
+    const f = fixture("profile-conflict");
+    await expect(f.collect()).rejects.toMatchObject({
+      problem: {
+        code: "runtime-unavailable",
+        reason:
+          "Codex already has an ardur-read permission profile configured — remove it or change the pin.",
+      },
+    });
+    expect(f.messages.some((event) => event.method === "thread/start")).toBe(false);
+  });
+  it("overrides a user default permission profile with the run's read profile", async () => {
+    const f = fixture("user-default-permissions");
+    await f.collect();
+    expect(f.messages.find((event) => event.method === "thread/start")).toMatchObject({
+      params: { config: { default_permissions: "ardur-read" } },
+    });
+  });
   it.each(["profile-missing", "profile-network"] as const)(
     "fails closed when the thread reports %s",
     async (mode) => {
