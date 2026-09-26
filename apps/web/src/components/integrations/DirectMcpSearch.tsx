@@ -6,7 +6,7 @@ import type {
 } from "@ardurbot/contracts";
 import { Button, Input } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { remoteConnection } from "../../lib/connect-integration";
 import { mcpOutcomeSentence } from "../../lib/mcp-sign-in";
 import { rpc } from "../../lib/rpc";
@@ -21,6 +21,17 @@ type Target = {
 
 type Waiting = { cancel: () => Promise<void> };
 
+/** A row in one of these states never finished; Connect continues it instead of creating a
+ * second row. `not-connected` is what Disconnect or a timed-out sign-in leaves behind. A
+ * connected or needs-sign-in row shows Manage instead (see `existing`). */
+const REUSABLE_STATES = new Set([
+  "not-connected",
+  "cancelled",
+  "discovery-failed",
+  "awaiting-consent",
+  "needs-client-registration",
+]);
+
 export function DirectMcpSearch({
   botId,
   catalog = [],
@@ -28,18 +39,26 @@ export function DirectMcpSearch({
   onConnectCatalog,
   onManage,
   onConnected,
+  onWaitingChange,
 }: {
   botId?: string;
   catalog?: IntegrationDescriptor[];
   connections?: IntegrationConnection[];
-  /** Starts a new connection for a built-in app. Null means the page already said why not. */
+  /**
+   * Starts or resumes a connection for a built-in app. Null means the page already said why
+   * not. `connection` is a cancelled, failed, awaiting-consent or needs-registration row for
+   * this app to continue instead of a second one.
+   */
   onConnectCatalog?: (
     descriptor: IntegrationDescriptor,
     token: string | undefined,
-    hooks: { onWaiting: (waiting: Waiting) => void },
+    hooks: { onWaiting: (waiting: Waiting) => void; signal: AbortSignal },
+    connection?: IntegrationConnection,
   ) => Promise<IntegrationConnection | null>;
   onManage?: (connection: IntegrationConnection) => void;
   onConnected?: (serverId: string) => void | Promise<void>;
+  /** Reports a sign-in wait so a parent that can navigate away treats it as busy. */
+  onWaitingChange?: (waiting: boolean) => void;
 }) {
   const { t } = useLingui();
   const [query, setQuery] = useState("");
@@ -57,6 +76,19 @@ export function DirectMcpSearch({
   const [waiting, setWaiting] = useState<Waiting | null>(null);
   const attempt = useRef(0);
   const userCancelled = useRef(false);
+  const abort = useRef<AbortController | null>(null);
+  useEffect(() => {
+    onWaitingChange?.(waiting !== null);
+  }, [waiting, onWaitingChange]);
+  // Leaving this view stops its polling; the sign-in itself continues.
+  useEffect(
+    () => () => {
+      attempt.current += 1;
+      abort.current?.abort();
+      onWaitingChange?.(false);
+    },
+    [],
+  );
   const remoteResults = [
     ...new Map(
       results.flatMap((result) =>
@@ -126,14 +158,23 @@ export function DirectMcpSearch({
       setBusy(false);
       setWaiting(wait);
     };
+    abort.current?.abort();
+    const controller = new AbortController();
+    abort.current = controller;
     try {
       if (target.descriptor) {
+        const reusable = remoteConnection(connections, target.descriptor.id);
         const connection = await onConnectCatalog?.(
           target.descriptor,
           needsToken ? token.trim() : undefined,
-          { onWaiting },
+          { onWaiting, signal: controller.signal },
+          reusable && REUSABLE_STATES.has(reusable.state) ? reusable : undefined,
         );
-        if (mine !== attempt.current || !connection) return;
+        if (mine !== attempt.current) return;
+        if (!connection) {
+          setWaiting(null);
+          return;
+        }
         // Popup-blocked sign-in continues in this tab and finishes there.
         if (connection.state === "awaiting-consent") return;
         setWaiting(null);
@@ -160,6 +201,7 @@ export function DirectMcpSearch({
         auth: auth?.type === "none" ? "none" : auth?.type === "mixed" ? "mixed" : "oauth",
         credential: token.trim() ? { value: token, headerName: auth?.headerName } : undefined,
         onWaiting,
+        signal: controller.signal,
       });
       if (mine !== attempt.current) return;
       setWaiting(null);
@@ -171,13 +213,16 @@ export function DirectMcpSearch({
       } else if (outcome.result === "credential-rejected") {
         setCredential({ endpoint: target.endpoint, value: token });
         setRejectedEndpoint(target.endpoint);
-      } else if (outcome.result === "needs-credential") {
+      } else if (outcome.result === "needs-credential" || outcome.result === "oauth-unavailable") {
         setCredential({ endpoint: target.endpoint, value: "" });
       } else {
         setNotice(mcpOutcomeSentence(outcome.result, userCancelled.current, outcome.recorded));
       }
     } catch {
-      if (mine === attempt.current) setError("connect");
+      if (mine === attempt.current) {
+        setError("connect");
+        setWaiting(null);
+      }
     } finally {
       if (mine === attempt.current) setBusy(false);
     }
@@ -205,7 +250,7 @@ export function DirectMcpSearch({
     </p>
   );
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-testid="find-apps">
       <form
         className="flex gap-2"
         onSubmit={(event) => {
@@ -283,13 +328,20 @@ export function DirectMcpSearch({
             <p className="text-sm text-muted-foreground">{typedDescriptor.name}</p>
           ) : null}
           {typedDescriptor?.authKind === "oauth" ? null : (
-            <Input
-              type="password"
-              autoComplete="off"
-              aria-label={t`Access token (optional)`}
-              value={urlToken}
-              onChange={(event) => setUrlToken(event.target.value)}
-            />
+            <div className="space-y-1">
+              <label htmlFor="direct-mcp-url-token" className="text-sm text-muted-foreground">
+                {typedDescriptor?.authKind === "token"
+                  ? t`Access token`
+                  : t`Access token (optional)`}
+              </label>
+              <Input
+                id="direct-mcp-url-token"
+                type="password"
+                autoComplete="off"
+                value={urlToken}
+                onChange={(event) => setUrlToken(event.target.value)}
+              />
+            </div>
           )}
           {rejectedEndpoint === endpoint.trim() ? rejected : null}
           {existing(typedDescriptor) ?? (

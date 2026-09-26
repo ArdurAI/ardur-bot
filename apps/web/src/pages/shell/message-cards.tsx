@@ -334,6 +334,7 @@ export function McpApprovalCard({
   transport,
   endpoint,
   needsOAuth,
+  onOpenMcp,
 }: {
   botId: string | undefined;
   name: string;
@@ -341,13 +342,24 @@ export function McpApprovalCard({
   transport: string;
   endpoint: string | null;
   needsOAuth: boolean;
+  onOpenMcp?: (serverId: string) => void;
 }) {
   const { t } = useLingui();
   const [state, setState] = useState<McpApprovalState>("pending");
   const [error, setError] = useState<string | null>(null);
+  const [credentialFix, setCredentialFix] = useState(false);
   const waitCancel = useRef<(() => Promise<void>) | null>(null);
   const userCancelled = useRef(false);
   const attempt = useRef(0);
+  const abort = useRef<AbortController | null>(null);
+  // Leaving this card stops its polling; the sign-in itself continues.
+  useEffect(
+    () => () => {
+      attempt.current += 1;
+      abort.current?.abort();
+    },
+    [],
+  );
 
   const recordedError = () =>
     rpc.mcp.servers
@@ -363,11 +375,16 @@ export function McpApprovalCard({
     const mine = ++attempt.current;
     setState("connecting");
     setError(null);
+    setCredentialFix(false);
     userCancelled.current = false;
     try {
       if (needsOAuth) {
         const { connectMcpOauth } = await import("../../lib/mcp-connect");
+        abort.current?.abort();
+        const controller = new AbortController();
+        abort.current = controller;
         const result = await connectMcpOauth(serverId, {
+          signal: controller.signal,
           onWaiting: (waiting) => {
             if (mine !== attempt.current) return;
             waitCancel.current = waiting.cancel;
@@ -383,6 +400,11 @@ export function McpApprovalCard({
         ) {
           const recorded = result === "sign-in-failed" ? await recordedError() : null;
           setError(mcpOutcomeSentence(result, userCancelled.current, recorded));
+          setCredentialFix(
+            result === "oauth-unavailable" ||
+              result === "disabled" ||
+              mcpSignIn(recorded)?.credential === true,
+          );
           setState("pending");
           return;
         }
@@ -392,10 +414,12 @@ export function McpApprovalCard({
       setState("connected");
     } catch (err) {
       if (mine !== attempt.current) return;
+      const recorded = await recordedError();
       setError(
-        mcpSignIn(await recordedError())?.sentence ??
+        mcpSignIn(recorded)?.sentence ??
           (err instanceof Error ? err.message : t`Could not approve this server`),
       );
+      setCredentialFix(mcpSignIn(recorded)?.credential === true);
       setState("pending");
     }
   }
@@ -421,7 +445,24 @@ export function McpApprovalCard({
                 ? t`Authorize this server so agents can use its tools. A popup opens.`
                 : t`Approve this server to let your agent use its tools.`}
           </p>
-          {error ? <p className="mt-2 text-xs text-destructive">{error}</p> : null}
+          {error ? (
+            <p className="mt-2 text-xs text-destructive">
+              {error}
+              {credentialFix && onOpenMcp ? (
+                <>
+                  {" "}
+                  <Button
+                    type="button"
+                    variant="link"
+                    className="h-auto p-0 text-xs"
+                    onClick={() => onOpenMcp(serverId)}
+                  >
+                    {t`Manage`}
+                  </Button>
+                </>
+              ) : null}
+            </p>
+          ) : null}
           <div className="mt-3 flex gap-2">
             <Button
               className="rounded-full"

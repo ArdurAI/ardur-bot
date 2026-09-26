@@ -51,6 +51,8 @@ export function mcpOutcomeSentence(
       return t`Sign-in did not finish. Try again.`;
     case "replaced":
       return t`This sign-in window was replaced by a newer one. Finish signing in there, or start again.`;
+    case "disabled":
+      return t`Enable this server first, then sign in.`;
     case "oauth-unavailable":
     case "needs-credential":
       return t`This server did not offer browser sign-in. Enter a token instead.`;

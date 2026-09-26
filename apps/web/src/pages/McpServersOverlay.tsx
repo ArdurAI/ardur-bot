@@ -33,6 +33,7 @@ import { connectMcpOauth, MCP_OAUTH_CHANNEL } from "../lib/mcp-connect";
 import { mcpFailureSentence, mcpOutcomeSentence, mcpSignIn } from "../lib/mcp-sign-in";
 import { rpc } from "../lib/rpc";
 import { McpConfigEditor } from "./customize/McpConfigEditor";
+import { McpCredentialFix } from "./customize/McpCredentialFix";
 import { McpDefaults } from "./customize/McpDefaults";
 import { McpDiagnostics } from "./customize/McpDiagnostics";
 import { ImportedServerCredentials } from "./import/ImportedServerCredentials";
@@ -87,6 +88,7 @@ export function McpServersOverlay({
     serverId: string;
     cancel: () => Promise<void>;
   } | null>(null);
+  const [credentialFor, setCredentialFor] = useState<string | null>(null);
   const userCancelled = useRef(false);
   const oauthAttempt = useRef(0);
   const oauthAbort = useRef<AbortController | null>(null);
@@ -134,12 +136,14 @@ export function McpServersOverlay({
   }, []);
   useEffect(() => {
     if (!focusRequest || appliedFocus.current === focusRequest) return;
-    if (!focusServerId || !servers.some((server) => server.id === focusServerId)) return;
-    const card = document.getElementById(`mcp-server-${focusServerId}`);
+    const server = servers.find((item) => item.id === focusServerId);
+    if (!server) return;
+    const card = document.getElementById(`mcp-server-${server.id}`);
     if (!card) return;
     appliedFocus.current = focusRequest;
     card.scrollIntoView({ block: "center" });
     card.focus();
+    if (mcpSignIn(server.lastError)?.credential) setCredentialFor(server.id);
   }, [focusRequest, focusServerId, servers]);
 
   useEffect(() => {
@@ -581,11 +585,12 @@ export function McpServersOverlay({
                         <p className="mt-1 text-xs text-muted-foreground">
                           {server.endpoint ?? server.command ?? server.slug}
                         </p>
-                        {server.credentialConflict ? (
-                          <p className="mt-2 text-sm text-destructive" role="alert">
-                            {t`This server has two credentials. Keep one.`}
-                          </p>
-                        ) : null}
+                        <McpCredentialFix
+                          server={server}
+                          open={credentialFor === server.id}
+                          onOpenChange={(open) => setCredentialFor(open ? server.id : null)}
+                          onSaved={() => refresh().then(() => undefined)}
+                        />
                         {server.imported ? (
                           <p className="mt-1 text-xs text-muted-foreground">
                             <Trans>

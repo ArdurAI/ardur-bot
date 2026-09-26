@@ -288,6 +288,7 @@ msgstr "Acceptance criteria"
 msgid "Accepted"
 msgstr "Accepted"
 
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Access token"
 msgstr "Access token"
@@ -1214,6 +1215,7 @@ msgstr "Can't reach the server."
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/customize/ConfigureExtension.tsx
 #: src/pages/customize/McpConfigEditor.tsx
+#: src/pages/customize/McpCredentialFix.tsx
 #: src/pages/customize/PluginsPage.tsx
 #: src/pages/fleet/FleetSettings.tsx
 #: src/pages/import/ImportedServerCredentials.tsx
@@ -2539,6 +2541,14 @@ msgstr "Could not save that voice"
 msgid "Could not save this choice"
 msgstr "Could not save this choice"
 
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Could not save this credential. Check it and try again."
+msgstr "Could not save this credential. Check it and try again."
+
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Could not save. Try again."
+msgstr "Could not save. Try again."
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not search catalog"
 msgstr "Could not search catalog"
@@ -3249,6 +3259,10 @@ msgstr "Email"
 msgid "Enable"
 msgstr "Enable"
 
+#: src/lib/mcp-sign-in.ts
+msgid "Enable this server first, then sign in."
+msgstr "Enable this server first, then sign in."
+
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Engage when... Ignore..."
 msgstr "Engage when... Ignore..."
@@ -3690,11 +3704,17 @@ msgstr "Hang up, then enter the code on screen."
 msgid "header"
 msgstr "header"
 
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Header"
+msgstr "Header"
+
+#: src/pages/customize/McpCredentialFix.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Header name"
 msgstr "Header name"
 
+#: src/pages/customize/McpCredentialFix.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Header value"
 msgstr "Header value"
@@ -4063,6 +4083,10 @@ msgstr "Keep computer awake"
 msgid "Keep for recovery"
 msgstr "Keep for recovery"
 
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Keep header"
+msgstr "Keep header"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Keep here"
 msgstr "Keep here"
@@ -4074,6 +4098,10 @@ msgstr "Keep memories"
 #: src/pages/MemoryImportExport.tsx
 msgid "Keep scope"
 msgstr "Keep scope"
+
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Keep token"
+msgstr "Keep token"
 
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Keep working when the window is closed"
@@ -4386,6 +4414,7 @@ msgstr "Make sure nothing is still running on this computer."
 #: src/pages/memory/MemorySettings.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/PrivacySettings.tsx
+#: src/pages/shell/message-cards.tsx
 msgid "Manage"
 msgstr "Manage"
 
@@ -4847,6 +4876,10 @@ msgstr "Network control is unavailable on this computer."
 #: src/pages/DevicesSettings.tsx
 msgid "Never"
 msgstr "Never"
+
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "New access token"
+msgstr "New access token"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "New bot"
@@ -6468,6 +6501,7 @@ msgstr "Sans"
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/board/ItemForm.tsx
 #: src/pages/customize/ConfigureExtension.tsx
+#: src/pages/customize/McpCredentialFix.tsx
 #: src/pages/DevicesSettings.tsx
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/GroupPanel.tsx
@@ -7497,7 +7531,7 @@ msgstr "This server did not offer browser sign-in. Enter a token instead."
 msgid "This server did not request browser authorization."
 msgstr "This server did not request browser authorization."
 
-#: src/pages/McpServersOverlay.tsx
+#: src/pages/customize/McpCredentialFix.tsx
 msgid "This server has two credentials. Keep one."
 msgstr "This server has two credentials. Keep one."
 
@@ -7573,6 +7607,10 @@ msgstr "Today"
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "Today (UTC)"
 msgstr "Today (UTC)"
+
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Token"
+msgstr "Token"
 
 #: src/pages/CompareStart.tsx
 msgid "Token reservation"
@@ -7737,6 +7775,10 @@ msgstr "Update available"
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Update computer"
 msgstr "Update computer"
+
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Update credential"
+msgstr "Update credential"
 
 #: src/pages/import/ImportedServerCredentials.tsx
 msgid "Update credentials"

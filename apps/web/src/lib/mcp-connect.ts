@@ -1,3 +1,4 @@
+import { isReauthorizationDeclined } from "@ardurbot/contracts";
 import { desktopBridge } from "./desktop";
 import type { McpOauthResult } from "./mcp-oauth-channel";
 import { MCP_OAUTH_CHANNEL } from "./mcp-oauth-channel";
@@ -7,7 +8,6 @@ export type { McpOauthResult };
 export { MCP_OAUTH_CHANNEL };
 
 const MCP_OAUTH_TIMEOUT_MS = 10 * 60 * 1000;
-const DECLINED_WHILE_CONNECTED = "Sign-in was declined.";
 
 export type McpOauthWait = {
   sessionId: string;
@@ -21,7 +21,7 @@ function recordedOauthOutcome(server: {
 }): McpOauthResult | null {
   if (server.connectionState === "connected") {
     if (!server.lastError) return "connected";
-    if (server.lastError === DECLINED_WHILE_CONNECTED) return "cancelled";
+    if (isReauthorizationDeclined(server.lastError)) return "cancelled";
     return "sign-in-failed";
   }
   if (server.connectionState === "discovery-failed") return "sign-in-failed";
@@ -47,6 +47,7 @@ export async function connectMcpOauth(
     });
   } catch (error) {
     const server = (await rpc.mcp.servers.list()).find((item) => item.id === serverId);
+    if (server && !server.enabled) return "disabled";
     if (server && recordedOauthOutcome(server) === "sign-in-failed") return "sign-in-failed";
     if (server?.lastError?.includes("oauth_unavailable")) return "oauth-unavailable";
     throw error;
@@ -58,10 +59,21 @@ export async function connectMcpOauth(
     started.sessionId,
     async () => {
       const server = (await rpc.mcp.servers.list()).find((item) => item.id === serverId);
-      if (!server) return null;
+      // Deleted mid-wait: nothing will ever clear this attempt's pending id.
+      if (!server) return "needs-sign-in";
+      // Disabling clears the pending id too, but this attempt can never succeed either
+      // way, so say so plainly instead of falling through to a generic sign-in outcome.
+      if (server.enabled === false) return "disabled";
       if (server.pendingOauthSessionId === started.sessionId) return null;
       if (server.pendingOauthSessionId) return "replaced";
-      return recordedOauthOutcome(server);
+      // Disconnecting mid-wait clears the oauth material without changing
+      // connectionState; a genuine completion always leaves live tokens behind.
+      if (server.connectionState === "connected" && server.oauthStatus === "none")
+        return "needs-sign-in";
+      // Any other way this attempt's pending id ends up gone with nothing recorded to
+      // explain why — deleted, or a first-time sign-in (still "not-connected") that was
+      // disconnected before ever completing — lands here the same way.
+      return recordedOauthOutcome(server) ?? "needs-sign-in";
     },
     {
       onWaiting: options?.onWaiting,

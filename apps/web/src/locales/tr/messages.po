@@ -288,6 +288,7 @@ msgstr ""
 msgid "Accepted"
 msgstr ""
 
+#: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Access token"
 msgstr ""
@@ -1214,6 +1215,7 @@ msgstr "Sunucuya ulaşılamıyor."
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/customize/ConfigureExtension.tsx
 #: src/pages/customize/McpConfigEditor.tsx
+#: src/pages/customize/McpCredentialFix.tsx
 #: src/pages/customize/PluginsPage.tsx
 #: src/pages/fleet/FleetSettings.tsx
 #: src/pages/import/ImportedServerCredentials.tsx
@@ -2539,6 +2541,14 @@ msgstr "Bu ses kaydedilemedi"
 msgid "Could not save this choice"
 msgstr "Bu seçim kaydedilemedi"
 
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Could not save this credential. Check it and try again."
+msgstr ""
+
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Could not save. Try again."
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not search catalog"
 msgstr ""
@@ -3249,6 +3259,10 @@ msgstr "E-posta"
 msgid "Enable"
 msgstr ""
 
+#: src/lib/mcp-sign-in.ts
+msgid "Enable this server first, then sign in."
+msgstr ""
+
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Engage when... Ignore..."
 msgstr ""
@@ -3690,11 +3704,17 @@ msgstr ""
 msgid "header"
 msgstr ""
 
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Header"
+msgstr ""
+
+#: src/pages/customize/McpCredentialFix.tsx
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "Header name"
 msgstr "Üstbilgi adı"
 
+#: src/pages/customize/McpCredentialFix.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Header value"
 msgstr "Üstbilgi değeri"
@@ -4063,6 +4083,10 @@ msgstr ""
 msgid "Keep for recovery"
 msgstr ""
 
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Keep header"
+msgstr ""
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Keep here"
 msgstr ""
@@ -4073,6 +4097,10 @@ msgstr "Hafızayı koru"
 
 #: src/pages/MemoryImportExport.tsx
 msgid "Keep scope"
+msgstr ""
+
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Keep token"
 msgstr ""
 
 #: src/pages/settings/GeneralSettings.tsx
@@ -4386,6 +4414,7 @@ msgstr "Bu bilgisayarda hâlâ çalışan bir şey olmadığından emin ol."
 #: src/pages/memory/MemorySettings.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/PrivacySettings.tsx
+#: src/pages/shell/message-cards.tsx
 msgid "Manage"
 msgstr ""
 
@@ -4846,6 +4875,10 @@ msgstr ""
 
 #: src/pages/DevicesSettings.tsx
 msgid "Never"
+msgstr ""
+
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "New access token"
 msgstr ""
 
 #: src/pages/shell/bot-panel.tsx
@@ -6468,6 +6501,7 @@ msgstr ""
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/board/ItemForm.tsx
 #: src/pages/customize/ConfigureExtension.tsx
+#: src/pages/customize/McpCredentialFix.tsx
 #: src/pages/DevicesSettings.tsx
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/GroupPanel.tsx
@@ -7497,7 +7531,7 @@ msgstr ""
 msgid "This server did not request browser authorization."
 msgstr "Bu sunucu tarayıcı yetkilendirmesi istemedi."
 
-#: src/pages/McpServersOverlay.tsx
+#: src/pages/customize/McpCredentialFix.tsx
 msgid "This server has two credentials. Keep one."
 msgstr ""
 
@@ -7572,6 +7606,10 @@ msgstr "Bugün"
 
 #: src/pages/dashboard/UsagePanel.tsx
 msgid "Today (UTC)"
+msgstr ""
+
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Token"
 msgstr ""
 
 #: src/pages/CompareStart.tsx
@@ -7736,6 +7774,10 @@ msgstr ""
 
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Update computer"
+msgstr ""
+
+#: src/pages/customize/McpCredentialFix.tsx
+msgid "Update credential"
 msgstr ""
 
 #: src/pages/import/ImportedServerCredentials.tsx

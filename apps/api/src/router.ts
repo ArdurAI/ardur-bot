@@ -72,7 +72,6 @@ import {
   McpOAuthBroker,
   MissingComputerProviderError,
   mapScratchpadItem,
-  mcpCredentialConflict,
   modelCredentialDto,
   NATIVE_HOST_OWNER_MESSAGE,
   nativeHostOwner,
@@ -3499,12 +3498,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           });
         }),
         create: authed.mcp.servers.create.handler(async ({ context, input }) => {
-          const credentialConflict = mcpCredentialConflict({
-            secret: "secret" in input ? input.secret : undefined,
-            headers: "headers" in input ? input.headers : undefined,
-          });
-          if (credentialConflict)
-            throw new ORPCError("BAD_REQUEST", { message: credentialConflict });
+          // The input schema already rejects a server with both a token and a header.
           const secretPayload = buildMcpCredentialBlob(input);
           const stored = secretPayload
             ? await deps.secrets.put(
@@ -3594,6 +3588,10 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
                 data: {
                   enabled: input.enabled,
                   connectionState: "not-connected",
+                  // Disabling ends any in-flight sign-in wait for this server; nothing
+                  // else clears its pending id once the server is no longer enabled.
+                  pendingOauthSessionId: null,
+                  consentStartedAt: null,
                   revision: { increment: 1 },
                 },
               });
@@ -3619,6 +3617,17 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
                 /* Existing malformed secrets are replaced only when new credentials are supplied. */
               }
             }
+            // `secret: null` drops a stale token without a new value, so the header
+            // it leaves behind must be the one already stored, not a blank slate.
+            const existingHeaders = (existingMaterial.headers as Record<string, string>) ?? {};
+            if (
+              "secret" in input &&
+              input.secret === null &&
+              Object.keys(existingHeaders).length === 0
+            )
+              throw new ORPCError("BAD_REQUEST", {
+                message: "This server would be left with no credential.",
+              });
             const config =
               "config" in input
                 ? input.config
@@ -3630,8 +3639,15 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
                     transport: existing.transport as "streamable_http" | "sse",
                     endpoint: existing.endpoint!,
                     // One credential: the new one replaces the other kind, header names included.
-                    headers: "headers" in input ? input.headers : {},
-                    secret: "secret" in input ? input.secret : undefined,
+                    // Dropping a token via `secret: null` re-supplies the stored header
+                    // unchanged, since nothing new was typed for it.
+                    headers:
+                      "headers" in input
+                        ? input.headers
+                        : "secret" in input && input.secret === null
+                          ? existingHeaders
+                          : {},
+                    secret: "secret" in input ? (input.secret ?? undefined) : undefined,
                   };
             if (!("config" in input) && existing.transport === "stdio") {
               throw new ORPCError("BAD_REQUEST", { message: "A remote MCP server is required" });

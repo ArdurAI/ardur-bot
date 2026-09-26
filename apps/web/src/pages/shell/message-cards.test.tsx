@@ -43,7 +43,7 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-async function mount() {
+async function mount(onOpenMcp?: (serverId: string) => void) {
   const container = document.createElement("div");
   document.body.append(container);
   const root = createRoot(container);
@@ -60,6 +60,7 @@ async function mount() {
         transport="streamable_http"
         endpoint="https://tools.example.test/mcp"
         needsOAuth
+        onOpenMcp={onOpenMcp}
       />,
     ),
   );
@@ -93,6 +94,90 @@ it("shows the plain sentence when the server offers no browser sign-in", async (
   );
   expect(container.textContent).not.toContain(provider);
   expect(api.approve).not.toHaveBeenCalled();
+});
+
+it("links a no-browser-sign-in server to where its credential can be fixed", async () => {
+  api.oauth.mockImplementation(async () => {
+    api.list.mockResolvedValue([
+      {
+        id: "server-1",
+        connectionState: "needs-sign-in",
+        lastError: "Needs sign-in (oauth_unavailable).",
+      },
+    ]);
+    throw new Error("provider-denied-browser-sign-in");
+  });
+  const onOpenMcp = vi.fn();
+  const container = await mount(onOpenMcp);
+  await click("Authorize");
+  await click("Manage");
+  expect(onOpenMcp).toHaveBeenCalledExactlyOnceWith("server-1");
+  expect(container.textContent).toContain(
+    "This server did not offer browser sign-in. Enter a token instead.",
+  );
+});
+
+it("stops polling for this card's sign-in when the card unmounts", async () => {
+  let capturedSignal: AbortSignal | undefined;
+  api.oauth.mockImplementation(
+    (_serverId: string, options: { signal?: AbortSignal }) =>
+      new Promise(() => {
+        capturedSignal = options.signal;
+      }),
+  );
+  await mount();
+  await click("Authorize");
+  expect(capturedSignal).toBeDefined();
+  expect(capturedSignal?.aborted).toBe(false);
+  await cleanup();
+  expect(capturedSignal?.aborted).toBe(true);
+});
+
+it("aborts the first wait's signal when Authorize is pressed again while waiting", async () => {
+  const signals: AbortSignal[] = [];
+  api.oauth.mockImplementation(
+    (
+      _serverId: string,
+      options: {
+        signal?: AbortSignal;
+        onWaiting?: (waiting: { cancel: () => Promise<void> }) => void;
+      },
+    ) => {
+      if (options.signal) signals.push(options.signal);
+      return new Promise(() => {
+        options.onWaiting?.({ cancel: async () => undefined });
+      });
+    },
+  );
+  const container = await mount();
+  await click("Authorize");
+  expect(container.textContent).toContain("Waiting for sign-in in the other window.");
+  expect(signals).toHaveLength(1);
+  expect(signals[0]?.aborted).toBe(false);
+  await click("Authorize");
+  expect(signals).toHaveLength(2);
+  expect(signals[0]?.aborted).toBe(true);
+});
+
+it("does not offer Manage for a sign-in that just needs another try", async () => {
+  api.oauth.mockResolvedValue("needs-sign-in");
+  const onOpenMcp = vi.fn();
+  const container = await mount(onOpenMcp);
+  await click("Authorize");
+  expect(container.textContent).toContain("Sign-in did not finish. Try again.");
+  expect([...container.querySelectorAll("button")].map((item) => item.textContent)).not.toContain(
+    "Manage",
+  );
+});
+
+it("offers Manage for a disabled server, since enabling it needs MCP settings", async () => {
+  api.oauth.mockResolvedValue("disabled");
+  const onOpenMcp = vi.fn();
+  const container = await mount(onOpenMcp);
+  await click("Authorize");
+  expect(container.textContent).toContain("Enable this server first, then sign in.");
+  await click("Manage");
+  expect(onOpenMcp).toHaveBeenCalledExactlyOnceWith("server-1");
 });
 
 it("does not approve a bot when tool discovery failed", async () => {

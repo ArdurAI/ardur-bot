@@ -241,6 +241,25 @@ code-b
       },
     ];
   }
+  if (lower.includes("propose an mcp server")) {
+    const named = /named\s+([A-Za-z0-9][A-Za-z0-9 _-]{0,59})/i.exec(prompt)?.[1]?.trim();
+    return [
+      {
+        assistant: "posting an approval card for that server.",
+        toolCalls: [
+          {
+            name: "add_mcp_server",
+            args: {
+              name: named ?? "Proposed MCP fixture",
+              transport: "streamable_http",
+              endpoint: "https://mcp-fixture.example.test/reports",
+            },
+          },
+        ],
+        complete: true,
+      },
+    ];
+  }
   if (
     lower.includes("tappable choices") ||
     lower.includes("choice buttons") ||
