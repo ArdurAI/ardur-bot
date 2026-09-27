@@ -200,6 +200,14 @@ test("sign-in, spawn, and stop work in the shell", async ({ page }, testInfo) =>
     ) {
       return;
     }
+    // Better Auth's session signal triggers a duplicate get-session fetch ~10ms after
+    // sign-up that navigation to onboarding cancels harmlessly after the awaited refetch finishes.
+    if (
+      new URL(request.url()).pathname === "/api/auth/get-session" &&
+      request.failure()?.errorText === "net::ERR_ABORTED"
+    ) {
+      return;
+    }
     failedRequests.push(
       `${request.method()} ${request.url()} ${request.failure()?.errorText ?? ""}`,
     );
