@@ -12,6 +12,57 @@ async function createBot(page: Page, name: string) {
   return createNamedBot(page, name);
 }
 
+test("a group member choice appears in the room and on its captured run", async ({
+  page,
+}, testInfo) => {
+  await signup(page, `group-choice-${Date.now()}@ardurbot.test`, "password12", "Group choice");
+  await completeOnboarding(page);
+  await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
+  await rpc(page, "models/connect", { provider: "scripted", apiKey: "fake-scripted-key" });
+  await page.reload();
+  const first = await createBot(page, "Room first");
+  await createBot(page, "Room second");
+  await openNewGroup(page);
+  const panel = page.getByTestId("side-panel");
+  await panel.locator("label:has-text('Name') input").fill("Choice room");
+  await panel.getByRole("button", { name: "Room first" }).click();
+  await panel.getByRole("button", { name: "Room second" }).click();
+  await panel.getByRole("button", { name: "Create group", exact: true }).click();
+  await page.waitForURL(/\/app\/g\/[^/]+$/);
+  const groupId = page.url().split("/").at(-1)!;
+  await page.getByTestId("bot-settings-trigger").click();
+  const control = panel.getByTestId(`group-model-${first}`);
+  const select = control.locator("select").first();
+  await expect
+    .poll(async () => select.locator("option[value]:not([value=''])").count())
+    .toBeGreaterThan(0);
+  const option = select.locator("option[value]:not([value=''])").first();
+  await select.selectOption((await option.getAttribute("value"))!);
+  await control.getByRole("button", { name: "Save model" }).click();
+  const group = await rpc<{
+    members: Array<{ botId: string; runtimePin: { modelId: string } | null }>;
+  }>(page, "groups/get", { groupId });
+  const modelId = group.members.find((member) => member.botId === first)?.runtimePin?.modelId;
+  expect(modelId).toBeTruthy();
+  await expect(
+    page.getByTestId("group-participant-models").getByLabel(`Using ${modelId}`),
+  ).toBeVisible();
+  await captureScreenshot(page, testInfo, "group-model-settings");
+  await page.getByRole("combobox", { name: "Message Choice room" }).fill("@Room first say ready");
+  await page.getByRole("button", { name: /Send/ }).last().click();
+  await expect
+    .poll(async () => {
+      const snapshot = await rpc<{
+        contextRun?: { botId: string; runtimePin?: { modelId: string } } | null;
+      }>(page, "threads/get", { groupId });
+      return snapshot.contextRun?.botId === first ? snapshot.contextRun.runtimePin?.modelId : null;
+    })
+    .toBe(modelId);
+  await expect(
+    page.getByTestId("group-participant-models").getByLabel(`Using ${modelId}`),
+  ).toBeVisible();
+});
+
 test("create group from + and see two bots in one transcript", async ({ page }, testInfo) => {
   const stamp = Date.now();
   await signup(page, `group-${stamp}@ardurbot.test`, "password12", "Group E2E");

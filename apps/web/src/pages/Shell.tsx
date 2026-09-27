@@ -3339,6 +3339,34 @@ export function ShellPage({
                 onClick={openBotModelSettings}
               />
             ) : null}
+            {inGroup && activeGroup ? (
+              <div
+                data-testid="group-participant-models"
+                className="app-no-drag flex min-w-0 items-center gap-2 overflow-x-auto"
+              >
+                {activeGroup.members.map((member) => {
+                  const participant = bots.find((bot) => bot.id === member.botId);
+                  if (!participant) return null;
+                  const running = currentRuns.find(
+                    (run) =>
+                      run.botId === member.botId && run.status === "running" && run.runtimePin,
+                  );
+                  return (
+                    <div key={member.botId} className="flex shrink-0 items-center gap-1">
+                      <span className="text-xs text-muted-foreground">{member.name}</span>
+                      <BotModelChip
+                        bot={participant}
+                        settings={modelSettings}
+                        pin={member.effectiveRuntimePin}
+                        nextPin={member.effectiveRuntimePin}
+                        run={running}
+                        display="using"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
             <RunContext run={activeSnapshot?.contextRun ?? activeSnapshot?.run} />
           </div>
           <div className="flex items-center gap-1">
@@ -3455,6 +3483,12 @@ export function ShellPage({
             onRunErrorPresented={handleRunErrorPresented}
             onDismissError={dismissComposerError}
             onChangeModel={() => {
+              const source = activeSnapshot?.run?.runtimeProblem?.source;
+              if (source?.kind === "group-member") {
+                if (groupId !== source.groupId) navigate(`/app/g/${source.groupId}`);
+                setPanel("group-settings");
+                return;
+              }
               const botId = activeSnapshot?.run?.runtimeProblem
                 ? activeSnapshot.run.botId
                 : active?.id;
@@ -3668,6 +3702,23 @@ export function ShellPage({
                 key={activeGroup.id}
                 group={activeGroup}
                 bots={bots}
+                modelSettings={modelSettings}
+                onModelPin={async (member, pin) => {
+                  if (!member.memberId) return;
+                  const target = {
+                    groupId: activeGroup.id,
+                    botId: member.botId,
+                    memberId: member.memberId,
+                    expectedRevision: member.modelPinRevision ?? 0,
+                  };
+                  const updated = pin
+                    ? await rpc.groups.setMemberModelPin({ ...target, pin })
+                    : await rpc.groups.clearMemberModelPin(target);
+                  setGroups((current) =>
+                    current.map((group) => (group.id === updated.id ? updated : group)),
+                  );
+                  await refreshGroupThread(activeGroup.id).catch(() => undefined);
+                }}
                 goal={goal?.groupId === activeGroup.id ? goal : null}
                 canManageGoal={Boolean(bootstrapMe?.isDeploymentOwner)}
                 onStartGoal={async (input) => {
@@ -3706,6 +3757,11 @@ export function ShellPage({
                 modelFocusRequest={modelFocusRequest}
                 runtimeFocusRequest={runtimeFocusRequest}
                 modelSettings={modelSettings}
+                overrideGroups={groups}
+                onOpenGroup={(id) => {
+                  navigate(`/app/g/${id}`);
+                  setPanel("group-settings");
+                }}
                 memoryProviderConfigured={memoryProviderConfig != null}
                 onSkillsChange={setAgentSkills}
                 onSave={async ({ computerMode, ...patch }) => {

@@ -65,6 +65,8 @@ export const ProductEventType = z.enum([
   "bot.deleted",
   "group.created",
   "group.updated",
+  "group.memberModelPin.set",
+  "group.memberModelPin.cleared",
   "group.handoff",
   "goal.started",
   "goal.assigned",

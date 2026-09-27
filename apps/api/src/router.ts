@@ -219,6 +219,7 @@ import {
   savePlacement,
   testFleetTarget,
 } from "./fleet.js";
+import { updateGroupMemberModelPin } from "./group-model-pin.js";
 import type { HostBridge } from "./host-bridge.js";
 import { sourceHostStatus } from "./host-status.js";
 import { createIdeChanges } from "./ide-changes.js";
@@ -1636,6 +1637,12 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         );
         return updated.group;
       }),
+      setMemberModelPin: authed.groups.setMemberModelPin.handler(async ({ context, input }) =>
+        updateGroupMemberModelPin(deps, context.actor, input, input.pin),
+      ),
+      clearMemberModelPin: authed.groups.clearMemberModelPin.handler(async ({ context, input }) =>
+        updateGroupMemberModelPin(deps, context.actor, input, null),
+      ),
       archive: authed.groups.archive.handler(async ({ context, input }) => {
         const archived = await groupRepos.archiveGroup(context.actor, input.groupId);
         await Promise.all(

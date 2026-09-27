@@ -1,13 +1,14 @@
 import type { AgentRunModel } from "@ardurbot/adapter-kit";
 import type { Actor, ResolvedPin, RuntimePin, RuntimeProblem } from "@ardurbot/contracts";
 import {
+  LocalityPolicySchema,
   MODEL_LOCALITY_DENIED_MESSAGE,
   RuntimePinError,
   RuntimePinSchema,
   runtimePinProblem,
   ThinkingLevelSchema,
 } from "@ardurbot/contracts";
-import { spaceDefaultEffort } from "@ardurbot/core";
+import { allowsModelDestination, spaceDefaultEffort } from "@ardurbot/core";
 import type { findDefaultModelCredential, PrismaClient } from "@ardurbot/db";
 import { findDefaultModelCredential as findSpaceDefault } from "@ardurbot/db";
 import { modelLocalityAllowed } from "./model-locality.js";
@@ -139,6 +140,15 @@ export async function resolveRunModelPin(input: {
         "pin-effort-unsupported",
         "The pinned effort is unavailable in this runtime.",
       );
+    const space = await input.prisma.space.findUnique({ where: { id: input.scope.spaceId } });
+    const nativeDestination = { host: null, local: false };
+    if (
+      ![bot?.allowedModelDestinations, space?.allowedModelDestinations].every((value) => {
+        const policy = LocalityPolicySchema.safeParse(value ?? { mode: "any" });
+        return policy.success && allowsModelDestination(policy.data, nativeDestination);
+      })
+    )
+      return runtimePinProblem(pin, "locality-denied", MODEL_LOCALITY_DENIED_MESSAGE);
     return {
       kind: "resolved",
       pin,

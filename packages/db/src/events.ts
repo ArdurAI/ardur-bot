@@ -6,6 +6,7 @@ import {
   type MessageBlock,
   MessageBlock as MessageBlockSchema,
   type ProductEvent,
+  RuntimePinSourceSchema,
 } from "@ardurbot/contracts";
 import {
   blocksToAgentHistoryText,
@@ -1343,6 +1344,45 @@ async function finalizeRunOnce(
     });
     if (task.count !== 1) throw new Error("Run task was not available to finalize");
 
+    const pinProblem = input.outcome === "failed" ? input.runtimeProblem : undefined;
+    const recordedSource = pinProblem
+      ? (
+          await tx.run.findUnique({
+            where: { id: input.runId },
+            select: { runtimePinSource: true },
+          })
+        )?.runtimePinSource
+      : null;
+    const groupSource = RuntimePinSourceSchema.safeParse(recordedSource).data;
+    const failedGroupPin = pinProblem && groupSource?.kind === "group-member";
+    if (failedGroupPin) {
+      const bot = await tx.bot.findUnique({ where: { id: input.botId }, select: { name: true } });
+      const text =
+        pinProblem.code === "locality-denied"
+          ? "This group's model is blocked by the bot or space settings."
+          : pinProblem.code === "pin-credential-missing"
+            ? `${bot?.name ?? "This bot"} couldn't use the model set for this group. Reconnect it or change the group model.`
+            : `${bot?.name ?? "This bot"} couldn't use the model set for this group. Change the group model or check this bot's settings.`;
+      const blocks = [{ kind: "text" as const, text }];
+      const notice = await createThreadMessageInTransaction(tx, {
+        threadId: input.threadId,
+        role: "system",
+        blocks,
+        botId: input.botId,
+        runId: input.runId,
+        clientNonce: `group-model-failed:${input.runId}`,
+        markUnread: true,
+      });
+      await appendEventInTransaction(tx, {
+        spaceId: input.spaceId,
+        threadId: input.threadId,
+        botId: input.botId,
+        type: "thread.message.created",
+        runId: input.runId,
+        payload: { messageId: notice.id, role: "system", blocks },
+      });
+    }
+
     let finalMessageId: string | null = null;
     const delegation =
       writableRun?.delegationId && writableRun.delegationRootTaskId
@@ -1430,7 +1470,13 @@ async function finalizeRunOnce(
           : {
               error: input.error,
               ...(input.providerErrorKind ? { providerErrorKind: input.providerErrorKind } : {}),
-              ...(input.runtimeProblem ? { runtimeProblem: input.runtimeProblem } : {}),
+              ...(input.runtimeProblem
+                ? {
+                    runtimeProblem: groupSource
+                      ? { ...input.runtimeProblem, source: groupSource }
+                      : input.runtimeProblem,
+                  }
+                : {}),
             },
     });
     await tx.event.deleteMany({ where: { runId: input.runId, type: "thread.progress" } });

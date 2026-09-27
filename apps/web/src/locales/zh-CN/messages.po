@@ -13,7 +13,7 @@ msgstr ""
 "Language-Team: \n"
 "Plural-Forms: \n"
 
-#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/model-pin-select.tsx
 msgid " — May not be available on your plan"
 msgstr ""
 
@@ -25,7 +25,7 @@ msgstr ""
 msgid " · not available"
 msgstr ""
 
-#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/model-pin-select.tsx
 msgid " (not available on your account)"
 msgstr ""
 
@@ -42,6 +42,11 @@ msgstr "{0, plural, one {# 个模型} other {# 个模型}}"
 #: src/pages/import/LocalImportPage.tsx
 msgid "{0, plural, one {1 item was not scanned because of the scan limits.} other {# items were not scanned because of the scan limits.}}"
 msgstr "{0, plural, other {由于扫描限制，有 # 个项目未被扫描。}}"
+
+#. placeholder {0}: bot.groupModelOverrideCount ?? 0
+#: src/pages/shell/bot-panel.tsx
+msgid "{0, plural, one {Also set differently in # group} other {Also set differently in # groups}}"
+msgstr ""
 
 #. placeholder {0}: preset.n
 #: src/pages/RoutineSchedule.tsx
@@ -2631,6 +2636,10 @@ msgstr ""
 msgid "Could not save group"
 msgstr "无法保存群组"
 
+#: src/pages/group-model-control.tsx
+msgid "Could not save group model."
+msgstr ""
+
 #: src/components/composer/composer-actions.ts
 msgid "Could not save memory"
 msgstr ""
@@ -2993,8 +3002,8 @@ msgstr ""
 msgid "Default"
 msgstr "默认"
 
-#. placeholder {0}: thinkingLevelDescription(defaultThinkingLevel)
-#: src/pages/shell/bot-panel.tsx
+#. placeholder {0}: thinkingLevelDescription(defaultLevel)
+#: src/pages/shell/model-pin-select.tsx
 msgid "Default ({0})"
 msgstr "默认（{0}）"
 
@@ -3397,7 +3406,7 @@ msgstr ""
 msgid "Effort"
 msgstr ""
 
-#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/model-pin-select.tsx
 msgid "Effort: not applicable"
 msgstr ""
 
@@ -3952,7 +3961,7 @@ msgstr ""
 msgid "Host service:"
 msgstr ""
 
-#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/model-pin-select.tsx
 msgid "Hosted providers"
 msgstr ""
 
@@ -4550,7 +4559,7 @@ msgid "Loading…"
 msgstr "加载中…"
 
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
-#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/model-pin-select.tsx
 msgid "Local"
 msgstr "本地"
 
@@ -4897,6 +4906,10 @@ msgstr ""
 msgid "Model id"
 msgstr "模型 ID"
 
+#: src/pages/group-model-control.tsx
+msgid "Model in this group"
+msgstr ""
+
 #: src/components/OllamaSettings.tsx
 msgid "Model name"
 msgstr ""
@@ -5132,6 +5145,10 @@ msgstr "新建工作区"
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/shell/terminal-session.tsx
 msgid "Next"
+msgstr ""
+
+#: src/pages/shell/bot-model-chip.tsx
+msgid "Next run"
 msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -5484,7 +5501,7 @@ msgstr ""
 msgid "Obsidian vault"
 msgstr ""
 
-#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/model-pin-select.tsx
 #: src/pages/system/SystemPage.tsx
 msgid "Off"
 msgstr ""
@@ -5497,7 +5514,7 @@ msgstr ""
 msgid "Ollama server URL"
 msgstr ""
 
-#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/model-pin-select.tsx
 msgid "On"
 msgstr ""
 
@@ -6712,6 +6729,7 @@ msgstr ""
 msgid "Runs when this bot receives a verified message from this provider."
 msgstr ""
 
+#: src/pages/group-model-control.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Runtime"
 msgstr ""
@@ -6722,6 +6740,11 @@ msgstr ""
 
 #: src/pages/LearningObservation.tsx
 msgid "safety"
+msgstr ""
+
+#: src/pages/group-model-control.tsx
+#: src/pages/shell/bot-model-chip.tsx
+msgid "Same as bot"
 msgstr ""
 
 #. placeholder {0}: row.participants.length
@@ -6769,6 +6792,10 @@ msgstr ""
 
 #: src/pages/import/ImportedServerCredentials.tsx
 msgid "Save credentials"
+msgstr ""
+
+#: src/pages/group-model-control.tsx
+msgid "Save model"
 msgstr ""
 
 #: src/components/AskCard.tsx
@@ -6823,6 +6850,7 @@ msgstr ""
 
 #: src/components/AskCard.tsx
 #: src/components/teach/SkillDraftCard.tsx
+#: src/pages/group-model-control.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
@@ -7649,7 +7677,7 @@ msgstr ""
 msgid "Theme"
 msgstr ""
 
-#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/model-pin-select.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Thinking"
 msgstr "思考"
@@ -8191,6 +8219,10 @@ msgstr "使用此模型"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "User"
+msgstr ""
+
+#: src/pages/shell/bot-model-chip.tsx
+msgid "Using {currentId}"
 msgstr ""
 
 #: src/pages/PluginsOverlay.tsx

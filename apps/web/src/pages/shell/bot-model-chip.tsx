@@ -71,34 +71,81 @@ export function BotModelChip({
   settings,
   run,
   onClick,
+  pin,
+  display = "change",
+  nextPin,
 }: {
   bot: Bot;
   settings: ModelSettings | null;
   run?: { runtimePin?: RuntimePin | null; runtimeInfo?: RuntimeInfo | null } | null;
-  onClick: () => void;
+  onClick?: () => void;
+  pin?: RuntimePin | null;
+  nextPin?: RuntimePin | null;
+  display?: "change" | "using";
 }) {
   const { t } = useLingui();
-  const model = effectiveBotModel(bot, settings);
+  const requested = run?.runtimePin ?? pin;
+  const displayBot = requested
+    ? {
+        ...bot,
+        runtimeKind: requested.runtimeKind,
+        modelProvider: requested.provider,
+        modelId: requested.modelId,
+        thinkingLevel: requested.effort as Bot["thinkingLevel"],
+        modelCredentialId: requested.credentialId,
+      }
+    : bot;
+  const model = effectiveBotModel(displayBot, settings);
   if (!model) return null;
   const effort =
-    bot.runtimeKind === "claude-code"
-      ? botEffortLabel(bot, run, t`requested`)
+    displayBot.runtimeKind === "claude-code"
+      ? botEffortLabel(displayBot, run, t`requested`)
       : (model.effortLabel ?? model.thinkingLevel);
-  const label = `${bot.runtimeKind && bot.runtimeKind !== "pi" ? "" : "Ardur · "}${model.providerLabel} · ${model.label}${effort ? ` · ${effort}` : ""}${model.unavailable ? t` · not available` : ""}`;
+  const label = `${displayBot.runtimeKind && displayBot.runtimeKind !== "pi" ? "" : "Ardur · "}${model.providerLabel} · ${model.label}${effort ? ` · ${effort}` : ""}${model.unavailable ? t` · not available` : ""}`;
+  const currentId = requested?.modelId ?? displayBot.modelId ?? model.label;
+  const inheritedId = bot.modelId ?? settings?.me.defaultModel ?? null;
+  const inheritedProvider = bot.modelProvider ?? settings?.me.defaultProvider ?? null;
+  const nextId = nextPin?.modelId ?? inheritedId;
+  const nextDiffers =
+    display === "using" &&
+    run?.runtimePin &&
+    (nextPin
+      ? JSON.stringify(run.runtimePin) !== JSON.stringify(nextPin)
+      : nextId !== run.runtimePin.modelId || inheritedProvider !== run.runtimePin.provider);
   return (
-    <Button
-      variant="ghost"
-      size="xs"
-      className={`app-no-drag min-w-0 shrink font-normal ${model.unavailable ? "text-warning" : "text-muted-foreground"}`}
-      aria-label={t`Change model: ${label}`}
-      onClick={onClick}
-    >
-      <span className="truncate">{label}</span>
-      {model.isDefault ? (
-        <span className="text-muted-foreground/70">
-          <Trans>default</Trans>
+    <span className="inline-flex min-w-0 items-center gap-1">
+      {onClick ? (
+        <Button
+          variant="ghost"
+          size="xs"
+          className={`app-no-drag min-w-0 shrink font-normal ${model.unavailable ? "text-warning" : "text-muted-foreground"}`}
+          aria-label={display === "using" ? t`Using ${currentId}` : t`Change model: ${label}`}
+          onClick={onClick}
+        >
+          <span className="truncate">{label}</span>
+          {display === "change" && model.isDefault ? (
+            <span className="text-muted-foreground/70">
+              <Trans>default</Trans>
+            </span>
+          ) : null}
+        </Button>
+      ) : (
+        <span
+          role="status"
+          aria-label={t`Using ${currentId}`}
+          className="truncate text-xs text-muted-foreground"
+        >
+          {label}
         </span>
+      )}
+      {nextDiffers ? (
+        <details className="text-xs text-muted-foreground">
+          <summary>
+            <Trans>Next run</Trans>
+          </summary>
+          <span>{nextId ?? t`Same as bot`}</span>
+        </details>
       ) : null}
-    </Button>
+    </span>
   );
 }

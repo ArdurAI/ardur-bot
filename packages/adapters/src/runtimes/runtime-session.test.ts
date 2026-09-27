@@ -43,6 +43,15 @@ describe("native session ownership", () => {
       { ...input, historyGeneration: 1 },
       { ...input, instructions: "new" },
       { ...input, pin: { ...input.pin, effort: "high" } },
+      {
+        ...input,
+        pinSource: {
+          kind: "group-member" as const,
+          groupId: "group",
+          memberId: "member",
+          botId: "bot",
+        },
+      },
     ])
       expect((await runtimeSession(prisma, changed)).previous).toBeUndefined();
   });

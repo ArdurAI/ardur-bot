@@ -22,7 +22,13 @@ import type {
   WebProvider,
 } from "@ardurbot/adapter-kit";
 import { routineJobKey, routineWakeupJob, runContinueJob } from "@ardurbot/adapter-kit";
-import type { CommandBlock, MessageBlock, RunStatus, RuntimePin } from "@ardurbot/contracts";
+import type {
+  CommandBlock,
+  MessageBlock,
+  RunStatus,
+  RuntimePin,
+  RuntimePinSource,
+} from "@ardurbot/contracts";
 import {
   ATTACHMENT_MAX_BYTES,
   BOT_DESCRIPTION_MAX_LENGTH,
@@ -243,6 +249,7 @@ import { claimBotRun } from "./context/concurrency.js";
 import { recordContextUsage, resumeContextSnapshot } from "./context/metrics.js";
 import { fitContextRecall, recallLocalDocuments } from "./context/recall.js";
 import { formatCurrentTimeInstruction } from "./current-time.js";
+import type { DelegationResolver } from "./delegation.js";
 import { completeHelper } from "./delegation.js";
 import { checkDelegationExecution } from "./delegation-execution.js";
 import { admitRunHelper } from "./delegation-helpers.js";
@@ -253,6 +260,7 @@ import { startExecutionHeartbeat } from "./execution-heartbeat.js";
 import { beforeFileChange, fileChangeText, recordFileChange } from "./file-changes.js";
 import { wakeGoalAfterDelegation } from "./goal-wake.js";
 import { handoffToGroupBot, loadGroupContext } from "./group-handoff.js";
+import { captureRunModelPin, selectRunPinSource } from "./group-model-pin.js";
 import {
   LEGACY_HISTORY_WINDOW_SIZE,
   MAX_RECALLED_MEMORIES,
@@ -1088,6 +1096,27 @@ export function createRunExecutor(deps: ExecutorDeps) {
         };
       },
     });
+  const resolveDelegationForThread = async (
+    scope: { userId: string; spaceId: string },
+    target: Parameters<DelegationResolver>[0],
+    context: Parameters<DelegationResolver>[1],
+  ) => {
+    if (!context) return resolvePin(scope, target);
+    const candidate = await selectRunPinSource({
+      prisma: context.tx as unknown as PrismaClient,
+      scope,
+      threadId: context.targetThreadId,
+      botId: target.id,
+      bot: target,
+      snapshot: null,
+      savedSource: null,
+      savedUsageGroupId: null,
+    });
+    const selected = await resolvePin(scope, target, candidate.snapshot);
+    return selected.kind === "resolved"
+      ? { ...selected, pinSource: candidate.source, usageGroupId: candidate.usageGroupId }
+      : selected;
+  };
   const resolveBriefRuntime: BriefMaintenanceDeps["resolve"] = async (run, bot, secrets) => {
     const selected = await resolvePin(run, bot, run.runtimePin, (values) =>
       secrets.push(...values),
@@ -1180,6 +1209,44 @@ export function createRunExecutor(deps: ExecutorDeps) {
             select: { id: true },
           })
         : null;
+      if (routine.threadId && !targetThread) {
+        const failed = await deps.prisma.$transaction(async (tx) => {
+          const stopped = await tx.routine.updateMany({
+            where: { id: routine.id, active: true, nextRunAt: scheduledAt },
+            data: { active: false, nextRunAt: null },
+          });
+          if (!stopped.count) return null;
+          const room = await tx.thread.findFirst({
+            where: {
+              id: routine.threadId!,
+              spaceId: routine.spaceId,
+              userId: routine.userId,
+              groupId: { not: null },
+            },
+            select: { id: true },
+          });
+          if (!room) return null;
+          const blocks = [{ kind: "text" as const, text: "This routine's group is unavailable." }];
+          const notice = await createThreadMessageInTransaction(tx, {
+            threadId: room.id,
+            role: "system",
+            blocks,
+            botId: bot.id,
+            clientNonce: `routine-group-unavailable:${routine.id}:${scheduledAt.toISOString()}`,
+            markUnread: true,
+          });
+          const event = await appendEventInTransaction(tx, {
+            spaceId: routine.spaceId,
+            threadId: room.id,
+            botId: bot.id,
+            type: "thread.message.created",
+            payload: { messageId: notice.id, role: "system", blocks },
+          });
+          return { threadId: room.id, seq: event.seq };
+        });
+        if (failed) await deps.events.notify(failed.threadId, failed.seq).catch(() => undefined);
+        return;
+      }
       const thread = targetThread ?? bot.thread;
       // A schedule with no valid parseable cron among its crons (e.g. a
       // legacy row accepted before cron validation was added) fires the
@@ -1632,21 +1699,51 @@ export function createRunExecutor(deps: ExecutorDeps) {
         const agentEnvironment = decryptAgentEnvironment(agentSecretRows, deps.secretStore);
         runSecrets.push(...Object.values(agentEnvironment));
         const agentEnvironmentInstruction = formatAgentEnvironmentInstruction(agentEnvironment);
-        const selected = await resolvePin(run, bot, run.runtimePin, (values) =>
-          runSecrets.push(...values),
-        );
-        const captured = await deps.prisma.run.updateMany({
-          where: { id: runId, status: "running", leaseOwner: workerId, leaseFence: fence },
-          data: {
-            runtimePin: run.runtimePin ?? selected.pin,
-            ...(selected.kind === "resolved"
-              ? { runtimeDestination: destinationForModel(selected) }
-              : {}),
-            modelProvider: selected.pin.provider,
-            modelId: selected.pin.modelId,
-          },
-        });
-        if (captured.count !== 1) return;
+        let selected: Awaited<ReturnType<typeof resolvePin>> | null = null;
+        let capturedPin: RuntimePin | null = null;
+        for (let selectionAttempt = 0; selectionAttempt < 5; selectionAttempt++) {
+          const candidate = await selectRunPinSource({
+            prisma: deps.prisma,
+            scope: run,
+            threadId: run.threadId,
+            executionGroupId: thread.groupId,
+            botId: bot.id,
+            bot,
+            snapshot: run.runtimePin,
+            savedSource: run.runtimePinSource,
+            savedUsageGroupId: run.usageGroupId,
+            comparisonId: run.comparisonId,
+          });
+          selected = await resolvePin(run, bot, candidate.snapshot, (values) =>
+            runSecrets.push(...values),
+          );
+          if (selected.kind === "problem" && candidate.source.kind !== "group-member")
+            throw new RuntimePinError(selected);
+          const captured = await captureRunModelPin({
+            prisma: deps.prisma,
+            scope: run,
+            runId,
+            workerId,
+            fence,
+            candidate,
+            pin: selected.pin,
+            destination: selected.kind === "resolved" ? destinationForModel(selected) : undefined,
+          });
+          if (captured === "lost") return;
+          if (captured === "stale") continue;
+          capturedPin = captured.pin;
+          run.runtimePin = captured.pin;
+          run.runtimePinSource = captured.source;
+          run.usageGroupId = captured.usageGroupId;
+          if (JSON.stringify(selected.pin) !== JSON.stringify(captured.pin)) {
+            selected = await resolvePin(run, bot, captured.pin, (values) =>
+              runSecrets.push(...values),
+            );
+          }
+          break;
+        }
+        if (!selected || !capturedPin)
+          throw new Error("The group model changed during admission. Retry this run.");
         if (selected.kind === "problem") throw new RuntimePinError(selected);
         if (selected.pin.runtimeKind !== "pi" && !(await nativeHostOwner(deps.prisma, run.userId)))
           throw new RuntimePinError(
@@ -1683,6 +1780,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 instructions: botInstructionText(bot, accountContext),
                 historyGeneration: thread.historyCompactionGeneration,
                 pin: selected.pin,
+                pinSource: run.runtimePinSource as RuntimePinSource | null,
               })
             : undefined;
         let runtimeInfo = {
@@ -4436,7 +4534,11 @@ export function createRunExecutor(deps: ExecutorDeps) {
           }
           if (name === "message_bot") {
             const sent = await messageBot(
-              { ...deps, resolveDelegationPin: (target) => resolvePin(run, target) },
+              {
+                ...deps,
+                resolveDelegationPin: (target, context) =>
+                  resolveDelegationForThread(run, target, context),
+              },
               { ...run, sourceMessageId: run.sourceMessageId },
               { id: bot.id, name: bot.name },
               {
@@ -4493,7 +4595,11 @@ export function createRunExecutor(deps: ExecutorDeps) {
           if (name === "handoff_to_bot") {
             if (!thread.groupId) return finish({ error: "handoff_to_bot is only for group chats" });
             const result = await handoffToGroupBot(
-              { ...deps, resolveDelegationPin: (target) => resolvePin(run, target) },
+              {
+                ...deps,
+                resolveDelegationPin: (target, context) =>
+                  resolveDelegationForThread(run, target, context),
+              },
               run,
               thread.groupId,
               {

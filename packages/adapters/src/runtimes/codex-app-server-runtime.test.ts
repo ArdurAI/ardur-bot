@@ -579,6 +579,7 @@ it("runs a native pin while the space has an inherited hosted credential", async
     prisma: {
       userModelCredential: { findFirst: hosted },
       spaceModelPreference: { findFirst: hosted },
+      space: { findUnique: vi.fn(async () => ({ allowedModelDestinations: null })) },
     } as never,
     scope: { userId: "owner", spaceId: "space" },
     bot: {

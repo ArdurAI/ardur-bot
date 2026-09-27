@@ -4,12 +4,16 @@ import {
   GROUP_MEMBER_MAX,
   GROUP_MEMBER_MIN,
   type Group,
+  type GroupMember,
+  type SetGroupMemberModelPinInput,
 } from "@ardurbot/contracts";
 import { BotAvatar, Button, Input, NativeSelect, NativeSelectOption } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { Check, X } from "lucide-react";
 import { lazy, Suspense, useId, useMemo, useState } from "react";
 import { BotContext } from "../components/ContextEntry";
+import type { ModelSettings } from "../lib/use-model-settings";
+import { GroupModelControl } from "./group-model-control";
 
 const StartGoalForm = lazy(() =>
   import("./GoalForm").then((module) => ({ default: module.StartGoalForm })),
@@ -165,6 +169,8 @@ export function GroupSettings({
   canManageGoal,
   onStartGoal,
   onSave,
+  onModelPin,
+  modelSettings,
   onRemove,
 }: {
   group: Group;
@@ -183,6 +189,11 @@ export function GroupSettings({
     botIds?: string[];
     coordinatorBotId?: string | null;
   }) => Promise<void>;
+  onModelPin: (
+    member: GroupMember,
+    pin: SetGroupMemberModelPinInput["pin"] | null,
+  ) => Promise<void>;
+  modelSettings: ModelSettings | null;
   onRemove: () => Promise<void>;
 }) {
   const { t } = useLingui();
@@ -258,6 +269,19 @@ export function GroupSettings({
         onChange={setSelected}
         maxHeight="max-h-[240px]"
       />
+      {selected.map((botId) => {
+        const bot = bots.find((entry) => entry.id === botId);
+        if (!bot) return null;
+        return (
+          <GroupModelControl
+            key={botId}
+            member={group.members.find((entry) => entry.botId === botId)}
+            bot={bot}
+            settings={modelSettings}
+            onSave={onModelPin}
+          />
+        );
+      })}
       <label htmlFor={coordinatorId} className="mt-4 block text-sm text-muted-foreground">
         <Trans>Coordinator</Trans>
         <NativeSelect
