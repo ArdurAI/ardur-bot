@@ -300,16 +300,23 @@ compose_field() {
       section == "computer" && /^  "services": \{/ { in_services = 1; next }
       in_services && /^    "computer": \{/ { in_section = 1; next }
       section != "computer" && /^  "x-ardurbot-image-selection": \{/ { in_section = 1; next }
-      in_section && ((section == "computer" && /^    }/) || (section != "computer" && /^  }/)) { exit }
-      in_section && index($0, "\"" key "\":") {
+      in_section && ((section == "computer" && /^    }/) || (section != "computer" && /^  }/)) {
+        in_section = 0
+        in_services = 0
+        next
+      }
+      !found && in_section && index($0, "\"" key "\":") {
         sub(/^.*: "/, "")
         sub(/",?$/, "")
-        if (index($0, "\\") || index($0, "\"")) exit 1
-        print
+        if (index($0, "\\") || index($0, "\"")) { invalid = 1; next }
+        val = $0
         found = 1
-        exit
+        next
       }
-      END { if (!found) exit 1 }
+      END {
+        if (invalid || !found) exit 1
+        print val
+      }
     '
   fi
 }

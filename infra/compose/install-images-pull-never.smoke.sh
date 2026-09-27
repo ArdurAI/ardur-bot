@@ -31,11 +31,20 @@ mkdir -p "$tmp/fallback-bin"
 ln -s "$(command -v awk)" "$tmp/fallback-bin/awk"
 if ! PATH="/bin:$tmp/fallback-bin" command -v jq >/dev/null 2>&1; then
   (
-    source <(sed -n '/^compose_field() {/,/^}/p' "$src")
+    eval "$(sed -n '/^compose_field() {/,/^}/p' "$src")"
     image=$(PATH="/bin:$tmp/fallback-bin" compose_field computer image < "$root/computer-config.fixture.json")
     channel=$(PATH="/bin:$tmp/fallback-bin" compose_field selection channel < "$root/computer-config.fixture.json")
     [[ "$image" == "ghcr.io/ardurai/ardur-bot/computer:1.2.3" && "$channel" == release ]] \
       || fail "POSIX Compose JSON extraction disagreed with the recorded config"
+
+    # A host without jq must drain large configurations without SIGPIPE (141) under pipefail.
+    large_config=$(
+      sed '$d' "$root/computer-config.fixture.json"
+      printf ',\n  "x-trailing": {\n    "data": "%200000s"\n  }\n}\n' ' '
+    )
+    image_large=$(printf '%s\n' "$large_config" | PATH="/bin:$tmp/fallback-bin" compose_field computer image)
+    [[ "$image_large" == "ghcr.io/ardurai/ardur-bot/computer:1.2.3" ]] \
+      || fail "POSIX Compose JSON extraction failed to drain large configuration"
   )
 fi
 
