@@ -35,7 +35,7 @@ export class ScriptedAgentRuntime implements AgentRuntime {
         request.prompt.includes("Identify the contradiction:") ||
         request.prompt.includes("Check the correction against the fixture:")
       )
-        await abortableDelay(250, signal);
+        await abortableDelay(2_000, signal);
       if (shouldFail(request.prompt)) {
         throw new Error("Scripted run failure");
       }
@@ -60,6 +60,15 @@ export class ScriptedAgentRuntime implements AgentRuntime {
             request.history.map((message) => message.content).join("\n"),
           )
         : (request.script ?? inferScript(request.prompt, request.resumeFromCheckpoint));
+      if (request.inputReceipt?.deliveryIds.length)
+        await request.acknowledgeInput?.({
+          runId: request.runId,
+          leaseFence: request.inputReceipt.leaseFence,
+          deliveryIds: request.inputReceipt.deliveryIds,
+          mode: "initial",
+        });
+      if (request.prompt.includes("Identify the contradiction:"))
+        await abortableDelay(2_000, signal);
       // Per-run call index so repeated tools (e.g. message_agent) get distinct
       // executionIds — delivery keys and effect replays key off this value.
       let toolCallSeq = 0;

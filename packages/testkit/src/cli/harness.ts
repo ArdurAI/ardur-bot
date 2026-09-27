@@ -1,4 +1,5 @@
 import { execSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { loadRootEnv } from "@ardurbot/core/node/load-root-env";
@@ -85,6 +86,7 @@ async function main() {
     process.env.SIGNUPS_ENABLED = "true";
     process.env.SIGNUP_ALLOWLIST = "";
     process.env.CI = "1";
+    if (e2e) process.env.TESTKIT_E2E_OWNER_TOKEN = randomUUID();
 
     execSync("pnpm --filter @ardurbot/db generate", { stdio: "inherit", env: process.env });
     execSync("pnpm db:migrate", {
@@ -200,6 +202,37 @@ async function main() {
       fetch: async (request) => {
         if (new URL(request.url).pathname === "/__e2e/emails") {
           return Response.json(email.sent, { headers: { "cache-control": "no-store" } });
+        }
+        if (e2e && new URL(request.url).pathname === "/__e2e/deployment-owner") {
+          if (
+            request.method !== "POST" ||
+            request.headers.get("x-e2e-owner-token") !== process.env.TESTKIT_E2E_OWNER_TOKEN
+          )
+            return new Response("Forbidden", { status: 403 });
+          const input = (await request.json()) as {
+            action?: "claim" | "release";
+            userId?: string;
+            previousOwnerUserId?: string | null;
+          };
+          if (!input.userId || !["claim", "release"].includes(input.action ?? ""))
+            return new Response("Bad request", { status: 400 });
+          const user = await handles.prisma.user.findUnique({ where: { id: input.userId } });
+          if (!user) return new Response("Unknown user", { status: 404 });
+          if (input.action === "claim") {
+            const settings = await handles.prisma.deploymentSettings.findUniqueOrThrow({
+              where: { id: "default" },
+            });
+            await handles.prisma.deploymentSettings.update({
+              where: { id: "default" },
+              data: { ownerUserId: input.userId },
+            });
+            return Response.json({ previousOwnerUserId: settings.ownerUserId });
+          }
+          const released = await handles.prisma.deploymentSettings.updateMany({
+            where: { id: "default", ownerUserId: input.userId },
+            data: { ownerUserId: input.previousOwnerUserId ?? null },
+          });
+          return Response.json({ released: released.count === 1 });
         }
         activeRequests += 1;
         try {

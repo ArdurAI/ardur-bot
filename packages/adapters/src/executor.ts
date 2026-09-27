@@ -101,6 +101,7 @@ import {
 import type { Pool } from "@ardurbot/db";
 import {
   acceptDelegation,
+  acknowledgeBotMessageInput,
   appendEventInTransaction,
   confirmDispatchStop,
   createSpaceForMember,
@@ -116,6 +117,7 @@ import {
   listDelegations,
   loadRunHistoryMessages,
   type McpServer,
+  noteBotMessageReadUnconfirmed,
   type Prisma,
   type PrismaClient,
   parseComputerMode,
@@ -5188,7 +5190,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 }
               : {}),
           });
-          if (selectedQuietIds.length)
+          if (selectedQuietIds.length && !scripted && selected.pin.runtimeKind !== "pi")
             await deps.prisma.botMessageDelivery.updateMany({
               where: {
                 id: { in: selectedQuietIds },
@@ -5228,6 +5230,38 @@ export function createRunExecutor(deps: ExecutorDeps) {
           tracePoint(runId, "context.ready", { attempt: fence });
           tracePoint(runId, "runtime.started", { attempt: fence });
           const modelStartedAt = Date.now();
+          const boundReceiptWakes = run.clientNonce?.startsWith("peer-wake:")
+            ? await deps.prisma.botMessageWake.findMany({
+                where: { runId, state: "bound", steeringMessageId: null },
+                select: { deliveryIds: true },
+              })
+            : [];
+          const delegatedReceipt =
+            run.trigger === "bot_message" && run.goalId && run.delegationId
+              ? await deps.prisma.botMessageDelivery.findMany({
+                  where: {
+                    delegationId: run.delegationId,
+                    recipientBotId: run.botId,
+                    recipientThreadId: run.threadId,
+                    state: "delivered",
+                  },
+                  select: { id: true },
+                })
+              : [];
+          const initialReceiptIds = [
+            ...new Set([
+              ...boundReceiptWakes.flatMap((wake) => wake.deliveryIds),
+              ...delegatedReceipt.map((delivery) => delivery.id),
+              ...selectedQuietIds,
+            ]),
+          ];
+          if (!scripted && selected.pin.runtimeKind !== "pi")
+            await noteBotMessageReadUnconfirmed(deps.prisma, {
+              runId,
+              leaseFence: fence,
+              deliveryIds: initialReceiptIds,
+            });
+          const acceptedSteeringDeliveryIds = new Set<string>();
           const runtimeEvents = withComparisonInput(
             deps,
             run,
@@ -5239,6 +5273,27 @@ export function createRunExecutor(deps: ExecutorDeps) {
               botId: bot.id,
               threadId: thread.id,
               runId,
+              inputReceipt: { leaseFence: fence, deliveryIds: initialReceiptIds },
+              acknowledgeInput: async (input) => {
+                if (!scripted && selected.pin.runtimeKind !== "pi")
+                  throw new Error("Input acknowledgement is unsupported by this runtime.");
+                if (input.runId !== runId || input.leaseFence !== fence)
+                  throw new Error("Input acknowledgement scope mismatch.");
+                const acceptedDeliveryIds =
+                  input.mode === "steering" ? [...acceptedSteeringDeliveryIds] : initialReceiptIds;
+                const result = await acknowledgeBotMessageInput(
+                  deps.prisma,
+                  input,
+                  acceptedDeliveryIds,
+                );
+                if (result.refused) {
+                  getLogger().warn("bot message input acknowledgement refused", {
+                    runId,
+                    reason: result.refused,
+                  });
+                  throw new Error("Bot message input acknowledgement was refused.");
+                }
+              },
               sourceMessageId: run.sourceMessageId,
               prompt: turnContext.prompt,
               instructions: turnContext.instructions,
@@ -5391,9 +5446,27 @@ export function createRunExecutor(deps: ExecutorDeps) {
                             );
                           workspaceCheckpoint.markFiles(files);
                           const filesInstruction = currentTurnFilesInstruction(files);
+                          const deliveryIds = (
+                            await deps.prisma.botMessageWake.findMany({
+                              where: {
+                                runId,
+                                state: "bound",
+                                steeringMessageId: item.id,
+                              },
+                              select: { deliveryIds: true },
+                            })
+                          ).flatMap((wake) => wake.deliveryIds);
+                          for (const id of deliveryIds) acceptedSteeringDeliveryIds.add(id);
+                          if (selected.pin.runtimeKind !== "pi")
+                            await noteBotMessageReadUnconfirmed(deps.prisma, {
+                              runId,
+                              leaseFence: fence,
+                              deliveryIds,
+                            });
                           return {
                             id: item.id,
                             messageId: item.messageId,
+                            deliveryIds,
                             historyText: item.text,
                             text: [
                               await loadReplyContext(deps.prisma, thread.id, item.messageId),

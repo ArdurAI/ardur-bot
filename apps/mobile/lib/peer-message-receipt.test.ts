@@ -22,7 +22,8 @@ vi.mock("./appearance", () => ({
 vi.mock("./native", () => ({ useResolvedAppearance: () => "light" }));
 vi.mock("./i18n", () => ({
   useI18n: () => ({
-    t: (value: string, args?: { peer: string }) => value.replace("{peer}", args?.peer ?? ""),
+    t: (value: string, args?: Record<string, string>) =>
+      value.replace(/\{(\w+)\}/g, (_, key: string) => args?.[key] ?? ""),
   }),
 }));
 vi.mock("react-native", () => ({
@@ -66,7 +67,7 @@ it("shows a completed peer receipt and expands the full answer", async () => {
         }),
       ),
     );
-    expect(node.textContent).toContain("Message from Worker");
+    expect(node.textContent).toContain("Sent");
     expect(node.textContent).toContain("Show reply");
     expect(node.querySelector("article")).toBeNull();
     await act(async () => node.querySelector("button")!.click());
@@ -102,10 +103,78 @@ it("keeps delivered and queued labels while offering the reply reader", async ()
         }),
       ),
     );
-    expect(node.textContent).toContain("Delivered from Worker · Queued");
+    expect(node.textContent).toContain("Waiting for a turn");
     expect(node.textContent).toContain("Show reply");
     await act(async () => node.querySelector("button")!.click());
     expect(node.querySelector("article")?.textContent).toBe("Checked the fixture.");
+  } finally {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+  }
+});
+
+it.each([
+  [undefined, false, "Sent"],
+  ["delivered", false, "Delivered to Worker"],
+  ["delivered", true, "Waiting for a turn"],
+  ["read", false, "Read by Worker"],
+  ["replied", false, "Replied"],
+  ["expired", false, "Expired"],
+  ["failed", false, "Failed"],
+] as const)("renders %s / busy %s as one %s chip", async (state, queuedForBusy, label) => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  try {
+    await act(async () =>
+      root.render(
+        createElement(PeerMessageReceipt, {
+          block: {
+            kind: "bot_message_sent",
+            toBotId: "worker",
+            toBotName: "Worker",
+            text: "Check the fixture",
+            ...(state ? { deliveryState: state } : {}),
+            queuedForBusy,
+          },
+          color: "gray",
+          actionProps: {},
+          onOpenPeer: vi.fn(),
+        }),
+      ),
+    );
+    expect(node.textContent).toBe(label);
+    expect(node.querySelectorAll("button")).toHaveLength(1);
+  } finally {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+  }
+});
+
+it("names the recipient when an incoming delivery is read", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  try {
+    await act(async () =>
+      root.render(
+        createElement(PeerMessageReceipt, {
+          block: {
+            kind: "bot_message_received",
+            fromBotId: "chief",
+            fromBotName: "Chief",
+            recipientBotName: "Worker",
+            text: "Check the fixture",
+            deliveryState: "read",
+          },
+          color: "gray",
+          actionProps: {},
+          onOpenPeer: vi.fn(),
+        }),
+      ),
+    );
+    expect(node.textContent).toContain("Read by Worker");
+    expect(node.textContent).toContain("Show reply");
   } finally {
     await act(async () => root.unmount());
     vi.unstubAllGlobals();

@@ -223,6 +223,7 @@ export async function replyToBotDelivery(
           kind: "bot_message_received",
           fromBotId: sender.id,
           fromBotName: sender.name,
+          recipientBotName: recipient.name,
           text: input.message,
           intent: input.intent,
           hop: parent.hop + 1,

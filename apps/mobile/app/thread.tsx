@@ -2496,6 +2496,7 @@ const MessageBubble = memo(function MessageBubble({
       <PeerMessageReceipt
         block={peerMessage}
         color={peerColor}
+        recipientName={groupId ? undefined : botName}
         actionProps={actionProps}
         onOpenPeer={onOpenBot}
       />

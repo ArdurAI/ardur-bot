@@ -3070,11 +3070,11 @@ msgstr "silindi"
 msgid "Deleting…"
 msgstr "Siliniyor…"
 
-#: src/pages/Shell.tsx
+#: src/components/PeerMessageReceipt.tsx
 msgid "Delivered from {peer}"
 msgstr "{peer} tarafından iletildi"
 
-#: src/pages/Shell.tsx
+#: src/components/PeerMessageReceipt.tsx
 msgid "Delivered to {peer}"
 msgstr "{peer} kişisine iletildi"
 
@@ -3559,10 +3559,11 @@ msgstr ""
 msgid "Experimental"
 msgstr ""
 
+#: src/components/PeerMessageReceipt.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/memory/MemoryProposals.tsx
 msgid "Expired"
-msgstr ""
+msgstr "Süresi doldu"
 
 #: src/pages/DevicesSettings.tsx
 msgid "Expires in five minutes."
@@ -3618,6 +3619,7 @@ msgstr ""
 msgid "failed"
 msgstr "başarısız"
 
+#: src/components/PeerMessageReceipt.tsx
 #: src/lib/run-status-label.ts
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
@@ -4828,10 +4830,6 @@ msgstr ""
 msgid "Message event"
 msgstr ""
 
-#: src/pages/Shell.tsx
-msgid "Message from {peer}"
-msgstr "{peer} botundan mesaj"
-
 #: src/pages/system/SystemPage.tsx
 msgid "Message from anywhere on your desktop."
 msgstr ""
@@ -4840,10 +4838,6 @@ msgstr ""
 #: src/pages/system/QuickComposer.tsx
 msgid "Message…"
 msgstr "Mesaj…"
-
-#: src/pages/Shell.tsx
-msgid "Messaged {peer}"
-msgstr "{peer} botuna mesaj gönderildi"
 
 #: src/pages/account/AccountMore.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -6009,7 +6003,6 @@ msgstr "Kuyruk bekleme süresi"
 #: src/pages/ComparePanel.tsx
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/DelegationLines.tsx
-#: src/pages/Shell.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Queued"
 msgstr "Kuyrukta"
@@ -6039,8 +6032,13 @@ msgid "Reactions"
 msgstr "Tepkiler"
 
 #: src/components/integrations/catalog/ToolPicker.tsx
+#: src/components/PeerMessageReceipt.tsx
 msgid "Read"
-msgstr ""
+msgstr "Okundu"
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Read by {recipient}"
+msgstr "{recipient} tarafından okundu"
 
 #: src/pages/ide/IdePage.tsx
 msgid "Read only: file is larger than 2 MB"
@@ -6339,6 +6337,10 @@ msgstr "API anahtarını değiştir"
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Replace key"
 msgstr "Anahtarı değiştir"
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Replied"
+msgstr "Yanıtlandı"
 
 #: src/pages/Shell.tsx
 msgid "Reply"
@@ -6980,6 +6982,10 @@ msgstr ""
 #: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
 msgid "Sends memory text to {host}"
 msgstr ""
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Sent"
+msgstr "Gönderildi"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Sentry alert"
@@ -8228,6 +8234,10 @@ msgstr "Ses"
 #: src/pages/system/SystemPage.tsx
 msgid "Voice shortcut"
 msgstr ""
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Waiting for a turn"
+msgstr "Sıra bekliyor"
 
 #: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx

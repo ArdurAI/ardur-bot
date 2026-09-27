@@ -3070,11 +3070,11 @@ msgstr "eliminado"
 msgid "Deleting…"
 msgstr "Eliminando…"
 
-#: src/pages/Shell.tsx
+#: src/components/PeerMessageReceipt.tsx
 msgid "Delivered from {peer}"
 msgstr "Entregado por {peer}"
 
-#: src/pages/Shell.tsx
+#: src/components/PeerMessageReceipt.tsx
 msgid "Delivered to {peer}"
 msgstr "Entregado a {peer}"
 
@@ -3559,10 +3559,11 @@ msgstr "Expandir {0}"
 msgid "Experimental"
 msgstr ""
 
+#: src/components/PeerMessageReceipt.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/memory/MemoryProposals.tsx
 msgid "Expired"
-msgstr ""
+msgstr "Caducado"
 
 #: src/pages/DevicesSettings.tsx
 msgid "Expires in five minutes."
@@ -3618,6 +3619,7 @@ msgstr ""
 msgid "failed"
 msgstr "fallido"
 
+#: src/components/PeerMessageReceipt.tsx
 #: src/lib/run-status-label.ts
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
@@ -4828,10 +4830,6 @@ msgstr "Redactor de mensajes"
 msgid "Message event"
 msgstr ""
 
-#: src/pages/Shell.tsx
-msgid "Message from {peer}"
-msgstr "Mensaje de {peer}"
-
 #: src/pages/system/SystemPage.tsx
 msgid "Message from anywhere on your desktop."
 msgstr ""
@@ -4840,10 +4838,6 @@ msgstr ""
 #: src/pages/system/QuickComposer.tsx
 msgid "Message…"
 msgstr "Mensaje…"
-
-#: src/pages/Shell.tsx
-msgid "Messaged {peer}"
-msgstr "Mensaje enviado a {peer}"
 
 #: src/pages/account/AccountMore.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -6009,7 +6003,6 @@ msgstr "Espera en cola"
 #: src/pages/ComparePanel.tsx
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/DelegationLines.tsx
-#: src/pages/Shell.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Queued"
 msgstr "En cola"
@@ -6039,8 +6032,13 @@ msgid "Reactions"
 msgstr "Reacciones"
 
 #: src/components/integrations/catalog/ToolPicker.tsx
+#: src/components/PeerMessageReceipt.tsx
 msgid "Read"
-msgstr ""
+msgstr "Leído"
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Read by {recipient}"
+msgstr "Leído por {recipient}"
 
 #: src/pages/ide/IdePage.tsx
 msgid "Read only: file is larger than 2 MB"
@@ -6339,6 +6337,10 @@ msgstr "Reemplazar clave de API"
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Replace key"
 msgstr "Reemplazar clave"
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Replied"
+msgstr "Respondido"
 
 #: src/pages/Shell.tsx
 msgid "Reply"
@@ -6980,6 +6982,10 @@ msgstr ""
 #: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
 msgid "Sends memory text to {host}"
 msgstr ""
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Sent"
+msgstr "Enviado"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Sentry alert"
@@ -8228,6 +8234,10 @@ msgstr "Voz"
 #: src/pages/system/SystemPage.tsx
 msgid "Voice shortcut"
 msgstr ""
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Waiting for a turn"
+msgstr "Esperando un turno"
 
 #: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx

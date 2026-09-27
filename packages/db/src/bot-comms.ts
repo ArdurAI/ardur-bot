@@ -21,7 +21,7 @@ export function buildCompletionReviewPrompt(body: string) {
 async function projectDeliveryState(
   tx: Prisma.TransactionClient,
   deliveryId: string,
-  state: "expired" | "failed",
+  state: "read" | "expired" | "failed",
 ) {
   const delivery = await tx.botMessageDelivery.findUniqueOrThrow({ where: { id: deliveryId } });
   for (const messageId of [delivery.outboundMessageId, delivery.inboundMessageId]) {
@@ -54,6 +54,157 @@ async function projectDeliveryState(
       payload: { messageId, blocks },
     });
   }
+}
+
+export type BotMessageInputAck = {
+  runId: string;
+  leaseFence: number;
+  deliveryIds: string[];
+  mode: "initial" | "steering";
+};
+
+/** A runtime receipt is valid only for content owned by its current run and lease. */
+export async function acknowledgeBotMessageInput(
+  prisma: PrismaClient,
+  input: BotMessageInputAck,
+  acceptedDeliveryIds: readonly string[],
+): Promise<{ changed: number; refused: "stale-fence" | "foreign-delivery" | null }> {
+  if (input.mode !== "initial" && input.mode !== "steering")
+    throw new Error("Unsupported bot message input acknowledgement mode.");
+  const ids = [...new Set(input.deliveryIds)];
+  if (ids.length === 0) return { changed: 0, refused: null };
+  // A turn can contain one eight-delivery wake and up to twenty quiet entries.
+  if (ids.length > 32) throw new Error("Too many bot message receipt IDs.");
+  if (ids.some((id) => !acceptedDeliveryIds.includes(id)))
+    return { changed: 0, refused: "foreign-delivery" };
+  return withTransactionRetry(() =>
+    prisma.$transaction(async (tx) => {
+      const run = await tx.run.findUnique({
+        where: { id: input.runId },
+        select: {
+          id: true,
+          status: true,
+          leaseFence: true,
+          botId: true,
+          threadId: true,
+          goalId: true,
+          delegationRootTaskId: true,
+          delegationId: true,
+        },
+      });
+      if (run?.status !== "running" || run.leaseFence !== input.leaseFence)
+        return { changed: 0, refused: "stale-fence" as const };
+      const wakes = await tx.botMessageWake.findMany({
+        where: { runId: run.id, state: "bound", deliveryIds: { hasSome: ids } },
+        select: { deliveryIds: true, steeringMessageId: true },
+      });
+      const claimed = wakes.flatMap((wake) =>
+        wake.steeringMessageId ? [wake.steeringMessageId] : [],
+      );
+      const steering = claimed.length
+        ? await tx.steeringMessage.findMany({
+            where: { id: { in: claimed }, runId: run.id, claimedAt: { not: null } },
+            select: { id: true },
+          })
+        : [];
+      const claimedIds = new Set(steering.map((item) => item.id));
+      const deliveries = await tx.botMessageDelivery.findMany({ where: { id: { in: ids } } });
+      if (deliveries.length !== ids.length)
+        return { changed: 0, refused: "foreign-delivery" as const };
+      for (const delivery of deliveries) {
+        const sameRecipient =
+          delivery.recipientBotId === run.botId &&
+          delivery.recipientThreadId === run.threadId &&
+          delivery.goalId === run.goalId &&
+          delivery.rootTaskId === run.delegationRootTaskId;
+        const inWake = wakes.some(
+          (wake) =>
+            wake.deliveryIds.includes(delivery.id) &&
+            (input.mode === "steering"
+              ? Boolean(wake.steeringMessageId && claimedIds.has(wake.steeringMessageId))
+              : !wake.steeringMessageId),
+        );
+        const delegated =
+          input.mode === "initial" &&
+          Boolean(delivery.delegationId && delivery.delegationId === run.delegationId);
+        const quiet =
+          input.mode === "initial" &&
+          (delivery.intent === "status" ||
+            delivery.intent === "fyi" ||
+            (delivery.intent === "result" && !delivery.inReplyToDeliveryId)) &&
+          delivery.outcome === null;
+        if (!sameRecipient || !(inWake || delegated || quiet))
+          return { changed: 0, refused: "foreign-delivery" as const };
+      }
+      const root = run.delegationRootTaskId
+        ? await tx.delegationRoot.findUnique({
+            where: { rootTaskId: run.delegationRootTaskId },
+            select: { coordinatorThreadId: true },
+          })
+        : null;
+      for (const threadId of [
+        ...(root ? [root.coordinatorThreadId] : []),
+        ...[run.threadId].filter((id) => id !== root?.coordinatorThreadId).sort(),
+      ])
+        await tx.$queryRaw`SELECT id FROM threads WHERE id = ${threadId} FOR UPDATE`;
+      if (run.delegationRootTaskId)
+        await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${run.delegationRootTaskId} FOR UPDATE`;
+      // Updating the run row serializes this receipt with lease transfer and finalization.
+      const fence = await tx.run.updateMany({
+        where: { id: run.id, status: "running", leaseFence: input.leaseFence },
+        data: { leaseFence: input.leaseFence },
+      });
+      if (!fence.count) return { changed: 0, refused: "stale-fence" as const };
+      let changed = 0;
+      for (const delivery of deliveries) {
+        const result = await tx.botMessageDelivery.updateMany({
+          where: { id: delivery.id, state: "delivered" },
+          data: { state: "read", readAt: new Date(), failureCode: null },
+        });
+        if (result.count) {
+          changed++;
+          await projectDeliveryState(tx, delivery.id, "read");
+        }
+        if (
+          delivery.intent === "status" ||
+          delivery.intent === "fyi" ||
+          (delivery.intent === "result" && !delivery.inReplyToDeliveryId)
+        )
+          await tx.botMessageDelivery.updateMany({
+            where: { id: delivery.id, outcome: null },
+            data: { outcome: "consumed" },
+          });
+      }
+      return { changed, refused: null };
+    }),
+  );
+}
+
+/** Unsupported runtimes keep the delivery receipt at Delivered with an explicit diagnostic. */
+export async function noteBotMessageReadUnconfirmed(
+  prisma: PrismaClient,
+  input: { runId: string; leaseFence: number; deliveryIds: string[] },
+) {
+  if (input.deliveryIds.length === 0) return 0;
+  return prisma.$transaction(async (tx) => {
+    const run = await tx.run.findFirst({
+      where: { id: input.runId, status: "running", leaseFence: input.leaseFence },
+      select: { botId: true, threadId: true, goalId: true, delegationRootTaskId: true },
+    });
+    if (!run) return 0;
+    const changed = await tx.botMessageDelivery.updateMany({
+      where: {
+        id: { in: input.deliveryIds },
+        recipientBotId: run.botId,
+        recipientThreadId: run.threadId,
+        goalId: run.goalId,
+        rootTaskId: run.delegationRootTaskId ?? "",
+        state: "delivered",
+      },
+      data: { failureCode: "read-unconfirmed" },
+    });
+    return changed.count;
+  });
 }
 
 async function finishWake(

@@ -294,6 +294,7 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     kind: z.literal("bot_message_received"),
     fromBotId: Id,
     fromBotName: z.string(),
+    recipientBotName: z.string().optional(),
     text: z.string(),
     intent: BotMessageIntent.optional(),
     delegationId: Id.optional(),

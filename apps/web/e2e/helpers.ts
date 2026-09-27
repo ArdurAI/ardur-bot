@@ -24,6 +24,30 @@ export async function rpc<T>(page: Page, procedure: string, body: unknown): Prom
   return parsed.json as T;
 }
 
+/** Claims the owner seat only in the disposable E2E harness database. */
+export async function claimDeploymentOwner(page: Page): Promise<() => Promise<void>> {
+  const token = process.env.TESTKIT_E2E_OWNER_TOKEN;
+  const apiUrl = process.env.API_URL;
+  if (!token || !apiUrl || process.env.VERIFY_DATABASE !== "1")
+    throw new Error("Deployment owner fixture requires the isolated E2E harness.");
+  const me = await rpc<{ userId: string }>(page, "me", {});
+  const headers = { "x-e2e-owner-token": token };
+  const claim = await page.request.post(`${apiUrl}/__e2e/deployment-owner`, {
+    headers,
+    data: { action: "claim", userId: me.userId },
+  });
+  if (!claim.ok()) throw new Error("Could not claim the isolated deployment owner fixture.");
+  const { previousOwnerUserId } = (await claim.json()) as { previousOwnerUserId: string | null };
+  return async () => {
+    const release = await page.request.post(`${apiUrl}/__e2e/deployment-owner`, {
+      headers,
+      data: { action: "release", userId: me.userId, previousOwnerUserId },
+    });
+    if (!release.ok() || !(await release.json()).released)
+      throw new Error("Could not release the isolated deployment owner fixture.");
+  };
+}
+
 export async function completeOnboarding(page: Page, testInfo?: TestInfo) {
   await page.waitForURL(/\/(onboarding|app)/, { timeout: 20_000 });
   // Optional Server integrations step (needsSetup). Skip when shown, then the

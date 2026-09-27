@@ -3070,11 +3070,11 @@ msgstr "已删除"
 msgid "Deleting…"
 msgstr "正在删除…"
 
-#: src/pages/Shell.tsx
+#: src/components/PeerMessageReceipt.tsx
 msgid "Delivered from {peer}"
 msgstr "已收到 {peer} 的消息"
 
-#: src/pages/Shell.tsx
+#: src/components/PeerMessageReceipt.tsx
 msgid "Delivered to {peer}"
 msgstr "已发送给 {peer}"
 
@@ -3559,10 +3559,11 @@ msgstr "展开 {0}"
 msgid "Experimental"
 msgstr ""
 
+#: src/components/PeerMessageReceipt.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/memory/MemoryProposals.tsx
 msgid "Expired"
-msgstr ""
+msgstr "已过期"
 
 #: src/pages/DevicesSettings.tsx
 msgid "Expires in five minutes."
@@ -3618,6 +3619,7 @@ msgstr ""
 msgid "failed"
 msgstr "失败"
 
+#: src/components/PeerMessageReceipt.tsx
 #: src/lib/run-status-label.ts
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
@@ -4828,10 +4830,6 @@ msgstr "消息输入框"
 msgid "Message event"
 msgstr ""
 
-#: src/pages/Shell.tsx
-msgid "Message from {peer}"
-msgstr "来自 {peer} 的消息"
-
 #: src/pages/system/SystemPage.tsx
 msgid "Message from anywhere on your desktop."
 msgstr ""
@@ -4840,10 +4838,6 @@ msgstr ""
 #: src/pages/system/QuickComposer.tsx
 msgid "Message…"
 msgstr "消息…"
-
-#: src/pages/Shell.tsx
-msgid "Messaged {peer}"
-msgstr "已发给 {peer}"
 
 #: src/pages/account/AccountMore.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -6009,7 +6003,6 @@ msgstr "排队等待"
 #: src/pages/ComparePanel.tsx
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/DelegationLines.tsx
-#: src/pages/Shell.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Queued"
 msgstr "排队中"
@@ -6039,8 +6032,13 @@ msgid "Reactions"
 msgstr "表情回应"
 
 #: src/components/integrations/catalog/ToolPicker.tsx
+#: src/components/PeerMessageReceipt.tsx
 msgid "Read"
-msgstr ""
+msgstr "已读"
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Read by {recipient}"
+msgstr "已由 {recipient} 阅读"
 
 #: src/pages/ide/IdePage.tsx
 msgid "Read only: file is larger than 2 MB"
@@ -6339,6 +6337,10 @@ msgstr "替换 API 密钥"
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Replace key"
 msgstr "替换密钥"
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Replied"
+msgstr "已回复"
 
 #: src/pages/Shell.tsx
 msgid "Reply"
@@ -6980,6 +6982,10 @@ msgstr ""
 #: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
 msgid "Sends memory text to {host}"
 msgstr ""
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Sent"
+msgstr "已发送"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Sentry alert"
@@ -8228,6 +8234,10 @@ msgstr "语音"
 #: src/pages/system/SystemPage.tsx
 msgid "Voice shortcut"
 msgstr ""
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Waiting for a turn"
+msgstr "等待轮次"
 
 #: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx

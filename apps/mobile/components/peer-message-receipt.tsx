@@ -1,5 +1,6 @@
 import { ChatMarkdown } from "@ardurbot/chat-ui/native";
 import type { MessageBlock } from "@ardurbot/contracts";
+import { botMessageReceiptKind } from "@ardurbot/core";
 import { useState } from "react";
 import { Pressable, Text, type TextProps, View } from "react-native";
 import { mobileTokens } from "../lib/appearance";
@@ -15,11 +16,13 @@ type PeerMessageBlock = Extract<
 export function PeerMessageReceipt({
   block,
   color,
+  recipientName,
   actionProps,
   onOpenPeer,
 }: {
   block: PeerMessageBlock;
   color: string;
+  recipientName?: string;
   actionProps: Pick<TextProps, "onLongPress" | "accessibilityActions" | "onAccessibilityAction">;
   onOpenPeer: (botId: string, name: string) => void;
 }) {
@@ -30,15 +33,26 @@ export function PeerMessageReceipt({
   const sent = block.kind === "bot_message_sent";
   const peer = sent ? block.toBotName : block.fromBotName;
   const peerBotId = sent ? block.toBotId : block.fromBotId;
+  const receipt = botMessageReceiptKind(block);
+  const recipient = sent ? peer : (block.recipientBotName ?? recipientName);
   const label =
-    block.deliveryState === "delivered"
-      ? sent
-        ? t("Delivered to {peer}", { peer })
-        : t("Delivered from {peer}", { peer })
-      : sent
-        ? t("Messaged {peer}", { peer })
-        : t("Message from {peer}", { peer });
-  const visibleLabel = block.queuedForBusy ? `${label} · ${t("Queued")}` : label;
+    receipt === "waiting"
+      ? t("Waiting for a turn")
+      : receipt === "read"
+        ? recipient
+          ? t("Read by {recipient}", { recipient })
+          : t("Read")
+        : receipt === "replied"
+          ? t("Replied")
+          : receipt === "expired"
+            ? t("Expired")
+            : receipt === "failed"
+              ? t("Failed")
+              : receipt === "delivered"
+                ? sent
+                  ? t("Delivered to {peer}", { peer })
+                  : t("Delivered from {peer}", { peer })
+                : t("Sent");
   const canShowReply = !sent && block.text.trim().length > 0;
 
   return (
@@ -48,9 +62,7 @@ export function PeerMessageReceipt({
         accessible
         accessibilityRole={canShowReply ? "button" : undefined}
         accessibilityLabel={
-          canShowReply
-            ? `${visibleLabel}. ${expanded ? t("Hide reply") : t("Show reply")}`
-            : visibleLabel
+          canShowReply ? `${label}. ${expanded ? t("Hide reply") : t("Show reply")}` : label
         }
         accessibilityState={canShowReply ? { expanded } : undefined}
         onPress={canShowReply ? () => setExpanded((value) => !value) : undefined}
@@ -68,7 +80,7 @@ export function PeerMessageReceipt({
           numberOfLines={1}
           style={{ color: tokens.mutedForeground, fontSize: 13.5, flexShrink: 1 }}
         >
-          {visibleLabel}
+          {label}
         </Text>
         {canShowReply ? (
           <Text style={{ color: tokens.foreground, fontSize: 13.5 }}>
