@@ -43,6 +43,7 @@ export class RemoteHostRuntime implements AgentRuntime {
         compaction: false,
         tools: this.kind !== "antigravity",
         scripted: false,
+        ...(this.kind === "hermes" ? { usageAccounting: "external" as const } : {}),
       },
     };
   }
