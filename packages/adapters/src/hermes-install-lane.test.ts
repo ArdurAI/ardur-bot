@@ -28,12 +28,12 @@ const status = (root: string) =>
     .split("\n")
     .filter((line) => line && !line.includes("contributors/emails/"));
 
-const packet = (delta: Record<string, unknown>, finish: string | null) =>
+const packet = (modelId: string, delta: Record<string, unknown>, finish: string | null) =>
   `data: ${JSON.stringify({
     id: "chatcmpl-fixture",
     object: "chat.completion.chunk",
     created: 0,
-    model: "fixture-model",
+    model: modelId,
     choices: [{ index: 0, delta, finish_reason: finish }],
   })}\n\n`;
 
@@ -41,7 +41,7 @@ if (!qualified) {
   it.skip("pinned install lane skipped: set both ARDUR_HERMES_INSTALL_LANE=1 and a qualified ARDUR_HERMES_INSTALL", () => {});
 } else {
   const trusted = qualified;
-  it("runs the pinned launcher through the broker and Ardur MCP bridge", async () => {
+  const runInstallLane = async (modelId: string) => {
     const before = status(trusted.root);
     const scope: BrokerScope = {
       runId: crypto.randomUUID(),
@@ -56,7 +56,7 @@ if (!qualified) {
       pin: {
         credentialId: "fixture-connection",
         provider: "fixture",
-        modelId: "fixture-model",
+        modelId,
         effort: "high",
       },
     };
@@ -67,7 +67,7 @@ if (!qualified) {
       connection: {
         credentialId: "fixture-connection",
         provider: "fixture",
-        modelId: "fixture-model",
+        modelId,
         baseUrl: "http://127.0.0.1:7766/v1",
         route: "openai-completions",
         contextWindow: 65_536,
@@ -116,7 +116,7 @@ if (!qualified) {
             : { role: "assistant", content: "completed" };
         const finish = "tool_calls" in delta ? "tool_calls" : "stop";
         return new Response(
-          [packet(delta, null), packet({}, finish), "data: [DONE]\n\n"].join(""),
+          [packet(modelId, delta, null), packet(modelId, {}, finish), "data: [DONE]\n\n"].join(""),
           {
             status: 200,
             headers: { "content-type": "text/event-stream" },
@@ -141,7 +141,7 @@ if (!qualified) {
             });
           } catch (error) {
             const submitted = args[0] as Record<string, unknown>;
-            brokerError = `${error instanceof Error ? error.message : String(error)} keys=${Object.keys(submitted)} tools=${JSON.stringify(submitted.tools)} max=${submitted.max_tokens} model=${submitted.model} effort=${submitted.reasoning_effort}`;
+            brokerError = `${error instanceof Error ? error.message : String(error)} keys=${Object.keys(submitted)} tools=${JSON.stringify(submitted.tools)} max=${submitted.max_tokens ?? submitted.max_completion_tokens} model=${submitted.model} effort=${submitted.reasoning_effort}`;
             throw error;
           }
           response = Buffer.from(await opened.arrayBuffer());
@@ -210,7 +210,7 @@ if (!qualified) {
       ],
       model: {
         provider: "fixture",
-        id: "fixture-model",
+        id: modelId,
         baseUrl: relay.url,
         apiKey: broker.grant.token,
         thinkingLevel: "high",
@@ -255,7 +255,14 @@ if (!qualified) {
       expect(called).toEqual(["fixture_echo"]);
       expect(requests).toHaveLength(2);
       for (const body of requests) {
-        expect(body.model).toBe("fixture-model");
+        expect(body.model).toBe(modelId);
+        if (modelId === "gpt-4.1") {
+          expect(body.max_completion_tokens).toBe(1024);
+          expect(body).not.toHaveProperty("max_tokens");
+        } else {
+          expect(body.max_tokens).toBe(1024);
+          expect(body).not.toHaveProperty("max_completion_tokens");
+        }
         expect(body.reasoning_effort).toBe("high");
         expect(
           (body.tools as { function: { name: string } }[]).map((tool) => tool.function.name),
@@ -271,7 +278,12 @@ if (!qualified) {
     expect(home).toBeTruthy();
     expect(existsSync(home)).toBe(false);
     expect(status(trusted.root)).toEqual(before);
-  }, 240_000);
+  };
+  it.each(["fixture-model", "gpt-4.1"])(
+    "runs the pinned launcher through the broker and Ardur MCP bridge with %s",
+    runInstallLane,
+    240_000,
+  );
 }
 
 it("resolves the launcher beside a relocated host bundle", () => {
