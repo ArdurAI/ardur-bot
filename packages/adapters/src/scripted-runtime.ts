@@ -131,7 +131,20 @@ export class ScriptedAgentRuntime implements AgentRuntime {
 export function inferScript(
   prompt: string,
   resumeFromCheckpoint?: string,
+  fromCard = false,
 ): NonNullable<AgentRunRequest["script"]> {
+  if (!fromCard) {
+    const framed = /<task_card>([\s\S]*?)<\/task_card>/.exec(prompt);
+    if (framed) {
+      try {
+        const card: unknown = JSON.parse(framed[1]);
+        if (card && typeof card === "object" && "goal" in card && typeof card.goal === "string")
+          return inferScript(card.goal, resumeFromCheckpoint, true);
+      } catch {
+        // Malformed test cards retain the ordinary scripted path.
+      }
+    }
+  }
   const lower = prompt.toLowerCase();
   if (resumeFromCheckpoint === "takeover-skipped") {
     return [

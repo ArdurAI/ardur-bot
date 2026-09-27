@@ -160,7 +160,7 @@ export async function stopGoal(prisma: PrismaClient, actor: Actor, goalId: strin
   });
   if (!goal) throw new IsolationError();
   if (goal.status !== "stopped") {
-    await requestCancel(prisma, actor, goal.rootTaskId);
+    await requestCancel(prisma, { spaceId: actor.spaceId, userId: actor.userId }, goal.rootTaskId);
     await prisma.$transaction(async (tx) => {
       const changed = await tx.teamGoal.updateMany({
         where: { id: goal.id, status: { not: "stopped" } },

@@ -42,6 +42,7 @@ describeJourneys("required product journeys", () => {
   let jobs: Awaited<ReturnType<typeof createApp>>["jobs"];
   let sandbox: Awaited<ReturnType<typeof createApp>>["sandbox"];
   const stamp = Date.now();
+  let ownerCookie: string;
   const dataDir = mkdtempSync(path.join(tmpdir(), "ardurbot-journey-"));
 
   async function sendAndWait(app: App, cookie: string, botId: string, text: string) {
@@ -1683,6 +1684,7 @@ describeJourneys("required product journeys", () => {
       where: { id: "default" },
       data: { ownerUserId: me.userId },
     });
+    ownerCookie = cookie;
     const res = await raw(app, cookie, "deployment/update", { computerHost: "this-mac" });
     const text = await res.text();
     expect(res.status).toBeGreaterThanOrEqual(400);
@@ -1905,7 +1907,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("54: a coordinator assigns two members and receives one wake per finished assignment", async () => {
-    const owner = await signup(app, `goal-${stamp}@ardurbot.test`, "Goal Owner");
+    const owner = ownerCookie;
     const coordinator = await rpc<Bot>(app, owner, "bots/create", {
       name: "Coordinator",
       title: "Lead",
@@ -1973,22 +1975,35 @@ describeJourneys("required product journeys", () => {
       where: { rootTaskId: goal.rootTaskId },
     });
     expect(root.tokenLimit).toBe(goal.tokenLimit);
+    const workerRuns = await prisma.run.findMany({
+      where: { id: { in: assignments.map((assignment) => assignment.runId!).filter(Boolean) } },
+      select: { id: true, delegationId: true, delegationRootTaskId: true, goalId: true },
+    });
+    expect(workerRuns).toEqual(
+      expect.arrayContaining(
+        assignments.map((assignment) => ({
+          id: assignment.runId,
+          delegationId: assignment.id,
+          delegationRootTaskId: goal.rootTaskId,
+          goalId: goal.id,
+        })),
+      ),
+    );
     const workerMessages = await prisma.message.findMany({
       where: {
         threadId: group.threadId,
-        runId: { in: assignments.map((assignment) => assignment.runId!).filter(Boolean) },
         role: "bot",
       },
       select: { botId: true, runId: true },
     });
-    for (const assignment of assignments) {
-      expect(
-        workerMessages.some(
-          (message) =>
-            message.runId === assignment.runId && message.botId === assignment.actingBotId,
-        ),
-      ).toBe(true);
-    }
+    expect(workerMessages).toEqual(
+      expect.arrayContaining(
+        assignments.map((assignment) => ({
+          botId: assignment.actingBotId,
+          runId: assignment.runId,
+        })),
+      ),
+    );
     const wakes = await prisma.run.findMany({
       where: { goalId: goal.id, clientNonce: { startsWith: "goal-wake:" } },
       select: { clientNonce: true },
@@ -2003,7 +2018,15 @@ describeJourneys("required product journeys", () => {
         where: { goalId: goal.id, clientNonce: { startsWith: "goal-wake:" } },
       }),
     ).toBe(2);
-    await rpc(app, owner, "goals/stop", { goalId: goal.id });
+    const stopped = await rpc<{ status: string }>(app, owner, "goals/stop", { goalId: goal.id });
+    expect(stopped.status).toBe("stopped");
+    expect(
+      (
+        await prisma.delegationRoot.findUniqueOrThrow({
+          where: { rootTaskId: goal.rootTaskId },
+        })
+      ).cancelRequestedAt,
+    ).not.toBeNull();
   });
 
   it("55: group chats share one transcript with mentions and handoffs", async () => {
