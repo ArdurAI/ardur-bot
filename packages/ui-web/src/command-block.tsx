@@ -2,7 +2,10 @@ import type { CommandBlock as RecordedCommand } from "@ardurbot/core";
 import { commandOutput, commandSummary } from "@ardurbot/core";
 import type { ReactNode } from "react";
 import { useId, useState } from "react";
+import { formatCommandTime } from "./command-time.js";
 import { Button } from "./components/ui/button.js";
+
+export { formatCommandTime } from "./command-time.js";
 
 export type CommandBlockLabels = {
   copyCommand: string;
@@ -46,6 +49,9 @@ export function CommandBlock({
     setCopyFailed(false);
     void navigator.clipboard.writeText(text).catch(() => setCopyFailed(true));
   };
+  const locale =
+    typeof navigator !== "undefined" && navigator.language ? navigator.language : undefined;
+  const formattedStartedAt = formatCommandTime(block.startedAt, new Date(), locale);
   return (
     <section
       data-testid="command-block"
@@ -69,7 +75,9 @@ export function CommandBlock({
         <span className="shrink-0 text-xs text-muted-foreground">{block.outcome}</span>
       </Button>
       <div className="px-3 pb-2 text-xs text-muted-foreground">
-        <time dateTime={block.startedAt ?? undefined}>{block.startedAt ?? labels.notRecorded}</time>
+        <time dateTime={block.startedAt ?? undefined}>
+          {formattedStartedAt ?? labels.notRecorded}
+        </time>
         {block.outcome === "unknown" ? <span> · {labels.incomplete}</span> : null}
       </div>
       <div

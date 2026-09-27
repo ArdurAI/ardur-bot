@@ -47,6 +47,24 @@ describe("web command block", () => {
     expect(html).toContain("Completion not recorded");
     expect(html).toMatchSnapshot();
   });
+  it("renders human-readable time as visible text while keeping the ISO value in dateTime", () => {
+    const html = renderToString(
+      <CommandBlock
+        block={commandBlock({ startedAt: "2026-09-23T12:00:00.000Z" })}
+        labels={labels}
+      />,
+    );
+    expect(html).toContain('dateTime="2026-09-23T12:00:00.000Z"');
+    expect(html).not.toContain(">2026-09-23T12:00:00.000Z<");
+  });
+  it("falls back to notRecorded label without throwing when startedAt is unparseable", () => {
+    const html = renderToString(
+      <CommandBlock block={commandBlock({ startedAt: "not-a-valid-date" })} labels={labels} />,
+    );
+    expect(html).toContain('dateTime="not-a-valid-date"');
+    expect(html).toContain("Not recorded");
+    expect(html).not.toContain("not-a-valid-date</time>");
+  });
 });
 
 function commandBlock(overrides: Partial<FixtureCommandBlock> = {}): FixtureCommandBlock {
