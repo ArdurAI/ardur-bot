@@ -2,7 +2,7 @@
 
 import { unknownCapacity } from "@ardurbot/contracts/fleet";
 import type { ComponentProps, ReactNode } from "react";
-import { act } from "react";
+import { act, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 
@@ -37,6 +37,36 @@ vi.mock("@ardurbot/ui-web", () => ({
   Textarea: (props: ComponentProps<"textarea">) => <textarea {...props} />,
   NativeSelect: (props: ComponentProps<"select">) => <select {...props} />,
   NativeSelectOption: (props: ComponentProps<"option">) => <option {...props} />,
+  Dialog: ({
+    open = true,
+    onOpenChange,
+    children,
+  }: {
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
+    children?: ReactNode;
+  }) => {
+    useEffect(() => {
+      if (!open || !onOpenChange) return;
+      const onKeyDown = (event: KeyboardEvent) => {
+        if (event.key === "Escape") onOpenChange(false);
+      };
+      window.addEventListener("keydown", onKeyDown);
+      return () => window.removeEventListener("keydown", onKeyDown);
+    }, [open, onOpenChange]);
+    return open ? <div data-slot="dialog">{children}</div> : null;
+  },
+  DialogContent: ({
+    children,
+    showCloseButton: _showCloseButton,
+    ...props
+  }: ComponentProps<"div"> & { showCloseButton?: boolean }) => (
+    <div role="dialog" {...props}>
+      {children}
+    </div>
+  ),
+  DialogHeader: (props: ComponentProps<"div">) => <div {...props} />,
+  DialogTitle: (props: ComponentProps<"h2">) => <h2 {...props} />,
 }));
 
 import { FleetSettings } from "./FleetSettings";
@@ -229,6 +259,144 @@ it("shows placement consent in the conversation only while input is pending", as
     );
     expect(element.textContent).toBe("");
   } finally {
+    await act(async () => root.unmount());
+  }
+});
+
+it("opens Add computer dialog with prefilled engine from discovered target, and closes on cancel or escape", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  api.list.mockResolvedValue({
+    targets: [],
+    bots: [],
+    placement: { mode: "manual", preferredTargetId: "host", minimumFreeGb: 4 },
+  });
+  api.discover.mockResolvedValue([
+    {
+      id: "docker-engine",
+      name: "Docker on this Mac",
+      kind: "docker",
+      connectionId: null,
+      state: "discovered",
+      endpoint: "/var/run/docker.sock",
+      capacity: unknownCapacity(),
+      bots: [],
+    },
+  ] as never);
+  const element = document.createElement("div"),
+    root = createRoot(element);
+  try {
+    await act(async () => root.render(<FleetSettings />));
+    expect(element.querySelector('[role="dialog"]')).toBeNull();
+
+    const add = [...element.querySelectorAll("button")].find(
+      (button) => button.textContent === "Add",
+    )!;
+    await act(async () => add.click());
+
+    const dialog = element.querySelector<HTMLElement>('[role="dialog"]')!;
+    expect(dialog).not.toBeNull();
+    expect(dialog.getAttribute("aria-label")).toBe("Add computer");
+    expect(dialog.querySelector("h2")?.textContent).toBe("Add computer");
+    expect(dialog.querySelector("form")).not.toBeNull();
+
+    expect(element.querySelector<HTMLSelectElement>('[aria-label="Connection type"]')?.value).toBe(
+      "docker",
+    );
+    expect(element.querySelector<HTMLInputElement>('[aria-label="Name"]')?.value).toBe(
+      "Docker on this Mac",
+    );
+    expect(element.querySelector<HTMLInputElement>('[aria-label="Engine endpoint"]')?.value).toBe(
+      "/var/run/docker.sock",
+    );
+
+    // Escape closes the dialog
+    await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
+    expect(element.querySelector('[role="dialog"]')).toBeNull();
+
+    // Re-open and verify Cancel closes
+    await act(async () => add.click());
+    expect(element.querySelector('[role="dialog"]')).not.toBeNull();
+    const cancel = [...element.querySelectorAll("button")].find(
+      (button) => button.textContent === "Cancel",
+    )!;
+    await act(async () => cancel.click());
+    expect(element.querySelector('[role="dialog"]')).toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
+it("opens empty Add computer dialog from header button, and save closes and refreshes", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  api.list.mockResolvedValue({
+    targets: [],
+    bots: [],
+    placement: { mode: "manual", preferredTargetId: "host", minimumFreeGb: 4 },
+  });
+  api.discover.mockResolvedValue([]);
+  const changed = vi.fn();
+  window.addEventListener("fleet:changed", changed);
+
+  const element = document.createElement("div"),
+    root = createRoot(element);
+  try {
+    await act(async () => root.render(<FleetSettings />));
+    const headerAdd = [...element.querySelectorAll("button")].find(
+      (button) => button.textContent === "Add computer",
+    )!;
+    await act(async () => headerAdd.click());
+
+    const dialog = element.querySelector<HTMLElement>('[role="dialog"]')!;
+    expect(dialog).not.toBeNull();
+    expect(dialog.getAttribute("aria-label")).toBe("Add computer");
+    expect(dialog.querySelector("h2")?.textContent).toBe("Add computer");
+    expect(dialog.querySelector("form")).not.toBeNull();
+
+    expect(element.querySelector<HTMLInputElement>('[aria-label="Name"]')?.value).toBe("");
+    expect(element.querySelector<HTMLSelectElement>('[aria-label="Connection type"]')?.value).toBe(
+      "ssh",
+    );
+    expect(element.querySelector<HTMLInputElement>('[aria-label="Host"]')?.value).toBe("");
+    expect(element.querySelector<HTMLInputElement>('[aria-label="User"]')?.value).toBe("");
+
+    const changeInput = (input: HTMLInputElement, value: string) => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    };
+
+    const nameInput = element.querySelector<HTMLInputElement>('[aria-label="Name"]')!;
+    const hostInput = element.querySelector<HTMLInputElement>('[aria-label="Host"]')!;
+    const userInput = element.querySelector<HTMLInputElement>('[aria-label="User"]')!;
+    await act(async () => {
+      changeInput(nameInput, "Remote Box");
+      changeInput(hostInput, "box.local");
+      changeInput(userInput, "admin");
+    });
+
+    const initialListCalls = api.list.mock.calls.length;
+    api.connect.mockResolvedValue({ id: "box-1" });
+
+    await act(async () =>
+      element
+        .querySelector("form")!
+        .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+
+    expect(api.connect).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: "Remote Box",
+        settings: expect.objectContaining({
+          engine: "ssh",
+          ssh: expect.objectContaining({ host: "box.local", user: "admin" }),
+        }),
+      }),
+    );
+    expect(element.querySelector('[role="dialog"]')).toBeNull();
+    expect(api.list.mock.calls.length).toBeGreaterThan(initialListCalls);
+    expect(changed).toHaveBeenCalledOnce();
+  } finally {
+    window.removeEventListener("fleet:changed", changed);
     await act(async () => root.unmount());
   }
 });
