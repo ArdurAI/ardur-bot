@@ -2523,7 +2523,7 @@ msgstr ""
 
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "Could not load the extension catalogue. Check the connection and try again."
-msgstr ""
+msgstr "확장 프로그램 카탈로그를 불러올 수 없습니다. 연결을 확인하고 다시 시도하세요."
 
 #: src/pages/LearningCurator.tsx
 msgid "Could not load the last check."
