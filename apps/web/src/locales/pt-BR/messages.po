@@ -4588,7 +4588,7 @@ msgstr ""
 
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "Loading the extension catalogue…"
-msgstr ""
+msgstr "Carregando o catálogo de extensões…"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Loading tools…"
@@ -5261,7 +5261,7 @@ msgstr ""
 
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "No extensions are in the built-in catalogue yet. Use Add to install an extension bundle (.mcpb or .dxt file) from this computer."
-msgstr ""
+msgstr "Ainda não há extensões no catálogo integrado. Use Adicionar para instalar um pacote de extensão (arquivo .mcpb ou .dxt) deste computador."
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "No group chats yet."
