@@ -162,6 +162,40 @@ it("marks a changed group pending and rewrites after the turn with the selected 
   expect(f.requests).toHaveLength(attempts + 1);
   expect(f.state.lastMessageSeq).toBe(2);
 });
+
+it("keeps an expired quiet receipt out of brief refresh evidence", async () => {
+  const f = fixture();
+  f.tx.message.findMany.mockResolvedValue([
+    {
+      role: "user",
+      blocks: [
+        {
+          kind: "bot_message_received",
+          deliveryId: "expired-delivery",
+          fromBotId: "peer",
+          fromBotName: "Peer",
+          text: "EXPIRED_DEADLINE_SENTINEL",
+          intent: "fyi",
+          deliveryState: "expired",
+        },
+        { kind: "text", text: "Keep the adjacent task note" },
+      ],
+    },
+  ] as never);
+  const findMany = vi.fn(async () => [{ id: "expired-delivery" }]);
+  const prisma = {
+    ...f.deps.prisma,
+    botMessageDelivery: { findMany },
+  } as unknown as PrismaClient;
+
+  await refreshRunBrief({ ...f.deps, prisma }, "run");
+
+  expect(findMany).toHaveBeenCalledOnce();
+  expect(f.requests).toHaveLength(1);
+  expect(f.requests[0]!.prompt).not.toContain("EXPIRED_DEADLINE_SENTINEL");
+  expect(f.requests[0]!.prompt).toContain("Keep the adjacent task note");
+  expect(f.commit).toHaveBeenCalledOnce();
+});
 it.each(["claude-code", "codex-app-server"] as const)(
   "uses a wire-valid auxiliary run for %s briefs",
   async (kind) => {

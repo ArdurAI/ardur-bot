@@ -26,6 +26,23 @@ function observation(patch: Partial<RequestUsageObservation> = {}): RequestUsage
 }
 
 describe("request usage normalization", () => {
+  it("accepts typed broker admission but rejects persisted bearer fields", () => {
+    const admission = {
+      kind: "worker-provider-broker" as const,
+      reservedTokens: 100,
+      maxRequests: 2,
+      maxReservedTokens: 200,
+    };
+    expect(parseRequestUsage(observation({ purpose: "unknown", admission })).admission).toEqual(
+      admission,
+    );
+    expect(() =>
+      parseRequestUsage({
+        ...observation({ purpose: "unknown", admission }),
+        admission: { ...admission, bearer: "placeholder" },
+      }),
+    ).toThrow();
+  });
   it("does not add cache or subset reasoning tokens to logical totals", () => {
     const totals = accumulateRequestUsage(null, observation());
     expect(usageTokenTotals(totals.categories, "subset-of-output")).toEqual({

@@ -9,6 +9,7 @@ import type {
   SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
 import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
+import { chatCompletionsUsage } from "./openai-chat-usage.js";
 import { traceCurrent } from "./scoreboard-trace.js";
 import { dispatcherFetch } from "./undici-fetch.js";
 
@@ -29,6 +30,7 @@ export function piWireUsage(
   payload: unknown,
 ): Partial<Record<keyof RawUsageCounts, unknown>> | null {
   const value = object(payload);
+  if (api === "openai-completions") return chatCompletionsUsage(payload);
   if (api === "anthropic-messages") {
     const source = value.type === "message_start" ? object(value.message).usage : value.usage;
     if (!source || typeof source !== "object") return null;
@@ -42,18 +44,14 @@ export function piWireUsage(
       reasoning: object(usage.output_tokens_details).thinking_tokens,
     };
   }
-  const source =
-    api === "openai-completions"
-      ? (value.usage ?? object(Array.isArray(value.choices) ? value.choices[0] : undefined).usage)
-      : (object(value.response).usage ?? value.usage);
+  const source = object(value.response).usage ?? value.usage;
   if (!source || typeof source !== "object") return null;
   const usage = object(source);
-  const chat = api === "openai-completions";
-  const input = object(chat ? usage.prompt_tokens_details : usage.input_tokens_details);
-  const output = object(chat ? usage.completion_tokens_details : usage.output_tokens_details);
+  const input = object(usage.input_tokens_details);
+  const output = object(usage.output_tokens_details);
   return {
-    input: chat ? usage.prompt_tokens : usage.input_tokens,
-    output: chat ? usage.completion_tokens : usage.output_tokens,
+    input: usage.input_tokens,
+    output: usage.output_tokens,
     cacheRead: input.cached_tokens ?? usage.prompt_cache_hit_tokens ?? usage.cached_tokens,
     cacheWrite: input.cache_write_tokens,
     reasoning: output.reasoning_tokens,

@@ -1232,6 +1232,7 @@ description: Prepare standup notes
     );
     const enqueue = vi.fn(async () => undefined);
     const prisma = {
+      botMessageDelivery: { updateMany: vi.fn(async () => ({ count: 0 })) },
       space: { findUnique: vi.fn(async () => ({ allowedModelDestinations: null })) },
       run: {
         findUnique: vi.fn(async () => ({
@@ -1293,6 +1294,7 @@ description: Prepare standup notes
     );
     const enqueue = vi.fn(async () => undefined);
     const prisma = {
+      botMessageDelivery: { updateMany: vi.fn(async () => ({ count: 0 })) },
       space: { findUnique: vi.fn(async () => ({ allowedModelDestinations: null })) },
       run: {
         findUnique: vi.fn(async () => ({
@@ -1352,6 +1354,7 @@ description: Prepare standup notes
     );
     const enqueue = vi.fn(async () => undefined);
     const prisma = {
+      botMessageDelivery: { updateMany: vi.fn(async () => ({ count: 0 })) },
       space: { findUnique: vi.fn(async () => ({ allowedModelDestinations: null })) },
       run: {
         findUnique: vi.fn(async () => ({

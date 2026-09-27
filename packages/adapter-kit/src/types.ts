@@ -395,6 +395,8 @@ export interface AgentSteeringMessage {
   id: string;
   messageId: string;
   text: string;
+  /** Delivery rows whose content this steering message carries. */
+  deliveryIds?: string[];
   /** Persisted history text before attachment paths are appended. */
   historyText?: string;
   images?: AgentInputImage[];
@@ -437,6 +439,7 @@ export interface UsageCategories {
 
 export type UsagePurpose =
   | "main"
+  | "unknown"
   | "retry"
   | "helper"
   | "summary"
@@ -462,6 +465,13 @@ export interface RequestUsageObservation {
   } | null;
   /** Optional on historical receipts; runtime collectors supply lifecycle and numeric provenance. */
   collection?: UsageCollection;
+  /** Durable admission bound for a worker-broker request; never contains credentials. */
+  admission?: {
+    kind: "worker-provider-broker";
+    reservedTokens: number;
+    maxRequests: number;
+    maxReservedTokens: number;
+  };
 }
 
 export interface AgentUsage {
@@ -481,6 +491,15 @@ export interface AgentRunRequest {
   botId: string;
   threadId: string;
   runId: string;
+  /** Lease-fenced receipt candidates already assembled into the initial input. */
+  inputReceipt?: { leaseFence: number; deliveryIds: string[] };
+  /** Called only after a supported runtime accepts those IDs into a valid turn. */
+  acknowledgeInput?: (input: {
+    runId: string;
+    leaseFence: number;
+    deliveryIds: string[];
+    mode: "initial" | "steering";
+  }) => Promise<void>;
   nativeSession?: RuntimeInfo;
   nativeCwd?: string;
   onRuntimeInfo?: (info: RuntimeInfo) => Promise<void>;
@@ -596,6 +615,8 @@ export interface AgentRuntimeCapabilities {
   compaction: boolean;
   tools: boolean;
   scripted: boolean;
+  /** Brokered provider calls persist their own receipts; runtime aggregates are informational. */
+  usageAccounting?: "runtime" | "external";
 }
 
 export interface VoiceInfo {
