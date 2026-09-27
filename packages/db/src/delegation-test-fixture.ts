@@ -85,6 +85,10 @@ export function fixture() {
     usageRecord: {
       aggregate: vi.fn(async () => ({ _sum: { inputTokens: 0, outputTokens: 0 } })),
     },
+    teamGoal: {
+      findUnique: vi.fn(async () => null),
+      findFirst: vi.fn(async () => null),
+    },
     spaceMember: { count: vi.fn(async () => 1) },
     artifact: {
       findFirstOrThrow: vi.fn(async ({ where }) => {

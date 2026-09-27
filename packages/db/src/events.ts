@@ -1181,6 +1181,7 @@ async function finalizeRunOnce(
           originDeviceGrantId: string | null;
           remoteRootTaskId: string | null;
           delegationId: string | null;
+          delegationRootTaskId: string | null;
         }
       | undefined;
     try {
@@ -1239,7 +1240,29 @@ async function finalizeRunOnce(
     if (task.count !== 1) throw new Error("Run task was not available to finalize");
 
     let finalMessageId: string | null = null;
-    if (input.outcome === "completed" && !writableRun?.delegationId) {
+    const goalRoomAssignment =
+      writableRun?.delegationId && writableRun.delegationRootTaskId
+        ? Boolean(
+            await tx.delegation.findFirst({
+              where: {
+                id: writableRun.delegationId,
+                rootTaskId: writableRun.delegationRootTaskId,
+                kind: "group-handoff",
+              },
+              select: { id: true },
+            }),
+          ) &&
+          Boolean(
+            await tx.teamGoal.findFirst({
+              where: {
+                rootTaskId: writableRun.delegationRootTaskId,
+                threadId: input.threadId,
+              },
+              select: { id: true },
+            }),
+          )
+        : false;
+    if (input.outcome === "completed" && (!writableRun?.delegationId || goalRoomAssignment)) {
       const completedBlocks = completedRunBlocks(input.blocks, writableRun?.startedAt ?? null, now);
       if (completedBlocks.length > 0) {
         const message = await createThreadMessageInTransaction(tx, {

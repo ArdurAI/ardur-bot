@@ -122,6 +122,7 @@ export async function admitDelegation(
     where: { rootTaskId, purpose: { not: "detached-learning" } },
     _sum: { inputTokens: true, outputTokens: true },
   });
+  const goal = await tx.teamGoal.findUnique({ where: { rootTaskId } });
   const root = await tx.delegationRoot.upsert({
     where: { rootTaskId },
     update: {},
@@ -129,10 +130,20 @@ export async function admitDelegation(
       rootTaskId,
       spaceId: input.spaceId,
       userId: input.userId,
-      coordinatorBotId: parent.botId,
-      coordinatorThreadId: parent.threadId,
+      coordinatorBotId: goal?.coordinatorBotId ?? parent.botId,
+      coordinatorThreadId: goal?.threadId ?? parent.threadId,
       usedTokens: (spent._sum.inputTokens ?? 0) + (spent._sum.outputTokens ?? 0),
-      deadlineAt: new Date(parent.createdAt.getTime() + DELEGATION_LIMITS.durationMs),
+      deadlineAt:
+        goal?.untilAt ?? new Date(parent.createdAt.getTime() + DELEGATION_LIMITS.durationMs),
+      ...(goal
+        ? {
+            maxDepth: goal.maxDepth,
+            maxConcurrent: goal.maxConcurrent,
+            maxHops: goal.maxHops,
+            maxDescendants: goal.maxDescendants,
+            tokenLimit: goal.tokenLimit,
+          }
+        : {}),
     },
   });
   if (root.cancelRequestedAt || root.deadlineAt <= now) refuse("deadline-passed");
@@ -369,10 +380,18 @@ export async function finishDelegation(
     },
   });
   const root = await tx.delegationRoot.findUniqueOrThrow({ where: { rootTaskId: row.rootTaskId } });
+  const goalRoomAssignment =
+    row.kind === "group-handoff" &&
+    (await tx.teamGoal.findFirst({
+      where: { rootTaskId: row.rootTaskId, threadId: root.coordinatorThreadId },
+      select: { id: true },
+    }));
   const blocks = [
     {
       kind: "text" as const,
-      text: `${row.requesterName} → ${row.actingName}: ${status === "completed" ? "completed, awaiting acceptance" : status}.\n${redactTaskValue(text).slice(0, 2000)}${row.card && TaskCardSchema.parse(row.card).doneWhen.length ? `\n${taskCardChecklist(TaskCardSchema.parse(row.card))}` : ""}`,
+      text: goalRoomAssignment
+        ? `${row.actingName}: ${status === "completed" ? "completed, awaiting acceptance" : status}.`
+        : `${row.requesterName} → ${row.actingName}: ${status === "completed" ? "completed, awaiting acceptance" : status}.\n${redactTaskValue(text).slice(0, 2000)}${row.card && TaskCardSchema.parse(row.card).doneWhen.length ? `\n${taskCardChecklist(TaskCardSchema.parse(row.card))}` : ""}`,
     },
   ];
   const message = row.summaryMessageId
