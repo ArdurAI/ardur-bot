@@ -1,7 +1,12 @@
+import { createHash } from "node:crypto";
+import type { AgentRunRequest } from "@ardurbot/adapter-kit";
 import type { HostFrame, HostRequest } from "@ardurbot/contracts/host-bridge";
 import { HOST_IN_FLIGHT, HOST_WINDOW } from "@ardurbot/contracts/host-bridge";
 import type { HostWire } from "@ardurbot/host-runtime/bridge-wire";
+import type { HostClient } from "@ardurbot/host-runtime/host-client";
 import { describe, expect, it, vi } from "vitest";
+import type { BrokerScope, HermesProviderBroker } from "../../../packages/adapters/src/hermes-provider-broker.js";
+import { RemoteHostRuntime } from "../../../packages/adapters/src/remote-host-runtime.js";
 import { HostHub } from "./host-hub.js";
 
 const request: HostRequest = {
@@ -28,53 +33,74 @@ function wire() {
   } satisfies HostWire & { frames: HostFrame[] };
 }
 
+function hermesRequest(hostGeneration: string, runId = "run"): HostRequest {
+  return {
+    ...request,
+    scope: { ...request.scope, runId },
+    operation: {
+      op: "runtime.turn",
+      homeKey: "bot",
+      request: {
+        botId: "bot",
+        runId,
+        threadId: "thread",
+        prompt: "hi",
+        instructions: "",
+        history: [],
+        tools: "none",
+        model: {
+          runtimePin: {
+            runtimeKind: "hermes",
+            provider: "fixture",
+            modelId: "fixture-model",
+            effort: "high",
+            credentialId: "fixture",
+            revision: 1,
+          },
+          provider: "fixture",
+          id: "fixture-model",
+          thinkingLevel: "high",
+        },
+        providerBroker: {
+          protocol: 1,
+          id: crypto.randomUUID(),
+          token: "a".repeat(43),
+          expiresAt: Date.now() + 60_000,
+          hostGeneration,
+        },
+      },
+    },
+  };
+}
+function healthFrame(): HostFrame {
+  return {
+    v: 1,
+    type: "health",
+    health: {
+      platform: "linux",
+      roots: [],
+      load: 0,
+      claude: { runtimeKind: "claude-code", available: false, models: [] },
+      codex: { runtimeKind: "codex-app-server", available: false, models: [] },
+      capabilities: { providerRelay: 1 },
+    },
+  };
+}
+
 describe("outbound host hub", () => {
   it("keeps Hermes on a negotiated host and fences provider callbacks to its worker", async () => {
     const hub = new HostHub(async () => true),
       host = wire(),
       worker = wire(),
       other = wire();
-    const hermes = {
-      ...request,
-      operation: {
-        op: "runtime.turn" as const,
-        homeKey: "bot",
-        request: {
-          botId: "bot",
-          runId: "run",
-          threadId: "thread",
-          prompt: "hi",
-          instructions: "",
-          history: [],
-          tools: "none" as const,
-          model: {
-            runtimePin: {
-              runtimeKind: "hermes" as const,
-              provider: "fixture",
-              modelId: "fixture-model",
-              effort: "high",
-              credentialId: "fixture",
-              revision: 1,
-            },
-            provider: "fixture",
-            id: "fixture-model",
-            thinkingLevel: "high" as const,
-          },
-          providerBroker: {
-            protocol: 1 as const,
-            id: crypto.randomUUID(),
-            token: "a".repeat(43),
-            expiresAt: Date.now() + 60_000,
-            hostGeneration: "first",
-          },
-        },
-      },
-    };
     hub.attach(host, "owner", "first");
+    const hermes = hermesRequest(crypto.randomUUID());
     await hub.request(hermes, worker);
     expect(host.frames).toEqual([]);
-    hub.health = { capabilities: { providerRelay: 1 } } as typeof hub.health;
-    await hub.request({ ...hermes, id: "second" }, worker);
+    await hub.fromHost(host, healthFrame());
+    const currentGeneration = hub.health!.generation!;
+    const current = hermesRequest(currentGeneration);
+    await hub.request({ ...current, id: "second" }, worker);
     expect(host.frames).toHaveLength(1);
     const callback = {
       v: 1 as const,
@@ -121,21 +147,129 @@ describe("outbound host hub", () => {
     expect(host.frames.at(-1)).toMatchObject({ type: "cancel", id: "second" });
     hub.detach();
     const nextHost = wire();
-    hub.attach(nextHost, "owner", "second");
-    hub.health = { capabilities: { providerRelay: 1 } } as typeof hub.health;
+    hub.attach(nextHost, "owner", "first");
+    await hub.fromHost(nextHost, healthFrame());
     await hub.request(
-      {
-        ...hermes,
-        id: "new-operation",
-        scope: { ...hermes.scope, runId: "new-run" },
-        operation: {
-          ...hermes.operation,
-          request: { ...hermes.operation.request, runId: "new-run" },
-        },
-      },
+      { ...hermesRequest(currentGeneration, "new-run"), id: "new-operation" },
       worker,
     );
     expect(nextHost.frames).toEqual([]);
+    hub.detach();
+  });
+  it("rejects a grant minted before a same-registration reconnect", async () => {
+    const authorize = vi.fn(async () => true);
+    const hub = new HostHub(authorize);
+    const first = wire();
+    const second = wire();
+    const worker = wire();
+    hub.attach(first, "owner", "registration");
+    await hub.fromHost(first, healthFrame());
+    const grantGeneration = hub.health?.generation;
+    expect(grantGeneration).toBeTruthy();
+    expect(grantGeneration).not.toBe("registration");
+    hub.attach(second, "owner", "registration");
+    await hub.fromHost(second, healthFrame());
+    expect(hub.health?.generation).not.toBe(grantGeneration);
+    await hub.request(hermesRequest(grantGeneration!), worker);
+    expect(second.frames).toEqual([]);
+    expect(worker.frames.at(-1)).toMatchObject({ type: "end", problem: expect.any(Object) });
+    expect(authorize).not.toHaveBeenCalled();
+    hub.detach();
+  });
+  it("revokes the broker when the host reconnects between health and submission", async () => {
+    const hub = new HostHub(async () => true);
+    const first = wire();
+    const second = wire();
+    hub.attach(first, "owner", "registration");
+    await hub.fromHost(first, healthFrame());
+    const grant = { id: crypto.randomUUID(), token: "a".repeat(43), expiresAt: Date.now() + 60_000 };
+    const revoke = vi.fn();
+    const open = vi.fn();
+    const broker = { grant, revoke, open } as unknown as HermesProviderBroker;
+    const client = {
+      health: async () => hub.health,
+      request: async function* (
+        operation: HostRequest["operation"],
+        context: { userId: string; spaceId: string; botId: string; runId: string },
+        _callback: unknown,
+        operationId: string,
+      ) {
+        const worker = wire();
+        await hub.request(
+          {
+            v: 1,
+            type: "request",
+            id: operationId,
+            scope: {
+              userId: context.userId,
+              spaceId: context.spaceId,
+              botId: context.botId,
+              runId: context.runId,
+            },
+            operation,
+          },
+          worker,
+        );
+        expect(worker.frames.at(-1)).toMatchObject({ type: "end", problem: expect.any(Object) });
+        throw new Error("Host operation is unavailable for this run.");
+      },
+    } as unknown as HostClient;
+    const remote = new RemoteHostRuntime(client, "hermes", async (_request, _context, fence) => {
+      hub.attach(second, "owner", "registration");
+      await hub.fromHost(second, healthFrame());
+      const scope: BrokerScope = {
+        runId: "run",
+        botId: "bot",
+        userId: "owner",
+        spaceId: "space",
+        operationId: fence.operationId,
+        leaseOwner: "worker",
+        leaseFence: 1,
+        hostGeneration: createHash("sha256")
+          .update(fence.hostGeneration)
+          .digest()
+          .readUIntBE(0, 6),
+        configurationHash: "fixture",
+        pin: {
+          credentialId: "fixture",
+          provider: "fixture",
+          modelId: "fixture-model",
+          effort: "high",
+        },
+      };
+      return { broker, scope };
+    });
+    const run: AgentRunRequest = {
+      botId: "bot",
+      threadId: "thread",
+      runId: "run",
+      prompt: "hi",
+      instructions: "",
+      history: [],
+      tools: "none",
+      model: {
+        provider: "fixture",
+        id: "fixture-model",
+        thinkingLevel: "high",
+        runtimePin: {
+          runtimeKind: "hermes",
+          provider: "fixture",
+          modelId: "fixture-model",
+          effort: "high",
+          credentialId: "fixture",
+          revision: 1,
+        } as AgentRunRequest["model"]["runtimePin"],
+      },
+    };
+    const consume = async () => {
+      for await (const _ of remote.run(run, { userId: "owner", spaceId: "space" })) {
+        // Rejection precedes any runtime event.
+      }
+    };
+    await expect(consume()).rejects.toThrow("Host operation is unavailable");
+    expect(second.frames).toEqual([]);
+    expect(open).not.toHaveBeenCalled();
+    expect(revoke).toHaveBeenCalledOnce();
     hub.detach();
   });
   it.each(["cancel", "disconnect"])("does not forward a queued probe after %s", async (action) => {

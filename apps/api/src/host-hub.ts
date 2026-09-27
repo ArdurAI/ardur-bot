@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { HostFrame, HostHealth, HostRequest } from "@ardurbot/contracts/host-bridge";
 import {
   encodeHostFrame,
@@ -34,9 +35,14 @@ function fleetProbe(request: HostRequest) {
       ))
   );
 }
-/** One deployment, one owner, one host generation. Nothing is replayed after detach. */
+/** One deployment and owner; each attached connection has its own provider-grant fence. */
 export class HostHub {
-  private host?: { wire: HostWire; ownerId: string; generation: string };
+  private host?: {
+    wire: HostWire;
+    ownerId: string;
+    registrationGeneration: string;
+    connectionGeneration: string;
+  };
   private pending = new Map<string, Pending>();
   private probes = new Map<string, QueuedProbe>();
   private seen = new Set<string>();
@@ -55,7 +61,12 @@ export class HostHub {
   }
   attach(wire: HostWire, ownerId: string, generation: string) {
     this.detach();
-    this.host = { wire, ownerId, generation };
+    this.host = {
+      wire,
+      ownerId,
+      registrationGeneration: generation,
+      connectionGeneration: randomUUID(),
+    };
     return () => {
       if (this.host?.wire === wire) this.detach();
     };
@@ -98,7 +109,7 @@ export class HostHub {
       (request.operation.op === "runtime.turn" &&
         request.operation.request.model.runtimePin.runtimeKind === "hermes" &&
         (this.health?.capabilities?.providerRelay !== 1 ||
-          request.operation.request.providerBroker?.hostGeneration !== host.generation))
+          request.operation.request.providerBroker?.hostGeneration !== host.connectionGeneration))
     ) {
       await worker.send({
         v: 1,
@@ -136,7 +147,10 @@ export class HostHub {
     pending.timer.unref?.();
     this.pending.set(request.id, pending);
     try {
-      if (!(await this.authorize(request, host.ownerId, host.generation)) || this.host !== host)
+      if (
+        !(await this.authorize(request, host.ownerId, host.registrationGeneration)) ||
+        this.host !== host
+      )
         throw new Error("Unauthorized host operation.");
       if (this.pending.get(request.id) !== pending) return;
       this.seen.add(request.id);
@@ -159,13 +173,19 @@ export class HostHub {
   async fromHost(wire: HostWire, frame: HostFrame) {
     if (this.host?.wire !== wire) return;
     if (frame.type === "health") {
-      this.health = { ...frame.health, generation: this.host.generation };
+      this.health = { ...frame.health, generation: this.host.connectionGeneration };
       return;
     }
     if (!("id" in frame)) throw new Error("Unexpected host frame.");
     const pending = this.pending.get(frame.id);
     if (!pending) return;
-    if (!(await this.authorize(pending.request, this.host.ownerId, this.host.generation))) {
+    if (
+      !(await this.authorize(
+        pending.request,
+        this.host.ownerId,
+        this.host.registrationGeneration,
+      ))
+    ) {
       this.cancel(frame.id, pending.worker);
       return;
     }
