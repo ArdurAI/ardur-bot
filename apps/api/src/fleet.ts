@@ -119,10 +119,13 @@ export async function cleanupFleetSecret(
 ) {
   try {
     const op = { op: "computer.remote.secret.delete" as const, secretId: hostSecretId };
+    let result: unknown;
     if (process.env.ARDURBOT_HOST_BRIDGE === "api") {
       if (!hostBridge) throw new Error("Host bridge is unavailable.");
-      await hostBridge.fleetResult(op, context);
-    } else await localFleetService().deleteSecret(hostSecretId);
+      result = await hostBridge.fleetResult(op, context);
+    } else result = await localFleetService().deleteSecret(hostSecretId);
+    if (!result || typeof result !== "object" || !("ok" in result) || result.ok !== true)
+      throw new Error("Host credential deletion was not acknowledged.");
     await prisma.fleetSecretCleanup.deleteMany({ where: { hostSecretId } });
     return true;
   } catch {

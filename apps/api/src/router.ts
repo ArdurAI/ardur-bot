@@ -2047,10 +2047,21 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           owner,
         );
         fleetCatalog(deps).connections.invalidate(input.connectionId, owner.spaceId);
-        return {
-          ...(await testFleetTarget(deps, owner, input.connectionId)),
-          revision: saved.revision,
-        };
+        try {
+          return {
+            ...(await testFleetTarget(deps, owner, input.connectionId)),
+            revision: saved.revision,
+          };
+        } catch {
+          // The save committed. Keep its revision even when the follow-up probe fails unexpectedly.
+          return {
+            ok: false as const,
+            reason: "not-reachable" as const,
+            checkedAt: new Date().toISOString(),
+            targets: [],
+            revision: saved.revision,
+          };
+        }
       }),
       remove: authed.fleet.remove.handler(({ context, input }) => {
         if (!context.actor.isDeploymentOwner) throw new ORPCError("FORBIDDEN");

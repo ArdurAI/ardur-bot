@@ -1,10 +1,20 @@
 import type { AdapterContext } from "@ardurbot/adapter-kit";
+import type { Actor } from "@ardurbot/contracts";
 import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
+import { unknownCapacity } from "@ardurbot/contracts/fleet";
 import type { PrismaClient } from "@ardurbot/db";
+import { RPCHandler } from "@orpc/server/fetch";
 import { describe, expect, it, vi } from "vitest";
 import { updateComputerConnection } from "./computer-settings.js";
-import { fleetConnectionDetails, reconcileFleetSecretCleanup, removeFleetTarget } from "./fleet.js";
+import {
+  cleanupFleetSecret,
+  fleetCatalog,
+  fleetConnectionDetails,
+  reconcileFleetSecretCleanup,
+  removeFleetTarget,
+} from "./fleet.js";
 import type { RouterDeps } from "./router.js";
+import { createRouter } from "./router.js";
 
 const context: AdapterContext = {
   spaceId: "space",
@@ -92,6 +102,127 @@ function fixture(pinned: string[] = []) {
 }
 
 describe("saved fleet connections", () => {
+  it("keeps the cleanup intent until the host acknowledges deletion", async () => {
+    const { deps } = fixture();
+    let acknowledge!: (value: { ok: true }) => void;
+    const hostReply = new Promise<{ ok: true }>((resolve) => {
+      acknowledge = resolve;
+    });
+    deps.hostBridge = { fleetResult: vi.fn(() => hostReply) } as never;
+    vi.stubEnv("ARDURBOT_HOST_BRIDGE", "api");
+    try {
+      const cleanup = cleanupFleetSecret(
+        deps.prisma,
+        deps.hostBridge,
+        context,
+        "afdf5a2e-09f0-42c9-917e-35c45f34db37",
+      );
+      expect(deps.prisma.fleetSecretCleanup.deleteMany).not.toHaveBeenCalled();
+      acknowledge({ ok: true });
+      await expect(cleanup).resolves.toBe(true);
+      expect(deps.prisma.fleetSecretCleanup.deleteMany).toHaveBeenCalledOnce();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("keeps the cleanup intent when the host does not confirm deletion", async () => {
+    const { deps } = fixture();
+    deps.hostBridge = { fleetResult: vi.fn(async () => ({ ok: false })) } as never;
+    vi.stubEnv("ARDURBOT_HOST_BRIDGE", "api");
+    try {
+      await expect(
+        cleanupFleetSecret(
+          deps.prisma,
+          deps.hostBridge,
+          context,
+          "afdf5a2e-09f0-42c9-917e-35c45f34db37",
+        ),
+      ).resolves.toBe(false);
+      expect(deps.prisma.fleetSecretCleanup.deleteMany).not.toHaveBeenCalled();
+      expect(deps.prisma.fleetSecretCleanup.updateMany).toHaveBeenCalledOnce();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("returns the committed revision through the router when an SSH probe throws", async () => {
+    const { deps, prisma, tx } = fixture();
+    let current = row;
+    vi.mocked(prisma.connection.findFirstOrThrow).mockImplementation(async () => current);
+    tx.connection.findFirstOrThrow.mockImplementation(async () => current);
+    tx.connection.update.mockImplementation(async ({ data }) => {
+      current = {
+        ...current,
+        metadata: data.metadata as typeof metadata,
+        updatedAt: new Date(current.updatedAt.getTime() + 1000),
+      };
+      return current;
+    });
+    const catalog = fleetCatalog(deps);
+    const probe = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("SSH operation failed; test the connection in Computers."))
+      .mockResolvedValueOnce({});
+    vi.spyOn(catalog.connections, "resolve").mockResolvedValue({ test: probe } as never);
+    vi.spyOn(catalog, "list").mockResolvedValue({
+      targets: [
+        {
+          id: "saved",
+          name: "Remote",
+          kind: "ssh",
+          connectionId: "saved",
+          state: "unavailable",
+          capacity: unknownCapacity(),
+          bots: [],
+        },
+      ],
+    } as never);
+    const actor = {
+      userId: context.userId,
+      spaceId: context.spaceId,
+      isDeploymentOwner: true,
+    } as Actor;
+    const handler = new RPCHandler(createRouter(deps));
+    const save = async (user: string, revision: string) => {
+      const { response } = await handler.handle(
+        new Request("http://localhost/rpc/fleet/update", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            json: {
+              connectionId: "saved",
+              connection: {
+                name: "Remote",
+                settings: { engine: "ssh", ssh: { host: "computer.invalid", user } },
+              },
+              revision,
+              confirmActive: false,
+            },
+          }),
+        }),
+        { prefix: "/rpc", context: { actor } },
+      );
+      return { status: response.status, body: await response.json() };
+    };
+    const first = await save("wrong", row.updatedAt.toISOString());
+    expect(first.status).toBe(200);
+    expect(first.body).toEqual({
+      json: expect.objectContaining({
+        ok: false,
+        reason: "not-reachable",
+        revision: current.updatedAt.toISOString(),
+      }),
+    });
+    expect(JSON.stringify(first.body)).not.toContain("SSH operation failed");
+    const second = await save("corrected", current.updatedAt.toISOString());
+    expect(second.status).toBe(200);
+    expect(second.body).toEqual({
+      json: expect.objectContaining({ ok: true, revision: current.updatedAt.toISOString() }),
+    });
+    expect(tx.connection.update).toHaveBeenCalledTimes(2);
+  });
+
   it("scopes details and update to the owner and space", async () => {
     const { prisma, tx, deps } = fixture();
     const details = await fleetConnectionDetails(deps, context, "saved");
