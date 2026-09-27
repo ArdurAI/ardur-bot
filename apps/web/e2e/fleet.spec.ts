@@ -65,7 +65,29 @@ test("Computers shows fleet capacity, placement and move consent", async ({ page
       },
     }),
   );
-  await page.route("**/rpc/fleet/discover", (route) => route.fulfill({ json: { json: [] } }));
+  const discovered = [
+    {
+      id: "discovered-docker",
+      name: "Docker on this Mac",
+      kind: "docker",
+      connectionId: null,
+      state: "discovered",
+      endpoint: "/var/run/docker.sock",
+      capacity: {
+        cpuCount: null,
+        cpuLoad1m: null,
+        memoryTotal: null,
+        memoryFree: null,
+        diskFree: null,
+        sampledAt: null,
+        source: "unknown",
+      },
+      bots: [],
+    },
+  ];
+  await page.route("**/rpc/fleet/discover", (route) =>
+    route.fulfill({ json: { json: discovered } }),
+  );
   const settings = await openUserSettings(page);
   await settings.getByRole("button", { name: "Computers", exact: true }).click();
   const fleet = page.getByTestId("fleet-settings");
@@ -73,4 +95,23 @@ test("Computers shows fleet capacity, placement and move consent", async ({ page
   await expect(fleet.getByLabel("Placement", { exact: true })).toHaveValue("free-memory");
   await expect(fleet.getByRole("button", { name: "Move", exact: true })).toBeVisible();
   await captureScreenshot(page, testInfo, "fleet-placement");
+
+  const discoveredRow = fleet.locator('[data-fleet-target="discovered-docker"]');
+  await discoveredRow.getByRole("button", { name: "Add", exact: true }).click();
+
+  const addDialog = page.getByRole("dialog", { name: "Add computer" });
+  await expect(addDialog).toBeVisible();
+  await expect(addDialog.getByLabel("Connection type")).toHaveValue("docker");
+  await expect(addDialog.getByLabel("Name")).toHaveValue("Docker on this Mac");
+  await expect(addDialog.getByLabel("Engine endpoint")).toHaveValue("/var/run/docker.sock");
+  await captureScreenshot(page, testInfo, "fleet-add-dialog");
+
+  await addDialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(addDialog).not.toBeVisible();
+
+  await fleet.getByRole("button", { name: "Add computer", exact: true }).click();
+  await expect(addDialog).toBeVisible();
+  await expect(addDialog.getByLabel("Name")).toHaveValue("");
+  await addDialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(addDialog).not.toBeVisible();
 });

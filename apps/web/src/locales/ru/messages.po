@@ -1657,6 +1657,7 @@ msgid "Client secret"
 msgstr "Секрет клиента"
 
 #: src/pages/board/Board.tsx
+#: src/pages/customize/ExtensionsPage.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/memory/MemoryDocuments.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -2518,6 +2519,10 @@ msgstr ""
 
 #: src/pages/TeamBoard.tsx
 msgid "Could not load Team; retry."
+msgstr ""
+
+#: src/pages/customize/ExtensionsPage.tsx
+msgid "Could not load the extension catalogue. Check the connection and try again."
 msgstr ""
 
 #: src/pages/LearningCurator.tsx
@@ -4184,6 +4189,7 @@ msgid "Insights ({insights})"
 msgstr "Советы ({insights})"
 
 #: src/pages/customize/ConfigureExtension.tsx
+#: src/pages/customize/ExtensionsPage.tsx
 #: src/pages/customize/PluginsPage.tsx
 msgid "Install"
 msgstr ""
@@ -4585,6 +4591,10 @@ msgstr "Загрузка правил…"
 #: src/pages/system/SystemPage.tsx
 msgid "Loading system settings…"
 msgstr ""
+
+#: src/pages/customize/ExtensionsPage.tsx
+msgid "Loading the extension catalogue…"
+msgstr "Загрузка каталога расширений…"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Loading tools…"
@@ -5251,6 +5261,10 @@ msgstr ""
 msgid "No embedding service is configured."
 msgstr ""
 
+#: src/pages/customize/ExtensionsPage.tsx
+msgid "No extensions are in the built-in catalogue yet. Use Add to install an extension bundle (.mcpb or .dxt file) from this computer."
+msgstr "Во встроенном каталоге пока нет расширений. Используйте «Добавить», чтобы установить пакет расширения (файл .mcpb или .dxt) с этого компьютера."
+
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "No group chats yet."
 msgstr "Групповых чатов пока нет."
@@ -5587,7 +5601,6 @@ msgstr ""
 msgid "Only space-shared documents go to this repository."
 msgstr ""
 
-#: src/pages/customize/ExtensionsPage.tsx
 #: src/pages/customize/SkillsPage.tsx
 #: src/pages/ide/IdePage.tsx
 #: src/pages/ide/terminal.tsx
@@ -6576,6 +6589,7 @@ msgstr ""
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/capabilities/CapabilitiesSettings.tsx
 #: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/customize/ExtensionsPage.tsx
 #: src/pages/dashboard/DashboardPage.tsx
 #: src/pages/GitMemorySettings.tsx
 #: src/pages/import/LocalImportPage.tsx
