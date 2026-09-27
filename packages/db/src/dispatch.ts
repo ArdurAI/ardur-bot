@@ -471,6 +471,7 @@ export async function confirmDispatchStop(
       })
     )
       return false;
+    // Canonical order: thread before the run task and any delegated root task.
     await tx.$queryRaw`SELECT id FROM threads WHERE id = ${run.threadId} FOR UPDATE`;
     await appendEventInTransaction(tx, {
       spaceId: run.spaceId,

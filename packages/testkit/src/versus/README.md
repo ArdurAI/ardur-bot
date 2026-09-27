@@ -1,4 +1,4 @@
-# Ardur Bot versus Hermes
+# Ardur versus Hermes
 
 This harness helps researchers compare identical synthetic work while preserving failures,
 operators review execution authority and budgets, and local-first users keep provider state

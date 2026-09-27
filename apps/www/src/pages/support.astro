@@ -9,21 +9,21 @@ const stars = await fetchGithubStars();
 const starsLabel = stars === null ? "Star" : formatStarCount(stars);
 ---
 
-<BaseLayout title="Support · Ardur Bot" description="Get help with the Ardur Bot app and self-hosted Ardur Bot.">
+<BaseLayout title="Support · Ardur" description="Get help with the Ardur app and self-hosted Ardur.">
   <div class="container">
     <Header starsLabel={starsLabel} />
     <main id="main" class="privacy-copy">
-      <h1>Ardur Bot support</h1>
+      <h1>Ardur support</h1>
       <p>
-        For help with the Ardur Bot mobile app or a hosted Ardur Bot account, email{" "}
+        For help with the Ardur mobile app or a hosted Ardur account, email{" "}
         <a href="mailto:hello@ardur.ai">hello@ardur.ai</a>. Include the email address on your
         account, what you expected to happen, and any error message you saw. Do not send passwords, API keys,
         access tokens, or other secrets.
       </p>
-      <h2>Self-hosted Ardur Bot</h2>
+      <h2>Self-hosted Ardur</h2>
       <p>
         Start with the <a href={DOCS_URL}>self-hosting guide</a>. For reproducible bugs or feature requests,
-        open an issue in the <a href={`${GITHUB_URL}/issues`}>Ardur Bot GitHub repository</a>.
+        open an issue in the <a href={`${GITHUB_URL}/issues`}>Ardur GitHub repository</a>.
       </p>
       <h2>Account deletion</h2>
       <p>

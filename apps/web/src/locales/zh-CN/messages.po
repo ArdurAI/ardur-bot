@@ -333,9 +333,10 @@ msgid "Acceptance criteria"
 msgstr ""
 
 #: src/pages/DelegationLines.tsx
+#: src/pages/GroupPanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Accepted"
-msgstr ""
+msgstr "已接受"
 
 #: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
@@ -857,15 +858,15 @@ msgstr "已归档。对话、记忆和文件保留。"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Ardur (built-in)"
-msgstr ""
+msgstr "Ardur（内置）"
 
 #: src/pages/import/LocalImportPage.tsx
-msgid "Ardur Bot reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history."
-msgstr ""
+msgid "Ardur reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history."
+msgstr "Ardur 会读取此电脑上这些工具的指令、记忆、技能和服务器列表，但不会读取登录信息、令牌或聊天记录。"
 
 #: src/lib/board-close-copy.ts
-msgid "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected."
-msgstr "Ardur Bot 已尝试五次。请在看板上关闭它，或检查此电脑是否已连接。"
+msgid "Ardur tried five times. Close it on the Board, or check that this computer is connected."
+msgstr "Ardur 已尝试五次。请在看板上关闭它，或检查此电脑是否已连接。"
 
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/McpServersOverlay.tsx
@@ -1117,8 +1118,9 @@ msgstr ""
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardColumns.tsx
 #: src/pages/dashboard/WorkPanel.tsx
+#: src/pages/GroupPanel.tsx
 msgid "Blocked"
-msgstr ""
+msgstr "已阻止"
 
 #. placeholder {0}: row.reason
 #: src/pages/TeamBoard.tsx
@@ -1536,8 +1538,8 @@ msgid "Choose one credential: a token or a header."
 msgstr "请只选择一种凭据：令牌或请求头。"
 
 #: src/pages/ModelSettingsOverlay.tsx
-msgid "Choose which connected model Ardur Bot uses."
-msgstr "选择 Ardur Bot 使用的已连接模型。"
+msgid "Choose which connected model Ardur uses."
+msgstr "选择 Ardur 使用的已连接模型。"
 
 #. placeholder {0}: browser.name
 #: src/pages/system/SystemPage.tsx
@@ -1749,8 +1751,9 @@ msgstr "完成"
 #: src/pages/ComparePanel.tsx
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/GroupPanel.tsx
 msgid "Completed"
-msgstr ""
+msgstr "已完成"
 
 #: src/components/ThreadCommandBlock.tsx
 msgid "Completion not recorded"
@@ -2709,6 +2712,10 @@ msgstr ""
 msgid "Could not start dictation; check Voice settings."
 msgstr ""
 
+#: src/pages/GoalForm.tsx
+msgid "Could not start goal. Check the deadline and try again."
+msgstr "无法开始目标。请检查截止时间后重试。"
+
 #: src/pages/McpServersOverlay.tsx
 msgid "Could not start OAuth"
 msgstr "无法开始 OAuth"
@@ -2716,6 +2723,10 @@ msgstr "无法开始 OAuth"
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Could not start teaching"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Could not stop goal. Try again."
+msgstr "无法停止目标。请重试。"
 
 #: src/pages/DelegationLines.tsx
 msgid "Could not stop this task; try again."
@@ -2849,8 +2860,8 @@ msgid "Create space"
 msgstr "创建工作区"
 
 #: src/pages/Auth.tsx
-msgid "Create your Ardur Bot"
-msgstr "创建你的 Ardur Bot"
+msgid "Create your Ardur"
+msgstr "创建你的 Ardur"
 
 #: src/components/AskCard.tsx
 #: src/pages/account/AccountTables.tsx
@@ -3291,6 +3302,10 @@ msgstr "完成"
 msgid "Done — waiting for your OK"
 msgstr ""
 
+#: src/pages/GoalForm.tsx
+msgid "Done when (one per line)"
+msgstr "完成条件（每行一项）"
+
 #. placeholder {0}: props.name
 #: src/components/ArtifactFileCard.tsx
 msgid "Download {0}"
@@ -3507,6 +3522,10 @@ msgstr ""
 #: src/pages/PluginsOverlay.tsx
 msgid "Executor token"
 msgstr "Executor 令牌"
+
+#: src/pages/GroupPanel.tsx
+msgid "Exhausted"
+msgstr "已耗尽"
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Existing documents keep their scope."
@@ -3794,6 +3813,10 @@ msgstr ""
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "GitLab host"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Goal"
+msgstr "目标"
 
 #: src/pages/dashboard/panels.ts
 msgid "Governance"
@@ -4157,9 +4180,9 @@ msgid "Integration options"
 msgstr ""
 
 #: src/components/composer/ComposerMenu.tsx
+#: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/settings-sections.ts
-#: src/pages/Shell.tsx
 msgid "Integrations"
 msgstr "集成"
 
@@ -4537,7 +4560,7 @@ msgid "Local Server Settings"
 msgstr ""
 
 #: src/pages/account/AccountSettings.tsx
-#: src/pages/Shell.tsx
+#: src/pages/dashboard/DashboardAccountArea.tsx
 msgid "Log out"
 msgstr "退出登录"
 
@@ -5023,9 +5046,10 @@ msgstr ""
 msgid "Needs takeover"
 msgstr "需要接管"
 
+#: src/pages/GroupPanel.tsx
 #: src/pages/Shell.tsx
 msgid "Needs you"
-msgstr ""
+msgstr "需要你处理"
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Network access lets a bot install packages and reach the internet. This comes with security risks."
@@ -5419,6 +5443,10 @@ msgstr "OAuth 连接失败"
 msgid "OAuth expired"
 msgstr ""
 
+#: src/pages/GoalForm.tsx
+msgid "Objective"
+msgstr "目标内容"
+
 #: src/pages/MemoryHistory.tsx
 msgid "Observations"
 msgstr ""
@@ -5500,8 +5528,8 @@ msgid "Open Accessibility settings"
 msgstr ""
 
 #: src/pages/system/QuickComposer.tsx
-msgid "Open Ardur Bot"
-msgstr ""
+msgid "Open Ardur"
+msgstr "打开 Ardur"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Open bot settings"
@@ -5706,8 +5734,8 @@ msgid "Paste a replacement key"
 msgstr "粘贴替换密钥"
 
 #: src/pages/ModelSettingsOverlay.tsx
-msgid "Paste the OpenAI-compatible address from your server. Ardur Bot adds /v1 if needed."
-msgstr "粘贴服务器的 OpenAI 兼容地址。需要时 Ardur Bot 会补上 /v1。"
+msgid "Paste the OpenAI-compatible address from your server. Ardur adds /v1 if needed."
+msgstr "粘贴服务器的 OpenAI 兼容地址。需要时 Ardur 会补上 /v1。"
 
 #: src/pages/memory/MemoryImport.tsx
 msgid "Paste the response"
@@ -5717,6 +5745,7 @@ msgstr ""
 msgid "Paste your API key"
 msgstr "粘贴你的 API 密钥"
 
+#: src/pages/GroupPanel.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Paused"
 msgstr "已暂停"
@@ -6477,8 +6506,8 @@ msgid "Retry screen"
 msgstr ""
 
 #: src/pages/McpOAuthCallback.tsx
-msgid "Return to Ardur Bot"
-msgstr "返回 Ardur Bot"
+msgid "Return to Ardur"
+msgstr "返回 Ardur"
 
 #. placeholder {0}: doc.revision
 #: src/pages/KnowledgeSection.tsx
@@ -6994,11 +7023,11 @@ msgstr "设置记忆搜索"
 msgid "Set up servers"
 msgstr ""
 
+#: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/settings-sections.ts
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
-#: src/pages/shell/sidebar-settings.tsx
 msgid "Settings"
 msgstr "设置"
 
@@ -7089,8 +7118,8 @@ msgid "Sign in again to manage sessions."
 msgstr ""
 
 #: src/pages/Auth.tsx
-msgid "Sign in to Ardur Bot"
-msgstr "登录 Ardur Bot"
+msgid "Sign in to Ardur"
+msgstr "登录 Ardur"
 
 #: src/pages/system/QuickComposer.tsx
 msgid "Sign in to use quick access."
@@ -7298,6 +7327,10 @@ msgstr "初始化看板？"
 msgid "Start comparison"
 msgstr ""
 
+#: src/pages/GoalForm.tsx
+msgid "Start goal"
+msgstr "开始目标"
+
 #: src/pages/memory/MemoryImport.tsx
 msgid "Start import"
 msgstr ""
@@ -7315,6 +7348,7 @@ msgid "Starting"
 msgstr "正在开始"
 
 #: src/components/teach/TeachComputerOverlay.tsx
+#: src/pages/GoalForm.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Starting…"
@@ -7334,6 +7368,7 @@ msgid "Steps"
 msgstr "步骤"
 
 #: src/pages/DelegationLines.tsx
+#: src/pages/GroupPanel.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/TeamBoard.tsx
@@ -7354,8 +7389,9 @@ msgstr ""
 
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
+#: src/pages/GroupPanel.tsx
 msgid "Stopped"
-msgstr ""
+msgstr "已停止"
 
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/DelegationLines.tsx
@@ -7770,8 +7806,8 @@ msgid "This signs out every other session and keeps this one signed in."
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
-msgid "This subscription sign-in is not available in Ardur Bot yet. Use a deployment credential or choose another provider."
-msgstr "此订阅登录在 Ardur Bot 中尚不可用。请使用部署凭据或选择其他提供方。"
+msgid "This subscription sign-in is not available in Ardur yet. Use a deployment credential or choose another provider."
+msgstr "此订阅登录在 Ardur 中尚不可用。请使用部署凭据或选择其他提供方。"
 
 #: src/pages/memory/MemoryProposals.tsx
 msgid "This suggestion cannot be approved here."
@@ -7824,13 +7860,18 @@ msgstr ""
 msgid "Token"
 msgstr "令牌"
 
+#: src/pages/GoalForm.tsx
+msgid "Token limit"
+msgstr "令牌上限"
+
 #: src/pages/CompareStart.tsx
 msgid "Token reservation"
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
 #: src/pages/LearningCurator.tsx
 msgid "tokens"
-msgstr ""
+msgstr "令牌"
 
 #: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx
@@ -7971,6 +8012,10 @@ msgstr "不支持的文件类型：{0}"
 msgid "Unsupported: no verified NetworkPolicy controller."
 msgstr ""
 
+#: src/pages/GoalForm.tsx
+msgid "Until (defaults to eight hours)"
+msgstr "截止时间（默认八小时）"
+
 #: src/pages/Shell.tsx
 msgid "Up to 4 files, 10 MB each"
 msgstr ""
@@ -8055,9 +8100,9 @@ msgid "Uploaded files"
 msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/dashboard/panels.ts
 #: src/pages/settings-sections.ts
-#: src/pages/Shell.tsx
 msgid "Usage"
 msgstr "用量"
 
@@ -8283,9 +8328,10 @@ msgid "Work items"
 msgstr "工作事项"
 
 #: src/pages/dashboard/NowPanel.tsx
+#: src/pages/GroupPanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Working"
-msgstr ""
+msgstr "进行中"
 
 #: src/pages/GitMemorySettings.tsx
 msgid "Working from the last copy"

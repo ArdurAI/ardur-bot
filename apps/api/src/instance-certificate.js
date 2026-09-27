@@ -14,7 +14,7 @@ export async function generateInstanceCertificate() {
   certificate.serialNumber = `01${randomBytes(16).toString("hex")}`;
   certificate.validity.notBefore = new Date(Date.now() - 60_000);
   certificate.validity.notAfter = new Date(Date.now() + 5 * 365 * 24 * 60 * 60_000);
-  const subject = [{ name: "commonName", value: "Ardur Bot Home" }];
+  const subject = [{ name: "commonName", value: "Ardur Home" }];
   certificate.setSubject(subject);
   certificate.setIssuer(subject);
   certificate.setExtensions([

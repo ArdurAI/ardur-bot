@@ -333,6 +333,7 @@ msgid "Acceptance criteria"
 msgstr "Acceptance criteria"
 
 #: src/pages/DelegationLines.tsx
+#: src/pages/GroupPanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Accepted"
 msgstr "Accepted"
@@ -860,12 +861,12 @@ msgid "Ardur (built-in)"
 msgstr "Ardur (built-in)"
 
 #: src/pages/import/LocalImportPage.tsx
-msgid "Ardur Bot reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history."
-msgstr "Ardur Bot reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history."
+msgid "Ardur reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history."
+msgstr "Ardur reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history."
 
 #: src/lib/board-close-copy.ts
-msgid "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected."
-msgstr "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected."
+msgid "Ardur tried five times. Close it on the Board, or check that this computer is connected."
+msgstr "Ardur tried five times. Close it on the Board, or check that this computer is connected."
 
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/McpServersOverlay.tsx
@@ -1117,6 +1118,7 @@ msgstr "Block link copied."
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardColumns.tsx
 #: src/pages/dashboard/WorkPanel.tsx
+#: src/pages/GroupPanel.tsx
 msgid "Blocked"
 msgstr "Blocked"
 
@@ -1536,8 +1538,8 @@ msgid "Choose one credential: a token or a header."
 msgstr "Choose one credential: a token or a header."
 
 #: src/pages/ModelSettingsOverlay.tsx
-msgid "Choose which connected model Ardur Bot uses."
-msgstr "Choose which connected model Ardur Bot uses."
+msgid "Choose which connected model Ardur uses."
+msgstr "Choose which connected model Ardur uses."
 
 #. placeholder {0}: browser.name
 #: src/pages/system/SystemPage.tsx
@@ -1749,6 +1751,7 @@ msgstr "Complete"
 #: src/pages/ComparePanel.tsx
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/GroupPanel.tsx
 msgid "Completed"
 msgstr "Completed"
 
@@ -2709,6 +2712,10 @@ msgstr "Could not start comparison; review the pins and retry."
 msgid "Could not start dictation; check Voice settings."
 msgstr "Could not start dictation; check Voice settings."
 
+#: src/pages/GoalForm.tsx
+msgid "Could not start goal. Check the deadline and try again."
+msgstr "Could not start goal. Check the deadline and try again."
+
 #: src/pages/McpServersOverlay.tsx
 msgid "Could not start OAuth"
 msgstr "Could not start OAuth"
@@ -2716,6 +2723,10 @@ msgstr "Could not start OAuth"
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Could not start teaching"
 msgstr "Could not start teaching"
+
+#: src/pages/GroupPanel.tsx
+msgid "Could not stop goal. Try again."
+msgstr "Could not stop goal. Try again."
 
 #: src/pages/DelegationLines.tsx
 msgid "Could not stop this task; try again."
@@ -2849,8 +2860,8 @@ msgid "Create space"
 msgstr "Create space"
 
 #: src/pages/Auth.tsx
-msgid "Create your Ardur Bot"
-msgstr "Create your Ardur Bot"
+msgid "Create your Ardur"
+msgstr "Create your Ardur"
 
 #: src/components/AskCard.tsx
 #: src/pages/account/AccountTables.tsx
@@ -3291,6 +3302,10 @@ msgstr "Done"
 msgid "Done — waiting for your OK"
 msgstr "Done — waiting for your OK"
 
+#: src/pages/GoalForm.tsx
+msgid "Done when (one per line)"
+msgstr "Done when (one per line)"
+
 #. placeholder {0}: props.name
 #: src/components/ArtifactFileCard.tsx
 msgid "Download {0}"
@@ -3507,6 +3522,10 @@ msgstr "Executing"
 #: src/pages/PluginsOverlay.tsx
 msgid "Executor token"
 msgstr "Executor token"
+
+#: src/pages/GroupPanel.tsx
+msgid "Exhausted"
+msgstr "Exhausted"
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Existing documents keep their scope."
@@ -3794,6 +3813,10 @@ msgstr "Git URL"
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "GitLab host"
 msgstr "GitLab host"
+
+#: src/pages/GroupPanel.tsx
+msgid "Goal"
+msgstr "Goal"
 
 #: src/pages/dashboard/panels.ts
 msgid "Governance"
@@ -4157,9 +4180,9 @@ msgid "Integration options"
 msgstr "Integration options"
 
 #: src/components/composer/ComposerMenu.tsx
+#: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/settings-sections.ts
-#: src/pages/Shell.tsx
 msgid "Integrations"
 msgstr "Integrations"
 
@@ -4537,7 +4560,7 @@ msgid "Local Server Settings"
 msgstr "Local Server Settings"
 
 #: src/pages/account/AccountSettings.tsx
-#: src/pages/Shell.tsx
+#: src/pages/dashboard/DashboardAccountArea.tsx
 msgid "Log out"
 msgstr "Log out"
 
@@ -5023,6 +5046,7 @@ msgstr "Needs sign-in on this computer"
 msgid "Needs takeover"
 msgstr "Needs takeover"
 
+#: src/pages/GroupPanel.tsx
 #: src/pages/Shell.tsx
 msgid "Needs you"
 msgstr "Needs you"
@@ -5419,6 +5443,10 @@ msgstr "OAuth connection failed"
 msgid "OAuth expired"
 msgstr "OAuth expired"
 
+#: src/pages/GoalForm.tsx
+msgid "Objective"
+msgstr "Objective"
+
 #: src/pages/MemoryHistory.tsx
 msgid "Observations"
 msgstr "Observations"
@@ -5500,8 +5528,8 @@ msgid "Open Accessibility settings"
 msgstr "Open Accessibility settings"
 
 #: src/pages/system/QuickComposer.tsx
-msgid "Open Ardur Bot"
-msgstr "Open Ardur Bot"
+msgid "Open Ardur"
+msgstr "Open Ardur"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Open bot settings"
@@ -5706,8 +5734,8 @@ msgid "Paste a replacement key"
 msgstr "Paste a replacement key"
 
 #: src/pages/ModelSettingsOverlay.tsx
-msgid "Paste the OpenAI-compatible address from your server. Ardur Bot adds /v1 if needed."
-msgstr "Paste the OpenAI-compatible address from your server. Ardur Bot adds /v1 if needed."
+msgid "Paste the OpenAI-compatible address from your server. Ardur adds /v1 if needed."
+msgstr "Paste the OpenAI-compatible address from your server. Ardur adds /v1 if needed."
 
 #: src/pages/memory/MemoryImport.tsx
 msgid "Paste the response"
@@ -5717,6 +5745,7 @@ msgstr "Paste the response"
 msgid "Paste your API key"
 msgstr "Paste your API key"
 
+#: src/pages/GroupPanel.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Paused"
 msgstr "Paused"
@@ -6477,8 +6506,8 @@ msgid "Retry screen"
 msgstr "Retry screen"
 
 #: src/pages/McpOAuthCallback.tsx
-msgid "Return to Ardur Bot"
-msgstr "Return to Ardur Bot"
+msgid "Return to Ardur"
+msgstr "Return to Ardur"
 
 #. placeholder {0}: doc.revision
 #: src/pages/KnowledgeSection.tsx
@@ -6994,11 +7023,11 @@ msgstr "Set up memory search"
 msgid "Set up servers"
 msgstr "Set up servers"
 
+#: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/settings-sections.ts
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
-#: src/pages/shell/sidebar-settings.tsx
 msgid "Settings"
 msgstr "Settings"
 
@@ -7089,8 +7118,8 @@ msgid "Sign in again to manage sessions."
 msgstr "Sign in again to manage sessions."
 
 #: src/pages/Auth.tsx
-msgid "Sign in to Ardur Bot"
-msgstr "Sign in to Ardur Bot"
+msgid "Sign in to Ardur"
+msgstr "Sign in to Ardur"
 
 #: src/pages/system/QuickComposer.tsx
 msgid "Sign in to use quick access."
@@ -7298,6 +7327,10 @@ msgstr "Start board?"
 msgid "Start comparison"
 msgstr "Start comparison"
 
+#: src/pages/GoalForm.tsx
+msgid "Start goal"
+msgstr "Start goal"
+
 #: src/pages/memory/MemoryImport.tsx
 msgid "Start import"
 msgstr "Start import"
@@ -7315,6 +7348,7 @@ msgid "Starting"
 msgstr "Starting"
 
 #: src/components/teach/TeachComputerOverlay.tsx
+#: src/pages/GoalForm.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Starting…"
@@ -7334,6 +7368,7 @@ msgid "Steps"
 msgstr "Steps"
 
 #: src/pages/DelegationLines.tsx
+#: src/pages/GroupPanel.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/TeamBoard.tsx
@@ -7354,6 +7389,7 @@ msgstr "Stop the current run"
 
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
+#: src/pages/GroupPanel.tsx
 msgid "Stopped"
 msgstr "Stopped"
 
@@ -7770,8 +7806,8 @@ msgid "This signs out every other session and keeps this one signed in."
 msgstr "This signs out every other session and keeps this one signed in."
 
 #: src/pages/ModelSettingsOverlay.tsx
-msgid "This subscription sign-in is not available in Ardur Bot yet. Use a deployment credential or choose another provider."
-msgstr "This subscription sign-in is not available in Ardur Bot yet. Use a deployment credential or choose another provider."
+msgid "This subscription sign-in is not available in Ardur yet. Use a deployment credential or choose another provider."
+msgstr "This subscription sign-in is not available in Ardur yet. Use a deployment credential or choose another provider."
 
 #: src/pages/memory/MemoryProposals.tsx
 msgid "This suggestion cannot be approved here."
@@ -7824,10 +7860,15 @@ msgstr "Today (UTC)"
 msgid "Token"
 msgstr "Token"
 
+#: src/pages/GoalForm.tsx
+msgid "Token limit"
+msgstr "Token limit"
+
 #: src/pages/CompareStart.tsx
 msgid "Token reservation"
 msgstr "Token reservation"
 
+#: src/pages/GroupPanel.tsx
 #: src/pages/LearningCurator.tsx
 msgid "tokens"
 msgstr "tokens"
@@ -7971,6 +8012,10 @@ msgstr "Unsupported file type: {0}"
 msgid "Unsupported: no verified NetworkPolicy controller."
 msgstr "Unsupported: no verified NetworkPolicy controller."
 
+#: src/pages/GoalForm.tsx
+msgid "Until (defaults to eight hours)"
+msgstr "Until (defaults to eight hours)"
+
 #: src/pages/Shell.tsx
 msgid "Up to 4 files, 10 MB each"
 msgstr "Up to 4 files, 10 MB each"
@@ -8055,9 +8100,9 @@ msgid "Uploaded files"
 msgstr "Uploaded files"
 
 #: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/dashboard/panels.ts
 #: src/pages/settings-sections.ts
-#: src/pages/Shell.tsx
 msgid "Usage"
 msgstr "Usage"
 
@@ -8283,6 +8328,7 @@ msgid "Work items"
 msgstr "Work items"
 
 #: src/pages/dashboard/NowPanel.tsx
+#: src/pages/GroupPanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Working"
 msgstr "Working"

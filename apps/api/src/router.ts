@@ -150,6 +150,7 @@ import {
   findModelCredential,
   findSpaceMemoryConfig,
   formatMessagingLinkCode,
+  getGoal,
   getUserPreferences,
   InvalidSpaceNameError,
   IsolationError,
@@ -170,6 +171,8 @@ import {
   SpaceNotFoundError,
   selectSpaceModelPreference,
   selectSpaceVoicePreference,
+  startGoal,
+  stopGoal,
   touchGroupUpdatedAt,
   updateUserPreferences,
 } from "@ardurbot/db";
@@ -5490,6 +5493,38 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
     },
     team: {
       board: authed.team.board.handler(({ context }) => teamBoard(deps.prisma, context.actor)),
+    },
+    goals: {
+      start: authed.goals.start.handler(async ({ context, input }) => {
+        if (!context.actor.isDeploymentOwner || !context.authSessionId)
+          throw new ORPCError("FORBIDDEN");
+        const goal = await startGoal(deps.prisma, context.actor, input);
+        const first = await deps.prisma.run.findUnique({
+          where: {
+            spaceId_clientNonce: {
+              spaceId: goal.spaceId,
+              clientNonce: `goal-start:${goal.id}`,
+            },
+          },
+          select: { id: true },
+        });
+        if (first)
+          await deps.jobs.enqueue(runContinueJob(first.id)).catch((error) => {
+            // The queued run is durable; reconciliation will retry dispatch.
+            getLogger().error("goal start enqueue", error);
+          });
+        return goal;
+      }),
+      get: authed.goals.get.handler(({ context, input }) => {
+        if (!context.actor.isDeploymentOwner || !context.authSessionId)
+          throw new ORPCError("FORBIDDEN");
+        return getGoal(deps.prisma, context.actor, input.groupId);
+      }),
+      stop: authed.goals.stop.handler(({ context, input }) => {
+        if (!context.actor.isDeploymentOwner || !context.authSessionId)
+          throw new ORPCError("FORBIDDEN");
+        return stopGoal(deps.prisma, context.actor, input.goalId);
+      }),
     },
     delegations: {
       accept: authed.delegations.accept.handler(({ context, input }) =>

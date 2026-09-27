@@ -13,6 +13,23 @@ import { deviceDigest } from "./device-grants.js";
 import { startDelegation, updateWorkerTask } from "./task-cards.js";
 
 describe("transactional delegation admission", () => {
+  it("keeps a card deadline below an explicit goal deadline and refuses an expired card", async () => {
+    const future = new Date(Date.now() + 30 * 60_000);
+    const later = new Date(Date.now() + 45 * 60_000);
+    const f = fixture();
+    const row = await f.admit({
+      card: { goal: "Review", deadlineAt: future.toISOString() },
+      deadlineAt: later,
+    });
+    expect(row.deadlineAt.toISOString()).toBe(future.toISOString());
+    const expired = fixture();
+    await expect(
+      expired.admit({
+        card: { goal: "Review", deadlineAt: new Date(0).toISOString() },
+        deadlineAt: later,
+      }),
+    ).rejects.toMatchObject({ problem: { code: "deadline-passed" } });
+  });
   it("shares caps across two worker clients, persists counters, and deduplicates retries", async () => {
     const f = fixture(),
       a = f.worker(),

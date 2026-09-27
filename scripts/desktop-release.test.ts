@@ -49,6 +49,7 @@ describe("release metadata", () => {
       "perf: /private/fixture",
       "unconventional subject",
     ]);
+    expect(notes).toContain("# Ardur desktop preview");
     expect(notes).toContain("Features: 1 change");
     expect(notes).toContain("Fixes: 1 change");
     expect(notes).toContain("Performance: 1 change");
@@ -68,9 +69,9 @@ describe("release metadata", () => {
         JSON.parse(await readFile(path.join(dir, "apps/desktop/package.json"), "utf8")).version,
       ).toBe("1.2.3-alpha.1");
       for (const arch of ["arm64", "x64"])
-        await writeFile(path.join(dir, `ardur-bot-1.2.3-alpha.1-mac-${arch}.dmg`), arch);
-      await generateCask("1.2.3-alpha.1", dir, path.join(dir, "Casks/ardur-bot.rb"));
-      const cask = await readFile(path.join(dir, "Casks/ardur-bot.rb"), "utf8");
+        await writeFile(path.join(dir, `ardur-1.2.3-alpha.1-mac-${arch}.dmg`), arch);
+      await generateCask("1.2.3-alpha.1", dir, path.join(dir, "Casks/ardur.rb"));
+      const cask = await readFile(path.join(dir, "Casks/ardur.rb"), "utf8");
       expect(cask).toContain('version "1.2.3-alpha.1"');
       for (const arch of ["arm64", "x64"])
         expect(cask).toContain(createHash("sha256").update(arch).digest("hex"));

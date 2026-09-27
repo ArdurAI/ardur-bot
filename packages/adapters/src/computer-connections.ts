@@ -83,7 +83,7 @@ export function ownsKind(provider: SandboxProvider, kind: string) {
   return described.kind === kind || described.id === kind;
 }
 
-/** The paired desktop names the host; without one, the server running Ardur Bot does. */
+/** The paired desktop names the host; without one, the server running Ardur does. */
 export async function deploymentHostLabel(prisma: PrismaClient): Promise<HostLabel> {
   const paired = await prisma.hostRegistration.findUnique({
     where: { id: "default" },

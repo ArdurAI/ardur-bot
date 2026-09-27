@@ -101,6 +101,7 @@ import {
 import { ProductEventSchema } from "./events.js";
 import { featuresContract } from "./features.js";
 import { FleetSchema, FleetTargetSchema, PlacementSettingsSchema } from "./fleet.js";
+import { goalsContract } from "./goal.js";
 import { HostStatusSchema } from "./host-bridge.js";
 import {
   IDE_FILE_BYTES,
@@ -1362,6 +1363,7 @@ export const appContract = {
     query: oc.input(z.object({ q: z.string().max(200) })).output(SearchQueryOutputSchema),
   },
   delegations: delegationsContract,
+  goals: goalsContract,
   team: teamContract,
   comparisons: comparisonsContract,
   runs: {

@@ -61,7 +61,7 @@ describe("unsigned desktop release contract", () => {
       target: ["dmg", "zip"],
     });
     expect(desktop.build.linux).toMatchObject({
-      executableName: "ardur-bot",
+      executableName: "ardur",
       target: ["AppImage", "deb"],
     });
     expect(desktop.build.win.target).toEqual(["nsis"]);

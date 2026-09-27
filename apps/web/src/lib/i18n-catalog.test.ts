@@ -262,7 +262,7 @@ describe("lingui catalogs", () => {
   it("catalogs each failed board close sentence once, from its one shared definition", () => {
     const sentences = [
       "A board item filed by a bot could not be closed.",
-      "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected.",
+      "Ardur tried five times. Close it on the Board, or check that this computer is connected.",
     ];
     for (const locale of ["en", "de", "ko", "tr", "hi", "pt-BR", "zh-CN", "es", "ru"]) {
       const catalog = readFileSync(
@@ -299,7 +299,7 @@ describe("lingui catalogs", () => {
       // The host-move refusal is shown as the server sent it (decided by its error code), not
       // through a hand-translated catalog copy, so it is never extracted.
       expect(catalog).not.toContain(
-        "Moving a computer onto the machine running Ardur Bot is not available yet.",
+        "Moving a computer onto the machine running Ardur is not available yet.",
       );
     }
   });

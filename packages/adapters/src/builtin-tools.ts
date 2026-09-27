@@ -22,6 +22,7 @@ export const DELEGATION_TOOL_NAMES = new Set([
   "archive_bot",
   "delete_bot",
   "handoff_to_bot",
+  "assign",
   "message_bot",
 ]);
 
@@ -935,6 +936,20 @@ export const builtinAgentTools: ConnectorTool[] = [
         },
       },
       required: ["message"],
+    },
+  },
+  {
+    name: "assign",
+    description:
+      "For the active group goal coordinator only: assign a task card to a current room member. The member starts after this turn; you keep the floor and may assign other members.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        member: { type: "string", description: "Current member bot id or exact name." },
+        card: z.toJSONSchema(TaskCardRequestSchema),
+        tokens: { type: "integer", minimum: 5000, maximum: 100000 },
+      },
+      required: ["member", "card"],
     },
   },
   {

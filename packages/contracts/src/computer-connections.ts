@@ -57,7 +57,7 @@ export const ComputerConnectionInputSchema = z.object({
     .optional(),
 });
 export const HOST_MOVE_UNAVAILABLE_MESSAGE =
-  "Moving a computer onto the machine running Ardur Bot is not available yet. Choose a saved connection or keep the current engine.";
+  "Moving a computer onto the machine running Ardur is not available yet. Choose a saved connection or keep the current engine.";
 /** A computer can never be moved onto the host: one typed error, detected by class, not text. */
 export class HostMoveUnavailableError extends Error {
   constructor() {

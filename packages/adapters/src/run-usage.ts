@@ -1,7 +1,12 @@
 import { createHash } from "node:crypto";
 import type { AgentUsage } from "@ardurbot/adapter-kit";
 import type { PrismaClient, ThreadEvents, UsageRecord } from "@ardurbot/db";
-import { appendEventInTransaction, Prisma, withTransactionRetry } from "@ardurbot/db";
+import {
+  appendEventInTransaction,
+  lockDelegationRootTask,
+  Prisma,
+  withTransactionRetry,
+} from "@ardurbot/db";
 import type { CategoryCoverage } from "./request-usage.js";
 import { accumulateRequestUsage, parseRequestUsage, usageTokenTotals } from "./request-usage.js";
 
@@ -12,6 +17,7 @@ type UsageRun = {
   botId: string;
   threadId: string;
   taskId?: string;
+  delegationRootTaskId?: string | null;
   delegationId?: string | null;
 };
 type UsageDependencies = {
@@ -40,7 +46,7 @@ export async function recordRunUsage(
     : null;
   const identity = {
     delegationId: delegation?.id ?? null,
-    rootTaskId: delegation?.rootTaskId ?? run.taskId ?? null,
+    rootTaskId: delegation?.rootTaskId ?? run.delegationRootTaskId ?? run.taskId ?? null,
     requesterBotId: delegation?.requesterBotId ?? run.botId,
     actingBotId: delegation?.actingBotId ?? run.botId,
     depth: delegation?.depth ?? 0,
@@ -59,7 +65,7 @@ export async function recordRunUsage(
     ...identity,
     cost: null,
   };
-  const rootTaskId = delegation?.rootTaskId ?? run.taskId;
+  const rootTaskId = delegation?.rootTaskId ?? run.delegationRootTaskId ?? run.taskId;
   const record = rootTaskId
     ? await deps.prisma.$transaction(async (tx) => {
         await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${rootTaskId} FOR UPDATE`;
@@ -138,10 +144,14 @@ async function recordRequestUsage(deps: UsageDependencies, run: UsageRun, usage:
           throw new Error("Usage delegation scope mismatch");
         const rootTaskId =
           delegation?.rootTaskId ?? currentRun.delegationRootTaskId ?? currentRun.taskId;
-        const locked = await tx.$queryRaw<
-          { id: string }[]
-        >`SELECT id FROM tasks WHERE id = ${rootTaskId} AND "spaceId" = ${run.spaceId} AND "userId" = ${run.userId} FOR UPDATE`;
-        if (locked.length !== 1) throw new Error("Usage root task is unavailable");
+        // Goal-room usage appends to the coordinator thread in this transaction. Match worker
+        // progress: coordinator thread first, then root task, including before the root exists.
+        await lockDelegationRootTask(tx, rootTaskId, run.threadId);
+        const rootTask = await tx.task.findFirst({
+          where: { id: rootTaskId, spaceId: run.spaceId, userId: run.userId },
+          select: { id: true },
+        });
+        if (!rootTask) throw new Error("Usage root task is unavailable");
         await tx.$queryRaw`SELECT id FROM runs WHERE id = ${run.id} FOR NO KEY UPDATE`;
         const identity = {
           delegationId: delegation?.id ?? null,

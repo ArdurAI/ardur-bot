@@ -52,6 +52,7 @@ it("scopes the feed to memberships and applies all four account preferences", as
       }),
     }),
   );
+  expect(findMany.mock.calls[0]?.[0].where).not.toHaveProperty("delegationRootTaskId");
 });
 
 it("includes only the acting owner's followed Board events with current space membership", async () => {

@@ -12,6 +12,8 @@ import type { PrismaClient, ThreadEvents } from "@ardurbot/db";
 export { isOneShotRoutineCron, ONCE_ROUTINE_CRON };
 
 export const SCHEDULE_TOOL_NAMES = new Set(["schedule_create", "schedule_list", "schedule_cancel"]);
+export const MIN_REPEATING_INTERVAL_SECONDS = 60;
+export const MIN_ONE_SHOT_LEAD_SECONDS = 0;
 
 export function filterBuiltinToolsForRun<T extends { name: string }>(
   tools: T[],
@@ -102,7 +104,7 @@ export function resolveScheduleTiming(
       }
       nextRunAt = parsed;
     }
-    if (nextRunAt.getTime() <= Date.now()) {
+    if (nextRunAt.getTime() <= Date.now() + MIN_ONE_SHOT_LEAD_SECONDS * 1_000) {
       return { ok: false, error: "One-shot schedules must run in the future." };
     }
     return { ok: true, cron: ONCE_ROUTINE_CRON, nextRunAt, oneShot: true };
@@ -138,7 +140,7 @@ export function resolveScheduleTiming(
   if (!["minutes", "hours", "days"].includes(unit)) {
     return { ok: false, error: 'unit must be "minutes", "hours", or "days".' };
   }
-  if (unit === "minutes" && every < 1) {
+  if (unit === "minutes" && every * 60 < MIN_REPEATING_INTERVAL_SECONDS) {
     return { ok: false, error: "minimum interval is 1 minute" };
   }
   const cron = cronFromPreset({ freq: "Interval", n: every, unit });
@@ -159,7 +161,7 @@ function validateRepeatingCron(cron: string): string | null {
   const step = /^\*\/(\d+)$/.exec(minuteExpr);
   if (step) {
     const n = Number(step[1]);
-    if (!Number.isFinite(n) || n < 1 || !Number.isInteger(n)) {
+    if (!Number.isFinite(n) || n * 60 < MIN_REPEATING_INTERVAL_SECONDS || !Number.isInteger(n)) {
       return "minimum interval is 1 minute";
     }
   }

@@ -1,6 +1,6 @@
 {
-  "name": "Ardur Bot",
-  "short_name": "Ardur Bot",
+  "name": "Ardur",
+  "short_name": "Ardur",
   "description": "Your team of always-on agents.",
   "start_url": "/",
   "display": "standalone",

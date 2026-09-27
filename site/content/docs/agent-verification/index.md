@@ -1,12 +1,12 @@
 ---
 title: "Agent verification"
-description: "Ardur Bot separates deterministic execution regressions from real-model task quality."
+description: "Ardur separates deterministic execution regressions from real-model task quality."
 source_path: "docs/agent-verification.md"
 ---
 
 > [Source: docs/agent-verification.md](https://github.com/ArdurAI/ardur-bot/blob/__ARDUR_BOT_SOURCE_REF__/docs/agent-verification.md). Edit the source file, then run `python3 site/scripts/sync_docs.py` to refresh this page.
 
-Ardur Bot separates deterministic execution regressions from real-model task quality.
+Ardur separates deterministic execution regressions from real-model task quality.
 A scripted response can prove that a tool call executes correctly; only a real
 model can demonstrate that it chooses a useful action for a natural request.
 
@@ -30,7 +30,7 @@ Missing live credentials mean **not run**, not a passing model evaluation.
 ## Deterministic Pi tests
 
 `packages/testkit/src/model-emulator.ts` serves a loopback OpenAI-compatible
-stream through Ardur Bot's existing generic connection. It does not replace Pi.
+stream through Ardur's existing generic connection. It does not replace Pi.
 Each step validates the actual request before streaming a response, and tests
 must assert that all expected steps were consumed without unexpected requests.
 The next request must contain the tool result from real execution.

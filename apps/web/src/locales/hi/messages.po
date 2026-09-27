@@ -333,9 +333,10 @@ msgid "Acceptance criteria"
 msgstr ""
 
 #: src/pages/DelegationLines.tsx
+#: src/pages/GroupPanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Accepted"
-msgstr ""
+msgstr "स्वीकृत"
 
 #: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
@@ -860,11 +861,11 @@ msgid "Ardur (built-in)"
 msgstr ""
 
 #: src/pages/import/LocalImportPage.tsx
-msgid "Ardur Bot reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history."
+msgid "Ardur reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history."
 msgstr ""
 
 #: src/lib/board-close-copy.ts
-msgid "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected."
+msgid "Ardur tried five times. Close it on the Board, or check that this computer is connected."
 msgstr ""
 
 #: src/pages/customize/McpDiagnostics.tsx
@@ -1117,8 +1118,9 @@ msgstr ""
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardColumns.tsx
 #: src/pages/dashboard/WorkPanel.tsx
+#: src/pages/GroupPanel.tsx
 msgid "Blocked"
-msgstr ""
+msgstr "अवरुद्ध"
 
 #. placeholder {0}: row.reason
 #: src/pages/TeamBoard.tsx
@@ -1536,8 +1538,8 @@ msgid "Choose one credential: a token or a header."
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
-msgid "Choose which connected model Ardur Bot uses."
-msgstr "चुनें कि Ardur Bot किस कनेक्टेड मॉडल का उपयोग करे।"
+msgid "Choose which connected model Ardur uses."
+msgstr "चुनें कि Ardur किस कनेक्टेड मॉडल का उपयोग करे।"
 
 #. placeholder {0}: browser.name
 #: src/pages/system/SystemPage.tsx
@@ -1749,8 +1751,9 @@ msgstr "पूर्ण"
 #: src/pages/ComparePanel.tsx
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/GroupPanel.tsx
 msgid "Completed"
-msgstr ""
+msgstr "पूर्ण"
 
 #: src/components/ThreadCommandBlock.tsx
 msgid "Completion not recorded"
@@ -2709,6 +2712,10 @@ msgstr ""
 msgid "Could not start dictation; check Voice settings."
 msgstr ""
 
+#: src/pages/GoalForm.tsx
+msgid "Could not start goal. Check the deadline and try again."
+msgstr "लक्ष्य शुरू नहीं हो सका। समय सीमा जाँचें और फिर प्रयास करें।"
+
 #: src/pages/McpServersOverlay.tsx
 msgid "Could not start OAuth"
 msgstr "OAuth शुरू नहीं हो सका"
@@ -2716,6 +2723,10 @@ msgstr "OAuth शुरू नहीं हो सका"
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Could not start teaching"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Could not stop goal. Try again."
+msgstr "लक्ष्य रोका नहीं जा सका। फिर प्रयास करें।"
 
 #: src/pages/DelegationLines.tsx
 msgid "Could not stop this task; try again."
@@ -2849,8 +2860,8 @@ msgid "Create space"
 msgstr ""
 
 #: src/pages/Auth.tsx
-msgid "Create your Ardur Bot"
-msgstr "अपना Ardur Bot बनाएं"
+msgid "Create your Ardur"
+msgstr "अपना Ardur बनाएं"
 
 #: src/components/AskCard.tsx
 #: src/pages/account/AccountTables.tsx
@@ -3291,6 +3302,10 @@ msgstr "पूर्ण"
 msgid "Done — waiting for your OK"
 msgstr ""
 
+#: src/pages/GoalForm.tsx
+msgid "Done when (one per line)"
+msgstr "पूर्ण होने की शर्तें (प्रति पंक्ति एक)"
+
 #. placeholder {0}: props.name
 #: src/components/ArtifactFileCard.tsx
 msgid "Download {0}"
@@ -3507,6 +3522,10 @@ msgstr ""
 #: src/pages/PluginsOverlay.tsx
 msgid "Executor token"
 msgstr "Executor टोकन"
+
+#: src/pages/GroupPanel.tsx
+msgid "Exhausted"
+msgstr "समाप्त"
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Existing documents keep their scope."
@@ -3794,6 +3813,10 @@ msgstr ""
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "GitLab host"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Goal"
+msgstr "लक्ष्य"
 
 #: src/pages/dashboard/panels.ts
 msgid "Governance"
@@ -4157,9 +4180,9 @@ msgid "Integration options"
 msgstr ""
 
 #: src/components/composer/ComposerMenu.tsx
+#: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/settings-sections.ts
-#: src/pages/Shell.tsx
 msgid "Integrations"
 msgstr "इंटीग्रेशन"
 
@@ -4537,7 +4560,7 @@ msgid "Local Server Settings"
 msgstr ""
 
 #: src/pages/account/AccountSettings.tsx
-#: src/pages/Shell.tsx
+#: src/pages/dashboard/DashboardAccountArea.tsx
 msgid "Log out"
 msgstr "लॉग आउट"
 
@@ -5023,9 +5046,10 @@ msgstr ""
 msgid "Needs takeover"
 msgstr "नियंत्रण लेना ज़रूरी"
 
+#: src/pages/GroupPanel.tsx
 #: src/pages/Shell.tsx
 msgid "Needs you"
-msgstr ""
+msgstr "आपकी ज़रूरत है"
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Network access lets a bot install packages and reach the internet. This comes with security risks."
@@ -5419,6 +5443,10 @@ msgstr "OAuth कनेक्शन विफल"
 msgid "OAuth expired"
 msgstr ""
 
+#: src/pages/GoalForm.tsx
+msgid "Objective"
+msgstr "उद्देश्य"
+
 #: src/pages/MemoryHistory.tsx
 msgid "Observations"
 msgstr ""
@@ -5500,7 +5528,7 @@ msgid "Open Accessibility settings"
 msgstr ""
 
 #: src/pages/system/QuickComposer.tsx
-msgid "Open Ardur Bot"
+msgid "Open Ardur"
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
@@ -5706,8 +5734,8 @@ msgid "Paste a replacement key"
 msgstr "बदलने के लिए नई कुंजी पेस्ट करें"
 
 #: src/pages/ModelSettingsOverlay.tsx
-msgid "Paste the OpenAI-compatible address from your server. Ardur Bot adds /v1 if needed."
-msgstr "अपने सर्वर से OpenAI-संगत पता पेस्ट करें। ज़रूरत होने पर Ardur Bot /v1 जोड़ देता है।"
+msgid "Paste the OpenAI-compatible address from your server. Ardur adds /v1 if needed."
+msgstr "अपने सर्वर से OpenAI-संगत पता पेस्ट करें। ज़रूरत होने पर Ardur /v1 जोड़ देता है।"
 
 #: src/pages/memory/MemoryImport.tsx
 msgid "Paste the response"
@@ -5717,9 +5745,10 @@ msgstr ""
 msgid "Paste your API key"
 msgstr "अपनी API कुंजी पेस्ट करें"
 
+#: src/pages/GroupPanel.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Paused"
-msgstr ""
+msgstr "रुका हुआ"
 
 #. placeholder {0}: tool.id
 #: src/components/integrations/manage/ToolPermissions.tsx
@@ -6477,8 +6506,8 @@ msgid "Retry screen"
 msgstr ""
 
 #: src/pages/McpOAuthCallback.tsx
-msgid "Return to Ardur Bot"
-msgstr "Ardur Bot पर लौटें"
+msgid "Return to Ardur"
+msgstr "Ardur पर लौटें"
 
 #. placeholder {0}: doc.revision
 #: src/pages/KnowledgeSection.tsx
@@ -6994,11 +7023,11 @@ msgstr ""
 msgid "Set up servers"
 msgstr ""
 
+#: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/settings-sections.ts
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
-#: src/pages/shell/sidebar-settings.tsx
 msgid "Settings"
 msgstr "सेटिंग्स"
 
@@ -7089,8 +7118,8 @@ msgid "Sign in again to manage sessions."
 msgstr ""
 
 #: src/pages/Auth.tsx
-msgid "Sign in to Ardur Bot"
-msgstr "Ardur Bot में साइन इन करें"
+msgid "Sign in to Ardur"
+msgstr "Ardur में साइन इन करें"
 
 #: src/pages/system/QuickComposer.tsx
 msgid "Sign in to use quick access."
@@ -7298,6 +7327,10 @@ msgstr "बोर्ड शुरू करें?"
 msgid "Start comparison"
 msgstr ""
 
+#: src/pages/GoalForm.tsx
+msgid "Start goal"
+msgstr "लक्ष्य शुरू करें"
+
 #: src/pages/memory/MemoryImport.tsx
 msgid "Start import"
 msgstr ""
@@ -7315,6 +7348,7 @@ msgid "Starting"
 msgstr "शुरू हो रहा है"
 
 #: src/components/teach/TeachComputerOverlay.tsx
+#: src/pages/GoalForm.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Starting…"
@@ -7334,6 +7368,7 @@ msgid "Steps"
 msgstr "चरण"
 
 #: src/pages/DelegationLines.tsx
+#: src/pages/GroupPanel.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/TeamBoard.tsx
@@ -7354,8 +7389,9 @@ msgstr ""
 
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
+#: src/pages/GroupPanel.tsx
 msgid "Stopped"
-msgstr ""
+msgstr "बंद"
 
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/DelegationLines.tsx
@@ -7770,8 +7806,8 @@ msgid "This signs out every other session and keeps this one signed in."
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
-msgid "This subscription sign-in is not available in Ardur Bot yet. Use a deployment credential or choose another provider."
-msgstr "यह सब्सक्रिप्शन साइन-इन अभी Ardur Bot में उपलब्ध नहीं है। किसी डिप्लॉयमेंट क्रेडेंशियल का उपयोग करें या दूसरा प्रोवाइडर चुनें।"
+msgid "This subscription sign-in is not available in Ardur yet. Use a deployment credential or choose another provider."
+msgstr "यह सब्सक्रिप्शन साइन-इन अभी Ardur में उपलब्ध नहीं है। किसी डिप्लॉयमेंट क्रेडेंशियल का उपयोग करें या दूसरा प्रोवाइडर चुनें।"
 
 #: src/pages/memory/MemoryProposals.tsx
 msgid "This suggestion cannot be approved here."
@@ -7824,13 +7860,18 @@ msgstr ""
 msgid "Token"
 msgstr ""
 
+#: src/pages/GoalForm.tsx
+msgid "Token limit"
+msgstr "टोकन सीमा"
+
 #: src/pages/CompareStart.tsx
 msgid "Token reservation"
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
 #: src/pages/LearningCurator.tsx
 msgid "tokens"
-msgstr ""
+msgstr "टोकन"
 
 #: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx
@@ -7971,6 +8012,10 @@ msgstr "असमर्थित फ़ाइल प्रकार: {0}"
 msgid "Unsupported: no verified NetworkPolicy controller."
 msgstr ""
 
+#: src/pages/GoalForm.tsx
+msgid "Until (defaults to eight hours)"
+msgstr "समय सीमा (डिफ़ॉल्ट आठ घंटे)"
+
 #: src/pages/Shell.tsx
 msgid "Up to 4 files, 10 MB each"
 msgstr ""
@@ -8055,9 +8100,9 @@ msgid "Uploaded files"
 msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/dashboard/panels.ts
 #: src/pages/settings-sections.ts
-#: src/pages/Shell.tsx
 msgid "Usage"
 msgstr "उपयोग"
 
@@ -8283,9 +8328,10 @@ msgid "Work items"
 msgstr "कार्य आइटम"
 
 #: src/pages/dashboard/NowPanel.tsx
+#: src/pages/GroupPanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Working"
-msgstr ""
+msgstr "काम जारी है"
 
 #: src/pages/GitMemorySettings.tsx
 msgid "Working from the last copy"

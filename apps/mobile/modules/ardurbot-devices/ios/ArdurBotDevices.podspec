@@ -4,7 +4,7 @@ Pod::Spec.new do |s|
   s.summary = 'Device keys and pinned home connections'
   s.description = 'Native device enrollment, presence, and pinned TLS for Dispatch.'
   s.license = { :type => 'Apache-2.0' }
-  s.author = 'Ardur Bot maintainers'
+  s.author = 'Ardur maintainers'
   s.homepage = 'https://github.com/ArdurAI/ardur-bot'
   s.platforms = { :ios => '16.0' }
   s.source = { :git => 'https://github.com/ArdurAI/ardur-bot.git' }

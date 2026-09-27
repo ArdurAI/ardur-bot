@@ -115,7 +115,7 @@ export interface ArdurBotDesktop {
 }
 
 /**
- * How the desktop app was pointed at a Ardur Bot server during first-run setup.
+ * How the desktop app was pointed at an Ardur server during first-run setup.
  * `new` is the Docker Compose stack this app installs and runs on the same computer.
  */
 export type DesktopInstanceMode = "new" | "existing";

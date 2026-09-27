@@ -79,7 +79,7 @@ export function McpOAuthCallbackPage() {
         {error ? <p className="mt-2 max-w-md text-sm text-muted-foreground">{error}</p> : null}
         {showReturn ? (
           <Button type="button" className="mt-5" onClick={() => window.close()}>
-            <Trans>Return to Ardur Bot</Trans>
+            <Trans>Return to Ardur</Trans>
           </Button>
         ) : (
           <p className="mt-2 text-sm text-muted-foreground">

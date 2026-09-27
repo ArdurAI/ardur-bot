@@ -523,7 +523,7 @@ export const RU_MESSAGES: Record<string, string> = {
     "Нажмите и удерживайте, чтобы закрепить или переместить в раздел",
   "Long press to pin, move, or silence notifications":
     "Длительное нажатие, чтобы закрепить, переместить или отключить уведомления",
-  "Enter your Ardur Bot server address.": "Введите адрес вашего сервера Ardur Bot.",
+  "Enter your Ardur server address.": "Введите адрес вашего сервера Ardur.",
   "Show less": "Свернуть",
   Members: "Участники",
   "Members ({min}–{max})": "Участники ({min}–{max})",
@@ -580,8 +580,8 @@ export const RU_MESSAGES: Record<string, string> = {
   "Photo library": "Библиотека фотографий",
   Pin: "Закрепить",
   "Please try again.": "Повторите попытку.",
-  "Point this app at your self-hosted Ardur Bot origin, the same HTTPS URL you open in a browser.":
-    "Направьте это приложение на свой собственный источник Ardur Bot, тот же URL-адрес HTTPS, который вы открываете в браузере.",
+  "Point this app at your self-hosted Ardur origin, the same HTTPS URL you open in a browser.":
+    "Направьте это приложение на свой собственный источник Ardur, тот же URL-адрес HTTPS, который вы открываете в браузере.",
   Private: "Личный",
   Providers: "Провайдеры",
   "Public servers need https://. HTTP only works on your local network.":
@@ -641,10 +641,10 @@ export const RU_MESSAGES: Record<string, string> = {
   "Show more": "Показать ещё",
   "Show {label}": "Показать {label}",
   "Sign in": "Войти",
-  "Sign in to Ardur Bot": "Войти в Ardur Bot",
+  "Sign in to Ardur": "Войти в Ardur",
   "Sign out": "Выйти",
   "Sign up": "Зарегистрироваться",
-  "Sign up for Ardur Bot": "Зарегистрироваться в Ardur Bot",
+  "Sign up for Ardur": "Зарегистрироваться в Ardur",
   "Sign-in": "Вход",
   "Sign-up": "Регистрация",
   "Sign-in did not return a session": "Вход не вернул сессию",
@@ -668,7 +668,7 @@ export const RU_MESSAGES: Record<string, string> = {
   Team: "Команда",
   "Team Computer": "Командный компьютер",
   "That doesn’t look like a URL": "Это не похоже на URL",
-  "That URL did not look like a Ardur Bot server": "Этот адрес не похож на сервер Ardur Bot",
+  "That URL did not look like an Ardur server": "Этот адрес не похож на сервер Ardur",
   "That URL is missing a host": "Для этого URL-адреса отсутствует хост",
   "The server changed while starting the request": "Сервер изменился при запуске запроса",
   "This permanently deletes your account, bots, conversations, memories, files, and saved connections. This cannot be undone.":
@@ -760,8 +760,8 @@ export const RU_MESSAGES: Record<string, string> = {
   "Open in full window": "Открыть в полном окне",
   "OpenAPI JSON": "OpenAPI JSON",
   "Opened its thread.": "Диалог открыт.",
-  "Paste the OpenAI-compatible address from your server. Ardur Bot adds /v1 if needed.":
-    "Вставьте OpenAI-совместимый адрес со своего сервера. При необходимости Ardur Bot добавляет /v1.",
+  "Paste the OpenAI-compatible address from your server. Ardur adds /v1 if needed.":
+    "Вставьте OpenAI-совместимый адрес со своего сервера. При необходимости Ardur добавляет /v1.",
   Paused: "Приостановлено",
   Prompt: "Промпт",
   "Recording a live demonstration needs desktop or web with the full computer view. You can still ask this bot to run saved skills from chat.":
@@ -776,8 +776,8 @@ export const RU_MESSAGES: Record<string, string> = {
   "This removes the empty space for everyone.": "Это удалит пустое пространство для всех.",
   "This removes every message and stops current work. The bot, computer, memory, and routines are kept.":
     "Это удалит все сообщения и остановит текущую работу. Бот, компьютер, память и задачи сохранятся.",
-  "This subscription sign-in is not available in Ardur Bot yet. Use a deployment credential or choose another provider.":
-    "Вход по этой подписке пока недоступен в Ardur Bot. Используйте учётные данные развёртывания или выберите другого провайдера.",
+  "This subscription sign-in is not available in Ardur yet. Use a deployment credential or choose another provider.":
+    "Вход по этой подписке пока недоступен в Ardur. Используйте учётные данные развёртывания или выберите другого провайдера.",
   "Tool sources": "Источники инструментов",
   Tools: "Инструменты",
   Uninstall: "Удалить",
@@ -979,8 +979,8 @@ export const RU_MESSAGES: Record<string, string> = {
   "Retry {path}": "Повторить: {path}",
   "Found on this Mac": "Найдено на этом Mac",
   "Found on this computer": "Найдено на этом компьютере",
-  "Ardur Bot reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history.":
-    "Ardur Bot читает инструкции, память, навыки и списки серверов этих инструментов на этом компьютере, но никогда не читает данные входа, токены или историю чатов.",
+  "Ardur reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history.":
+    "Ardur читает инструкции, память, навыки и списки серверов этих инструментов на этом компьютере, но никогда не читает данные входа, токены или историю чатов.",
   "Sign-in files (auth.json, credentials and oauth_creds.json), cookies, tokens, credential backups, session transcripts, chat histories, history.jsonl, telemetry and caches are never read; server lists retain environment variable names only.":
     "Файлы входа (auth.json, credentials и oauth_creds.json), файлы cookie, токены, резервные копии учётных данных, записи сеансов, истории чатов, history.jsonl, телеметрия и кэши никогда не читаются; в списках серверов сохраняются только имена переменных окружения.",
   Board: "Доска",
@@ -1087,8 +1087,8 @@ export const RU_MESSAGES: Record<string, string> = {
   "Closing on the Board.": "Закрывается на доске.",
   "A board item filed by a bot could not be closed.":
     "Не удалось закрыть задачу на доске, созданную ботом.",
-  "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected.":
-    "Ardur Bot попытался пять раз. Закройте её на доске или проверьте, что этот компьютер подключён.",
+  "Ardur tried five times. Close it on the Board, or check that this computer is connected.":
+    "Ardur попытался пять раз. Закройте её на доске или проверьте, что этот компьютер подключён.",
   "{name} filed {filed}: {done} done, {open} open, {other} closed without being completed.":
     "{name} создал задач: {filed}; выполнено: {done}, открыто: {open}, закрыто без выполнения: {other}.",
   Allow: "Разрешить",

@@ -1,0 +1,745 @@
+{
+  "schemaVersion": 1,
+  "product": {
+    "name": "Ardur",
+    "tagline": "Your own AI team, on your own subscriptions.",
+    "summary": "Open-source desktop bots that run on your own AI subscriptions and keys.",
+    "status": "pre-alpha",
+    "statusLine": "Pre-alpha. Unsigned desktop previews; build from source or self-host.",
+    "license": "Apache-2.0",
+    "repoUrl": "https://github.com/ArdurAI/ardur-bot",
+    "docsUrl": "https://github.com/ArdurAI/ardur-bot/tree/dev/docs"
+  },
+  "features": [
+    {
+      "id": "team",
+      "eyebrow": "TEAM",
+      "title": "Named bots, together",
+      "body": "Give each bot its own conversation and history, and bring bots together in group chats.",
+      "source": "README.md#What you get today"
+    },
+    {
+      "id": "remember",
+      "eyebrow": "MEMORY",
+      "title": "Memory that persists",
+      "body": "Bots keep memory alongside their conversation and history.",
+      "source": "README.md#What you get today"
+    },
+    {
+      "id": "routine",
+      "eyebrow": "ROUTINES",
+      "title": "Work on a schedule",
+      "body": "Set routines for bots to run on a schedule.",
+      "source": "README.md#What you get today"
+    },
+    {
+      "id": "delegate",
+      "eyebrow": "DELEGATION",
+      "title": "Bots work together",
+      "body": "Bots can delegate work to each other in groups or use short-lived subagents.",
+      "source": "README.md#What you get today"
+    },
+    {
+      "id": "choose",
+      "eyebrow": "CHOICE",
+      "title": "Choose each bot's model",
+      "body": "Choose a provider, model and thinking level for each bot.",
+      "source": "README.md#What you get today"
+    },
+    {
+      "id": "approve",
+      "eyebrow": "APPROVAL",
+      "title": "Stay in control",
+      "body": "Ardur asks for approval before consequential actions.",
+      "source": "README.md#What you get today"
+    }
+  ],
+  "providers": [
+    {
+      "id": "openrouter",
+      "name": "OpenRouter",
+      "access": "api-key",
+      "status": "available",
+      "featured": true
+    },
+    {
+      "id": "openai-codex",
+      "name": "OpenAI Codex",
+      "access": "subscription",
+      "status": "available",
+      "featured": true,
+      "accountHint": "ChatGPT account"
+    },
+    {
+      "id": "anthropic",
+      "name": "Anthropic",
+      "access": "api-key",
+      "status": "available",
+      "featured": true,
+      "accountHint": "API key"
+    },
+    {
+      "id": "openai",
+      "name": "OpenAI",
+      "access": "api-key",
+      "status": "available",
+      "featured": true
+    },
+    {
+      "id": "google",
+      "name": "Google",
+      "access": "api-key",
+      "status": "available",
+      "featured": true
+    },
+    {
+      "id": "vercel-ai-gateway",
+      "name": "Vercel AI Gateway",
+      "access": "gateway",
+      "status": "available",
+      "featured": true
+    },
+    {
+      "id": "amazon-bedrock",
+      "name": "Amazon Bedrock",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "ant-ling",
+      "name": "Ant Ling",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "azure-openai-responses",
+      "name": "Azure OpenAI",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "baseten",
+      "name": "Baseten",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "cerebras",
+      "name": "Cerebras",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "claude-cli",
+      "name": "Claude Pro/Max through the CLI",
+      "access": "subscription",
+      "status": "roadmap",
+      "featured": false,
+      "accountHint": "Claude account through your own CLI"
+    },
+    {
+      "id": "cloudflare-ai-gateway",
+      "name": "Cloudflare AI Gateway",
+      "access": "gateway",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "cloudflare-workers-ai",
+      "name": "Cloudflare Workers AI",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "deepseek",
+      "name": "DeepSeek",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "fireworks",
+      "name": "Fireworks",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "github-copilot",
+      "name": "GitHub Copilot",
+      "access": "subscription",
+      "status": "available",
+      "featured": false,
+      "accountHint": "Copilot account"
+    },
+    {
+      "id": "google-vertex",
+      "name": "Google Vertex AI",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "groq",
+      "name": "Groq",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "huggingface",
+      "name": "Hugging Face",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "kimi-coding",
+      "name": "Kimi for Coding",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "meta",
+      "name": "Meta",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "minimax",
+      "name": "MiniMax",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "minimax-cn",
+      "name": "MiniMax CN",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "mistral",
+      "name": "Mistral",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "moonshotai",
+      "name": "Moonshot AI",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "moonshotai-cn",
+      "name": "Moonshot AI CN",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "nvidia",
+      "name": "NVIDIA",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "ollama",
+      "name": "Ollama as a first-class choice",
+      "access": "local",
+      "status": "roadmap",
+      "featured": false
+    },
+    {
+      "id": "openai-compatible",
+      "name": "OpenAI-compatible server",
+      "access": "gateway",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "opencode-go",
+      "name": "OpenCode Go",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "opencode",
+      "name": "OpenCode Zen",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "qwen-token-plan",
+      "name": "Qwen Token Plan",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "qwen-token-plan-cn",
+      "name": "Qwen Token Plan CN",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "qwen-token-plan-individual",
+      "name": "Qwen Token Plan Individual",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "radius",
+      "name": "Radius",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "together",
+      "name": "Together",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "xai",
+      "name": "xAI",
+      "access": "subscription",
+      "status": "available",
+      "featured": false,
+      "accountHint": "SuperGrok or X Premium account"
+    },
+    {
+      "id": "xiaomi",
+      "name": "Xiaomi",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "xiaomi-token-plan-ams",
+      "name": "Xiaomi Token Plan AMS",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "xiaomi-token-plan-cn",
+      "name": "Xiaomi Token Plan CN",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "xiaomi-token-plan-sgp",
+      "name": "Xiaomi Token Plan SGP",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "zai",
+      "name": "Z.AI",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    },
+    {
+      "id": "zai-coding-cn",
+      "name": "Z.AI Coding CN",
+      "access": "api-key",
+      "status": "available",
+      "featured": false
+    }
+  ],
+  "computers": [
+    {
+      "id": "local",
+      "name": "This computer"
+    },
+    {
+      "id": "docker",
+      "name": "Docker"
+    },
+    {
+      "id": "podman",
+      "name": "Podman"
+    },
+    {
+      "id": "kubernetes",
+      "name": "Kubernetes"
+    },
+    {
+      "id": "ssh",
+      "name": "SSH machine"
+    },
+    {
+      "id": "e2b",
+      "name": "E2B"
+    },
+    {
+      "id": "daytona",
+      "name": "Daytona"
+    },
+    {
+      "id": "box",
+      "name": "Box"
+    }
+  ],
+  "install": {
+    "fromSource": {
+      "requirements": "Node.js 22.22.2 or newer in the 22.x line, Node.js 24.x, or Node.js 26+; pnpm 9; and Docker",
+      "commands": [
+        "git clone https://github.com/ArdurAI/ardur-bot.git",
+        "cd ardur-bot",
+        "git checkout dev",
+        "cp .env.example .env",
+        "docker compose --env-file .env -f infra/compose/docker-compose.yml -f infra/compose/docker-compose.postgres-host.yml up postgres -d",
+        "pnpm install",
+        "pnpm db:generate",
+        "pnpm db:migrate",
+        "pnpm sandbox:build",
+        "pnpm dev"
+      ],
+      "note": "In .env, set POSTGRES_PASSWORD to a random value (for example, openssl rand -hex 16) and use it in DATABASE_URL; set BETTER_AUTH_SECRET, ENCRYPTION_KEY, SCREEN_PROXY_SECRET and SANDBOX_SUPERVISOR_TOKEN to separate long random values (for example, openssl rand -hex 32); add model credentials in the app or set OPENROUTER_API_KEY.",
+      "docsUrl": "https://github.com/ArdurAI/ardur-bot#run-from-source"
+    },
+    "desktop": {
+      "releasesUrl": "https://github.com/ArdurAI/ardur-bot/releases",
+      "platforms": [
+        {
+          "os": "macOS",
+          "assetPattern": "\\.dmg$"
+        },
+        {
+          "os": "Windows",
+          "assetPattern": "\\.exe$"
+        },
+        {
+          "os": "Linux",
+          "assetPattern": "\\.AppImage$"
+        }
+      ]
+    },
+    "homebrew": {
+      "tapRepo": "ArdurAI/homebrew-tap",
+      "caskPath": "Casks/ardur.rb",
+      "command": "brew install --cask ardurai/tap/ardur"
+    }
+  },
+  "personas": [
+    {
+      "name": "Operator",
+      "line": "Set up a bot, watch it work and approve consequential actions."
+    },
+    {
+      "name": "Builder",
+      "line": "Choose models, computers and integrations for each bot."
+    },
+    {
+      "name": "Researcher",
+      "line": "Run several bots, inspect sources and keep their work."
+    },
+    {
+      "name": "Team lead",
+      "line": "Share bots with colleagues and review what they did."
+    },
+    {
+      "name": "Local-first user",
+      "line": "Keep the core bot workflow on computers and models they control."
+    }
+  ],
+  "routines": {
+    "triggers": [
+      {
+        "id": "schedule",
+        "name": "Schedule",
+        "detail": "Run at a chosen time or repeating schedule."
+      },
+      {
+        "id": "webhook",
+        "name": "Webhook",
+        "detail": "Run when a configured webhook fires."
+      },
+      {
+        "id": "github",
+        "name": "GitHub",
+        "detail": "Run when a configured GitHub event arrives."
+      },
+      {
+        "id": "message",
+        "name": "Message",
+        "detail": "Run when a connected message provider receives a message."
+      }
+    ],
+    "minimumIntervalSeconds": 60,
+    "limits": [
+      {
+        "id": "one-shot-future",
+        "text": "One-shot runs must be scheduled in the future.",
+        "value": 0
+      },
+      {
+        "id": "run-history",
+        "text": "Run history lists up to 50 of a routine's latest runs.",
+        "value": 50
+      },
+      {
+        "id": "webhook-body-bytes",
+        "text": "Webhook and GitHub event bodies are limited to 64 KB.",
+        "value": 65536
+      },
+      {
+        "id": "github-matching-routines",
+        "text": "A GitHub event includes up to 5 of the most recently updated active routines that match it.",
+        "value": 5
+      },
+      {
+        "id": "webhook-matching-routines",
+        "text": "A webhook request includes up to 5 of the most recently updated active routines that match it.",
+        "value": 5
+      }
+    ],
+    "useCases": [
+      {
+        "id": "morning-inbox",
+        "audience": "everyday",
+        "title": "A morning briefing",
+        "body": "Ask for today's appointments and messages needing attention in a short note with source links. Connect the required email and calendar read tools before enabling the routine.",
+        "steps": [
+          "Prepare Daybook with access to the intended email and calendar accounts.",
+          "Open “Agent computer”, find “Routines”, and choose “Create Routine”.",
+          "Set “Name” to Morning briefing.",
+          "Use “Instruction” to request today's appointments, unread messages needing attention, source links, and missing-access notes; forbid mail and calendar changes.",
+          "Choose “Add trigger”, “On a schedule”, and “Weekdays”; set “Time of day” to 8:00 AM in the displayed timezone.",
+          "Keep “Active” on and choose “Save”.",
+          "Choose “Test run”, check “Run history”, and read the result in Daybook's conversation."
+        ],
+        "uiLabels": [
+          "Agent computer",
+          "Routines",
+          "Create Routine",
+          "Name",
+          "Instruction",
+          "Add trigger",
+          "On a schedule",
+          "Weekdays",
+          "Time of day",
+          "Active",
+          "Save",
+          "Test run",
+          "Run history"
+        ]
+      },
+      {
+        "id": "inbox-calendar-review",
+        "audience": "everyday",
+        "title": "Inbox and calendar triage",
+        "body": "Ask for a review queue with suggested replies and meeting changes in the conversation. The example follows clock boundaries, including nights and weekends; it does not wait for the previous run to finish.",
+        "steps": [
+          "Prepare Triage with email and calendar read tools, and require approval for account changes.",
+          "Open “Agent computer”, find “Routines”, and choose “Create Routine”.",
+          "Set “Name” to Inbox and calendar review.",
+          "Use “Instruction” to request a source-linked review queue and suggested replies here; forbid sending, account drafts, message changes, and meeting changes.",
+          "Choose “Add trigger”, “On a schedule”, and “Interval”; set “Interval amount” to 3 and “Interval unit” to “hours”.",
+          "Keep “Active” on and choose “Save”.",
+          "Choose “Test run”, check “Run history”, and read the review in Triage's conversation."
+        ],
+        "uiLabels": [
+          "Agent computer",
+          "Routines",
+          "Create Routine",
+          "Name",
+          "Instruction",
+          "Add trigger",
+          "On a schedule",
+          "Interval",
+          "Interval amount",
+          "Interval unit",
+          "hours",
+          "Active",
+          "Save",
+          "Test run",
+          "Run history"
+        ]
+      },
+      {
+        "id": "weekly-status",
+        "audience": "everyday",
+        "title": "A weekly status draft",
+        "body": "Ask for a weekly draft of progress, blockers, and next steps from dated project notes. Make the Project Notes folder available to the bot before enabling the routine.",
+        "steps": [
+          "Prepare Weekly with read access to the Project Notes folder.",
+          "Open “Agent computer”, find “Routines”, and choose “Create Routine”.",
+          "Set “Name” to Weekly status draft.",
+          "Use “Instruction” to request a weekly update with file citations, facts separated from suggestions, and missing evidence noted; forbid edits, publication, and messages.",
+          "Choose “Add trigger”, “On a schedule”, and “Advanced...”; set “Cron expression” to 0 15 * * 5 for Friday afternoon in the displayed timezone.",
+          "Keep “Active” on and choose “Save”.",
+          "Choose “Test run”, check “Run history”, and read the draft in Weekly's conversation."
+        ],
+        "uiLabels": [
+          "Agent computer",
+          "Routines",
+          "Create Routine",
+          "Name",
+          "Instruction",
+          "Add trigger",
+          "On a schedule",
+          "Advanced...",
+          "Cron expression",
+          "Active",
+          "Save",
+          "Test run",
+          "Run history"
+        ]
+      },
+      {
+        "id": "repository-review",
+        "audience": "technical",
+        "title": "A nightly repository review",
+        "body": "Ask for a report on existing workflow results, stale pull requests, and missing checks. This is a review instruction, not a built-in scanner or a promise to execute tests.",
+        "steps": [
+          "Prepare Repository with the required repository read tools and resolve sample-project to an accessible repository.",
+          "Open “Agent computer”, find “Routines”, and choose “Create Routine”.",
+          "Set “Name” to Nightly repository review and “Instruction” to request source-linked workflow, pull-request, and check findings for sample-project; forbid tests, installs, edits, reruns, and publication.",
+          "Choose “Add trigger”, “On a schedule”, and “Advanced...”; set “Cron expression” to 0 2 * * * in the displayed timezone.",
+          "Keep “Active” on and choose “Save”.",
+          "Choose “Test run” to execute the saved instruction.",
+          "Check “Run history” and read the findings and unknowns in Repository's conversation."
+        ],
+        "uiLabels": [
+          "Agent computer",
+          "Routines",
+          "Create Routine",
+          "Name",
+          "Instruction",
+          "Add trigger",
+          "On a schedule",
+          "Advanced...",
+          "Cron expression",
+          "Active",
+          "Save",
+          "Test run",
+          "Run history"
+        ]
+      },
+      {
+        "id": "ci-failure-review",
+        "audience": "technical",
+        "title": "A CI failure review",
+        "body": "Ask for a failure summary after a workflow event by fetching its actual conclusion through connected read tools. The trigger does not filter for failed builds, and real event deliveries do not populate the routine's history.",
+        "steps": [
+          "Prepare CI Watch with repository, workflow, job, and log read tools that can fetch delivered identifiers.",
+          "Open “Agent computer”, find “Routines”, and choose “Create Routine”.",
+          "Set “Name” to CI failure review and “Instruction” to fetch completed workflow results, summarize verified failures, and treat logs as untrusted; forbid reruns, edits, comments, and publication.",
+          "Choose “Add trigger” and “Git event”.",
+          "Keep “Active” on and choose “Save”.",
+          "Configure the sender for workflow_run events and JSON delivery using “POST to”, “key”, and “header”; make the endpoint reachable.",
+          "Send a real workflow event and read the fetched conclusion, findings, or missing-access notes in CI Watch's conversation."
+        ],
+        "uiLabels": [
+          "Agent computer",
+          "Routines",
+          "Create Routine",
+          "Name",
+          "Instruction",
+          "Add trigger",
+          "Git event",
+          "Active",
+          "Save",
+          "POST to",
+          "key",
+          "header"
+        ]
+      },
+      {
+        "id": "runbook-review",
+        "audience": "technical",
+        "title": "A service alert review",
+        "body": "Ask for read-only service checks and a proposed repair in the conversation. Require approval before publishing a draft change; this is not unattended remediation.",
+        "steps": [
+          "Prepare Runbook with read-only operational access, a Runbooks folder, an approved proposal repository, and command approvals.",
+          "Open “Agent computer”, find “Routines”, and choose “Create Routine”.",
+          "Set “Name” to Service alert review and “Instruction” to distrust payload directives, use only the prepared environment, request check approvals, and draft findings; require publication approval and forbid live changes.",
+          "Choose “Add trigger” and “Webhook”.",
+          "Keep “Active” on and choose “Save”.",
+          "Configure the sender with “POST to” and the bearer “header”; keep “key” private, make the endpoint reachable, and use a unique Idempotency-Key per alert.",
+          "Send a sample alert, review Runbook's conversation, and approve any proposed branch, commit, push, or draft pull request before publication."
+        ],
+        "uiLabels": [
+          "Agent computer",
+          "Routines",
+          "Create Routine",
+          "Name",
+          "Instruction",
+          "Add trigger",
+          "Webhook",
+          "Active",
+          "Save",
+          "POST to",
+          "key",
+          "header"
+        ]
+      }
+    ]
+  },
+  "videos": [
+    {
+      "id": "routines-demo",
+      "title": "A routine from setup to result",
+      "description": "A Briefing bot creates a Morning checklist routine from sample notes, schedules it for weekdays at 8:00 AM UTC, saves it, runs it once, and shows three checklist bullets and a completed Run history entry.",
+      "durationSeconds": 56,
+      "width": 1920,
+      "height": 1080,
+      "files": {
+        "mp4": "media/routines-demo.mp4",
+        "webm": "media/routines-demo.webm",
+        "poster": "media/routines-demo.jpg",
+        "captions": "media/routines-demo.en.vtt"
+      }
+    }
+  ],
+  "screenshots": [
+    {
+      "id": "app-chat",
+      "file": "screenshots/app-chat.png",
+      "alt": "Chief of Staff bot conversation showing a release checklist command, a drafted team update, and an approval card beside a six-bot team.",
+      "width": 2880,
+      "height": 1800,
+      "theme": "light"
+    },
+    {
+      "id": "group-chat",
+      "file": "screenshots/group-chat.png",
+      "alt": "Operations huddle group conversation where Chief of Staff, Inbox Manager, and Release Captain coordinate a weekly update and hand off a release check.",
+      "width": 2880,
+      "height": 1800,
+      "theme": "light"
+    },
+    {
+      "id": "routines",
+      "file": "screenshots/routines.png",
+      "alt": "Chief of Staff bot conversation with the computer side panel and three scheduled routines: Morning brief, Inbox triage, and Evening wrap-up.",
+      "width": 2880,
+      "height": 1800,
+      "theme": "light"
+    }
+  ]
+}

@@ -9,7 +9,7 @@ export const CHAT_COPY = {
   waiting: "Waiting for home.",
   stopped: "Stopped.",
   stronger: "Approve this on your Mac or phone.",
-  pair: "Pair your account with Ardur Bot first.",
+  pair: "Pair your account with Ardur first.",
   secrets: "Add secrets in Settings, not in chat.",
 } as const;
 const id = z.string().min(1).max(256);
