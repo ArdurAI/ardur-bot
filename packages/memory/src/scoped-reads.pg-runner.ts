@@ -3,7 +3,9 @@ import { fileURLToPath } from "node:url";
 import { PostgreSqlContainer } from "@testcontainers/postgresql";
 
 const root = fileURLToPath(new URL("../../../", import.meta.url));
-const container = await new PostgreSqlContainer("postgres:16-alpine").start();
+const container = await new PostgreSqlContainer("postgres:16-alpine")
+  .withEnvironment({ POSTGRES_INITDB_ARGS: "--locale-provider=icu --icu-locale=en-US" })
+  .start();
 try {
   const env = {
     ...process.env,
@@ -23,6 +25,7 @@ try {
       "run",
       "packages/memory/src/scoped-reads.postgres.test.ts",
       "packages/memory/src/commit.postgres.test.ts",
+      "packages/adapters/src/memory/scoped-reads-wrapper.postgres.test.ts",
       "--maxWorkers=2",
     ],
     {

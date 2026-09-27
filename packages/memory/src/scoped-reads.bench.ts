@@ -26,6 +26,7 @@ type StoreConstructor = new (tx: Prisma.TransactionClient) => ReadStore;
 type Plan = {
   Plan: { "Actual Rows": number; "Shared Hit Blocks": number; "Shared Read Blocks": number };
 };
+type Statement = { query: string; params: unknown[] };
 
 function percentile(values: number[], fraction: number) {
   const sorted = [...values].sort((a, b) => a - b);
@@ -37,9 +38,17 @@ async function main() {
   const module = (await import(pathToFileURL(storePath).href)) as {
     PostgresDocumentStore: StoreConstructor;
   };
-  const container = await new PostgreSqlContainer("postgres:16-alpine").start();
+  const container = await new PostgreSqlContainer("postgres:16-alpine")
+    .withEnvironment({ POSTGRES_INITDB_ARGS: "--locale-provider=icu --icu-locale=en-US" })
+    .start();
   const uri = container.getConnectionUri();
-  const database = createDb(uri);
+  let captured: Statement[] | null = null;
+  const database = createDb(uri, {
+    queryLog: (event) => {
+      if (captured && /^\s*SELECT\b/iu.test(event.query))
+        captured.push({ query: event.query, params: JSON.parse(event.params) as unknown[] });
+    },
+  });
   try {
     // The migration child receives only the disposable container URL. An inherited URL is ignored.
     execFileSync("pnpm", ["--filter", "@ardurbot/db", "exec", "prisma", "migrate", "deploy"], {
@@ -107,8 +116,13 @@ async function main() {
           ),
       };
       const latencies: Record<string, { medianMs: number; p95Ms: number }> = {};
+      const statements: Record<string, Statement[]> = {};
       for (const [name, action] of Object.entries(paths)) {
+        captured = [];
         await action();
+        statements[name] = captured;
+        captured = null;
+        if (statements[name]!.length === 0) throw new Error(`No SELECT captured for ${name}`);
         const samples = [];
         for (let sample = 0; sample < 7; sample++) {
           const start = performance.now();
@@ -117,34 +131,54 @@ async function main() {
         }
         latencies[name] = { medianMs: percentile(samples, 0.5), p95Ms: percentile(samples, 0.95) };
       }
-      const plans: Record<string, { rows: number; sharedBuffers: number; file: string }> = {};
-      for (const name of ["read", "list"] as const) {
-        const headSql =
-          name === "read"
-            ? `SELECT d.id, r.revision FROM memory_documents d
-              LEFT JOIN LATERAL (SELECT revision FROM memory_revisions WHERE "documentId" = d.id
-                ORDER BY revision DESC LIMIT 1) r ON true
-              WHERE d.id = 'bench-000001' AND d."spaceId" = 'bench-space' AND d."userId" = 'bench-user'`
-            : `SELECT d.id, r.revision FROM memory_documents d
-              LEFT JOIN LATERAL (SELECT revision FROM memory_revisions WHERE "documentId" = d.id
-                ORDER BY revision DESC LIMIT 1) r ON true
-              WHERE d."spaceId" = 'bench-space' AND d."userId" = 'bench-user'
-                AND d.scope = 'user' AND d."deletedAt" IS NULL ORDER BY d.id LIMIT 51`;
-        const oldSql = `SELECT d.id, r.revision FROM memory_documents d
-          LEFT JOIN memory_revisions r ON r."documentId" = d.id
-          WHERE d."spaceId" = 'bench-space'`;
-        const sql = label === "base" ? oldSql : headSql;
+      const plans: Record<
+        string,
+        {
+          rows: number;
+          sharedBuffers: number;
+          statements: Array<{ rows: number; sharedBuffers: number; file: string }>;
+        }
+      > = {};
+      for (const [name, queries] of Object.entries(statements)) {
+        const entries = [];
+        for (const [index, statement] of queries.entries()) {
+          const explained = await database.pool.query(
+            `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${statement.query}`,
+            statement.params,
+          );
+          const plan = (explained.rows[0] as { "QUERY PLAN": Plan[] })["QUERY PLAN"][0]!;
+          const file = `explain-${label}-${size}-${name}-${index + 1}.json`;
+          await writeFile(
+            path.join(outputDirectory, file),
+            JSON.stringify({ ...statement, plan }, null, 2),
+          );
+          entries.push({
+            rows: plan.Plan["Actual Rows"],
+            sharedBuffers: plan.Plan["Shared Hit Blocks"] + plan.Plan["Shared Read Blocks"],
+            file,
+          });
+        }
+        plans[name] = {
+          rows: entries.reduce((sum, entry) => sum + entry.rows, 0),
+          sharedBuffers: entries.reduce((sum, entry) => sum + entry.sharedBuffers, 0),
+          statements: entries,
+        };
+      }
+      if (size === 10_000 && label === "tip") {
+        // A separate schema diagnostic, never counted as a measured store statement.
+        const sql = `SELECT id FROM memory_documents
+          WHERE "spaceId" = $1 AND "userId" = $2 AND id COLLATE "C" > $3 COLLATE "C"
+          ORDER BY id COLLATE "C" LIMIT 51`;
+        const params = [access.spaceId, access.userId, "bench-000001"];
         const explained = await database.pool.query(
           `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${sql}`,
+          params,
         );
         const plan = (explained.rows[0] as { "QUERY PLAN": Plan[] })["QUERY PLAN"][0]!;
-        const file = `explain-${label}-${size}-${name}.json`;
-        await writeFile(path.join(outputDirectory, file), JSON.stringify(plan, null, 2));
-        plans[name] = {
-          rows: plan.Plan["Actual Rows"],
-          sharedBuffers: plan.Plan["Shared Hit Blocks"] + plan.Plan["Shared Read Blocks"],
-          file,
-        };
+        await writeFile(
+          path.join(outputDirectory, "explain-c-collation-10000.json"),
+          JSON.stringify({ query: sql, params, plan }, null, 2),
+        );
       }
       results.push({ documents: size, revisionsPerDocument: 20, latencies, plans });
       process.stdout.write(`${label}: ${size} documents measured\n`);

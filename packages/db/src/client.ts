@@ -1,7 +1,7 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import type { PoolClient } from "pg";
 import { Pool } from "pg";
-import { PrismaClient } from "./generated/prisma/client.js";
+import { type Prisma, PrismaClient } from "./generated/prisma/client.js";
 
 export type Db = PrismaClient;
 
@@ -10,6 +10,8 @@ export interface DbClientOptions {
   applicationName?: string;
   /** Retries a checkout that Postgres refuses with 53300. On unless set to false. */
   connectRetry?: boolean;
+  /** Optional SQL event sink for local query measurement. */
+  queryLog?: (event: Prisma.QueryEvent) => void;
 }
 
 const DEFAULT_POOL_MAX = 4;
@@ -45,8 +47,15 @@ export function createDb(
 ): { prisma: PrismaClient; pool: Pool } {
   const pool = createPool(connectionString, options);
   const adapter = new PrismaPg(pool);
-  const prisma = new PrismaClient({ adapter });
-  return { prisma, pool };
+  if (options.queryLog) {
+    const prisma = new PrismaClient({
+      adapter,
+      log: [{ emit: "event", level: "query" }],
+    });
+    prisma.$on("query", options.queryLog);
+    return { prisma, pool };
+  }
+  return { prisma: new PrismaClient({ adapter }), pool };
 }
 
 /**

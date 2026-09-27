@@ -13,6 +13,7 @@ const describePostgres =
 describePostgres("scoped memory reads (PostgreSQL)", () => {
   const space = "scoped-read-space";
   const otherSpace = "scoped-read-other-space";
+  const paginationSpace = "scoped-read-pagination-space";
   const user = "reader";
   const bot = "reader-bot";
   const otherBot = "other-bot";
@@ -65,7 +66,7 @@ describePostgres("scoped memory reads (PostgreSQL)", () => {
       await prisma.$disconnect();
       await db.pool.end();
     };
-    for (const id of [space, otherSpace]) {
+    for (const id of [space, otherSpace, paginationSpace]) {
       await prisma.organization.create({
         data: {
           id,
@@ -108,12 +109,18 @@ describePostgres("scoped memory reads (PostgreSQL)", () => {
     ];
     for (const [id, scope, deleted] of scopes)
       await prisma.memoryDocument.create({ data: document(id, scope, deleted) });
+    for (const id of ["a-page", "c-page"])
+      await prisma.memoryDocument.create({
+        data: document(id, { kind: "user", spaceId: paginationSpace, userId: user }),
+      });
   });
 
   afterAll(async () => {
     if (!prisma) return;
     try {
-      await prisma.organization.deleteMany({ where: { id: { in: [space, otherSpace] } } });
+      await prisma.organization.deleteMany({
+        where: { id: { in: [space, otherSpace, paginationSpace] } },
+      });
     } finally {
       await close();
     }
@@ -140,24 +147,36 @@ describePostgres("scoped memory reads (PostgreSQL)", () => {
   );
 
   it("keeps page size and cursors identical when a hidden document is inserted", async () => {
+    const actor = { ...access, spaceId: paginationSpace };
     const first = async () =>
       prisma.$transaction(async (tx) => {
         const store = new PostgresDocumentStore(tx);
-        const page = await store.list({ limit: 1, scope: "user" }, access);
-        const next = await store.list(
-          { limit: 1, scope: "user", cursor: page.nextCursor! },
-          access,
-        );
+        const page = await store.list({ limit: 1, scope: "user" }, actor);
+        const next = await store.list({ limit: 1, scope: "user", cursor: page.nextCursor! }, actor);
         return { first: page, next };
       });
     const before = await first();
+    expect(before.first.items.map((item) => item.id)).toEqual(["a-page"]);
+    expect(before.first.nextCursor).toBe("a-page");
+    expect(before.next.items.map((item) => item.id)).toEqual(["c-page"]);
+    expect(before.next.nextCursor).toBeNull();
     await prisma.memoryDocument.create({
-      data: document("b-hidden", { kind: "user", spaceId: space, userId: "someone-else" }),
+      data: document("b-hidden", {
+        kind: "user",
+        spaceId: paginationSpace,
+        userId: "someone-else",
+      }),
     });
-    expect(await first()).toEqual(before);
+    const after = await first();
+    expect(after.first.items).toHaveLength(before.first.items.length);
+    expect(after.next.items).toHaveLength(before.next.items.length);
+    expect(after.first.nextCursor).toBe(before.first.nextCursor);
+    expect(after.next.nextCursor).toBe(before.next.nextCursor);
+    expect(after.next.items.map((item) => item.id)).toEqual(["c-page"]);
+    expect(after).toEqual(before);
   });
 
-  it("bounds head and revision queries before PostgreSQL loads rows", async () => {
+  it("passes bounded take arguments to Prisma for heads and revisions", async () => {
     let headQueries = 0;
     let historyQueries = 0;
     const observed = prisma.$extends({
