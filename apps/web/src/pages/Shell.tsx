@@ -3426,7 +3426,7 @@ export function ShellPage({
             ) : null}
           </div>
         </div>
-        {inGroup && goal?.groupId === groupId ? (
+        {inGroup && goal && goal.groupId === groupId ? (
           <GroupGoalStrip
             goal={goal}
             onStop={async () => {

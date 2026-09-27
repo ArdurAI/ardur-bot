@@ -135,9 +135,10 @@ export function inferScript(
 ): NonNullable<AgentRunRequest["script"]> {
   if (!fromCard) {
     const framed = /<task_card>([\s\S]*?)<\/task_card>/.exec(prompt);
-    if (framed) {
+    const cardJson = framed?.[1];
+    if (cardJson) {
       try {
-        const card: unknown = JSON.parse(framed[1]);
+        const card: unknown = JSON.parse(cardJson);
         if (card && typeof card === "object" && "goal" in card && typeof card.goal === "string")
           return inferScript(card.goal, resumeFromCheckpoint, true);
       } catch {
