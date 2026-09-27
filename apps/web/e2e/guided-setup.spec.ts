@@ -5,7 +5,8 @@ test("shared guided setup renders a deterministic four-step pilot", async ({ pag
   await page.goto("/guided-setup-fixture.html");
   await expect(page.getByRole("heading", { name: "Set up Ardur" })).toBeVisible();
   await expect(page.locator(".guided-step")).toHaveCount(9);
-  await expect(page.getByText("Waiting for you")).toBeVisible();
+  await expect(page.getByText("Waiting for you", { exact: true })).toBeVisible();
+  await expect(page.getByRole("status")).not.toBeInViewport();
   await expect(page.getByText("Start Ardur services")).toBeVisible();
   await captureScreenshot(page, testInfo, "guided-setup-web-fixture");
   await page.emulateMedia({ reducedMotion: "reduce" });
