@@ -270,6 +270,10 @@ export function isThreadSnapshotEvent(event: ProductEvent): boolean {
   );
 }
 
+export function isGroupMemberModelPinEvent(event: ProductEvent): boolean {
+  return event.type === "group.memberModelPin.set" || event.type === "group.memberModelPin.cleared";
+}
+
 export function reduceThreadSnapshot(
   prev: ThreadSnapshot | null,
   event: ProductEvent,

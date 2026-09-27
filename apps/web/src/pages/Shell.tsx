@@ -196,6 +196,7 @@ import {
   computerPanelNeedsMaintenance,
   computerTakeoverBlocked,
   isComputerStatusEvent,
+  isGroupMemberModelPinEvent,
   isThreadSnapshotEvent,
   prependThreadMessagePage,
   reconcileRefreshedThread,
@@ -1340,6 +1341,9 @@ export function ShellPage({
           computerRef,
         ),
       onEvent: (event) => {
+        if (isGroupMemberModelPinEvent(event)) {
+          void refreshBots().catch(() => undefined);
+        }
         if (event.type === "thread.message.created" && event.payload.role === "bot") {
           readVisibleGroups.current.delete(groupId);
           markVisibleGroupRead();
@@ -3721,6 +3725,18 @@ export function ShellPage({
                     current.map((group) => (group.id === updated.id ? updated : group)),
                   );
                   await refreshGroupThread(activeGroup.id).catch(() => undefined);
+                }}
+                onReloadMember={async (member) => {
+                  const latest = (await rpc.groups.list()).find(
+                    (group) => group.id === activeGroup.id,
+                  );
+                  if (!latest) return undefined;
+                  setGroups((current) =>
+                    current.map((group) => (group.id === latest.id ? latest : group)),
+                  );
+                  return latest.members.find(
+                    (item) => item.memberId === member.memberId || item.botId === member.botId,
+                  );
                 }}
                 goal={goal?.groupId === activeGroup.id ? goal : null}
                 canManageGoal={Boolean(bootstrapMe?.isDeploymentOwner)}

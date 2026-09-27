@@ -17,6 +17,7 @@ import {
   computerPanelAutoUsesBoot,
   computerPanelNeedsMaintenance,
   computerTakeoverBlocked,
+  isGroupMemberModelPinEvent,
   isThreadSnapshotEvent,
   mergeThreadSnapshot,
   prependThreadMessagePage,
@@ -28,6 +29,11 @@ import {
 } from "./thread-events.js";
 
 describe("thread event reduction", () => {
+  it("recognizes either member pin event for a group refresh", () => {
+    expect(isGroupMemberModelPinEvent(event({ type: "group.memberModelPin.set" }))).toBe(true);
+    expect(isGroupMemberModelPinEvent(event({ type: "group.memberModelPin.cleared" }))).toBe(true);
+    expect(isGroupMemberModelPinEvent(event({ type: "run.started" }))).toBe(false);
+  });
   it.each(["queued", "leased", "running", "waiting_input", "waiting_takeover"] as const)(
     "keeps the admitted member pin visible while %s",
     (status) => {

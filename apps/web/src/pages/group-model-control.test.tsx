@@ -198,6 +198,62 @@ describe("group model control", () => {
     );
   });
 
+  it("reloads a conflicting member so the next save uses the fresh revision", async () => {
+    const stale = { ...member, modelPinRevision: 1, runtimePin: pin };
+    const fresh = { ...stale, modelPinRevision: 2 };
+    const save = vi.fn(async (value: GroupMember) => {
+      if (value.modelPinRevision !== 2) {
+        throw Object.assign(new Error("This member's model changed. Reload the group."), {
+          code: "CONFLICT",
+        });
+      }
+    });
+    const reload = vi.fn(async () => fresh);
+    await act(async () =>
+      root.render(
+        <GroupModelControl
+          member={stale}
+          bot={bot}
+          settings={settings}
+          onSave={save}
+          onReload={reload}
+        />,
+      ),
+    );
+    const select = container.querySelector("select")!;
+    await change(select, "");
+    await act(async () => container.querySelector<HTMLButtonElement>("button:last-child")!.click());
+    expect(reload).toHaveBeenCalledOnce();
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      "This member's model changed. Reload the group.",
+    );
+    await act(async () => container.querySelector<HTMLButtonElement>("button:last-child")!.click());
+    expect(save).toHaveBeenLastCalledWith(fresh, expect.objectContaining({ modelId: "model-a" }));
+  });
+
+  it("restores inheritance when a conflict reload finds a cleared override", async () => {
+    const stale = { ...member, modelPinRevision: 1, runtimePin: pin };
+    const fresh = { ...member, modelPinRevision: 2, runtimePin: null };
+    const save = vi.fn(async () => {
+      throw Object.assign(new Error("This member's model changed. Reload the group."), {
+        code: "CONFLICT",
+      });
+    });
+    await act(async () =>
+      root.render(
+        <GroupModelControl
+          member={stale}
+          bot={bot}
+          settings={settings}
+          onSave={save}
+          onReload={vi.fn(async () => fresh)}
+        />,
+      ),
+    );
+    await act(async () => container.querySelector<HTMLButtonElement>("button:last-child")!.click());
+    expect(container.querySelector("select")?.value).toBe("");
+  });
+
   it("disables edits for an unsaved member", async () => {
     const save = await render(undefined);
     expect(container.querySelector("select")?.disabled).toBe(true);
@@ -289,6 +345,86 @@ describe("group model control", () => {
     expect(container.querySelector('[aria-label="Using model-old"]')).not.toBeNull();
     expect(container.textContent).toContain("Next run");
     expect(container.textContent).toContain("model-a");
+  });
+
+  it("discloses an inherited effort change with the same model", async () => {
+    const inheritedSettings = {
+      ...settings!,
+      credentials: settings!.credentials.map((item) => ({
+        ...item,
+        thinkingLevel: "high" as const,
+      })),
+    };
+    await act(async () =>
+      root.render(
+        <BotModelChip
+          bot={{
+            ...bot,
+            modelProvider: null,
+            modelId: null,
+            modelCredentialId: null,
+            thinkingLevel: null,
+          }}
+          settings={inheritedSettings}
+          nextPin={null}
+          display="using"
+          run={{ runtimePin: { ...pin, effort: "low" } }}
+        />,
+      ),
+    );
+    expect(container.querySelector("details")?.textContent).toContain("high");
+  });
+
+  it("discloses an explicit effort change with the same model", async () => {
+    await act(async () =>
+      root.render(
+        <BotModelChip
+          bot={bot}
+          settings={settings}
+          nextPin={{ ...pin, effort: "high" }}
+          display="using"
+          run={{ runtimePin: pin }}
+        />,
+      ),
+    );
+    expect(container.querySelector("details")?.textContent).toContain("high");
+  });
+
+  it("discloses provider and connection changes even when the model ID stays the same", async () => {
+    await act(async () =>
+      root.render(
+        <BotModelChip
+          bot={bot}
+          settings={settings}
+          nextPin={{
+            ...pin,
+            provider: "other-provider",
+            credentialId: "other-connection",
+            revision: 2,
+          }}
+          display="using"
+          run={{ runtimePin: pin }}
+        />,
+      ),
+    );
+    const details = container.querySelector("details")!;
+    expect(details.textContent).toContain("other-provider");
+    expect(details.textContent).toContain("other-connection");
+  });
+
+  it("ignores revision-only changes in the next-run disclosure", async () => {
+    await act(async () =>
+      root.render(
+        <BotModelChip
+          bot={bot}
+          settings={settings}
+          nextPin={{ ...pin, revision: 99 }}
+          display="using"
+          run={{ runtimePin: pin }}
+        />,
+      ),
+    );
+    expect(container.querySelector("details")).toBeNull();
   });
 
   it("keeps the change chip on the saved bot choice after an older run fails", async () => {

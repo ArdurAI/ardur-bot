@@ -66,6 +66,45 @@ export function effectiveBotModel(
   };
 }
 
+function nextBotPin(bot: Bot, settings: ModelSettings | null): Omit<RuntimePin, "revision"> {
+  const overridden = Boolean(
+    bot.modelProvider != null || bot.modelId != null || bot.modelCredentialId != null,
+  );
+  const provider = overridden ? bot.modelProvider : (settings?.me.defaultProvider ?? null);
+  const modelId = overridden ? bot.modelId : (settings?.me.defaultModel ?? null);
+  const credential = settings?.credentials.find((item) =>
+    bot.modelCredentialId
+      ? item.id === bot.modelCredentialId && item.provider === provider
+      : item.provider === provider && item.modelId === modelId,
+  );
+  const entry = settings?.catalog.find((item) => item.provider === provider && item.id === modelId);
+  return {
+    runtimeKind: bot.runtimeKind ?? "pi",
+    provider,
+    modelId,
+    effort:
+      bot.thinkingLevel ??
+      (overridden
+        ? null
+        : (credential?.thinkingLevel ??
+          spaceDefaultEffort(
+            credential?.reasoning ?? entry?.reasoning,
+            credential?.thinkingLevels ?? entry?.thinkingLevels,
+          ))),
+    credentialId: bot.modelCredentialId ?? credential?.id ?? null,
+  };
+}
+
+function sameSelection(a: Omit<RuntimePin, "revision">, b: Omit<RuntimePin, "revision">): boolean {
+  return (
+    a.runtimeKind === b.runtimeKind &&
+    a.provider === b.provider &&
+    a.modelId === b.modelId &&
+    a.effort === b.effort &&
+    a.credentialId === b.credentialId
+  );
+}
+
 export function BotModelChip({
   bot,
   settings,
@@ -105,15 +144,19 @@ export function BotModelChip({
       : (model.effortLabel ?? model.thinkingLevel);
   const label = `${displayBot.runtimeKind && displayBot.runtimeKind !== "pi" ? "" : "Ardur · "}${model.providerLabel} · ${model.label}${effort ? ` · ${effort}` : ""}${model.unavailable ? t` · not available` : ""}`;
   const currentId = requested?.modelId ?? displayBot.modelId ?? model.label;
-  const inheritedId = bot.modelId ?? settings?.me.defaultModel ?? null;
-  const inheritedProvider = bot.modelProvider ?? settings?.me.defaultProvider ?? null;
-  const nextId = nextPin?.modelId ?? inheritedId;
+  const next = nextPin ?? nextBotPin(bot, settings);
+  const connection = settings?.credentials.find((item) => item.id === next.credentialId);
+  const nextLabel = [
+    runtimeNames[next.runtimeKind],
+    next.provider,
+    next.modelId,
+    next.effort,
+    connection?.label ?? next.credentialId,
+  ]
+    .filter(Boolean)
+    .join(" · ");
   const nextDiffers =
-    display === "using" &&
-    run?.runtimePin &&
-    (nextPin
-      ? JSON.stringify(run.runtimePin) !== JSON.stringify(nextPin)
-      : nextId !== run.runtimePin.modelId || inheritedProvider !== run.runtimePin.provider);
+    display === "using" && run?.runtimePin && !sameSelection(run.runtimePin, next);
   return (
     <span className="inline-flex min-w-0 items-center gap-1">
       {onClick ? (
@@ -156,7 +199,7 @@ export function BotModelChip({
           <summary>
             <Trans>Next run</Trans>
           </summary>
-          <span>{nextId ?? t`Same as bot`}</span>
+          <span>{nextLabel || t`Same as bot`}</span>
         </details>
       ) : null}
     </span>

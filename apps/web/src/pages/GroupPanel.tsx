@@ -170,6 +170,7 @@ export function GroupSettings({
   onStartGoal,
   onSave,
   onModelPin,
+  onReloadMember,
   modelSettings,
   onRemove,
 }: {
@@ -193,6 +194,7 @@ export function GroupSettings({
     member: GroupMember,
     pin: SetGroupMemberModelPinInput["pin"] | null,
   ) => Promise<void>;
+  onReloadMember?: (member: GroupMember) => Promise<GroupMember | undefined>;
   modelSettings: ModelSettings | null;
   onRemove: () => Promise<void>;
 }) {
@@ -304,6 +306,7 @@ export function GroupSettings({
             bot={bot}
             settings={modelSettings}
             onSave={onModelPin}
+            onReload={onReloadMember}
           />
         );
       })}

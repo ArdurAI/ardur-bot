@@ -19,15 +19,18 @@ export function GroupModelControl({
   bot,
   settings,
   onSave,
+  onReload,
 }: {
   member?: GroupMember;
   bot: Bot;
   settings: ModelSettings | null;
   onSave: (member: GroupMember, pin: SetGroupMemberModelPinInput["pin"] | null) => Promise<void>;
+  onReload?: (member: GroupMember) => Promise<GroupMember | undefined>;
 }) {
   const { t } = useLingui();
   const id = useId();
-  const confirmed = member?.runtimePin ?? null;
+  const [activeMember, setActiveMember] = useState(member);
+  const confirmed = activeMember?.runtimePin ?? null;
   const [inherit, setInherit] = useState(!confirmed);
   const [kind, setKind] = useState<RuntimeKind>(confirmed?.runtimeKind ?? "pi");
   const [key, setKey] = useState(
@@ -52,6 +55,9 @@ export function GroupModelControl({
     selectedCredential?.thinkingLevel ??
     spaceDefaultEffort(selectedCredential?.reasoning ?? selectedEntry?.reasoning, supportedEffort);
   useEffect(() => {
+    setActiveMember(member);
+  }, [member?.memberId, member?.modelPinRevision]);
+  useEffect(() => {
     setInherit(!confirmed);
     setKind(confirmed?.runtimeKind ?? "pi");
     setKey(
@@ -60,10 +66,10 @@ export function GroupModelControl({
         : "",
     );
     setEffort(confirmed?.effort ?? "");
-  }, [member?.memberId, member?.modelPinRevision]);
+  }, [activeMember?.memberId, activeMember?.modelPinRevision]);
 
   async function save() {
-    if (!member?.memberId || saving) return;
+    if (!activeMember?.memberId || saving) return;
     const selected = parseModelPinOptionKey(key);
     if (!inherit && (!selected?.provider || !selected.modelId || !selected.credentialId)) return;
     const credential = settings?.credentials.find((item) => item.id === selected?.credentialId);
@@ -87,7 +93,7 @@ export function GroupModelControl({
     setError(null);
     try {
       await onSave(
-        member,
+        activeMember,
         inherit
           ? null
           : {
@@ -98,16 +104,25 @@ export function GroupModelControl({
               effort: nextEffort,
             },
       );
-    } catch {
-      setInherit(!confirmed);
-      setKind(confirmed?.runtimeKind ?? "pi");
+    } catch (cause) {
+      const conflict =
+        typeof cause === "object" && cause !== null && "code" in cause && cause.code === "CONFLICT";
+      const reloaded = conflict ? await onReload?.(activeMember).catch(() => undefined) : undefined;
+      if (reloaded) setActiveMember(reloaded);
+      const restored = reloaded ? (reloaded.runtimePin ?? null) : confirmed;
+      setInherit(!restored);
+      setKind(restored?.runtimeKind ?? "pi");
       setKey(
-        confirmed?.provider && confirmed.modelId
-          ? modelPinOptionKey(confirmed.provider, confirmed.modelId, confirmed.credentialId)
+        restored?.provider && restored.modelId
+          ? modelPinOptionKey(restored.provider, restored.modelId, restored.credentialId)
           : "",
       );
-      setEffort(confirmed?.effort ?? "");
-      setError(t`Could not save group model.`);
+      setEffort(restored?.effort ?? "");
+      setError(
+        conflict && cause instanceof Error && cause.message
+          ? cause.message
+          : t`Could not save group model.`,
+      );
     } finally {
       setSaving(false);
     }
@@ -163,7 +178,7 @@ export function GroupModelControl({
           />
         </>
       ) : null}
-      {member?.memberId ? (
+      {activeMember?.memberId ? (
         <details className="mt-2 text-xs text-muted-foreground">
           <summary className="cursor-pointer">
             <Trans>Runtime</Trans>
@@ -198,7 +213,7 @@ export function GroupModelControl({
         size="sm"
         className="mt-2"
         disabled={
-          !member?.memberId ||
+          !activeMember?.memberId ||
           saving ||
           (!inherit && !key) ||
           (kind !== "pi" && !bot.runtimeExperimental)
