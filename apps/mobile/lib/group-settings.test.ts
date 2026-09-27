@@ -96,10 +96,16 @@ const refreshedGroup = {
   ],
 } as unknown as MobileGroup;
 
+const refreshedAgainGroup = {
+  ...refreshedGroup,
+  members: [...refreshedGroup.members, { botId: "bot-d", memberId: "m-d", name: "Bot D", color: "#444" }],
+} as unknown as MobileGroup;
+
 const bots = [
   { id: "bot-a", name: "Bot A", color: "#111" },
   { id: "bot-b", name: "Bot B", color: "#222" },
   { id: "bot-c", name: "Bot C", color: "#333" },
+  { id: "bot-d", name: "Bot D", color: "#444" },
 ] as unknown as MobileBot[];
 
 beforeEach(() => {
@@ -217,6 +223,32 @@ it("keeps edits typed while a member-model save was in flight", async () => {
   // The typed name survives; the untouched member list still adopts C.
   expect(node.querySelector("input")?.value).toBe("Typed During Save");
   expect(lastSelectedMembers).toEqual(["bot-a", "bot-b", "bot-c"]);
+
+  await act(async () => root.unmount());
+});
+
+it("adopts two refreshes delivered before a render without dropping the newest member", async () => {
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  await act(async () => root.render(createElement(GroupSettingsScreen)));
+  const onSaved = lastOnSaved!;
+
+  // Two member-model saves finish in the same tick, each with a newer peer addition.
+  await act(async () => {
+    onSaved(refreshedGroup);
+    onSaved(refreshedAgainGroup);
+  });
+
+  expect(lastSelectedMembers).toEqual(["bot-a", "bot-b", "bot-c", "bot-d"]);
+  expect(node.querySelector("input")?.value).toBe("Renamed by Peer");
+
+  const saveButton = [...node.querySelectorAll("button")].find((b) => b.textContent === "Save");
+  await act(async () => saveButton!.click());
+  // Untouched drafts equal the latest group, so Save must not send a member list at all.
+  expect(rpc).not.toHaveBeenCalledWith(
+    "groups/update",
+    expect.objectContaining({ botIds: expect.anything() }),
+  );
 
   await act(async () => root.unmount());
 });

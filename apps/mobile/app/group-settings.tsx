@@ -23,10 +23,9 @@ export default function GroupSettingsScreen() {
   const router = useRouter();
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const [group, setGroup] = useState<MobileGroup | null>(null);
-  // The last group the drafts were reconciled against; read at call time so a save that
-  // finishes after the user kept typing compares against the current drafts, not a stale render.
+  // The last group the drafts were reconciled against. It advances synchronously wherever the
+  // group is set, so two saves that finish before a render each compare against the previous one.
   const baseline = useRef<MobileGroup | null>(null);
-  baseline.current = group;
   const [bots, setBots] = useState<MobileBot[]>([]);
   const [catalog, setCatalog] = useState<MobileModel[]>([]);
   const [credentials, setCredentials] = useState<MobileModelCredential[]>([]);
@@ -46,6 +45,7 @@ export default function GroupSettingsScreen() {
     ])
       .then(([nextGroup, nextBots]) => {
         if (!nextGroup) throw new Error(t("Group not found"));
+        baseline.current = nextGroup;
         setGroup(nextGroup);
         setName(nextGroup.name);
         setCoordinator(nextGroup.coordinatorBotId ?? null);
@@ -72,6 +72,7 @@ export default function GroupSettingsScreen() {
 
   function onGroupSaved(refreshed: MobileGroup) {
     const base = baseline.current;
+    baseline.current = refreshed;
     if (base) {
       // Functional updates compare the draft as it is now: an edit typed while the
       // request was in flight is kept, an untouched draft adopts the refreshed value.
