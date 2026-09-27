@@ -53,7 +53,9 @@ it("translates Antigravity model and tool failures", () => {
   activateUiLocale("zh-CN");
   try {
     expect(
-      antigravityProblemMessage(runtimePinProblem(pin, "pin-model-unknown", "unrecognised")),
+      antigravityProblemMessage(
+        runtimePinProblem(pin, "pin-model-unknown", "unrecognised", "model-unrecognised"),
+      ),
     ).toContain("无法识别模型 gemini-3.8-flash-low");
     expect(
       antigravityProblemMessage(
@@ -61,9 +63,20 @@ it("translates Antigravity model and tool failures", () => {
           pin,
           "runtime-unavailable",
           "Antigravity tried to use its own tools, which Ardur does not allow yet. The turn was stopped.",
+          "native-tool-attempted",
         ),
       ),
     ).toContain("已停止本轮运行");
+    expect(
+      antigravityProblemMessage(
+        runtimePinProblem(
+          pin,
+          "runtime-unavailable",
+          "Antigravity did not finish in time. Try again.",
+          "timeout",
+        ),
+      ),
+    ).toBe("Antigravity 未能按时完成。请重试。");
   } finally {
     activateUiLocale("en");
   }

@@ -30,6 +30,7 @@ export const RuntimeAvailabilitySchema = z.object({
   runtimeKind: RuntimeKindSchema,
   available: z.boolean(),
   reason: z.string().optional(),
+  reasonId: z.string().optional(),
   version: z.string().optional(),
   signedIn: z.boolean().optional(),
   signInStatus: z.enum(["unknown", "signed-in", "signed-out"]).optional(),
@@ -99,6 +100,7 @@ export const RuntimeProblemSchema = z.object({
   ]),
   pin: RuntimePinSchema,
   reason: z.string(),
+  reasonId: z.string().optional(),
   actions: z.array(z.enum(["connect", "change-pin", "open-docs"])),
 });
 export type RuntimeProblem = z.infer<typeof RuntimeProblemSchema>;
@@ -107,12 +109,14 @@ export function runtimePinProblem(
   pin: RuntimePin,
   code: RuntimeProblem["code"],
   reason: string,
+  reasonId?: string,
 ): RuntimeProblem {
   return {
     kind: "problem",
     code,
     pin,
     reason,
+    ...(reasonId ? { reasonId } : {}),
     actions:
       code === "local-import-rescan" || code === "local-import-item"
         ? []

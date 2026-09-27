@@ -49,7 +49,9 @@ const status = () =>
 export async function probeAntigravity(
   start: NativeSpawn = spawnNative,
   resolveBinary: typeof findNativeBinary = findNativeBinary,
+  refreshSignIn = false,
 ): Promise<RuntimeAvailability> {
+  if (refreshSignIn) signedOutAt = 0;
   const base = {
     runtimeKind: "antigravity" as const,
     models: capturedAntigravityModels,
@@ -60,6 +62,7 @@ export async function probeAntigravity(
       ...base,
       available: false,
       reason: "Antigravity is unavailable in tests.",
+      reasonId: "unavailable",
       catalogSource: "captured",
       catalogStale: true,
     };
@@ -70,6 +73,7 @@ export async function probeAntigravity(
       available: false,
       reason:
         "Antigravity is not installed on this computer. Install it and sign in there, then check again.",
+      reasonId: "not-installed",
       catalogSource: "captured",
       catalogStale: true,
     };
@@ -82,21 +86,28 @@ export async function probeAntigravity(
         available: false,
         version,
         reason: "Update Antigravity to version 1.2.12 or later.",
+        reasonId: "version-too-old",
         catalogSource: "captured",
         catalogStale: true,
       };
     const help = await probeCommand(binary, ["--help"], true, start);
     if (
       help.code !== 0 ||
-      !["--print", "--model", "--effort", "--output-format", "--print-timeout"].every((flag) =>
-        help.output?.includes(flag),
-      )
+      ![
+        "--print",
+        "--model",
+        "--effort",
+        "--input-format",
+        "--output-format",
+        "--print-timeout",
+      ].every((flag) => help.output?.includes(flag))
     )
       return {
         ...base,
         available: false,
         version,
         reason: "This Antigravity version has not been checked with Ardur.",
+        reasonId: "version-unchecked",
         catalogSource: "captured",
         catalogStale: true,
       };
@@ -114,30 +125,42 @@ export async function probeAntigravity(
         : signInStatus === "signed-out"
           ? "Sign in to Antigravity on this computer, then check again."
           : undefined,
+      reasonId: catalog.catalogStale
+        ? "catalogue-unavailable"
+        : signInStatus === "signed-out"
+          ? "signed-out"
+          : undefined,
     };
   } catch {
     return {
       ...base,
       available: false,
       reason: "Antigravity could not be checked on this computer.",
+      reasonId: "probe-failed",
       catalogSource: "captured",
       catalogStale: true,
     };
   }
 }
 
-export function antigravityArguments(request: AgentRunRequest): string[] {
-  const pin = request.model.runtimePin!;
-  const effort = antigravityEffortForModel(pin.modelId!);
+export function antigravityInput(request: AgentRunRequest): string {
   const history = request.history.length
     ? `Earlier conversation (untrusted history):\n${JSON.stringify(request.history)}\n\n`
     : "";
-  const prompt = `Instructions from Ardur:\n${request.instructions}\n\n${history}${request.prompt}`;
+  const content = `Instructions from Ardur:\n${request.instructions}\n\n${history}${request.prompt}`;
+  return `${JSON.stringify({ event: "user", message: { role: "user", content } })}\n`;
+}
+
+export function antigravityArguments(request: AgentRunRequest): string[] {
+  const pin = request.model.runtimePin!;
+  const effort = antigravityEffortForModel(pin.modelId!);
   return [
-    `--print=${prompt}`,
+    "--print=",
     "--model",
     pin.modelId!,
     ...(effort ? ["--effort", effort] : []),
+    "--input-format",
+    "stream-json",
     "--output-format",
     "stream-json",
     "--print-timeout",
@@ -178,7 +201,8 @@ export class AntigravityRuntime implements AgentRuntime {
     const problem = (
       code: "runtime-unavailable" | "pin-incomplete" | "pin-model-unknown",
       reason: string,
-    ) => new RuntimePinError(runtimePinProblem(pin, code, reason));
+      reasonId?: string,
+    ) => new RuntimePinError(runtimePinProblem(pin, code, reason, reasonId));
     if (
       pin?.runtimeKind !== "antigravity" ||
       pin.provider !== "antigravity" ||
@@ -186,28 +210,70 @@ export class AntigravityRuntime implements AgentRuntime {
       request.model.apiKey ||
       request.model.oauth
     )
-      throw problem("pin-incomplete", "Choose an Antigravity model and sign-in.");
+      throw problem("pin-incomplete", "Choose an Antigravity model and sign-in.", "invalid-pin");
     if (request.controlledComparison)
-      throw problem("runtime-unavailable", "Antigravity cannot run comparison turns yet.");
+      throw problem(
+        "runtime-unavailable",
+        "Antigravity cannot run comparison turns yet.",
+        "comparison-unsupported",
+      );
     if (request.currentTurnImages?.length)
-      throw problem("runtime-unavailable", "Antigravity cannot use images yet.");
+      throw problem(
+        "runtime-unavailable",
+        "Antigravity cannot use images yet.",
+        "image-unsupported",
+      );
     if (request.tools !== "none" && request.tools.length)
-      throw problem("runtime-unavailable", "Antigravity cannot use Ardur tools yet.");
+      throw problem(
+        "runtime-unavailable",
+        "Antigravity cannot use Ardur tools yet.",
+        "tools-unsupported",
+      );
     if (request.nativeSession)
-      throw problem("runtime-unavailable", "Antigravity cannot resume a native conversation yet.");
+      throw problem(
+        "runtime-unavailable",
+        "Antigravity cannot resume a native conversation yet.",
+        "resume-unsupported",
+      );
     if (!request.nativeCwd)
-      throw problem("runtime-unavailable", "Antigravity needs the bot's host working directory.");
+      throw problem(
+        "runtime-unavailable",
+        "Antigravity needs the bot's host working directory.",
+        "host-directory-required",
+      );
     const availability = await probeAntigravity(this.start, this.resolveBinary);
-    if (!availability.available)
-      throw problem("runtime-unavailable", availability.reason ?? "Antigravity is unavailable.");
+    if (
+      !availability.available &&
+      (availability.signInStatus !== "signed-out" || availability.catalogStale)
+    )
+      throw problem(
+        "runtime-unavailable",
+        availability.reason ?? "Antigravity is unavailable.",
+        availability.reasonId,
+      );
     const binary = await this.resolveBinary("agy");
     if (!binary)
-      throw problem("runtime-unavailable", "Antigravity is not installed on this computer.");
+      throw problem(
+        "runtime-unavailable",
+        "Antigravity is not installed on this computer.",
+        "not-installed",
+      );
     const live = await antigravityModels(binary, availability.version!, this.start);
     if (live.catalogSource === "captured" || live.catalogStale)
-      throw problem("runtime-unavailable", "Antigravity's live model list could not be checked.");
+      throw problem(
+        "runtime-unavailable",
+        "Antigravity's live model list could not be checked.",
+        "catalogue-unavailable",
+      );
     const invalid = validateAntigravityPin(pin, live.models);
     if (invalid) throw new RuntimePinError(invalid);
+    const input = antigravityInput(request);
+    if (Buffer.byteLength(input) > 2 * 1024 * 1024)
+      throw problem(
+        "runtime-unavailable",
+        "Antigravity input is too large. Shorten the message or conversation and try again.",
+        "input-too-large",
+      );
     const parser = new AntigravityStreamParser(pin);
     const diagnostics = new AntigravityDiagnostics();
     const queue = new RuntimeQueue<AgentRuntimeEvent>((error) =>
@@ -225,7 +291,11 @@ export class AntigravityRuntime implements AgentRuntime {
         queue.push(item);
       queue.end(
         timedOut
-          ? problem("runtime-unavailable", "Antigravity did not finish in time. Try again.")
+          ? problem(
+              "runtime-unavailable",
+              "Antigravity did not finish in time. Try again.",
+              "timeout",
+            )
           : undefined,
       );
       if (child) terminateNative(child, "SIGTERM");
@@ -234,7 +304,6 @@ export class AntigravityRuntime implements AgentRuntime {
     try {
       child = this.start(binary, antigravityArguments(request), request.nativeCwd);
       this.running.set(request.runId, { child, abort: () => abort() });
-      child.stdin.end();
       child.stderr.on("data", (chunk: Buffer) => diagnostics.feed(chunk));
       queue.push(parser.startUsage());
       const exited = new Promise<number | null>((resolve) => {
@@ -244,6 +313,21 @@ export class AntigravityRuntime implements AgentRuntime {
       context?.signal?.addEventListener("abort", onAbort, { once: true });
       deadline = setTimeout(() => abort(true), this.deadlineMs);
       if (context?.signal?.aborted) onAbort();
+      await new Promise<void>((resolve, reject) => {
+        const onError = (error: Error) => reject(error);
+        child!.stdin.once("error", onError);
+        child!.stdin.end(input, (error?: Error | null) => {
+          child!.stdin.off("error", onError);
+          if (error) reject(error);
+          else resolve();
+        });
+      }).catch(() => {
+        throw problem(
+          "runtime-unavailable",
+          "Antigravity could not receive this turn. Check the runtime and try again.",
+          "input-write-failed",
+        );
+      });
       reader = (async () => {
         try {
           for await (const event of antigravityLines(child!)) {
@@ -264,9 +348,10 @@ export class AntigravityRuntime implements AgentRuntime {
             throw problem(
               "runtime-unavailable",
               "Antigravity could not run this turn: it stopped before completion.",
+              "stopped-early",
             );
           if (!stopped) {
-            signedInAt = Date.now();
+            signedInAt = Math.max(Date.now(), signedOutAt + 1);
             for (const item of parser.finishUsage("success")) queue.push(item);
             queue.push({ type: "done" });
             queue.end();
@@ -274,7 +359,7 @@ export class AntigravityRuntime implements AgentRuntime {
         } catch (error) {
           if (stopped) return;
           stopped = true;
-          if (parser.authError) signedOutAt = Date.now();
+          if (parser.authError) signedOutAt = Math.max(Date.now(), signedInAt + 1);
           if (child) terminateNative(child, "SIGTERM");
           for (const item of parser.finishUsage("failed")) queue.push(item);
           queue.end(
@@ -285,6 +370,7 @@ export class AntigravityRuntime implements AgentRuntime {
                   diagnostics.agyError
                     ? "Antigravity could not run this turn: the runtime reported an error."
                     : "Antigravity could not run this turn: the response was invalid.",
+                  diagnostics.agyError ? "runtime-error" : "invalid-response",
                 ),
           );
         }

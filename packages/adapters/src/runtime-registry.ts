@@ -52,11 +52,19 @@ export class RuntimeRegistry {
         models: [],
       }),
     );
-    if (!availability.available)
+    if (
+      !availability.available &&
+      !(
+        pin.runtimeKind === "antigravity" &&
+        availability.signInStatus === "signed-out" &&
+        availability.catalogStale === false
+      )
+    )
       return runtimePinProblem(
         pin,
         "runtime-unavailable",
         availability.reason ?? "The pinned runtime is unavailable — change the pin.",
+        availability.reasonId,
       );
     if (pin.runtimeKind !== "pi") {
       const model = availability.models.find((entry) => entry.id === pin.modelId);
@@ -111,7 +119,10 @@ export function createRuntimeRegistry(pi: AgentRuntime) {
   });
 }
 
-export async function nativeRuntimeAvailability(kind: RuntimeKind): Promise<RuntimeAvailability> {
+export async function nativeRuntimeAvailability(
+  kind: RuntimeKind,
+  refresh = false,
+): Promise<RuntimeAvailability> {
   if (kind === "pi") return { runtimeKind: kind, available: true, models: [] };
   if (usesHostBridge()) {
     const health = await createHostClient().health();
@@ -131,5 +142,5 @@ export async function nativeRuntimeAvailability(kind: RuntimeKind): Promise<Runt
     ? probeClaude()
     : kind === "codex-app-server"
       ? probeCodex()
-      : probeAntigravity();
+      : probeAntigravity(undefined, undefined, refresh);
 }

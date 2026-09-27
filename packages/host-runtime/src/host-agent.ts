@@ -98,13 +98,13 @@ export class HostAgent {
       })),
     );
   }
-  async health(): Promise<HostHealth> {
+  async health(refreshSignIn = false): Promise<HostHealth> {
     const cwd = await confinedHostCwd(this.config.root, [this.config.root]);
     const start: NativeSpawn = (binary, args) => spawnNative(binary, args, cwd);
     const [claude, codex, antigravity, environment, integrations] = await Promise.all([
       probeClaude(start),
       probeCodex(start),
-      probeAntigravity(start),
+      probeAntigravity(start, undefined, refreshSignIn),
       inspectHostEnvironment(getHostEnvironment(), false),
       inspectHostIntegrations(),
     ]);
@@ -247,7 +247,7 @@ export class HostAgent {
       } else if (op.op === "computer.remote.call") {
         await this.fleet.call(op, context, send);
       } else if (op.op === "host.health") {
-        await send("result", await this.health());
+        await send("result", await this.health(op.refreshSignIn));
       } else if (op.op === "board.run") {
         const result = await new BoardRunner({ root: this.config.root, hostRoots: this.roots }).run(
           op.request,

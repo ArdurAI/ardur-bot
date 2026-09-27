@@ -119,6 +119,7 @@ import {
   OPENAI_COMPATIBLE_PROVIDER_ID,
   usableModelId,
 } from "@ardurbot/contracts";
+import { HostHealthSchema } from "@ardurbot/contracts/host-bridge";
 import { LOCAL_IMPORT_INVALID_FOLDER_CODE } from "@ardurbot/contracts/local-import";
 import { appContract } from "@ardurbot/contracts/rpc";
 import {
@@ -1028,7 +1029,20 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
     runtimes: {
       availability: authed.runtimes.availability.handler(async ({ context, input }) => {
         if (process.env.ARDURBOT_HOST_BRIDGE === "api" && input.runtimeKind !== "pi") {
-          const health = (await deps.hostBridge?.status(context.actor.userId))?.health;
+          const host = await deps.hostBridge?.status(context.actor.userId);
+          const health =
+            input.refresh && host?.configured && host.connected && deps.hostBridge
+              ? HostHealthSchema.parse(
+                  await deps.hostBridge.fleetResult(
+                    { op: "host.health", refreshSignIn: input.runtimeKind === "antigravity" },
+                    {
+                      userId: context.actor.userId,
+                      spaceId: context.actor.spaceId,
+                      signal: context.signal,
+                    },
+                  ),
+                )
+              : host?.health;
           return (
             health?.[nativeRuntimeHealthKeys[input.runtimeKind]] ?? {
               runtimeKind: input.runtimeKind,
@@ -1051,7 +1065,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
             models: [],
             reason: NATIVE_HOST_OWNER_MESSAGE,
           };
-        return nativeRuntimeAvailability(input.runtimeKind);
+        return nativeRuntimeAvailability(input.runtimeKind, input.refresh);
       }),
       connectCodex: authed.runtimes.connectCodex.handler(async ({ context }) => {
         if (!(await nativeHostOwner(deps.prisma, context.actor.userId)))

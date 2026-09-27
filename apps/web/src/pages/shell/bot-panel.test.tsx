@@ -1144,6 +1144,7 @@ it("renders Antigravity's model failure with the pinned model", async () => {
             revision: 1,
           },
           reason: "unrecognised",
+          reasonId: "model-unrecognised",
           actions: ["change-pin"],
         }}
       />,

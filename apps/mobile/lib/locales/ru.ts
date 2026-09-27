@@ -1,5 +1,19 @@
 export const RU_MESSAGES: Record<string, string> = {
   Antigravity: "Antigravity",
+  "Antigravity did not finish in time. Try again.":
+    "Antigravity не завершил запрос вовремя. Повторите попытку.",
+  "Antigravity's live model list could not be checked. Check again.":
+    "Не удалось проверить актуальный список моделей Antigravity. Проверьте ещё раз.",
+  "Update Antigravity to version 1.2.12 or later.":
+    "Обновите Antigravity до версии 1.2.12 или новее.",
+  "Antigravity cannot use images yet. Remove the image and try again.":
+    "Antigravity пока не поддерживает изображения. Удалите изображение и повторите попытку.",
+  "Antigravity cannot run comparison turns yet. Choose another runtime.":
+    "Antigravity пока не поддерживает сравнение. Выберите другую среду выполнения.",
+  "Antigravity input is too large. Shorten the message or conversation and try again.":
+    "Входные данные Antigravity слишком велики. Сократите сообщение или историю и повторите попытку.",
+  "Antigravity could not run this turn. Check the runtime and try again.":
+    "Antigravity не смог выполнить этот запрос. Проверьте среду выполнения и повторите попытку.",
   "Antigravity tried to use its own tools, which Ardur does not allow yet. The turn was stopped.":
     "Antigravity попытался использовать собственные инструменты, которые Ardur пока не разрешает. Выполнение остановлено.",
   "Antigravity did not recognise the model {model}. Pick a model from its list.":

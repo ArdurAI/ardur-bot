@@ -749,11 +749,37 @@ msgstr "Answered: {answer}"
 msgid "Antigravity"
 msgstr "Antigravity"
 
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity cannot run comparison turns yet. Choose another runtime."
+msgstr "Antigravity cannot run comparison turns yet. Choose another runtime."
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity cannot use images yet. Remove the image and try again."
+msgstr "Antigravity cannot use images yet. Remove the image and try again."
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity could not run this turn. Check the runtime and try again."
+msgstr "Antigravity could not run this turn. Check the runtime and try again."
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity did not finish in time. Try again."
+msgstr "Antigravity did not finish in time. Try again."
+
+#. placeholder {0}: pin.modelId ?? ""
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity did not recognise the model {0}. Pick a model from its list."
+msgstr "Antigravity did not recognise the model {0}. Pick a model from its list."
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity input is too large. Shorten the message or conversation and try again."
+msgstr "Antigravity input is too large. Shorten the message or conversation and try again."
+
 #. placeholder {0}: availability.version
 #: src/pages/shell/runtime-settings.tsx
 msgid "Antigravity is installed (version {0})"
 msgstr "Antigravity is installed (version {0})"
 
+#: src/pages/shell/provider-error-message.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Antigravity is not installed on this computer. Install it and sign in there, then check again."
 msgstr "Antigravity is not installed on this computer. Install it and sign in there, then check again."
@@ -761,6 +787,14 @@ msgstr "Antigravity is not installed on this computer. Install it and sign in th
 #: src/pages/shell/runtime-settings.tsx
 msgid "Antigravity runs on a connected host computer."
 msgstr "Antigravity runs on a connected host computer."
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity tried to use its own tools, which Ardur does not allow yet. The turn was stopped."
+msgstr "Antigravity tried to use its own tools, which Ardur does not allow yet. The turn was stopped."
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity's live model list could not be checked. Check again."
+msgstr "Antigravity's live model list could not be checked. Check again."
 
 #: src/pages/ModelDestinations.tsx
 msgid "Any"
@@ -7164,6 +7198,7 @@ msgstr "Sign in"
 msgid "Sign in again to manage sessions."
 msgstr "Sign in again to manage sessions."
 
+#: src/pages/shell/provider-error-message.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Sign in to Antigravity on this computer, then check again."
 msgstr "Sign in to Antigravity on this computer, then check again."
@@ -7205,6 +7240,7 @@ msgstr "Sign-in is needed. Connect again."
 msgid "Sign-in timed out."
 msgstr "Sign-in timed out."
 
+#: src/pages/shell/provider-error-message.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Sign-in unknown until the first run"
 msgstr "Sign-in unknown until the first run"
@@ -8084,6 +8120,10 @@ msgstr "Up to date"
 msgid "Update"
 msgstr "Update"
 
+#: src/pages/shell/provider-error-message.tsx
+msgid "Update Antigravity to version 1.2.12 or later."
+msgstr "Update Antigravity to version 1.2.12 or later."
+
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Update available"
 msgstr "Update available"
@@ -8498,15 +8538,3 @@ msgstr "Your team of always-on agents<0/>that you can give real work to."
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr "Yours"
-
-#: src/pages/shell/provider-error-message.tsx
-msgid "Antigravity tried to use its own tools, which Ardur does not allow yet. The turn was stopped."
-msgstr "Antigravity tried to use its own tools, which Ardur does not allow yet. The turn was stopped."
-
-#: src/pages/shell/provider-error-message.tsx
-msgid "Antigravity did not recognise the model {0}. Pick a model from its list."
-msgstr "Antigravity did not recognise the model {0}. Pick a model from its list."
-
-#: src/pages/shell/provider-error-message.tsx
-msgid "Antigravity could not run this turn: {0}."
-msgstr "Antigravity could not run this turn: {0}."

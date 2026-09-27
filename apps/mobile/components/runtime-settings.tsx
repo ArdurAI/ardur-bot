@@ -40,7 +40,10 @@ export function RuntimeSettings({
     setError(null);
     if (kind === "pi") return;
     let active = true;
-    void rpc<RuntimeAvailability>("runtimes/availability", { runtimeKind: kind })
+    void rpc<RuntimeAvailability>("runtimes/availability", {
+      runtimeKind: kind,
+      refresh: refresh > 0,
+    })
       .then((value) => {
         if (active) setAvailability(value);
       })

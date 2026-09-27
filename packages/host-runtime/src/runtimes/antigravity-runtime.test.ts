@@ -72,7 +72,58 @@ describe("Antigravity fake process", () => {
     expect(args).toContain("--model");
     expect(args).toContain("--effort");
     expect(args).not.toContain("--dangerously-skip-permissions");
-    expect(args).not.toContain("--input-format");
+    expect(args).toContain("--input-format");
+    expect(args).toContain("--print=");
+    expect(args.join(" ")).not.toContain("Do the task");
+  });
+  it("sends content above 200,000 bytes without putting it in argv", async () => {
+    const f = fixture("你".repeat(70_000));
+    expect(Buffer.byteLength(f.request.prompt)).toBeGreaterThanOrEqual(200_000);
+    expect((await f.collect()).at(-1)).toEqual({ type: "done" });
+    expect(f.calls.at(-1)?.join(" ")).not.toContain("你");
+  });
+  it("bounds the stdin event before spawning", async () => {
+    const f = fixture("x".repeat(2 * 1024 * 1024));
+    await expect(f.collect()).rejects.toMatchObject({
+      problem: { code: "runtime-unavailable", reasonId: "input-too-large" },
+    });
+    expect(f.calls.some((args) => args[0] === "--print=")).toBe(false);
+  });
+  it("surfaces a stdin write error as runtime-unavailable", async () => {
+    const f = fixture();
+    const start: NativeSpawn = (binary, args, cwd) => {
+      const child = f.start(binary, args, cwd);
+      if (args[0] === "--print=") child.stdin.destroy(new Error("fake write failure"));
+      return child;
+    };
+    const runtime = new AntigravityRuntime(start, f.resolveBinary);
+    const collect = async () => {
+      for await (const _event of runtime.run(f.request)) {
+        /* consume */
+      }
+    };
+    await expect(collect()).rejects.toMatchObject({
+      problem: { code: "runtime-unavailable", reasonId: "input-write-failed" },
+    });
+  });
+  it.each([
+    ['{"event":"user"}\n', 'missing the "message" field'],
+    ['{"event":"user","message":{"role":"user"}}\n', "has no content"],
+    ['{"event":"user","message":"bare string"}\n', "could not decode"],
+  ])("rejects malformed stdin events", async (input, expected) => {
+    const child = spawn(
+      process.execPath,
+      [script, "--print=", "--input-format", "stream-json", "--output-format", "stream-json"],
+      { stdio: "pipe" },
+    );
+    let stderr = "";
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+    child.stdin.end(input);
+    const code = await new Promise<number | null>((resolve) => child.once("close", resolve));
+    expect(code).toBe(1);
+    expect(stderr).toContain(expected);
   });
   it.each(["denied-tool", "model-error", "malformed", "premature", "nonzero", "mismatch"])(
     "fails closed for %s",
@@ -128,6 +179,23 @@ describe("Antigravity fake process", () => {
   it("stops a slow turn at the watchdog deadline", async () => {
     const f = fixture("slow", 10);
     await expect(f.collect()).rejects.toMatchObject({ problem: { code: "runtime-unavailable" } });
+  });
+  it("retries immediately after cached sign-out and records success", async () => {
+    const f = fixture("auth-error");
+    await expect(f.collect()).rejects.toMatchObject({ problem: { reasonId: "signed-out" } });
+    expect((await probeAntigravity(f.start, f.resolveBinary)).signInStatus).toBe("signed-out");
+    f.request.prompt = "success";
+    expect((await f.collect()).at(-1)).toEqual({ type: "done" });
+    expect((await probeAntigravity(f.start, f.resolveBinary)).signInStatus).toBe("signed-in");
+  });
+  it("clears cached sign-out on an explicit availability refresh", async () => {
+    const f = fixture("auth-error");
+    await expect(f.collect()).rejects.toMatchObject({ problem: { reasonId: "signed-out" } });
+    expect((await probeAntigravity(f.start, f.resolveBinary)).signInStatus).toBe("signed-out");
+    const runsBeforeRefresh = f.calls.filter((args) => args[0] === "--print=").length;
+    const refreshed = await probeAntigravity(f.start, f.resolveBinary, true);
+    expect(refreshed.signInStatus).not.toBe("signed-out");
+    expect(f.calls.filter((args) => args[0] === "--print=")).toHaveLength(runsBeforeRefresh);
   });
   it("cancels a turn after streamed text without reporting completion", async () => {
     const f = fixture("slow");

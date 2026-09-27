@@ -17,12 +17,18 @@ export function validateAntigravityPin(
     pin.credentialId !== "native:antigravity" ||
     !pin.modelId
   )
-    return runtimePinProblem(pin, "pin-incomplete", "Choose an Antigravity model and sign-in.");
+    return runtimePinProblem(
+      pin,
+      "pin-incomplete",
+      "Choose an Antigravity model and sign-in.",
+      "invalid-pin",
+    );
   if (!models.some((model) => model.id === pin.modelId))
     return runtimePinProblem(
       pin,
       "pin-model-unknown",
       `Antigravity did not recognise the model ${pin.modelId}. Pick a model from its list.`,
+      "model-unrecognised",
     );
   const expected = antigravityEffortForModel(pin.modelId);
   if (
@@ -33,6 +39,7 @@ export function validateAntigravityPin(
       pin,
       "pin-effort-unsupported",
       "This effort does not match the pinned model.",
+      "effort-unsupported",
     );
   return undefined;
 }

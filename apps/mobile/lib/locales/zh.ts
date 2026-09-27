@@ -1,5 +1,17 @@
 export const ZH_MESSAGES: Record<string, string> = {
   Antigravity: "Antigravity",
+  "Antigravity did not finish in time. Try again.": "Antigravity 未能按时完成。请重试。",
+  "Antigravity's live model list could not be checked. Check again.":
+    "无法检查 Antigravity 的实时模型列表。请重新检查。",
+  "Update Antigravity to version 1.2.12 or later.": "请将 Antigravity 更新至 1.2.12 或更高版本。",
+  "Antigravity cannot use images yet. Remove the image and try again.":
+    "Antigravity 暂不支持图片。请移除图片后重试。",
+  "Antigravity cannot run comparison turns yet. Choose another runtime.":
+    "Antigravity 暂不支持对比运行。请选择其他运行环境。",
+  "Antigravity input is too large. Shorten the message or conversation and try again.":
+    "Antigravity 输入过大。请缩短消息或对话后重试。",
+  "Antigravity could not run this turn. Check the runtime and try again.":
+    "Antigravity 无法完成本轮运行。请检查运行环境后重试。",
   "Antigravity tried to use its own tools, which Ardur does not allow yet. The turn was stopped.":
     "Antigravity 尝试使用自己的工具，Ardur 目前尚不允许此操作。已停止本轮运行。",
   "Antigravity did not recognise the model {model}. Pick a model from its list.":

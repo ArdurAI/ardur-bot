@@ -78,15 +78,24 @@ export class AntigravityStreamParser {
   }
   parse(value: Record<string, unknown>): AgentRuntimeEvent[] {
     if (this.finished)
-      throw this.failure("runtime-unavailable", "Antigravity returned an invalid response.");
+      throw this.failure(
+        "runtime-unavailable",
+        "Antigravity returned an invalid response.",
+        "invalid-response",
+      );
     if (value.event === "init") {
       if (this.initialized || !value.init || typeof value.init !== "object")
-        throw this.failure("runtime-unavailable", "Antigravity returned an invalid response.");
+        throw this.failure(
+          "runtime-unavailable",
+          "Antigravity returned an invalid response.",
+          "invalid-response",
+        );
       const init = value.init as Record<string, unknown>;
       if (init.model !== this.pin.modelId)
         throw this.failure(
           "pin-model-unknown",
           `Antigravity did not recognise the model ${this.pin.modelId}. Pick a model from its list.`,
+          "model-unrecognised",
         );
       this.initialized = true;
       this.sessionId =
@@ -95,28 +104,49 @@ export class AntigravityStreamParser {
     }
     if (value.event === "step_update") {
       if (!this.initialized || !value.step_update || typeof value.step_update !== "object")
-        throw this.failure("runtime-unavailable", "Antigravity returned an invalid response.");
+        throw this.failure(
+          "runtime-unavailable",
+          "Antigravity returned an invalid response.",
+          "invalid-response",
+        );
       const step = value.step_update as Record<string, unknown>;
       if (step.step_type === "tool")
         throw this.failure(
           "runtime-unavailable",
           "Antigravity tried to use its own tools, which Ardur does not allow yet. The turn was stopped.",
+          "native-tool-attempted",
         );
       if (step.step_type === "agent_response") {
         if (step.text_delta === undefined) return [];
         if (typeof step.text_delta !== "string")
-          throw this.failure("runtime-unavailable", "Antigravity returned an invalid response.");
+          throw this.failure(
+            "runtime-unavailable",
+            "Antigravity returned an invalid response.",
+            "invalid-response",
+          );
         this.textBytes += Buffer.byteLength(step.text_delta);
         if (this.textBytes > 4 * 1024 * 1024)
-          throw this.failure("runtime-unavailable", "Antigravity returned too much text.");
+          throw this.failure(
+            "runtime-unavailable",
+            "Antigravity returned too much text.",
+            "text-too-large",
+          );
         return [{ type: "text", text: step.text_delta }];
       }
       if (step.step_type === "user_input") return [];
-      throw this.failure("runtime-unavailable", "Antigravity returned an invalid response.");
+      throw this.failure(
+        "runtime-unavailable",
+        "Antigravity returned an invalid response.",
+        "invalid-response",
+      );
     }
     if (value.event === "result") {
       if (!value.result || typeof value.result !== "object")
-        throw this.failure("runtime-unavailable", "Antigravity returned an invalid response.");
+        throw this.failure(
+          "runtime-unavailable",
+          "Antigravity returned an invalid response.",
+          "invalid-response",
+        );
       const result = value.result as Record<string, unknown>;
       this.recordUsage(result.usage);
       if (result.status === "ERROR") {
@@ -125,16 +155,22 @@ export class AntigravityStreamParser {
           throw this.failure(
             "pin-model-unknown",
             `Antigravity did not recognise the model ${this.pin.modelId}. Pick a model from its list.`,
+            "model-unrecognised",
           );
         if (/authentication required|not signed in|sign in required/i.test(error))
           this.authError = true;
         throw this.failure(
           "runtime-unavailable",
           "Antigravity could not run this turn: the runtime reported an error.",
+          this.authError ? "signed-out" : "runtime-error",
         );
       }
       if (!this.initialized)
-        throw this.failure("runtime-unavailable", "Antigravity returned an invalid response.");
+        throw this.failure(
+          "runtime-unavailable",
+          "Antigravity returned an invalid response.",
+          "invalid-response",
+        );
       if (
         result.status !== "SUCCESS" ||
         (result.denied_actions !== undefined &&
@@ -143,20 +179,33 @@ export class AntigravityStreamParser {
         throw this.failure(
           "runtime-unavailable",
           "Antigravity tried to use its own tools, which Ardur does not allow yet. The turn was stopped.",
+          "native-tool-attempted",
         );
       if (typeof result.response !== "string" || !result.response || this.textBytes === 0)
-        throw this.failure("runtime-unavailable", "Antigravity returned an empty response.");
+        throw this.failure(
+          "runtime-unavailable",
+          "Antigravity returned an empty response.",
+          "empty-response",
+        );
       this.finished = true;
       return [];
     }
-    throw this.failure("runtime-unavailable", "Antigravity returned an invalid response.");
+    throw this.failure(
+      "runtime-unavailable",
+      "Antigravity returned an invalid response.",
+      "invalid-response",
+    );
   }
   private recordUsage(observation: unknown) {
     if (
       observation !== undefined &&
       (!observation || typeof observation !== "object" || Array.isArray(observation))
     )
-      throw this.failure("runtime-unavailable", "Antigravity returned invalid usage.");
+      throw this.failure(
+        "runtime-unavailable",
+        "Antigravity returned invalid usage.",
+        "invalid-response",
+      );
     if (observation && typeof observation === "object") {
       const usage = observation as Record<string, unknown>;
       if (
@@ -174,7 +223,11 @@ export class AntigravityStreamParser {
           typeof usage.input_tokens === "number" &&
           usage.cache_read_tokens > usage.input_tokens)
       )
-        throw this.failure("runtime-unavailable", "Antigravity returned invalid usage.");
+        throw this.failure(
+          "runtime-unavailable",
+          "Antigravity returned invalid usage.",
+          "invalid-response",
+        );
       this.usage.snapshot({
         input: usage.input_tokens,
         output: usage.output_tokens,
@@ -183,7 +236,11 @@ export class AntigravityStreamParser {
       });
     }
   }
-  private failure(code: "runtime-unavailable" | "pin-model-unknown", reason: string) {
-    return new RuntimePinError(runtimePinProblem(this.pin, code, reason));
+  private failure(
+    code: "runtime-unavailable" | "pin-model-unknown",
+    reason: string,
+    reasonId: string,
+  ) {
+    return new RuntimePinError(runtimePinProblem(this.pin, code, reason, reasonId));
   }
 }

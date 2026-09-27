@@ -1,0 +1,2 @@
+{"event":"init","conversation_id":"fake-session","init":{"model":"gemini-3.8-flash-low","tools":[]}}
+{"event":"result","result":{"status":"ERROR","response":"","error":"authentication required","usage":{"input_tokens":0,"output_tokens":0,"thinking_tokens":0,"cache_read_tokens":0}}}

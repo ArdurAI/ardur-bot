@@ -749,11 +749,37 @@ msgstr "已回答：{answer}"
 msgid "Antigravity"
 msgstr "Antigravity"
 
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity cannot run comparison turns yet. Choose another runtime."
+msgstr "Antigravity 暂不支持对比运行。请选择其他运行环境。"
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity cannot use images yet. Remove the image and try again."
+msgstr "Antigravity 暂不支持图片。请移除图片后重试。"
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity could not run this turn. Check the runtime and try again."
+msgstr "Antigravity 无法完成本轮运行。请检查运行环境后重试。"
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity did not finish in time. Try again."
+msgstr "Antigravity 未能按时完成。请重试。"
+
+#. placeholder {0}: pin.modelId ?? ""
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity did not recognise the model {0}. Pick a model from its list."
+msgstr "Antigravity 无法识别模型 {0}。请从其列表中选择模型。"
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity input is too large. Shorten the message or conversation and try again."
+msgstr "Antigravity 输入过大。请缩短消息或对话后重试。"
+
 #. placeholder {0}: availability.version
 #: src/pages/shell/runtime-settings.tsx
 msgid "Antigravity is installed (version {0})"
 msgstr "Antigravity 已安装（版本 {0}）"
 
+#: src/pages/shell/provider-error-message.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Antigravity is not installed on this computer. Install it and sign in there, then check again."
 msgstr "此计算机未安装 Antigravity。安装并登录后重新检查。"
@@ -761,6 +787,14 @@ msgstr "此计算机未安装 Antigravity。安装并登录后重新检查。"
 #: src/pages/shell/runtime-settings.tsx
 msgid "Antigravity runs on a connected host computer."
 msgstr "Antigravity 在已连接的主机上运行。"
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity tried to use its own tools, which Ardur does not allow yet. The turn was stopped."
+msgstr "Antigravity 尝试使用自己的工具，Ardur 目前尚不允许此操作。已停止本轮运行。"
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity's live model list could not be checked. Check again."
+msgstr "无法检查 Antigravity 的实时模型列表。请重新检查。"
 
 #: src/pages/ModelDestinations.tsx
 msgid "Any"
@@ -7164,6 +7198,7 @@ msgstr "登录"
 msgid "Sign in again to manage sessions."
 msgstr ""
 
+#: src/pages/shell/provider-error-message.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Sign in to Antigravity on this computer, then check again."
 msgstr "在此计算机登录 Antigravity，然后重新检查。"
@@ -7205,6 +7240,7 @@ msgstr "需要登录。请重新连接。"
 msgid "Sign-in timed out."
 msgstr ""
 
+#: src/pages/shell/provider-error-message.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Sign-in unknown until the first run"
 msgstr "首次运行前无法确定登录状态"
@@ -8084,6 +8120,10 @@ msgstr "已是最新"
 msgid "Update"
 msgstr "更新"
 
+#: src/pages/shell/provider-error-message.tsx
+msgid "Update Antigravity to version 1.2.12 or later."
+msgstr "请将 Antigravity 更新至 1.2.12 或更高版本。"
+
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Update available"
 msgstr "有可用更新"
@@ -8498,15 +8538,3 @@ msgstr "你的一支随时在线的 Agent 团队<0/>可以交给它们真正的�
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
-
-#: src/pages/shell/provider-error-message.tsx
-msgid "Antigravity tried to use its own tools, which Ardur does not allow yet. The turn was stopped."
-msgstr "Antigravity 尝试使用自己的工具，Ardur 目前尚不允许此操作。已停止本轮运行。"
-
-#: src/pages/shell/provider-error-message.tsx
-msgid "Antigravity did not recognise the model {0}. Pick a model from its list."
-msgstr "Antigravity 无法识别模型 {0}。请从其列表中选择模型。"
-
-#: src/pages/shell/provider-error-message.tsx
-msgid "Antigravity could not run this turn: {0}."
-msgstr "Antigravity 无法完成本轮运行：{0}。"
