@@ -147,6 +147,7 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
               ),
               leaseOwner: "fixture-active",
               leaseFence: 1,
+              leaseExpiresAt: untilAt,
             }
           : {}),
       },
@@ -329,6 +330,37 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
       enqueued,
       deps: { prisma, events: createThreadEvents(prisma), jobs },
     };
+  }
+
+  async function createQuietDelivery(
+    f: Awaited<ReturnType<typeof fixture>>,
+    expiresAt = f.goal.untilAt,
+  ) {
+    const id = randomUUID();
+    return prisma.botMessageDelivery.create({
+      data: {
+        id,
+        spaceId,
+        userId,
+        goalId: f.goal.id,
+        rootTaskId: f.rootTask.id,
+        conversationId: id,
+        senderBotId: f.worker.id,
+        recipientBotId: f.coordinator.id,
+        senderThreadId: f.workerThread.id,
+        recipientThreadId: f.room.id,
+        sourceRunId: f.workerRun.id,
+        intent: "fyi",
+        outboundMessageId: f.parent.inboundMessageId!,
+        inboundMessageId: f.parent.outboundMessageId,
+        state: "delivered",
+        hop: 2,
+        authorityFingerprint: "fixture",
+        requestFingerprint: id,
+        idempotencyKey: `quiet-claim-${id}`,
+        expiresAt,
+      },
+    });
   }
 
   async function completeWorker(f: Awaited<ReturnType<typeof fixture>>, text: string) {
@@ -534,31 +566,7 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
 
   it("replays a quiet delivery after an interrupted fenced claim", async () => {
     const f = await fixture("compatible");
-    const id = randomUUID();
-    await prisma.botMessageDelivery.create({
-      data: {
-        id,
-        spaceId,
-        userId,
-        goalId: f.goal.id,
-        rootTaskId: f.rootTask.id,
-        conversationId: id,
-        senderBotId: f.worker.id,
-        recipientBotId: f.coordinator.id,
-        senderThreadId: f.workerThread.id,
-        recipientThreadId: f.room.id,
-        sourceRunId: f.workerRun.id,
-        intent: "fyi",
-        outboundMessageId: f.parent.inboundMessageId!,
-        inboundMessageId: f.parent.outboundMessageId,
-        state: "delivered",
-        hop: 2,
-        authorityFingerprint: "fixture",
-        requestFingerprint: id,
-        idempotencyKey: `quiet-claim-${id}`,
-        expiresAt: f.goal.untilAt,
-      },
-    });
+    const { id } = await createQuietDelivery(f);
     await claimQuietBotMessages(prisma, {
       runId: f.coordinatorRun.id,
       leaseOwner: "fixture-active",
@@ -609,6 +617,187 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
       outcome: "consumed",
       quietClaimRunId: null,
     });
+  });
+
+  it("completes a turn with only quiet deliveries still available at claim time", async () => {
+    const f = await fixture("compatible");
+    const expired = await createQuietDelivery(f);
+    const available = await createQuietDelivery(f);
+    // The executor selected both rows before the first one expired.
+    await prisma.botMessageDelivery.update({
+      where: { id: expired.id },
+      data: { expiresAt: new Date(Date.now() - 1_000) },
+    });
+    const claimedIds = await claimQuietBotMessages(prisma, {
+      runId: f.coordinatorRun.id,
+      leaseOwner: "fixture-active",
+      leaseFence: 1,
+      deliveryIds: [expired.id, available.id],
+    });
+    expect(claimedIds).toEqual([available.id]);
+    expect(await expireQuietBotMessages(prisma)).toBeGreaterThan(0);
+    const attempt = await prisma.attempt.create({
+      data: { runId: f.coordinatorRun.id, fence: 1, status: "running" },
+    });
+    expect(
+      await finalizeRun(prisma, {
+        spaceId,
+        threadId: f.room.id,
+        botId: f.coordinator.id,
+        runId: f.coordinatorRun.id,
+        taskId: f.coordinatorRun.taskId,
+        attemptId: attempt.id,
+        leaseOwner: "fixture-active",
+        leaseFence: 1,
+        outcome: "completed",
+        blocks: [{ kind: "text", text: "Turn completed" }],
+      }),
+    ).not.toBe(false);
+    expect(
+      await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id: expired.id } }),
+    ).toMatchObject({
+      state: "expired",
+      outcome: "expired",
+      quietClaimRunId: null,
+    });
+    expect(
+      await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id: available.id } }),
+    ).toMatchObject({
+      outcome: "consumed",
+      quietClaimRunId: null,
+    });
+  });
+
+  it("keeps a claimed quiet delivery stable while context assembly crosses expiry", async () => {
+    const f = await fixture("compatible");
+    const { id } = await createQuietDelivery(f);
+    expect(
+      await claimQuietBotMessages(prisma, {
+        runId: f.coordinatorRun.id,
+        leaseOwner: "fixture-active",
+        leaseFence: 1,
+        deliveryIds: [id],
+      }),
+    ).toEqual([id]);
+    await prisma.botMessageDelivery.update({
+      where: { id },
+      data: { expiresAt: new Date(Date.now() - 1_000) },
+    });
+    await expireQuietBotMessages(prisma);
+    expect(await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id } })).toMatchObject({
+      state: "delivered",
+      outcome: null,
+      quietClaimRunId: f.coordinatorRun.id,
+    });
+    const attempt = await prisma.attempt.create({
+      data: { runId: f.coordinatorRun.id, fence: 1, status: "running" },
+    });
+    expect(
+      await finalizeRun(prisma, {
+        spaceId,
+        threadId: f.room.id,
+        botId: f.coordinator.id,
+        runId: f.coordinatorRun.id,
+        taskId: f.coordinatorRun.taskId,
+        attemptId: attempt.id,
+        leaseOwner: "fixture-active",
+        leaseFence: 1,
+        outcome: "completed",
+        blocks: [{ kind: "text", text: "Turn completed" }],
+      }),
+    ).not.toBe(false);
+    expect(await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id } })).toMatchObject({
+      outcome: "consumed",
+      quietClaimRunId: null,
+    });
+  });
+
+  it("rejects an old attempt after its replacement claims the quiet delivery", async () => {
+    const f = await fixture("compatible");
+    const { id } = await createQuietDelivery(f);
+    const oldAttempt = await prisma.run.findUniqueOrThrow({ where: { id: f.coordinatorRun.id } });
+    expect(oldAttempt.leaseFence).toBe(1);
+    let staleClaim: Promise<string[]> | undefined;
+    await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM runs WHERE id = ${f.coordinatorRun.id} FOR UPDATE`;
+      await tx.run.update({
+        where: { id: f.coordinatorRun.id },
+        data: { leaseOwner: "fixture-replacement", leaseFence: 2 },
+      });
+      await tx.botMessageDelivery.update({
+        where: { id },
+        data: { quietClaimRunId: f.coordinatorRun.id, quietClaimLeaseFence: 2 },
+      });
+      staleClaim = claimQuietBotMessages(prisma, {
+        runId: f.coordinatorRun.id,
+        leaseOwner: oldAttempt.leaseOwner!,
+        leaseFence: oldAttempt.leaseFence,
+        deliveryIds: [id],
+      });
+    });
+    await expect(staleClaim).rejects.toThrow("lost its run lease");
+    expect(
+      await claimQuietBotMessages(prisma, {
+        runId: f.coordinatorRun.id,
+        leaseOwner: "fixture-replacement",
+        leaseFence: 2,
+        deliveryIds: [id],
+      }),
+    ).toEqual([id]);
+    const attempt = await prisma.attempt.create({
+      data: { runId: f.coordinatorRun.id, fence: 2, status: "running" },
+    });
+    expect(
+      await finalizeRun(prisma, {
+        spaceId,
+        threadId: f.room.id,
+        botId: f.coordinator.id,
+        runId: f.coordinatorRun.id,
+        taskId: f.coordinatorRun.taskId,
+        attemptId: attempt.id,
+        leaseOwner: "fixture-replacement",
+        leaseFence: 2,
+        outcome: "completed",
+        blocks: [{ kind: "text", text: "Replacement completed" }],
+      }),
+    ).not.toBe(false);
+    expect(await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id } })).toMatchObject({
+      outcome: "consumed",
+      quietClaimRunId: null,
+    });
+    expect(await reconcileQuietBotMessageClaims(prisma)).toBe(0);
+  });
+
+  it("recovers a newer abandoned claim beyond a full page of healthy claims", async () => {
+    const f = await fixture("compatible");
+    const healthyIds = (
+      await Promise.all(Array.from({ length: 101 }, () => createQuietDelivery(f)))
+    ).map((delivery) => delivery.id);
+    await prisma.botMessageDelivery.updateMany({
+      where: { id: { in: healthyIds } },
+      data: { quietClaimRunId: f.coordinatorRun.id, quietClaimLeaseFence: 1 },
+    });
+    const abandoned = await createQuietDelivery(f);
+    await prisma.botMessageDelivery.update({
+      where: { id: abandoned.id },
+      data: {
+        createdAt: new Date(Date.now() + 1_000),
+        quietClaimRunId: f.workerRun.id,
+        quietClaimLeaseFence: 1,
+      },
+    });
+    expect(await reconcileQuietBotMessageClaims(prisma, 100)).toBe(1);
+    expect(
+      await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id: abandoned.id } }),
+    ).toMatchObject({
+      quietClaimRunId: null,
+      quietClaimLeaseFence: null,
+    });
+    expect(
+      await prisma.botMessageDelivery.count({
+        where: { id: { in: healthyIds }, quietClaimRunId: f.coordinatorRun.id },
+      }),
+    ).toBe(101);
   });
 
   it("stores one linked result and one idle wake across concurrent retries", async () => {
