@@ -517,6 +517,8 @@ model ChatGroupMember {
   botId     String
   bot       Bot       @relation(fields: [botId], references: [id], onDelete: NoAction)
   createdAt DateTime  @default(now())
+  runtimePin Json?
+  modelPinRevision Int @default(0)
 
   @@unique([groupId, botId])
   @@index([botId])
@@ -664,6 +666,8 @@ model Run {
   status               String
   trigger              String
   runtimePin           Json?
+  runtimePinSource     Json?
+  usageGroupId         String?
   runtimeDestination   Json?
   runtimeComputer      Json?
   runtimeInfo          Json?
@@ -1161,6 +1165,9 @@ model UsageRecord {
   reasoningTokens Int?
   /// A snapshot of the admitted pin, not credentials or mutable bot settings.
   runtimePin Json?
+  groupId String?
+  threadId String?
+  runtimePinSource Json?
   observations RequestUsageObservation[]
   delegationId String?
   rootTaskId String?
@@ -1191,6 +1198,7 @@ model UsageRecord {
   createdAt    DateTime @default(now())
 
   @@index([spaceId, userId, createdAt])
+  @@index([spaceId, userId, groupId, createdAt])
   @@index([rootTaskId])
   @@index([delegationId])
   @@map("usage_records")

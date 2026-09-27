@@ -178,3 +178,145 @@ describe("archiveGroup", () => {
     expect(groupUpdate).not.toHaveBeenCalled();
   });
 });
+
+describe("stable group memberships", () => {
+  const actor = {
+    spaceId: "space",
+    userId: "user",
+    email: "owner@example.test",
+    isDeploymentOwner: true,
+  };
+  const now = new Date("2026-09-27T00:00:00.000Z");
+  const pin = {
+    runtimeKind: "pi",
+    provider: "fixture",
+    modelId: "fixture",
+    effort: "low",
+    credentialId: "connection",
+    revision: 4,
+  };
+  const groupRecord = {
+    id: "group",
+    spaceId: "space",
+    userId: "user",
+    name: "Group",
+    pinned: false,
+    sectionId: null,
+    archivedAt: null,
+    createdAt: now,
+    updatedAt: now,
+    thread: { id: "thread", unread: false, messages: [] },
+    members: [
+      { bot: { id: "bot-1", name: "One", color: "ink", runs: [] } },
+      { bot: { id: "bot-2", name: "Two", color: "ink", runs: [] } },
+    ],
+  };
+
+  it("deletes only removed members and creates only added members", async () => {
+    const deleteMany = vi.fn();
+    const createMany = vi.fn();
+    const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([{ id: "group" }]),
+      spaceMember: {
+        findUnique: vi
+          .fn()
+          .mockResolvedValue({ organizationId: "org", space: { deletingAt: null } }),
+      },
+      chatGroup: {
+        findFirst: vi.fn().mockResolvedValue({
+          thread: { id: "thread" },
+          coordinatorBotId: null,
+          members: [
+            {
+              botId: "bot-1",
+              bot: { archivedAt: null },
+              id: "member-1",
+              runtimePin: pin,
+              modelPinRevision: 4,
+            },
+            { botId: "bot-2", bot: { archivedAt: null } },
+            { botId: "bot-3", bot: { archivedAt: null } },
+          ],
+        }),
+        update: vi.fn(),
+        findFirstOrThrow: vi.fn().mockResolvedValue(groupRecord),
+      },
+      chatGroupMember: { deleteMany, createMany },
+      run: { findMany: vi.fn().mockResolvedValue([]) },
+    };
+    const prisma = {
+      bot: {
+        findMany: vi
+          .fn()
+          .mockResolvedValue(
+            ["bot-1", "bot-2", "bot-4"].map((id) => ({ id, name: id, color: "ink" })),
+          ),
+      },
+      $transaction: vi.fn(async (fn: (client: typeof tx) => unknown) => fn(tx)),
+    } as unknown as PrismaClient;
+    await createGroupRepos(prisma).updateGroup(actor, {
+      groupId: "group",
+      botIds: ["bot-1", "bot-2", "bot-4"],
+    });
+    expect(deleteMany).toHaveBeenCalledWith({
+      where: { groupId: "group", botId: { in: ["bot-3"] } },
+    });
+    expect(createMany).toHaveBeenCalledWith({ data: [{ groupId: "group", botId: "bot-4" }] });
+    expect(tx.run.findMany).toHaveBeenCalledWith({
+      where: {
+        threadId: "thread",
+        botId: { in: ["bot-3"] },
+        status: { in: ["queued", "leased", "running", "waiting_input", "waiting_takeover"] },
+      },
+      select: { id: true, taskId: true },
+    });
+  });
+
+  it("copies explicit choices at initial revision one when duplicating", async () => {
+    const createMany = vi.fn();
+    const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([{ id: "group" }]),
+      spaceMember: {
+        findUnique: vi
+          .fn()
+          .mockResolvedValue({ organizationId: "org", space: { deletingAt: null } }),
+      },
+      chatGroup: {
+        findFirst: vi.fn().mockResolvedValue({
+          members: [
+            { botId: "bot-1", runtimePin: pin, modelPinRevision: 4 },
+            { botId: "bot-2", runtimePin: null, modelPinRevision: 0 },
+          ],
+        }),
+        create: vi.fn().mockResolvedValue({ id: "new-group" }),
+        findFirstOrThrow: vi.fn().mockResolvedValue(groupRecord),
+      },
+      chatGroupMember: { createMany },
+      thread: { create: vi.fn() },
+    };
+    const prisma = {
+      bot: {
+        findMany: vi
+          .fn()
+          .mockResolvedValue(["bot-1", "bot-2"].map((id) => ({ id, name: id, color: "ink" }))),
+      },
+      $transaction: vi.fn(async (fn: (client: typeof tx) => unknown) => fn(tx)),
+    } as unknown as PrismaClient;
+    await createGroupRepos(prisma).createGroup(actor, {
+      name: "Copy",
+      botIds: ["bot-1", "bot-2"],
+      copyPinsFromGroupId: "group",
+    });
+    expect(createMany).toHaveBeenCalledWith({
+      data: [
+        {
+          groupId: "new-group",
+          botId: "bot-1",
+          runtimePin: { ...pin, revision: 1 },
+          modelPinRevision: 1,
+        },
+        { groupId: "new-group", botId: "bot-2" },
+      ],
+    });
+  });
+});
