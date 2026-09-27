@@ -1,11 +1,15 @@
 import type { BackgroundJob, JobPublisher } from "@ardurbot/adapter-kit";
 import type { Pool, PrismaClient, ThreadEvents } from "@ardurbot/db";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { returnBotMessageOutcome } from "./bot-messages.js";
 import type { ReconciliationLeadership } from "./job-reconciler.js";
 import { createJobReconciler, createPostgresReconciliationLeadership } from "./job-reconciler.js";
 
 vi.mock("./bot-messages.js", () => ({ returnBotMessageOutcome: vi.fn() }));
+
+beforeEach(() => {
+  vi.mocked(returnBotMessageOutcome).mockReset();
+});
 
 function publisher() {
   const enqueue = vi.fn(async (_job: BackgroundJob) => undefined);

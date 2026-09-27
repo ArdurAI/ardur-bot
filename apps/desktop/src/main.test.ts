@@ -93,6 +93,37 @@ function fixture() {
 }
 
 const url = "https://app.example.test";
+
+describe("first-launch setup dispatch", () => {
+  it.each([
+    { guided: false, legacy: false, forced: false, starts: true },
+    { guided: true, legacy: false, forced: false, starts: false },
+    { guided: false, legacy: false, forced: true, starts: false },
+    { guided: false, legacy: true, forced: false, starts: false },
+  ])(
+    "keeps the local-mode start decision for $guided/$legacy/$forced",
+    ({ guided, legacy, forced, starts }) => {
+      const source = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
+      const start = source.indexOf('if (target.kind === "setup") {');
+      const end = source.indexOf('} else if (target.source === "saved") {', start);
+      expect(start).toBeGreaterThan(0);
+      expect(end).toBeGreaterThan(start);
+      const localStart = vi.fn();
+      const showSetupWindow = vi.fn();
+      vm.runInNewContext(source.slice(start, end + 1), {
+        target: { kind: "setup" },
+        showSetupWindow,
+        legacyCompose: legacy,
+        GUIDED_SETUP_ENABLED: guided,
+        process: { env: { ARDURBOT_FORCE_SETUP: forced ? "1" : undefined } },
+        localMode: { start: localStart },
+      });
+      expect(showSetupWindow).toHaveBeenCalledOnce();
+      expect(localStart).toHaveBeenCalledTimes(starts ? 1 : 0);
+    },
+  );
+});
+
 describe("main window host lifecycle", () => {
   it("keeps the reactivated host running when reconnect destroys the previous window", async () => {
     const f = fixture();
@@ -374,6 +405,7 @@ describe("choosing an existing instance while local mode runs", () => {
       currentSetup: { mode: "new", serverUrl: local },
       currentTargetUrl: local,
       legacyCompose: false,
+      guidedEngine: null,
       parseSetupInput,
       managedLocalOpenUrl,
       localMode: {
@@ -462,6 +494,8 @@ describe("quitting while local mode runs", () => {
       unsavedFiles: new UnsavedFiles<WindowFake>(),
       dialog: { showMessageBoxSync: vi.fn(() => 0) },
       legacyCompose: false,
+      guidedEngine: null,
+      guidedIpcCleanup: null,
       localShutdown: null as Promise<void> | null,
       localMode: {
         running: () => running,

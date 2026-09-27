@@ -9,6 +9,13 @@ import { abortableDelay, inferHandoffTargetName } from "@ardurbot/core";
 const running = new Map<string, AbortController>();
 
 export class ScriptedAgentRuntime implements AgentRuntime {
+  constructor(
+    private readonly inputHooks?: {
+      beforeAcknowledge?: (request: AgentRunRequest) => Promise<void>;
+      afterAcknowledge?: (request: AgentRunRequest) => Promise<void>;
+    },
+  ) {}
+
   describe() {
     return {
       id: "scripted",
@@ -35,7 +42,7 @@ export class ScriptedAgentRuntime implements AgentRuntime {
         request.prompt.includes("Identify the contradiction:") ||
         request.prompt.includes("Check the correction against the fixture:")
       )
-        await abortableDelay(250, signal);
+        await abortableDelay(2_000, signal);
       if (shouldFail(request.prompt)) {
         throw new Error("Scripted run failure");
       }
@@ -49,7 +56,9 @@ export class ScriptedAgentRuntime implements AgentRuntime {
         yield { type: "done", text: "stopped" };
         return;
       }
-      const goalWake = /review (?:worker's|reviewer's) completed assignment/i.test(request.prompt);
+      const goalWake = /review (?:worker's|reviewer's|the) completed assignment/i.test(
+        request.prompt,
+      );
       const script = goalWake
         ? inferScript(
             request.prompt,
@@ -58,6 +67,18 @@ export class ScriptedAgentRuntime implements AgentRuntime {
             request.history.map((message) => message.content).join("\n"),
           )
         : (request.script ?? inferScript(request.prompt, request.resumeFromCheckpoint));
+      if (request.inputReceipt?.deliveryIds.length) {
+        await this.inputHooks?.beforeAcknowledge?.(request);
+        await request.acknowledgeInput?.({
+          runId: request.runId,
+          leaseFence: request.inputReceipt.leaseFence,
+          deliveryIds: request.inputReceipt.deliveryIds,
+          mode: "initial",
+        });
+        await this.inputHooks?.afterAcknowledge?.(request);
+      }
+      if (request.prompt.includes("Identify the contradiction:"))
+        await abortableDelay(2_000, signal);
       // Per-run call index so repeated tools (e.g. message_agent) get distinct
       // executionIds — delivery keys and effect replays key off this value.
       let toolCallSeq = 0;
@@ -201,7 +222,11 @@ export function inferScript(
         complete: true,
       },
     ];
-  if (lower.includes("review worker's completed assignment")) {
+  if (
+    lower.includes("review worker's completed assignment") ||
+    (lower.includes("review the completed assignment") &&
+      !deliveredHistory.includes("Independent check:"))
+  ) {
     const workerResult =
       /The sort is ascending, so the corrected wording is: (Results show [^\n]+\.)/.exec(
         deliveredHistory,
@@ -252,7 +277,11 @@ export function inferScript(
       },
     ];
   }
-  if (lower.includes("review reviewer's completed assignment")) {
+  if (
+    lower.includes("review reviewer's completed assignment") ||
+    (lower.includes("review the completed assignment") &&
+      deliveredHistory.includes("Independent check:"))
+  ) {
     const reviewed =
       /Independent check: (Results show [^\n]+\.) The original wording contradicts the ascending sort\./.exec(
         deliveredHistory,

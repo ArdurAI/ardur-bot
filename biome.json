@@ -66,6 +66,16 @@
   },
   "overrides": [
     {
+      "includes": ["packages/testkit/src/**/*.test.ts"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "noUndeclaredVariables": "error"
+          }
+        }
+      }
+    },
+    {
       "includes": ["packages/ui-web/src/components/ui/**", "packages/ui-web/src/shadcn.css"],
       "linter": {
         "rules": {

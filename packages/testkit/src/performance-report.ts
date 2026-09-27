@@ -272,7 +272,7 @@ export interface RequestUsageEvidence {
   turnId: string;
   attemptId: string;
   parentRequestId: string | null;
-  purpose: "main" | "retry" | "helper" | "summary" | "delegated" | "detached-learning";
+  purpose: "main" | "unknown" | "retry" | "helper" | "summary" | "delegated" | "detached-learning";
   routeId: string;
   traceId: string;
   outcome: EvidenceOutcome;
@@ -801,7 +801,15 @@ function validateUsage(request: RequestUsageEvidence, artifactHashes: ReadonlySe
   ])
     opaque(id);
   if (request.parentRequestId !== null) opaque(request.parentRequestId);
-  oneOf(request.purpose, ["main", "retry", "helper", "summary", "delegated", "detached-learning"]);
+  oneOf(request.purpose, [
+    "main",
+    "unknown",
+    "retry",
+    "helper",
+    "summary",
+    "delegated",
+    "detached-learning",
+  ]);
   outcome(request.outcome);
   oneOf(request.inputSemantics, [
     "total-with-cache-subsets",

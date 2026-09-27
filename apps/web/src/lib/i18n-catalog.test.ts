@@ -354,4 +354,25 @@ describe("lingui catalogs", () => {
       );
     }
   });
+
+  it("translates the extension catalogue loading, empty-state, and failure guidance in every shipped catalog", () => {
+    const sentences = [
+      "Loading the extension catalogue…",
+      "No extensions are in the built-in catalogue yet. Use Add to install an extension bundle (.mcpb or .dxt file) from this computer.",
+      "Could not load the extension catalogue. Check the connection and try again.",
+    ];
+    for (const locale of ["en", "de", "ko", "tr", "hi", "pt-BR", "zh-CN", "es", "ru"]) {
+      const catalog = readFileSync(
+        fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url)),
+        "utf8",
+      );
+      for (const sentence of sentences) {
+        const key = `msgid ${JSON.stringify(sentence)}\nmsgstr "`;
+        const at = catalog.indexOf(key);
+        expect(at, `${locale}: ${sentence} missing from catalog`).toBeGreaterThanOrEqual(0);
+        const translated = catalog.slice(at + key.length, catalog.indexOf('"', at + key.length));
+        expect(translated.trim(), `${locale}: ${sentence} must not be empty`).toBeTruthy();
+      }
+    }
+  });
 });

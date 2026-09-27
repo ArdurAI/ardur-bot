@@ -2,7 +2,13 @@ import type { JobPublisher } from "@ardurbot/adapter-kit";
 import { messagingDeliverJob, routineWakeupJob, runContinueJob } from "@ardurbot/adapter-kit";
 import type { MessageBlock } from "@ardurbot/contracts";
 import type { Pool, PrismaClient, ThreadEvents } from "@ardurbot/db";
-import { goalExhaustionReason, reconcileGoalExhaustion } from "@ardurbot/db";
+import {
+  dispatchBotMessageWake,
+  expireQuietBotMessages,
+  goalExhaustionReason,
+  reconcileGoalExhaustion,
+  reconcileQuietBotMessageClaims,
+} from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 import type { PoolClient } from "pg";
 import { returnBotMessageOutcome } from "./bot-messages.js";
@@ -384,6 +390,38 @@ export function createJobReconciler(
             getLogger().error("goal wake reconciliation", error),
           );
         }
+      }
+    }
+
+    if (deps.prisma.botMessageDelivery) {
+      await expireQuietBotMessages(deps.prisma, now, batchSize).catch((error) =>
+        getLogger().error("quiet message expiry", error),
+      );
+      await reconcileQuietBotMessageClaims(deps.prisma, batchSize).catch((error) =>
+        getLogger().error("quiet message claim reconciliation", error),
+      );
+    }
+    const pendingPeerWakes = deps.prisma.botMessageWake
+      ? await deps.prisma.botMessageWake.findMany({
+          where: {
+            state: { in: ["pending", "sealed", "retry_wait"] },
+            OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }],
+          },
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+          take: batchSize,
+          select: { id: true },
+        })
+      : [];
+    for (const wake of pendingPeerWakes) {
+      try {
+        const dispatched = await dispatchBotMessageWake(deps.prisma, wake.id);
+        for (const update of dispatched.updatedThreads)
+          await deps.events?.notify(update.threadId, update.seq).catch((error) => {
+            getLogger().error("peer wake receipt notification", error);
+          });
+        if (dispatched.runId) await deps.jobs.enqueue(runContinueJob(dispatched.runId));
+      } catch (error) {
+        getLogger().error("peer wake reconciliation", error);
       }
     }
 

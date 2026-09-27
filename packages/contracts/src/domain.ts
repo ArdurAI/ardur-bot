@@ -22,6 +22,7 @@ import {
   RuntimeInfoSchema,
   RuntimeKindSchema,
   RuntimePinSchema,
+  RuntimePinSourceSchema,
   RuntimeProblemSchema,
 } from "./runtime-pins.js";
 
@@ -939,6 +940,7 @@ export const RunSchema = z.object({
   runtimeProblem: RuntimeProblemSchema.optional(),
   runtimeInfo: RuntimeInfoSchema.nullable().optional(),
   runtimePin: RuntimePinSchema.nullable().optional(),
+  runtimePinSource: RuntimePinSourceSchema.optional(),
   placement: RunPlacementSchema.nullable().optional(),
   startedAt: z.string().nullable(),
   completedAt: z.string().nullable(),

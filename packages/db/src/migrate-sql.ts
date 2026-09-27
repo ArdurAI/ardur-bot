@@ -200,6 +200,62 @@ export async function applySqlMigrationsToDatabase(input: {
   );
 }
 
+/** A read-only proof that the application role can use the database it owns without superuser rights. */
+export async function applicationDatabaseReady(input: {
+  connectionString: string;
+  signal?: AbortSignal;
+}): Promise<boolean> {
+  try {
+    return await withClient(input.connectionString, input.signal, applicationDatabaseOwned);
+  } catch (error) {
+    if (input.signal?.aborted) throw error;
+    return false;
+  }
+}
+
+/** The role must be non-superuser and own the database the connection selected. */
+export async function applicationDatabaseOwned(client: MigrationSqlClient): Promise<boolean> {
+  const result = await client.query(
+    `SELECT r.rolsuper, d.datdba = r.oid AS owns
+     FROM pg_roles r JOIN pg_database d ON d.datname = current_database()
+     WHERE r.rolname = current_user`,
+  );
+  const row = result.rows[0] as { rolsuper?: unknown; owns?: unknown } | undefined;
+  return row?.rolsuper === false && row.owns === true;
+}
+
+/** Read-only readiness check; it never creates history or repairs an interrupted migration. */
+export async function sqlMigrationsReady(input: {
+  connectionString: string;
+  migrationsDir: string;
+  signal?: AbortSignal;
+}): Promise<boolean> {
+  try {
+    return await withClient(input.connectionString, input.signal, async (client) => {
+      const migrations = await listSqlMigrations(input.migrationsDir);
+      const recorded = await readRecorded({
+        query: (text, values) => client.query(text, values as unknown[]),
+      });
+      assertHistory(migrations, recorded);
+      return migrations.every(
+        (migration) =>
+          finishedRow(recorded, migration.name) &&
+          recorded.some(
+            (row) =>
+              row.migrationName === migration.name &&
+              row.checksum === migration.checksum &&
+              row.finishedAt != null &&
+              row.rolledBackAt == null,
+          ),
+      );
+    });
+  } catch (error) {
+    if (input.signal?.aborted) throw error;
+    if (error instanceof MigrationHistoryError && error.reason !== "unfinished") throw error;
+    return false;
+  }
+}
+
 /**
  * A connection whose `error` event never becomes an uncaught exception: a server that
  * stops mid-query rejects the query instead. An abort cancels the running statement from
