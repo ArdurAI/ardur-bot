@@ -14,6 +14,7 @@ import { modelsForRequest } from "./pi-runtime.js";
 /** Use the same endpoint metadata as model dispatch, including custom connections. */
 export function destinationForModel(model: AgentRunModel): ModelDestination {
   if (model.provider === "scripted") return { host: "localhost", local: true };
+  if (model.provider === "antigravity") return { host: null, local: false };
   const concrete = modelsForRequest({ model }, model.provider).getModel(model.provider, model.id);
   return modelDestination(
     model.baseUrl ?? (model.provider === LOCAL_PROVIDER_ID ? localBaseUrl() : concrete?.baseUrl),

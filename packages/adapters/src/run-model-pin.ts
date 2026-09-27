@@ -1,14 +1,21 @@
 import type { AgentRunModel } from "@ardurbot/adapter-kit";
-import type { Actor, ResolvedPin, RuntimePin, RuntimeProblem } from "@ardurbot/contracts";
+import type {
+  Actor,
+  ResolvedPin,
+  RuntimePin,
+  RuntimeProblem,
+  ThinkingLevel,
+} from "@ardurbot/contracts";
 import {
-  LocalityPolicySchema,
+  antigravityEffortForModel,
   MODEL_LOCALITY_DENIED_MESSAGE,
+  nativeRuntimeProviders,
   RuntimePinError,
   RuntimePinSchema,
   runtimePinProblem,
   ThinkingLevelSchema,
 } from "@ardurbot/contracts";
-import { allowsModelDestination, spaceDefaultEffort } from "@ardurbot/core";
+import { spaceDefaultEffort } from "@ardurbot/core";
 import type { findDefaultModelCredential, PrismaClient } from "@ardurbot/db";
 import { findDefaultModelCredential as findSpaceDefault } from "@ardurbot/db";
 import { modelLocalityAllowed } from "./model-locality.js";
@@ -108,13 +115,13 @@ export async function resolveRunModelPin(input: {
     }
   }
   if (pin.runtimeKind !== "pi") {
-    if (pin.runtimeKind !== "claude-code" && pin.runtimeKind !== "codex-app-server")
+    if (!(pin.runtimeKind in nativeRuntimeProviders))
       return runtimePinProblem(
         pin,
         "runtime-unavailable",
         "The pinned runtime is unavailable — change the pin.",
       );
-    const provider = pin.runtimeKind === "claude-code" ? "anthropic" : "openai-codex";
+    const provider = nativeRuntimeProviders[pin.runtimeKind as keyof typeof nativeRuntimeProviders];
     if (pin.credentialId && pin.credentialId !== `native:${pin.runtimeKind}`)
       return runtimePinProblem(
         pin,
@@ -124,7 +131,7 @@ export async function resolveRunModelPin(input: {
     if (
       pin.provider !== provider ||
       !pin.modelId ||
-      !pin.effort ||
+      (pin.runtimeKind !== "antigravity" && !pin.effort) ||
       pin.credentialId !== `native:${pin.runtimeKind}`
     ) {
       return runtimePinProblem(
@@ -133,20 +140,25 @@ export async function resolveRunModelPin(input: {
         "Choose a model, effort, and runtime sign-in.",
       );
     }
+    const expected =
+      pin.runtimeKind === "antigravity" ? antigravityEffortForModel(pin.modelId) : undefined;
     const effort = ThinkingLevelSchema.safeParse(pin.effort);
-    if (!effort.success)
+    if (
+      pin.runtimeKind === "antigravity"
+        ? expected === undefined || (pin.effort !== null && pin.effort !== expected)
+        : !effort.success
+    )
       return runtimePinProblem(
         pin,
         "pin-effort-unsupported",
         "The pinned effort is unavailable in this runtime.",
       );
     const space = await input.prisma.space.findUnique({ where: { id: input.scope.spaceId } });
-    const nativeDestination = { host: null, local: false };
     if (
-      ![bot?.allowedModelDestinations, space?.allowedModelDestinations].every((value) => {
-        const policy = LocalityPolicySchema.safeParse(value ?? { mode: "any" });
-        return policy.success && allowsModelDestination(policy.data, nativeDestination);
-      })
+      !modelLocalityAllowed([bot?.allowedModelDestinations, space?.allowedModelDestinations], {
+        provider,
+        id: pin.modelId,
+      } as AgentRunModel)
     )
       return runtimePinProblem(pin, "locality-denied", MODEL_LOCALITY_DENIED_MESSAGE);
     return {
@@ -155,7 +167,8 @@ export async function resolveRunModelPin(input: {
       runtimePin: pin,
       provider,
       id: pin.modelId,
-      thinkingLevel: effort.data,
+      thinkingLevel:
+        pin.runtimeKind === "antigravity" ? (pin.effort as ThinkingLevel | null) : effort.data!,
     };
   }
   if (input.snapshot != null || hasBotPin(bot))

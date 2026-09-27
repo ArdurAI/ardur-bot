@@ -115,9 +115,11 @@ import {
   HostMoveUnavailableError,
   IntegrationManifestSchema,
   IntegrationProviderIdSchema,
+  nativeRuntimeHealthKeys,
   OPENAI_COMPATIBLE_PROVIDER_ID,
   usableModelId,
 } from "@ardurbot/contracts";
+import { HostHealthSchema } from "@ardurbot/contracts/host-bridge";
 import { LOCAL_IMPORT_INVALID_FOLDER_CODE } from "@ardurbot/contracts/local-import";
 import { appContract } from "@ardurbot/contracts/rpc";
 import {
@@ -1026,26 +1028,46 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       }),
     },
     runtimes: {
-      availability: authed.runtimes.availability.handler(async ({ context, input }) =>
-        process.env.ARDURBOT_HOST_BRIDGE === "api" && input.runtimeKind !== "pi"
-          ? ((await deps.hostBridge?.status(context.actor.userId))?.health?.[
-              input.runtimeKind === "claude-code" ? "claude" : "codex"
-            ] ?? {
+      availability: authed.runtimes.availability.handler(async ({ context, input }) => {
+        if (process.env.ARDURBOT_HOST_BRIDGE === "api" && input.runtimeKind !== "pi") {
+          const host = await deps.hostBridge?.status(context.actor.userId);
+          const health =
+            input.refresh && host?.configured && host.connected && deps.hostBridge
+              ? HostHealthSchema.parse(
+                  await deps.hostBridge.fleetResult(
+                    { op: "host.health", refreshSignIn: input.runtimeKind === "antigravity" },
+                    {
+                      userId: context.actor.userId,
+                      spaceId: context.actor.spaceId,
+                      signal: context.signal,
+                    },
+                  ),
+                )
+              : host?.health;
+          return (
+            health?.[nativeRuntimeHealthKeys[input.runtimeKind]] ?? {
               runtimeKind: input.runtimeKind,
               available: false,
               models: [],
-              reason: "Host service is not running — open the desktop app.",
-            })
-          : input.runtimeKind !== "pi" &&
-              !(await nativeHostOwner(deps.prisma, context.actor.userId))
-            ? {
-                runtimeKind: input.runtimeKind,
-                available: false,
-                models: [],
-                reason: NATIVE_HOST_OWNER_MESSAGE,
-              }
-            : nativeRuntimeAvailability(input.runtimeKind),
-      ),
+              reason:
+                health && input.runtimeKind === "antigravity"
+                  ? "Update Ardur on the connected computer to use Antigravity."
+                  : "Host service is not running — open the desktop app.",
+            }
+          );
+        }
+        if (
+          input.runtimeKind !== "pi" &&
+          !(await nativeHostOwner(deps.prisma, context.actor.userId))
+        )
+          return {
+            runtimeKind: input.runtimeKind,
+            available: false,
+            models: [],
+            reason: NATIVE_HOST_OWNER_MESSAGE,
+          };
+        return nativeRuntimeAvailability(input.runtimeKind, input.refresh);
+      }),
       connectCodex: authed.runtimes.connectCodex.handler(async ({ context }) => {
         if (!(await nativeHostOwner(deps.prisma, context.actor.userId)))
           throw new ORPCError("FORBIDDEN", { message: NATIVE_HOST_OWNER_MESSAGE });

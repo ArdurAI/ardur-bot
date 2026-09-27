@@ -1,4 +1,5 @@
 import type { ModelOAuthBegin, RuntimeAvailability, RuntimeKind } from "@ardurbot/contracts";
+import { nativeRuntimeProviders } from "@ardurbot/contracts";
 import { modelPinOptionKey, parseModelPinOptionKey } from "@ardurbot/core";
 import { Button, NativeSelect, NativeSelectOption, Switch } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
@@ -38,7 +39,7 @@ export function RuntimeSettings({
     if (kind === "pi") return;
     let active = true;
     void rpc.runtimes
-      .availability({ runtimeKind: kind })
+      .availability({ runtimeKind: kind, refresh: refresh > 0 })
       .then((value) => {
         if (active) setAvailability(value);
       })
@@ -96,6 +97,7 @@ export function RuntimeSettings({
         <NativeSelectOption value="pi">{t`Ardur (built-in)`}</NativeSelectOption>
         <NativeSelectOption value="claude-code">{t`Claude Code (your claude sign-in)`}</NativeSelectOption>
         <NativeSelectOption value="codex-app-server">{t`Codex (your ChatGPT sign-in)`}</NativeSelectOption>
+        <NativeSelectOption value="antigravity">{t`Antigravity`}</NativeSelectOption>
       </NativeSelect>
       {kind !== "pi" ? (
         <>
@@ -113,7 +115,14 @@ export function RuntimeSettings({
           {availability ? (
             <p role="status" className="text-sm text-muted-foreground">
               {[
-                availability.version,
+                kind === "antigravity" && availability.version
+                  ? t`Antigravity is installed (version ${availability.version})`
+                  : availability.version,
+                kind === "antigravity" &&
+                availability.available &&
+                availability.signInStatus === "unknown"
+                  ? t`Sign-in unknown until the first run`
+                  : null,
                 availability.signedIn === true
                   ? t`Signed in`
                   : availability.available
@@ -126,7 +135,12 @@ export function RuntimeSettings({
           ) : null}
           {availability?.reason ? (
             <p role="status" className="text-sm text-muted-foreground">
-              {availability.reason}
+              {kind === "antigravity" &&
+              availability.reason.startsWith("Antigravity is not installed")
+                ? t`Antigravity is not installed on this computer. Install it and sign in there, then check again.`
+                : kind === "antigravity" && availability.signInStatus === "signed-out"
+                  ? t`Sign in to Antigravity on this computer, then check again.`
+                  : availability.reason}
             </p>
           ) : null}
           {error ? (
@@ -174,13 +188,13 @@ export function RuntimeSettings({
               onModel(
                 next
                   ? modelPinOptionKey(
-                      kind === "claude-code" ? "anthropic" : "openai-codex",
+                      nativeRuntimeProviders[kind as keyof typeof nativeRuntimeProviders],
                       next.id,
                       `native:${kind}`,
                     )
                   : "",
               );
-              onEffort("");
+              onEffort(kind === "antigravity" ? (next?.efforts[0] ?? "") : "");
             }}
           >
             <NativeSelectOption value="">{t`Choose a model`}</NativeSelectOption>
@@ -195,30 +209,36 @@ export function RuntimeSettings({
               </NativeSelectOption>
             ))}
           </NativeSelect>
-          <label htmlFor={`${id}-effort`} className="block text-sm">
-            <Trans>Thinking</Trans>
-          </label>
-          <NativeSelect
-            id={`${id}-effort`}
-            value={effort}
-            onChange={(event) => onEffort(event.target.value)}
-          >
-            <NativeSelectOption value="">{t`Choose effort`}</NativeSelectOption>
-            {effort && !model?.efforts.includes(effort) ? (
-              <NativeSelectOption value={effort}>
-                {effort} — {t`not available`}
-              </NativeSelectOption>
-            ) : null}
-            {model?.efforts.map((value) => (
-              <NativeSelectOption key={value} value={value}>
-                {value}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
+          {kind !== "antigravity" ? (
+            <>
+              <label htmlFor={`${id}-effort`} className="block text-sm">
+                <Trans>Thinking</Trans>
+              </label>
+              <NativeSelect
+                id={`${id}-effort`}
+                value={effort}
+                onChange={(event) => onEffort(event.target.value)}
+              >
+                <NativeSelectOption value="">{t`Choose effort`}</NativeSelectOption>
+                {effort && !model?.efforts.includes(effort) ? (
+                  <NativeSelectOption value={effort}>
+                    {effort} — {t`not available`}
+                  </NativeSelectOption>
+                ) : null}
+                {model?.efforts.map((value) => (
+                  <NativeSelectOption key={value} value={value}>
+                    {value}
+                  </NativeSelectOption>
+                ))}
+              </NativeSelect>
+            </>
+          ) : null}
           <p className="text-sm text-muted-foreground">
-            {kind === "claude-code"
-              ? t`Claude Code runs on host computers for now — change the bot's computer or its runtime.`
-              : t`Codex runs on host computers for now — change the bot's computer or its runtime.`}
+            {kind === "antigravity"
+              ? t`Antigravity runs on a connected host computer.`
+              : kind === "claude-code"
+                ? t`Claude Code runs on host computers for now — change the bot's computer or its runtime.`
+                : t`Codex runs on host computers for now — change the bot's computer or its runtime.`}
           </p>
         </>
       ) : null}

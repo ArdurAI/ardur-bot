@@ -3,6 +3,10 @@ import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
 import {
   Button,
   Checkbox,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
   Input,
   NativeSelect,
   NativeSelectOption,
@@ -411,208 +415,224 @@ function AddComputer({
     }
   }
   return (
-    <form
-      onSubmit={(event) => void save(event)}
-      className="space-y-3 rounded-lg border border-border p-4"
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open && !busy) onCancel();
+      }}
     >
-      <h4 className="font-medium">
-        <Trans>Add computer</Trans>
-      </h4>
-      <NativeSelect
-        aria-label={t`Connection type`}
-        value={kind}
-        onChange={(event) => setKind(event.target.value)}
+      <DialogContent
+        aria-label={t`Add computer`}
+        aria-labelledby="add-computer-dialog-title"
+        aria-describedby={undefined}
+        showCloseButton={!busy}
+        className="max-h-[85vh] overflow-y-auto sm:max-w-lg"
       >
-        <NativeSelectOption value="ssh">
-          <Trans>SSH machine</Trans>
-        </NativeSelectOption>
-        <NativeSelectOption value="docker">Docker</NativeSelectOption>
-        <NativeSelectOption value="podman">Podman</NativeSelectOption>
-        <NativeSelectOption value="kubernetes">
-          <Trans>Kubernetes context</Trans>
-        </NativeSelectOption>
-      </NativeSelect>
-      <Input
-        aria-label={t`Name`}
-        placeholder={t`Name`}
-        required
-        maxLength={80}
-        value={name}
-        onChange={(event) => setName(event.target.value)}
-      />
-      {kind === "ssh" ? (
-        <>
-          <Input
-            aria-label={t`Host`}
-            placeholder={t`Host`}
-            required
-            value={host}
-            onChange={(event) => setHost(event.target.value)}
-          />
-          <Input
-            aria-label={t`User`}
-            placeholder={t`User`}
-            required
-            value={user}
-            onChange={(event) => setUser(event.target.value)}
-          />
+        <DialogHeader>
+          <DialogTitle id="add-computer-dialog-title">
+            <Trans>Add computer</Trans>
+          </DialogTitle>
+        </DialogHeader>
+        <form onSubmit={(event) => void save(event)} className="space-y-3">
           <NativeSelect
-            aria-label={t`Authentication`}
-            value={authentication}
-            onChange={(event) => setAuthentication(event.target.value as typeof authentication)}
+            aria-label={t`Connection type`}
+            value={kind}
+            onChange={(event) => setKind(event.target.value)}
           >
-            <NativeSelectOption value="agent">
-              <Trans>SSH agent</Trans>
+            <NativeSelectOption value="ssh">
+              <Trans>SSH machine</Trans>
             </NativeSelectOption>
-            <NativeSelectOption value="private-key">
-              <Trans>Private key</Trans>
+            <NativeSelectOption value="docker">Docker</NativeSelectOption>
+            <NativeSelectOption value="podman">Podman</NativeSelectOption>
+            <NativeSelectOption value="kubernetes">
+              <Trans>Kubernetes context</Trans>
             </NativeSelectOption>
-            <NativeSelectOption value="tailscale">Tailscale SSH</NativeSelectOption>
           </NativeSelect>
-          {authentication === "private-key" ? (
-            <Input
-              aria-label={t`Private key path on this computer`}
-              placeholder={t`Private key path on this computer`}
-              required
-              value={keyPath}
-              onChange={(event) => setKeyPath(event.target.value)}
-            />
-          ) : null}
-          <details>
-            <summary className="text-sm text-muted-foreground">
-              <Trans>Advanced</Trans>
-            </summary>
-            <div className="space-y-2 pt-2">
-              <Input
-                type="number"
-                aria-label={t`Port`}
-                min={1}
-                max={65535}
-                value={port}
-                onChange={(event) => setPort(Number(event.target.value))}
-              />
-              <Input
-                aria-label={t`Jump host`}
-                placeholder={t`Jump host`}
-                value={jumpHost}
-                onChange={(event) => setJumpHost(event.target.value)}
-              />
-              <Input
-                aria-label={t`Remote base directory`}
-                value={baseDirectory}
-                onChange={(event) => setBaseDirectory(event.target.value)}
-              />
-            </div>
-          </details>
-        </>
-      ) : kind === "kubernetes" ? (
-        <>
           <Input
-            aria-label={t`Context`}
-            placeholder={t`Context`}
+            aria-label={t`Name`}
+            placeholder={t`Name`}
             required
-            value={context}
-            onChange={(event) => setContext(event.target.value)}
+            maxLength={80}
+            value={name}
+            onChange={(event) => setName(event.target.value)}
           />
-          <Input
-            aria-label={t`Namespace`}
-            placeholder={t`Namespace`}
-            required
-            value={namespace}
-            onChange={(event) => setNamespace(event.target.value)}
-          />
-          <details>
-            <summary className="text-sm text-muted-foreground">
-              <Trans>Kubeconfig</Trans>
-            </summary>
-            <Input
-              aria-label={t`Kubeconfig path`}
-              placeholder={t`Kubeconfig path`}
-              value={kubeconfigPath}
-              disabled={!!kubeconfig}
-              onChange={(event) => setKubeconfigPath(event.target.value)}
-            />
-            <Textarea
-              disabled={!!kubeconfigPath}
-              aria-label={t`Kubeconfig`}
-              value={kubeconfig}
-              onChange={(event) => setKubeconfig(event.target.value)}
-            />
-          </details>
-          <details>
-            <summary className="text-sm text-muted-foreground">
-              <Trans>Resources</Trans>
-            </summary>
-            <div className="space-y-2 pt-2">
-              {(
-                [
-                  ["storageSize", t`Storage size`],
-                  ["storageClass", t`Storage class`],
-                  ["cpuRequest", t`CPU request`],
-                  ["cpuLimit", t`CPU limit`],
-                  ["memoryRequest", t`Memory request`],
-                  ["memoryLimit", t`Memory limit`],
-                ] as const
-              ).map(([key, label]) => (
+          {kind === "ssh" ? (
+            <>
+              <Input
+                aria-label={t`Host`}
+                placeholder={t`Host`}
+                required
+                value={host}
+                onChange={(event) => setHost(event.target.value)}
+              />
+              <Input
+                aria-label={t`User`}
+                placeholder={t`User`}
+                required
+                value={user}
+                onChange={(event) => setUser(event.target.value)}
+              />
+              <NativeSelect
+                aria-label={t`Authentication`}
+                value={authentication}
+                onChange={(event) => setAuthentication(event.target.value as typeof authentication)}
+              >
+                <NativeSelectOption value="agent">
+                  <Trans>SSH agent</Trans>
+                </NativeSelectOption>
+                <NativeSelectOption value="private-key">
+                  <Trans>Private key</Trans>
+                </NativeSelectOption>
+                <NativeSelectOption value="tailscale">Tailscale SSH</NativeSelectOption>
+              </NativeSelect>
+              {authentication === "private-key" ? (
                 <Input
-                  key={key}
-                  aria-label={label}
-                  placeholder={label}
-                  value={resources[key]}
-                  onChange={(event) => setResources({ ...resources, [key]: event.target.value })}
-                />
-              ))}
-            </div>
-          </details>
-        </>
-      ) : (
-        <>
-          <Input
-            aria-label={t`Engine endpoint`}
-            placeholder={t`Engine endpoint`}
-            required
-            value={endpoint}
-            onChange={(event) => setEndpoint(event.target.value)}
-          />
-          {endpoint.startsWith("tcp://")
-            ? (["ca", "cert", "key"] as const).map((key) => (
-                <Input
-                  key={key}
-                  aria-label={
-                    key === "ca"
-                      ? t`CA certificate path`
-                      : key === "cert"
-                        ? t`Client certificate path`
-                        : t`Client key path`
-                  }
-                  placeholder={
-                    key === "ca"
-                      ? t`CA certificate path`
-                      : key === "cert"
-                        ? t`Client certificate path`
-                        : t`Client key path`
-                  }
+                  aria-label={t`Private key path on this computer`}
+                  placeholder={t`Private key path on this computer`}
                   required
-                  value={tls[key]}
-                  onChange={(event) => setTls({ ...tls, [key]: event.target.value })}
+                  value={keyPath}
+                  onChange={(event) => setKeyPath(event.target.value)}
                 />
-              ))
-            : null}
-        </>
-      )}
-      {error ? (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      ) : null}
-      <div className="flex gap-2">
-        <Button type="submit" disabled={busy}>
-          <Trans>Add</Trans>
-        </Button>
-        <Button type="button" variant="ghost" onClick={onCancel}>
-          <Trans>Cancel</Trans>
-        </Button>
-      </div>
-    </form>
+              ) : null}
+              <details>
+                <summary className="text-sm text-muted-foreground">
+                  <Trans>Advanced</Trans>
+                </summary>
+                <div className="space-y-2 pt-2">
+                  <Input
+                    type="number"
+                    aria-label={t`Port`}
+                    min={1}
+                    max={65535}
+                    value={port}
+                    onChange={(event) => setPort(Number(event.target.value))}
+                  />
+                  <Input
+                    aria-label={t`Jump host`}
+                    placeholder={t`Jump host`}
+                    value={jumpHost}
+                    onChange={(event) => setJumpHost(event.target.value)}
+                  />
+                  <Input
+                    aria-label={t`Remote base directory`}
+                    value={baseDirectory}
+                    onChange={(event) => setBaseDirectory(event.target.value)}
+                  />
+                </div>
+              </details>
+            </>
+          ) : kind === "kubernetes" ? (
+            <>
+              <Input
+                aria-label={t`Context`}
+                placeholder={t`Context`}
+                required
+                value={context}
+                onChange={(event) => setContext(event.target.value)}
+              />
+              <Input
+                aria-label={t`Namespace`}
+                placeholder={t`Namespace`}
+                required
+                value={namespace}
+                onChange={(event) => setNamespace(event.target.value)}
+              />
+              <details>
+                <summary className="text-sm text-muted-foreground">
+                  <Trans>Kubeconfig</Trans>
+                </summary>
+                <Input
+                  aria-label={t`Kubeconfig path`}
+                  placeholder={t`Kubeconfig path`}
+                  value={kubeconfigPath}
+                  disabled={!!kubeconfig}
+                  onChange={(event) => setKubeconfigPath(event.target.value)}
+                />
+                <Textarea
+                  disabled={!!kubeconfigPath}
+                  aria-label={t`Kubeconfig`}
+                  value={kubeconfig}
+                  onChange={(event) => setKubeconfig(event.target.value)}
+                />
+              </details>
+              <details>
+                <summary className="text-sm text-muted-foreground">
+                  <Trans>Resources</Trans>
+                </summary>
+                <div className="space-y-2 pt-2">
+                  {(
+                    [
+                      ["storageSize", t`Storage size`],
+                      ["storageClass", t`Storage class`],
+                      ["cpuRequest", t`CPU request`],
+                      ["cpuLimit", t`CPU limit`],
+                      ["memoryRequest", t`Memory request`],
+                      ["memoryLimit", t`Memory limit`],
+                    ] as const
+                  ).map(([key, label]) => (
+                    <Input
+                      key={key}
+                      aria-label={label}
+                      placeholder={label}
+                      value={resources[key]}
+                      onChange={(event) =>
+                        setResources({ ...resources, [key]: event.target.value })
+                      }
+                    />
+                  ))}
+                </div>
+              </details>
+            </>
+          ) : (
+            <>
+              <Input
+                aria-label={t`Engine endpoint`}
+                placeholder={t`Engine endpoint`}
+                required
+                value={endpoint}
+                onChange={(event) => setEndpoint(event.target.value)}
+              />
+              {endpoint.startsWith("tcp://")
+                ? (["ca", "cert", "key"] as const).map((key) => (
+                    <Input
+                      key={key}
+                      aria-label={
+                        key === "ca"
+                          ? t`CA certificate path`
+                          : key === "cert"
+                            ? t`Client certificate path`
+                            : t`Client key path`
+                      }
+                      placeholder={
+                        key === "ca"
+                          ? t`CA certificate path`
+                          : key === "cert"
+                            ? t`Client certificate path`
+                            : t`Client key path`
+                      }
+                      required
+                      value={tls[key]}
+                      onChange={(event) => setTls({ ...tls, [key]: event.target.value })}
+                    />
+                  ))
+                : null}
+            </>
+          )}
+          {error ? (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          ) : null}
+          <div className="flex gap-2">
+            <Button type="submit" disabled={busy}>
+              <Trans>Add</Trans>
+            </Button>
+            <Button type="button" variant="ghost" disabled={busy} onClick={onCancel}>
+              <Trans>Cancel</Trans>
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

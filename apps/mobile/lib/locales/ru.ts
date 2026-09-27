@@ -1,11 +1,32 @@
 export const RU_MESSAGES: Record<string, string> = {
-  "This bot uses a model chosen for this group. Change it in Group settings.":
-    "Этот бот использует модель, выбранную для группы. Измените её в настройках группы.",
-  "Model in this group": "Модель в этой группе",
-  "Same as bot": "Как у бота",
-  "Could not save group model.": "Не удалось сохранить модель группы.",
-  "This member's model changed. Reload the group.":
-    "Модель этого участника изменилась. Перезагрузите группу.",
+  Antigravity: "Antigravity",
+  "Antigravity did not finish in time. Try again.":
+    "Antigravity не завершил запрос вовремя. Повторите попытку.",
+  "Antigravity's live model list could not be checked. Check again.":
+    "Не удалось проверить актуальный список моделей Antigravity. Проверьте ещё раз.",
+  "Update Antigravity to version 1.2.12 or later.":
+    "Обновите Antigravity до версии 1.2.12 или новее.",
+  "Antigravity cannot use images yet. Remove the image and try again.":
+    "Antigravity пока не поддерживает изображения. Удалите изображение и повторите попытку.",
+  "Antigravity cannot run comparison turns yet. Choose another runtime.":
+    "Antigravity пока не поддерживает сравнение. Выберите другую среду выполнения.",
+  "Antigravity input is too large. Shorten the message or conversation and try again.":
+    "Входные данные Antigravity слишком велики. Сократите сообщение или историю и повторите попытку.",
+  "Antigravity could not run this turn. Check the runtime and try again.":
+    "Antigravity не смог выполнить этот запрос. Проверьте среду выполнения и повторите попытку.",
+  "Antigravity tried to use its own tools, which Ardur does not allow yet. The turn was stopped.":
+    "Antigravity попытался использовать собственные инструменты, которые Ardur пока не разрешает. Выполнение остановлено.",
+  "Antigravity did not recognise the model {model}. Pick a model from its list.":
+    "Antigravity не распознал модель {model}. Выберите модель из его списка.",
+  "Antigravity could not run this turn: {reason}.":
+    "Antigravity не смог выполнить этот запрос: {reason}.",
+  "Cost unavailable": "Стоимость недоступна",
+  "Antigravity is installed (version {version})": "Antigravity установлен (версия {version})",
+  "Sign-in unknown until the first run": "Статус входа неизвестен до первого запуска",
+  "Antigravity is not installed on this computer. Install it and sign in there, then check again.":
+    "Antigravity не установлен на этом компьютере. Установите его, войдите в аккаунт и проверьте снова.",
+  "Sign in to Antigravity on this computer, then check again.":
+    "Войдите в Antigravity на этом компьютере и проверьте снова.",
   "Sign-in timed out.": "Время входа истекло.",
   "Needs sign-in": "Требуется вход",
   "Not available": "Недоступно",
@@ -1160,4 +1181,11 @@ export const RU_MESSAGES: Record<string, string> = {
   "Based on {count} requests in the last {days} days.":
     "По {count} запросам за последние {days} дн.",
   "Allow {tool} for {bot} without asking?": "Разрешать {tool} для {bot} без вопроса?",
+  "This bot uses a model chosen for this group. Change it in Group settings.":
+    "Этот бот использует модель, выбранную для группы. Измените её в настройках группы.",
+  "Model in this group": "Модель в этой группе",
+  "Same as bot": "Как у бота",
+  "Could not save group model.": "Не удалось сохранить модель группы.",
+  "This member's model changed. Reload the group.":
+    "Модель этого участника изменилась. Перезагрузите группу.",
 };

@@ -5,7 +5,7 @@ export function effectiveToolAccessMode(
   mode: CapabilityPreferences["toolAccessMode"],
   runtime: string,
 ) {
-  return ["pi", "claude-code", "codex-app-server"].includes(runtime) ? mode : "all";
+  return ["pi", "claude-code", "codex-app-server", "antigravity"].includes(runtime) ? mode : "all";
 }
 export function capabilityAllowsTool(settings: CapabilityPreferences, name: string) {
   if (name === "search_connectors") return settings.connectorSearch;

@@ -1,6 +1,7 @@
 import { runtimePinMessage, runtimePinProblem } from "@ardurbot/contracts";
 import { expect, it } from "vitest";
-import { runtimePinRecovery } from "./runtime-pin-recovery";
+import { activateUiLocale } from "./i18n";
+import { antigravityProblemMessage, runtimePinRecovery } from "./runtime-pin-recovery";
 
 it("shows the pin and directs recovery to its provider and failed bot", () => {
   const pin = {
@@ -59,4 +60,67 @@ it("routes native sign-in recovery to the failed bot runtime settings", () => {
     pathname: "/bot-settings",
     params: { botId: "bot" },
   });
+});
+
+it("translates Antigravity model and tool failures", () => {
+  const pin = {
+    runtimeKind: "antigravity" as const,
+    provider: "antigravity",
+    modelId: "gemini-3.8-flash-low",
+    effort: "low",
+    credentialId: "native:antigravity",
+    revision: 1,
+  };
+  activateUiLocale("zh-CN");
+  try {
+    expect(
+      antigravityProblemMessage(
+        runtimePinProblem(pin, "pin-model-unknown", "unrecognised", "model-unrecognised"),
+      ),
+    ).toContain("无法识别模型 gemini-3.8-flash-low");
+    expect(
+      antigravityProblemMessage(
+        runtimePinProblem(
+          pin,
+          "runtime-unavailable",
+          "Antigravity tried to use its own tools, which Ardur does not allow yet. The turn was stopped.",
+          "native-tool-attempted",
+        ),
+      ),
+    ).toContain("已停止本轮运行");
+    expect(
+      antigravityProblemMessage(
+        runtimePinProblem(
+          pin,
+          "runtime-unavailable",
+          "Antigravity did not finish in time. Try again.",
+          "timeout",
+        ),
+      ),
+    ).toBe("Antigravity 未能按时完成。请重试。");
+  } finally {
+    activateUiLocale("en");
+  }
+});
+
+it("translates the registry's model error without a reason identifier", () => {
+  const problem = runtimePinProblem(
+    {
+      runtimeKind: "antigravity",
+      provider: "antigravity",
+      modelId: "gemini-3.8-flash-low",
+      effort: "low",
+      credentialId: "native:antigravity",
+      revision: 1,
+    },
+    "pin-model-unknown",
+    "The pinned model is unavailable in this runtime.",
+  );
+  expect(problem.reasonId).toBeUndefined();
+  activateUiLocale("zh-CN");
+  try {
+    expect(antigravityProblemMessage(problem)).toContain("无法识别模型 gemini-3.8-flash-low");
+  } finally {
+    activateUiLocale("en");
+  }
 });

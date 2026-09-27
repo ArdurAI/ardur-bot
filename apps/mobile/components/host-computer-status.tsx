@@ -29,6 +29,7 @@ export function HostComputerStatus() {
   const versions = [
     status.health?.claude.version ? `claude ${status.health.claude.version}` : "",
     status.health?.codex.version ? `codex ${status.health.codex.version}` : "",
+    status.health?.antigravity?.version ? `Antigravity ${status.health.antigravity.version}` : "",
   ].filter(Boolean);
   return (
     <View accessibilityLabel={t("This computer")} style={{ gap: 8, padding: 16 }}>

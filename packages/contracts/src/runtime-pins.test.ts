@@ -46,6 +46,12 @@ describe("runtime pin contracts", () => {
       "This bot is pinned to Local · My model · high; connect it or change the pin.",
     );
   });
+  it("preserves a runtime reason identifier across failure payloads", () => {
+    const problem = runtimePinProblem(pin, "runtime-unavailable", "Timed out.", "timeout");
+    expect(RunFailurePayloadSchema.parse({ runtimeProblem: problem }).runtimeProblem).toEqual(
+      problem,
+    );
+  });
   it("validates typed failures even without the older provider error kind", () => {
     const event = {
       id: "event",

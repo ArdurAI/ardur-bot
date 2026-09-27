@@ -37,6 +37,8 @@ Inherited from Rakazo and working:
 - Approvals before consequential actions, voice mode, and web, Electron desktop and Expo
   mobile clients of the same API
 
+Experimental Antigravity text conversations can run on a connected host computer with an exact model pin; see [Antigravity runtime](docs/antigravity-runtime.md).
+
 ## Where it is going
 
 - Subscription-honest providers: Claude Pro/Max through your own unmodified `claude` CLI

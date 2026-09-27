@@ -2,6 +2,7 @@ import { nativeRuntimeAvailability } from "@ardurbot/adapters";
 import type { Actor, RuntimeAvailability } from "@ardurbot/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { botModelPinUpdate } from "./bot-model-pin.js";
+import { validateModelPinSelection } from "./model-pin-validation.js";
 import type { RouterDeps } from "./router.js";
 
 vi.mock("@ardurbot/adapters", async (original) => ({
@@ -45,6 +46,40 @@ function fixture() {
   return { deps, findFirst, credential };
 }
 describe("bot pin editing", () => {
+  it("saves a no-effort Antigravity model with explicit null", async () => {
+    const { deps, findFirst } = fixture();
+    vi.mocked(nativeRuntimeAvailability).mockResolvedValue({
+      runtimeKind: "antigravity",
+      available: false,
+      models: [
+        {
+          id: "claude-sonnet-4-6",
+          label: "Claude Sonnet 4.6 (Thinking)",
+          efforts: [],
+          effortMode: "none",
+        },
+      ],
+    });
+    expect(
+      await botModelPinUpdate(
+        deps,
+        actor,
+        { ...existing, thinkingLevel: "high" },
+        {
+          botId: "bot",
+          runtimeKind: "antigravity",
+          modelProvider: "antigravity",
+          modelId: "claude-sonnet-4-6",
+          thinkingLevel: null,
+        },
+      ),
+    ).toMatchObject({
+      runtimeKind: "antigravity",
+      thinkingLevel: null,
+      modelCredentialId: "native:antigravity",
+    });
+    expect(findFirst).not.toHaveBeenCalled();
+  });
   it.each(["low", "medium", "high", "xhigh", "max"] as const)(
     "saves a complete native %s binding without looking up API credentials",
     async (effort) => {
@@ -208,6 +243,24 @@ describe("bot pin editing", () => {
       ),
     ).toMatchObject({ modelProvider: null, modelId: null, modelCredentialId: null });
   });
+});
+
+it("accepts a no-effort native model for a group member choice", async () => {
+  const { deps, findFirst } = fixture();
+  vi.mocked(nativeRuntimeAvailability).mockResolvedValue({
+    runtimeKind: "antigravity",
+    available: false,
+    models: [{ id: "claude-sonnet-4-6", label: "Sonnet", efforts: [], effortMode: "none" }],
+  });
+  const choice = {
+    runtimeKind: "antigravity" as const,
+    provider: "antigravity",
+    modelId: "claude-sonnet-4-6",
+    effort: null,
+    credentialId: "native:antigravity",
+  };
+  expect(await validateModelPinSelection(deps, actor, choice)).toEqual(choice);
+  expect(findFirst).not.toHaveBeenCalled();
 });
 
 it("refuses an explicitly selected hosted credential for a native pin", async () => {
