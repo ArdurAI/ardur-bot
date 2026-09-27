@@ -31,6 +31,7 @@ import { createOwnerPreviews } from "./pending-previews.js";
 type Owner = Pick<Actor, "spaceId" | "userId">;
 type Material = {
   redactions?: string[];
+  argumentRedactions?: string[];
   command?: string;
   args?: string[];
   env?: Record<string, string>;
@@ -129,6 +130,7 @@ export function createMcpSettings(deps: {
     revision: string;
     config: LocalServerConfig;
     redactions: Record<string, string[]>;
+    argumentRedactions: Record<string, string[]>;
     expires: number;
   }>();
   async function requireHostOwner(owner: Owner) {
@@ -179,6 +181,7 @@ export function createMcpSettings(deps: {
           const env = stored.env ?? {};
           const secrets = [
             ...(stored.redactions ?? []),
+            ...(stored.argumentRedactions ?? []),
             ...Object.values(env),
             ...(stored.secret ? [stored.secret] : []),
           ];
@@ -357,13 +360,14 @@ export function createMcpSettings(deps: {
         });
       const config = parseServerConfig(input.json);
       const before = await configuration(rows, true);
+      const storedMaterials = await Promise.all(
+        rows.map(async (row) => ({ slug: row.slug, stored: await material(row) })),
+      );
       const redactions = Object.fromEntries(
-        await Promise.all(
-          rows.map(async (row) => {
-            const stored = await material(row);
-            return [row.slug, independentMcpRedactions(stored)];
-          }),
-        ),
+        storedMaterials.map(({ slug, stored }) => [slug, independentMcpRedactions(stored)]),
+      );
+      const argumentRedactions = Object.fromEntries(
+        storedMaterials.map(({ slug, stored }) => [slug, stored.argumentRedactions ?? []]),
       );
       for (const [slug, server] of Object.entries(config.mcpServers)) {
         if (rows.some((row) => row.slug === slug && (row.managedBy || row.catalogId)))
@@ -404,6 +408,7 @@ export function createMcpSettings(deps: {
         revision: input.revision,
         config,
         redactions,
+        argumentRedactions,
         expires: Date.now() + 10 * 60_000,
       });
       const previewValues = Object.fromEntries(
@@ -411,6 +416,7 @@ export function createMcpSettings(deps: {
           slug,
           [
             ...(redactions[slug] ?? []),
+            ...(argumentRedactions[slug] ?? []),
             ...Object.values(server.env),
             ...(server.secret ? [server.secret] : []),
           ],
@@ -483,27 +489,25 @@ export function createMcpSettings(deps: {
               const flags = mcpCredentialFlagsForEntries(previous, { env: server.env });
               const envValues = Object.values(server.env);
               const launchParts = [server.command, ...server.args];
-              const redactions = [
-                ...new Set([
-                  ...independentMcpRedactions({
-                    redactions: preview.redactions[slug],
-                    env: server.env,
-                  }),
-                  // A removed or rotated credential may still occur in a launch argument,
-                  // including spellings decoded by the shared MCP redactor.
-                  ...[
+              const redactions = independentMcpRedactions({
+                redactions: preview.redactions[slug],
+                env: server.env,
+              });
+              // Argument-bound credentials stay protected even when an ordinary named entry
+              // has the same value. Only removing the value from the launch command/args drops it.
+              const argumentRedactions = [
+                ...new Set(
+                  [
+                    ...(preview.argumentRedactions[slug] ?? []),
                     ...(previous.secret ? [previous.secret] : []),
                     ...Object.entries(previous.env ?? {}).flatMap(([key, value]) =>
-                      mcpEntryIsSecret(previous.credentialFlags, "env", key) &&
-                      !envValues.includes(value)
-                        ? [value]
-                        : [],
+                      mcpEntryIsSecret(previous.credentialFlags, "env", key) ? [value] : [],
                     ),
                   ].filter(
                     (value) =>
                       value && launchParts.some((part) => mcpTextContainsSecret(part, value)),
                   ),
-                ]),
+                ),
               ];
               const secretId = await store(
                 owner,
@@ -513,6 +517,7 @@ export function createMcpSettings(deps: {
                   env: server.env,
                   secret: server.secret,
                   redactions,
+                  argumentRedactions,
                   credentialFlags: flags,
                 },
                 tx,
@@ -527,11 +532,13 @@ export function createMcpSettings(deps: {
                 transport: "stdio",
                 command: redactMcpText(server.command, [
                   ...redactions,
+                  ...argumentRedactions,
                   ...envValues,
                   ...(server.secret ? [server.secret] : []),
                 ]),
                 args: redactMcpArguments(server.args, [
                   ...redactions,
+                  ...argumentRedactions,
                   ...envValues,
                   ...(server.secret ? [server.secret] : []),
                 ]),

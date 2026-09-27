@@ -6,6 +6,7 @@ import { redactMcpArguments } from "@ardurbot/host-runtime/mcp-diagnostics";
  * (tokens, client registration, PKCE verifier) managed by McpOAuthBroker. */
 export type McpSecretMaterial = {
   redactions?: string[];
+  argumentRedactions?: string[];
   args?: string[];
   command?: string;
   cwd?: string;

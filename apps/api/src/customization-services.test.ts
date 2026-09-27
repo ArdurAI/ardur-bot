@@ -6,7 +6,11 @@ import path from "node:path";
 import { EncryptedSecretStore, oauthMaterialSecrets } from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
 import { ManagedServerInputSchema } from "@ardurbot/contracts";
-import { redactMcpText } from "@ardurbot/host-runtime/mcp-diagnostics";
+import {
+  McpLogBuffer,
+  redactMcpText,
+  redactMcpValue,
+} from "@ardurbot/host-runtime/mcp-diagnostics";
 import { assertMemorySafe } from "@ardurbot/memory";
 import { memoryServiceFixture } from "@ardurbot/testkit/memory-fakes";
 import { RPCHandler } from "@orpc/server/fetch";
@@ -718,8 +722,30 @@ describe("customization service boundaries", () => {
     },
   ])(
     "keeps a $name protected after its named entry is removed",
-    async ({ credential, value, argument, remove }) => {
+    async ({ name, credential, value, argument, remove }) => {
       const f = await fixture();
+      const assertProtected = async () => {
+        expect(JSON.stringify(f.tables.mcpServer)).not.toContain(argument);
+        expect((await f.mcp.list(actor))[0]?.args).toEqual([
+          "server.js",
+          argument.startsWith("--token=") ? "--token=[redacted]" : "[redacted]",
+        ]);
+        expect((await f.mcp.config(actor)).json).not.toContain(argument);
+        const row = f.tables.mcpServer![0]!;
+        const encrypted = f.tables.secret!.find((entry) => entry.id === row.secretId)!;
+        const material = JSON.parse(
+          f.deps.secrets.load(String(encrypted.ciphertext), String(encrypted.id)),
+        );
+        const runtimeSecrets = oauthMaterialSecrets(material);
+        expect(runtimeSecrets).toContain(value);
+        const logs = new McpLogBuffer(runtimeSecrets);
+        logs.append(`diagnostic ${value}\n`);
+        expect(JSON.stringify(logs.snapshot())).not.toContain(value);
+        expect(redactMcpValue({ result: value }, runtimeSecrets)).toEqual({
+          result: "[redacted]",
+        });
+        return material;
+      };
       const initial = await f.mcp.config(actor);
       const created = await f.mcp.preview(actor, {
         revision: initial.revision,
@@ -743,18 +769,47 @@ describe("customization service boundaries", () => {
         json: JSON.stringify(changed),
       });
       await f.mcp.apply(actor, removal.id);
-      expect(JSON.stringify(f.tables.mcpServer)).not.toContain(argument);
-      expect((await f.mcp.list(actor))[0]?.args).toEqual([
-        "server.js",
-        argument.startsWith("--token=") ? "--token=[redacted]" : "[redacted]",
-      ]);
-      expect((await f.mcp.config(actor)).json).not.toContain(argument);
-      const row = f.tables.mcpServer![0]!;
-      const encrypted = f.tables.secret!.find((entry) => entry.id === row.secretId)!;
-      const material = JSON.parse(
-        f.deps.secrets.load(String(encrypted.ciphertext), String(encrypted.id)),
-      );
-      expect(material.redactions).toContain(value);
+      const material = await assertProtected();
+      expect(material.argumentRedactions).toContain(value);
+      if (name === "removed secret also entered as an ordinary environment value") {
+        const exported = await f.mcp.config(actor);
+        const renamed = await f.mcp.preview(actor, {
+          revision: exported.revision,
+          json: exported.json.replace('"Fixture"', '"Updated"'),
+        });
+        await f.mcp.apply(actor, renamed.id);
+        const afterRename = await assertProtected();
+        expect(afterRename.credentialFlags.env.LOG_LEVEL).toBe(false);
+        expect(afterRename.argumentRedactions).toContain(value);
+
+        const current = await f.mcp.config(actor);
+        const withoutEnvironment = JSON.parse(current.json);
+        withoutEnvironment.mcpServers.fixture.env = {};
+        const removedEnvironment = await f.mcp.preview(actor, {
+          revision: current.revision,
+          json: JSON.stringify(withoutEnvironment),
+        });
+        await f.mcp.apply(actor, removedEnvironment.id);
+        const afterEnvironmentRemoval = await assertProtected();
+        expect(afterEnvironmentRemoval.env).toEqual({});
+        expect(afterEnvironmentRemoval.argumentRedactions).toContain(value);
+
+        const finalConfig = await f.mcp.config(actor);
+        const withoutArgument = JSON.parse(finalConfig.json);
+        withoutArgument.mcpServers.fixture.args = ["server.js"];
+        const removedArgument = await f.mcp.preview(actor, {
+          revision: finalConfig.revision,
+          json: JSON.stringify(withoutArgument),
+        });
+        await f.mcp.apply(actor, removedArgument.id);
+        const finalRow = f.tables.mcpServer![0]!;
+        const finalSecret = f.tables.secret!.find((entry) => entry.id === finalRow.secretId)!;
+        const finalMaterial = JSON.parse(
+          f.deps.secrets.load(String(finalSecret.ciphertext), String(finalSecret.id)),
+        );
+        expect(finalMaterial.argumentRedactions).not.toContain(value);
+        expect(oauthMaterialSecrets(finalMaterial)).not.toContain(value);
+      }
     },
   );
   it("does not persist an ordinary environment value as a redaction after a config edit", async () => {
