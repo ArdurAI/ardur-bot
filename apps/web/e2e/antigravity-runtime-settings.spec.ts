@@ -36,7 +36,7 @@ test("antigravity-runtime-settings", async ({ page }, testInfo) => {
   await settings.getByRole("combobox", { name: "Runs on" }).selectOption("antigravity");
   await expect(settings.getByText("Antigravity is installed (version 1.2.12)")).toBeVisible();
   await expect(settings.getByText("Sign-in unknown until the first run").first()).toBeVisible();
-  await expect(settings.getByRole("combobox", { name: "Model" })).toContainText(
+  await expect(settings.getByRole("combobox", { name: "Model", exact: true })).toContainText(
     "Gemini 3.8 Flash (Low)",
   );
   await captureScreenshot(page, testInfo, "antigravity-runtime-settings");
