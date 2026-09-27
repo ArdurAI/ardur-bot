@@ -36,7 +36,11 @@ test("actions run by default while optional confirmations live in advanced user 
 
   await settings.getByText("Action confirmations", { exact: true }).click();
   await expect(settings.getByRole("heading", { name: "Action confirmations" })).toBeVisible();
-  await expect(settings.getByText("No exceptions. Actions run automatically.")).toBeVisible();
+  await expect(
+    settings.getByText(
+      "Actions usually run automatically. Rules, safety checks, and integration policies may require confirmation.",
+    ),
+  ).toBeVisible();
   await expect(settings.getByTestId("auto-review-toggle")).toBeVisible();
   await expect(settings.getByTestId("auto-review-toggle")).not.toBeChecked();
   await expect(settings.getByText("Flag unexpected actions")).toBeVisible();
