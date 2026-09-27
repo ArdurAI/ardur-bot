@@ -1,6 +1,5 @@
 import { execFile, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
 import { chmod, copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
@@ -16,8 +15,8 @@ const image =
   "nousresearch/hermes-agent@sha256:c64666f62179b6cd7d2df3348a30907b383a82a8e0d2400083b8004e24615780";
 const fixture = fileURLToPath(new URL("./fixtures/hermes-image-fixture.py", import.meta.url));
 function evidenceDirectory() {
-  const preferred = "/Volumes/EXTENDED/ardur-measurements/hermes-m0";
-  return process.env.ARDUR_HERMES_EVIDENCE_DIR ?? (existsSync(preferred) ? preferred : tmpdir());
+  // The lane runner sets ARDUR_HERMES_EVIDENCE_DIR; the repository carries no machine-specific path.
+  return process.env.ARDUR_HERMES_EVIDENCE_DIR ?? tmpdir();
 }
 
 function dockerEnvironment() {
