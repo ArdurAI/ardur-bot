@@ -10,6 +10,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import type { ImportedProvenance } from "@ardurbot/contracts";
 import { PostgresDocumentStore } from "@ardurbot/memory";
 import {
   memoryConformance,
@@ -19,7 +20,12 @@ import {
 import { memoryDatabaseFake, serialMemoryLock } from "@ardurbot/testkit/memory-fakes";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { memoryFilesystemFake } from "./filesystem-fake.js";
-import { MarkdownFiles, parseRevisionMarkdown, revisionMarkdown } from "./markdown-files.js";
+import {
+  historyNotePath,
+  MarkdownFiles,
+  parseRevisionMarkdown,
+  revisionMarkdown,
+} from "./markdown-files.js";
 import {
   ObsidianDocumentStore,
   VaultWithPrivateDocuments,
@@ -270,5 +276,40 @@ describe("vault filesystem boundary", () => {
       deletedAt: null,
     };
     expect(parseRevisionMarkdown(revisionMarkdown(revision))).toEqual(revision);
+  });
+  it("preserves imported provenance in projected notes and history", async () => {
+    const f = await createFixture();
+    try {
+      const access = memoryTestAccess();
+      const provenance: ImportedProvenance = {
+        tool: "codex",
+        relativePath: "notes/fact.md",
+        sourcePathHash: "a".repeat(64),
+        contentHash: "b".repeat(64),
+        modifiedAt: "2026-09-23T12:00:00.000Z",
+        importedAt: "2026-09-23T12:00:00.000Z",
+        kind: "memories",
+        authorizesIntent: false,
+      };
+      const store = f.vault(access.spaceId);
+      const saved = await store.commit(
+        { ...memoryTestCommit(access, "Imported fact", "space-shared"), imported: provenance },
+        access,
+      );
+      expect(saved.imported).toEqual(provenance);
+
+      const files = new MarkdownFiles(path.join(f.root, access.spaceId));
+      const raw = await files.read(vaultNotePath(saved));
+      expect(raw).not.toBeNull();
+      const projected = parseRevisionMarkdown(raw!);
+      expect(projected.imported).toEqual(provenance);
+
+      const historyRaw = await files.read(historyNotePath(saved));
+      expect(historyRaw).not.toBeNull();
+      const historyRevision = parseRevisionMarkdown(historyRaw!);
+      expect(historyRevision.imported).toEqual(provenance);
+    } finally {
+      await f.dispose();
+    }
   });
 });

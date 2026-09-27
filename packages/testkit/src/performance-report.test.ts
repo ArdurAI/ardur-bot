@@ -549,11 +549,11 @@ describe("request usage attribution", () => {
     },
   );
 
-  it("keeps main, retry, helper, summary, delegated and detached learning attributed separately", () => {
+  it("keeps known and unknown request purposes attributed separately", () => {
     const report = evidence();
     const base = usage(report);
     report.usage = (
-      ["main", "retry", "helper", "summary", "delegated", "detached-learning"] as const
+      ["main", "unknown", "retry", "helper", "summary", "delegated", "detached-learning"] as const
     ).map((purpose, index) => ({
       ...structuredClone(base),
       purpose,
@@ -561,8 +561,8 @@ describe("request usage attribution", () => {
       attemptId: `attempt-${index}`,
       parentRequestId: index ? "request-0" : null,
     }));
-    report.usageCoverage = { expected: 6, observed: 6 };
-    expect(parsePerformanceEvidenceReport(report, "purposes").usage).toHaveLength(6);
+    report.usageCoverage = { expected: 7, observed: 7 };
+    expect(parsePerformanceEvidenceReport(report, "purposes").usage).toHaveLength(7);
   });
 
   it.each(["failed", "cancelled", "timed-out", "uncertain"] as const)(

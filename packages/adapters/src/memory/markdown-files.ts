@@ -30,6 +30,7 @@ export function revisionMarkdown(revision: DocumentRevision): string {
     scope: revision.scopeKey,
     author: revision.author,
     ...(revision.learning ? { learning: revision.learning } : {}),
+    ...(revision.imported ? { imported: revision.imported } : {}),
     bot:
       revision.author.botId ?? (revision.scopeKey.kind === "bot" ? revision.scopeKey.botId : null),
     runId: revision.runId,
@@ -64,13 +65,15 @@ export function parseRevisionMarkdown(text: string): DocumentRevision {
     }
   }
   const { id, scope, bot: _bot, updatedAt, ...rest } = metadata;
-  return DocumentRevisionSchema.parse({
+  const revision = DocumentRevisionSchema.parse({
     ...rest,
     documentId: id,
     scopeKey: scope,
     createdAt: updatedAt,
     content: match[2]!,
   });
+  assertMemorySafe(revision);
+  return revision;
 }
 
 /** All IO is rooted in an explicitly registered dedicated folder, never a bot filesystem. */

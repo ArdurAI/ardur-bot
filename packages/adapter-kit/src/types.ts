@@ -439,6 +439,7 @@ export interface UsageCategories {
 
 export type UsagePurpose =
   | "main"
+  | "unknown"
   | "retry"
   | "helper"
   | "summary"
@@ -464,6 +465,13 @@ export interface RequestUsageObservation {
   } | null;
   /** Optional on historical receipts; runtime collectors supply lifecycle and numeric provenance. */
   collection?: UsageCollection;
+  /** Durable admission bound for a worker-broker request; never contains credentials. */
+  admission?: {
+    kind: "worker-provider-broker";
+    reservedTokens: number;
+    maxRequests: number;
+    maxReservedTokens: number;
+  };
 }
 
 export interface AgentUsage {
@@ -607,6 +615,8 @@ export interface AgentRuntimeCapabilities {
   compaction: boolean;
   tools: boolean;
   scripted: boolean;
+  /** Brokered provider calls persist their own receipts; runtime aggregates are informational. */
+  usageAccounting?: "runtime" | "external";
 }
 
 export interface VoiceInfo {
