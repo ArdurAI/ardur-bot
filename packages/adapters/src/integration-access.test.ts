@@ -1,13 +1,27 @@
 import type { AdapterContext, ConnectorCall } from "@ardurbot/adapter-kit";
 import type { SpaceToolPolicies } from "@ardurbot/contracts";
+import { createArdurMcpProtocol } from "@ardurbot/host-runtime/runtimes/ardur-mcp-server";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { describe, expect, it, vi } from "vitest";
 import {
   grantedMcpTools,
   integrationApprovalForCall,
   integrationResourceDenial,
+  mcpGrantForBot,
 } from "./integration-access.js";
 import { captureIntegrationManifest } from "./integration-manifest.js";
 import { McpConnector } from "./mcp-connector.js";
+import { serverFirstMcpFixture } from "./mcp-test-db.js";
+
+function fixtureConnector(
+  db: Record<string, unknown>,
+  secrets: ConstructorParameters<typeof McpConnector>[1],
+  options?: ConstructorParameters<typeof McpConnector>[2],
+  oauth?: ConstructorParameters<typeof McpConnector>[3],
+) {
+  return new McpConnector(serverFirstMcpFixture(db) as never, secrets, options, oauth);
+}
 
 // All tool names in this test are synthetic; no vendor tool list is asserted.
 const tools = Array.from({ length: 25 }, (_, index) => ({
@@ -28,6 +42,9 @@ const context: AdapterContext = {
 function fixture() {
   const assignment = {
     id: "grant",
+    botId: "bot",
+    spaceId: "space",
+    userId: "owner",
     allowAllTools: false,
     needsReview: false,
     allowedTools: tools.map((tool) => tool.name),
@@ -53,7 +70,13 @@ function fixture() {
   const db = {
     botMcpServer: {
       findMany: vi.fn(async () => [assignment]),
-      findFirst: vi.fn(async () => assignment),
+      findFirst: vi.fn(async ({ where }) =>
+        where.botId === assignment.botId &&
+        where.spaceId === assignment.spaceId &&
+        where.userId === assignment.userId
+          ? assignment
+          : null,
+      ),
     },
   };
   const network = {
@@ -91,13 +114,14 @@ function fixture() {
       return new Response(null, { status: 202 });
     }),
   };
+  Object.assign(db, serverFirstMcpFixture(db));
   return {
     assignment,
     db,
     network,
     calls,
     initializations: () => initializations,
-    connector: new McpConnector(db as never, {} as never, { network }),
+    connector: fixtureConnector(db as never, {} as never, { network }),
   };
 }
 
@@ -120,6 +144,145 @@ const lazy = (name: string): ConnectorCall => ({
 });
 
 describe("MCP integration authorization", () => {
+  it("caps a persisted custom override after a space Block with no override update", async () => {
+    const f = fixture();
+    const [first, second] = [tools[0]!.name, tools[1]!.name];
+    f.assignment.server.catalogId = null;
+    Object.assign(f.assignment, { access: "custom" });
+    f.assignment.allowedTools = [first, second];
+    f.assignment.server.spaceAllowedTools = [first, second];
+    expect(
+      (await f.connector.discoverTools(context)).map((entry) => entry.route?.toolName),
+    ).toContain(second);
+
+    // The space Block updates the server revision but leaves the custom row intact.
+    f.assignment.server.spaceAllowedTools = [first];
+    f.assignment.server.revision = 2;
+    const blocked = { ...direct(second), route: { ...direct(second).route!, resourceRevision: 2 } };
+    expect(grantedMcpTools(f.assignment, [first, second])).toEqual([first]);
+    expect(
+      (await f.connector.discoverTools(context)).map((entry) => entry.route?.toolName),
+    ).toEqual([first]);
+    expect(await collect(f.connector, blocked)).toMatchObject([{ type: "error" }]);
+    expect(await integrationApprovalForCall(f.db as never, blocked.route, context, {})).toBe(
+      "disabled",
+    );
+    expect(f.calls).toEqual([]);
+    await f.connector.close();
+  });
+  it("inherits the space set and preserves custom, removed, and review states", () => {
+    const f = fixture();
+    const first = tools[0]!.name;
+    const second = tools[1]!.name;
+    f.assignment.server.spaceAllowedTools = [first, second];
+    expect(grantedMcpTools({ ...f.assignment, access: "inherit" }, [first, second])).toEqual([
+      first,
+      second,
+    ]);
+    expect(
+      grantedMcpTools({ ...f.assignment, access: "custom", allowedTools: [first] }, [
+        first,
+        second,
+      ]),
+    ).toEqual([first]);
+    expect(grantedMcpTools({ ...f.assignment, access: "none" }, [first, second])).toEqual([]);
+    expect(
+      grantedMcpTools(
+        {
+          ...f.assignment,
+          access: "inherit",
+          server: { ...f.assignment.server, needsReview: true },
+        },
+        [first],
+      ),
+    ).toEqual([]);
+  });
+  it("checks approval from inherited access and blocks it during review", async () => {
+    const f = fixture();
+    const id = tools[0]!.name;
+    const server = f.assignment.server;
+    server.spaceToolPolicies = { [id]: "allow" };
+    server.spaceAllowedTools = [id];
+    const db = {
+      botMcpServer: { findFirst: vi.fn(async () => null) },
+      bot: {
+        findFirst: vi.fn(async ({ where }) =>
+          where.spaceId === context.spaceId && where.userId === context.userId
+            ? { id: "bot", computer: null }
+            : null,
+        ),
+      },
+      mcpServer: {
+        findFirst: vi.fn(async ({ where }) =>
+          where.spaceId === context.spaceId && where.userId === context.userId ? server : null,
+        ),
+      },
+    };
+    expect(await integrationApprovalForCall(db as never, direct(id).route, context, {})).toBe(
+      "allow",
+    );
+    expect(
+      await integrationApprovalForCall(db as never, direct(id).route, context, {
+        action: "delete",
+      }),
+    ).toBe("ask-first");
+    Object.assign(server, { needsReview: true });
+    expect(await integrationApprovalForCall(db as never, direct(id).route, context, {})).toBe(
+      "disabled",
+    );
+    expect(
+      await integrationApprovalForCall(
+        db as never,
+        direct(id).route,
+        { ...context, userId: "foreign" },
+        {},
+      ),
+    ).toBe("disabled");
+    await f.connector.close();
+  });
+  it("requires the bot and server to share an owner and a desktop for host access", async () => {
+    const f = fixture();
+    const server = { ...f.assignment.server, transport: "host-cli" };
+    const computer = { kind: "desktop" };
+    const db = {
+      botMcpServer: { findFirst: vi.fn(async () => null) },
+      bot: {
+        findFirst: vi.fn(async ({ where }) =>
+          where.spaceId === context.spaceId && where.userId === context.userId
+            ? { id: "bot", computer }
+            : null,
+        ),
+      },
+      mcpServer: {
+        findFirst: vi.fn(async ({ where }) =>
+          where.spaceId === context.spaceId && where.userId === context.userId ? server : null,
+        ),
+      },
+    };
+    expect((await mcpGrantForBot(db as never, context, "server"))?.access).toBe("inherit");
+    computer.kind = "remote";
+    expect(await mcpGrantForBot(db as never, context, "server")).toBeNull();
+    expect(
+      await mcpGrantForBot(db as never, { ...context, spaceId: "foreign" }, "server"),
+    ).toBeNull();
+    await f.connector.close();
+  });
+  it("lists a discovered integration tool through the runtime protocol", async () => {
+    const f = fixture();
+    f.assignment.server.spaceAllowedTools = [tools[0]!.name];
+    f.assignment.allowedTools = [tools[0]!.name];
+    const discovered = await f.connector.discoverTools(context);
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const protocol = createArdurMcpProtocol({ tools: discovered } as never);
+    const client = new Client({ name: "fixture", version: "1" });
+    await Promise.all([protocol.connect(serverTransport), client.connect(clientTransport)]);
+    expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual([
+      `mcp__test__${tools[0]!.name}`,
+    ]);
+    await client.close();
+    await protocol.close();
+    await f.connector.close();
+  });
   it("enforces Allow, Ask and Block for custom MCP tools and fences stale grants", async () => {
     const f = fixture();
     f.assignment.server.catalogId = null;

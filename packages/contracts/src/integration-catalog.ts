@@ -204,6 +204,7 @@ export const IntegrationConnectionSchema = z.object({
   state: IntegrationStateSchema,
   manifest: IntegrationManifestSchema.nullable(),
   needsReview: z.boolean(),
+  spaceAllowedTools: z.array(z.string()).optional(),
   resourceConstraints: IntegrationResourceConstraintsSchema.optional(),
   spaceToolPolicies: SpaceToolPoliciesSchema.default({}),
   transport: z.string().optional(),
@@ -217,6 +218,7 @@ export const IntegrationConnectionSchema = z.object({
 export type IntegrationConnection = z.infer<typeof IntegrationConnectionSchema>;
 export const IntegrationGrantSchema = z.object({
   botId: z.string(),
+  access: z.enum(["inherit", "custom", "none"]).default("custom"),
   toolIds: z.array(z.string()),
   needsReview: z.boolean(),
 });

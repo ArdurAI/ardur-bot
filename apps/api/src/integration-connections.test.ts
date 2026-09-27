@@ -50,6 +50,7 @@ function fixture(stdio: { stdioEnabled?: boolean; allowedCommands?: string[] } =
     allowedTools: string[];
     allowAllTools: boolean;
     needsReview: boolean;
+    access?: string;
   }> = [];
   const mcpServer = {
     findFirst: vi.fn(async ({ where }: { where: Record<string, unknown> }) => {
@@ -127,10 +128,22 @@ function fixture(stdio: { stdioEnabled?: boolean; allowedCommands?: string[] } =
       ),
     },
     botMcpServer: {
-      updateMany: vi.fn(async ({ data }: { data: Partial<(typeof grants)[number]> }) => {
-        grants = grants.map((grant) => ({ ...grant, ...data }));
-        return { count: grants.length };
-      }),
+      updateMany: vi.fn(
+        async ({
+          where,
+          data,
+        }: {
+          where?: { access?: string };
+          data: Partial<(typeof grants)[number]>;
+        }) => {
+          grants = grants.map((grant) =>
+            where?.access && (grant.access ?? "custom") !== where.access
+              ? grant
+              : { ...grant, ...data },
+          );
+          return { count: grants.length };
+        },
+      ),
       findMany: vi.fn(async () => grants),
       deleteMany: vi.fn(async () => {
         grants = [];
@@ -140,6 +153,26 @@ function fixture(stdio: { stdioEnabled?: boolean; allowedCommands?: string[] } =
         grants = data;
         return { count: data.length };
       }),
+      upsert: vi.fn(
+        async ({
+          where,
+          create,
+          update,
+        }: {
+          where: { botId_serverId: { botId: string; serverId: string } };
+          create: (typeof grants)[number];
+          update: Partial<(typeof grants)[number]>;
+        }) => {
+          const index = grants.findIndex(
+            (grant) =>
+              grant.botId === where.botId_serverId.botId &&
+              grant.serverId === where.botId_serverId.serverId,
+          );
+          if (index < 0) grants.push(create);
+          else grants[index] = { ...grants[index]!, ...update };
+          return grants[index < 0 ? grants.length - 1 : index]!;
+        },
+      ),
     },
     mcpOAuthSession: {
       deleteMany: vi.fn(async () => ({ count: 1 })),
@@ -537,7 +570,9 @@ describe("catalog connection lifecycle", () => {
     await f.service.revoke(actor, result.connection.id);
     expect(f.row().secretId).toBeNull();
     expect(f.secretRows.size).toBe(0);
-    expect(await f.service.grants(actor, result.connection.id)).toEqual([]);
+    expect(await f.service.grants(actor, result.connection.id)).toEqual([
+      { botId: "bot", access: "custom", toolIds: [], needsReview: true },
+    ]);
   });
   it("reports a bad token only as discovery-failed", async () => {
     const f = fixture();
@@ -924,7 +959,7 @@ describe("catalog connection lifecycle", () => {
     });
     await f.service.capture(actor, "connection");
     expect(await f.service.grants(actor, "connection")).toEqual([
-      { botId: "bot", toolIds: [], needsReview: true },
+      { botId: "bot", access: "custom", toolIds: [], needsReview: true },
     ]);
     expect(f.row().spaceAllowedTools).toEqual([]);
     expect(f.row().spaceToolPolicies).toEqual({});
@@ -949,23 +984,45 @@ describe("catalog connection lifecycle", () => {
         botIds: ["bot"],
         toolIds: ["synthetic_read"],
       }),
-    ).toEqual([{ botId: "bot", toolIds: ["synthetic_read"], needsReview: false }]);
+    ).toEqual([
+      { botId: "bot", access: "custom", toolIds: ["synthetic_read"], needsReview: false },
+    ]);
     expect(f.row().spaceAllowedTools).toEqual(["synthetic_read"]);
     expect(f.row().revision).toBe(2);
-    expect(f.db.botMcpServer.createMany).toHaveBeenCalledWith({
-      data: [
-        expect.objectContaining({
-          allowAllTools: false,
-          needsReview: false,
-          allowedTools: ["synthetic_read"],
-        }),
-      ],
+    expect(f.db.botMcpServer.upsert).toHaveBeenCalledWith({
+      where: { botId_serverId: { botId: "bot", serverId: "connection" } },
+      create: expect.objectContaining({
+        allowAllTools: false,
+        needsReview: false,
+        allowedTools: ["synthetic_read"],
+      }),
+      update: expect.objectContaining({ allowedTools: ["synthetic_read"] }),
     });
     expect(f.db.externalEffect.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({ data: { status: "denied" } }),
     );
-    await f.service.assign(actor, { connectionId: "connection", botIds: [], toolIds: [] });
+    await f.service.assign(actor, {
+      connectionId: "connection",
+      overrides: [{ botId: "bot", access: "inherit", toolIds: [] }],
+      toolIds: [],
+    });
     expect(await f.service.grants(actor, "connection")).toEqual([]);
+  });
+  it("preserves an omitted removal while saving the space tools", async () => {
+    const f = fixture();
+    await f.service.assign(actor, {
+      connectionId: "connection",
+      toolIds: ["synthetic_read"],
+      overrides: [{ botId: "bot", access: "none", toolIds: [] }],
+    });
+    await f.service.assign(actor, {
+      connectionId: "connection",
+      toolIds: [],
+      overrides: [],
+    });
+    expect(await f.service.grants(actor, "connection")).toEqual([
+      { botId: "bot", access: "none", toolIds: [], needsReview: false },
+    ]);
   });
   it("persists owner read policies, returns them, preserves omitted policies and supports Ask first", async () => {
     const f = fixture();
@@ -1094,7 +1151,7 @@ describe("catalog connection lifecycle", () => {
         spaceToolPolicies: {},
         revision: 2,
       });
-      expect(f.db.botMcpServer.deleteMany).toHaveBeenCalled();
+      expect(f.db.botMcpServer.updateMany).toHaveBeenCalled();
       expect(f.db.mcpOAuthSession.deleteMany).toHaveBeenCalled();
       expect(f.db.externalEffect.updateMany).toHaveBeenCalledWith({
         where: expect.objectContaining({
@@ -1107,6 +1164,25 @@ describe("catalog connection lifecycle", () => {
       expect(f.oauth.forgetPending).toHaveBeenCalledWith({ serverId: "connection", ...actor });
     },
   );
+  it("keeps an explicit removal through revoke and reconnect", async () => {
+    const f = fixture();
+    await f.service.assign(actor, {
+      connectionId: "connection",
+      toolIds: ["synthetic_read"],
+      overrides: [{ botId: "bot", access: "none", toolIds: [] }],
+    });
+    await f.service.revoke(actor, "connection");
+    expect(await f.service.grants(actor, "connection")).toEqual([
+      { botId: "bot", access: "none", toolIds: [], needsReview: false },
+    ]);
+    f.setRow({ enabled: true, connectionState: "awaiting-consent" });
+    vi.spyOn(f.service, "tools").mockResolvedValue(manifest);
+    await f.service.capture(actor, "connection");
+    expect(f.row().spaceAllowedTools).toEqual(["synthetic_read"]);
+    expect(await f.service.grants(actor, "connection")).toEqual([
+      { botId: "bot", access: "none", toolIds: [], needsReview: false },
+    ]);
+  });
 });
 
 describe("connection recovery and health", () => {
@@ -1138,7 +1214,7 @@ describe("connection recovery and health", () => {
     expect(f.row().revision).toBe(revision);
     expect(f.row().lastSuccessAt).toBeInstanceOf(Date);
     expect(await f.service.grants(actor, "connection")).toEqual([
-      { botId: "bot", toolIds: ["synthetic_read"], needsReview: false },
+      { botId: "bot", access: "custom", toolIds: ["synthetic_read"], needsReview: false },
     ]);
   });
   it("expires consent after ten minutes and removes its credentials and sessions", async () => {
@@ -1191,7 +1267,8 @@ describe("connection recovery and health", () => {
         where: expect.objectContaining({
           enabled: true,
           connectionState: "connected",
-          assignments: { some: { needsReview: false } },
+          needsReview: false,
+          spaceAllowedTools: { not: [] },
           OR: [{ lastCheckedAt: null }, { lastCheckedAt: { lte: expect.any(Date) } }],
         }),
       }),

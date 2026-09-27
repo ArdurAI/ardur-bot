@@ -8,6 +8,8 @@ export function mcpServerDto(
     imported?: unknown;
     catalogId?: string | null;
     spaceToolPolicies?: unknown;
+    spaceAllowedTools?: unknown;
+    needsReview?: boolean;
     managedBy?: string | null;
     managedId?: string | null;
     placement?: string;
@@ -46,6 +48,10 @@ export function mcpServerDto(
           .map(([key]) => key)
       : [];
   return {
+    needsReview: row.needsReview ?? false,
+    spaceAllowedTools: Array.isArray(row.spaceAllowedTools)
+      ? row.spaceAllowedTools.filter((item): item is string => typeof item === "string")
+      : [],
     spaceToolPolicies: SpaceToolPoliciesSchema.safeParse(row.spaceToolPolicies).data ?? {},
     catalogId: row.catalogId ?? null,
     id: row.id,

@@ -169,6 +169,7 @@ export function BotContext({
   const [open, setOpen] = useState(false);
   const [version, setVersion] = useState(0);
   const [briefs, setBriefs] = useState<Brief[]>([]);
+  const [integrations, setIntegrations] = useState<Array<{ id: string; name: string }>>([]);
   const [metrics, setMetrics] = useState<Awaited<ReturnType<typeof rpc.metrics.context>> | null>(
     null,
   );
@@ -180,15 +181,18 @@ export function BotContext({
     let active = true;
     setError(false);
     setBriefs([]);
+    setIntegrations([]);
     setMetrics(null);
     Promise.all([
       rpc.briefs.list({ botId, groupId }),
       rpc.metrics.context({ botId, groupId }),
       rpc.context.settings({ botId }),
+      rpc.integrations.available({ botId }),
     ])
-      .then(([briefs, metrics, settings]) => {
+      .then(([briefs, metrics, settings, available]) => {
         if (!active) return;
         setBriefs(briefs);
+        setIntegrations(available);
         setMetrics(metrics);
         setConcurrentRuns(settings.concurrentRuns);
       })
@@ -214,6 +218,16 @@ export function BotContext({
             </Button>
           </div>
         ) : null}
+        <div className="text-sm">
+          <p className="font-medium">
+            <Trans>Integrations</Trans>
+          </p>
+          <p className="text-muted-foreground">
+            {integrations.length
+              ? integrations.map((item) => item.name).join(", ")
+              : t`None available`}
+          </p>
+        </div>
         <div className="flex gap-2">
           <Button
             size="xs"

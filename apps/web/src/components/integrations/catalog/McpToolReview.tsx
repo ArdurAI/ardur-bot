@@ -15,7 +15,6 @@ import { ToolPermissions } from "../manage/ToolPermissions";
 export function McpToolReview({
   server,
   bots,
-  assignments,
   onClose,
   onSaved,
 }: {
@@ -28,11 +27,9 @@ export function McpToolReview({
   const { t } = useLingui();
   const controlId = useId();
   const [manifest, setManifest] = useState<IntegrationManifest | null>(null);
-  const [botIds, setBotIds] = useState(() =>
-    bots
-      .filter((bot) => assignments[bot.id]?.some((entry) => entry.serverId === server.id))
-      .map((bot) => bot.id),
-  );
+  const [overrides, setOverrides] = useState<
+    Array<{ botId: string; access: "inherit" | "custom" | "none"; toolIds: string[] }>
+  >([]);
   const [toolIds, setToolIds] = useState<string[]>([]);
   const [spaceToolPolicies, setSpaceToolPolicies] = useState<SpaceToolPolicies>(
     server.spaceToolPolicies ?? {},
@@ -50,15 +47,15 @@ export function McpToolReview({
       const current = (await rpc.mcp.assignments.all()).filter(
         (entry) => entry.serverId === server.id,
       );
-      setBotIds(current.map((entry) => entry.botId));
-      setToolIds(
-        current.length && current.every((entry) => !entry.needsReview && !entry.allowAllTools)
-          ? current[0]!.allowedTools.filter((id) =>
-              current.every((entry) => entry.allowedTools.includes(id)),
-            )
-          : [],
+      setOverrides(
+        current.map((entry) => ({
+          botId: entry.botId,
+          access: entry.access,
+          toolIds: entry.allowedTools,
+        })),
       );
       const latest = (await rpc.mcp.servers.list()).find((entry) => entry.id === server.id);
+      setToolIds(latest?.spaceAllowedTools ?? []);
       setSpaceToolPolicies(latest?.spaceToolPolicies ?? {});
       setSavedPolicies(latest?.spaceToolPolicies ?? {});
       setManifest(manifest);
@@ -75,7 +72,11 @@ export function McpToolReview({
     try {
       await rpc.mcp.servers.permissions({
         serverId: server.id,
-        botIds,
+        overrides: overrides.map((entry) => ({
+          ...entry,
+          toolIds:
+            entry.access === "custom" ? entry.toolIds.filter((id) => toolIds.includes(id)) : [],
+        })),
         toolIds,
         ...(JSON.stringify(spaceToolPolicies) === JSON.stringify(savedPolicies)
           ? {}
@@ -106,22 +107,77 @@ export function McpToolReview({
         ) : null}
         <fieldset disabled={busy} className="space-y-2">
           <legend className="mb-2 text-sm font-medium">{t`Bots`}</legend>
-          {bots.map((bot) => (
-            <label
-              key={bot.id}
-              htmlFor={`${controlId}-${bot.id}`}
-              className="flex items-center gap-3 text-sm"
-            >
-              <Checkbox
-                id={`${controlId}-${bot.id}`}
-                checked={botIds.includes(bot.id)}
-                onCheckedChange={(checked) =>
-                  setBotIds(checked ? [...botIds, bot.id] : botIds.filter((id) => id !== bot.id))
-                }
-              />
-              {bot.name}
-            </label>
-          ))}
+          <p className="text-sm text-muted-foreground">
+            {server.transport === "host-cli"
+              ? t`All desktop bots have access (including ones you create later).`
+              : t`All bots have access (bots you create later too).`}
+          </p>
+          {bots.map((bot) => {
+            const override = overrides.find((entry) => entry.botId === bot.id);
+            const removed = override?.access === "none";
+            return (
+              <div key={bot.id} className="space-y-2">
+                <label
+                  htmlFor={`${controlId}-${bot.id}`}
+                  className="flex items-center gap-3 text-sm"
+                >
+                  <Checkbox
+                    id={`${controlId}-${bot.id}`}
+                    checked={!removed}
+                    onCheckedChange={(checked) =>
+                      setOverrides((current) => [
+                        ...current.filter((entry) => entry.botId !== bot.id),
+                        { botId: bot.id, access: checked ? "inherit" : "none", toolIds: [] },
+                      ])
+                    }
+                  />
+                  {bot.name}
+                  {removed ? <span className="text-muted-foreground">{t`Removed`}</span> : null}
+                </label>
+                {!removed && manifest ? (
+                  <details className="ml-7 text-sm">
+                    <summary className="cursor-pointer">{t`Limit tools`}</summary>
+                    <Button
+                      variant="ghost"
+                      onClick={() =>
+                        setOverrides((current) => [
+                          ...current.filter((entry) => entry.botId !== bot.id),
+                          { botId: bot.id, access: "inherit", toolIds: [] },
+                        ])
+                      }
+                    >{t`Use all selected tools`}</Button>
+                    {manifest.tools
+                      .filter((tool) => toolIds.includes(tool.id))
+                      .map((tool) => (
+                        <div key={tool.id} className="flex items-center gap-2">
+                          <Checkbox
+                            aria-label={`${bot.name}: ${tool.id}`}
+                            checked={
+                              override?.access !== "custom" || override.toolIds.includes(tool.id)
+                            }
+                            onCheckedChange={(checked) => {
+                              const currentTools =
+                                override?.access === "custom" ? override.toolIds : toolIds;
+                              setOverrides((current) => [
+                                ...current.filter((entry) => entry.botId !== bot.id),
+                                {
+                                  botId: bot.id,
+                                  access: "custom",
+                                  toolIds: checked
+                                    ? [...new Set([...currentTools, tool.id])]
+                                    : currentTools.filter((id) => id !== tool.id),
+                                },
+                              ]);
+                            }}
+                          />
+                          {tool.id}
+                        </div>
+                      ))}
+                  </details>
+                ) : null}
+              </div>
+            );
+          })}
         </fieldset>
         {manifest ? (
           <ToolPermissions

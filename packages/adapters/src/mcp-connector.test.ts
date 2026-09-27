@@ -6,7 +6,17 @@ import { captureIntegrationManifest } from "./integration-manifest.js";
 import { allowlistDrift, McpConnector } from "./mcp-connector.js";
 import type { McpOAuthBroker } from "./mcp-oauth.js";
 import { StoredMcpOAuthProvider } from "./mcp-oauth.js";
+import { serverFirstMcpFixture } from "./mcp-test-db.js";
 import { EncryptedSecretStore } from "./secrets.js";
+
+function fixtureConnector(
+  db: Record<string, unknown>,
+  secrets: ConstructorParameters<typeof McpConnector>[1],
+  options?: ConstructorParameters<typeof McpConnector>[2],
+  oauth?: ConstructorParameters<typeof McpConnector>[3],
+) {
+  return new McpConnector(serverFirstMcpFixture(db) as never, secrets, options, oauth);
+}
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -133,7 +143,7 @@ describe("MCP connector session cache", () => {
       },
       secret: { findFirst: vi.fn(async () => stored) },
     };
-    const connector = new McpConnector(prisma as never, secrets, { network: TEST_NETWORK });
+    const connector = fixtureConnector(prisma as never, secrets, { network: TEST_NETWORK });
     const context = {
       spaceId: "w1",
       userId: "u1",
@@ -161,7 +171,7 @@ describe("MCP connector session cache", () => {
     const prisma = {
       secret: { findFirst: vi.fn(async () => ({ id: "secret-1", ciphertext: "encrypted" })) },
     };
-    const connector = new McpConnector(
+    const connector = fixtureConnector(
       prisma as never,
       { load: () => JSON.stringify({ headers: { Authorization: "Bearer fake-token" } }) } as never,
       { network: TEST_NETWORK },
@@ -196,7 +206,7 @@ describe("MCP connector session cache", () => {
       const prisma = {
         secret: { findFirst: vi.fn(async () => ({ id: "secret-1", ciphertext: "encrypted" })) },
       };
-      const connector = new McpConnector(
+      const connector = fixtureConnector(
         prisma as never,
         { load: () => JSON.stringify(stored) } as never,
         { network: TEST_NETWORK },
@@ -239,7 +249,7 @@ describe("MCP connector session cache", () => {
         findFirst: vi.fn().mockResolvedValue(ASSIGNMENT),
       },
     };
-    const connector = new McpConnector(prisma as never, {} as never, {
+    const connector = fixtureConnector(prisma as never, {} as never, {
       network: TEST_NETWORK,
     });
     const context = {
@@ -280,7 +290,7 @@ describe("MCP connector session cache", () => {
         })),
       };
       vi.stubGlobal("fetch", mcpFetch(state));
-      const connector = new McpConnector(
+      const connector = fixtureConnector(
         {
           botMcpServer: {
             findMany: vi.fn().mockResolvedValue([ASSIGNMENT]),
@@ -312,7 +322,7 @@ describe("MCP connector session cache", () => {
       botMcpServer: { findMany: vi.fn().mockResolvedValue([ASSIGNMENT]) },
       run: { findUnique: vi.fn().mockResolvedValue({ threadId: "thread-1" }) },
     };
-    const connector = new McpConnector(prisma as never, {} as never, {
+    const connector = fixtureConnector(prisma as never, {} as never, {
       network: TEST_NETWORK,
       events: { append },
     });
@@ -361,7 +371,7 @@ describe("MCP connector session cache", () => {
       secret: { findFirst: vi.fn().mockResolvedValue({ id: "secret-1", ciphertext: "encrypted" }) },
       run: { findUnique: vi.fn().mockResolvedValue({ threadId: "thread-1" }) },
     };
-    const connector = new McpConnector(
+    const connector = fixtureConnector(
       prisma as never,
       {
         load: vi.fn().mockReturnValue(JSON.stringify({ headers: { "X-Api-Key": "local-key" } })),
@@ -404,7 +414,7 @@ describe("MCP connector session cache", () => {
       secret: { findFirst: vi.fn().mockResolvedValue({ id: "secret-1", ciphertext: "encrypted" }) },
       run: { findUnique: vi.fn().mockResolvedValue({ threadId: "thread-1" }) },
     };
-    const connector = new McpConnector(
+    const connector = fixtureConnector(
       prisma as never,
       {
         load: vi.fn().mockReturnValue(JSON.stringify({ headers: { "X-Api-Key": "local-key" } })),
@@ -444,7 +454,7 @@ describe("MCP connector session cache", () => {
       botMcpServer: { findMany: vi.fn().mockResolvedValue([ASSIGNMENT]) },
       run: { findUnique: vi.fn().mockResolvedValue({ threadId: "thread-1" }) },
     };
-    const connector = new McpConnector(prisma as never, {} as never, {
+    const connector = fixtureConnector(prisma as never, {} as never, {
       network: TEST_NETWORK,
       events: { append },
     });
@@ -470,7 +480,7 @@ describe("MCP connector session cache", () => {
   it("leaves no discovery event when the failure happens outside a run", async () => {
     vi.stubGlobal("fetch", mcpFetch({ failNext: true, initializations: 0 }));
     const append = vi.fn().mockResolvedValue(undefined);
-    const connector = new McpConnector(
+    const connector = fixtureConnector(
       { botMcpServer: { findMany: vi.fn().mockResolvedValue([ASSIGNMENT]) } } as never,
       {} as never,
       { network: TEST_NETWORK, events: { append } },
@@ -490,7 +500,7 @@ describe("MCP connector session cache", () => {
   });
 
   it("returns no tools when the MCP catalog is empty", async () => {
-    const connector = new McpConnector(
+    const connector = fixtureConnector(
       { botMcpServer: { findMany: vi.fn().mockResolvedValue([]) } } as never,
       {} as never,
     );
@@ -528,7 +538,7 @@ describe("MCP connector session cache", () => {
         findFirst: vi.fn().mockResolvedValue(ASSIGNMENT),
       },
     };
-    const connector = new McpConnector(prisma as never, {} as never, {
+    const connector = fixtureConnector(prisma as never, {} as never, {
       network: TEST_NETWORK,
     });
     const context = {
@@ -696,7 +706,7 @@ describe("MCP connector session cache", () => {
         findFirst: vi.fn().mockResolvedValue(ASSIGNMENT),
       },
     };
-    const connector = new McpConnector(prisma as never, {} as never, {
+    const connector = fixtureConnector(prisma as never, {} as never, {
       network: TEST_NETWORK,
     });
     const context = {
@@ -751,7 +761,7 @@ describe("MCP connector session cache", () => {
         async () => undefined,
       );
       const invalidate = vi.spyOn(provider, "invalidateCredentials");
-      const connector = new McpConnector(
+      const connector = fixtureConnector(
         { botMcpServer: { findMany: vi.fn().mockResolvedValue([ASSIGNMENT]) } } as never,
         {} as never,
         {
@@ -814,7 +824,7 @@ describe("MCP connector session cache", () => {
     const prisma = {
       botMcpServer: { findMany: vi.fn().mockResolvedValue([localAssignment]) },
     };
-    const connector = new McpConnector(prisma as never, {} as never);
+    const connector = fixtureConnector(prisma as never, {} as never);
 
     const tools = await connector.discoverTools({
       spaceId: "w1",
@@ -838,7 +848,7 @@ describe("MCP connector session cache", () => {
       botMcpServer: { findMany: vi.fn().mockResolvedValue([localAssignment]) },
       secret: { findFirst: vi.fn().mockResolvedValue({ id: "secret-1", ciphertext: "encrypted" }) },
     };
-    const connector = new McpConnector(
+    const connector = fixtureConnector(
       prisma as never,
       {
         load: vi.fn().mockReturnValue(JSON.stringify({ secret: "local-token" })),
@@ -869,7 +879,7 @@ describe("MCP connector session cache", () => {
       ...ASSIGNMENT,
       server: { ...SERVER, endpoint, secretId: "secret-header" },
     };
-    const headerConnector = new McpConnector(
+    const headerConnector = fixtureConnector(
       {
         botMcpServer: { findMany: vi.fn().mockResolvedValue([headerAssignment]) },
         secret: {
@@ -900,7 +910,7 @@ describe("MCP connector session cache", () => {
       ...ASSIGNMENT,
       server: { ...SERVER, endpoint, secretId: "secret-bearer" },
     };
-    const bearerConnector = new McpConnector(
+    const bearerConnector = fixtureConnector(
       {
         botMcpServer: { findMany: vi.fn().mockResolvedValue([bearerAssignment]) },
         secret: {
@@ -931,7 +941,7 @@ describe("MCP connector session cache", () => {
       botMcpServer: { findMany: vi.fn().mockResolvedValue([localAssignment]) },
       secret: { findFirst: vi.fn().mockResolvedValue({ id: "secret-1", ciphertext: "encrypted" }) },
     };
-    const connector = new McpConnector(
+    const connector = fixtureConnector(
       prisma as never,
       {
         load: vi
@@ -961,7 +971,7 @@ describe("MCP connector session cache", () => {
         findFirst: vi.fn().mockResolvedValue(ASSIGNMENT),
       },
     };
-    const connector = new McpConnector(prisma as never, {} as never, {
+    const connector = fixtureConnector(prisma as never, {} as never, {
       network: TEST_NETWORK,
     });
     const context = {
@@ -1003,7 +1013,7 @@ describe("MCP connector session cache", () => {
         findFirst: vi.fn().mockResolvedValue(ASSIGNMENT),
       },
     };
-    const connector = new McpConnector(prisma as never, {} as never, {
+    const connector = fixtureConnector(prisma as never, {} as never, {
       network: TEST_NETWORK,
     });
     const contextFor = (spaceId: string, userId: string) =>
@@ -1013,13 +1023,13 @@ describe("MCP connector session cache", () => {
     expect(state.initializations).toBe(1);
 
     await connector.discoverTools(contextFor("w1", "u2"));
-    expect(state.initializations).toBe(2);
+    expect(state.initializations).toBe(1);
 
     await connector.discoverTools(contextFor("w2", "u1"));
-    expect(state.initializations).toBe(3);
+    expect(state.initializations).toBe(1);
 
     await connector.discoverTools(contextFor("w1", "u1"));
-    expect(state.initializations).toBe(3);
+    expect(state.initializations).toBe(1);
 
     await connector.close();
   });
@@ -1069,7 +1079,7 @@ it("sends the encrypted token as Bearer during authenticated discovery and redac
     ],
   };
   vi.stubGlobal("fetch", mcpFetch(state));
-  const connector = new McpConnector(
+  const connector = fixtureConnector(
     { secret: { findFirst: async () => stored } } as never,
     store,
     { network: TEST_NETWORK },
@@ -1117,7 +1127,7 @@ it("marks a timeout after sending a catalog write uncertain without a transport 
       return base(input, init);
     }),
   );
-  const connector = new McpConnector(
+  const connector = fixtureConnector(
     { botMcpServer: { findFirst: async () => assignment } } as never,
     {} as never,
     { network: TEST_NETWORK },
@@ -1177,7 +1187,7 @@ it("uses the captured resource search tool and refuses unknown tools, missing fi
   const base = mcpFetch({ failNext: false, initializations: 0, tools: offered, calls });
   vi.stubGlobal("fetch", base);
   const findFirst = vi.fn(async () => server);
-  const connector = new McpConnector({ mcpServer: { findFirst } } as never, {} as never, {
+  const connector = fixtureConnector({ mcpServer: { findFirst } } as never, {} as never, {
     network: TEST_NETWORK,
   });
   const context = {

@@ -393,6 +393,8 @@ describe("secrets model-visibility conformance", () => {
       );
 
       const prisma = {
+        bot: { findFirst: vi.fn(async () => ({ id: "bot-1", computer: null })) },
+        mcpServer: { findMany: vi.fn(async () => [{ ...server, assignments: [assignment] }]) },
         botMcpServer: {
           findMany: vi.fn().mockResolvedValue([assignment]),
           findFirst: vi.fn().mockResolvedValue(assignment),

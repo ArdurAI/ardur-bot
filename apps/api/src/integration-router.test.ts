@@ -33,7 +33,10 @@ function fixture(overrides: Partial<RouterDeps> = {}) {
       findFirst: vi.fn(async () => ({ id: "server", catalogId: "github" })),
       update: vi.fn(),
     },
-    botMcpServer: { upsert: vi.fn(async () => assignment), updateMany: vi.fn() },
+    botMcpServer: {
+      upsert: vi.fn(async ({ create }) => ({ ...assignment, ...create })),
+      updateMany: vi.fn(),
+    },
     $executeRaw: vi.fn(),
     $transaction: vi.fn(),
   };
@@ -145,11 +148,12 @@ describe("integration RPC boundaries", () => {
         connectionState: "not-connected",
         pendingOauthSessionId: null,
         consentStartedAt: null,
+        needsReview: true,
         revision: { increment: 1 },
       },
     });
     expect(f.prisma.botMcpServer.updateMany).toHaveBeenCalledWith({
-      where: { serverId: "server", spaceId: "space", userId: "owner" },
+      where: { serverId: "server", spaceId: "space", userId: "owner", access: "custom" },
       data: { needsReview: true, allowAllTools: false, allowedTools: [] },
     });
     expect(f.prisma.mcpServer.findFirst).toHaveBeenCalledWith({
@@ -198,6 +202,7 @@ describe("integration RPC boundaries", () => {
         connectionState: "not-connected",
         pendingOauthSessionId: null,
         consentStartedAt: null,
+        needsReview: true,
         revision: { increment: 1 },
       },
     });
@@ -264,13 +269,14 @@ describe("integration RPC boundaries", () => {
     });
     expect(response?.status).toBe(200);
     expect(await response?.json()).toMatchObject({
-      json: { allowAllTools: false, needsReview: true, allowedTools: [] },
+      json: { allowAllTools: false, needsReview: false, allowedTools: [], access: "inherit" },
     });
     expect(f.prisma.botMcpServer.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         create: expect.objectContaining({
           allowAllTools: false,
-          needsReview: true,
+          needsReview: false,
+          access: "inherit",
           allowedTools: [],
         }),
       }),
