@@ -122,7 +122,7 @@ describe("memory proposal entry points", () => {
           input(container.querySelectorAll("textarea")[1]!, "  - Use concise replies.  "),
         );
         await act(async () => button(container, "Review import").click());
-        expect(propose).toHaveBeenCalledExactlyOnceWith("- Use concise replies.");
+        expect(propose).toHaveBeenCalledExactlyOnceWith("  - Use concise replies.  ");
         expect(onProposals).toHaveBeenCalledWith([proposal]);
         expect(api.memoryWrite).not.toHaveBeenCalled();
         expect(api.createGrant).not.toHaveBeenCalled();
@@ -274,6 +274,30 @@ describe("inline memory suggestions", () => {
         expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ status: "applied" }));
         expect(api.memoryWrite).not.toHaveBeenCalled();
         expect(api.createGrant).not.toHaveBeenCalled();
+      },
+    );
+  });
+
+  it("shows a masked credential line only on the rejected proposal", async () => {
+    api.approve.mockRejectedValue({
+      data: {
+        code: "MEMORY_CREDENTIAL_LINE",
+        proposalId: "proposal",
+        lineNumber: 2,
+        maskedLine: "- Key: [redacted]",
+      },
+    });
+    await mounted(
+      <MemoryProposals proposals={[proposal, { ...proposal, id: "other" }]} onChange={vi.fn()} />,
+      async (container) => {
+        await act(async () => button(container, "Approve").click());
+        expect(container.querySelectorAll('[role="alert"]')).toHaveLength(1);
+        expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+          "Line 2: - Key: [redacted] Edit or reject this line.",
+        );
+        expect(
+          container.querySelectorAll("article")[1]?.querySelector('[role="alert"]'),
+        ).toBeNull();
       },
     );
   });

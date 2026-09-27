@@ -49,7 +49,7 @@ function fixture(
     },
     spaceModelPreference: { findFirst: vi.fn(async () => null) },
     secret: {
-      findMany: vi.fn(async () => []),
+      findMany: vi.fn(async (): Promise<Array<{ id: string; ciphertext: string }>> => []),
       findFirst: vi.fn(async () => ({ id: "secret", ciphertext: "fixture" })),
     },
     botSecret: { findMany: vi.fn(async () => []) },
@@ -248,6 +248,26 @@ describe("explicit memory intents", () => {
     expect(f.db.proposalEvidence.create.mock.calls[0]![0].data.body.excerpt).toBe(
       "Review the memory I pasted for import.",
     );
+  });
+  it("keeps pasted words and whitespace even when stored values resemble prose", async () => {
+    const f = fixture();
+    f.db.secret.findMany.mockResolvedValue([{ id: "stored", ciphertext: "fixture" }]);
+    f.deps.secretStore.load = vi.fn(() =>
+      JSON.stringify({
+        label: "projects",
+        kind: "repo",
+        apiKey: "placeholder-long-secret-value-123456",
+      }),
+    );
+    const source =
+      "Profile\n- ~/repos/ reports projects code plain\n  - Keep the entire long sentence.\n";
+    const proposals = await proposeMemoryIntent(f.deps, actor, {
+      intent: "import",
+      text: source,
+      requestId: "verbatim-fixture",
+    });
+    expect(proposals[0]?.proposedContent).toBe(source.slice("Profile\n".length));
+    expect(f.runtime.run).not.toHaveBeenCalled();
   });
   it("runs the coordinator with no tools and returns an approval card", async () => {
     const f = fixture();

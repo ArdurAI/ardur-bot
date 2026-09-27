@@ -95,7 +95,10 @@ test("capabilities and memory use persisted settings, confirmation, and proposal
           type: "memory",
           scope: { spaceId: "space", userId: "user" },
           target: {},
-          proposedContent: "Use concise answers.",
+          proposedContent:
+            body.intent === "import"
+              ? String(body.text).slice("Preferences\n".length)
+              : "Use concise answers.",
           rationale: "Requested memory change.",
           evidenceIds: ["evidence"],
           diff: "--- current\n+++ proposed\n+Use concise answers.",
@@ -104,6 +107,22 @@ test("capabilities and memory use persisted settings, confirmation, and proposal
           expiresAt: "2099-01-01T00:00:00Z",
         },
       ];
+    if (path === "learning/approve")
+      result = {
+        proposal: {
+          id: "proposal",
+          type: "memory",
+          scope: { spaceId: "space", userId: "user" },
+          target: {},
+          proposedContent: "- Keep ~/repos/ reports and code.\n  - Use plain prose.",
+          rationale: "Requested import",
+          evidenceIds: ["evidence"],
+          diff: "",
+          status: "applied",
+          operation: "memory-import",
+          expiresAt: "2099-01-01T00:00:00Z",
+        },
+      };
     await route.fulfill({ json: { json: result } });
   });
   await page.goto("/src/pages/capabilities/__fixtures__/settings.html");
@@ -129,15 +148,20 @@ test("capabilities and memory use persisted settings, confirmation, and proposal
   await expect(page.getByRole("button", { name: /Preferences.*Updated/ })).toBeVisible();
   await captureScreenshot(page, testInfo, "memory-documents");
   await page.getByRole("button", { name: "Start import" }).click();
-  await page.getByLabel("Paste the response").fill("Preferences\n- Use concise answers.");
+  const paste = "Preferences\n- Keep ~/repos/ reports and code.\n  - Use plain prose.";
+  await page.getByLabel("Paste the response").fill(paste);
   await page.getByRole("button", { name: "Review import", exact: true }).click();
   await expect(page.getByRole("button", { name: "Approve", exact: true })).toBeVisible();
+  await expect(page.getByText("- Keep ~/repos/ reports and code.", { exact: false })).toBeVisible();
+  expect(calls.find((call) => call.path === "memory/propose")?.body.text).toBe(paste);
   expect(
     calls.some((call) =>
       ["learning/approve", "memory/update", "memory/import"].includes(call.path),
     ),
   ).toBe(false);
   await captureScreenshot(page, testInfo, "memory-pending-import");
+  await page.getByRole("button", { name: "Approve", exact: true }).click();
+  await expect(page.getByText("Applied", { exact: true })).toBeVisible();
   await page.getByLabel("Tell your bot what to change or remove").fill("Use concise answers.");
   await page.getByRole("button", { name: "Send", exact: true }).click();
   await expect.poll(() => calls.filter((call) => call.path === "memory/propose")).toHaveLength(2);

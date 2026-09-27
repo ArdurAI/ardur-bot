@@ -40,7 +40,7 @@ export function MemoryImport({
     setBusy(true);
     setError(null);
     try {
-      onProposals(await propose(text.trim()));
+      onProposals(await propose(text));
       setText("");
       setOpen(false);
     } catch {

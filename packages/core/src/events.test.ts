@@ -9,6 +9,7 @@ import {
   humanizeToolName,
   isRunTerminalEvent,
   projectMessages,
+  redactSecrets,
   reduceLiveMessageBlocks,
   runFailureError,
   sanitizeJsonValue,
@@ -16,15 +17,34 @@ import {
   trackToolCallStreak,
   trackToolNameStreak,
 } from "./events.js";
+import { redactLearningText } from "./learning-signals.js";
 
 describe("containsSecret", () => {
   it("detects secrets that JSON escaping changes", () => {
-    expect(containsSecret({ 'api"key': { nested: 'api"key' } }, ['api"key'])).toBe(true);
+    expect(containsSecret({ 'api"key42': { nested: 'api"key42' } }, ['api"key42'])).toBe(true);
     expect(containsSecret({ nested: ["line\nbreak"] }, ["line\nbreak"])).toBe(true);
   });
 
   it("does not confuse escaped text with the original control character", () => {
     expect(containsSecret({ value: "literal\\ntext" }, ["\n"])).toBe(false);
+  });
+
+  it("ignores short values, bounds medium values, and redacts long values inside prose", () => {
+    const long = "Q7v4N2x9R5p1K8m3T6z0B4c7D9f2H5j8";
+    const source = `~/repos/ repo reports projects code plain project9 ${long} end`;
+    expect(redactSecrets(source, ["repo", "code", "reports", "project9", long])).toBe(
+      "~/repos/ repo reports projects code plain [redacted] [redacted] end",
+    );
+    expect(containsSecret({ content: "project9 project9suffix" }, ["project9"])).toBe(true);
+    expect(containsSecret({ content: "project9suffix" }, ["project9"])).toBe(false);
+    expect(containsSecret({ content: "code and repo" }, ["code", "repo"])).toBe(false);
+    expect(containsSecret({ content: source }, [long])).toBe(true);
+  });
+
+  it("uses the same threshold for review text that spans stream chunks", () => {
+    expect(
+      redactLearningText("repo code project9suffix project9", ["repo", "code", "project9"]),
+    ).toBe("repo code project9suffix [redacted]");
   });
 });
 

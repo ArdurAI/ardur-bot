@@ -18,19 +18,40 @@ export async function learningSecrets(
     }),
   ]);
   const values = new Set<string>();
-  function collect(value: unknown) {
-    if (typeof value === "string" && value.length >= 4) values.add(value);
-    else if (Array.isArray(value)) value.forEach(collect);
-    else if (value && typeof value === "object") Object.values(value).forEach(collect);
+  function collect(value: unknown, credential = false) {
+    if (typeof value === "string") {
+      if (credential && value.length >= 8) values.add(value);
+    } else if (Array.isArray(value)) {
+      for (const item of value) collect(item, credential);
+    } else if (value && typeof value === "object") {
+      for (const [key, nested] of Object.entries(value)) {
+        if (
+          /^(?:name|label|displayName|description|kind|provider|type|baseUrl|url|endpoint|modelId)$/iu.test(
+            key,
+          )
+        )
+          continue;
+        collect(
+          nested,
+          credential ||
+            /(?:token|secret|password|passwd|api[_-]?key|private[_-]?key|authorization|cookie|credential)/iu.test(
+              key,
+            ),
+        );
+      }
+    }
   }
   for (const secret of [...secrets, ...botSecrets]) {
     const plaintext = store.load(secret.ciphertext, secret.id);
-    values.add(plaintext);
     try {
-      collect(JSON.parse(plaintext));
+      const parsed: unknown = JSON.parse(plaintext);
+      if (typeof parsed === "string" || Array.isArray(parsed)) collect(parsed, true);
+      else if (parsed === null || typeof parsed !== "object") {
+        if (plaintext.length >= 8) values.add(plaintext);
+      } else collect(parsed);
     } catch {
-      /* Plain credentials need no decoding. */
+      if (plaintext.length >= 8) values.add(plaintext);
     }
   }
-  return [...values].filter(Boolean);
+  return [...values];
 }

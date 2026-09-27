@@ -17,6 +17,7 @@ import type { Prisma, PrismaClient } from "@ardurbot/db";
 import { IsolationError, lockLearningProposal } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 import type { MemoryOperationContext, MemoryService } from "@ardurbot/memory";
+import { assertMemorySafe, MemoryRedactionError } from "@ardurbot/memory";
 import { boardItemUnchanged, isFinalPendingCloseError } from "./board/pending-close.js";
 import type { BoardService } from "./board/service.js";
 import {
@@ -236,7 +237,10 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
       proposal.typedDelta = input.typedDelta;
     } else {
       if (input.proposedContent === undefined) throw new Error("Provide document content.");
-      proposal.proposedContent = redactLearningText(input.proposedContent, context.knownSecrets);
+      proposal.proposedContent =
+        proposal.operation === "memory-import"
+          ? input.proposedContent
+          : redactLearningText(input.proposedContent, context.knownSecrets);
     }
     validateContent(proposal);
     proposal.diff = proposalDiff(
@@ -699,7 +703,7 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
         await editContent(tx, proposal, context, edits, head);
         await audit("edit");
       }
-      if (proposal.proposedContent !== undefined)
+      if (proposal.proposedContent !== undefined && proposal.operation !== "memory-import")
         proposal.proposedContent = redactLearningText(
           proposal.proposedContent,
           context.knownSecrets,
@@ -723,6 +727,30 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
       }
       await attribution(tx, proposal, context, head?.revision ?? 0, "apply", grantId);
       const content = proposal.proposedContent ?? JSON.stringify(proposal.typedDelta);
+      if (proposal.type === "memory" && proposal.memoryAction !== "delete") {
+        try {
+          assertMemorySafe(content, context.knownSecrets);
+        } catch (error) {
+          if (!(error instanceof MemoryRedactionError)) throw error;
+          const lines = content.split(/\r\n|\n|\r/u);
+          const index = lines.findIndex((line) => {
+            try {
+              assertMemorySafe(line, context.knownSecrets);
+              return false;
+            } catch (lineError) {
+              if (!(lineError instanceof MemoryRedactionError)) throw lineError;
+              return true;
+            }
+          });
+          const line = lines[Math.max(index, 0)] ?? "";
+          const masked = redactLearningText(line, context.knownSecrets);
+          throw new MemoryRedactionError(
+            proposal.id,
+            Math.max(index, 0) + 1,
+            masked === line ? "[redacted]" : masked.slice(0, 300),
+          );
+        }
+      }
       proposal.diff = proposalDiff(
         redactLearningText(head?.content ?? "", context.knownSecrets),
         content,

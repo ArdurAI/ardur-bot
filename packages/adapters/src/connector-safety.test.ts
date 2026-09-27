@@ -3,7 +3,7 @@ import { redactConnectorPayload } from "./connector-safety.js";
 
 describe("redactConnectorPayload", () => {
   it("redacts secrets that JSON escapes in property names and values", () => {
-    const secret = 'api"key';
+    const secret = 'api"key42';
 
     expect(
       redactConnectorPayload(
@@ -26,9 +26,13 @@ describe("redactConnectorPayload", () => {
     expect(redactConnectorPayload(circular, ["secret"])).toEqual({ ok: true });
   });
 
-  it("redacts secrets represented by non-string JSON leaves", () => {
+  it("ignores short primitive values while redacting an exact credential field", () => {
     expect(
       redactConnectorPayload({ number: 123, boolean: true, empty: null }, ["123", "true", "null"]),
-    ).toEqual({ number: "[redacted]", boolean: "[redacted]", empty: "[redacted]" });
+    ).toEqual({ number: 123, boolean: true, empty: null });
+    expect(redactConnectorPayload({ session: "s1", note: "s1" }, ["s1"])).toEqual({
+      session: "[redacted]",
+      note: "s1",
+    });
   });
 });

@@ -55,7 +55,8 @@ export async function proposeMemoryIntent(
     ...scope,
     botId: bot.id,
   });
-  const text = redactLearningText(input.text, knownSecrets);
+  const text =
+    input.intent === "import" ? input.text : redactLearningText(input.text, knownSecrets);
   const watermark = learningHash([input.intent, text]);
   const prior = await deps.prisma.reviewExecution.findUnique({ where: { idempotencyKey } });
   if (prior) {
@@ -229,7 +230,8 @@ export async function proposeMemoryIntent(
     const evidenceId = randomUUID();
     const proposals = drafts.map((draft) => {
       const head = memoryIntentTarget(draft, documents, actor.userId);
-      const content = redactLearningText(draft.content, knownSecrets);
+      const content =
+        input.intent === "import" ? draft.content : redactLearningText(draft.content, knownSecrets);
       return LearningProposalSchema.parse({
         id: randomUUID(),
         type: "memory",

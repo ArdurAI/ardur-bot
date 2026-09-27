@@ -1,30 +1,31 @@
 import type { MemoryDocumentHead, MemoryDraft } from "@ardurbot/contracts";
 
 export function importedMemoryDrafts(text: string): MemoryDraft[] {
+  const drafts: MemoryDraft[] = [];
   let kind: MemoryDraft["kind"] = "topic";
-  const groups = new Map<MemoryDraft["kind"], string[]>();
-  for (const line of text.split(/\r?\n/)) {
-    const value = line.trim();
-    const heading = value
+  let start = 0;
+  const add = (end: number) => {
+    const content = text.slice(start, end);
+    if (content.trim()) drafts.push({ action: "save", expectedRevision: 0, kind, content });
+  };
+  for (const match of text.matchAll(/[^\r\n]*(?:\r\n|\n|\r|$)/g)) {
+    if (!match[0]) continue;
+    const line = match[0].replace(/\r?\n$|\r$/, "");
+    const heading = line
+      .trim()
       .replace(/^#+\s*/, "")
-      .replace(/[*:]+/g, "")
+      .replace(/[*:]+$/g, "")
       .trim()
       .toLowerCase();
-    if (["profile", "preferences", "topics"].includes(heading)) {
-      kind = heading === "topics" ? "topic" : (heading as MemoryDraft["kind"]);
-      continue;
-    }
-    if (!value) continue;
-    const lines = groups.get(kind) ?? [];
-    lines.push(value);
-    groups.set(kind, lines);
+    if (heading !== "profile" && heading !== "preferences" && heading !== "topics") continue;
+    const offset = match.index;
+    add(offset);
+    kind = heading === "topics" ? "topic" : heading;
+    start = offset + match[0].length;
   }
-  return [...groups].map(([kind, lines]) => ({
-    action: "save",
-    expectedRevision: 0,
-    kind,
-    content: lines.join("\n"),
-  }));
+  add(text.length);
+  if (drafts.length > 3) throw new Error("Split this import into at most three sections.");
+  return drafts;
 }
 export function memoryIntentTarget(
   draft: MemoryDraft,

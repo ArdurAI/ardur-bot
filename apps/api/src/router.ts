@@ -182,6 +182,7 @@ import {
 import { redactMcpArguments } from "@ardurbot/host-runtime/mcp-diagnostics";
 import { getLogger } from "@ardurbot/logging";
 import type { MemoryService } from "@ardurbot/memory";
+import { MemoryRedactionError } from "@ardurbot/memory";
 import type { Router } from "@orpc/server";
 import { implement, ORPCError } from "@orpc/server";
 import { createAccountService } from "./account.js";
@@ -3253,9 +3254,25 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       summary: authed.learning.summary.handler(({ context, input }) =>
         learning.summary(context.actor, input.botId),
       ),
-      approve: authed.learning.approve.handler(({ context, input }) =>
-        boardCall(() => learning.approve(input.proposalId, context.actor, input.edits)),
-      ),
+      approve: authed.learning.approve.handler(async ({ context, input }) => {
+        try {
+          return await boardCall(() =>
+            learning.approve(input.proposalId, context.actor, input.edits),
+          );
+        } catch (error) {
+          if (error instanceof MemoryRedactionError && error.proposalId && error.lineNumber)
+            throw new ORPCError("BAD_REQUEST", {
+              message: "Edit or reject this line.",
+              data: {
+                code: "MEMORY_CREDENTIAL_LINE",
+                proposalId: error.proposalId,
+                lineNumber: error.lineNumber,
+                maskedLine: error.maskedLine ?? "[redacted]",
+              },
+            });
+          throw error;
+        }
+      }),
       reject: authed.learning.reject.handler(({ context, input }) =>
         boardCall(() => learning.reject(input.proposalId, context.actor, input.reason)),
       ),
