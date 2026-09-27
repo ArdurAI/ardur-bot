@@ -19,7 +19,7 @@ stay on the computer.
   and expires after ten minutes. The page has no app shell, scrubs its query,
   forbids framing, avoids caching, broadcasts completion and attempts to close.
   Browsers can refuse to close a tab opened by the operating system; the page
-  then retains a one-sentence result and **Open Ardur Bot** link.
+  then retains a one-sentence result and **Open Ardur** link.
 - Web opens a popup and accepts BroadcastChannel completion or an authenticated
   connection-status poll. Desktop opens the system browser and polls the same
   status, then focuses its window. Packaged builds register `ardurbot://` and
@@ -139,7 +139,7 @@ connector administration or a permission to bypass write approval.
 [Codex MCP configuration](https://developers.openai.com/codex/mcp) supports OAuth,
 tool inclusion/exclusion and timeouts.
 [Hermes MCP configuration](https://hermes-agent.nousresearch.com/docs/reference/mcp-config-reference)
-documents OAuth/refresh, tool filters and reconnect behavior. Ardur Bot now has
+documents OAuth/refresh, tool filters and reconnect behavior. Ardur now has
 server-side return, expiry, refresh, recovery, safe read retry and management.
 Importing their configuration files, arbitrary tool profiles and feature-for-
 feature organization settings are not part of this change.
@@ -163,7 +163,7 @@ Jenkins CLI card does not claim to install or configure that plugin.
    API, worker and UI, and restart the host service to load the new inventory.
 2. In desktop Integrations, reconnect Notion and approve in the system browser.
    Confirm the browser shows only the completion sentence. It attempts to close;
-   if the browser blocks that, use **Open Ardur Bot** in a packaged build. Confirm
+   if the browser blocks that, use **Open Ardur** in a packaged build. Confirm
    the existing desktop window focuses and Manage shows tools.
 3. Cancel an old Atlassian **Finish signing in in your browser.** row. Confirm
    Connect is immediately available. A new abandoned sign-in should show
@@ -224,7 +224,7 @@ opens Manage and selects Ask; its CI screenshot remains a publication-time check
 ### Visible copy
 
 The completion page uses “Connected to {integration}. You can close this tab and
-return to Ardur Bot.”, “Could not complete sign-in.” and “Open Ardur Bot”. These
+return to Ardur.”, “Could not complete sign-in.” and “Open Ardur”. These
 are needed when browser policy blocks automatic tab closure.
 
 Connection states use “Connected”, “Needs sign-in”, “Sign-in timed out.”,

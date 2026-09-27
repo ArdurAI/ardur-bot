@@ -66,7 +66,7 @@ export async function stopRemoteComputerWork(
       if (event.type === "stdout") output += event.data;
     }
     if (!idle || output.trim() !== "ardurbot-background-idle") return false;
-    await sandbox.releaseScreen?.(computer, cleanup);
+    if (cleanup.screenLeaseId) await sandbox.releaseScreen?.(computer, cleanup);
     return true;
   } catch {
     return false;

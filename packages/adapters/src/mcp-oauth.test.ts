@@ -278,7 +278,7 @@ describe("MCP OAuth", () => {
       if (staticClient) expect(registration).toBeUndefined();
       else
         expect(registration).toMatchObject({
-          client_name: "Ardur Bot",
+          client_name: "Ardur",
           application_type: "native",
         });
       expect(started.authorizationUrl).not.toContain("synthetic-app-secret");

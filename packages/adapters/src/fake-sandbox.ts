@@ -103,6 +103,15 @@ export class FakeSandboxProvider implements SandboxProvider {
       return;
     }
     const cmd = request.argv.join(" ");
+    if (request.argv[3] === "ardurbot-cancel-run-work") {
+      yield { type: "exit", code: 0 };
+      return;
+    }
+    if (request.argv[3] === "ardurbot-background-probe") {
+      yield { type: "stdout", data: "ardurbot-background-idle\n" };
+      yield { type: "exit", code: 1 };
+      return;
+    }
     if (request.argv[0] === "echo") {
       yield { type: "stdout", data: `${request.argv.slice(1).join(" ")}\n` };
     } else if (cmd.startsWith("cat ")) {

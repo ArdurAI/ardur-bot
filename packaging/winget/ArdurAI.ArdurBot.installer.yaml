@@ -3,7 +3,7 @@ PackageVersion: "@VERSION@"
 InstallerLocale: en-US
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/ArdurAI/ardur-bot/releases/download/v@VERSION@/ardur-bot-@VERSION@-win-x64.exe
+    InstallerUrl: https://github.com/ArdurAI/ardur-bot/releases/download/v@VERSION@/ardur-@VERSION@-win-x64.exe
     InstallerSha256: "@X64_SHA256@"
     InstallerType: nullsoft
 ManifestType: installer

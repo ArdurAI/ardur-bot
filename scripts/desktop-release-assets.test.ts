@@ -21,12 +21,12 @@ it("assembles required installers, merges both Mac architectures, and refuses mi
       await mkdir(target, { recursive: true });
       for (const extension of extensions)
         await writeFile(
-          path.join(target, `ardur-bot-${version}-${platform}-${arch}.${extension}`),
+          path.join(target, `ardur-${version}-${platform}-${arch}.${extension}`),
           `${platform}-${arch}`,
         );
       await writeFile(
         path.join(target, feed),
-        `version: ${version}\nfiles:\n  - url: ardur-bot-${version}-${platform}-${arch}.${extensions.at(-1)}\n    sha512: fixture\n`,
+        `version: ${version}\nfiles:\n  - url: ardur-${version}-${platform}-${arch}.${extensions.at(-1)}\n    sha512: fixture\n`,
       );
     }
     execFileSync(
@@ -37,9 +37,7 @@ it("assembles required installers, merges both Mac architectures, and refuses mi
     const feed = await readFile(path.join(output, "latest-mac.yml"), "utf8");
     expect(feed).toContain("mac-arm64.zip");
     expect(feed).toContain("mac-x64.zip");
-    expect(await readFile(path.join(output, "ardur-bot.rb"), "utf8")).not.toContain(
-      "@ARM64_SHA256@",
-    );
+    expect(await readFile(path.join(output, "ardur.rb"), "utf8")).not.toContain("@ARM64_SHA256@");
     const checksums = await readFile(path.join(output, "checksums.txt"), "utf8");
     for (const file of [
       "install.sh",

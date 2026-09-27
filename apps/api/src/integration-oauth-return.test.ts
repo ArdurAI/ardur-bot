@@ -38,7 +38,7 @@ describe("API OAuth return page", () => {
     expect(f.oauth.completeRedirect).toHaveBeenCalledWith({ state, code: "fake-code" });
     expect(f.integrations.capture).toHaveBeenCalledWith(f.owner, "connection", state);
     expect(response.status).toBe(200);
-    expect(html).toContain("Connected to Notion. You can close this tab and return to Ardur Bot.");
+    expect(html).toContain("Connected to Notion. You can close this tab and return to Ardur.");
     expect(html).toContain("window.close()");
     expect(html).toContain('BroadcastChannel("ardurbot-mcp-oauth")');
     expect(html).toContain("ardurbot://integrations/connection");

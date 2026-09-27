@@ -148,6 +148,22 @@ describe("connectorKindFromToolName", () => {
 });
 
 describe("resolveActionApproval", () => {
+  it("never applies a rule from another goal", () => {
+    const rule: ActionApprovalRule = {
+      effect: "always_allow",
+      matchKind: "tool",
+      matchValue: "destination.write",
+      scopeKey: "goal:other",
+    };
+    expect(
+      resolveActionApprovalDetail({
+        toolName: "destination.write",
+        botId: "coordinator",
+        goalId: "current",
+        rules: [rule],
+      }).source,
+    ).toBe("default");
+  });
   const alwaysAllowDestination: ActionApprovalRule[] = [
     { effect: "always_allow", matchKind: "tool", matchValue: "destination.write" },
   ];

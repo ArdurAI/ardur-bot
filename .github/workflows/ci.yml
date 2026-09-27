@@ -60,6 +60,7 @@ jobs:
         env:
           DATABASE_URL: postgres://ardurbot:ardurbot@127.0.0.1:5433/ardurbot
       - run: pnpm check
+      - run: pnpm site:facts:check
 
   build:
     name: Production builds
@@ -160,3 +161,51 @@ jobs:
             apps/web/test-results
             playwright-report
           if-no-files-found: ignore
+
+  publish-site-assets:
+    name: Publish website facts and screenshots
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+    needs: [computer-profiles, lint, check, build, test, test-integration, test-web-e2e]
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    concurrency:
+      group: site-assets-${{ github.repository }}
+      cancel-in-progress: false
+    env:
+      SITE_SCREENSHOTS_DIR: /tmp/site-screenshots-${{ github.run_id }}
+      SITE_ASSETS_STAGE: /tmp/site-assets-stage-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm db:generate
+        env:
+          DATABASE_URL: postgres://ardurbot:ardurbot@127.0.0.1:5433/ardurbot
+      - run: pnpm site:facts:check
+      - name: Install Playwright Chromium
+        run: pnpm --filter @ardurbot/web exec playwright install --with-deps chromium
+      - name: Capture product screenshots
+        run: pnpm test:e2e --spec=site-screenshots.spec.ts --workers=1
+      - name: Compare website assets
+        id: assets
+        run: node --import tsx scripts/site-assets-prepare.ts
+      - name: Publish changed assets
+        if: steps.assets.outputs.changed == 'true'
+        run: |
+          set -euo pipefail
+          git switch --orphan site-assets-publish
+          git rm -rf .
+          cp "${SITE_ASSETS_STAGE}/product.json" product.json
+          cp -R "${SITE_ASSETS_STAGE}/screenshots" screenshots
+          if [ -d "${SITE_ASSETS_STAGE}/media" ]; then cp -R "${SITE_ASSETS_STAGE}/media" media; fi
+          git add product.json screenshots
+          if [ -d media ]; then git add media; fi
+          git -c commit.gpgsign=false -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'Publish site assets'
+          git push --force origin HEAD:refs/heads/site-assets
+          echo "- Published orphan commit: $(git rev-parse HEAD)" >> "${GITHUB_STEP_SUMMARY}"

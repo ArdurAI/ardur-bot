@@ -31,6 +31,7 @@ export function loadRunHistoryMessages(
       seq: true,
       role: true,
       runId: true,
+      botId: true,
       blocks: true,
       replyToMessageId: true,
       replyQuote: true,
@@ -106,6 +107,7 @@ export async function assertRunCanWriteHistory(
       originDeviceGrantId: string | null;
       remoteRootTaskId: string | null;
       delegationId: string | null;
+      delegationRootTaskId: string | null;
     }
   | undefined
 > {
@@ -118,6 +120,7 @@ export async function assertRunCanWriteHistory(
       originDeviceGrantId: true,
       remoteRootTaskId: true,
       delegationId: true,
+      delegationRootTaskId: true,
     },
   });
   if (!run || run.status === "cancelled") {

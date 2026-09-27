@@ -1,6 +1,6 @@
 import type { Prisma } from "./client.js";
 
-/** The caller selects authorized runs and owns the surrounding transaction and cleanup. */
+/** The caller selects authorized runs and locks their thread before these task updates. */
 export async function cancelRunsInTransaction(
   tx: Pick<Prisma.TransactionClient, "run" | "attempt" | "task">,
   runs: ReadonlyArray<{ id: string; taskId: string }>,

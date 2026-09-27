@@ -41,6 +41,7 @@ export * from "./dashboard.js";
 export * from "./delegation-policy.js";
 export * from "./events.js";
 export * from "./featured-connectors.js";
+export * from "./goal-context.js";
 export * from "./group-mentions.js";
 export * from "./http-response.js";
 export * from "./ide-changes.js";

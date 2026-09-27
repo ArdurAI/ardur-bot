@@ -37,6 +37,8 @@ export async function releaseNotes(subjects, gate) {
     counts.set(label, (counts.get(label) ?? 0) + 1);
   }
   const summary = [
+    "# Ardur desktop preview",
+    "",
     "Unsigned preview. Signed builds come later.",
     "",
     "macOS updates require downloading and installing the new build manually.",
@@ -55,7 +57,7 @@ export async function releaseNotes(subjects, gate) {
 export async function generateWinget(version, assets, outputDir) {
   releaseVersion(`v${version}`, version);
   await mkdir(outputDir, { recursive: true });
-  const exe = await readFile(path.join(assets, `ardur-bot-${version}-win-x64.exe`));
+  const exe = await readFile(path.join(assets, `ardur-${version}-win-x64.exe`));
   const sha = createHash("sha256").update(exe).digest("hex");
   for (const file of [
     "ArdurAI.ArdurBot.installer.yaml",
@@ -71,9 +73,9 @@ export async function generateWinget(version, assets, outputDir) {
 
 export async function generateCask(version, assets, output) {
   releaseVersion(`v${version}`, version);
-  let template = await readFile(new URL("../homebrew/Casks/ardur-bot.rb", import.meta.url), "utf8");
+  let template = await readFile(new URL("../homebrew/Casks/ardur.rb", import.meta.url), "utf8");
   for (const arch of ["arm64", "x64"]) {
-    const dmg = await readFile(path.join(assets, `ardur-bot-${version}-mac-${arch}.dmg`));
+    const dmg = await readFile(path.join(assets, `ardur-${version}-mac-${arch}.dmg`));
     template = template.replace(
       `@${arch.toUpperCase()}_SHA256@`,
       createHash("sha256").update(dmg).digest("hex"),

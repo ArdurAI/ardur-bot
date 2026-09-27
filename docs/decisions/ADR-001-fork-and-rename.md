@@ -4,7 +4,7 @@ Status: accepted (2026-09-23)
 
 ## Context
 
-Ardur Bot is an installable desktop app where each bot is pinned to a configured
+Ardur is an installable desktop app where each bot is pinned to a configured
 provider, model and effort level, running on the user's own subscriptions and
 keys, with bots on the host machine, Docker, Podman or Kubernetes. Rakazo
 (https://github.com/elie222/rakazo, Apache-2.0) already has per-bot

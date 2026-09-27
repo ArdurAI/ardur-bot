@@ -31,12 +31,12 @@ for (const [platform, arch, extensions] of [
   ["win", "x64", ["exe"]],
 ]) {
   for (const extension of extensions)
-    await readFile(path.join(destination, `ardur-bot-${version}-${platform}-${arch}.${extension}`));
+    await readFile(path.join(destination, `ardur-${version}-${platform}-${arch}.${extension}`));
 }
 const armLinux = (await readdir(destination)).filter((file) => file.includes("-linux-arm64."));
 if (armLinux.length > 0) {
   for (const extension of ["AppImage", "deb"])
-    await readFile(path.join(destination, `ardur-bot-${version}-linux-arm64.${extension}`));
+    await readFile(path.join(destination, `ardur-${version}-linux-arm64.${extension}`));
 } else
   console.warn(
     "::warning title=Linux arm64::Optional ARM Linux artifacts are unavailable for this preview.",
@@ -53,18 +53,18 @@ for (const [file, feed] of feeds) {
   await writeFile(path.join(destination, file), yaml.dump(feed));
 }
 await copyFile("scripts/install.sh", path.join(destination, "install.sh"));
-await generateCask(version, destination, path.join(destination, "ardur-bot.rb"));
+await generateCask(version, destination, path.join(destination, "ardur.rb"));
 await generateWinget(version, destination, destination);
 
 const crypto = await import("node:crypto");
 let checksums = "";
 // Exclude update feeds (.yml) and blockmaps (.blockmap) managed by electron-builder,
-// the Homebrew cask (ardur-bot.rb), and checksums.txt itself.
+// the Homebrew cask (ardur.rb), and checksums.txt itself.
 const allFiles = (await readdir(destination)).filter(
   (f) => !f.endsWith(".yml") && !f.endsWith(".blockmap"),
 );
 for (const f of allFiles.sort()) {
-  if (f === "checksums.txt" || f === "ardur-bot.rb") continue;
+  if (f === "checksums.txt" || f === "ardur.rb") continue;
   const content = await readFile(path.join(destination, f));
   const hash = crypto.createHash("sha256").update(content).digest("hex");
   checksums += `${hash}  ${f}\n`;

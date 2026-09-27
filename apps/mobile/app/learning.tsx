@@ -326,7 +326,7 @@ export default function Learning() {
                   {proposal.boardCloseFailed && !proposal.boardChanged ? (
                     <Text style={styles.secondary}>
                       {t(
-                        "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected.",
+                        "Ardur tried five times. Close it on the Board, or check that this computer is connected.",
                       )}
                     </Text>
                   ) : null}

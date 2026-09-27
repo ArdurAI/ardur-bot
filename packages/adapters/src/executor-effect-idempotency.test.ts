@@ -96,6 +96,7 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService) {
     trigger: "user",
     sourceMessageId: null as string | null,
     leaseFence: 0,
+    screenLeaseId: null as string | null,
     commandReplayId: null as string | null,
     boardItemId: null as string | null,
     boardWorkspaceId: null as string | null,
@@ -260,7 +261,7 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService) {
         defaultModelId: "scripted",
       })),
     },
-    taughtSkill: { findMany: vi.fn(async () => []) },
+    taughtSkill: { findFirst: vi.fn(async () => null), findMany: vi.fn(async () => []) },
     agentSecret: { findMany: vi.fn(async () => []) },
     agentSkill: { findMany: vi.fn(async () => []) },
     scratchpadItem: {
@@ -320,6 +321,16 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService) {
     yield { type: "stdout" as const, data: "Tests passed." };
     yield { type: "exit" as const, code: 0 };
   });
+  const sandboxObserve = vi.fn(
+    async (_computer: unknown, _context: { screenLeaseId?: string }) => ({
+      frameId: "frame-1",
+      capturedAt: "2026-09-24T12:00:00.000Z",
+      mimeType: "image/png" as const,
+      image: new Uint8Array(),
+      width: 1,
+      height: 1,
+    }),
+  );
   const environmentNote = vi.fn(async () => "Tools on this computer: gh 2.80.0 (signed in).");
   const resolveCommandCwd = vi.fn(async () => "/workspace");
   const sandboxDescription = { capabilities: { graphical: false } };
@@ -340,6 +351,7 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService) {
       resolveCommandCwd,
       environmentNote,
       execute: sandboxExecute,
+      observe: sandboxObserve,
     },
     memory: {
       describe: () => ({ capabilities: {} }),
@@ -359,6 +371,7 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService) {
     executor,
     prisma,
     sandboxExecute,
+    sandboxObserve,
     environmentNote,
     resolveCommandCwd,
     sandboxDescription,
@@ -386,6 +399,68 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService) {
     },
   };
 }
+
+describe("screen lease persistence through the executor", () => {
+  function screenRun() {
+    const f = fixture("screen-run");
+    f.sandboxDescription.capabilities.graphical = true;
+    f.setCalls([{ name: "computer_observe", args: {}, executionId: "screen-call" }]);
+    return f;
+  }
+
+  it("records the actual lease on the run before screen work", async () => {
+    const f = screenRun();
+    let recordedAtObserve: string | null = null;
+    f.sandboxObserve.mockImplementation(async () => {
+      recordedAtObserve = f.runRecord.screenLeaseId;
+      return {
+        frameId: "frame-1",
+        capturedAt: "2026-09-24T12:00:00.000Z",
+        mimeType: "image/png",
+        image: new Uint8Array(),
+        width: 1,
+        height: 1,
+      };
+    });
+
+    await f.run();
+
+    expect(f.sandboxObserve).toHaveBeenCalledOnce();
+    const context = f.sandboxObserve.mock.calls[0]?.[1];
+    expect(recordedAtObserve).toBe(context?.screenLeaseId);
+    expect(recordedAtObserve).toBe("screen-run:1");
+    expect(f.runRecord.screenLeaseId).toBe(recordedAtObserve);
+  });
+
+  it("refuses screen work when cancellation wins the fenced write", async () => {
+    const f = screenRun();
+    f.prisma.run.updateMany.mockImplementation(async ({ data }) => {
+      if ("screenLeaseId" in data) {
+        f.runRecord.cancelRequestedAt = new Date();
+        return { count: 0 };
+      }
+      Object.assign(f.runRecord, data);
+      return { count: 1 };
+    });
+
+    await f.executor.continueRun(f.runRecord.id, "worker-1");
+
+    expect(f.prisma.run.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: f.runRecord.id,
+          status: "running",
+          leaseOwner: "worker-1",
+          leaseFence: 1,
+          cancelRequestedAt: null,
+        }),
+        data: { screenLeaseId: "screen-run:1" },
+      }),
+    );
+    expect(f.runRecord.screenLeaseId).toBeNull();
+    expect(f.sandboxObserve).not.toHaveBeenCalled();
+  });
+});
 
 describe("Board outcome finalization", () => {
   afterEach(() => vi.restoreAllMocks());

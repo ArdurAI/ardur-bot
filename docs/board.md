@@ -117,7 +117,7 @@ human action.
 The top bar contains Dashboard, Bots and IDE, with Cmd/Ctrl+1, 2 and 3. Dashboard
 contains Overview and Board views. `/app/board` selects Board; `workspace` and
 `item` query parameters preserve board and item deep links. The active view uses
-`Board — Ardur Bot` as the window title. Overview's Work panel shows the default
+`Board — Ardur` as the window title. Overview's Work panel shows the default
 board's Ready, In progress and Blocked counts and its next three ready items.
 
 Board shows Ready, In progress, Blocked, Deferred and Done. Done contains
@@ -230,7 +230,7 @@ stop either way.
 Reject and Undo answer with the code `board-closing`, and web and mobile show
 "Closing on the Board." at once and until that marker clears. A close that keeps failing waits
 longer between tries and, after five failures, sends the notice
-"A board item filed by a bot could not be closed." with "Ardur Bot tried five times. Close it
+"A board item filed by a bot could not be closed." with "Ardur tried five times. Close it
 on the Board, or check that this computer is connected." Learning shows the same two lines in
 place of "Closing on the Board.", and web and desktop notifications show them in the reader's
 language; mobile push text comes from the server, which has no user language, like every other

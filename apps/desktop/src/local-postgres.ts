@@ -128,7 +128,7 @@ export async function loadEmbeddedPostgres(input: {
 /** The message is the sentence the window shows; the package name is for the log. */
 export class MissingDatabaseBinariesError extends Error {
   constructor(readonly packageName: string) {
-    super("Part of this installation is missing. Reinstall Ardur Bot.");
+    super("Part of this installation is missing. Reinstall Ardur.");
     this.name = "MissingDatabaseBinariesError";
   }
 }

@@ -24,7 +24,9 @@ export async function updateTaskCard(
   deps: Pick<ExecutorDeps, "prisma" | "events">,
   input: Parameters<typeof updateWorkerTask>[1],
 ) {
-  const result = await deps.prisma.$transaction((tx) => updateWorkerTask(tx, input));
+  const result = await withTransactionRetry(() =>
+    deps.prisma.$transaction((tx) => updateWorkerTask(tx, input)),
+  );
   if ("event" in result && result.event)
     await deps.events.notify(result.event.threadId, result.event.seq).catch(() => undefined);
   return { ok: true };

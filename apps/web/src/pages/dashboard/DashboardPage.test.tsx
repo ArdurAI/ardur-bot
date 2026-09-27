@@ -62,6 +62,11 @@ vi.mock("@ardurbot/chat-ui/web", () => ({
   ChatMarkdown: ({ children }: { children: ReactNode }) => <div>{children}</div>,
 }));
 vi.mock("@ardurbot/ui-web", () => ({
+  Popover: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+  PopoverTrigger: ({ children, ...props }: ComponentProps<"button">) => (
+    <button {...props}>{children}</button>
+  ),
+  PopoverContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   Dialog: ({ children }: { children: ReactNode }) => children,
   DialogContent: ({ children }: { children: ReactNode }) => <div role="dialog">{children}</div>,
   DialogHeader: ({ children }: { children: ReactNode }) => children,
@@ -87,6 +92,13 @@ const summary = {
   providers: [],
 };
 const actions = { openSettings: vi.fn(), openLearning: vi.fn() };
+const account = {
+  name: "Test Owner",
+  menuOpen: false,
+  onMenuOpenChange: vi.fn(),
+  onUsage: vi.fn(),
+  onSignOut: vi.fn(),
+};
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.clearAllMocks();
@@ -117,13 +129,34 @@ async function renderPage(scope = "viewer:space") {
   await act(async () =>
     root.render(
       <MemoryRouter>
-        <DashboardPage scope={scope} spaceId="space" openSettings={actions.openSettings} />
+        <DashboardPage
+          scope={scope}
+          spaceId="space"
+          account={account}
+          openSettings={actions.openSettings}
+        />
       </MemoryRouter>,
     ),
   );
   await act(() => vi.dynamicImportSettled());
   await vi.waitFor(() => expect(node.querySelectorAll('[aria-busy="true"]').length).toBe(0));
 }
+it("shows the account row above panels and opens the matching settings sections", async () => {
+  await renderPage();
+  const area = node.querySelector('[data-testid="dashboard-account"]')!;
+  expect(area.textContent).toContain("TO");
+  expect(area.textContent).toContain("Test Owner");
+  expect(area.nextElementSibling?.querySelector("[data-panel]")).not.toBeNull();
+  expect(area.querySelector('[data-testid="user-menu-trigger"]')).not.toBeNull();
+  const buttons = [...area.querySelectorAll("button")];
+  await act(async () =>
+    buttons.find((button) => button.textContent?.includes("Settings"))?.click(),
+  );
+  await act(async () =>
+    buttons.find((button) => button.textContent?.includes("Integrations"))?.click(),
+  );
+  expect(actions.openSettings.mock.calls).toEqual([["general"], ["integrations"]]);
+});
 it("loads eight independent lazy panels and renders honest empty states", async () => {
   await renderPage();
   expect(node.querySelectorAll("[data-panel]").length).toBe(8);
@@ -179,7 +212,7 @@ it("paints the layout before bootstrap without starting unscoped panel requests"
   await act(async () =>
     root.render(
       <MemoryRouter>
-        <DashboardPage scope="" openSettings={actions.openSettings} />
+        <DashboardPage scope="" account={account} openSettings={actions.openSettings} />
       </MemoryRouter>,
     ),
   );
@@ -483,7 +516,12 @@ it("keeps warm content immediately available, below the 200 ms render budget, an
   await act(async () =>
     root.render(
       <MemoryRouter>
-        <DashboardPage scope="viewer:space" spaceId="space" openSettings={actions.openSettings} />
+        <DashboardPage
+          scope="viewer:space"
+          spaceId="space"
+          account={account}
+          openSettings={actions.openSettings}
+        />
       </MemoryRouter>,
     ),
   );

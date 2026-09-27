@@ -2,7 +2,7 @@ import type { ConnectorRoute } from "@ardurbot/adapter-kit";
 import { DelegationAuthoritySchema } from "@ardurbot/contracts";
 import { classifyRemoteTool, remotePermissionExpansion } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
-import { requestCancel } from "@ardurbot/db";
+import { reconcileGoalExhaustion, requestCancel } from "@ardurbot/db";
 import { grantedMcpTools, mcpGrantForBot } from "./integration-access.js";
 
 /** The recorded ceiling also applies to connector routes resolved after catalog lookup. */
@@ -22,6 +22,7 @@ export async function checkDelegationExecution(
   ) {
     if (!root.cancelRequestedAt)
       await requestCancel(prisma, { spaceId: run.spaceId, userId: run.userId }, rootTaskId);
+    if (run.goalId) await reconcileGoalExhaustion(prisma, run.goalId);
     return "This task is stopping; start a new task to continue.";
   }
   const delegationId = helperDelegationId ?? run.delegationId;

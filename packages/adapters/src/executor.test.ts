@@ -26,6 +26,34 @@ import {
   toolCompletionFromResult,
 } from "./executor.js";
 import { serializeModelSecret } from "./pi-oauth.js";
+import { agentHistoryTurn } from "./reply-context.js";
+
+it("labels a peer group reply as user data rather than the current bot's words", () => {
+  const names = new Map([["peer", "Reviewer"]]);
+  const message = {
+    id: "message",
+    threadId: "room",
+    role: "bot",
+    botId: "peer",
+    blocks: [{ kind: "text", text: "I found a failure." }],
+  };
+  expect(agentHistoryTurn(message, "coordinator", true, names)).toEqual({
+    role: "user",
+    content: "[Reviewer]: I found a failure.",
+  });
+  expect(
+    agentHistoryTurn({ ...message, botId: "coordinator" }, "coordinator", true, names),
+  ).toEqual({
+    role: "assistant",
+    content: "I found a failure.",
+  });
+  expect(
+    agentHistoryTurn({ ...message, role: "user", botId: null }, "coordinator", true, names),
+  ).toEqual({
+    role: "user",
+    content: "I found a failure.",
+  });
+});
 
 describe("tool completion audit", () => {
   it("records result metadata without persisting tool contents", () => {

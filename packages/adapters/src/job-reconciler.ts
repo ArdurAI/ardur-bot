@@ -2,10 +2,12 @@ import type { JobPublisher } from "@ardurbot/adapter-kit";
 import { messagingDeliverJob, routineWakeupJob, runContinueJob } from "@ardurbot/adapter-kit";
 import type { MessageBlock } from "@ardurbot/contracts";
 import type { Pool, PrismaClient, ThreadEvents } from "@ardurbot/db";
+import { goalExhaustionReason, reconcileGoalExhaustion } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 import type { PoolClient } from "pg";
 import { returnBotMessageOutcome } from "./bot-messages.js";
 import { scheduleComputerControlExpiry } from "./computer-control.js";
+import { wakeGoalAfterDelegation } from "./goal-wake.js";
 import { isUserProgressClientNonce } from "./user-progress.js";
 
 const DEFAULT_INTERVAL_MS = 30_000;
@@ -13,7 +15,7 @@ const DEFAULT_BATCH_SIZE = 100;
 const ROUTINE_LOOKAHEAD_MS = 60_000;
 const CONTROL_LOOKAHEAD_MS = 60_000;
 const BRIEF_MAINTENANCE_INTERVAL_MS = 600_000;
-// Two keys give Ardur Bot's lock a namespace without relying on a hash that might collide
+// Two keys give Ardur's lock a namespace without relying on a hash that might collide
 // with an application using the one-key advisory-lock API.
 const RECONCILIATION_LOCK_NAMESPACE = 1_380_019_075;
 const RECONCILIATION_LOCK_ID = 1;
@@ -338,6 +340,51 @@ export function createJobReconciler(
           }
         }),
       );
+    }
+
+    // A process may exit after a worker is finalized but before its coordinator wake is made.
+    // The root lock and coordinatorWokenAt marker make this pass safe to replay.
+    if (deps.prisma.teamGoal && deps.prisma.delegation) {
+      const goals = await deps.prisma.teamGoal.findMany({
+        where: { status: "running" },
+        select: { id: true, rootTaskId: true, untilAt: true, tokenLimit: true },
+      });
+      if (goals.length) {
+        const roots = await deps.prisma.delegationRoot.findMany({
+          where: { rootTaskId: { in: goals.map((goal) => goal.rootTaskId) } },
+          select: {
+            rootTaskId: true,
+            usedTokens: true,
+            tokenLimit: true,
+            deadlineAt: true,
+            cancelRequestedAt: true,
+          },
+        });
+        const byRoot = new Map(roots.map((root) => [root.rootTaskId, root]));
+        for (const goal of goals) {
+          if (!goalExhaustionReason(goal, byRoot.get(goal.rootTaskId) ?? null, now)) continue;
+          await reconcileGoalExhaustion(deps.prisma, goal.id);
+        }
+        const liveRoots = goals
+          .filter((goal) => !goalExhaustionReason(goal, byRoot.get(goal.rootTaskId) ?? null, now))
+          .map((goal) => goal.rootTaskId);
+        const terminal = await deps.prisma.delegation.findMany({
+          where: {
+            rootTaskId: { in: liveRoots },
+            kind: "group-handoff",
+            status: { in: ["completed", "failed", "cancelled", "accepted"] },
+            coordinatorWokenAt: null,
+          },
+          orderBy: [{ completedAt: "asc" }, { id: "asc" }],
+          take: batchSize,
+          select: { id: true },
+        });
+        for (const row of terminal) {
+          await wakeGoalAfterDelegation(deps, row.id).catch((error) =>
+            getLogger().error("goal wake reconciliation", error),
+          );
+        }
+      }
     }
 
     await Promise.all([

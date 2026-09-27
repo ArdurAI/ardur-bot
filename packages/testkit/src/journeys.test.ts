@@ -5,6 +5,7 @@ import { gunzipSync } from "node:zlib";
 import {
   ComposioEmulator,
   captureIntegrationManifest,
+  createJobReconciler,
   createScheduleFromTool,
   DesktopSandboxProvider,
   FakeSandboxProvider,
@@ -12,6 +13,7 @@ import {
   ManagedSandboxEmulator,
   McpConnector,
   owningSandbox,
+  ScriptedAgentRuntime,
   toComputerRef,
 } from "@ardurbot/adapters";
 import type { DelegationSnapshot, MemoryPage, TaughtSkill } from "@ardurbot/contracts";
@@ -22,8 +24,10 @@ import {
   createThreadEvents,
   createThreadMessage,
   RunHistoryWriteError,
+  updateWorkerTask,
+  wakeGoalCoordinatorForDelegation,
 } from "@ardurbot/db";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
 import type { createApp } from "../../../apps/api/src/app.ts";
 import { checkDelegationExecution } from "../../adapters/src/delegation-execution.js";
 import { integrationApprovalForCall } from "../../adapters/src/integration-access.js";
@@ -46,6 +50,7 @@ describeJourneys("required product journeys", () => {
   let jobs: Awaited<ReturnType<typeof createApp>>["jobs"];
   let sandbox: Awaited<ReturnType<typeof createApp>>["sandbox"];
   const stamp = Date.now();
+  let ownerCookie: string;
   const dataDir = mkdtempSync(path.join(tmpdir(), "ardurbot-journey-"));
 
   async function sendAndWait(app: App, cookie: string, botId: string, text: string) {
@@ -2017,6 +2022,7 @@ describeJourneys("required product journeys", () => {
       where: { id: "default" },
       data: { ownerUserId: me.userId },
     });
+    ownerCookie = cookie;
     const res = await raw(app, cookie, "deployment/update", { computerHost: "this-mac" });
     const text = await res.text();
     expect(res.status).toBeGreaterThanOrEqual(400);
@@ -2238,7 +2244,434 @@ describeJourneys("required product journeys", () => {
     ).toBe("revoked");
   });
 
-  it("54: group chats share one transcript with mentions and handoffs", async () => {
+  it("54: a coordinator assigns two members and receives one wake per finished assignment", async () => {
+    const instructionsByRun = new Map<string, string>();
+    const originalRun = ScriptedAgentRuntime.prototype.run;
+    const runtimeSpy = vi
+      .spyOn(ScriptedAgentRuntime.prototype, "run")
+      .mockImplementation((request, context) => {
+        instructionsByRun.set(request.runId, request.instructions);
+        return originalRun.call(new ScriptedAgentRuntime(), request, context);
+      });
+    onTestFinished(() => runtimeSpy.mockRestore());
+    const owner = ownerCookie;
+    const coordinator = await rpc<Bot>(app, owner, "bots/create", {
+      name: "Coordinator",
+      title: "Lead",
+      description: "",
+      instructions: "",
+      notifyOnFinish: true,
+    });
+    const first = await rpc<Bot>(app, owner, "bots/create", {
+      name: "BotA",
+      title: "Reviewer",
+      description: "",
+      instructions: "",
+      notifyOnFinish: true,
+    });
+    const second = await rpc<Bot>(app, owner, "bots/create", {
+      name: "BotB",
+      title: "Reviewer",
+      description: "",
+      instructions: "",
+      notifyOnFinish: true,
+    });
+    const group = await rpc<{ id: string; threadId: string }>(app, owner, "groups/create", {
+      name: "Review room",
+      botIds: [coordinator.id, first.id, second.id],
+    });
+    await rpc(app, owner, "groups/update", { groupId: group.id, coordinatorBotId: coordinator.id });
+    const goal = await rpc<{ id: string; rootTaskId: string; tokenLimit: number }>(
+      app,
+      owner,
+      "goals/start",
+      {
+        groupId: group.id,
+        objective: "Coordinate BotA and BotB to review the repository",
+        doneWhen: ["Both reviews are posted"],
+      },
+    );
+    expect(goal.tokenLimit).toBe(600_000);
+    const startRun = await prisma.run.findFirstOrThrow({
+      where: { goalId: goal.id, clientNonce: `goal-start:${goal.id}` },
+    });
+    expect(startRun).toMatchObject({
+      botId: coordinator.id,
+      threadId: group.threadId,
+      trigger: "follow_up",
+      delegationRootTaskId: goal.rootTaskId,
+      sourceMessageId: null,
+    });
+    await waitForDatabase(
+      async () =>
+        (await prisma.run.findUnique({ where: { id: startRun.id }, select: { status: true } }))
+          ?.status === "completed",
+    );
+    expect(instructionsByRun.get(startRun.id)).toContain("Both reviews are posted");
+    expect(
+      await prisma.message.count({
+        where: { threadId: group.threadId, runId: startRun.id, role: "bot" },
+      }),
+    ).toBeGreaterThan(0);
+    await waitForDatabase(
+      async () =>
+        (await prisma.delegation.count({
+          where: {
+            rootTaskId: goal.rootTaskId,
+            kind: "group-handoff",
+            status: "completed",
+            coordinatorWokenAt: { not: null },
+          },
+        })) === 2,
+    );
+    const assignments = await prisma.delegation.findMany({
+      where: { rootTaskId: goal.rootTaskId, kind: "group-handoff" },
+      orderBy: { createdAt: "asc" },
+    });
+    expect(assignments).toHaveLength(2);
+    expect(new Set(assignments.map((assignment) => assignment.actingBotId))).toEqual(
+      new Set([first.id, second.id]),
+    );
+    const root = await prisma.delegationRoot.findUniqueOrThrow({
+      where: { rootTaskId: goal.rootTaskId },
+    });
+    expect(root.tokenLimit).toBe(goal.tokenLimit);
+    const workerRuns = await prisma.run.findMany({
+      where: { id: { in: assignments.map((assignment) => assignment.runId!).filter(Boolean) } },
+      select: { id: true, delegationId: true, delegationRootTaskId: true, goalId: true },
+    });
+    expect(workerRuns).toEqual(
+      expect.arrayContaining(
+        assignments.map((assignment) => ({
+          id: assignment.runId,
+          delegationId: assignment.id,
+          delegationRootTaskId: goal.rootTaskId,
+          goalId: goal.id,
+        })),
+      ),
+    );
+    const workerMessages = await prisma.message.findMany({
+      where: {
+        threadId: group.threadId,
+        role: "bot",
+      },
+      select: { botId: true, runId: true },
+    });
+    expect(workerMessages).toEqual(
+      expect.arrayContaining(
+        assignments.map((assignment) => ({
+          botId: assignment.actingBotId,
+          runId: assignment.runId,
+        })),
+      ),
+    );
+    const wakes = await prisma.run.findMany({
+      where: { goalId: goal.id, clientNonce: { startsWith: "goal-wake:" } },
+      select: { clientNonce: true },
+    });
+    expect(new Set(wakes.map((wake) => wake.clientNonce))).toEqual(
+      new Set(assignments.map((assignment) => `goal-wake:${assignment.id}`)),
+    );
+    const replay = createJobReconciler({ prisma, jobs }, { batchSize: 100 });
+    await replay.reconcileOnce();
+    expect(
+      await prisma.run.count({
+        where: { goalId: goal.id, clientNonce: { startsWith: "goal-wake:" } },
+      }),
+    ).toBe(2);
+    const racingAssignment = assignments[0]!;
+    const racingRun = await prisma.run.findUniqueOrThrow({
+      where: { id: racingAssignment.runId! },
+    });
+    await prisma.run.update({
+      where: { id: racingAssignment.runId! },
+      data: {
+        status: "running",
+        completedAt: null,
+        leaseOwner: "progress-fixture",
+        leaseExpiresAt: new Date(Date.now() + 60_000),
+      },
+    });
+    await prisma.delegation.update({
+      where: { id: racingAssignment.id },
+      data: { status: "running", coordinatorWokenAt: null },
+    });
+    // A real PostgreSQL pair: progress pauses immediately after its first row lock while
+    // the coordinator wake takes the competing lock. Repeating catches order regressions.
+    for (let index = 0; index < 12; index += 1) {
+      let reachedFirstLock!: () => void;
+      let reachedSecondLock!: () => void;
+      let reachedWakeThread!: () => void;
+      let resumeWorker!: () => void;
+      let resumeWake!: () => void;
+      const firstLock = new Promise<void>((resolve) => {
+        reachedFirstLock = resolve;
+      });
+      const resume = new Promise<void>((resolve) => {
+        resumeWorker = resolve;
+      });
+      const wakeThread = new Promise<void>((resolve) => {
+        reachedWakeThread = resolve;
+      });
+      const secondLock = new Promise<void>((resolve) => {
+        reachedSecondLock = resolve;
+      });
+      const wakeResume = new Promise<void>((resolve) => {
+        resumeWake = resolve;
+      });
+      const progress = prisma.$transaction(async (tx) => {
+        let paused = false;
+        const gated = new Proxy(tx, {
+          get(target, property, receiver) {
+            if (property !== "$queryRaw") return Reflect.get(target, property, receiver);
+            return async (...args: Parameters<typeof tx.$queryRaw>) => {
+              if (paused) reachedSecondLock();
+              const result = await tx.$queryRaw(...args);
+              if (!paused) {
+                paused = true;
+                reachedFirstLock();
+                await resume;
+              }
+              return result;
+            };
+          },
+        });
+        return updateWorkerTask(gated, {
+          runId: racingAssignment.runId!,
+          spaceId: racingRun.spaceId,
+          userId: racingRun.userId,
+          botId: racingAssignment.actingBotId,
+          executionId: `progress-race-${index}`,
+          tool: "report_progress",
+          args: { state: "progress", text: `Progress ${index}` },
+        });
+      });
+      void progress.catch(() => undefined);
+      await firstLock;
+      const wakePrisma = new Proxy(prisma, {
+        get(target, property, receiver) {
+          if (property !== "$transaction") return Reflect.get(target, property, receiver);
+          return (callback: (tx: Parameters<typeof updateWorkerTask>[0]) => Promise<unknown>) =>
+            prisma.$transaction((tx) =>
+              callback(
+                new Proxy(tx, {
+                  get(inner, key, innerReceiver) {
+                    if (key !== "$queryRaw") return Reflect.get(inner, key, innerReceiver);
+                    return async (...args: Parameters<typeof tx.$queryRaw>) => {
+                      const result = await tx.$queryRaw(...args);
+                      if (args[0]?.[0]?.includes("FROM threads")) {
+                        reachedWakeThread();
+                        await wakeResume;
+                      }
+                      return result;
+                    };
+                  },
+                }),
+              ),
+            );
+        },
+      });
+      const wake = wakeGoalCoordinatorForDelegation(wakePrisma, racingAssignment.id);
+      const wakeOwnsThread = await Promise.race([
+        wakeThread.then(() => true),
+        new Promise<false>((resolve) => setTimeout(() => resolve(false), 100)),
+      ]);
+      resumeWorker();
+      if (wakeOwnsThread) await secondLock;
+      resumeWake();
+      const outcomes = await Promise.allSettled([progress, wake]);
+      expect(outcomes.map((outcome) => outcome.status)).toEqual(["fulfilled", "fulfilled"]);
+    }
+    const stopped = await rpc<{ status: string }>(app, owner, "goals/stop", { goalId: goal.id });
+    expect(stopped.status).toBe("stopped");
+    expect(
+      (
+        await prisma.delegationRoot.findUniqueOrThrow({
+          where: { rootTaskId: goal.rootTaskId },
+        })
+      ).cancelRequestedAt,
+    ).not.toBeNull();
+  });
+
+  it("a spent goal cancels a waiting coordinator and releases new room messages", async () => {
+    const owner = await signup(app, `budget-j-${stamp}@ardurbot.test`, "Budget owner");
+    const ownerMe = await rpc<Me>(app, owner, "me");
+    await prisma.deploymentSettings.update({
+      where: { id: "default" },
+      data: { ownerUserId: ownerMe.userId },
+    });
+    const coordinator = await rpc<Bot>(app, owner, "bots/create", {
+      name: "Budget Lead",
+      title: "Lead",
+      description: "",
+      instructions: "",
+    });
+    const peer = await rpc<Bot>(app, owner, "bots/create", {
+      name: "Budget Peer",
+      title: "Reviewer",
+      description: "",
+      instructions: "",
+    });
+    const group = await rpc<{ id: string; threadId: string }>(app, owner, "groups/create", {
+      name: "Budget room",
+      botIds: [coordinator.id, peer.id],
+    });
+    await rpc(app, owner, "groups/update", { groupId: group.id, coordinatorBotId: coordinator.id });
+    const goal = await rpc<{ id: string; rootTaskId: string; tokenLimit: number }>(
+      app,
+      owner,
+      "goals/start",
+      {
+        groupId: group.id,
+        objective: "Ask me which city before reporting readiness",
+        tokenLimit: 100,
+      },
+    );
+    const first = await prisma.run.findFirstOrThrow({
+      where: { goalId: goal.id, clientNonce: `goal-start:${goal.id}` },
+    });
+    await waitForDatabase(
+      async () =>
+        (await prisma.run.findUnique({ where: { id: first.id }, select: { status: true } }))
+          ?.status === "waiting_input",
+    );
+    // Model A's recorded screen ownership before B takes over the bot-scoped screen.
+    const oldScreenLeaseId = `${first.id}:1`;
+    await prisma.run.update({
+      where: { id: first.id },
+      data: { screenLeaseId: oldScreenLeaseId },
+    });
+    const computer = (
+      await prisma.bot.findUniqueOrThrow({
+        where: { id: coordinator.id },
+        include: { computer: true },
+      })
+    ).computer!;
+    const computerRef = toComputerRef(computer);
+    const screen = (await owningSandbox(sandbox, computer, {
+      operationId: first.id,
+      traceId: first.id,
+      spaceId: first.spaceId,
+      userId: first.userId,
+      botId: coordinator.id,
+      screenLeaseId: oldScreenLeaseId,
+      signal: new AbortController().signal,
+    })) as FakeSandboxProvider;
+    await screen.observe(computerRef, {
+      operationId: first.id,
+      traceId: first.id,
+      spaceId: first.spaceId,
+      userId: first.userId,
+      botId: coordinator.id,
+      screenLeaseId: oldScreenLeaseId,
+      signal: new AbortController().signal,
+    });
+    await prisma.delegationRoot.update({
+      where: { rootTaskId: goal.rootTaskId },
+      data: { usedTokens: goal.tokenLimit },
+    });
+    const reconciler = createJobReconciler({ prisma, jobs });
+    await reconciler.reconcileOnce();
+    expect(
+      (await prisma.delegationRoot.findUniqueOrThrow({ where: { rootTaskId: goal.rootTaskId } }))
+        .cancelRequestedAt,
+    ).not.toBeNull();
+    expect((await prisma.run.findUniqueOrThrow({ where: { id: first.id } })).status).toBe(
+      "waiting_input",
+    );
+    let resumeOrdinary!: () => void;
+    let ordinaryStarted!: () => void;
+    const ordinaryGate = new Promise<void>((resolve) => {
+      resumeOrdinary = resolve;
+    });
+    const ordinaryReady = new Promise<void>((resolve) => {
+      ordinaryStarted = resolve;
+    });
+    const originalRun = ScriptedAgentRuntime.prototype.run;
+    const runtimeSpy = vi
+      .spyOn(ScriptedAgentRuntime.prototype, "run")
+      .mockImplementation((request, context) =>
+        (async function* () {
+          ordinaryStarted();
+          await ordinaryGate;
+          yield* originalRun.call(new ScriptedAgentRuntime(), request, context);
+        })(),
+      );
+    onTestFinished(() => {
+      resumeOrdinary();
+      runtimeSpy.mockRestore();
+    });
+    const { runId } = await rpc<{ runId: string }>(app, owner, "threads/send", {
+      groupId: group.id,
+      text: "Say hello to the room",
+    });
+    expect(runId).not.toBe(first.id);
+    await ordinaryReady;
+    const newerScreenLeaseId = `${runId}:2`;
+    await screen.observe(computerRef, {
+      operationId: runId,
+      traceId: runId,
+      spaceId: first.spaceId,
+      userId: first.userId,
+      botId: coordinator.id,
+      screenLeaseId: newerScreenLeaseId,
+      signal: new AbortController().signal,
+    });
+    const release = vi.spyOn(screen, "releaseScreen");
+    try {
+      expect((await prisma.run.findUniqueOrThrow({ where: { id: runId } })).status).toBe("running");
+      await executor.continueRun(first.id, "goal-stop-fixture");
+      expect(release).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ screenLeaseId: oldScreenLeaseId }),
+      );
+      expect(screen.boxes.get(computerRef.id)?.screenLeases.get(coordinator.id)).toBe(
+        newerScreenLeaseId,
+      );
+    } finally {
+      release.mockRestore();
+      resumeOrdinary();
+      runtimeSpy.mockRestore();
+    }
+    await waitForDatabase(
+      async () =>
+        (await prisma.run.findUnique({ where: { id: runId }, select: { status: true } }))
+          ?.status === "completed",
+    );
+    const ordinary = await prisma.run.findUniqueOrThrow({ where: { id: runId } });
+    expect(ordinary.goalId).toBeNull();
+    expect(ordinary.delegationRootTaskId).toBeNull();
+    await reconciler.reconcileOnce();
+    expect(
+      await prisma.run.findUnique({
+        where: { id: first.id },
+        select: { status: true, cancelRequestedAt: true, leaseOwner: true },
+      }),
+    ).toMatchObject({ status: "cancelled", cancelRequestedAt: expect.any(Date) });
+    await reconciler.reconcileOnce();
+    const current = await rpc<{ status: string }>(app, owner, "goals/get", {
+      groupId: group.id,
+    });
+    expect(current.status).toBe("exhausted");
+    await prisma.delegationRoot.update({
+      where: { rootTaskId: goal.rootTaskId },
+      data: { cancelRequestedAt: null },
+    });
+    expect(
+      (await rpc<{ status: string }>(app, owner, "goals/stop", { goalId: goal.id })).status,
+    ).toBe("exhausted");
+    expect(
+      (await prisma.delegationRoot.findUniqueOrThrow({ where: { rootTaskId: goal.rootTaskId } }))
+        .cancelRequestedAt,
+    ).not.toBeNull();
+    expect(
+      await prisma.event.count({
+        where: { threadId: group.threadId, type: "goal.exhausted" },
+      }),
+    ).toBe(1);
+  });
+
+  it("55: group chats share one transcript with mentions and handoffs", async () => {
     const ada = await signup(app, `ada-g-${stamp}@ardurbot.test`, "Ada Groups");
     const adaMe = await rpc<Me>(app, ada, "me");
     const botA = await rpc<Bot>(app, ada, "bots/create", {

@@ -163,13 +163,13 @@ it("says a board close that keeps failing could not be closed, and what to do, i
     "A board item filed by a bot could not be closed.",
     {
       tag: "board:workspace:item",
-      body: "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected.",
+      body: "Ardur tried five times. Close it on the Board, or check that this computer is connected.",
     },
   );
   for (const locale of ["ru", "zh-CN"])
     for (const msgid of [
       "A board item filed by a bot could not be closed.",
-      "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected.",
+      "Ardur tried five times. Close it on the Board, or check that this computer is connected.",
     ]) {
       const catalog = readFileSync(
         path.join(import.meta.dirname, "../locales", locale, "messages.po"),

@@ -66,7 +66,7 @@ controls are disabled.
 - "Not requested"
 - "Off"
 - "Open Accessibility settings"
-- "Open Ardur Bot"
+- "Open Ardur"
 - "Open Screen recording settings"
 - "Open System Settings"
 - "Open System settings in the desktop app."

@@ -47,7 +47,7 @@ describe("passwordResetEmail", () => {
 
     expect(message).toMatchObject({
       to: "ada@example.test",
-      subject: "Reset your Ardur Bot password",
+      subject: "Reset your Ardur password",
     });
     expect(message.text).toContain("https://ardurbot.test/reset-password?token=secret&next=1");
     expect(message.html).toContain("&lt;Ada &amp; &quot;team&quot;&gt;");

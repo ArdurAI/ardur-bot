@@ -39,6 +39,7 @@ import {
   createRepos,
   createThreadMessageInTransaction,
   expireComputerExecutionLeases,
+  goalExhaustionReason,
   IsolationError,
   lockOwnedGroup,
   type Prisma,
@@ -894,7 +895,7 @@ export async function sendThreadMessage(
       const members = await lockAndLoadGroupMembers(tx, actor, target);
       const memberBotIds = members.map((member) => member.botId);
       const mentionTargets = splitMentionTargets(input.mentions);
-      const [groupRouting, spaceRouting, replyTarget, lastRun] = await Promise.all([
+      const [groupRouting, spaceRouting, replyTarget, lastRun, candidateGoal] = await Promise.all([
         tx.chatGroup.findUnique({
           where: { id: target.groupId },
           select: { coordinatorBotId: true },
@@ -910,7 +911,37 @@ export async function sendThreadMessage(
           where: { threadId: target.threadId, spaceId: actor.spaceId, userId: actor.userId },
           orderBy: { createdAt: "desc" },
         }),
+        tx.teamGoal?.findFirst({
+          where: {
+            groupId: target.groupId,
+            spaceId: actor.spaceId,
+            userId: actor.userId,
+            status: "running",
+          },
+          select: {
+            id: true,
+            rootTaskId: true,
+            coordinatorBotId: true,
+            untilAt: true,
+            tokenLimit: true,
+          },
+        }),
       ]);
+      const root = candidateGoal
+        ? await tx.delegationRoot.findUnique({
+            where: { rootTaskId: candidateGoal.rootTaskId },
+            select: {
+              usedTokens: true,
+              tokenLimit: true,
+              deadlineAt: true,
+              cancelRequestedAt: true,
+            },
+          })
+        : null;
+      const activeGoal =
+        candidateGoal && root && !goalExhaustionReason(candidateGoal, root, new Date())
+          ? candidateGoal
+          : null;
       const explicit = members.filter(
         (member) =>
           mentionTargets.botMentionIds.includes(member.botId) ||
@@ -968,11 +999,54 @@ export async function sendThreadMessage(
           botId: { in: targetBotIds },
           status: { in: [...ACTIVE_RUN_STATUSES] },
         },
-        select: { id: true, taskId: true, botId: true, status: true },
+        select: {
+          id: true,
+          taskId: true,
+          botId: true,
+          status: true,
+          goalId: true,
+          delegationRootTaskId: true,
+        },
+      });
+      const goalIds = activeRuns.flatMap((run) => (run.goalId ? [run.goalId] : []));
+      const rootTaskIds = activeRuns.flatMap((run) =>
+        run.delegationRootTaskId ? [run.delegationRootTaskId] : [],
+      );
+      const runGoals =
+        goalIds.length || rootTaskIds.length
+          ? await tx.teamGoal.findMany({
+              where: { OR: [{ id: { in: goalIds } }, { rootTaskId: { in: rootTaskIds } }] },
+              select: { id: true, rootTaskId: true, status: true, untilAt: true, tokenLimit: true },
+            })
+          : [];
+      const runRoots = runGoals.length
+        ? await tx.delegationRoot.findMany({
+            where: { rootTaskId: { in: runGoals.map((goal) => goal.rootTaskId) } },
+            select: {
+              rootTaskId: true,
+              usedTokens: true,
+              tokenLimit: true,
+              deadlineAt: true,
+              cancelRequestedAt: true,
+            },
+          })
+        : [];
+      const goalsById = new Map(runGoals.map((goal) => [goal.id, goal]));
+      const goalsByRoot = new Map(runGoals.map((goal) => [goal.rootTaskId, goal]));
+      const rootsById = new Map(runRoots.map((root) => [root.rootTaskId, root]));
+      const routableRuns = activeRuns.filter((run) => {
+        const goal =
+          (run.goalId ? goalsById.get(run.goalId) : undefined) ??
+          (run.delegationRootTaskId ? goalsByRoot.get(run.delegationRootTaskId) : undefined);
+        if (!goal) return !run.goalId;
+        return (
+          goal.status === "running" &&
+          !goalExhaustionReason(goal, rootsById.get(goal.rootTaskId) ?? null, new Date())
+        );
       });
       const activeByBotId = new Map<string, (typeof activeRuns)[number]>();
       const answeredByBotId = new Map<string, Array<(typeof activeRuns)[number]>>();
-      for (const run of activeRuns) {
+      for (const run of routableRuns) {
         if (run.status === "waiting_input") {
           const answerText = input.text?.trim();
           if (!answerText) {
@@ -1042,6 +1116,11 @@ export async function sendThreadMessage(
             routingRule: routed.rule,
             clientNonce: sendRunClientNonce(input.clientNonce, message.id, botId),
             sourceMessageId: message.id,
+            ...(activeGoal &&
+            activeGoal.coordinatorBotId === botId &&
+            activeGoal.coordinatorBotId === groupRouting?.coordinatorBotId
+              ? { goalId: activeGoal.id, delegationRootTaskId: activeGoal.rootTaskId }
+              : {}),
           },
         });
         runs.push(run);

@@ -14,6 +14,7 @@ export async function stoppedRunComputer(prisma: PrismaClient, run: Run, compute
     spaceId: run.spaceId,
     userId: run.userId,
     botId: run.botId,
+    ...(run.screenLeaseId ? { screenLeaseId: run.screenLeaseId } : {}),
     signal: AbortSignal.timeout(30_000),
   };
   return { computer: toComputerRef(computer), context };

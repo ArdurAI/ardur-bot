@@ -24,6 +24,7 @@ export async function runIntegrationSuites(options: {
         ...options.env,
         DATABASE_URL: suiteUrl.toString(),
         REALTIME_DATABASE_URL: suiteUrl.toString(),
+        USAGE_LEDGER_TEST_DATABASE_URL: suiteUrl.toString(),
         OPENROUTER_API_KEY: "",
         MODEL_API_KEY: "",
       });
