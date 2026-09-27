@@ -156,6 +156,40 @@ function textFromUpdate(update: Record<string, unknown>) {
   return content.text;
 }
 
+export function createHermesTextRedactor(secrets: readonly string[], emit: (text: string) => void) {
+  const spellings = [
+    ...new Set(
+      secrets.flatMap((value) => [
+        value,
+        encodeURIComponent(value),
+        JSON.stringify(value).slice(1, -1),
+      ]),
+    ),
+  ]
+    .filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+  let pending = "";
+  return (chunk: string, flush = false) => {
+    pending += chunk;
+    for (const spelling of spellings) pending = pending.split(spelling).join("[redacted]");
+    let held = 0;
+    if (!flush)
+      for (const spelling of spellings) {
+        for (let size = Math.min(spelling.length - 1, pending.length); size > held; size--) {
+          if (pending.endsWith(spelling.slice(0, size))) {
+            held = size;
+            break;
+          }
+        }
+      }
+    const count = pending.length - held;
+    if (!count) return;
+    const safe = redactMcpText(pending.slice(0, count), secrets);
+    pending = pending.slice(count);
+    if (safe) emit(safe);
+  };
+}
+
 interface ActiveTurn {
   active: boolean;
   stopReason?: "cancel" | "pause" | "failure";
@@ -233,7 +267,9 @@ export class HermesRuntime implements AgentRuntime {
   ): AsyncIterable<AgentRuntimeEvent> {
     if (this.running.has(request.runId)) throw new Error("This Hermes run is already active.");
     const config = hermesConfig(request);
-    const queue = new RuntimeQueue<AgentRuntimeEvent>();
+    const queue = new RuntimeQueue<AgentRuntimeEvent>(
+      (error) => new Error("Hermes could not complete this turn.", { cause: error }),
+    );
     const turn: ActiveTurn = { active: true, queue };
     this.running.set(request.runId, turn);
     const stopOnSignal = () => {
@@ -258,10 +294,17 @@ export class HermesRuntime implements AgentRuntime {
       if (contextText) await writeFile(join(home, "SOUL.md"), contextText, { mode: 0o600 });
 
       let fenced = false;
+      const enqueue = (event: AgentRuntimeEvent) => {
+        const failure = queue.push(event);
+        if (failure && !fenced) {
+          fenced = true;
+          void this.stopTurn(request.runId, "failure").catch(() => {});
+        }
+      };
       const bridge = createArdurToolBridge(
         request,
         (event) => {
-          if (!fenced && turn?.active) queue.push(event);
+          if (!fenced && turn?.active) enqueue(event);
         },
         () => {
           fenced = true;
@@ -278,33 +321,9 @@ export class HermesRuntime implements AgentRuntime {
       const allowedToolTitles = new Set(
         Array.isArray(request.tools) ? request.tools.map((tool) => `mcp__ardur__${tool.name}`) : [],
       );
-      const spellings = secrets.flatMap((value) => [
-        value,
-        encodeURIComponent(value),
-        JSON.stringify(value).slice(1, -1),
-      ]);
-      let pendingText = "";
-      const emitText = (flush = false) => {
-        let held = 0;
-        if (!flush && !spellings.some((spelling) => pendingText.endsWith(spelling)))
-          for (const spelling of spellings) {
-            for (
-              let size = Math.min(spelling.length - 1, pendingText.length);
-              size > held;
-              size--
-            ) {
-              if (pendingText.endsWith(spelling.slice(0, size))) {
-                held = size;
-                break;
-              }
-            }
-          }
-        const count = pendingText.length - held;
-        if (!count) return;
-        const safe = redactMcpText(pendingText.slice(0, count), secrets);
-        pendingText = pendingText.slice(count);
-        if (safe && turn.active) queue.push({ type: "text", text: safe });
-      };
+      const emitText = createHermesTextRedactor(secrets, (safe) => {
+        if (turn.active) enqueue({ type: "text", text: safe });
+      });
       const result = await this.options.launch({
         command: this.options.command,
         args: this.options.args ?? [],
@@ -333,7 +352,7 @@ export class HermesRuntime implements AgentRuntime {
         timeoutMs: 90_000,
         onPermissionAttempt: () => {
           if (turn.active) {
-            queue.push({
+            enqueue({
               type: "progress",
               text: "Hermes requested a native permission.",
               activity: true,
@@ -345,8 +364,7 @@ export class HermesRuntime implements AgentRuntime {
           if (!turn.active || sessionId !== turn.sessionId) return;
           const kind = update.sessionUpdate;
           if (kind === "agent_message_chunk") {
-            pendingText += textFromUpdate(update);
-            emitText();
+            emitText(textFromUpdate(update));
           } else if (kind === "tool_call") {
             const title = typeof update.title === "string" ? update.title : "";
             // The pinned adapter's generic MCP fallback uses the exact tool name as title;
@@ -357,9 +375,9 @@ export class HermesRuntime implements AgentRuntime {
               void this.stopTurn(request.runId, "failure").catch(() => {});
               return;
             }
-            queue.push({ type: "progress", text: redactMcpText(title, secrets), activity: true });
+            enqueue({ type: "progress", text: redactMcpText(title, secrets), activity: true });
           } else if (kind === "tool_call_update" || kind === "plan") {
-            queue.push({ type: "progress", text: "Hermes is working.", activity: true });
+            enqueue({ type: "progress", text: "Hermes is working.", activity: true });
           }
         },
       });
@@ -420,7 +438,7 @@ export class HermesRuntime implements AgentRuntime {
           if (!turn.active || context?.signal?.aborted) return;
           if (response.stopReason !== "end_turn")
             throw new Error("Hermes did not complete the turn.");
-          emitText(true);
+          emitText("", true);
           const usage = response.usage;
           if (usage && typeof usage === "object" && !Array.isArray(usage)) {
             const value = usage as Record<string, unknown>;
@@ -430,7 +448,7 @@ export class HermesRuntime implements AgentRuntime {
               value.inputTokens > 0 &&
               value.outputTokens > 0
             )
-              queue.push({
+              enqueue({
                 type: "usage",
                 provider: request.model.provider,
                 model: request.model.id,
@@ -441,7 +459,7 @@ export class HermesRuntime implements AgentRuntime {
                   typeof value.cachedReadTokens === "number" ? value.cachedReadTokens : undefined,
               });
           }
-          queue.push({ type: "done" });
+          enqueue({ type: "done" });
           queue.end();
         } catch (error) {
           if (turn.active) {

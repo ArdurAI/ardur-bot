@@ -55,6 +55,12 @@ async function handle(value) {
     process.stdout.write("{broken\n");
     return;
   }
+  if (scenario === "queue-overflow" && value.method === "fixture/overflow") {
+    for (let i = 0; i < 260; i++)
+      update({ sessionUpdate: "plan", entries: [{ content: `step ${i}` }] });
+    process.stderr.write("overflow-complete\n");
+    return;
+  }
   if (value.method !== "session/prompt") return;
   if (scenario === "malformed") {
     process.stdout.write("{broken\n");
@@ -160,6 +166,22 @@ async function handle(value) {
     send({ id: value.id, result: { stopReason: "end_turn" } });
     return;
   }
+  if (scenario === "redact-overlap") {
+    const kind = value.params.prompt[0].text;
+    const secret = kind === "provider" ? process.env.ARDUR_HERMES_PROVIDER_KEY : mcp.args.at(-1);
+    message(`${secret}${kind === "provider" ? "i" : secret.slice(0, 1)}`);
+    message("!");
+    send({ id: value.id, result: { stopReason: "end_turn" } });
+    return;
+  }
+  if (scenario === "redact-overlap-three") {
+    const secret = process.env.ARDUR_HERMES_PROVIDER_KEY;
+    message(secret.slice(0, -1));
+    message(`${secret.slice(-1)}i`);
+    message("!");
+    send({ id: value.id, result: { stopReason: "end_turn" } });
+    return;
+  }
   if (scenario === "defaulted-usage") {
     message("completed");
     send({
@@ -182,9 +204,11 @@ async function handle(value) {
       "ask-user",
       "takeover",
       "pending-tool-malformed",
+      "queue-overflow",
     ].includes(scenario)
   ) {
-    if (scenario === "pending-tool-malformed") message("before protocol failure.");
+    if (scenario === "pending-tool-malformed" || scenario === "queue-overflow")
+      message("before protocol failure.");
     const client = new Client({ name: "fixture", version: "0.1.0" });
     const transport = new StdioClientTransport({
       command: mcp.command,

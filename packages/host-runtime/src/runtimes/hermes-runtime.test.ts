@@ -2,7 +2,11 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import type { AgentRunRequest, AgentRuntimeEvent } from "@ardurbot/adapter-kit";
 import { describe, expect, it, vi } from "vitest";
-import { HermesRuntime, launchUnconfinedProcess } from "./hermes-runtime.js";
+import {
+  createHermesTextRedactor,
+  HermesRuntime,
+  launchUnconfinedProcess,
+} from "./hermes-runtime.js";
 import { stopNative } from "./native-process.js";
 
 const fixture = fileURLToPath(new URL("./fixtures/fake-acp.mjs", import.meta.url));
@@ -243,6 +247,69 @@ describe("HermesRuntime M0 ACP seam", () => {
     }
   });
 
+  it("fences a pending tool when a paused consumer overflows its queue", async () => {
+    let authorizationEntered!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      authorizationEntered = resolve;
+    });
+    let releaseAuthorization!: () => void;
+    const heldAuthorization = new Promise<void>((resolve) => {
+      releaseAuthorization = resolve;
+    });
+    let overflowWritten!: () => void;
+    const written = new Promise<void>((resolve) => {
+      overflowWritten = resolve;
+    });
+    let child!: Awaited<ReturnType<typeof launchUnconfinedProcess>>["child"];
+    const executeTool = vi.fn(async () => ({ unexpected: true }));
+    const adapter = new HermesRuntime({
+      command: process.execPath,
+      args: [fixture, "queue-overflow"],
+      launch: async (spec) => {
+        const result = await launchUnconfinedProcess(spec);
+        child = result.child;
+        child.stderr.on("data", (chunk: Buffer) => {
+          if (chunk.toString("utf8").includes("overflow-complete")) overflowWritten();
+        });
+        return result;
+      },
+    });
+    const run = request({
+      tools: [{ name: "fixture_echo", description: "Echo", inputSchema: {} }],
+      authorizeTool: async () => {
+        authorizationEntered();
+        await heldAuthorization;
+        return undefined;
+      },
+      executeTool,
+    });
+    const events = adapter.run(run)[Symbol.asyncIterator]();
+    try {
+      expect(await events.next()).toEqual({
+        value: { type: "text", text: "before protocol failure." },
+        done: false,
+      });
+      await entered;
+      child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", method: "fixture/overflow" })}\n`);
+      await written;
+      await new Promise((resolve) => setImmediate(resolve));
+      releaseAuthorization();
+      const drain = async () => {
+        while (!(await events.next()).done) {
+          // Buffered progress precedes the stored queue error.
+        }
+      };
+      await expect(drain()).rejects.toMatchObject({
+        message: "Hermes could not complete this turn.",
+        cause: { message: "Runtime output exceeded its limit." },
+      });
+      expect(executeTool).not.toHaveBeenCalled();
+    } finally {
+      releaseAuthorization();
+      await events.return?.();
+    }
+  });
+
   it("isolates the home, cwd and environment and writes a secret-free config", async () => {
     process.env.ARDUR_PARENT_SECRET = "fixture-parent-secret";
     try {
@@ -322,6 +389,69 @@ describe("HermesRuntime M0 ACP seam", () => {
       .map((event) => event.text)
       .join("");
     expect(text).toBe("Bearer [redacted] suffix");
+  });
+
+  for (const kind of ["provider", "relay"] as const) {
+    it(`redacts a complete ${kind} secret before holding its repeated first character`, async () => {
+      const run = request({ prompt: kind });
+      if (kind === "provider") run.model.apiKey = "fixture-provider-key-f";
+      const events = await collect(runtime("redact-overlap"), run);
+      const text = events
+        .filter((event) => event.type === "text")
+        .map((event) => event.text)
+        .join("");
+      if (kind === "provider") expect(text).toBe("[redacted]i!");
+      else {
+        expect(text).toContain("[redacted]");
+        expect(text.endsWith("!")).toBe(true);
+      }
+    });
+  }
+
+  it("redacts a secret followed by its own prefix across three chunks", async () => {
+    const run = request();
+    run.model.apiKey = "fixture-provider-key-f";
+    const events = await collect(runtime("redact-overlap-three"), run);
+    const text = events
+      .filter((event) => event.type === "text")
+      .map((event) => event.text)
+      .join("");
+    expect(text).toBe("[redacted]i!");
+  });
+
+  it("protects self-overlapping relay-shaped spellings", () => {
+    const relay = "f".repeat(64);
+    const output: string[] = [];
+    const emit = createHermesTextRedactor([relay], (text) => output.push(text));
+    emit(`${relay}f`);
+    emit("!");
+    emit("", true);
+    expect(output.join("")).toBe("[redacted]f!");
+  });
+
+  it("protects 200 short-alphabet keys at every two-chunk boundary", () => {
+    let state = 0x51f15e;
+    const next = () => {
+      state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+      return state;
+    };
+    for (let keyIndex = 0; keyIndex < 200; keyIndex++) {
+      const length = 8 + (next() % 57);
+      const key = Array.from({ length }, () => "abc"[next() % 3]).join("");
+      for (const raw of [`${key}${key.slice(0, 2)}!`, `${key}|${key}`]) {
+        const occurrences = raw.split(key).length - 1;
+        for (let boundary = 1; boundary < raw.length; boundary++) {
+          const output: string[] = [];
+          const emit = createHermesTextRedactor([key], (text) => output.push(text));
+          emit(raw.slice(0, boundary));
+          emit(raw.slice(boundary));
+          emit("", true);
+          const joined = output.join("");
+          expect(joined).not.toContain(key);
+          expect(joined.match(/\[redacted\]/g)).toHaveLength(occurrences);
+        }
+      }
+    }
   });
 
   it("reserves a run during launch and fences an abort before ACP starts", async () => {
