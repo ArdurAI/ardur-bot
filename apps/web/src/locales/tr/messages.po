@@ -6315,7 +6315,7 @@ msgstr "Yanıtla"
 
 #: src/pages/PeerMessagesOverlay.tsx
 msgid "Reply shortened — open the conversation with {peerBotName} for the full text"
-msgstr ""
+msgstr "Yanıt kısaltıldı — tam metni görmek için {peerBotName} ile olan konuşmayı açın"
 
 #: src/pages/Shell.tsx
 msgid "Replying to {replyName}"

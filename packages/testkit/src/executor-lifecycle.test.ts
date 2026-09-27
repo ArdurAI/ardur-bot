@@ -228,6 +228,114 @@ describeIntegration("run executor lifecycle", () => {
     ]);
   });
 
+  it("stores the full peer reply beside a bounded coordinator receipt only once", async () => {
+    const seeded = await seedPeerRun("long-peer-reply");
+    const events = createThreadEvents(handles.prisma);
+    const answer = "Complete peer answer. ".repeat(110);
+    expect(answer.length).toBeGreaterThan(2000);
+    const input = {
+      spaceId: seeded.coordinator.me.spaceId,
+      threadId: seeded.workerThread.id,
+      botId: seeded.workerBot.id,
+      runId: seeded.run.id,
+      taskId: seeded.task.id,
+      attemptId: seeded.attempt.id,
+      leaseOwner: "peer-worker",
+      leaseFence: 1,
+      outcome: "completed" as const,
+      blocks: [{ kind: "text" as const, text: answer }],
+    };
+
+    expect(await events.finalizeRun(input)).toEqual({ continuationRunId: null });
+    const [workerMessages, coordinatorMessages] = await Promise.all([
+      handles.prisma.message.findMany({
+        where: { threadId: seeded.workerThread.id, runId: seeded.run.id },
+      }),
+      handles.prisma.message.findMany({
+        where: {
+          threadId: seeded.coordinator.thread.id,
+          clientNonce: `delegation-summary:${seeded.delegation.id}`,
+        },
+      }),
+    ]);
+    expect(workerMessages).toHaveLength(1);
+    expect(workerMessages[0]).toMatchObject({
+      role: "bot",
+      botId: seeded.workerBot.id,
+      blocks: input.blocks,
+    });
+    expect(coordinatorMessages).toHaveLength(1);
+    expect(coordinatorMessages[0]!.blocks).toEqual([
+      expect.objectContaining({
+        kind: "bot_message_received",
+        fromBotId: seeded.workerBot.id,
+        text: answer.slice(0, 2000),
+        truncated: true,
+        fullLength: answer.length,
+      }),
+    ]);
+
+    expect(await events.finalizeRun(input)).toBe(false);
+    expect(
+      await handles.prisma.message.count({
+        where: { threadId: seeded.workerThread.id, runId: seeded.run.id },
+      }),
+    ).toBe(1);
+    expect(
+      await handles.prisma.message.count({
+        where: {
+          threadId: seeded.coordinator.thread.id,
+          clientNonce: `delegation-summary:${seeded.delegation.id}`,
+        },
+      }),
+    ).toBe(1);
+  });
+
+  it("finishes a silent peer completion without writing an empty worker reply", async () => {
+    const seeded = await seedPeerRun("silent-peer-reply");
+    const events = createThreadEvents(handles.prisma);
+    expect(
+      await events.finalizeRun({
+        spaceId: seeded.coordinator.me.spaceId,
+        threadId: seeded.workerThread.id,
+        botId: seeded.workerBot.id,
+        runId: seeded.run.id,
+        taskId: seeded.task.id,
+        attemptId: seeded.attempt.id,
+        leaseOwner: "peer-worker",
+        leaseFence: 1,
+        outcome: "completed",
+        blocks: [],
+      }),
+    ).toEqual({ continuationRunId: null });
+
+    expect(
+      await handles.prisma.message.count({
+        where: { threadId: seeded.workerThread.id, runId: seeded.run.id },
+      }),
+    ).toBe(0);
+    expect(
+      await handles.prisma.event.count({
+        where: {
+          threadId: seeded.workerThread.id,
+          runId: seeded.run.id,
+          type: "thread.message.created",
+        },
+      }),
+    ).toBe(0);
+    const receipt = await handles.prisma.message.findUniqueOrThrow({
+      where: {
+        threadId_clientNonce: {
+          threadId: seeded.coordinator.thread.id,
+          clientNonce: `delegation-summary:${seeded.delegation.id}`,
+        },
+      },
+    });
+    expect(receipt.blocks).toEqual([
+      expect.objectContaining({ kind: "text", text: expect.stringContaining("completed") }),
+    ]);
+  });
+
   it("rolls back every terminal write when the atomic commit fails", async () => {
     const seeded = await seedRun("terminal-rollback", "do not partially finish", {
       status: "running",
@@ -895,6 +1003,91 @@ describeIntegration("run executor lifecycle", () => {
       },
     });
     return { cookie, me, bot, thread, task, run };
+  }
+
+  async function seedPeerRun(label: string) {
+    const coordinator = await seedRun(label, "Ask a peer to respond");
+    const workerBot = await rpc<{ id: string }>(coordinator.cookie, "bots/create", {
+      name: `Peer ${label}`,
+      title: "",
+      description: "",
+      instructions: "",
+      notifyOnFinish: false,
+    });
+    const workerThread = await handles.prisma.thread.findUniqueOrThrow({
+      where: { botId: workerBot.id },
+    });
+    const deadlineAt = new Date(Date.now() + 60_000);
+    await handles.prisma.delegationRoot.create({
+      data: {
+        rootTaskId: coordinator.task.id,
+        spaceId: coordinator.me.spaceId,
+        userId: coordinator.me.userId,
+        coordinatorBotId: coordinator.bot.id,
+        coordinatorThreadId: coordinator.thread.id,
+        activeDescendants: 1,
+        totalDescendants: 1,
+        deadlineAt,
+      },
+    });
+    const delegation = await handles.prisma.delegation.create({
+      data: {
+        rootTaskId: coordinator.task.id,
+        parentRunId: coordinator.run.id,
+        spaceId: coordinator.me.spaceId,
+        userId: coordinator.me.userId,
+        requesterBotId: coordinator.bot.id,
+        actingBotId: workerBot.id,
+        requesterName: `Executor ${label}`,
+        actingName: `Peer ${label}`,
+        kind: "message",
+        depth: 1,
+        hop: 1,
+        status: "running",
+        snapshot: {},
+        authority: {},
+        ancestorBotIds: [coordinator.bot.id],
+        reservedTokens: 0,
+        deadlineAt,
+        admissionKey: `bot-message:${coordinator.run.id}:message_bot:0`,
+        fingerprint: "peer-test",
+      },
+    });
+    const task = await handles.prisma.task.create({
+      data: {
+        spaceId: coordinator.me.spaceId,
+        botId: workerBot.id,
+        threadId: workerThread.id,
+        userId: coordinator.me.userId,
+        prompt: "Respond to the peer request",
+        status: "queued",
+      },
+    });
+    const run = await handles.prisma.run.create({
+      data: {
+        spaceId: coordinator.me.spaceId,
+        botId: workerBot.id,
+        threadId: workerThread.id,
+        taskId: task.id,
+        userId: coordinator.me.userId,
+        status: "running",
+        trigger: "bot_message",
+        leaseOwner: "peer-worker",
+        leaseFence: 1,
+        leaseExpiresAt: deadlineAt,
+        startedAt: new Date(),
+        delegationId: delegation.id,
+        delegationRootTaskId: coordinator.task.id,
+      },
+    });
+    await handles.prisma.delegation.update({
+      where: { id: delegation.id },
+      data: { runId: run.id },
+    });
+    const attempt = await handles.prisma.attempt.create({
+      data: { runId: run.id, fence: 1, status: "running" },
+    });
+    return { coordinator, workerBot, workerThread, delegation, task, run, attempt };
   }
 
   async function signup(email: string, name: string) {

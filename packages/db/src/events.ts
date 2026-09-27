@@ -1273,14 +1273,16 @@ async function finalizeRunOnce(
       (!writableRun?.delegationId || goalRoomAssignment || peerMessageAssignment)
     ) {
       const completedBlocks = peerMessageAssignment
-        ? [
-            {
-              kind: "text" as const,
-              text: redactTaskValue(
-                input.blocks.flatMap((block) => ("text" in block ? [block.text] : [])).join("\n"),
-              ),
-            },
-          ]
+        ? input.blocks.length > 0
+          ? [
+              {
+                kind: "text" as const,
+                text: redactTaskValue(
+                  input.blocks.flatMap((block) => ("text" in block ? [block.text] : [])).join("\n"),
+                ),
+              },
+            ]
+          : []
         : completedRunBlocks(input.blocks, writableRun?.startedAt ?? null, now);
       if (completedBlocks.length > 0) {
         const message = await createThreadMessageInTransaction(tx, {

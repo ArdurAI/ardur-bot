@@ -6315,7 +6315,7 @@ msgstr "Responder"
 
 #: src/pages/PeerMessagesOverlay.tsx
 msgid "Reply shortened — open the conversation with {peerBotName} for the full text"
-msgstr ""
+msgstr "Resposta abreviada — abra a conversa com {peerBotName} para ver o texto completo"
 
 #: src/pages/Shell.tsx
 msgid "Replying to {replyName}"
