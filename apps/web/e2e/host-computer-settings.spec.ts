@@ -55,7 +55,7 @@ test("Computers shows host tools, a failed login profile and registered folders"
   await page.getByTestId("settings-nav-computer").click();
   await page
     .getByTestId("computers-setup-settings")
-    .getByText("This computer", { exact: true })
+    .locator("summary", { hasText: "This computer" })
     .click();
   await expect(page.getByTestId("host-computer-settings")).toContainText(
     "Connected · claude 2.1.259 · codex 0.156.1",
@@ -177,7 +177,7 @@ test("Computers in local mode shows this computer once, with the folders this ap
   await page.getByTestId("settings-nav-computer").click();
   await page
     .getByTestId("computers-setup-settings")
-    .getByText("This computer", { exact: true })
+    .locator("summary", { hasText: "This computer" })
     .click();
   // This computer's state and capacity are on its Fleet row, once.
   const row = page.locator('[data-fleet-target="host"]');

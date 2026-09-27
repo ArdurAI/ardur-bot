@@ -2,6 +2,12 @@ import type { Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 import { captureScreenshot, completeOnboarding, signup } from "./helpers";
 
+// Route handlers here read fetched responses; a poll still in flight when a test ends must not
+// surface as "Response has been disposed" from the handler.
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
 test("setup exposes all integration choices and saves only the selected provider", async ({
   page,
 }, testInfo) => {
