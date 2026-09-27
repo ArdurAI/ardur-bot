@@ -84,6 +84,7 @@ export function fixture() {
     $queryRaw: vi.fn(async () => []),
     usageRecord: {
       aggregate: vi.fn(async () => ({ _sum: { inputTokens: 0, outputTokens: 0 } })),
+      findMany: vi.fn(async () => []),
     },
     teamGoal: {
       findUnique: vi.fn(async () => null),

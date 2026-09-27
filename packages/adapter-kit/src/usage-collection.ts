@@ -123,6 +123,7 @@ export class RequestUsageCollector {
       attemptId?: string;
       parentRequestId?: string | null;
       limitations?: UsageLimitation[];
+      admission?: RequestUsageObservation["admission"];
     },
   ) {
     this.requestId = options.requestId ?? crypto.randomUUID();
@@ -193,6 +194,7 @@ export class RequestUsageCollector {
           raw: { ...this.raw },
           limitations: [...this.limitations],
         },
+        ...(this.options.admission ? { admission: this.options.admission } : {}),
       },
     };
   }
