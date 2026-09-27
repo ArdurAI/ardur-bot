@@ -115,6 +115,7 @@ import {
   HostMoveUnavailableError,
   IntegrationManifestSchema,
   IntegrationProviderIdSchema,
+  nativeRuntimeHealthKeys,
   OPENAI_COMPATIBLE_PROVIDER_ID,
   usableModelId,
 } from "@ardurbot/contracts";
@@ -1025,26 +1026,33 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       }),
     },
     runtimes: {
-      availability: authed.runtimes.availability.handler(async ({ context, input }) =>
-        process.env.ARDURBOT_HOST_BRIDGE === "api" && input.runtimeKind !== "pi"
-          ? ((await deps.hostBridge?.status(context.actor.userId))?.health?.[
-              input.runtimeKind === "claude-code" ? "claude" : "codex"
-            ] ?? {
+      availability: authed.runtimes.availability.handler(async ({ context, input }) => {
+        if (process.env.ARDURBOT_HOST_BRIDGE === "api" && input.runtimeKind !== "pi") {
+          const health = (await deps.hostBridge?.status(context.actor.userId))?.health;
+          return (
+            health?.[nativeRuntimeHealthKeys[input.runtimeKind]] ?? {
               runtimeKind: input.runtimeKind,
               available: false,
               models: [],
-              reason: "Host service is not running — open the desktop app.",
-            })
-          : input.runtimeKind !== "pi" &&
-              !(await nativeHostOwner(deps.prisma, context.actor.userId))
-            ? {
-                runtimeKind: input.runtimeKind,
-                available: false,
-                models: [],
-                reason: NATIVE_HOST_OWNER_MESSAGE,
-              }
-            : nativeRuntimeAvailability(input.runtimeKind),
-      ),
+              reason:
+                health && input.runtimeKind === "antigravity"
+                  ? "Update Ardur on the connected computer to use Antigravity."
+                  : "Host service is not running — open the desktop app.",
+            }
+          );
+        }
+        if (
+          input.runtimeKind !== "pi" &&
+          !(await nativeHostOwner(deps.prisma, context.actor.userId))
+        )
+          return {
+            runtimeKind: input.runtimeKind,
+            available: false,
+            models: [],
+            reason: NATIVE_HOST_OWNER_MESSAGE,
+          };
+        return nativeRuntimeAvailability(input.runtimeKind);
+      }),
       connectCodex: authed.runtimes.connectCodex.handler(async ({ context }) => {
         if (!(await nativeHostOwner(deps.prisma, context.actor.userId)))
           throw new ORPCError("FORBIDDEN", { message: NATIVE_HOST_OWNER_MESSAGE });

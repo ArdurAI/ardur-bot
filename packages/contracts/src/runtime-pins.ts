@@ -1,18 +1,30 @@
 import * as z from "zod";
 import type { ThinkingLevel } from "./domain.js";
 
-export const RuntimeKindSchema = z.enum(["pi", "claude-code", "codex-app-server"]);
+export const RuntimeKindSchema = z.enum(["pi", "claude-code", "codex-app-server", "antigravity"]);
 export type RuntimeKind = z.infer<typeof RuntimeKindSchema>;
 export const runtimeNames: Record<RuntimeKind, string> = {
   pi: "Ardur",
   "claude-code": "Claude Code",
   "codex-app-server": "Codex",
+  antigravity: "Antigravity",
 };
 export const runtimeLabels: Record<RuntimeKind, string> = {
   pi: "Ardur (built-in)",
   "claude-code": "Claude Code (your claude sign-in)",
   "codex-app-server": "Codex (your ChatGPT sign-in)",
+  antigravity: "Antigravity",
 };
+export const nativeRuntimeProviders = {
+  "claude-code": "anthropic",
+  "codex-app-server": "openai-codex",
+  antigravity: "antigravity",
+} as const;
+export const nativeRuntimeHealthKeys = {
+  "claude-code": "claude",
+  "codex-app-server": "codex",
+  antigravity: "antigravity",
+} as const;
 
 export const RuntimeAvailabilitySchema = z.object({
   runtimeKind: RuntimeKindSchema,
@@ -20,7 +32,18 @@ export const RuntimeAvailabilitySchema = z.object({
   reason: z.string().optional(),
   version: z.string().optional(),
   signedIn: z.boolean().optional(),
-  models: z.array(z.object({ id: z.string(), label: z.string(), efforts: z.array(z.string()) })),
+  signInStatus: z.enum(["unknown", "signed-in", "signed-out"]).optional(),
+  catalogSource: z.enum(["live", "cache", "captured", "none"]).optional(),
+  catalogCheckedAt: z.string().optional(),
+  catalogStale: z.boolean().optional(),
+  models: z.array(
+    z.object({
+      id: z.string(),
+      label: z.string(),
+      efforts: z.array(z.string()),
+      effortMode: z.enum(["selectable", "model-suffix", "none"]).optional(),
+    }),
+  ),
 });
 export type RuntimeAvailability = z.infer<typeof RuntimeAvailabilitySchema>;
 
@@ -53,7 +76,7 @@ export type ResolvedPin = {
   pin: RuntimePin;
   provider: string;
   id: string;
-  thinkingLevel: ThinkingLevel;
+  thinkingLevel: ThinkingLevel | null;
 };
 
 export const MODEL_LOCALITY_DENIED_MESSAGE =

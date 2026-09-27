@@ -745,6 +745,23 @@ msgstr "Respondido: {0}"
 msgid "Answered: {answer}"
 msgstr "Respondido: {answer}"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Antigravity"
+msgstr "Antigravity"
+
+#. placeholder {0}: availability.version
+#: src/pages/shell/runtime-settings.tsx
+msgid "Antigravity is installed (version {0})"
+msgstr "O Antigravity está instalado (versão {0})"
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Antigravity is not installed on this computer. Install it and sign in there, then check again."
+msgstr "O Antigravity não está instalado neste computador. Instale, entre na conta e verifique novamente."
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Antigravity runs on a connected host computer."
+msgstr "O Antigravity é executado em um computador host conectado."
+
 #: src/pages/ModelDestinations.tsx
 msgid "Any"
 msgstr ""
@@ -2111,6 +2128,10 @@ msgstr ""
 #: src/pages/TeamBoard.tsx
 msgid "Cost"
 msgstr ""
+
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Cost unavailable"
+msgstr "Custo indisponível"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Could not add"
@@ -7143,6 +7164,10 @@ msgstr "Entrar"
 msgid "Sign in again to manage sessions."
 msgstr ""
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Sign in to Antigravity on this computer, then check again."
+msgstr "Entre no Antigravity neste computador e verifique novamente."
+
 #: src/pages/Auth.tsx
 msgid "Sign in to Ardur"
 msgstr "Entrar no Ardur"
@@ -7179,6 +7204,10 @@ msgstr ""
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Sign-in timed out."
 msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Sign-in unknown until the first run"
+msgstr "O status de login é desconhecido até a primeira execução"
 
 #: src/lib/mcp-sign-in.ts
 msgid "Sign-in was cancelled."
@@ -8469,3 +8498,15 @@ msgstr "Sua equipe de agentes sempre ativos<0/>, a quem você pode dar trabalho 
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity tried to use its own tools, which Ardur does not allow yet. The turn was stopped."
+msgstr "O Antigravity tentou usar suas próprias ferramentas, o que o Ardur ainda não permite. A execução foi interrompida."
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity did not recognise the model {0}. Pick a model from its list."
+msgstr "O Antigravity não reconheceu o modelo {0}. Escolha um modelo da lista."
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity could not run this turn: {0}."
+msgstr "O Antigravity não conseguiu executar esta rodada: {0}."

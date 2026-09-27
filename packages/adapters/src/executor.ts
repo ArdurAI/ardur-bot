@@ -1621,6 +1621,14 @@ export function createRunExecutor(deps: ExecutorDeps) {
         });
         if (captured.count !== 1) return;
         if (selected.kind === "problem") throw new RuntimePinError(selected);
+        if (selected.pin.runtimeKind === "antigravity" && run.trigger === "bot_message")
+          throw new RuntimePinError(
+            runtimePinProblem(
+              selected.pin,
+              "runtime-unavailable",
+              "This connection cannot run this peer task safely.",
+            ),
+          );
         if (selected.pin.runtimeKind !== "pi" && !(await nativeHostOwner(deps.prisma, run.userId)))
           throw new RuntimePinError(
             runtimePinProblem(selected.pin, "runtime-unavailable", NATIVE_HOST_OWNER_MESSAGE),
@@ -1663,7 +1671,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           runtimeKind: selected.pin.runtimeKind,
           version: runtimeSelection.availability.version,
           binding: native?.binding,
-          ...(selected.pin.runtimeKind === "claude-code"
+          ...(["claude-code", "antigravity"].includes(selected.pin.runtimeKind)
             ? { effortAttested: false, effortAttestationReason: null }
             : {}),
         };
@@ -4920,7 +4928,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               stablePrefix: turnContext.stablePrefix,
               history: turnContext.history,
               currentTurnImages,
-              tools,
+              tools: selected.pin.runtimeKind === "antigravity" ? "none" : tools,
               model: resolved,
               resumeFromCheckpoint: takeoverResume?.checkpoint,
               nativeSession: undefined,

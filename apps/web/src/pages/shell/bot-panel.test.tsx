@@ -726,6 +726,46 @@ it("shows the saved native runtime in the header and its availability sentence i
   expect(container.textContent).toContain("Experimental");
 });
 
+it("saves Antigravity suffix effort and explicit no-effort null", async () => {
+  api.availability.mockResolvedValue({
+    runtimeKind: "antigravity",
+    available: true,
+    version: "1.2.12",
+    signInStatus: "unknown",
+    models: [
+      { id: "gemini-3.8-flash-low", label: "Low", efforts: ["low"] },
+      { id: "claude-sonnet-4-6", label: "No effort", efforts: [] },
+    ],
+  });
+  const native = {
+    ...bot,
+    runtimeKind: "antigravity" as const,
+    modelProvider: "antigravity",
+    modelId: "gemini-3.8-flash-low",
+    modelCredentialId: "native:antigravity",
+    thinkingLevel: "low" as const,
+  };
+  await act(async () => root.render(settings(native)));
+  expect(container.querySelector('select[id$="-effort"]')).toBeNull();
+  const select = modelSelect();
+  await act(async () => {
+    select.value = "claude-sonnet-4-6";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await save();
+  expect(onSave).toHaveBeenLastCalledWith(
+    expect.objectContaining({ modelId: "claude-sonnet-4-6", thinkingLevel: null }),
+  );
+  await act(async () => {
+    select.value = "gemini-3.8-flash-low";
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await save();
+  expect(onSave).toHaveBeenLastCalledWith(
+    expect.objectContaining({ modelId: "gemini-3.8-flash-low", thinkingLevel: "low" }),
+  );
+});
+
 it("offers and saves high from the probed native effort list, retaining the pin on recheck", async () => {
   const native = {
     ...bot,
@@ -1085,6 +1125,33 @@ it("keeps a native pin failure's real reason and offers only Change pin", async 
   expect([...container.querySelectorAll("button")].map((button) => button.textContent)).toEqual([
     "Change pin",
   ]);
+});
+
+it("renders Antigravity's model failure with the pinned model", async () => {
+  await act(async () =>
+    root.render(
+      <ProviderErrorMessage
+        text=""
+        runtimeProblem={{
+          kind: "problem",
+          code: "pin-model-unknown",
+          pin: {
+            runtimeKind: "antigravity",
+            provider: "antigravity",
+            modelId: "gemini-3.8-flash-low",
+            effort: "low",
+            credentialId: "native:antigravity",
+            revision: 1,
+          },
+          reason: "unrecognised",
+          actions: ["change-pin"],
+        }}
+      />,
+    ),
+  );
+  expect(container.textContent).toContain(
+    "Antigravity did not recognise the model gemini-3.8-flash-low. Pick a model from its list.",
+  );
 });
 
 it("focuses the model select when modelFocusRequest is set", async () => {

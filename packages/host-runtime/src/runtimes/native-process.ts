@@ -11,13 +11,13 @@ import {
 export { nativeEnvironment } from "../host-environment.js";
 
 export function nativeBinaryCandidates(
-  name: "claude" | "codex",
+  name: "claude" | "codex" | "agy",
   env: NodeJS.ProcessEnv,
   platform = process.platform,
 ) {
   return hostBinaryCandidates(name, env, platform);
 }
-export async function findNativeBinary(name: "claude" | "codex", env?: NodeJS.ProcessEnv) {
+export async function findNativeBinary(name: "claude" | "codex" | "agy", env?: NodeJS.ProcessEnv) {
   env ??= (await getHostEnvironment()).env;
   return resolveHostBinary(name, env);
 }

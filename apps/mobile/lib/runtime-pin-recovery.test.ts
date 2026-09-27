@@ -1,6 +1,7 @@
 import { runtimePinMessage, runtimePinProblem } from "@ardurbot/contracts";
 import { expect, it } from "vitest";
-import { runtimePinRecovery } from "./runtime-pin-recovery";
+import { activateUiLocale } from "./i18n";
+import { antigravityProblemMessage, runtimePinRecovery } from "./runtime-pin-recovery";
 
 it("shows the pin and directs recovery to its provider and failed bot", () => {
   const pin = {
@@ -38,4 +39,32 @@ it("routes native sign-in recovery to the failed bot runtime settings", () => {
     pathname: "/bot-settings",
     params: { botId: "bot" },
   });
+});
+
+it("translates Antigravity model and tool failures", () => {
+  const pin = {
+    runtimeKind: "antigravity" as const,
+    provider: "antigravity",
+    modelId: "gemini-3.8-flash-low",
+    effort: "low",
+    credentialId: "native:antigravity",
+    revision: 1,
+  };
+  activateUiLocale("zh-CN");
+  try {
+    expect(
+      antigravityProblemMessage(runtimePinProblem(pin, "pin-model-unknown", "unrecognised")),
+    ).toContain("无法识别模型 gemini-3.8-flash-low");
+    expect(
+      antigravityProblemMessage(
+        runtimePinProblem(
+          pin,
+          "runtime-unavailable",
+          "Antigravity tried to use its own tools, which Ardur does not allow yet. The turn was stopped.",
+        ),
+      ),
+    ).toContain("已停止本轮运行");
+  } finally {
+    activateUiLocale("en");
+  }
 });

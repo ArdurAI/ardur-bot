@@ -99,3 +99,43 @@ it("offers and selects the probed efforts through the native Thinking sheet", as
   expect(onEffort).toHaveBeenCalledWith("high");
   await act(async () => root.unmount());
 });
+
+it("selects Antigravity's fixed effort and hides the redundant Thinking control", async () => {
+  vi.mocked(rpc).mockResolvedValue({
+    runtimeKind: "antigravity",
+    available: true,
+    version: "1.2.12",
+    signInStatus: "unknown",
+    models: [
+      { id: "gemini-3.8-flash-low", label: "Low", efforts: ["low"] },
+      { id: "claude-sonnet-4-6", label: "No effort", efforts: [] },
+    ],
+  });
+  const onEffort = vi.fn();
+  const onModel = vi.fn();
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  await act(async () =>
+    root.render(
+      createElement(RuntimeSettings, {
+        kind: "antigravity",
+        onKind: vi.fn(),
+        modelKey: "",
+        onModel,
+        effort: "",
+        onEffort,
+        experimental: true,
+        onExperimental: vi.fn(),
+      }),
+    ),
+  );
+  expect(node.querySelector('[aria-label="Thinking"]')).toBeNull();
+  await act(async () => node.querySelector<HTMLButtonElement>('[aria-label="Model"]')!.click());
+  const sheet = vi.mocked(presentMessageActionSheet).mock.calls.at(-1)![0];
+  sheet.actions[0]!.onPress();
+  expect(onEffort).toHaveBeenLastCalledWith("low");
+  sheet.actions[1]!.onPress();
+  expect(onEffort).toHaveBeenLastCalledWith("");
+  expect(onModel).toHaveBeenCalledTimes(2);
+  await act(async () => root.unmount());
+});

@@ -1,5 +1,7 @@
 # ADR-002 implementation: native runtimes
 
+Antigravity A1 adds a third Experimental host runtime for text-only turns. See [Antigravity runtime](../antigravity-runtime.md) for its exact pin, refusal, and usage boundaries.
+
 Date: 2026-09-23. Status: experimental implementation; real-binary release gates remain open.
 This note supplements [ADR-002](ADR-002-runtime-pins.md).
 

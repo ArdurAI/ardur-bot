@@ -1,5 +1,5 @@
 import type { ModelOAuthBegin, RuntimeAvailability, RuntimeKind } from "@ardurbot/contracts";
-import { runtimeLabels } from "@ardurbot/contracts";
+import { nativeRuntimeProviders, runtimeLabels } from "@ardurbot/contracts";
 import { modelPinOptionKey, parseModelPinOptionKey } from "@ardurbot/core";
 import { useEffect, useState } from "react";
 import { Linking, Pressable, Switch, Text, View } from "react-native";
@@ -121,7 +121,16 @@ export function RuntimeSettings({
           {availability ? (
             <Text style={{ color: tokens.mutedForeground }}>
               {[
-                availability.version,
+                kind === "antigravity" && availability.version
+                  ? t("Antigravity is installed (version {version})", {
+                      version: availability.version,
+                    })
+                  : availability.version,
+                kind === "antigravity" &&
+                availability.available &&
+                availability.signInStatus === "unknown"
+                  ? t("Sign-in unknown until the first run")
+                  : null,
                 availability.signedIn === true
                   ? t("Signed in")
                   : availability.available
@@ -134,7 +143,14 @@ export function RuntimeSettings({
           ) : null}
           {availability?.reason ? (
             <Text accessibilityRole="text" style={{ color: tokens.mutedForeground }}>
-              {availability.reason}
+              {kind === "antigravity" &&
+              availability.reason.startsWith("Antigravity is not installed")
+                ? t(
+                    "Antigravity is not installed on this computer. Install it and sign in there, then check again.",
+                  )
+                : kind === "antigravity" && availability.signInStatus === "signed-out"
+                  ? t("Sign in to Antigravity on this computer, then check again.")
+                  : availability.reason}
             </Text>
           ) : null}
           {error ? (
@@ -179,12 +195,12 @@ export function RuntimeSettings({
                   onPress: () => {
                     onModel(
                       modelPinOptionKey(
-                        kind === "claude-code" ? "anthropic" : "openai-codex",
+                        nativeRuntimeProviders[kind as keyof typeof nativeRuntimeProviders],
                         entry.id,
                         `native:${kind}`,
                       ),
                     );
-                    onEffort("");
+                    onEffort(kind === "antigravity" ? (entry.efforts[0] ?? "") : "");
                   },
                 })),
               })
@@ -194,23 +210,25 @@ export function RuntimeSettings({
               {model?.label ?? parseModelPinOptionKey(modelKey)?.modelId ?? t("Choose a model")}
             </Text>
           </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t("Thinking")}
-            style={button}
-            onPress={() =>
-              presentMessageActionSheet({
-                ...sheet,
-                title: t("Thinking"),
-                actions: (model?.efforts ?? []).map((value) => ({
-                  text: value,
-                  onPress: () => onEffort(value),
-                })),
-              })
-            }
-          >
-            <Text style={{ color: tokens.foreground }}>{effort || t("Choose effort")}</Text>
-          </Pressable>
+          {kind !== "antigravity" ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t("Thinking")}
+              style={button}
+              onPress={() =>
+                presentMessageActionSheet({
+                  ...sheet,
+                  title: t("Thinking"),
+                  actions: (model?.efforts ?? []).map((value) => ({
+                    text: value,
+                    onPress: () => onEffort(value),
+                  })),
+                })
+              }
+            >
+              <Text style={{ color: tokens.foreground }}>{effort || t("Choose effort")}</Text>
+            </Pressable>
+          ) : null}
         </>
       ) : null}
     </View>

@@ -1,4 +1,18 @@
 export const RU_MESSAGES: Record<string, string> = {
+  Antigravity: "Antigravity",
+  "Antigravity tried to use its own tools, which Ardur does not allow yet. The turn was stopped.":
+    "Antigravity попытался использовать собственные инструменты, которые Ardur пока не разрешает. Выполнение остановлено.",
+  "Antigravity did not recognise the model {model}. Pick a model from its list.":
+    "Antigravity не распознал модель {model}. Выберите модель из его списка.",
+  "Antigravity could not run this turn: {reason}.":
+    "Antigravity не смог выполнить этот запрос: {reason}.",
+  "Cost unavailable": "Стоимость недоступна",
+  "Antigravity is installed (version {version})": "Antigravity установлен (версия {version})",
+  "Sign-in unknown until the first run": "Статус входа неизвестен до первого запуска",
+  "Antigravity is not installed on this computer. Install it and sign in there, then check again.":
+    "Antigravity не установлен на этом компьютере. Установите его, войдите в аккаунт и проверьте снова.",
+  "Sign in to Antigravity on this computer, then check again.":
+    "Войдите в Antigravity на этом компьютере и проверьте снова.",
   "Sign-in timed out.": "Время входа истекло.",
   "Needs sign-in": "Требуется вход",
   "Not available": "Недоступно",

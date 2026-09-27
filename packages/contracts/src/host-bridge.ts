@@ -253,6 +253,7 @@ export const HostHealthSchema = z.strictObject({
   load: z.number().int().min(0).max(HOST_IN_FLIGHT),
   claude: RuntimeAvailabilitySchema,
   codex: RuntimeAvailabilitySchema,
+  antigravity: RuntimeAvailabilitySchema.optional(),
   environment: HostEnvironmentSchema.optional(),
   integrations: z.array(HostIntegrationSchema).max(16).optional(),
 });

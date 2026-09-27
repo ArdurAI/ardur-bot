@@ -1,6 +1,6 @@
 import type { ModelCatalogEntry, ProviderErrorKind, RuntimeProblem } from "@ardurbot/contracts";
 import { Button } from "@ardurbot/ui-web";
-import { Trans } from "@lingui/react/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { parseProviderError } from "../../lib/provider-error";
 
 export function ProviderErrorMessage({
@@ -18,6 +18,7 @@ export function ProviderErrorMessage({
   catalog?: ModelCatalogEntry[];
   onConnect?: () => void;
 }) {
+  const { t } = useLingui();
   if (runtimeProblem) {
     if (runtimeProblem.code === "locality-denied")
       return (
@@ -41,11 +42,20 @@ export function ProviderErrorMessage({
       "an unset provider";
     const model = entry?.label ?? pin.modelId ?? "an unset model";
     const effort = pin.effort ?? "an unset effort";
+    const antigravityReason =
+      pin.runtimeKind !== "antigravity"
+        ? null
+        : runtimeProblem.code === "pin-model-unknown"
+          ? t`Antigravity did not recognise the model ${pin.modelId ?? ""}. Pick a model from its list.`
+          : runtimeProblem.reason ===
+              "Antigravity tried to use its own tools, which Ardur does not allow yet. The turn was stopped."
+            ? t`Antigravity tried to use its own tools, which Ardur does not allow yet. The turn was stopped.`
+            : t`Antigravity could not run this turn: ${runtimeProblem.reason.replace(/^Antigravity could not run this turn: /, "").replace(/\.$/, "")}.`;
     return (
       <>
         <span className="min-w-0 flex-1">
           {pin.runtimeKind !== "pi" || runtimeProblem.code !== "pin-credential-missing" ? (
-            runtimeProblem.reason
+            (antigravityReason ?? runtimeProblem.reason)
           ) : (
             <Trans>
               This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin.

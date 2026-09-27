@@ -1,4 +1,17 @@
 export const ZH_MESSAGES: Record<string, string> = {
+  Antigravity: "Antigravity",
+  "Antigravity tried to use its own tools, which Ardur does not allow yet. The turn was stopped.":
+    "Antigravity 尝试使用自己的工具，Ardur 目前尚不允许此操作。已停止本轮运行。",
+  "Antigravity did not recognise the model {model}. Pick a model from its list.":
+    "Antigravity 无法识别模型 {model}。请从其列表中选择模型。",
+  "Antigravity could not run this turn: {reason}.": "Antigravity 无法完成本轮运行：{reason}。",
+  "Cost unavailable": "费用不可用",
+  "Antigravity is installed (version {version})": "Antigravity 已安装（版本 {version}）",
+  "Sign-in unknown until the first run": "首次运行前无法确定登录状态",
+  "Antigravity is not installed on this computer. Install it and sign in there, then check again.":
+    "此计算机未安装 Antigravity。安装并登录后重新检查。",
+  "Sign in to Antigravity on this computer, then check again.":
+    "在此计算机登录 Antigravity，然后重新检查。",
   "Sign-in timed out.": "登录已超时。",
   "Needs sign-in": "需要登录",
   "Not available": "不可用",

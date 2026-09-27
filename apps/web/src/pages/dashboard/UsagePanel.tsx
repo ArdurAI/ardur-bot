@@ -36,17 +36,17 @@ export default function UsagePanel({ data }: { data: UsageSummary }) {
           <p className="mt-2 text-muted-foreground">
             <Trans>Today (UTC)</Trans>
           </p>
-          <Period value={provider.today} />
+          <Period value={provider.today} provider={provider.provider} />
           <p className="mt-2 text-muted-foreground">
             <Trans>This week (UTC)</Trans>
           </p>
-          <Period value={provider.week} />
+          <Period value={provider.week} provider={provider.provider} />
         </div>
       ))}
     </div>
   );
 }
-function Period({ value }: { value: UsagePeriod }) {
+function Period({ value, provider }: { value: UsagePeriod; provider: string }) {
   const { t } = useLingui();
   const records = value.records;
   const tokens = value.inputTokens + value.outputTokens;
@@ -60,6 +60,11 @@ function Period({ value }: { value: UsagePeriod }) {
           {" "}
           · <Trans>Cost</Trans>:{" "}
           {value.cost.toLocaleString(undefined, { maximumFractionDigits: 6 })}
+        </>
+      ) : provider === "antigravity" ? (
+        <>
+          {" "}
+          · <Trans>Cost unavailable</Trans>
         </>
       ) : null}
     </p>
