@@ -7761,6 +7761,10 @@ msgstr "The bot is working — wait or stop it"
 msgid "The connection was cancelled."
 msgstr "The connection was cancelled."
 
+#: src/pages/group-model-control.tsx
+msgid "The group model choice was reloaded. Pick again."
+msgstr "The group model choice was reloaded. Pick again."
+
 #: src/pages/memory/MemoryProposals.tsx
 msgid "The memory changed since this suggestion. Open History before trying again."
 msgstr "The memory changed since this suggestion. Open History before trying again."

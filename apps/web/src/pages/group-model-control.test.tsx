@@ -203,7 +203,7 @@ describe("group model control", () => {
     const fresh = { ...stale, modelPinRevision: 2 };
     const save = vi.fn(async (value: GroupMember) => {
       if (value.modelPinRevision !== 2) {
-        throw Object.assign(new Error("This member's model changed. Reload the group."), {
+        throw Object.assign(new Error("Server conflict detail"), {
           code: "CONFLICT",
         });
       }
@@ -225,7 +225,7 @@ describe("group model control", () => {
     await act(async () => container.querySelector<HTMLButtonElement>("button:last-child")!.click());
     expect(reload).toHaveBeenCalledOnce();
     expect(container.querySelector('[role="alert"]')?.textContent).toBe(
-      "This member's model changed. Reload the group.",
+      "The group model choice was reloaded. Pick again.",
     );
     await act(async () => container.querySelector<HTMLButtonElement>("button:last-child")!.click());
     expect(save).toHaveBeenLastCalledWith(fresh, expect.objectContaining({ modelId: "model-a" }));
@@ -346,6 +346,68 @@ describe("group model control", () => {
     expect(container.textContent).toContain("Next run");
     expect(container.textContent).toContain("model-a");
   });
+
+  it("names the default connection when a newer matching connection comes first", async () => {
+    const inheritedBot = {
+      ...bot,
+      modelProvider: null,
+      modelId: null,
+      modelCredentialId: null,
+      thinkingLevel: null,
+    };
+    const defaultConnection = settings!.credentials[0]!;
+    const newer = { ...defaultConnection, id: "newer", label: "Newer", isDefault: false };
+    await act(async () =>
+      root.render(
+        <BotModelChip
+          bot={inheritedBot}
+          settings={{ ...settings!, credentials: [newer, defaultConnection] }}
+          display="using"
+          run={{ runtimePin: { ...pin, modelId: "model-old" } }}
+        />,
+      ),
+    );
+    expect(container.querySelector("details")?.textContent).toContain("Connection");
+    expect(container.querySelector("details")?.textContent).not.toContain("Newer");
+  });
+
+  it.each([null, "off"] as const)(
+    "hides an unchanged inherited non-reasoning choice with bot effort %s",
+    async (thinkingLevel) => {
+      const localSettings = {
+        ...settings!,
+        me: { defaultProvider: "ollama", defaultModel: "local-model" },
+        catalog: [
+          { ...settings!.catalog[0]!, provider: "ollama", id: "local-model", reasoning: false },
+        ],
+        credentials: [{ ...settings!.credentials[0]!, provider: "ollama", modelId: "local-model" }],
+      };
+      await act(async () =>
+        root.render(
+          <BotModelChip
+            bot={{
+              ...bot,
+              modelProvider: null,
+              modelId: null,
+              modelCredentialId: null,
+              thinkingLevel,
+            }}
+            settings={localSettings}
+            display="using"
+            run={{
+              runtimePin: {
+                ...pin,
+                provider: "ollama",
+                modelId: "local-model",
+                effort: thinkingLevel === "off" ? "none" : null,
+              },
+            }}
+          />,
+        ),
+      );
+      expect(container.querySelector("details")).toBeNull();
+    },
+  );
 
   it("discloses an inherited effort change with the same model", async () => {
     const inheritedSettings = {

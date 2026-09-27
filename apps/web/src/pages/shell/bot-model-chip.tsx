@@ -1,6 +1,6 @@
 import type { Bot, RuntimeInfo, RuntimePin } from "@ardurbot/contracts";
 import { runtimeNames } from "@ardurbot/contracts";
-import { botEffortLabel, spaceDefaultEffort } from "@ardurbot/core";
+import { botEffortLabel, inheritedOllamaEffort, spaceDefaultEffort } from "@ardurbot/core";
 import { Button } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { modelUnavailable, spaceDefaultUnavailable } from "../../lib/model-availability";
@@ -75,22 +75,23 @@ function nextBotPin(bot: Bot, settings: ModelSettings | null): Omit<RuntimePin, 
   const credential = settings?.credentials.find((item) =>
     bot.modelCredentialId
       ? item.id === bot.modelCredentialId && item.provider === provider
-      : item.provider === provider && item.modelId === modelId,
+      : item.provider === provider && item.modelId === modelId && (overridden || item.isDefault),
   );
   const entry = settings?.catalog.find((item) => item.provider === provider && item.id === modelId);
   return {
     runtimeKind: bot.runtimeKind ?? "pi",
     provider,
     modelId,
-    effort:
-      bot.thinkingLevel ??
-      (overridden
-        ? null
-        : (credential?.thinkingLevel ??
+    effort: overridden
+      ? (bot.thinkingLevel ?? null)
+      : provider === "ollama"
+        ? inheritedOllamaEffort(bot.thinkingLevel, credential?.reasoning ?? entry?.reasoning)
+        : (bot.thinkingLevel ??
+          credential?.thinkingLevel ??
           spaceDefaultEffort(
             credential?.reasoning ?? entry?.reasoning,
             credential?.thinkingLevels ?? entry?.thinkingLevels,
-          ))),
+          )),
     credentialId: bot.modelCredentialId ?? credential?.id ?? null,
   };
 }

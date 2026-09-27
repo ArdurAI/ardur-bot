@@ -15,7 +15,7 @@ import {
   runtimePinProblem,
   ThinkingLevelSchema,
 } from "@ardurbot/contracts";
-import { spaceDefaultEffort } from "@ardurbot/core";
+import { inheritedOllamaEffort, spaceDefaultEffort } from "@ardurbot/core";
 import type { findDefaultModelCredential, PrismaClient } from "@ardurbot/db";
 import { findDefaultModelCredential as findSpaceDefault } from "@ardurbot/db";
 import { modelLocalityAllowed } from "./model-locality.js";
@@ -89,7 +89,7 @@ export async function resolveRunModelPin(input: {
       modelId: credential?.defaultModel ?? (input.scripted ? "scripted" : null),
       effort:
         credential?.provider === "ollama" && bot?.thinkingLevel === "off"
-          ? "none"
+          ? inheritedOllamaEffort(bot.thinkingLevel, entry?.reasoning)
           : (bot?.thinkingLevel ??
             spaceDefaultEffort(entry?.reasoning ?? false, entry?.thinkingLevels)),
       credentialId: credential?.id ?? (input.scripted ? "scripted" : null),
@@ -104,9 +104,7 @@ export async function resolveRunModelPin(input: {
         loadedModel = await input.loadKey(credential, pin, credential.provider === "ollama");
         pin.effort =
           credential.provider === "ollama"
-            ? loadedModel.reasoning
-              ? "medium"
-              : null
+            ? inheritedOllamaEffort(null, loadedModel.reasoning)
             : (loadedModel.thinkingLevel ?? (loadedModel.reasoning ? "medium" : "off"));
       } catch (error) {
         if (error instanceof RuntimePinError) return error.problem;

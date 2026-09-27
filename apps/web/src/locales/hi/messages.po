@@ -7761,6 +7761,10 @@ msgstr ""
 msgid "The connection was cancelled."
 msgstr ""
 
+#: src/pages/group-model-control.tsx
+msgid "The group model choice was reloaded. Pick again."
+msgstr "समूह का मॉडल चयन फिर से लोड हो गया है। दोबारा चुनें।"
+
 #: src/pages/memory/MemoryProposals.tsx
 msgid "The memory changed since this suggestion. Open History before trying again."
 msgstr ""

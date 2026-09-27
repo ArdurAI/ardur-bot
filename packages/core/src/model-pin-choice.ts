@@ -40,3 +40,12 @@ export function spaceDefaultEffort(
   const order: ThinkingLevel[] = ["medium", "high", "xhigh", "max", "low", "minimal", "off"];
   return order.find((level) => !levels || levels.includes(level)) ?? "off";
 }
+
+/** The inherited local pin stores the resolved reasoning state, not the display effort. */
+export function inheritedOllamaEffort(
+  thinkingLevel: ThinkingLevel | null | undefined,
+  reasoning: boolean | undefined,
+): ThinkingLevel | "none" | null {
+  if (thinkingLevel === "off") return "none";
+  return thinkingLevel ?? (reasoning ? "medium" : null);
+}

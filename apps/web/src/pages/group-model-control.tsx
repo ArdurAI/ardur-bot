@@ -119,8 +119,8 @@ export function GroupModelControl({
       );
       setEffort(restored?.effort ?? "");
       setError(
-        conflict && cause instanceof Error && cause.message
-          ? cause.message
+        conflict && reloaded
+          ? t`The group model choice was reloaded. Pick again.`
           : t`Could not save group model.`,
       );
     } finally {

@@ -7761,6 +7761,10 @@ msgstr ""
 msgid "The connection was cancelled."
 msgstr ""
 
+#: src/pages/group-model-control.tsx
+msgid "The group model choice was reloaded. Pick again."
+msgstr "그룹의 모델 선택을 다시 불러왔습니다. 다시 선택하세요."
+
 #: src/pages/memory/MemoryProposals.tsx
 msgid "The memory changed since this suggestion. Open History before trying again."
 msgstr ""
