@@ -163,6 +163,7 @@ run_install() {
   shift
   (
     unset ARDURBOT_IMAGE_TAG ARDURBOT_COMPUTER_IMAGE ARDURBOT_COMPUTER_IMAGE_TAG ARDURBOT_COMPUTER_CHANNEL ARDURBOT_COMPUTER_IMAGE_REF
+    export FIXTURE_CHANNEL=release
     export STUB_DOCKER_LOG="$work/docker.log"
     export STUB_CURL_LOG="$work/curl.log"
     export PATH="$work/bin:$PATH"
@@ -209,6 +210,16 @@ printf 'ARDURBOT_IMAGE_TAG=v1.2.3\n' >> "$tmp/pinned-release/cwd/.env"
 run_install "$tmp/pinned-release" --offline >/dev/null
 grep -Fx 'COMPUTER_REF=ghcr.io/ardurai/ardur-bot/computer:1.2.3' "$tmp/pinned-release/docker.log" >/dev/null \
   || fail "the pinned release computer reference did not use the exact app version"
+
+# The desktop unit test reads this same table for its dotenv parser.
+while IFS='|' read -r name key encoded expected reference; do
+  [[ "$name" == \#* || -z "$name" ]] && continue
+  setup_work "$tmp/setting-$name"
+  printf '%b\n' "$encoded" >> "$tmp/setting-$name/cwd/.env"
+  run_install "$tmp/setting-$name" --offline >/dev/null
+  grep -Fx "COMPUTER_REF=$reference" "$tmp/setting-$name/docker.log" >/dev/null \
+    || fail "$name selected a different computer reference"
+done < "$root/deployment-settings.fixtures.tsv"
 
 # --pull-never is accepted and skips pull (may still download Compose files).
 setup_work "$tmp/pull-never"

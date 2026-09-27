@@ -283,22 +283,95 @@ YAML
   fi
 }
 
-# Read only the named setting without evaluating the env file as shell code.
+# Parse Compose's assignment, quoting, comment and simple ${VAR} interpolation
+# rules without evaluating the env file as shell code.
+parse_deployment_value() {
+  local raw="$1" c next quote="" rest i
+  parsed_value=""
+  interpolate_value=true
+  quote="${raw:0:1}"
+  if [[ "$quote" == '"' || "$quote" == "'" ]]; then
+    [[ "$quote" == "'" ]] && interpolate_value=false
+    for ((i = 1; i < ${#raw}; i++)); do
+      c="${raw:i:1}"
+      if [[ "$quote" == '"' && "$c" == '\' && $((i + 1)) -lt ${#raw} ]]; then
+        i=$((i + 1))
+        next="${raw:i:1}"
+        case "$next" in
+          n) parsed_value+=$'\n' ;;
+          r) parsed_value+=$'\r' ;;
+          t) parsed_value+=$'\t' ;;
+          '"'|'\') parsed_value+="$next" ;;
+          *) parsed_value+="\\$next" ;;
+        esac
+      elif [[ "$quote" == "'" && "$c" == '\' && "${raw:i+1:1}" == "'" ]]; then
+        parsed_value+="'"
+        i=$((i + 1))
+      elif [[ "$c" == "$quote" ]]; then
+        rest="${raw:i+1}"
+        [[ "$rest" =~ ^[[:space:]]*(#.*)?$ ]] || return 1
+        return 0
+      else
+        parsed_value+="$c"
+      fi
+    done
+    return 1
+  fi
+  for ((i = 0; i < ${#raw}; i++)); do
+    c="${raw:i:1}"
+    if [[ "$c" == '#' && $i -gt 0 && "${raw:i-1:1}" =~ [[:space:]] ]]; then
+      break
+    fi
+    parsed_value+="$c"
+  done
+  parsed_value="${parsed_value%"${parsed_value##*[![:space:]]}"}"
+}
+
+# Read only the named setting; earlier assignments can supply interpolation values.
 deployment_setting() {
-  local key="$1" file="${2:-$ENV_FILE}" line value=""
-  if [[ "$file" == "$ENV_FILE" ]] && printenv "$key" >/dev/null 2>&1; then
+  local key="$1" file="${2:-$ENV_FILE}" line name value="" variable replacement rest result i
+  local -a names=() values=()
+  if printenv "$key" >/dev/null 2>&1; then
     printenv "$key"
     return
   fi
   while IFS= read -r line || [[ -n "$line" ]]; do
-    if [[ "$line" == "$key="* ]]; then
-      value="${line#*=}"
-      value="${value%$'\r'}"
+    line="${line%$'\r'}"
+    [[ "$line" =~ ^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)[[:space:]]*=[[:space:]]*(.*)$ ]] || continue
+    name="${BASH_REMATCH[1]}"
+    parse_deployment_value "${BASH_REMATCH[2]}" || continue
+    if [[ "$interpolate_value" == true ]]; then
+      rest="$parsed_value"
+      result=""
+      while [[ -n "$rest" ]]; do
+        if [[ "$rest" =~ ^\$\{([A-Za-z_][A-Za-z0-9_]*)\} ]]; then
+          variable="${BASH_REMATCH[1]}"
+          i="${#BASH_REMATCH[0]}"
+          replacement=""
+          if replacement=$(printenv "$variable" 2>/dev/null); then
+            :
+          else
+            for ((i = ${#names[@]} - 1; i >= 0; i--)); do
+              if [[ "${names[i]}" == "$variable" ]]; then
+                replacement="${values[i]}"
+                break
+              fi
+            done
+            i="${#BASH_REMATCH[0]}"
+          fi
+          result+="$replacement"
+          rest="${rest:i}"
+        else
+          result+="${rest:0:1}"
+          rest="${rest:1}"
+        fi
+      done
+      parsed_value="$result"
     fi
+    names+=("$name")
+    values+=("$parsed_value")
+    [[ "$name" == "$key" ]] && value="$parsed_value"
   done < "$file"
-  if [[ "$value" == \"*\" || "$value" == \'*\' ]]; then
-    value="${value:1:${#value}-2}"
-  fi
   printf '%s' "$value"
 }
 

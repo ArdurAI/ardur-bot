@@ -105,19 +105,45 @@ const GENERATED_SECRETS: Record<string, number> = {
 const LAUNCH_SUPPLIED = ["ARDURBOT_IMAGE_TAG", "ARDURBOT_COMPUTER_IMAGE_REF"];
 const PREVIOUS_GENERATED_COMPUTER_IMAGE = "ghcr.io/ardurai/ardur-bot/computer";
 const MAX_STACK_ENV_BYTES = 64 * 1024;
+// Compose parses inactive profiles for stop as well; this value is never pulled.
+const STOP_COMPOSE_IMAGE_REF = "ghcr.io/ardurai/ardur-bot/computer:dev";
 
-function computerChannelFromStackEnv(contents: string): string | undefined {
-  let channel: string | undefined;
+/** Compose dotenv rules needed for deployment settings; never evaluate the file as code. */
+export function deploymentSettingFromStackEnv(
+  contents: string,
+  key: string,
+  env: Record<string, string | undefined> = {},
+): string | undefined {
+  const values: Record<string, string> = {};
   for (const line of contents.split(/\r?\n/)) {
-    if (!line.startsWith("ARDURBOT_COMPUTER_CHANNEL=")) continue;
-    const value = line.slice("ARDURBOT_COMPUTER_CHANNEL=".length).trim();
-    channel =
-      (value.startsWith('"') && value.endsWith('"')) ||
-      (value.startsWith("'") && value.endsWith("'"))
-        ? value.slice(1, -1)
-        : value;
+    const assignment = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(line);
+    if (!assignment) continue;
+    const name = assignment[1]!;
+    const raw = assignment[2]!;
+    const doubleQuoted = /^"((?:\\.|[^"\\])*)"(?:\s+#.*|\s*)$/.exec(raw);
+    const singleQuoted = /^'((?:\\.|[^'\\])*)'(?:\s+#.*|\s*)$/.exec(raw);
+    let value: string;
+    if (singleQuoted) {
+      value = singleQuoted[1]!.replace(/\\'/g, "'");
+    } else if (doubleQuoted) {
+      value = doubleQuoted[1]!.replace(
+        /\\([nrt"\\])/g,
+        (_match, escaped: string) =>
+          ({ n: "\n", r: "\r", t: "\t", '"': '"', "\\": "\\" })[escaped] ?? escaped,
+      );
+    } else {
+      if (raw.startsWith('"') || raw.startsWith("'")) continue;
+      value = raw.replace(/\s+#.*$/, "").trimEnd();
+    }
+    if (!singleQuoted) {
+      value = value.replace(
+        /\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g,
+        (_match, variable: string) => env[variable] ?? values[variable] ?? "",
+      );
+    }
+    values[name] = value;
   }
-  return channel;
+  return env[key] ?? values[key];
 }
 
 function migrateGeneratedComputerImage(contents: string): string {
@@ -354,7 +380,7 @@ export class LocalStackController {
   private current: DesktopLocalStackState;
   private currentWebUrl: string;
   private currentStackToken: string | null = null;
-  private currentComputerChannel: string | undefined;
+  private currentComputerImageRef: string | undefined;
   private running: Promise<DesktopLocalStackState> | null = null;
   private stopping: Promise<DesktopLocalStackState> | null = null;
   private inFlight: AbortController | null = null;
@@ -480,6 +506,7 @@ export class LocalStackController {
 
   private async attempt(signal: AbortSignal) {
     this.push({ type: "check-start" });
+    this.currentComputerImageRef = undefined;
     await mkdir(this.deps.stackDir, { recursive: true, mode: 0o700 });
 
     const binary = resolveDockerBinary(this.deps.platform, this.deps.env, this.deps.exists);
@@ -534,7 +561,16 @@ export class LocalStackController {
       MAX_STACK_ENV_BYTES,
     );
     if (settings === null) throw new Error("The stack settings could not be checked.");
-    this.currentComputerChannel = computerChannelFromStackEnv(settings);
+    const channel = deploymentSettingFromStackEnv(settings, "ARDURBOT_COMPUTER_CHANNEL", {
+      ...dockerSpawnEnv(this.deps.platform, this.deps.env, binary),
+      ARDURBOT_IMAGE_TAG: this.deps.imageTag,
+    });
+    const computerImageRef = resolveComputerImage({
+      appVersion: this.deps.appVersion,
+      localPresent: false,
+      channel,
+    });
+    this.currentComputerImageRef = computerImageRef;
     const stackToken = await ensureStackToken(this.deps.stackDir, this.deps.randomHex);
     this.currentStackToken = stackToken;
 
@@ -597,16 +633,20 @@ export class LocalStackController {
     });
   }
 
-  private docker(binary: string, args: string[], timeoutMs: number, signal?: AbortSignal) {
+  private docker(
+    binary: string,
+    args: string[],
+    timeoutMs: number,
+    signal?: AbortSignal,
+    computerImageRef?: string,
+  ) {
     return this.deps.run(binary, args, {
       cwd: this.deps.stackDir,
       env: dockerSpawnEnv(this.deps.platform, this.deps.env, binary, {
         ARDURBOT_IMAGE_TAG: this.deps.imageTag,
-        ARDURBOT_COMPUTER_IMAGE_REF: resolveComputerImage({
-          appVersion: this.deps.appVersion,
-          localPresent: false,
-          channel: this.currentComputerChannel,
-        }),
+        ...(computerImageRef === undefined
+          ? {}
+          : { ARDURBOT_COMPUTER_IMAGE_REF: computerImageRef }),
         // The API never asks where bots run here; Set up makes this computer the default.
         ARDURBOT_DESKTOP_STACK: "1",
         ...(this.currentStackToken === null
@@ -644,6 +684,7 @@ export class LocalStackController {
       ],
       timeoutMs,
       signal,
+      this.currentComputerImageRef ?? STOP_COMPOSE_IMAGE_REF,
     );
   }
 }

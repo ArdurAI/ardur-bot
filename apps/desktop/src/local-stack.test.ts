@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { RunDocker, RunDockerResult } from "./docker-cli.js";
 import {
   COMPOSE_WAIT_TIMEOUT_S,
+  deploymentSettingFromStackEnv,
   ensureStackEnv,
   ensureStackToken,
   initialStackState,
@@ -27,6 +28,25 @@ import {
 
 const COMPOSE_DIR = path.resolve(import.meta.dirname, "..", "..", "..", "infra", "compose");
 const fakeHex = (bytes: number) => "ab".repeat(bytes);
+
+describe("Compose deployment settings", () => {
+  it("uses the same dotenv cases as the installer", async () => {
+    const table = await readFile(
+      path.join(COMPOSE_DIR, "deployment-settings.fixtures.tsv"),
+      "utf8",
+    );
+    for (const row of table.split("\n")) {
+      if (!row || row.startsWith("#")) continue;
+      const [name, key, encoded, expected] = row.split("|");
+      expect(
+        deploymentSettingFromStackEnv(encoded!.replaceAll("\\n", "\n"), key!, {
+          FIXTURE_CHANNEL: "release",
+        }),
+        name,
+      ).toBe(expected);
+    }
+  });
+});
 
 describe("stack locations", () => {
   it("keeps the compose project under user data", () => {
@@ -466,17 +486,23 @@ describe("LocalStackController", () => {
       [...compose, "pull"],
       [...compose, "up", "-d", "--wait", "--wait-timeout", String(COMPOSE_WAIT_TIMEOUT_S)],
     ]);
-    for (const call of calls) {
+    for (const [index, call] of calls.entries()) {
       expect(call.binary).toBe("/usr/bin/docker");
       expect(call.cwd).toBe(stackPath);
       expect(call.env).toMatchObject({
         ARDURBOT_IMAGE_TAG: "v1.2.3",
-        ARDURBOT_COMPUTER_IMAGE_REF: "ghcr.io/ardurai/ardur-bot/computer:1.2.3",
         COMPOSE_PROGRESS: "plain",
         // Tells the API that this stack runs on the owner's own computer.
         ARDURBOT_DESKTOP_STACK: "1",
         HOME: "/home/me",
       });
+      if (index < 2) {
+        expect(call.env).not.toHaveProperty("ARDURBOT_COMPUTER_IMAGE_REF");
+      } else {
+        expect(call.env.ARDURBOT_COMPUTER_IMAGE_REF).toBe(
+          "ghcr.io/ardurai/ardur-bot/computer:1.2.3",
+        );
+      }
       expect(call.env).not.toHaveProperty("OPENROUTER_API_KEY");
     }
     expect(calls.at(-1)?.env.ARDURBOT_DESKTOP_STACK_TOKEN).toBe("ab".repeat(32));
@@ -501,6 +527,44 @@ describe("LocalStackController", () => {
     expect(calls.at(-1)?.env.ARDURBOT_COMPUTER_IMAGE_REF).toBe(
       "ghcr.io/ardurai/ardur-bot/computer:0.1.0-alpha.1",
     );
+  });
+
+  it("accepts a channel with an inline comment", async () => {
+    const dir = path.join(root, "stack");
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      path.join(dir, STACK_ENV_FILE),
+      "ARDURBOT_COMPUTER_CHANNEL=release # pin the release\n",
+    );
+    expect((await controller({ appVersion: "0.1.0-alpha.1" }).start()).phase).toBe("ready");
+    expect(calls.at(-1)?.env.ARDURBOT_COMPUTER_IMAGE_REF).toBe(
+      "ghcr.io/ardurai/ardur-bot/computer:0.1.0-alpha.1",
+    );
+  });
+
+  it("re-reads a corrected channel on Retry using the same controller", async () => {
+    const dir = path.join(root, "stack");
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, STACK_ENV_FILE), "ARDURBOT_COMPUTER_CHANNEL=invalid\n");
+    const stack = controller({ appVersion: "0.1.0-alpha.1" });
+    expect((await stack.start()).phase).toBe("failed");
+    expect(calls.map((call) => call.args[1])).toEqual(["version", "--format"]);
+
+    await writeFile(path.join(dir, STACK_ENV_FILE), "ARDURBOT_COMPUTER_CHANNEL=release\n");
+    expect((await stack.start()).phase).toBe("ready");
+    expect(calls.at(-1)?.env.ARDURBOT_COMPUTER_IMAGE_REF).toBe(
+      "ghcr.io/ardurai/ardur-bot/computer:0.1.0-alpha.1",
+    );
+  });
+
+  it("stops after an invalid channel without resolving the image", async () => {
+    const dir = path.join(root, "stack");
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, STACK_ENV_FILE), "ARDURBOT_COMPUTER_CHANNEL=invalid\n");
+    const stack = controller();
+    expect((await stack.start()).phase).toBe("failed");
+    await expect(stack.stop()).resolves.toMatchObject({ phase: "idle" });
+    expect(calls.at(-1)?.args.slice(7)).toEqual(["stop"]);
   });
 
   it("keeps lifecycle commands off the standalone project despite environment overrides", async () => {
