@@ -1,3 +1,4 @@
+import { writeFile } from "node:fs/promises";
 import { afterEach, expect, it, vi } from "vitest";
 import { runIntegrationSuites } from "./integration.js";
 import { runProcess } from "./process.js";
@@ -124,4 +125,48 @@ it("reports success only when every suite and cleanup succeeds", async () => {
     suites: options.suites.map((suite) => ({ suite, failures: [] })),
   });
   expect(log).toHaveBeenCalledWith("Integration suites: 3 passed, 0 failed");
+});
+
+it("fails an integration filter that executes no tests", async () => {
+  const { options, log, error } = fixture();
+  options.suites = ["first.test.ts"];
+  const filtered = { ...options, testNamePattern: "missing test" };
+  vi.mocked(runProcess).mockImplementation(async (_command, args) => {
+    const output = args.find((arg) => arg.startsWith("--outputFile.json="))?.split("=")[1];
+    if (!output) throw new Error("JSON report path missing");
+    await writeFile(output, JSON.stringify({ numPassedTests: 0 }));
+  });
+
+  const result = await runIntegrationSuites(filtered);
+
+  expect(result).toEqual({
+    ok: false,
+    suites: [
+      {
+        suite: "first.test.ts",
+        failures: [{ phase: "test", message: "No tests matched integration filter: missing test" }],
+      },
+    ],
+  });
+  expect(vi.mocked(runProcess).mock.calls[0]?.[1]).toContain("--testNamePattern");
+  expect(log).toHaveBeenCalledWith("Integration suites: 0 passed, 1 failed");
+  expect(error).toHaveBeenCalledWith("  test: No tests matched integration filter: missing test");
+});
+
+it("counts both repeated runs when the filter matches", async () => {
+  const { options, log } = fixture();
+  options.suites = ["first.test.ts", "first.test.ts"];
+  const filtered = { ...options, testNamePattern: "selected test" };
+  vi.mocked(runProcess).mockImplementation(async (_command, args) => {
+    const output = args.find((arg) => arg.startsWith("--outputFile.json="))?.split("=")[1];
+    if (!output) throw new Error("JSON report path missing");
+    await writeFile(output, JSON.stringify({ numPassedTests: 1 }));
+  });
+
+  expect(await runIntegrationSuites(filtered)).toEqual({
+    ok: true,
+    suites: options.suites.map((suite) => ({ suite, failures: [] })),
+  });
+  expect(runProcess).toHaveBeenCalledTimes(2);
+  expect(log).toHaveBeenCalledWith("Integration suites: 2 passed, 0 failed");
 });

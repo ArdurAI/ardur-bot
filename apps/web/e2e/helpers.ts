@@ -24,11 +24,21 @@ export async function rpc<T>(page: Page, procedure: string, body: unknown): Prom
   return parsed.json as T;
 }
 
-export async function claimDeploymentOwner(page: Page): Promise<void> {
+export async function claimDeploymentOwner(page: Page): Promise<() => Promise<void>> {
   const apiUrl = process.env.API_URL;
   if (!apiUrl) throw new Error("The e2e API URL is missing");
-  const response = await page.request.post(`${apiUrl}/__e2e/deployment-owner`);
-  if (!response.ok()) throw new Error(`Cannot set up deployment owner: ${response.status()}`);
+  for (;;) {
+    const response = await page.request.post(`${apiUrl}/__e2e/deployment-owner`, {
+      timeout: 125_000,
+    });
+    if (response.status() === 423) continue;
+    if (!response.ok()) throw new Error(`Cannot set up deployment owner: ${response.status()}`);
+    break;
+  }
+  return async () => {
+    const release = await page.request.delete(`${apiUrl}/__e2e/deployment-owner`);
+    if (!release.ok()) throw new Error(`Cannot release deployment owner: ${release.status()}`);
+  };
 }
 
 export async function completeOnboarding(page: Page, testInfo?: TestInfo) {

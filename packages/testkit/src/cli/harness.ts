@@ -4,6 +4,7 @@ import path from "node:path";
 import { loadRootEnv } from "@ardurbot/core/node/load-root-env";
 import { PostgreSqlContainer } from "@testcontainers/postgresql";
 import type { createApp } from "../../../../apps/api/src/app.ts";
+import { createDeploymentOwnerFixture } from "./deployment-owner.js";
 import { runIntegrationSuites } from "./integration.js";
 import { runProcess } from "./process.js";
 
@@ -200,30 +201,43 @@ async function main() {
     });
     let activeRequests = 0;
     const requestWaiters = new Set<() => void>();
+    const deploymentOwner = createDeploymentOwnerFixture({
+      authenticate: async (request) => {
+        const headers = new Headers(request.headers);
+        headers.set("content-type", "application/json");
+        const sessionResponse = await handles.app.fetch(
+          new Request(new URL("/rpc/me", request.url), {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ json: {} }),
+          }),
+        );
+        if (!sessionResponse.ok) return null;
+        const me = (await sessionResponse.json()) as { json?: { userId?: string } };
+        const sessionId =
+          request.headers
+            .get("cookie")
+            ?.split(";")
+            .map((cookie) => cookie.trim())
+            .find((cookie) => cookie.startsWith("better-auth.session_token=")) ??
+          request.headers.get("authorization");
+        if (!me.json?.userId || !sessionId) return null;
+        return { userId: me.json.userId, sessionId };
+      },
+      setOwner: async (userId) => {
+        await handles.prisma.deploymentSettings.update({
+          where: { id: "default" },
+          data: { ownerUserId: userId },
+        });
+      },
+    });
     const server = serve({
       fetch: async (request) => {
         if (new URL(request.url).pathname === "/__e2e/emails") {
           return Response.json(email.sent, { headers: { "cache-control": "no-store" } });
         }
         if (new URL(request.url).pathname === "/__e2e/deployment-owner") {
-          if (request.method !== "POST") return new Response(null, { status: 405 });
-          const headers = new Headers(request.headers);
-          headers.set("content-type", "application/json");
-          const sessionResponse = await handles.app.fetch(
-            new Request(new URL("/rpc/me", request.url), {
-              method: "POST",
-              headers,
-              body: JSON.stringify({ json: {} }),
-            }),
-          );
-          if (!sessionResponse.ok) return new Response(null, { status: 401 });
-          const me = (await sessionResponse.json()) as { json?: { userId?: string } };
-          if (!me.json?.userId) return new Response(null, { status: 401 });
-          await handles.prisma.deploymentSettings.update({
-            where: { id: "default" },
-            data: { ownerUserId: me.json.userId },
-          });
-          return Response.json({ ok: true });
+          return deploymentOwner(request);
         }
         activeRequests += 1;
         try {
