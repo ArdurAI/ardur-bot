@@ -70,7 +70,7 @@ export function hostLostProblem(
 ) {
   return runtimePinProblem(
     request.operation.op === "runtime.turn"
-      ? request.operation.request.model.runtimePin
+      ? (request.operation.request.model.runtimePin as RuntimePin)
       : PLACEHOLDER_PIN,
     "runtime-unavailable",
     reason,

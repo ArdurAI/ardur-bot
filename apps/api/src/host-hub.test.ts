@@ -29,6 +29,115 @@ function wire() {
 }
 
 describe("outbound host hub", () => {
+  it("keeps Hermes on a negotiated host and fences provider callbacks to its worker", async () => {
+    const hub = new HostHub(async () => true),
+      host = wire(),
+      worker = wire(),
+      other = wire();
+    const hermes = {
+      ...request,
+      operation: {
+        op: "runtime.turn" as const,
+        homeKey: "bot",
+        request: {
+          botId: "bot",
+          runId: "run",
+          threadId: "thread",
+          prompt: "hi",
+          instructions: "",
+          history: [],
+          tools: "none" as const,
+          model: {
+            runtimePin: {
+              runtimeKind: "hermes" as const,
+              provider: "fixture",
+              modelId: "fixture-model",
+              effort: "high",
+              credentialId: "fixture",
+              revision: 1,
+            },
+            provider: "fixture",
+            id: "fixture-model",
+            thinkingLevel: "high" as const,
+          },
+          providerBroker: {
+            protocol: 1 as const,
+            id: crypto.randomUUID(),
+            token: "a".repeat(43),
+            expiresAt: Date.now() + 60_000,
+            hostGeneration: "first",
+          },
+        },
+      },
+    };
+    hub.attach(host, "owner", "first");
+    await hub.request(hermes, worker);
+    expect(host.frames).toEqual([]);
+    hub.health = { capabilities: { providerRelay: 1 } } as typeof hub.health;
+    await hub.request({ ...hermes, id: "second" }, worker);
+    expect(host.frames).toHaveLength(1);
+    const callback = {
+      v: 1 as const,
+      type: "callback" as const,
+      id: "second",
+      callId: "provider-1",
+      method: "provider.read" as const,
+      args: [0],
+    };
+    await hub.fromHost(host, callback);
+    await expect(
+      hub.fromWorker(other, { v: 1, type: "reply", id: "second", callId: "provider-1", value: {} }),
+    ).rejects.toThrow();
+    await expect(
+      hub.fromWorker(worker, {
+        v: 1,
+        type: "reply",
+        id: "second",
+        callId: "provider-1",
+        value: { seq: 0, chunk: "invalid!", done: true },
+      }),
+    ).rejects.toThrow();
+    await hub.fromWorker(worker, {
+      v: 1,
+      type: "reply",
+      id: "second",
+      callId: "provider-1",
+      value: { seq: 0, chunk: "", done: true },
+    });
+    expect(host.frames.at(-1)).toMatchObject({ type: "reply", callId: "provider-1" });
+    for (let index = 0; index < 45; index++) {
+      const callId = `chunk-${index}`;
+      await hub.fromHost(host, { ...callback, callId, method: "executeTool" });
+      await hub.fromWorker(worker, {
+        v: 1,
+        type: "reply",
+        id: "second",
+        callId,
+        value: "x".repeat(220_000),
+      });
+      if (worker.frames.some((frame) => frame.type === "end" && frame.id === "second")) break;
+    }
+    expect(worker.frames).toContainEqual(expect.objectContaining({ type: "end", id: "second" }));
+    expect(host.frames.at(-1)).toMatchObject({ type: "cancel", id: "second" });
+    hub.detach();
+    const nextHost = wire();
+    hub.attach(nextHost, "owner", "second");
+    hub.health = { capabilities: { providerRelay: 1 } } as typeof hub.health;
+    await hub.request(
+      {
+        ...hermes,
+        id: "new-operation",
+        scope: { ...hermes.scope, runId: "new-run" },
+        operation: {
+          ...hermes.operation,
+          request: { ...hermes.operation.request, runId: "new-run" },
+        },
+      },
+      worker,
+    );
+    expect(nextHost.frames).toEqual([]);
+    hub.detach();
+  });
   it.each(["cancel", "disconnect"])("does not forward a queued probe after %s", async (action) => {
     const authorize = vi.fn(async () => true);
     const hub = new HostHub(authorize),
@@ -80,6 +189,28 @@ describe("outbound host hub", () => {
     expect(other.frames).toEqual([]);
     expect(worker.frames.map((frame) => frame.type)).toEqual(["stream", "stream", "stream"]);
     await hub.fromHost(host, { v: 1, type: "end", id: request.id });
+    hub.detach();
+  });
+  it("fences host output after the cumulative bridge limit", async () => {
+    const hub = new HostHub(async () => true),
+      host = wire(),
+      worker = wire();
+    hub.attach(host, "owner", "first");
+    await hub.request(request, worker);
+    for (let seq = 0; seq < 45; seq++) {
+      await hub.fromHost(host, {
+        v: 1,
+        type: "stream",
+        id: request.id,
+        seq,
+        channel: "stdout",
+        data: "x".repeat(220_000),
+      });
+      if (worker.frames.some((frame) => frame.type === "end")) break;
+      await hub.fromWorker(worker, { v: 1, type: "ack", id: request.id, seq });
+    }
+    expect(worker.frames.at(-1)).toMatchObject({ type: "end", id: request.id });
+    expect(host.frames.at(-1)).toMatchObject({ type: "cancel", id: request.id });
     hub.detach();
   });
   it("forwards cancellation and never retries a disconnected run on reconnect", async () => {

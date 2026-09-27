@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import { mkdir, realpath } from "node:fs/promises";
 import { hostname } from "node:os";
 import path from "node:path";
@@ -41,6 +42,13 @@ import { createLocalImportScanner, LocalImportRescanError } from "./import/scann
 import { AntigravityRuntime, probeAntigravity } from "./runtimes/antigravity-runtime.js";
 import { ClaudeCodeRuntime, probeClaude } from "./runtimes/claude-code-runtime.js";
 import { CodexAppServerRuntime, probeCodex } from "./runtimes/codex-app-server-runtime.js";
+import {
+  hermesLauncherAsset,
+  pinnedHermesLaunch,
+  probeHermesInstall,
+} from "./runtimes/hermes-install.js";
+import { startHermesProviderRelay } from "./runtimes/hermes-provider-relay.js";
+import { HermesRuntime } from "./runtimes/hermes-runtime.js";
 import type { NativeSpawn } from "./runtimes/native-process.js";
 import { spawnNative } from "./runtimes/native-process.js";
 
@@ -70,7 +78,7 @@ export class HostAgent {
     },
     private readonly wire: HostWire,
     private readonly runtimes: Partial<
-      Record<"claude-code" | "codex-app-server" | "antigravity", AgentRuntime>
+      Record<"claude-code" | "codex-app-server" | "antigravity" | "hermes", AgentRuntime>
     > = {
       "claude-code": new ClaudeCodeRuntime(),
       "codex-app-server": new CodexAppServerRuntime(),
@@ -109,6 +117,7 @@ export class HostAgent {
       inspectHostIntegrations(),
     ]);
     return {
+      capabilities: { providerRelay: 1 },
       platform: process.platform as HostHealth["platform"],
       name: hostname().slice(0, 80),
       roots: this.roots,
@@ -431,13 +440,18 @@ export class HostAgent {
     )
       throw new Error("Runtime pin mismatch.");
     if (kind === "pi") throw new Error("Runtime is not a host runtime.");
+    if ((kind === "hermes") !== Boolean(turn.providerBroker))
+      throw new Error("Provider grant does not match the runtime.");
     const callback = async (
       method:
         | "authorizeTool"
         | "executeTool"
         | "onToolCompleted"
         | "onRuntimeInfo"
-        | "claimSteering",
+        | "claimSteering"
+        | "provider.open"
+        | "provider.read"
+        | "provider.cancel",
       args: unknown[],
     ) => {
       state.abort.signal.throwIfAborted();
@@ -468,9 +482,24 @@ export class HostAgent {
       computer.providerRef,
       ...this.roots,
     ]);
+    let hermes: HermesRuntime | undefined;
+    const relay = turn.providerBroker
+      ? await startHermesProviderRelay(
+          turn.providerBroker,
+          (method, args) => callback(method, args),
+          () => {
+            void hermes?.fail(turn.runId);
+          },
+        )
+      : undefined;
     const local: AgentRunRequest = {
       ...turn,
       nativeCwd,
+      model: {
+        ...turn.model,
+        runtimePin: turn.model.runtimePin as AgentRunRequest["model"]["runtimePin"],
+        ...(relay ? { baseUrl: relay.url, apiKey: turn.providerBroker!.token } : {}),
+      },
       tools: turn.tools as AgentRunRequest["tools"],
       currentTurnImages: turn.currentTurnImages?.map((image) => ({
         ...image,
@@ -494,9 +523,38 @@ export class HostAgent {
           ReturnType<NonNullable<AgentRunRequest["claimSteering"]>>
         >,
     };
-    const runtime = this.runtimes[kind];
-    if (!runtime) throw new Error("Host runtime is unavailable.");
-    for await (const event of runtime.run(local, context))
-      await send("event", HostRuntimeEventSchema.parse(event));
+    try {
+      let runtime = this.runtimes[kind];
+      if (kind === "hermes") {
+        const install = process.env.ARDUR_HERMES_INSTALL;
+        if (!install || !relay) throw new Error("Pinned Hermes install is unavailable.");
+        const qualified = probeHermesInstall(install);
+        const staging = await realpath(this.config.root);
+        const overlap = path.relative(qualified.root, staging);
+        if (
+          overlap === "" ||
+          (overlap !== ".." && !overlap.startsWith(`..${path.sep}`) && !path.isAbsolute(overlap))
+        )
+          throw new Error("Hermes staging cannot overlap its install.");
+        const bundled = hermesLauncherAsset(process.argv[1] ?? "");
+        const launcher = existsSync(bundled)
+          ? bundled
+          : path.resolve("packages/host-runtime/python/hermes_launcher.py");
+        hermes = new HermesRuntime({
+          command: qualified.python,
+          args: [launcher],
+          launch: pinnedHermesLaunch(qualified.root, launcher),
+          pinned: true,
+          stagingParent: this.config.root,
+          onTurnFinished: () => relay.close(),
+        });
+        runtime = hermes;
+      }
+      if (!runtime) throw new Error("Host runtime is unavailable.");
+      for await (const event of runtime.run(local, context))
+        await send("event", HostRuntimeEventSchema.parse(event));
+    } finally {
+      relay?.close();
+    }
   }
 }

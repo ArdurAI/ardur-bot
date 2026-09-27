@@ -15,8 +15,13 @@ it("builds one relocatable JavaScript file without server modules or workspace i
     const entries = await readdir(directory);
     expect(entries.filter((name) => /\.[cm]?js$/.test(name))).toEqual(["host-service.cjs"]);
     expect(entries.sort()).toEqual(
-      metadata.native.files.length ? ["host-service.cjs", "native"] : ["host-service.cjs"],
+      metadata.native.files.length
+        ? ["host-service.cjs", "native", "python"]
+        : ["host-service.cjs", "python"],
     );
+    expect(
+      (await readFile(path.join(directory, "python", "hermes_launcher.py"))).length,
+    ).toBeGreaterThan(0);
     if (metadata.native.files.length) {
       expect(await readdir(path.join(directory, "native"), { recursive: true })).toEqual(
         expect.arrayContaining(

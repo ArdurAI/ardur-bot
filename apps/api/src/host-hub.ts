@@ -4,6 +4,8 @@ import {
   HOST_IN_FLIGHT,
   HOST_TOTAL_BYTES,
   HOST_WINDOW,
+  HostProviderOpenSchema,
+  HostProviderReadSchema,
 } from "@ardurbot/contracts/host-bridge";
 import type { HostWire } from "@ardurbot/host-runtime/bridge-wire";
 import { hostLostProblem } from "@ardurbot/host-runtime/bridge-wire";
@@ -14,7 +16,8 @@ type Pending = {
   seq: number;
   ack: number;
   bytes: number;
-  calls: Set<string>;
+  workerBytes: number;
+  calls: Map<string, Extract<HostFrame, { type: "callback" }>["method"]>;
   timer: ReturnType<typeof setTimeout>;
 };
 type QueuedProbe = Pick<Pending, "request" | "worker" | "timer"> & {
@@ -91,7 +94,11 @@ export class HostHub {
       this.probes.has(request.id) ||
       this.seen.has(request.id) ||
       (this.lostRuns.has(request.scope.runId) && request.operation.op !== "board.run") ||
-      this.lostRuns.size >= 100_000
+      this.lostRuns.size >= 100_000 ||
+      (request.operation.op === "runtime.turn" &&
+        request.operation.request.model.runtimePin.runtimeKind === "hermes" &&
+        (this.health?.capabilities?.providerRelay !== 1 ||
+          request.operation.request.providerBroker?.hostGeneration !== host.generation))
     ) {
       await worker.send({
         v: 1,
@@ -122,7 +129,8 @@ export class HostHub {
       seq: -1,
       ack: -1,
       bytes: 0,
-      calls: new Set(),
+      workerBytes: 0,
+      calls: new Map(),
       timer: setTimeout(() => this.cancel(request.id, worker), 15 * 60_000),
     };
     pending.timer.unref?.();
@@ -151,7 +159,7 @@ export class HostHub {
   async fromHost(wire: HostWire, frame: HostFrame) {
     if (this.host?.wire !== wire) return;
     if (frame.type === "health") {
-      this.health = frame.health;
+      this.health = { ...frame.health, generation: this.host.generation };
       return;
     }
     if (!("id" in frame)) throw new Error("Unexpected host frame.");
@@ -169,11 +177,14 @@ export class HostHub {
     } else if (frame.type === "callback") {
       if (
         pending.request.operation.op !== "runtime.turn" ||
+        (frame.method.startsWith("provider.") &&
+          (pending.request.operation.request.model.runtimePin.runtimeKind !== "hermes" ||
+            !pending.request.operation.request.providerBroker)) ||
         pending.calls.size >= HOST_WINDOW ||
         pending.calls.has(frame.callId)
       )
         throw new Error("Unexpected host callback.");
-      pending.calls.add(frame.callId);
+      pending.calls.set(frame.callId, frame.method);
     } else if (frame.type !== "end") throw new Error("Unexpected host frame.");
     pending.bytes += Buffer.byteLength(encodeHostFrame(frame));
     if (pending.bytes > HOST_TOTAL_BYTES) {
@@ -206,7 +217,20 @@ export class HostHub {
         throw new Error("Invalid acknowledgement.");
       pending.ack = frame.seq;
     } else if (frame.type === "reply") {
-      if (!pending.calls.delete(frame.callId)) throw new Error("Unknown callback.");
+      const method = pending.calls.get(frame.callId);
+      if (!method) throw new Error("Unknown callback.");
+      if (!frame.failed) {
+        if (method === "provider.open") HostProviderOpenSchema.parse(frame.value);
+        else if (method === "provider.read") HostProviderReadSchema.parse(frame.value);
+        else if (method === "provider.cancel" && frame.value !== undefined)
+          throw new Error("Unexpected provider cancellation value.");
+      }
+      pending.calls.delete(frame.callId);
+      pending.workerBytes += Buffer.byteLength(encodeHostFrame(frame));
+      if (pending.workerBytes > HOST_TOTAL_BYTES) {
+        this.cancel(frame.id, worker);
+        return;
+      }
     } else throw new Error("Unexpected worker frame.");
     await this.host?.wire.send(frame);
   }

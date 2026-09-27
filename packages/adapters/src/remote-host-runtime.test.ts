@@ -1,8 +1,10 @@
+import { createHash } from "node:crypto";
 import type { AgentRunRequest } from "@ardurbot/adapter-kit";
 import type { HostFrame, HostOperation } from "@ardurbot/contracts/host-bridge";
 import type { HostClient } from "@ardurbot/host-runtime/host-client";
 import { describe, expect, it, vi } from "vitest";
 import { approvalPausedToolResult } from "./approval-effect.js";
+import type { BrokerScope, HermesProviderBroker } from "./hermes-provider-broker.js";
 import { RemoteHostRuntime } from "./remote-host-runtime.js";
 
 const request = (): AgentRunRequest => ({
@@ -63,6 +65,115 @@ async function collect(source: ReturnType<RemoteHostRuntime["run"]>) {
   return events;
 }
 describe("worker-owned remote runtime callbacks", () => {
+  it("refuses an older host before creating a broker grant", async () => {
+    const broker = vi.fn();
+    const client = {
+      health: vi.fn(async () => ({ platform: "linux", roots: [], load: 0 })),
+    } as unknown as HostClient;
+    const remote = new RemoteHostRuntime(client, "hermes", broker);
+    await expect(collect(remote.run(request()))).rejects.toThrow("pinned provider relay");
+    expect(broker).not.toHaveBeenCalled();
+  });
+  it("binds provider callbacks to the negotiated host operation without a provider key", async () => {
+    const generation = crypto.randomUUID();
+    const grant = {
+      id: crypto.randomUUID(),
+      token: "a".repeat(43),
+      expiresAt: Date.now() + 60_000,
+    };
+    const revoke = vi.fn();
+    const open = vi.fn(
+      async () =>
+        new Response('{"model":"fixture-model"}', {
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    const broker = { grant, revoke, open } as unknown as HermesProviderBroker;
+    let expectedOperationId = "";
+    const client = {
+      health: async () => ({ capabilities: { providerRelay: 1 }, generation }),
+      request: async function* (
+        operation: HostOperation,
+        _context: unknown,
+        callback: Callback,
+        operationId: string,
+      ) {
+        expect(operation.op).toBe("runtime.turn");
+        if (operation.op !== "runtime.turn") throw new Error("Wrong operation");
+        expect(operationId).toBe(expectedOperationId);
+        expect(operation.request.providerBroker).toMatchObject({
+          protocol: 1,
+          id: grant.id,
+          hostGeneration: generation,
+        });
+        expect(JSON.stringify(operation)).not.toContain("real-provider-key");
+        await expect(callback(frame("provider.read", [0]))).rejects.toThrow("sequence");
+        expect(await callback(frame("provider.open", [{ model: "fixture-model" }]))).toEqual({
+          status: 200,
+          contentType: "application/json",
+        });
+        expect(await callback(frame("provider.read", [0]))).toEqual({
+          seq: 0,
+          chunk: Buffer.from('{"model":"fixture-model"}').toString("base64"),
+          done: true,
+        });
+        yield {
+          v: 1,
+          type: "stream",
+          id: operationId,
+          seq: 0,
+          channel: "event",
+          data: { type: "done" },
+        } as const;
+      },
+    } as unknown as HostClient;
+    const remote = new RemoteHostRuntime(client, "hermes", async (_request, _context, fence) => {
+      expectedOperationId = fence.operationId;
+      const scope: BrokerScope = {
+        runId: "run",
+        botId: "bot",
+        userId: "owner",
+        spaceId: "space",
+        operationId: fence.operationId,
+        leaseOwner: "worker",
+        leaseFence: 1,
+        hostGeneration: createHash("sha256").update(fence.hostGeneration).digest().readUIntBE(0, 6),
+        configurationHash: "fixture",
+        pin: {
+          credentialId: "credential",
+          provider: "fixture",
+          modelId: "fixture-model",
+          effort: "high",
+        },
+      };
+      return { broker, scope };
+    });
+    const original = request();
+    const run: AgentRunRequest = {
+      ...original,
+      model: {
+        ...original.model,
+        provider: "fixture",
+        id: "fixture-model",
+        thinkingLevel: "high",
+        contextWindow: 65_536,
+        maxTokens: 1024,
+        runtimePin: {
+          runtimeKind: "hermes",
+          provider: "fixture",
+          modelId: "fixture-model",
+          effort: "high",
+          credentialId: "credential",
+          revision: 1,
+        } as unknown as AgentRunRequest["model"]["runtimePin"],
+      },
+    };
+    expect(await collect(remote.run(run, { userId: "owner", spaceId: "space" }))).toEqual([
+      { type: "done" },
+    ]);
+    expect(open).toHaveBeenCalledOnce();
+    expect(revoke).toHaveBeenCalledOnce();
+  });
   it("retains effort evidence across the host callback schema", async () => {
     const onRuntimeInfo = vi.fn();
     const info = {

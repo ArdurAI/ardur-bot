@@ -30,6 +30,10 @@ describe("desktop package metadata", () => {
       from: "../host-service/dist/host-service.cjs",
       to: "host-service/host-service.cjs",
     });
+    expect(packageJson.build.extraResources).toContainEqual({
+      from: "../host-service/dist/python/hermes_launcher.py",
+      to: "host-service/python/hermes_launcher.py",
+    });
     const native = packageJson.build.extraResources.filter((resource) =>
       resource.from.includes("/native/"),
     );
