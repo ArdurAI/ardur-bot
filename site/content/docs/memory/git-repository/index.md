@@ -22,9 +22,9 @@ Only **space-shared** documents enter the repository. User and bot documents sta
 
 ## Deployment
 
-API and worker require system Git and OpenSSH. The Compose images install those packages; no new JavaScript runtime dependency is required. Host installations must make `git` and `ssh` available in the service's executable path. The transport supports the Unix API/worker environment; desktop uses that environment through Compose on macOS, Windows and Linux.
+API and worker require system Git and OpenSSH. The Compose images install those packages; no new JavaScript runtime dependency is required. Host installations must make `git` and `ssh` available in the service's executable path. New desktop installations start local API and worker services without Compose; existing legacy Compose installations keep their Compose path.
 
-Application-managed storage is below `DATA_DIR/memory-git`. A persistent machine identity belongs to that storage directory, not to the shared database. API and worker must share that directory. Each space/repository has its own clone and app-private sync state. The desktop memory Compose override mounts this storage into API and worker only; neither the bot computer nor the supervisor receives the repository mount.
+Application-managed storage is below `DATA_DIR/memory-git`. A persistent machine identity belongs to that storage directory, not to the shared database. API and worker must share that directory. Each space/repository has its own clone and app-private sync state. Legacy desktop Compose installations use a memory override that mounts this storage into API and worker only; neither the bot computer nor the supervisor receives the repository mount.
 
 `MEMORY_GIT_ALLOWED_HOSTS` is a deployment-owner comma-separated hostname allowlist and defaults to `github.com`. HTTPS redirects, credential-bearing URLs, arbitrary protocols and nonstandard ports are refused. `MEMORY_GIT_KNOWN_HOSTS` can name a deployment-owned SSH trust file for additional allowed hosts. GitHub's published Ed25519 host key is included; host verification is strict. Passphrase-protected deploy keys are not supported by the noninteractive transport; use a repository token or a dedicated deploy key.
 

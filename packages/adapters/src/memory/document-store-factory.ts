@@ -11,6 +11,8 @@ import { ObsidianDocumentStore, VaultWithPrivateDocuments } from "./obsidian-sto
 /** How the Postgres store selects page ids; only tests on the relational fake replace the SQL path. */
 export type ListIdSelector = ConstructorParameters<typeof PostgresDocumentStore>[2];
 
+export const DOCUMENT_STORE_KINDS = ["postgres", "git", "obsidian"] as const;
+
 /** Document destination selection is independent of the semantic provider adapter. */
 export async function selectDocumentStore(
   tx: Prisma.TransactionClient,
@@ -20,7 +22,7 @@ export async function selectDocumentStore(
   selectListIds?: ListIdSelector,
 ): Promise<MemoryDocumentStore> {
   const postgres = new PostgresDocumentStore(tx, undefined, selectListIds);
-  if (!config || !config.documentStore || config.documentStore === "postgres") return postgres;
+  if (!config?.documentStore || config.documentStore === "postgres") return postgres;
   if (config.documentStore === "git")
     return new VaultWithPrivateDocuments(
       await configuredGitStore(tx, config, dataDir, secrets),

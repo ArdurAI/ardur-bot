@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  applicationDatabaseOwned,
   applySqlMigrations,
   listSqlMigrations,
   MigrationApplyError,
@@ -12,6 +13,21 @@ import {
 } from "./migrate-sql.js";
 
 const migrationsDir = fileURLToPath(new URL("../prisma/migrations/", import.meta.url));
+
+describe("application database ownership", () => {
+  it("requires a responding non-superuser role that owns the selected database", async () => {
+    for (const [row, expected] of [
+      [{ rolsuper: false, owns: true }, true],
+      [{ rolsuper: true, owns: true }, false],
+      [{ rolsuper: false, owns: false }, false],
+      [undefined, false],
+    ] as const) {
+      expect(
+        await applicationDatabaseOwned({ query: async () => ({ rows: row ? [row] : [] }) }),
+      ).toBe(expected);
+    }
+  });
+});
 
 interface RecordedMigration {
   id: string;

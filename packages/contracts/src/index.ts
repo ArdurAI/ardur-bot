@@ -17,6 +17,7 @@ export type * from "./dashboard.js";
 export * from "./delegation.js";
 export * from "./desktop.js";
 export * from "./desktop-extensions.js";
+export * from "./desktop-setup.js";
 export * from "./dispatch.js";
 export * from "./domain.js";
 export * from "./events.js";
