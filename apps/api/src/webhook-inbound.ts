@@ -5,7 +5,7 @@ import type { EncryptedSecretStore } from "@ardurbot/adapters";
 import type { PrismaClient } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 
-export const WEBHOOK_MAX_BODY_BYTES = 64 * 1024;
+export { WEBHOOK_MAX_BODY_BYTES } from "./limits.js";
 export const WEBHOOK_SECRET_KIND = "webhook";
 
 export type WebhookEvents = {

@@ -3,6 +3,12 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
+import {
+  GITHUB_MATCHING_ROUTINES_LIMIT,
+  ROUTINE_HISTORY_LIMIT,
+  WEBHOOK_MATCHING_ROUTINES_LIMIT,
+  WEBHOOK_MAX_BODY_BYTES,
+} from "../apps/api/src/limits";
 import { SUBSCRIPTION_SIGN_IN_PROVIDERS } from "../packages/adapters/src/pi-oauth";
 import {
   MIN_ONE_SHOT_LEAD_SECONDS,
@@ -112,6 +118,20 @@ describe("site facts", () => {
       text: "One-shot runs must be scheduled in the future.",
       value: MIN_ONE_SHOT_LEAD_SECONDS,
     });
+    const limitValues = Object.fromEntries(
+      routinesFromCode().limits.map((limit) => [limit.id, limit.value]),
+    );
+    expect(limitValues["run-history"]).toBe(ROUTINE_HISTORY_LIMIT);
+    expect(limitValues["webhook-body-bytes"]).toBe(WEBHOOK_MAX_BODY_BYTES);
+    expect(limitValues["github-matching-routines"]).toBe(GITHUB_MATCHING_ROUTINES_LIMIT);
+    expect(limitValues["webhook-matching-routines"]).toBe(WEBHOOK_MATCHING_ROUTINES_LIMIT);
+    // The API behaviour these limits describe; changing one is a product decision, not drift.
+    expect([
+      ROUTINE_HISTORY_LIMIT,
+      WEBHOOK_MAX_BODY_BYTES,
+      GITHUB_MATCHING_ROUTINES_LIMIT,
+      WEBHOOK_MATCHING_ROUTINES_LIMIT,
+    ]).toEqual([50, 65_536, 5, 5]);
     expect(resolveScheduleTiming({ every: 1, unit: "minutes" }).ok).toBe(true);
     expect(resolveScheduleTiming({ runAt: "2000-01-01T00:00:00.000Z" })).toMatchObject({
       ok: false,

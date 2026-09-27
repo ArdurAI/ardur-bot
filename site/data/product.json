@@ -495,6 +495,26 @@
         "id": "one-shot-future",
         "text": "One-shot runs must be scheduled in the future.",
         "value": 0
+      },
+      {
+        "id": "run-history",
+        "text": "Run history lists up to 50 of a routine's latest runs.",
+        "value": 50
+      },
+      {
+        "id": "webhook-body-bytes",
+        "text": "Webhook and GitHub event bodies are limited to 64 KB.",
+        "value": 65536
+      },
+      {
+        "id": "github-matching-routines",
+        "text": "A GitHub event includes up to 5 of the most recently updated active routines that match it.",
+        "value": 5
+      },
+      {
+        "id": "webhook-matching-routines",
+        "text": "A webhook request includes up to 5 of the most recently updated active routines that match it.",
+        "value": 5
       }
     ],
     "useCases": [

@@ -2,6 +2,7 @@ import { hasValidBearerToken } from "@ardurbot/core";
 import type { Hono } from "hono";
 import { mountGithubWebhookRoute } from "./github-webhook.js";
 import { readBoundedBody } from "./http-body.js";
+import { WEBHOOK_MATCHING_ROUTINES_LIMIT } from "./limits.js";
 import {
   deliverWebhookEvent,
   formatWebhookPrompt,
@@ -60,7 +61,7 @@ export function mountWebhookHttpRoutes(app: Hono, deps: WebhookDeps) {
       },
       select: { id: true, name: true, prompt: true },
       orderBy: { updatedAt: "desc" },
-      take: 5,
+      take: WEBHOOK_MATCHING_ROUTINES_LIMIT,
     });
 
     const idempotencyKey =
