@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -26,6 +27,7 @@ import {
   claimSteering,
   createThreadEvents,
   createThreadMessage,
+  expireQuietBotMessages,
   finalizeRun,
   RunHistoryWriteError,
   sendUserMessage,
@@ -34,6 +36,7 @@ import {
 } from "@ardurbot/db";
 import { afterAll, beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
 import type { createApp } from "../../../apps/api/src/app.ts";
+import * as turnContext from "../../adapters/src/context/assemble.js";
 import { checkDelegationExecution } from "../../adapters/src/delegation-execution.js";
 import { integrationApprovalForCall } from "../../adapters/src/integration-access.js";
 import { promptWithInitialSteering, toHistory } from "../../adapters/src/pi-runtime.js";
@@ -3721,6 +3724,206 @@ describeJourneys("required product journeys", () => {
       await prisma.steeringMessage.findUniqueOrThrow({ where: { id: unassignedSteering.id } }),
     ).toMatchObject({ runId: null, claimedAt: null });
     await settleFixtureWork([coordinator.id, peer.id], goal.id);
+  });
+
+  it("sends only claimed quiet deliveries after selection and through context assembly", async () => {
+    const owner = await signup(app, `quiet-executor-${stamp}@ardurbot.test`, "Quiet owner");
+    const actor = await rpc<Me>(app, owner, "me");
+    await prisma.deploymentSettings.update({
+      where: { id: "default" },
+      data: { ownerUserId: actor.userId },
+    });
+    const coordinator = await rpc<Bot>(app, owner, "bots/create", {
+      name: "Coordinator",
+      title: "Lead",
+      description: "",
+      instructions: "",
+    });
+    const worker = await rpc<Bot>(app, owner, "bots/create", {
+      name: "Worker",
+      title: "Member",
+      description: "",
+      instructions: "",
+    });
+    const group = await rpc<{ id: string; threadId: string }>(app, owner, "groups/create", {
+      name: "Quiet delivery room",
+      botIds: [coordinator.id, worker.id],
+    });
+    await rpc(app, owner, "groups/update", {
+      groupId: group.id,
+      coordinatorBotId: coordinator.id,
+    });
+    const untilAt = new Date(Date.now() + 60 * 60 * 1000);
+    const goal = await rpc<{ id: string; rootTaskId: string }>(app, owner, "goals/start", {
+      groupId: group.id,
+      objective: "Review quiet updates.",
+      doneWhen: ["Updates reviewed"],
+      tokenLimit: 100_000,
+      untilAt: untilAt.toISOString(),
+    });
+    const start = await prisma.run.findFirstOrThrow({
+      where: { goalId: goal.id, clientNonce: `goal-start:${goal.id}` },
+    });
+    await prisma.run.update({ where: { id: start.id }, data: { status: "completed" } });
+    await prisma.task.update({ where: { id: start.taskId }, data: { status: "done" } });
+    const workerThread = await prisma.thread.findFirstOrThrow({
+      where: { botId: worker.id, spaceId: worker.spaceId },
+    });
+
+    for (const expiresDuringAssembly of [false, true]) {
+      const task = await prisma.task.create({
+        data: {
+          spaceId: coordinator.spaceId,
+          userId: actor.userId,
+          botId: coordinator.id,
+          threadId: group.threadId,
+          prompt: "Review the current updates.",
+          status: "queued",
+        },
+      });
+      const run = await prisma.run.create({
+        data: {
+          spaceId: coordinator.spaceId,
+          userId: actor.userId,
+          botId: coordinator.id,
+          threadId: group.threadId,
+          taskId: task.id,
+          status: "queued",
+          trigger: "follow_up",
+          goalId: goal.id,
+          delegationRootTaskId: goal.rootTaskId,
+        },
+      });
+      const deliveries = [];
+      for (const label of ["expired", "claimed"]) {
+        const id = randomUUID();
+        const text = `${label}-${id}`;
+        const outbound = await createThreadMessage(prisma, {
+          threadId: workerThread.id,
+          role: "bot",
+          botId: worker.id,
+          blocks: [{ kind: "text", text }],
+          markUnread: false,
+        });
+        const inbound = await createThreadMessage(prisma, {
+          threadId: group.threadId,
+          role: "user",
+          blocks: [{ kind: "text", text }],
+          markUnread: false,
+        });
+        deliveries.push(
+          await prisma.botMessageDelivery.create({
+            data: {
+              id,
+              spaceId: coordinator.spaceId,
+              userId: actor.userId,
+              goalId: goal.id,
+              rootTaskId: goal.rootTaskId,
+              conversationId: id,
+              senderBotId: worker.id,
+              recipientBotId: coordinator.id,
+              senderThreadId: workerThread.id,
+              recipientThreadId: group.threadId,
+              sourceRunId: start.id,
+              intent: "fyi",
+              outboundMessageId: outbound.id,
+              inboundMessageId: inbound.id,
+              state: "delivered",
+              hop: 1,
+              authorityFingerprint: "fixture",
+              requestFingerprint: id,
+              idempotencyKey: `quiet-executor:${id}`,
+              expiresAt: untilAt,
+            },
+          }),
+        );
+      }
+      const [expired, claimed] = deliveries;
+      let selectedBoth = false;
+      let enterAssembly!: () => void;
+      let resumeAssembly!: () => void;
+      const assemblyEntered = new Promise<void>((resolve) => {
+        enterAssembly = resolve;
+      });
+      const assemblyGate = new Promise<void>((resolve) => {
+        resumeAssembly = resolve;
+      });
+      const selected = prisma.botMessageDelivery.findMany.bind(prisma.botMessageDelivery);
+      const selectSpy = vi
+        .spyOn(prisma.botMessageDelivery, "findMany")
+        .mockImplementation(async (args) => {
+          const rows = await selected(args);
+          if (args.where?.recipientThreadId === group.threadId && args.select?.inboundMessageId) {
+            selectedBoth =
+              rows.some((row) => row.id === expired.id) &&
+              rows.some((row) => row.id === claimed.id);
+            await prisma.botMessageDelivery.update({
+              where: { id: expired.id },
+              data: { expiresAt: new Date(Date.now() - 1_000) },
+            });
+            await expireQuietBotMessages(prisma);
+          }
+          return rows;
+        });
+      const assemble = turnContext.assembleTurnContext;
+      const assemblySpy = vi
+        .spyOn(turnContext, "assembleTurnContext")
+        .mockImplementation(async (args) => {
+          const assembled = await assemble(args);
+          if (expiresDuringAssembly && args.requiredContext?.id === `quiet-deliveries:${run.id}`) {
+            enterAssembly();
+            await assemblyGate;
+          }
+          return assembled;
+        });
+      const requests: Array<{ history: Array<{ id?: string; content: string }> }> = [];
+      const runtimeSpy = vi
+        .spyOn(ScriptedAgentRuntime.prototype, "run")
+        .mockImplementation(async function* (request) {
+          if (request.runId === run.id) requests.push({ history: request.history });
+          yield { type: "done", text: "Updates reviewed." };
+        });
+      try {
+        const execution = executor.continueRun(run.id, `quiet-executor-${run.id}`);
+        if (expiresDuringAssembly) {
+          await Promise.race([
+            assemblyEntered,
+            execution.then(() => {
+              throw new Error("The turn completed before context assembly was reached.");
+            }),
+          ]);
+          await prisma.botMessageDelivery.update({
+            where: { id: claimed.id },
+            data: { expiresAt: new Date(Date.now() - 1_000) },
+          });
+          await expireQuietBotMessages(prisma);
+          expect(
+            await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id: claimed.id } }),
+          ).toMatchObject({ state: "delivered", outcome: null, quietClaimRunId: run.id });
+          resumeAssembly();
+        }
+        await execution;
+      } finally {
+        resumeAssembly();
+        runtimeSpy.mockRestore();
+        assemblySpy.mockRestore();
+        selectSpy.mockRestore();
+      }
+      expect(selectedBoth).toBe(true);
+      expect(requests).toHaveLength(1);
+      const quiet = requests[0]?.history.find(
+        (message) => message.id === `quiet-deliveries:${run.id}`,
+      );
+      expect(quiet?.content).toContain(claimed.id);
+      expect(quiet?.content).not.toContain(expired.id);
+      expect(
+        await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id: expired.id } }),
+      ).toMatchObject({ state: "expired", outcome: "expired", quietClaimRunId: null });
+      expect(
+        await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id: claimed.id } }),
+      ).toMatchObject({ outcome: "consumed", quietClaimRunId: null });
+    }
+    await settleFixtureWork([coordinator.id, worker.id], goal.id);
   });
 
   it("keeps a goal wake's source result after a newer room message fills history", async () => {

@@ -717,8 +717,21 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
     const { id } = await createQuietDelivery(f);
     const oldAttempt = await prisma.run.findUniqueOrThrow({ where: { id: f.coordinatorRun.id } });
     expect(oldAttempt.leaseFence).toBe(1);
-    let staleClaim: Promise<string[]> | undefined;
-    await prisma.$transaction(async (tx) => {
+    let replacementLocked!: () => void;
+    let commitReplacement!: () => void;
+    let resumeLookup!: () => void;
+    let lookupReached = false;
+    let staleBackendPid: number | undefined;
+    const replacementAtLock = new Promise<void>((resolve) => {
+      replacementLocked = resolve;
+    });
+    const replacementGate = new Promise<void>((resolve) => {
+      commitReplacement = resolve;
+    });
+    const lookupGate = new Promise<void>((resolve) => {
+      resumeLookup = resolve;
+    });
+    const replacement = prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM runs WHERE id = ${f.coordinatorRun.id} FOR UPDATE`;
       await tx.run.update({
         where: { id: f.coordinatorRun.id },
@@ -728,14 +741,71 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
         where: { id },
         data: { quietClaimRunId: f.coordinatorRun.id, quietClaimLeaseFence: 2 },
       });
-      staleClaim = claimQuietBotMessages(prisma, {
-        runId: f.coordinatorRun.id,
-        leaseOwner: oldAttempt.leaseOwner!,
-        leaseFence: oldAttempt.leaseFence,
-        deliveryIds: [id],
-      });
+      replacementLocked();
+      await replacementGate;
     });
+    void replacement.catch(() => undefined);
+    await replacementAtLock;
+    const gatedPrisma = new Proxy(prisma, {
+      get(target, property, receiver) {
+        if (property !== "$transaction") return Reflect.get(target, property, receiver);
+        return (work: (tx: typeof prisma) => Promise<unknown>) =>
+          prisma.$transaction(async (tx) => {
+            const backend = await tx.$queryRaw<{ pid: number }[]>`SELECT pg_backend_pid() AS pid`;
+            staleBackendPid = backend[0]?.pid;
+            return work(
+              new Proxy(tx, {
+                get(inner, key, innerReceiver) {
+                  if (key !== "run") return Reflect.get(inner, key, innerReceiver);
+                  return new Proxy(tx.run, {
+                    get(run, operation, runReceiver) {
+                      if (operation !== "findFirst")
+                        return Reflect.get(run, operation, runReceiver);
+                      return async (...args: unknown[]) => {
+                        const found = await (
+                          tx.run.findFirst as (...args: unknown[]) => Promise<unknown>
+                        )(...args);
+                        lookupReached = true;
+                        await lookupGate;
+                        return found;
+                      };
+                    },
+                  });
+                },
+              }) as typeof prisma,
+            );
+          });
+      },
+    }) as PrismaClient;
+    const staleClaim = claimQuietBotMessages(gatedPrisma, {
+      runId: f.coordinatorRun.id,
+      leaseOwner: oldAttempt.leaseOwner!,
+      leaseFence: oldAttempt.leaseFence,
+      deliveryIds: [id],
+    });
+    void staleClaim.catch(() => undefined);
+    let blocked = false;
+    try {
+      for (let attempt = 0; attempt < 100; attempt++) {
+        if (staleBackendPid) {
+          const [row] = await prisma.$queryRaw<{ blockers: number[] }[]>`
+            SELECT pg_blocking_pids(${staleBackendPid}) AS blockers`;
+          blocked = (row?.blockers.length ?? 0) > 0;
+        }
+        if (blocked || lookupReached) break;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      expect(blocked || lookupReached).toBe(true);
+    } finally {
+      commitReplacement();
+      resumeLookup();
+    }
+    await replacement;
     await expect(staleClaim).rejects.toThrow("lost its run lease");
+    expect(await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id } })).toMatchObject({
+      quietClaimRunId: f.coordinatorRun.id,
+      quietClaimLeaseFence: 2,
+    });
     expect(
       await claimQuietBotMessages(prisma, {
         runId: f.coordinatorRun.id,
