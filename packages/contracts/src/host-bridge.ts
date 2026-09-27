@@ -55,6 +55,8 @@ export const HostRuntimeInfoSchema = z.union([
   RuntimeInfoSchema,
   RuntimeInfoSchema.extend({ runtimeKind: z.literal("hermes") }),
 ]);
+export const HostRuntimeProblemSchema = RuntimeProblemSchema.extend({ pin: HostRuntimePinSchema });
+export type HostRuntimeProblem = z.infer<typeof HostRuntimeProblemSchema>;
 export const HOST_TOOLS = [
   "git",
   "gh",
@@ -323,7 +325,7 @@ export const HostFrameSchema = /* @__PURE__ */ (() =>
       v: z.literal(1),
       type: z.literal("end"),
       id,
-      problem: RuntimeProblemSchema.optional(),
+      problem: HostRuntimeProblemSchema.optional(),
     }),
     z.strictObject({
       v: z.literal(1),

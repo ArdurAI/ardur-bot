@@ -1,4 +1,4 @@
-import type { HostFrame, HostRequest } from "@ardurbot/contracts/host-bridge";
+import type { HostFrame, HostRequest, HostRuntimeProblem } from "@ardurbot/contracts/host-bridge";
 import {
   decodeHostFrame,
   encodeHostFrame,
@@ -67,14 +67,14 @@ const PLACEHOLDER_PIN: RuntimePin = {
 export function hostLostProblem(
   request: HostRequest,
   reason = "Host service disconnected — open the desktop app and start a new run.",
-) {
-  return runtimePinProblem(
-    request.operation.op === "runtime.turn"
-      ? (request.operation.request.model.runtimePin as RuntimePin)
-      : PLACEHOLDER_PIN,
-    "runtime-unavailable",
-    reason,
-  );
+): HostRuntimeProblem {
+  return {
+    ...runtimePinProblem(PLACEHOLDER_PIN, "runtime-unavailable", reason),
+    pin:
+      request.operation.op === "runtime.turn"
+        ? request.operation.request.model.runtimePin
+        : PLACEHOLDER_PIN,
+  };
 }
 /** A local-import operation failed on the host itself, distinct from a lost or busy host. */
 export function importProblem(code: "local-import-rescan" | "local-import-item", reason: string) {

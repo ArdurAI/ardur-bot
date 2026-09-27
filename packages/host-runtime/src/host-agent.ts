@@ -384,8 +384,8 @@ export class HostAgent {
       state.abort.signal.throwIfAborted();
       await this.wire.send({ v: 1, type: "end", id: request.id });
     } catch (error) {
-      await this.wire
-        .send({
+      try {
+        await this.wire.send({
           v: 1,
           type: "end",
           id: request.id,
@@ -396,8 +396,18 @@ export class HostAgent {
                   request,
                   "Host operation could not finish — check registered folders and the runtime.",
                 ),
-        })
-        .catch(() => this.wire.close());
+        });
+      } catch {
+        // A malformed or oversized operation error must not disconnect other host operations.
+        await this.wire
+          .send({
+            v: 1,
+            type: "end",
+            id: request.id,
+            problem: hostLostProblem(request, "Host operation could not finish."),
+          })
+          .catch(() => undefined);
+      }
     } finally {
       clearTimeout(timeout);
       state.abort.abort();
