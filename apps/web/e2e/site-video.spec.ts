@@ -39,9 +39,11 @@ test("records the Routines walkthrough", async ({ browser }) => {
     const input = route.request().postDataJSON()?.json as Record<string, unknown> | undefined;
     return route.fulfill({ json: { json: fixture.rpc(procedure, input) } });
   });
+  // The warm-up serves the plain fixture, whose bot keeps its own name; only the recording renames it.
+  const warmupBot = (fixture.rpc("bootstrap") as { bots: { name: string }[] }).bots[0]!;
   try {
     await warmupPage.goto("/app/bot");
-    await expect(warmupPage.getByText("Briefing").first()).toBeVisible();
+    await expect(warmupPage.getByText(warmupBot.name).first()).toBeVisible();
   } finally {
     await warmupContext.close();
   }
