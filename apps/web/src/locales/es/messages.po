@@ -4586,6 +4586,10 @@ msgstr "Cargando reglas…"
 msgid "Loading system settings…"
 msgstr ""
 
+#: src/pages/customize/ExtensionsPage.tsx
+msgid "Loading the extension catalogue…"
+msgstr ""
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Loading tools…"
 msgstr ""
@@ -5256,7 +5260,7 @@ msgid "No embedding service is configured."
 msgstr ""
 
 #: src/pages/customize/ExtensionsPage.tsx
-msgid "No extensions are in the built-in catalogue yet. Use Add to install an extension from a file or folder on this computer."
+msgid "No extensions are in the built-in catalogue yet. Use Add to install an extension bundle (.mcpb or .dxt file) from this computer."
 msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx

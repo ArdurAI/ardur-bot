@@ -4586,6 +4586,10 @@ msgstr "Loading rules…"
 msgid "Loading system settings…"
 msgstr "Loading system settings…"
 
+#: src/pages/customize/ExtensionsPage.tsx
+msgid "Loading the extension catalogue…"
+msgstr "Loading the extension catalogue…"
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Loading tools…"
 msgstr "Loading tools…"
@@ -5256,8 +5260,8 @@ msgid "No embedding service is configured."
 msgstr "No embedding service is configured."
 
 #: src/pages/customize/ExtensionsPage.tsx
-msgid "No extensions are in the built-in catalogue yet. Use Add to install an extension from a file or folder on this computer."
-msgstr "No extensions are in the built-in catalogue yet. Use Add to install an extension from a file or folder on this computer."
+msgid "No extensions are in the built-in catalogue yet. Use Add to install an extension bundle (.mcpb or .dxt file) from this computer."
+msgstr "No extensions are in the built-in catalogue yet. Use Add to install an extension bundle (.mcpb or .dxt file) from this computer."
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "No group chats yet."

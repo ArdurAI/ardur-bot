@@ -11,6 +11,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  Skeleton,
 } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
 import { Blocks, Plus } from "lucide-react";
@@ -77,6 +78,7 @@ export default function ExtensionsPage({
       const result = await rpc.integrations.list();
       setCatalog(result.catalog.filter((item) => item.transport === "stdio"));
     } catch {
+      setCatalog(null);
       setCatalogError(true);
     } finally {
       setCatalogBusy(false);
@@ -219,7 +221,17 @@ export default function ExtensionsPage({
             <DialogHeader>
               <DialogTitle>{t`Browse extensions`}</DialogTitle>
             </DialogHeader>
-            {catalogError ? (
+            {catalogBusy ? (
+              <div className="space-y-4">
+                <p role="status" className="text-sm text-muted-foreground">
+                  {t`Loading the extension catalogue…`}
+                </p>
+                <div className="space-y-3" aria-hidden="true">
+                  <Skeleton className="h-14 w-full" />
+                  <Skeleton className="h-14 w-full" />
+                </div>
+              </div>
+            ) : catalogError ? (
               <div role="alert" className="space-y-4">
                 <p className="text-sm text-destructive">{t`Could not load the extension catalogue. Check the connection and try again.`}</p>
                 <DialogFooter>
@@ -259,7 +271,7 @@ export default function ExtensionsPage({
             ) : catalog && catalog.length === 0 ? (
               <div className="space-y-4">
                 <p className="text-sm text-muted-foreground">
-                  {t`No extensions are in the built-in catalogue yet. Use Add to install an extension from a file or folder on this computer.`}
+                  {t`No extensions are in the built-in catalogue yet. Use Add to install an extension bundle (.mcpb or .dxt file) from this computer.`}
                 </p>
                 <DialogFooter>
                   <Button type="button" variant="outline" onClick={closeBrowse}>{t`Close`}</Button>

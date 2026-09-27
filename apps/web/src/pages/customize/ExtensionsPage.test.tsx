@@ -48,6 +48,7 @@ vi.mock("@ardurbot/ui-web", () => {
     DialogFooter: Container,
     DialogHeader: Container,
     DialogTitle: ({ children }: { children?: ReactNode }) => <h2>{children}</h2>,
+    Skeleton: (props: ComponentProps<"div">) => <div {...props} />,
   };
 });
 
@@ -130,7 +131,7 @@ describe("ExtensionsPage", () => {
     expect(container.querySelector("h2")?.textContent).toBe("Browse extensions");
     expect(
       container.textContent?.includes(
-        "No extensions are in the built-in catalogue yet. Use Add to install an extension from a file or folder on this computer.",
+        "No extensions are in the built-in catalogue yet. Use Add to install an extension bundle (.mcpb or .dxt file) from this computer.",
       ),
     ).toBe(true);
 
@@ -197,7 +198,7 @@ describe("ExtensionsPage", () => {
     expect(rpcMocks.integrationsList).toHaveBeenCalledTimes(2);
     expect(
       container.textContent?.includes(
-        "No extensions are in the built-in catalogue yet. Use Add to install an extension from a file or folder on this computer.",
+        "No extensions are in the built-in catalogue yet. Use Add to install an extension bundle (.mcpb or .dxt file) from this computer.",
       ),
     ).toBe(true);
   });
@@ -247,5 +248,125 @@ describe("ExtensionsPage", () => {
     expect(container.textContent?.includes("Open the desktop app to manage extensions.")).toBe(
       true,
     );
+  });
+
+  it("shows visible accessible loading state while catalogue request is in flight and renders items when resolved", async () => {
+    let resolveList!: (value: any) => void;
+    rpcMocks.integrationsList.mockReturnValue(
+      new Promise((resolve) => {
+        resolveList = resolve;
+      }),
+    );
+
+    await act(async () => {
+      root.render(<ExtensionsPage />);
+    });
+
+    const browseBtn = Array.from(container.querySelectorAll("button")).find(
+      (b) => b.textContent?.trim() === "Browse extensions",
+    );
+    await act(async () => {
+      browseBtn!.click();
+    });
+
+    expect(container.querySelector("h2")?.textContent).toBe("Browse extensions");
+    expect(container.querySelector('[role="status"]')?.textContent).toBe(
+      "Loading the extension catalogue…",
+    );
+
+    await act(async () => {
+      resolveList({
+        catalog: [
+          {
+            id: "local-ext",
+            name: "My Local Extension",
+            vendor: "Acme",
+            transport: "stdio",
+            available: true,
+          },
+        ],
+      });
+    });
+
+    expect(container.querySelector('[role="status"]')).toBeNull();
+    expect(container.textContent?.includes("My Local Extension")).toBe(true);
+  });
+
+  it("shows visible accessible loading state during retry after rejection", async () => {
+    let rejectList!: (error: any) => void;
+    rpcMocks.integrationsList.mockReturnValueOnce(
+      new Promise((_, reject) => {
+        rejectList = reject;
+      }),
+    );
+
+    await act(async () => {
+      root.render(<ExtensionsPage />);
+    });
+
+    const browseBtn = Array.from(container.querySelectorAll("button")).find(
+      (b) => b.textContent?.trim() === "Browse extensions",
+    );
+    await act(async () => {
+      browseBtn!.click();
+    });
+
+    // Initial in-flight request shows loading state
+    expect(container.querySelector('[role="status"]')?.textContent).toBe(
+      "Loading the extension catalogue…",
+    );
+
+    // Reject initial request -> shows error with Retry
+    await act(async () => {
+      rejectList(new Error("Network failed"));
+    });
+
+    expect(container.querySelector('[role="status"]')).toBeNull();
+    expect(
+      container.textContent?.includes(
+        "Could not load the extension catalogue. Check the connection and try again.",
+      ),
+    ).toBe(true);
+
+    const dialogButtons = Array.from(
+      container.querySelector('[data-testid="dialog"]')?.querySelectorAll("button") ?? [],
+    );
+    const retryBtn = dialogButtons.find((b) => b.textContent?.trim() === "Retry");
+    expect(retryBtn).toBeDefined();
+
+    // Set up second deferred promise for retry
+    let resolveRetry!: (value: any) => void;
+    rpcMocks.integrationsList.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveRetry = resolve;
+      }),
+    );
+
+    // Click Retry -> shows loading state again while retry is in flight
+    await act(async () => {
+      retryBtn!.click();
+    });
+
+    expect(container.querySelector('[role="status"]')?.textContent).toBe(
+      "Loading the extension catalogue…",
+    );
+
+    // Resolve retry request
+    await act(async () => {
+      resolveRetry({
+        catalog: [
+          {
+            id: "local-ext",
+            name: "My Local Extension",
+            vendor: "Acme",
+            transport: "stdio",
+            available: true,
+          },
+        ],
+      });
+    });
+
+    expect(container.querySelector('[role="status"]')).toBeNull();
+    expect(container.textContent?.includes("My Local Extension")).toBe(true);
   });
 });
