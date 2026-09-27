@@ -5,7 +5,7 @@ import { memoryDatabaseFake } from "./memory-fakes.js";
 
 it("the relational fake applies the production tombstone predicate", async () => {
   const database = memoryDatabaseFake();
-  const store = new PostgresDocumentStore(database.tx);
+  const store = new PostgresDocumentStore(database.tx, undefined, database.selectListIds);
   const access = memoryTestAccess();
   const commit = memoryTestCommit(access);
   const saved = await store.commit(commit, access);

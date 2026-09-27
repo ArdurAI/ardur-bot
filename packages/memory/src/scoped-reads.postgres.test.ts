@@ -176,24 +176,32 @@ describePostgres("scoped memory reads (PostgreSQL)", () => {
     expect(after).toEqual(before);
   });
 
-  it("passes bounded take arguments to Prisma for heads and revisions", async () => {
+  it("bounds heads, current revision pairs, and history", async () => {
     let headQueries = 0;
     let historyQueries = 0;
+    let currentRevisionQueries = 0;
     const observed = prisma.$extends({
       query: {
         memoryDocument: {
           async findMany({ args, query }) {
             headQueries++;
             expect(args.take).toBeLessThanOrEqual(3);
-            if (args.select?.revisions && typeof args.select.revisions === "object")
-              expect(args.select.revisions.take).toBeLessThanOrEqual(1);
             return query(args);
           },
         },
         memoryRevision: {
           async findMany({ args, query }) {
-            historyQueries++;
-            expect(args.take).toBeLessThanOrEqual(3);
+            if (Array.isArray(args.where?.OR)) {
+              currentRevisionQueries++;
+              expect(args.where.OR.length).toBeLessThanOrEqual(3);
+              for (const pair of args.where.OR) {
+                expect(pair.documentId).toBeTypeOf("string");
+                expect(pair.revision).toBeTypeOf("number");
+              }
+            } else {
+              historyQueries++;
+              expect(args.take).toBeLessThanOrEqual(3);
+            }
             return query(args);
           },
         },
@@ -206,6 +214,7 @@ describePostgres("scoped memory reads (PostgreSQL)", () => {
       await store.history("a-visible", { limit: 2 }, access);
     });
     expect(headQueries).toBe(3);
+    expect(currentRevisionQueries).toBe(2);
     expect(historyQueries).toBe(1);
   });
 

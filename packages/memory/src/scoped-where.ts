@@ -1,5 +1,5 @@
 import type { DocumentListInput, MemoryAccess } from "@ardurbot/adapter-kit";
-import type { Prisma } from "@ardurbot/db";
+import { Prisma } from "@ardurbot/db";
 
 /** Access is supplied by MemoryService.open, never by a list or read argument. */
 export function authorizedDocumentWhere(access: MemoryAccess): Prisma.MemoryDocumentWhereInput {
@@ -47,6 +47,50 @@ export function listedDocumentWhere(
       ...(input.cursor ? [{ id: { gt: input.cursor } }] : []),
     ],
   };
+}
+
+const documentColumns = {
+  id: Prisma.sql`"id"`,
+  spaceId: Prisma.sql`"spaceId"`,
+  userId: Prisma.sql`"userId"`,
+  botId: Prisma.sql`"botId"`,
+  scope: Prisma.sql`"scope"`,
+  scopeKey: Prisma.sql`"scopeKey"`,
+  deletedAt: Prisma.sql`"deletedAt"`,
+} as const;
+
+/** Compile only the predicates used by scoped reads; values stay bound parameters. */
+export function documentWhereSql(where: Prisma.MemoryDocumentWhereInput): Prisma.Sql {
+  const clauses: Prisma.Sql[] = [];
+  for (const [key, filter] of Object.entries(where)) {
+    if (filter === undefined) continue;
+    if (key === "AND" || key === "OR") {
+      const parts = (
+        Array.isArray(filter) ? filter : [filter]
+      ) as Prisma.MemoryDocumentWhereInput[];
+      if (parts.length === 0) continue;
+      const joined = Prisma.join(parts.map(documentWhereSql), key === "AND" ? " AND " : " OR ");
+      clauses.push(Prisma.sql`(${joined})`);
+      continue;
+    }
+    if (!(key in documentColumns)) throw new Error(`Unsupported memory filter: ${key}`);
+    const column = documentColumns[key as keyof typeof documentColumns];
+    if (filter === null) clauses.push(Prisma.sql`${column} IS NULL`);
+    else if (typeof filter === "string") clauses.push(Prisma.sql`${column} = ${filter}`);
+    else if (typeof filter === "object" && "in" in filter && Array.isArray(filter.in))
+      clauses.push(
+        filter.in.length ? Prisma.sql`${column} IN (${Prisma.join(filter.in)})` : Prisma.sql`FALSE`,
+      );
+    else if (
+      key === "id" &&
+      typeof filter === "object" &&
+      "gt" in filter &&
+      typeof filter.gt === "string"
+    )
+      clauses.push(Prisma.sql`${column} COLLATE "C" > ${filter.gt} COLLATE "C"`);
+    else throw new Error(`Unsupported memory filter: ${key}`);
+  }
+  return clauses.length ? Prisma.sql`(${Prisma.join(clauses, " AND ")})` : Prisma.sql`TRUE`;
 }
 
 type FilterRow = {

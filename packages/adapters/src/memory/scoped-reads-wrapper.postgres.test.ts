@@ -88,12 +88,11 @@ describePostgres("mixed-case private memory pagination (PostgreSQL)", () => {
     expect(ids).toEqual(["A", "B", "a", "b"]);
   }
 
-  // Pending a C-collated ID index: the ICU primary key cannot serve bytewise keyset order.
-  it.skip("orders imported IDs bytewise in the PostgreSQL store", async () => {
+  it("orders imported IDs bytewise in the PostgreSQL store", async () => {
     await prisma.$transaction(async (tx) => expectJavaScriptOrder(new PostgresDocumentStore(tx)));
   });
 
-  it.skip("does not skip IDs when the vault merges private PostgreSQL pages", async () => {
+  it("does not skip IDs when the vault merges private PostgreSQL pages", async () => {
     await prisma.$transaction(async (tx) => {
       const vault = { list: async () => ({ items: [], nextCursor: null }) };
       const wrapper = new VaultWithPrivateDocuments(

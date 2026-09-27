@@ -17,6 +17,9 @@ const outputDirectory = path.resolve(
     path.join(repositoryRoot, ".context/scoped-reads"),
 );
 const label = option("label") ?? "tip";
+const revisionCount = Number(option("revisions") ?? "20");
+if (revisionCount !== 1 && revisionCount !== 20)
+  throw new Error("Supported revision counts are 1 and 20");
 const storePath = option("store")
   ? path.resolve(option("store")!)
   : fileURLToPath(new URL("./postgres-store.ts", import.meta.url));
@@ -82,7 +85,7 @@ async function main() {
         INSERT INTO memory_documents
           (id, "spaceId", "userId", scope, "scopeKey", path, content, revision, "createdAt", "updatedAt")
         SELECT 'bench-' || lpad(i::text, 6, '0'), $3, $4, 'user', $5,
-          'document-' || i || '.md', 'revision-20', 20, now(), now()
+          'document-' || i || '.md', 'revision-current', 20, now(), now()
         FROM generate_series($1::integer, $2::integer) AS i
       `,
         [previous + 1, size, access.spaceId, access.userId, key],
@@ -92,11 +95,14 @@ async function main() {
         INSERT INTO memory_revisions
           (id, "documentId", revision, content, "authorKind", "authorUserId", "createdAt")
         SELECT 'bench-rev-' || i || '-' || r,
-          'bench-' || lpad(i::text, 6, '0'), r, 'revision-' || r, 'user', $3, now()
+          'bench-' || lpad(i::text, 6, '0'), r,
+          CASE WHEN r = 20 THEN 'revision-current' ELSE 'revision-' || r END,
+          'user', $3, now()
         FROM generate_series($1::integer, $2::integer) AS i
         CROSS JOIN generate_series(1, 20) AS r
+        WHERE $4::integer = 20 OR r = 20
       `,
-        [previous + 1, size, access.userId],
+        [previous + 1, size, access.userId, revisionCount],
       );
       previous = size;
       await database.pool.query("ANALYZE memory_documents");
@@ -135,8 +141,14 @@ async function main() {
         string,
         {
           rows: number;
+          resultBytes: number;
           sharedBuffers: number;
-          statements: Array<{ rows: number; sharedBuffers: number; file: string }>;
+          statements: Array<{
+            rows: number;
+            resultBytes: number;
+            sharedBuffers: number;
+            file: string;
+          }>;
         }
       > = {};
       for (const [name, queries] of Object.entries(statements)) {
@@ -147,6 +159,9 @@ async function main() {
             statement.params,
           );
           const plan = (explained.rows[0] as { "QUERY PLAN": Plan[] })["QUERY PLAN"][0]!;
+          // JSON payload size is a stable proxy for rows sent to the client, not wire bytes.
+          const returned = await database.pool.query(statement.query, statement.params);
+          const resultBytes = Buffer.byteLength(JSON.stringify(returned.rows));
           const file = `explain-${label}-${size}-${name}-${index + 1}.json`;
           await writeFile(
             path.join(outputDirectory, file),
@@ -154,12 +169,14 @@ async function main() {
           );
           entries.push({
             rows: plan.Plan["Actual Rows"],
+            resultBytes,
             sharedBuffers: plan.Plan["Shared Hit Blocks"] + plan.Plan["Shared Read Blocks"],
             file,
           });
         }
         plans[name] = {
           rows: entries.reduce((sum, entry) => sum + entry.rows, 0),
+          resultBytes: entries.reduce((sum, entry) => sum + entry.resultBytes, 0),
           sharedBuffers: entries.reduce((sum, entry) => sum + entry.sharedBuffers, 0),
           statements: entries,
         };
@@ -180,7 +197,7 @@ async function main() {
           JSON.stringify({ query: sql, params, plan }, null, 2),
         );
       }
-      results.push({ documents: size, revisionsPerDocument: 20, latencies, plans });
+      results.push({ documents: size, revisionsPerDocument: revisionCount, latencies, plans });
       process.stdout.write(`${label}: ${size} documents measured\n`);
     }
     await writeFile(

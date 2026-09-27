@@ -78,15 +78,22 @@ export function memoryDatabaseFake() {
         orderBy,
         take,
       }: {
-        where: { documentId: string; revision?: { lt: number } };
+        where: {
+          documentId?: string;
+          revision?: { lt: number };
+          OR?: Array<{ documentId: string; revision: number }>;
+        };
         orderBy?: { revision: "asc" | "desc" };
         take?: number;
       }) =>
         revisions
-          .filter(
-            (row) =>
-              row.documentId === where.documentId &&
-              (where.revision?.lt === undefined || Number(row.revision) < where.revision.lt),
+          .filter((row) =>
+            where.OR
+              ? where.OR.some(
+                  (pair) => row.documentId === pair.documentId && row.revision === pair.revision,
+                )
+              : row.documentId === where.documentId &&
+                (where.revision?.lt === undefined || Number(row.revision) < where.revision.lt),
           )
           .sort(
             (a, b) =>
@@ -126,6 +133,12 @@ export function memoryDatabaseFake() {
     tx: tx as unknown as Prisma.TransactionClient,
     documents,
     revisions,
+    selectListIds: async (where: Prisma.MemoryDocumentWhereInput, limit: number) =>
+      [...documents.values()]
+        .filter((row) => matchesDocumentWhere(row, where))
+        .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+        .slice(0, limit)
+        .map(({ id }) => ({ id })),
     failNext: () => {
       fail = true;
     },

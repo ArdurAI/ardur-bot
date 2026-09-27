@@ -7,12 +7,12 @@ import type {
 } from "@ardurbot/adapter-kit";
 import { MemoryAccessError, MemoryConflictError } from "@ardurbot/adapter-kit";
 import { DocumentRevisionSchema } from "@ardurbot/contracts";
-import type { Prisma } from "@ardurbot/db";
+import { Prisma } from "@ardurbot/db";
 import type { JournalDocument, MemoryJournal } from "./journal.js";
 import { JournalDocumentStore } from "./journal.js";
 import { assertMemorySafe } from "./redaction.js";
 import { scopeKey } from "./scope.js";
-import { authorizedDocumentWhere, listedDocumentWhere } from "./scoped-where.js";
+import { authorizedDocumentWhere, documentWhereSql, listedDocumentWhere } from "./scoped-where.js";
 
 const headFields = {
   kind: true,
@@ -60,6 +60,10 @@ type RevisionRow = Pick<
   Prisma.MemoryRevisionGetPayload<Prisma.MemoryRevisionDefaultArgs>,
   keyof typeof revisionFields
 >;
+type ListIds = (
+  where: Prisma.MemoryDocumentWhereInput,
+  limit: number,
+) => Promise<Array<{ id: string }>>;
 
 function rowScope(row: DocumentRow): DocumentScope {
   if (row.scope === "space-shared") return { kind: "space-shared", spaceId: row.spaceId };
@@ -272,25 +276,45 @@ export class PostgresDocumentStore extends JournalDocumentStore {
   constructor(
     private readonly tx: Prisma.TransactionClient,
     clock?: () => Date,
+    private readonly selectListIds?: ListIds,
   ) {
     super(new PostgresMemoryJournal(tx), "postgres", clock);
+  }
+
+  private async currentRevisions(rows: DocumentRow[]): Promise<Map<string, RevisionRow>> {
+    if (rows.length === 0) return new Map();
+    const revisions = await this.tx.memoryRevision.findMany({
+      where: { OR: rows.map((row) => ({ documentId: row.id, revision: row.revision })) },
+      select: { documentId: true, ...revisionFields },
+    });
+    return new Map(revisions.map((revision) => [revision.documentId, revision]));
   }
 
   override async list(input: DocumentListInput, access: MemoryAccess) {
     if (input.botId && !access.botIds.includes(input.botId)) throw new MemoryAccessError();
     const limit = Math.min(100, Math.max(1, input.limit ?? 50));
+    const where = listedDocumentWhere(access, input);
+    const ids = this.selectListIds
+      ? await this.selectListIds(where, limit + 1)
+      : await this.tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+          SELECT "id" FROM "memory_documents"
+          WHERE ${documentWhereSql(where)}
+          ORDER BY "id" COLLATE "C" ASC
+          LIMIT ${limit + 1}
+        `);
     const rows = await this.tx.memoryDocument.findMany({
-      where: listedDocumentWhere(access, input),
-      orderBy: { id: "asc" },
-      take: limit + 1,
-      select: {
-        ...headFields,
-        revisions: { orderBy: { revision: "desc" }, take: 1, select: revisionFields },
-      },
+      // The bytewise cursor was applied above. Reapplying it through Prisma would
+      // use the database's ICU collation and discard valid IDs on later pages.
+      where: { AND: [authorizedDocumentWhere(access), { id: { in: ids.map((row) => row.id) } }] },
+      take: ids.length,
+      select: headFields,
     });
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const ordered = ids.flatMap(({ id }) => (byId.has(id) ? [byId.get(id)!] : []));
+    const latest = await this.currentRevisions(ordered);
     const page = {
-      items: rows.slice(0, limit).map((row) => rowHead(row, row.revisions[0])),
-      nextCursor: rows.length > limit ? rows[limit - 1]!.id : null,
+      items: ordered.slice(0, limit).map((row) => rowHead(row, latest.get(row.id))),
+      nextCursor: ordered.length > limit ? ordered[limit - 1]!.id : null,
     };
     assertMemorySafe(page, access.knownSecrets);
     return page;
@@ -300,12 +324,10 @@ export class PostgresDocumentStore extends JournalDocumentStore {
     const rows = await this.tx.memoryDocument.findMany({
       where: { AND: [authorizedDocumentWhere(access), { id }] },
       take: 1,
-      select: {
-        ...headFields,
-        revisions: { orderBy: { revision: "desc" }, take: 1, select: revisionFields },
-      },
+      select: headFields,
     });
-    const head = rows[0] ? rowHead(rows[0], rows[0].revisions[0]) : null;
+    const latest = await this.currentRevisions(rows);
+    const head = rows[0] ? rowHead(rows[0], latest.get(rows[0].id)) : null;
     assertMemorySafe(head, access.knownSecrets);
     return head;
   }
