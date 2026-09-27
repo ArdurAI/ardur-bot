@@ -8,7 +8,7 @@ import {
 } from "@ardurbot/contracts";
 import { redactTaskValue } from "@ardurbot/core";
 import type { Delegation, Prisma } from "./client.js";
-import { finishDelegation } from "./delegation.js";
+import { finishDelegation, lockDelegationRoot } from "./delegation.js";
 import { appendEventInTransaction } from "./events.js";
 
 export async function validateTaskReferences(
@@ -31,7 +31,7 @@ export async function validateTaskReferences(
   }
 }
 
-/** The caller holds the root-task lock. Events are quiet, persisted thread events. */
+/** The caller holds the coordinator-thread lock, then the root-task lock. Events are quiet. */
 export async function appendTaskEvent(
   tx: Prisma.TransactionClient,
   row: Delegation,
@@ -74,7 +74,7 @@ export async function startDelegation(
   executionKey?: string,
 ) {
   let row = await tx.delegation.findUniqueOrThrow({ where: { id } });
-  await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${row.rootTaskId} FOR UPDATE`;
+  await lockDelegationRoot(tx, row.rootTaskId);
   row = await tx.delegation.findUniqueOrThrow({ where: { id } });
   if (row.status !== "queued" && !(row.status === "running" && executionKey)) return;
   if (row.status === "queued")
@@ -109,7 +109,7 @@ export async function updateWorkerTask(
   let row = await tx.delegation.findFirstOrThrow({
     where: { id, spaceId: input.spaceId, userId: input.userId, actingBotId: input.botId },
   });
-  await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${row.rootTaskId} FOR UPDATE`;
+  await lockDelegationRoot(tx, row.rootTaskId);
   row = await tx.delegation.findUniqueOrThrow({ where: { id } });
   if (input.delegationId && (row.kind !== "helper" || row.parentRunId !== run.id))
     throw new Error("This helper does not belong to this run.");

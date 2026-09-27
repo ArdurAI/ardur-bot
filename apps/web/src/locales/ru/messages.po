@@ -333,9 +333,10 @@ msgid "Acceptance criteria"
 msgstr ""
 
 #: src/pages/DelegationLines.tsx
+#: src/pages/GroupPanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Accepted"
-msgstr ""
+msgstr "Принято"
 
 #: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
@@ -1117,8 +1118,9 @@ msgstr ""
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardColumns.tsx
 #: src/pages/dashboard/WorkPanel.tsx
+#: src/pages/GroupPanel.tsx
 msgid "Blocked"
-msgstr ""
+msgstr "Заблокировано"
 
 #. placeholder {0}: row.reason
 #: src/pages/TeamBoard.tsx
@@ -1749,8 +1751,9 @@ msgstr "Завершить"
 #: src/pages/ComparePanel.tsx
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/GroupPanel.tsx
 msgid "Completed"
-msgstr ""
+msgstr "Завершено"
 
 #: src/components/ThreadCommandBlock.tsx
 msgid "Completion not recorded"
@@ -2709,6 +2712,10 @@ msgstr ""
 msgid "Could not start dictation; check Voice settings."
 msgstr ""
 
+#: src/pages/GoalForm.tsx
+msgid "Could not start goal. Check the deadline and try again."
+msgstr "Не удалось начать цель. Проверьте срок и повторите попытку."
+
 #: src/pages/McpServersOverlay.tsx
 msgid "Could not start OAuth"
 msgstr "Не удалось запустить OAuth"
@@ -2716,6 +2723,10 @@ msgstr "Не удалось запустить OAuth"
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Could not start teaching"
 msgstr "Не удалось начать обучение"
+
+#: src/pages/GroupPanel.tsx
+msgid "Could not stop goal. Try again."
+msgstr "Не удалось остановить цель. Повторите попытку."
 
 #: src/pages/DelegationLines.tsx
 msgid "Could not stop this task; try again."
@@ -3291,6 +3302,10 @@ msgstr "Готово"
 msgid "Done — waiting for your OK"
 msgstr ""
 
+#: src/pages/GoalForm.tsx
+msgid "Done when (one per line)"
+msgstr "Критерии завершения (по одному на строку)"
+
 #. placeholder {0}: props.name
 #: src/components/ArtifactFileCard.tsx
 msgid "Download {0}"
@@ -3507,6 +3522,10 @@ msgstr ""
 #: src/pages/PluginsOverlay.tsx
 msgid "Executor token"
 msgstr "Токен Executor"
+
+#: src/pages/GroupPanel.tsx
+msgid "Exhausted"
+msgstr "Исчерпано"
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Existing documents keep their scope."
@@ -3794,6 +3813,10 @@ msgstr ""
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "GitLab host"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Goal"
+msgstr "Цель"
 
 #: src/pages/dashboard/panels.ts
 msgid "Governance"
@@ -5023,6 +5046,7 @@ msgstr ""
 msgid "Needs takeover"
 msgstr "Требуется передача управления"
 
+#: src/pages/GroupPanel.tsx
 #: src/pages/Shell.tsx
 msgid "Needs you"
 msgstr "Требуется ваше участие"
@@ -5419,6 +5443,10 @@ msgstr "Соединение OAuth не удалось"
 msgid "OAuth expired"
 msgstr "Срок действия OAuth истек"
 
+#: src/pages/GoalForm.tsx
+msgid "Objective"
+msgstr "Задача"
+
 #: src/pages/MemoryHistory.tsx
 msgid "Observations"
 msgstr ""
@@ -5717,6 +5745,7 @@ msgstr ""
 msgid "Paste your API key"
 msgstr "Вставьте свой ключ API"
 
+#: src/pages/GroupPanel.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Paused"
 msgstr "Приостановлено"
@@ -7298,6 +7327,10 @@ msgstr "Создать доску?"
 msgid "Start comparison"
 msgstr ""
 
+#: src/pages/GoalForm.tsx
+msgid "Start goal"
+msgstr "Начать цель"
+
 #: src/pages/memory/MemoryImport.tsx
 msgid "Start import"
 msgstr ""
@@ -7315,6 +7348,7 @@ msgid "Starting"
 msgstr "Запуск"
 
 #: src/components/teach/TeachComputerOverlay.tsx
+#: src/pages/GoalForm.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Starting…"
@@ -7334,6 +7368,7 @@ msgid "Steps"
 msgstr "Шаги"
 
 #: src/pages/DelegationLines.tsx
+#: src/pages/GroupPanel.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/TeamBoard.tsx
@@ -7354,8 +7389,9 @@ msgstr ""
 
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
+#: src/pages/GroupPanel.tsx
 msgid "Stopped"
-msgstr ""
+msgstr "Остановлено"
 
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/DelegationLines.tsx
@@ -7824,13 +7860,18 @@ msgstr ""
 msgid "Token"
 msgstr "Токен"
 
+#: src/pages/GoalForm.tsx
+msgid "Token limit"
+msgstr "Лимит токенов"
+
 #: src/pages/CompareStart.tsx
 msgid "Token reservation"
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
 #: src/pages/LearningCurator.tsx
 msgid "tokens"
-msgstr ""
+msgstr "токенов"
 
 #: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx
@@ -7970,6 +8011,10 @@ msgstr "Неподдерживаемый тип файла: {0}."
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Unsupported: no verified NetworkPolicy controller."
 msgstr ""
+
+#: src/pages/GoalForm.tsx
+msgid "Until (defaults to eight hours)"
+msgstr "До (по умолчанию восемь часов)"
 
 #: src/pages/Shell.tsx
 msgid "Up to 4 files, 10 MB each"
@@ -8283,9 +8328,10 @@ msgid "Work items"
 msgstr "Рабочие задачи"
 
 #: src/pages/dashboard/NowPanel.tsx
+#: src/pages/GroupPanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Working"
-msgstr ""
+msgstr "В работе"
 
 #: src/pages/GitMemorySettings.tsx
 msgid "Working from the last copy"

@@ -2,6 +2,15 @@ import type { AgentRuntimeEvent } from "@ardurbot/adapter-kit";
 import { describe, expect, it } from "vitest";
 import { inferScript, ScriptedAgentRuntime } from "./scripted-runtime.js";
 
+it("uses a delegated card's goal rather than its envelope metadata for scripted intent", () => {
+  const prompt = `This is a delegated task. <task_card>${JSON.stringify({
+    goal: "Review the repository",
+    approvalBoundaries: { connectors: [] },
+  })}</task_card>`;
+  expect(inferScript(prompt)).toEqual(inferScript("Review the repository"));
+  expect(inferScript(prompt).flatMap((turn) => turn.toolCalls ?? [])).toEqual([]);
+});
+
 describe("inferScript message_bot", () => {
   const messageBotScript = (confirmName: string, message: string) => [
     {

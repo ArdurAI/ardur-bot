@@ -219,4 +219,21 @@ describe("comparison orchestration through P2 admission", () => {
       (await mergeComparison(f.deps, comparisonScope, { ...input, reserveBudget: true })).merge,
     ).not.toBeNull();
   });
+  it("locks the coordinator thread before the root task when merging", async () => {
+    const f = comparisonFixture();
+    const comparison = await startComparison(f.deps, comparisonScope, comparisonInput);
+    await f.complete(comparison.results[0]!.runId, "Selected");
+    f.tx.$queryRaw.mockClear();
+    await mergeComparison(f.deps, comparisonScope, {
+      id: comparison.id,
+      selectedRunIds: [comparison.results[0]!.runId],
+      botId: "coordinator",
+      reserveBudget: false,
+    });
+    const locks = (f.tx.$queryRaw.mock.calls as unknown as Array<[TemplateStringsArray]>).map(
+      ([sql]) => sql.join(""),
+    );
+    expect(locks[0]).toContain("FROM threads");
+    expect(locks[1]).toContain("FROM tasks");
+  });
 });

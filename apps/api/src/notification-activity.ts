@@ -12,7 +12,6 @@ export async function notificationActivity(prisma: PrismaClient, actor: Actor) {
         space: { memberships: { some: { userId: actor.userId } } },
         status: { in: ["completed", "failed", "waiting_input", "waiting_takeover"] },
         delegationId: null,
-        delegationRootTaskId: null,
         bot: { archivedAt: null },
       },
       select: {

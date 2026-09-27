@@ -65,7 +65,8 @@ const PURCHASE_CONNECTOR_SLUGS = new Set(["stripe", "shopify", "paypal", "square
 export type ActionApprovalRule = Pick<
   StoredActionApprovalRule,
   "effect" | "matchKind" | "matchValue" | "botId"
->;
+> &
+  Partial<Pick<StoredActionApprovalRule, "scopeKey">>;
 
 export function connectorKindFromToolName(toolName: string, connectorKinds: string[] = []): string {
   const normalizedTool = toolName.toLowerCase();
@@ -162,6 +163,7 @@ export type ActionApprovalResolved = {
 export function resolveActionApprovalDetail(input: {
   toolName: string;
   botId?: string;
+  goalId?: string | null;
   connectorKind?: string;
   rules: ActionApprovalRule[];
   integrationApproval?: "ask-first" | "allow";
@@ -171,6 +173,12 @@ export function resolveActionApprovalDetail(input: {
   const connectorKind = input.connectorKind ?? connectorKindFromToolName(input.toolName);
   const matchingRules = input.rules.filter(
     (rule) =>
+      (!rule.scopeKey ||
+        rule.scopeKey === "all" ||
+        (input.botId !== undefined && rule.scopeKey === `bot:${input.botId}`) ||
+        (input.goalId !== undefined &&
+          input.goalId !== null &&
+          rule.scopeKey === `goal:${input.goalId}`)) &&
       (!rule.botId || rule.botId === input.botId) &&
       ruleMatches(rule, input.toolName, connectorKind),
   );
@@ -193,6 +201,7 @@ export function resolveActionApprovalDetail(input: {
 export function resolveActionApproval(input: {
   toolName: string;
   botId?: string;
+  goalId?: string | null;
   connectorKind?: string;
   rules: ActionApprovalRule[];
 }): "ask" | "allow" {

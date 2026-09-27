@@ -503,6 +503,7 @@ model ChatGroup {
   members    ChatGroupMember[]
   thread     Thread?
   artifacts  Artifact[]
+  goals      TeamGoal[]
 
   @@index([spaceId, userId, archivedAt, pinned, updatedAt])
   @@index([sectionId])
@@ -620,6 +621,7 @@ model Task {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   runs      Run[]
+  goal      TeamGoal?
 
   @@index([spaceId, botId])
   @@map("tasks")
@@ -641,6 +643,8 @@ model Run {
   comparisonId String?
   delegationId String? @unique
   delegationRootTaskId String?
+  goalId String?
+  goal TeamGoal? @relation(fields: [goalId], references: [id], onDelete: SetNull)
   originDeviceGrantId String?
   remoteDeviceGrantIds String[] @default([])
   remoteRootTaskId String?
@@ -668,6 +672,7 @@ model Run {
   error                String?
   leaseOwner           String?
   leaseFence           Int              @default(0)
+  screenLeaseId        String?
   leaseExpiresAt       DateTime?
   checkpoint           String?
   clientNonce          String?
@@ -701,6 +706,7 @@ model Run {
   @@index([originDeviceGrantId, status])
   @@index([remoteRootTaskId, status])
   @@index([delegationRootTaskId, status])
+  @@index([goalId, status])
   @@index([sourceMessageId])
   @@index([threadId, status, createdAt])
   @@index([routineId])
@@ -2043,6 +2049,35 @@ model DelegationRoot {
   createdAt DateTime @default(now())
   @@map("delegation_roots")
 }
+model TeamGoal {
+  id String @id @default(cuid())
+  spaceId String
+  userId String
+  groupId String
+  group ChatGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  threadId String
+  coordinatorBotId String
+  rootTaskId String @unique
+  rootTask Task @relation(fields: [rootTaskId], references: [id], onDelete: Cascade)
+  objective String
+  doneWhen String[] @default([])
+  status String @default("running")
+  tokenLimit Int
+  perWorkerTokens Int
+  maxConcurrent Int
+  maxDescendants Int
+  maxDepth Int @default(1)
+  maxHops Int @default(6)
+  untilAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  stoppedAt DateTime?
+  runs Run[]
+
+  @@index([spaceId, userId, groupId, status])
+  @@index([threadId, status])
+  @@map("team_goals")
+}
 model Delegation {
   comparisonId String?
   card Json?
@@ -2075,6 +2110,7 @@ model Delegation {
   workspaceKind String?
   createdAt DateTime @default(now())
   completedAt DateTime?
+  coordinatorWokenAt DateTime?
   acceptedAt DateTime?
   cancelRequestedAt DateTime?
   cancelConfirmedAt DateTime?

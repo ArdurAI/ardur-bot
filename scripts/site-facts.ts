@@ -2,6 +2,12 @@ import { execFileSync } from "node:child_process";
 import { readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  GITHUB_MATCHING_ROUTINES_LIMIT,
+  ROUTINE_HISTORY_LIMIT,
+  WEBHOOK_MATCHING_ROUTINES_LIMIT,
+  WEBHOOK_MAX_BODY_BYTES,
+} from "../apps/api/src/limits.ts";
 import { listPiCatalog } from "../packages/adapters/src/pi-models.ts";
 import {
   MIN_ONE_SHOT_LEAD_SECONDS,
@@ -152,6 +158,26 @@ export function routinesFromCode(): NonNullable<SiteProduct["routines"]> {
         id: "one-shot-future",
         text: "One-shot runs must be scheduled in the future.",
         value: MIN_ONE_SHOT_LEAD_SECONDS,
+      },
+      {
+        id: "run-history",
+        text: `Run history lists up to ${ROUTINE_HISTORY_LIMIT} of a routine's latest runs.`,
+        value: ROUTINE_HISTORY_LIMIT,
+      },
+      {
+        id: "webhook-body-bytes",
+        text: `Webhook and GitHub event bodies are limited to ${WEBHOOK_MAX_BODY_BYTES / 1024} KB.`,
+        value: WEBHOOK_MAX_BODY_BYTES,
+      },
+      {
+        id: "github-matching-routines",
+        text: `A GitHub event includes up to ${GITHUB_MATCHING_ROUTINES_LIMIT} of the most recently updated active routines that match it.`,
+        value: GITHUB_MATCHING_ROUTINES_LIMIT,
+      },
+      {
+        id: "webhook-matching-routines",
+        text: `A webhook request includes up to ${WEBHOOK_MATCHING_ROUTINES_LIMIT} of the most recently updated active routines that match it.`,
+        value: WEBHOOK_MATCHING_ROUTINES_LIMIT,
       },
     ],
   };

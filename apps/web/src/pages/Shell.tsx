@@ -8,6 +8,7 @@ import type {
   ComputerStatus,
   Connection,
   ConnectionCatalogItem,
+  Goal,
   Group,
   InsightAction,
   Me,
@@ -213,7 +214,7 @@ import { useSettingsShortcut } from "../lib/use-settings-shortcut";
 import type { ContextMenuPosition } from "./BotContextMenu";
 import { ConnectorSuggestion } from "./capabilities/ConnectorSuggestion";
 import { DashboardPage } from "./dashboard/DashboardPage";
-import { CreateGroupForm, GroupSettings, memberName } from "./GroupPanel";
+import { CreateGroupForm, GroupGoalStrip, GroupSettings, memberName } from "./GroupPanel";
 import { HostComputerPrompt } from "./HostComputerPrompt";
 import type { RoutineDraftState } from "./RoutineEditor";
 import {
@@ -358,6 +359,7 @@ export function ShellPage({
   const session = authClient.useSession();
   const userId = session.data?.user.id;
   const [groups, setGroups] = useState<Group[]>([]);
+  const [goal, setGoal] = useState<Goal | null>(null);
   const [bots, setBots] = useState<Bot[]>([]);
   const botsRef = useRef(bots);
   botsRef.current = bots;
@@ -702,6 +704,25 @@ export function ShellPage({
   computerOpenRef.current = computerOpen;
   computerBotIdRef.current = computerBotId ?? active?.id;
   const activeGroup = groups.find((group) => group.id === groupId);
+  useEffect(() => {
+    setGoal(null);
+    if (!groupId || !bootstrapMe?.isDeploymentOwner) return;
+    let live = true;
+    const refresh = () => {
+      void rpc.goals
+        .get({ groupId })
+        .then((value) => {
+          if (live) setGoal(value);
+        })
+        .catch(() => undefined);
+    };
+    refresh();
+    const timer = window.setInterval(refresh, 15_000);
+    return () => {
+      live = false;
+      window.clearInterval(timer);
+    };
+  }, [groupId, bootstrapMe?.isDeploymentOwner]);
   const activePendingAttachments = useMemo(
     () => attachmentsForThread(pendingAttachments, inGroup ? groupId : active?.id),
     [active?.id, groupId, inGroup, pendingAttachments],
@@ -3341,6 +3362,14 @@ export function ShellPage({
             ) : null}
           </div>
         </div>
+        {inGroup && goal && goal.groupId === groupId ? (
+          <GroupGoalStrip
+            goal={goal}
+            onStop={async () => {
+              setGoal(await rpc.goals.stop({ goalId: goal.id }));
+            }}
+          />
+        ) : null}
         {bootstrapMe?.isDeploymentOwner
           ? currentRuns.map((run) =>
               run.status === "waiting_input" && run.placement?.status === "pending" ? (
@@ -3639,6 +3668,11 @@ export function ShellPage({
                 key={activeGroup.id}
                 group={activeGroup}
                 bots={bots}
+                goal={goal?.groupId === activeGroup.id ? goal : null}
+                canManageGoal={Boolean(bootstrapMe?.isDeploymentOwner)}
+                onStartGoal={async (input) => {
+                  setGoal(await rpc.goals.start(input));
+                }}
                 onSave={async (input) => {
                   const updated = await rpc.groups.update({ groupId: activeGroup.id, ...input });
                   setGroups((current) =>

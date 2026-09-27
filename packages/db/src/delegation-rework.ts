@@ -2,7 +2,7 @@ import type { Actor } from "@ardurbot/contracts";
 import { DELEGATION_LIMITS, delegationProblem, TaskCardSchema } from "@ardurbot/contracts";
 import { redactTaskValue, taskCardPrompt } from "@ardurbot/core";
 import type { Prisma } from "./client.js";
-import { DelegationAdmissionError } from "./delegation.js";
+import { DelegationAdmissionError, lockDelegationRoot } from "./delegation.js";
 import { inheritedRemoteOrigin } from "./dispatch.js";
 import { appendTaskEvent } from "./task-cards.js";
 
@@ -18,7 +18,7 @@ export async function rejectDelegation(
   if (!reason || reason.length > 2000)
     throw new Error("Give a rejection reason of at most 2,000 characters.");
   let row = await tx.delegation.findFirstOrThrow({ where: { id, ...scope } });
-  await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${row.rootTaskId} FOR UPDATE`;
+  await lockDelegationRoot(tx, row.rootTaskId);
   row = await tx.delegation.findUniqueOrThrow({ where: { id } });
   const root = await tx.delegationRoot.findFirstOrThrow({
     where: { rootTaskId: row.rootTaskId, coordinatorBotId, ...scope },

@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
 import type { AgentUsage, RequestUsageObservation } from "@ardurbot/adapter-kit";
 import { RequestUsageCollector, usageEvent } from "@ardurbot/adapter-kit";
-import type { ContextSnapshot } from "@ardurbot/contracts";
+import { type ContextSnapshot, TaskCardSchema } from "@ardurbot/contracts";
 import type { Prisma, PrismaClient } from "@ardurbot/db";
-import { createDb } from "@ardurbot/db";
+import { createDb, updateWorkerTask } from "@ardurbot/db";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { aggregateContext, recordContextUsage, resumeContextSnapshot } from "./context/metrics.js";
 import { loadLearningRecords } from "./learning-records.js";
@@ -11,7 +11,9 @@ import type { RecordedContextUsage } from "./run-usage.js";
 import { recordRunUsage } from "./run-usage.js";
 import { accountRuntimeUsage } from "./runtime-usage.js";
 
-const databaseUrl = process.env.USAGE_LEDGER_TEST_DATABASE_URL;
+const databaseUrl =
+  process.env.USAGE_LEDGER_TEST_DATABASE_URL ??
+  (process.env.VERIFY_DATABASE === "1" ? process.env.DATABASE_URL : undefined);
 const postgres = databaseUrl ? describe.sequential : describe.skip;
 postgres("request ledger on disposable PostgreSQL", () => {
   let db: ReturnType<typeof createDb>;
@@ -21,9 +23,10 @@ postgres("request ledger on disposable PostgreSQL", () => {
     const url = new URL(databaseUrl!);
     if (
       !["127.0.0.1", "localhost"].includes(url.hostname) ||
-      !url.pathname.startsWith("/usage_ledger_test")
+      (!url.pathname.startsWith("/usage_ledger_test") &&
+        !(process.env.VERIFY_DATABASE === "1" && url.pathname.startsWith("/integration_")))
     )
-      throw new Error("Usage tests require a disposable local usage_ledger_test database");
+      throw new Error("Usage tests require a disposable local integration database");
     db = createDb(databaseUrl!);
     peer = createDb(databaseUrl!);
   });
@@ -164,6 +167,140 @@ postgres("request ledger on disposable PostgreSQL", () => {
     expect(rows[0]!.observations[0]!.observation).toEqual(f.request);
     expect(await db.prisma.event.count({ where: { runId: f.id, type: "usage.recorded" } })).toBe(1);
   });
+  it("serializes request usage with worker progress on the coordinator thread", async () => {
+    const f = await fixture();
+    const snapshot = {
+      pin: f.pin,
+      computer: { id: null, mode: "dedicated", kind: "fake" },
+      destination: { host: null, local: true },
+    } as const;
+    const authority = { scopes: [], connectors: [] };
+    const delegation = await db.prisma.delegation.create({
+      data: {
+        rootTaskId: f.id,
+        parentRunId: f.run.id,
+        runId: f.run.id,
+        spaceId: f.id,
+        userId: f.run.userId,
+        requesterBotId: f.run.botId,
+        actingBotId: f.run.botId,
+        requesterName: "Fixture",
+        actingName: "Fixture",
+        kind: "helper",
+        depth: 1,
+        hop: 1,
+        status: "running",
+        snapshot,
+        authority,
+        ancestorBotIds: [],
+        reservedTokens: 0,
+        deadlineAt: new Date("2030-01-01"),
+        admissionKey: f.id,
+        fingerprint: "fixture",
+        card: TaskCardSchema.parse({
+          goal: "Report progress",
+          requesterBotId: f.run.botId,
+          workerBotId: f.run.botId,
+          approvalBoundaries: authority,
+          snapshot,
+          budget: { tokens: 1000, deadlineAt: "2030-01-01T00:00:00.000Z" },
+          artifacts: [],
+          timeline: [],
+        }),
+      },
+    });
+    await db.prisma.run.update({ where: { id: f.run.id }, data: { delegationId: delegation.id } });
+
+    for (let index = 0; index < 12; index += 1) {
+      let firstLock!: () => void;
+      let resumeUsage!: () => void;
+      let progressThread!: () => void;
+      const usageLocked = new Promise<void>((resolve) => {
+        firstLock = resolve;
+      });
+      const usageResume = new Promise<void>((resolve) => {
+        resumeUsage = resolve;
+      });
+      const progressLocked = new Promise<void>((resolve) => {
+        progressThread = resolve;
+      });
+      let attempts = 0;
+      const usageClient = new Proxy(peer.prisma, {
+        get(target, property, receiver) {
+          if (property !== "$transaction") return Reflect.get(target, property, receiver);
+          return (
+            callback: (tx: Prisma.TransactionClient) => Promise<unknown>,
+            options: unknown,
+          ) => {
+            attempts += 1;
+            return peer.prisma.$transaction(
+              (tx) =>
+                callback(
+                  new Proxy(tx, {
+                    get(inner, key, innerReceiver) {
+                      if (key !== "$queryRaw") return Reflect.get(inner, key, innerReceiver);
+                      return async (...args: Parameters<typeof tx.$queryRaw>) => {
+                        const result = await tx.$queryRaw(...args);
+                        const sql = Array.isArray(args[0])
+                          ? args[0].join("")
+                          : (args[0] as { sql: string }).sql;
+                        if (attempts === 1 && sql.includes("FOR UPDATE")) {
+                          firstLock();
+                          await usageResume;
+                        }
+                        return result;
+                      };
+                    },
+                  }),
+                ),
+              options as never,
+            );
+          };
+        },
+      }) as PrismaClient;
+      const usage = f.record(f.usage({ requestId: `race-${index}` }), usageClient);
+      void usage.catch(() => undefined);
+      await usageLocked;
+      const progress = db.prisma.$transaction(async (tx) =>
+        updateWorkerTask(
+          new Proxy(tx, {
+            get(target, property, receiver) {
+              if (property !== "$queryRaw") return Reflect.get(target, property, receiver);
+              return async (...args: Parameters<typeof tx.$queryRaw>) => {
+                const result = await tx.$queryRaw(...args);
+                const sql = Array.isArray(args[0])
+                  ? args[0].join("")
+                  : (args[0] as { sql: string }).sql;
+                if (sql.includes("FROM threads")) progressThread();
+                return result;
+              };
+            },
+          }),
+          {
+            runId: f.run.id,
+            spaceId: f.id,
+            userId: f.run.userId,
+            botId: f.run.botId,
+            executionId: `progress-${index}`,
+            tool: "report_progress",
+            args: { state: "progress", text: `Progress ${index}` },
+          },
+        ),
+      );
+      void progress.catch(() => undefined);
+      await Promise.race([
+        progressLocked,
+        new Promise<void>((resolve) => setTimeout(resolve, 100)),
+      ]);
+      resumeUsage();
+      const outcomes = await Promise.allSettled([usage, progress]);
+      if (outcomes[0]?.status === "rejected") throw outcomes[0].reason;
+      if (outcomes[1]?.status === "rejected") throw outcomes[1].reason;
+      expect(outcomes.map((outcome) => outcome.status)).toEqual(["fulfilled", "fulfilled"]);
+      expect(attempts).toBe(1);
+    }
+    expect(await f.root()).toMatchObject({ usedTokens: 12 * 150 });
+  }, 120_000);
   it("persists runtime lifecycle receipts, raw categories and cancelled spend exactly once", async () => {
     const f = await fixture();
     const collector = new RequestUsageCollector({

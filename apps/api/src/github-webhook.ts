@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { Hono } from "hono";
 import { readBoundedBody } from "./http-body.js";
+import { GITHUB_MATCHING_ROUTINES_LIMIT } from "./limits.js";
 import {
   deliverWebhookEvent,
   loadWebhookTarget,
@@ -191,7 +192,7 @@ export function mountGithubWebhookRoute(app: Hono, deps: WebhookDeps) {
       },
       select: { id: true, name: true, prompt: true },
       orderBy: { updatedAt: "desc" },
-      take: 5,
+      take: GITHUB_MATCHING_ROUTINES_LIMIT,
     });
     if (githubRoutines.length === 0) {
       return c.json({ ok: true, ignored: true });

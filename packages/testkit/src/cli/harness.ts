@@ -117,6 +117,7 @@ async function main() {
         "packages/adapters/src/memory/scoped-reads-wrapper.postgres.test.ts",
         "packages/adapters/src/wakeup.postgres.test.ts",
         "packages/adapters/src/realtime.postgres.test.ts",
+        "packages/adapters/src/run-usage.postgres.test.ts",
         "packages/adapters/src/job-reconciler.postgres.test.ts",
         "packages/adapters/src/cloud-agent.postgres.test.ts",
       ];

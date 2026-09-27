@@ -66,3 +66,32 @@ it("never emits a second push for a delegated subrun", async () => {
   expect(send).not.toHaveBeenCalled();
   expect(findPreferences).not.toHaveBeenCalled();
 });
+
+it("notifies a coordinator run that only carries a goal root", async () => {
+  const send = vi.fn();
+  const deps = {
+    prisma: {
+      run: {
+        findUnique: vi.fn(async () => ({
+          delegationId: null,
+          delegationRootTaskId: "goal-root",
+          trigger: "user",
+          bot: { notifyOnFinish: true },
+          thread: { groupId: "group" },
+        })),
+        findFirst: vi.fn(async () => ({
+          bot: { notifyOnFinish: true },
+          thread: { groupId: "group" },
+        })),
+      },
+      userPreferences: { findUnique: vi.fn(async () => DEFAULT_USER_PREFERENCES) },
+    },
+    notifications: { send },
+  } as unknown as ExecutorDeps;
+  await notifyRun(
+    deps,
+    { id: "run", spaceId: "space", userId: "user", botId: "bot", threadId: "thread" },
+    { kind: "completion", title: "Finished", body: "", botId: "bot", threadId: "thread" },
+  );
+  expect(send).toHaveBeenCalledOnce();
+});

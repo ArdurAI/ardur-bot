@@ -549,6 +549,37 @@ describe("hardening", () => {
 });
 
 describe("automatic outcome return", () => {
+  it("returns a coordinator outcome when its run carries only the goal root", async () => {
+    const harness = deps({
+      hopBlocks: [
+        {
+          kind: "bot_message_received",
+          fromBotId: "bot-target",
+          fromBotName: "Peer",
+          text: "research this",
+          hop: 1,
+          intent: "request",
+          returnToMessageId: "message-request",
+        },
+      ],
+    });
+    vi.mocked(harness.deps.prisma.run.findUnique).mockResolvedValue({
+      delegationId: null,
+      delegationRootTaskId: "goal-root",
+    } as never);
+    expect(
+      await returnBotMessageOutcome(
+        harness.deps,
+        { ...run, sourceMessageId: "message-source" },
+        sender,
+        "The answer is 42.",
+      ),
+    ).toBe(true);
+    expect(harness.tx.run.create).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ trigger: "bot_message" }) }),
+    );
+  });
+
   it("routes a delegated run's final text back to its coordinator", async () => {
     const harness = deps({
       hopBlocks: [

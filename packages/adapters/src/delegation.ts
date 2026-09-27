@@ -25,6 +25,8 @@ export async function prepareDelegation(
     prompt: string;
     newChild?: boolean;
     card?: unknown;
+    tokens?: number;
+    deadlineAt?: Date;
   },
   resolve?: DelegationResolver,
 ) {
@@ -94,6 +96,7 @@ export async function prepareDelegation(
       comparisonId: record.comparisonId,
       delegationId: record.id,
       delegationRootTaskId: record.rootTaskId,
+      goalId: parent.goalId,
       runtimePin: admittedSnapshot.pin,
       runtimeDestination: admittedSnapshot.destination,
       runtimeComputer: admittedSnapshot.computer,
