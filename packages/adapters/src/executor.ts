@@ -1756,6 +1756,27 @@ export function createRunExecutor(deps: ExecutorDeps) {
           connectedProviders: connectedComposio.map((row) => row.provider),
         };
         const skillOwner = { ...context, attempt: fence };
+        let screenLeaseRecorded = false;
+        const runScreenToolResult = async (
+          work: () => Promise<unknown>,
+          finish?: (result: unknown) => Promise<unknown>,
+        ) => {
+          if (!screenLeaseRecorded) {
+            const marked = await deps.prisma.run.updateMany({
+              where: {
+                id: runId,
+                status: "running",
+                leaseOwner: workerId,
+                leaseFence: fence,
+                cancelRequestedAt: null,
+              },
+              data: { screenLeaseId: context.screenLeaseId },
+            });
+            if (marked.count !== 1) throw new DispatchStopRequested();
+            screenLeaseRecorded = true;
+          }
+          return computerScreenToolResult(work, finish);
+        };
         if (!comparisonRun) await deps.memoryDocuments?.startSession?.(context);
         const memoryScope = configuredMemory
           ? effectiveMemoryScope(bot.memoryScope, configuredMemory.defaultScope)
@@ -3044,7 +3065,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             if (await getActiveTeachingSession(deps.prisma, run.spaceId, run.botId)) {
               return { error: "Teaching is in progress. Stop teaching before using the computer." };
             }
-            return computerScreenToolResult(async () =>
+            return runScreenToolResult(async () =>
               formatObservation(await deps.sandbox.observe(computer, context)),
             );
           }
@@ -3056,7 +3077,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               return { error: "Teaching is in progress. Stop teaching before using the computer." };
             }
             workspaceCheckpoint.markDirty();
-            return computerScreenToolResult(async () => {
+            return runScreenToolResult(async () => {
               const result = await deps.sandbox.act(
                 computer,
                 {
@@ -3346,7 +3367,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             }
             const requestedPath = String(args.path ?? "");
             workspaceCheckpoint.markDirty();
-            return computerScreenToolResult(async () => {
+            return runScreenToolResult(async () => {
               const result = await deps.sandbox.act(
                 computer,
                 {
@@ -3374,7 +3395,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             }
             const application = String(args.application ?? "");
             workspaceCheckpoint.markDirty();
-            return computerScreenToolResult(async () => {
+            return runScreenToolResult(async () => {
               const result = await deps.sandbox.act(
                 computer,
                 {
@@ -3436,7 +3457,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 : name === "browser_snapshot"
                   ? browserSnapshotFromTool
                   : browserActFromTool;
-            return computerScreenToolResult(() => tool(browser, computer, context, args), finish);
+            return runScreenToolResult(() => tool(browser, computer, context, args), finish);
           }
 
           if (name.startsWith("cloud_agent_")) {

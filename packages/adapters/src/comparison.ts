@@ -21,6 +21,7 @@ import type { Prisma, PrismaClient } from "@ardurbot/db";
 import {
   comparisonMergeInput,
   deviceDigest,
+  lockDelegationRoot,
   readComparison,
   withTransactionRetry,
 } from "@ardurbot/db";
@@ -332,7 +333,7 @@ export async function mergeComparison(deps: ComparisonDeps, scope: Scope, raw: C
   const runIds = await withTransactionRetry(() =>
     deps.prisma.$transaction(async (tx) => {
       const row = await tx.comparison.findFirstOrThrow({ where: { id: input.id, ...scope } });
-      await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${row.rootTaskId} FOR UPDATE`;
+      await lockDelegationRoot(tx, row.rootTaskId);
       const comparison = await readComparison(tx, scope, row.id);
       if (comparison.merge) {
         if (

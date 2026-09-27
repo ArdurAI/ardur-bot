@@ -45,12 +45,8 @@ type Scope = Pick<Actor, "spaceId" | "userId">;
 export async function lockDelegationRootForRun(tx: Prisma.TransactionClient, runId: string) {
   const run = await tx.run.findUniqueOrThrow({ where: { id: runId } });
   const rootTaskId = run.delegationRootTaskId ?? run.taskId;
-  const root = await tx.delegationRoot.findUnique({
-    where: { rootTaskId },
-    select: { coordinatorThreadId: true },
-  });
   // The first admission creates its root after locking; its parent run supplies the thread.
-  await lockThreadThenRootTask(tx, root?.coordinatorThreadId ?? run.threadId, rootTaskId);
+  await lockDelegationRootTask(tx, rootTaskId, run.threadId);
   return { run: await tx.run.findUniqueOrThrow({ where: { id: runId } }), rootTaskId };
 }
 
@@ -61,6 +57,19 @@ export async function lockDelegationRoot(tx: Prisma.TransactionClient, rootTaskI
     select: { coordinatorThreadId: true },
   });
   await lockThreadThenRootTask(tx, root.coordinatorThreadId, rootTaskId);
+}
+
+/** Also covers first-turn usage before a delegation root has been created. */
+export async function lockDelegationRootTask(
+  tx: Prisma.TransactionClient,
+  rootTaskId: string,
+  fallbackThreadId: string,
+) {
+  const root = await tx.delegationRoot.findUnique({
+    where: { rootTaskId },
+    select: { coordinatorThreadId: true },
+  });
+  await lockThreadThenRootTask(tx, root?.coordinatorThreadId ?? fallbackThreadId, rootTaskId);
 }
 
 async function lockThreadThenRootTask(

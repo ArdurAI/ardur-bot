@@ -2159,7 +2159,12 @@ describeJourneys("required product journeys", () => {
   });
 
   it("a spent goal cancels a waiting coordinator and releases new room messages", async () => {
-    const owner = ownerCookie;
+    const owner = await signup(app, `budget-j-${stamp}@ardurbot.test`, "Budget owner");
+    const ownerMe = await rpc<Me>(app, owner, "me");
+    await prisma.deploymentSettings.update({
+      where: { id: "default" },
+      data: { ownerUserId: ownerMe.userId },
+    });
     const coordinator = await rpc<Bot>(app, owner, "bots/create", {
       name: "Budget Lead",
       title: "Lead",
@@ -2195,6 +2200,37 @@ describeJourneys("required product journeys", () => {
         (await prisma.run.findUnique({ where: { id: first.id }, select: { status: true } }))
           ?.status === "waiting_input",
     );
+    // Model A's recorded screen ownership before B takes over the bot-scoped screen.
+    const oldScreenLeaseId = `${first.id}:1`;
+    await prisma.run.update({
+      where: { id: first.id },
+      data: { screenLeaseId: oldScreenLeaseId },
+    });
+    const computer = (
+      await prisma.bot.findUniqueOrThrow({
+        where: { id: coordinator.id },
+        include: { computer: true },
+      })
+    ).computer!;
+    const computerRef = toComputerRef(computer);
+    const screen = (await owningSandbox(sandbox, computer, {
+      operationId: first.id,
+      traceId: first.id,
+      spaceId: first.spaceId,
+      userId: first.userId,
+      botId: coordinator.id,
+      screenLeaseId: oldScreenLeaseId,
+      signal: new AbortController().signal,
+    })) as FakeSandboxProvider;
+    await screen.observe(computerRef, {
+      operationId: first.id,
+      traceId: first.id,
+      spaceId: first.spaceId,
+      userId: first.userId,
+      botId: coordinator.id,
+      screenLeaseId: oldScreenLeaseId,
+      signal: new AbortController().signal,
+    });
     await prisma.delegationRoot.update({
       where: { rootTaskId: goal.rootTaskId },
       data: { usedTokens: goal.tokenLimit },
@@ -2205,11 +2241,63 @@ describeJourneys("required product journeys", () => {
       (await prisma.delegationRoot.findUniqueOrThrow({ where: { rootTaskId: goal.rootTaskId } }))
         .cancelRequestedAt,
     ).not.toBeNull();
+    expect((await prisma.run.findUniqueOrThrow({ where: { id: first.id } })).status).toBe(
+      "waiting_input",
+    );
+    let resumeOrdinary!: () => void;
+    let ordinaryStarted!: () => void;
+    const ordinaryGate = new Promise<void>((resolve) => {
+      resumeOrdinary = resolve;
+    });
+    const ordinaryReady = new Promise<void>((resolve) => {
+      ordinaryStarted = resolve;
+    });
+    const originalRun = ScriptedAgentRuntime.prototype.run;
+    const runtimeSpy = vi
+      .spyOn(ScriptedAgentRuntime.prototype, "run")
+      .mockImplementation((request, context) =>
+        (async function* () {
+          ordinaryStarted();
+          await ordinaryGate;
+          yield* originalRun.call(new ScriptedAgentRuntime(), request, context);
+        })(),
+      );
+    onTestFinished(() => {
+      resumeOrdinary();
+      runtimeSpy.mockRestore();
+    });
     const { runId } = await rpc<{ runId: string }>(app, owner, "threads/send", {
       groupId: group.id,
       text: "Say hello to the room",
     });
     expect(runId).not.toBe(first.id);
+    await ordinaryReady;
+    const newerScreenLeaseId = `${runId}:2`;
+    await screen.observe(computerRef, {
+      operationId: runId,
+      traceId: runId,
+      spaceId: first.spaceId,
+      userId: first.userId,
+      botId: coordinator.id,
+      screenLeaseId: newerScreenLeaseId,
+      signal: new AbortController().signal,
+    });
+    const release = vi.spyOn(screen, "releaseScreen");
+    try {
+      expect((await prisma.run.findUniqueOrThrow({ where: { id: runId } })).status).toBe("running");
+      await executor.continueRun(first.id, "goal-stop-fixture");
+      expect(release).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ screenLeaseId: oldScreenLeaseId }),
+      );
+      expect(screen.boxes.get(computerRef.id)?.screenLeases.get(coordinator.id)).toBe(
+        newerScreenLeaseId,
+      );
+    } finally {
+      release.mockRestore();
+      resumeOrdinary();
+      runtimeSpy.mockRestore();
+    }
     await waitForDatabase(
       async () =>
         (await prisma.run.findUnique({ where: { id: runId }, select: { status: true } }))
@@ -2219,7 +2307,6 @@ describeJourneys("required product journeys", () => {
     expect(ordinary.goalId).toBeNull();
     expect(ordinary.delegationRootTaskId).toBeNull();
     await reconciler.reconcileOnce();
-    await executor.continueRun(first.id, "goal-stop-fixture");
     expect(
       await prisma.run.findUnique({
         where: { id: first.id },

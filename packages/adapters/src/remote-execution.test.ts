@@ -224,6 +224,7 @@ it("requires positive cleanup evidence before confirming a stop", async () => {
     traceId: "stop",
     spaceId: "space",
     userId: "owner",
+    screenLeaseId: "run:1",
     signal: new AbortController().signal,
   };
   expect(

@@ -672,6 +672,7 @@ model Run {
   error                String?
   leaseOwner           String?
   leaseFence           Int              @default(0)
+  screenLeaseId        String?
   leaseExpiresAt       DateTime?
   checkpoint           String?
   clientNonce          String?
