@@ -29,22 +29,14 @@ describe("containsSecret", () => {
     expect(containsSecret({ value: "literal\\ntext" }, ["\n"])).toBe(false);
   });
 
-  it("ignores short values, bounds medium values, and redacts long values inside prose", () => {
-    const long = "Q7v4N2x9R5p1K8m3T6z0B4c7D9f2H5j8";
-    const source = `~/repos/ repo reports projects code plain project9 ${long} end`;
-    expect(redactSecrets(source, ["repo", "code", "reports", "project9", long])).toBe(
-      "~/repos/ repo reports projects code plain [redacted] [redacted] end",
-    );
-    expect(containsSecret({ content: "project9 project9suffix" }, ["project9"])).toBe(true);
-    expect(containsSecret({ content: "project9suffix" }, ["project9"])).toBe(false);
-    expect(containsSecret({ content: "code and repo" }, ["code", "repo"])).toBe(false);
-    expect(containsSecret({ content: source }, [long])).toBe(true);
+  it("redacts every registered value, including short values inside prose", () => {
+    expect(redactSecrets("prefix ab12cdsuffix", ["ab12cd"])).toBe("prefix [redacted]suffix");
+    expect(containsSecret({ content: "prefix ab12cdsuffix" }, ["ab12cd"])).toBe(true);
+    expect(redactSecrets("plain", [])).toBe("plain");
   });
 
-  it("uses the same threshold for review text that spans stream chunks", () => {
-    expect(
-      redactLearningText("repo code project9suffix project9", ["repo", "code", "project9"]),
-    ).toBe("repo code project9suffix [redacted]");
+  it("uses exact registered values across stream chunks", () => {
+    expect(redactLearningText("before ab12cdsuffix", ["ab12cd"])).toBe("before [redacted]suffix");
   });
 });
 
@@ -690,6 +682,16 @@ describe("createStreamingRedactor", () => {
     ].join("");
     expect(output).toBe("before [redacted] after");
     expect(output).not.toContain("fake-secret-123");
+  });
+
+  it("redacts a six-character credential split across command output chunks", () => {
+    const redactor = createStreamingRedactor(["ab12cd"]);
+    const output = [
+      redactor.push("prefix ab"),
+      redactor.push("12cdsuffix"),
+      redactor.finish(),
+    ].join("");
+    expect(output).toBe("prefix [redacted]suffix");
   });
 
   it("does not delay chunks when there are no known secrets", () => {

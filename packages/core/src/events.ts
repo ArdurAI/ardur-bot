@@ -327,33 +327,16 @@ export function subagentBlockFromPayload(
   };
 }
 
-const TOKEN_CHARACTER = /[\p{L}\p{N}_]/u;
-
 function secretAt(value: string, secret: string, index: number): boolean {
-  if (secret.length < 8 || !value.startsWith(secret, index)) return false;
-  if (secret.length >= 16) return true;
-  return (
-    (index === 0 || !TOKEN_CHARACTER.test(value[index - 1]!)) &&
-    (index + secret.length === value.length || !TOKEN_CHARACTER.test(value[index + secret.length]!))
-  );
+  return value.startsWith(secret, index);
 }
 
 function hasSecret(value: string, secrets: string[]): boolean {
-  return secrets.some((secret) => {
-    if (secret.length < 8) return false;
-    let index = value.indexOf(secret);
-    while (index !== -1) {
-      if (secretAt(value, secret, index)) return true;
-      index = value.indexOf(secret, index + 1);
-    }
-    return false;
-  });
+  return secrets.some((secret) => secret.length > 0 && value.includes(secret));
 }
 
 export function redactSecrets(value: string, secrets: string[]): string {
-  const active = [...new Set(secrets.filter((secret) => secret.length >= 8))].sort(
-    (a, b) => b.length - a.length,
-  );
+  const active = [...new Set(secrets.filter(Boolean))].sort((a, b) => b.length - a.length);
   let output = "";
   for (let index = 0; index < value.length; ) {
     const secret = active.find((candidate) => secretAt(value, candidate, index));
@@ -369,7 +352,7 @@ export function redactSecrets(value: string, secrets: string[]): string {
 }
 
 export function containsSecret(value: unknown, secrets: string[]): boolean {
-  const active = secrets.filter((secret) => secret.length >= 8);
+  const active = secrets.filter(Boolean);
   if (active.length === 0) return false;
   const serialized = JSON.stringify(value);
   if (serialized === undefined) return false;
@@ -462,12 +445,9 @@ export function sanitizeJsonValue<T>(value: T): T {
 }
 
 export function createStreamingRedactor(secrets: string[]) {
-  const values = [...new Set(secrets.filter((secret) => secret.length >= 8))].sort(
-    (a, b) => b.length - a.length,
-  );
+  const values = [...new Set(secrets.filter(Boolean))].sort((a, b) => b.length - a.length);
   const maxLength = values[0]?.length ?? 0;
   let buffer = "";
-  let preceding = "";
 
   const drain = (final: boolean) => {
     let output: string;
@@ -480,12 +460,10 @@ export function createStreamingRedactor(secrets: string[]) {
       output = "";
       while (offset < safeStartLimit) {
         const secret = values.find((value) => {
-          if (value.length < 16 && offset === 0 && TOKEN_CHARACTER.test(preceding)) return false;
           return secretAt(buffer, value, offset);
         });
         if (secret) {
           output += "[redacted]";
-          preceding = secret.at(-1) ?? "";
           offset += secret.length;
           continue;
         }
@@ -497,14 +475,12 @@ export function createStreamingRedactor(secrets: string[]) {
             // Keep the pair together; hold both if the low unit is outside this drain window.
             if (!final && offset + 1 >= safeStartLimit) break;
             output += buffer[offset]! + buffer[offset + 1]!;
-            preceding = buffer[offset + 1]!;
             offset += 2;
             continue;
           }
           if (!final && !hasNext) break; // trailing high surrogate — wait for the next chunk
         }
         output += buffer[offset];
-        preceding = buffer[offset]!;
         offset += 1;
       }
       buffer = buffer.slice(offset);

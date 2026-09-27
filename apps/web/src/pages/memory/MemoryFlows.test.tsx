@@ -146,6 +146,29 @@ describe("memory proposal entry points", () => {
     });
   });
 
+  it("shows a masked line and the section-limit instruction during import", async () => {
+    const propose = vi
+      .fn()
+      .mockRejectedValueOnce({
+        data: { code: "MEMORY_CREDENTIAL_LINE", lineNumber: 2, maskedLine: "- [redacted]" },
+      })
+      .mockRejectedValueOnce({ data: { code: "MEMORY_IMPORT_SECTION_LIMIT" } });
+    await mounted(<MemoryImport propose={propose} onProposals={vi.fn()} />, async (container) => {
+      await act(async () => button(container, "Start import").click());
+      await act(async () => input(container.querySelectorAll("textarea")[1]!, "Profile\n- ab12cd"));
+      await act(async () => button(container, "Review import").click());
+      expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+        "Line 2: - [redacted] Edit or remove this line.",
+      );
+      expect(container.querySelector('[role="alert"]')?.textContent).not.toContain("ab12cd");
+      expect(container.querySelectorAll("textarea")[1]?.value).toBe("Profile\n- ab12cd");
+      await act(async () => button(container, "Review import").click());
+      expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+        "Split this import into at most three sections.",
+      );
+    });
+  });
+
   it("sends a memory-edit instruction and returns pending proposals", async () => {
     const propose = vi.fn().mockResolvedValue([proposal]);
     const onProposals = vi.fn();

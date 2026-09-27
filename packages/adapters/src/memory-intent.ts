@@ -15,6 +15,7 @@ import type { Prisma, PrismaClient } from "@ardurbot/db";
 import type { MemoryService } from "@ardurbot/memory";
 import { proposalView } from "./learning-apply.js";
 import { learningMember } from "./learning-grants.js";
+import { assertSafeMemoryContent } from "./learning-memory-safety.js";
 import { resolveReviewerPin, reviewerDestination } from "./learning-pin.js";
 import { proposalDiff, proposalFingerprint } from "./learning-proposal.js";
 import { learningHash } from "./learning-records.js";
@@ -128,6 +129,9 @@ export async function proposeMemoryIntent(
         )
       : null;
   if (resolved?.kind === "problem") throw new RuntimePinError(resolved);
+  // Parse and check the original import before any review row, evidence, diff, or proposal exists.
+  const importDrafts = input.intent === "import" ? importedMemoryDrafts(text) : null;
+  if (importDrafts) assertSafeMemoryContent(text, knownSecrets);
   const reservation =
     input.intent === "import"
       ? 0
@@ -172,7 +176,7 @@ export async function proposeMemoryIntent(
   let usageSeen = input.intent === "import";
   const usageTotals = new ObservedUsageTotals();
   try {
-    let drafts = importedMemoryDrafts(text);
+    let drafts = importDrafts ?? [];
     if (input.intent === "edit" && resolved) {
       if (!deps.runtime) throw new Error("The coordinator runtime is unavailable.");
       const controller = new AbortController();

@@ -200,7 +200,7 @@ describe.skipIf(!databaseAvailable)("capabilities and memory through persisted R
           }),
         );
       const owner = await rpc<Actor>(handles.app, cookie, "me");
-      const secret = "T4h7K0m3P8q2R5s9V1x6Y3z8B4c7D2f5";
+      const secret = "ab12cd";
       const encrypted = await new EncryptedSecretStore("offline-capmem-fixture-encryption-key").put(
         secret,
         {} as never,
@@ -214,26 +214,46 @@ describe.skipIf(!databaseAvailable)("capabilities and memory through persisted R
           ciphertext: encrypted.ciphertext,
         },
       });
-      const guarded = await rpc<LearningProposal[]>(handles.app, cookie, "memory/propose", {
-        intent: "import",
-        text: `Profile\n- Safe line.\n- Key ${secret} in prose.\nPreferences\n- Another safe line.`,
-        requestId: "guarded-journey",
-      });
-      expect(guarded).toHaveLength(2);
-      const rejected = await handles.app.request("/rpc/learning/approve", {
+      const proposalCount = await handles.prisma.learningProposal.count();
+      const evidenceCount = await handles.prisma.proposalEvidence.count();
+      const reviewCount = await handles.prisma.reviewExecution.count();
+      const rejected = await handles.app.request("/rpc/memory/propose", {
         method: "POST",
         headers: { "content-type": "application/json", cookie, origin },
-        body: JSON.stringify({ json: { proposalId: guarded[0]!.id } }),
+        body: JSON.stringify({
+          json: {
+            intent: "import",
+            text: `Profile\n- Safe line.\n- Key ${secret} in prose.\nPreferences\n- Another safe line.`,
+            requestId: "guarded-journey",
+          },
+        }),
       });
       expect(rejected.status).toBe(400);
       const rejection = (await rejected.json()) as { json: { data: Record<string, unknown> } };
       expect(rejection.json.data).toMatchObject({
         code: "MEMORY_CREDENTIAL_LINE",
-        proposalId: guarded[0]!.id,
-        lineNumber: 2,
+        lineNumber: 3,
         maskedLine: "- Key [redacted] in prose.",
       });
       expect(JSON.stringify(rejection)).not.toContain(secret);
+      expect(await handles.prisma.learningProposal.count()).toBe(proposalCount);
+      expect(await handles.prisma.proposalEvidence.count()).toBe(evidenceCount);
+      expect(await handles.prisma.reviewExecution.count()).toBe(reviewCount);
+      const stored = await Promise.all([
+        handles.prisma.learningProposal.findMany({ select: { body: true } }),
+        handles.prisma.proposalEvidence.findMany({ select: { body: true } }),
+        handles.prisma.event.findMany({ select: { payload: true } }),
+      ]);
+      expect(JSON.stringify(stored)).not.toContain(secret);
+      const guarded = await rpc<LearningProposal[]>(handles.app, cookie, "memory/propose", {
+        intent: "import",
+        text: "Profile\n- Safe line.\nPreferences\n- Another safe line.",
+        requestId: "corrected-journey",
+      });
+      expect(guarded.map((item) => item.proposedContent)).toEqual([
+        "- Safe line.\n",
+        "- Another safe line.",
+      ]);
       await rpc(handles.app, cookie, "learning/approve", { proposalId: guarded[1]!.id });
       expect((await list()).items).toContainEqual(
         expect.objectContaining({

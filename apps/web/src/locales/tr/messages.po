@@ -4497,6 +4497,18 @@ msgstr "Açık"
 msgid "Limit tools"
 msgstr "Araçları sınırla"
 
+#. placeholder {0}: data.lineNumber
+#. placeholder {1}: data.maskedLine
+#: src/pages/memory/MemoryProposals.tsx
+msgid "Line {0}: {1} Edit or reject this line."
+msgstr "Satır {0}: {1} Bu satırı düzenleyin veya reddedin."
+
+#. placeholder {0}: data.lineNumber
+#. placeholder {1}: data.maskedLine
+#: src/pages/memory/MemoryImport.tsx
+msgid "Line {0}: {1} Edit or remove this line."
+msgstr "Satır {0}: {1} Bu satırı düzenleyin veya kaldırın."
+
 #: src/pages/RoutineEditor.tsx
 msgid "Linear issue"
 msgstr ""
@@ -7394,6 +7406,10 @@ msgstr "Bu yanıtı seslendir"
 #: src/pages/CallView.tsx
 msgid "Speaking…"
 msgstr "Konuşuyor…"
+
+#: src/pages/memory/MemoryImport.tsx
+msgid "Split this import into at most three sections."
+msgstr "Bu içe aktarımı en fazla üç bölüme ayırın."
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "SSH agent"

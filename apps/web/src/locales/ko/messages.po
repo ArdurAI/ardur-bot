@@ -4497,6 +4497,18 @@ msgstr "라이트"
 msgid "Limit tools"
 msgstr "도구 제한"
 
+#. placeholder {0}: data.lineNumber
+#. placeholder {1}: data.maskedLine
+#: src/pages/memory/MemoryProposals.tsx
+msgid "Line {0}: {1} Edit or reject this line."
+msgstr "줄 {0}: {1} 이 줄을 수정하거나 거부하세요."
+
+#. placeholder {0}: data.lineNumber
+#. placeholder {1}: data.maskedLine
+#: src/pages/memory/MemoryImport.tsx
+msgid "Line {0}: {1} Edit or remove this line."
+msgstr "줄 {0}: {1} 이 줄을 수정하거나 삭제하세요."
+
 #: src/pages/RoutineEditor.tsx
 msgid "Linear issue"
 msgstr "Linear 이슈"
@@ -7394,6 +7406,10 @@ msgstr "이 답변 읽기"
 #: src/pages/CallView.tsx
 msgid "Speaking…"
 msgstr "말하는 중…"
+
+#: src/pages/memory/MemoryImport.tsx
+msgid "Split this import into at most three sections."
+msgstr "가져올 내용을 최대 세 개의 섹션으로 나누세요."
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "SSH agent"

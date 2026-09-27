@@ -26,13 +26,14 @@ describe("redactConnectorPayload", () => {
     expect(redactConnectorPayload(circular, ["secret"])).toEqual({ ok: true });
   });
 
-  it("ignores short primitive values while redacting an exact credential field", () => {
+  it("redacts short registered credentials in plain response text and primitives", () => {
+    expect(redactConnectorPayload("echo ab12cdsuffix", ["ab12cd"])).toBe("echo [redacted]suffix");
     expect(
       redactConnectorPayload({ number: 123, boolean: true, empty: null }, ["123", "true", "null"]),
-    ).toEqual({ number: 123, boolean: true, empty: null });
+    ).toEqual({ number: "[redacted]", boolean: "[redacted]", empty: "[redacted]" });
     expect(redactConnectorPayload({ session: "s1", note: "s1" }, ["s1"])).toEqual({
       session: "[redacted]",
-      note: "s1",
+      note: "[redacted]",
     });
   });
 });

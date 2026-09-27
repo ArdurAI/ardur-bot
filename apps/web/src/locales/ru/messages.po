@@ -4497,6 +4497,18 @@ msgstr "Светлая"
 msgid "Limit tools"
 msgstr "Ограничить инструменты"
 
+#. placeholder {0}: data.lineNumber
+#. placeholder {1}: data.maskedLine
+#: src/pages/memory/MemoryProposals.tsx
+msgid "Line {0}: {1} Edit or reject this line."
+msgstr "Строка {0}: {1} Измените или отклоните эту строку."
+
+#. placeholder {0}: data.lineNumber
+#. placeholder {1}: data.maskedLine
+#: src/pages/memory/MemoryImport.tsx
+msgid "Line {0}: {1} Edit or remove this line."
+msgstr "Строка {0}: {1} Измените или удалите эту строку."
+
 #: src/pages/RoutineEditor.tsx
 msgid "Linear issue"
 msgstr "Задача Linear"
@@ -7394,6 +7406,10 @@ msgstr "Озвучить этот ответ"
 #: src/pages/CallView.tsx
 msgid "Speaking…"
 msgstr "Озвучивание…"
+
+#: src/pages/memory/MemoryImport.tsx
+msgid "Split this import into at most three sections."
+msgstr "Разделите импорт не более чем на три раздела."
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "SSH agent"

@@ -59,7 +59,8 @@ describe("memory credential gate", () => {
     expect(() => assertMemorySafe(commit('use a"b\nc now'), ['a"b\nc now'])).toThrow(
       MemoryRedactionError,
     );
-    expect(() => assertMemorySafe(commit("repo and code"), ["repo", "code"])).not.toThrow();
+    expect(() => assertMemorySafe(commit("repo and code"), [])).not.toThrow();
+    expect(() => assertMemorySafe(commit("repo and code"), ["repo"])).toThrow(MemoryRedactionError);
     expect(safe("Leave out passwords, API keys")).not.toThrow();
   });
 });

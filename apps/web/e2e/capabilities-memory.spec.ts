@@ -14,6 +14,7 @@ test("capabilities and memory use persisted settings, confirmation, and proposal
   const fakeToken = "abcdefghijklmnopqrstuvwxyz123456";
   const blockedLine = `- Key: ${fakeToken}`;
   const paste = `Preferences\n${importedContent}\n\nTopic: Access\n${blockedLine}`;
+  const correctedPaste = `Preferences\n${importedContent}`;
   const safeProposal = {
     id: "proposal",
     type: "memory",
@@ -27,13 +28,6 @@ test("capabilities and memory use persisted settings, confirmation, and proposal
     status: "pending",
     operation: "memory-import",
     expiresAt: "2099-01-01T00:00:00Z",
-  };
-  const blockedProposal = {
-    ...safeProposal,
-    id: "blocked-proposal",
-    documentKind: "topic",
-    proposedContent: blockedLine,
-    diff: `--- current\n+++ proposed\n+${blockedLine}`,
   };
   let importProposed = false;
   let approved = false;
@@ -92,12 +86,8 @@ test("capabilities and memory use persisted settings, confirmation, and proposal
     if (path === "learning/list")
       result = {
         reviews: [],
-        proposals: importProposed
-          ? approved
-            ? [blockedProposal]
-            : [safeProposal, blockedProposal]
-          : [],
-        pendingCount: importProposed ? (approved ? 1 : 2) : 0,
+        proposals: importProposed && !approved ? [safeProposal] : [],
+        pendingCount: importProposed && !approved ? 1 : 0,
         appliedThisWeek: approved ? 1 : 0,
       };
     if (path === "learning/settings")
@@ -133,10 +123,29 @@ test("capabilities and memory use persisted settings, confirmation, and proposal
         nextCursor: null,
       };
     if (path === "memory/propose") {
+      if (body.intent === "import" && String(body.text).includes(fakeToken)) {
+        await route.fulfill({
+          status: 400,
+          json: {
+            json: {
+              defined: false,
+              code: "BAD_REQUEST",
+              status: 400,
+              message: "Remove credentials from this memory before saving.",
+              data: {
+                code: "MEMORY_CREDENTIAL_LINE",
+                lineNumber: 6,
+                maskedLine: "- Key: [redacted]",
+              },
+            },
+          },
+        });
+        return;
+      }
       if (body.intent === "import") importProposed = true;
       result =
         body.intent === "import"
-          ? [safeProposal, blockedProposal]
+          ? [safeProposal]
           : [
               {
                 ...safeProposal,
@@ -147,26 +156,6 @@ test("capabilities and memory use persisted settings, confirmation, and proposal
             ];
     }
     if (path === "learning/approve") {
-      if (body.proposalId === blockedProposal.id) {
-        await route.fulfill({
-          status: 400,
-          json: {
-            json: {
-              defined: false,
-              code: "BAD_REQUEST",
-              status: 400,
-              message: "Edit or reject this line.",
-              data: {
-                code: "MEMORY_CREDENTIAL_LINE",
-                proposalId: blockedProposal.id,
-                lineNumber: 1,
-                maskedLine: "- Key: [redacted]",
-              },
-            },
-          },
-        });
-        return;
-      }
       approved = true;
       result = { proposal: { ...safeProposal, status: "applied" } };
     }
@@ -197,11 +186,17 @@ test("capabilities and memory use persisted settings, confirmation, and proposal
   await page.getByRole("button", { name: "Start import" }).click();
   await page.getByLabel("Paste the response").fill(paste);
   await page.getByRole("button", { name: "Review import", exact: true }).click();
+  await expect(page.getByRole("alert")).toHaveText(
+    "Line 6: - Key: [redacted] Edit or remove this line.",
+  );
+  await expect(page.getByRole("alert")).not.toContainText(fakeToken);
+  await expect(page.getByLabel("Paste the response")).toHaveValue(paste);
   const suggestions = page.getByRole("region", { name: "Memory suggestions" });
+  await expect(suggestions).toHaveCount(0);
+  await page.getByLabel("Paste the response").fill(correctedPaste);
+  await page.getByRole("button", { name: "Review import", exact: true }).click();
   const safeCard = suggestions.locator("article").filter({ hasText: importedContent });
-  const blockedCard = suggestions.locator("article").filter({ hasText: blockedLine });
   await expect(safeCard.getByRole("button", { name: "Approve" })).toBeVisible();
-  await expect(blockedCard.getByRole("button", { name: "Approve" })).toBeVisible();
   expect(calls.find((call) => call.path === "memory/propose")?.body.text).toBe(paste);
   expect(
     calls.some((call) =>
@@ -209,18 +204,11 @@ test("capabilities and memory use persisted settings, confirmation, and proposal
     ),
   ).toBe(false);
   await captureScreenshot(page, testInfo, "memory-pending-import");
-  await blockedCard.getByRole("button", { name: "Approve" }).click();
-  await expect(blockedCard.getByRole("alert")).toHaveText(
-    "Line 1: - Key: [redacted] Edit or reject this line.",
-  );
-  await expect(blockedCard.getByRole("alert")).not.toContainText(fakeToken);
-  await expect(safeCard.getByRole("button", { name: "Approve" })).toBeEnabled();
   await safeCard.getByRole("button", { name: "Approve" }).click();
   await expect(safeCard).toHaveCount(0);
-  await expect(blockedCard.getByRole("alert")).toContainText("Edit or reject this line.");
   expect(
     calls.filter((call) => call.path === "learning/approve").map((call) => call.body.proposalId),
-  ).toEqual([blockedProposal.id, safeProposal.id]);
+  ).toEqual([safeProposal.id]);
   await page.getByRole("button", { name: /Preferences.*Updated/ }).click();
   const documentContent = page
     .getByRole("region", { name: "Memory document" })
@@ -228,7 +216,7 @@ test("capabilities and memory use persisted settings, confirmation, and proposal
   await expect.poll(() => documentContent.textContent()).toBe(importedContent);
   await page.getByLabel("Tell your bot what to change or remove").fill("Use concise answers.");
   await page.getByRole("button", { name: "Send", exact: true }).click();
-  await expect.poll(() => calls.filter((call) => call.path === "memory/propose")).toHaveLength(2);
+  await expect.poll(() => calls.filter((call) => call.path === "memory/propose")).toHaveLength(3);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.locator('[data-testid="user-settings"] .rk-scroll').evaluate((panel) => {
     panel.scrollTop = 0;

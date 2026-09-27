@@ -4497,6 +4497,18 @@ msgstr "लाइट"
 msgid "Limit tools"
 msgstr "टूल सीमित करें"
 
+#. placeholder {0}: data.lineNumber
+#. placeholder {1}: data.maskedLine
+#: src/pages/memory/MemoryProposals.tsx
+msgid "Line {0}: {1} Edit or reject this line."
+msgstr "पंक्ति {0}: {1} इस पंक्ति को संपादित करें या अस्वीकार करें।"
+
+#. placeholder {0}: data.lineNumber
+#. placeholder {1}: data.maskedLine
+#: src/pages/memory/MemoryImport.tsx
+msgid "Line {0}: {1} Edit or remove this line."
+msgstr "पंक्ति {0}: {1} इस पंक्ति को संपादित करें या हटाएँ।"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Linear issue"
 msgstr ""
@@ -7394,6 +7406,10 @@ msgstr "यह उत्तर बोलकर सुनाएं"
 #: src/pages/CallView.tsx
 msgid "Speaking…"
 msgstr "बोल रहा है…"
+
+#: src/pages/memory/MemoryImport.tsx
+msgid "Split this import into at most three sections."
+msgstr "इस आयात को अधिकतम तीन अनुभागों में बाँटें।"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "SSH agent"

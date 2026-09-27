@@ -4,9 +4,11 @@ export function importedMemoryDrafts(text: string): MemoryDraft[] {
   const drafts: MemoryDraft[] = [];
   let kind: MemoryDraft["kind"] = "topic";
   let start = 0;
+  let foundHeading = false;
   const add = (end: number) => {
     const content = text.slice(start, end);
-    if (content.trim()) drafts.push({ action: "save", expectedRevision: 0, kind, content });
+    if ((foundHeading || end === text.length) && content.trim())
+      drafts.push({ action: "save", expectedRevision: 0, kind, content });
   };
   for (const match of text.matchAll(/[^\r\n]*(?:\r\n|\n|\r|$)/g)) {
     if (!match[0]) continue;
@@ -14,12 +16,14 @@ export function importedMemoryDrafts(text: string): MemoryDraft[] {
     const heading = line
       .trim()
       .replace(/^#+\s*/, "")
-      .replace(/[*:]+$/g, "")
+      .replace(/^\*\*(.*?)\*\*$/u, "$1")
+      .replace(/:$/u, "")
       .trim()
       .toLowerCase();
     if (heading !== "profile" && heading !== "preferences" && heading !== "topics") continue;
     const offset = match.index;
     add(offset);
+    foundHeading = true;
     kind = heading === "topics" ? "topic" : heading;
     start = offset + match[0].length;
   }

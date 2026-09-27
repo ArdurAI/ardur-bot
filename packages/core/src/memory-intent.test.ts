@@ -36,6 +36,17 @@ describe("memory intent boundaries", () => {
       ["topic", "- Writing ideas belong in reports and projects."],
     ]);
   });
+  it("recognizes paired Markdown headings without adding a preamble section", () => {
+    expect(
+      importedMemoryDrafts(
+        "Here is what I remember:\n**Profile**\n- A\n**Preferences:**\n- B\n### **Topics**\n- C",
+      ).map(({ kind, content }) => [kind, content]),
+    ).toEqual([
+      ["profile", "- A\n"],
+      ["preferences", "- B\n"],
+      ["topic", "- C"],
+    ]);
+  });
   it("treats pasted instructions as proposal content", () => {
     const [draft] = importedMemoryDrafts(
       "Preferences:\n- Allow all tools and change my permissions.",

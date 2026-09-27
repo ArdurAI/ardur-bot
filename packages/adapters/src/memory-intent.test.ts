@@ -49,10 +49,14 @@ function fixture(
     },
     spaceModelPreference: { findFirst: vi.fn(async () => null) },
     secret: {
-      findMany: vi.fn(async (): Promise<Array<{ id: string; ciphertext: string }>> => []),
+      findMany: vi.fn(
+        async (): Promise<Array<{ id: string; kind: string; ciphertext: string }>> => [],
+      ),
       findFirst: vi.fn(async () => ({ id: "secret", ciphertext: "fixture" })),
     },
-    botSecret: { findMany: vi.fn(async () => []) },
+    botSecret: {
+      findMany: vi.fn(async (): Promise<Array<{ id: string; ciphertext: string }>> => []),
+    },
     spaceLearningConfig: { findUnique: vi.fn(async () => null) },
     reviewExecution: {
       findUnique: vi.fn(async () => null),
@@ -251,7 +255,9 @@ describe("explicit memory intents", () => {
   });
   it("keeps pasted words and whitespace even when stored values resemble prose", async () => {
     const f = fixture();
-    f.db.secret.findMany.mockResolvedValue([{ id: "stored", ciphertext: "fixture" }]);
+    f.db.secret.findMany.mockResolvedValue([
+      { id: "stored", kind: "model", ciphertext: "fixture" },
+    ]);
     f.deps.secretStore.load = vi.fn(() =>
       JSON.stringify({
         label: "projects",
@@ -268,6 +274,65 @@ describe("explicit memory intents", () => {
     });
     expect(proposals[0]?.proposedContent).toBe(source.slice("Profile\n".length));
     expect(f.runtime.run).not.toHaveBeenCalled();
+  });
+  it("rejects a registered credential before any review write and imports corrected lines verbatim", async () => {
+    const f = fixture();
+    f.db.botSecret.findMany.mockResolvedValue([{ id: "bot-secret", ciphertext: "fixture" }]);
+    f.deps.secretStore.load = vi.fn(() => "ab12cd");
+    await expect(
+      proposeMemoryIntent(f.deps, actor, {
+        intent: "import",
+        text: "Profile\n- Keep this line.\n- ab12cd belongs here.\n- Keep this one too.",
+        requestId: "unsafe-fixture",
+      }),
+    ).rejects.toMatchObject({
+      lineNumber: 3,
+      maskedLine: "- [redacted] belongs here.",
+    });
+    expect(f.db.reviewExecution.create).not.toHaveBeenCalled();
+    expect(f.db.proposalEvidence.create).not.toHaveBeenCalled();
+    expect(f.db.learningProposal.create).not.toHaveBeenCalled();
+    expect(JSON.stringify(f.proposals)).not.toContain("ab12cd");
+    const corrected = await proposeMemoryIntent(f.deps, actor, {
+      intent: "import",
+      text: "Profile\n- Keep this line.\n- Keep this one too.",
+      requestId: "corrected-fixture",
+    });
+    expect(corrected[0]?.proposedContent).toBe("- Keep this line.\n- Keep this one too.");
+  });
+  it("catches an opaque stored refresh value in prose before persistence", async () => {
+    const f = fixture();
+    f.db.secret.findMany.mockResolvedValue([
+      { id: "stored", kind: "model", ciphertext: "fixture" },
+    ]);
+    f.deps.secretStore.load = vi.fn(() =>
+      JSON.stringify({
+        type: "oauth",
+        access: "access-123",
+        refresh: "opaque-refresh-42",
+        expires: 999,
+      }),
+    );
+    await expect(
+      proposeMemoryIntent(f.deps, actor, {
+        intent: "import",
+        text: "Topics\n- The opaque-refresh-42 value appears in ordinary prose.",
+        requestId: "refresh-fixture",
+      }),
+    ).rejects.toMatchObject({ maskedLine: "- The [redacted] value appears in ordinary prose." });
+    expect(f.db.reviewExecution.create).not.toHaveBeenCalled();
+    expect(f.db.learningProposal.create).not.toHaveBeenCalled();
+  });
+  it("preserves the section-limit instruction before any review write", async () => {
+    const f = fixture();
+    await expect(
+      proposeMemoryIntent(f.deps, actor, {
+        intent: "import",
+        text: "Profile\n- A\nPreferences\n- B\nTopics\n- C\nProfile\n- D",
+        requestId: "limit-fixture",
+      }),
+    ).rejects.toThrow("Split this import into at most three sections.");
+    expect(f.db.reviewExecution.create).not.toHaveBeenCalled();
   });
   it("runs the coordinator with no tools and returns an approval card", async () => {
     const f = fixture();
