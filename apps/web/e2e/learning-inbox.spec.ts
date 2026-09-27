@@ -120,7 +120,9 @@ test("learning inbox separates suggestions from applied changes and shows Undo",
   await expect(inbox.getByText("Not enough runs to tell", { exact: true })).toBeVisible();
   await captureScreenshot(page, testInfo, "learning-inbox-applied");
   await inbox.getByRole("tab", { name: "Timeline", exact: true }).click();
-  await expect(inbox.getByText("document:1", { exact: false })).toBeVisible();
+  await expect(
+    inbox.getByRole("button", { name: "Revision and observations document:1" }),
+  ).toBeVisible();
   await captureScreenshot(page, testInfo, "learning-timeline");
   await inbox.getByRole("tab", { name: "Inbox", exact: true }).click();
   await inbox.getByRole("button", { name: "Undo", exact: true }).click();
