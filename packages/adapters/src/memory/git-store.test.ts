@@ -80,7 +80,11 @@ async function fixture() {
     store,
     transports,
     companion: (spaceId: string) =>
-      new VaultWithPrivateDocuments(store(spaceId), new PostgresDocumentStore(database.tx), null),
+      new VaultWithPrivateDocuments(
+        store(spaceId),
+        new PostgresDocumentStore(database.tx, undefined, database.selectListIds),
+        null,
+      ),
     dispose: () => rm(root, { recursive: true, force: true }),
   };
 }
@@ -301,7 +305,7 @@ describe("Git document store", () => {
       await store.restore(first.id, 1, 2, request(), access);
       const bundle = await store.exportBundle(access);
       const database = memoryDatabaseFake();
-      const postgres = new PostgresDocumentStore(database.tx);
+      const postgres = new PostgresDocumentStore(database.tx, undefined, database.selectListIds);
       await postgres.importBundle(bundle, request().delivery, access);
       expect(await postgres.exportBundle(access)).toEqual(bundle);
       expect(bundle.documents[0]?.revisions.map((r) => r.revision)).toEqual([1, 2, 3]);

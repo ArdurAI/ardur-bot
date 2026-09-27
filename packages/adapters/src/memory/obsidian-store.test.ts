@@ -46,7 +46,7 @@ async function createFixture() {
     store: (spaceId: string) =>
       new VaultWithPrivateDocuments(
         vault(spaceId),
-        new PostgresDocumentStore(database.tx),
+        new PostgresDocumentStore(database.tx, undefined, database.selectListIds),
         "user-a",
       ),
     restart: () => undefined,
@@ -73,7 +73,7 @@ async function fakeFixture() {
     store: (spaceId: string) =>
       new VaultWithPrivateDocuments(
         vault(spaceId),
-        new PostgresDocumentStore(database.tx),
+        new PostgresDocumentStore(database.tx, undefined, database.selectListIds),
         "user-a",
       ),
     restart: () => undefined,
