@@ -3350,7 +3350,11 @@ export function ShellPage({
                   if (!participant) return null;
                   const admitted = admittedMemberRun(currentRuns, member.botId);
                   return (
-                    <div key={member.botId} className="flex shrink-0 items-center gap-1">
+                    <div
+                      key={member.botId}
+                      data-testid={`group-participant-${member.botId}`}
+                      className="flex shrink-0 items-center gap-1"
+                    >
                       <span className="text-xs text-muted-foreground">{member.name}</span>
                       <BotModelChip
                         bot={participant}

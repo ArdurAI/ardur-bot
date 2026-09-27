@@ -61,7 +61,7 @@ test("a group member choice appears in the room and on its captured run", async 
   const modelId = group.members.find((member) => member.botId === first)?.runtimePin?.modelId;
   expect(modelId).toBe(catalogChoice!.id);
   await expect(
-    page.getByTestId("group-participant-models").getByLabel(`Using ${modelId}`),
+    page.getByTestId(`group-participant-${first}`).getByLabel(`Using ${modelId}`),
   ).toBeVisible();
   await captureScreenshot(page, testInfo, "group-model-settings");
   await page.getByRole("combobox", { name: "Message Choice room" }).fill("@Room first say ready");
@@ -75,7 +75,7 @@ test("a group member choice appears in the room and on its captured run", async 
     })
     .toBe(modelId);
   await expect(
-    page.getByTestId("group-participant-models").getByLabel(`Using ${modelId}`),
+    page.getByTestId(`group-participant-${first}`).getByLabel(`Using ${modelId}`),
   ).toBeVisible();
 });
 
