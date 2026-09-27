@@ -59,265 +59,314 @@
       "id": "amazon-bedrock",
       "name": "Amazon Bedrock",
       "access": "api-key",
-      "status": "available"
+      "status": "available",
+      "featured": false
     },
     {
       "id": "ant-ling",
       "name": "Ant Ling",
       "access": "api-key",
-      "status": "available"
+      "status": "available",
+      "featured": false
     },
     {
       "id": "anthropic",
       "name": "Anthropic",
       "access": "api-key",
-      "status": "available"
+      "status": "available",
+      "featured": true,
+      "accountHint": "API key"
     },
     {
       "id": "azure-openai-responses",
       "name": "Azure OpenAI",
       "access": "api-key",
-      "status": "available"
+      "status": "available",
+      "featured": false
     },
     {
       "id": "baseten",
       "name": "Baseten",
       "access": "api-key",
-      "status": "available"
+      "status": "available",
+      "featured": false
     },
     {
       "id": "cerebras",
       "name": "Cerebras",
       "access": "api-key",
-      "status": "available"
+      "status": "available",
+      "featured": false
     },
     {
       "id": "claude-cli",
       "name": "Claude Pro/Max through the CLI",
       "access": "subscription",
-      "status": "roadmap"
+      "status": "roadmap",
+      "featured": false,
+      "accountHint": "Claude account through your own CLI"
     },
     {
       "id": "cloudflare-ai-gateway",
       "name": "Cloudflare AI Gateway",
       "access": "gateway",
-      "status": "available"
+      "status": "available",
+      "featured": false
     },
     {
       "id": "cloudflare-workers-ai",
       "name": "Cloudflare Workers AI",
       "access": "api-key",
-      "status": "available"
+      "status": "available",
+      "featured": false
     },
     {
       "id": "deepseek",
       "name": "DeepSeek",
       "access": "api-key",
-      "status": "available"
+      "status": "available",
+      "featured": false
     },
     {
       "id": "fireworks",
       "name": "Fireworks",
       "access": "api-key",
-      "status": "available"
+      "status": "available",
+      "featured": false
     },
     {
       "id": "github-copilot",
       "name": "GitHub Copilot",
       "access": "subscription",
-      "status": "available"
+      "status": "available",
+      "featured": false,
+      "accountHint": "Copilot account"
     },
     {
       "id": "google",
       "name": "Google",
       "access": "api-key",
-      "status": "available"
+      "status": "available",
+      "featured": true
     },
     {
       "id": "google-vertex",
       "name": "Google Vertex AI",
       "access": "api-key",
-      "status": "available"
+      "status": "available",
+      "featured": false
     },
     {
       "id": "groq",
       "name": "Groq",
       "access": "api-key",
-      "status": "available"
+      "status": "available",
+      "featured": false
     },
     {
       "id": "huggingface",
       "name": "Hugging Face",
       "access": "api-key",
-      "status": "available"
+      "status": "available",
+      "featured": false
     },
     {
       "id": "kimi-coding",
       "name": "Kimi for Coding",
-      "access": "subscription",
-      "status": "available"
+      "access": "api-key",
+      "status": "available",
+      "featured": false
     },
     {
       "id": "meta",
       "name": "Meta",
-      "access": "subscription",
-      "status": "available"
+      "access": "api-key",
+      "status": "available",
+      "featured": false
     },
     {
       "id": "minimax",
       "name": "MiniMax",
       "access": "api-key",
-      "status": "available"
+      "status": "available",
+      "featured": false
     },
     {
       "id": "minimax-cn",
       "name": "MiniMax CN",
       "access": "api-key",
-      "status": "available"
+      "status": "available",
+      "featured": false
     },
     {
       "id": "mistral",
       "name": "Mistral",
       "access": "api-key",
-      "status": "available"
+      "status": "available",
+      "featured": false
     },
     {
       "id": "moonshotai",
       "name": "Moonshot AI",
       "access": "api-key",
-      "status": "available"
+      "status": "available",
+      "featured": false
     },
     {
       "id": "moonshotai-cn",
       "name": "Moonshot AI CN",
       "access": "api-key",
-      "status": "available"
+      "status": "available",
+      "featured": false
     },
     {
       "id": "nvidia",
       "name": "NVIDIA",
       "access": "api-key",
-      "status": "available"
+      "status": "available",
+      "featured": false
     },
     {
       "id": "ollama",
       "name": "Ollama as a first-class choice",
       "access": "local",
-      "status": "roadmap"
+      "status": "roadmap",
+      "featured": false
     },
     {
       "id": "openai",
       "name": "OpenAI",
       "access": "api-key",
-      "status": "available"
+      "status": "available",
+      "featured": true
     },
     {
       "id": "openai-codex",
       "name": "OpenAI Codex",
       "access": "subscription",
-      "status": "available"
+      "status": "available",
+      "featured": true,
+      "accountHint": "ChatGPT account"
     },
     {
       "id": "openai-compatible",
       "name": "OpenAI-compatible server",
       "access": "gateway",
-      "status": "available"
+      "status": "available",
+      "featured": false
     },
     {
       "id": "opencode-go",
       "name": "OpenCode Go",
       "access": "api-key",
-      "status": "available"
+      "status": "available",
+      "featured": false
     },
     {
       "id": "opencode",
       "name": "OpenCode Zen",
       "access": "api-key",
-      "status": "available"
+      "status": "available",
+      "featured": false
     },
     {
       "id": "openrouter",
       "name": "OpenRouter",
       "access": "api-key",
-      "status": "available"
+      "status": "available",
+      "featured": true
     },
     {
       "id": "qwen-token-plan",
       "name": "Qwen Token Plan",
       "access": "api-key",
-      "status": "available"
+      "status": "available",
+      "featured": false
     },
     {
       "id": "qwen-token-plan-cn",
       "name": "Qwen Token Plan CN",
       "access": "api-key",
-      "status": "available"
+      "status": "available",
+      "featured": false
     },
     {
       "id": "qwen-token-plan-individual",
       "name": "Qwen Token Plan Individual",
       "access": "api-key",
-      "status": "available"
+      "status": "available",
+      "featured": false
     },
     {
       "id": "radius",
       "name": "Radius",
       "access": "api-key",
-      "status": "available"
+      "status": "available",
+      "featured": false
     },
     {
       "id": "together",
       "name": "Together",
       "access": "api-key",
-      "status": "available"
+      "status": "available",
+      "featured": false
     },
     {
       "id": "vercel-ai-gateway",
       "name": "Vercel AI Gateway",
       "access": "gateway",
-      "status": "available"
+      "status": "available",
+      "featured": true
     },
     {
       "id": "xai",
       "name": "xAI",
       "access": "subscription",
-      "status": "available"
+      "status": "available",
+      "featured": false,
+      "accountHint": "SuperGrok or X Premium account"
     },
     {
       "id": "xiaomi",
       "name": "Xiaomi",
       "access": "api-key",
-      "status": "available"
+      "status": "available",
+      "featured": false
     },
     {
       "id": "xiaomi-token-plan-ams",
       "name": "Xiaomi Token Plan AMS",
       "access": "api-key",
-      "status": "available"
+      "status": "available",
+      "featured": false
     },
     {
       "id": "xiaomi-token-plan-cn",
       "name": "Xiaomi Token Plan CN",
       "access": "api-key",
-      "status": "available"
+      "status": "available",
+      "featured": false
     },
     {
       "id": "xiaomi-token-plan-sgp",
       "name": "Xiaomi Token Plan SGP",
       "access": "api-key",
-      "status": "available"
+      "status": "available",
+      "featured": false
     },
     {
       "id": "zai",
       "name": "Z.AI",
       "access": "api-key",
-      "status": "available"
+      "status": "available",
+      "featured": false
     },
     {
       "id": "zai-coding-cn",
       "name": "Z.AI Coding CN",
       "access": "api-key",
-      "status": "available"
+      "status": "available",
+      "featured": false
     }
   ],
   "computers": [
@@ -356,7 +405,7 @@
   ],
   "install": {
     "fromSource": {
-      "requirements": "Node.js 22.22.2+ in the 22.x line, 24.x or 26+; pnpm 9; Docker",
+      "requirements": "Node.js 22.22.2 or newer in the 22.x line, Node.js 24.x, or Node.js 26+; pnpm 9; and Docker",
       "commands": [
         "git clone https://github.com/ArdurAI/ardur-bot.git",
         "cd ardur-bot",
@@ -417,11 +466,43 @@
       "line": "Keep the core bot workflow on computers and models they control."
     }
   ],
+  "routines": {
+    "triggers": [
+      {
+        "id": "schedule",
+        "name": "Schedule",
+        "detail": "Run at a chosen time or repeating schedule."
+      },
+      {
+        "id": "webhook",
+        "name": "Webhook",
+        "detail": "Run when a configured webhook fires."
+      },
+      {
+        "id": "github",
+        "name": "GitHub",
+        "detail": "Run when a configured GitHub event arrives."
+      },
+      {
+        "id": "message",
+        "name": "Message",
+        "detail": "Run when a connected message provider receives a message."
+      }
+    ],
+    "minimumIntervalSeconds": 60,
+    "limits": [
+      {
+        "id": "one-shot-future",
+        "text": "One-shot runs must be scheduled in the future.",
+        "value": 0
+      }
+    ]
+  },
   "screenshots": [
     {
       "id": "app-chat",
       "file": "screenshots/app-chat.png",
-      "alt": "Ardur bot conversation with a request for approval and the bot list beside it.",
+      "alt": "Chief of Staff bot conversation showing a release checklist command, a drafted team update, and an approval card beside a six-bot team.",
       "width": 2880,
       "height": 1800,
       "theme": "light"
@@ -429,7 +510,15 @@
     {
       "id": "group-chat",
       "file": "screenshots/group-chat.png",
-      "alt": "Ardur group chat with two bots listed in the conversation.",
+      "alt": "Operations huddle group conversation where Chief of Staff, Inbox Manager, and Release Captain coordinate a weekly update and hand off a release check.",
+      "width": 2880,
+      "height": 1800,
+      "theme": "light"
+    },
+    {
+      "id": "routines",
+      "file": "screenshots/routines.png",
+      "alt": "Chief of Staff bot conversation with the computer side panel and three scheduled routines: Morning brief, Inbox triage, and Friday wrap-up.",
       "width": 2880,
       "height": 1800,
       "theme": "light"

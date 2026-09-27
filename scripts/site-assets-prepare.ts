@@ -10,12 +10,13 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 export function contentDigest(
   product: SiteProduct,
   screenshots: ReadonlyMap<string, Buffer>,
+  media: ReadonlyMap<string, Buffer> = new Map(),
 ): string {
   const { generatedAt: _generatedAt, source: _source, ...facts } = product;
   const hash = createHash("sha256").update(JSON.stringify(facts));
-  for (const file of [...screenshots.keys()].sort()) {
+  for (const file of [...screenshots.keys(), ...media.keys()].sort()) {
     hash.update(file);
-    hash.update(screenshots.get(file)!);
+    hash.update(screenshots.get(file) ?? media.get(file)!);
   }
   return hash.digest("hex");
 }
@@ -35,6 +36,7 @@ function git(...args: string[]): Buffer {
 async function existingAssets(): Promise<{
   product: SiteProduct;
   screenshots: Map<string, Buffer>;
+  media: Map<string, Buffer>;
 } | null> {
   try {
     git("ls-remote", "--exit-code", "origin", "refs/heads/site-assets");
@@ -47,15 +49,28 @@ async function existingAssets(): Promise<{
     .toString("utf8")
     .trim()
     .split("\n");
-  const product = SiteProductSchema.parse(
+  const parsed = SiteProductSchema.safeParse(
     JSON.parse(git("show", "FETCH_HEAD:product.json").toString("utf8")),
   );
-  const expectedFiles = ["product.json", ...product.screenshots.map((shot) => shot.file)].sort();
+  if (!parsed.success) return null;
+  const product = parsed.data;
+  const expectedFiles = [
+    "product.json",
+    ...product.screenshots.map((shot) => shot.file),
+    ...(product.videos?.flatMap((video) => Object.values(video.files)) ?? []),
+  ].sort();
   if (files.slice().sort().join("\n") !== expectedFiles.join("\n")) return null;
   return {
     product,
     screenshots: new Map(
       product.screenshots.map((shot) => [shot.file, git("show", `FETCH_HEAD:${shot.file}`)]),
+    ),
+    media: new Map(
+      product.videos?.flatMap((video) =>
+        Object.values(video.files).map(
+          (file) => [file, git("show", `FETCH_HEAD:${file}`)] as const,
+        ),
+      ) ?? [],
     ),
   };
 }
@@ -73,6 +88,7 @@ async function prepare(): Promise<void> {
     JSON.parse(await readFile(path.join(root, "site/data/product.json"), "utf8")),
   );
   const screenshots = new Map<string, Buffer>();
+  const media = new Map<string, Buffer>();
   for (const shot of product.screenshots) {
     const bytes = await readFile(path.join(dir, `${shot.id}.png`));
     if (
@@ -87,13 +103,16 @@ async function prepare(): Promise<void> {
     }
     screenshots.set(shot.file, bytes);
   }
-  const digest = contentDigest(product, screenshots);
+  for (const video of product.videos ?? [])
+    for (const file of Object.values(video.files))
+      media.set(file, await readFile(path.join(root, "site", file)));
+  const digest = contentDigest(product, screenshots, media);
   const old = await existingAssets();
-  const changed = !old || contentDigest(old.product, old.screenshots) !== digest;
+  const changed = !old || contentDigest(old.product, old.screenshots, old.media) !== digest;
   if (process.env.GITHUB_OUTPUT)
     await appendFile(process.env.GITHUB_OUTPUT, `changed=${changed}\n`);
   const summary = changed
-    ? `### Site assets ready\n\n- Product facts and ${screenshots.size} screenshots changed.\n- Content SHA-256: \`${digest}\`\n- Files: ${["product.json", ...screenshots.keys()].join(", ")}\n`
+    ? `### Site assets ready\n\n- Product facts, ${screenshots.size} screenshots and ${media.size} media files changed.\n- Content SHA-256: \`${digest}\`\n- Files: ${["product.json", ...screenshots.keys(), ...media.keys()].join(", ")}\n`
     : `### Site assets unchanged\n\n- Content SHA-256: \`${digest}\`\n- No commit published.\n`;
   if (process.env.GITHUB_STEP_SUMMARY) await appendFile(process.env.GITHUB_STEP_SUMMARY, summary);
   if (!changed) {
@@ -101,11 +120,13 @@ async function prepare(): Promise<void> {
     return;
   }
   await mkdir(path.join(stage, "screenshots"), { recursive: true });
+  if (media.size) await mkdir(path.join(stage, "media"), { recursive: true });
   await writeFile(
     path.join(stage, "product.json"),
     `${JSON.stringify(publishedProduct(product, commit, new Date()), null, 2)}\n`,
   );
   for (const [file, bytes] of screenshots) await writeFile(path.join(stage, file), bytes);
+  for (const [file, bytes] of media) await writeFile(path.join(stage, file), bytes);
   console.log(`Site assets ready: ${digest}`);
 }
 

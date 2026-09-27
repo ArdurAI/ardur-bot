@@ -51,6 +51,8 @@ export const SiteProductSchema = z
           name: text,
           access: z.enum(["api-key", "subscription", "local", "gateway"]),
           status: z.enum(["available", "roadmap"]),
+          featured: z.boolean(),
+          accountHint: text.optional(),
         }),
       )
       .min(1),
@@ -73,6 +75,43 @@ export const SiteProductSchema = z
       }),
     }),
     personas: z.array(z.strictObject({ name: text, line: text })).min(1),
+    routines: z
+      .strictObject({
+        triggers: z.array(z.strictObject({ id, name: text, detail: text })).min(1),
+        minimumIntervalSeconds: z.number().int().positive(),
+        limits: z.array(z.strictObject({ id, text, value: z.number().int().nonnegative() })),
+        useCases: z
+          .array(
+            z.strictObject({
+              id,
+              audience: z.enum(["everyday", "technical"]),
+              title: text,
+              body: text,
+              steps: z.array(text).min(1),
+              uiLabels: z.array(text).min(1),
+            }),
+          )
+          .optional(),
+      })
+      .optional(),
+    videos: z
+      .array(
+        z.strictObject({
+          id,
+          title: text,
+          description: text,
+          durationSeconds: z.number().positive(),
+          width: z.number().int().positive(),
+          height: z.number().int().positive(),
+          files: z.strictObject({
+            mp4: z.string().regex(/^media\/[a-z0-9-]+\.mp4$/),
+            webm: z.string().regex(/^media\/[a-z0-9-]+\.webm$/),
+            poster: z.string().regex(/^media\/[a-z0-9-]+\.jpg$/),
+            captions: z.string().regex(/^media\/[a-z0-9-]+\.en\.vtt$/),
+          }),
+        }),
+      )
+      .optional(),
     screenshots: z
       .array(
         z.strictObject({
@@ -103,6 +142,22 @@ export const SiteProductSchema = z
           message: `Screenshot ${shot.id} has the wrong file path`,
         });
       }
+    }
+    if (data.routines?.useCases) {
+      const cases = data.routines.useCases;
+      if (
+        cases.length !== 6 ||
+        cases.filter((item) => item.audience === "everyday").length !== 3 ||
+        cases.filter((item) => item.audience === "technical").length !== 3
+      ) {
+        context.addIssue({
+          code: "custom",
+          message:
+            "routines.useCases needs exactly six entries: three everyday and three technical",
+        });
+      }
+      if (new Set(cases.map((item) => item.id)).size !== cases.length)
+        context.addIssue({ code: "custom", message: "routines.useCases IDs must be unique" });
     }
   });
 

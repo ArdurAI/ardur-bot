@@ -25,5 +25,14 @@ describe("site asset publication", () => {
     expect(contentDigest(source, images)).not.toBe(
       contentDigest(published, new Map([["screenshots/app-chat.png", Buffer.from("fixture")]])),
     );
+    const media = new Map([["media/routines-demo.mp4", Buffer.from("video fixture")]]);
+    expect(contentDigest(source, images, media)).not.toBe(contentDigest(source, images));
+    expect(contentDigest(source, images, media)).not.toBe(
+      contentDigest(
+        source,
+        images,
+        new Map([["media/routines-demo.mp4", Buffer.from("changed video")]]),
+      ),
+    );
   });
 });

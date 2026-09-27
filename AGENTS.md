@@ -1,11 +1,5 @@
 # AGENTS.md
 
-## Public website facts
-
-- The public site ardur.ai builds Ardur product pages from `site/data/product.json` and screenshots that CI publishes to `site-assets` on every push to `dev`.
-- When a change alters what users can do, which providers or computers work, how to install, or what the app looks like, update curated fields in `site/data/product.json` and the screenshot spec if a pictured screen changed; run `pnpm site:facts`.
-- Never write product claims into the website repository by hand. `pnpm site:facts:check` enforces these facts in CI.
-
 - This is a public repository: assume all tracked content and diffs are public. Never commit secrets, `.env` files, private URLs, personal/customer data, or real production data; use fake placeholders. Review `git status` and the staged diff before committing, and never force-add ignored files. If private data appears, stop and alert the maintainer.
 - Read VISION.md before changing anything users can see. It names who uses Ardur Bot (operator, builder, researcher, team lead, local-first user), what each is trying to do, and what "better" means for them; every change should say which of them it helps and how they would notice. Its "Before every commit" list is the review bar.
 - Ardur Bot is one product across web, Electron desktop, and Expo mobile; Electron hosts the web UI. Put shared behavior, contracts, API logic, and reusable UI in packages. Keep only genuinely native navigation, storage, permissions, and interactions platform-specific. Core workflows must cover every applicable surface or degrade safely for an explicit reason.
@@ -22,3 +16,9 @@
 - Commit messages, PR descriptions, issues, and review replies are public too. Describe test results in words instead of pasting tool output, and never include anything that identifies a person, machine, or account: local paths, usernames, hostnames, signing identities, legal entity names, Apple Team IDs, API key IDs, issuer or tenant IDs, account emails, or the accounts, machines, and files that secret values came from. Naming the secrets a workflow reads is fine; use placeholders when a value must be shown.
 - For UI changes, link the CI E2E screenshot that shows the change on the PR; add the web test that opens that screen if it is missing. For native-only mobile UI that CI cannot capture, say so in the PR instead of linking an unrelated web screenshot.
 - UI system. Colors live in `@ardurbot/ui-tokens` as semantic tokens (background, card, muted, border, primary, destructive, ...) with one TypeScript source that generates `tokens.css`; never hardcode a product hex or use `[var(--…)]` arbitrary values. Web and Electron use shadcn/ui on Base UI, vendored into `packages/ui-web` via `pnpm exec shadcn add` from the official registry only (third-party registries are a supply-chain risk); reuse those components before writing chrome by hand, and reuse `apps/web/src/components/ai/` for AI moments (loading, shimmer, success). The app is monochrome: primary is ink, status colors are destructive/success/warning, bots carry the only identity color. Mobile is native-first: Expo Router, Expo UI, native sheets, menus, alerts and pickers wherever one exists; custom surfaces (thread, composer, avatars, cards) use plain StyleSheet with the shared tokens through `apps/mobile/lib/appearance`, and system chrome stays PlatformColor via `lib/native`. Mobile may diverge from web when the native pattern is better.
+
+## Public website facts
+
+- The public site ardur.ai builds Ardur product pages from `site/data/product.json` and screenshots that CI publishes to `site-assets` on every push to `dev`.
+- When a change alters what users can do, which providers or computers work, how to install, or what the app looks like, update curated fields in `site/data/product.json` and the screenshot spec if a pictured screen changed; run `pnpm site:facts`.
+- Never write product claims into the website repository by hand. `pnpm site:facts:check` enforces these facts in CI.

@@ -1,6 +1,8 @@
 import { mkdir, stat } from "node:fs/promises";
 import path from "node:path";
+import { BOT_COLORS } from "@ardurbot/contracts";
 import { expect, type Page, test } from "@playwright/test";
+import { listPiCatalog } from "../../../packages/adapters/src/pi-models";
 import { dashboardFixture } from "./dashboard-fixture";
 
 const outputDir = process.env.SITE_SCREENSHOTS_DIR;
@@ -17,81 +19,343 @@ async function captureSiteScreenshot(page: Page, id: string) {
   }
 }
 
-test("captures the bot and group conversations from seeded demo data", async ({ page }) => {
-  const fixture = dashboardFixture(2);
+function showcaseData() {
+  const fixture = dashboardFixture(6);
+  const base = fixture.rpc("bootstrap") as {
+    me: Record<string, unknown>;
+    bots: (Record<string, unknown> & { id: string; threadId: string })[];
+    spaces: Record<string, unknown>[];
+    thread: Record<string, unknown>;
+  };
+  const names = [
+    "Chief of Staff",
+    "Inbox Manager",
+    "Research Scout",
+    "Release Captain",
+    "Expense Manager",
+    "Calendar Keeper",
+  ];
+  const catalog = listPiCatalog();
+  const model = (provider: string, id: string) => {
+    if (!catalog.some((entry) => entry.provider === provider && entry.id === id))
+      throw new Error(`Missing bundled model ${provider}/${id}`);
+    return { modelProvider: provider, modelId: id, thinkingLevel: "medium" };
+  };
+  const choices = [
+    model("openai-codex", "gpt-5.3-codex-spark"),
+    model("anthropic", "claude-sonnet-4-6"),
+    model("google", "gemini-2.5-pro"),
+    model("openai", "gpt-4.1"),
+    model("xai", "grok-4.3"),
+    model("openai-codex", "gpt-5.3-codex-spark"),
+  ];
+  const bots = base.bots.map((bot, index) => ({
+    ...bot,
+    name: names[index],
+    color: BOT_COLORS[index],
+    ...choices[index],
+    preview: index === 0 ? "Ready to send the weekly plan" : "",
+    unread: false,
+  }));
   const group = {
-    id: "group",
+    id: "operations-group",
     spaceId: "space",
-    name: "Review team",
+    name: "Operations huddle",
     pinned: false,
     sectionId: null,
     archivedAt: null,
-    members: [
-      { botId: "bot", name: "Reviewer", color: "slate", status: "idle" },
-      { botId: "bot-1", name: "Reviewer 1", color: "slate", status: "idle" },
-    ],
-    threadId: "group-thread",
-    preview: "",
+    members: [0, 1, 3].map((index) => ({
+      botId: bots[index].id,
+      name: bots[index].name,
+      color: bots[index].color,
+      status: "idle",
+    })),
+    threadId: "operations-thread",
+    preview: "Release checklist is ready for review.",
     unread: false,
     updatedAt: "2026-09-24T12:00:00.000Z",
     createdAt: "2026-09-24T12:00:00.000Z",
   };
-  const groupMessage = {
-    id: "group-message",
-    threadId: group.threadId,
-    seq: 1,
-    role: "bot",
+  const message = (
+    id: string,
+    threadId: string,
+    seq: number,
+    role: "user" | "bot",
+    text: string,
+    botId?: string,
+  ) => ({
+    id,
+    threadId,
+    seq,
+    role,
+    ...(botId ? { botId } : {}),
+    blocks: [{ kind: "text", text }],
+    createdAt: "2026-09-24T12:00:00.000Z",
+  });
+  const appMessages = [
+    message(
+      "app-1",
+      "thread",
+      1,
+      "user",
+      "Check this week's release checklist and draft a team update.",
+    ),
+    message(
+      "app-2",
+      "thread",
+      2,
+      "bot",
+      "I'll inspect the checklist, then summarize anything that still needs attention.",
+      "bot",
+    ),
+    {
+      id: "app-3",
+      threadId: "thread",
+      seq: 3,
+      role: "bot",
+      botId: "bot",
+      runId: "run",
+      createdAt: "2026-09-24T12:00:00.000Z",
+      blocks: [
+        {
+          kind: "command",
+          command: {
+            commandId: "checklist-command",
+            runId: "run",
+            attemptId: "attempt",
+            executionId: "execution",
+            command: "cat planning/release-checklist.md",
+            cwd: null,
+            computerId: null,
+            computer: "Team computer",
+            startedAt: "2026-09-24T12:00:00.000Z",
+            durationMs: 180,
+            exitCode: 0,
+            outcome: "completed",
+            stdout: "Build verified\nChecks passed\nRelease note drafted\n",
+            stderr: null,
+            error: null,
+            redacted: false,
+            truncated: false,
+            replayOf: null,
+            rerunDisabledReason: "Demo fixture",
+          },
+        },
+      ],
+    },
+    message(
+      "app-4",
+      "thread",
+      4,
+      "bot",
+      "The build and checks are complete. The release note is drafted; I can send the team a short update.",
+      "bot",
+    ),
+    {
+      id: "app-5",
+      threadId: "thread",
+      seq: 5,
+      role: "bot",
+      botId: "bot",
+      runId: "run",
+      createdAt: "2026-09-24T12:00:00.000Z",
+      blocks: [
+        {
+          kind: "ask",
+          text: "Send the team update?",
+          detail: "The release checklist is complete, and the weekly update is ready for review.",
+          status: "pending",
+          approvalEffectId: "effect",
+          actions: [
+            { id: "allow", label: "Allow once" },
+            { id: "deny", label: "Deny" },
+          ],
+        },
+      ],
+    },
+  ];
+  const groupMessages = [
+    message(
+      "group-1",
+      group.threadId,
+      1,
+      "user",
+      "Can we ship the weekly update after today's checks?",
+    ),
+    message(
+      "group-2",
+      group.threadId,
+      2,
+      "bot",
+      "I have the draft. Inbox Manager, please check whether any customer reply changes the summary.",
+      "bot",
+    ),
+    message(
+      "group-3",
+      group.threadId,
+      3,
+      "bot",
+      "Two replies arrived this morning. I added their follow-ups to the draft.",
+      "bot-1",
+    ),
+    {
+      id: "group-4",
+      threadId: group.threadId,
+      seq: 4,
+      role: "bot",
+      botId: "bot-1",
+      createdAt: group.createdAt,
+      blocks: [
+        {
+          kind: "handoff",
+          fromBotId: "bot-1",
+          toBotId: "bot-3",
+          text: "Release Captain, verify the deployment status before we send this.",
+        },
+      ],
+    },
+    message(
+      "group-5",
+      group.threadId,
+      5,
+      "bot",
+      "Checks are green and the release note matches the deployed version. Ready for approval.",
+      "bot-3",
+    ),
+  ];
+  const routines = [
+    {
+      id: "morning-brief",
+      name: "Morning brief",
+      crons: ["0 8 * * 1-5"],
+      prompt: "Prepare today's priorities",
+    },
+    {
+      id: "inbox-triage",
+      name: "Inbox triage",
+      crons: ["0 11 * * 1-5"],
+      prompt: "Review urgent mail",
+    },
+    {
+      id: "friday-wrap",
+      name: "Friday wrap-up",
+      crons: ["0 16 * * 5"],
+      prompt: "Summarize this week's work",
+    },
+  ].map((routine) => ({
+    ...routine,
     botId: "bot",
-    blocks: [{ kind: "text", text: "The draft is ready for the team's review." }],
+    timezone: "UTC",
+    active: true,
+    notify: true,
+    webhookEnabled: false,
+    githubEnabled: false,
+    messageProvider: null,
+    lastRunAt: null,
+    nextRunAt: "2026-09-25T08:00:00.000Z",
     createdAt: group.createdAt,
+  }));
+  const appSnapshot = { ...base.thread, cursor: 5, messages: appMessages };
+  const groupSnapshot = {
+    threadId: group.threadId,
+    groupId: group.id,
+    groupName: group.name,
+    members: group.members,
+    cursor: 5,
+    olderCursor: null,
+    run: null,
+    messages: groupMessages,
   };
+  return { fixture, base, bots, group, routines, appSnapshot, groupSnapshot };
+}
+
+test("captures bot chat, group collaboration, and routines from seeded demo data", async ({
+  page,
+}) => {
+  const data = showcaseData();
   await page.clock.setFixedTime(new Date("2026-09-24T12:00:30.000Z"));
-  await page.route("**/api/auth/get-session*", (route) => route.fulfill({ json: fixture.session }));
+  await page.route("**/api/auth/get-session*", (route) =>
+    route.fulfill({ json: data.fixture.session }),
+  );
   await page.route("**/rpc/**", async (route) => {
     const procedure = new URL(route.request().url()).pathname.slice("/rpc/".length);
-    if (procedure === "threads/subscribe") {
-      await route.fulfill({ contentType: "text/event-stream", body: "" });
-      return;
-    }
-    const input = route.request().postDataJSON()?.json as { groupId?: string } | undefined;
-    const original = fixture.rpc(procedure, input);
+    if (procedure === "threads/subscribe")
+      return route.fulfill({ contentType: "text/event-stream", body: "" });
+    const input = route.request().postDataJSON()?.json as
+      | { groupId?: string; botId?: string }
+      | undefined;
+    const original = data.fixture.rpc(procedure, input);
+    const space = { ...data.base.spaces[0], bots: data.bots, groups: [data.group] };
     const result =
       procedure === "bootstrap"
         ? {
             ...(original as object),
-            groups: [group],
-            spaces: [{ ...(original as { spaces: object[] }).spaces[0], groups: [group] }],
+            me: {
+              ...data.base.me,
+              defaultProvider: "openai-codex",
+              defaultModel: "gpt-5.3-codex-spark",
+              sandboxProvider: "docker",
+            },
+            bots: data.bots,
+            groups: [data.group],
+            spaces: [space],
+            routines: data.routines,
+            thread: data.appSnapshot,
           }
-        : procedure === "spaces/list"
+        : procedure === "me"
           ? {
               ...(original as object),
-              current: { ...(original as { current: object }).current, groups: [group] },
-              spaces: [{ ...(original as { spaces: object[] }).spaces[0], groups: [group] }],
+              defaultProvider: "openai-codex",
+              defaultModel: "gpt-5.3-codex-spark",
+              sandboxProvider: "docker",
             }
-          : procedure === "groups/list"
-            ? [group]
-            : (procedure === "threads/get" || procedure === "threads/head") &&
-                input?.groupId === group.id
-              ? {
-                  threadId: group.threadId,
-                  groupId: group.id,
-                  groupName: group.name,
-                  members: group.members,
-                  cursor: 1,
-                  olderCursor: null,
-                  run: null,
-                  messages: [groupMessage],
-                }
-              : original;
+          : procedure === "spaces/list"
+            ? { current: space, spaces: [space] }
+            : procedure === "bots/list"
+              ? data.bots
+              : procedure === "bots/get"
+                ? (data.bots.find((bot) => bot.id === input?.botId) ?? data.bots[0])
+                : procedure === "groups/list"
+                  ? [data.group]
+                  : procedure === "routines/list"
+                    ? input?.botId === "bot"
+                      ? data.routines
+                      : []
+                    : procedure === "runs/list" || procedure === "dashboard/now"
+                      ? {
+                          ...(original as object),
+                          runs: (original as { runs: Record<string, unknown>[] }).runs.map(
+                            (run) => ({
+                              ...run,
+                              botName: "Chief of Staff",
+                              promptSnippet: "Review release checklist",
+                            }),
+                          ),
+                        }
+                      : procedure === "threads/get" || procedure === "threads/head"
+                        ? input?.groupId === data.group.id
+                          ? data.groupSnapshot
+                          : data.appSnapshot
+                        : original;
     await route.fulfill({ json: { json: result } });
   });
 
   await page.goto("/app/bot");
   await expect(page.getByRole("button", { name: "Allow once", exact: true })).toBeVisible();
+  await expect(page.getByText("cat planning/release-checklist.md")).toBeVisible();
   await captureSiteScreenshot(page, "app-chat");
 
-  await page.goto("/app/g/group");
-  await expect(page.getByRole("combobox", { name: "Message Review team" })).toBeVisible();
-  await expect(page.getByText("The draft is ready for the team's review.")).toBeVisible();
+  await page.goto("/app/g/operations-group");
+  await expect(
+    page.getByText("Checks are green and the release note matches the deployed version.", {
+      exact: false,
+    }),
+  ).toBeVisible();
   await captureSiteScreenshot(page, "group-chat");
+
+  await page.goto("/app/bot");
+  await page.getByTitle("Agent computer").click();
+  await expect(page.getByText("Morning brief")).toBeVisible();
+  await expect(page.getByTestId("computer-preview")).toBeVisible();
+  await captureSiteScreenshot(page, "routines");
 });

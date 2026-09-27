@@ -203,7 +203,9 @@ jobs:
           git rm -rf .
           cp "${SITE_ASSETS_STAGE}/product.json" product.json
           cp -R "${SITE_ASSETS_STAGE}/screenshots" screenshots
+          if [ -d "${SITE_ASSETS_STAGE}/media" ]; then cp -R "${SITE_ASSETS_STAGE}/media" media; fi
           git add product.json screenshots
+          if [ -d media ]; then git add media; fi
           git -c commit.gpgsign=false -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'Publish site assets'
           git push --force origin HEAD:refs/heads/site-assets
           echo "- Published orphan commit: $(git rev-parse HEAD)" >> "${GITHUB_STEP_SUMMARY}"

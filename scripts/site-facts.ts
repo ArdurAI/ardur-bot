@@ -1,19 +1,25 @@
-import { readdir, readFile, writeFile } from "node:fs/promises";
+import { readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { listPiCatalog } from "../packages/adapters/src/pi-models.ts";
+import {
+  MIN_ONE_SHOT_LEAD_SECONDS,
+  MIN_REPEATING_INTERVAL_SECONDS,
+} from "../packages/adapters/src/schedule-tools.ts";
 import { ComputerConnectionSettingsSchema } from "../packages/contracts/src/computer-connections.ts";
+import { CreateRoutineInput, RoutineSchema } from "../packages/contracts/src/domain.ts";
 import { type SiteProduct, SiteProductSchema } from "../packages/contracts/src/site-product.ts";
+import { POPULAR_MODEL_PROVIDER_IDS } from "../packages/core/src/model-providers.ts";
 
 type Provider = SiteProduct["providers"][number];
-type ProviderMetadata = Pick<Provider, "name" | "access" | "status">;
+type ProviderMetadata = Pick<Provider, "name" | "access" | "status" | "accountHint">;
 
 // Every shipped catalog ID must be described here. Do not infer access from an OAuth flag:
 // the catalog also contains key-only and compatibility paths for subscription vendors.
 export const PROVIDER_METADATA: Record<string, ProviderMetadata> = {
   "amazon-bedrock": { name: "Amazon Bedrock", access: "api-key", status: "available" },
   "ant-ling": { name: "Ant Ling", access: "api-key", status: "available" },
-  anthropic: { name: "Anthropic", access: "api-key", status: "available" },
+  anthropic: { name: "Anthropic", access: "api-key", status: "available", accountHint: "API key" },
   "azure-openai-responses": { name: "Azure OpenAI", access: "api-key", status: "available" },
   baseten: { name: "Baseten", access: "api-key", status: "available" },
   cerebras: { name: "Cerebras", access: "api-key", status: "available" },
@@ -29,13 +35,18 @@ export const PROVIDER_METADATA: Record<string, ProviderMetadata> = {
   },
   deepseek: { name: "DeepSeek", access: "api-key", status: "available" },
   fireworks: { name: "Fireworks", access: "api-key", status: "available" },
-  "github-copilot": { name: "GitHub Copilot", access: "subscription", status: "available" },
+  "github-copilot": {
+    name: "GitHub Copilot",
+    access: "subscription",
+    status: "available",
+    accountHint: "Copilot account",
+  },
   google: { name: "Google", access: "api-key", status: "available" },
   "google-vertex": { name: "Google Vertex AI", access: "api-key", status: "available" },
   groq: { name: "Groq", access: "api-key", status: "available" },
   huggingface: { name: "Hugging Face", access: "api-key", status: "available" },
-  "kimi-coding": { name: "Kimi for Coding", access: "subscription", status: "available" },
-  meta: { name: "Meta", access: "subscription", status: "available" },
+  "kimi-coding": { name: "Kimi for Coding", access: "api-key", status: "available" },
+  meta: { name: "Meta", access: "api-key", status: "available" },
   minimax: { name: "MiniMax", access: "api-key", status: "available" },
   "minimax-cn": { name: "MiniMax CN", access: "api-key", status: "available" },
   mistral: { name: "Mistral", access: "api-key", status: "available" },
@@ -43,7 +54,12 @@ export const PROVIDER_METADATA: Record<string, ProviderMetadata> = {
   "moonshotai-cn": { name: "Moonshot AI CN", access: "api-key", status: "available" },
   nvidia: { name: "NVIDIA", access: "api-key", status: "available" },
   openai: { name: "OpenAI", access: "api-key", status: "available" },
-  "openai-codex": { name: "OpenAI Codex", access: "subscription", status: "available" },
+  "openai-codex": {
+    name: "OpenAI Codex",
+    access: "subscription",
+    status: "available",
+    accountHint: "ChatGPT account",
+  },
   "openai-compatible": { name: "OpenAI-compatible server", access: "gateway", status: "available" },
   opencode: { name: "OpenCode Zen", access: "api-key", status: "available" },
   "opencode-go": { name: "OpenCode Go", access: "api-key", status: "available" },
@@ -58,7 +74,12 @@ export const PROVIDER_METADATA: Record<string, ProviderMetadata> = {
   radius: { name: "Radius", access: "api-key", status: "available" },
   together: { name: "Together", access: "api-key", status: "available" },
   "vercel-ai-gateway": { name: "Vercel AI Gateway", access: "gateway", status: "available" },
-  xai: { name: "xAI", access: "subscription", status: "available" },
+  xai: {
+    name: "xAI",
+    access: "subscription",
+    status: "available",
+    accountHint: "SuperGrok or X Premium account",
+  },
   xiaomi: { name: "Xiaomi", access: "api-key", status: "available" },
   "xiaomi-token-plan-ams": {
     name: "Xiaomi Token Plan AMS",
@@ -78,6 +99,7 @@ export const PROVIDER_METADATA: Record<string, ProviderMetadata> = {
     name: "Claude Pro/Max through the CLI",
     access: "subscription",
     status: "roadmap",
+    accountHint: "Claude account through your own CLI",
   },
   ollama: { name: "Ollama as a first-class choice", access: "local", status: "roadmap" },
 };
@@ -88,6 +110,51 @@ const readmePath = "README.md";
 const screenshotSpec = "apps/web/e2e/site-screenshots.spec.ts";
 const generatedComment =
   "<!-- Generated from site/data/product.json by pnpm site:facts; edit that file. -->";
+const triggerDetails: Record<string, { id: string; name: string; detail: string }> = {
+  crons: {
+    id: "schedule",
+    name: "Schedule",
+    detail: "Run at a chosen time or repeating schedule.",
+  },
+  webhookEnabled: {
+    id: "webhook",
+    name: "Webhook",
+    detail: "Run when a configured webhook fires.",
+  },
+  githubEnabled: {
+    id: "github",
+    name: "GitHub",
+    detail: "Run when a configured GitHub event arrives.",
+  },
+  messageProvider: {
+    id: "message",
+    name: "Message",
+    detail: "Run when a connected message provider receives a message.",
+  },
+};
+const nonTriggerInputKeys = new Set(["botId", "name", "prompt", "timezone", "notify", "active"]);
+
+export function routinesFromCode(): NonNullable<SiteProduct["routines"]> {
+  const keys = Object.keys(CreateRoutineInput.shape).filter((key) => !nonTriggerInputKeys.has(key));
+  for (const key of keys) {
+    if (!(key in RoutineSchema.shape) || !triggerDetails[key]) {
+      throw new Error(
+        `Add routine trigger field "${key}" to triggerDetails in scripts/site-facts.ts.`,
+      );
+    }
+  }
+  return {
+    triggers: keys.map((key) => triggerDetails[key]),
+    minimumIntervalSeconds: MIN_REPEATING_INTERVAL_SECONDS,
+    limits: [
+      {
+        id: "one-shot-future",
+        text: "One-shot runs must be scheduled in the future.",
+        value: MIN_ONE_SHOT_LEAD_SECONDS,
+      },
+    ],
+  };
+}
 
 export function providersFromCatalog(catalog = listPiCatalog()): Provider[] {
   const shipped = [...new Set(catalog.map((entry) => entry.provider))];
@@ -101,9 +168,17 @@ export function providersFromCatalog(catalog = listPiCatalog()): Provider[] {
       );
     }
   }
+  for (const id of POPULAR_MODEL_PROVIDER_IDS) {
+    if (!shipped.includes(id))
+      throw new Error(`Featured provider "${id}" is missing from the model catalog.`);
+  }
   return Object.entries(PROVIDER_METADATA)
     .filter(([id, metadata]) => shipped.includes(id) || metadata.status === "roadmap")
-    .map(([id, metadata]) => ({ id, ...metadata }))
+    .map(([id, metadata]) => ({
+      id,
+      ...metadata,
+      featured: POPULAR_MODEL_PROVIDER_IDS.some((popular) => popular === id),
+    }))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -143,6 +218,10 @@ export async function generatedProduct(rootDir = root): Promise<SiteProduct> {
     ...curated,
     providers: providersFromCatalog(),
     computers: computersFromRegistry(),
+    routines: {
+      ...routinesFromCode(),
+      ...(curated.routines?.useCases ? { useCases: curated.routines.useCases } : {}),
+    },
     install: {
       ...curated.install,
       homebrew: {
@@ -175,29 +254,23 @@ function replaceBlock(readme: string, id: string, content: string): string {
 
 export function generatedReadme(readme: string, product: SiteProduct): string {
   const available = product.providers.filter((provider) => provider.status === "available");
-  const featured = [
-    "openrouter",
-    "openai-codex",
-    "anthropic",
-    "openai",
-    "google",
-    "vercel-ai-gateway",
-    "openai-compatible",
-  ].map((id) => {
-    const provider = available.find((entry) => entry.id === id);
+  const featured = POPULAR_MODEL_PROVIDER_IDS.map((id) => {
+    const provider = available.find((entry) => entry.id === id && entry.featured);
     if (!provider)
       throw new Error(`Featured provider "${id}" is missing from site/data/product.json.`);
-    return provider.name;
+    return provider.accountHint ? `${provider.name} (${provider.accountHint})` : provider.name;
   });
   const more = available.length - featured.length;
   const planned = product.providers
     .filter((provider) => provider.status === "roadmap")
-    .map((provider) => provider.name);
+    .map((provider) =>
+      provider.id === "ollama" ? "Ollama as a direct local choice" : provider.name,
+    );
   const providerText = [
-    `- Providers: ${featured.slice(0, -1).join(", ")}, and ${featured.at(-1)},`,
-    `  plus ${more} more in the model catalog. OpenAI-compatible servers cover local Ollama,`,
-    "  LM Studio and llama.cpp. The planned first-class options are",
-    `  ${planned.join(" and ")}.`,
+    `- Providers: ${featured.slice(0, 3).join(", ")},`,
+    `  ${featured.slice(3).join(", ")}, and ${more} more in the searchable model catalog.`,
+    "  OpenAI-compatible servers cover local Ollama, LM Studio and llama.cpp.",
+    `  Planned additions include ${planned.join(" and ")}.`,
   ].join("\n");
   const fromSource = product.install.fromSource;
   const split = fromSource.commands.indexOf("cp .env.example .env") + 1;
@@ -206,16 +279,36 @@ export function generatedReadme(readme: string, product: SiteProduct): string {
       "install.fromSource.commands must include setup commands before service commands.",
     );
   const sourceText = [
-    `You need ${fromSource.requirements}. Node.js 23.x and 25.x are not supported.`,
+    `You need ${fromSource.requirements.replace(", Node.js 24.x", ",\nNode.js 24.x")}. Node.js 23.x and 25.x are not supported.`,
     "",
     "```sh",
     ...fromSource.commands.slice(0, split),
     "```",
     "",
-    fromSource.note,
+    fromSource.note
+      .replace(/\.env\b/g, "`.env`")
+      .replace(
+        /\b(POSTGRES_PASSWORD|DATABASE_URL|BETTER_AUTH_SECRET|ENCRYPTION_KEY|SCREEN_PROXY_SECRET|SANDBOX_SUPERVISOR_TOKEN|OPENROUTER_API_KEY|openssl rand -hex (?:16|32))\b/g,
+        "`$1`",
+      )
+      .replace(" and use it in `DATABASE_URL`", " and put the same value in `DATABASE_URL`")
+      .replace("; set ", ". Set ")
+      .replace("; add ", ". Add ")
+      .replace(" and put the same value", "\nand put the same value")
+      .replace(". Set ", ".\nSet ")
+      .replace(" and `SANDBOX_SUPERVISOR_TOKEN`", "\nand `SANDBOX_SUPERVISOR_TOKEN`")
+      .replace(". Add model credentials", ".\nAdd model credentials"),
     "",
     "```sh",
-    ...fromSource.commands.slice(split),
+    ...fromSource.commands
+      .slice(split)
+      .map((command) =>
+        command.startsWith("docker compose ")
+          ? command
+              .replace(/ -f /g, " \\\n  -f ")
+              .replace(/ up postgres -d$/, " \\\n  up postgres -d")
+          : command,
+      ),
     "```",
   ].join("\n");
   return replaceBlock(replaceBlock(readme, "providers", providerText), "from-source", sourceText);
@@ -249,6 +342,48 @@ export async function validateReferences(product: SiteProduct, rootDir = root): 
         `Screenshot "${shot.id}" has no capture in ${screenshotSpec}. Add captureSiteScreenshot(page, "${shot.id}").`,
       );
     }
+  }
+  if (product.routines?.useCases) {
+    const catalog = await readFile(
+      path.join(rootDir, "apps/web/src/locales/en/messages.po"),
+      "utf8",
+    );
+    const labels = new Set(
+      [...catalog.matchAll(/^msgid "([^"\\]*(?:\\.[^"\\]*)*)"$/gm)].map((match) => match[1]),
+    );
+    for (const useCase of product.routines.useCases) {
+      for (const label of useCase.uiLabels) {
+        if (!labels.has(label))
+          throw new Error(
+            `Routine use case "${useCase.id}" uses UI label "${label}" missing from the English message catalog.`,
+          );
+        if (!useCase.steps.some((step) => step.includes(`“${label}”`)))
+          throw new Error(
+            `Routine use case "${useCase.id}" must use UI label "${label}" verbatim in a step.`,
+          );
+      }
+      for (const step of useCase.steps) {
+        for (const match of step.matchAll(/“([^”]+)”/g)) {
+          if (!useCase.uiLabels.includes(match[1]))
+            throw new Error(
+              `Routine use case "${useCase.id}" names control "${match[1]}" without listing its UI label.`,
+            );
+        }
+      }
+    }
+  }
+  for (const video of product.videos ?? []) {
+    for (const file of Object.values(video.files)) {
+      const asset = path.join(rootDir, "site", file);
+      const info = await stat(asset).catch(() => {
+        throw new Error(`Video "${video.id}" is missing site/${file}.`);
+      });
+      if (!info.isFile() || info.size > 8_000_000)
+        throw new Error(`Video "${video.id}" file site/${file} must be a file at most 8 MB.`);
+    }
+    const captions = await readFile(path.join(rootDir, "site", video.files.captions), "utf8");
+    if (!captions.startsWith("WEBVTT"))
+      throw new Error(`Video "${video.id}" needs WEBVTT captions.`);
   }
 }
 
