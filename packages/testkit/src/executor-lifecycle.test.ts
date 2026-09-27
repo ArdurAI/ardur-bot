@@ -291,50 +291,60 @@ describeIntegration("run executor lifecycle", () => {
     ).toBe(1);
   });
 
-  it("finishes a silent peer completion without writing an empty worker reply", async () => {
-    const seeded = await seedPeerRun("silent-peer-reply");
-    const events = createThreadEvents(handles.prisma);
-    expect(
-      await events.finalizeRun({
-        spaceId: seeded.coordinator.me.spaceId,
-        threadId: seeded.workerThread.id,
-        botId: seeded.workerBot.id,
-        runId: seeded.run.id,
-        taskId: seeded.task.id,
-        attemptId: seeded.attempt.id,
-        leaseOwner: "peer-worker",
-        leaseFence: 1,
-        outcome: "completed",
-        blocks: [],
-      }),
-    ).toEqual({ continuationRunId: null });
-
-    expect(
-      await handles.prisma.message.count({
-        where: { threadId: seeded.workerThread.id, runId: seeded.run.id },
-      }),
-    ).toBe(0);
-    expect(
-      await handles.prisma.event.count({
-        where: {
+  it.each([
+    { case: "empty blocks", id: "empty", blocks: [] },
+    {
+      case: "tool-only blocks",
+      id: "tools",
+      blocks: [{ kind: "steps" as const, steps: [{ label: "Read file", count: 1 }] }],
+    },
+  ])(
+    "finishes a silent peer completion with $case without writing an empty worker reply",
+    async ({ blocks, id }) => {
+      const seeded = await seedPeerRun(`silent-peer-reply-${id}`);
+      const events = createThreadEvents(handles.prisma);
+      expect(
+        await events.finalizeRun({
+          spaceId: seeded.coordinator.me.spaceId,
           threadId: seeded.workerThread.id,
+          botId: seeded.workerBot.id,
           runId: seeded.run.id,
-          type: "thread.message.created",
+          taskId: seeded.task.id,
+          attemptId: seeded.attempt.id,
+          leaseOwner: "peer-worker",
+          leaseFence: 1,
+          outcome: "completed",
+          blocks,
+        }),
+      ).toEqual({ continuationRunId: null });
+
+      expect(
+        await handles.prisma.message.count({
+          where: { threadId: seeded.workerThread.id, runId: seeded.run.id },
+        }),
+      ).toBe(0);
+      expect(
+        await handles.prisma.event.count({
+          where: {
+            threadId: seeded.workerThread.id,
+            runId: seeded.run.id,
+            type: "thread.message.created",
+          },
+        }),
+      ).toBe(0);
+      const receipt = await handles.prisma.message.findUniqueOrThrow({
+        where: {
+          threadId_clientNonce: {
+            threadId: seeded.coordinator.thread.id,
+            clientNonce: `delegation-summary:${seeded.delegation.id}`,
+          },
         },
-      }),
-    ).toBe(0);
-    const receipt = await handles.prisma.message.findUniqueOrThrow({
-      where: {
-        threadId_clientNonce: {
-          threadId: seeded.coordinator.thread.id,
-          clientNonce: `delegation-summary:${seeded.delegation.id}`,
-        },
-      },
-    });
-    expect(receipt.blocks).toEqual([
-      expect.objectContaining({ kind: "text", text: expect.stringContaining("completed") }),
-    ]);
-  });
+      });
+      expect(receipt.blocks).toEqual([
+        expect.objectContaining({ kind: "text", text: expect.stringContaining("completed") }),
+      ]);
+    },
+  );
 
   it("rolls back every terminal write when the atomic commit fails", async () => {
     const seeded = await seedRun("terminal-rollback", "do not partially finish", {

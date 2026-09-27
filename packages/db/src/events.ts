@@ -1272,16 +1272,14 @@ async function finalizeRunOnce(
       input.outcome === "completed" &&
       (!writableRun?.delegationId || goalRoomAssignment || peerMessageAssignment)
     ) {
+      const peerReply = peerMessageAssignment
+        ? redactTaskValue(
+            input.blocks.flatMap((block) => ("text" in block ? [block.text] : [])).join("\n"),
+          )
+        : null;
       const completedBlocks = peerMessageAssignment
-        ? input.blocks.length > 0
-          ? [
-              {
-                kind: "text" as const,
-                text: redactTaskValue(
-                  input.blocks.flatMap((block) => ("text" in block ? [block.text] : [])).join("\n"),
-                ),
-              },
-            ]
+        ? peerReply?.trim()
+          ? [{ kind: "text" as const, text: peerReply }]
           : []
         : completedRunBlocks(input.blocks, writableRun?.startedAt ?? null, now);
       if (completedBlocks.length > 0) {
