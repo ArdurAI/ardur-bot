@@ -29,11 +29,8 @@ async function revealHoverRail(row: Locator): Promise<Locator> {
 /** Park the pointer outside the message and blur focus so the rail returns to opacity-0. */
 async function expectRailAtRest(page: Page, row: Locator) {
   const rail = row.getByTestId("message-hover-rail");
-  const box = await row.boundingBox();
-  if (box) {
-    // (0,0) can still sit on the first transcript row; leave below the row instead.
-    await page.mouse.move(Math.max(0, box.x) + 8, box.y + box.height + 32);
-  }
+  // Park the pointer in a neutral spot off the transcript so hover is cleared.
+  await page.mouse.move(0, 0);
   // More keeps focus after Escape; blur so focus-within does not leave the rail visible.
   await page.evaluate(() => {
     (document.activeElement as HTMLElement | null)?.blur();
@@ -203,9 +200,12 @@ test("message hover shows beside-bubble actions; reply links to parent", async (
   expect(rowBox).not.toBeNull();
   expect(Math.abs(timeBox!.x - rowBox!.x)).toBeLessThan(2);
   await toolbar.getByRole("button", { name: "More" }).click();
-  await expect(page.getByRole("menu").locator("time")).toHaveCount(0);
+  const menu = page.getByRole("menu");
+  await expect(menu).toBeVisible();
+  await expect(menu.locator("time")).toHaveCount(0);
   // Escape closes More and restores focus to the trigger so the rail stays up.
   await page.keyboard.press("Escape");
+  await expect(menu).toBeHidden();
   await expect(toolbar.getByRole("button", { name: "More" })).toBeFocused();
   await captureScreenshot(page, testInfo, "message-user-actions-hover-desktop");
   // Default transcript shot: rail at rest (no hover pin, mouse clear).
@@ -238,19 +238,21 @@ test("message hover shows beside-bubble actions; reply links to parent", async (
   await testInfo.attach("message-hover-toolbar", { contentType: "image/png", path: hoverPath });
 
   await react.click();
+  const reactionPicker = page.getByRole("dialog", { name: "Reactions" });
+  await expect(reactionPicker).toBeVisible();
   for (const emoji of ["👍", "👎", "❤️", "😂", "🎉", "😮"]) {
-    await expect(page.getByRole("button", { name: emoji, exact: true })).toBeVisible();
+    await expect(reactionPicker.getByRole("button", { name: emoji, exact: true })).toBeVisible();
   }
   await captureScreenshot(page, testInfo, "message-reaction-picker");
-  await page.getByRole("button", { name: "❤️", exact: true }).click();
+  await reactionPicker.getByRole("button", { name: "❤️", exact: true }).click();
   await expect(parentRow.getByTestId("message-reactions")).toHaveText("❤️");
   await parentRow.hover();
   await react.click();
-  await page.getByRole("button", { name: "👍", exact: true }).click();
+  await reactionPicker.getByRole("button", { name: "👍", exact: true }).click();
   await expect(parentRow.getByTestId("message-reactions")).toContainText("👍");
   await parentRow.hover();
   await react.click();
-  await page.getByRole("button", { name: "❤️", exact: true }).click();
+  await reactionPicker.getByRole("button", { name: "❤️", exact: true }).click();
   await expect(parentRow.getByTestId("message-reactions")).toContainText("❤️ 2");
   await captureScreenshot(page, testInfo, "message-multiple-reactions");
   await page.reload({ waitUntil: "domcontentloaded" });
@@ -279,6 +281,9 @@ test("message hover shows beside-bubble actions; reply links to parent", async (
   const parentPreview = replyRow.getByTestId("reply-parent-preview");
   await expect(parentPreview).toBeVisible();
   await expect(parentPreview).toContainText(parentText);
+  await expect(transcript.getByText(new RegExp(`done\\. i handled: ${replyText}`))).toBeVisible({
+    timeout: 20_000,
+  });
   await captureScreenshot(page, testInfo, "message-reply-thread");
 
   await parentPreview.click();
