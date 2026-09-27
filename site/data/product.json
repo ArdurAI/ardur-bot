@@ -43,7 +43,7 @@
       "id": "choose",
       "eyebrow": "CHOICE",
       "title": "Choose each bot's model",
-      "body": "Choose a provider, model and thinking level for each bot.",
+      "body": "Choose each bot's runtime and model, including experimental Antigravity text conversations on a connected computer.",
       "source": "README.md#What you get today"
     },
     {

@@ -20,6 +20,7 @@ import {
   RuntimeQueue,
   spawnNative,
   stopNative,
+  terminateNative,
 } from "./native-process.js";
 
 function supportedClaudeVersion(version?: string) {
@@ -365,7 +366,7 @@ export class ClaudeCodeRuntime implements AgentRuntime {
         paused = true;
         for (const event of parser.finishUsage("cancelled")) queue.push(event);
         queue.end();
-        child?.kill("SIGTERM");
+        if (child) terminateNative(child, "SIGTERM");
       },
       () => parser.initialized && !context?.signal?.aborted,
     );
@@ -393,7 +394,7 @@ export class ClaudeCodeRuntime implements AgentRuntime {
       ))
         queue.push(event);
       queue.end();
-      child?.kill("SIGTERM");
+      if (child) terminateNative(child, "SIGTERM");
     };
     let reader: Promise<void> | undefined;
     try {

@@ -233,9 +233,30 @@ function fixture(
     for await (const event of runtime.run(request)) events.push(event);
     return events;
   };
-  return { collect, messages, request, info, spawn };
+  return { collect, messages, request, info, spawn, runtime, child };
 }
 describe("Codex app-server protocol", () => {
+  it("stops a held turn after cancellation", async () => {
+    const f = fixture("success", {
+      duringTurn: [
+        {
+          method: "item/agentMessage/delta",
+          params: { threadId: "thread-native", delta: "hello" },
+        },
+      ],
+    });
+    const controller = new AbortController();
+    const events: AgentRuntimeEvent[] = [];
+    for await (const event of f.runtime.run(f.request, { signal: controller.signal })) {
+      events.push(event);
+      if (event.type === "text") {
+        controller.abort();
+        await f.runtime.abort(f.request.runId);
+      }
+    }
+    expect(f.child.kill).toHaveBeenCalled();
+    expect(events.some((event) => event.type === "done")).toBe(false);
+  });
   const usage = (inputTokens: number, outputTokens: number, turnId = "turn-native"): Message => ({
     method: "thread/tokenUsage/updated",
     params: {

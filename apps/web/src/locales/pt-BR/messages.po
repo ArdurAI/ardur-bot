@@ -745,6 +745,57 @@ msgstr "Respondido: {0}"
 msgid "Answered: {answer}"
 msgstr "Respondido: {answer}"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Antigravity"
+msgstr "Antigravity"
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity cannot run comparison turns yet. Choose another runtime."
+msgstr "O Antigravity ainda não executa turnos de comparação. Escolha outro ambiente de execução."
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity cannot use images yet. Remove the image and try again."
+msgstr "O Antigravity ainda não aceita imagens. Remova a imagem e tente novamente."
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity could not run this turn. Check the runtime and try again."
+msgstr "O Antigravity não conseguiu executar este turno. Verifique o ambiente de execução e tente novamente."
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity did not finish in time. Try again."
+msgstr "O Antigravity não terminou a tempo. Tente novamente."
+
+#. placeholder {0}: pin.modelId ?? ""
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity did not recognise the model {0}. Pick a model from its list."
+msgstr "O Antigravity não reconheceu o modelo {0}. Escolha um modelo da lista."
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity input is too large. Shorten the message or conversation and try again."
+msgstr "A entrada do Antigravity é grande demais. Encurte a mensagem ou conversa e tente novamente."
+
+#. placeholder {0}: availability.version
+#: src/pages/shell/runtime-settings.tsx
+msgid "Antigravity is installed (version {0})"
+msgstr "O Antigravity está instalado (versão {0})"
+
+#: src/pages/shell/provider-error-message.tsx
+#: src/pages/shell/runtime-settings.tsx
+msgid "Antigravity is not installed on this computer. Install it and sign in there, then check again."
+msgstr "O Antigravity não está instalado neste computador. Instale, entre na conta e verifique novamente."
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Antigravity runs on a connected host computer."
+msgstr "O Antigravity é executado em um computador host conectado."
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity tried to use its own tools, which Ardur does not allow yet. The turn was stopped."
+msgstr "O Antigravity tentou usar suas próprias ferramentas, o que o Ardur ainda não permite. A execução foi interrompida."
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity's live model list could not be checked. Check again."
+msgstr "Não foi possível verificar a lista atual de modelos do Antigravity. Verifique novamente."
+
 #: src/pages/ModelDestinations.tsx
 msgid "Any"
 msgstr ""
@@ -2111,6 +2162,10 @@ msgstr ""
 #: src/pages/TeamBoard.tsx
 msgid "Cost"
 msgstr ""
+
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Cost unavailable"
+msgstr "Custo indisponível"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Could not add"
@@ -7152,6 +7207,11 @@ msgstr "Entrar"
 msgid "Sign in again to manage sessions."
 msgstr ""
 
+#: src/pages/shell/provider-error-message.tsx
+#: src/pages/shell/runtime-settings.tsx
+msgid "Sign in to Antigravity on this computer, then check again."
+msgstr "Entre no Antigravity neste computador e verifique novamente."
+
 #: src/pages/Auth.tsx
 msgid "Sign in to Ardur"
 msgstr "Entrar no Ardur"
@@ -7188,6 +7248,11 @@ msgstr ""
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Sign-in timed out."
 msgstr ""
+
+#: src/pages/shell/provider-error-message.tsx
+#: src/pages/shell/runtime-settings.tsx
+msgid "Sign-in unknown until the first run"
+msgstr "O status de login é desconhecido até a primeira execução"
 
 #: src/lib/mcp-sign-in.ts
 msgid "Sign-in was cancelled."
@@ -8063,6 +8128,10 @@ msgstr ""
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Update"
 msgstr ""
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Update Antigravity to version 1.2.12 or later."
+msgstr "Atualize o Antigravity para a versão 1.2.12 ou posterior."
 
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Update available"

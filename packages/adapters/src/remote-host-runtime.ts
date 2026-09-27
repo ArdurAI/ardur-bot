@@ -20,14 +20,19 @@ export class RemoteHostRuntime implements AgentRuntime {
   private active = new Map<string, AbortController>();
   constructor(
     private readonly client: HostClient,
-    private readonly kind: "claude-code" | "codex-app-server",
+    private readonly kind: "claude-code" | "codex-app-server" | "antigravity",
   ) {}
   describe() {
     return {
       id: this.kind,
       contractVersion: "1",
       adapterVersion: "0.1.0",
-      capabilities: { streaming: true, compaction: false, tools: true, scripted: false },
+      capabilities: {
+        streaming: true,
+        compaction: false,
+        tools: this.kind !== "antigravity",
+        scripted: false,
+      },
     };
   }
   async abort(runId: string) {

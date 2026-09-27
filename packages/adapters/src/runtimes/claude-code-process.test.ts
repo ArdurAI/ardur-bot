@@ -42,6 +42,7 @@ function fixture(
     version?: string;
     init?: Record<string, unknown>;
     result?: Record<string, unknown>;
+    hold?: boolean;
   } = {},
 ) {
   const child = new EventEmitter() as ChildProcessWithoutNullStreams;
@@ -75,6 +76,16 @@ function fixture(
           ...options.result,
         },
       ];
+      if (options.hold) {
+        stdout.write(
+          `${events
+            .slice(0, 2)
+            .map((event) => JSON.stringify(event))
+            .join("\n")}\n`,
+        );
+        done();
+        return;
+      }
       stdout.end(`${events.map((event) => JSON.stringify(event)).join("\n")}\n`);
       done();
       queueMicrotask(() => {
@@ -102,6 +113,7 @@ function fixture(
     return child;
   });
   const info = vi.fn();
+  const runtime = new ClaudeCodeRuntime(spawn);
   const request: AgentRunRequest = {
     botId: "bot",
     threadId: "thread",
@@ -131,15 +143,31 @@ function fixture(
     spawn,
     info,
     child,
+    request,
+    runtime,
     input: () => input,
     run: async () => {
       const events: AgentRuntimeEvent[] = [];
-      for await (const event of new ClaudeCodeRuntime(spawn).run(request)) events.push(event);
+      for await (const event of runtime.run(request)) events.push(event);
       return events;
     },
   };
 }
 describe("Claude subprocess lifecycle", () => {
+  it("stops a held turn after cancellation", async () => {
+    const f = fixture(0, false, { hold: true });
+    const controller = new AbortController();
+    const events: AgentRuntimeEvent[] = [];
+    for await (const event of f.runtime.run(f.request, { signal: controller.signal })) {
+      events.push(event);
+      if (event.type === "text") {
+        controller.abort();
+        await f.runtime.abort(f.request.runId);
+      }
+    }
+    expect(f.child.kill).toHaveBeenCalled();
+    expect(events.some((event) => event.type === "done")).toBe(false);
+  });
   it.each([0, 1])(
     "probes sign-in using auth status exit code %s and discards its output",
     async (authCode) => {

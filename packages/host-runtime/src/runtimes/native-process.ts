@@ -11,13 +11,13 @@ import {
 export { nativeEnvironment } from "../host-environment.js";
 
 export function nativeBinaryCandidates(
-  name: "claude" | "codex",
+  name: "claude" | "codex" | "agy",
   env: NodeJS.ProcessEnv,
   platform = process.platform,
 ) {
   return hostBinaryCandidates(name, env, platform);
 }
-export async function findNativeBinary(name: "claude" | "codex", env?: NodeJS.ProcessEnv) {
+export async function findNativeBinary(name: "claude" | "codex" | "agy", env?: NodeJS.ProcessEnv) {
   env ??= (await getHostEnvironment()).env;
   return resolveHostBinary(name, env);
 }
@@ -42,6 +42,8 @@ export async function probeCommand(
   args: string[],
   capture = false,
   start = spawnNative,
+  // Some CLIs print usage to stderr (agy --help does); opt in per probe so version parsing elsewhere stays on stdout.
+  captureStderr = false,
 ) {
   const maxOutputBytes = 16 * 1024;
   const child = start(binary, args);
@@ -51,7 +53,10 @@ export async function probeCommand(
     if (capture && output.length < maxOutputBytes)
       output += chunk.toString().slice(0, maxOutputBytes - output.length);
   });
-  child.stderr.resume();
+  child.stderr.on("data", (chunk: Buffer) => {
+    if (capture && captureStderr && output.length < maxOutputBytes)
+      output += chunk.toString().slice(0, maxOutputBytes - output.length);
+  });
   const timer = setTimeout(() => child.kill("SIGKILL"), 5_000);
   try {
     const code = await new Promise<number | null>((resolve, reject) => {

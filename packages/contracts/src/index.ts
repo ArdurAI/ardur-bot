@@ -1,5 +1,6 @@
 export * from "./account.js";
 export * from "./ai-consent.js";
+export * from "./antigravity-pin.js";
 export * from "./attachments.js";
 export type * from "./board.js";
 export * from "./bot-avatar.js";

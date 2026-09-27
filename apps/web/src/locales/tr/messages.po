@@ -745,6 +745,57 @@ msgstr "Yanıtlandı: {0}"
 msgid "Answered: {answer}"
 msgstr "Yanıtlandı: {answer}"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Antigravity"
+msgstr "Antigravity"
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity cannot run comparison turns yet. Choose another runtime."
+msgstr "Antigravity henüz karşılaştırma turlarını çalıştıramıyor. Başka bir çalışma ortamı seçin."
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity cannot use images yet. Remove the image and try again."
+msgstr "Antigravity henüz görselleri kullanamıyor. Görseli kaldırıp tekrar deneyin."
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity could not run this turn. Check the runtime and try again."
+msgstr "Antigravity bu turu çalıştıramadı. Çalışma ortamını kontrol edip tekrar deneyin."
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity did not finish in time. Try again."
+msgstr "Antigravity zamanında tamamlanmadı. Tekrar deneyin."
+
+#. placeholder {0}: pin.modelId ?? ""
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity did not recognise the model {0}. Pick a model from its list."
+msgstr "Antigravity {0} modelini tanımadı. Listesinden bir model seçin."
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity input is too large. Shorten the message or conversation and try again."
+msgstr "Antigravity girdisi çok büyük. Mesajı veya konuşmayı kısaltıp tekrar deneyin."
+
+#. placeholder {0}: availability.version
+#: src/pages/shell/runtime-settings.tsx
+msgid "Antigravity is installed (version {0})"
+msgstr "Antigravity yüklü (sürüm {0})"
+
+#: src/pages/shell/provider-error-message.tsx
+#: src/pages/shell/runtime-settings.tsx
+msgid "Antigravity is not installed on this computer. Install it and sign in there, then check again."
+msgstr "Antigravity bu bilgisayarda yüklü değil. Yükleyip oturum açın, ardından yeniden kontrol edin."
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Antigravity runs on a connected host computer."
+msgstr "Antigravity bağlı bir ana bilgisayarda çalışır."
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity tried to use its own tools, which Ardur does not allow yet. The turn was stopped."
+msgstr "Antigravity kendi araçlarını kullanmayı denedi; Ardur buna henüz izin vermiyor. İşlem durduruldu."
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity's live model list could not be checked. Check again."
+msgstr "Antigravity güncel model listesi kontrol edilemedi. Tekrar kontrol edin."
+
 #: src/pages/ModelDestinations.tsx
 msgid "Any"
 msgstr ""
@@ -2111,6 +2162,10 @@ msgstr ""
 #: src/pages/TeamBoard.tsx
 msgid "Cost"
 msgstr ""
+
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Cost unavailable"
+msgstr "Maliyet bilgisi yok"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Could not add"
@@ -7152,6 +7207,11 @@ msgstr "Oturum aç"
 msgid "Sign in again to manage sessions."
 msgstr ""
 
+#: src/pages/shell/provider-error-message.tsx
+#: src/pages/shell/runtime-settings.tsx
+msgid "Sign in to Antigravity on this computer, then check again."
+msgstr "Bu bilgisayarda Antigravity oturumu açın, ardından yeniden kontrol edin."
+
 #: src/pages/Auth.tsx
 msgid "Sign in to Ardur"
 msgstr "Ardur'da oturum aç"
@@ -7188,6 +7248,11 @@ msgstr ""
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Sign-in timed out."
 msgstr ""
+
+#: src/pages/shell/provider-error-message.tsx
+#: src/pages/shell/runtime-settings.tsx
+msgid "Sign-in unknown until the first run"
+msgstr "İlk çalıştırmaya kadar oturum açma durumu bilinmiyor"
 
 #: src/lib/mcp-sign-in.ts
 msgid "Sign-in was cancelled."
@@ -8063,6 +8128,10 @@ msgstr ""
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Update"
 msgstr ""
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Update Antigravity to version 1.2.12 or later."
+msgstr "Antigravity uygulamasını 1.2.12 veya sonraki bir sürüme güncelleyin."
 
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Update available"

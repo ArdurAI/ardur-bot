@@ -745,6 +745,57 @@ msgstr "उत्तर दिया: {0}"
 msgid "Answered: {answer}"
 msgstr "उत्तर: {answer}"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Antigravity"
+msgstr "Antigravity"
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity cannot run comparison turns yet. Choose another runtime."
+msgstr "Antigravity अभी तुलना वाले टर्न नहीं चला सकता। कोई दूसरा रनटाइम चुनें।"
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity cannot use images yet. Remove the image and try again."
+msgstr "Antigravity अभी चित्रों का उपयोग नहीं कर सकता। चित्र हटाकर फिर कोशिश करें।"
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity could not run this turn. Check the runtime and try again."
+msgstr "Antigravity यह टर्न नहीं चला सका। रनटाइम जाँचकर फिर कोशिश करें।"
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity did not finish in time. Try again."
+msgstr "Antigravity समय पर पूरा नहीं हुआ। फिर कोशिश करें।"
+
+#. placeholder {0}: pin.modelId ?? ""
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity did not recognise the model {0}. Pick a model from its list."
+msgstr "Antigravity ने मॉडल {0} को नहीं पहचाना। उसकी सूची से कोई मॉडल चुनें।"
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity input is too large. Shorten the message or conversation and try again."
+msgstr "Antigravity का इनपुट बहुत बड़ा है। संदेश या बातचीत छोटी करके फिर कोशिश करें।"
+
+#. placeholder {0}: availability.version
+#: src/pages/shell/runtime-settings.tsx
+msgid "Antigravity is installed (version {0})"
+msgstr "Antigravity इंस्टॉल है (संस्करण {0})"
+
+#: src/pages/shell/provider-error-message.tsx
+#: src/pages/shell/runtime-settings.tsx
+msgid "Antigravity is not installed on this computer. Install it and sign in there, then check again."
+msgstr "इस कंप्यूटर पर Antigravity इंस्टॉल नहीं है। इसे इंस्टॉल करें, वहाँ साइन इन करें और फिर जाँचें।"
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Antigravity runs on a connected host computer."
+msgstr "Antigravity कनेक्ट किए गए होस्ट कंप्यूटर पर चलता है।"
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity tried to use its own tools, which Ardur does not allow yet. The turn was stopped."
+msgstr "Antigravity ने अपने टूल इस्तेमाल करने की कोशिश की, जिसकी Ardur अभी अनुमति नहीं देता। टर्न रोक दिया गया।"
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity's live model list could not be checked. Check again."
+msgstr "Antigravity की वर्तमान मॉडल सूची की जाँच नहीं हो सकी। फिर से जाँचें।"
+
 #: src/pages/ModelDestinations.tsx
 msgid "Any"
 msgstr ""
@@ -2111,6 +2162,10 @@ msgstr ""
 #: src/pages/TeamBoard.tsx
 msgid "Cost"
 msgstr ""
+
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Cost unavailable"
+msgstr "लागत उपलब्ध नहीं है"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Could not add"
@@ -7152,6 +7207,11 @@ msgstr "साइन इन करें"
 msgid "Sign in again to manage sessions."
 msgstr ""
 
+#: src/pages/shell/provider-error-message.tsx
+#: src/pages/shell/runtime-settings.tsx
+msgid "Sign in to Antigravity on this computer, then check again."
+msgstr "इस कंप्यूटर पर Antigravity में साइन इन करें और फिर जाँचें।"
+
 #: src/pages/Auth.tsx
 msgid "Sign in to Ardur"
 msgstr "Ardur में साइन इन करें"
@@ -7188,6 +7248,11 @@ msgstr ""
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Sign-in timed out."
 msgstr ""
+
+#: src/pages/shell/provider-error-message.tsx
+#: src/pages/shell/runtime-settings.tsx
+msgid "Sign-in unknown until the first run"
+msgstr "पहले रन तक साइन-इन की स्थिति अज्ञात है"
 
 #: src/lib/mcp-sign-in.ts
 msgid "Sign-in was cancelled."
@@ -8063,6 +8128,10 @@ msgstr ""
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Update"
 msgstr ""
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Update Antigravity to version 1.2.12 or later."
+msgstr "Antigravity को संस्करण 1.2.12 या उसके बाद वाले संस्करण पर अपडेट करें।"
 
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Update available"
