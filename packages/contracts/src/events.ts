@@ -282,6 +282,9 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     toBotName: z.string(),
     text: z.string(),
     intent: BotMessageIntent.optional(),
+    delegationId: Id.optional(),
+    deliveryState: z.literal("delivered").optional(),
+    queuedForBusy: z.boolean().optional(),
   }),
   z.object({
     /** Peer content in a bot's chat: an incoming prompt or a completed reply. */
@@ -290,6 +293,9 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     fromBotName: z.string(),
     text: z.string(),
     intent: BotMessageIntent.optional(),
+    delegationId: Id.optional(),
+    deliveryState: z.literal("delivered").optional(),
+    queuedForBusy: z.boolean().optional(),
     /** Completed replies may be bounded in the coordinator receipt. */
     truncated: z.boolean().optional(),
     fullLength: z.number().int().nonnegative().optional(),

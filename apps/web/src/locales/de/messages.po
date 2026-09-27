@@ -3125,6 +3125,14 @@ msgstr "gelöscht"
 msgid "Deleting…"
 msgstr "Wird gelöscht…"
 
+#: src/pages/Shell.tsx
+msgid "Delivered from {peer}"
+msgstr "Von {peer} zugestellt"
+
+#: src/pages/Shell.tsx
+msgid "Delivered to {peer}"
+msgstr "An {peer} zugestellt"
+
 #: src/pages/LearningObservation.tsx
 msgid "Delta"
 msgstr ""
@@ -6056,6 +6064,7 @@ msgstr "Wartezeit"
 #: src/pages/ComparePanel.tsx
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/Shell.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Queued"
 msgstr "In Warteschlange"

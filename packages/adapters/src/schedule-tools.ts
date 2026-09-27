@@ -26,13 +26,14 @@ export function filterBuiltinToolsForRun<T extends { name: string }>(
 export function filterBuiltinToolsForThread<T extends { name: string }>(
   tools: T[],
   groupId: string | null | undefined,
+  goalCoordinator = false,
 ): T[] {
   return tools.filter(
     (tool) =>
       (groupId || tool.name !== "handoff_to_bot") &&
       // In a group the room is the shared surface: hand the stage to a member
       // rather than starting a private thread off to one side.
-      (!groupId || tool.name !== "message_bot"),
+      (!groupId || tool.name !== "message_bot" || goalCoordinator),
   );
 }
 

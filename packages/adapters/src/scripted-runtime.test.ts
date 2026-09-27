@@ -58,6 +58,47 @@ describe("inferScript message_bot", () => {
   });
 });
 
+describe("goal result transport", () => {
+  const workerResult =
+    "The sort is ascending, so the corrected wording is: Results show oldest first; sort results by createdAt ascending.";
+  const reviewerResult =
+    "Independent check: Results show oldest first; sort results by createdAt ascending. The original wording contradicts the ascending sort.";
+
+  it("requires the delivered worker result before requesting review", () => {
+    expect(() => inferScript("Review Worker's completed assignment")).toThrow(
+      "Worker result was not delivered",
+    );
+    const review = inferScript(
+      "Review Worker's completed assignment",
+      undefined,
+      false,
+      workerResult,
+    );
+    expect(review[0]?.toolCalls?.[0]?.args).toMatchObject({
+      card: {
+        inputs: [
+          { type: "text", text: "Results show oldest first; sort results by createdAt ascending." },
+        ],
+      },
+    });
+  });
+
+  it("uses the delivered card input and reviewer result for the final answer", () => {
+    const card = `<task_card>${JSON.stringify({
+      goal: "Check the correction against the fixture: Results show newest first; sort results by createdAt ascending",
+      inputs: [{ type: "text", text: "A different proposed sentence." }],
+    })}</task_card>`;
+    expect(inferScript(card)[0]?.assistant).toContain("A different proposed sentence.");
+    expect(() => inferScript("Review Reviewer's completed assignment")).toThrow(
+      "Reviewer result was not delivered",
+    );
+    expect(
+      inferScript("Review Reviewer's completed assignment", undefined, false, reviewerResult)[0]
+        ?.assistant,
+    ).toContain("Results show oldest first; sort results by createdAt ascending.");
+  });
+});
+
 describe("inferScript quote markdown fixture", () => {
   it("returns the markdown fixture including the caller marker", () => {
     expect(inferScript("quote markdown fixture md-stamp")[0]?.assistant).toContain(

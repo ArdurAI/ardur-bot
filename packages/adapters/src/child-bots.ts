@@ -15,7 +15,6 @@ import {
   cancelRunsInTransaction,
   computerScopeKey,
   createRepos,
-  createThreadMessageInTransaction,
   DelegationAdmissionError,
   expireComputerExecutionLeases,
   finishDelegation,
@@ -25,6 +24,7 @@ import { getLogger } from "@ardurbot/logging";
 import { toComputerRef } from "./computer-support.js";
 import { checkpointAndRecordComputerWorkspace } from "./computer-workspace.js";
 import { delegationFailure, prepareDelegation } from "./delegation.js";
+import { wakeGoalAfterDelegation } from "./goal-wake.js";
 import { resolveAgentHomePath } from "./home.js";
 import { enqueueLearningInsights } from "./learning-queue.js";
 import { removePiBotSessions } from "./pi-session.js";
@@ -265,52 +265,110 @@ export async function archiveBot(
   bot: LifecycleBot,
   context: AdapterContext,
 ) {
-  const [dedicated, activeRuns, activeRoutines] = await Promise.all([
+  const [dedicated, activeRoutines] = await Promise.all([
     deps.prisma.computer.findUnique({
       where: { scopeKey: computerScopeKey("dedicated", bot.spaceId, bot.id) },
-    }),
-    deps.prisma.run.findMany({
-      where: { botId: bot.id, status: { in: [...ACTIVE_RUN_STATUSES] } },
-      select: { id: true },
     }),
     deps.prisma.routine.findMany({
       where: { botId: bot.id, active: true },
       select: { id: true },
     }),
   ]);
-  const runIds = activeRuns.map((run) => run.id);
   const now = new Date();
-  await deps.prisma.$transaction(async (tx) => {
-    await tx.run.updateMany({
-      where: { id: { in: runIds } },
-      data: { status: "cancelled", completedAt: now },
-    });
-    await tx.task.updateMany({
-      where: { runs: { some: { id: { in: runIds } } } },
-      data: { status: "cancelled" },
-    });
-    await tx.routine.updateMany({
-      where: { botId: bot.id },
-      data: { active: false, nextRunAt: null },
-    });
-    await expireComputerExecutionLeases(tx, { botId: bot.id });
-    await tx.computer.updateMany({
-      where: {
-        OR: [{ controlBotId: bot.id }, { executionBotId: bot.id }],
-      },
-      data: releasedComputerLease(),
-    });
-    if (dedicated) {
-      await tx.computer.updateMany({
-        where: { id: dedicated.id, state: { not: "running" } },
-        data: { state: "stopped" },
+  const { activeRuns, cancelledGoalMessages } = await withTransactionRetry(() =>
+    deps.prisma.$transaction(async (tx) => {
+      // Delivery locks this row before queueing. Archive must select runs only
+      // after this update has acquired the same lock.
+      await tx.bot.update({
+        where: { id: bot.id },
+        data: { archivedAt: bot.archivedAt ?? now, pinned: false },
       });
-    }
-    await tx.bot.update({
-      where: { id: bot.id },
-      data: { archivedAt: bot.archivedAt ?? now, pinned: false },
-    });
-  });
+      const runs = await tx.run.findMany({
+        where: { botId: bot.id, status: { in: [...ACTIVE_RUN_STATUSES] } },
+        select: { id: true, delegationId: true },
+      });
+      const runIds = runs.map((run) => run.id);
+      const messages = runs.some((run) => run.delegationId)
+        ? await tx.delegation.findMany({
+            where: {
+              runId: { in: runIds },
+              actingBotId: bot.id,
+              kind: "message",
+              status: { in: ["queued", "running", "cancel-requested"] },
+            },
+            select: { id: true, runId: true, rootTaskId: true, spaceId: true, userId: true },
+          })
+        : [];
+      const goals = messages.length
+        ? await tx.teamGoal.findMany({
+            where: { rootTaskId: { in: messages.map((message) => message.rootTaskId) } },
+            select: { rootTaskId: true, threadId: true, spaceId: true, userId: true },
+          })
+        : [];
+      const goalByRoot = new Map(goals.map((goal) => [goal.rootTaskId, goal]));
+      const cancelledGoalMessages = messages
+        .filter((message) => {
+          const goal = goalByRoot.get(message.rootTaskId);
+          return goal && goal.spaceId === message.spaceId && goal.userId === message.userId;
+        })
+        .sort(
+          (left, right) =>
+            left.rootTaskId.localeCompare(right.rootTaskId) || left.id.localeCompare(right.id),
+        );
+      const coordinatorThreads = [
+        ...new Set(
+          cancelledGoalMessages.map((message) => goalByRoot.get(message.rootTaskId)!.threadId),
+        ),
+      ].sort();
+      for (const threadId of coordinatorThreads)
+        await tx.$queryRaw`SELECT id FROM threads WHERE id = ${threadId} FOR UPDATE`;
+      for (const message of cancelledGoalMessages)
+        await finishDelegation(
+          tx,
+          message.id,
+          "cancelled",
+          "The recipient was archived before finishing.",
+          message.runId,
+        );
+      await tx.run.updateMany({
+        where: { id: { in: runIds } },
+        data: { status: "cancelled", completedAt: now },
+      });
+      await tx.task.updateMany({
+        where: { runs: { some: { id: { in: runIds } } } },
+        data: { status: "cancelled" },
+      });
+      await tx.routine.updateMany({
+        where: { botId: bot.id },
+        data: { active: false, nextRunAt: null },
+      });
+      await expireComputerExecutionLeases(tx, { botId: bot.id });
+      await tx.computer.updateMany({
+        where: {
+          OR: [{ controlBotId: bot.id }, { executionBotId: bot.id }],
+        },
+        data: releasedComputerLease(),
+      });
+      if (dedicated) {
+        await tx.computer.updateMany({
+          where: { id: dedicated.id, state: { not: "running" } },
+          data: { state: "stopped" },
+        });
+      }
+      return {
+        activeRuns: runs,
+        cancelledGoalMessages: cancelledGoalMessages.map((row) => row.id),
+      };
+    }),
+  );
+  await Promise.all(
+    cancelledGoalMessages.map((id) =>
+      wakeGoalAfterDelegation({ prisma: deps.prisma, jobs: deps.jobs }, id).catch((error) => {
+        // The terminal card is durable; reconciliation can retry its wake.
+        getLogger().error("goal wake after recipient archive", error);
+      }),
+    ),
+  );
   await Promise.allSettled([
     ...activeRuns.map((run) => deps.jobs.cancel(runJobKey(run.id))),
     ...activeRoutines.map((routine) => deps.jobs.cancel(routineJobKey(routine.id))),
@@ -365,34 +423,47 @@ export async function destroyBot(
   }
   // Keep the bot deletion transaction from committing if raw transcript cleanup fails.
   await removePiBotSessions(deps.dataDir, bot.userId, bot.id);
-  const deletion = await withTransactionRetry(() =>
-    deps.prisma.$transaction(async (tx) => {
-      const locked = await tx.$queryRaw<Array<{ id: string; webhookSecretId: string | null }>>`
+  const deletion = await retryGroupMembershipSnapshot(() =>
+    withTransactionRetry(() =>
+      deps.prisma.$transaction(async (tx) => {
+        const lockedGroups = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT groups.id
+        FROM chat_groups AS groups
+        INNER JOIN chat_group_members AS members ON members."groupId" = groups.id
+        WHERE members."botId" = ${bot.id}
+        ORDER BY groups.id
+        FOR UPDATE OF groups
+      `;
+        const locked = await tx.$queryRaw<Array<{ id: string; webhookSecretId: string | null }>>`
         SELECT id, "webhookSecretId"
         FROM bots
         WHERE id = ${bot.id} AND "spaceId" = ${bot.spaceId}
         FOR UPDATE
       `;
-      const webhookSecretId = locked[0]?.webhookSecretId ?? bot.webhookSecretId ?? null;
-      const botArtifacts = await tx.artifact.findMany({
-        where: { botId: bot.id, groupId: null, spaceId: bot.spaceId },
-        select: { storageKey: true },
-      });
-      await tx.artifact.deleteMany({
-        where: { botId: bot.id, groupId: null, spaceId: bot.spaceId },
-      });
-      const groupCleanup = await detachBotFromGroups(tx, bot.id);
-      await tx.computerExecutionLease.deleteMany({ where: { botId: bot.id } });
-      await tx.computer.updateMany({
-        where: {
-          ...(dedicated ? { id: { not: dedicated.id } } : {}),
-          OR: [{ controlBotId: bot.id }, { executionBotId: bot.id }],
-        },
-        data: releasedComputerLease(),
-      });
-      if (!options.deleteMemories) {
-        const directory = archivedMemoryDirectory(bot.name, bot.id);
-        await tx.$executeRaw`
+        const webhookSecretId = locked[0]?.webhookSecretId ?? bot.webhookSecretId ?? null;
+        const botArtifacts = await tx.artifact.findMany({
+          where: { botId: bot.id, groupId: null, spaceId: bot.spaceId },
+          select: { storageKey: true },
+        });
+        await tx.artifact.deleteMany({
+          where: { botId: bot.id, groupId: null, spaceId: bot.spaceId },
+        });
+        const groupCleanup = await detachBotFromGroups(
+          tx,
+          bot.id,
+          lockedGroups.map((group) => group.id),
+        );
+        await tx.computerExecutionLease.deleteMany({ where: { botId: bot.id } });
+        await tx.computer.updateMany({
+          where: {
+            ...(dedicated ? { id: { not: dedicated.id } } : {}),
+            OR: [{ controlBotId: bot.id }, { executionBotId: bot.id }],
+          },
+          data: releasedComputerLease(),
+        });
+        if (!options.deleteMemories) {
+          const directory = archivedMemoryDirectory(bot.name, bot.id);
+          await tx.$executeRaw`
           UPDATE "memory_documents"
           SET "botId" = NULL,
               "scope" = 'user',
@@ -400,33 +471,34 @@ export async function destroyBot(
               "updatedAt" = CURRENT_TIMESTAMP
           WHERE "botId" = ${bot.id}
         `;
-      }
-      await tx.botDeletion.create({
-        data: {
-          id: bot.id,
-          spaceId: bot.spaceId,
-          name: bot.name,
-          deletedByUserId: context.userId,
-          memoriesPreserved: !options.deleteMemories,
-        },
-      });
-      await tx.bot.delete({ where: { id: bot.id } });
-      // Insights about this bot, and any request text they quote, go with it.
-      await tx.learningInsight.deleteMany({ where: { spaceId: bot.spaceId, botId: bot.id } });
-      if (webhookSecretId) {
-        await tx.secret.deleteMany({
-          where: { id: webhookSecretId, kind: "webhook", spaceId: bot.spaceId },
+        }
+        await tx.botDeletion.create({
+          data: {
+            id: bot.id,
+            spaceId: bot.spaceId,
+            name: bot.name,
+            deletedByUserId: context.userId,
+            memoriesPreserved: !options.deleteMemories,
+          },
         });
-      }
-      if (dedicated) await tx.computer.delete({ where: { id: dedicated.id } });
-      return {
-        artifactKeys: [
-          ...botArtifacts.map((artifact) => artifact.storageKey),
-          ...groupCleanup.artifactKeys,
-        ],
-        cancelledGroupRuns: groupCleanup.cancelledRuns,
-      };
-    }),
+        await tx.bot.delete({ where: { id: bot.id } });
+        // Insights about this bot, and any request text they quote, go with it.
+        await tx.learningInsight.deleteMany({ where: { spaceId: bot.spaceId, botId: bot.id } });
+        if (webhookSecretId) {
+          await tx.secret.deleteMany({
+            where: { id: webhookSecretId, kind: "webhook", spaceId: bot.spaceId },
+          });
+        }
+        if (dedicated) await tx.computer.delete({ where: { id: dedicated.id } });
+        return {
+          artifactKeys: [
+            ...botArtifacts.map((artifact) => artifact.storageKey),
+            ...groupCleanup.artifactKeys,
+          ],
+          cancelledGroupRuns: groupCleanup.cancelledRuns,
+        };
+      }),
+    ),
   );
   await Promise.allSettled(
     deletion.cancelledGroupRuns.map((run) => deps.jobs.cancel(runJobKey(run.id))),
@@ -470,15 +542,24 @@ export async function destroyBot(
   }
 }
 
-async function detachBotFromGroups(tx: Prisma.TransactionClient, botId: string) {
-  await tx.$queryRaw<Array<{ id: string }>>`
-    SELECT groups.id
-    FROM chat_groups AS groups
-    INNER JOIN chat_group_members AS members ON members."groupId" = groups.id
-    WHERE members."botId" = ${botId}
-    ORDER BY groups.id
-    FOR UPDATE OF groups
-  `;
+class GroupMembershipChangedError extends Error {}
+
+async function retryGroupMembershipSnapshot<T>(operation: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (!(error instanceof GroupMembershipChangedError) || attempt === 2) throw error;
+    }
+  }
+  throw new Error("Group membership changed during bot deletion.");
+}
+
+async function detachBotFromGroups(
+  tx: Prisma.TransactionClient,
+  botId: string,
+  lockedGroupIds: string[],
+) {
   const affectedGroups = await tx.chatGroup.findMany({
     where: { members: { some: { botId } } },
     include: {
@@ -488,6 +569,10 @@ async function detachBotFromGroups(tx: Prisma.TransactionClient, botId: string) 
       thread: { select: { id: true } },
     },
   });
+  const currentGroupIds = affectedGroups.map((group) => group.id).sort();
+  if (currentGroupIds.join("\0") !== lockedGroupIds.join("\0")) {
+    throw new GroupMembershipChangedError("Group membership changed during bot deletion.");
+  }
   const dissolvedGroupIds: string[] = [];
   for (const group of affectedGroups) {
     const activeMembersAfterDeletion = group.members.filter(

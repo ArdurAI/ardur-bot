@@ -4,6 +4,79 @@ import { assembleTurnContext, needsRecall } from "./assemble.js";
 import { markStablePrefix } from "./provider-cache.js";
 
 describe("turn context", () => {
+  it("keeps private brief, compacted summary, desk history and recall out of a peer request", async () => {
+    const recall = vi.fn(async () => "PRIVATE_RECALL_SENTINEL");
+    const context = await assembleTurnContext({
+      peerReadOnly: true,
+      instructions: "Read only the card.",
+      brief: "PRIVATE_BRIEF_SENTINEL",
+      summary: "PRIVATE_SUMMARY_SENTINEL",
+      history: [{ id: "old", role: "user", content: "PRIVATE_HISTORY_SENTINEL" }],
+      message: "<task_card>Authorized fixture</task_card>",
+      query: "What happened earlier?",
+      recall,
+    });
+
+    expect(context.history).toEqual([]);
+    expect(context.prompt).toContain("Authorized fixture");
+    expect(JSON.stringify(context)).not.toMatch(/PRIVATE_(BRIEF|SUMMARY|HISTORY|RECALL)_SENTINEL/);
+    expect(recall).not.toHaveBeenCalled();
+  });
+  it("keeps a required completion after newer history fills the rolling budget", async () => {
+    const result = "DISTINCT_WORKER_RESULT";
+    const context = await assembleTurnContext({
+      instructions: "Review completed work.",
+      history: [
+        { id: "summary", role: "user", content: result },
+        { id: "newer", role: "user", content: "n".repeat(12_001) },
+      ],
+      requiredContext: { id: "required-result:summary", role: "user", content: result },
+      sourceMessageId: "summary",
+      message: "Review the completed assignment.",
+    });
+    expect(context.history.filter((message) => message.id === "required-result:summary")).toEqual([
+      { id: "required-result:summary", role: "user", content: result },
+    ]);
+    expect(context.history.at(-1)?.content).toBe(result);
+    expect(context.snapshot.layers.messages).toBeLessThanOrEqual(12_000);
+    expect(context.history.find((message) => message.id === "newer")?.content).toHaveLength(
+      12_000 - result.length,
+    );
+  });
+  it("gives rolling history exactly the space left by a required result", async () => {
+    const context = await assembleTurnContext({
+      instructions: "Review completed work.",
+      history: [{ id: "newer", role: "user", content: "h".repeat(200) }],
+      requiredContext: { id: "required", role: "user", content: "r".repeat(80) },
+      message: "Review the result.",
+      budgets: { messages: 200 },
+    });
+    expect(context.history).toEqual([
+      { id: "newer", role: "user", content: "h".repeat(120) },
+      { id: "required", role: "user", content: "r".repeat(80) },
+    ]);
+    expect(context.snapshot.layers.messages).toBe(200);
+  });
+  it("keeps the head of an oversized required result with a visible budget marker", async () => {
+    const marker =
+      "[Result truncated to fit the history budget; open the thread for the full report.]";
+    const context = await assembleTurnContext({
+      instructions: "Review completed work.",
+      history: [{ id: "newer", role: "user", content: "private rolling history" }],
+      requiredContext: { id: "required", role: "user", content: "r".repeat(300) },
+      message: "Review the result.",
+      budgets: { messages: 200 },
+    });
+    expect(context.history).toEqual([
+      {
+        id: "required",
+        role: "user",
+        content: `${"r".repeat(200 - marker.length - 1)}\n${marker}`,
+      },
+    ]);
+    expect(context.history[0]?.content.endsWith(marker)).toBe(true);
+    expect(context.snapshot.layers.messages).toBe(200);
+  });
   it("orders bounded layers and keeps the stable prefix byte-identical", async () => {
     const recall = vi.fn(async () => "[ardur-memory:document:3] " + "fact ".repeat(4000));
     const run = {

@@ -54,7 +54,9 @@ export async function lockDelegationRootForRun(tx: Prisma.TransactionClient, run
   return { run: await tx.run.findUniqueOrThrow({ where: { id: runId } }), rootTaskId };
 }
 
-/** Canonical order for transactions touching both rows: coordinator thread, then root task. */
+/** Canonical order: bot/group, coordinator thread, recipient thread, then root task.
+ * Message submission takes bot before thread; finalization and thread clearing follow it.
+ */
 export async function lockDelegationRoot(tx: Prisma.TransactionClient, rootTaskId: string) {
   const root = await tx.delegationRoot.findUniqueOrThrow({
     where: { rootTaskId },
@@ -101,6 +103,7 @@ export async function admitDelegation(
     deadlineAt?: Date;
     newChild?: boolean;
     card?: unknown;
+    peerMode?: "read-only";
   },
 ) {
   const { run: parent, rootTaskId } = await lockDelegationRootForRun(tx, input.parentRunId);
@@ -346,6 +349,7 @@ export async function admitDelegation(
   const members = await tx.spaceMember.count({ where: { spaceId: input.spaceId } });
   const card = TaskCardSchema.parse({
     ...request,
+    ...(input.peerMode ? { peerMode: input.peerMode } : {}),
     requesterBotId: parent.botId,
     workerBotId: input.actingBotId,
     ...(members > 1 ? { responsibleUserId: input.userId } : {}),

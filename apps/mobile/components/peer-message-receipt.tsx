@@ -30,9 +30,15 @@ export function PeerMessageReceipt({
   const sent = block.kind === "bot_message_sent";
   const peer = sent ? block.toBotName : block.fromBotName;
   const peerBotId = sent ? block.toBotId : block.fromBotId;
-  const label = sent
-    ? t("Messaged {peer}", { peer: peer ?? t("Bot") })
-    : t("Message from {peer}", { peer: peer ?? t("Bot") });
+  const label =
+    block.deliveryState === "delivered"
+      ? sent
+        ? t("Delivered to {peer}", { peer })
+        : t("Delivered from {peer}", { peer })
+      : sent
+        ? t("Messaged {peer}", { peer })
+        : t("Message from {peer}", { peer });
+  const visibleLabel = block.queuedForBusy ? `${label} · ${t("Queued")}` : label;
   const canShowReply = !sent && block.text.trim().length > 0;
 
   return (
@@ -42,7 +48,9 @@ export function PeerMessageReceipt({
         accessible
         accessibilityRole={canShowReply ? "button" : undefined}
         accessibilityLabel={
-          canShowReply ? `${label}. ${expanded ? t("Hide reply") : t("Show reply")}` : label
+          canShowReply
+            ? `${visibleLabel}. ${expanded ? t("Hide reply") : t("Show reply")}`
+            : visibleLabel
         }
         accessibilityState={canShowReply ? { expanded } : undefined}
         onPress={canShowReply ? () => setExpanded((value) => !value) : undefined}
@@ -60,7 +68,7 @@ export function PeerMessageReceipt({
           numberOfLines={1}
           style={{ color: tokens.mutedForeground, fontSize: 13.5, flexShrink: 1 }}
         >
-          {label}
+          {visibleLabel}
         </Text>
         {canShowReply ? (
           <Text style={{ color: tokens.foreground, fontSize: 13.5 }}>

@@ -4,7 +4,7 @@ export const ContextBudgetsSchema = z.object({
   stable: z.number().int().min(4000).max(64000).default(64000),
   brief: z.number().int().min(200).max(6000).default(6000),
   summary: z.number().int().min(200).max(12000).default(4000),
-  messages: z.number().int().min(1000).max(48000).default(12000),
+  messages: z.number().int().min(200).max(48000).default(12000),
   recall: z.number().int().min(200).max(12000).default(6000),
   message: z.number().int().min(1000).max(128000).default(48000),
 });

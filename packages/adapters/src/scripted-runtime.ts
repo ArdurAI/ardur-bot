@@ -31,6 +31,11 @@ export class ScriptedAgentRuntime implements AgentRuntime {
     const signal = context?.signal ?? controller.signal;
     try {
       if (request.prompt.includes("scripted slow review")) await abortableDelay(2_000, signal);
+      if (
+        request.prompt.includes("Identify the contradiction:") ||
+        request.prompt.includes("Check the correction against the fixture:")
+      )
+        await abortableDelay(250, signal);
       if (shouldFail(request.prompt)) {
         throw new Error("Scripted run failure");
       }
@@ -44,7 +49,15 @@ export class ScriptedAgentRuntime implements AgentRuntime {
         yield { type: "done", text: "stopped" };
         return;
       }
-      const script = request.script ?? inferScript(request.prompt, request.resumeFromCheckpoint);
+      const goalWake = /review (?:worker's|reviewer's) completed assignment/i.test(request.prompt);
+      const script = goalWake
+        ? inferScript(
+            request.prompt,
+            request.resumeFromCheckpoint,
+            false,
+            request.history.map((message) => message.content).join("\n"),
+          )
+        : (request.script ?? inferScript(request.prompt, request.resumeFromCheckpoint));
       // Per-run call index so repeated tools (e.g. message_agent) get distinct
       // executionIds — delivery keys and effect replays key off this value.
       let toolCallSeq = 0;
@@ -132,6 +145,8 @@ export function inferScript(
   prompt: string,
   resumeFromCheckpoint?: string,
   fromCard = false,
+  deliveredHistory = "",
+  cardInputs: unknown[] = [],
 ): NonNullable<AgentRunRequest["script"]> {
   if (!fromCard) {
     const framed = /<task_card>([\s\S]*?)<\/task_card>/.exec(prompt);
@@ -140,13 +155,116 @@ export function inferScript(
       try {
         const card: unknown = JSON.parse(cardJson);
         if (card && typeof card === "object" && "goal" in card && typeof card.goal === "string")
-          return inferScript(card.goal, resumeFromCheckpoint, true);
+          return inferScript(
+            card.goal,
+            resumeFromCheckpoint,
+            true,
+            deliveredHistory,
+            "inputs" in card && Array.isArray(card.inputs) ? card.inputs : [],
+          );
       } catch {
         // Malformed test cards retain the ordinary scripted path.
       }
     }
   }
   const lower = prompt.toLowerCase();
+  const firstLoopFixture = "Results show newest first; sort results by createdAt ascending";
+  const correctedFixture = "Results show oldest first; sort results by createdAt ascending.";
+  if (prompt.includes(firstLoopFixture) && lower.includes("you coordinate this goal")) {
+    return [
+      {
+        assistant: "I asked Worker to check the fixture.",
+        toolCalls: [
+          {
+            name: "message_bot",
+            args: {
+              confirm_name: "Worker",
+              message: "Identify the contradiction in the fixture.",
+              intent: "request",
+              card: {
+                goal: `Identify the contradiction: ${firstLoopFixture}`,
+                inputs: [{ type: "text", text: firstLoopFixture }],
+                doneWhen: ["Propose corrected wording"],
+                deadlineAt: null,
+              },
+            },
+          },
+        ],
+        complete: true,
+      },
+    ];
+  }
+  if (lower.includes("identify the contradiction:") && prompt.includes(firstLoopFixture))
+    return [
+      {
+        assistant: `The sort is ascending, so the corrected wording is: ${correctedFixture}`,
+        complete: true,
+      },
+    ];
+  if (lower.includes("review worker's completed assignment")) {
+    const workerResult =
+      /The sort is ascending, so the corrected wording is: (Results show [^\n]+\.)/.exec(
+        deliveredHistory,
+      )?.[1];
+    if (!workerResult) throw new Error("Worker result was not delivered to the coordinator.");
+    return [
+      {
+        assistant: "I asked Reviewer for an independent check.",
+        toolCalls: [
+          {
+            name: "message_bot",
+            args: {
+              confirm_name: "Reviewer",
+              message: "Check the proposed wording against the fixture independently.",
+              intent: "request",
+              card: {
+                goal: `Check the correction against the fixture: ${firstLoopFixture}`,
+                inputs: [{ type: "text", text: workerResult }],
+                doneWhen: ["Confirm or correct the wording"],
+                deadlineAt: null,
+              },
+            },
+          },
+        ],
+        complete: true,
+      },
+    ];
+  }
+  if (
+    lower.includes("check the correction against the fixture:") &&
+    prompt.includes(firstLoopFixture)
+  ) {
+    const proposed = cardInputs.find((input): input is { type: "text"; text: string } =>
+      Boolean(
+        input &&
+          typeof input === "object" &&
+          "type" in input &&
+          input.type === "text" &&
+          "text" in input &&
+          typeof input.text === "string",
+      ),
+    )?.text;
+    if (!proposed) throw new Error("The proposed correction was not delivered to Reviewer.");
+    return [
+      {
+        assistant: `Independent check: ${proposed} The original wording contradicts the ascending sort.`,
+        complete: true,
+      },
+    ];
+  }
+  if (lower.includes("review reviewer's completed assignment")) {
+    const reviewed =
+      /Independent check: (Results show [^\n]+\.) The original wording contradicts the ascending sort\./.exec(
+        deliveredHistory,
+      )?.[1];
+    if (!reviewed) throw new Error("Reviewer result was not delivered to the coordinator.");
+    return [
+      {
+        assistant: `Worker found the contradiction and Reviewer checked it. ${reviewed} The fixture does not say how ties are ordered.`,
+        complete: true,
+      },
+    ];
+  }
   if (resumeFromCheckpoint === "takeover-skipped") {
     return [
       {

@@ -98,6 +98,8 @@ export const RU_MESSAGES: Record<string, string> = {
   "Could not run routine": "Не удалось запустить задачу",
   "Could not save memory": "Не удалось сохранить память",
   "Could not start a new chat": "Не удалось начать новый чат",
+  "Delivered to {peer}": "Доставлено для {peer}",
+  "Delivered from {peer}": "Получено от {peer}",
   "Could not update learning. Try again.": "Не удалось обновить обучение. Повторите попытку.",
   "Could not update this task; try again.": "Не удалось обновить задачу. Повторите попытку.",
   Curator: "Куратор",

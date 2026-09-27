@@ -285,7 +285,7 @@ export async function wakeGoalCoordinatorForDelegation(prisma: PrismaClient, del
       const row = await tx.delegation.findUniqueOrThrow({ where: { id: delegationId } });
       if (
         row.coordinatorWokenAt ||
-        row.kind !== "group-handoff" ||
+        !["group-handoff", "message"].includes(row.kind) ||
         !["completed", "failed", "cancelled", "accepted"].includes(row.status)
       )
         return null;

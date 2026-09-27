@@ -48,6 +48,18 @@ describe("mobile i18n", () => {
     expect(ZH_MESSAGES["Closing on the Board."]).toBe("正在看板上关闭。");
   });
 
+  it("translates both peer delivery labels with the recipient's name", async () => {
+    const { resetI18nForTests, t } = await import("./i18n");
+    for (const [locale, to, from] of [
+      ["ru", "Доставлено для Worker", "Получено от Worker"],
+      ["zh-CN", "已发送给 Worker", "已收到 Worker 的消息"],
+    ] as const) {
+      resetI18nForTests(locale);
+      expect(t("Delivered to {peer}", { peer: "Worker" })).toBe(to);
+      expect(t("Delivered from {peer}", { peer: "Worker" })).toBe(from);
+    }
+  });
+
   it("falls back to the English source message when a translation is missing", async () => {
     const { resetI18nForTests, t } = await import("./i18n");
     resetI18nForTests("zh-CN");

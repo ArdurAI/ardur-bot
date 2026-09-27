@@ -36,7 +36,7 @@
       "id": "delegate",
       "eyebrow": "DELEGATION",
       "title": "Bots work together",
-      "body": "Bots can delegate work to each other in groups or use short-lived subagents.",
+      "body": "A goal coordinator can send bounded requests to group members' desk threads and receive their results. Bots can also hand off room work or use short-lived subagents.",
       "source": "README.md#What you get today"
     },
     {

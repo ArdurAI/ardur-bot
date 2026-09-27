@@ -271,7 +271,43 @@ export async function clearThread(
   realtime?: RealtimeFanout,
 ): Promise<ClearThreadResult> {
   const committed = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-    // Thread row precedes any task row cancelled by clearThread.
+    // Group mutations precede their thread row in goal admission and group handoff.
+    if (input.groupId) {
+      await tx.$queryRaw`SELECT id FROM chat_groups WHERE id = ${input.groupId} AND "spaceId" = ${input.spaceId} FOR UPDATE`;
+    } else {
+      await tx.$queryRaw`SELECT id FROM bots WHERE id = ${input.botId} AND "spaceId" = ${input.spaceId} FOR UPDATE`;
+    }
+    // A desk cancellation also writes the coordinator's thread. Find those roots while the
+    // recipient bot/group is locked, then lock coordinator threads before the recipient thread.
+    const pendingDeskRuns = await tx.run.findMany({
+      where: {
+        spaceId: input.spaceId,
+        threadId: input.threadId,
+        ...(input.groupId ? {} : { botId: input.botId }),
+        goalId: { not: null },
+        delegationId: { not: null },
+        status: { in: ["queued", "leased", "running", "waiting_input", "waiting_takeover"] },
+      },
+      select: { delegationRootTaskId: true },
+    });
+    const rootTaskIds = [
+      ...new Set(
+        pendingDeskRuns.flatMap((run) =>
+          run.delegationRootTaskId ? [run.delegationRootTaskId] : [],
+        ),
+      ),
+    ];
+    const roots = rootTaskIds.length
+      ? await tx.delegationRoot.findMany({
+          where: { rootTaskId: { in: rootTaskIds } },
+          select: { coordinatorThreadId: true },
+        })
+      : [];
+    for (const threadId of [...new Set(roots.map((root) => root.coordinatorThreadId))]
+      .filter((threadId) => threadId !== input.threadId)
+      .sort())
+      await tx.$queryRaw`SELECT id FROM threads WHERE id = ${threadId} FOR UPDATE`;
+    // Bot or group row precedes both threads, which precede cancelled runs and roots.
     const thread = await tx.thread.update({
       where: {
         id: input.threadId,
@@ -288,10 +324,30 @@ export async function clearThread(
         ...(input.groupId ? {} : { botId: input.botId }),
         status: { in: ["queued", "leased", "running", "waiting_input", "waiting_takeover"] },
       },
-      select: { id: true, taskId: true },
+      select: { id: true, taskId: true, delegationId: true, goalId: true },
     });
     const now = new Date();
     const runIds = activeRuns.map((run) => run.id);
+    const goalDelegationIds = activeRuns.flatMap((run) =>
+      run.goalId && run.delegationId ? [run.delegationId] : [],
+    );
+    const deskCards = goalDelegationIds.length
+      ? await tx.delegation.findMany({
+          where: { id: { in: goalDelegationIds }, kind: "message" },
+          select: { id: true },
+        })
+      : [];
+    const deskCardIds = new Set(deskCards.map((card) => card.id));
+    for (const run of activeRuns) {
+      if (run.delegationId && deskCardIds.has(run.delegationId))
+        await finishDelegation(
+          tx,
+          run.delegationId,
+          "cancelled",
+          "The recipient thread was cleared before finishing.",
+          run.id,
+        );
+    }
     await cancelRunsInTransaction(tx, activeRuns, now);
     // Expire as tombstones so a still-open provider screen claim cannot reset fencing to 1.
     await expireComputerExecutionLeases(tx, { runId: { in: runIds } });
@@ -391,6 +447,9 @@ export async function sendUserMessage(
 
   const commit = () =>
     prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      // Bot before thread: finalization and clearThread take this order. SteeringMessage's
+      // bot foreign key otherwise waits behind finalization while finalization waits here.
+      await tx.$queryRaw`SELECT id FROM bots WHERE id = ${input.botId} AND "spaceId" = ${input.spaceId} FOR UPDATE`;
       // Message first: its thread-row lock serializes the whole send against clearThread, so a
       // concurrent clear either sees the committed run and cancels it, or strictly precedes this
       // transaction. Created in separate transactions, the run could land inside the clear's
@@ -410,7 +469,7 @@ export async function sendUserMessage(
         clientNonce: input.clientNonce,
       });
       const createRun = input.createRun !== false;
-      const busy =
+      const firstBusy =
         createRun && !input.allowParallelRun
           ? await tx.run.findFirst({
               where: {
@@ -420,9 +479,34 @@ export async function sendUserMessage(
                   in: ["running", "queued", "leased", "waiting_input", "waiting_takeover"],
                 },
               },
-              select: { id: true, taskId: true },
+              select: {
+                id: true,
+                taskId: true,
+                delegationId: true,
+              },
             })
           : null;
+      let busy = firstBusy;
+      if (firstBusy && (await isReadOnlyPeerRun(tx, firstBusy))) {
+        busy = null;
+        const candidates = await tx.run.findMany({
+          where: {
+            threadId: input.threadId,
+            botId: input.botId,
+            status: {
+              in: ["running", "queued", "leased", "waiting_input", "waiting_takeover"],
+            },
+          },
+          select: { id: true, taskId: true, delegationId: true },
+          orderBy: { createdAt: "asc" },
+        });
+        for (const candidate of candidates) {
+          if (!(await isReadOnlyPeerRun(tx, candidate))) {
+            busy = candidate;
+            break;
+          }
+        }
+      }
       let task = null;
       let run = null;
       if (createRun && !busy) {
@@ -542,10 +626,11 @@ export async function claimSteering(
         id: true,
         spaceId: true,
         trigger: true,
+        delegationId: true,
         sourceMessage: { select: { blocks: true } },
       },
     });
-    if (!run) return [];
+    if (!run || (await isReadOnlyPeerRun(tx, run))) return [];
     const channelId =
       run.trigger === "messaging"
         ? messagingChannelId(run.sourceMessage?.blocks as MessageBlock[] | undefined)
@@ -1178,7 +1263,21 @@ async function finalizeRunOnce(
   summary?: { threadId: string; seq: number };
 } | null> {
   return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-    // Canonical order: thread first, then the run task and delegated root task.
+    // Claiming and delivery take the bot before its thread. Completion may also
+    // write the coordinator summary, so acquire the bot before either thread.
+    await tx.$queryRaw`SELECT id FROM bots WHERE id = ${input.botId} AND "spaceId" = ${input.spaceId} FOR UPDATE`;
+    const lineage = await tx.run.findUnique({
+      where: { id: input.runId },
+      select: { delegationRootTaskId: true },
+    });
+    if (lineage?.delegationRootTaskId) {
+      const root = await tx.delegationRoot.findUnique({
+        where: { rootTaskId: lineage.delegationRootTaskId },
+        select: { coordinatorThreadId: true },
+      });
+      if (root && root.coordinatorThreadId !== input.threadId)
+        await tx.$queryRaw`SELECT id FROM threads WHERE id = ${root.coordinatorThreadId} FOR UPDATE`;
+    }
     await tx.$queryRaw`SELECT id FROM threads WHERE id = ${input.threadId} FOR UPDATE`;
     let writableRun:
       | {
@@ -1371,15 +1470,18 @@ async function createSteeringContinuation(
   tx: Prisma.TransactionClient,
   input: FinalizeRunBase,
 ): Promise<string | null> {
-  const active = await tx.run.findFirst({
+  const active = await tx.run.findMany({
     where: {
       threadId: input.threadId,
       botId: input.botId,
       status: { in: ["queued", "leased", "running", "waiting_input", "waiting_takeover"] },
     },
-    select: { id: true },
+    select: { id: true, delegationId: true },
   });
-  if (active) return null;
+  // A queued desk peer cannot consume private steering and must not suppress its reply.
+  for (const run of active) {
+    if (!(await isReadOnlyPeerRun(tx, run))) return null;
+  }
   const pending = await tx.steeringMessage.findMany({
     where: {
       botId: input.botId,
@@ -1420,6 +1522,25 @@ async function createSteeringContinuation(
     data: { runId: run.id, claimedAt: null },
   });
   return run.id;
+}
+
+async function isReadOnlyPeerRun(
+  tx: Prisma.TransactionClient,
+  run: { delegationId: string | null },
+) {
+  if (!run.delegationId) return false;
+  const delegation = await tx.delegation.findUnique({
+    where: { id: run.delegationId },
+    select: { kind: true, card: true },
+  });
+  return Boolean(
+    delegation?.kind === "message" &&
+      delegation.card &&
+      typeof delegation.card === "object" &&
+      !Array.isArray(delegation.card) &&
+      "peerMode" in delegation.card &&
+      delegation.card.peerMode === "read-only",
+  );
 }
 
 export async function appendEventInTransaction(

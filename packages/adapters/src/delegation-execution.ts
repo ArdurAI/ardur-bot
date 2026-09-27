@@ -1,9 +1,10 @@
 import type { ConnectorRoute } from "@ardurbot/adapter-kit";
-import { DelegationAuthoritySchema } from "@ardurbot/contracts";
+import { DelegationAuthoritySchema, TaskCardSchema } from "@ardurbot/contracts";
 import { classifyRemoteTool, remotePermissionExpansion } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
-import { reconcileGoalExhaustion, requestCancel } from "@ardurbot/db";
+import { reconcileGoalExhaustion, requestCancel, updateWorkerTask } from "@ardurbot/db";
 import { grantedMcpTools, mcpGrantForBot } from "./integration-access.js";
+import { peerReadOnlyRuntimeSupported, peerReadOnlyToolAllowed } from "./peer-policy.js";
 
 /** The recorded ceiling also applies to connector routes resolved after catalog lookup. */
 export async function checkDelegationExecution(
@@ -28,6 +29,33 @@ export async function checkDelegationExecution(
   const delegationId = helperDelegationId ?? run.delegationId;
   if (!delegationId) return;
   const row = await prisma.delegation.findUniqueOrThrow({ where: { id: delegationId } });
+  const card = TaskCardSchema.safeParse(row.card);
+  if (card.success && card.data.peerMode === "read-only") {
+    if (
+      !peerReadOnlyRuntimeSupported(
+        String((run.runtimePin as { runtimeKind?: string } | null)?.runtimeKind ?? ""),
+      )
+    )
+      return "This connection cannot run this peer task safely.";
+    if ((tool && !peerReadOnlyToolAllowed(tool)) || (route && route.connectorId !== "builtin")) {
+      await prisma.$transaction((tx) =>
+        updateWorkerTask(tx, {
+          runId: run.id,
+          spaceId: run.spaceId,
+          userId: run.userId,
+          botId: run.botId,
+          executionId: `peer-block:${run.id}`,
+          tool: "report_progress",
+          args: {
+            state: "blocked",
+            text: "This desk request needs an action outside its read-only card.",
+            action: "Bring the request to the owner for review.",
+          },
+        }),
+      );
+      return "This peer task is read-only. Ask the coordinator to bring blocked work to the owner.";
+    }
+  }
   if (helperDelegationId && (row.kind !== "helper" || row.parentRunId !== runId))
     return "This helper does not belong to this run.";
   if (

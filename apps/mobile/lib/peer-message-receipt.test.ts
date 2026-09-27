@@ -80,6 +80,38 @@ it("shows a completed peer receipt and expands the full answer", async () => {
   }
 });
 
+it("keeps delivered and queued labels while offering the reply reader", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  try {
+    await act(async () =>
+      root.render(
+        createElement(PeerMessageReceipt, {
+          block: {
+            kind: "bot_message_received",
+            fromBotId: "worker",
+            fromBotName: "Worker",
+            text: "Checked the fixture.",
+            deliveryState: "delivered",
+            queuedForBusy: true,
+          },
+          color: "gray",
+          actionProps: {},
+          onOpenPeer: vi.fn(),
+        }),
+      ),
+    );
+    expect(node.textContent).toContain("Delivered from Worker · Queued");
+    expect(node.textContent).toContain("Show reply");
+    await act(async () => node.querySelector("button")!.click());
+    expect(node.querySelector("article")?.textContent).toBe("Checked the fixture.");
+  } finally {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+  }
+});
+
 it("marks and links a shortened reply in the reader", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const { fixture } = await vi.importActual<{

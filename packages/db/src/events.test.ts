@@ -1852,6 +1852,7 @@ describe("sendUserMessage", () => {
       const fanout = new TestFanout();
       const publish = vi.spyOn(fanout, "publish");
       const tx = {
+        $queryRaw: vi.fn(async () => [{ id: "bot-1" }]),
         thread: {
           update: vi
             .fn()
@@ -1933,6 +1934,7 @@ describe("sendUserMessage", () => {
 
   it("persists steering instead of starting a parallel run when the bot is busy", async () => {
     const tx = {
+      $queryRaw: vi.fn(async () => [{ id: "bot-1" }]),
       thread: {
         update: vi
           .fn()
@@ -2088,6 +2090,7 @@ describe("clearThread", () => {
       const fanout = new TestFanout();
       const publish = vi.spyOn(fanout, "publish");
       const tx = {
+        $queryRaw: vi.fn().mockResolvedValue([{ id: "bot-1" }]),
         thread: {
           update: vi
             .fn()
@@ -2126,6 +2129,9 @@ describe("clearThread", () => {
         event: { type: "thread.cleared" },
         cancelledRunIds: ["run-1"],
       });
+      expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+        tx.thread.update.mock.invocationCallOrder[0]!,
+      );
       expect(tx.computerExecutionLease.updateMany).toHaveBeenCalledWith({
         where: { runId: { in: ["run-1"] } },
         data: { expiresAt: new Date(0) },
@@ -2156,6 +2162,7 @@ describe("clearThread", () => {
   it("scopes group clear lease cleanup to cancelled run ids", async () => {
     const fanout = new TestFanout();
     const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([{ id: "group-1" }]),
       thread: {
         update: vi
           .fn()
@@ -2199,6 +2206,11 @@ describe("clearThread", () => {
         fanout,
       ),
     ).resolves.toMatchObject({ cancelledRunIds: ["group-run-1", "group-run-2"] });
+
+    expect(tx.$queryRaw).toHaveBeenCalledTimes(1);
+    expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+      tx.thread.update.mock.invocationCallOrder[0]!,
+    );
 
     expect(tx.run.findMany).toHaveBeenCalledWith(
       expect.objectContaining({

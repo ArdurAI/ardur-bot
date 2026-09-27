@@ -3125,6 +3125,14 @@ msgstr "डिलीट किया गया"
 msgid "Deleting…"
 msgstr "डिलीट किया जा रहा है…"
 
+#: src/pages/Shell.tsx
+msgid "Delivered from {peer}"
+msgstr "{peer} से प्राप्त हुआ"
+
+#: src/pages/Shell.tsx
+msgid "Delivered to {peer}"
+msgstr "{peer} को पहुँचाया गया"
+
 #: src/pages/LearningObservation.tsx
 msgid "Delta"
 msgstr ""
@@ -6056,6 +6064,7 @@ msgstr "कतार में प्रतीक्षा"
 #: src/pages/ComparePanel.tsx
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/Shell.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Queued"
 msgstr "कतार में"

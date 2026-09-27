@@ -1,3 +1,6 @@
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { runProcess } from "./process.js";
 
 type SuiteFailure = { phase: "setup" | "test" | "cleanup"; message: string };
@@ -8,6 +11,7 @@ export async function runIntegrationSuites(options: {
   template: string;
   databaseCommand: (statement: string) => Promise<void>;
   env: NodeJS.ProcessEnv;
+  testNamePattern?: string;
 }) {
   const results: Array<{ suite: string; failures: SuiteFailure[] }> = [];
   const template = options.template.replaceAll('"', '""');
@@ -17,20 +21,54 @@ export async function runIntegrationSuites(options: {
     suiteUrl.pathname = `/${database}`;
     const failures: SuiteFailure[] = [];
     let phase: SuiteFailure["phase"] = "setup";
+    let reportDir: string | undefined;
     try {
       await options.databaseCommand(`CREATE DATABASE "${database}" TEMPLATE "${template}"`);
       phase = "test";
-      await runProcess("pnpm", ["exec", "vitest", "run", suite], {
-        ...options.env,
-        DATABASE_URL: suiteUrl.toString(),
-        REALTIME_DATABASE_URL: suiteUrl.toString(),
-        USAGE_LEDGER_TEST_DATABASE_URL: suiteUrl.toString(),
-        OPENROUTER_API_KEY: "",
-        MODEL_API_KEY: "",
-      });
+      if (options.testNamePattern) reportDir = await mkdtemp(path.join(tmpdir(), "ardur-vitest-"));
+      const reportFile = reportDir ? path.join(reportDir, "results.json") : undefined;
+      await runProcess(
+        "pnpm",
+        [
+          "exec",
+          "vitest",
+          "run",
+          suite,
+          ...(options.testNamePattern ? ["--testNamePattern", options.testNamePattern] : []),
+          ...(reportFile
+            ? ["--reporter=default", "--reporter=json", `--outputFile.json=${reportFile}`]
+            : []),
+        ],
+        {
+          ...options.env,
+          DATABASE_URL: suiteUrl.toString(),
+          REALTIME_DATABASE_URL: suiteUrl.toString(),
+          USAGE_LEDGER_TEST_DATABASE_URL: suiteUrl.toString(),
+          OPENROUTER_API_KEY: "",
+          MODEL_API_KEY: "",
+        },
+      );
+      if (reportFile) {
+        const report = JSON.parse(await readFile(reportFile, "utf8")) as {
+          numPassedTests?: number;
+        };
+        if (!Number.isSafeInteger(report.numPassedTests) || !report.numPassedTests) {
+          throw new Error(`No tests matched integration filter: ${options.testNamePattern}`);
+        }
+      }
     } catch (error) {
       failures.push({ phase, message: error instanceof Error ? error.message : String(error) });
     } finally {
+      if (reportDir) {
+        try {
+          await rm(reportDir, { recursive: true, force: true });
+        } catch (error) {
+          failures.push({
+            phase: "cleanup",
+            message: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
       try {
         await options.databaseCommand(`DROP DATABASE IF EXISTS "${database}" WITH (FORCE)`);
       } catch (error) {

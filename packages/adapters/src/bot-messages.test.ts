@@ -55,6 +55,7 @@ function deps(
     );
   const tx = {
     delegation: { update: vi.fn(async () => ({})) },
+    delegationRoot: { findUnique: vi.fn().mockResolvedValue(null) },
     $queryRaw: vi.fn().mockResolvedValue([{ id: "thread" }]),
     run: {
       findFirst: vi
@@ -77,6 +78,7 @@ function deps(
   };
   let transactionAttempts = 0;
   const prisma = {
+    thread: { findUnique: vi.fn().mockResolvedValue({ groupId: null }) },
     bot: {
       findMany: vi
         .fn()
@@ -251,7 +253,7 @@ describe("messaging another bot", () => {
       { allowTerminalSource: true },
     );
     expect(sent.ok).toBe(true);
-    expect(harness.tx.$queryRaw).toHaveBeenCalledTimes(2);
+    expect(harness.tx.$queryRaw).toHaveBeenCalledTimes(3);
     expect(harness.tx.message.create).toHaveBeenLastCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({

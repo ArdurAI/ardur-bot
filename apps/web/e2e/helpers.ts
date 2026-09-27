@@ -1,4 +1,5 @@
 import { expect, type Page, type TestInfo } from "@playwright/test";
+import { DEPLOYMENT_OWNER_RENEW_MS } from "../../../packages/testkit/src/cli/deployment-owner.js";
 
 export function isRealSandboxProvider(provider = process.env.SANDBOX_PROVIDER) {
   return provider === "e2b" || provider === "daytona" || provider === "box";
@@ -22,6 +23,44 @@ export async function rpc<T>(page: Page, procedure: string, body: unknown): Prom
     throw new Error(`${procedure} ${response.status()}: ${parsed.error?.message ?? "failed"}`);
   }
   return parsed.json as T;
+}
+
+export async function claimDeploymentOwner(page: Page): Promise<() => Promise<void>> {
+  const apiUrl = process.env.API_URL;
+  if (!apiUrl) throw new Error("The e2e API URL is missing");
+  const ownerUrl = `${apiUrl}/__e2e/deployment-owner`;
+  for (;;) {
+    const response = await page.request.post(ownerUrl, {
+      timeout: 125_000,
+    });
+    if (response.status() === 423) continue;
+    if (!response.ok()) throw new Error(`Cannot set up deployment owner: ${response.status()}`);
+    break;
+  }
+  let renewal: Promise<void> | undefined;
+  let renewalError: unknown;
+  const timer = setInterval(() => {
+    if (renewal) return;
+    renewal = page.request
+      .post(ownerUrl)
+      .then((response) => {
+        if (!response.ok()) throw new Error(`Cannot renew deployment owner: ${response.status()}`);
+        renewalError = undefined;
+      })
+      .catch((error: unknown) => {
+        renewalError = error;
+      })
+      .finally(() => {
+        renewal = undefined;
+      });
+  }, DEPLOYMENT_OWNER_RENEW_MS);
+  return async () => {
+    clearInterval(timer);
+    await renewal;
+    const release = await page.request.delete(ownerUrl);
+    if (!release.ok()) throw new Error(`Cannot release deployment owner: ${release.status()}`);
+    if (renewalError) throw renewalError;
+  };
 }
 
 export async function completeOnboarding(page: Page, testInfo?: TestInfo) {

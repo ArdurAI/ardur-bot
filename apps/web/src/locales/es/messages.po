@@ -3125,6 +3125,14 @@ msgstr "eliminado"
 msgid "Deleting…"
 msgstr "Eliminando…"
 
+#: src/pages/Shell.tsx
+msgid "Delivered from {peer}"
+msgstr "Entregado por {peer}"
+
+#: src/pages/Shell.tsx
+msgid "Delivered to {peer}"
+msgstr "Entregado a {peer}"
+
 #: src/pages/LearningObservation.tsx
 msgid "Delta"
 msgstr ""
@@ -6056,6 +6064,7 @@ msgstr "Espera en cola"
 #: src/pages/ComparePanel.tsx
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/Shell.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Queued"
 msgstr "En cola"
