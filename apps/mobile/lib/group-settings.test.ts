@@ -191,3 +191,32 @@ it("preserves deliberate name edit across refresh while still adopting concurren
 
   await act(async () => root.unmount());
 });
+
+it("keeps edits typed while a member-model save was in flight", async () => {
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  await act(async () => root.render(createElement(GroupSettingsScreen)));
+
+  // The control captured this callback when the save started.
+  const inFlightOnSaved = lastOnSaved!;
+  expect(inFlightOnSaved).toBeDefined();
+
+  // The user keeps typing before the response arrives.
+  const nameInput = node.querySelector("input")!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+      nameInput,
+      "Typed During Save",
+    );
+    nameInput.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  // The response resolves through the callback captured before the edit.
+  await act(async () => inFlightOnSaved(refreshedGroup));
+
+  // The typed name survives; the untouched member list still adopts C.
+  expect(node.querySelector("input")?.value).toBe("Typed During Save");
+  expect(lastSelectedMembers).toEqual(["bot-a", "bot-b", "bot-c"]);
+
+  await act(async () => root.unmount());
+});

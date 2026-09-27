@@ -1,6 +1,6 @@
 import { GROUP_MEMBER_MAX, GROUP_MEMBER_MIN } from "@ardurbot/contracts";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, TextInput } from "react-native";
 import { BotMemberPicker } from "../components/bot-member-picker";
 import { ContextSection } from "../components/context-section";
@@ -23,6 +23,10 @@ export default function GroupSettingsScreen() {
   const router = useRouter();
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const [group, setGroup] = useState<MobileGroup | null>(null);
+  // The last group the drafts were reconciled against; read at call time so a save that
+  // finishes after the user kept typing compares against the current drafts, not a stale render.
+  const baseline = useRef<MobileGroup | null>(null);
+  baseline.current = group;
   const [bots, setBots] = useState<MobileBot[]>([]);
   const [catalog, setCatalog] = useState<MobileModel[]>([]);
   const [credentials, setCredentials] = useState<MobileModelCredential[]>([]);
@@ -67,18 +71,21 @@ export default function GroupSettingsScreen() {
   }, []);
 
   function onGroupSaved(refreshed: MobileGroup) {
-    if (group) {
-      if (name === group.name) {
-        setName(refreshed.name);
-      }
-      const prevMemberIds = group.members.map((member) => member.botId).join(",");
-      if (selected.join(",") === prevMemberIds) {
-        setSelected(refreshed.members.map((member) => member.botId));
-      }
-      const prevCoordinator = group.coordinatorBotId ?? null;
-      if (coordinator === prevCoordinator) {
-        setCoordinator(refreshed.coordinatorBotId ?? null);
-      }
+    const base = baseline.current;
+    if (base) {
+      // Functional updates compare the draft as it is now: an edit typed while the
+      // request was in flight is kept, an untouched draft adopts the refreshed value.
+      setName((current) => (current === base.name ? refreshed.name : current));
+      const baseMemberIds = base.members.map((member) => member.botId).join(",");
+      setSelected((current) =>
+        current.join(",") === baseMemberIds
+          ? refreshed.members.map((member) => member.botId)
+          : current,
+      );
+      const baseCoordinator = base.coordinatorBotId ?? null;
+      setCoordinator((current) =>
+        current === baseCoordinator ? (refreshed.coordinatorBotId ?? null) : current,
+      );
     }
     setGroup(refreshed);
   }
