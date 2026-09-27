@@ -6,7 +6,8 @@ if (args[0] === "--version") {
   process.exit(0);
 }
 if (args[0] === "--help") {
-  process.stdout.write("--print --model --effort --input-format --output-format --print-timeout\n");
+  // The real CLI prints usage to stderr and exits 0.
+  process.stderr.write("--print --model --effort --input-format --output-format --print-timeout\n");
   process.exit(0);
 }
 if (args[0] === "models") {
