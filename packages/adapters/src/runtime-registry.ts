@@ -5,9 +5,15 @@ import type {
   RuntimePin,
   RuntimeProblem,
 } from "@ardurbot/contracts";
-import { runtimePinProblem } from "@ardurbot/contracts";
+import {
+  nativeRuntimeHealthKeys,
+  runtimeNames,
+  runtimePinProblem,
+  validateAntigravityPin,
+} from "@ardurbot/contracts";
 import { RemoteHostRuntime } from "./remote-host-runtime.js";
 import { createHostClient, usesHostBridge } from "./remote-host-sandbox.js";
+import { AntigravityRuntime, probeAntigravity } from "./runtimes/antigravity-runtime.js";
 import { ClaudeCodeRuntime, probeClaude } from "./runtimes/claude-code-runtime.js";
 import { CodexAppServerRuntime, probeCodex } from "./runtimes/codex-app-server-runtime.js";
 
@@ -30,7 +36,7 @@ export class RuntimeRegistry {
       return runtimePinProblem(
         pin,
         "runtime-unsupported-computer",
-        `${pin.runtimeKind === "claude-code" ? "Claude Code" : "Codex"} runs on host computers for now — change the bot's computer or its runtime.`,
+        `${runtimeNames[pin.runtimeKind]} runs on host computers for now — change the bot's computer or its runtime.`,
       );
     if (pin.runtimeKind !== "pi" && !experimental)
       return runtimePinProblem(
@@ -46,11 +52,19 @@ export class RuntimeRegistry {
         models: [],
       }),
     );
-    if (!availability.available)
+    if (
+      !availability.available &&
+      !(
+        pin.runtimeKind === "antigravity" &&
+        availability.signInStatus === "signed-out" &&
+        availability.catalogStale === false
+      )
+    )
       return runtimePinProblem(
         pin,
         "runtime-unavailable",
         availability.reason ?? "The pinned runtime is unavailable — change the pin.",
+        availability.reasonId,
       );
     if (pin.runtimeKind !== "pi") {
       const model = availability.models.find((entry) => entry.id === pin.modelId);
@@ -60,7 +74,10 @@ export class RuntimeRegistry {
           "pin-model-unknown",
           "The pinned model is unavailable in this runtime.",
         );
-      if (!model.efforts.includes(pin.effort ?? ""))
+      if (pin.runtimeKind === "antigravity") {
+        const invalid = validateAntigravityPin(pin, availability.models);
+        if (invalid) return invalid;
+      } else if (!model.efforts.includes(pin.effort ?? ""))
         return runtimePinProblem(
           pin,
           "pin-effort-unsupported",
@@ -77,6 +94,9 @@ export function createRuntimeRegistry(pi: AgentRuntime) {
   const codex = client
     ? new RemoteHostRuntime(client, "codex-app-server")
     : new CodexAppServerRuntime();
+  const antigravity = client
+    ? new RemoteHostRuntime(client, "antigravity")
+    : new AntigravityRuntime();
   return new RuntimeRegistry({
     pi: {
       factory: () => pi,
@@ -92,21 +112,35 @@ export function createRuntimeRegistry(pi: AgentRuntime) {
       factory: () => codex,
       probe: () => nativeRuntimeAvailability("codex-app-server"),
     },
+    antigravity: {
+      factory: () => antigravity,
+      probe: () => nativeRuntimeAvailability("antigravity"),
+    },
   });
 }
 
-export async function nativeRuntimeAvailability(kind: RuntimeKind): Promise<RuntimeAvailability> {
+export async function nativeRuntimeAvailability(
+  kind: RuntimeKind,
+  refresh = false,
+): Promise<RuntimeAvailability> {
   if (kind === "pi") return { runtimeKind: kind, available: true, models: [] };
   if (usesHostBridge()) {
     const health = await createHostClient().health();
     return (
-      health?.[kind === "claude-code" ? "claude" : "codex"] ?? {
+      health?.[nativeRuntimeHealthKeys[kind]] ?? {
         runtimeKind: kind,
         available: false,
         models: [],
-        reason: "Host service is not running — open the desktop app.",
+        reason:
+          health && kind === "antigravity"
+            ? "Update Ardur on the connected computer to use Antigravity."
+            : "Host service is not running — open the desktop app.",
       }
     );
   }
-  return kind === "claude-code" ? probeClaude() : probeCodex();
+  return kind === "claude-code"
+    ? probeClaude()
+    : kind === "codex-app-server"
+      ? probeCodex()
+      : probeAntigravity(undefined, undefined, refresh);
 }

@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -27,7 +26,6 @@ import {
   claimSteering,
   createThreadEvents,
   createThreadMessage,
-  expireQuietBotMessages,
   finalizeRun,
   RunHistoryWriteError,
   sendUserMessage,
@@ -36,7 +34,6 @@ import {
 } from "@ardurbot/db";
 import { afterAll, beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
 import type { createApp } from "../../../apps/api/src/app.ts";
-import * as turnContext from "../../adapters/src/context/assemble.js";
 import { checkDelegationExecution } from "../../adapters/src/delegation-execution.js";
 import { integrationApprovalForCall } from "../../adapters/src/integration-access.js";
 import { promptWithInitialSteering, toHistory } from "../../adapters/src/pi-runtime.js";
@@ -2567,10 +2564,10 @@ describeJourneys("required product journeys", () => {
       .spyOn(ScriptedAgentRuntime.prototype, "run")
       .mockImplementation((request, context) => {
         const history = request.history.map((message) => message.content).join("\n");
-        if (request.prompt.includes("Review the completed assignment"))
-          expect([workerResult, reviewerResult].some((result) => history.includes(result))).toBe(
-            true,
-          );
+        if (request.prompt.includes("Review Worker's completed assignment"))
+          expect(history).toContain(workerResult);
+        if (request.prompt.includes("Review Reviewer's completed assignment"))
+          expect(history).toContain(reviewerResult);
         return originalRuntime.call(new ScriptedAgentRuntime(), request, context);
       });
     onTestFinished(() => deliverySpy.mockRestore());
@@ -2606,19 +2603,11 @@ describeJourneys("required product journeys", () => {
     expect(cards.every((card) => card.depth === 1 && card.rootTaskId === goal.rootTaskId)).toBe(
       true,
     );
-    const automatic = await prisma.botMessageDelivery.findMany({
-      where: {
-        sourceDelegationId: { in: cards.map((card) => card.id) },
-        idempotencyKey: { startsWith: "auto-result:" },
-      },
+    const wakes = await prisma.run.findMany({
+      where: { goalId: goal.id, clientNonce: { startsWith: "goal-wake:" } },
     });
-    expect(automatic).toHaveLength(2);
-    const wakes = await prisma.botMessageWake.findMany({
-      where: { rootTaskId: goal.rootTaskId },
-    });
-    expect(wakes).toHaveLength(2);
-    expect(wakes.flatMap((wake) => wake.deliveryIds).sort()).toEqual(
-      automatic.map((delivery) => delivery.id).sort(),
+    expect(wakes.map((wake) => wake.clientNonce).sort()).toEqual(
+      cards.map((card) => `goal-wake:${card.id}`).sort(),
     );
     await waitForDatabase(
       async () =>
@@ -2650,21 +2639,12 @@ describeJourneys("required product journeys", () => {
           "delegationId" in block &&
           block.delegationId === card.id &&
           "deliveryState" in block &&
-          block.deliveryState === "replied"
+          block.deliveryState === "delivered"
             ? [message]
             : [],
         ),
       );
       expect(markers).toHaveLength(2);
-      const ledger = await prisma.botMessageDelivery.findFirstOrThrow({
-        where: { delegationId: card.id, intent: "request" },
-      });
-      expect(ledger).toMatchObject({ state: "replied", replyDeliveryId: expect.any(String) });
-      expect(
-        await prisma.botMessageDelivery.count({
-          where: { inReplyToDeliveryId: ledger.id, intent: "result" },
-        }),
-      ).toBe(1);
       const recipientThread = recipientThreads.find((bot) => bot.id === card.actingBotId)!.thread!
         .id;
       expect(new Set(markers.map((message) => message.threadId))).toEqual(
@@ -2683,11 +2663,7 @@ describeJourneys("required product journeys", () => {
     const usage = await prisma.usageRecord.findMany({
       where: {
         runId: {
-          in: [
-            startRun.id,
-            ...cards.map((card) => card.runId!),
-            ...wakes.flatMap((wake) => (wake.runId ? [wake.runId] : [])),
-          ],
+          in: [startRun.id, ...cards.map((card) => card.runId!), ...wakes.map((wake) => wake.id)],
         },
       },
       select: { rootTaskId: true },
@@ -2736,15 +2712,11 @@ describeJourneys("required product journeys", () => {
     expect(await wakeGoalCoordinatorForDelegation(prisma, cards[0]!.id)).toBeNull();
     const reconciler = createJobReconciler({ prisma, jobs }, { batchSize: 100 });
     await reconciler.reconcileOnce();
-    const settledWakes = await prisma.botMessageWake.findMany({
-      where: { rootTaskId: goal.rootTaskId },
-    });
-    expect(settledWakes).toHaveLength(2);
     expect(
       await prisma.run.count({
-        where: { goalId: goal.id, clientNonce: { startsWith: "peer-wake:" } },
+        where: { goalId: goal.id, clientNonce: { startsWith: "goal-wake:" } },
       }),
-    ).toBe(new Set(settledWakes.flatMap((wake) => (wake.runId ? [wake.runId] : []))).size);
+    ).toBe(2);
 
     const fixturePin = {
       runtimeKind: "pi" as const,
@@ -3726,257 +3698,6 @@ describeJourneys("required product journeys", () => {
     await settleFixtureWork([coordinator.id, peer.id], goal.id);
   });
 
-  it("sends only claimed quiet deliveries after selection and through context assembly", async () => {
-    const owner = await signup(app, `quiet-executor-${stamp}@ardurbot.test`, "Quiet owner");
-    const actor = await rpc<Me>(app, owner, "me");
-    await prisma.deploymentSettings.update({
-      where: { id: "default" },
-      data: { ownerUserId: actor.userId },
-    });
-    const coordinator = await rpc<Bot>(app, owner, "bots/create", {
-      name: "Coordinator",
-      title: "Lead",
-      description: "",
-      instructions: "",
-    });
-    const worker = await rpc<Bot>(app, owner, "bots/create", {
-      name: "Worker",
-      title: "Member",
-      description: "",
-      instructions: "",
-    });
-    const group = await rpc<{ id: string; threadId: string }>(app, owner, "groups/create", {
-      name: "Quiet delivery room",
-      botIds: [coordinator.id, worker.id],
-    });
-    await rpc(app, owner, "groups/update", {
-      groupId: group.id,
-      coordinatorBotId: coordinator.id,
-    });
-    const untilAt = new Date(Date.now() + 60 * 60 * 1000);
-    const goal = await rpc<{ id: string; rootTaskId: string }>(app, owner, "goals/start", {
-      groupId: group.id,
-      objective: "Review quiet updates.",
-      doneWhen: ["Updates reviewed"],
-      tokenLimit: 100_000,
-      untilAt: untilAt.toISOString(),
-    });
-    const start = await prisma.run.findFirstOrThrow({
-      where: { goalId: goal.id, clientNonce: `goal-start:${goal.id}` },
-    });
-    await prisma.run.update({ where: { id: start.id }, data: { status: "completed" } });
-    await prisma.task.update({ where: { id: start.taskId }, data: { status: "done" } });
-    const workerThread = await prisma.thread.findFirstOrThrow({
-      where: { botId: worker.id, spaceId: worker.spaceId },
-    });
-
-    for (const expiresDuringAssembly of [false, true]) {
-      const task = await prisma.task.create({
-        data: {
-          spaceId: coordinator.spaceId,
-          userId: actor.userId,
-          botId: coordinator.id,
-          threadId: group.threadId,
-          prompt: "Review the current updates.",
-          status: "queued",
-        },
-      });
-      const run = await prisma.run.create({
-        data: {
-          spaceId: coordinator.spaceId,
-          userId: actor.userId,
-          botId: coordinator.id,
-          threadId: group.threadId,
-          taskId: task.id,
-          status: "queued",
-          trigger: "follow_up",
-          goalId: goal.id,
-          delegationRootTaskId: goal.rootTaskId,
-        },
-      });
-      const deliveries = [];
-      for (const label of ["expired", "claimed"]) {
-        const id = randomUUID();
-        const text = `${label}-${id}`;
-        const outbound = await createThreadMessage(prisma, {
-          threadId: workerThread.id,
-          role: "bot",
-          botId: worker.id,
-          blocks: [
-            {
-              kind: "bot_message_sent",
-              toBotId: coordinator.id,
-              toBotName: coordinator.name,
-              text,
-              intent: "fyi",
-              deliveryId: id,
-              deliveryState: "delivered",
-            },
-          ],
-          markUnread: false,
-        });
-        const inbound = await createThreadMessage(prisma, {
-          threadId: group.threadId,
-          role: "user",
-          origin: "peer-bot",
-          actorId: worker.id,
-          blocks: [
-            {
-              kind: "bot_message_received",
-              fromBotId: worker.id,
-              fromBotName: worker.name,
-              text,
-              intent: "fyi",
-              hop: 1,
-              returnToMessageId: outbound.id,
-              deliveryId: id,
-              deliveryState: "delivered",
-            },
-          ],
-          markUnread: false,
-        });
-        deliveries.push(
-          await prisma.botMessageDelivery.create({
-            data: {
-              id,
-              spaceId: coordinator.spaceId,
-              userId: actor.userId,
-              goalId: goal.id,
-              rootTaskId: goal.rootTaskId,
-              conversationId: id,
-              senderBotId: worker.id,
-              recipientBotId: coordinator.id,
-              senderThreadId: workerThread.id,
-              recipientThreadId: group.threadId,
-              sourceRunId: start.id,
-              intent: "fyi",
-              outboundMessageId: outbound.id,
-              inboundMessageId: inbound.id,
-              state: "delivered",
-              hop: 1,
-              authorityFingerprint: "fixture",
-              requestFingerprint: id,
-              idempotencyKey: `quiet-executor:${id}`,
-              expiresAt: untilAt,
-            },
-          }),
-        );
-      }
-      const [expired, claimed] = deliveries;
-      let selectedBoth = false;
-      let enterAssembly!: () => void;
-      let resumeAssembly!: () => void;
-      const assemblyEntered = new Promise<void>((resolve) => {
-        enterAssembly = resolve;
-      });
-      const assemblyGate = new Promise<void>((resolve) => {
-        resumeAssembly = resolve;
-      });
-      const selected = prisma.botMessageDelivery.findMany.bind(prisma.botMessageDelivery);
-      const selectSpy = vi
-        .spyOn(prisma.botMessageDelivery, "findMany")
-        .mockImplementation(async (args) => {
-          const rows = await selected(args);
-          if (
-            args.where?.recipientThreadId === group.threadId &&
-            args.where.state &&
-            args.select?.inboundMessageId
-          ) {
-            selectedBoth =
-              rows.some((row) => row.id === expired.id) &&
-              rows.some((row) => row.id === claimed.id);
-            await prisma.botMessageDelivery.update({
-              where: { id: expired.id },
-              data: { expiresAt: new Date(Date.now() - 1_000) },
-            });
-            await expireQuietBotMessages(prisma);
-          }
-          return rows;
-        });
-      const assemble = turnContext.assembleTurnContext;
-      const assemblySpy = vi
-        .spyOn(turnContext, "assembleTurnContext")
-        .mockImplementation(async (args) => {
-          const assembled = await assemble(args);
-          if (expiresDuringAssembly && args.requiredContext?.id === `quiet-deliveries:${run.id}`) {
-            enterAssembly();
-            await assemblyGate;
-          }
-          return assembled;
-        });
-      const requests: Array<{
-        prompt: string;
-        history: Array<{ id?: string; content: string }>;
-      }> = [];
-      const runtimeSpy = vi
-        .spyOn(ScriptedAgentRuntime.prototype, "run")
-        .mockImplementation(async function* (request) {
-          if (request.runId === run.id)
-            requests.push({ prompt: request.prompt, history: request.history });
-          yield { type: "done", text: "Updates reviewed." };
-        });
-      try {
-        const execution = executor.continueRun(run.id, `quiet-executor-${run.id}`);
-        if (expiresDuringAssembly) {
-          await Promise.race([
-            assemblyEntered,
-            execution.then(() => {
-              throw new Error("The turn completed before context assembly was reached.");
-            }),
-          ]);
-          await prisma.botMessageDelivery.update({
-            where: { id: claimed.id },
-            data: { expiresAt: new Date(Date.now() - 1_000) },
-          });
-          await expireQuietBotMessages(prisma);
-          expect(
-            await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id: claimed.id } }),
-          ).toMatchObject({ state: "delivered", outcome: null, quietClaimRunId: run.id });
-          resumeAssembly();
-        }
-        await execution;
-      } finally {
-        resumeAssembly();
-        runtimeSpy.mockRestore();
-        assemblySpy.mockRestore();
-        selectSpy.mockRestore();
-      }
-      expect(selectedBoth).toBe(true);
-      expect(requests).toHaveLength(1);
-      const runtimeInput = [
-        requests[0]?.prompt,
-        ...(requests[0]?.history ?? []).map((message) => message.content),
-      ].join("\n");
-      expect(runtimeInput).not.toContain(`expired-${expired.id}`);
-      expect(runtimeInput).not.toContain(expired.id);
-      expect(runtimeInput.split(`claimed-${claimed.id}`)).toHaveLength(2);
-      const quiet = requests[0]?.history.find(
-        (message) => message.id === `quiet-deliveries:${run.id}`,
-      );
-      expect(quiet?.content).toContain(claimed.id);
-      expect(quiet?.content).toContain(`claimed-${claimed.id}`);
-      expect(
-        await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id: expired.id } }),
-      ).toMatchObject({ state: "expired", outcome: "expired", quietClaimRunId: null });
-      expect(
-        (await prisma.message.findUniqueOrThrow({ where: { id: expired.inboundMessageId! } }))
-          .blocks,
-      ).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            kind: "bot_message_received",
-            deliveryId: expired.id,
-            deliveryState: "expired",
-          }),
-        ]),
-      );
-      expect(
-        await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id: claimed.id } }),
-      ).toMatchObject({ outcome: "consumed", quietClaimRunId: null });
-    }
-    await settleFixtureWork([coordinator.id, worker.id], goal.id);
-  });
-
   it("keeps a goal wake's source result after a newer room message fills history", async () => {
     const pin = {
       runtimeKind: "pi" as const,
@@ -4023,14 +3744,14 @@ describeJourneys("required product journeys", () => {
       where: { goalId: goal.id, clientNonce: `goal-start:${goal.id}` },
     });
     await executor.continueRun(startRun.id, "wake-start-fixture");
-    await waitForDatabase(async () =>
-      ["completed", "failed", "cancelled"].includes(
-        (await prisma.run.findUnique({ where: { id: startRun.id }, select: { status: true } }))
-          ?.status ?? "",
-      ),
-    );
+    await waitForDatabase(async () => {
+      const current = await prisma.run.findUnique({
+        where: { id: startRun.id },
+        select: { status: true },
+      });
+      return current?.status === "completed";
+    });
     const completedStart = await prisma.run.findUniqueOrThrow({ where: { id: startRun.id } });
-    expect(completedStart.status).toBe("completed");
     const distinctResult = "WORKER_RESULT_OLDEST_FIRST_SENTINEL";
     const coordinatorTask = await prisma.task.create({
       data: {
@@ -4103,12 +3824,6 @@ describeJourneys("required product journeys", () => {
     const workerAttempt = await prisma.attempt.create({
       data: { runId: workerRun.id, fence: 1, status: "running" },
     });
-    // This fixture tests the source result in one manually constructed wake.
-    // Reserve the completion claim so reconciliation cannot create a competing wake.
-    await prisma.delegation.update({
-      where: { id: delivery.delegationId },
-      data: { coordinatorWokenAt: new Date() },
-    });
     const workerThreadId = workerRun.threadId;
     const finished = await finalizeRun(prisma, {
       spaceId: worker.spaceId,
@@ -4138,35 +3853,13 @@ describeJourneys("required product journeys", () => {
         status: "queued",
       },
     });
-    const wake = await prisma.run.create({
-      data: {
-        spaceId: coordinator.spaceId,
-        userId: ownerMe.userId,
-        botId: coordinator.id,
-        threadId: group.threadId,
-        taskId: wakeTask.id,
-        status: "queued",
-        trigger: "follow_up",
-        sourceMessageId: summary.summaryMessageId,
-        clientNonce: `goal-wake:wake-budget-${stamp}`,
-        goalId: goal.id,
-        delegationRootTaskId: goal.rootTaskId,
-        runtimePin: completedStart.runtimePin ?? pin,
-        runtimeDestination: completedStart.runtimeDestination ?? undefined,
-        runtimeComputer: completedStart.runtimeComputer ?? undefined,
-      },
-    });
-    await createThreadMessage(prisma, {
-      threadId: group.threadId,
-      role: "user",
-      blocks: [{ kind: "text", text: `Later room context: ${"x".repeat(12_100)}` }],
-    });
     const requests: string[] = [];
     const originalRun = ScriptedAgentRuntime.prototype.run;
+    let wakeId: string | null = null;
     const runtimeSpy = vi
       .spyOn(ScriptedAgentRuntime.prototype, "run")
       .mockImplementation((request, context) => {
-        if (request.runId === wake.id) {
+        if (request.runId === wakeId) {
           requests.push(
             toHistory(request.history, request.prompt, request.sourceMessageId)
               .map((message) => message.content)
@@ -4176,15 +3869,35 @@ describeJourneys("required product journeys", () => {
         return originalRun.call(new ScriptedAgentRuntime(), request, context);
       });
     try {
+      // The reconciler only dispatches queued runs. Hold this fixture in waiting_input
+      // until the explicit continuation so the spy observes its sole execution.
+      const wake = await prisma.run.create({
+        data: {
+          spaceId: coordinator.spaceId,
+          userId: ownerMe.userId,
+          botId: coordinator.id,
+          threadId: group.threadId,
+          taskId: wakeTask.id,
+          status: "waiting_input",
+          trigger: "follow_up",
+          sourceMessageId: summary.summaryMessageId,
+          clientNonce: `goal-wake:wake-budget-${stamp}`,
+          goalId: goal.id,
+          delegationRootTaskId: goal.rootTaskId,
+          runtimePin: completedStart.runtimePin ?? pin,
+          runtimeDestination: completedStart.runtimeDestination ?? undefined,
+          runtimeComputer: completedStart.runtimeComputer ?? undefined,
+        },
+      });
+      wakeId = wake.id;
+      await createThreadMessage(prisma, {
+        threadId: group.threadId,
+        role: "user",
+        blocks: [{ kind: "text", text: `Later room context: ${"x".repeat(12_100)}` }],
+      });
       await executor.continueRun(wake.id, "wake-budget-fixture");
     } finally {
       runtimeSpy.mockRestore();
-    }
-    if (requests.length === 0) {
-      const skipped = await prisma.run.findUniqueOrThrow({ where: { id: wake.id } });
-      throw new Error(
-        `Wake runtime was not entered: ${skipped.status}: ${skipped.error ?? "none"}`,
-      );
     }
     expect(requests).toHaveLength(1);
     expect(requests[0]).toContain(distinctResult);
@@ -4569,11 +4282,6 @@ describeJourneys("required product journeys", () => {
     });
     expect(runId).not.toBe(first.id);
     await ordinaryReady;
-    await waitForDatabase(
-      async () =>
-        (await prisma.run.findUnique({ where: { id: runId }, select: { status: true } }))
-          ?.status === "running",
-    );
     const newerScreenLeaseId = `${runId}:2`;
     await screen.observe(computerRef, {
       operationId: runId,

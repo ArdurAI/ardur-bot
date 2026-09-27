@@ -38,6 +38,7 @@ import { HostMcpServers } from "./host-mcp.js";
 import { confinedHostCwd } from "./host-policy.js";
 import type { LocalImportScanner } from "./import/scanner.js";
 import { createLocalImportScanner, LocalImportRescanError } from "./import/scanner.js";
+import { AntigravityRuntime, probeAntigravity } from "./runtimes/antigravity-runtime.js";
 import { ClaudeCodeRuntime, probeClaude } from "./runtimes/claude-code-runtime.js";
 import { CodexAppServerRuntime, probeCodex } from "./runtimes/codex-app-server-runtime.js";
 import type { NativeSpawn } from "./runtimes/native-process.js";
@@ -68,9 +69,12 @@ export class HostAgent {
       mcpServers?: HostMcpRegistration[];
     },
     private readonly wire: HostWire,
-    private readonly runtimes: Record<"claude-code" | "codex-app-server", AgentRuntime> = {
+    private readonly runtimes: Partial<
+      Record<"claude-code" | "codex-app-server" | "antigravity", AgentRuntime>
+    > = {
       "claude-code": new ClaudeCodeRuntime(),
       "codex-app-server": new CodexAppServerRuntime(),
+      antigravity: new AntigravityRuntime(),
     },
   ) {
     this.fleet = new FleetService(config.root, config.token ?? randomUUID());
@@ -94,12 +98,13 @@ export class HostAgent {
       })),
     );
   }
-  async health(): Promise<HostHealth> {
+  async health(refreshSignIn = false): Promise<HostHealth> {
     const cwd = await confinedHostCwd(this.config.root, [this.config.root]);
     const start: NativeSpawn = (binary, args) => spawnNative(binary, args, cwd);
-    const [claude, codex, environment, integrations] = await Promise.all([
+    const [claude, codex, antigravity, environment, integrations] = await Promise.all([
       probeClaude(start),
       probeCodex(start),
+      probeAntigravity(start, undefined, refreshSignIn),
       inspectHostEnvironment(getHostEnvironment(), false),
       inspectHostIntegrations(),
     ]);
@@ -110,6 +115,7 @@ export class HostAgent {
       load: this.active.size,
       claude,
       codex,
+      antigravity,
       environment,
       capacity: await hostCapacity(),
       integrations,
@@ -241,7 +247,7 @@ export class HostAgent {
       } else if (op.op === "computer.remote.call") {
         await this.fleet.call(op, context, send);
       } else if (op.op === "host.health") {
-        await send("result", await this.health());
+        await send("result", await this.health(op.refreshSignIn));
       } else if (op.op === "board.run") {
         const result = await new BoardRunner({ root: this.config.root, hostRoots: this.roots }).run(
           op.request,
@@ -492,7 +498,9 @@ export class HostAgent {
           ReturnType<NonNullable<AgentRunRequest["claimSteering"]>>
         >,
     };
-    for await (const event of this.runtimes[kind].run(local, context))
+    const runtime = this.runtimes[kind];
+    if (!runtime) throw new Error("Host runtime is unavailable.");
+    for await (const event of runtime.run(local, context))
       await send("event", HostRuntimeEventSchema.parse(event));
   }
 }

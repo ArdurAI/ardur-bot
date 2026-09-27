@@ -45,6 +45,40 @@ function fixture() {
   return { deps, findFirst, credential };
 }
 describe("bot pin editing", () => {
+  it("saves a no-effort Antigravity model with explicit null", async () => {
+    const { deps, findFirst } = fixture();
+    vi.mocked(nativeRuntimeAvailability).mockResolvedValue({
+      runtimeKind: "antigravity",
+      available: false,
+      models: [
+        {
+          id: "claude-sonnet-4-6",
+          label: "Claude Sonnet 4.6 (Thinking)",
+          efforts: [],
+          effortMode: "none",
+        },
+      ],
+    });
+    expect(
+      await botModelPinUpdate(
+        deps,
+        actor,
+        { ...existing, thinkingLevel: "high" },
+        {
+          botId: "bot",
+          runtimeKind: "antigravity",
+          modelProvider: "antigravity",
+          modelId: "claude-sonnet-4-6",
+          thinkingLevel: null,
+        },
+      ),
+    ).toMatchObject({
+      runtimeKind: "antigravity",
+      thinkingLevel: null,
+      modelCredentialId: "native:antigravity",
+    });
+    expect(findFirst).not.toHaveBeenCalled();
+  });
   it.each(["low", "medium", "high", "xhigh", "max"] as const)(
     "saves a complete native %s binding without looking up API credentials",
     async (effort) => {

@@ -1,6 +1,6 @@
 import { oc } from "@orpc/contract";
 import * as z from "zod";
-import { RuntimePinSchema } from "./runtime-pins.js";
+import { RuntimePinSchema, RuntimePinSourceSchema } from "./runtime-pins.js";
 
 export const DelegationKindSchema = z.enum(["message", "group-handoff", "helper", "child"]);
 export type DelegationKind = z.infer<typeof DelegationKindSchema>;
@@ -31,6 +31,7 @@ export const DelegationAuthoritySchema = z.object({
 export type DelegationAuthority = z.infer<typeof DelegationAuthoritySchema>;
 export const DelegationSnapshotSchema = z.object({
   pin: RuntimePinSchema,
+  pinSource: RuntimePinSourceSchema.optional(),
   computer: z.object({
     id: z.string().nullable(),
     mode: z.enum(["team", "dedicated"]),

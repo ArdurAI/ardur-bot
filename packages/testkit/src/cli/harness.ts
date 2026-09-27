@@ -5,6 +5,7 @@ import path from "node:path";
 import { loadRootEnv } from "@ardurbot/core/node/load-root-env";
 import { PostgreSqlContainer } from "@testcontainers/postgresql";
 import type { createApp } from "../../../../apps/api/src/app.ts";
+import { createDeploymentOwnerFixture } from "./deployment-owner.js";
 import { runIntegrationSuites } from "./integration.js";
 import { runProcess } from "./process.js";
 
@@ -19,6 +20,7 @@ const runtimeArg = process.argv.find((arg) => arg.startsWith("--runtime="));
 const workersArg = process.argv.find((arg) => arg.startsWith("--workers="));
 const shardArg = process.argv.find((arg) => arg.startsWith("--shard="));
 const repeatEachArg = process.argv.find((arg) => arg.startsWith("--repeat-each="));
+const integrationRepeats = Number(repeatEachArg?.slice("--repeat-each=".length) ?? "1");
 const sandboxProvider = sandboxArg?.slice("--sandbox=".length) ?? "fake";
 const e2eSpec = specArg?.slice("--spec=".length);
 const e2eGrep = grepArg?.slice("--grep=".length);
@@ -28,6 +30,9 @@ const agentRuntime = runtimeArg?.slice("--runtime=".length) ?? "scripted";
 
 if (Number(integration) + Number(e2e) !== 1) {
   throw new Error("Pass exactly one of --integration or --e2e");
+}
+if (!Number.isSafeInteger(integrationRepeats) || integrationRepeats < 1) {
+  throw new Error("--repeat-each must be a positive integer");
 }
 if (!["fake", "e2b", "daytona", "box"].includes(sandboxProvider)) {
   throw new Error('Sandbox must be "fake", "e2b", "daytona", or "box"');
@@ -110,6 +115,7 @@ async function main() {
         "packages/testkit/src/connections.test.ts",
         "packages/testkit/src/bot-secrets.test.ts",
         "packages/db/src/space-membership.postgres.test.ts",
+        "packages/db/src/group-model-pins.postgres.test.ts",
         "packages/db/src/messaging.postgres.test.ts",
         "packages/db/src/learning.postgres.test.ts",
         "packages/adapters/src/learning-insights.postgres.test.ts",
@@ -145,14 +151,14 @@ async function main() {
           throw new Error("Isolated integration database operation failed");
       };
       const selectedSuites = e2eSpec ? suites.filter((suite) => suite === e2eSpec) : suites;
-      if (selectedSuites.length === 0) throw new Error("Unknown integration suite.");
+      if (selectedSuites.length === 0) throw new Error(`Unknown integration suite: ${e2eSpec}`);
       const result = await runIntegrationSuites({
-        suites: selectedSuites,
-        grep: e2eGrep,
+        suites: Array.from({ length: integrationRepeats }, () => selectedSuites).flat(),
         databaseUrl,
         template: container.getDatabase(),
         databaseCommand,
         env: process.env,
+        testNamePattern: e2eGrep,
       });
       await writeSummary(reportDir, {
         ...result,
@@ -226,6 +232,36 @@ async function main() {
     });
     let activeRequests = 0;
     const requestWaiters = new Set<() => void>();
+    const deploymentOwner = createDeploymentOwnerFixture({
+      authenticate: async (request) => {
+        const headers = new Headers(request.headers);
+        headers.set("content-type", "application/json");
+        const sessionResponse = await handles.app.fetch(
+          new Request(new URL("/rpc/me", request.url), {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ json: {} }),
+          }),
+        );
+        if (!sessionResponse.ok) return null;
+        const me = (await sessionResponse.json()) as { json?: { userId?: string } };
+        const sessionId =
+          request.headers
+            .get("cookie")
+            ?.split(";")
+            .map((cookie) => cookie.trim())
+            .find((cookie) => cookie.startsWith("better-auth.session_token=")) ??
+          request.headers.get("authorization");
+        if (!me.json?.userId || !sessionId) return null;
+        return { userId: me.json.userId, sessionId };
+      },
+      setOwner: async (userId) => {
+        await handles.prisma.deploymentSettings.update({
+          where: { id: "default" },
+          data: { ownerUserId: userId },
+        });
+      },
+    });
     const server = serve({
       fetch: async (request) => {
         const url = new URL(request.url);
@@ -280,36 +316,8 @@ async function main() {
           if (!delivery) return new Response("Unknown delivery", { status: 404 });
           return Response.json(delivery, { headers: { "cache-control": "no-store" } });
         }
-        if (e2e && url.pathname === "/__e2e/deployment-owner") {
-          if (
-            request.method !== "POST" ||
-            request.headers.get("x-e2e-owner-token") !== process.env.TESTKIT_E2E_OWNER_TOKEN
-          )
-            return new Response("Forbidden", { status: 403 });
-          const input = (await request.json()) as {
-            action?: "claim" | "release";
-            userId?: string;
-            previousOwnerUserId?: string | null;
-          };
-          if (!input.userId || !["claim", "release"].includes(input.action ?? ""))
-            return new Response("Bad request", { status: 400 });
-          const user = await handles.prisma.user.findUnique({ where: { id: input.userId } });
-          if (!user) return new Response("Unknown user", { status: 404 });
-          if (input.action === "claim") {
-            const settings = await handles.prisma.deploymentSettings.findUniqueOrThrow({
-              where: { id: "default" },
-            });
-            await handles.prisma.deploymentSettings.update({
-              where: { id: "default" },
-              data: { ownerUserId: input.userId },
-            });
-            return Response.json({ previousOwnerUserId: settings.ownerUserId });
-          }
-          const released = await handles.prisma.deploymentSettings.updateMany({
-            where: { id: "default", ownerUserId: input.userId },
-            data: { ownerUserId: input.previousOwnerUserId ?? null },
-          });
-          return Response.json({ released: released.count === 1 });
+        if (url.pathname === "/__e2e/deployment-owner") {
+          return deploymentOwner(request);
         }
         activeRequests += 1;
         try {

@@ -19,7 +19,7 @@ export function effectiveBotModel(
       providerLabel: runtimeNames[bot.runtimeKind],
       thinkingLevel: bot.thinkingLevel,
       isDefault: false,
-      unavailable: !bot.modelId || !bot.thinkingLevel,
+      unavailable: !bot.modelId || (bot.runtimeKind !== "antigravity" && !bot.thinkingLevel),
     };
   if (!settings) return null;
   const { me, catalog, credentials } = settings;
@@ -81,7 +81,7 @@ export function BotModelChip({
   const model = effectiveBotModel(bot, settings);
   if (!model) return null;
   const effort =
-    bot.runtimeKind === "claude-code"
+    bot.runtimeKind === "claude-code" || bot.runtimeKind === "antigravity"
       ? botEffortLabel(bot, run, t`requested`)
       : (model.effortLabel ?? model.thinkingLevel);
   const label = `${bot.runtimeKind && bot.runtimeKind !== "pi" ? "" : "Ardur · "}${model.providerLabel} · ${model.label}${effort ? ` · ${effort}` : ""}${model.unavailable ? t` · not available` : ""}`;

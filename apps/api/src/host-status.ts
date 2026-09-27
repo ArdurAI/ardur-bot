@@ -9,6 +9,7 @@ import {
   inspectHostEnvironment,
 } from "@ardurbot/host-runtime/host-environment";
 import { inspectHostIntegrations } from "@ardurbot/host-runtime/host-integrations";
+import { probeAntigravity } from "@ardurbot/host-runtime/runtimes/antigravity-runtime";
 import { probeClaude } from "@ardurbot/host-runtime/runtimes/claude-code-runtime";
 import { probeCodex } from "@ardurbot/host-runtime/runtimes/codex-app-server-runtime";
 
@@ -39,9 +40,10 @@ export async function sourceHostStatus(
       inspectHostEnvironment(getHostEnvironment(), false),
       probeClaude(),
       probeCodex(),
+      probeAntigravity(),
       inspectHostIntegrations(),
     ])
-      .then(([environment, claude, codex, integrations]) => ({
+      .then(([environment, claude, codex, antigravity, integrations]) => ({
         platform: process.platform as HostHealth["platform"],
         roots: [],
         load: 0,
@@ -49,6 +51,7 @@ export async function sourceHostStatus(
         integrations,
         claude,
         codex,
+        antigravity,
       }))
       .catch((error) => {
         health = undefined;

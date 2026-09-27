@@ -1,4 +1,5 @@
 import { expect, type Page, type TestInfo } from "@playwright/test";
+import { DEPLOYMENT_OWNER_RENEW_MS } from "../../../packages/testkit/src/cli/deployment-owner.js";
 
 export function isRealSandboxProvider(provider = process.env.SANDBOX_PROVIDER) {
   return provider === "e2b" || provider === "daytona" || provider === "box";
@@ -24,27 +25,41 @@ export async function rpc<T>(page: Page, procedure: string, body: unknown): Prom
   return parsed.json as T;
 }
 
-/** Claims the owner seat only in the disposable E2E harness database. */
 export async function claimDeploymentOwner(page: Page): Promise<() => Promise<void>> {
-  const token = process.env.TESTKIT_E2E_OWNER_TOKEN;
   const apiUrl = process.env.API_URL;
-  if (!token || !apiUrl || process.env.VERIFY_DATABASE !== "1")
-    throw new Error("Deployment owner fixture requires the isolated E2E harness.");
-  const me = await rpc<{ userId: string }>(page, "me", {});
-  const headers = { "x-e2e-owner-token": token };
-  const claim = await page.request.post(`${apiUrl}/__e2e/deployment-owner`, {
-    headers,
-    data: { action: "claim", userId: me.userId },
-  });
-  if (!claim.ok()) throw new Error("Could not claim the isolated deployment owner fixture.");
-  const { previousOwnerUserId } = (await claim.json()) as { previousOwnerUserId: string | null };
-  return async () => {
-    const release = await page.request.post(`${apiUrl}/__e2e/deployment-owner`, {
-      headers,
-      data: { action: "release", userId: me.userId, previousOwnerUserId },
+  if (!apiUrl) throw new Error("The e2e API URL is missing");
+  const ownerUrl = `${apiUrl}/__e2e/deployment-owner`;
+  for (;;) {
+    const response = await page.request.post(ownerUrl, {
+      timeout: 125_000,
     });
-    if (!release.ok() || !(await release.json()).released)
-      throw new Error("Could not release the isolated deployment owner fixture.");
+    if (response.status() === 423) continue;
+    if (!response.ok()) throw new Error(`Cannot set up deployment owner: ${response.status()}`);
+    break;
+  }
+  let renewal: Promise<void> | undefined;
+  let renewalError: unknown;
+  const timer = setInterval(() => {
+    if (renewal) return;
+    renewal = page.request
+      .post(ownerUrl)
+      .then((response) => {
+        if (!response.ok()) throw new Error(`Cannot renew deployment owner: ${response.status()}`);
+        renewalError = undefined;
+      })
+      .catch((error: unknown) => {
+        renewalError = error;
+      })
+      .finally(() => {
+        renewal = undefined;
+      });
+  }, DEPLOYMENT_OWNER_RENEW_MS);
+  return async () => {
+    clearInterval(timer);
+    await renewal;
+    const release = await page.request.delete(ownerUrl);
+    if (!release.ok()) throw new Error(`Cannot release deployment owner: ${release.status()}`);
+    if (renewalError) throw renewalError;
   };
 }
 

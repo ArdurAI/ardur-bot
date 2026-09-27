@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
+import { DelegationSnapshotSchema } from "./delegation.js";
+import { RunSchema } from "./domain.js";
 import { ProductEventSchema } from "./events.js";
 import { RunFailurePayloadSchema } from "./provider-errors.js";
 import {
   RuntimeInfoSchema,
   RuntimePinError,
   RuntimePinSchema,
+  RuntimePinSourceSchema,
   runtimePinMessage,
   runtimePinProblem,
 } from "./runtime-pins.js";
@@ -43,6 +46,12 @@ describe("runtime pin contracts", () => {
       "This bot is pinned to Local · My model · high; connect it or change the pin.",
     );
   });
+  it("preserves a runtime reason identifier across failure payloads", () => {
+    const problem = runtimePinProblem(pin, "runtime-unavailable", "Timed out.", "timeout");
+    expect(RunFailurePayloadSchema.parse({ runtimeProblem: problem }).runtimeProblem).toEqual(
+      problem,
+    );
+  });
   it("validates typed failures even without the older provider error kind", () => {
     const event = {
       id: "event",
@@ -65,6 +74,47 @@ describe("runtime pin contracts", () => {
       "pinned to Claude Code · local · model · high",
     );
   });
+});
+
+it("validates each pin source and keeps older run and delegation snapshots readable", () => {
+  const sources = [
+    { kind: "group-member", groupId: "group", memberId: "member", botId: "bot" },
+    { kind: "bot", botId: "bot" },
+    { kind: "space-default", spaceId: "space", botId: "bot" },
+  ] as const;
+  for (const source of sources) expect(RuntimePinSourceSchema.parse(source)).toEqual(source);
+  expect(RuntimePinSourceSchema.safeParse({ kind: "group-member", botId: "bot" }).success).toBe(
+    false,
+  );
+  expect(RuntimePinSourceSchema.safeParse({ kind: "bot", botId: "" }).success).toBe(false);
+  const delegation = {
+    pin,
+    computer: { id: null, mode: "team", kind: null },
+    destination: { host: null, local: false },
+  };
+  expect(DelegationSnapshotSchema.parse(delegation)).toEqual(delegation);
+  expect(
+    DelegationSnapshotSchema.parse({ ...delegation, pinSource: sources[0] }).pinSource,
+  ).toEqual(sources[0]);
+  const run = {
+    id: "run",
+    botId: "bot",
+    threadId: "thread",
+    taskId: "task",
+    status: "running",
+    trigger: "user",
+    routineId: null,
+    modelProvider: null,
+    modelId: null,
+    error: null,
+    startedAt: null,
+    completedAt: null,
+    createdAt: "2026-09-27T00:00:00.000Z",
+  };
+  expect(RunSchema.parse(run)).toEqual(run);
+  expect(RunSchema.parse({ ...run, runtimePinSource: sources[1] }).runtimePinSource).toEqual(
+    sources[1],
+  );
 });
 
 it("uses the real reason and offers Connect only for a hosted credential failure", () => {
