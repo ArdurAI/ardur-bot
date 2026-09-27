@@ -163,7 +163,8 @@
         "apps/web/src/components/Context.tsx",
         "packages/contracts/src/rpc.ts",
         "docs/memory/chief-of-staff-context.md",
-        "docs/learning.md"
+        "docs/learning.md",
+        "apps/mobile/app/bot-settings.tsx"
       ],
       "tests": []
     },
@@ -186,7 +187,8 @@
       "sources": [
         "apps/web/src/pages/shell/runtime-settings.tsx",
         "packages/contracts/src/rpc.ts",
-        "docs/decisions/ADR-002-native-runtimes.md"
+        "docs/decisions/ADR-002-native-runtimes.md",
+        "apps/mobile/app/bot-settings.tsx"
       ],
       "tests": []
     },

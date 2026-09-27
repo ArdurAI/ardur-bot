@@ -472,7 +472,7 @@
       "platforms": {
         "web": "configure",
         "desktop": "configure",
-        "mobile": "read-only"
+        "mobile": "configure"
       },
       "settingsPath": {},
       "steps": [],
@@ -516,7 +516,7 @@
       "platforms": {
         "web": "configure",
         "desktop": "configure",
-        "mobile": "unavailable"
+        "mobile": "configure"
       },
       "settingsPath": {},
       "steps": [],
@@ -1092,7 +1092,7 @@
       "platforms": {
         "web": "configure",
         "desktop": "configure",
-        "mobile": "read-only"
+        "mobile": "unavailable"
       },
       "settingsPath": {},
       "steps": [],
