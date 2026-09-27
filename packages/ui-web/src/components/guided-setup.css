@@ -1,0 +1,118 @@
+#guided-root {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.guided-shell {
+  justify-content: flex-start;
+  max-width: 720px;
+  overflow-y: auto;
+}
+.guided-setup {
+  color: var(--foreground);
+}
+.guided-steps {
+  list-style: decimal;
+  padding-left: 1.8rem;
+  margin: 1rem 0;
+}
+.guided-step {
+  padding: 0.75rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+.guided-step::marker {
+  color: var(--muted-foreground);
+}
+.guided-row {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.4rem 1rem;
+}
+.guided-step-name {
+  flex: 1 1 13rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.guided-state,
+.guided-time {
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+.guided-step[data-status="failed"] .guided-state,
+.guided-error {
+  color: var(--destructive);
+}
+.guided-row-body {
+  margin-top: 0.65rem;
+}
+.guided-row-body p {
+  margin: 0.4rem 0;
+}
+.guided-row-actions,
+.guided-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+.guided-details {
+  margin-top: 0.5rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.guided-details textarea {
+  display: block;
+  width: 100%;
+  min-height: 5rem;
+  max-height: 9rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+  background: var(--background);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+}
+.guided-notice {
+  color: var(--foreground);
+}
+.guided-setup [data-slot="button"] {
+  font: inherit;
+  min-height: 2rem;
+  padding: 0.35rem 0.8rem;
+  border-radius: var(--radius);
+  cursor: pointer;
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border: 1px solid var(--primary);
+}
+.guided-setup [data-slot="button"].guided-secondary {
+  background: var(--secondary);
+  color: var(--secondary-foreground);
+  border-color: var(--border);
+}
+.guided-setup [data-slot="button"].guided-ghost {
+  background: transparent;
+  color: var(--foreground);
+  border-color: transparent;
+}
+.guided-setup [data-slot="button"]:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+.guided-setup [data-slot="button"]:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+@media (prefers-reduced-motion: reduce) {
+  .guided-setup *,
+  .guided-setup *::before,
+  .guided-setup *::after {
+    transition: none;
+    animation: none;
+  }
+}
