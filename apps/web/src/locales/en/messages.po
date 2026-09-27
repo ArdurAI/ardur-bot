@@ -3767,6 +3767,10 @@ msgstr "Free"
 msgid "Free memory"
 msgstr "Free memory"
 
+#: src/components/PeerMessageReceipt.tsx
+msgid "from {peer}"
+msgstr "from {peer}"
+
 #: src/pages/customize/PluginsPage.tsx
 #: src/pages/customize/SkillsPage.tsx
 msgid "From folder"
@@ -4829,6 +4833,10 @@ msgstr "Message composer"
 #: src/pages/RoutineEditor.tsx
 msgid "Message event"
 msgstr "Message event"
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Message from {peer}"
+msgstr "Message from {peer}"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Message from anywhere on your desktop."
@@ -6987,6 +6995,10 @@ msgstr "Sends memory text to {host}"
 msgid "Sent"
 msgstr "Sent"
 
+#: src/components/PeerMessageReceipt.tsx
+msgid "Sent to {peer}"
+msgstr "Sent to {peer}"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Sentry alert"
 msgstr "Sentry alert"
@@ -7880,6 +7892,10 @@ msgstr "Timeline"
 #: src/pages/shell/bot-panel.tsx
 msgid "Title"
 msgstr "Title"
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "to {peer}"
+msgstr "to {peer}"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "To use your Claude subscription, choose Runs on → Claude Code in a bot's settings."

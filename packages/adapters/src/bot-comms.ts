@@ -3,6 +3,7 @@ import { runContinueJob } from "@ardurbot/adapter-kit";
 import type { MessageBlock } from "@ardurbot/contracts";
 import { BOT_MESSAGE_MAX_HOPS, buildBotMessageWakePrompt } from "@ardurbot/core";
 import {
+  acknowledgeBotMessageInput,
   appendBotMessageWakeInTransaction,
   appendEventInTransaction,
   BotInboxFullError,
@@ -15,6 +16,20 @@ import { getLogger } from "@ardurbot/logging";
 import type { ExecutorDeps } from "./executor.js";
 
 type ReplyDeps = Pick<ExecutorDeps, "prisma" | "events" | "jobs">;
+
+export async function acknowledgeBotMessageReceipt(
+  deps: Pick<ExecutorDeps, "prisma" | "events">,
+  input: Parameters<typeof acknowledgeBotMessageInput>[1],
+  acceptedDeliveryIds: readonly string[],
+) {
+  const result = await acknowledgeBotMessageInput(deps.prisma, input, acceptedDeliveryIds);
+  if (result.refused) return result;
+  for (const update of result.updatedThreads)
+    await deps.events.notify(update.threadId, update.seq).catch((error) => {
+      getLogger().error("bot message receipt notification", error);
+    });
+  return result;
+}
 
 export async function recordInboxFullChip(
   deps: ReplyDeps,

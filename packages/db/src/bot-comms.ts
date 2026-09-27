@@ -12,6 +12,7 @@ import { createThreadMessageInTransaction } from "./messages.js";
 import { withTransactionRetry } from "./transaction-retry.js";
 
 const RETRY_DELAYS_MS = [30_000, 120_000, 300_000] as const;
+type ThreadCursor = { threadId: string; seq: number };
 
 /** Completion orchestration never interpolates the sender's editable display name. */
 export function buildCompletionReviewPrompt(body: string) {
@@ -21,9 +22,10 @@ export function buildCompletionReviewPrompt(body: string) {
 async function projectDeliveryState(
   tx: Prisma.TransactionClient,
   deliveryId: string,
-  state: "read" | "expired" | "failed",
-) {
+  state: "read" | "expired" | "failed" | null,
+): Promise<ThreadCursor[]> {
   const delivery = await tx.botMessageDelivery.findUniqueOrThrow({ where: { id: deliveryId } });
+  const cursors: ThreadCursor[] = [];
   for (const messageId of [delivery.outboundMessageId, delivery.inboundMessageId]) {
     if (!messageId) continue;
     const message = await tx.message.findUnique({ where: { id: messageId } });
@@ -32,18 +34,19 @@ async function projectDeliveryState(
       !(message.blocks as MessageBlock[]).some(
         (block) =>
           (block.kind === "bot_message_sent" || block.kind === "bot_message_received") &&
-          block.deliveryId === deliveryId,
+          block.deliveryId === deliveryId &&
+          (state !== null || block.queuedForBusy),
       )
     )
       continue;
     const blocks = (message.blocks as MessageBlock[]).map((block) =>
       (block.kind === "bot_message_sent" || block.kind === "bot_message_received") &&
       block.deliveryId === deliveryId
-        ? { ...block, deliveryState: state, queuedForBusy: false }
+        ? { ...block, ...(state === null ? {} : { deliveryState: state }), queuedForBusy: false }
         : block,
     );
     await tx.message.update({ where: { id: messageId }, data: { blocks } });
-    await appendEventInTransaction(tx, {
+    const event = await appendEventInTransaction(tx, {
       spaceId: delivery.spaceId,
       threadId: message.threadId,
       botId:
@@ -53,7 +56,9 @@ async function projectDeliveryState(
       type: "thread.message.updated",
       payload: { messageId, blocks },
     });
+    cursors.push({ threadId: message.threadId, seq: event.seq });
   }
+  return cursors;
 }
 
 export type BotMessageInputAck = {
@@ -68,15 +73,19 @@ export async function acknowledgeBotMessageInput(
   prisma: PrismaClient,
   input: BotMessageInputAck,
   acceptedDeliveryIds: readonly string[],
-): Promise<{ changed: number; refused: "stale-fence" | "foreign-delivery" | null }> {
+): Promise<{
+  changed: number;
+  refused: "stale-fence" | "foreign-delivery" | null;
+  updatedThreads: ThreadCursor[];
+}> {
   if (input.mode !== "initial" && input.mode !== "steering")
     throw new Error("Unsupported bot message input acknowledgement mode.");
   const ids = [...new Set(input.deliveryIds)];
-  if (ids.length === 0) return { changed: 0, refused: null };
+  if (ids.length === 0) return { changed: 0, refused: null, updatedThreads: [] };
   // A turn can contain one eight-delivery wake and up to twenty quiet entries.
   if (ids.length > 32) throw new Error("Too many bot message receipt IDs.");
   if (ids.some((id) => !acceptedDeliveryIds.includes(id)))
-    return { changed: 0, refused: "foreign-delivery" };
+    return { changed: 0, refused: "foreign-delivery", updatedThreads: [] };
   return withTransactionRetry(() =>
     prisma.$transaction(async (tx) => {
       const run = await tx.run.findUnique({
@@ -93,7 +102,7 @@ export async function acknowledgeBotMessageInput(
         },
       });
       if (run?.status !== "running" || run.leaseFence !== input.leaseFence)
-        return { changed: 0, refused: "stale-fence" as const };
+        return { changed: 0, refused: "stale-fence" as const, updatedThreads: [] };
       const wakes = await tx.botMessageWake.findMany({
         where: { runId: run.id, state: "bound", deliveryIds: { hasSome: ids } },
         select: { deliveryIds: true, steeringMessageId: true },
@@ -110,7 +119,7 @@ export async function acknowledgeBotMessageInput(
       const claimedIds = new Set(steering.map((item) => item.id));
       const deliveries = await tx.botMessageDelivery.findMany({ where: { id: { in: ids } } });
       if (deliveries.length !== ids.length)
-        return { changed: 0, refused: "foreign-delivery" as const };
+        return { changed: 0, refused: "foreign-delivery" as const, updatedThreads: [] };
       for (const delivery of deliveries) {
         const sameRecipient =
           delivery.recipientBotId === run.botId &&
@@ -136,7 +145,7 @@ export async function acknowledgeBotMessageInput(
           delivery.quietClaimRunId === run.id &&
           delivery.quietClaimLeaseFence === input.leaseFence;
         if (!sameRecipient || !(inWake || delegated || quiet))
-          return { changed: 0, refused: "foreign-delivery" as const };
+          return { changed: 0, refused: "foreign-delivery" as const, updatedThreads: [] };
       }
       const root = run.delegationRootTaskId
         ? await tx.delegationRoot.findUnique({
@@ -156,8 +165,9 @@ export async function acknowledgeBotMessageInput(
         where: { id: run.id, status: "running", leaseFence: input.leaseFence },
         data: { leaseFence: input.leaseFence },
       });
-      if (!fence.count) return { changed: 0, refused: "stale-fence" as const };
+      if (!fence.count) return { changed: 0, refused: "stale-fence" as const, updatedThreads: [] };
       let changed = 0;
+      const updatedThreads: ThreadCursor[] = [];
       for (const delivery of deliveries) {
         const result = await tx.botMessageDelivery.updateMany({
           where: { id: delivery.id, state: "delivered" },
@@ -165,7 +175,7 @@ export async function acknowledgeBotMessageInput(
         });
         if (result.count) {
           changed++;
-          await projectDeliveryState(tx, delivery.id, "read");
+          updatedThreads.push(...(await projectDeliveryState(tx, delivery.id, "read")));
         }
         if (
           delivery.quietClaimRunId === run.id &&
@@ -181,7 +191,7 @@ export async function acknowledgeBotMessageInput(
             data: { outcome: "consumed", quietClaimRunId: null, quietClaimLeaseFence: null },
           });
       }
-      return { changed, refused: null };
+      return { changed, refused: null, updatedThreads };
     }),
   );
 }
@@ -228,29 +238,30 @@ async function finishWake(
   state: "cancelled" | "failed",
   failureCode: string,
   notice: boolean,
-) {
+): Promise<ThreadCursor[]> {
   await tx.botMessageWake.update({ where: { id: wake.id }, data: { state, nextAttemptAt: null } });
+  const updatedThreads: ThreadCursor[] = [];
   for (const id of wake.deliveryIds) {
     const changed = await tx.botMessageDelivery.updateMany({
       where: { id, state: { in: ["queued", "delivered", "read"] }, outcome: null },
       data: { state: "failed", failureCode, outcome: "failed" },
     });
-    if (changed.count) await projectDeliveryState(tx, id, "failed");
+    if (changed.count) updatedThreads.push(...(await projectDeliveryState(tx, id, "failed")));
   }
-  if (!notice) return;
+  if (!notice) return updatedThreads;
   const root = await tx.delegationRoot.findUnique({
     where: { rootTaskId: wake.rootTaskId },
     select: { coordinatorThreadId: true, coordinatorBotId: true },
   });
   const threadId = root?.coordinatorThreadId ?? wake.recipientThreadId;
   const thread = await tx.thread.findUnique({ where: { id: threadId }, select: { id: true } });
-  if (!thread) return;
+  if (!thread) return updatedThreads;
   const nonce = `peer-wake-failure:${wake.id}`;
   const existing = await tx.message.findUnique({
     where: { threadId_clientNonce: { threadId, clientNonce: nonce } },
     select: { id: true },
   });
-  if (existing) return;
+  if (existing) return updatedThreads;
   const blocks: MessageBlock[] = [
     {
       kind: "text",
@@ -265,13 +276,15 @@ async function finishWake(
     clientNonce: nonce,
     markUnread: false,
   });
-  await appendEventInTransaction(tx, {
+  const event = await appendEventInTransaction(tx, {
     spaceId: wake.spaceId,
     threadId,
     botId: root?.coordinatorBotId ?? wake.recipientBotId,
     type: "thread.message.created",
     payload: { messageId: message.id, role: "bot", blocks },
   });
+  updatedThreads.push({ threadId, seq: event.seq });
+  return updatedThreads;
 }
 
 export class BotInboxFullError extends Error {
@@ -1112,9 +1125,10 @@ export async function settleBotMessageWakesInTransaction(
   runId: string,
   completed: boolean,
   runtimeProblemCode?: string,
-): Promise<string | null> {
+): Promise<{ continuationRunId: string | null; updatedThreads: ThreadCursor[] }> {
   const wakes = await tx.botMessageWake.findMany({ where: { runId, state: "bound" } });
   let interrupted = false;
+  const updatedThreads: ThreadCursor[] = [];
   for (const wake of wakes) {
     const claimed = wake.steeringMessageId
       ? await tx.steeringMessage.findUnique({
@@ -1131,6 +1145,8 @@ export async function settleBotMessageWakesInTransaction(
         where: { id: { in: wake.deliveryIds }, outcome: null },
         data: { outcome: "consumed" },
       });
+      for (const id of wake.deliveryIds)
+        updatedThreads.push(...(await projectDeliveryState(tx, id, null)));
       continue;
     }
     interrupted = true;
@@ -1149,11 +1165,11 @@ export async function settleBotMessageWakesInTransaction(
         },
       });
     if (runtimeProblemCode) {
-      await finishWake(tx, wake, "failed", runtimeProblemCode, true);
+      updatedThreads.push(...(await finishWake(tx, wake, "failed", runtimeProblemCode, true)));
       continue;
     }
     if (wake.attempts >= RETRY_DELAYS_MS.length) {
-      await finishWake(tx, wake, "failed", "retry-exhausted", true);
+      updatedThreads.push(...(await finishWake(tx, wake, "failed", "retry-exhausted", true)));
       continue;
     }
     await tx.botMessageDelivery.updateMany({
@@ -1190,8 +1206,12 @@ export async function settleBotMessageWakesInTransaction(
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         select: { id: true },
       });
-      if (pending) return bindBotMessageWakeInTransaction(tx, pending.id);
+      if (pending)
+        return {
+          continuationRunId: await bindBotMessageWakeInTransaction(tx, pending.id),
+          updatedThreads,
+        };
     }
   }
-  return null;
+  return { continuationRunId: null, updatedThreads };
 }

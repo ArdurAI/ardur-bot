@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { JobPublisher } from "@ardurbot/adapter-kit";
-import { buildBotMessageWakePrompt } from "@ardurbot/core";
+import { botMessageReceiptKind, buildBotMessageWakePrompt } from "@ardurbot/core";
 import {
   acknowledgeBotMessageInput,
   appendBotMessageWakeInTransaction,
@@ -19,7 +19,7 @@ import {
   refreshBoundBotMessageWakeRun,
 } from "@ardurbot/db";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { replyToBotDelivery } from "./bot-comms.js";
+import { acknowledgeBotMessageReceipt, replyToBotDelivery } from "./bot-comms.js";
 import { messageBot } from "./bot-messages.js";
 import { wakeGoalAfterDelegation } from "./goal-wake.js";
 import { createJobReconciler } from "./job-reconciler.js";
@@ -654,7 +654,7 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
       deliveryIds: [id],
       mode: "initial" as const,
     };
-    expect(await acknowledgeBotMessageInput(prisma, ack, [id])).toEqual({
+    expect(await acknowledgeBotMessageInput(prisma, ack, [id])).toMatchObject({
       changed: 0,
       refused: "foreign-delivery",
     });
@@ -664,7 +664,7 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
       leaseFence: 1,
       deliveryIds: [id],
     });
-    expect(await acknowledgeBotMessageInput(prisma, ack, [id])).toEqual({
+    expect(await acknowledgeBotMessageInput(prisma, ack, [id])).toMatchObject({
       changed: 1,
       refused: null,
     });
@@ -974,18 +974,25 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
 
   it("reads an idle desk request on its first accepted turn", async () => {
     const f = await fixture();
-    expect(
-      await acknowledgeBotMessageInput(
-        prisma,
-        {
-          runId: f.workerRun.id,
-          leaseFence: 1,
-          deliveryIds: [f.parent.id],
-          mode: "initial",
-        },
-        [f.parent.id],
-      ),
-    ).toEqual({ changed: 1, refused: null });
+    const notify = vi.spyOn(f.deps.events, "notify").mockResolvedValue();
+    const result = await acknowledgeBotMessageReceipt(
+      f.deps,
+      {
+        runId: f.workerRun.id,
+        leaseFence: 1,
+        deliveryIds: [f.parent.id],
+        mode: "initial",
+      },
+      [f.parent.id],
+    );
+    expect(result).toMatchObject({ changed: 1, refused: null });
+    expect(result.updatedThreads.map(({ threadId }) => threadId)).toEqual([
+      f.room.id,
+      f.workerThread.id,
+    ]);
+    expect(notify.mock.calls).toEqual(
+      result.updatedThreads.map(({ threadId, seq }) => [threadId, seq]),
+    );
     const parent = await prisma.botMessageDelivery.findUniqueOrThrow({
       where: { id: f.parent.id },
     });
@@ -997,6 +1004,14 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
           expect.objectContaining({ deliveryId: parent.id, deliveryState: "read" }),
         ]),
       );
+      if (id === parent.outboundMessageId) {
+        const block = (message.blocks as Array<{ kind: string }>).find(
+          (item) => item.kind === "bot_message_sent",
+        );
+        expect(botMessageReceiptKind(block as Parameters<typeof botMessageReceiptKind>[0])).toBe(
+          "read",
+        );
+      }
     }
   });
 
@@ -1051,11 +1066,11 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
     };
     expect(
       await acknowledgeBotMessageInput(prisma, { ...receipt, leaseFence: 3 }, receipt.deliveryIds),
-    ).toEqual({
+    ).toMatchObject({
       changed: 0,
       refused: "stale-fence",
     });
-    expect(await acknowledgeBotMessageInput(prisma, receipt, [])).toEqual({
+    expect(await acknowledgeBotMessageInput(prisma, receipt, [])).toMatchObject({
       changed: 0,
       refused: "foreign-delivery",
     });
@@ -1069,12 +1084,12 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
         },
         [foreign.parent.id],
       ),
-    ).toEqual({ changed: 0, refused: "foreign-delivery" });
-    expect(await acknowledgeBotMessageInput(prisma, receipt, receipt.deliveryIds)).toEqual({
+    ).toMatchObject({ changed: 0, refused: "foreign-delivery" });
+    expect(await acknowledgeBotMessageInput(prisma, receipt, receipt.deliveryIds)).toMatchObject({
       changed: 1,
       refused: null,
     });
-    expect(await acknowledgeBotMessageInput(prisma, receipt, receipt.deliveryIds)).toEqual({
+    expect(await acknowledgeBotMessageInput(prisma, receipt, receipt.deliveryIds)).toMatchObject({
       changed: 0,
       refused: null,
     });
@@ -1112,7 +1127,7 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
     const ack = { runId: f.activeRun!.id, leaseFence: 1, deliveryIds: [result.deliveryId] };
     expect(
       await acknowledgeBotMessageInput(prisma, { ...ack, mode: "steering" }, ack.deliveryIds),
-    ).toEqual({
+    ).toMatchObject({
       changed: 0,
       refused: "foreign-delivery",
     });
@@ -1126,7 +1141,7 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
     });
     expect(
       await acknowledgeBotMessageInput(prisma, { ...ack, mode: "steering" }, ack.deliveryIds),
-    ).toEqual({
+    ).toMatchObject({
       changed: 1,
       refused: null,
     });
@@ -1302,7 +1317,7 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
         },
         [reply.deliveryId],
       ),
-    ).toEqual({ changed: 1, refused: null });
+    ).toMatchObject({ changed: 1, refused: null });
     expect(
       await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id: reply.deliveryId } }),
     ).toMatchObject({ state: "read", failureCode: null });
@@ -1329,6 +1344,88 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
     await prisma.run.update({ where: { id: f.activeRun!.id }, data: { status: "completed" } });
     const nextRunId = await dispatchBotMessageWake(prisma, wake.id);
     expect(nextRunId).toBeTruthy();
+  });
+
+  it("removes Waiting from both threads after a native coordinator consumes a queued reply", async () => {
+    const f = await fixture("owner");
+    const reply = await replyToBotDelivery(f.deps, f.workerRun, f.worker, {
+      inReplyToDeliveryId: f.parent.id,
+      message: "The fixture is complete.",
+      intent: "result",
+      deliveryKey: `native-reply-${f.parent.id}`,
+    });
+    if (!reply.ok) throw new Error(reply.error);
+    const delivery = await prisma.botMessageDelivery.findUniqueOrThrow({
+      where: { id: reply.deliveryId },
+    });
+    for (const id of [delivery.outboundMessageId, delivery.inboundMessageId]) {
+      const message = await prisma.message.findUniqueOrThrow({ where: { id: id! } });
+      expect(message.blocks).toEqual(
+        expect.arrayContaining([expect.objectContaining({ queuedForBusy: true })]),
+      );
+    }
+    await prisma.run.update({ where: { id: f.activeRun!.id }, data: { status: "completed" } });
+    const wake = await prisma.botMessageWake.findFirstOrThrow({
+      where: { rootTaskId: f.rootTask.id },
+    });
+    const runId = await dispatchBotMessageWake(prisma, wake.id);
+    if (!runId) throw new Error("Queued reply was not dispatched.");
+    const run = await prisma.run.update({
+      where: { id: runId },
+      data: { status: "running", leaseOwner: "fixture-native", leaseFence: 1 },
+    });
+    expect(
+      await noteBotMessageReadUnconfirmed(prisma, {
+        runId,
+        leaseFence: 1,
+        deliveryIds: [reply.deliveryId],
+      }),
+    ).toBe(1);
+    const attempt = await prisma.attempt.create({
+      data: { runId, fence: 1, status: "running" },
+    });
+    const publish = vi.fn(async (_topic: string, _payload: string) => undefined);
+    expect(
+      await finalizeRun(
+        prisma,
+        {
+          spaceId,
+          threadId: f.room.id,
+          botId: f.coordinator.id,
+          runId,
+          taskId: run.taskId,
+          attemptId: attempt.id,
+          leaseOwner: "fixture-native",
+          leaseFence: 1,
+          outcome: "completed",
+          blocks: [],
+        },
+        { publish } as never,
+      ),
+    ).not.toBe(false);
+    expect(
+      await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id: reply.deliveryId } }),
+    ).toMatchObject({ state: "delivered", outcome: "consumed", failureCode: "read-unconfirmed" });
+    for (const id of [delivery.outboundMessageId, delivery.inboundMessageId]) {
+      const message = await prisma.message.findUniqueOrThrow({ where: { id: id! } });
+      const block = (
+        message.blocks as Array<{ deliveryId?: string; queuedForBusy?: boolean }>
+      ).find((item) => item.deliveryId === reply.deliveryId);
+      expect(block).toMatchObject({ deliveryState: "delivered", queuedForBusy: false });
+      expect(botMessageReceiptKind(block as Parameters<typeof botMessageReceiptKind>[0])).toBe(
+        "delivered",
+      );
+    }
+    for (const threadId of [f.room.id, f.workerThread.id]) {
+      const event = await prisma.event.findFirstOrThrow({
+        where: { threadId, type: "thread.message.updated" },
+        orderBy: { seq: "desc" },
+      });
+      expect(publish).toHaveBeenCalledWith(
+        `thread:${threadId}`,
+        JSON.stringify({ cursor: event.seq }),
+      );
+    }
   });
 
   it("repairs a committed reply after enqueue failure", async () => {

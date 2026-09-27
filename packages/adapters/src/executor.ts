@@ -101,7 +101,6 @@ import {
 import type { Pool } from "@ardurbot/db";
 import {
   acceptDelegation,
-  acknowledgeBotMessageInput,
   appendEventInTransaction,
   claimQuietBotMessages,
   confirmDispatchStop,
@@ -187,6 +186,7 @@ import { BoardService } from "./board/service.js";
 import { BOARD_TOOL_NAMES, executeBoardTool, finishBoardRun } from "./board/tools.js";
 import { applyBoardToolAccess, botUpkeepPrompt, resolveBoardAccess } from "./board/upkeep.js";
 import { attachedImageArtifactIds, resolveUpdateBotAvatar } from "./bot-avatar.js";
+import { acknowledgeBotMessageReceipt } from "./bot-comms.js";
 import { loadBotMessageContext, messageBot, returnBotMessageOutcome } from "./bot-messages.js";
 import {
   findBotSecret,
@@ -5320,11 +5320,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   throw new Error("Input acknowledgement scope mismatch.");
                 const acceptedDeliveryIds =
                   input.mode === "steering" ? [...acceptedSteeringDeliveryIds] : initialReceiptIds;
-                const result = await acknowledgeBotMessageInput(
-                  deps.prisma,
-                  input,
-                  acceptedDeliveryIds,
-                );
+                const result = await acknowledgeBotMessageReceipt(deps, input, acceptedDeliveryIds);
                 if (result.refused) {
                   getLogger().warn("bot message input acknowledgement refused", {
                     runId,

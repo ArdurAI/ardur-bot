@@ -1241,6 +1241,8 @@ export async function finalizeRun(
   await notifyRealtime(realtime, committed.threadId, committed.seq);
   if (committed.summary)
     await notifyRealtime(realtime, committed.summary.threadId, committed.summary.seq);
+  for (const update of committed.updatedThreads)
+    await notifyRealtime(realtime, update.threadId, update.seq);
   return { continuationRunId: committed.continuationRunId };
 }
 
@@ -1270,6 +1272,7 @@ async function finalizeRunOnce(
   seq: number;
   continuationRunId: string | null;
   summary?: { threadId: string; seq: number };
+  updatedThreads: { threadId: string; seq: number }[];
 } | null> {
   return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     // Claiming and delivery take the bot before its thread. Completion may also
@@ -1611,7 +1614,7 @@ async function finalizeRunOnce(
             },
     });
     await tx.event.deleteMany({ where: { runId: input.runId, type: "thread.progress" } });
-    const peerContinuationRunId = await settleBotMessageWakesInTransaction(
+    const peerSettlement = await settleBotMessageWakesInTransaction(
       tx,
       input.runId,
       input.outcome === "completed",
@@ -1647,12 +1650,18 @@ async function finalizeRunOnce(
       });
     }
     const steeringContinuationRunId =
-      peerContinuationRunId || (input.outcome === "failed" && input.runtimeProblem)
+      peerSettlement.continuationRunId || (input.outcome === "failed" && input.runtimeProblem)
         ? null
         : await createSteeringContinuation(tx, input);
-    const continuationRunId = peerContinuationRunId ?? steeringContinuationRunId;
+    const continuationRunId = peerSettlement.continuationRunId ?? steeringContinuationRunId;
     await tx.bot.update({ where: { id: input.botId }, data: { updatedAt: now } });
-    return { threadId: lastEvent.threadId, seq: lastEvent.seq, continuationRunId, summary };
+    return {
+      threadId: lastEvent.threadId,
+      seq: lastEvent.seq,
+      continuationRunId,
+      summary,
+      updatedThreads: peerSettlement.updatedThreads,
+    };
   });
 }
 

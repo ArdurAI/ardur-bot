@@ -38,9 +38,17 @@ export function PeerMessageReceipt({
                   ? t`Delivered to ${peer}`
                   : t`Delivered from ${peer}`
                 : t`Sent`;
+  const accessibleLabel =
+    receipt === "sent"
+      ? sent
+        ? t`Sent to ${peer}`
+        : t`Message from ${peer}`
+      : receipt === "delivered"
+        ? label
+        : `${label} · ${sent ? t`to ${peer}` : t`from ${peer}`}`;
   return (
     <CollaborationMarker
-      ariaLabel={label}
+      ariaLabel={accessibleLabel}
       color={color}
       identity={peerBotId}
       label={label}

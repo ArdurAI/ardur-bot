@@ -53,6 +53,14 @@ export function PeerMessageReceipt({
                   ? t("Delivered to {peer}", { peer })
                   : t("Delivered from {peer}", { peer })
                 : t("Sent");
+  const accessibleLabel =
+    receipt === "sent"
+      ? sent
+        ? t("Sent to {peer}", { peer })
+        : t("Message from {peer}", { peer })
+      : receipt === "delivered"
+        ? label
+        : `${label} · ${sent ? t("to {peer}", { peer }) : t("from {peer}", { peer })}`;
   const canShowReply = !sent && block.text.trim().length > 0;
 
   return (
@@ -62,7 +70,9 @@ export function PeerMessageReceipt({
         accessible
         accessibilityRole={canShowReply ? "button" : undefined}
         accessibilityLabel={
-          canShowReply ? `${label}. ${expanded ? t("Hide reply") : t("Show reply")}` : label
+          canShowReply
+            ? `${accessibleLabel}. ${expanded ? t("Hide reply") : t("Show reply")}`
+            : accessibleLabel
         }
         accessibilityState={canShowReply ? { expanded } : undefined}
         onPress={canShowReply ? () => setExpanded((value) => !value) : undefined}

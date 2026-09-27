@@ -3767,6 +3767,10 @@ msgstr "무료"
 msgid "Free memory"
 msgstr ""
 
+#: src/components/PeerMessageReceipt.tsx
+msgid "from {peer}"
+msgstr "{peer}에게서"
+
 #: src/pages/customize/PluginsPage.tsx
 #: src/pages/customize/SkillsPage.tsx
 msgid "From folder"
@@ -4829,6 +4833,10 @@ msgstr "메시지 작성기"
 #: src/pages/RoutineEditor.tsx
 msgid "Message event"
 msgstr ""
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Message from {peer}"
+msgstr "{peer}의 메시지"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Message from anywhere on your desktop."
@@ -6987,6 +6995,10 @@ msgstr ""
 msgid "Sent"
 msgstr "보냄"
 
+#: src/components/PeerMessageReceipt.tsx
+msgid "Sent to {peer}"
+msgstr "{peer}에게 보냄"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Sentry alert"
 msgstr "Sentry 알림"
@@ -7880,6 +7892,10 @@ msgstr ""
 #: src/pages/shell/bot-panel.tsx
 msgid "Title"
 msgstr "역할"
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "to {peer}"
+msgstr "{peer}에게"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "To use your Claude subscription, choose Runs on → Claude Code in a bot's settings."
