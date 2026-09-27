@@ -78,18 +78,36 @@ export async function fleetDiscover(deps: RouterDeps, context: AdapterContext) {
   return value;
 }
 export async function importFleetSecret(
-  deps: Pick<RouterDeps, "hostBridge">,
+  deps: Pick<RouterDeps, "prisma" | "hostBridge">,
   input: {
     kubeconfig?: string;
     privateKeyPath?: string;
     tlsPaths?: { ca: string; cert: string; key: string };
   },
   context: AdapterContext,
+  secretId = randomUUID(),
 ) {
-  const operation = { op: "computer.remote.secret" as const, grantId: randomUUID(), ...input };
-  return process.env.ARDURBOT_HOST_BRIDGE === "api" && deps.hostBridge
-    ? ((await deps.hostBridge.fleetResult(operation, context)) as { id: string })
-    : localFleetService().importSecret(operation, context);
+  await deps.prisma.fleetSecretCleanup.create({
+    data: {
+      hostSecretId: secretId,
+      spaceId: context.spaceId,
+      userId: context.userId,
+      nextAttemptAt: new Date(Date.now() + 60 * 60 * 1000),
+    },
+  });
+  const operation = {
+    op: "computer.remote.secret" as const,
+    grantId: randomUUID(),
+    secretId,
+    ...input,
+  };
+  const imported =
+    process.env.ARDURBOT_HOST_BRIDGE === "api" && deps.hostBridge
+      ? ((await deps.hostBridge.fleetResult(operation, context)) as { id: string })
+      : localFleetService().importSecret(operation, context);
+  if ((await imported).id !== secretId)
+    throw new Error("Computer credential import returned another id.");
+  return { id: secretId };
 }
 
 /** Host deletion is idempotent, so a lost response leaves the intent safe to retry. */
@@ -127,6 +145,19 @@ export async function reconcileFleetSecretCleanup(prisma: PrismaClient, hostBrid
     take: 50,
   });
   for (const intent of due) {
+    const referenced = await prisma.connection.findFirst({
+      where: {
+        spaceId: intent.spaceId,
+        userId: intent.userId,
+        connectorId: "computer",
+        metadata: { path: ["hostSecretId"], equals: intent.hostSecretId },
+      },
+      select: { id: true },
+    });
+    if (referenced) {
+      await prisma.fleetSecretCleanup.deleteMany({ where: { hostSecretId: intent.hostSecretId } });
+      continue;
+    }
     await cleanupFleetSecret(
       prisma,
       hostBridge,

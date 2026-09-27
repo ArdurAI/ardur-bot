@@ -125,6 +125,7 @@ export const RemoteSecretSchema = /* @__PURE__ */ (() =>
   z.strictObject({
     op: z.literal("computer.remote.secret"),
     grantId: z.string().uuid(),
+    secretId: z.string().uuid(),
     kubeconfig: z.string().max(131072).optional(),
     privateKeyPath: path.optional(),
     tlsPaths: z.strictObject({ ca: path, cert: path, key: path }).optional(),

@@ -122,6 +122,7 @@ it("imports host-local key material into encrypted storage and returns only an o
       {
         op: "computer.remote.secret",
         grantId: "grant",
+        secretId: "afdf5a2e-09f0-42c9-917e-35c45f34db37",
         privateKeyPath: file,
       },
       context,
@@ -136,6 +137,30 @@ it("imports host-local key material into encrypted storage and returns only an o
       privateKey: "fixture-private-material",
     });
     expect(() => secrets.load(ciphertext, "different-record")).toThrow();
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("retries a lost import response under one durable secret id", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "fleet-service-"));
+  const service = new FleetService(root, "fixture-encryption-material");
+  const file = path.join(root, "key");
+  const secretId = "afdf5a2e-09f0-42c9-917e-35c45f34db37";
+  const operation = {
+    op: "computer.remote.secret" as const,
+    grantId: "grant",
+    secretId,
+    privateKeyPath: file,
+  };
+  try {
+    await writeFile(file, "fixture-private-material", { mode: 0o600 });
+    await service.importSecret(operation, context);
+    const original = await readFile(path.join(root, "fleet-secrets", secretId), "utf8");
+    await expect(service.importSecret(operation, context)).resolves.toEqual({ id: secretId });
+    expect(await readFile(path.join(root, "fleet-secrets", secretId), "utf8")).toBe(original);
+    await writeFile(file, "different-private-material", { mode: 0o600 });
+    await expect(service.importSecret(operation, context)).rejects.toThrow();
   } finally {
     await rm(root, { recursive: true, force: true });
   }

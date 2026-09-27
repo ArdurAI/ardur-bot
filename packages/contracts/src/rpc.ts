@@ -105,6 +105,7 @@ import {
   FleetSchema,
   FleetTargetSchema,
   FleetTestResultSchema,
+  FleetUpdateResultSchema,
   PlacementSettingsSchema,
 } from "./fleet.js";
 import { goalsContract } from "./goal.js";
@@ -304,7 +305,7 @@ function createFleetContract() {
           confirmActive: z.boolean().default(false),
         }),
       )
-      .output(FleetTestResultSchema),
+      .output(FleetUpdateResultSchema),
     remove: oc.input(z.object({ connectionId: Id })).output(z.object({ ok: z.literal(true) })),
     placement: oc.input(PlacementSettingsSchema).output(PlacementSettingsSchema),
     bot: oc

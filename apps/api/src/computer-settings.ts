@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import path from "node:path";
 import type { AdapterContext } from "@ardurbot/adapter-kit";
@@ -35,6 +36,7 @@ export async function saveComputerConnection(
 ) {
   const input = ComputerConnectionInputSchema.parse(raw);
   delete input.settings.hostSecretId;
+  const importedIds: string[] = [];
   if (input.settings.dockerContext && !input.settings.endpoint)
     throw new Error("Choose the saved context endpoint.");
   let source = { inline: input.kubeconfig, path: input.kubeconfigPath };
@@ -64,6 +66,7 @@ export async function saveComputerConnection(
     source = { inline: snapshot.inline, path: snapshot.path };
     if (process.env.ARDURBOT_HOST_BRIDGE === "api" && source.inline) {
       const stored = await importFleetSecret(deps, { kubeconfig: source.inline }, context);
+      importedIds.push(stored.id);
       input.settings.hostSecretId = stored.id;
     }
     const contexts = await kubernetesContexts(source);
@@ -83,6 +86,7 @@ export async function saveComputerConnection(
       { privateKeyPath: input.privateKeyPath, tlsPaths: input.tlsPaths },
       context,
     );
+    importedIds.push(imported.id);
     input.settings.hostSecretId = imported.id;
   }
   if (input.settings.ssh?.authentication === "private-key" && !input.settings.hostSecretId)
@@ -104,7 +108,7 @@ export async function saveComputerConnection(
           userId: context.userId,
         },
       });
-    return tx.connection.create({
+    const created = await tx.connection.create({
       data: {
         spaceId: context.spaceId,
         userId: context.userId,
@@ -116,6 +120,9 @@ export async function saveComputerConnection(
         secretId: secret?.id,
       },
     });
+    if (importedIds.length)
+      await tx.fleetSecretCleanup.deleteMany({ where: { hostSecretId: { in: importedIds } } });
+    return created;
   });
   return { id: row.id, name: row.displayName, settings: input.settings };
 }
@@ -147,7 +154,7 @@ export async function updateComputerConnection(
   );
   const changed = JSON.stringify(oldConnection) !== JSON.stringify(newConnection) || hasNewMaterial;
   if (!changed) {
-    await deps.prisma.$transaction(async (tx) => {
+    const saved = await deps.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM connections WHERE id = ${connectionId} AND "spaceId" = ${context.spaceId} AND "userId" = ${context.userId} AND "connectorId" = 'computer' FOR UPDATE`;
       const current = await tx.connection.findFirstOrThrow({
         where: {
@@ -161,15 +168,16 @@ export async function updateComputerConnection(
         throw new ORPCError("CONFLICT", {
           message: "This computer changed. Reload and try again.",
         });
-      await tx.connection.update({
+      const updated = await tx.connection.update({
         where: { id: connectionId },
         data: { displayName: input.name },
       });
       await tx.fleetAudit.create({
         data: { spaceId: context.spaceId, userId: context.userId, connectionId, action: "renamed" },
       });
+      return updated;
     });
-    return { changed: false };
+    return { changed: false, revision: saved.updatedAt.toISOString() };
   }
   if (
     changed &&
@@ -198,23 +206,9 @@ export async function updateComputerConnection(
 
   const importedIds: string[] = [];
   const importNewSecret = async (material: Parameters<typeof importFleetSecret>[1]) => {
-    const imported = await importFleetSecret(deps, material, context);
-    importedIds.push(imported.id);
-    try {
-      // A crashed editor leaves a stale intent; successful commit removes it atomically.
-      await deps.prisma.fleetSecretCleanup.create({
-        data: {
-          hostSecretId: imported.id,
-          spaceId: context.spaceId,
-          userId: context.userId,
-          nextAttemptAt: new Date(Date.now() + 60 * 60 * 1000),
-        },
-      });
-    } catch (error) {
-      await cleanupFleetSecret(deps.prisma, deps.hostBridge, context, imported.id);
-      throw error;
-    }
-    return imported;
+    const secretId = randomUUID();
+    importedIds.push(secretId);
+    return importFleetSecret(deps, material, context, secretId);
   };
   try {
     let newSecret: Awaited<ReturnType<EncryptedSecretStore["put"]>> | undefined;
@@ -293,7 +287,7 @@ export async function updateComputerConnection(
     )
       throw new Error("Choose a local engine socket.");
 
-    await deps.prisma.$transaction(async (tx) => {
+    const saved = await deps.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT id FROM connections WHERE id = ${connectionId} AND "spaceId" = ${context.spaceId} AND "userId" = ${context.userId} AND "connectorId" = 'computer' FOR UPDATE`;
       const current = await tx.connection.findFirstOrThrow({
         where: {
@@ -317,7 +311,7 @@ export async function updateComputerConnection(
             userId: context.userId,
           },
         });
-      await tx.connection.update({
+      const updated = await tx.connection.update({
         where: { id: connectionId },
         data: {
           displayName: input.name,
@@ -352,20 +346,38 @@ export async function updateComputerConnection(
             userId: context.userId,
           },
         });
+      return updated;
     });
     if (oldSettings.hostSecretId && oldSettings.hostSecretId !== input.settings.hostSecretId) {
       await cleanupFleetSecret(deps.prisma, deps.hostBridge, context, oldSettings.hostSecretId);
     }
-    return { changed };
+    return { changed, revision: saved.updatedAt.toISOString() };
   } catch (error) {
     for (const hostSecretId of importedIds) {
-      await deps.prisma.fleetSecretCleanup
-        .updateMany({
-          where: { hostSecretId },
+      try {
+        const [current, intent] = await Promise.all([
+          deps.prisma.connection.findFirstOrThrow({
+            where: {
+              id: connectionId,
+              spaceId: context.spaceId,
+              userId: context.userId,
+              connectorId: "computer",
+            },
+          }),
+          deps.prisma.fleetSecretCleanup.findUnique({ where: { hostSecretId } }),
+        ]);
+        if (
+          ComputerConnectionSettingsSchema.parse(current.metadata).hostSecretId === hostSecretId ||
+          !intent
+        )
+          continue;
+        await deps.prisma.fleetSecretCleanup.updateMany({
+          where: { hostSecretId, spaceId: context.spaceId, userId: context.userId },
           data: { nextAttemptAt: new Date() },
-        })
-        .catch(() => undefined);
-      await cleanupFleetSecret(deps.prisma, deps.hostBridge, context, hostSecretId);
+        });
+      } catch {
+        // A failed read leaves the durable intent for the reconciler; deletion is unsafe.
+      }
     }
     throw error;
   }

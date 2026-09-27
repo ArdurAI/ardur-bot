@@ -2038,7 +2038,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       update: authed.fleet.update.handler(async ({ context, input }) => {
         if (!context.actor.isDeploymentOwner) throw new ORPCError("FORBIDDEN");
         const owner = computerContext(context.actor, "fleet", "fleet-update");
-        await updateComputerConnection(
+        const saved = await updateComputerConnection(
           deps,
           input.connectionId,
           input.connection,
@@ -2047,7 +2047,10 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           owner,
         );
         fleetCatalog(deps).connections.invalidate(input.connectionId, owner.spaceId);
-        return testFleetTarget(deps, owner, input.connectionId);
+        return {
+          ...(await testFleetTarget(deps, owner, input.connectionId)),
+          revision: saved.revision,
+        };
       }),
       remove: authed.fleet.remove.handler(({ context, input }) => {
         if (!context.actor.isDeploymentOwner) throw new ORPCError("FORBIDDEN");

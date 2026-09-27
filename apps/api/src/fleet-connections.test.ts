@@ -29,6 +29,7 @@ const row = {
 };
 
 function fixture(pinned: string[] = []) {
+  let provisionalIntent: { hostSecretId: string; spaceId: string; userId: string } | null = null;
   const tx = {
     $queryRaw: vi.fn(async () => [{ id: "saved" }]),
     connection: {
@@ -52,15 +53,26 @@ function fixture(pinned: string[] = []) {
     fleetAudit: { create: vi.fn(async () => ({})) },
     fleetSecretCleanup: {
       create: vi.fn(async () => ({})),
-      deleteMany: vi.fn(async () => ({ count: 1 })),
+      deleteMany: vi.fn(async () => {
+        provisionalIntent = null;
+        return { count: 1 };
+      }),
     },
   };
   const prisma = {
-    connection: { findFirstOrThrow: vi.fn(async () => row) },
+    connection: { findFirstOrThrow: vi.fn(async () => row), findFirst: vi.fn(async () => null) },
     run: { findFirst: vi.fn(async () => null) },
     secret: { findFirst: vi.fn(async () => null) },
     fleetSecretCleanup: {
-      create: vi.fn(async () => ({})),
+      create: vi.fn(async ({ data }) => {
+        provisionalIntent = {
+          hostSecretId: data.hostSecretId,
+          spaceId: data.spaceId,
+          userId: data.userId,
+        };
+        return provisionalIntent;
+      }),
+      findUnique: vi.fn(async () => provisionalIntent),
       findMany: vi.fn(async () => []),
       deleteMany: vi.fn(async () => ({ count: 1 })),
       updateMany: vi.fn(async () => ({ count: 1 })),
@@ -151,6 +163,49 @@ describe("saved fleet connections", () => {
     expect(loaded.settings.endpoint).toBe(metadata.endpoint);
     expect(tx.connection.update).not.toHaveBeenCalled();
   });
+  it("returns each committed revision for a corrected second save", async () => {
+    const { deps, prisma, tx } = fixture();
+    let current = row;
+    vi.mocked(prisma.connection.findFirstOrThrow).mockImplementation(async () => current);
+    tx.connection.findFirstOrThrow.mockImplementation(async () => current);
+    tx.connection.update.mockImplementation(async ({ data }) => {
+      current = {
+        ...current,
+        metadata: data.metadata as typeof metadata,
+        updatedAt: new Date(current.updatedAt.getTime() + 1000),
+      };
+      return current;
+    });
+    const failedProbeEndpoint = ComputerConnectionSettingsSchema.parse({
+      engine: "docker",
+      endpoint: "unix:///fixture/missing.sock",
+    });
+    const first = await updateComputerConnection(
+      deps,
+      "saved",
+      { name: "Old", settings: failedProbeEndpoint },
+      row.updatedAt.toISOString(),
+      false,
+      context,
+    );
+    expect(first.revision).toBe(current.updatedAt.toISOString());
+    const corrected = await updateComputerConnection(
+      deps,
+      "saved",
+      {
+        name: "Old",
+        settings: ComputerConnectionSettingsSchema.parse({
+          engine: "docker",
+          endpoint: "unix:///fixture/correct.sock",
+        }),
+      },
+      first.revision,
+      false,
+      context,
+    );
+    expect(corrected.revision).toBe(current.updatedAt.toISOString());
+    expect(tx.connection.update).toHaveBeenCalledTimes(2);
+  });
   it.each(["leased", "waiting_takeover"])(
     "includes %s in details and the change confirmation guard",
     async () => {
@@ -183,13 +238,17 @@ describe("saved fleet connections", () => {
       ).rejects.toThrow("Runs are active");
     },
   );
-  it("records and compensates an imported credential when the update conflicts", async () => {
+  it("records retryable cleanup for an imported credential when the update conflicts", async () => {
     const { deps, tx } = fixture();
-    const hostSecretId = "afdf5a2e-09f0-42c9-917e-35c45f34db37";
+    let hostSecretId = "";
     tx.connection.findFirstOrThrow.mockResolvedValue({ ...row, updatedAt: new Date(1) });
-    const fleetResult = vi.fn(async (op: { op: string }) =>
-      op.op === "computer.remote.secret" ? { id: hostSecretId } : { ok: true },
-    );
+    const fleetResult = vi.fn(async (op: { op: string; secretId?: string }) => {
+      if (op.op === "computer.remote.secret") {
+        hostSecretId = op.secretId!;
+        return { id: hostSecretId };
+      }
+      return { ok: true };
+    });
     deps.hostBridge = { fleetResult } as never;
     vi.stubEnv("ARDURBOT_HOST_BRIDGE", "api");
     try {
@@ -213,7 +272,10 @@ describe("saved fleet connections", () => {
       expect(deps.prisma.fleetSecretCleanup.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ hostSecretId }),
       });
-      expect(fleetResult).toHaveBeenCalledWith(
+      expect(deps.prisma.fleetSecretCleanup.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ hostSecretId }) }),
+      );
+      expect(fleetResult).not.toHaveBeenCalledWith(
         { op: "computer.remote.secret.delete", secretId: hostSecretId },
         context,
       );
@@ -221,13 +283,17 @@ describe("saved fleet connections", () => {
       vi.unstubAllEnvs();
     }
   });
-  it("compensates a Kubernetes credential imported before a failed transaction", async () => {
+  it("schedules cleanup for a Kubernetes credential imported before a failed transaction", async () => {
     const { deps, tx } = fixture();
-    const hostSecretId = "afdf5a2e-09f0-42c9-917e-35c45f34db37";
+    let hostSecretId = "";
     tx.connection.findFirstOrThrow.mockResolvedValue({ ...row, updatedAt: new Date(1) });
-    const fleetResult = vi.fn(async (op: { op: string }) =>
-      op.op === "computer.remote.secret" ? { id: hostSecretId } : { ok: true },
-    );
+    const fleetResult = vi.fn(async (op: { op: string; secretId?: string }) => {
+      if (op.op === "computer.remote.secret") {
+        hostSecretId = op.secretId!;
+        return { id: hostSecretId };
+      }
+      return { ok: true };
+    });
     deps.hostBridge = { fleetResult } as never;
     vi.stubEnv("ARDURBOT_HOST_BRIDGE", "api");
     const kubeconfig = JSON.stringify({
@@ -259,7 +325,10 @@ describe("saved fleet connections", () => {
       expect(deps.prisma.fleetSecretCleanup.create).toHaveBeenCalledWith({
         data: expect.objectContaining({ hostSecretId }),
       });
-      expect(fleetResult).toHaveBeenCalledWith(
+      expect(deps.prisma.fleetSecretCleanup.updateMany).toHaveBeenCalledWith(
+        expect.objectContaining({ where: expect.objectContaining({ hostSecretId }) }),
+      );
+      expect(fleetResult).not.toHaveBeenCalledWith(
         { op: "computer.remote.secret.delete", secretId: hostSecretId },
         context,
       );
@@ -269,9 +338,12 @@ describe("saved fleet connections", () => {
   });
   it("keeps a retryable intent if compensation loses its host response", async () => {
     const { deps } = fixture();
-    const hostSecretId = "afdf5a2e-09f0-42c9-917e-35c45f34db37";
-    const fleetResult = vi.fn(async (op: { op: string }) => {
-      if (op.op === "computer.remote.secret") return { id: hostSecretId };
+    let hostSecretId = "";
+    const fleetResult = vi.fn(async (op: { op: string; secretId?: string }) => {
+      if (op.op === "computer.remote.secret") {
+        hostSecretId = op.secretId!;
+        return { id: hostSecretId };
+      }
       throw new Error("host disconnected");
     });
     deps.hostBridge = { fleetResult } as never;
@@ -300,7 +372,7 @@ describe("saved fleet connections", () => {
       expect(deps.prisma.fleetSecretCleanup.deleteMany).not.toHaveBeenCalled();
       expect(deps.prisma.fleetSecretCleanup.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { hostSecretId },
+          where: expect.objectContaining({ hostSecretId }),
         }),
       );
     } finally {
@@ -309,8 +381,11 @@ describe("saved fleet connections", () => {
   });
   it("removes the temporary cleanup intent when the imported credential commits", async () => {
     const { deps, tx } = fixture();
-    const hostSecretId = "afdf5a2e-09f0-42c9-917e-35c45f34db37";
-    const fleetResult = vi.fn(async () => ({ id: hostSecretId }));
+    let hostSecretId = "";
+    const fleetResult = vi.fn(async (op: { secretId?: string }) => {
+      hostSecretId = op.secretId!;
+      return { id: hostSecretId };
+    });
     deps.hostBridge = { fleetResult } as never;
     vi.stubEnv("ARDURBOT_HOST_BRIDGE", "api");
     try {
@@ -336,6 +411,119 @@ describe("saved fleet connections", () => {
         { op: "computer.remote.secret.delete", secretId: hostSecretId },
         context,
       );
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("retains an imported credential when the connection commits but its response is lost", async () => {
+    const { deps, tx } = fixture();
+    let committed = false;
+    let importedId = "";
+    const fleetResult = vi.fn(async (op: { op: string; secretId?: string }) => {
+      if (op.op === "computer.remote.secret") {
+        importedId = op.secretId ?? "afdf5a2e-09f0-42c9-917e-35c45f34db37";
+        return { id: importedId };
+      }
+      return { ok: true };
+    });
+    deps.hostBridge = { fleetResult } as never;
+    deps.prisma.$transaction = (async (work: (value: typeof tx) => Promise<unknown>) => {
+      await work(tx);
+      committed = true;
+      throw new Error("commit response lost");
+    }) as never;
+    vi.mocked(deps.prisma.connection.findFirstOrThrow).mockImplementation(async () =>
+      committed
+        ? ({ ...row, metadata: { ...metadata, hostSecretId: importedId } } as never)
+        : (row as never),
+    );
+    vi.stubEnv("ARDURBOT_HOST_BRIDGE", "api");
+    try {
+      await expect(
+        updateComputerConnection(
+          deps,
+          "saved",
+          {
+            name: "Old",
+            settings: ComputerConnectionSettingsSchema.parse({
+              engine: "docker",
+              endpoint: "tcp://fixture.example:2376",
+            }),
+            tlsPaths: { ca: "/fixture/ca", cert: "/fixture/cert", key: "/fixture/key" },
+          },
+          row.updatedAt.toISOString(),
+          false,
+          context,
+        ),
+      ).rejects.toThrow("commit response lost");
+      expect(committed).toBe(true);
+      expect(importedId).toMatch(/^[a-f0-9-]{36}$/);
+      expect(fleetResult).not.toHaveBeenCalledWith(
+        { op: "computer.remote.secret.delete", secretId: importedId },
+        context,
+      );
+      expect(deps.prisma.fleetSecretCleanup.updateMany).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("reconciles an import whose host write succeeded but its response was lost", async () => {
+    const { deps } = fixture();
+    let intent: { hostSecretId: string; spaceId: string; userId: string } | undefined;
+    const create = vi.mocked(deps.prisma.fleetSecretCleanup.create);
+    create.mockImplementation(async ({ data }) => {
+      intent = { hostSecretId: data.hostSecretId, spaceId: data.spaceId, userId: data.userId };
+      return intent as never;
+    });
+    vi.mocked(deps.prisma.fleetSecretCleanup.findUnique).mockImplementation(
+      async () => (intent as never) ?? null,
+    );
+    vi.mocked(deps.prisma.fleetSecretCleanup.findMany).mockImplementation(async () =>
+      intent ? ([intent] as never) : [],
+    );
+    vi.mocked(deps.prisma.fleetSecretCleanup.deleteMany).mockImplementation(async () => {
+      intent = undefined;
+      return { count: 1 };
+    });
+    let hostCopy = "";
+    const fleetResult = vi.fn(async (op: { op: string; secretId?: string }) => {
+      if (op.op === "computer.remote.secret") {
+        expect(intent).toBeDefined();
+        expect(op.secretId).toMatch(/^[a-f0-9-]{36}$/);
+        expect(intent?.hostSecretId).toBe(op.secretId);
+        hostCopy = op.secretId!;
+        throw new Error("import response lost");
+      }
+      if (op.op === "computer.remote.secret.delete") hostCopy = "";
+      return { ok: true };
+    });
+    deps.hostBridge = { fleetResult } as never;
+    vi.stubEnv("ARDURBOT_HOST_BRIDGE", "api");
+    try {
+      await expect(
+        updateComputerConnection(
+          deps,
+          "saved",
+          {
+            name: "Old",
+            settings: ComputerConnectionSettingsSchema.parse({
+              engine: "docker",
+              endpoint: "tcp://fixture.example:2376",
+            }),
+            tlsPaths: { ca: "/fixture/ca", cert: "/fixture/cert", key: "/fixture/key" },
+          },
+          row.updatedAt.toISOString(),
+          false,
+          context,
+        ),
+      ).rejects.toThrow("import response lost");
+      expect(hostCopy).toMatch(/^[a-f0-9-]{36}$/);
+      expect(intent?.hostSecretId).toBe(hostCopy);
+      await reconcileFleetSecretCleanup(deps.prisma, deps.hostBridge);
+      expect(hostCopy).toBe("");
+      expect(intent).toBeUndefined();
     } finally {
       vi.unstubAllEnvs();
     }
@@ -447,6 +635,26 @@ describe("saved fleet connections", () => {
         { op: "computer.remote.secret.delete", secretId: hostSecretId },
         expect.objectContaining({ spaceId: "space", userId: "owner" }),
       );
+      expect(deps.prisma.fleetSecretCleanup.deleteMany).toHaveBeenCalledWith({
+        where: { hostSecretId },
+      });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+  it("keeps a credential referenced by a connection when reconciling a stale intent", async () => {
+    const { deps } = fixture();
+    const hostSecretId = "afdf5a2e-09f0-42c9-917e-35c45f34db37";
+    vi.mocked(deps.prisma.fleetSecretCleanup.findMany).mockResolvedValue([
+      { hostSecretId, spaceId: "space", userId: "owner" },
+    ] as never);
+    vi.mocked(deps.prisma.connection.findFirst).mockResolvedValue({ id: "saved" } as never);
+    const fleetResult = vi.fn();
+    deps.hostBridge = { fleetResult } as never;
+    vi.stubEnv("ARDURBOT_HOST_BRIDGE", "api");
+    try {
+      await reconcileFleetSecretCleanup(deps.prisma, deps.hostBridge);
+      expect(fleetResult).not.toHaveBeenCalled();
       expect(deps.prisma.fleetSecretCleanup.deleteMany).toHaveBeenCalledWith({
         where: { hostSecretId },
       });

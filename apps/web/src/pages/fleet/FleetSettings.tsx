@@ -552,6 +552,7 @@ function AddComputer({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [probeReason, setProbeReason] = useState<FleetReachabilityReason | null>(null);
+  const [revision, setRevision] = useState(details?.revision);
   const [confirmActive, setConfirmActive] = useState(false);
   async function save(event?: FormEvent) {
     event?.preventDefault();
@@ -628,9 +629,10 @@ function AddComputer({
         const result = await rpc.fleet.update({
           connectionId: details.id,
           connection,
-          revision: details.revision,
+          revision: revision ?? details.revision,
           confirmActive,
         });
+        setRevision(result.revision);
         if (!result.ok) {
           setProbeReason(result.reason);
           await onRefresh();

@@ -208,6 +208,91 @@ it("prefills Edit and saves a renamed target through fleet.update", async () => 
     element.remove();
   }
 });
+it("uses the committed revision when correcting an endpoint after a failed probe", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const saved = {
+    id: "saved",
+    name: "Office",
+    kind: "docker",
+    connectionId: "saved",
+    state: "connected",
+    endpoint: "unix:///fixture/docker.sock",
+    capacity: unknownCapacity(),
+    bots: [],
+  };
+  api.list.mockResolvedValue({
+    targets: [saved],
+    bots: [],
+    placement: { mode: "manual", preferredTargetId: "host", minimumFreeGb: 4 },
+  });
+  api.details.mockResolvedValue({
+    id: "saved",
+    name: "Office",
+    revision: "2026-09-27T00:00:00.000Z",
+    settings: { engine: "docker", endpoint: saved.endpoint },
+    hasCredential: false,
+    activeRuns: false,
+  });
+  api.update
+    .mockResolvedValueOnce({
+      ok: false,
+      reason: "socket-missing",
+      revision: "2026-09-27T00:00:01.000Z",
+      targets: [],
+    })
+    .mockResolvedValueOnce({
+      ok: true,
+      revision: "2026-09-27T00:00:02.000Z",
+      targets: [],
+    });
+  const element = document.createElement("div");
+  document.body.appendChild(element);
+  const root = createRoot(element);
+  try {
+    await act(async () => root.render(<FleetSettings />));
+    const edit = [
+      ...element.querySelectorAll<HTMLButtonElement>('[data-fleet-target="saved"] button'),
+    ].find((button) => button.textContent === "Edit")!;
+    await act(async () => edit.click());
+    const dialog = document.body.querySelector('[aria-label="Edit computer"]')!;
+    const endpoint = dialog.querySelector<HTMLInputElement>('[aria-label="Engine endpoint"]')!;
+    const changeEndpoint = async (value: string) => {
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+          endpoint,
+          value,
+        );
+        endpoint.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    };
+    const submit = async () =>
+      act(async () =>
+        dialog
+          .querySelector("form")!
+          .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+      );
+    await changeEndpoint("unix:///fixture/missing.sock");
+    await submit();
+    expect(api.update).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ revision: "2026-09-27T00:00:00.000Z" }),
+    );
+    await changeEndpoint("unix:///fixture/correct.sock");
+    await submit();
+    expect(api.update).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        revision: "2026-09-27T00:00:01.000Z",
+        connection: expect.objectContaining({
+          settings: expect.objectContaining({ endpoint: "unix:///fixture/correct.sock" }),
+        }),
+      }),
+    );
+  } finally {
+    await act(async () => root.unmount());
+    element.remove();
+  }
+});
 it("warns before changing a connection with an active run", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const saved = {

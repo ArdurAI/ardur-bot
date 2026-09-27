@@ -161,6 +161,9 @@ export const FleetTestResultSchema = z.discriminatedUnion("ok", [
     targets: z.array(FleetTargetSchema),
   }),
 ]);
+export const FleetUpdateResultSchema = FleetTestResultSchema.and(
+  z.object({ revision: z.iso.datetime() }),
+);
 export const FleetConnectionDetailsSchema = z.object({
   id: z.string(),
   name: z.string(),
