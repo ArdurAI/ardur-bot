@@ -25,6 +25,7 @@ import {
   buildCompletionReviewPrompt,
   goalBotAuthorityFingerprint,
   settleBotMessageWakesInTransaction,
+  settleQuietBotMessageClaimsInTransaction,
 } from "./bot-comms.js";
 import { cancelRunsInTransaction } from "./cancel-runs.js";
 import type { Prisma, PrismaClient } from "./client.js";
@@ -1468,10 +1469,6 @@ async function finalizeRunOnce(
                   botId: parent.senderBotId,
                 })
               : "recipient-unavailable";
-            const senderName = await tx.bot.findUnique({
-              where: { id: input.botId },
-              select: { name: true },
-            });
             const automaticReply = await tx.botMessageDelivery.create({
               data: {
                 id: replyId,
@@ -1513,6 +1510,11 @@ async function finalizeRunOnce(
             const receipt = await tx.message.findUniqueOrThrow({
               where: { id: result.summaryMessageId! },
             });
+            const receiptBlock = (receipt.blocks as MessageBlock[]).find(
+              (block) => block.kind === "bot_message_received",
+            );
+            if (receiptBlock?.kind !== "bot_message_received")
+              throw new Error("Delegation receipt is unavailable.");
             const blocks = (receipt.blocks as MessageBlock[]).map((block) =>
               block.kind === "bot_message_received"
                 ? { ...block, deliveryId: replyId, deliveryState: "delivered" as const }
@@ -1520,14 +1522,15 @@ async function finalizeRunOnce(
             );
             await tx.message.update({ where: { id: receipt.id }, data: { blocks } });
             const automaticPrompt = buildBotMessageWakePrompt({
-              from: { id: input.botId, name: senderName?.name ?? "Worker" },
-              text,
-              intent: "result",
+              from: { id: input.botId, name: receiptBlock.fromBotName },
+              text: receiptBlock.text,
+              intent: receiptBlock.intent,
             });
             await appendBotMessageWakeInTransaction(
               tx,
               automaticReply,
               buildCompletionReviewPrompt(automaticPrompt).length,
+              true,
             );
             await tx.delegation.updateMany({
               where: { id: writableRun.delegationId, coordinatorWokenAt: null },
@@ -1613,6 +1616,12 @@ async function finalizeRunOnce(
       input.runId,
       input.outcome === "completed",
       input.outcome === "failed" ? input.runtimeProblem?.code : undefined,
+    );
+    await settleQuietBotMessageClaimsInTransaction(
+      tx,
+      input.runId,
+      input.leaseFence,
+      input.outcome === "completed",
     );
     if (input.outcome === "completed") {
       await tx.steeringMessage.deleteMany({

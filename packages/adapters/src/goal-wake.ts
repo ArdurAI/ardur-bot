@@ -1,6 +1,10 @@
 import { runContinueJob } from "@ardurbot/adapter-kit";
 import type { PrismaClient, ThreadEvents } from "@ardurbot/db";
-import { dispatchBotMessageWake, wakeGoalCoordinatorForDelegation } from "@ardurbot/db";
+import {
+  backfillAutomaticBotMessageWake,
+  dispatchBotMessageWake,
+  wakeGoalCoordinatorForDelegation,
+} from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 import type { ExecutorDeps } from "./executor.js";
 
@@ -23,8 +27,11 @@ export async function wakeGoalAfterDelegation(
       },
       select: { id: true },
     });
-    if (pending) {
-      const runId = await dispatchBotMessageWake(deps.prisma as PrismaClient, pending.id);
+    const wakeId =
+      pending?.id ??
+      (await backfillAutomaticBotMessageWake(deps.prisma as PrismaClient, automatic.id));
+    if (wakeId) {
+      const runId = await dispatchBotMessageWake(deps.prisma as PrismaClient, wakeId);
       if (runId)
         await deps.jobs.enqueue(runContinueJob(runId)).catch((error) => {
           getLogger().error("goal wake enqueue", error);
