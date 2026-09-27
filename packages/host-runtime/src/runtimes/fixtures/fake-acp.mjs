@@ -226,6 +226,23 @@ async function handle(value) {
     });
     return;
   }
+  if (scenario === "text-burst") {
+    const frames = Array.from({ length: 600 }, () =>
+      JSON.stringify({
+        jsonrpc: "2.0",
+        method: "session/update",
+        params: {
+          sessionId,
+          update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "x" } },
+        },
+      }),
+    );
+    frames.push(
+      JSON.stringify({ jsonrpc: "2.0", id: value.id, result: { stopReason: "end_turn" } }),
+    );
+    process.stdout.write(`${frames.join("\n")}\n`);
+    return;
+  }
   if (scenario === "before-tool" || scenario === "during-tool") {
     await new Promise((resolve) => setTimeout(resolve, scenario === "before-tool" ? 500 : 25));
   }

@@ -93,6 +93,14 @@ describe("HermesRuntime M0 ACP seam", () => {
     );
   });
 
+  it("drains a single-write burst of 600 text updates without overflowing", async () => {
+    const events = await collect(runtime("text-burst"), request());
+    const textEvents = events.filter((event) => event.type === "text");
+    expect(textEvents.map((event) => event.text).join("")).toBe("x".repeat(600));
+    expect(textEvents.length).toBeLessThan(16);
+    expect(events.at(-1)).toEqual({ type: "done" });
+  });
+
   it("executes one MCP call through the real bridge in authorization order", async () => {
     const order: string[] = [];
     const events = await collect(
@@ -822,7 +830,7 @@ describe("HermesRuntime M0 ACP seam", () => {
     expect(await events).not.toContainEqual({ type: "done" });
   });
 
-  it("drops buffered text and completion after abort while the consumer is paused", async () => {
+  it("drops queued events after abort while the consumer is paused", async () => {
     const run = request();
     const finishSignal = turnFinishSignal(run.runId);
     const adapter = new HermesRuntime({
@@ -832,7 +840,10 @@ describe("HermesRuntime M0 ACP seam", () => {
       onTurnFinished: finishSignal.onTurnFinished,
     });
     const events = adapter.run(run)[Symbol.asyncIterator]();
-    expect(await events.next()).toEqual({ value: { type: "text", text: "first " }, done: false });
+    expect(await events.next()).toEqual({
+      value: { type: "text", text: expect.stringMatching(/^first /) },
+      done: false,
+    });
     expect(await finishSignal.finished).toBe("done");
     await adapter.abort(run.runId);
     expect(await events.next()).toEqual({ value: undefined, done: true });
