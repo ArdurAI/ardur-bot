@@ -120,7 +120,10 @@ short-lived owner-scoped login handle and status. Completion, cancellation, expi
 and process cleanup are handled by `CodexConnections`; the vendor owns credentials.
 
 `thread/start` or `thread/resume` receives the exact model, OpenAI provider, instructions,
-reasoning effort, and an `ardur-read` permission profile through config overrides.
+reasoning effort, and an `ardur-read` permission profile through config overrides. The profile
+grants the platform minimum, the run's folder, and the `AGENTS.md` instruction files Codex loads
+from that folder's git root down to the folder; without those file grants Codex refuses to create
+the session when an ancestor directory carries instructions it cannot read.
 The profile grants read access to `:minimal` platform paths and the native working
 directory, when set, with network access disabled. Ardur does not send the legacy
 `sandbox` field with the thread or `sandboxPolicy` with `turn/start`. The thread

@@ -1,4 +1,6 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
+import { access } from "node:fs/promises";
+import path from "node:path";
 import type {
   AdapterContext,
   AgentRunRequest,
@@ -130,6 +132,63 @@ export function codexArguments() {
     "features.view_image=false",
   ];
 }
+/** Codex's instruction-discovery settings, as returned by config/read. */
+export type InstructionDiscovery = { rootMarkers?: unknown; fallbackFilenames?: unknown };
+const DEFAULT_ROOT_MARKERS = [".git"];
+const INSTRUCTION_FILENAMES = ["AGENTS.md", "AGENTS.override.md"];
+function plainNames(value: unknown, fallback: string[]): string[] {
+  const names = Array.isArray(value)
+    ? value.filter(
+        (entry): entry is string =>
+          typeof entry === "string" && entry.length > 0 && !/[/\\\0]/.test(entry),
+      )
+    : [];
+  return names.length ? names : fallback;
+}
+
+/**
+ * Instruction files Codex loads for a folder: AGENTS.md, its override and any configured
+ * fallback names, from the folder's project root (the nearest ancestor holding a configured root
+ * marker) down to the folder itself, or only the folder's own when no root is found. The read
+ * profile confines the run to its folder, so these files are granted explicitly; otherwise
+ * Codex refuses to create the session when an ancestor holds instructions it cannot read.
+ */
+export async function instructionFileReads(
+  cwd: string,
+  discovery: InstructionDiscovery = {},
+): Promise<Record<string, "read">> {
+  const markers = plainNames(discovery.rootMarkers, DEFAULT_ROOT_MARKERS);
+  const filenames = [
+    ...new Set([...INSTRUCTION_FILENAMES, ...plainNames(discovery.fallbackFilenames, [])]),
+  ];
+  const chain: string[] = [];
+  let directory = path.resolve(cwd);
+  let root: string | undefined;
+  for (let depth = 0; depth < 64 && !root; depth++) {
+    chain.push(directory);
+    for (const marker of markers) {
+      if (
+        await access(path.join(directory, marker)).then(
+          () => true,
+          () => false,
+        )
+      ) {
+        root = directory;
+        break;
+      }
+    }
+    const parent = path.dirname(directory);
+    if (parent === directory) break;
+    directory = parent;
+  }
+  const directories = root ? chain : chain.slice(0, 1);
+  return Object.fromEntries(
+    directories.flatMap((entry) =>
+      filenames.map((name) => [path.join(entry, name), "read" as const]),
+    ),
+  );
+}
+
 export async function openCodex(start: NativeSpawn = spawnNative) {
   const binary = await findNativeBinary("codex");
   if (!binary) throw new Error("Codex app-server unavailable");
@@ -335,6 +394,8 @@ export class CodexAppServerRuntime implements AgentRuntime {
         config: {
           mcp_servers?: Record<string, unknown>;
           permissions?: Record<string, unknown>;
+          project_root_markers?: unknown;
+          project_doc_fallback_filenames?: unknown;
         };
       }>("config/read", { includeLayers: false, cwd: request.nativeCwd });
       if (Object.hasOwn(config.mcp_servers ?? {}, "ardur"))
@@ -408,7 +469,15 @@ export class CodexAppServerRuntime implements AgentRuntime {
             "ardur-read": {
               filesystem: {
                 ":minimal": "read",
-                ...(request.nativeCwd ? { [request.nativeCwd]: "read" } : {}),
+                ...(request.nativeCwd
+                  ? {
+                      [request.nativeCwd]: "read",
+                      ...(await instructionFileReads(request.nativeCwd, {
+                        rootMarkers: config.project_root_markers,
+                        fallbackFilenames: config.project_doc_fallback_filenames,
+                      })),
+                    }
+                  : {}),
               },
               network: { enabled: false },
             },
@@ -416,17 +485,28 @@ export class CodexAppServerRuntime implements AgentRuntime {
           model_reasoning_effort: pin.effort,
         },
       };
-      const session = await rpc.request<{
-        thread: { id: string };
-        model: string;
-        modelProvider: string;
-        reasoningEffort: string;
-        sandbox?: { type: string; networkAccess?: boolean };
-        activePermissionProfile?: { id: string } | null;
-      }>(request.nativeSession?.sessionId ? "thread/resume" : "thread/start", {
-        ...options,
-        ...(request.nativeSession?.sessionId ? { threadId: request.nativeSession.sessionId } : {}),
-      });
+      const session = await rpc
+        .request<{
+          thread: { id: string };
+          model: string;
+          modelProvider: string;
+          reasoningEffort: string;
+          sandbox?: { type: string; networkAccess?: boolean };
+          activePermissionProfile?: { id: string } | null;
+        }>(request.nativeSession?.sessionId ? "thread/resume" : "thread/start", {
+          ...options,
+          ...(request.nativeSession?.sessionId
+            ? { threadId: request.nativeSession.sessionId }
+            : {}),
+        })
+        .catch((error: unknown) => {
+          if (error instanceof CodexRequestRejected)
+            throw problem(
+              "runtime-unavailable",
+              "Codex could not start a session in this bot's folder — change the bot's computer or the pin.",
+            );
+          throw error;
+        });
       if (session.model !== pin.modelId || session.modelProvider !== "openai")
         throw problem("pin-model-unknown", "Codex returned a different model.");
       if (session.reasoningEffort !== pin.effort)
