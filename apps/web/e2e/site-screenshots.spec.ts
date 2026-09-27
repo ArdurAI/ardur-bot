@@ -42,18 +42,28 @@ function showcaseData() {
     return { modelProvider: provider, modelId: id, thinkingLevel: "medium" };
   };
   const choices = [
-    model("openai-codex", "gpt-5.3-codex-spark"),
+    model("openai-codex", "gpt-6-sol"),
     model("anthropic", "claude-sonnet-4-6"),
     model("google", "gemini-2.5-pro"),
     model("openai", "gpt-4.1"),
     model("xai", "grok-4.3"),
-    model("openai-codex", "gpt-5.3-codex-spark"),
+    model("openai-codex", "gpt-6-sol"),
   ];
+  const credentialId = (index: number) => `showcase-model-${index}`;
+  const credentials = choices.map((choice, index) => ({
+    id: credentialId(index),
+    provider: choice.modelProvider,
+    label: `${names[index]} connection`,
+    hasKey: true,
+    isDefault: index === 0,
+    modelId: choice.modelId,
+  }));
   const bots = base.bots.map((bot, index) => ({
     ...bot,
     name: names[index],
     color: BOT_COLORS[index],
     ...choices[index],
+    modelCredentialId: credentialId(index),
     preview: index === 0 ? "Ready to send the weekly plan" : "",
     unread: false,
   }));
@@ -125,11 +135,11 @@ function showcaseData() {
             attemptId: "attempt",
             executionId: "execution",
             command: "cat planning/release-checklist.md",
-            cwd: null,
+            cwd: "/home/ardurbot/workspace",
             computerId: null,
             computer: "Team computer",
             startedAt: "2026-09-24T12:00:00.000Z",
-            durationMs: 180,
+            durationMs: 2_400,
             exitCode: 0,
             outcome: "completed",
             stdout: "Build verified\nChecks passed\nRelease note drafted\n",
@@ -229,18 +239,21 @@ function showcaseData() {
       name: "Morning brief",
       crons: ["0 8 * * 1-5"],
       prompt: "Prepare today's priorities",
+      nextRunAt: "2026-09-25T08:00:00.000Z",
     },
     {
       id: "inbox-triage",
       name: "Inbox triage",
       crons: ["0 11 * * 1-5"],
       prompt: "Review urgent mail",
+      nextRunAt: "2026-09-25T11:00:00.000Z",
     },
     {
-      id: "friday-wrap",
-      name: "Friday wrap-up",
-      crons: ["0 16 * * 5"],
-      prompt: "Summarize this week's work",
+      id: "evening-wrap",
+      name: "Evening wrap-up",
+      crons: ["0 16 * * *"],
+      prompt: "Summarize today's work",
+      nextRunAt: "2026-09-24T16:00:00.000Z",
     },
   ].map((routine) => ({
     ...routine,
@@ -252,7 +265,6 @@ function showcaseData() {
     githubEnabled: false,
     messageProvider: null,
     lastRunAt: null,
-    nextRunAt: "2026-09-25T08:00:00.000Z",
     createdAt: group.createdAt,
   }));
   const appSnapshot = { ...base.thread, cursor: 5, messages: appMessages };
@@ -266,7 +278,7 @@ function showcaseData() {
     run: null,
     messages: groupMessages,
   };
-  return { fixture, base, bots, group, routines, appSnapshot, groupSnapshot };
+  return { fixture, base, bots, catalog, credentials, group, routines, appSnapshot, groupSnapshot };
 }
 
 test("captures bot chat, group collaboration, and routines from seeded demo data", async ({
@@ -284,6 +296,16 @@ test("captures bot chat, group collaboration, and routines from seeded demo data
     const input = route.request().postDataJSON()?.json as
       | { groupId?: string; botId?: string }
       | undefined;
+    if (procedure === "models/list") {
+      const configured = data.catalog.filter((entry) =>
+        data.credentials.some(
+          (credential) => credential.provider === entry.provider && credential.modelId === entry.id,
+        ),
+      );
+      return route.fulfill({ json: { json: configured } });
+    }
+    if (procedure === "models/credentials")
+      return route.fulfill({ json: { json: data.credentials } });
     const original = data.fixture.rpc(procedure, input);
     const space = { ...data.base.spaces[0], bots: data.bots, groups: [data.group] };
     const result =
@@ -293,7 +315,7 @@ test("captures bot chat, group collaboration, and routines from seeded demo data
             me: {
               ...data.base.me,
               defaultProvider: "openai-codex",
-              defaultModel: "gpt-5.3-codex-spark",
+              defaultModel: "gpt-6-sol",
               sandboxProvider: "docker",
             },
             bots: data.bots,
@@ -306,7 +328,7 @@ test("captures bot chat, group collaboration, and routines from seeded demo data
           ? {
               ...(original as object),
               defaultProvider: "openai-codex",
-              defaultModel: "gpt-5.3-codex-spark",
+              defaultModel: "gpt-6-sol",
               sandboxProvider: "docker",
             }
           : procedure === "spaces/list"
@@ -343,6 +365,15 @@ test("captures bot chat, group collaboration, and routines from seeded demo data
   await page.goto("/app/bot");
   await expect(page.getByRole("button", { name: "Allow once", exact: true })).toBeVisible();
   await expect(page.getByText("cat planning/release-checklist.md")).toBeVisible();
+  await expect(page.getByRole("button", { name: /Change model: Ardur · Codex/ })).toContainText(
+    "medium",
+  );
+  await expect(page.getByRole("button", { name: /Change model: Ardur · Codex/ })).not.toContainText(
+    "not available",
+  );
+  await expect(page.getByTestId("command-block")).toContainText(
+    "in /home/ardurbot/workspace · 2 s · exit 0",
+  );
   await captureSiteScreenshot(page, "app-chat");
 
   await page.goto("/app/g/operations-group");
@@ -356,6 +387,7 @@ test("captures bot chat, group collaboration, and routines from seeded demo data
   await page.goto("/app/bot");
   await page.getByTitle("Agent computer").click();
   await expect(page.getByText("Morning brief")).toBeVisible();
+  await expect(page.getByText("Every day at 4:00 PM")).toBeVisible();
   await expect(page.getByTestId("computer-preview")).toBeVisible();
   await captureSiteScreenshot(page, "routines");
 });
