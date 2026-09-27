@@ -13,6 +13,7 @@ vi.mock("../lib/rpc", () => ({
     metrics: { context: vi.fn() },
     context: { settings: vi.fn() },
     bots: { update: vi.fn() },
+    integrations: { available: vi.fn(async () => [{ id: "one", name: "Notes" }]) },
   },
 }));
 vi.mock("@lingui/react/macro", () => ({

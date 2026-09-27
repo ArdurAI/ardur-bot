@@ -16,7 +16,12 @@ describe("explicit host MCP authorization", () => {
       enabled: true,
       catalogId: null,
     };
-    const grant = { allowedTools: ["read_fixture"], allowAllTools: false, needsReview: false };
+    const grant = {
+      allowedTools: ["read_fixture"],
+      allowAllTools: false,
+      needsReview: false,
+      server,
+    };
     const prisma = {
       mcpServer: {
         findFirst: vi.fn(async ({ where }) =>

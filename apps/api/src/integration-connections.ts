@@ -46,7 +46,10 @@ import { ORPCError } from "@orpc/server";
 
 type Owner = Pick<Actor, "spaceId" | "userId">;
 
-export function connectionDto(server: McpServer, needsReview = false): IntegrationConnection {
+export function connectionDto(
+  server: McpServer,
+  needsReview = server.needsReview,
+): IntegrationConnection {
   const manifest = IntegrationManifestSchema.safeParse(server.manifest);
   return {
     id: server.id,
@@ -54,6 +57,9 @@ export function connectionDto(server: McpServer, needsReview = false): Integrati
     state: IntegrationStateSchema.parse(server.connectionState),
     manifest: manifest.success ? manifest.data : null,
     needsReview,
+    spaceAllowedTools: Array.isArray(server.spaceAllowedTools)
+      ? server.spaceAllowedTools.filter((id): id is string => typeof id === "string")
+      : [],
     transport: server.transport,
     consentStartedAt: server.consentStartedAt?.toISOString() ?? null,
     lastCheckedAt: server.lastCheckedAt?.toISOString() ?? null,
@@ -100,10 +106,7 @@ export class IntegrationConnections {
         oauthAvailable: Boolean(this.oauthApp(descriptor.id)),
       })),
       connections: servers.map((row) =>
-        connectionDto(
-          row,
-          row.assignments.some((grant) => grant.needsReview),
-        ),
+        connectionDto(row, row.needsReview || row.assignments.some((grant) => grant.needsReview)),
       ),
     };
   }
@@ -558,7 +561,12 @@ export class IntegrationConnections {
               tx,
               id,
               actor,
-              { ...data, spaceAllowedTools: [], spaceToolPolicies: {} },
+              {
+                ...data,
+                spaceAllowedTools: previous.success ? [] : manifest.tools.map((tool) => tool.id),
+                spaceToolPolicies: {},
+                needsReview: previous.success,
+              },
               where,
             )
           : (
@@ -572,7 +580,7 @@ export class IntegrationConnections {
         if (!changed) return;
         // A refreshed manifest never silently inherits grants to an older tool definition.
         await tx.botMcpServer.updateMany({
-          where: { serverId: id, spaceId: actor.spaceId, userId: actor.userId },
+          where: { serverId: id, spaceId: actor.spaceId, userId: actor.userId, access: "custom" },
           data: { allowedTools: [], allowAllTools: false, needsReview: true },
         });
         await this.invalidateApprovals(tx, actor, server);
@@ -684,7 +692,8 @@ export class IntegrationConnections {
         enabled: true,
         catalogId: { not: null },
         connectionState: "connected",
-        assignments: { some: { needsReview: false } },
+        needsReview: false,
+        spaceAllowedTools: { not: [] },
         OR: [
           { lastCheckedAt: null },
           { lastCheckedAt: { lte: new Date(Date.now() - INTEGRATION_HEALTH_INTERVAL_MS) } },
@@ -719,6 +728,10 @@ export class IntegrationConnections {
     });
     return rows.map((row) => ({
       botId: row.botId,
+      access: (row.access === "none" ? "none" : row.access === "inherit" ? "inherit" : "custom") as
+        | "none"
+        | "inherit"
+        | "custom",
       needsReview: row.needsReview || row.allowAllTools,
       toolIds: row.needsReview || row.allowAllTools ? [] : (row.allowedTools as string[]),
     }));
@@ -728,7 +741,12 @@ export class IntegrationConnections {
     actor: Owner,
     input: {
       connectionId: string;
-      botIds: string[];
+      botIds?: string[];
+      overrides?: Array<{
+        botId: string;
+        access: "inherit" | "custom" | "none";
+        toolIds: string[];
+      }>;
       toolIds: string[];
       spaceToolPolicies?: SpaceToolPolicies;
       resourceConstraints?: IntegrationResourceConstraints;
@@ -804,7 +822,23 @@ export class IntegrationConnections {
             });
         }
       }
-      const botIds = [...new Set(input.botIds)];
+      const overrides =
+        input.overrides ??
+        (input.botIds ?? []).map((botId) => ({
+          botId,
+          access: "custom" as const,
+          toolIds: input.toolIds,
+        }));
+      const botIds = [...new Set(overrides.map((override) => override.botId))];
+      if (
+        botIds.length !== overrides.length ||
+        overrides.some(
+          (override) =>
+            override.toolIds.some((id) => !input.toolIds.includes(id)) ||
+            (override.access !== "custom" && override.toolIds.length > 0),
+        )
+      )
+        throw new Error("Review the available tools and try again.");
       const bots = await tx.bot.findMany({
         where: {
           id: { in: botIds },
@@ -817,23 +851,41 @@ export class IntegrationConnections {
       });
       if (bots.length !== botIds.length) throw new IsolationError();
       const toolIds = [...new Set(input.toolIds)];
-      await tx.botMcpServer.deleteMany({
-        where: { serverId: server.id, spaceId: actor.spaceId, userId: actor.userId },
-      });
-      if (botIds.length)
-        await tx.botMcpServer.createMany({
-          data: botIds.map((botId) => ({
-            spaceId: actor.spaceId,
-            userId: actor.userId,
-            serverId: server.id,
-            botId,
-            allowAllTools: false,
-            needsReview: false,
-            allowedTools: toolIds,
-          })),
-        });
+      for (const override of overrides) {
+        if (override.access === "inherit") {
+          await tx.botMcpServer.deleteMany({
+            where: {
+              botId: override.botId,
+              serverId: server.id,
+              spaceId: actor.spaceId,
+              userId: actor.userId,
+            },
+          });
+        } else {
+          await tx.botMcpServer.upsert({
+            where: { botId_serverId: { botId: override.botId, serverId: server.id } },
+            create: {
+              spaceId: actor.spaceId,
+              userId: actor.userId,
+              serverId: server.id,
+              botId: override.botId,
+              access: override.access,
+              allowAllTools: false,
+              needsReview: false,
+              allowedTools: override.access === "custom" ? override.toolIds : [],
+            },
+            update: {
+              access: override.access,
+              allowAllTools: false,
+              needsReview: false,
+              allowedTools: override.access === "custom" ? override.toolIds : [],
+            },
+          });
+        }
+      }
       await bumpMcpServerRevision(tx, server.id, actor, {
         spaceAllowedTools: toolIds,
+        needsReview: false,
         ...(constraints === undefined ? {} : { resourceConstraints: constraints }),
         ...(spaceToolPolicies === undefined ? {} : { spaceToolPolicies }),
       });
@@ -881,8 +933,9 @@ export class IntegrationConnections {
         await tx.secret.deleteMany({
           where: { id: current.secretId, ...actor },
         });
-      await tx.botMcpServer.deleteMany({
-        where: { serverId: id, spaceId: actor.spaceId, userId: actor.userId },
+      await tx.botMcpServer.updateMany({
+        where: { serverId: id, spaceId: actor.spaceId, userId: actor.userId, access: "custom" },
+        data: { allowedTools: [], needsReview: true },
       });
       await tx.mcpOAuthSession.deleteMany({
         where: { serverId: id, spaceId: actor.spaceId, userId: actor.userId },

@@ -53,11 +53,16 @@ it("loads an existing MCP grant, saves Ask and Block without changing other serv
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   let policies: SpaceToolPolicies = { get_item: "allow" };
   let allowedTools = ["get_item", "update_item"];
-  const server = { id: "server", spaceToolPolicies: policies } as McpServer;
+  const server = {
+    id: "server",
+    spaceToolPolicies: policies,
+    spaceAllowedTools: allowedTools,
+  } as McpServer;
   const assignment = () =>
     ({
       botId: "bot",
       serverId: server.id,
+      access: "custom",
       allowedTools,
       allowAllTools: false,
       needsReview: false,
@@ -72,7 +77,9 @@ it("loads an existing MCP grant, saves Ask and Block without changing other serv
     assignment(),
     { ...assignment(), serverId: "other-server" },
   ]);
-  api.list.mockImplementation(async () => [{ ...server, spaceToolPolicies: policies }]);
+  api.list.mockImplementation(async () => [
+    { ...server, spaceToolPolicies: policies, spaceAllowedTools: allowedTools },
+  ]);
   api.permissions.mockImplementation(async (input) => {
     policies = input.spaceToolPolicies;
     allowedTools = input.toolIds;
@@ -114,7 +121,7 @@ it("loads an existing MCP grant, saves Ask and Block without changing other serv
   );
   expect(api.permissions).toHaveBeenCalledExactlyOnceWith({
     serverId: "server",
-    botIds: ["bot"],
+    overrides: [{ botId: "bot", access: "custom", toolIds: ["get_item"] }],
     toolIds: ["get_item"],
     spaceToolPolicies: { get_item: "ask-first", update_item: "ask-first" },
   });

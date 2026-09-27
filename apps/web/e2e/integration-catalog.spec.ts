@@ -4,7 +4,9 @@ import { expect, test } from "@playwright/test";
 import { integrationCatalog } from "../../../packages/adapters/src/integration-catalog.js";
 import { captureScreenshot, completeOnboarding, openUserSettings, signup } from "./helpers";
 
-test("Settings catalog connects and grants only selected tools", async ({ page }, testInfo) => {
+test("Settings catalog gives every bot access by default and saves explicit removal", async ({
+  page,
+}, testInfo) => {
   await signup(page, `catalog-${Date.now()}@ardurbot.test`, "password12", "Catalog test");
   await completeOnboarding(page);
   const origin = new URL(page.url()).origin;
@@ -14,6 +16,7 @@ test("Settings catalog connects and grants only selected tools", async ({ page }
     catalogId: "notion",
     state: "connected",
     needsReview: false,
+    spaceAllowedTools: ["synthetic_read", "synthetic_update"],
     spaceToolPolicies: {},
     manifest: {
       capturedAt: "2026-09-23T00:00:00.000Z",
@@ -41,7 +44,15 @@ test("Settings catalog connects and grants only selected tools", async ({ page }
   await page.route("**/rpc/integrations/resourceTools", (route) =>
     route.fulfill({ json: { json: [] } }),
   );
-  await page.route("**/rpc/integrations/grants", (route) => route.fulfill({ json: { json: [] } }));
+  let grants: Array<{
+    botId: string;
+    access: "custom" | "none" | "inherit";
+    toolIds: string[];
+    needsReview: boolean;
+  }> = [];
+  await page.route("**/rpc/integrations/grants", (route) =>
+    route.fulfill({ json: { json: grants } }),
+  );
   await page.route("**/rpc/integrations/status", (route) =>
     route.fulfill({ json: { json: connections[0] } }),
   );
@@ -69,17 +80,27 @@ test("Settings catalog connects and grants only selected tools", async ({ page }
     });
   });
   let assigned:
-    | { botIds: string[]; toolIds: string[]; spaceToolPolicies: Record<string, string> }
+    | {
+        overrides: Array<{
+          botId: string;
+          access: "custom" | "none" | "inherit";
+          toolIds: string[];
+        }>;
+        toolIds: string[];
+        spaceToolPolicies: Record<string, string>;
+      }
     | undefined;
   await page.route("**/rpc/integrations/assign", async (route) => {
     assigned = route.request().postDataJSON().json;
+    grants = assigned!.overrides
+      .filter((entry) => entry.access !== "inherit")
+      .map((entry) => ({
+        ...entry,
+        needsReview: false,
+      }));
     await route.fulfill({
       json: {
-        json: assigned!.botIds.map((botId) => ({
-          botId,
-          toolIds: assigned!.toolIds,
-          needsReview: false,
-        })),
+        json: grants,
       },
     });
   });
@@ -125,8 +146,16 @@ test("Settings catalog connects and grants only selected tools", async ({ page }
     .click();
   await expect(settings.getByTestId("integration-manage")).toBeVisible();
   const approval = settings.getByLabel("Permission for synthetic_read");
-  await expect(approval).toHaveValue("block");
-  await expect(settings.getByLabel("Permission for synthetic_update")).toHaveValue("block");
+  await expect(approval).toHaveValue("ask");
+  await expect(settings.getByLabel("Permission for synthetic_update")).toHaveValue("ask");
+  await expect(
+    settings.getByText("All bots have access (bots you create later too).", { exact: true }),
+  ).toBeVisible();
+  const botAccess = settings
+    .getByRole("group", { name: "Bots", exact: true })
+    .getByRole("checkbox")
+    .first();
+  await expect(botAccess).toBeChecked();
   await approval.selectOption("allow");
   await expect(approval).toHaveValue("allow");
   await approval.selectOption("ask");
@@ -134,22 +163,21 @@ test("Settings catalog connects and grants only selected tools", async ({ page }
   await expect(settings.getByText("test-account", { exact: true })).toBeVisible();
   await expect(settings.getByRole("button", { name: "Test", exact: true })).toBeVisible();
   await expect(settings.getByRole("button", { name: "Reconnect", exact: true })).toBeVisible();
-  await settings
-    .getByRole("group", { name: "Bots", exact: true })
-    .getByRole("checkbox")
-    .first()
-    .check();
   await settings.getByLabel("Permission for synthetic_update").selectOption("ask");
   await settings.getByLabel("Notion page URL or ID").fill("a".repeat(32));
   await settings.getByRole("button", { name: "Save", exact: true }).click();
   await expect(settings.getByText("Your bots can use the selected tools.")).toBeVisible();
-  expect(assigned?.botIds).toHaveLength(1);
+  expect(assigned?.overrides).toEqual([]);
   expect(assigned?.toolIds).toEqual(["synthetic_read", "synthetic_update"]);
   expect(assigned?.spaceToolPolicies).toEqual({
     synthetic_read: "ask-first",
     synthetic_update: "ask-first",
   });
   await captureScreenshot(page, testInfo, "settings-integration-tools");
+  await botAccess.uncheck();
+  await settings.getByRole("button", { name: "Save", exact: true }).click();
+  expect(assigned?.overrides).toEqual([expect.objectContaining({ access: "none", toolIds: [] })]);
+  await expect(settings.getByText("Removed", { exact: true })).toBeVisible();
 });
 
 test("Find apps connects a token app, waits for an OAuth app, and manages custom rows", async ({

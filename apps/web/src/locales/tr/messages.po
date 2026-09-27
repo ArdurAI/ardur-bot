@@ -590,9 +590,20 @@ msgstr "Agent'lar:"
 msgid "All bots"
 msgstr ""
 
+#: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/components/integrations/catalog/McpToolReview.tsx
+#: src/pages/McpServersOverlay.tsx
+msgid "All bots have access (bots you create later too)."
+msgstr "Tüm botların erişimi var (daha sonra oluşturduklarınız da dahil)."
+
 #: src/pages/customize/CustomizeControls.tsx
 msgid "All categories"
 msgstr ""
+
+#: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/components/integrations/catalog/McpToolReview.tsx
+msgid "All desktop bots have access (including ones you create later)."
+msgstr "Tüm masaüstü botlarının erişimi var (daha sonra oluşturduklarınız da dahil)."
 
 #: src/components/integrations/catalog/ToolPicker.tsx
 #: src/components/integrations/manage/ToolPermissions.tsx
@@ -1515,10 +1526,6 @@ msgstr "Yeni bir parola seçin"
 
 #: src/components/composer/command-description.ts
 msgid "Choose a taught skill"
-msgstr ""
-
-#: src/components/integrations/catalog/IntegrationManage.tsx
-msgid "Choose bots and the tools they can use."
 msgstr ""
 
 #: src/pages/shell/runtime-settings.tsx
@@ -4180,6 +4187,7 @@ msgid "Integration options"
 msgstr ""
 
 #: src/components/composer/ComposerMenu.tsx
+#: src/components/Context.tsx
 #: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/settings-sections.ts
@@ -4420,6 +4428,11 @@ msgstr ""
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Light"
 msgstr "Açık"
+
+#: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/components/integrations/catalog/McpToolReview.tsx
+msgid "Limit tools"
+msgstr "Araçları sınırla"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Linear issue"
@@ -5303,6 +5316,10 @@ msgstr ""
 #: src/pages/GroupPanel.tsx
 msgid "None"
 msgstr "Yok"
+
+#: src/components/Context.tsx
+msgid "None available"
+msgstr "Kullanılabilir öğe yok"
 
 #: src/pages/HostComputerSettings.tsx
 msgid "None detected"
@@ -6265,6 +6282,11 @@ msgstr "{0} becerisini kaldır"
 #: src/pages/RoutineEditor.tsx
 msgid "Remove webhook"
 msgstr ""
+
+#: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/components/integrations/catalog/McpToolReview.tsx
+msgid "Removed"
+msgstr "Kaldırıldı"
 
 #. placeholder {0}: LOCAL_IMPORT_TOOL_NAMES[entry.importedFrom]
 #: src/pages/LearningTimeline.tsx
@@ -8122,6 +8144,15 @@ msgstr "Bulunan bir modeli kullan"
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Use a token"
 msgstr ""
+
+#: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/components/integrations/catalog/McpToolReview.tsx
+msgid "Use all selected tools"
+msgstr "Seçili tüm araçları kullan"
+
+#: src/components/integrations/catalog/IntegrationManage.tsx
+msgid "Use all selected tools, or choose a subset for this bot."
+msgstr "Seçili tüm araçları kullanın veya bu bot için bir alt küme seçin."
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Use default guidance"
