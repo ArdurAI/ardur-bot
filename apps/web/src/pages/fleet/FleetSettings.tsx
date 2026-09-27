@@ -1,5 +1,10 @@
 import type { FleetTarget, PlacementSettings } from "@ardurbot/contracts";
-import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
+import {
+  ComputerConnectionSettingsSchema,
+  errorDataCode,
+  FLEET_ACTIVE_RUN_CONFLICT_CODE,
+  FLEET_PINNED_BOTS_CONFLICT_CODE,
+} from "@ardurbot/contracts";
 import type { FleetReachabilityReason } from "@ardurbot/contracts/fleet";
 import {
   Button,
@@ -357,16 +362,26 @@ export function FleetSettings() {
                       await refresh();
                       window.dispatchEvent(new Event("fleet:changed"));
                     })
-                    .catch((cause: unknown) =>
+                    .catch((cause: unknown) => {
+                      const data =
+                        typeof cause === "object" && cause !== null && "data" in cause
+                          ? cause.data
+                          : undefined;
+                      const botNames =
+                        errorDataCode(cause) === FLEET_PINNED_BOTS_CONFLICT_CODE &&
+                        typeof data === "object" &&
+                        data !== null &&
+                        "botNames" in data &&
+                        Array.isArray(data.botNames) &&
+                        data.botNames.every((name) => typeof name === "string")
+                          ? (data.botNames as string[])
+                          : null;
                       setRemoveError(
-                        cause instanceof Error &&
-                          /^\d+ (?:bot runs|bots run) on this computer: .+\. Move (?:it|them) first\.$/.test(
-                            cause.message,
-                          )
-                          ? cause.message
+                        botNames
+                          ? t`Move bots first: ${botNames.join(", ")}`
                           : t`Could not remove this computer. Try again.`,
-                      ),
-                    )
+                      );
+                    })
                     .finally(() => setBusy(false));
                 }}
               >
@@ -544,6 +559,10 @@ function AddComputer({
     setError("");
     try {
       const settings = ComputerConnectionSettingsSchema.parse({
+        ...resources,
+        storageClass: resources.storageClass || undefined,
+        ...(details ? { namespace: details.settings.namespace } : {}),
+        ...(details?.settings.engine === kind ? details.settings : {}),
         engine: kind,
         ...(kind === "ssh"
           ? {
@@ -564,6 +583,11 @@ function AddComputer({
                 storageClass: resources.storageClass || undefined,
               }
             : {
+                ...resources,
+                storageClass: resources.storageClass || undefined,
+                endpoint: undefined,
+                socket: undefined,
+                dockerContext: undefined,
                 ...(details?.settings.socket && endpoint === details.settings.socket
                   ? { socket: endpoint }
                   : { endpoint }),
@@ -604,6 +628,7 @@ function AddComputer({
         const result = await rpc.fleet.update({
           connectionId: details.id,
           connection,
+          revision: details.revision,
           confirmActive,
         });
         if (!result.ok) {
@@ -613,7 +638,11 @@ function AddComputer({
         }
       } else await rpc.computer.connect(connection);
       await onSaved();
-    } catch {
+    } catch (cause) {
+      if (details && errorDataCode(cause) === FLEET_ACTIVE_RUN_CONFLICT_CODE) {
+        setConfirmActive(true);
+        return;
+      }
       setError(
         details
           ? t`Could not update the computer. Check its settings and try again.`

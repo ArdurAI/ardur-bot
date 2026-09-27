@@ -326,6 +326,7 @@ describe("lingui catalogs", () => {
       "Remove {0}? Its saved connection and credentials will be deleted. Past run history remains.",
       "Runs are active on this computer. Saving this connection change may interrupt them. Save anyway?",
       "Connection saved, but the test failed:",
+      "Move bots first: {0}",
     ];
     for (const locale of ["en", "de", "ko", "tr", "hi", "pt-BR", "zh-CN", "es", "ru"]) {
       const catalog = readFileSync(

@@ -3,12 +3,16 @@ import type { AdapterContext } from "@ardurbot/adapter-kit";
 import { runContinueJob } from "@ardurbot/adapter-kit";
 import { discoverFleet, FleetCatalog, localFleetService } from "@ardurbot/adapters";
 import type { FleetTarget } from "@ardurbot/contracts";
-import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
+import {
+  ComputerConnectionSettingsSchema,
+  FLEET_PINNED_BOTS_CONFLICT_CODE,
+} from "@ardurbot/contracts";
 import {
   FleetTargetSchema,
   PlacementDecisionSchema,
   PlacementSettingsSchema,
 } from "@ardurbot/contracts/fleet";
+import { ACTIVE_RUN_STATUSES } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import { Prisma } from "@ardurbot/db";
 import { engineFailureReason } from "@ardurbot/host-runtime/fleet/probe";
@@ -97,17 +101,20 @@ export async function cleanupFleetSecret(
 ) {
   try {
     const op = { op: "computer.remote.secret.delete" as const, secretId: hostSecretId };
-    if (process.env.ARDURBOT_HOST_BRIDGE === "api" && hostBridge)
+    if (process.env.ARDURBOT_HOST_BRIDGE === "api") {
+      if (!hostBridge) throw new Error("Host bridge is unavailable.");
       await hostBridge.fleetResult(op, context);
-    else await localFleetService().deleteSecret(hostSecretId);
+    } else await localFleetService().deleteSecret(hostSecretId);
     await prisma.fleetSecretCleanup.deleteMany({ where: { hostSecretId } });
     return true;
   } catch {
     // The intent survives both a disconnected host and an ambiguous deletion response.
-    await prisma.fleetSecretCleanup.updateMany({
-      where: { hostSecretId },
-      data: { attempts: { increment: 1 }, nextAttemptAt: new Date(Date.now() + 30_000) },
-    }).catch(() => undefined);
+    await prisma.fleetSecretCleanup
+      .updateMany({
+        where: { hostSecretId },
+        data: { attempts: { increment: 1 }, nextAttemptAt: new Date(Date.now() + 30_000) },
+      })
+      .catch(() => undefined);
     return false;
   }
 }
@@ -342,6 +349,7 @@ export async function fleetConnectionDetails(
   return {
     id: row.id,
     name: row.displayName,
+    revision: row.updatedAt.toISOString(),
     settings: visibleSettings,
     ...(source?.path ? { kubeconfigPath: source.path } : {}),
     hasCredential: Boolean(settings.hostSecretId || secret),
@@ -350,7 +358,7 @@ export async function fleetConnectionDetails(
         where: {
           spaceId: context.spaceId,
           userId: context.userId,
-          status: { in: ["queued", "running", "waiting_input"] },
+          status: { in: [...ACTIVE_RUN_STATUSES] },
           bot: { computer: { connectionId: id } },
         },
         select: { id: true },
@@ -375,6 +383,11 @@ export async function removeFleetTarget(deps: RouterDeps, context: AdapterContex
         const names = pinned.map((bot) => bot.name).join(", ");
         throw new ORPCError("CONFLICT", {
           message: `${pinned.length} ${pinned.length === 1 ? "bot runs" : "bots run"} on this computer: ${names}. Move ${pinned.length === 1 ? "it" : "them"} first.`,
+          data: {
+            code: FLEET_PINNED_BOTS_CONFLICT_CODE,
+            botNames: pinned.map((bot) => bot.name),
+            count: pinned.length,
+          },
         });
       }
       const computers = await tx.computer.findMany({

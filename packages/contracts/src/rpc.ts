@@ -300,6 +300,7 @@ function createFleetContract() {
         z.object({
           connectionId: Id,
           connection: ComputerConnectionInputSchema,
+          revision: z.iso.datetime(),
           confirmActive: z.boolean().default(false),
         }),
       )

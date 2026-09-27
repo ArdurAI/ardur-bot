@@ -22,7 +22,10 @@ export type ComputerSecretLoader = { load(ciphertext: string, id: string): strin
 
 /** Saved connection rows keep every operation on the computer's chosen destination. */
 export class ComputerConnections {
-  private readonly providers = new Map<string, { revision: number; provider: Promise<SandboxProvider> }>();
+  private readonly providers = new Map<
+    string,
+    { revision: string; provider: Promise<SandboxProvider> }
+  >();
   invalidate(id: string, spaceId: string) {
     this.providers.delete(`${spaceId}:${id}`);
   }
@@ -38,7 +41,7 @@ export class ComputerConnections {
     if (!row)
       throw new Error("The computer connection is unavailable; choose a connection in Settings.");
     const key = `${context.spaceId}:${id}`;
-    const revision = row.updatedAt.getTime();
+    const revision = JSON.stringify([row.updatedAt?.getTime() ?? 0, row.metadata, row.secretId]);
     let cached = this.providers.get(key);
     if (!cached || cached.revision !== revision) {
       const provider = (async () => {

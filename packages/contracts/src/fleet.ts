@@ -164,6 +164,7 @@ export const FleetTestResultSchema = z.discriminatedUnion("ok", [
 export const FleetConnectionDetailsSchema = z.object({
   id: z.string(),
   name: z.string(),
+  revision: z.iso.datetime(),
   settings: z.object({
     engine: z.enum(["docker", "podman", "kubernetes", "ssh"]),
     endpoint: EngineEndpointSchema.optional(),

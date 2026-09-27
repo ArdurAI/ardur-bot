@@ -5129,6 +5129,11 @@ msgstr ""
 msgid "Move automatically"
 msgstr ""
 
+#. placeholder {0}: botNames.join(", ")
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Move bots first: {0}"
+msgstr "먼저 이 봇들을 이동하세요: {0}"
+
 #: src/pages/shell/dialogs.tsx
 msgid "Move them to your shared memory."
 msgstr "공용 기억으로 옮깁니다."

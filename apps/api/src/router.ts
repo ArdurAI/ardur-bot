@@ -2042,6 +2042,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           deps,
           input.connectionId,
           input.connection,
+          input.revision,
           input.confirmActive,
           owner,
         );

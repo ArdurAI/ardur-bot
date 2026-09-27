@@ -97,9 +97,9 @@ import { mountExportRoutes } from "./account-export.js";
 import { warnAutoReviewConfiguration } from "./auto-review-status.js";
 import { backfillRuntimePins } from "./backfill-runtime-pins.js";
 import { boardCloseRetry } from "./board.js";
-import { reconcileFleetSecretCleanup } from "./fleet.js";
 import type { AppEnv } from "./env.js";
 import { loadEnv } from "./env.js";
+import { reconcileFleetSecretCleanup } from "./fleet.js";
 import { HostBridge } from "./host-bridge.js";
 import { mountHostMcpRoutes } from "./host-mcp-routes.js";
 import { sourceHostStatus } from "./host-status.js";
@@ -541,7 +541,9 @@ export async function createApp(
     if (fleetCleanupTask) return;
     fleetCleanupTask = reconcileFleetSecretCleanup(prisma, hostBridge)
       .catch((error) => logger.error("fleet credential cleanup failed", error))
-      .finally(() => { fleetCleanupTask = undefined; });
+      .finally(() => {
+        fleetCleanupTask = undefined;
+      });
   };
   sweepFleetSecrets();
   const fleetCleanupTimer = setInterval(sweepFleetSecrets, 30_000);

@@ -96,7 +96,11 @@ it("confirms removal, shows pinned-bot refusal, and leaves discovered rows witho
   api.discover.mockResolvedValue([
     { ...saved, id: "found", state: "discovered", connectionId: null, bots: [] },
   ] as never);
-  api.remove.mockRejectedValue(new Error("1 bot runs on this computer: Example. Move it first."));
+  api.remove.mockRejectedValue({
+    data: { code: "fleet-pinned-bots", botNames: ["Example\nOne"], count: 1 },
+    message: "server English",
+  });
+  catalog.set("Move bots first: Example\nOne", "Переместите бота: Example\nOne");
   const element = document.createElement("div");
   document.body.appendChild(element);
   const root = createRoot(element);
@@ -120,7 +124,7 @@ it("confirms removal, shows pinned-bot refusal, and leaves discovered rows witho
     )!;
     await act(async () => remove.click());
     expect(api.remove).toHaveBeenCalledWith({ connectionId: "saved" });
-    expect(dialog.textContent).toContain("1 bot runs on this computer: Example. Move it first.");
+    expect(dialog.textContent).toContain("Переместите бота: Example\nOne");
   } finally {
     await act(async () => root.unmount());
     element.remove();
@@ -147,15 +151,16 @@ it("prefills Edit and saves a renamed target through fleet.update", async () => 
   api.details.mockResolvedValue({
     id: "saved",
     name: "Office",
+    revision: "2026-09-27T00:00:00.000Z",
     settings: {
       engine: "docker",
       endpoint: "unix:///fixture/docker.sock",
       namespace: "ardurbot",
       storageSize: "10Gi",
       cpuRequest: "250m",
-      cpuLimit: "2",
+      cpuLimit: "4",
       memoryRequest: "256Mi",
-      memoryLimit: "2Gi",
+      memoryLimit: "8Gi",
     },
     hasCredential: false,
     activeRuns: false,
@@ -191,7 +196,11 @@ it("prefills Edit and saves a renamed target through fleet.update", async () => 
     expect(api.update).toHaveBeenCalledWith(
       expect.objectContaining({
         connectionId: "saved",
-        connection: expect.objectContaining({ name: "Workshop" }),
+        revision: "2026-09-27T00:00:00.000Z",
+        connection: expect.objectContaining({
+          name: "Workshop",
+          settings: expect.objectContaining({ cpuLimit: "4", memoryLimit: "8Gi" }),
+        }),
       }),
     );
   } finally {
@@ -219,6 +228,7 @@ it("warns before changing a connection with an active run", async () => {
   api.details.mockResolvedValue({
     id: "saved",
     name: "Office",
+    revision: "2026-09-27T00:00:00.000Z",
     settings: {
       engine: "docker",
       endpoint: "unix:///fixture/docker.sock",
@@ -264,6 +274,85 @@ it("warns before changing a connection with an active run", async () => {
         .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
     );
     expect(api.update).toHaveBeenCalledWith(expect.objectContaining({ confirmActive: true }));
+  } finally {
+    await act(async () => root.unmount());
+    element.remove();
+  }
+});
+it("offers Save anyway when a run starts after the editor opens, keeping the edit", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  api.list.mockResolvedValue({
+    targets: [
+      {
+        id: "saved",
+        name: "Office",
+        kind: "docker",
+        connectionId: "saved",
+        state: "connected",
+        capacity: unknownCapacity(),
+        bots: [],
+      },
+    ],
+    bots: [],
+    placement: { mode: "manual", preferredTargetId: "host", minimumFreeGb: 4 },
+  });
+  api.details.mockResolvedValue({
+    id: "saved",
+    name: "Office",
+    revision: "2026-09-27T00:00:00.000Z",
+    settings: {
+      engine: "docker",
+      endpoint: "unix:///fixture/docker.sock",
+      namespace: "ardurbot",
+      storageSize: "10Gi",
+      cpuRequest: "250m",
+      cpuLimit: "2",
+      memoryRequest: "256Mi",
+      memoryLimit: "2Gi",
+    },
+    hasCredential: false,
+    activeRuns: false,
+  });
+  api.update.mockRejectedValueOnce({ data: { code: "fleet-active-runs" } });
+  api.update.mockResolvedValueOnce({ ok: true, checkedAt: new Date().toISOString(), targets: [] });
+  const element = document.createElement("div");
+  document.body.appendChild(element);
+  const root = createRoot(element);
+  try {
+    await act(async () => root.render(<FleetSettings />));
+    const edit = [
+      ...element.querySelectorAll<HTMLButtonElement>('[data-fleet-target="saved"] button'),
+    ].find((button) => button.textContent === "Edit")!;
+    await act(async () => edit.click());
+    const dialog = document.body.querySelector('[aria-label="Edit computer"]')!;
+    const endpoint = dialog.querySelector<HTMLInputElement>('[aria-label="Engine endpoint"]')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+        endpoint,
+        "unix:///fixture/new.sock",
+      );
+      endpoint.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const submit = () =>
+      dialog
+        .querySelector("form")!
+        .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await act(async () => {
+      submit();
+    });
+    expect(api.update).toHaveBeenLastCalledWith(expect.objectContaining({ confirmActive: false }));
+    expect(dialog.textContent).toContain("Save anyway");
+    await act(async () => {
+      submit();
+    });
+    expect(api.update).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        confirmActive: true,
+        connection: expect.objectContaining({
+          settings: expect.objectContaining({ endpoint: "unix:///fixture/new.sock" }),
+        }),
+      }),
+    );
   } finally {
     await act(async () => root.unmount());
     element.remove();
