@@ -59,6 +59,9 @@ describe.runIf(composeAvailable)("Compose routing (requires Docker Compose CLI)"
             USERPROFILE: process.env.USERPROFILE,
             APPDATA: process.env.APPDATA,
             DOCKER_CONFIG: process.env.DOCKER_CONFIG,
+            // The images file refuses to render without a computer image reference; the
+            // installer and desktop supply the bootstrap value the same way.
+            ARDURBOT_COMPUTER_IMAGE_REF_BOOTSTRAP: "ghcr.io/ardurai/ardur-bot/computer:test",
           },
         },
       ),
