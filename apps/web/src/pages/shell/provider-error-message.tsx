@@ -44,7 +44,10 @@ export function ProviderErrorMessage({
     const effort = pin.effort ?? "an unset effort";
     const antigravityReason = (() => {
       if (pin.runtimeKind !== "antigravity") return null;
-      switch (runtimeProblem.reasonId) {
+      switch (
+        runtimeProblem.reasonId ??
+        (runtimeProblem.code === "pin-model-unknown" ? "model-unrecognised" : undefined)
+      ) {
         case "timeout":
           return t`Antigravity did not finish in time. Try again.`;
         case "catalogue-unavailable":

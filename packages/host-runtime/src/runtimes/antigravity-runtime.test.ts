@@ -106,6 +106,68 @@ describe("Antigravity fake process", () => {
       problem: { code: "runtime-unavailable", reasonId: "input-write-failed" },
     });
   });
+  it("keeps a closed child's stdin error inside the failed turn", async () => {
+    const f = fixture("x".repeat(1024 * 1024));
+    const start: NativeSpawn = (binary, args, cwd) =>
+      args[0] === "--print="
+        ? (spawn(process.execPath, ["-e", "process.exit(0)"], {
+            cwd,
+            stdio: "pipe",
+          }) as ChildProcessWithoutNullStreams)
+        : f.start(binary, args, cwd);
+    const runtime = new AntigravityRuntime(start, f.resolveBinary);
+    let uncaught: Error | undefined;
+    const onUncaught = (error: Error) => {
+      uncaught = error;
+    };
+    process.once("uncaughtException", onUncaught);
+    try {
+      const collect = async () => {
+        for await (const _event of runtime.run(f.request)) {
+          /* consume */
+        }
+      };
+      await expect(collect()).rejects.toMatchObject({
+        problem: { code: "runtime-unavailable", reasonId: "input-write-failed" },
+      });
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(uncaught).toBeUndefined();
+    } finally {
+      process.off("uncaughtException", onUncaught);
+    }
+  });
+  it("kills a child that blocks stdin past the watchdog deadline", async () => {
+    const f = fixture("x".repeat(1024 * 1024));
+    let turnChild: ChildProcessWithoutNullStreams | undefined;
+    const start: NativeSpawn = (binary, args, cwd) => {
+      if (args[0] !== "--print=") return f.start(binary, args, cwd);
+      turnChild = spawn(
+        process.execPath,
+        ["-e", "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000)"],
+        { cwd, stdio: "pipe" },
+      ) as ChildProcessWithoutNullStreams;
+      return turnChild;
+    };
+    const runtime = new AntigravityRuntime(start, f.resolveBinary, 400);
+    const safetyKill = setTimeout(() => turnChild?.kill("SIGKILL"), 4_000);
+    const startedAt = Date.now();
+    try {
+      const collect = async () => {
+        for await (const _event of runtime.run(f.request)) {
+          /* consume */
+        }
+      };
+      await expect(collect()).rejects.toMatchObject({
+        problem: { code: "runtime-unavailable", reasonId: "timeout" },
+      });
+      expect(Date.now() - startedAt).toBeLessThan(2_500);
+      if (process.platform === "win32") expect(turnChild?.exitCode).not.toBeNull();
+      else expect(turnChild?.signalCode).toBe("SIGKILL");
+    } finally {
+      clearTimeout(safetyKill);
+      if (turnChild?.exitCode === null && turnChild.signalCode === null) turnChild.kill("SIGKILL");
+    }
+  });
   it.each([
     ['{"event":"user"}\n', 'missing the "message" field'],
     ['{"event":"user","message":{"role":"user"}}\n', "has no content"],
@@ -189,12 +251,15 @@ describe("Antigravity fake process", () => {
     expect((await probeAntigravity(f.start, f.resolveBinary)).signInStatus).toBe("signed-in");
   });
   it("clears cached sign-out on an explicit availability refresh", async () => {
-    const f = fixture("auth-error");
+    const f = fixture("success");
+    expect((await f.collect()).at(-1)).toEqual({ type: "done" });
+    f.request.prompt = "auth-error";
     await expect(f.collect()).rejects.toMatchObject({ problem: { reasonId: "signed-out" } });
     expect((await probeAntigravity(f.start, f.resolveBinary)).signInStatus).toBe("signed-out");
     const runsBeforeRefresh = f.calls.filter((args) => args[0] === "--print=").length;
     const refreshed = await probeAntigravity(f.start, f.resolveBinary, true);
-    expect(refreshed.signInStatus).not.toBe("signed-out");
+    expect(refreshed.signInStatus).toBe("unknown");
+    expect(refreshed.signedIn).toBeUndefined();
     expect(f.calls.filter((args) => args[0] === "--print=")).toHaveLength(runsBeforeRefresh);
   });
   it("cancels a turn after streamed text without reporting completion", async () => {

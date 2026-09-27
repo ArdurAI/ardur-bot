@@ -2,7 +2,10 @@ import type { RuntimeProblem } from "@ardurbot/contracts";
 import { t } from "./i18n";
 
 export function antigravityProblemMessage(problem: RuntimeProblem): string {
-  switch (problem.reasonId) {
+  switch (
+    problem.reasonId ??
+    (problem.code === "pin-model-unknown" ? "model-unrecognised" : undefined)
+  ) {
     case "timeout":
       return t("Antigravity did not finish in time. Try again.");
     case "catalogue-unavailable":

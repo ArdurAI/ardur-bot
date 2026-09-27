@@ -81,3 +81,25 @@ it("translates Antigravity model and tool failures", () => {
     activateUiLocale("en");
   }
 });
+
+it("translates the registry's model error without a reason identifier", () => {
+  const problem = runtimePinProblem(
+    {
+      runtimeKind: "antigravity",
+      provider: "antigravity",
+      modelId: "gemini-3.8-flash-low",
+      effort: "low",
+      credentialId: "native:antigravity",
+      revision: 1,
+    },
+    "pin-model-unknown",
+    "The pinned model is unavailable in this runtime.",
+  );
+  expect(problem.reasonId).toBeUndefined();
+  activateUiLocale("zh-CN");
+  try {
+    expect(antigravityProblemMessage(problem)).toContain("无法识别模型 gemini-3.8-flash-low");
+  } finally {
+    activateUiLocale("en");
+  }
+});

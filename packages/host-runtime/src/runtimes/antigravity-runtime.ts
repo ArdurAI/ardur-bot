@@ -283,6 +283,7 @@ export class AntigravityRuntime implements AgentRuntime {
     let reader: Promise<void> | undefined;
     let stopped = false;
     let deadline: ReturnType<typeof setTimeout> | undefined;
+    const inputAbort = new AbortController();
     const abort = (timedOut = false) => {
       stopped = true;
       for (const item of parser.finishUsage(
@@ -298,6 +299,7 @@ export class AntigravityRuntime implements AgentRuntime {
             )
           : undefined,
       );
+      inputAbort.abort();
       if (child) terminateNative(child, "SIGTERM");
     };
     const onAbort = () => abort();
@@ -314,20 +316,40 @@ export class AntigravityRuntime implements AgentRuntime {
       deadline = setTimeout(() => abort(true), this.deadlineMs);
       if (context?.signal?.aborted) onAbort();
       await new Promise<void>((resolve, reject) => {
+        const stdin = child!.stdin;
         const onError = (error: Error) => reject(error);
-        child!.stdin.once("error", onError);
-        child!.stdin.end(input, (error?: Error | null) => {
-          child!.stdin.off("error", onError);
+        const onAbortInput = () => {
+          stdin.destroy();
+          reject(new Error("Input write was interrupted."));
+        };
+        const onClose = () => {
+          stdin.off("error", onError);
+          inputAbort.signal.removeEventListener("abort", onAbortInput);
+          reject(new Error("Input stream closed before the write completed."));
+        };
+        stdin.on("error", onError);
+        stdin.once("close", onClose);
+        inputAbort.signal.addEventListener("abort", onAbortInput, { once: true });
+        if (inputAbort.signal.aborted) {
+          onAbortInput();
+          return;
+        }
+        stdin.end(input, (error?: Error | null) => {
           if (error) reject(error);
           else resolve();
         });
       }).catch(() => {
-        throw problem(
-          "runtime-unavailable",
-          "Antigravity could not receive this turn. Check the runtime and try again.",
-          "input-write-failed",
-        );
+        if (!stopped)
+          throw problem(
+            "runtime-unavailable",
+            "Antigravity could not receive this turn. Check the runtime and try again.",
+            "input-write-failed",
+          );
       });
+      if (stopped) {
+        yield* queue;
+        return;
+      }
       reader = (async () => {
         try {
           for await (const event of antigravityLines(child!)) {
@@ -359,7 +381,10 @@ export class AntigravityRuntime implements AgentRuntime {
         } catch (error) {
           if (stopped) return;
           stopped = true;
-          if (parser.authError) signedOutAt = Math.max(Date.now(), signedInAt + 1);
+          if (parser.authError) {
+            signedOutAt = Math.max(Date.now(), signedInAt + 1);
+            signedInAt = 0;
+          }
           if (child) terminateNative(child, "SIGTERM");
           for (const item of parser.finishUsage("failed")) queue.push(item);
           queue.end(
