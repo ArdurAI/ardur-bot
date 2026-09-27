@@ -3802,13 +3802,37 @@ describeJourneys("required product journeys", () => {
           threadId: workerThread.id,
           role: "bot",
           botId: worker.id,
-          blocks: [{ kind: "text", text }],
+          blocks: [
+            {
+              kind: "bot_message_sent",
+              toBotId: coordinator.id,
+              toBotName: coordinator.name,
+              text,
+              intent: "fyi",
+              deliveryId: id,
+              deliveryState: "delivered",
+            },
+          ],
           markUnread: false,
         });
         const inbound = await createThreadMessage(prisma, {
           threadId: group.threadId,
           role: "user",
-          blocks: [{ kind: "text", text }],
+          origin: "peer-bot",
+          actorId: worker.id,
+          blocks: [
+            {
+              kind: "bot_message_received",
+              fromBotId: worker.id,
+              fromBotName: worker.name,
+              text,
+              intent: "fyi",
+              hop: 1,
+              returnToMessageId: outbound.id,
+              deliveryId: id,
+              deliveryState: "delivered",
+            },
+          ],
           markUnread: false,
         });
         deliveries.push(
@@ -3853,7 +3877,11 @@ describeJourneys("required product journeys", () => {
         .spyOn(prisma.botMessageDelivery, "findMany")
         .mockImplementation(async (args) => {
           const rows = await selected(args);
-          if (args.where?.recipientThreadId === group.threadId && args.select?.inboundMessageId) {
+          if (
+            args.where?.recipientThreadId === group.threadId &&
+            args.where.state &&
+            args.select?.inboundMessageId
+          ) {
             selectedBoth =
               rows.some((row) => row.id === expired.id) &&
               rows.some((row) => row.id === claimed.id);
@@ -3876,11 +3904,15 @@ describeJourneys("required product journeys", () => {
           }
           return assembled;
         });
-      const requests: Array<{ history: Array<{ id?: string; content: string }> }> = [];
+      const requests: Array<{
+        prompt: string;
+        history: Array<{ id?: string; content: string }>;
+      }> = [];
       const runtimeSpy = vi
         .spyOn(ScriptedAgentRuntime.prototype, "run")
         .mockImplementation(async function* (request) {
-          if (request.runId === run.id) requests.push({ history: request.history });
+          if (request.runId === run.id)
+            requests.push({ prompt: request.prompt, history: request.history });
           yield { type: "done", text: "Updates reviewed." };
         });
       try {
@@ -3911,14 +3943,33 @@ describeJourneys("required product journeys", () => {
       }
       expect(selectedBoth).toBe(true);
       expect(requests).toHaveLength(1);
+      const runtimeInput = [
+        requests[0]?.prompt,
+        ...(requests[0]?.history ?? []).map((message) => message.content),
+      ].join("\n");
+      expect(runtimeInput).not.toContain(`expired-${expired.id}`);
+      expect(runtimeInput).not.toContain(expired.id);
+      expect(runtimeInput.split(`claimed-${claimed.id}`)).toHaveLength(2);
       const quiet = requests[0]?.history.find(
         (message) => message.id === `quiet-deliveries:${run.id}`,
       );
       expect(quiet?.content).toContain(claimed.id);
-      expect(quiet?.content).not.toContain(expired.id);
+      expect(quiet?.content).toContain(`claimed-${claimed.id}`);
       expect(
         await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id: expired.id } }),
       ).toMatchObject({ state: "expired", outcome: "expired", quietClaimRunId: null });
+      expect(
+        (await prisma.message.findUniqueOrThrow({ where: { id: expired.inboundMessageId! } }))
+          .blocks,
+      ).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: "bot_message_received",
+            deliveryId: expired.id,
+            deliveryState: "expired",
+          }),
+        ]),
+      );
       expect(
         await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id: claimed.id } }),
       ).toMatchObject({ outcome: "consumed", quietClaimRunId: null });
