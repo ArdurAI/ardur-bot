@@ -82,7 +82,7 @@ describe("web command block", () => {
       vi.setSystemTime(new Date(2026, 8, 27, 10, 0));
       const html = renderToString(
         <CommandBlock
-          block={commandBlock({ startedAt: "2026-09-24T14:30:00.000Z" })}
+          block={commandBlock({ startedAt: new Date(2026, 8, 24, 14, 30).toISOString() })}
           labels={labels}
           locale="de-DE"
         />,
@@ -108,7 +108,9 @@ describe("web command block", () => {
 
     try {
       await act(async () => {
-        root.render(<CommandBlock block={commandBlock({ startedAt })} labels={labels} />);
+        root.render(
+          <CommandBlock block={commandBlock({ startedAt })} labels={labels} locale="en-US" />,
+        );
       });
 
       expect(host.textContent).not.toContain("Sep 24");
@@ -132,7 +134,7 @@ describe("web command block", () => {
     try {
       const html = renderToString(
         <CommandBlock
-          block={commandBlock({ startedAt: "2026-09-24T14:30:00.000Z" })}
+          block={commandBlock({ startedAt: new Date(2026, 8, 24, 14, 30).toISOString() })}
           labels={labels}
           locale="en-US"
         />,
