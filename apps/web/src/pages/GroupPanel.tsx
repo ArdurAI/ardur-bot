@@ -10,7 +10,7 @@ import {
 import { BotAvatar, Button, Input, NativeSelect, NativeSelectOption } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { Check, X } from "lucide-react";
-import { lazy, Suspense, useId, useMemo, useState } from "react";
+import { lazy, Suspense, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { BotContext } from "../components/ContextEntry";
 import type { ModelSettings } from "../lib/use-model-settings";
 import { GroupModelControl } from "./group-model-control";
@@ -202,8 +202,33 @@ export function GroupSettings({
   const [name, setName] = useState(group.name);
   const [coordinator, setCoordinator] = useState(group.coordinatorBotId ?? "");
   const [selected, setSelected] = useState(group.members.map((member) => member.botId));
+  const baseline = useRef(group);
   const [pending, setPending] = useState<"save" | "remove" | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useLayoutEffect(() => {
+    const previous = baseline.current;
+    if (previous === group) return;
+    baseline.current = group;
+    if (previous.id !== group.id) {
+      setName(group.name);
+      setCoordinator(group.coordinatorBotId ?? "");
+      setSelected(group.members.map((member) => member.botId));
+      return;
+    }
+    setName((current) => (current === previous.name ? group.name : current));
+    setCoordinator((current) =>
+      current === (previous.coordinatorBotId ?? "") ? (group.coordinatorBotId ?? "") : current,
+    );
+    setSelected((current) =>
+      sameMembers(
+        current,
+        previous.members.map((member) => member.botId),
+      )
+        ? group.members.map((member) => member.botId)
+        : current,
+    );
+  }, [group]);
 
   async function mutate(kind: "save" | "remove", action: () => Promise<void>) {
     if (pending) return;
