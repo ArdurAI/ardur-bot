@@ -17,6 +17,7 @@ const grepArg = process.argv.find((arg) => arg.startsWith("--grep="));
 const runtimeArg = process.argv.find((arg) => arg.startsWith("--runtime="));
 const workersArg = process.argv.find((arg) => arg.startsWith("--workers="));
 const shardArg = process.argv.find((arg) => arg.startsWith("--shard="));
+const repeatEachArg = process.argv.find((arg) => arg.startsWith("--repeat-each="));
 const sandboxProvider = sandboxArg?.slice("--sandbox=".length) ?? "fake";
 const e2eSpec = specArg?.slice("--spec=".length);
 const e2eGrep = grepArg?.slice("--grep=".length);
@@ -225,6 +226,7 @@ async function main() {
             ...(e2eGrep ? ["--grep", e2eGrep] : []),
             ...(e2eWorkers ? ["--workers", e2eWorkers] : []),
             ...(e2eShard ? ["--shard", e2eShard] : []),
+            ...(repeatEachArg ? [repeatEachArg] : []),
           ],
           {
             ...process.env,

@@ -4,6 +4,7 @@ import type {
   DelegationProblem,
   DelegationRecord,
   DelegationSnapshot,
+  MessageBlock,
 } from "@ardurbot/contracts";
 import {
   ALL_DEVICE_SCOPES,
@@ -426,14 +427,29 @@ export async function finishDelegation(
       where: { rootTaskId: row.rootTaskId, threadId: root.coordinatorThreadId },
       select: { id: true },
     }));
-  const blocks = [
-    {
-      kind: "text" as const,
-      text: goalRoomAssignment
-        ? `${row.actingName}: ${status === "completed" ? "completed, awaiting acceptance" : status}.`
-        : `${row.requesterName} → ${row.actingName}: ${status === "completed" ? "completed, awaiting acceptance" : status}.\n${redactTaskValue(text).slice(0, 2000)}${row.card && TaskCardSchema.parse(row.card).doneWhen.length ? `\n${taskCardChecklist(TaskCardSchema.parse(row.card))}` : ""}`,
-    },
-  ];
+  // Comparison delegations also use kind "message"; only message_bot keys are peer receipts.
+  const peerMessageResult =
+    row.kind === "message" &&
+    (row.admissionKey.startsWith("bot-message:") || row.admissionKey.startsWith("message:"));
+  const blocks: MessageBlock[] =
+    peerMessageResult && status === "completed" && text.trim().length > 0
+      ? [
+          {
+            kind: "bot_message_received",
+            fromBotId: row.actingBotId,
+            fromBotName: row.actingName,
+            text: redactTaskValue(text).slice(0, 2000),
+            intent: "result",
+          },
+        ]
+      : [
+          {
+            kind: "text",
+            text: goalRoomAssignment
+              ? `${row.actingName}: ${status === "completed" ? "completed, awaiting acceptance" : status}.`
+              : `${row.requesterName} → ${row.actingName}: ${status === "completed" ? "completed, awaiting acceptance" : status}.\n${redactTaskValue(text).slice(0, 2000)}${row.card && TaskCardSchema.parse(row.card).doneWhen.length ? `\n${taskCardChecklist(TaskCardSchema.parse(row.card))}` : ""}`,
+          },
+        ];
   const message = row.summaryMessageId
     ? await tx.message.update({ where: { id: row.summaryMessageId }, data: { blocks } })
     : await createThreadMessageInTransaction(tx, {

@@ -1,4 +1,6 @@
+import type { MessageBlock } from "@ardurbot/contracts";
 import { ALL_DEVICE_SCOPES, DELEGATION_LIMITS, TaskCardSchema } from "@ardurbot/contracts";
+import { userVisibleMessages } from "@ardurbot/core";
 import { describe, expect, it } from "vitest";
 import {
   acceptDelegation,
@@ -152,6 +154,57 @@ it("writes one completion summary and changes it on explicit acceptance", async 
       data: { blocks: [{ kind: "text", text: "Coordinator → Worker: accepted.\nReviewed" }] },
     }),
   );
+});
+
+it("shows a completed peer exchange once in the sender transcript", async () => {
+  const f = fixture();
+  const row = await f.admit({ admissionKey: "bot-message:parent:message_bot:0" });
+  const peerText = "peer-exchange-alpha";
+  const db = f.worker();
+  await db.$transaction((tx) =>
+    finishDelegation(tx, row.id, "completed", `done. i handled: ${peerText}`),
+  );
+
+  const summary = f.tx.message.create.mock.calls[0]![0].data.blocks as MessageBlock[];
+  const visible = userVisibleMessages(
+    [
+      { runId: "parent", blocks: [{ kind: "text" as const, text: `Ask Worker ${peerText}` }] },
+      {
+        runId: "parent",
+        blocks: [
+          {
+            kind: "bot_message_sent" as const,
+            toBotId: "worker",
+            toBotName: "Worker",
+            text: peerText,
+          },
+        ],
+      },
+      { blocks: summary },
+    ],
+    { includePeerReceipts: true },
+  );
+  const visibleText = visible.flatMap((message) =>
+    message.blocks.flatMap((block) => (block.kind === "text" ? [block.text] : [])),
+  );
+  expect(visibleText.filter((text) => text.includes(peerText))).toHaveLength(1);
+  expect(summary).toEqual([
+    expect.objectContaining({
+      kind: "bot_message_received",
+      fromBotId: "worker",
+      fromBotName: "Worker",
+      text: `done. i handled: ${peerText}`,
+    }),
+  ]);
+});
+
+it("keeps a status summary when a peer finishes without a written answer", async () => {
+  const f = fixture();
+  const row = await f.admit({ admissionKey: "bot-message:parent:message_bot:0" });
+  await f.worker().$transaction((tx) => finishDelegation(tx, row.id, "completed", ""));
+  expect(f.tx.message.create.mock.calls[0]![0].data.blocks).toEqual([
+    expect.objectContaining({ kind: "text", text: expect.stringContaining("completed") }),
+  ]);
 });
 it("counts coordinator usage before the first handoff and rolls back an exhausted root", async () => {
   const f = fixture();

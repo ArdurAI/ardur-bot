@@ -284,7 +284,7 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     intent: BotMessageIntent.optional(),
   }),
   z.object({
-    /** Delivered into the receiving bot's own chat as the prompt that woke it. */
+    /** Peer content in a bot's chat: an incoming prompt or a completed reply. */
     kind: z.literal("bot_message_received"),
     fromBotId: Id,
     fromBotName: z.string(),
