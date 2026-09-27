@@ -1,4 +1,6 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
+import { access } from "node:fs/promises";
+import path from "node:path";
 import type {
   AdapterContext,
   AgentRunRequest,
@@ -130,6 +132,38 @@ export function codexArguments() {
     "features.view_image=false",
   ];
 }
+/**
+ * Instruction files Codex loads for a folder: AGENTS.md (and its override) from the folder's git
+ * root down to the folder itself, or only the folder's own when no git root is found. The
+ * read profile confines the run to its folder, so these files are granted explicitly; otherwise
+ * Codex refuses to create the session when an ancestor holds an AGENTS.md it cannot read.
+ */
+export async function instructionFileReads(cwd: string): Promise<Record<string, "read">> {
+  const chain: string[] = [];
+  let directory = path.resolve(cwd);
+  let gitRoot: string | undefined;
+  for (let depth = 0; depth < 64 && !gitRoot; depth++) {
+    chain.push(directory);
+    if (
+      await access(path.join(directory, ".git")).then(
+        () => true,
+        () => false,
+      )
+    )
+      gitRoot = directory;
+    const parent = path.dirname(directory);
+    if (parent === directory) break;
+    directory = parent;
+  }
+  const directories = gitRoot ? chain : chain.slice(0, 1);
+  return Object.fromEntries(
+    directories.flatMap((entry) => [
+      [path.join(entry, "AGENTS.md"), "read" as const],
+      [path.join(entry, "AGENTS.override.md"), "read" as const],
+    ]),
+  );
+}
+
 export async function openCodex(start: NativeSpawn = spawnNative) {
   const binary = await findNativeBinary("codex");
   if (!binary) throw new Error("Codex app-server unavailable");
@@ -408,7 +442,12 @@ export class CodexAppServerRuntime implements AgentRuntime {
             "ardur-read": {
               filesystem: {
                 ":minimal": "read",
-                ...(request.nativeCwd ? { [request.nativeCwd]: "read" } : {}),
+                ...(request.nativeCwd
+                  ? {
+                      [request.nativeCwd]: "read",
+                      ...(await instructionFileReads(request.nativeCwd)),
+                    }
+                  : {}),
               },
               network: { enabled: false },
             },
@@ -416,17 +455,28 @@ export class CodexAppServerRuntime implements AgentRuntime {
           model_reasoning_effort: pin.effort,
         },
       };
-      const session = await rpc.request<{
-        thread: { id: string };
-        model: string;
-        modelProvider: string;
-        reasoningEffort: string;
-        sandbox?: { type: string; networkAccess?: boolean };
-        activePermissionProfile?: { id: string } | null;
-      }>(request.nativeSession?.sessionId ? "thread/resume" : "thread/start", {
-        ...options,
-        ...(request.nativeSession?.sessionId ? { threadId: request.nativeSession.sessionId } : {}),
-      });
+      const session = await rpc
+        .request<{
+          thread: { id: string };
+          model: string;
+          modelProvider: string;
+          reasoningEffort: string;
+          sandbox?: { type: string; networkAccess?: boolean };
+          activePermissionProfile?: { id: string } | null;
+        }>(request.nativeSession?.sessionId ? "thread/resume" : "thread/start", {
+          ...options,
+          ...(request.nativeSession?.sessionId
+            ? { threadId: request.nativeSession.sessionId }
+            : {}),
+        })
+        .catch((error: unknown) => {
+          if (error instanceof CodexRequestRejected)
+            throw problem(
+              "runtime-unavailable",
+              "Codex could not start a session in this bot's folder — change the bot's computer or the pin.",
+            );
+          throw error;
+        });
       if (session.model !== pin.modelId || session.modelProvider !== "openai")
         throw problem("pin-model-unknown", "Codex returned a different model.");
       if (session.reasoningEffort !== pin.effort)
