@@ -200,8 +200,29 @@ describe("GuidedSetupView", () => {
         snapshot.steps[3]!.status = "failed";
         snapshot.steps[3]!.attempt = 1;
         snapshot.steps[3]!.reasonCode = reasonCode;
+        if (reasonCode === "command-collision") {
+          snapshot.steps[3]!.details = [
+            {
+              code: "command-collision",
+              text: "Another app owns the ardur command. Skip this step, or remove or rename that command and retry.",
+            },
+          ];
+        }
         await view.render(snapshot);
         expect(view.host.textContent).not.toContain("Choose another location.");
+        if (reasonCode === "command-collision") {
+          const commandRow = [...view.host.querySelectorAll("ol > li")].find((row) =>
+            row.textContent?.includes("Add the terminal command"),
+          );
+          const disclosure = [...(commandRow?.querySelectorAll("button") ?? [])].find(
+            (button) => button.textContent === "Show details",
+          );
+          expect(disclosure).toBeDefined();
+          await act(async () => disclosure?.click());
+          expect(view.host.querySelector("#guided-details-command textarea")?.value).toBe(
+            "Another app owns the ardur command. Skip this step, or remove or rename that command and retry.",
+          );
+        }
         const skip = [...view.host.querySelectorAll("button")].find(
           (button) => button.textContent === "Skip",
         );

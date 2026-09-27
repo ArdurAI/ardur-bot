@@ -209,21 +209,14 @@ export class SetupEngine {
     return this.schedule(0, false);
   }
 
-  async retry(stepId: SetupStepId): Promise<SetupSnapshot> {
+  retry(stepId: SetupStepId): Promise<SetupSnapshot> {
     if (this.inflight) return this.inflight;
     if (this.newer || this.cancelling || this.journal.snapshot.interrupted || this.cleanupPending())
       return Promise.resolve(this.snapshot());
     const index = this.steps.findIndex((step) => step.id === stepId);
-    if (index < 0 || !(await this.recheckDependencies(this.steps[index]!, index)))
-      return this.snapshot();
-    if (stepId === "migrations") {
-      const databaseIndex = this.steps.findIndex((step) => step.id === "database");
-      if (databaseIndex >= 0) {
-        this.freshlyVerified.delete("database");
-        return this.schedule(databaseIndex, false);
-      }
-    }
-    return this.schedule(index, true);
+    if (index < 0 || this.steps[index]!.requires.some((id) => this.row(id).status !== "succeeded"))
+      return Promise.resolve(this.snapshot());
+    return this.schedule(index, true, this.steps.length, true);
   }
 
   async skip(stepId: SetupStepId): Promise<SetupSnapshot> {
@@ -309,18 +302,48 @@ export class SetupEngine {
     startIndex: number,
     explicit: boolean,
     stopBefore = this.steps.length,
+    retry = false,
   ): Promise<SetupSnapshot> {
-    this.abort = new AbortController();
+    if (this.inflight) return this.inflight;
+    const controller = new AbortController();
+    this.abort = controller;
     const runId = randomUUID();
     this.journal.snapshot.runId = runId;
-    const running = this.execute(startIndex, explicit, this.abort.signal, stopBefore).finally(
-      () => {
-        if (this.inflight === running) this.inflight = null;
+    const execution = retry
+      ? this.executeRetry(startIndex, controller.signal)
+      : this.execute(startIndex, explicit, controller.signal, stopBefore);
+    const running = execution.finally(() => {
+      if (this.inflight === running) {
+        this.inflight = null;
         this.abort = null;
-      },
-    );
+      }
+    });
     this.inflight = running;
     return running;
+  }
+
+  private async executeRetry(index: number, signal: AbortSignal): Promise<SetupSnapshot> {
+    const step = this.steps[index]!;
+    if (!this.dependenciesMet(step)) {
+      await this.execute(0, false, signal, index);
+      if (
+        signal.aborted ||
+        this.cancelling ||
+        this.journal.snapshot.interrupted ||
+        this.cleanupPending() ||
+        !this.dependenciesMet(step)
+      )
+        return this.snapshot();
+    }
+    if (signal.aborted || this.cancelling) return this.snapshot();
+    if (step.id === "migrations") {
+      const databaseIndex = this.steps.findIndex((item) => item.id === "database");
+      if (databaseIndex >= 0) {
+        this.freshlyVerified.delete("database");
+        return this.execute(databaseIndex, false, signal, this.steps.length);
+      }
+    }
+    return this.execute(index, true, signal, this.steps.length);
   }
 
   private async execute(

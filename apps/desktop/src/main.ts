@@ -125,7 +125,7 @@ let currentSetup: DesktopSetup | null = null;
 let currentTargetUrl: string | null = null;
 let desktopSystem: Awaited<ReturnType<typeof installSystemRuntime>> | undefined;
 let setupError: string | null = null;
-/** Set when launch opened setup to bring back a saved local instance, not when a person opened it. */
+/** True while setup follows a saved local instance or the guided service handoff. */
 let setupResumesLocal = false;
 let serviceFailurePrompt = false;
 let setupSaveInProgress = false;
@@ -1759,7 +1759,9 @@ app.whenReady().then(async () => {
   ipcMain.handle("desktop.setup.stack.start", (event) => {
     if (!fromSetupWindow(event)) return null;
     if (guidedEngine) {
-      if (!guidedEngine.pilotReady()) return null;
+      // A saved local installation can restart from setup.html after startup fails.
+      if (!guidedEngine.pilotReady() && !(setupResumesLocal && currentSetup?.mode === "new"))
+        return null;
       setupResumesLocal = true;
       void localMode.start();
       return localMode.state();

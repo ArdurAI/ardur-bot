@@ -201,6 +201,53 @@ describe("SetupEngine", () => {
     expect(run).toHaveBeenCalledTimes(1);
   });
 
+  it.each(["retry", "start"] as const)(
+    "joins Retry followed by %s before dependency recheck settles and keeps cancellation ownership",
+    async (next) => {
+      const gate = deferred<void>();
+      const check = vi.fn(async () => ({
+        kind: "satisfied" as const,
+        checkedAt: 100,
+        evidence: "ready",
+      }));
+      const commandCheck = vi.fn(async () => {
+        if (commandCheck.mock.calls.length > 1) await gate.promise;
+        return { kind: "needed" as const, reasonCode: "command-absent" };
+      });
+      const run = vi.fn(async () => ({ kind: "verified" as const, proof: "command" }));
+      const cancel = vi.fn(async () => undefined);
+      const engine = await SetupEngine.open(
+        memoryStore().store,
+        [
+          step({ check }),
+          step({
+            id: "command",
+            requires: ["prerequisites"],
+            canSkip: true,
+            check: commandCheck,
+            run,
+            cancel,
+          }),
+        ],
+        clock,
+      );
+      await engine.start();
+      const first = engine.retry("command");
+      const second = next === "retry" ? engine.retry("command") : engine.start();
+      expect(engine.running()).toBe(true);
+      await vi.waitFor(() => expect(commandCheck).toHaveBeenCalledTimes(2));
+      const stopping = engine.cancel();
+      gate.resolve();
+      await Promise.all([first, second, stopping]);
+
+      expect(second).toBe(first);
+      expect(commandCheck).toHaveBeenCalledTimes(2);
+      expect(run).not.toHaveBeenCalled();
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(engine.snapshot().steps[3]?.status).toBe("cancelled");
+    },
+  );
+
   it.each(["check", "run", "verify"] as const)(
     "settles cancellation at the %s await boundary",
     async (boundary) => {
