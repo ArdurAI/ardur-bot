@@ -1632,6 +1632,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           return await groupRepos.createGroup(context.actor, {
             name: duplicateBotName(source.name),
             botIds: source.members.map((member) => member.bot.id),
+            copyPinsFromGroupId: source.id,
           });
         } catch (error) {
           throw mapSpaceLifecycleError(error);
