@@ -86,6 +86,9 @@ export function BotContextMenu({
         aria-label={t`Actions for ${bot.name}`}
         align="start"
         sideOffset={0}
+        // The trigger is an invisible pointer anchor, so the menu must not return focus to it;
+        // the shell returns focus to the row that opened the menu, or to the control an item opens.
+        finalFocus={false}
         className="max-h-[min(420px,calc(100vh-16px))] w-[264px] overflow-y-auto"
       >
         <DropdownMenuItem onClick={onTogglePinned}>

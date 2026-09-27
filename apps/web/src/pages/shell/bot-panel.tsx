@@ -28,7 +28,7 @@ import {
 } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { X } from "lucide-react";
-import { lazy, Suspense, useEffect, useId, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useId, useRef, useState } from "react";
 import { BotContext } from "../../components/ContextEntry";
 import { ShowAllModels } from "../../components/ShowAllModels";
 import { modelUnavailable, spaceDefaultUnavailable } from "../../lib/model-availability";
@@ -245,31 +245,29 @@ export function BotSettings({
     runtimeRef.current?.querySelector("select")?.focus();
     runtimeRef.current?.scrollIntoView({ block: "nearest" });
   }, [runtimeFocusRequest]);
+  // The model select exists only for the built-in runtime, and a focus request can arrive
+  // while another runtime is shown or before the select has rendered; the request stays
+  // pending until the select mounts, so it is honoured exactly once without timers.
+  const pendingModelFocus = useRef(0);
+  const focusModel = useCallback(() => {
+    const select = modelRef.current;
+    if (!select) return;
+    select.focus();
+    select.scrollIntoView({ block: "nearest" });
+    pendingModelFocus.current = 0;
+  }, []);
   useEffect(() => {
     if (!modelFocusRequest) return;
-    const focusTarget = () => {
-      const select =
-        modelRef.current ??
-        document.querySelector<HTMLSelectElement>(
-          '[data-testid="bot-settings"] select[id$="-model"]',
-        );
-      if (select) {
-        select.focus();
-        select.scrollIntoView({ block: "nearest" });
-      }
-    };
-    focusTarget();
-    const frame = requestAnimationFrame(focusTarget);
-    const timer1 = setTimeout(focusTarget, 50);
-    const timer2 = setTimeout(focusTarget, 150);
-    const timer3 = setTimeout(focusTarget, 300);
-    return () => {
-      cancelAnimationFrame(frame);
-      clearTimeout(timer1);
-      clearTimeout(timer2);
-      clearTimeout(timer3);
-    };
-  }, [modelFocusRequest]);
+    pendingModelFocus.current = modelFocusRequest;
+    focusModel();
+  }, [modelFocusRequest, focusModel]);
+  const attachModelRef = useCallback(
+    (select: HTMLSelectElement | null) => {
+      modelRef.current = select;
+      if (select && pendingModelFocus.current) focusModel();
+    },
+    [focusModel],
+  );
   const ids = useId();
   const [name, setName] = useState(bot.name);
   const [title, setTitle] = useState(bot.title);
@@ -572,7 +570,7 @@ export function BotSettings({
           <label htmlFor={`${ids}-model`} className={fieldLabelClass}>
             <Trans>Model</Trans>
             <NativeSelect
-              ref={modelRef}
+              ref={attachModelRef}
               id={`${ids}-model`}
               className="mt-2 w-full"
               value={modelKey}
