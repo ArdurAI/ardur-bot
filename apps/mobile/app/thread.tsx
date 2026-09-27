@@ -83,6 +83,7 @@ import {
 } from "../components/markdown-artifact-preview";
 import { MessageFeedback } from "../components/message-feedback";
 import { NativeSymbol } from "../components/native-symbol";
+import { PeerMessageReceipt } from "../components/peer-message-receipt";
 import {
   applyMobileThreadEvent,
   blockText,
@@ -2486,40 +2487,12 @@ const MessageBubble = memo(function MessageBubble({
   );
   if (peerMessage) {
     const sent = peerMessage.kind === "bot_message_sent";
-    const peer = sent ? peerMessage.toBotName : peerMessage.fromBotName;
     const peerBotId = sent ? peerMessage.toBotId : peerMessage.fromBotId;
-    const label = sent
-      ? t("Messaged {peer}", { peer: peer ?? t("Bot") })
-      : t("Message from {peer}", { peer: peer ?? t("Bot") });
     const peerColor =
       bots.find((bot) => bot.id === peerBotId)?.color ??
       members?.find((member) => member.botId === peerBotId)?.color ??
       tokens.mutedForeground;
-    // Compact receipt only: peer bodies stay out of the human thread.
-    // Full view-only peer chat is web-first; mobile keeps the chip without expand.
-    return (
-      <Pressable
-        {...actionProps}
-        accessible
-        accessibilityLabel={label}
-        style={{
-          width: "100%",
-          paddingVertical: 4,
-          alignItems: "center",
-          justifyContent: "flex-start",
-          flexDirection: "row",
-          gap: 6,
-        }}
-      >
-        <BotAvatar color={peerColor} identity={peerBotId} size={16} />
-        <Text
-          numberOfLines={1}
-          style={{ color: tokens.mutedForeground, fontSize: 13.5, flexShrink: 1 }}
-        >
-          {label}
-        </Text>
-      </Pressable>
-    );
+    return <PeerMessageReceipt block={peerMessage} color={peerColor} actionProps={actionProps} />;
   }
   const channelMessage = message.blocks.find(
     (block): block is Extract<MessageBlock, { kind: "channel_message" }> =>

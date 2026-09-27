@@ -493,7 +493,8 @@ export async function acceptDelegation(
       text?: string;
     }>;
     for (const block of blocks)
-      if (block.text) block.text = block.text.replace("completed, awaiting acceptance", "accepted");
+      if (block.kind === "text" && block.text)
+        block.text = block.text.replace("completed, awaiting acceptance", "accepted");
     await tx.message.update({ where: { id: message.id }, data: { blocks } });
     await appendEventInTransaction(tx, {
       spaceId: row.spaceId,

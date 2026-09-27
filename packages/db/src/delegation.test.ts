@@ -198,6 +198,25 @@ it("shows a completed peer exchange once in the sender transcript", async () => 
   ]);
 });
 
+it("keeps a peer answer verbatim after acceptance", async () => {
+  const f = fixture();
+  const row = await f.admit({ admissionKey: "bot-message:parent:message_bot:0" });
+  const answer = "The external request is completed, awaiting acceptance by its owner.";
+  const db = f.worker();
+  await db.$transaction((tx) => finishDelegation(tx, row.id, "completed", answer));
+  expect(f.state().messages[0].blocks).toEqual([
+    expect.objectContaining({ kind: "bot_message_received", text: answer }),
+  ]);
+
+  await db.$transaction((tx) =>
+    acceptDelegation(tx, { spaceId: "space", userId: "owner" }, row.id, "coordinator"),
+  );
+  expect(f.state().rows[0].status).toBe("accepted");
+  expect(f.state().messages[0].blocks).toEqual([
+    expect.objectContaining({ kind: "bot_message_received", text: answer }),
+  ]);
+});
+
 it("keeps a status summary when a peer finishes without a written answer", async () => {
   const f = fixture();
   const row = await f.admit({ admissionKey: "bot-message:parent:message_bot:0" });

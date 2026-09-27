@@ -719,6 +719,8 @@ export const ZH_MESSAGES: Record<string, string> = {
   Image: "图片",
   "Markdown file": "Markdown 文件",
   "Message from {peer}": "来自 {peer} 的消息",
+  "Show reply": "查看回复",
+  "Hide reply": "收起回复",
   subagent: "子智能体",
   "Messaged {peer}": "已给 {peer} 发消息",
   "No authentication": "无认证",
