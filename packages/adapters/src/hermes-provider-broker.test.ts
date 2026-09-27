@@ -153,6 +153,50 @@ describe("worker provider broker", () => {
     });
   });
 
+  it("fails a streamed error after retaining measured usage without exposing provider text", async () => {
+    const providerText = "private provider diagnostic";
+    const f = fixture({
+      fetch: vi.fn(
+        async () =>
+          new Response(
+            `data: {"model":"fixture-model","choices":[]}\n\ndata: {"usage":{"prompt_tokens":17,"completion_tokens":4}}\n\ndata: {"error":{"message":"${providerText}","code":"internal"}}\n\n`,
+            { headers: { "content-type": "text/event-stream" } },
+          ),
+      ),
+    });
+    const outcome = await f.broker
+      .open(f.request({ body: { ...f.body, stream: true } }))
+      .catch((error: unknown) => error);
+    expect(outcome).toBeInstanceOf(Error);
+    expect((outcome as Error).message).toBe("Provider request failed.");
+    expect(JSON.stringify(outcome)).not.toContain(providerText);
+    expect(f.records.at(-1)?.request).toMatchObject({
+      categories: { logicalInput: 17, output: 4 },
+      collection: { outcome: "failed" },
+    });
+  });
+
+  it("fails a JSON error envelope without exposing provider text", async () => {
+    const providerText = "private provider diagnostic";
+    const f = fixture({
+      fetch: vi.fn(async () =>
+        json({
+          model: "fixture-model",
+          usage: { prompt_tokens: 9, completion_tokens: 2 },
+          error: { message: providerText },
+        }),
+      ),
+    });
+    const outcome = await f.broker.open(f.request()).catch((error: unknown) => error);
+    expect(outcome).toBeInstanceOf(Error);
+    expect((outcome as Error).message).toBe("Provider request failed.");
+    expect(JSON.stringify(outcome)).not.toContain(providerText);
+    expect(f.records.at(-1)?.request).toMatchObject({
+      categories: { logicalInput: 9, output: 2 },
+      collection: { outcome: "failed" },
+    });
+  });
+
   it("cancels an unsupported response body before finishing", async () => {
     const cancelled = vi.fn();
     const stream = new ReadableStream<Uint8Array>({ cancel: cancelled });

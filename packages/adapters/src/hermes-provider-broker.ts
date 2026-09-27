@@ -491,6 +491,7 @@ export class HermesProviderBroker {
           const counts = chatCompletionsUsage(payload);
           if (counts) await this.options.record(collector.snapshot(counts));
           await active();
+          if (object(value.error)) throw new Error("Provider reported an error.");
           if (value.model !== undefined && value.model !== connection.modelId) {
             await finish("failed");
             throw new Error("Provider reported a different model.");
