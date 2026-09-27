@@ -42,6 +42,27 @@ function dockerProviderKey(providerKey: string) {
   };
 }
 
+function missingDockerObject(error: unknown, kind: "image" | "container") {
+  const reported = error as { stderr?: unknown; message?: unknown };
+  const detail = `${String(reported.stderr ?? "")} ${String(reported.message ?? "")}`;
+  return kind === "image"
+    ? /No such (?:image|object)/i.test(detail)
+    : /No such (?:container|object)/i.test(detail);
+}
+
+async function inspectContainerStopped(name: string, runDocker: typeof execute = execute) {
+  try {
+    await runDocker("docker", ["inspect", name], {
+      env: dockerEnvironment(),
+      timeout: 10_000,
+    });
+    return false;
+  } catch (error) {
+    if (missingDockerObject(error, "container")) return true;
+    throw new Error("Hermes container stop could not be verified.", { cause: error });
+  }
+}
+
 async function stagingDirectory(socketExists: (path: string) => boolean = existsSync) {
   // The default Colima VM only mounts HOME; other Docker endpoints can mount writable parents elsewhere.
   const parent = process.env.ARDUR_HERMES_STAGING_PARENT ?? process.cwd();
@@ -208,6 +229,7 @@ interface LaneCapture {
   name: string;
   argvHasKey: boolean;
   inspectHasKey: boolean;
+  stopFailure: string | null;
 }
 
 function launchFor(
@@ -234,8 +256,22 @@ function launchFor(
       name,
       argvHasKey: false,
       inspectHasKey: false,
+      stopFailure: null,
     };
     captures.push(data);
+    try {
+      await dependencies.execute("docker", ["image", "inspect", image], {
+        env: dockerEnvironment(),
+        timeout: 10_000,
+      });
+    } catch (error) {
+      throw new Error(
+        missingDockerObject(error, "image")
+          ? "Pinned Hermes image is absent locally; no download was attempted."
+          : "Pinned Hermes image inspection failed; the cached image could not be verified.",
+        { cause: error },
+      );
+    }
     const staging = await stagingDirectory();
     dependencies.onStaging?.(staging);
     const configCopy = join(staging, "image-config.yaml");
@@ -253,6 +289,7 @@ function launchFor(
       "docker",
       [
         "run",
+        "--pull=never",
         "-i",
         "--rm",
         "--network",
@@ -297,13 +334,21 @@ function launchFor(
       },
     );
     const teardown = async () => {
-      await dependencies
-        .execute("docker", ["stop", "--time", "1", name], {
+      let stopError: Error | undefined;
+      try {
+        await dependencies.execute("docker", ["stop", "--time", "1", name], {
           env: dockerEnvironment(),
           timeout: 10_000,
-        })
-        .catch(() => undefined);
-      await rm(staging, { recursive: true, force: true });
+        });
+      } catch (error) {
+        if (!missingDockerObject(error, "container")) {
+          data.stopFailure = "Hermes container cleanup could not be verified.";
+          stopError = new Error(data.stopFailure, { cause: error });
+        }
+      } finally {
+        await rm(staging, { recursive: true, force: true });
+      }
+      if (stopError) throw stopError;
     };
     try {
       data.argvHasKey = child.spawnargs.some((arg) => arg.includes(providerKey));
@@ -340,7 +385,10 @@ function launchFor(
           })
           .then(
             ({ stdout }) => stdout.trim() === "true",
-            () => false,
+            (error) => {
+              if (missingDockerObject(error, "container")) return false;
+              throw error;
+            },
           );
         if (running) {
           data.containerStartMs = Math.round(performance.now() - start);
@@ -376,6 +424,104 @@ function launchFor(
     }
   };
 }
+
+it("rejects a missing cached image before starting Docker", async () => {
+  const parent = await mkdtemp(join(process.cwd(), ".hermes-launch-test-"));
+  const home = join(parent, "home");
+  await mkdir(home);
+  await writeFile(join(home, "config.yaml"), "{}\n");
+  await writeFile(join(home, "SOUL.md"), "fixture\n");
+  const previousStaging = process.env.ARDUR_HERMES_STAGING_PARENT;
+  process.env.ARDUR_HERMES_STAGING_PARENT = parent;
+  const runDocker = vi.fn(async () => {
+    throw Object.assign(new Error("image absent"), { stderr: "No such image" });
+  });
+  const startDocker = vi.fn();
+  try {
+    await expect(
+      launchFor([], performance.now(), {
+        execute: runDocker as unknown as typeof execute,
+        spawn: startDocker as unknown as typeof spawn,
+      })({
+        command: "fixture",
+        args: [],
+        cwd: parent,
+        env: { HERMES_HOME: home, ARDUR_HERMES_PROVIDER_KEY: "fixture-provider-key" },
+      }),
+    ).rejects.toThrow("Pinned Hermes image is absent locally; no download was attempted.");
+    expect(runDocker).toHaveBeenCalledWith(
+      "docker",
+      ["image", "inspect", image],
+      expect.anything(),
+    );
+    expect(startDocker).not.toHaveBeenCalled();
+  } finally {
+    if (previousStaging === undefined) delete process.env.ARDUR_HERMES_STAGING_PARENT;
+    else process.env.ARDUR_HERMES_STAGING_PARENT = previousStaging;
+    await rm(parent, { recursive: true, force: true });
+  }
+});
+
+it("records a Docker stop failure and fails qualification", async () => {
+  const parent = await mkdtemp(join(process.cwd(), ".hermes-launch-test-"));
+  const home = join(parent, "home");
+  await mkdir(home);
+  await writeFile(join(home, "config.yaml"), "{}\n");
+  await writeFile(join(home, "SOUL.md"), "fixture\n");
+  const previousStaging = process.env.ARDUR_HERMES_STAGING_PARENT;
+  process.env.ARDUR_HERMES_STAGING_PARENT = parent;
+  const runDocker = vi.fn(async (_command: string, args: string[]) => {
+    if (args[0] === "inspect") throw new Error("inspection unavailable");
+    if (args[0] === "stop") throw new Error("daemon unavailable");
+    return { stdout: "[]", stderr: "" };
+  });
+  const child = {
+    spawnargs: [],
+    stdout: new EventEmitter(),
+    stderr: new EventEmitter(),
+    exitCode: 1,
+  } as unknown as ReturnType<typeof spawn>;
+  const startDocker = vi.fn((_command: string, _args: string[]) => child);
+  const captures: LaneCapture[] = [];
+  try {
+    await expect(
+      launchFor(captures, performance.now(), {
+        execute: runDocker as unknown as typeof execute,
+        spawn: startDocker as unknown as typeof spawn,
+      })({
+        command: "fixture",
+        args: [],
+        cwd: parent,
+        env: { HERMES_HOME: home, ARDUR_HERMES_PROVIDER_KEY: "fixture-provider-key" },
+      }),
+    ).rejects.toThrow("Hermes container cleanup could not be verified.");
+    expect(captures[0]?.stopFailure).toBe("Hermes container cleanup could not be verified.");
+    expect(startDocker.mock.calls[0]?.[1]).toContain("--pull=never");
+  } finally {
+    if (previousStaging === undefined) delete process.env.ARDUR_HERMES_STAGING_PARENT;
+    else process.env.ARDUR_HERMES_STAGING_PARENT = previousStaging;
+    await rm(parent, { recursive: true, force: true });
+  }
+});
+
+it("counts only Docker's missing-container response as stopped", async () => {
+  for (const detail of ["No such container: fixture", "No such object: fixture"]) {
+    const missing = vi.fn(async () => {
+      throw Object.assign(new Error("inspection failed"), { stderr: detail });
+    });
+    expect(await inspectContainerStopped("fixture", missing as unknown as typeof execute)).toBe(
+      true,
+    );
+  }
+  for (const detail of ["Cannot connect to Docker daemon", "No such image: fixture"]) {
+    const daemon = vi.fn(async () => {
+      throw Object.assign(new Error("inspection failed"), { stderr: detail });
+    });
+    await expect(
+      inspectContainerStopped("fixture", daemon as unknown as typeof execute),
+    ).rejects.toThrow("Hermes container stop could not be verified.");
+  }
+});
 
 it("stops its container and removes staging when inspection fails after spawn", async () => {
   const parent = await mkdtemp(join(process.cwd(), ".hermes-launch-test-"));
@@ -512,6 +658,7 @@ if (process.env.ARDUR_HERMES_IMAGE_LANE !== "1") {
       mcp,
       keyPresentInContainer: captures[0]?.inspectHasKey,
       keyAbsentFromDockerArgv: !captures[0]?.argvHasKey,
+      stopFailure: captures[0]?.stopFailure,
     };
     const timings = {
       containerStartMs: captures[0]?.containerStartMs ?? null,
@@ -538,19 +685,32 @@ if (process.env.ARDUR_HERMES_IMAGE_LANE !== "1") {
       await new Promise((resolve) => setTimeout(resolve, 50));
     const providerCapturedBeforeAbort =
       captures[1]?.records.some((record) => record.kind === "provider") ?? false;
-    await adapter.abort(held.runId);
-    await pending;
-    const stopped = await execute("docker", ["inspect", captures[1]!.name], {
-      env: dockerEnvironment(),
-      timeout: 10_000,
-    }).then(
-      () => false,
-      () => true,
-    );
+    let abortFailure: string | null = null;
+    try {
+      await adapter.abort(held.runId);
+      await pending;
+    } catch {
+      abortFailure = "Hermes cancellation or cleanup failed.";
+    }
+    let stopped = false;
+    let inspectionFailure: string | null = null;
+    try {
+      stopped = await inspectContainerStopped(captures[1]!.name);
+    } catch {
+      inspectionFailure = "Hermes container stop could not be verified.";
+    }
     await writeFile(
       join(evidence, "cancel.json"),
       JSON.stringify(
-        { stopped, providerCapturedBeforeAbort, events: heldEvents, container: captures[1]?.name },
+        {
+          stopped,
+          providerCapturedBeforeAbort,
+          events: heldEvents,
+          container: captures[1]?.name,
+          stopFailure: captures[1]?.stopFailure,
+          abortFailure,
+          inspectionFailure,
+        },
         null,
         2,
       ),
@@ -596,6 +756,10 @@ if (process.env.ARDUR_HERMES_IMAGE_LANE !== "1") {
     expect(mcp.some((record) => record.value.event === "tool-call")).toBe(true);
     expect(providerCapturedBeforeAbort).toBe(true);
     expect(heldEvents.some((event) => event.type === "done")).toBe(false);
+    expect(captures[0]?.stopFailure).toBeNull();
+    expect(captures[1]?.stopFailure).toBeNull();
+    expect(abortFailure).toBeNull();
+    expect(inspectionFailure).toBeNull();
     expect(stopped).toBe(true);
   }, 180_000);
 }
