@@ -213,6 +213,8 @@ export class HermesRuntime implements AgentRuntime {
       args?: string[];
       launch: HermesLaunch;
       onPermissionAttempt?: () => void;
+      /** Test and observability hook, called once after the turn is fenced and its queue has ended. */
+      onTurnFinished?: (runId: string, reason: "done" | "pause" | "failure" | "cancel") => void;
     },
   ) {
     if (typeof options.launch !== "function") throw new Error("Hermes needs an explicit launcher.");
@@ -255,6 +257,11 @@ export class HermesRuntime implements AgentRuntime {
         }
         turn.stopReason = finalReason;
         turn.queue.end(finalError);
+        try {
+          this.options.onTurnFinished?.(runId, finalReason);
+        } catch {
+          // Observers must not interrupt cleanup or change the turn's outcome.
+        }
       }
     }
     if (turn.child && !turn.cleanupChild) {

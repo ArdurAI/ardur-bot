@@ -46,6 +46,26 @@ function runtime(scenario: string, onPermissionAttempt?: () => void) {
   });
 }
 
+type TurnFinishReason = "done" | "pause" | "failure" | "cancel";
+
+function turnFinishSignal(runId: string) {
+  const calls: TurnFinishReason[] = [];
+  let resolve!: (reason: TurnFinishReason) => void;
+  const finished = new Promise<TurnFinishReason>((settle) => {
+    resolve = settle;
+  });
+  return {
+    calls,
+    finished,
+    onTurnFinished: (finishedRunId: string, reason: TurnFinishReason) => {
+      if (finishedRunId === runId) {
+        calls.push(reason);
+        resolve(reason);
+      }
+    },
+  };
+}
+
 describe("HermesRuntime M0 ACP seam", () => {
   it("requires an explicit launcher at construction", () => {
     expect(
@@ -274,24 +294,8 @@ describe("HermesRuntime M0 ACP seam", () => {
     const heldAuthorization = new Promise<void>((resolve) => {
       releaseAuthorization = resolve;
     });
-    let malformedSeen!: () => void;
-    const malformed = new Promise<void>((resolve) => {
-      malformedSeen = resolve;
-    });
     let child!: Awaited<ReturnType<typeof launchUnconfinedProcess>>["child"];
     const executeTool = vi.fn(async () => ({ unexpected: true }));
-    const adapter = new HermesRuntime({
-      command: process.execPath,
-      args: [fixture, "pending-tool-malformed"],
-      launch: async (spec) => {
-        const result = await launchUnconfinedProcess(spec);
-        child = result.child;
-        child.stdout.on("data", (chunk: Buffer) => {
-          if (chunk.toString("utf8").includes("{broken\n")) malformedSeen();
-        });
-        return result;
-      },
-    });
     const run = request({
       tools: [{ name: "fixture_echo", description: "Echo", inputSchema: {} }],
       authorizeTool: async () => {
@@ -301,6 +305,17 @@ describe("HermesRuntime M0 ACP seam", () => {
       },
       executeTool,
     });
+    const finishSignal = turnFinishSignal(run.runId);
+    const adapter = new HermesRuntime({
+      command: process.execPath,
+      args: [fixture, "pending-tool-malformed"],
+      launch: async (spec) => {
+        const result = await launchUnconfinedProcess(spec);
+        child = result.child;
+        return result;
+      },
+      onTurnFinished: finishSignal.onTurnFinished,
+    });
     const events = adapter.run(run)[Symbol.asyncIterator]();
     try {
       expect(await events.next()).toEqual({
@@ -309,8 +324,7 @@ describe("HermesRuntime M0 ACP seam", () => {
       });
       await entered;
       child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", method: "fixture/fail-now" })}\n`);
-      await malformed;
-      await new Promise((resolve) => setImmediate(resolve));
+      expect(await finishSignal.finished).toBe("failure");
       releaseAuthorization();
       const drain = async () => {
         while (!(await events.next()).done) {
@@ -337,24 +351,8 @@ describe("HermesRuntime M0 ACP seam", () => {
     const heldAuthorization = new Promise<void>((resolve) => {
       releaseAuthorization = resolve;
     });
-    let responseSeen!: () => void;
-    const responded = new Promise<void>((resolve) => {
-      responseSeen = resolve;
-    });
     let child!: Awaited<ReturnType<typeof launchUnconfinedProcess>>["child"];
     const executeTool = vi.fn(async () => ({ unexpected: true }));
-    const adapter = new HermesRuntime({
-      command: process.execPath,
-      args: [fixture, "pending-tool-malformed"],
-      launch: async (spec) => {
-        const result = await launchUnconfinedProcess(spec);
-        child = result.child;
-        child.stdout.on("data", (chunk: Buffer) => {
-          if (chunk.toString("utf8").includes('"stopReason":"end_turn"')) responseSeen();
-        });
-        return result;
-      },
-    });
     const run = request({
       tools: [{ name: "fixture_echo", description: "Echo", inputSchema: {} }],
       authorizeTool: async () => {
@@ -364,6 +362,17 @@ describe("HermesRuntime M0 ACP seam", () => {
       },
       executeTool,
     });
+    const finishSignal = turnFinishSignal(run.runId);
+    const adapter = new HermesRuntime({
+      command: process.execPath,
+      args: [fixture, "pending-tool-malformed"],
+      launch: async (spec) => {
+        const result = await launchUnconfinedProcess(spec);
+        child = result.child;
+        return result;
+      },
+      onTurnFinished: finishSignal.onTurnFinished,
+    });
     const events = adapter.run(run)[Symbol.asyncIterator]();
     try {
       expect(await events.next()).toEqual({
@@ -372,8 +381,7 @@ describe("HermesRuntime M0 ACP seam", () => {
       });
       await entered;
       child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", method: "fixture/finish-now" })}\n`);
-      await responded;
-      await new Promise((resolve) => setImmediate(resolve));
+      expect(await finishSignal.finished).toBe("done");
       releaseAuthorization();
       const remaining: AgentRuntimeEvent[] = [];
       for await (const event of { [Symbol.asyncIterator]: () => events }) remaining.push(event);
@@ -403,38 +411,8 @@ describe("HermesRuntime M0 ACP seam", () => {
       const heldAuthorization = new Promise<void>((resolve) => {
         releaseAuthorization = resolve;
       });
-      let terminalSeen!: () => void;
-      const observed = new Promise<void>((resolve) => {
-        terminalSeen = resolve;
-      });
-      const marker =
-        transition === "end_turn"
-          ? '"stopReason":"end_turn"'
-          : transition === "forbidden tool"
-            ? "terminal: unavailable"
-            : transition === "protocol failure"
-              ? "{broken\n"
-              : transition === "queue overflow"
-                ? "overflow-complete"
-                : undefined;
       let child!: Awaited<ReturnType<typeof launchUnconfinedProcess>>["child"];
       const executeTool = vi.fn(async () => ({ unexpected: true }));
-      const adapter = new HermesRuntime({
-        command: process.execPath,
-        args: [fixture, "pending-tool-malformed"],
-        launch: async (spec) => {
-          const result = await launchUnconfinedProcess(spec);
-          child = result.child;
-          const output = transition === "queue overflow" ? child.stderr : child.stdout;
-          let observedOutput = "";
-          output.on("data", (chunk: Buffer) => {
-            observedOutput += chunk.toString("utf8");
-            if (marker && observedOutput.includes(marker)) terminalSeen();
-          });
-          return result;
-        },
-      });
-      const controller = new AbortController();
       const run = request({
         tools: [{ name: "fixture_echo", description: "Echo", inputSchema: {} }],
         authorizeTool: async () => {
@@ -444,6 +422,18 @@ describe("HermesRuntime M0 ACP seam", () => {
         },
         executeTool,
       });
+      const finishSignal = turnFinishSignal(run.runId);
+      const adapter = new HermesRuntime({
+        command: process.execPath,
+        args: [fixture, "pending-tool-malformed"],
+        launch: async (spec) => {
+          const result = await launchUnconfinedProcess(spec);
+          child = result.child;
+          return result;
+        },
+        onTurnFinished: finishSignal.onTurnFinished,
+      });
+      const controller = new AbortController();
       const events = adapter.run(run, { signal: controller.signal })[Symbol.asyncIterator]();
       try {
         expect((await events.next()).value).toEqual({
@@ -452,10 +442,8 @@ describe("HermesRuntime M0 ACP seam", () => {
         });
         await entered;
         if (transition === "abort") await adapter.abort(run.runId);
-        else if (transition === "signal") {
-          controller.abort();
-          await new Promise((resolve) => setImmediate(resolve));
-        } else if (transition === "bridge pause") {
+        else if (transition === "signal") controller.abort();
+        else if (transition === "bridge pause") {
           // The serialized bridge cannot begin a second call while authorization is held.
           // Its pause callback enters the same private terminal transition tested here.
           await (
@@ -469,9 +457,17 @@ describe("HermesRuntime M0 ACP seam", () => {
             "queue overflow": "fixture/overflow-now",
           }[transition];
           child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", method })}\n`);
-          await observed;
-          await new Promise((resolve) => setImmediate(resolve));
         }
+        const expectedReason = {
+          end_turn: "done",
+          "bridge pause": "pause",
+          "forbidden tool": "failure",
+          "protocol failure": "failure",
+          "queue overflow": "failure",
+          abort: "cancel",
+          signal: "cancel",
+        }[transition];
+        expect(await finishSignal.finished).toBe(expectedReason);
         releaseAuthorization();
         try {
           while (!(await events.next()).done) {
@@ -481,6 +477,7 @@ describe("HermesRuntime M0 ACP seam", () => {
           // Failure transitions carry their queue error to the consumer.
         }
         expect(executeTool).not.toHaveBeenCalled();
+        expect(finishSignal.calls).toEqual([expectedReason]);
       } finally {
         releaseAuthorization();
         await events.return?.();
@@ -497,24 +494,8 @@ describe("HermesRuntime M0 ACP seam", () => {
     const heldAuthorization = new Promise<void>((resolve) => {
       releaseAuthorization = resolve;
     });
-    let overflowWritten!: () => void;
-    const written = new Promise<void>((resolve) => {
-      overflowWritten = resolve;
-    });
     let child!: Awaited<ReturnType<typeof launchUnconfinedProcess>>["child"];
     const executeTool = vi.fn(async () => ({ unexpected: true }));
-    const adapter = new HermesRuntime({
-      command: process.execPath,
-      args: [fixture, "queue-overflow"],
-      launch: async (spec) => {
-        const result = await launchUnconfinedProcess(spec);
-        child = result.child;
-        child.stderr.on("data", (chunk: Buffer) => {
-          if (chunk.toString("utf8").includes("overflow-complete")) overflowWritten();
-        });
-        return result;
-      },
-    });
     const run = request({
       tools: [{ name: "fixture_echo", description: "Echo", inputSchema: {} }],
       authorizeTool: async () => {
@@ -524,6 +505,17 @@ describe("HermesRuntime M0 ACP seam", () => {
       },
       executeTool,
     });
+    const finishSignal = turnFinishSignal(run.runId);
+    const adapter = new HermesRuntime({
+      command: process.execPath,
+      args: [fixture, "queue-overflow"],
+      launch: async (spec) => {
+        const result = await launchUnconfinedProcess(spec);
+        child = result.child;
+        return result;
+      },
+      onTurnFinished: finishSignal.onTurnFinished,
+    });
     const events = adapter.run(run)[Symbol.asyncIterator]();
     try {
       expect(await events.next()).toEqual({
@@ -532,8 +524,7 @@ describe("HermesRuntime M0 ACP seam", () => {
       });
       await entered;
       child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", method: "fixture/overflow" })}\n`);
-      await written;
-      await new Promise((resolve) => setImmediate(resolve));
+      expect(await finishSignal.finished).toBe("failure");
       releaseAuthorization();
       const drain = async () => {
         while (!(await events.next()).done) {
@@ -545,6 +536,7 @@ describe("HermesRuntime M0 ACP seam", () => {
         cause: { message: "Runtime output exceeded its limit." },
       });
       expect(executeTool).not.toHaveBeenCalled();
+      expect(finishSignal.calls).toEqual(["failure"]);
     } finally {
       releaseAuthorization();
       await events.return?.();
@@ -772,13 +764,35 @@ describe("HermesRuntime M0 ACP seam", () => {
   });
 
   it("cancels before an MCP call and fences later activity", async () => {
+    let promptSent!: () => void;
+    const prompted = new Promise<void>((resolve) => {
+      promptSent = resolve;
+    });
     const run = request({
       tools: [{ name: "fixture_echo", description: "Echo", inputSchema: {} }],
       executeTool: vi.fn(async () => ({ ok: true })),
     });
-    const adapter = runtime("before-tool");
+    const adapter = new HermesRuntime({
+      command: process.execPath,
+      args: [fixture, "before-tool"],
+      launch: async (spec) => {
+        const result = await launchUnconfinedProcess(spec);
+        const write = result.child.stdin.write.bind(result.child.stdin);
+        result.child.stdin.write = ((value: string) => {
+          const written = write(value);
+          if (value.includes('"method":"session/prompt"')) promptSent();
+          return written;
+        }) as typeof result.child.stdin.write;
+        return result;
+      },
+    });
     const events = collect(adapter, run);
-    await new Promise((resolve) => setTimeout(resolve, 90));
+    await Promise.race([
+      prompted,
+      events.then(() => {
+        throw new Error("Hermes ended before sending its prompt.");
+      }),
+    ]);
     await adapter.abort(run.runId);
     expect(await events).not.toContainEqual({ type: "done" });
     expect(run.executeTool).not.toHaveBeenCalled();
@@ -809,29 +823,17 @@ describe("HermesRuntime M0 ACP seam", () => {
   });
 
   it("drops buffered text and completion after abort while the consumer is paused", async () => {
-    let promptCompleted!: () => void;
-    const completed = new Promise<void>((resolve) => {
-      promptCompleted = resolve;
-    });
+    const run = request();
+    const finishSignal = turnFinishSignal(run.runId);
     const adapter = new HermesRuntime({
       command: process.execPath,
       args: [fixture, "text"],
-      launch: async (spec) => {
-        const result = await launchUnconfinedProcess(spec);
-        let output = "";
-        result.child.stdout.on("data", (chunk: Buffer) => {
-          output += chunk.toString("utf8");
-          if (output.includes('"stopReason":"end_turn"')) promptCompleted();
-        });
-        return result;
-      },
+      launch: launchUnconfinedProcess,
+      onTurnFinished: finishSignal.onTurnFinished,
     });
-    const run = request();
     const events = adapter.run(run)[Symbol.asyncIterator]();
     expect(await events.next()).toEqual({ value: { type: "text", text: "first " }, done: false });
-    await completed;
-    // Let the prompt response enqueue done while the consumer is still paused.
-    await new Promise((resolve) => setImmediate(resolve));
+    expect(await finishSignal.finished).toBe("done");
     await adapter.abort(run.runId);
     expect(await events.next()).toEqual({ value: undefined, done: true });
   });

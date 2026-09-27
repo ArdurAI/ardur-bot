@@ -72,13 +72,11 @@ async function handle(value) {
   if (scenario === "pending-tool-malformed" && value.method === "fixture/overflow-now") {
     for (let i = 0; i < 260; i++)
       update({ sessionUpdate: "plan", entries: [{ content: `step ${i}` }] });
-    process.stderr.write("overflow-complete\n");
     return;
   }
   if (scenario === "queue-overflow" && value.method === "fixture/overflow") {
     for (let i = 0; i < 260; i++)
       update({ sessionUpdate: "plan", entries: [{ content: `step ${i}` }] });
-    process.stderr.write("overflow-complete\n");
     return;
   }
   if (value.method !== "session/prompt") return;
