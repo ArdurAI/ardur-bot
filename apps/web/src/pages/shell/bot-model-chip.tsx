@@ -84,6 +84,7 @@ export function BotModelChip({
   display?: "change" | "using";
 }) {
   const { t } = useLingui();
+  const pinUnknown = display === "using" && Boolean(run) && !run?.runtimePin;
   const requested = display === "using" ? (run?.runtimePin ?? pin) : pin;
   const displayBot = requested
     ? {
@@ -120,7 +121,13 @@ export function BotModelChip({
           variant="ghost"
           size="xs"
           className={`app-no-drag min-w-0 shrink font-normal ${model.unavailable ? "text-warning" : "text-muted-foreground"}`}
-          aria-label={display === "using" ? t`Using ${currentId}` : t`Change model: ${label}`}
+          aria-label={
+            pinUnknown
+              ? t`Next run`
+              : display === "using"
+                ? t`Using ${currentId}`
+                : t`Change model: ${label}`
+          }
           onClick={onClick}
         >
           <span className="truncate">{label}</span>
@@ -133,9 +140,14 @@ export function BotModelChip({
       ) : (
         <span
           role="status"
-          aria-label={t`Using ${currentId}`}
+          aria-label={pinUnknown ? t`Next run` : t`Using ${currentId}`}
           className="truncate text-xs text-muted-foreground"
         >
+          {pinUnknown ? (
+            <>
+              <Trans>Next run</Trans> ·{" "}
+            </>
+          ) : null}
           {label}
         </span>
       )}

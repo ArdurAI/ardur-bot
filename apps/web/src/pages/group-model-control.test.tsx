@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { Bot, GroupMember } from "@ardurbot/contracts";
+import type { Bot, GroupMember, ProductEvent, ThreadSnapshot } from "@ardurbot/contracts";
 import { modelPinOptionKey } from "@ardurbot/core";
 import type { ComponentProps, ReactNode } from "react";
 import { act } from "react";
@@ -27,9 +27,20 @@ vi.mock("@ardurbot/ui-web", () => ({
   NativeSelectOption: (props: ComponentProps<"option">) => <option {...props} />,
   Switch: () => null,
 }));
-vi.mock("./shell/runtime-settings", () => ({ RuntimeSettings: () => null }));
 vi.mock("../components/ShowAllModels", () => ({ ShowAllModels: () => null }));
+vi.mock("../lib/rpc", () => ({
+  rpc: {
+    runtimes: {
+      availability: vi.fn(async () => ({
+        runtimeKind: "antigravity",
+        available: true,
+        models: [{ id: "claude-sonnet-4-6", label: "Sonnet", efforts: [] }],
+      })),
+    },
+  },
+}));
 
+import { activeMemberRun, reduceThreadSnapshot } from "../lib/thread-events";
 import { GroupModelControl } from "./group-model-control";
 import { BotModelChip } from "./shell/bot-model-chip";
 
@@ -99,10 +110,14 @@ afterEach(async () => {
   container.remove();
 });
 
-async function render(memberValue: GroupMember | undefined, onSave = vi.fn(async () => undefined)) {
+async function render(
+  memberValue: GroupMember | undefined,
+  onSave = vi.fn(async () => undefined),
+  botValue = bot,
+) {
   await act(async () =>
     root.render(
-      <GroupModelControl member={memberValue} bot={bot} settings={settings} onSave={onSave} />,
+      <GroupModelControl member={memberValue} bot={botValue} settings={settings} onSave={onSave} />,
     ),
   );
   return onSave;
@@ -115,6 +130,29 @@ async function change(select: HTMLSelectElement, value: string) {
 }
 
 describe("group model control", () => {
+  it("saves a native model without an effort through RuntimeSettings", async () => {
+    const save = await render(
+      member,
+      vi.fn(async () => undefined),
+      { ...bot, runtimeExperimental: true },
+    );
+    const runtime = container.querySelector('select[id$="-runtime"]') as HTMLSelectElement;
+    await change(runtime, "antigravity");
+    const model = container.querySelector('select[id$="-model"]') as HTMLSelectElement;
+    await change(model, "claude-sonnet-4-6");
+    const saveButton = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Save model",
+    )!;
+    expect(saveButton.disabled).toBe(false);
+    await act(async () => saveButton.click());
+    expect(save).toHaveBeenCalledWith(member, {
+      runtimeKind: "antigravity",
+      provider: "antigravity",
+      modelId: "claude-sonnet-4-6",
+      credentialId: "native:antigravity",
+      effort: null,
+    });
+  });
   it("starts inherited, saves an explicit equal choice, and can reset", async () => {
     const save = await render(member);
     const select = container.querySelector("select")!;
@@ -181,6 +219,58 @@ describe("group model control", () => {
       ),
     );
     expect(container.querySelector('[aria-label="Using model-old"]')).not.toBeNull();
+    expect(container.textContent).toContain("Next run");
+  });
+
+  it("waits for a live run's admitted pin before showing Using", async () => {
+    const snapshot: ThreadSnapshot = {
+      groupId: "room",
+      threadId: "thread",
+      cursor: 0,
+      messages: [],
+      olderCursor: null,
+      run: null,
+      activeRuns: [],
+    };
+    const start = {
+      id: "event",
+      spaceId: "space",
+      threadId: "thread",
+      botId: "bot",
+      seq: 1,
+      type: "run.started",
+      runId: "run",
+      createdAt: "2026-09-01T00:00:00Z",
+      payload: {},
+    } as ProductEvent;
+    const nextPin = { ...pin, modelId: "new-choice" };
+    const renderBadge = async (current: ThreadSnapshot | null) =>
+      act(async () =>
+        root.render(
+          <BotModelChip
+            bot={bot}
+            settings={settings}
+            pin={nextPin}
+            nextPin={nextPin}
+            display="using"
+            run={activeMemberRun(current?.activeRuns ?? [], "bot")}
+          />,
+        ),
+      );
+
+    const pending = reduceThreadSnapshot(snapshot, start);
+    await renderBadge(pending);
+    expect(container.querySelector('[aria-label="Using new-choice"]')).toBeNull();
+    expect(container.textContent).toContain("Next run");
+
+    const admitted = reduceThreadSnapshot(pending!, {
+      ...start,
+      id: "admitted",
+      seq: 2,
+      payload: { runtimePin: pin },
+    });
+    await renderBadge(admitted);
+    expect(container.querySelector('[aria-label="Using model-a"]')).not.toBeNull();
     expect(container.textContent).toContain("Next run");
   });
 

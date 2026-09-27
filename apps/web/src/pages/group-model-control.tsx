@@ -83,7 +83,6 @@ export function GroupModelControl({
                 credential?.thinkingLevels ?? catalogEntry?.thinkingLevels,
               ))
             : null);
-    if (!inherit && !nextEffort && selected?.provider !== "ollama") return;
     setSaving(true);
     setError(null);
     try {

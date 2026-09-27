@@ -9,8 +9,8 @@ import type {
 import { RunTriggerSchema } from "@ardurbot/contracts";
 import { describe, expect, it } from "vitest";
 import {
+  activeMemberRun,
   activeThreadRuns,
-  admittedMemberRun,
   applyThreadSendReceipt,
   clearActiveThreadRuns,
   computerPanelAutoBoot,
@@ -43,8 +43,8 @@ describe("thread event reduction", () => {
           revision: 1,
         },
       };
-      expect(admittedMemberRun([run], "member")).toBe(run);
-      expect(admittedMemberRun([run], "other")).toBeNull();
+      expect(activeMemberRun([run], "member")).toBe(run);
+      expect(activeMemberRun([run], "other")).toBeNull();
     },
   );
   it.each(["completed", "failed", "cancelled"] as const)(
@@ -62,9 +62,43 @@ describe("thread event reduction", () => {
           revision: 1,
         },
       };
-      expect(admittedMemberRun([run], "member")).toBeNull();
+      expect(activeMemberRun([run], "member")).toBeNull();
     },
   );
+  it("preserves a previous pin and accepts the admitted pin from a live start", () => {
+    const originalPin = {
+      runtimeKind: "pi" as const,
+      provider: "fixture",
+      modelId: "original",
+      effort: "high",
+      credentialId: "connection",
+      revision: 1,
+    };
+    const run = { ...threadRun("live", "member"), runtimePin: originalPin };
+    const initial = { ...snapshot([]), groupId: "group", run, activeRuns: [run] };
+    const started = reduceThreadSnapshot(
+      initial,
+      event({ type: "run.started", botId: "member", runId: "live" }),
+    );
+    expect(started?.activeRuns?.[0]?.runtimePin).toEqual(originalPin);
+
+    const newPin = { ...originalPin, modelId: "admitted", revision: 2 };
+    const admitted = reduceThreadSnapshot(
+      initial,
+      event({
+        type: "run.started",
+        botId: "member",
+        runId: "new",
+        payload: { runtimePin: newPin },
+      }),
+    );
+    expect(admitted?.activeRuns?.find((item) => item.id === "new")?.runtimePin).toEqual(newPin);
+    const unknown = reduceThreadSnapshot(
+      { ...initial, run: null, activeRuns: [] },
+      event({ type: "run.started", botId: "member", runId: "unknown" }),
+    );
+    expect(activeMemberRun(unknown?.activeRuns ?? [], "member")?.id).toBe("unknown");
+  });
   it("admits live context through the subscription filter and updates the matching run", () => {
     const run = threadRun("run-1");
     const initial = { ...snapshot([]), run, activeRuns: [run, threadRun("peer")] };

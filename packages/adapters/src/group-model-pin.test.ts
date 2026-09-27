@@ -157,7 +157,10 @@ describe("group run pin selection", () => {
 
 describe("fenced run pin capture", () => {
   function fixture(revision = 2, updated = 1) {
-    const updateMany = vi.fn(async () => ({ count: updated }));
+    const updateMany = vi
+      .fn()
+      .mockResolvedValueOnce({ count: updated })
+      .mockResolvedValue({ count: 1 });
     const tx = {
       $queryRaw: vi.fn(async () => [{ id: "group" }]),
       chatGroup: { findFirst: vi.fn(async () => ({ thread: { id: "room" } })) },
@@ -258,5 +261,27 @@ describe("fenced run pin capture", () => {
         pin,
       }),
     ).toMatchObject({ pin });
+  });
+
+  it("fills delegated run model columns from its pre-set committed pin under the lease", async () => {
+    const f = fixture(2, 0);
+    const candidate = {
+      ...f.candidate,
+      membership: null,
+      source: { kind: "bot" as const, botId: "bot" },
+    };
+    await captureRunModelPin({
+      prisma: f.prisma,
+      scope,
+      runId: "delegated",
+      workerId: "worker",
+      fence: 7,
+      candidate,
+      pin: { ...pin, modelId: "new-choice" },
+    });
+    expect(f.updateMany).toHaveBeenLastCalledWith({
+      where: { id: "delegated", status: "running", leaseOwner: "worker", leaseFence: 7 },
+      data: { modelProvider: pin.provider, modelId: pin.modelId },
+    });
   });
 });

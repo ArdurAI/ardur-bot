@@ -186,8 +186,8 @@ import { readSeenRunErrorIds, rememberSeenRunErrorId } from "../lib/run-error-st
 import type {} from "../lib/scoreboard-trace";
 import { sharedInflight } from "../lib/shared-inflight";
 import {
+  activeMemberRun,
   activeThreadRuns,
-  admittedMemberRun,
   applyThreadSendReceipt,
   clearActiveThreadRuns,
   computerPanelAutoBoot,
@@ -3348,7 +3348,7 @@ export function ShellPage({
                 {activeGroup.members.map((member) => {
                   const participant = bots.find((bot) => bot.id === member.botId);
                   if (!participant) return null;
-                  const admitted = admittedMemberRun(currentRuns, member.botId);
+                  const admitted = activeMemberRun(currentRuns, member.botId);
                   return (
                     <div
                       key={member.botId}

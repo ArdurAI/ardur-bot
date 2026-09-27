@@ -177,15 +177,27 @@ export async function captureRunModelPin(input: {
       },
     });
     if (
-      !saved ||
-      saved.status !== "running" ||
+      saved?.status !== "running" ||
       saved.leaseOwner !== input.workerId ||
       saved.leaseFence !== input.fence
     )
       return "lost" as const;
     if (!updated.count && saved.runtimePin == null) return "lost" as const;
+    const committedPin = RuntimePinSchema.parse(saved.runtimePin);
+    if (!updated.count) {
+      const metadata = await tx.run.updateMany({
+        where: {
+          id: input.runId,
+          status: "running",
+          leaseOwner: input.workerId,
+          leaseFence: input.fence,
+        },
+        data: { modelProvider: committedPin.provider, modelId: committedPin.modelId },
+      });
+      if (!metadata.count) return "lost" as const;
+    }
     return {
-      pin: RuntimePinSchema.parse(saved.runtimePin),
+      pin: committedPin,
       source:
         RuntimePinSourceSchema.safeParse(saved.runtimePinSource).data ?? input.candidate.source,
       usageGroupId: saved.usageGroupId,
