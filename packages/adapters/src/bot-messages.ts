@@ -393,7 +393,7 @@ export async function returnBotMessageOutcome(
   intent: "result" | "status" = "result",
 ) {
   const saved = await deps.prisma.run.findUnique({ where: { id: run.id } });
-  if (saved?.delegationId || saved?.delegationRootTaskId) {
+  if (saved?.delegationId) {
     await markBotOutcomeReturned(deps.prisma, run.id);
     return true;
   }

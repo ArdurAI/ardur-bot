@@ -114,12 +114,16 @@ it("charges coordinator usage to the existing root under the admission lock", as
       botId: "chief",
       threadId: "thread",
       taskId: "root",
+      delegationRootTaskId: "goal-root",
     },
     { provider: "fixture", model: "fixture", inputTokens: 10, outputTokens: 20 },
   );
   expect(tx.$queryRaw).toHaveBeenCalledOnce();
   expect(tx.delegationRoot.updateMany).toHaveBeenCalledWith({
-    where: { rootTaskId: "root" },
+    where: { rootTaskId: "goal-root" },
     data: { usedTokens: { increment: 30 } },
+  });
+  expect(tx.usageRecord.create).toHaveBeenCalledWith({
+    data: expect.objectContaining({ rootTaskId: "goal-root" }),
   });
 });

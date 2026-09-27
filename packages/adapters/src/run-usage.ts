@@ -12,6 +12,7 @@ type UsageRun = {
   botId: string;
   threadId: string;
   taskId?: string;
+  delegationRootTaskId?: string | null;
   delegationId?: string | null;
 };
 type UsageDependencies = {
@@ -40,7 +41,7 @@ export async function recordRunUsage(
     : null;
   const identity = {
     delegationId: delegation?.id ?? null,
-    rootTaskId: delegation?.rootTaskId ?? run.taskId ?? null,
+    rootTaskId: delegation?.rootTaskId ?? run.delegationRootTaskId ?? run.taskId ?? null,
     requesterBotId: delegation?.requesterBotId ?? run.botId,
     actingBotId: delegation?.actingBotId ?? run.botId,
     depth: delegation?.depth ?? 0,
@@ -59,7 +60,7 @@ export async function recordRunUsage(
     ...identity,
     cost: null,
   };
-  const rootTaskId = delegation?.rootTaskId ?? run.taskId;
+  const rootTaskId = delegation?.rootTaskId ?? run.delegationRootTaskId ?? run.taskId;
   const record = rootTaskId
     ? await deps.prisma.$transaction(async (tx) => {
         await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${rootTaskId} FOR UPDATE`;

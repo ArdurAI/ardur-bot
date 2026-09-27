@@ -1930,10 +1930,23 @@ export function createRunExecutor(deps: ExecutorDeps) {
         );
         let approvalRulesPromise: Promise<ActionApprovalRule[]> | undefined;
         const loadApprovalRules = () => {
+          const goalId = (run as typeof run & { goalId?: string | null }).goalId;
           approvalRulesPromise ??= deps.prisma.actionApprovalRule
             .findMany({
-              where: { spaceId: run.spaceId, createdByUserId: run.userId },
-              select: { effect: true, matchKind: true, matchValue: true, botId: true },
+              where: {
+                spaceId: run.spaceId,
+                createdByUserId: run.userId,
+                scopeKey: {
+                  in: ["all", `bot:${run.botId}`, ...(goalId ? [`goal:${goalId}`] : [])],
+                },
+              },
+              select: {
+                effect: true,
+                matchKind: true,
+                matchValue: true,
+                botId: true,
+                scopeKey: true,
+              },
             })
             .then((rules) => rules as ActionApprovalRule[]);
           return approvalRulesPromise;
@@ -2511,6 +2524,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             : resolveActionApprovalDetail({
                 toolName: name,
                 botId: run.botId,
+                goalId: (run as typeof run & { goalId?: string | null }).goalId,
                 connectorKind,
                 rules: await loadApprovalRules(),
                 integrationApproval,
@@ -5664,7 +5678,7 @@ export async function notifyRun(
       originDeviceGrantId: true,
     },
   });
-  if (!delegated || delegated.delegationId || delegated.delegationRootTaskId) return;
+  if (!delegated || delegated.delegationId) return;
   const enabled = await runNotificationsEnabled(deps.prisma, run).catch((error) => {
     getLogger().error("notification preference lookup", error);
     return false;
