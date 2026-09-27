@@ -11,6 +11,7 @@ import {
 } from "../packages/adapters/src/schedule-tools";
 import { CreateRoutineInput } from "../packages/contracts/src/domain";
 import { SiteProductSchema } from "../packages/contracts/src/site-product";
+import { POPULAR_MODEL_PROVIDER_IDS } from "../packages/core/src/model-providers";
 import {
   generatedReadme,
   providersFromCatalog,
@@ -57,6 +58,17 @@ describe("site facts", () => {
       "choose",
       "approve",
     ]);
+  });
+
+  it("lists featured providers first, in the app picker's order", () => {
+    const providers = providersFromCatalog();
+    expect(
+      providers.slice(0, POPULAR_MODEL_PROVIDER_IDS.length).map((provider) => provider.id),
+    ).toEqual([...POPULAR_MODEL_PROVIDER_IDS]);
+    const rest = providers
+      .slice(POPULAR_MODEL_PROVIDER_IDS.length)
+      .map((provider) => provider.name);
+    expect(rest).toEqual([...rest].sort((a, b) => a.localeCompare(b)));
   });
 
   it("describes every shipped provider and names the map entry missing for a new one", () => {

@@ -172,14 +172,22 @@ export function providersFromCatalog(catalog = listPiCatalog()): Provider[] {
     if (!shipped.includes(id))
       throw new Error(`Featured provider "${id}" is missing from the model catalog.`);
   }
-  return Object.entries(PROVIDER_METADATA)
-    .filter(([id, metadata]) => shipped.includes(id) || metadata.status === "roadmap")
-    .map(([id, metadata]) => ({
-      id,
-      ...metadata,
-      featured: POPULAR_MODEL_PROVIDER_IDS.some((popular) => popular === id),
-    }))
-    .sort((a, b) => a.name.localeCompare(b.name));
+  return (
+    Object.entries(PROVIDER_METADATA)
+      .filter(([id, metadata]) => shipped.includes(id) || metadata.status === "roadmap")
+      .map(([id, metadata]) => ({
+        id,
+        ...metadata,
+        featured: POPULAR_MODEL_PROVIDER_IDS.some((popular) => popular === id),
+      }))
+      // Featured providers first, in the order the app's model picker shows them.
+      .sort((a, b) => pickerRank(a.id) - pickerRank(b.id) || a.name.localeCompare(b.name))
+  );
+}
+
+function pickerRank(id: string): number {
+  const rank = (POPULAR_MODEL_PROVIDER_IDS as readonly string[]).indexOf(id);
+  return rank === -1 ? POPULAR_MODEL_PROVIDER_IDS.length : rank;
 }
 
 export function computersFromRegistry(): SiteProduct["computers"] {

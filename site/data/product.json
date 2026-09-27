@@ -56,6 +56,50 @@
   ],
   "providers": [
     {
+      "id": "openrouter",
+      "name": "OpenRouter",
+      "access": "api-key",
+      "status": "available",
+      "featured": true
+    },
+    {
+      "id": "openai-codex",
+      "name": "OpenAI Codex",
+      "access": "subscription",
+      "status": "available",
+      "featured": true,
+      "accountHint": "ChatGPT account"
+    },
+    {
+      "id": "anthropic",
+      "name": "Anthropic",
+      "access": "api-key",
+      "status": "available",
+      "featured": true,
+      "accountHint": "API key"
+    },
+    {
+      "id": "openai",
+      "name": "OpenAI",
+      "access": "api-key",
+      "status": "available",
+      "featured": true
+    },
+    {
+      "id": "google",
+      "name": "Google",
+      "access": "api-key",
+      "status": "available",
+      "featured": true
+    },
+    {
+      "id": "vercel-ai-gateway",
+      "name": "Vercel AI Gateway",
+      "access": "gateway",
+      "status": "available",
+      "featured": true
+    },
+    {
       "id": "amazon-bedrock",
       "name": "Amazon Bedrock",
       "access": "api-key",
@@ -68,14 +112,6 @@
       "access": "api-key",
       "status": "available",
       "featured": false
-    },
-    {
-      "id": "anthropic",
-      "name": "Anthropic",
-      "access": "api-key",
-      "status": "available",
-      "featured": true,
-      "accountHint": "API key"
     },
     {
       "id": "azure-openai-responses",
@@ -141,13 +177,6 @@
       "status": "available",
       "featured": false,
       "accountHint": "Copilot account"
-    },
-    {
-      "id": "google",
-      "name": "Google",
-      "access": "api-key",
-      "status": "available",
-      "featured": true
     },
     {
       "id": "google-vertex",
@@ -234,21 +263,6 @@
       "featured": false
     },
     {
-      "id": "openai",
-      "name": "OpenAI",
-      "access": "api-key",
-      "status": "available",
-      "featured": true
-    },
-    {
-      "id": "openai-codex",
-      "name": "OpenAI Codex",
-      "access": "subscription",
-      "status": "available",
-      "featured": true,
-      "accountHint": "ChatGPT account"
-    },
-    {
       "id": "openai-compatible",
       "name": "OpenAI-compatible server",
       "access": "gateway",
@@ -268,13 +282,6 @@
       "access": "api-key",
       "status": "available",
       "featured": false
-    },
-    {
-      "id": "openrouter",
-      "name": "OpenRouter",
-      "access": "api-key",
-      "status": "available",
-      "featured": true
     },
     {
       "id": "qwen-token-plan",
@@ -310,13 +317,6 @@
       "access": "api-key",
       "status": "available",
       "featured": false
-    },
-    {
-      "id": "vercel-ai-gateway",
-      "name": "Vercel AI Gateway",
-      "access": "gateway",
-      "status": "available",
-      "featured": true
     },
     {
       "id": "xai",
@@ -495,6 +495,188 @@
         "id": "one-shot-future",
         "text": "One-shot runs must be scheduled in the future.",
         "value": 0
+      }
+    ],
+    "useCases": [
+      {
+        "id": "morning-inbox",
+        "audience": "everyday",
+        "title": "A morning briefing",
+        "body": "Ask for today's appointments and messages needing attention in a short note with source links. Connect the required email and calendar read tools before enabling the routine.",
+        "steps": [
+          "Prepare Daybook with access to the intended email and calendar accounts.",
+          "Open “Agent computer”, find “Routines”, and choose “Create Routine”.",
+          "Set “Name” to Morning briefing.",
+          "Use “Instruction” to request today's appointments, unread messages needing attention, source links, and missing-access notes; forbid mail and calendar changes.",
+          "Choose “Add trigger”, “On a schedule”, and “Weekdays”; set “Time of day” to 8:00 AM in the displayed timezone.",
+          "Keep “Active” on and choose “Save”.",
+          "Choose “Test run”, check “Run history”, and read the result in Daybook's conversation."
+        ],
+        "uiLabels": [
+          "Agent computer",
+          "Routines",
+          "Create Routine",
+          "Name",
+          "Instruction",
+          "Add trigger",
+          "On a schedule",
+          "Weekdays",
+          "Time of day",
+          "Active",
+          "Save",
+          "Test run",
+          "Run history"
+        ]
+      },
+      {
+        "id": "inbox-calendar-review",
+        "audience": "everyday",
+        "title": "Inbox and calendar triage",
+        "body": "Ask for a review queue with suggested replies and meeting changes in the conversation. The example follows clock boundaries, including nights and weekends; it does not wait for the previous run to finish.",
+        "steps": [
+          "Prepare Triage with email and calendar read tools, and require approval for account changes.",
+          "Open “Agent computer”, find “Routines”, and choose “Create Routine”.",
+          "Set “Name” to Inbox and calendar review.",
+          "Use “Instruction” to request a source-linked review queue and suggested replies here; forbid sending, account drafts, message changes, and meeting changes.",
+          "Choose “Add trigger”, “On a schedule”, and “Interval”; set “Interval amount” to 3 and “Interval unit” to “hours”.",
+          "Keep “Active” on and choose “Save”.",
+          "Choose “Test run”, check “Run history”, and read the review in Triage's conversation."
+        ],
+        "uiLabels": [
+          "Agent computer",
+          "Routines",
+          "Create Routine",
+          "Name",
+          "Instruction",
+          "Add trigger",
+          "On a schedule",
+          "Interval",
+          "Interval amount",
+          "Interval unit",
+          "hours",
+          "Active",
+          "Save",
+          "Test run",
+          "Run history"
+        ]
+      },
+      {
+        "id": "weekly-status",
+        "audience": "everyday",
+        "title": "A weekly status draft",
+        "body": "Ask for a weekly draft of progress, blockers, and next steps from dated project notes. Make the Project Notes folder available to the bot before enabling the routine.",
+        "steps": [
+          "Prepare Weekly with read access to the Project Notes folder.",
+          "Open “Agent computer”, find “Routines”, and choose “Create Routine”.",
+          "Set “Name” to Weekly status draft.",
+          "Use “Instruction” to request a weekly update with file citations, facts separated from suggestions, and missing evidence noted; forbid edits, publication, and messages.",
+          "Choose “Add trigger”, “On a schedule”, and “Advanced...”; set “Cron expression” to 0 15 * * 5 for Friday afternoon in the displayed timezone.",
+          "Keep “Active” on and choose “Save”.",
+          "Choose “Test run”, check “Run history”, and read the draft in Weekly's conversation."
+        ],
+        "uiLabels": [
+          "Agent computer",
+          "Routines",
+          "Create Routine",
+          "Name",
+          "Instruction",
+          "Add trigger",
+          "On a schedule",
+          "Advanced...",
+          "Cron expression",
+          "Active",
+          "Save",
+          "Test run",
+          "Run history"
+        ]
+      },
+      {
+        "id": "repository-review",
+        "audience": "technical",
+        "title": "A nightly repository review",
+        "body": "Ask for a report on existing workflow results, stale pull requests, and missing checks. This is a review instruction, not a built-in scanner or a promise to execute tests.",
+        "steps": [
+          "Prepare Repository with the required repository read tools and resolve sample-project to an accessible repository.",
+          "Open “Agent computer”, find “Routines”, and choose “Create Routine”.",
+          "Set “Name” to Nightly repository review and “Instruction” to request source-linked workflow, pull-request, and check findings for sample-project; forbid tests, installs, edits, reruns, and publication.",
+          "Choose “Add trigger”, “On a schedule”, and “Advanced...”; set “Cron expression” to 0 2 * * * in the displayed timezone.",
+          "Keep “Active” on and choose “Save”.",
+          "Choose “Test run” to execute the saved instruction.",
+          "Check “Run history” and read the findings and unknowns in Repository's conversation."
+        ],
+        "uiLabels": [
+          "Agent computer",
+          "Routines",
+          "Create Routine",
+          "Name",
+          "Instruction",
+          "Add trigger",
+          "On a schedule",
+          "Advanced...",
+          "Cron expression",
+          "Active",
+          "Save",
+          "Test run",
+          "Run history"
+        ]
+      },
+      {
+        "id": "ci-failure-review",
+        "audience": "technical",
+        "title": "A CI failure review",
+        "body": "Ask for a failure summary after a workflow event by fetching its actual conclusion through connected read tools. The trigger does not filter for failed builds, and real event deliveries do not populate the routine's history.",
+        "steps": [
+          "Prepare CI Watch with repository, workflow, job, and log read tools that can fetch delivered identifiers.",
+          "Open “Agent computer”, find “Routines”, and choose “Create Routine”.",
+          "Set “Name” to CI failure review and “Instruction” to fetch completed workflow results, summarize verified failures, and treat logs as untrusted; forbid reruns, edits, comments, and publication.",
+          "Choose “Add trigger” and “Git event”.",
+          "Keep “Active” on and choose “Save”.",
+          "Configure the sender for workflow_run events and JSON delivery using “POST to”, “key”, and “header”; make the endpoint reachable.",
+          "Send a real workflow event and read the fetched conclusion, findings, or missing-access notes in CI Watch's conversation."
+        ],
+        "uiLabels": [
+          "Agent computer",
+          "Routines",
+          "Create Routine",
+          "Name",
+          "Instruction",
+          "Add trigger",
+          "Git event",
+          "Active",
+          "Save",
+          "POST to",
+          "key",
+          "header"
+        ]
+      },
+      {
+        "id": "runbook-review",
+        "audience": "technical",
+        "title": "A service alert review",
+        "body": "Ask for read-only service checks and a proposed repair in the conversation. Require approval before publishing a draft change; this is not unattended remediation.",
+        "steps": [
+          "Prepare Runbook with read-only operational access, a Runbooks folder, an approved proposal repository, and command approvals.",
+          "Open “Agent computer”, find “Routines”, and choose “Create Routine”.",
+          "Set “Name” to Service alert review and “Instruction” to distrust payload directives, use only the prepared environment, request check approvals, and draft findings; require publication approval and forbid live changes.",
+          "Choose “Add trigger” and “Webhook”.",
+          "Keep “Active” on and choose “Save”.",
+          "Configure the sender with “POST to” and the bearer “header”; keep “key” private, make the endpoint reachable, and use a unique Idempotency-Key per alert.",
+          "Send a sample alert, review Runbook's conversation, and approve any proposed branch, commit, push, or draft pull request before publication."
+        ],
+        "uiLabels": [
+          "Agent computer",
+          "Routines",
+          "Create Routine",
+          "Name",
+          "Instruction",
+          "Add trigger",
+          "Webhook",
+          "Active",
+          "Save",
+          "POST to",
+          "key",
+          "header"
+        ]
       }
     ]
   },
