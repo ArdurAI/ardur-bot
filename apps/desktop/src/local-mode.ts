@@ -95,11 +95,19 @@ export interface LocalModeDependencies {
   env: NodeJS.ProcessEnv;
   spawn: (command: string, args: string[], options: SpawnOptions) => ChildProcess;
   fetch: (url: string, init: RequestInit) => Promise<Response>;
-  /**
-   * Creates the application database and its role as the superuser (`adminUrl`), then
-   * applies migrations as that role (`databaseUrl`). An abort cancels the running statement.
-   */
+  /** Applies migrations as the application role; older callers may prepare the role here too. */
   migrate: (input: { adminUrl: string; databaseUrl: string; signal: AbortSignal }) => Promise<void>;
+  /** Guided mode separates role/database creation from schema changes. */
+  prepareApplicationDatabase?: (input: {
+    adminUrl: string;
+    databaseUrl: string;
+    signal: AbortSignal;
+  }) => Promise<void>;
+  applicationDatabaseReady?: (input: {
+    databaseUrl: string;
+    signal: AbortSignal;
+  }) => Promise<boolean>;
+  migrationsReady?: (input: { databaseUrl: string; signal: AbortSignal }) => Promise<boolean>;
   /** May load the embedded binaries first; a missing package rejects with its name. */
   postgresFactory: (
     options: EmbeddedPostgresOptions,
@@ -240,6 +248,69 @@ export class LocalModeController {
     return run;
   }
 
+  /** Staged operations share the same in-flight and stop ownership as start(). */
+  prepareDatabase(signal: AbortSignal): Promise<DesktopLocalStackState> {
+    return this.stage("database", signal);
+  }
+
+  applyMigrations(signal: AbortSignal): Promise<DesktopLocalStackState> {
+    return this.stage("migrations", signal);
+  }
+
+  startServices(signal: AbortSignal): Promise<DesktopLocalStackState> {
+    return this.stage("services", signal);
+  }
+
+  async databaseOwned(): Promise<boolean> {
+    if (!this.postgres || !this.secrets || !this.postgresPort) return false;
+    return this.serves(this.postgresPort, this.secrets.POSTGRES_PASSWORD);
+  }
+
+  async databaseReady(signal: AbortSignal): Promise<boolean> {
+    if (!(await this.databaseOwned()) || !this.deps.applicationDatabaseReady) return false;
+    return this.deps.applicationDatabaseReady({ databaseUrl: this.databaseUrl, signal });
+  }
+
+  async migrationsReady(signal: AbortSignal): Promise<boolean> {
+    if (!(await this.databaseOwned()) || !this.deps.migrationsReady) return false;
+    return this.deps.migrationsReady({ databaseUrl: this.databaseUrl, signal });
+  }
+
+  private stage(
+    stage: "database" | "migrations" | "services",
+    signal: AbortSignal,
+  ): Promise<DesktopLocalStackState> {
+    if (this.quitting || this.stopping) return Promise.resolve(this.current);
+    if (this.inflight) return this.inflight;
+    this.stopped = false;
+    const abort = new AbortController();
+    this.runAbort = abort;
+    const onAbort = () => {
+      this.stopped = true;
+      abort.abort();
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+    if (signal.aborted) onAbort();
+    const run = (async () => {
+      try {
+        abort.signal.throwIfAborted();
+        if (stage === "database") await this.prepareDatabaseStage(abort.signal);
+        else if (stage === "migrations") await this.applyMigrationsStage(abort.signal);
+        else await this.startServicesStage(abort.signal);
+      } catch (error) {
+        if (!this.stopped) await this.handleRunFailure(error);
+      } finally {
+        signal.removeEventListener("abort", onAbort);
+      }
+      return this.current;
+    })().finally(() => {
+      if (this.inflight === run) this.inflight = null;
+      if (this.runAbort === abort) this.runAbort = null;
+    });
+    this.inflight = run;
+    return run;
+  }
+
   /**
    * Postgres is not restarted. The window shows one sentence; Retry calls start(). A
    * server this run spawned is stopped right away, as before. An adopted server's handle
@@ -370,36 +441,64 @@ export class LocalModeController {
       await this.ensurePostgres(signal);
       if (this.stopped) return this.current;
       this.publish("migrations", null);
-      await this.deps.migrate({
+      await this.deps.prepareApplicationDatabase?.({
         adminUrl: this.adminUrl,
         databaseUrl: this.databaseUrl,
         signal,
       });
+      await this.deps.migrate({ adminUrl: this.adminUrl, databaseUrl: this.databaseUrl, signal });
       if (this.stopped) return this.current;
-      this.publish("services", null);
-      if (!this.children.has("api")) this.spawn("api");
-      if (!this.children.has("worker")) this.spawn("worker");
-      if (!(await this.waitForServices(signal))) return this.current;
-      this.publish("ready", null);
-      this.watchAdopted();
+      await this.startServicesStage(signal);
       return this.current;
     } catch (error) {
-      if (this.stopped || this.databaseReported) return this.current;
-      if (error instanceof LocalModeFailure) {
-        this.log(error.detail);
-        this.fail(error.message, error.offerReset);
-      } else if (error instanceof MissingDatabaseBinariesError) {
-        this.log(`${error.packageName} could not be loaded`);
-        this.fail(error.message);
-      } else if (this.current.phase === "migrations" && (await this.databaseAlive())) {
-        await this.releaseDatabase();
-        this.log(error instanceof Error ? error.message : String(error));
-        const failure = migrationFailure(error);
-        if (!this.stopped) this.fail(failure.message, failure.offerReset);
-      } else {
-        await this.reportDatabaseDown();
-      }
+      await this.handleRunFailure(error);
       return this.current;
+    }
+  }
+
+  private async prepareDatabaseStage(signal: AbortSignal): Promise<void> {
+    this.publish("database", null);
+    await this.ensurePostgres(signal);
+    if (this.stopped) return;
+    await this.deps.prepareApplicationDatabase?.({
+      adminUrl: this.adminUrl,
+      databaseUrl: this.databaseUrl,
+      signal,
+    });
+  }
+
+  private async applyMigrationsStage(signal: AbortSignal): Promise<void> {
+    if (this.deps.prepareApplicationDatabase && !(await this.databaseOwned())) {
+      throw new LocalModeFailure(DATABASE_NOT_STARTED);
+    }
+    this.publish("migrations", null);
+    await this.deps.migrate({ adminUrl: this.adminUrl, databaseUrl: this.databaseUrl, signal });
+  }
+
+  private async startServicesStage(signal: AbortSignal): Promise<void> {
+    this.publish("services", null);
+    if (!this.children.has("api")) this.spawn("api");
+    if (!this.children.has("worker")) this.spawn("worker");
+    if (!(await this.waitForServices(signal))) return;
+    this.publish("ready", null);
+    this.watchAdopted();
+  }
+
+  private async handleRunFailure(error: unknown): Promise<void> {
+    if (this.stopped || this.databaseReported) return;
+    if (error instanceof LocalModeFailure) {
+      this.log(error.detail);
+      this.fail(error.message, error.offerReset);
+    } else if (error instanceof MissingDatabaseBinariesError) {
+      this.log(`${error.packageName} could not be loaded`);
+      this.fail(error.message);
+    } else if (this.current.phase === "migrations" && (await this.databaseAlive())) {
+      await this.releaseDatabase();
+      this.log(error instanceof Error ? error.message : String(error));
+      const failure = migrationFailure(error);
+      if (!this.stopped) this.fail(failure.message, failure.offerReset);
+    } else {
+      await this.reportDatabaseDown();
     }
   }
 

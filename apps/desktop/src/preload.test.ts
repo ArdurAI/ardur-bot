@@ -4,7 +4,11 @@ import vm from "node:vm";
 import type { ArdurBotDesktop, ArdurBotSetup } from "@ardurbot/contracts";
 import { describe, expect, it, vi } from "vitest";
 
-function runPreload(file: string, ipc: { invoke?: unknown; on?: unknown; off?: unknown } = {}) {
+function runPreload(
+  file: string,
+  ipc: { invoke?: unknown; on?: unknown; off?: unknown } = {},
+  argv: string[] = [],
+) {
   const invoke =
     (ipc.invoke as ReturnType<typeof vi.fn>) ?? vi.fn(async (channel: string) => ({ channel }));
   const on = (ipc.on as ReturnType<typeof vi.fn>) ?? vi.fn();
@@ -13,12 +17,12 @@ function runPreload(file: string, ipc: { invoke?: unknown; on?: unknown; off?: u
   const source = readFileSync(path.join(import.meta.dirname, file), "utf8");
 
   vm.runInNewContext(source, {
-    process: { platform: "linux" },
+    process: { platform: "linux", argv },
     require(moduleName: string) {
       if (moduleName !== "electron") throw new Error(`Unexpected preload import: ${moduleName}`);
       return {
         contextBridge: { exposeInMainWorld },
-        ipcRenderer: { invoke, on, off },
+        ipcRenderer: { invoke, on, off, removeListener: off },
         webUtils: { getPathForFile: (file: { path?: string }) => file.path ?? "" },
       };
     },
@@ -182,6 +186,23 @@ describe("desktop preload bridge", () => {
 });
 
 describe("setup preload bridge", () => {
+  it("exposes guided methods only with the main-process argument", async () => {
+    const { exposeInMainWorld, invoke, on, off } = runPreload("setup-preload.cjs", {}, [
+      "--ardurbot-guided-setup",
+    ]);
+    const bridge = exposeInMainWorld.mock.calls[0]![1] as ArdurBotSetup;
+    expect(bridge.guidedSetup).toBeDefined();
+    await bridge.guidedSetup!.snapshot();
+    await bridge.guidedSetup!.retry("database");
+    expect(invoke.mock.calls.map(([channel]) => channel)).toEqual([
+      "desktop.guidedSetup.snapshot",
+      "desktop.guidedSetup.retry",
+    ]);
+    const unsubscribe = bridge.guidedSetup!.onChange(() => undefined);
+    expect(on).toHaveBeenCalledWith("desktop.guidedSetup.changed", expect.any(Function));
+    unsubscribe();
+    expect(off).toHaveBeenCalledWith("desktop.guidedSetup.changed", expect.any(Function));
+  });
   it("exposes only the first-run setup operations", async () => {
     const { invoke, on, exposeInMainWorld } = runPreload("setup-preload.cjs");
 
