@@ -32,6 +32,21 @@ test("Computers shows fleet capacity, placement and move consent", async ({ page
       bots: [{ id: "builder", name: "Builder" }],
     },
     {
+      id: "refused-engine",
+      name: "Docker Desktop on this Mac",
+      kind: "docker",
+      connectionId: "refused-engine",
+      state: "unavailable",
+      endpoint: "unix:///fixture/refused.sock",
+      reachability: {
+        status: "installed-not-running",
+        reason: "engine-not-running",
+        checkedAt: new Date().toISOString(),
+      },
+      capacity: { ...capacity, memoryFree: null, memoryTotal: null, source: "not-reported" },
+      bots: [],
+    },
+    {
       id: "remote",
       name: "Linux computer",
       kind: "ssh",
@@ -65,13 +80,30 @@ test("Computers shows fleet capacity, placement and move consent", async ({ page
       },
     }),
   );
+  await page.route("**/rpc/fleet/test", (route) =>
+    route.fulfill({
+      json: {
+        json: {
+          ok: false,
+          reason: "engine-not-running",
+          checkedAt: new Date().toISOString(),
+          targets: [targets[1]],
+        },
+      },
+    }),
+  );
   const discovered = [
     {
       id: "discovered-docker",
-      name: "Docker on this Mac",
+      name: "Docker Desktop on this Mac",
       kind: "docker",
       connectionId: null,
       state: "discovered",
+      reachability: {
+        status: "installed-not-running",
+        reason: "engine-not-running",
+        checkedAt: new Date().toISOString(),
+      },
       endpoint: "/var/run/docker.sock",
       capacity: {
         cpuCount: null,
@@ -94,6 +126,11 @@ test("Computers shows fleet capacity, placement and move consent", async ({ page
   await expect(fleet).toContainText("24.0 GB free");
   await expect(fleet.getByLabel("Placement", { exact: true })).toHaveValue("free-memory");
   await expect(fleet.getByRole("button", { name: "Move", exact: true })).toBeVisible();
+  const refusedRow = fleet.locator('[data-fleet-target="refused-engine"]');
+  await expect(refusedRow).toContainText("Installed, not running · Engine not running");
+  await expect(refusedRow).not.toContainText("Memory not reported");
+  await refusedRow.getByRole("button", { name: "Test" }).click();
+  await expect(refusedRow).toContainText("Engine not running");
   await captureScreenshot(page, testInfo, "fleet-placement");
 
   const discoveredRow = fleet.locator('[data-fleet-target="discovered-docker"]');
@@ -102,7 +139,7 @@ test("Computers shows fleet capacity, placement and move consent", async ({ page
   const addDialog = page.getByRole("dialog", { name: "Add computer" });
   await expect(addDialog).toBeVisible();
   await expect(addDialog.getByLabel("Connection type")).toHaveValue("docker");
-  await expect(addDialog.getByLabel("Name")).toHaveValue("Docker on this Mac");
+  await expect(addDialog.getByLabel("Name")).toHaveValue("Docker Desktop on this Mac");
   await expect(addDialog.getByLabel("Engine endpoint")).toHaveValue("/var/run/docker.sock");
   await captureScreenshot(page, testInfo, "fleet-add-dialog");
 

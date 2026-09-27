@@ -11,6 +11,7 @@ import {
 } from "@ardurbot/contracts/fleet";
 import type { PrismaClient } from "@ardurbot/db";
 import { Prisma } from "@ardurbot/db";
+import { engineFailureReason } from "@ardurbot/host-runtime/fleet/probe";
 import type { RouterDeps } from "./router.js";
 
 const catalogs = new WeakMap<PrismaClient, FleetCatalog>();
@@ -190,10 +191,27 @@ export async function testFleetTarget(
   connectionId: string | null,
 ) {
   if (!connectionId) {
-    await fleetCatalog(deps)
-      .testDefault(context)
-      .catch(() => undefined);
-    return (await fleetCatalog(deps).list(context)).targets;
+    const checkedAt = new Date().toISOString();
+    try {
+      await fleetCatalog(deps).testDefault(context);
+    } catch (error) {
+      const reason = engineFailureReason(error);
+      if (!reason) throw error;
+      fleetCatalog(deps).recordTest("default", {
+        reachability: { status: "installed-not-running", reason, checkedAt },
+      });
+      return {
+        ok: false as const,
+        reason,
+        checkedAt,
+        targets: (await fleetCatalog(deps).list(context)).targets,
+      };
+    }
+    return {
+      ok: true as const,
+      checkedAt,
+      targets: (await fleetCatalog(deps).list(context)).targets,
+    };
   }
   const row = await deps.prisma.connection.findFirstOrThrow({
     where: {
@@ -205,13 +223,44 @@ export async function testFleetTarget(
   });
   const settings = ComputerConnectionSettingsSchema.parse(row.metadata);
   const provider = await fleetCatalog(deps).connections.resolve(connectionId, context);
-  const details =
-    "test" in provider && typeof provider.test === "function"
-      ? ((await provider.test(context)) as { version?: string; os?: string })
-      : {};
-  fleetCatalog(deps).recordTest(connectionId, details);
+  const checkedAt = new Date().toISOString();
+  let details: { version?: string; os?: string; capacity?: FleetTarget["capacity"] };
+  try {
+    details =
+      "test" in provider && typeof provider.test === "function"
+        ? ((await provider.test({
+            ...context,
+            signal: AbortSignal.any([context.signal, AbortSignal.timeout(5000)]),
+          })) as { version?: string; os?: string; capacity?: FleetTarget["capacity"] })
+        : {};
+  } catch (error) {
+    const reason = engineFailureReason(error);
+    if (!reason) throw error;
+    fleetCatalog(deps).recordTest(connectionId, {
+      reachability: {
+        status:
+          settings.endpoint?.startsWith("ssh://") || settings.endpoint?.startsWith("tcp://")
+            ? "not-reachable"
+            : "installed-not-running",
+        reason,
+        checkedAt,
+      },
+    });
+    const target = (await fleetCatalog(deps).list(context)).targets.find(
+      (target) => target.id === connectionId,
+    )!;
+    return { ok: false as const, reason, checkedAt, targets: [target] };
+  }
+  fleetCatalog(deps).recordTest(connectionId, {
+    ...details,
+    reachability: { status: "running", checkedAt },
+  });
   const target = (await fleetCatalog(deps).list(context)).targets.find(
     (target) => target.id === connectionId,
   )!;
-  return [{ ...target, ...details, kind: settings.engine }];
+  return {
+    ok: true as const,
+    checkedAt,
+    targets: [{ ...target, ...details, kind: settings.engine }],
+  };
 }

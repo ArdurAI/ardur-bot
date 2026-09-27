@@ -1,5 +1,6 @@
 import type { FleetTarget, PlacementSettings } from "@ardurbot/contracts";
 import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
+import type { FleetReachabilityReason } from "@ardurbot/contracts/fleet";
 import {
   Button,
   Checkbox,
@@ -19,6 +20,24 @@ import { rpc } from "../../lib/rpc";
 import { useTargetName } from "./target-name";
 
 type Fleet = Awaited<ReturnType<typeof rpc.fleet.list>>;
+
+function ReachabilityReason({ reason }: { reason: FleetReachabilityReason }) {
+  const { t } = useLingui();
+  switch (reason) {
+    case "engine-not-running":
+      return t`Engine not running`;
+    case "permission-denied":
+      return t`Permission denied on the socket`;
+    case "timed-out":
+      return t`Timed out`;
+    case "socket-missing":
+      return t`Socket missing`;
+    case "not-reachable":
+      return t`Engine not reachable`;
+    default:
+      return "";
+  }
+}
 
 export function FleetSettings() {
   const { t } = useLingui();
@@ -103,13 +122,37 @@ export function FleetSettings() {
               <div className="min-w-0">
                 <p className="truncate font-medium">{targetName(target)}</p>
                 <p className="text-xs text-muted-foreground">
-                  {target.state === "connected"
-                    ? t`Connected`
-                    : target.state === "discovered"
-                      ? t`Available`
-                      : t`Unavailable`}
+                  {target.reachability?.status === "running"
+                    ? t`Running`
+                    : target.reachability?.status === "installed-not-running"
+                      ? t`Installed, not running`
+                      : target.reachability?.status === "not-reachable"
+                        ? t`Not reachable`
+                        : target.state === "connected"
+                          ? t`Connected`
+                          : target.state === "discovered"
+                            ? t`Available`
+                            : t`Unavailable`}
+                  {target.reachability?.reason ? (
+                    <>
+                      {" "}
+                      · <ReachabilityReason reason={target.reachability.reason} />
+                    </>
+                  ) : null}
                   {target.endpoint && target.kind === "tailscale" ? ` · ${target.endpoint}` : ""}
                 </p>
+                {target.reachability?.status === "installed-not-running" ? (
+                  <p className="text-xs text-muted-foreground">
+                    <Trans>Start the engine and press Test.</Trans>
+                  </p>
+                ) : null}
+                {target.reachability?.checkedAt ? (
+                  <p className="text-xs text-muted-foreground">
+                    <Trans>
+                      Checked {new Date(target.reachability.checkedAt).toLocaleString()}
+                    </Trans>
+                  </p>
+                ) : null}
               </div>
               {target.state === "discovered" ? (
                 <Button variant="ghost" onClick={() => setAdding({ target })}>
@@ -127,7 +170,8 @@ export function FleetSettings() {
                           ? {
                               ...current,
                               targets: current.targets.map(
-                                (row) => tested.find((result) => result.id === row.id) ?? row,
+                                (row) =>
+                                  tested.targets.find((result) => result.id === row.id) ?? row,
                               ),
                             }
                           : current,
@@ -227,6 +271,12 @@ export function FleetSettings() {
 export function CapacityBar({ target }: { target: FleetTarget }) {
   const { t } = useLingui();
   const { memoryFree, memoryTotal, cpuCount, cpuLoad1m, diskFree } = target.capacity;
+  if (
+    memoryFree === null &&
+    target.reachability?.status !== "running" &&
+    (target.state !== "connected" || target.kind === "docker" || target.kind === "podman")
+  )
+    return null;
   return (
     <div className="space-y-1 text-xs text-muted-foreground">
       <p>

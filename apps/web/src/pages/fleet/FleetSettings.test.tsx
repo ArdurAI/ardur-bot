@@ -2,7 +2,7 @@
 
 import { unknownCapacity } from "@ardurbot/contracts/fleet";
 import type { ComponentProps, ReactNode } from "react";
-import { act, useEffect } from "react";
+import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 
@@ -113,7 +113,7 @@ it("renders capacity and assignments, applies placement, and requests explicit m
 it("names built-in rows by their key and the API's host label, and saved connections as named", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   catalog.set("This Mac", "Этот Mac");
-  catalog.set("Docker on this Mac", "Docker на этом Mac");
+  catalog.set("Docker engine on this Mac", "Docker на этом Mac");
   catalog.set("Default computer", "Компьютер по умолчанию");
   const row = {
     kind: "docker",
@@ -146,6 +146,66 @@ it("names built-in rows by their key and the API's host label, and saved connect
       '[aria-label="Preferred computer"]',
     )!;
     expect([...preferred.options].map((option) => option.textContent)).toEqual(translated);
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+it("shows probe reasons and checks without reporting memory for unreachable engines", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const checkedAt = "2026-09-27T18:00:00.000Z";
+  const base = { kind: "docker" as const, capacity: unknownCapacity(), bots: [] };
+  api.list.mockResolvedValue({
+    targets: [
+      {
+        ...base,
+        id: "saved",
+        name: "Docker Desktop on this Mac",
+        connectionId: "saved",
+        state: "unavailable",
+        reachability: { status: "installed-not-running", reason: "engine-not-running", checkedAt },
+      },
+      {
+        ...base,
+        id: "remote",
+        name: "Remote engine",
+        connectionId: "remote",
+        state: "unavailable",
+        reachability: { status: "not-reachable", reason: "timed-out", checkedAt },
+      },
+      {
+        ...base,
+        id: "running",
+        name: "Running engine",
+        connectionId: "running",
+        state: "connected",
+        reachability: { status: "running", checkedAt },
+      },
+    ],
+    bots: [],
+    placement: { mode: "manual", preferredTargetId: "host", minimumFreeGb: 4 },
+  });
+  api.discover.mockResolvedValue([
+    {
+      ...base,
+      id: "found",
+      name: "OrbStack on this Mac",
+      connectionId: null,
+      state: "discovered",
+      reachability: { status: "installed-not-running", reason: "socket-missing", checkedAt },
+    },
+  ] as never);
+  const element = document.createElement("div"),
+    root = createRoot(element);
+  try {
+    await act(async () => root.render(<FleetSettings />));
+    const row = (id: string) =>
+      element.querySelector(`[data-fleet-target="${id}"]`)?.textContent ?? "";
+    expect(row("saved")).toContain("Installed, not running · Engine not running");
+    expect(row("saved")).toContain("Checked");
+    expect(row("remote")).toContain("Not reachable · Timed out");
+    expect(row("found")).toContain("Socket missing");
+    expect(row("saved")).not.toContain("Memory not reported");
+    expect(row("running")).toContain("Memory not reported");
   } finally {
     await act(async () => root.unmount());
   }
@@ -266,11 +326,11 @@ it("opens Add computer dialog with prefilled engine from discovered row, and Esc
   api.discover.mockResolvedValue([
     {
       id: "docker-engine",
-      name: "Docker on this Mac",
+      name: "Docker Desktop on this Mac",
       kind: "docker",
       connectionId: null,
       state: "discovered",
-      endpoint: "/var/run/docker.sock",
+      endpoint: "/fixture/docker-desktop.sock",
       capacity: unknownCapacity(),
       bots: [],
     },
@@ -311,11 +371,11 @@ it("opens Add computer dialog with prefilled engine from discovered row, and Esc
       document.body.querySelector<HTMLSelectElement>('[aria-label="Connection type"]')?.value,
     ).toBe("docker");
     expect(document.body.querySelector<HTMLInputElement>('[aria-label="Name"]')?.value).toBe(
-      "Docker on this Mac",
+      "Docker Desktop on this Mac",
     );
     expect(
       document.body.querySelector<HTMLInputElement>('[aria-label="Engine endpoint"]')?.value,
-    ).toBe("/var/run/docker.sock");
+    ).toBe("/fixture/docker-desktop.sock");
 
     // Pressing Escape closes only the nested Add dialog, not Settings, and restores focus
     await act(async () => {

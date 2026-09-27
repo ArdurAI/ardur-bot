@@ -115,6 +115,14 @@ export type HostLabel = z.infer<typeof HostLabelSchema>;
 export function hostLabel(platform: string): HostLabel {
   return platform === "darwin" ? "This Mac" : "This computer";
 }
+export const FleetReachabilityReasonSchema = z.enum([
+  "engine-not-running",
+  "permission-denied",
+  "timed-out",
+  "socket-missing",
+  "not-reachable",
+]);
+export type FleetReachabilityReason = z.infer<typeof FleetReachabilityReasonSchema>;
 export const FleetTargetSchema = /* @__PURE__ */ (() =>
   z.object({
     id: z.string(),
@@ -124,6 +132,13 @@ export const FleetTargetSchema = /* @__PURE__ */ (() =>
     builtin: z.enum(["host", "local-docker", "default"]).optional(),
     connectionId: z.string().nullable(),
     state: z.enum(["connected", "discovered", "unavailable"]),
+    reachability: z
+      .object({
+        status: z.enum(["running", "installed-not-running", "not-reachable"]),
+        reason: FleetReachabilityReasonSchema.optional(),
+        checkedAt: z.iso.datetime(),
+      })
+      .optional(),
     capacity: CapacitySnapshotSchema,
     version: z.string().optional(),
     os: z.string().optional(),
@@ -133,6 +148,19 @@ export const FleetTargetSchema = /* @__PURE__ */ (() =>
     bots: z.array(z.object({ id: z.string(), name: z.string() })).default([]),
   }))();
 export type FleetTarget = z.infer<typeof FleetTargetSchema>;
+export const FleetTestResultSchema = z.discriminatedUnion("ok", [
+  z.object({
+    ok: z.literal(true),
+    checkedAt: z.iso.datetime(),
+    targets: z.array(FleetTargetSchema),
+  }),
+  z.object({
+    ok: z.literal(false),
+    reason: FleetReachabilityReasonSchema,
+    checkedAt: z.iso.datetime(),
+    targets: z.array(FleetTargetSchema),
+  }),
+]);
 export const PlacementDecisionSchema = z.object({
   targetId: z.string(),
   targetName: z.string().optional(),

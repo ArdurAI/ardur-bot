@@ -1529,6 +1529,11 @@ msgstr "Check your email"
 msgid "Checked"
 msgstr "Checked"
 
+#. placeholder {0}: new Date(target.reachability.checkedAt).toLocaleString()
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Checked {0}"
+msgstr "Checked {0}"
+
 #: src/components/DesktopUpdates.tsx
 #: src/components/OllamaSettings.tsx
 #: src/components/SoftwareUpdateSection.tsx
@@ -1763,6 +1768,24 @@ msgstr "Codex runs on host computers for now — change the bot's computer or it
 #: src/pages/LearningInsights.tsx
 msgid "coding"
 msgstr "coding"
+
+#. placeholder {0}: target.context.slice(7)
+#: src/pages/fleet/target-name.ts
+msgid "Colima ({0}) on this computer"
+msgstr "Colima ({0}) on this computer"
+
+#. placeholder {0}: target.context.slice(7)
+#: src/pages/fleet/target-name.ts
+msgid "Colima ({0}) on this Mac"
+msgstr "Colima ({0}) on this Mac"
+
+#: src/pages/fleet/target-name.ts
+msgid "Colima (default) on this computer"
+msgstr "Colima (default) on this computer"
+
+#: src/pages/fleet/target-name.ts
+msgid "Colima (default) on this Mac"
+msgstr "Colima (default) on this Mac"
 
 #. placeholder {0}: group.title
 #: src/pages/Shell.tsx
@@ -3333,17 +3356,33 @@ msgstr "Do not type passwords into the demo. Use Take control for credentials."
 msgid "Docker"
 msgstr "Docker"
 
+#: src/pages/fleet/target-name.ts
+msgid "Docker Desktop on this computer"
+msgstr "Docker Desktop on this computer"
+
+#: src/pages/fleet/target-name.ts
+msgid "Docker Desktop on this Mac"
+msgstr "Docker Desktop on this Mac"
+
+#: src/pages/fleet/target-name.ts
+msgid "Docker engine (default context) on this computer"
+msgstr "Docker engine (default context) on this computer"
+
+#: src/pages/fleet/target-name.ts
+msgid "Docker engine (default context) on this Mac"
+msgstr "Docker engine (default context) on this Mac"
+
+#: src/pages/fleet/target-name.ts
+msgid "Docker engine on this computer"
+msgstr "Docker engine on this computer"
+
+#: src/pages/fleet/target-name.ts
+msgid "Docker engine on this Mac"
+msgstr "Docker engine on this Mac"
+
 #: src/pages/HostComputerPrompt.tsx
 msgid "Docker limits access to your computer for added security. Using {hostLabel} lets bots work with your local files and tools."
 msgstr "Docker limits access to your computer for added security. Using {hostLabel} lets bots work with your local files and tools."
-
-#: src/pages/fleet/target-name.ts
-msgid "Docker on this computer"
-msgstr "Docker on this computer"
-
-#: src/pages/fleet/target-name.ts
-msgid "Docker on this Mac"
-msgstr "Docker on this Mac"
 
 #: src/pages/KnowledgeSection.tsx
 msgid "Document"
@@ -3485,6 +3524,14 @@ msgstr "Engage when... Ignore..."
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Engine endpoint"
 msgstr "Engine endpoint"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Engine not reachable"
+msgstr "Engine not reachable"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Engine not running"
+msgstr "Engine not running"
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Engine: {label}"
@@ -4214,6 +4261,10 @@ msgstr "Installed models"
 msgid "Installed on your computer"
 msgstr "Installed on your computer"
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Installed, not running"
+msgstr "Installed, not running"
+
 #: src/pages/customize/PluginsPage.tsx
 msgid "Installing"
 msgstr "Installing"
@@ -4363,6 +4414,11 @@ msgstr "Keep working when the window is closed"
 #: src/pages/RoutineEditor.tsx
 msgid "key"
 msgstr "key"
+
+#. placeholder {0}: target.context.slice(5)
+#: src/pages/fleet/target-name.ts
+msgid "kind ({0})"
+msgstr "kind ({0})"
 
 #: src/pages/KnowledgeSection.tsx
 msgid "Knowledge"
@@ -5458,6 +5514,10 @@ msgstr "Not initialized"
 msgid "Not now"
 msgstr "Not now"
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Not reachable"
+msgstr "Not reachable"
+
 #: src/components/ThreadCommandBlock.tsx
 #: src/pages/ide/diff.tsx
 msgid "Not recorded"
@@ -5736,6 +5796,14 @@ msgstr "Or connect an API key"
 msgid "Or paste an API key"
 msgstr "Or paste an API key"
 
+#: src/pages/fleet/target-name.ts
+msgid "OrbStack on this computer"
+msgstr "OrbStack on this computer"
+
+#: src/pages/fleet/target-name.ts
+msgid "OrbStack on this Mac"
+msgstr "OrbStack on this Mac"
+
 #: src/pages/account/AccountProfile.tsx
 msgid "Organic"
 msgstr "Organic"
@@ -5842,6 +5910,10 @@ msgstr "Paste your API key"
 #: src/pages/RoutineEditor.tsx
 msgid "Paused"
 msgstr "Paused"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Permission denied on the socket"
+msgstr "Permission denied on the socket"
 
 #. placeholder {0}: tool.id
 #: src/components/integrations/manage/ToolPermissions.tsx
@@ -6761,6 +6833,7 @@ msgstr "running"
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/fleet/FleetSettings.tsx
 msgid "Running"
 msgstr "Running"
 
@@ -7324,6 +7397,10 @@ msgstr "Slack not enabled"
 msgid "Slash commands"
 msgstr "Slash commands"
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Socket missing"
+msgstr "Socket missing"
+
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Software update"
 msgstr "Software update"
@@ -7456,6 +7533,10 @@ msgstr "Start or stop dictation in the chat you are typing in."
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Start recording"
 msgstr "Start recording"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Start the engine and press Test."
+msgstr "Start the engine and press Test."
 
 #: src/lib/run-status-label.ts
 msgid "Starting"
@@ -7942,6 +8023,10 @@ msgstr "Time of day"
 #: src/components/Context.tsx
 msgid "Time to first token"
 msgstr "Time to first token"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Timed out"
+msgstr "Timed out"
 
 #: src/pages/LearningInbox.tsx
 #: src/pages/TeamBoard.tsx

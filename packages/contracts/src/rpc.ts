@@ -100,7 +100,12 @@ import {
 } from "./domain.js";
 import { ProductEventSchema } from "./events.js";
 import { featuresContract } from "./features.js";
-import { FleetSchema, FleetTargetSchema, PlacementSettingsSchema } from "./fleet.js";
+import {
+  FleetSchema,
+  FleetTargetSchema,
+  FleetTestResultSchema,
+  PlacementSettingsSchema,
+} from "./fleet.js";
 import { goalsContract } from "./goal.js";
 import { HostStatusSchema } from "./host-bridge.js";
 import {
@@ -287,7 +292,7 @@ function createFleetContract() {
   return {
     list: oc.output(FleetSchema),
     discover: oc.output(FleetTargetSchema.array()),
-    test: oc.input(z.object({ connectionId: Id.nullable() })).output(FleetTargetSchema.array()),
+    test: oc.input(z.object({ connectionId: Id.nullable() })).output(FleetTestResultSchema),
     placement: oc.input(PlacementSettingsSchema).output(PlacementSettingsSchema),
     bot: oc
       .input(

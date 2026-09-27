@@ -14,6 +14,7 @@ import {
   parseLinuxCapacity,
 } from "./capacity.js";
 import { FLEET_LINUX_CAPABILITIES, fleetComputerKey, LinuxFleetSandbox } from "./linux-sandbox.js";
+import { engineFailureReason } from "./probe.js";
 import type { FleetProcess } from "./process.js";
 import { remoteArgv, systemFleetProcess } from "./process.js";
 import { sshOptions } from "./ssh-sandbox.js";
@@ -138,8 +139,12 @@ export class FleetDockerSandboxProvider extends LinuxFleetSandbox {
         input,
         limit,
       );
-      if (result.code !== 0)
-        throw new Error("Engine operation failed; test the connection in Computers.");
+      if (result.code !== 0) {
+        const reason = engineFailureReason(result.stderr.toString());
+        throw new Error(
+          reason ?? (argv[0] === "info" ? "engine-not-running" : "Engine command failed."),
+        );
+      }
       return result.stdout;
     } finally {
       await command.cleanup();
@@ -317,12 +322,20 @@ export class FleetDockerSandboxProvider extends LinuxFleetSandbox {
     const version = String(info.ServerVersion ?? "");
     const os = String(info.OperatingSystem ?? info.OSType ?? "");
     if (info.OSType !== "linux") throw new Error("Choose a Linux container engine.");
+    const localSocket =
+      !this.settings.dockerContext &&
+      (!this.settings.endpoint ||
+        this.settings.endpoint.startsWith("unix://") ||
+        this.settings.endpoint.startsWith("/"));
+    const capacity = dockerCapacity(raw, localSocket ? await hostCapacity() : undefined);
+    if (capacity.memoryFree !== null && capacity.memoryTotal !== null)
+      capacity.memoryFree = Math.min(capacity.memoryFree, capacity.memoryTotal);
     return {
       version,
       os,
-      capacity: await this.capacity(),
+      capacity,
       name: this.settings.engine,
-      rootless: JSON.stringify(info.SecurityOptions).includes("rootless"),
+      rootless: JSON.stringify(info.SecurityOptions ?? []).includes("rootless"),
     };
   }
   readonly capacity = cachedCapacity(async () => {

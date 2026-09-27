@@ -1529,6 +1529,11 @@ msgstr "अपना ईमेल देखें"
 msgid "Checked"
 msgstr ""
 
+#. placeholder {0}: new Date(target.reachability.checkedAt).toLocaleString()
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Checked {0}"
+msgstr ""
+
 #: src/components/DesktopUpdates.tsx
 #: src/components/OllamaSettings.tsx
 #: src/components/SoftwareUpdateSection.tsx
@@ -1762,6 +1767,24 @@ msgstr ""
 
 #: src/pages/LearningInsights.tsx
 msgid "coding"
+msgstr ""
+
+#. placeholder {0}: target.context.slice(7)
+#: src/pages/fleet/target-name.ts
+msgid "Colima ({0}) on this computer"
+msgstr ""
+
+#. placeholder {0}: target.context.slice(7)
+#: src/pages/fleet/target-name.ts
+msgid "Colima ({0}) on this Mac"
+msgstr ""
+
+#: src/pages/fleet/target-name.ts
+msgid "Colima (default) on this computer"
+msgstr ""
+
+#: src/pages/fleet/target-name.ts
+msgid "Colima (default) on this Mac"
 msgstr ""
 
 #. placeholder {0}: group.title
@@ -3333,17 +3356,33 @@ msgstr "डेमो में पासवर्ड टाइप न करे�
 msgid "Docker"
 msgstr "Docker"
 
+#: src/pages/fleet/target-name.ts
+msgid "Docker Desktop on this computer"
+msgstr ""
+
+#: src/pages/fleet/target-name.ts
+msgid "Docker Desktop on this Mac"
+msgstr ""
+
+#: src/pages/fleet/target-name.ts
+msgid "Docker engine (default context) on this computer"
+msgstr ""
+
+#: src/pages/fleet/target-name.ts
+msgid "Docker engine (default context) on this Mac"
+msgstr ""
+
+#: src/pages/fleet/target-name.ts
+msgid "Docker engine on this computer"
+msgstr ""
+
+#: src/pages/fleet/target-name.ts
+msgid "Docker engine on this Mac"
+msgstr ""
+
 #: src/pages/HostComputerPrompt.tsx
 msgid "Docker limits access to your computer for added security. Using {hostLabel} lets bots work with your local files and tools."
 msgstr "Docker अतिरिक्त सुरक्षा के लिए आपके कंप्यूटर तक पहुँच सीमित करता है। {hostLabel} चुनने पर बॉट्स आपकी स्थानीय फ़ाइलों और टूल्स के साथ काम कर सकते हैं।"
-
-#: src/pages/fleet/target-name.ts
-msgid "Docker on this computer"
-msgstr ""
-
-#: src/pages/fleet/target-name.ts
-msgid "Docker on this Mac"
-msgstr ""
 
 #: src/pages/KnowledgeSection.tsx
 msgid "Document"
@@ -3484,6 +3523,14 @@ msgstr ""
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Engine endpoint"
+msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Engine not reachable"
+msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Engine not running"
 msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
@@ -4214,6 +4261,10 @@ msgstr ""
 msgid "Installed on your computer"
 msgstr ""
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Installed, not running"
+msgstr ""
+
 #: src/pages/customize/PluginsPage.tsx
 msgid "Installing"
 msgstr ""
@@ -4362,6 +4413,11 @@ msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "key"
+msgstr ""
+
+#. placeholder {0}: target.context.slice(5)
+#: src/pages/fleet/target-name.ts
+msgid "kind ({0})"
 msgstr ""
 
 #: src/pages/KnowledgeSection.tsx
@@ -5458,6 +5514,10 @@ msgstr "आरंभ नहीं किया गया"
 msgid "Not now"
 msgstr "अभी नहीं"
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Not reachable"
+msgstr ""
+
 #: src/components/ThreadCommandBlock.tsx
 #: src/pages/ide/diff.tsx
 msgid "Not recorded"
@@ -5736,6 +5796,14 @@ msgstr "या एक API कुंजी कनेक्ट करें"
 msgid "Or paste an API key"
 msgstr "या एक API कुंजी पेस्ट करें"
 
+#: src/pages/fleet/target-name.ts
+msgid "OrbStack on this computer"
+msgstr ""
+
+#: src/pages/fleet/target-name.ts
+msgid "OrbStack on this Mac"
+msgstr ""
+
 #: src/pages/account/AccountProfile.tsx
 msgid "Organic"
 msgstr ""
@@ -5842,6 +5910,10 @@ msgstr "अपनी API कुंजी पेस्ट करें"
 #: src/pages/RoutineEditor.tsx
 msgid "Paused"
 msgstr "रुका हुआ"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Permission denied on the socket"
+msgstr ""
 
 #. placeholder {0}: tool.id
 #: src/components/integrations/manage/ToolPermissions.tsx
@@ -6761,6 +6833,7 @@ msgstr "चल रहा है"
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/fleet/FleetSettings.tsx
 msgid "Running"
 msgstr "चल रहा है"
 
@@ -7324,6 +7397,10 @@ msgstr ""
 msgid "Slash commands"
 msgstr ""
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Socket missing"
+msgstr ""
+
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Software update"
 msgstr ""
@@ -7456,6 +7533,10 @@ msgstr ""
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Start recording"
 msgstr "रिकॉर्डिंग शुरू करें"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Start the engine and press Test."
+msgstr ""
 
 #: src/lib/run-status-label.ts
 msgid "Starting"
@@ -7942,6 +8023,10 @@ msgstr "दिन का समय"
 #: src/components/Context.tsx
 msgid "Time to first token"
 msgstr "पहले टोकन तक का समय"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Timed out"
+msgstr ""
 
 #: src/pages/LearningInbox.tsx
 #: src/pages/TeamBoard.tsx

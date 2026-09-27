@@ -135,3 +135,30 @@ it("pins discovered contexts to their tested endpoint and validates resource uni
   expect(engineLimits(settings)).toEqual(["--cpus", "0.5", "--memory", "268435456"]);
   expect(() => engineLimits({ ...settings, cpuLimit: "0" })).toThrow("resource limits");
 });
+
+it("uses the successful Test response after a failed capacity sample was cached", async () => {
+  let running = false;
+  const run = vi.fn(async () => ({
+    code: running ? 0 : 1,
+    stdout: Buffer.from(
+      JSON.stringify({
+        OSType: "linux",
+        NCPU: 4,
+        MemTotal: 8 * 1024 ** 3,
+        ServerVersion: "fixture",
+      }),
+    ),
+    stderr: Buffer.from(running ? "" : "connection refused"),
+  }));
+  const provider = new FleetDockerSandboxProvider(
+    ComputerConnectionSettingsSchema.parse({
+      engine: "docker",
+      endpoint: "unix:///fixture/engine.sock",
+    }),
+    { run, start: vi.fn() } as FleetProcess,
+  );
+  expect((await provider.capacity()).source).toBe("not-reported");
+  running = true;
+  const tested = await provider.test(context);
+  expect(tested.capacity).toMatchObject({ source: "docker", memoryTotal: 8 * 1024 ** 3 });
+});

@@ -26,7 +26,7 @@ import { KubernetesSandboxProvider } from "../kubernetes-sandbox.js";
 import { FakeKubernetesApi } from "../kubernetes-test-api.js";
 import { RemoteHostSandboxProvider } from "../remote-host-sandbox.js";
 import { createSandboxProvider } from "../sandbox-factory.js";
-import { FleetCatalog } from "./catalog.js";
+import { FleetCatalog, projectedEngineName } from "./catalog.js";
 import { placeRunComputer } from "./placement.js";
 
 function storedComputer(overrides: Record<string, unknown> = {}) {
@@ -1604,7 +1604,7 @@ it("keys the built-in rows and labels the host from the paired desktop, else the
     {
       id: "default",
       builtin: "local-docker",
-      name: "Docker on this Mac",
+      name: "Docker engine on this Mac",
       kind: "docker",
       bots: [],
     },
@@ -1614,11 +1614,44 @@ it("keys the built-in rows and labels the host from the paired desktop, else the
   expect(rows(onLinux).map(({ id, builtin, name }) => ({ id, builtin, name }))).toEqual([
     { id: "host", builtin: "host", name: "This computer" },
     { id: "default", builtin: "default", name: "Default computer" },
-    { id: "docker", builtin: "local-docker", name: "Docker on this computer" },
+    { id: "docker", builtin: "local-docker", name: "Docker engine on this computer" },
   ]);
   expect((await list(provider("docker"), null)).hostLabel).toBe(
     process.platform === "darwin" ? "This Mac" : "This computer",
   );
+});
+
+it("clarifies old generated engine names without changing owner names", () => {
+  const settings = (endpoint: string) =>
+    ComputerConnectionSettingsSchema.parse({ engine: "docker", endpoint });
+  expect(
+    projectedEngineName(
+      "Docker on this Mac",
+      settings("unix:///fixture/.docker/run/docker.sock"),
+      "This Mac",
+    ),
+  ).toBe("Docker Desktop on this Mac");
+  expect(
+    projectedEngineName(
+      "Docker on this Mac",
+      settings("unix:///fixture/.orbstack/run/docker.sock"),
+      "This Mac",
+    ),
+  ).toBe("OrbStack on this Mac");
+  expect(
+    projectedEngineName(
+      "Docker on this Mac",
+      settings("unix:///fixture/.colima/atrium-beta/docker.sock"),
+      "This Mac",
+    ),
+  ).toBe("Colima (atrium-beta) on this Mac");
+  expect(
+    projectedEngineName(
+      "My build engine",
+      settings("unix:///fixture/.docker/run/docker.sock"),
+      "This Mac",
+    ),
+  ).toBe("My build engine");
 });
 
 it.each([

@@ -1529,6 +1529,11 @@ msgstr "Проверьте свою электронную почту"
 msgid "Checked"
 msgstr ""
 
+#. placeholder {0}: new Date(target.reachability.checkedAt).toLocaleString()
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Checked {0}"
+msgstr ""
+
 #: src/components/DesktopUpdates.tsx
 #: src/components/OllamaSettings.tsx
 #: src/components/SoftwareUpdateSection.tsx
@@ -1763,6 +1768,24 @@ msgstr ""
 #: src/pages/LearningInsights.tsx
 msgid "coding"
 msgstr "программирования"
+
+#. placeholder {0}: target.context.slice(7)
+#: src/pages/fleet/target-name.ts
+msgid "Colima ({0}) on this computer"
+msgstr ""
+
+#. placeholder {0}: target.context.slice(7)
+#: src/pages/fleet/target-name.ts
+msgid "Colima ({0}) on this Mac"
+msgstr ""
+
+#: src/pages/fleet/target-name.ts
+msgid "Colima (default) on this computer"
+msgstr ""
+
+#: src/pages/fleet/target-name.ts
+msgid "Colima (default) on this Mac"
+msgstr ""
 
 #. placeholder {0}: group.title
 #: src/pages/Shell.tsx
@@ -3333,17 +3356,33 @@ msgstr "Не вводите пароли в демо. Используйте «�
 msgid "Docker"
 msgstr "Docker"
 
+#: src/pages/fleet/target-name.ts
+msgid "Docker Desktop on this computer"
+msgstr ""
+
+#: src/pages/fleet/target-name.ts
+msgid "Docker Desktop on this Mac"
+msgstr ""
+
+#: src/pages/fleet/target-name.ts
+msgid "Docker engine (default context) on this computer"
+msgstr ""
+
+#: src/pages/fleet/target-name.ts
+msgid "Docker engine (default context) on this Mac"
+msgstr ""
+
+#: src/pages/fleet/target-name.ts
+msgid "Docker engine on this computer"
+msgstr ""
+
+#: src/pages/fleet/target-name.ts
+msgid "Docker engine on this Mac"
+msgstr ""
+
 #: src/pages/HostComputerPrompt.tsx
 msgid "Docker limits access to your computer for added security. Using {hostLabel} lets bots work with your local files and tools."
 msgstr "Docker ограничивает доступ к вашему компьютеру для дополнительной безопасности. С помощью {hostLabel} боты могут работать с локальными файлами и инструментами."
-
-#: src/pages/fleet/target-name.ts
-msgid "Docker on this computer"
-msgstr "Docker на этом компьютере"
-
-#: src/pages/fleet/target-name.ts
-msgid "Docker on this Mac"
-msgstr "Docker на этом Mac"
 
 #: src/pages/KnowledgeSection.tsx
 msgid "Document"
@@ -3484,6 +3523,14 @@ msgstr "Включайтесь, когда... Игнорируйте..."
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Engine endpoint"
+msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Engine not reachable"
+msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Engine not running"
 msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
@@ -4214,6 +4261,10 @@ msgstr ""
 msgid "Installed on your computer"
 msgstr ""
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Installed, not running"
+msgstr ""
+
 #: src/pages/customize/PluginsPage.tsx
 msgid "Installing"
 msgstr ""
@@ -4363,6 +4414,11 @@ msgstr ""
 #: src/pages/RoutineEditor.tsx
 msgid "key"
 msgstr "ключ"
+
+#. placeholder {0}: target.context.slice(5)
+#: src/pages/fleet/target-name.ts
+msgid "kind ({0})"
+msgstr ""
 
 #: src/pages/KnowledgeSection.tsx
 msgid "Knowledge"
@@ -5458,6 +5514,10 @@ msgstr "Не инициализировано"
 msgid "Not now"
 msgstr "Не сейчас"
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Not reachable"
+msgstr ""
+
 #: src/components/ThreadCommandBlock.tsx
 #: src/pages/ide/diff.tsx
 msgid "Not recorded"
@@ -5736,6 +5796,14 @@ msgstr "Или подключить API-ключ"
 msgid "Or paste an API key"
 msgstr "Или вставьте ключ API"
 
+#: src/pages/fleet/target-name.ts
+msgid "OrbStack on this computer"
+msgstr ""
+
+#: src/pages/fleet/target-name.ts
+msgid "OrbStack on this Mac"
+msgstr ""
+
 #: src/pages/account/AccountProfile.tsx
 msgid "Organic"
 msgstr "Органичный"
@@ -5842,6 +5910,10 @@ msgstr "Вставьте свой ключ API"
 #: src/pages/RoutineEditor.tsx
 msgid "Paused"
 msgstr "Приостановлено"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Permission denied on the socket"
+msgstr ""
 
 #. placeholder {0}: tool.id
 #: src/components/integrations/manage/ToolPermissions.tsx
@@ -6761,6 +6833,7 @@ msgstr "выполняется"
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/fleet/FleetSettings.tsx
 msgid "Running"
 msgstr "Выполняется"
 
@@ -7324,6 +7397,10 @@ msgstr "Slack не включен"
 msgid "Slash commands"
 msgstr ""
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Socket missing"
+msgstr ""
+
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Software update"
 msgstr "Обновление программного обеспечения"
@@ -7456,6 +7533,10 @@ msgstr ""
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Start recording"
 msgstr "Начать запись"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Start the engine and press Test."
+msgstr ""
 
 #: src/lib/run-status-label.ts
 msgid "Starting"
@@ -7942,6 +8023,10 @@ msgstr "Время суток"
 #: src/components/Context.tsx
 msgid "Time to first token"
 msgstr "Время до первого токена"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Timed out"
+msgstr ""
 
 #: src/pages/LearningInbox.tsx
 #: src/pages/TeamBoard.tsx

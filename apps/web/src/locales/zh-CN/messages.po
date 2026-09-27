@@ -1529,6 +1529,11 @@ msgstr "请查看邮箱"
 msgid "Checked"
 msgstr ""
 
+#. placeholder {0}: new Date(target.reachability.checkedAt).toLocaleString()
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Checked {0}"
+msgstr ""
+
 #: src/components/DesktopUpdates.tsx
 #: src/components/OllamaSettings.tsx
 #: src/components/SoftwareUpdateSection.tsx
@@ -1763,6 +1768,24 @@ msgstr ""
 #: src/pages/LearningInsights.tsx
 msgid "coding"
 msgstr "编程"
+
+#. placeholder {0}: target.context.slice(7)
+#: src/pages/fleet/target-name.ts
+msgid "Colima ({0}) on this computer"
+msgstr ""
+
+#. placeholder {0}: target.context.slice(7)
+#: src/pages/fleet/target-name.ts
+msgid "Colima ({0}) on this Mac"
+msgstr ""
+
+#: src/pages/fleet/target-name.ts
+msgid "Colima (default) on this computer"
+msgstr ""
+
+#: src/pages/fleet/target-name.ts
+msgid "Colima (default) on this Mac"
+msgstr ""
 
 #. placeholder {0}: group.title
 #: src/pages/Shell.tsx
@@ -3333,17 +3356,33 @@ msgstr "不要在示范中输入密码。凭据请用「接管」。"
 msgid "Docker"
 msgstr "Docker"
 
+#: src/pages/fleet/target-name.ts
+msgid "Docker Desktop on this computer"
+msgstr ""
+
+#: src/pages/fleet/target-name.ts
+msgid "Docker Desktop on this Mac"
+msgstr ""
+
+#: src/pages/fleet/target-name.ts
+msgid "Docker engine (default context) on this computer"
+msgstr ""
+
+#: src/pages/fleet/target-name.ts
+msgid "Docker engine (default context) on this Mac"
+msgstr ""
+
+#: src/pages/fleet/target-name.ts
+msgid "Docker engine on this computer"
+msgstr ""
+
+#: src/pages/fleet/target-name.ts
+msgid "Docker engine on this Mac"
+msgstr ""
+
 #: src/pages/HostComputerPrompt.tsx
 msgid "Docker limits access to your computer for added security. Using {hostLabel} lets bots work with your local files and tools."
 msgstr "Docker 限制对你电脑的访问，以提高安全性。使用{hostLabel}时，Bot 可以处理你的本地文件并使用本地工具。"
-
-#: src/pages/fleet/target-name.ts
-msgid "Docker on this computer"
-msgstr "这台电脑上的 Docker"
-
-#: src/pages/fleet/target-name.ts
-msgid "Docker on this Mac"
-msgstr "这台 Mac 上的 Docker"
 
 #: src/pages/KnowledgeSection.tsx
 msgid "Document"
@@ -3484,6 +3523,14 @@ msgstr ""
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Engine endpoint"
+msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Engine not reachable"
+msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Engine not running"
 msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
@@ -4214,6 +4261,10 @@ msgstr ""
 msgid "Installed on your computer"
 msgstr ""
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Installed, not running"
+msgstr ""
+
 #: src/pages/customize/PluginsPage.tsx
 msgid "Installing"
 msgstr ""
@@ -4363,6 +4414,11 @@ msgstr ""
 #: src/pages/RoutineEditor.tsx
 msgid "key"
 msgstr "密钥"
+
+#. placeholder {0}: target.context.slice(5)
+#: src/pages/fleet/target-name.ts
+msgid "kind ({0})"
+msgstr ""
 
 #: src/pages/KnowledgeSection.tsx
 msgid "Knowledge"
@@ -5458,6 +5514,10 @@ msgstr "未初始化"
 msgid "Not now"
 msgstr "暂不"
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Not reachable"
+msgstr ""
+
 #: src/components/ThreadCommandBlock.tsx
 #: src/pages/ide/diff.tsx
 msgid "Not recorded"
@@ -5736,6 +5796,14 @@ msgstr "或连接 API 密钥"
 msgid "Or paste an API key"
 msgstr "或粘贴 API 密钥"
 
+#: src/pages/fleet/target-name.ts
+msgid "OrbStack on this computer"
+msgstr ""
+
+#: src/pages/fleet/target-name.ts
+msgid "OrbStack on this Mac"
+msgstr ""
+
 #: src/pages/account/AccountProfile.tsx
 msgid "Organic"
 msgstr "自然"
@@ -5842,6 +5910,10 @@ msgstr "粘贴你的 API 密钥"
 #: src/pages/RoutineEditor.tsx
 msgid "Paused"
 msgstr "已暂停"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Permission denied on the socket"
+msgstr ""
 
 #. placeholder {0}: tool.id
 #: src/components/integrations/manage/ToolPermissions.tsx
@@ -6761,6 +6833,7 @@ msgstr "运行中"
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/fleet/FleetSettings.tsx
 msgid "Running"
 msgstr "运行中"
 
@@ -7324,6 +7397,10 @@ msgstr ""
 msgid "Slash commands"
 msgstr ""
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Socket missing"
+msgstr ""
+
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Software update"
 msgstr "软件更新"
@@ -7456,6 +7533,10 @@ msgstr ""
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Start recording"
 msgstr "开始录制"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Start the engine and press Test."
+msgstr ""
 
 #: src/lib/run-status-label.ts
 msgid "Starting"
@@ -7942,6 +8023,10 @@ msgstr "时间"
 #: src/components/Context.tsx
 msgid "Time to first token"
 msgstr "首个词元耗时"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Timed out"
+msgstr ""
 
 #: src/pages/LearningInbox.tsx
 #: src/pages/TeamBoard.tsx

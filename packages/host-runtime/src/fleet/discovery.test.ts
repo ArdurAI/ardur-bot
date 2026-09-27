@@ -1,7 +1,13 @@
 import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
 import { expect, it, vi } from "vitest";
-import { discoverFleet, parseDockerContexts, parseTailscalePeers } from "./discovery.js";
+import {
+  discoverFleet,
+  dockerContextName,
+  parseDockerContexts,
+  parseTailscalePeers,
+} from "./discovery.js";
 import { engineCommand } from "./docker-sandbox.js";
+import { probeEngineEndpoint } from "./probe.js";
 import type { FleetProcess } from "./process.js";
 
 it("reads JSON-lines Docker contexts and preserves every Kubernetes context", async () => {
@@ -23,6 +29,47 @@ it("reads JSON-lines Docker contexts and preserves every Kubernetes context", as
       .filter((target) => target.kind === "kubernetes")
       .map((target) => target.context),
   ).toEqual(["kind-test", "cluster-test"]);
+});
+it("names Docker contexts by their actual engine and profile", () => {
+  expect(dockerContextName("desktop-linux")).toContain("Docker Desktop");
+  expect(dockerContextName("orbstack")).toContain("OrbStack");
+  expect(dockerContextName("colima")).toContain("Colima (default)");
+  expect(dockerContextName("colima-atrium-beta")).toContain("Colima (atrium-beta)");
+  expect(dockerContextName("kind-ardur-test")).toBe("kind (ardur-test)");
+});
+it.each([
+  ["answered", { code: 0, stderr: "" }, "running", undefined],
+  [
+    "refused",
+    { code: 1, stderr: "connection refused" },
+    "installed-not-running",
+    "engine-not-running",
+  ],
+  [
+    "missing",
+    { code: 1, stderr: "no such file or directory" },
+    "installed-not-running",
+    "socket-missing",
+  ],
+  ["timeout", { code: 1, stderr: "timed out" }, "installed-not-running", "timed-out"],
+] as const)("classifies a %s engine probe", async (_case, result, status, reason) => {
+  const run = vi.fn(async (_name: string, _argv: string[]) => ({
+    code: result.code,
+    stdout: Buffer.alloc(0),
+    stderr: Buffer.from(result.stderr),
+  }));
+  const probed = await probeEngineEndpoint(
+    { kind: "docker", endpoint: "unix:///fixture/engine.sock" },
+    { run, start: vi.fn() } as FleetProcess,
+  );
+  expect(probed).toMatchObject({ status, ...(reason ? { reason } : {}) });
+  expect(run.mock.calls[0]?.[1]).toEqual([
+    "--host",
+    "unix:///fixture/engine.sock",
+    "info",
+    "--format",
+    "{{json .}}",
+  ]);
 });
 it("lists only online Linux peers, with MagicDNS, IP and advertised Tailscale SSH", () => {
   const peers = parseTailscalePeers(
