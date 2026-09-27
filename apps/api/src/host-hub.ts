@@ -180,11 +180,7 @@ export class HostHub {
     const pending = this.pending.get(frame.id);
     if (!pending) return;
     if (
-      !(await this.authorize(
-        pending.request,
-        this.host.ownerId,
-        this.host.registrationGeneration,
-      ))
+      !(await this.authorize(pending.request, this.host.ownerId, this.host.registrationGeneration))
     ) {
       this.cancel(frame.id, pending.worker);
       return;

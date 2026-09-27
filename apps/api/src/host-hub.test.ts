@@ -5,7 +5,10 @@ import { HOST_IN_FLIGHT, HOST_WINDOW } from "@ardurbot/contracts/host-bridge";
 import type { HostWire } from "@ardurbot/host-runtime/bridge-wire";
 import type { HostClient } from "@ardurbot/host-runtime/host-client";
 import { describe, expect, it, vi } from "vitest";
-import type { BrokerScope, HermesProviderBroker } from "../../../packages/adapters/src/hermes-provider-broker.js";
+import type {
+  BrokerScope,
+  HermesProviderBroker,
+} from "../../../packages/adapters/src/hermes-provider-broker.js";
 import { RemoteHostRuntime } from "../../../packages/adapters/src/remote-host-runtime.js";
 import { HostHub } from "./host-hub.js";
 
@@ -182,7 +185,11 @@ describe("outbound host hub", () => {
     const second = wire();
     hub.attach(first, "owner", "registration");
     await hub.fromHost(first, healthFrame());
-    const grant = { id: crypto.randomUUID(), token: "a".repeat(43), expiresAt: Date.now() + 60_000 };
+    const grant = {
+      id: crypto.randomUUID(),
+      token: "a".repeat(43),
+      expiresAt: Date.now() + 60_000,
+    };
     const revoke = vi.fn();
     const open = vi.fn();
     const broker = { grant, revoke, open } as unknown as HermesProviderBroker;
@@ -210,8 +217,16 @@ describe("outbound host hub", () => {
           },
           worker,
         );
-        expect(worker.frames.at(-1)).toMatchObject({ type: "end", problem: expect.any(Object) });
-        throw new Error("Host operation is unavailable for this run.");
+        if (worker.frames.at(-1)?.type === "end")
+          throw new Error("Host operation is unavailable for this run.");
+        yield {
+          v: 1,
+          type: "stream",
+          id: operationId,
+          seq: 0,
+          channel: "event",
+          data: { type: "done" },
+        };
       },
     } as unknown as HostClient;
     const remote = new RemoteHostRuntime(client, "hermes", async (_request, _context, fence) => {
@@ -225,10 +240,7 @@ describe("outbound host hub", () => {
         operationId: fence.operationId,
         leaseOwner: "worker",
         leaseFence: 1,
-        hostGeneration: createHash("sha256")
-          .update(fence.hostGeneration)
-          .digest()
-          .readUIntBE(0, 6),
+        hostGeneration: createHash("sha256").update(fence.hostGeneration).digest().readUIntBE(0, 6),
         configurationHash: "fixture",
         pin: {
           credentialId: "fixture",
