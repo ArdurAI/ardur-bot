@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import type { AgentUsage } from "@ardurbot/adapter-kit";
+import { DELEGATION_LIMITS } from "@ardurbot/contracts";
 import type { PrismaClient, ThreadEvents, UsageRecord } from "@ardurbot/db";
 import {
   appendEventInTransaction,
@@ -170,14 +171,31 @@ async function recordRequestUsage(
         let delegation = delegationId
           ? await tx.delegation.findUniqueOrThrow({ where: { id: delegationId } })
           : null;
+        const currentDelegationScope =
+          delegation &&
+          (delegation.parentRunId === run.id ||
+            (delegation.runId === run.id && currentRun.delegationId === delegation.id));
+        const historicalBrokerReceipt =
+          delegation &&
+          !currentDelegationScope &&
+          request.admission?.kind === "worker-provider-broker" &&
+          request.counter.sequence > 0 &&
+          (await tx.usageRecord.findFirst({
+            where: {
+              delegationId: delegation.id,
+              runId: run.id,
+              requestId: request.requestId,
+              attemptId: request.attemptId,
+              counterEpoch: request.counter.epochId,
+              observations: { some: { sequence: 0 } },
+            },
+            select: { id: true },
+          }));
         if (
           delegation &&
           (delegation.spaceId !== run.spaceId ||
             delegation.userId !== run.userId ||
-            !(
-              delegation.parentRunId === run.id ||
-              (delegation.runId === run.id && currentRun.delegationId === delegation.id)
-            ))
+            !(currentDelegationScope || historicalBrokerReceipt))
         )
           throw new Error("Usage delegation scope mismatch");
         const rootTaskId =
@@ -334,17 +352,32 @@ async function recordRequestUsage(
               rootBudget.tokenLimit
           )
             throw new Error("Broker root task allowance exhausted");
-          if (
-            delegation &&
-            (!["queued", "running"].includes(delegation.status) ||
-              delegation.usedTokens +
-                reservations
-                  .filter((row) => row.delegationId === delegation.id)
-                  .reduce((sum, row) => sum + row.held, 0) +
-                request.admission.reservedTokens >
-                delegation.reservedTokens)
-          )
-            throw new Error("Broker delegation allowance exhausted");
+          if (delegation) {
+            const attemptSpent =
+              delegation.hop > 1
+                ? await tx.usageRecord.aggregate({
+                    where: {
+                      delegationId: delegation.id,
+                      runId: run.id,
+                      purpose: { not: "detached-learning" },
+                    },
+                    _sum: { inputTokens: true, outputTokens: true },
+                  })
+                : null;
+            const usedInAttempt = attemptSpent
+              ? (attemptSpent._sum.inputTokens ?? 0) + (attemptSpent._sum.outputTokens ?? 0)
+              : delegation.usedTokens;
+            const attemptLimit =
+              delegation.hop > 1 ? DELEGATION_LIMITS.reservationTokens : delegation.reservedTokens;
+            const heldInAttempt = reservations
+              .filter((row) => row.delegationId === delegation.id && row.runId === run.id)
+              .reduce((sum, row) => sum + row.held, 0);
+            if (
+              !["queued", "running"].includes(delegation.status) ||
+              usedInAttempt + heldInAttempt + request.admission.reservedTokens > attemptLimit
+            )
+              throw new Error("Broker delegation allowance exhausted");
+          }
         }
         const totals = accumulateRequestUsage(existing ? storedTotals(existing) : null, request);
         const tokens = usageTokenTotals(totals.categories, request.reasoningSemantics);
@@ -431,11 +464,19 @@ async function recordRequestUsage(
           },
         });
         if (request.purpose !== "detached-learning") {
-          await updateUsageBudget(tx, rootTaskId, delegation?.id, inputDelta + outputDelta);
+          await updateUsageBudget(
+            tx,
+            rootTaskId,
+            delegation?.id,
+            inputDelta + outputDelta,
+            Boolean(historicalBrokerReceipt),
+          );
         }
         if (
           request.admission &&
-          (!delegation || !["queued", "running", "cancel-requested"].includes(delegation.status))
+          (!delegation ||
+            historicalBrokerReceipt ||
+            !["queued", "running", "cancel-requested"].includes(delegation.status))
         ) {
           await tx.delegationRoot.updateMany({
             where: { rootTaskId },
@@ -503,6 +544,7 @@ async function updateUsageBudget(
   rootTaskId: string,
   delegationId: string | undefined,
   tokens: number,
+  retainedPriorAttempt = false,
 ) {
   if (!delegationId) {
     await tx.delegationRoot.updateMany({
@@ -512,7 +554,8 @@ async function updateUsageBudget(
     return;
   }
   const current = await tx.delegation.findUniqueOrThrow({ where: { id: delegationId } });
-  const active = ["queued", "running", "cancel-requested"].includes(current.status);
+  const active =
+    !retainedPriorAttempt && ["queued", "running", "cancel-requested"].includes(current.status);
   await tx.delegation.update({
     where: { id: current.id },
     data: { usedTokens: { increment: tokens } },

@@ -3,7 +3,13 @@ import type { AgentUsage, RequestUsageObservation } from "@ardurbot/adapter-kit"
 import { RequestUsageCollector, usageEvent } from "@ardurbot/adapter-kit";
 import { type ContextSnapshot, TaskCardSchema } from "@ardurbot/contracts";
 import type { Prisma, PrismaClient } from "@ardurbot/db";
-import { admitDelegation, createDb, finishDelegation, updateWorkerTask } from "@ardurbot/db";
+import {
+  admitDelegation,
+  createDb,
+  finishDelegation,
+  rejectDelegation,
+  updateWorkerTask,
+} from "@ardurbot/db";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { aggregateContext, recordContextUsage, resumeContextSnapshot } from "./context/metrics.js";
 import { loadLearningRecords } from "./learning-records.js";
@@ -356,7 +362,7 @@ postgres("request ledger on disposable PostgreSQL", () => {
     expect(await f.root()).toMatchObject({ reservedTokens: 0, usedTokens: 0 });
   });
 
-  it("charges broker starts inside a child allowance only once at the root", async () => {
+  it("retains an old broker hold only once across child rework", async () => {
     const f = await fixture();
     await db.prisma.run.update({
       where: { id: f.id },
@@ -364,7 +370,7 @@ postgres("request ledger on disposable PostgreSQL", () => {
     });
     await db.prisma.delegationRoot.update({
       where: { rootTaskId: f.id },
-      data: { tokenLimit: 1000, reservedTokens: 1000, activeDescendants: 1 },
+      data: { tokenLimit: 20_000, reservedTokens: 1000, activeDescendants: 1 },
     });
     const snapshot = {
       pin: f.pin,
@@ -372,11 +378,36 @@ postgres("request ledger on disposable PostgreSQL", () => {
       destination: { host: null, local: true },
     };
     const authority = { scopes: [], connectors: [] };
+    const childTask = await db.prisma.task.create({
+      data: {
+        spaceId: f.id,
+        userId: f.run.userId,
+        botId: f.id,
+        threadId: f.id,
+        prompt: "Synthetic helper",
+        status: "running",
+      },
+    });
+    const workerRun = await db.prisma.run.create({
+      data: {
+        spaceId: f.id,
+        userId: f.run.userId,
+        botId: f.id,
+        threadId: f.id,
+        taskId: childTask.id,
+        delegationRootTaskId: f.id,
+        status: "running",
+        trigger: "bot_message",
+        runtimePin: f.pin,
+        leaseOwner: "worker",
+        leaseFence: 2,
+      },
+    });
     const delegation = await db.prisma.delegation.create({
       data: {
         rootTaskId: f.id,
         parentRunId: f.id,
-        runId: f.id,
+        runId: workerRun.id,
         spaceId: f.id,
         userId: f.run.userId,
         requesterBotId: f.id,
@@ -406,8 +437,11 @@ postgres("request ledger on disposable PostgreSQL", () => {
         }),
       },
     });
-    await db.prisma.run.update({ where: { id: f.id }, data: { delegationId: delegation.id } });
-    const make = (tokens: number) =>
+    await db.prisma.run.update({
+      where: { id: workerRun.id },
+      data: { delegationId: delegation.id },
+    });
+    const make = (tokens: number, maxReservedTokens = 2000) =>
       new RequestUsageCollector({
         provider: "fixture",
         model: "fixture",
@@ -418,11 +452,12 @@ postgres("request ledger on disposable PostgreSQL", () => {
           kind: "worker-provider-broker",
           reservedTokens: tokens,
           maxRequests: 2,
-          maxReservedTokens: 2000,
+          maxReservedTokens,
         },
       });
+    const childRun = { ...workerRun, delegationId: delegation.id };
     const record = (usage: AgentUsage) =>
-      recordBrokerRunUsage({ prisma: db.prisma, events: f.events }, f.run, usage, {
+      recordBrokerRunUsage({ prisma: db.prisma, events: f.events }, childRun, usage, {
         leaseOwner: "worker",
         leaseFence: 2,
         runtimePin: f.pin,
@@ -432,7 +467,37 @@ postgres("request ledger on disposable PostgreSQL", () => {
     expect(await f.root()).toMatchObject({ reservedTokens: 1000, usedTokens: 0 });
     await expect(record(make(950).start())).rejects.toThrow("delegation allowance exhausted");
     await db.prisma.$transaction((tx) =>
-      finishDelegation(tx, delegation.id, "completed", "Synthetic result", f.id),
+      finishDelegation(tx, delegation.id, "completed", "Synthetic result", workerRun.id),
+    );
+    expect(await f.root()).toMatchObject({ reservedTokens: 100, usedTokens: 0 });
+    await db.prisma.run.update({ where: { id: workerRun.id }, data: { status: "completed" } });
+    const rework = await db.prisma.$transaction((tx) =>
+      rejectDelegation(
+        tx,
+        { spaceId: f.id, userId: f.run.userId },
+        delegation.id,
+        f.id,
+        "Revise the synthetic result",
+      ),
+    );
+    expect(await f.root()).toMatchObject({ reservedTokens: 10_100, usedTokens: 0 });
+    const reworkRun = await db.prisma.run.update({
+      where: { id: rework.runId },
+      data: { status: "running", leaseOwner: "worker", leaseFence: 2 },
+    });
+    const reworkRecord = (usage: AgentUsage) =>
+      recordBrokerRunUsage({ prisma: db.prisma, events: f.events }, reworkRun, usage, {
+        leaseOwner: "worker",
+        leaseFence: 2,
+        runtimePin: f.pin,
+      });
+    const fresh = make(9950, 20_000);
+    await reworkRecord(fresh.start());
+    await reworkRecord(fresh.snapshot({ input: 0, output: 0 }));
+    await reworkRecord(fresh.finish("success"));
+    expect(await f.root()).toMatchObject({ reservedTokens: 10_100, usedTokens: 0 });
+    await db.prisma.$transaction((tx) =>
+      finishDelegation(tx, delegation.id, "completed", "Revised result", rework.runId),
     );
     expect(await f.root()).toMatchObject({ reservedTokens: 100, usedTokens: 0 });
     await record(first.finish("unknown"));
@@ -441,6 +506,64 @@ postgres("request ledger on disposable PostgreSQL", () => {
     expect(await f.root()).toMatchObject({ reservedTokens: 80, usedTokens: 20 });
     await record(first.finish("success"));
     expect(await f.root()).toMatchObject({ reservedTokens: 0, usedTokens: 20 });
+
+    await db.prisma.run.update({ where: { id: rework.runId }, data: { status: "completed" } });
+    const third = await db.prisma.$transaction((tx) =>
+      rejectDelegation(
+        tx,
+        { spaceId: f.id, userId: f.run.userId },
+        delegation.id,
+        f.id,
+        "Revise the synthetic result again",
+      ),
+    );
+    const thirdRun = await db.prisma.run.update({
+      where: { id: third.runId },
+      data: { status: "running", leaseOwner: "worker", leaseFence: 2 },
+    });
+    const thirdRecord = (usage: AgentUsage) =>
+      recordBrokerRunUsage({ prisma: db.prisma, events: f.events }, thirdRun, usage, {
+        leaseOwner: "worker",
+        leaseFence: 2,
+        runtimePin: f.pin,
+      });
+    const thirdHold = make(100);
+    await thirdRecord(thirdHold.start());
+    await db.prisma.$transaction((tx) =>
+      finishDelegation(tx, delegation.id, "completed", "Third result", third.runId),
+    );
+    expect(await f.root()).toMatchObject({ reservedTokens: 100, usedTokens: 20 });
+    await db.prisma.run.update({ where: { id: third.runId }, data: { status: "completed" } });
+    const fourth = await db.prisma.$transaction((tx) =>
+      rejectDelegation(
+        tx,
+        { spaceId: f.id, userId: f.run.userId },
+        delegation.id,
+        f.id,
+        "One final revision",
+      ),
+    );
+    await thirdRecord(thirdHold.snapshot({ input: 15, output: 5 }));
+    await thirdRecord(thirdHold.finish("success"));
+    expect(await f.root()).toMatchObject({ reservedTokens: 10_000, usedTokens: 40 });
+    const fourthRun = await db.prisma.run.update({
+      where: { id: fourth.runId },
+      data: { status: "running", leaseOwner: "worker", leaseFence: 2 },
+    });
+    const fourthRecord = (usage: AgentUsage) =>
+      recordBrokerRunUsage({ prisma: db.prisma, events: f.events }, fourthRun, usage, {
+        leaseOwner: "worker",
+        leaseFence: 2,
+        runtimePin: f.pin,
+      });
+    const fourthRequest = make(9990, 20_000);
+    await fourthRecord(fourthRequest.start());
+    await fourthRecord(fourthRequest.snapshot({ input: 0, output: 0 }));
+    await fourthRecord(fourthRequest.finish("success"));
+    await db.prisma.$transaction((tx) =>
+      finishDelegation(tx, delegation.id, "completed", "Final result", fourth.runId),
+    );
+    expect(await f.root()).toMatchObject({ reservedTokens: 0, usedTokens: 40 });
   });
 
   it("rechecks the broker lease after waiting for the root lock", async () => {

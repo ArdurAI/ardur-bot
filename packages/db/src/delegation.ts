@@ -47,9 +47,13 @@ export const ACTIVE_DELEGATIONS = ["queued", "running", "cancel-requested"];
 const PEER_RECEIPT_MAX_LENGTH = 2000;
 type Scope = Pick<Actor, "spaceId" | "userId">;
 
-async function unresolvedBrokerTokens(tx: Prisma.TransactionClient, delegationId: string) {
+async function unresolvedBrokerTokens(
+  tx: Prisma.TransactionClient,
+  delegationId: string,
+  runId: string,
+) {
   const rows = await tx.usageRecord.findMany({
-    where: { delegationId, observations: { some: { sequence: 0 } } },
+    where: { delegationId, runId, observations: { some: { sequence: 0 } } },
     select: {
       inputTokens: true,
       outputTokens: true,
@@ -508,13 +512,28 @@ export async function finishDelegation(
   });
   if (!changed.count) return;
   await appendTaskEvent(tx, row, status, text);
-  const brokerHeld = await unresolvedBrokerTokens(tx, row.id);
+  const brokerHeld = row.runId ? await unresolvedBrokerTokens(tx, row.id, row.runId) : 0;
+  const attemptSpent =
+    row.hop > 1 && row.runId
+      ? await tx.usageRecord.aggregate({
+          where: {
+            delegationId: row.id,
+            runId: row.runId,
+            purpose: { not: "detached-learning" },
+          },
+          _sum: { inputTokens: true, outputTokens: true },
+        })
+      : null;
+  const usedInAttempt = attemptSpent
+    ? (attemptSpent._sum.inputTokens ?? 0) + (attemptSpent._sum.outputTokens ?? 0)
+    : row.usedTokens;
+  const attemptLimit = row.hop > 1 ? DELEGATION_LIMITS.reservationTokens : row.reservedTokens;
   await tx.delegationRoot.update({
     where: { rootTaskId: row.rootTaskId },
     data: {
       activeDescendants: { decrement: 1 },
       reservedTokens: {
-        decrement: Math.max(0, row.reservedTokens - row.usedTokens - brokerHeld),
+        decrement: Math.max(0, attemptLimit - usedInAttempt - brokerHeld),
       },
     },
   });
