@@ -15,6 +15,8 @@
     "lint": "biome check .",
     "format": "biome check --write .",
     "db:generate": "pnpm --filter @ardurbot/db generate",
+    "site:facts": "node --import tsx scripts/site-facts.ts",
+    "site:facts:check": "node --import tsx scripts/site-facts.ts --check",
     "db:migrate": "pnpm --filter @ardurbot/db migrate",
     "db:backfill-pins": "tsx apps/api/src/backfill-runtime-pins-cli.ts",
     "sandbox:build": "tsx scripts/build-computers.ts",

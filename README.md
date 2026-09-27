@@ -23,9 +23,13 @@ Inherited from Rakazo and working:
 - Persistent bots with their own conversation, memory, routines and history
 - Group chats and delegation between bots, plus short-lived subagents
 - A provider, model and thinking level per bot
-- Providers: OpenRouter, OpenAI Codex (ChatGPT account), Anthropic (API key), OpenAI,
-  Google, Vercel AI Gateway, and any OpenAI-compatible server, which covers Kimi Code,
-  Z.ai, and local Ollama, LM Studio or llama.cpp
+<!-- site-facts:providers:start -->
+<!-- Generated from site/data/product.json by pnpm site:facts; edit that file. -->
+- Providers: OpenRouter, OpenAI Codex, Anthropic, OpenAI, Google, Vercel AI Gateway, and OpenAI-compatible server,
+  plus 35 more in the model catalog. OpenAI-compatible servers cover local Ollama,
+  LM Studio and llama.cpp. The planned first-class options are
+  Claude Pro/Max through the CLI and Ollama as a first-class choice.
+<!-- site-facts:providers:end -->
 - Computers: the computer Ardur Bot is installed on, plus Docker, Podman, Kubernetes or SSH
   machines you add, and E2B, Daytona or Box on a server, with a browser, terminal, files and a
   graphical desktop ([where bots run](docs/self-host.md#where-bots-run))
@@ -101,8 +105,9 @@ for build and acceptance instructions.
 
 ## Run from source
 
-You need Node.js 22.22.2 or newer in the 22.x line, Node.js 24.x, or Node.js 26+; pnpm 9;
-and Docker. Node.js 23.x and 25.x are not supported.
+<!-- site-facts:from-source:start -->
+<!-- Generated from site/data/product.json by pnpm site:facts; edit that file. -->
+You need Node.js 22.22.2+ in the 22.x line, 24.x or 26+; pnpm 9; Docker. Node.js 23.x and 25.x are not supported.
 
 ```sh
 git clone https://github.com/ArdurAI/ardur-bot.git
@@ -111,22 +116,17 @@ git checkout dev
 cp .env.example .env
 ```
 
-In `.env`, set `POSTGRES_PASSWORD` (for example `openssl rand -hex 16`) and put the same
-value in `DATABASE_URL`. Set `BETTER_AUTH_SECRET`, `ENCRYPTION_KEY`, `SCREEN_PROXY_SECRET`
-and `SANDBOX_SUPERVISOR_TOKEN` to separate long random values (`openssl rand -hex 32`).
-Model credentials are added in the app, or set `OPENROUTER_API_KEY` here.
+In .env, set POSTGRES_PASSWORD to a random value (for example, openssl rand -hex 16) and use it in DATABASE_URL; set BETTER_AUTH_SECRET, ENCRYPTION_KEY, SCREEN_PROXY_SECRET and SANDBOX_SUPERVISOR_TOKEN to separate long random values (for example, openssl rand -hex 32); add model credentials in the app or set OPENROUTER_API_KEY.
 
 ```sh
-docker compose --env-file .env \
-  -f infra/compose/docker-compose.yml \
-  -f infra/compose/docker-compose.postgres-host.yml \
-  up postgres -d
+docker compose --env-file .env -f infra/compose/docker-compose.yml -f infra/compose/docker-compose.postgres-host.yml up postgres -d
 pnpm install
 pnpm db:generate
 pnpm db:migrate
 pnpm sandbox:build
 pnpm dev
 ```
+<!-- site-facts:from-source:end -->
 
 Open [http://127.0.0.1:5173](http://127.0.0.1:5173), create an account, connect a model, and
 create your first bot. Local Docker computers are on by default.

@@ -1,0 +1,438 @@
+{
+  "schemaVersion": 1,
+  "product": {
+    "name": "Ardur",
+    "tagline": "Your own AI team, on your own subscriptions.",
+    "summary": "Open-source desktop bots that run on your own AI subscriptions and keys.",
+    "status": "pre-alpha",
+    "statusLine": "Pre-alpha. Unsigned desktop previews; build from source or self-host.",
+    "license": "Apache-2.0",
+    "repoUrl": "https://github.com/ArdurAI/ardur-bot",
+    "docsUrl": "https://github.com/ArdurAI/ardur-bot/tree/dev/docs"
+  },
+  "features": [
+    {
+      "id": "team",
+      "eyebrow": "TEAM",
+      "title": "Named bots, together",
+      "body": "Give each bot its own conversation and history, and bring bots together in group chats.",
+      "source": "README.md#What you get today"
+    },
+    {
+      "id": "remember",
+      "eyebrow": "MEMORY",
+      "title": "Memory that persists",
+      "body": "Bots keep memory alongside their conversation and history.",
+      "source": "README.md#What you get today"
+    },
+    {
+      "id": "routine",
+      "eyebrow": "ROUTINES",
+      "title": "Work on a schedule",
+      "body": "Set routines for bots to run on a schedule.",
+      "source": "README.md#What you get today"
+    },
+    {
+      "id": "delegate",
+      "eyebrow": "DELEGATION",
+      "title": "Bots work together",
+      "body": "Bots can delegate work to each other in groups or use short-lived subagents.",
+      "source": "README.md#What you get today"
+    },
+    {
+      "id": "choose",
+      "eyebrow": "CHOICE",
+      "title": "Choose each bot's model",
+      "body": "Choose a provider, model and thinking level for each bot.",
+      "source": "README.md#What you get today"
+    },
+    {
+      "id": "approve",
+      "eyebrow": "APPROVAL",
+      "title": "Stay in control",
+      "body": "Ardur asks for approval before consequential actions.",
+      "source": "README.md#What you get today"
+    }
+  ],
+  "providers": [
+    {
+      "id": "amazon-bedrock",
+      "name": "Amazon Bedrock",
+      "access": "api-key",
+      "status": "available"
+    },
+    {
+      "id": "ant-ling",
+      "name": "Ant Ling",
+      "access": "api-key",
+      "status": "available"
+    },
+    {
+      "id": "anthropic",
+      "name": "Anthropic",
+      "access": "api-key",
+      "status": "available"
+    },
+    {
+      "id": "azure-openai-responses",
+      "name": "Azure OpenAI",
+      "access": "api-key",
+      "status": "available"
+    },
+    {
+      "id": "baseten",
+      "name": "Baseten",
+      "access": "api-key",
+      "status": "available"
+    },
+    {
+      "id": "cerebras",
+      "name": "Cerebras",
+      "access": "api-key",
+      "status": "available"
+    },
+    {
+      "id": "claude-cli",
+      "name": "Claude Pro/Max through the CLI",
+      "access": "subscription",
+      "status": "roadmap"
+    },
+    {
+      "id": "cloudflare-ai-gateway",
+      "name": "Cloudflare AI Gateway",
+      "access": "gateway",
+      "status": "available"
+    },
+    {
+      "id": "cloudflare-workers-ai",
+      "name": "Cloudflare Workers AI",
+      "access": "api-key",
+      "status": "available"
+    },
+    {
+      "id": "deepseek",
+      "name": "DeepSeek",
+      "access": "api-key",
+      "status": "available"
+    },
+    {
+      "id": "fireworks",
+      "name": "Fireworks",
+      "access": "api-key",
+      "status": "available"
+    },
+    {
+      "id": "github-copilot",
+      "name": "GitHub Copilot",
+      "access": "subscription",
+      "status": "available"
+    },
+    {
+      "id": "google",
+      "name": "Google",
+      "access": "api-key",
+      "status": "available"
+    },
+    {
+      "id": "google-vertex",
+      "name": "Google Vertex AI",
+      "access": "api-key",
+      "status": "available"
+    },
+    {
+      "id": "groq",
+      "name": "Groq",
+      "access": "api-key",
+      "status": "available"
+    },
+    {
+      "id": "huggingface",
+      "name": "Hugging Face",
+      "access": "api-key",
+      "status": "available"
+    },
+    {
+      "id": "kimi-coding",
+      "name": "Kimi for Coding",
+      "access": "subscription",
+      "status": "available"
+    },
+    {
+      "id": "meta",
+      "name": "Meta",
+      "access": "subscription",
+      "status": "available"
+    },
+    {
+      "id": "minimax",
+      "name": "MiniMax",
+      "access": "api-key",
+      "status": "available"
+    },
+    {
+      "id": "minimax-cn",
+      "name": "MiniMax CN",
+      "access": "api-key",
+      "status": "available"
+    },
+    {
+      "id": "mistral",
+      "name": "Mistral",
+      "access": "api-key",
+      "status": "available"
+    },
+    {
+      "id": "moonshotai",
+      "name": "Moonshot AI",
+      "access": "api-key",
+      "status": "available"
+    },
+    {
+      "id": "moonshotai-cn",
+      "name": "Moonshot AI CN",
+      "access": "api-key",
+      "status": "available"
+    },
+    {
+      "id": "nvidia",
+      "name": "NVIDIA",
+      "access": "api-key",
+      "status": "available"
+    },
+    {
+      "id": "ollama",
+      "name": "Ollama as a first-class choice",
+      "access": "local",
+      "status": "roadmap"
+    },
+    {
+      "id": "openai",
+      "name": "OpenAI",
+      "access": "api-key",
+      "status": "available"
+    },
+    {
+      "id": "openai-codex",
+      "name": "OpenAI Codex",
+      "access": "subscription",
+      "status": "available"
+    },
+    {
+      "id": "openai-compatible",
+      "name": "OpenAI-compatible server",
+      "access": "gateway",
+      "status": "available"
+    },
+    {
+      "id": "opencode-go",
+      "name": "OpenCode Go",
+      "access": "api-key",
+      "status": "available"
+    },
+    {
+      "id": "opencode",
+      "name": "OpenCode Zen",
+      "access": "api-key",
+      "status": "available"
+    },
+    {
+      "id": "openrouter",
+      "name": "OpenRouter",
+      "access": "api-key",
+      "status": "available"
+    },
+    {
+      "id": "qwen-token-plan",
+      "name": "Qwen Token Plan",
+      "access": "api-key",
+      "status": "available"
+    },
+    {
+      "id": "qwen-token-plan-cn",
+      "name": "Qwen Token Plan CN",
+      "access": "api-key",
+      "status": "available"
+    },
+    {
+      "id": "qwen-token-plan-individual",
+      "name": "Qwen Token Plan Individual",
+      "access": "api-key",
+      "status": "available"
+    },
+    {
+      "id": "radius",
+      "name": "Radius",
+      "access": "api-key",
+      "status": "available"
+    },
+    {
+      "id": "together",
+      "name": "Together",
+      "access": "api-key",
+      "status": "available"
+    },
+    {
+      "id": "vercel-ai-gateway",
+      "name": "Vercel AI Gateway",
+      "access": "gateway",
+      "status": "available"
+    },
+    {
+      "id": "xai",
+      "name": "xAI",
+      "access": "subscription",
+      "status": "available"
+    },
+    {
+      "id": "xiaomi",
+      "name": "Xiaomi",
+      "access": "api-key",
+      "status": "available"
+    },
+    {
+      "id": "xiaomi-token-plan-ams",
+      "name": "Xiaomi Token Plan AMS",
+      "access": "api-key",
+      "status": "available"
+    },
+    {
+      "id": "xiaomi-token-plan-cn",
+      "name": "Xiaomi Token Plan CN",
+      "access": "api-key",
+      "status": "available"
+    },
+    {
+      "id": "xiaomi-token-plan-sgp",
+      "name": "Xiaomi Token Plan SGP",
+      "access": "api-key",
+      "status": "available"
+    },
+    {
+      "id": "zai",
+      "name": "Z.AI",
+      "access": "api-key",
+      "status": "available"
+    },
+    {
+      "id": "zai-coding-cn",
+      "name": "Z.AI Coding CN",
+      "access": "api-key",
+      "status": "available"
+    }
+  ],
+  "computers": [
+    {
+      "id": "local",
+      "name": "This computer"
+    },
+    {
+      "id": "docker",
+      "name": "Docker"
+    },
+    {
+      "id": "podman",
+      "name": "Podman"
+    },
+    {
+      "id": "kubernetes",
+      "name": "Kubernetes"
+    },
+    {
+      "id": "ssh",
+      "name": "SSH machine"
+    },
+    {
+      "id": "e2b",
+      "name": "E2B"
+    },
+    {
+      "id": "daytona",
+      "name": "Daytona"
+    },
+    {
+      "id": "box",
+      "name": "Box"
+    }
+  ],
+  "install": {
+    "fromSource": {
+      "requirements": "Node.js 22.22.2+ in the 22.x line, 24.x or 26+; pnpm 9; Docker",
+      "commands": [
+        "git clone https://github.com/ArdurAI/ardur-bot.git",
+        "cd ardur-bot",
+        "git checkout dev",
+        "cp .env.example .env",
+        "docker compose --env-file .env -f infra/compose/docker-compose.yml -f infra/compose/docker-compose.postgres-host.yml up postgres -d",
+        "pnpm install",
+        "pnpm db:generate",
+        "pnpm db:migrate",
+        "pnpm sandbox:build",
+        "pnpm dev"
+      ],
+      "note": "In .env, set POSTGRES_PASSWORD to a random value (for example, openssl rand -hex 16) and use it in DATABASE_URL; set BETTER_AUTH_SECRET, ENCRYPTION_KEY, SCREEN_PROXY_SECRET and SANDBOX_SUPERVISOR_TOKEN to separate long random values (for example, openssl rand -hex 32); add model credentials in the app or set OPENROUTER_API_KEY.",
+      "docsUrl": "https://github.com/ArdurAI/ardur-bot#run-from-source"
+    },
+    "desktop": {
+      "releasesUrl": "https://github.com/ArdurAI/ardur-bot/releases",
+      "platforms": [
+        {
+          "os": "macOS",
+          "assetPattern": "\\.dmg$"
+        },
+        {
+          "os": "Windows",
+          "assetPattern": "\\.exe$"
+        },
+        {
+          "os": "Linux",
+          "assetPattern": "\\.AppImage$"
+        }
+      ]
+    },
+    "homebrew": {
+      "tapRepo": "ArdurAI/homebrew-tap",
+      "caskPath": "Casks/ardur-bot.rb",
+      "command": "brew install --cask ardurai/tap/ardur-bot"
+    }
+  },
+  "personas": [
+    {
+      "name": "Operator",
+      "line": "Set up a bot, watch it work and approve consequential actions."
+    },
+    {
+      "name": "Builder",
+      "line": "Choose models, computers and integrations for each bot."
+    },
+    {
+      "name": "Researcher",
+      "line": "Run several bots, inspect sources and keep their work."
+    },
+    {
+      "name": "Team lead",
+      "line": "Share bots with colleagues and review what they did."
+    },
+    {
+      "name": "Local-first user",
+      "line": "Keep the core bot workflow on computers and models they control."
+    }
+  ],
+  "screenshots": [
+    {
+      "id": "app-chat",
+      "file": "screenshots/app-chat.png",
+      "alt": "Ardur bot conversation with a request for approval and the bot list beside it.",
+      "width": 2880,
+      "height": 1800,
+      "theme": "light"
+    },
+    {
+      "id": "group-chat",
+      "file": "screenshots/group-chat.png",
+      "alt": "Ardur group chat with two bots listed in the conversation.",
+      "width": 2880,
+      "height": 1800,
+      "theme": "light"
+    }
+  ]
+}

@@ -1,5 +1,11 @@
 # AGENTS.md
 
+## Public website facts
+
+- The public site ardur.ai builds Ardur product pages from `site/data/product.json` and screenshots that CI publishes to `site-assets` on every push to `dev`.
+- When a change alters what users can do, which providers or computers work, how to install, or what the app looks like, update curated fields in `site/data/product.json` and the screenshot spec if a pictured screen changed; run `pnpm site:facts`.
+- Never write product claims into the website repository by hand. `pnpm site:facts:check` enforces these facts in CI.
+
 - This is a public repository: assume all tracked content and diffs are public. Never commit secrets, `.env` files, private URLs, personal/customer data, or real production data; use fake placeholders. Review `git status` and the staged diff before committing, and never force-add ignored files. If private data appears, stop and alert the maintainer.
 - Read VISION.md before changing anything users can see. It names who uses Ardur Bot (operator, builder, researcher, team lead, local-first user), what each is trying to do, and what "better" means for them; every change should say which of them it helps and how they would notice. Its "Before every commit" list is the review bar.
 - Ardur Bot is one product across web, Electron desktop, and Expo mobile; Electron hosts the web UI. Put shared behavior, contracts, API logic, and reusable UI in packages. Keep only genuinely native navigation, storage, permissions, and interactions platform-specific. Core workflows must cover every applicable surface or degrade safely for an explicit reason.
