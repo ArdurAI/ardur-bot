@@ -8,14 +8,18 @@ import { configuredGitStore } from "./git-config.js";
 import { MarkdownFiles } from "./markdown-files.js";
 import { ObsidianDocumentStore, VaultWithPrivateDocuments } from "./obsidian-store.js";
 
+/** How the Postgres store selects page ids; only tests on the relational fake replace the SQL path. */
+export type ListIdSelector = ConstructorParameters<typeof PostgresDocumentStore>[2];
+
 /** Document destination selection is independent of the semantic provider adapter. */
 export async function selectDocumentStore(
   tx: Prisma.TransactionClient,
   config: { documentStore: string; documentSettings: unknown; secretId?: string | null } | null,
   dataDir: string,
   secrets?: Pick<EncryptedSecretStore, "load">,
+  selectListIds?: ListIdSelector,
 ): Promise<MemoryDocumentStore> {
-  const postgres = new PostgresDocumentStore(tx);
+  const postgres = new PostgresDocumentStore(tx, undefined, selectListIds);
   if (!config || !config.documentStore || config.documentStore === "postgres") return postgres;
   if (config.documentStore === "git")
     return new VaultWithPrivateDocuments(
