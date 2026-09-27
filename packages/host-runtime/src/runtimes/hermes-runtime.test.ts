@@ -180,6 +180,69 @@ describe("HermesRuntime M0 ACP seam", () => {
     });
   }
 
+  it("fences an authorized tool immediately when ACP fails while the consumer is paused", async () => {
+    let authorizationEntered!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      authorizationEntered = resolve;
+    });
+    let releaseAuthorization!: () => void;
+    const heldAuthorization = new Promise<void>((resolve) => {
+      releaseAuthorization = resolve;
+    });
+    let malformedSeen!: () => void;
+    const malformed = new Promise<void>((resolve) => {
+      malformedSeen = resolve;
+    });
+    let child!: Awaited<ReturnType<typeof launchUnconfinedProcess>>["child"];
+    const executeTool = vi.fn(async () => ({ unexpected: true }));
+    const adapter = new HermesRuntime({
+      command: process.execPath,
+      args: [fixture, "pending-tool-malformed"],
+      launch: async (spec) => {
+        const result = await launchUnconfinedProcess(spec);
+        child = result.child;
+        child.stdout.on("data", (chunk: Buffer) => {
+          if (chunk.toString("utf8").includes("{broken\n")) malformedSeen();
+        });
+        return result;
+      },
+    });
+    const run = request({
+      tools: [{ name: "fixture_echo", description: "Echo", inputSchema: {} }],
+      authorizeTool: async () => {
+        authorizationEntered();
+        await heldAuthorization;
+        return undefined;
+      },
+      executeTool,
+    });
+    const events = adapter.run(run)[Symbol.asyncIterator]();
+    try {
+      expect(await events.next()).toEqual({
+        value: { type: "text", text: "before protocol failure." },
+        done: false,
+      });
+      await entered;
+      child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", method: "fixture/fail-now" })}\n`);
+      await malformed;
+      await new Promise((resolve) => setImmediate(resolve));
+      releaseAuthorization();
+      const drain = async () => {
+        while (!(await events.next()).done) {
+          // Buffered progress may precede the stored protocol error.
+        }
+      };
+      await expect(drain()).rejects.toMatchObject({
+        message: "Hermes could not complete this turn.",
+        cause: { message: "ACP sent malformed JSON." },
+      });
+      expect(executeTool).not.toHaveBeenCalled();
+    } finally {
+      releaseAuthorization();
+      await events.return?.();
+    }
+  });
+
   it("isolates the home, cwd and environment and writes a secret-free config", async () => {
     process.env.ARDUR_PARENT_SECRET = "fixture-parent-secret";
     try {
@@ -231,6 +294,35 @@ describe("HermesRuntime M0 ACP seam", () => {
       expect(text.match(/\[redacted\]/g)).toHaveLength(2);
     });
   }
+
+  for (const kind of ["provider", "relay"] as const) {
+    it(`redacts ${kind} when a labelled value is split after its first character`, async () => {
+      const events = await collect(runtime("redact-labelled-boundary"), request({ prompt: kind }));
+      const text = events
+        .filter((event) => event.type === "text")
+        .map((event) => event.text)
+        .join("");
+      if (kind === "provider") {
+        expect(text).not.toContain("fixture-provider-key-123");
+        expect(text).not.toContain("ixture-provider-key-123");
+      } else {
+        expect(text).not.toMatch(/[a-f0-9]{63,64}/);
+      }
+      expect(text.match(/\[redacted\]/g)).toHaveLength(1);
+      expect(text).toContain("suffix");
+    });
+  }
+
+  it("redacts a complete secret whose last character starts another possible match", async () => {
+    const run = request({ prompt: "provider" });
+    run.model.apiKey = "fixture-provider-key-f";
+    const events = await collect(runtime("redact-labelled-boundary"), run);
+    const text = events
+      .filter((event) => event.type === "text")
+      .map((event) => event.text)
+      .join("");
+    expect(text).toBe("Bearer [redacted] suffix");
+  });
 
   it("reserves a run during launch and fences an abort before ACP starts", async () => {
     let release!: () => void;

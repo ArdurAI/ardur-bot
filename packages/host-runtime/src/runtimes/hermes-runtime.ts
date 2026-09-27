@@ -285,9 +285,8 @@ export class HermesRuntime implements AgentRuntime {
       ]);
       let pendingText = "";
       const emitText = (flush = false) => {
-        pendingText = redactMcpText(pendingText, secrets);
         let held = 0;
-        if (!flush)
+        if (!flush && !spellings.some((spelling) => pendingText.endsWith(spelling)))
           for (const spelling of spellings) {
             for (
               let size = Math.min(spelling.length - 1, pendingText.length);
@@ -302,7 +301,7 @@ export class HermesRuntime implements AgentRuntime {
           }
         const count = pendingText.length - held;
         if (!count) return;
-        const safe = pendingText.slice(0, count);
+        const safe = redactMcpText(pendingText.slice(0, count), secrets);
         pendingText = pendingText.slice(count);
         if (safe && turn.active) queue.push({ type: "text", text: safe });
       };
@@ -445,12 +444,15 @@ export class HermesRuntime implements AgentRuntime {
           queue.push({ type: "done" });
           queue.end();
         } catch (error) {
-          if (turn.active)
+          if (turn.active) {
+            fenced = true;
             queue.end(
               new Error("Hermes could not complete this turn.", {
                 cause: error instanceof AcpClientError ? error : undefined,
               }),
             );
+            void this.stopTurn(request.runId, "failure").catch(() => {});
+          }
         }
       };
       const protocol = runProtocol();

@@ -51,6 +51,10 @@ async function handle(value) {
   if (value.method === "session/cancel") {
     process.exit(0);
   }
+  if (scenario === "pending-tool-malformed" && value.method === "fixture/fail-now") {
+    process.stdout.write("{broken\n");
+    return;
+  }
   if (value.method !== "session/prompt") return;
   if (scenario === "malformed") {
     process.stdout.write("{broken\n");
@@ -147,6 +151,15 @@ async function handle(value) {
     send({ id: value.id, result: { stopReason: "end_turn" } });
     return;
   }
+  if (scenario === "redact-labelled-boundary") {
+    const kind = value.params.prompt[0].text;
+    const secret = kind === "provider" ? process.env.ARDUR_HERMES_PROVIDER_KEY : mcp.args.at(-1);
+    message(`${kind === "provider" ? "Bearer " : "token="}${secret.slice(0, 1)}`);
+    message(secret.slice(1));
+    message(" suffix");
+    send({ id: value.id, result: { stopReason: "end_turn" } });
+    return;
+  }
   if (scenario === "defaulted-usage") {
     message("completed");
     send({
@@ -161,7 +174,17 @@ async function handle(value) {
   if (scenario === "before-tool" || scenario === "during-tool") {
     await new Promise((resolve) => setTimeout(resolve, scenario === "before-tool" ? 500 : 25));
   }
-  if (["tool", "before-tool", "during-tool", "ask-user", "takeover"].includes(scenario)) {
+  if (
+    [
+      "tool",
+      "before-tool",
+      "during-tool",
+      "ask-user",
+      "takeover",
+      "pending-tool-malformed",
+    ].includes(scenario)
+  ) {
+    if (scenario === "pending-tool-malformed") message("before protocol failure.");
     const client = new Client({ name: "fixture", version: "0.1.0" });
     const transport = new StdioClientTransport({
       command: mcp.command,
