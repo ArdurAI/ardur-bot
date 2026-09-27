@@ -19,6 +19,73 @@ const migration = readFileSync(
   "utf8",
 );
 
+function createDeferred<T = void>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+function createControllablePrisma(
+  base: PrismaClient,
+  hooks: {
+    onBeforeUpdate?: () => Promise<void> | void;
+  },
+): PrismaClient {
+  return new Proxy(base, {
+    get(target, prop, receiver) {
+      if (prop === "$transaction") {
+        return async (
+          fn: (tx: Parameters<Parameters<PrismaClient["$transaction"]>[0]>[0]) => Promise<unknown>,
+          options?: unknown,
+        ) => {
+          return (target as any).$transaction(async (tx: any) => {
+            const wrappedTx = new Proxy(tx, {
+              get(txTarget, txProp, txReceiver) {
+                if (txProp === "chatGroupMember") {
+                  const memberTarget = txTarget.chatGroupMember;
+                  return new Proxy(memberTarget, {
+                    get(mTarget, mProp, mReceiver) {
+                      if (mProp === "update") {
+                        return async (...args: unknown[]) => {
+                          if (hooks.onBeforeUpdate) await hooks.onBeforeUpdate();
+                          return (mTarget.update as any)(...args);
+                        };
+                      }
+                      return Reflect.get(mTarget, mProp, mReceiver);
+                    },
+                  });
+                }
+                return Reflect.get(txTarget, txProp, txReceiver);
+              },
+            });
+            return fn(wrappedTx);
+          }, options);
+        };
+      }
+      return Reflect.get(target, prop, receiver);
+    },
+  });
+}
+
+async function waitForBlockedLock(
+  pool: ReturnType<typeof createDb>["pool"],
+  timeoutMs = 250,
+): Promise<boolean> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    const res = await pool.query<{ count: string }>(
+      "SELECT count(*) FROM pg_locks WHERE NOT granted",
+    );
+    if (Number(res.rows[0]?.count) > 0) return true;
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  return false;
+}
+
 describePostgres("group member pins (PostgreSQL)", () => {
   const suffix = `${process.pid}-${Date.now()}`;
   const userId = `g1-user-${suffix}`;
@@ -151,10 +218,47 @@ describePostgres("group member pins (PostgreSQL)", () => {
         ]),
       ).rejects.toMatchObject({ code: "23514" });
     } finally {
-      await client.query("RESET search_path");
-      await client.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+      try {
+        await client.query("ROLLBACK").catch(() => {});
+        await client.query("RESET search_path").catch(() => {});
+        await client.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`).catch(() => {});
+      } finally {
+        client.release();
+      }
+    }
+  });
+
+  it("rolls back unfinished transaction and releases client when migration statement fails", async () => {
+    const schema = `g1_migration_fault_${process.pid}_${Date.now()}`;
+    const initialCheckedOut = pool.totalCount - pool.idleCount;
+    const client = await pool.connect();
+    let caught: unknown;
+    try {
+      try {
+        await client.query(`CREATE SCHEMA "${schema}"`);
+        await client.query("BEGIN");
+        await client.query(`SET LOCAL search_path TO "${schema}"`);
+        await client.query("THIS IS INVALID SQL STATEMENT TO FORCE ABORT");
+        await client.query(migration);
+        await client.query("COMMIT");
+      } finally {
+        await client.query("ROLLBACK").catch(() => {});
+        await client.query("RESET search_path").catch(() => {});
+        await client.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`).catch(() => {});
+      }
+    } catch (error) {
+      caught = error;
+    } finally {
       client.release();
     }
+    expect(caught).toBeDefined();
+    expect((caught as { code?: string }).code).toBe("42601");
+    expect(pool.totalCount - pool.idleCount).toBe(initialCheckedOut);
+    const remaining = await pool.query(
+      "SELECT 1 FROM information_schema.schemata WHERE schema_name = $1",
+      [schema],
+    );
+    expect(remaining.rows).toHaveLength(0);
   });
 
   it("increments only changed choices and preserves surviving memberships", async () => {
@@ -269,5 +373,99 @@ describePostgres("group member pins (PostgreSQL)", () => {
     });
     await repos.removeGroup(actor, duplicate.id);
     expect(await prisma.chatGroupMember.count({ where: { groupId: duplicate.id } })).toBe(0);
+  });
+
+  it("serializes concurrent setGroupMemberPin calls with distinct choices", async () => {
+    const repos = createGroupRepos(prisma);
+    const group = await repos.createGroup(actor, {
+      name: "Concurrent Set",
+      botIds: bots.slice(0, 2),
+    });
+    const botId = bots[0]!;
+
+    const choiceA = {
+      runtimeKind: "pi" as const,
+      provider: "fixture-a",
+      modelId: "model-a",
+      effort: "low",
+      credentialId: "connection-a",
+    };
+    const choiceB = {
+      runtimeKind: "pi" as const,
+      provider: "fixture-b",
+      modelId: "model-b",
+      effort: "high",
+      credentialId: "connection-b",
+    };
+
+    const firstHoldingLock = createDeferred();
+    const releaseFirst = createDeferred();
+
+    const client1 = createControllablePrisma(prisma, {
+      onBeforeUpdate: async () => {
+        firstHoldingLock.resolve();
+        await releaseFirst.promise;
+      },
+    });
+
+    const p1 = setGroupMemberPin(client1, actor, group.id, botId, choiceA);
+    await firstHoldingLock.promise;
+
+    const p2 = setGroupMemberPin(prisma, actor, group.id, botId, choiceB);
+    await waitForBlockedLock(pool);
+    releaseFirst.resolve();
+
+    const [first, second] = await Promise.all([p1, p2]);
+
+    expect(first.modelPinRevision).toBe(1);
+    expect(second.modelPinRevision).toBe(2);
+    expect(first.modelPinRevision).not.toBe(second.modelPinRevision);
+    expect(first.runtimePin).toEqual({ ...choiceA, revision: 1 });
+    expect(second.runtimePin).toEqual({ ...choiceB, revision: 2 });
+
+    const states = await getGroupMemberPinStates(prisma, actor, group.id);
+    const memberState = states.find((s) => s.botId === botId)!;
+    expect(memberState.modelPinRevision).toBe(2);
+    expect(memberState.runtimePin).toEqual({ ...choiceB, revision: 2 });
+    expect(memberState.runtimePin?.revision).toBe(memberState.modelPinRevision);
+  });
+
+  it("serializes setGroupMemberPin racing clearGroupMemberPin", async () => {
+    const repos = createGroupRepos(prisma);
+    const group = await repos.createGroup(actor, {
+      name: "Concurrent Clear",
+      botIds: bots.slice(0, 2),
+    });
+    const botId = bots[0]!;
+
+    const firstHoldingLock = createDeferred();
+    const releaseFirst = createDeferred();
+
+    const client1 = createControllablePrisma(prisma, {
+      onBeforeUpdate: async () => {
+        firstHoldingLock.resolve();
+        await releaseFirst.promise;
+      },
+    });
+
+    const p1 = setGroupMemberPin(client1, actor, group.id, botId, choice);
+    await firstHoldingLock.promise;
+
+    const p2 = clearGroupMemberPin(prisma, actor, group.id, botId);
+    await waitForBlockedLock(pool);
+    releaseFirst.resolve();
+
+    const [first, second] = await Promise.all([p1, p2]);
+
+    expect(first.modelPinRevision).toBe(1);
+    expect(second.modelPinRevision).toBe(2);
+    expect(first.modelPinRevision).not.toBe(second.modelPinRevision);
+    expect(first.runtimePin).toEqual({ ...choice, revision: 1 });
+    expect(second.runtimePin).toBeNull();
+
+    const states = await getGroupMemberPinStates(prisma, actor, group.id);
+    const memberState = states.find((s) => s.botId === botId)!;
+    expect(memberState.modelPinRevision).toBe(2);
+    expect(memberState.runtimePin).toBeNull();
   });
 });
