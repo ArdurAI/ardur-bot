@@ -1147,18 +1147,4 @@ export const RU_MESSAGES: Record<string, string> = {
   "Based on {count} requests in the last {days} days.":
     "По {count} запросам за последние {days} дн.",
   "Allow {tool} for {bot} without asking?": "Разрешать {tool} для {bot} без вопроса?",
-  "Enter your Ardur Bot server address.": "Введите адрес вашего сервера Ardur Bot.",
-  "Point this app at your self-hosted Ardur Bot origin, the same HTTPS URL you open in a browser.":
-    "Направьте это приложение на свой собственный источник Ardur Bot, тот же URL-адрес HTTPS, который вы открываете в браузере.",
-  "Sign in to Ardur Bot": "Войти в Ardur Bot",
-  "Sign up for Ardur Bot": "Зарегистрироваться в Ardur Bot",
-  "That URL did not look like a Ardur Bot server": "Этот адрес не похож на сервер Ardur Bot",
-  "Paste the OpenAI-compatible address from your server. Ardur Bot adds /v1 if needed.":
-    "Вставьте OpenAI-совместимый адрес со своего сервера. При необходимости Ardur Bot добавляет /v1.",
-  "This subscription sign-in is not available in Ardur Bot yet. Use a deployment credential or choose another provider.":
-    "Вход по этой подписке пока недоступен в Ardur Bot. Используйте учётные данные развёртывания или выберите другого провайдера.",
-  "Ardur Bot reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history.":
-    "Ardur Bot читает инструкции, память, навыки и списки серверов этих инструментов на этом компьютере, но никогда не читает данные входа, токены или историю чатов.",
-  "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected.":
-    "Ardur Bot попытался пять раз. Закройте её на доске или проверьте, что этот компьютер подключён.",
 };

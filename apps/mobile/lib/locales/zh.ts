@@ -1105,18 +1105,4 @@ export const ZH_MESSAGES: Record<string, string> = {
     "基于最近 {days} 天内 {approvals} 次批准且没有拒绝。",
   "Based on {count} requests in the last {days} days.": "基于最近 {days} 天内的 {count} 次请求。",
   "Allow {tool} for {bot} without asking?": "允许 {bot} 使用 {tool} 而不再询问？",
-  "Enter your Ardur Bot server address.": "输入你的 Ardur Bot 服务器地址。",
-  "Point this app at your self-hosted Ardur Bot origin, the same HTTPS URL you open in a browser.":
-    "将此应用指向你自托管的 Ardur Bot 源站，地址与你在浏览器中打开的 HTTPS URL 相同。",
-  "Sign in to Ardur Bot": "登录 Ardur Bot",
-  "Sign up for Ardur Bot": "注册 Ardur Bot",
-  "That URL did not look like a Ardur Bot server": "该地址看起来不是 Ardur Bot 服务器",
-  "Paste the OpenAI-compatible address from your server. Ardur Bot adds /v1 if needed.":
-    "粘贴你服务器的 OpenAI 兼容地址。如有需要，Ardur Bot 会自动补上 /v1。",
-  "This subscription sign-in is not available in Ardur Bot yet. Use a deployment credential or choose another provider.":
-    "Ardur Bot 暂不支持此订阅登录。请使用部署凭据或选择其他提供商。",
-  "Ardur Bot reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history.":
-    "Ardur Bot 读取此电脑上这些工具的指令、记忆、技能和服务器列表，绝不读取登录信息、令牌或聊天记录。",
-  "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected.":
-    "Ardur Bot 已尝试五次。请在看板上关闭它，或检查此电脑是否已连接。",
 };

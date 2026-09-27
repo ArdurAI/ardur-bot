@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -32,10 +32,14 @@ const temporary: string[] = [];
 async function fixture() {
   const root = await mkdtemp(path.join(os.tmpdir(), "site-facts-"));
   temporary.push(root);
+  // Copy whatever cask ships, as the generator does, so a cask rename cannot break the fixture.
+  const casks = (await readdir(path.join(sourceRoot, "homebrew/Casks"))).filter((name) =>
+    name.endsWith(".rb"),
+  );
   for (const file of [
     "site/data/product.json",
     "README.md",
-    "homebrew/Casks/ardur-bot.rb",
+    ...casks.map((cask) => `homebrew/Casks/${cask}`),
     "apps/web/e2e/site-screenshots.spec.ts",
     "apps/web/src/locales/en/messages.po",
   ]) {
