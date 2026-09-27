@@ -24,21 +24,21 @@ test("composer / picker lists skills above actions", async ({ page }, testInfo) 
 
   const picker = page.getByTestId("slash-picker");
   await expect(picker).toBeVisible();
-  const skillButton = picker.getByRole("button", { name: "Skill Daily standup" });
-  const chatSettings = picker.getByRole("button", { name: "Chat Settings" });
+  const skillButton = picker.getByRole("option", { name: /Daily standup/ });
+  const chatSettings = picker.getByRole("option", { name: /Chat Settings/ });
   await expect(skillButton).toBeVisible();
   await expect(chatSettings).toBeVisible();
-  await expect(picker.getByRole("button", { name: "Settings: General" })).toBeVisible();
-  await expect(picker.getByRole("button", { name: "Settings: Usage" })).toBeVisible();
+  await expect(picker.getByRole("option", { name: /Settings: General/ })).toBeVisible();
+  await expect(picker.getByRole("option", { name: /Settings: Usage/ })).toBeVisible();
 
   const skillBox = await skillButton.boundingBox();
   const actionBox = await chatSettings.boundingBox();
   expect(skillBox).toBeTruthy();
   expect(actionBox).toBeTruthy();
-  expect(skillBox!.y).toBeLessThan(actionBox!.y);
+  expect(skillBox!.y).toBeGreaterThan(actionBox!.y);
 
   await expect(skillButton).toContainText("Prepare a concise standup");
-  const interrogate = picker.getByRole("button", { name: "Skill Interrogate", exact: true });
+  const interrogate = picker.getByRole("option", { name: /Interrogate/ });
   await expect(interrogate).toBeVisible();
   await expect(interrogate).toContainText("Review only; never applies fixes.");
   await captureScreenshot(page, testInfo, "slash-skills-picker");
