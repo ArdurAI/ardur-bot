@@ -196,16 +196,19 @@ test("Executor reconnect saves a replacement token before discovery", async ({ p
       },
     });
   });
-  await reportConnected(page, () => discovered);
+  const listed = await reportConnected(page, () => discovered);
   await page.getByRole("button", { name: "Executor", exact: true }).click();
   await page
     .getByRole("textbox", { name: "Server URL", exact: true })
     .fill("http://localhost:8765/mcp");
   await page.getByLabel("Access token", { exact: true }).fill("fake-new-token");
+  const listedBefore = listed.served();
   await page.getByRole("button", { name: "Connect", exact: true }).click();
   await expect.poll(() => saved).toBe(true);
   await expect.poll(() => discovered).toBe(server.id);
-  await expect(page.getByRole("button", { name: "Connected", exact: true })).toBeVisible();
+  // The list refresh that follows discovery must finish before the test ends; otherwise the
+  // route handler is still reading a response that closing the context disposes.
+  await expect.poll(() => listed.served()).toBeGreaterThan(listedBefore);
   await expect(page.getByRole("alert")).toBeHidden();
 });
 
@@ -286,6 +289,7 @@ test("configured server owners manage providers from settings", async ({ page },
 
 /** These tests fake the API's connection probe, so they also fake the state it records. */
 async function reportConnected(page: Page, serverId: () => string) {
+  let served = 0;
   await page.route("**/rpc/mcp/servers/list", async (route) => {
     const response = await route.fetch();
     const body = (await response.json()) as { json: Array<{ id: string }> };
@@ -298,5 +302,7 @@ async function reportConnected(page: Page, serverId: () => string) {
         ),
       },
     });
+    served += 1;
   });
+  return { served: () => served };
 }
