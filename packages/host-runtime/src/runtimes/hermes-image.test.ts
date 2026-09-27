@@ -1,8 +1,9 @@
 import { execFile, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import { chmod, copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { homedir, tmpdir } from "node:os";
+import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import type { AgentRunRequest, AgentRuntimeEvent } from "@ardurbot/adapter-kit";
@@ -14,25 +15,116 @@ const execute = promisify(execFile);
 const image =
   "nousresearch/hermes-agent@sha256:c64666f62179b6cd7d2df3348a30907b383a82a8e0d2400083b8004e24615780";
 const fixture = fileURLToPath(new URL("./fixtures/hermes-image-fixture.py", import.meta.url));
-const evidence = "/Volumes/EXTENDED/ardur-measurements/hermes-m0";
-const dockerEnv = {
-  PATH: process.env.PATH ?? "/usr/bin:/bin",
-  DOCKER_HOST: `unix://${homedir()}/.colima/default/docker.sock`,
-};
+function evidenceDirectory() {
+  const preferred = "/Volumes/EXTENDED/ardur-measurements/hermes-m0";
+  return process.env.ARDUR_HERMES_EVIDENCE_DIR ?? (existsSync(preferred) ? preferred : tmpdir());
+}
+
+function dockerEnvironment() {
+  return {
+    PATH: process.env.PATH ?? "/usr/bin:/bin",
+    DOCKER_HOST: process.env.DOCKER_HOST || `unix://${homedir()}/.colima/default/docker.sock`,
+  };
+}
+
+function dockerProviderKey(providerKey: string) {
+  return {
+    args: ["--env", "ARDUR_HERMES_PROVIDER_KEY"],
+    env: { ARDUR_HERMES_PROVIDER_KEY: providerKey },
+  };
+}
+
+async function stagingDirectory() {
+  // Colima mounts $HOME, so fixture bind mounts must be staged below it.
+  const parent = process.env.ARDUR_HERMES_STAGING_PARENT ?? process.cwd();
+  const outsideHome = relative(homedir(), parent);
+  if (
+    outsideHome === ".." ||
+    outsideHome.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`)
+  )
+    throw new Error("Hermes image staging must be below HOME.");
+  await mkdir(parent, { recursive: true, mode: 0o700 });
+  return mkdtemp(join(parent, ".hermes-image-"));
+}
+
+function assertFirstTurn(failure: string | null, events: AgentRuntimeEvent[]) {
+  expect(failure).toBeNull();
+  expect(events.at(-1)).toEqual({ type: "done" });
+  expect(
+    events
+      .filter((event) => event.type === "text")
+      .map((event) => event.text)
+      .join(""),
+  ).toContain("completed");
+}
+
+it("fails image qualification when the first turn fails or lacks its answer", () => {
+  expect(() => assertFirstTurn("failed", [{ type: "done" }])).toThrow();
+  expect(() => assertFirstTurn(null, [])).toThrow();
+  expect(() =>
+    assertFirstTurn(null, [{ type: "text", text: "wrong" }, { type: "done" }]),
+  ).toThrow();
+});
+
+it("uses portable image lane paths and the selected Docker endpoint", async () => {
+  const previousEvidence = process.env.ARDUR_HERMES_EVIDENCE_DIR;
+  const previousHost = process.env.DOCKER_HOST;
+  const previousStaging = process.env.ARDUR_HERMES_STAGING_PARENT;
+  const stagingParent = await mkdtemp(join(process.cwd(), ".hermes-staging-parent-"));
+  let staging: string | undefined;
+  try {
+    process.env.ARDUR_HERMES_EVIDENCE_DIR = join(tmpdir(), "fixture-evidence");
+    process.env.DOCKER_HOST = "unix:///fixture/docker.sock";
+    process.env.ARDUR_HERMES_STAGING_PARENT = stagingParent;
+    staging = await stagingDirectory();
+    expect(evidenceDirectory()).toBe(join(tmpdir(), "fixture-evidence"));
+    expect(dockerEnvironment().DOCKER_HOST).toBe("unix:///fixture/docker.sock");
+    expect(staging.startsWith(homedir())).toBe(true);
+    expect(dirname(staging)).toBe(stagingParent);
+  } finally {
+    if (previousEvidence === undefined) delete process.env.ARDUR_HERMES_EVIDENCE_DIR;
+    else process.env.ARDUR_HERMES_EVIDENCE_DIR = previousEvidence;
+    if (previousHost === undefined) delete process.env.DOCKER_HOST;
+    else process.env.DOCKER_HOST = previousHost;
+    if (previousStaging === undefined) delete process.env.ARDUR_HERMES_STAGING_PARENT;
+    else process.env.ARDUR_HERMES_STAGING_PARENT = previousStaging;
+    if (staging) await rm(staging, { recursive: true, force: true });
+    await rm(stagingParent, { recursive: true, force: true });
+  }
+});
+
+it("keeps the fake provider key out of Docker argv", () => {
+  const key = "fixture-provider-key-123";
+  const option = dockerProviderKey(key);
+  expect(option.args.join(" ")).not.toContain(key);
+  expect(option.env.ARDUR_HERMES_PROVIDER_KEY).toBe(key);
+});
 
 interface LaneCapture {
   records: Array<{ kind: string; ms: number; hostMs: number; value: Record<string, unknown> }>;
   containerStartMs: number | null;
   handshakeMs: number | null;
   name: string;
+  argvHasKey: boolean;
+  inspectHasKey: boolean;
 }
 
 function launchFor(captures: LaneCapture[], start: number): HermesLaunch {
   return async (spec: HermesLaunchSpec) => {
+    const providerKey = spec.env.ARDUR_HERMES_PROVIDER_KEY;
+    if (!providerKey) throw new Error("The image lane needs its fake provider key.");
+    const keyOption = dockerProviderKey(providerKey);
     const name = `ardur-hermes-m0-${randomUUID()}`;
-    const data: LaneCapture = { records: [], containerStartMs: null, handshakeMs: null, name };
+    const data: LaneCapture = {
+      records: [],
+      containerStartMs: null,
+      handshakeMs: null,
+      name,
+      argvHasKey: false,
+      inspectHasKey: false,
+    };
     captures.push(data);
-    const staging = await mkdtemp(join(resolve(process.cwd(), "..", ".work"), "hermes-image-"));
+    const staging = await stagingDirectory();
     const configCopy = join(staging, "image-config.yaml");
     const soulCopy = join(staging, "image-SOUL.md");
     await copyFile(join(spec.env.HERMES_HOME!, "config.yaml"), configCopy);
@@ -76,16 +168,22 @@ function launchFor(captures: LaneCapture[], start: number): HermesLaunch {
         "--log-driver",
         "none",
         ...mounts,
-        "--env",
-        `ARDUR_HERMES_PROVIDER_KEY=${spec.env.ARDUR_HERMES_PROVIDER_KEY}`,
+        ...keyOption.args,
         "--entrypoint",
         "/opt/hermes/.venv/bin/python",
         image,
         "/fixtures/hermes-image-fixture.py",
         "launch",
       ],
-      { env: dockerEnv, stdio: "pipe" },
+      {
+        env: {
+          ...dockerEnvironment(),
+          ...keyOption.env,
+        },
+        stdio: "pipe",
+      },
     );
+    data.argvHasKey = child.spawnargs.some((arg) => arg.includes(providerKey));
     child.stdout.once("data", () => {
       data.handshakeMs = Math.round(performance.now() - start);
     });
@@ -113,7 +211,7 @@ function launchFor(captures: LaneCapture[], start: number): HermesLaunch {
     const deadline = Date.now() + 10_000;
     while (Date.now() < deadline) {
       const running = await execute("docker", ["inspect", "--format", "{{.State.Running}}", name], {
-        env: dockerEnv,
+        env: dockerEnvironment(),
         timeout: 2_000,
       }).then(
         ({ stdout }) => stdout.trim() === "true",
@@ -121,6 +219,17 @@ function launchFor(captures: LaneCapture[], start: number): HermesLaunch {
       );
       if (running) {
         data.containerStartMs = Math.round(performance.now() - start);
+        const inspected = await execute(
+          "docker",
+          ["inspect", "--format", "{{json .Config.Env}}", name],
+          {
+            env: dockerEnvironment(),
+            timeout: 2_000,
+          },
+        );
+        data.inspectHasKey = (JSON.parse(inspected.stdout) as string[]).includes(
+          `ARDUR_HERMES_PROVIDER_KEY=${providerKey}`,
+        );
         break;
       }
       if (child.exitCode !== null) break;
@@ -136,7 +245,7 @@ function launchFor(captures: LaneCapture[], start: number): HermesLaunch {
       },
       teardown: async () => {
         await execute("docker", ["stop", "--time", "1", name], {
-          env: dockerEnv,
+          env: dockerEnvironment(),
           timeout: 10_000,
         }).catch(() => undefined);
         await rm(staging, { recursive: true, force: true });
@@ -185,6 +294,7 @@ if (process.env.ARDUR_HERMES_IMAGE_LANE !== "1") {
   it.skip("the pinned Hermes image lane is opt-in: set ARDUR_HERMES_IMAGE_LANE=1 on a machine with the approved image", () => {});
 } else {
   it("qualifies the pinned ACP image and records the provider catalog", async () => {
+    const evidence = evidenceDirectory();
     await mkdir(evidence, { recursive: true });
     const captures: LaneCapture[] = [];
     const start = performance.now();
@@ -222,6 +332,8 @@ if (process.env.ARDUR_HERMES_IMAGE_LANE !== "1") {
       container: captures[0]?.name,
       toolNames: tools,
       mcp,
+      keyPresentInContainer: captures[0]?.inspectHasKey,
+      keyAbsentFromDockerArgv: !captures[0]?.argvHasKey,
     };
     const timings = {
       containerStartMs: captures[0]?.containerStartMs ?? null,
@@ -234,6 +346,9 @@ if (process.env.ARDUR_HERMES_IMAGE_LANE !== "1") {
     await writeFile(join(evidence, "provider-requests.json"), JSON.stringify(requests, null, 2));
     await writeFile(join(evidence, "event-transcript.json"), JSON.stringify(transcript, null, 2));
     await writeFile(join(evidence, "timings.json"), JSON.stringify(timings, null, 2));
+    assertFirstTurn(failure, events);
+    expect(captures[0]?.argvHasKey).toBe(false);
+    expect(captures[0]?.inspectHasKey).toBe(true);
 
     const held = request("hold");
     const heldEvents: AgentRuntimeEvent[] = [];
@@ -248,7 +363,7 @@ if (process.env.ARDUR_HERMES_IMAGE_LANE !== "1") {
     await adapter.abort(held.runId);
     await pending;
     const stopped = await execute("docker", ["inspect", captures[1]!.name], {
-      env: dockerEnv,
+      env: dockerEnvironment(),
       timeout: 10_000,
     }).then(
       () => false,
