@@ -753,6 +753,8 @@ export const RU_MESSAGES: Record<string, string> = {
   "Message from {peer}": "Сообщение от {peer}",
   "Show reply": "Показать ответ",
   "Hide reply": "Скрыть ответ",
+  "Reply shortened — open the conversation with {peer} for the full text":
+    "Ответ сокращён — откройте диалог с {peer}, чтобы увидеть полный текст",
   subagent: "субагент",
   "Messaged {peer}": "Отправлено сообщение {peer}",
   "No authentication": "Нет аутентификации",

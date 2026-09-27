@@ -6313,6 +6313,10 @@ msgstr "替换密钥"
 msgid "Reply"
 msgstr "回复"
 
+#: src/pages/PeerMessagesOverlay.tsx
+msgid "Reply shortened — open the conversation with {peerBotName} for the full text"
+msgstr "回复已缩短 — 打开与 {peerBotName} 的对话查看全文"
+
 #: src/pages/Shell.tsx
 msgid "Replying to {replyName}"
 msgstr "正在回复 {replyName}"

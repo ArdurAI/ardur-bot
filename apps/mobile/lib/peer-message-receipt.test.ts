@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+
+import type { MessageBlock } from "@ardurbot/contracts";
 import type { ReactNode } from "react";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
@@ -60,6 +62,7 @@ it("shows a completed peer receipt and expands the full answer", async () => {
           },
           color: "gray",
           actionProps: {},
+          onOpenPeer: vi.fn(),
         }),
       ),
     );
@@ -71,6 +74,61 @@ it("shows a completed peer receipt and expands the full answer", async () => {
     expect(node.querySelector("button")?.getAttribute("aria-expanded")).toBe("true");
     await act(async () => node.querySelector("button")!.click());
     expect(node.querySelector("article")).toBeNull();
+  } finally {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+  }
+});
+
+it("marks and links a shortened reply in the reader", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const { fixture } = await vi.importActual<{
+    fixture: () => {
+      admit: (input: { admissionKey: string }) => Promise<{ id: string }>;
+      worker: () => {
+        $transaction: (run: (tx: unknown) => Promise<unknown>) => Promise<unknown>;
+      };
+      state: () => { messages: Array<{ blocks: MessageBlock[] }> };
+    };
+  }>("../../../packages/db/src/delegation-test-fixture");
+  const { finishDelegation } = await vi.importActual<{
+    finishDelegation: (
+      tx: unknown,
+      id: string,
+      status: "completed",
+      text: string,
+    ) => Promise<unknown>;
+  }>("../../../packages/db/src/delegation");
+  const f = fixture();
+  const row = await f.admit({ admissionKey: "bot-message:parent:message_bot:0" });
+  const answer = "x".repeat(2100);
+  await f.worker().$transaction((tx) => finishDelegation(tx, row.id, "completed", answer));
+  const block = f.state().messages[0]!.blocks[0] as Extract<
+    MessageBlock,
+    { kind: "bot_message_received" }
+  >;
+  expect(block).toMatchObject({ truncated: true, fullLength: 2100 });
+  const onOpenPeer = vi.fn();
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  try {
+    await act(async () =>
+      root.render(
+        createElement(PeerMessageReceipt, {
+          block,
+          color: "gray",
+          actionProps: {},
+          onOpenPeer,
+        }),
+      ),
+    );
+    await act(async () => node.querySelector("button")!.click());
+    expect(node.querySelector("article")?.textContent).toBe(answer.slice(0, 2000));
+    expect(node.textContent).toContain(
+      "Reply shortened — open the conversation with Worker for the full text",
+    );
+    await act(async () => node.querySelectorAll("button")[1]!.click());
+    expect(onOpenPeer).toHaveBeenCalledWith("worker", "Worker");
   } finally {
     await act(async () => root.unmount());
     vi.unstubAllGlobals();

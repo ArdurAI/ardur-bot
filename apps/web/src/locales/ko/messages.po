@@ -6313,6 +6313,10 @@ msgstr "키 교체"
 msgid "Reply"
 msgstr "답장"
 
+#: src/pages/PeerMessagesOverlay.tsx
+msgid "Reply shortened — open the conversation with {peerBotName} for the full text"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Replying to {replyName}"
 msgstr "{replyName}에게 답장"

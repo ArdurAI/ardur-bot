@@ -16,10 +16,12 @@ export function PeerMessageReceipt({
   block,
   color,
   actionProps,
+  onOpenPeer,
 }: {
   block: PeerMessageBlock;
   color: string;
   actionProps: Pick<TextProps, "onLongPress" | "accessibilityActions" | "onAccessibilityAction">;
+  onOpenPeer: (botId: string, name: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const colorScheme = useResolvedAppearance();
@@ -81,6 +83,25 @@ export function PeerMessageReceipt({
           <ChatMarkdown palette={tokens} colorScheme={colorScheme}>
             {block.text}
           </ChatMarkdown>
+          {block.kind === "bot_message_received" && block.truncated ? (
+            <Pressable
+              accessibilityRole="link"
+              onPress={() => onOpenPeer(peerBotId, peer)}
+              style={{ marginTop: 8 }}
+            >
+              <Text
+                style={{
+                  color: tokens.foreground,
+                  fontSize: 13.5,
+                  textDecorationLine: "underline",
+                }}
+              >
+                {t("Reply shortened — open the conversation with {peer} for the full text", {
+                  peer,
+                })}
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
       ) : null}
     </View>

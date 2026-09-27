@@ -6313,6 +6313,10 @@ msgstr "Заменить ключ"
 msgid "Reply"
 msgstr "Ответить"
 
+#: src/pages/PeerMessagesOverlay.tsx
+msgid "Reply shortened — open the conversation with {peerBotName} for the full text"
+msgstr "Ответ сокращён — откройте диалог с {peerBotName}, чтобы увидеть полный текст"
+
 #: src/pages/Shell.tsx
 msgid "Replying to {replyName}"
 msgstr "Ответ на {replyName}"

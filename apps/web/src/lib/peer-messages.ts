@@ -6,6 +6,7 @@ export interface PeerMessage {
   peerBotId: string;
   peerBotName: string;
   text: string;
+  truncated?: boolean;
   createdAt: string;
 }
 
@@ -44,6 +45,7 @@ export function peerMessagesFrom(messages: readonly ThreadMessage[]): PeerMessag
               peerBotId: block.fromBotId,
               peerBotName: block.fromBotName,
               text: block.text,
+              truncated: block.truncated,
               createdAt: message.createdAt,
             },
       );

@@ -41,6 +41,7 @@ const refuse = (code: DelegationProblem["code"]): never => {
   throw new DelegationAdmissionError(delegationProblem(code));
 };
 export const ACTIVE_DELEGATIONS = ["queued", "running", "cancel-requested"];
+const PEER_RECEIPT_MAX_LENGTH = 2000;
 type Scope = Pick<Actor, "spaceId" | "userId">;
 
 export async function lockDelegationRootForRun(tx: Prisma.TransactionClient, runId: string) {
@@ -402,11 +403,12 @@ export async function finishDelegation(
   row = await tx.delegation.findUniqueOrThrow({ where: { id } });
   if (expectedRunId !== undefined && row.runId !== expectedRunId) return;
   if (row.status === "cancel-requested" && status !== "cancelled") return;
+  const redactedText = redactTaskValue(text);
   const changed = await tx.delegation.updateMany({
     where: { id, status: { in: ACTIVE_DELEGATIONS } },
     data: {
       status,
-      result: redactTaskValue(text).slice(0, 2000),
+      result: redactedText.slice(0, PEER_RECEIPT_MAX_LENGTH),
       completedAt: new Date(),
       ...(status === "cancelled" ? { cancelConfirmedAt: new Date() } : {}),
     },
@@ -438,8 +440,10 @@ export async function finishDelegation(
             kind: "bot_message_received",
             fromBotId: row.actingBotId,
             fromBotName: row.actingName,
-            text: redactTaskValue(text).slice(0, 2000),
+            text: redactedText.slice(0, PEER_RECEIPT_MAX_LENGTH),
             intent: "result",
+            truncated: redactedText.length > PEER_RECEIPT_MAX_LENGTH,
+            fullLength: redactedText.length,
           },
         ]
       : [
@@ -447,7 +451,7 @@ export async function finishDelegation(
             kind: "text",
             text: goalRoomAssignment
               ? `${row.actingName}: ${status === "completed" ? "completed, awaiting acceptance" : status}.`
-              : `${row.requesterName} → ${row.actingName}: ${status === "completed" ? "completed, awaiting acceptance" : status}.\n${redactTaskValue(text).slice(0, 2000)}${row.card && TaskCardSchema.parse(row.card).doneWhen.length ? `\n${taskCardChecklist(TaskCardSchema.parse(row.card))}` : ""}`,
+              : `${row.requesterName} → ${row.actingName}: ${status === "completed" ? "completed, awaiting acceptance" : status}.\n${redactedText.slice(0, 2000)}${row.card && TaskCardSchema.parse(row.card).doneWhen.length ? `\n${taskCardChecklist(TaskCardSchema.parse(row.card))}` : ""}`,
           },
         ];
   const message = row.summaryMessageId

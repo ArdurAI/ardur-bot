@@ -217,6 +217,21 @@ it("keeps a peer answer verbatim after acceptance", async () => {
   ]);
 });
 
+it("marks a bounded peer receipt when the completed answer is longer", async () => {
+  const f = fixture();
+  const row = await f.admit({ admissionKey: "bot-message:parent:message_bot:0" });
+  const answer = "x".repeat(2100);
+  await f.worker().$transaction((tx) => finishDelegation(tx, row.id, "completed", answer));
+  expect(f.state().messages[0].blocks).toEqual([
+    expect.objectContaining({
+      kind: "bot_message_received",
+      text: answer.slice(0, 2000),
+      truncated: true,
+      fullLength: answer.length,
+    }),
+  ]);
+});
+
 it("keeps a status summary when a peer finishes without a written answer", async () => {
   const f = fixture();
   const row = await f.admit({ admissionKey: "bot-message:parent:message_bot:0" });

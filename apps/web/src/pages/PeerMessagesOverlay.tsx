@@ -26,6 +26,7 @@ export function PeerMessagesOverlay({
   peerBotName: initialPeerBotName,
   peerBotColor,
   onClose,
+  onOpenPeerThread,
 }: {
   botId: string;
   botName: string;
@@ -34,6 +35,7 @@ export function PeerMessagesOverlay({
   peerBotName: string;
   peerBotColor: string;
   onClose: () => void;
+  onOpenPeerThread: () => void;
 }) {
   const { t } = useLingui();
   const [messages, setMessages] = useState<readonly ThreadMessage[]>([]);
@@ -144,6 +146,18 @@ export function PeerMessagesOverlay({
                     <div className="text-[14.5px] leading-[1.5] text-foreground/90" dir="auto">
                       <ChatMarkdown>{peerMessage.text}</ChatMarkdown>
                     </div>
+                    {peerMessage.truncated ? (
+                      <button
+                        type="button"
+                        onClick={onOpenPeerThread}
+                        className="mt-2 text-left text-[13px] text-foreground underline"
+                      >
+                        <Trans>
+                          Reply shortened — open the conversation with {peerBotName} for the full
+                          text
+                        </Trans>
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               );

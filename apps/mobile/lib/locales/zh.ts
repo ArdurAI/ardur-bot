@@ -721,6 +721,8 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Message from {peer}": "来自 {peer} 的消息",
   "Show reply": "查看回复",
   "Hide reply": "收起回复",
+  "Reply shortened — open the conversation with {peer} for the full text":
+    "回复已缩短 — 打开与 {peer} 的对话查看全文",
   subagent: "子智能体",
   "Messaged {peer}": "已给 {peer} 发消息",
   "No authentication": "无认证",

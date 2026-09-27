@@ -290,6 +290,9 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     fromBotName: z.string(),
     text: z.string(),
     intent: BotMessageIntent.optional(),
+    /** Completed replies may be bounded in the coordinator receipt. */
+    truncated: z.boolean().optional(),
+    fullLength: z.number().int().nonnegative().optional(),
     /** Sender-thread echo this delivery answers, when applicable. */
     returnToMessageId: Id.optional(),
     /** Links in a bot-started chain; absent when a person started it. */

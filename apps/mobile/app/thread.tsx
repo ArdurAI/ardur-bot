@@ -2492,7 +2492,14 @@ const MessageBubble = memo(function MessageBubble({
       bots.find((bot) => bot.id === peerBotId)?.color ??
       members?.find((member) => member.botId === peerBotId)?.color ??
       tokens.mutedForeground;
-    return <PeerMessageReceipt block={peerMessage} color={peerColor} actionProps={actionProps} />;
+    return (
+      <PeerMessageReceipt
+        block={peerMessage}
+        color={peerColor}
+        actionProps={actionProps}
+        onOpenPeer={onOpenBot}
+      />
+    );
   }
   const channelMessage = message.blocks.find(
     (block): block is Extract<MessageBlock, { kind: "channel_message" }> =>
