@@ -109,7 +109,7 @@ export async function fetchSafeWebText(
       resolve,
       dispatcher,
       maxBytes,
-      userAgent: options.userAgent ?? "Ardur Bot/0.1 (+https://github.com/ardurai/ardur-bot)",
+      userAgent: options.userAgent ?? "Ardur/0.1 (+https://github.com/ardurai/ardur-bot)",
       headers: options.headers,
       signal,
       redirectsRemaining: MAX_REDIRECTS,

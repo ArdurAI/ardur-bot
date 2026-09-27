@@ -24,13 +24,13 @@
   const PHASE_LABELS = {
     "checking-docker": "Getting ready…",
     preparing: "Getting ready…",
-    pulling: "Downloading Ardur Bot…",
-    starting: "Starting Ardur Bot…",
+    pulling: "Downloading Ardur…",
+    starting: "Starting Ardur…",
     "waiting-healthy": "Almost ready…",
     database: "Starting the database.",
     migrations: "Preparing the database.",
     services: "Starting services.",
-    ready: "Ardur Bot is ready.",
+    ready: "Ardur is ready.",
   };
   const TERMINAL_PHASES = new Set([
     "idle",
@@ -298,7 +298,7 @@
       const result = await bridge.test(value);
       if (result.ok) {
         serverUrl.value = result.url;
-        setStatus(`Ardur Bot answered at ${result.url}.`, "ok");
+        setStatus(`Ardur answered at ${result.url}.`, "ok");
       } else {
         setStatus(result.error ?? "Could not reach that address.", "error");
       }
@@ -424,7 +424,7 @@
         continueButton.focus();
       }
     } catch {
-      setStatus("Setup could not start. Quit Ardur Bot and try again.", "error");
+      setStatus("Setup could not start. Quit Ardur and try again.", "error");
       setBusy(true);
     }
   }

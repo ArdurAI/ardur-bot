@@ -387,14 +387,14 @@ it("says a board close that keeps failing could not be closed, and what to do", 
   await act(async () => root.render(<LearningInbox botId="bot" />));
   expect(container.textContent).toContain("A board item filed by a bot could not be closed.");
   expect(container.textContent).toContain(
-    "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected.",
+    "Ardur tried five times. Close it on the Board, or check that this computer is connected.",
   );
   expect(container.textContent).not.toContain("Closing on the Board.");
   expect(catalogTranslation("ru", "A board item filed by a bot could not be closed.")).not.toBe("");
   expect(
     catalogTranslation(
       "zh-CN",
-      "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected.",
+      "Ardur tried five times. Close it on the Board, or check that this computer is connected.",
     ),
   ).not.toBe("");
 });

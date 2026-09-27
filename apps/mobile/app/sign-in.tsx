@@ -170,9 +170,9 @@ export default function SignIn() {
                 {resetSent
                   ? t("Check your email")
                   : mode === "in"
-                    ? t("Sign in to Ardur Bot")
+                    ? t("Sign in to Ardur")
                     : mode === "up"
-                      ? t("Sign up for Ardur Bot")
+                      ? t("Sign up for Ardur")
                       : t("Reset your password")}
               </Text>
               {resetSent ? (
@@ -461,7 +461,7 @@ function ServerSheet({
           <Text
             style={{ color: tokens.mutedForeground, marginTop: 28, fontSize: 15, lineHeight: 22 }}
           >
-            {t("Enter your Ardur Bot server address.")}
+            {t("Enter your Ardur server address.")}
           </Text>
           <TextInput
             autoCapitalize="none"

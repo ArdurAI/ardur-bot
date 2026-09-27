@@ -10,6 +10,8 @@ test("settings shell is two-pane and deep-links Models Memory Voice Usage", asyn
   await signup(page, `settings-shell-${stamp}@ardurbot.test`, "password12", userName);
   await completeOnboarding(page);
 
+  const botPath = new URL(page.url()).pathname;
+  await page.goto("/app?view=dashboard");
   await page.getByTestId("user-menu-trigger").click();
   const menu = page.locator('[data-slot="popover-content"]');
   await expect(menu.getByRole("button", { name: "Settings", exact: true })).toBeVisible();
@@ -18,10 +20,9 @@ test("settings shell is two-pane and deep-links Models Memory Voice Usage", asyn
   await expect(menu.getByRole("button", { name: "Models", exact: true })).toHaveCount(0);
   await captureScreenshot(page, testInfo, "settings-account-menu-lean");
   await page.keyboard.press("Escape");
-
+  await page.goto(botPath);
   await page
-    .locator("aside")
-    .first()
+    .locator("header.app-drag")
     .getByRole("button", { name: "Settings", exact: true })
     .click();
   const settings = page.getByTestId("user-settings");

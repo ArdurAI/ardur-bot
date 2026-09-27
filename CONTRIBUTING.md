@@ -1,6 +1,6 @@
-# Contributing to Ardur Bot
+# Contributing to Ardur
 
-Thanks for helping. Ardur Bot is early and moves fast, so the process is deliberately light.
+Thanks for helping. Ardur is early and moves fast, so the process is deliberately light.
 
 ## How work flows
 
@@ -32,7 +32,7 @@ you touch that area.
 
 ## Syncing with upstream
 
-Ardur Bot is a fork of [Rakazo](https://github.com/elie222/rakazo). To pull upstream changes:
+Ardur is a fork of [Rakazo](https://github.com/elie222/rakazo). To pull upstream changes:
 
 ```sh
 git fetch upstream

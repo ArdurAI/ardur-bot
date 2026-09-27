@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Ardur Bot",
+    "name": "Ardur",
     "slug": "ardurbot",
     "owner": "inbox-zero",
     "scheme": "ardurbot",
@@ -33,8 +33,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Ardur Bot uses your photo library so you can attach images to a bot message.",
-          "cameraPermission": "Ardur Bot uses the camera to pair with home or attach a photo.",
+          "photosPermission": "Ardur uses your photo library so you can attach images to a bot message.",
+          "cameraPermission": "Ardur uses the camera to pair with home or attach a photo.",
           "microphonePermission": false
         }
       ],
@@ -51,10 +51,10 @@
         "usesNonExemptEncryption": false
       },
       "infoPlist": {
-        "NSFaceIDUsageDescription": "Ardur Bot confirms your presence before an action runs.",
-        "NSCameraUsageDescription": "Ardur Bot uses the camera to pair with home or attach a photo.",
-        "NSPhotoLibraryUsageDescription": "Ardur Bot uses your photo library so you can attach images to a bot message.",
-        "NSLocalNetworkUsageDescription": "Ardur Bot connects to a self-hosted Ardur Bot server on your local network.",
+        "NSFaceIDUsageDescription": "Ardur confirms your presence before an action runs.",
+        "NSCameraUsageDescription": "Ardur uses the camera to pair with home or attach a photo.",
+        "NSPhotoLibraryUsageDescription": "Ardur uses your photo library so you can attach images to a bot message.",
+        "NSLocalNetworkUsageDescription": "Ardur connects to a self-hosted Ardur server on your local network.",
         "NSAppTransportSecurity": {
           "NSAllowsLocalNetworking": true
         }

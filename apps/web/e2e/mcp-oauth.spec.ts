@@ -2,7 +2,7 @@ import type { McpServer } from "@ardurbot/contracts";
 import type { Route } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 import { MCP_OAUTH_CHANNEL } from "../src/lib/mcp-connect";
-import { captureScreenshot, completeOnboarding, signup } from "./helpers";
+import { captureScreenshot, completeOnboarding, openUserSettings, signup } from "./helpers";
 
 test("connects an MCP server through the OAuth popup callback", async ({ page }, testInfo) => {
   const stamp = Date.now();
@@ -91,7 +91,7 @@ test("connects an MCP server through the OAuth popup callback", async ({ page },
     });
   });
 
-  await page.getByText("Integrations", { exact: true }).click();
+  await openUserSettings(page, "integrations");
   await page.getByTestId("settings-nav-mcp").click();
   await expect(page.getByTestId("user-settings")).toHaveAttribute("data-settings-section", "mcp");
   await expect(page.getByRole("heading", { name: "MCP", exact: true })).toBeVisible();

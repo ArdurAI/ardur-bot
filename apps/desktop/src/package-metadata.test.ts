@@ -7,6 +7,9 @@ const packageJson = JSON.parse(
 ) as {
   productName?: string;
   build: {
+    appId: string;
+    artifactName: string;
+    linux: { executableName: string };
     productName?: string;
     extraResources: { from: string; to: string; filter?: string[] }[];
   };
@@ -14,8 +17,12 @@ const packageJson = JSON.parse(
 
 describe("desktop package metadata", () => {
   it("shares the customer-facing name between Electron and electron-builder", () => {
-    expect(packageJson.productName).toBe("Ardur Bot");
+    expect(packageJson.productName).toBe("Ardur");
     expect(packageJson.build?.productName).toBeUndefined();
+    expect(packageJson.build.appId).toBe("ai.ardur.bot.desktop");
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: electron-builder expands these macros.
+    expect(packageJson.build.artifactName).toBe("ardur-${version}-${os}-${arch}.${ext}");
+    expect(packageJson.build.linux.executableName).toBe("ardur");
   });
 
   it("packs the matching native addon beside the single host bundle", () => {

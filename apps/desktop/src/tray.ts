@@ -19,11 +19,11 @@ export function createDesktopTray(
         : icon;
     if (typeof image !== "string") image.setTemplateImage(true);
     const tray = new Tray(image);
-    tray.setToolTip("Ardur Bot");
+    tray.setToolTip("Ardur");
     trayActions.set(tray, { show, quit });
     tray.setContextMenu(
       Menu.buildFromTemplate([
-        { label: "Open Ardur Bot", click: show },
+        { label: "Open Ardur", click: show },
         { type: "separator" },
         { label: "Quit", click: quit },
       ]),
@@ -57,7 +57,7 @@ export function updateHostTray(tray: Tray | null, connected: boolean) {
   if (!actions) return;
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: "Open Ardur Bot", click: actions.show },
+      { label: "Open Ardur", click: actions.show },
       state,
       { type: "separator" },
       { label: "Quit", click: actions.quit },

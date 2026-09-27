@@ -1,12 +1,12 @@
 ---
 title: "Desktop performance benchmarks"
-description: "Ardur Bot measures the production Vite renderer inside a packaged Electron directory build against a"
+description: "Ardur measures the production Vite renderer inside a packaged Electron directory build against a"
 source_path: "docs/performance.md"
 ---
 
 > [Source: docs/performance.md](https://github.com/ArdurAI/ardur-bot/blob/__ARDUR_BOT_SOURCE_REF__/docs/performance.md). Edit the source file, then run `python3 site/scripts/sync_docs.py` to refresh this page.
 
-Ardur Bot measures the production Vite renderer inside a packaged Electron directory build against a
+Ardur measures the production Vite renderer inside a packaged Electron directory build against a
 disposable Postgres database, the scripted agent runtime, and the fake sandbox. No provider account
 or production data is used.
 

@@ -1,16 +1,16 @@
 ---
 title: "Vision"
-description: "Ardur Bot exists so that people can own a team of AI bots that keep working, on models and"
+description: "Ardur exists so that people can own a team of AI bots that keep working, on models and"
 source_path: "VISION.md"
 ---
 
 > [Source: VISION.md](https://github.com/ArdurAI/ardur-bot/blob/__ARDUR_BOT_SOURCE_REF__/VISION.md). Edit the source file, then run `python3 site/scripts/sync_docs.py` to refresh this page.
 
-Ardur Bot exists so that people can own a team of AI bots that keep working, on models and
+Ardur exists so that people can own a team of AI bots that keep working, on models and
 computers they choose, without surrendering their subscriptions, their data, or their judgment.
 
 It is a fork of Rakazo, and it keeps Rakazo's core: a bot is a continuing identity with one
-visible conversation, durable memory, routines, and a computer. What Ardur Bot adds is a
+visible conversation, durable memory, routines, and a computer. What Ardur adds is a
 promise about **who does the work and where**: every bot is pinned to a provider, model and
 effort level that the owner chose, using the owner's own subscriptions and keys, and that pin
 never silently changes.
@@ -120,5 +120,5 @@ This file records current product truth. Git history keeps what it replaced.
 - Rakazo's mechanics (bots, groups, routines, computers, approvals, memory) are kept and
   credited; see NOTICE and docs/decisions/ADR-001-fork-and-rename.md.
 - Claude subscriptions are used only through the user's own unmodified `claude` binary. The
-  inherited Claude.ai OAuth login is removed from Ardur Bot builds.
+  inherited Claude.ai OAuth login is removed from Ardur builds.
 - Work lands on `dev`; `main` moves only after a human has verified a build.

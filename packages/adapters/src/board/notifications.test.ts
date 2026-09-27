@@ -69,7 +69,7 @@ it("says a board item filed by a bot could not be closed and what to do, with or
     notifications as unknown as NotificationProvider,
   );
   const body =
-    "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected.";
+    "Ardur tried five times. Close it on the Board, or check that this computer is connected.";
   expect(notifications.send).toHaveBeenCalledTimes(2);
   expect(notifications.send).toHaveBeenNthCalledWith(
     1,

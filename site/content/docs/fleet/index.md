@@ -81,7 +81,7 @@ move a computer to a saved connection, or to the deployment default whenever the
 another engine, named there as `Deployment default (E2B)` for example. That move saves the
 workspace from the old engine while that engine is configured here, and otherwise restores the last
 saved workspace. Choosing the deployment default for a computer already on that engine changes
-nothing. Moving a computer onto the machine running Ardur Bot is refused until verified migration
+nothing. Moving a computer onto the machine running Ardur is refused until verified migration
 lands, so the deployment default is not offered while new computers start on the host. If the
 computer changes before an automatic move starts, the move is skipped: the run's placement records
 it, and no computer update is shown.
@@ -171,7 +171,7 @@ infrastructure charges; the feature does not provision machines or purchase serv
    host keys uses ordinary SSH agent authentication. No Tailscale authentication material is
    entered in the application.
 5. Add an engine discovered through its socket/context, or a remote SSH/TLS engine. Place the
-   selected Ardur Bot image on that engine first. For TLS, provide host-local CA, certificate
+   selected Ardur image on that engine first. For TLS, provide host-local CA, certificate
    and key paths. Test it, select it for a private bot, create a file, and verify sleep/wake and
    checkpoint restore. Confirm no port is published by the new container.
 6. Select a discovered kind or existing Kubernetes context. Choose an existing namespace and
