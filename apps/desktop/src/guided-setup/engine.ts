@@ -193,6 +193,13 @@ export class SetupEngine {
     const index = this.steps.findIndex((step) => step.id === stepId);
     if (index < 0 || !this.dependenciesMet(this.steps[index]!))
       return Promise.resolve(this.snapshot());
+    if (stepId === "migrations") {
+      const databaseIndex = this.steps.findIndex((step) => step.id === "database");
+      if (databaseIndex >= 0) {
+        this.freshlyVerified.delete("database");
+        return this.schedule(databaseIndex, false);
+      }
+    }
     return this.schedule(index, true);
   }
 

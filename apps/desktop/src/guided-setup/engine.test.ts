@@ -277,6 +277,53 @@ describe("SetupEngine", () => {
     expect(engine.snapshot().complete).toBe(false);
   });
 
+  it("restores a released database before retrying failed migrations", async () => {
+    let databaseRunning = false;
+    let databaseStarts = 0;
+    let migrationRuns = 0;
+    const ready = () => ({ kind: "satisfied" as const, checkedAt: 100, evidence: "ready" });
+    const prerequisites = step({ check: async () => ready() });
+    const database = step({
+      id: "database",
+      requires: ["prerequisites"],
+      check: async () =>
+        databaseRunning ? ready() : { kind: "needed" as const, reasonCode: "database-stopped" },
+      run: async () => {
+        databaseStarts += 1;
+        databaseRunning = true;
+        return { kind: "owned", proof: "database" };
+      },
+      verify: async () => ready(),
+    });
+    const migrations = step({
+      id: "migrations",
+      requires: ["database"],
+      check: async () => ({ kind: "needed", reasonCode: "migrations-pending" }),
+      run: async () => {
+        if (!databaseRunning) throw new Error("database not started");
+        migrationRuns += 1;
+        if (migrationRuns === 1) {
+          databaseRunning = false; // Failure cleanup releases the database.
+          throw new Error("transient migration failure");
+        }
+        return { kind: "verified", proof: "migrated" };
+      },
+      verify: async () => ready(),
+    });
+    const engine = await SetupEngine.open(
+      memoryStore().store,
+      [prerequisites, database, migrations],
+      clock,
+    );
+    expect((await engine.start()).steps[2]?.status).toBe("failed");
+    expect(databaseStarts).toBe(1);
+    expect(migrationRuns).toBe(1);
+
+    expect((await engine.retry("migrations")).steps[2]?.status).toBe("succeeded");
+    expect(databaseStarts).toBe(2);
+    expect(migrationRuns).toBe(2);
+  });
+
   it("does not trust saved success to authorize a dependent skip before recheck", async () => {
     const files = memoryStore();
     const command = step({ id: "command", canSkip: true, requires: ["prerequisites"] });

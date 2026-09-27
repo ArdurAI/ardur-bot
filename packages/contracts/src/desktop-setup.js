@@ -11,7 +11,6 @@ export const SetupStepIdSchema = z.enum([
   "first-bot",
   "finish",
 ]);
-export type SetupStepId = z.infer<typeof SetupStepIdSchema>;
 
 export const SetupStepStatusSchema = z.enum([
   "pending",
@@ -27,11 +26,9 @@ export const SetupStepStatusSchema = z.enum([
   "failed",
   "interrupted",
 ]);
-export type SetupStepStatus = z.infer<typeof SetupStepStatusSchema>;
 
 const boundedText = z.string().max(240);
 export const SetupDetailSchema = z.object({ code: boundedText, text: boundedText }).strict();
-export type SetupDetail = z.infer<typeof SetupDetailSchema>;
 
 export const SetupStepSnapshotSchema = z
   .object({
@@ -47,7 +44,6 @@ export const SetupStepSnapshotSchema = z
     details: z.array(SetupDetailSchema).max(12),
   })
   .strict();
-export type SetupStepSnapshot = z.infer<typeof SetupStepSnapshotSchema>;
 
 export const SetupSnapshotSchema = z
   .object({
@@ -65,7 +61,6 @@ export const SetupSnapshotSchema = z
     blocked: z.boolean(),
   })
   .strict();
-export type SetupSnapshot = z.infer<typeof SetupSnapshotSchema>;
 
 export const SetupStepInputSchema = SetupStepIdSchema;
 export const SetupNoInputSchema = z.tuple([]);
@@ -74,7 +69,6 @@ export const SetupOnChangeOutputSchema = SetupSnapshotSchema;
 export const StepReceiptSchema = z
   .object({ kind: z.enum(["owned", "reused", "verified"]), proof: z.string().max(120) })
   .strict();
-export type StepReceipt = z.infer<typeof StepReceiptSchema>;
 export const SetupJournalSchema = z
   .object({
     version: z.literal(1),
@@ -83,7 +77,6 @@ export const SetupJournalSchema = z
     receipts: z.partialRecord(SetupStepIdSchema, StepReceiptSchema),
   })
   .strict();
-export type SetupJournal = z.infer<typeof SetupJournalSchema>;
 export const GUIDED_SETUP_CHANNELS = {
   snapshot: "desktop.guidedSetup.snapshot",
   start: "desktop.guidedSetup.start",
@@ -92,14 +85,4 @@ export const GUIDED_SETUP_CHANNELS = {
   cancel: "desktop.guidedSetup.cancel",
   resume: "desktop.guidedSetup.resume",
   changed: "desktop.guidedSetup.changed",
-} as const;
-
-export interface GuidedSetupBridge {
-  snapshot(): Promise<SetupSnapshot>;
-  start(): Promise<SetupSnapshot>;
-  retry(stepId: SetupStepId): Promise<SetupSnapshot>;
-  skip(stepId: SetupStepId): Promise<SetupSnapshot>;
-  cancel(): Promise<SetupSnapshot>;
-  resume(): Promise<SetupSnapshot>;
-  onChange(listener: (snapshot: SetupSnapshot) => void): () => void;
-}
+};

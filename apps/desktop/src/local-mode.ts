@@ -283,6 +283,7 @@ export class LocalModeController {
     if (this.quitting || this.stopping) return Promise.resolve(this.current);
     if (this.inflight) return this.inflight;
     this.stopped = false;
+    if (stage === "database") this.databaseReported = false;
     const abort = new AbortController();
     this.runAbort = abort;
     const onAbort = () => {
