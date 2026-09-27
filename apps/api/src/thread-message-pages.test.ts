@@ -1,4 +1,7 @@
+import { userVisibleMessages } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
+import { finishDelegation } from "@ardurbot/db";
+import { fixture as delegationFixture } from "@ardurbot/db/testing/delegation";
 import { describe, expect, it, vi } from "vitest";
 import {
   isPeerRun,
@@ -8,6 +11,68 @@ import {
 } from "./thread-message-pages.js";
 
 describe("thread message pages", () => {
+  it("keeps a completed peer result in the peer view without echoing its body in the transcript", async () => {
+    const delegation = delegationFixture();
+    const row = await delegation.admit({ admissionKey: "bot-message:parent:message_bot:0" });
+    const phrase = "peer-exchange-alpha";
+    await delegation
+      .worker()
+      .$transaction((tx) =>
+        finishDelegation(tx, row.id, "completed", `done. i handled: ${phrase}`),
+      );
+    const resultBlocks = delegation.tx.message.create.mock.calls[0]![0].data.blocks;
+    const rows = [
+      {
+        id: "owner",
+        seq: 1,
+        role: "user",
+        runId: null,
+        botId: null,
+        blocks: [{ kind: "text", text: `Ask Worker ${phrase}` }],
+      },
+      {
+        id: "sent",
+        seq: 2,
+        role: "bot",
+        runId: "parent",
+        botId: "coordinator",
+        blocks: [
+          { kind: "bot_message_sent", toBotId: "worker", toBotName: "Worker", text: phrase },
+        ],
+      },
+      {
+        id: "result",
+        seq: 3,
+        role: "bot",
+        runId: null,
+        botId: "coordinator",
+        blocks: resultBlocks,
+      },
+    ].map((item) => ({
+      ...item,
+      threadId: "thread",
+      replyToMessageId: null,
+      replyQuote: null,
+      feedback: [],
+      createdAt: new Date(`2026-08-16T00:00:0${item.seq}.000Z`),
+    }));
+    const prisma = {
+      event: { findMany: vi.fn(async () => []) },
+      message: { findMany: vi.fn(async () => [...rows].reverse()) },
+      run: { findMany: vi.fn(async () => []) },
+    } as unknown as PrismaClient;
+
+    const page = await loadMessagePage(prisma, "thread", undefined, 3, undefined, false, true);
+    const visible = userVisibleMessages(page.messages, { includePeerReceipts: true });
+    const visibleText = visible.flatMap((message) =>
+      message.blocks.flatMap((block) => (block.kind === "text" ? [block.text] : [])),
+    );
+    expect(visibleText.filter((text) => text.includes(phrase))).toHaveLength(1);
+    expect(page.messages.find((message) => message.id === "result")?.blocks).toEqual([
+      expect.objectContaining({ kind: "bot_message_received", fromBotId: "worker" }),
+    ]);
+  });
+
   it("caches peer-run classification for live events", async () => {
     const findUnique = vi.fn(async () => ({ trigger: "bot_message" }));
     const prisma = {

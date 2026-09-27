@@ -6335,6 +6335,10 @@ msgstr "कुंजी बदलें"
 msgid "Reply"
 msgstr "उत्तर दें"
 
+#: src/pages/PeerMessagesOverlay.tsx
+msgid "Reply shortened — open the conversation with {peerBotName} for the full text"
+msgstr "उत्तर संक्षिप्त किया गया है — पूरा पाठ देखने के लिए {peerBotName} के साथ बातचीत खोलें"
+
 #: src/pages/Shell.tsx
 msgid "Replying to {replyName}"
 msgstr "{replyName} को उत्तर दे रहे हैं"

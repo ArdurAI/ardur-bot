@@ -284,12 +284,15 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     intent: BotMessageIntent.optional(),
   }),
   z.object({
-    /** Delivered into the receiving bot's own chat as the prompt that woke it. */
+    /** Peer content in a bot's chat: an incoming prompt or a completed reply. */
     kind: z.literal("bot_message_received"),
     fromBotId: Id,
     fromBotName: z.string(),
     text: z.string(),
     intent: BotMessageIntent.optional(),
+    /** Completed replies may be bounded in the coordinator receipt. */
+    truncated: z.boolean().optional(),
+    fullLength: z.number().int().nonnegative().optional(),
     /** Sender-thread echo this delivery answers, when applicable. */
     returnToMessageId: Id.optional(),
     /** Links in a bot-started chain; absent when a person started it. */

@@ -4,6 +4,7 @@ import type {
   DelegationProblem,
   DelegationRecord,
   DelegationSnapshot,
+  MessageBlock,
 } from "@ardurbot/contracts";
 import {
   ALL_DEVICE_SCOPES,
@@ -42,6 +43,7 @@ const refuse = (code: DelegationProblem["code"]): never => {
   throw new DelegationAdmissionError(delegationProblem(code));
 };
 export const ACTIVE_DELEGATIONS = ["queued", "running", "cancel-requested"];
+const PEER_RECEIPT_MAX_LENGTH = 2000;
 type Scope = Pick<Actor, "spaceId" | "userId">;
 
 export async function lockDelegationRootForRun(tx: Prisma.TransactionClient, runId: string) {
@@ -439,11 +441,12 @@ export async function finishDelegation(
   row = await tx.delegation.findUniqueOrThrow({ where: { id } });
   if (expectedRunId !== undefined && row.runId !== expectedRunId) return;
   if (row.status === "cancel-requested" && status !== "cancelled") return;
+  const redactedText = redactTaskValue(text);
   const changed = await tx.delegation.updateMany({
     where: { id, status: { in: ACTIVE_DELEGATIONS } },
     data: {
       status,
-      result: redactTaskValue(text).slice(0, 2000),
+      result: redactedText.slice(0, PEER_RECEIPT_MAX_LENGTH),
       completedAt: new Date(),
       ...(status === "cancelled" ? { cancelConfirmedAt: new Date() } : {}),
     },
@@ -464,14 +467,31 @@ export async function finishDelegation(
       where: { rootTaskId: row.rootTaskId, threadId: root.coordinatorThreadId },
       select: { id: true },
     }));
-  const blocks = [
-    {
-      kind: "text" as const,
-      text: goalRoomAssignment
-        ? `${row.actingName}: ${status === "completed" ? "completed, awaiting acceptance" : status}.`
-        : `${row.requesterName} → ${row.actingName}: ${status === "completed" ? "completed, awaiting acceptance" : status}.\n${redactTaskValue(text).slice(0, 2000)}${row.card && TaskCardSchema.parse(row.card).doneWhen.length ? `\n${taskCardChecklist(TaskCardSchema.parse(row.card))}` : ""}`,
-    },
-  ];
+  // Comparison delegations also use kind "message"; only message_bot keys are peer receipts.
+  const peerMessageResult =
+    row.kind === "message" &&
+    (row.admissionKey.startsWith("bot-message:") || row.admissionKey.startsWith("message:"));
+  const blocks: MessageBlock[] =
+    peerMessageResult && status === "completed" && text.trim().length > 0
+      ? [
+          {
+            kind: "bot_message_received",
+            fromBotId: row.actingBotId,
+            fromBotName: row.actingName,
+            text: redactedText.slice(0, PEER_RECEIPT_MAX_LENGTH),
+            intent: "result",
+            truncated: redactedText.length > PEER_RECEIPT_MAX_LENGTH,
+            fullLength: redactedText.length,
+          },
+        ]
+      : [
+          {
+            kind: "text",
+            text: goalRoomAssignment
+              ? `${row.actingName}: ${status === "completed" ? "completed, awaiting acceptance" : status}.`
+              : `${row.requesterName} → ${row.actingName}: ${status === "completed" ? "completed, awaiting acceptance" : status}.\n${redactedText.slice(0, 2000)}${row.card && TaskCardSchema.parse(row.card).doneWhen.length ? `\n${taskCardChecklist(TaskCardSchema.parse(row.card))}` : ""}`,
+          },
+        ];
   const message = row.summaryMessageId
     ? await tx.message.update({ where: { id: row.summaryMessageId }, data: { blocks } })
     : await createThreadMessageInTransaction(tx, {
@@ -515,7 +535,8 @@ export async function acceptDelegation(
       text?: string;
     }>;
     for (const block of blocks)
-      if (block.text) block.text = block.text.replace("completed, awaiting acceptance", "accepted");
+      if (block.kind === "text" && block.text)
+        block.text = block.text.replace("completed, awaiting acceptance", "accepted");
     await tx.message.update({ where: { id: message.id }, data: { blocks } });
     await appendEventInTransaction(tx, {
       spaceId: row.spaceId,
