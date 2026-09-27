@@ -8,6 +8,7 @@ export async function runIntegrationSuites(options: {
   template: string;
   databaseCommand: (statement: string) => Promise<void>;
   env: NodeJS.ProcessEnv;
+  grep?: string;
 }) {
   const results: Array<{ suite: string; failures: SuiteFailure[] }> = [];
   const template = options.template.replaceAll('"', '""');
@@ -20,14 +21,24 @@ export async function runIntegrationSuites(options: {
     try {
       await options.databaseCommand(`CREATE DATABASE "${database}" TEMPLATE "${template}"`);
       phase = "test";
-      await runProcess("pnpm", ["exec", "vitest", "run", suite], {
-        ...options.env,
-        DATABASE_URL: suiteUrl.toString(),
-        REALTIME_DATABASE_URL: suiteUrl.toString(),
-        USAGE_LEDGER_TEST_DATABASE_URL: suiteUrl.toString(),
-        OPENROUTER_API_KEY: "",
-        MODEL_API_KEY: "",
-      });
+      await runProcess(
+        "pnpm",
+        [
+          "exec",
+          "vitest",
+          "run",
+          suite,
+          ...(options.grep ? ["--testNamePattern", options.grep] : []),
+        ],
+        {
+          ...options.env,
+          DATABASE_URL: suiteUrl.toString(),
+          REALTIME_DATABASE_URL: suiteUrl.toString(),
+          USAGE_LEDGER_TEST_DATABASE_URL: suiteUrl.toString(),
+          OPENROUTER_API_KEY: "",
+          MODEL_API_KEY: "",
+        },
+      );
     } catch (error) {
       failures.push({ phase, message: error instanceof Error ? error.message : String(error) });
     } finally {

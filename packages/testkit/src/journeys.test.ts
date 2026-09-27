@@ -2639,12 +2639,21 @@ describeJourneys("required product journeys", () => {
           "delegationId" in block &&
           block.delegationId === card.id &&
           "deliveryState" in block &&
-          block.deliveryState === "delivered"
+          block.deliveryState === "replied"
             ? [message]
             : [],
         ),
       );
       expect(markers).toHaveLength(2);
+      const ledger = await prisma.botMessageDelivery.findFirstOrThrow({
+        where: { delegationId: card.id, intent: "request" },
+      });
+      expect(ledger).toMatchObject({ state: "replied", replyDeliveryId: expect.any(String) });
+      expect(
+        await prisma.botMessageDelivery.count({
+          where: { inReplyToDeliveryId: ledger.id, intent: "result" },
+        }),
+      ).toBe(1);
       const recipientThread = recipientThreads.find((bot) => bot.id === card.actingBotId)!.thread!
         .id;
       expect(new Set(markers.map((message) => message.threadId))).toEqual(
@@ -3744,7 +3753,14 @@ describeJourneys("required product journeys", () => {
       where: { goalId: goal.id, clientNonce: `goal-start:${goal.id}` },
     });
     await executor.continueRun(startRun.id, "wake-start-fixture");
+    await waitForDatabase(async () =>
+      ["completed", "failed", "cancelled"].includes(
+        (await prisma.run.findUnique({ where: { id: startRun.id }, select: { status: true } }))
+          ?.status ?? "",
+      ),
+    );
     const completedStart = await prisma.run.findUniqueOrThrow({ where: { id: startRun.id } });
+    expect(completedStart.status).toBe("completed");
     const distinctResult = "WORKER_RESULT_OLDEST_FIRST_SENTINEL";
     const coordinatorTask = await prisma.task.create({
       data: {
@@ -3817,6 +3833,12 @@ describeJourneys("required product journeys", () => {
     const workerAttempt = await prisma.attempt.create({
       data: { runId: workerRun.id, fence: 1, status: "running" },
     });
+    // This fixture tests the source result in one manually constructed wake.
+    // Reserve the completion claim so reconciliation cannot create a competing wake.
+    await prisma.delegation.update({
+      where: { id: delivery.delegationId },
+      data: { coordinatorWokenAt: new Date() },
+    });
     const workerThreadId = workerRun.threadId;
     const finished = await finalizeRun(prisma, {
       spaceId: worker.spaceId,
@@ -3887,6 +3909,12 @@ describeJourneys("required product journeys", () => {
       await executor.continueRun(wake.id, "wake-budget-fixture");
     } finally {
       runtimeSpy.mockRestore();
+    }
+    if (requests.length === 0) {
+      const skipped = await prisma.run.findUniqueOrThrow({ where: { id: wake.id } });
+      throw new Error(
+        `Wake runtime was not entered: ${skipped.status}: ${skipped.error ?? "none"}`,
+      );
     }
     expect(requests).toHaveLength(1);
     expect(requests[0]).toContain(distinctResult);
@@ -4271,6 +4299,11 @@ describeJourneys("required product journeys", () => {
     });
     expect(runId).not.toBe(first.id);
     await ordinaryReady;
+    await waitForDatabase(
+      async () =>
+        (await prisma.run.findUnique({ where: { id: runId }, select: { status: true } }))
+          ?.status === "running",
+    );
     const newerScreenLeaseId = `${runId}:2`;
     await screen.observe(computerRef, {
       operationId: runId,

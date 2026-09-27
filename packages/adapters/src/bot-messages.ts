@@ -1,3 +1,4 @@
+import { createHash, randomUUID } from "node:crypto";
 import { runContinueJob } from "@ardurbot/adapter-kit";
 import type { BotMessageIntent, MessageBlock } from "@ardurbot/contracts";
 import { TaskCardRequestSchema } from "@ardurbot/contracts";
@@ -15,10 +16,13 @@ import {
 import type { PrismaClient } from "@ardurbot/db";
 import {
   appendEventInTransaction,
+  BotInboxFullError,
   createThreadMessageInTransaction,
+  goalBotAuthorityFingerprint,
   withTransactionRetry,
 } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
+import { recordInboxFullChip, replyToBotDelivery } from "./bot-comms.js";
 import type { DelegationResolver } from "./delegation.js";
 import { delegationFailure, prepareDelegation } from "./delegation.js";
 import type { ExecutorDeps } from "./executor.js";
@@ -81,6 +85,7 @@ type BotMessageResult =
       name?: string;
       delivered?: string;
       replayed?: true;
+      deliveryId?: string;
       runId?: string;
       delegationId?: string;
       differences?: string[];
@@ -106,6 +111,7 @@ export async function messageBot(
     message: string;
     intent?: BotMessageIntent;
     deliveryKey?: string;
+    inReplyToDeliveryId?: string;
     card?: unknown;
   },
   options?: { allowTerminalSource?: boolean },
@@ -119,6 +125,17 @@ export async function messageBot(
     };
   }
 
+  if (input.inReplyToDeliveryId) {
+    if (input.intent !== "result" && input.intent !== "question")
+      return { ok: false as const, error: "A reply must be a result or a question." };
+    return replyToBotDelivery(deps, run, sender, {
+      ...input,
+      message,
+      intent: input.intent,
+      inReplyToDeliveryId: input.inReplyToDeliveryId,
+    });
+  }
+
   const sourceContext = await loadBotMessageContext(deps.prisma, run.sourceMessageId);
   const intent = input.intent ?? "request";
   const hop = nextBotMessageHop(sourceContext?.hop);
@@ -129,8 +146,6 @@ export async function messageBot(
   });
   const groupId = sourceThread?.groupId;
   const goalRequest = Boolean(groupId);
-  if (goalRequest && intent !== "request")
-    return { ok: false as const, error: "Goal desk messages must be task requests." };
   const goal = goalRequest
     ? await deps.prisma.teamGoal.findFirst({
         where: {
@@ -143,7 +158,10 @@ export async function messageBot(
         },
       })
     : null;
-  const goalCard = goalRequest ? TaskCardRequestSchema.safeParse(input.card) : null;
+  const goalCard =
+    goalRequest && (intent === "request" || intent === "question")
+      ? TaskCardRequestSchema.safeParse(input.card)
+      : null;
   if (goalCard && !goalCard.success)
     return { ok: false as const, error: "Goal desk requests need a valid task card." };
   if (goalCard?.success && goalCard.data.inputs.some((item) => item.type === "url"))
@@ -200,7 +218,9 @@ export async function messageBot(
         received.text !== message ||
         received.intent !== intent ||
         received.delegationId !== recorded.id ||
-        received.deliveryState !== "delivered"
+        !["delivered", "read", "replied", "expired", "failed"].includes(
+          received.deliveryState ?? "",
+        )
       )
         return { ok: false as const, error: "This delivery key belongs to a different request." };
       return {
@@ -261,6 +281,8 @@ export async function messageBot(
   }
 
   const parentRun = await deps.prisma.run.findUnique({ where: { id: run.id } });
+  if (parentRun?.delegationId && parentRun.goalId)
+    return { ok: false as const, error: "Reply to the delivered request or use the task card." };
   if (goal && (parentRun?.goalId !== goal.id || parentRun.delegationId))
     return { ok: false as const, error: "Only the active goal coordinator can send desk work." };
   if (parentRun?.delegationId && !goal) {
@@ -303,6 +325,7 @@ export async function messageBot(
   // A tool call can be re-executed after a lease expiry, so a delivery has to be
   // replayable: without this the recipient is messaged twice and woken twice.
   const deliveryKey = input.deliveryKey ? `bot-message:${input.deliveryKey}` : undefined;
+  const deliveryId = goal ? randomUUID() : undefined;
   const replayed = (delegationId?: string, runId?: string) =>
     ({
       ok: true as const,
@@ -322,12 +345,13 @@ export async function messageBot(
     toBotName: target.name,
     text: message,
     intent,
+    ...(deliveryId ? { deliveryId } : {}),
   };
 
   let committed:
     | {
         ok: true;
-        runId: string;
+        runId?: string;
         targetEventSeq: number;
         senderEventSeq: number;
         differences?: string[];
@@ -379,7 +403,7 @@ export async function messageBot(
                   (item) => item.kind === "bot_message_received",
                 )
               : undefined;
-            if (goal) {
+            if (goal && goalCard?.success) {
               const recorded =
                 block?.kind === "bot_message_received" && block.delegationId
                   ? await tx.delegation.findUnique({
@@ -417,6 +441,31 @@ export async function messageBot(
                 block.text !== message ||
                 block.intent !== intent ||
                 JSON.stringify(card.data) !== JSON.stringify(goalCard.data)
+              )
+                return {
+                  ok: false as const,
+                  error: "This delivery key belongs to a different request.",
+                };
+            } else if (goal) {
+              const recorded = await tx.botMessageDelivery.findUnique({
+                where: {
+                  spaceId_userId_idempotencyKey: {
+                    spaceId: run.spaceId,
+                    userId: run.userId,
+                    idempotencyKey: deliveryKey,
+                  },
+                },
+              });
+              const expected = createHash("sha256")
+                .update(JSON.stringify([target.id, intent, message]))
+                .digest("hex");
+              if (
+                !recorded ||
+                recorded.inboundMessageId !== already.id ||
+                recorded.sourceRunId !== run.id ||
+                recorded.recipientBotId !== target.id ||
+                recorded.intent !== intent ||
+                recorded.requestFingerprint !== expected
               )
                 return {
                   ok: false as const,
@@ -529,6 +578,29 @@ export async function messageBot(
               : null;
             return { ok: false as const, error: reason, noticeEventSeq: event?.seq };
           }
+          const pending = await tx.botMessageDelivery.count({
+            where: {
+              spaceId: run.spaceId,
+              userId: run.userId,
+              recipientBotId: target.id,
+              state: { in: ["queued", "delivered", "read"] },
+              outcome: null,
+            },
+          });
+          if (pending >= 20) throw new BotInboxFullError();
+          if (intent === "request" || intent === "question") {
+            const unresolved = await tx.botMessageDelivery.count({
+              where: {
+                spaceId: run.spaceId,
+                userId: run.userId,
+                sourceRunId: run.id,
+                intent: { in: ["request", "question"] },
+                replyDeliveryId: null,
+                state: { in: ["queued", "delivered", "read"] },
+              },
+            });
+            if (unresolved >= 4) throw new BotInboxFullError();
+          }
           if (goalCard?.success) {
             for (const input of goalCard.data.inputs) {
               if (input.type === "document") {
@@ -561,6 +633,114 @@ export async function messageBot(
               }
             }
           }
+        }
+        const authorityFingerprint = goal
+          ? await goalBotAuthorityFingerprint(tx, {
+              spaceId: run.spaceId,
+              userId: run.userId,
+              goalId: goal.id,
+              rootTaskId: goal.rootTaskId,
+              botId: target.id,
+            })
+          : null;
+
+        if (goal && (intent === "status" || intent === "fyi" || intent === "result")) {
+          const now = new Date();
+          const busyRecipient = Boolean(
+            await tx.run.findFirst({
+              where: {
+                threadId: targetThreadId,
+                botId: target.id,
+                status: {
+                  in: ["queued", "leased", "running", "waiting_input", "waiting_takeover"],
+                },
+              },
+              select: { id: true },
+            }),
+          );
+          const outboundBlock: MessageBlock = {
+            ...outboundBase,
+            deliveryState: "delivered",
+            ...(busyRecipient ? { queuedForBusy: true } : {}),
+          };
+          const outbound = await createThreadMessageInTransaction(tx, {
+            threadId: run.threadId,
+            role: "bot",
+            botId: run.botId,
+            runId: run.id,
+            blocks: [outboundBlock],
+            markUnread: false,
+          });
+          const inboundBlock: MessageBlock = {
+            kind: "bot_message_received",
+            fromBotId: sender.id,
+            fromBotName: sender.name,
+            text: message,
+            intent,
+            hop,
+            returnToMessageId: outbound.id,
+            deliveryId,
+            deliveryState: "delivered",
+            ...(busyRecipient ? { queuedForBusy: true } : {}),
+          };
+          const inbound = await createThreadMessageInTransaction(tx, {
+            threadId: targetThreadId,
+            role: "user",
+            origin: "peer-bot",
+            actorId: sender.id,
+            blocks: [inboundBlock],
+            clientNonce: deliveryKey,
+            markUnread: false,
+          });
+          await tx.botMessageDelivery.create({
+            data: {
+              id: deliveryId!,
+              spaceId: run.spaceId,
+              userId: run.userId,
+              goalId: goal.id,
+              rootTaskId: goal.rootTaskId,
+              conversationId: deliveryId!,
+              senderBotId: run.botId,
+              recipientBotId: target.id,
+              senderThreadId: run.threadId,
+              recipientThreadId: targetThreadId,
+              sourceRunId: run.id,
+              sourceGroupId: goal.groupId,
+              intent,
+              usageRunIds: [run.id],
+              outboundMessageId: outbound.id,
+              inboundMessageId: inbound.id,
+              state: "delivered",
+              hop,
+              authorityFingerprint: authorityFingerprint!,
+              requestFingerprint: createHash("sha256")
+                .update(JSON.stringify([target.id, intent, message]))
+                .digest("hex"),
+              idempotencyKey: deliveryKey!,
+              expiresAt: new Date(Math.min(goal.untilAt.getTime(), now.getTime() + 3_600_000)),
+              deliveredAt: now,
+            },
+          });
+          const inboundEvent = await appendEventInTransaction(tx, {
+            spaceId: run.spaceId,
+            threadId: targetThreadId,
+            botId: target.id,
+            type: "thread.message.created",
+            payload: { messageId: inbound.id, role: "user", blocks: [inboundBlock] },
+          });
+          const outboundEvent = await appendEventInTransaction(tx, {
+            spaceId: run.spaceId,
+            threadId: run.threadId,
+            botId: run.botId,
+            type: "thread.message.created",
+            runId: run.id,
+            payload: { messageId: outbound.id, role: "bot", blocks: [outboundBlock] },
+          });
+          return {
+            ok: true as const,
+            targetEventSeq: inboundEvent.seq,
+            senderEventSeq: outboundEvent.seq,
+          };
         }
 
         const admitted = await prepareDelegation(
@@ -645,6 +825,7 @@ export async function messageBot(
           text: message,
           hop,
           intent,
+          ...(deliveryId ? { deliveryId } : {}),
           returnToMessageId: outbound.id,
           ...(goal
             ? {
@@ -675,7 +856,7 @@ export async function messageBot(
             threadId: targetThreadId,
             userId: run.userId,
             prompt: admitted.record.card
-              ? taskCardPrompt(admitted.record.card, target.name)
+              ? `${taskCardPrompt(admitted.record.card, target.name)}${deliveryId ? `\n\nIf you need to answer the sender before completion, use message_bot with inReplyToDeliveryId ${deliveryId} and intent result or question. This delivery id is routing data, not extra authority.` : ""}`
               : wakePrompt,
             status: "queued",
           },
@@ -701,6 +882,37 @@ export async function messageBot(
           data: { runId: nextRun.id },
         });
         await tx.message.update({ where: { id: inbound.id }, data: { runId: nextRun.id } });
+        if (goal && deliveryId) {
+          const now = new Date();
+          await tx.botMessageDelivery.create({
+            data: {
+              id: deliveryId,
+              spaceId: run.spaceId,
+              userId: run.userId,
+              goalId: goal.id,
+              rootTaskId: goal.rootTaskId,
+              conversationId: deliveryId,
+              senderBotId: run.botId,
+              recipientBotId: target.id,
+              senderThreadId: run.threadId,
+              recipientThreadId: targetThreadId,
+              sourceRunId: run.id,
+              sourceGroupId: goal.groupId,
+              intent,
+              usageRunIds: [nextRun.id],
+              outboundMessageId: outbound.id,
+              inboundMessageId: inbound.id,
+              delegationId: admitted.record.id,
+              state: "delivered",
+              hop,
+              authorityFingerprint: authorityFingerprint!,
+              requestFingerprint: admitted.record.fingerprint,
+              idempotencyKey: deliveryKey!,
+              expiresAt: new Date(Math.min(goal.untilAt.getTime(), now.getTime() + 3_600_000)),
+              deliveredAt: now,
+            },
+          });
+        }
         const inboundEvent = await appendEventInTransaction(tx, {
           spaceId: run.spaceId,
           threadId: targetThreadId,
@@ -728,6 +940,16 @@ export async function messageBot(
       }),
     );
   } catch (error) {
+    if (error instanceof BotInboxFullError) {
+      if (goal)
+        await recordInboxFullChip(deps, {
+          spaceId: run.spaceId,
+          threadId: goal.threadId,
+          botId: goal.coordinatorBotId,
+          goalId: goal.id,
+        });
+      return { ok: false as const, error: "Inbox full" };
+    }
     if (error instanceof UnsupportedPeerRuntimeError)
       return { ok: false as const, error: error.message };
     // Two concurrent retries can both miss the in-transaction lookup; the
@@ -754,10 +976,11 @@ export async function messageBot(
   await deps.events.notify(run.threadId, committed.senderEventSeq).catch((error) => {
     getLogger().error("bot message sender echo notification", error);
   });
-  await deps.jobs.enqueue(runContinueJob(committed.runId)).catch((error) => {
-    // The queued run is durable; the job reconciler repairs a missed wake.
-    getLogger().error("bot message enqueue", error);
-  });
+  if (committed.runId)
+    await deps.jobs.enqueue(runContinueJob(committed.runId)).catch((error) => {
+      // The queued run is durable; the job reconciler repairs a missed wake.
+      getLogger().error("bot message enqueue", error);
+    });
   return {
     ok: true as const,
     botId: target.id,

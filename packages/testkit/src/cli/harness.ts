@@ -87,10 +87,9 @@ async function main() {
     process.env.CI = "1";
 
     execSync("pnpm --filter @ardurbot/db generate", { stdio: "inherit", env: process.env });
-    execSync("pnpm --filter @ardurbot/db exec prisma migrate deploy", {
+    execSync("pnpm db:migrate", {
       stdio: "inherit",
       env: process.env,
-      cwd: path.resolve("packages/db"),
     });
 
     if (integration) {
@@ -112,6 +111,7 @@ async function main() {
         "packages/db/src/messaging.postgres.test.ts",
         "packages/db/src/learning.postgres.test.ts",
         "packages/adapters/src/learning-insights.postgres.test.ts",
+        "packages/adapters/src/bot-comms.postgres.test.ts",
         "packages/db/src/command-blocks.postgres.test.ts",
         "packages/adapters/src/board/filing.postgres.test.ts",
         "packages/adapters/src/board/delivery.postgres.test.ts",
@@ -142,8 +142,11 @@ async function main() {
         if (result.exitCode !== 0)
           throw new Error("Isolated integration database operation failed");
       };
+      const selectedSuites = e2eSpec ? suites.filter((suite) => suite === e2eSpec) : suites;
+      if (selectedSuites.length === 0) throw new Error("Unknown integration suite.");
       const result = await runIntegrationSuites({
-        suites,
+        suites: selectedSuites,
+        grep: e2eGrep,
         databaseUrl,
         template: container.getDatabase(),
         databaseCommand,

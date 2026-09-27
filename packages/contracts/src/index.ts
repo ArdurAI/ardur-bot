@@ -3,6 +3,7 @@ export * from "./ai-consent.js";
 export * from "./attachments.js";
 export type * from "./board.js";
 export * from "./bot-avatar.js";
+export * from "./bot-comms.js";
 export * from "./bot-secrets.js";
 export * from "./capability-settings.js";
 export * from "./command-blocks.js";

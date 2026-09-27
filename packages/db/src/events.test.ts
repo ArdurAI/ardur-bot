@@ -103,6 +103,7 @@ describe("finalizeRun", () => {
         findMany: vi.fn(async () => []),
         updateMany: vi.fn(async () => ({ count: 0 })),
       },
+      botMessageWake: { findMany: vi.fn(async () => []) },
       bot: { update: vi.fn(async () => ({})) },
     };
     const transaction = vi

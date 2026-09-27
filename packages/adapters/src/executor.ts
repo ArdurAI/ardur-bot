@@ -109,6 +109,7 @@ import {
   findModelCredential,
   finishedCommandIds,
   getUserPreferences,
+  goalBotAuthorityFingerprint,
   goalExhaustionReason,
   InvalidSpaceNameError,
   isTooManyDatabaseConnections,
@@ -1635,10 +1636,36 @@ export function createRunExecutor(deps: ExecutorDeps) {
         const selected = await resolvePin(run, bot, run.runtimePin, (values) =>
           runSecrets.push(...values),
         );
+        const peerAuthorityFingerprint =
+          run.goalId &&
+          run.delegationRootTaskId &&
+          !run.delegationId &&
+          !run.comparisonId &&
+          !run.remoteRootTaskId &&
+          !run.originDeviceGrantId &&
+          run.remoteDeviceGrantIds.length === 0 &&
+          run.trigger !== "user"
+            ? await deps.prisma.$transaction(async (tx) => {
+                const currentBot = await tx.bot.findUnique({
+                  where: { id: run.botId },
+                  select: { modelPinRevision: true },
+                });
+                return currentBot?.modelPinRevision === selected.pin.revision
+                  ? goalBotAuthorityFingerprint(tx, {
+                      spaceId: run.spaceId,
+                      userId: run.userId,
+                      goalId: run.goalId!,
+                      rootTaskId: run.delegationRootTaskId!,
+                      botId: run.botId,
+                    })
+                  : null;
+              })
+            : null;
         const captured = await deps.prisma.run.updateMany({
           where: { id: runId, status: "running", leaseOwner: workerId, leaseFence: fence },
           data: {
             runtimePin: run.runtimePin ?? selected.pin,
+            peerAuthorityFingerprint,
             ...(selected.kind === "resolved"
               ? { runtimeDestination: destinationForModel(selected) }
               : {}),
@@ -1886,12 +1913,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
         const emptyResponseText = peerReadOnly
           ? "The delegated bot completed its turn without a written summary."
           : peerMessage
-            ? peerMessage.intent === "result" ||
-              peerMessage.intent === "status" ||
-              peerMessage.intent === "question" ||
-              peerMessage.repliesToRequest
+            ? peerMessage.intent === "question" || peerMessage.intent === "request"
               ? `Update from ${peerMessage.fromBotName}: ${peerMessage.text}`
-              : "The delegated bot completed its turn without a written summary."
+              : undefined
             : undefined;
         const pendingExposures: Parameters<typeof recordKnowledgeExposure>[2][] = [];
         const [discovered, currentTurnImages, scratchpadContext] = await Promise.all([
@@ -4452,6 +4476,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   | undefined,
                 card: redactTaskValue(args.card, runSecrets),
                 deliveryKey: effectKey,
+                inReplyToDeliveryId: args.inReplyToDeliveryId
+                  ? String(args.inReplyToDeliveryId)
+                  : undefined,
               },
             );
             return finish(sent);

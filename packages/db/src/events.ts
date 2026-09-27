@@ -1,3 +1,4 @@
+import { createHash, randomUUID } from "node:crypto";
 import type { RealtimeFanout } from "@ardurbot/adapter-kit";
 import type { RunFailurePayload } from "@ardurbot/contracts";
 import {
@@ -18,6 +19,7 @@ import {
   sanitizeJsonValue,
 } from "@ardurbot/core";
 import { getLogger } from "@ardurbot/logging";
+import { settleBotMessageWakesInTransaction } from "./bot-comms.js";
 import { cancelRunsInTransaction } from "./cancel-runs.js";
 import type { Prisma, PrismaClient } from "./client.js";
 import { materializeCommandEvent } from "./command-blocks.js";
@@ -1279,6 +1281,8 @@ async function finalizeRunOnce(
         await tx.$queryRaw`SELECT id FROM threads WHERE id = ${root.coordinatorThreadId} FOR UPDATE`;
     }
     await tx.$queryRaw`SELECT id FROM threads WHERE id = ${input.threadId} FOR UPDATE`;
+    if (lineage?.delegationRootTaskId)
+      await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${lineage.delegationRootTaskId} FOR UPDATE`;
     let writableRun:
       | {
           startedAt: Date | null;
@@ -1401,7 +1405,7 @@ async function finalizeRunOnce(
         });
       }
     }
-    const summary = writableRun?.delegationId
+    let summary = writableRun?.delegationId
       ? await finishDelegation(
           tx,
           writableRun.delegationId,
@@ -1412,6 +1416,137 @@ async function finalizeRunOnce(
           input.runId,
         )
       : undefined;
+    if (peerMessageAssignment && writableRun?.delegationId) {
+      const parent = await tx.botMessageDelivery.findFirst({
+        where: {
+          delegationId: writableRun.delegationId,
+          rootTaskId: writableRun.delegationRootTaskId!,
+        },
+      });
+      if (parent) {
+        const result = await tx.delegation.findUniqueOrThrow({
+          where: { id: writableRun.delegationId },
+          select: { summaryMessageId: true },
+        });
+        const completed =
+          input.outcome === "completed" && Boolean(finalMessageId && result.summaryMessageId);
+        if (!parent.replyDeliveryId && completed) {
+          const replyId = randomUUID();
+          const goal = await tx.teamGoal.findFirst({
+            where: {
+              rootTaskId: parent.rootTaskId,
+              spaceId: parent.spaceId,
+              userId: parent.userId,
+            },
+            select: { id: true, groupId: true, untilAt: true },
+          });
+          if (goal) {
+            const text = redactTaskValue(
+              input.blocks.flatMap((block) => ("text" in block ? [block.text] : [])).join("\n"),
+            );
+            await tx.botMessageDelivery.create({
+              data: {
+                id: replyId,
+                spaceId: parent.spaceId,
+                userId: parent.userId,
+                goalId: goal.id,
+                rootTaskId: parent.rootTaskId,
+                conversationId: parent.conversationId,
+                inReplyToDeliveryId: parent.id,
+                senderBotId: input.botId,
+                recipientBotId: parent.senderBotId,
+                senderThreadId: input.threadId,
+                recipientThreadId: parent.senderThreadId,
+                sourceRunId: input.runId,
+                sourceDelegationId: writableRun.delegationId,
+                usageRunIds: [input.runId],
+                targetGroupId: goal.groupId,
+                intent: "result",
+                outboundMessageId: finalMessageId!,
+                inboundMessageId: result.summaryMessageId!,
+                state: "delivered",
+                hop: parent.hop + 1,
+                authorityFingerprint: createHash("sha256")
+                  .update(JSON.stringify([goal.id, parent.rootTaskId, parent.senderBotId]))
+                  .digest("hex"),
+                requestFingerprint: createHash("sha256").update(text).digest("hex"),
+                idempotencyKey: `auto-result:${writableRun.delegationId}`,
+                expiresAt: new Date(Math.min(goal.untilAt.getTime(), now.getTime() + 3_600_000)),
+                deliveredAt: now,
+                outcome: "completion",
+              },
+            });
+            await tx.botMessageDelivery.update({
+              where: { id: parent.id },
+              data: {
+                replyDeliveryId: replyId,
+                state: "replied",
+                repliedAt: now,
+                outcome: "completed",
+              },
+            });
+            const receipt = await tx.message.findUniqueOrThrow({
+              where: { id: result.summaryMessageId! },
+            });
+            const blocks = (receipt.blocks as MessageBlock[]).map((block) =>
+              block.kind === "bot_message_received"
+                ? { ...block, deliveryId: replyId, deliveryState: "delivered" as const }
+                : block,
+            );
+            await tx.message.update({ where: { id: receipt.id }, data: { blocks } });
+            summary = await appendEventInTransaction(tx, {
+              spaceId: parent.spaceId,
+              threadId: receipt.threadId,
+              botId: parent.senderBotId,
+              type: "thread.message.updated",
+              payload: { messageId: receipt.id, blocks },
+            });
+          }
+        } else if (!parent.replyDeliveryId) {
+          await tx.botMessageDelivery.update({
+            where: { id: parent.id },
+            data: {
+              state: "failed",
+              outcome: input.outcome,
+              failureCode: input.outcome === "failed" ? "run-failed" : "empty-result",
+            },
+          });
+        } else {
+          await tx.botMessageDelivery.update({
+            where: { id: parent.id },
+            data: { outcome: input.outcome },
+          });
+        }
+        const receiptState = (
+          await tx.botMessageDelivery.findUniqueOrThrow({
+            where: { id: parent.id },
+            select: { state: true },
+          })
+        ).state as "delivered" | "replied" | "failed";
+        for (const messageId of [parent.outboundMessageId, parent.inboundMessageId]) {
+          if (!messageId) continue;
+          const projection = await tx.message.findUniqueOrThrow({ where: { id: messageId } });
+          const blocks = (projection.blocks as MessageBlock[]).map((block) =>
+            (block.kind === "bot_message_sent" || block.kind === "bot_message_received") &&
+            block.deliveryId === parent.id
+              ? { ...block, deliveryState: receiptState, queuedForBusy: false }
+              : block,
+          );
+          await tx.message.update({ where: { id: messageId }, data: { blocks } });
+          const event = await appendEventInTransaction(tx, {
+            spaceId: parent.spaceId,
+            threadId: projection.threadId,
+            botId:
+              projection.threadId === parent.senderThreadId
+                ? parent.senderBotId
+                : parent.recipientBotId,
+            type: "thread.message.updated",
+            payload: { messageId, blocks },
+          });
+          if (projection.threadId === parent.senderThreadId) summary = event;
+        }
+      }
+    }
     await persistDispatchSummary(
       tx,
       { taskId: input.taskId, ...writableRun },
@@ -1434,6 +1569,11 @@ async function finalizeRunOnce(
             },
     });
     await tx.event.deleteMany({ where: { runId: input.runId, type: "thread.progress" } });
+    const peerContinuationRunId = await settleBotMessageWakesInTransaction(
+      tx,
+      input.runId,
+      input.outcome === "completed",
+    );
     if (input.outcome === "completed") {
       await tx.steeringMessage.deleteMany({
         where: { runId: input.runId, claimedAt: { not: null } },
@@ -1457,10 +1597,11 @@ async function finalizeRunOnce(
         data: { runId: null },
       });
     }
-    const continuationRunId =
-      input.outcome === "failed" && input.runtimeProblem
+    const steeringContinuationRunId =
+      peerContinuationRunId || (input.outcome === "failed" && input.runtimeProblem)
         ? null
         : await createSteeringContinuation(tx, input);
+    const continuationRunId = peerContinuationRunId ?? steeringContinuationRunId;
     await tx.bot.update({ where: { id: input.botId }, data: { updatedAt: now } });
     return { threadId: lastEvent.threadId, seq: lastEvent.seq, continuationRunId, summary };
   });

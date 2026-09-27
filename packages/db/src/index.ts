@@ -1,5 +1,6 @@
 export * from "./board-follow.js";
 export * from "./bootstrap-user.js";
+export * from "./bot-comms.js";
 export * from "./cancel-runs.js";
 export * from "./channel-grants.js";
 export * from "./client.js";

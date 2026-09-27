@@ -22,6 +22,8 @@ model AiDataConsent {
 }
 
 model User {
+  botMessageDeliveries BotMessageDelivery[]
+  botMessageWakes BotMessageWake[]
   localImportConfigs LocalImportConfig[]
   preferences UserPreferences?
   aiDataConsents AiDataConsent[]
@@ -188,6 +190,8 @@ model Member {
 }
 
 model Space {
+  botMessageDeliveries BotMessageDelivery[]
+  botMessageWakes BotMessageWake[]
   placement Json?
   features SpaceFeature[]
   boardWorkspaces BoardWorkspace[]
@@ -664,6 +668,7 @@ model Run {
   status               String
   trigger              String
   runtimePin           Json?
+  peerAuthorityFingerprint String?
   runtimeDestination   Json?
   runtimeComputer      Json?
   runtimeInfo          Json?
@@ -2120,6 +2125,85 @@ model Delegation {
   @@index([parentRunId])
   @@index([spaceId, actingBotId, status])
   @@map("delegations")
+}
+
+model BotMessageDelivery {
+  id String @id @default(cuid())
+  spaceId String
+  space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  goalId String?
+  rootTaskId String
+  conversationId String
+  inReplyToDeliveryId String?
+  senderBotId String
+  recipientBotId String
+  senderThreadId String
+  recipientThreadId String
+  sourceRunId String
+  sourceDelegationId String?
+  sourceGroupId String?
+  targetGroupId String?
+  intent String
+  outboundMessageId String
+  inboundMessageId String?
+  delegationId String?
+  replyDeliveryId String?
+  state String @default("queued")
+  hop Int
+  authorityFingerprint String
+  requestFingerprint String
+  idempotencyKey String
+  requestedEffects Json @default("[]")
+  approvalEffectId String?
+  policyRevision Int @default(0)
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  deliveredAt DateTime?
+  readAt DateTime?
+  repliedAt DateTime?
+  outcome String?
+  failureCode String?
+  usageRunIds String[] @default([])
+  tokens Int?
+  cost Float?
+  pricingProvenance Json?
+
+  @@unique([spaceId, userId, idempotencyKey])
+  @@index([spaceId, userId, recipientBotId, state, createdAt])
+  @@index([rootTaskId, createdAt])
+  @@index([conversationId, createdAt])
+  @@index([spaceId, userId, senderBotId, recipientBotId, createdAt])
+  @@index([inReplyToDeliveryId])
+  @@map("bot_message_deliveries")
+}
+
+model BotMessageWake {
+  id String @id @default(cuid())
+  spaceId String
+  space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  userId String
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  goalId String?
+  rootTaskId String
+  recipientBotId String
+  recipientThreadId String
+  authorityFingerprint String
+  generation Int
+  deliveryIds String[] @default([])
+  promptCharacters Int @default(0)
+  runId String?
+  steeringMessageId String?
+  state String @default("pending")
+  clientNonce String
+  createdAt DateTime @default(now())
+  consumedAt DateTime?
+
+  @@unique([spaceId, clientNonce])
+  @@index([state, createdAt])
+  @@index([runId, state])
+  @@map("bot_message_wakes")
 }
 
 // A deployment has one paired host. Only a SHA-256 digest is persisted.
