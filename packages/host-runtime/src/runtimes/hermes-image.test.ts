@@ -1,5 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { EventEmitter } from "node:events";
 import { existsSync } from "node:fs";
 import { chmod, copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
@@ -7,7 +8,7 @@ import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import type { AgentRunRequest, AgentRuntimeEvent } from "@ardurbot/adapter-kit";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import type { HermesLaunch, HermesLaunchSpec } from "./hermes-runtime.js";
 import { HermesRuntime } from "./hermes-runtime.js";
 
@@ -209,7 +210,18 @@ interface LaneCapture {
   inspectHasKey: boolean;
 }
 
-function launchFor(captures: LaneCapture[], start: number): HermesLaunch {
+function launchFor(
+  captures: LaneCapture[],
+  start: number,
+  dependencies: {
+    execute: typeof execute;
+    spawn: typeof spawn;
+    onStaging?: (path: string) => void;
+  } = {
+    execute,
+    spawn,
+  },
+): HermesLaunch {
   return async (spec: HermesLaunchSpec) => {
     const providerKey = spec.env.ARDUR_HERMES_PROVIDER_KEY;
     if (!providerKey) throw new Error("The image lane needs its fake provider key.");
@@ -225,6 +237,7 @@ function launchFor(captures: LaneCapture[], start: number): HermesLaunch {
     };
     captures.push(data);
     const staging = await stagingDirectory();
+    dependencies.onStaging?.(staging);
     const configCopy = join(staging, "image-config.yaml");
     const soulCopy = join(staging, "image-SOUL.md");
     await copyFile(join(spec.env.HERMES_HOME!, "config.yaml"), configCopy);
@@ -236,7 +249,7 @@ function launchFor(captures: LaneCapture[], start: number): HermesLaunch {
       [configCopy, "/fixtures/config.yaml"],
       [soulCopy, "/fixtures/SOUL.md"],
     ].flatMap(([src, dst]) => ["--mount", `type=bind,src=${src},dst=${dst},readonly`]);
-    const child = spawn(
+    const child = dependencies.spawn(
       "docker",
       [
         "run",
@@ -283,76 +296,141 @@ function launchFor(captures: LaneCapture[], start: number): HermesLaunch {
         stdio: "pipe",
       },
     );
-    data.argvHasKey = child.spawnargs.some((arg) => arg.includes(providerKey));
-    child.stdout.once("data", () => {
-      data.handshakeMs = Math.round(performance.now() - start);
-    });
-    let line = "";
-    child.stderr.on("data", (chunk: Buffer) => {
-      line += chunk.toString("utf8");
-      if (line.length > 16 * 1024 * 1024) line = "";
-      let end = line.indexOf("\n");
-      while (end >= 0) {
-        const item = line.slice(0, end);
-        line = line.slice(end + 1);
-        if (item.startsWith("ARDUR_EVIDENCE:")) {
-          try {
-            data.records.push({
-              ...JSON.parse(item.slice("ARDUR_EVIDENCE:".length)),
-              hostMs: Math.round(performance.now() - start),
-            });
-          } catch {
-            // An incomplete evidence record is not counted.
-          }
-        }
-        end = line.indexOf("\n");
-      }
-    });
-    const deadline = Date.now() + 10_000;
-    while (Date.now() < deadline) {
-      const running = await execute("docker", ["inspect", "--format", "{{.State.Running}}", name], {
-        env: dockerEnvironment(),
-        timeout: 2_000,
-      }).then(
-        ({ stdout }) => stdout.trim() === "true",
-        () => false,
-      );
-      if (running) {
-        data.containerStartMs = Math.round(performance.now() - start);
-        const inspected = await execute(
-          "docker",
-          ["inspect", "--format", "{{json .Config.Env}}", name],
-          {
-            env: dockerEnvironment(),
-            timeout: 2_000,
-          },
-        );
-        data.inspectHasKey = (JSON.parse(inspected.stdout) as string[]).includes(
-          `ARDUR_HERMES_PROVIDER_KEY=${providerKey}`,
-        );
-        break;
-      }
-      if (child.exitCode !== null) break;
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
-    return {
-      child,
-      sessionCwd: "/work",
-      mcpConfig: {
-        command: "/opt/hermes/.venv/bin/python",
-        args: ["/fixtures/hermes-image-fixture.py", "mcp"],
-        env: {},
-      },
-      teardown: async () => {
-        await execute("docker", ["stop", "--time", "1", name], {
+    const teardown = async () => {
+      await dependencies
+        .execute("docker", ["stop", "--time", "1", name], {
           env: dockerEnvironment(),
           timeout: 10_000,
-        }).catch(() => undefined);
-        await rm(staging, { recursive: true, force: true });
-      },
+        })
+        .catch(() => undefined);
+      await rm(staging, { recursive: true, force: true });
     };
+    try {
+      data.argvHasKey = child.spawnargs.some((arg) => arg.includes(providerKey));
+      child.stdout.once("data", () => {
+        data.handshakeMs = Math.round(performance.now() - start);
+      });
+      let line = "";
+      child.stderr.on("data", (chunk: Buffer) => {
+        line += chunk.toString("utf8");
+        if (line.length > 16 * 1024 * 1024) line = "";
+        let end = line.indexOf("\n");
+        while (end >= 0) {
+          const item = line.slice(0, end);
+          line = line.slice(end + 1);
+          if (item.startsWith("ARDUR_EVIDENCE:")) {
+            try {
+              data.records.push({
+                ...JSON.parse(item.slice("ARDUR_EVIDENCE:".length)),
+                hostMs: Math.round(performance.now() - start),
+              });
+            } catch {
+              // An incomplete evidence record is not counted.
+            }
+          }
+          end = line.indexOf("\n");
+        }
+      });
+      const deadline = Date.now() + 10_000;
+      while (Date.now() < deadline) {
+        const running = await dependencies
+          .execute("docker", ["inspect", "--format", "{{.State.Running}}", name], {
+            env: dockerEnvironment(),
+            timeout: 2_000,
+          })
+          .then(
+            ({ stdout }) => stdout.trim() === "true",
+            () => false,
+          );
+        if (running) {
+          data.containerStartMs = Math.round(performance.now() - start);
+          const inspected = await dependencies.execute(
+            "docker",
+            ["inspect", "--format", "{{json .Config.Env}}", name],
+            {
+              env: dockerEnvironment(),
+              timeout: 2_000,
+            },
+          );
+          data.inspectHasKey = (JSON.parse(inspected.stdout) as string[]).includes(
+            `ARDUR_HERMES_PROVIDER_KEY=${providerKey}`,
+          );
+          break;
+        }
+        if (child.exitCode !== null) break;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      return {
+        child,
+        sessionCwd: "/work",
+        mcpConfig: {
+          command: "/opt/hermes/.venv/bin/python",
+          args: ["/fixtures/hermes-image-fixture.py", "mcp"],
+          env: {},
+        },
+        teardown,
+      };
+    } catch (error) {
+      await teardown();
+      throw error;
+    }
   };
 }
+
+it("stops its container and removes staging when inspection fails after spawn", async () => {
+  const parent = await mkdtemp(join(process.cwd(), ".hermes-launch-test-"));
+  const home = join(parent, "home");
+  await mkdir(home);
+  await writeFile(join(home, "config.yaml"), "{}\n");
+  await writeFile(join(home, "SOUL.md"), "fixture\n");
+  const previousStaging = process.env.ARDUR_HERMES_STAGING_PARENT;
+  process.env.ARDUR_HERMES_STAGING_PARENT = parent;
+  let staging: string | undefined;
+  const inspectionError = new Error("fixture inspect failed");
+  let inspections = 0;
+  const runDocker = vi.fn(async (_command: string, args: string[]) => {
+    if (args[0] === "inspect") {
+      inspections++;
+      if (inspections === 2) throw inspectionError;
+      return { stdout: "true\n", stderr: "" };
+    }
+    return { stdout: "", stderr: "" };
+  });
+  const child = {
+    spawnargs: [],
+    stdout: new EventEmitter(),
+    stderr: new EventEmitter(),
+    exitCode: null,
+  } as unknown as ReturnType<typeof spawn>;
+  const captures: LaneCapture[] = [];
+  try {
+    await expect(
+      launchFor(captures, performance.now(), {
+        execute: runDocker as unknown as typeof execute,
+        spawn: (() => child) as typeof spawn,
+        onStaging: (path) => {
+          staging = path;
+        },
+      })({
+        command: "fixture",
+        args: [],
+        cwd: parent,
+        env: { HERMES_HOME: home, ARDUR_HERMES_PROVIDER_KEY: "fixture-provider-key" },
+      }),
+    ).rejects.toBe(inspectionError);
+    expect(runDocker).toHaveBeenCalledWith(
+      "docker",
+      ["stop", "--time", "1", captures[0]!.name],
+      expect.anything(),
+    );
+    expect(staging).toBeDefined();
+    expect(existsSync(staging!)).toBe(false);
+  } finally {
+    if (previousStaging === undefined) delete process.env.ARDUR_HERMES_STAGING_PARENT;
+    else process.env.ARDUR_HERMES_STAGING_PARENT = previousStaging;
+    await rm(parent, { recursive: true, force: true });
+  }
+});
 
 function request(prompt: string): AgentRunRequest {
   return {
