@@ -10,6 +10,33 @@ test("capabilities and memory use persisted settings, confirmation, and proposal
     connectorSearch: false,
     inlineVisualizations: true,
   };
+  const importedContent = "- Keep ~/repos/ reports and code.\n  - Use plain prose.";
+  const fakeToken = "abcdefghijklmnopqrstuvwxyz123456";
+  const blockedLine = `- Key: ${fakeToken}`;
+  const paste = `Preferences\n${importedContent}\n\nTopic: Access\n${blockedLine}`;
+  const safeProposal = {
+    id: "proposal",
+    type: "memory",
+    scope: { spaceId: "space", userId: "user" },
+    target: {},
+    documentKind: "preferences",
+    proposedContent: importedContent,
+    rationale: "Requested memory change.",
+    evidenceIds: ["evidence"],
+    diff: `--- current\n+++ proposed\n+${importedContent}`,
+    status: "pending",
+    operation: "memory-import",
+    expiresAt: "2099-01-01T00:00:00Z",
+  };
+  const blockedProposal = {
+    ...safeProposal,
+    id: "blocked-proposal",
+    documentKind: "topic",
+    proposedContent: blockedLine,
+    diff: `--- current\n+++ proposed\n+${blockedLine}`,
+  };
+  let importProposed = false;
+  let approved = false;
   const documents = [
     { id: "profile", kind: "profile", content: "Studies plants.", path: "learned/profile.md" },
     {
@@ -63,7 +90,16 @@ test("capabilities and memory use persisted settings, confirmation, and proposal
     if (path === "capabilities/network") result = { id: "update", status: "queued" };
     if (path === "learning/summary") result = { pendingCount: 0, appliedThisWeek: 0 };
     if (path === "learning/list")
-      result = { reviews: [], proposals: [], pendingCount: 0, appliedThisWeek: 0 };
+      result = {
+        reviews: [],
+        proposals: importProposed
+          ? approved
+            ? [blockedProposal]
+            : [safeProposal, blockedProposal]
+          : [],
+        pendingCount: importProposed ? (approved ? 1 : 2) : 0,
+        appliedThisWeek: approved ? 1 : 0,
+      };
     if (path === "learning/settings")
       result = {
         enabled: false,
@@ -87,42 +123,53 @@ test("capabilities and memory use persisted settings, confirmation, and proposal
           maxOutputChars: 12000,
         },
       };
-    if (path === "memory/list") result = { items: documents, nextCursor: null };
-    if (path === "memory/propose")
-      result = [
-        {
-          id: "proposal",
-          type: "memory",
-          scope: { spaceId: "space", userId: "user" },
-          target: {},
-          proposedContent:
-            body.intent === "import"
-              ? String(body.text).slice("Preferences\n".length)
-              : "Use concise answers.",
-          rationale: "Requested memory change.",
-          evidenceIds: ["evidence"],
-          diff: "--- current\n+++ proposed\n+Use concise answers.",
-          status: "pending",
-          operation: body.intent === "import" ? "memory-import" : "memory-edit",
-          expiresAt: "2099-01-01T00:00:00Z",
-        },
-      ];
-    if (path === "learning/approve")
+    if (path === "memory/list")
       result = {
-        proposal: {
-          id: "proposal",
-          type: "memory",
-          scope: { spaceId: "space", userId: "user" },
-          target: {},
-          proposedContent: "- Keep ~/repos/ reports and code.\n  - Use plain prose.",
-          rationale: "Requested import",
-          evidenceIds: ["evidence"],
-          diff: "",
-          status: "applied",
-          operation: "memory-import",
-          expiresAt: "2099-01-01T00:00:00Z",
-        },
+        items: documents.map((document) =>
+          approved && document.id === "preferences"
+            ? { ...document, content: importedContent, revision: 2 }
+            : document,
+        ),
+        nextCursor: null,
       };
+    if (path === "memory/propose") {
+      if (body.intent === "import") importProposed = true;
+      result =
+        body.intent === "import"
+          ? [safeProposal, blockedProposal]
+          : [
+              {
+                ...safeProposal,
+                id: "edit-proposal",
+                proposedContent: "Use concise answers.",
+                operation: "memory-edit",
+              },
+            ];
+    }
+    if (path === "learning/approve") {
+      if (body.proposalId === blockedProposal.id) {
+        await route.fulfill({
+          status: 400,
+          json: {
+            json: {
+              defined: false,
+              code: "BAD_REQUEST",
+              status: 400,
+              message: "Edit or reject this line.",
+              data: {
+                code: "MEMORY_CREDENTIAL_LINE",
+                proposalId: blockedProposal.id,
+                lineNumber: 1,
+                maskedLine: "- Key: [redacted]",
+              },
+            },
+          },
+        });
+        return;
+      }
+      approved = true;
+      result = { proposal: { ...safeProposal, status: "applied" } };
+    }
     await route.fulfill({ json: { json: result } });
   });
   await page.goto("/src/pages/capabilities/__fixtures__/settings.html");
@@ -148,11 +195,13 @@ test("capabilities and memory use persisted settings, confirmation, and proposal
   await expect(page.getByRole("button", { name: /Preferences.*Updated/ })).toBeVisible();
   await captureScreenshot(page, testInfo, "memory-documents");
   await page.getByRole("button", { name: "Start import" }).click();
-  const paste = "Preferences\n- Keep ~/repos/ reports and code.\n  - Use plain prose.";
   await page.getByLabel("Paste the response").fill(paste);
   await page.getByRole("button", { name: "Review import", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Approve", exact: true })).toBeVisible();
-  await expect(page.getByText("- Keep ~/repos/ reports and code.", { exact: false })).toBeVisible();
+  const suggestions = page.getByRole("region", { name: "Memory suggestions" });
+  const safeCard = suggestions.locator("article").filter({ hasText: importedContent });
+  const blockedCard = suggestions.locator("article").filter({ hasText: blockedLine });
+  await expect(safeCard.getByRole("button", { name: "Approve" })).toBeVisible();
+  await expect(blockedCard.getByRole("button", { name: "Approve" })).toBeVisible();
   expect(calls.find((call) => call.path === "memory/propose")?.body.text).toBe(paste);
   expect(
     calls.some((call) =>
@@ -160,8 +209,23 @@ test("capabilities and memory use persisted settings, confirmation, and proposal
     ),
   ).toBe(false);
   await captureScreenshot(page, testInfo, "memory-pending-import");
-  await page.getByRole("button", { name: "Approve", exact: true }).click();
-  await expect(page.getByText("Applied", { exact: true })).toBeVisible();
+  await blockedCard.getByRole("button", { name: "Approve" }).click();
+  await expect(blockedCard.getByRole("alert")).toHaveText(
+    "Line 1: - Key: [redacted] Edit or reject this line.",
+  );
+  await expect(blockedCard.getByRole("alert")).not.toContainText(fakeToken);
+  await expect(safeCard.getByRole("button", { name: "Approve" })).toBeEnabled();
+  await safeCard.getByRole("button", { name: "Approve" }).click();
+  await expect(safeCard).toHaveCount(0);
+  await expect(blockedCard.getByRole("alert")).toContainText("Edit or reject this line.");
+  expect(
+    calls.filter((call) => call.path === "learning/approve").map((call) => call.body.proposalId),
+  ).toEqual([blockedProposal.id, safeProposal.id]);
+  await page.getByRole("button", { name: /Preferences.*Updated/ }).click();
+  const documentContent = page
+    .getByRole("region", { name: "Memory document" })
+    .locator("p.whitespace-pre-wrap");
+  await expect.poll(() => documentContent.textContent()).toBe(importedContent);
   await page.getByLabel("Tell your bot what to change or remove").fill("Use concise answers.");
   await page.getByRole("button", { name: "Send", exact: true }).click();
   await expect.poll(() => calls.filter((call) => call.path === "memory/propose")).toHaveLength(2);
