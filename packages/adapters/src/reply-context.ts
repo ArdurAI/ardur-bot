@@ -1,8 +1,7 @@
 import type { MessageBlock } from "@ardurbot/contracts";
 import { REPLY_QUOTE_MAX_LENGTH } from "@ardurbot/contracts";
 import { blocksToAgentHistoryText, messageReaction } from "@ardurbot/core";
-import type { PrismaClient } from "@ardurbot/db";
-import { quietHistoryDeliveryIds } from "./quiet-history.js";
+import { type PrismaClient, quietHistoryDeliveryIds } from "@ardurbot/db";
 
 type QuotedMessage = { id: string; threadId: string; role: string; blocks: unknown };
 type ReplyMessage = QuotedMessage & {

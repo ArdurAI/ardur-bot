@@ -414,8 +414,12 @@ export function createJobReconciler(
       : [];
     for (const wake of pendingPeerWakes) {
       try {
-        const runId = await dispatchBotMessageWake(deps.prisma, wake.id);
-        if (runId) await deps.jobs.enqueue(runContinueJob(runId));
+        const dispatched = await dispatchBotMessageWake(deps.prisma, wake.id);
+        for (const update of dispatched.updatedThreads)
+          await deps.events?.notify(update.threadId, update.seq).catch((error) => {
+            getLogger().error("peer wake receipt notification", error);
+          });
+        if (dispatched.runId) await deps.jobs.enqueue(runContinueJob(dispatched.runId));
       } catch (error) {
         getLogger().error("peer wake reconciliation", error);
       }

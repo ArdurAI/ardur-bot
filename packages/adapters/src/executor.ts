@@ -121,6 +121,7 @@ import {
   type Prisma,
   type PrismaClient,
   parseComputerMode,
+  quietHistoryDeliveryIds,
   refreshBoundBotMessageWakeRun,
   releaseQuietBotMessageClaims,
   requestCancel,
@@ -324,7 +325,6 @@ import {
   searchChartCatalog,
 } from "./plot-tool.js";
 import { classifyProviderError } from "./provider-error.js";
-import { quietHistoryDeliveryIds } from "./quiet-history.js";
 import {
   approvalRequestRoute,
   bindDeviceApproval,

@@ -31,9 +31,13 @@ export async function wakeGoalAfterDelegation(
       pending?.id ??
       (await backfillAutomaticBotMessageWake(deps.prisma as PrismaClient, automatic.id));
     if (wakeId) {
-      const runId = await dispatchBotMessageWake(deps.prisma as PrismaClient, wakeId);
-      if (runId)
-        await deps.jobs.enqueue(runContinueJob(runId)).catch((error) => {
+      const dispatched = await dispatchBotMessageWake(deps.prisma as PrismaClient, wakeId);
+      for (const update of dispatched.updatedThreads)
+        await deps.events?.notify(update.threadId, update.seq).catch((error) => {
+          getLogger().error("goal wake receipt notification", error);
+        });
+      if (dispatched.runId)
+        await deps.jobs.enqueue(runContinueJob(dispatched.runId)).catch((error) => {
           getLogger().error("goal wake enqueue", error);
         });
     }

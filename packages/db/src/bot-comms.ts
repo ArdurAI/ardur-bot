@@ -865,15 +865,23 @@ export async function dispatchBotMessageWake(prisma: PrismaClient, wakeId: strin
   return withTransactionRetry(() =>
     prisma.$transaction(async (tx) => {
       const candidate = await tx.botMessageWake.findUnique({ where: { id: wakeId } });
-      if (!candidate || !["pending", "sealed", "retry_wait"].includes(candidate.state)) return null;
-      if (candidate.nextAttemptAt && candidate.nextAttemptAt > new Date()) return null;
+      if (!candidate || !["pending", "sealed", "retry_wait"].includes(candidate.state))
+        return { runId: null, updatedThreads: [] };
+      if (candidate.nextAttemptAt && candidate.nextAttemptAt > new Date())
+        return { runId: null, updatedThreads: [] };
       const root = await tx.delegationRoot.findUnique({
         where: { rootTaskId: candidate.rootTaskId },
         select: { coordinatorThreadId: true },
       });
       if (!root) {
-        await finishWake(tx, candidate, "cancelled", "goal-unavailable", true);
-        return null;
+        const updatedThreads = await finishWake(
+          tx,
+          candidate,
+          "cancelled",
+          "goal-unavailable",
+          true,
+        );
+        return { runId: null, updatedThreads };
       }
       for (const threadId of [
         root.coordinatorThreadId,
@@ -881,7 +889,7 @@ export async function dispatchBotMessageWake(prisma: PrismaClient, wakeId: strin
       ])
         await tx.$queryRaw`SELECT id FROM threads WHERE id = ${threadId} FOR UPDATE`;
       await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${candidate.rootTaskId} FOR UPDATE`;
-      return (await bindBotMessageWakeInTransaction(tx, wakeId)).runId;
+      return bindBotMessageWakeInTransaction(tx, wakeId);
     }),
   );
 }

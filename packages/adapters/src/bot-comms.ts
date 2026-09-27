@@ -373,10 +373,14 @@ export async function replyToBotDelivery(
       where: { deliveryIds: { has: committed.deliveryId }, state: "pending" },
       select: { id: true },
     });
-    const runId = pending ? await dispatchBotMessageWake(deps.prisma, pending.id) : null;
-    if (runId)
+    const dispatched = pending ? await dispatchBotMessageWake(deps.prisma, pending.id) : null;
+    for (const update of dispatched?.updatedThreads ?? [])
+      await deps.events.notify(update.threadId, update.seq).catch((error) => {
+        getLogger().error("peer wake receipt notification", error);
+      });
+    if (dispatched?.runId)
       await deps.jobs
-        .enqueue(runContinueJob(runId))
+        .enqueue(runContinueJob(dispatched.runId))
         .catch((error) => getLogger().error("peer wake enqueue", error));
     return {
       ok: true as const,

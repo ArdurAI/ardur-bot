@@ -456,7 +456,7 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
       where: { id: wake.id },
       data: { nextAttemptAt: new Date(0) },
     });
-    const runId = await dispatchBotMessageWake(prisma, wake.id);
+    const runId = (await dispatchBotMessageWake(prisma, wake.id)).runId;
     expect(runId).toBeTruthy();
     expect(
       (await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id: delivery.id } }))
@@ -489,7 +489,7 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
       const wake = await prisma.botMessageWake.findFirstOrThrow({
         where: { deliveryIds: { has: delivery.id } },
       });
-      expect(await dispatchBotMessageWake(prisma, wake.id)).toBeNull();
+      expect((await dispatchBotMessageWake(prisma, wake.id)).runId).toBeNull();
       expect(
         await prisma.botMessageWake.findUniqueOrThrow({ where: { id: wake.id } }),
       ).toMatchObject({ state: "cancelled" });
@@ -513,7 +513,7 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
     const wake = await prisma.botMessageWake.findFirstOrThrow({
       where: { deliveryIds: { has: delivery.id } },
     });
-    const runId = await dispatchBotMessageWake(prisma, wake.id);
+    const runId = (await dispatchBotMessageWake(prisma, wake.id)).runId;
     expect(runId).toBeTruthy();
     await prisma.run.update({
       where: { id: runId! },
@@ -1194,12 +1194,12 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
     });
     expect(wake).toMatchObject({ state: "retry_wait", runId: null, attempts: 1 });
     expect(wake.nextAttemptAt!.getTime()).toBeGreaterThan(Date.now());
-    expect(await dispatchBotMessageWake(prisma, wake.id)).toBeNull();
+    expect((await dispatchBotMessageWake(prisma, wake.id)).runId).toBeNull();
     await prisma.botMessageWake.update({
       where: { id: wake.id },
       data: { nextAttemptAt: new Date(0) },
     });
-    const rebound = await dispatchBotMessageWake(prisma, wake.id);
+    const rebound = (await dispatchBotMessageWake(prisma, wake.id)).runId;
     expect(rebound).toBeTruthy();
     expect(
       await prisma.run.count({
@@ -1288,7 +1288,7 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
       where: { id: wake.id },
       data: { nextAttemptAt: new Date(0) },
     });
-    const rebound = await dispatchBotMessageWake(prisma, wake.id);
+    const rebound = (await dispatchBotMessageWake(prisma, wake.id)).runId;
     expect(rebound).toBeTruthy();
     expect(
       (
@@ -1342,7 +1342,7 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
       status: mode === "held" ? "waiting_input" : "running",
     });
     await prisma.run.update({ where: { id: f.activeRun!.id }, data: { status: "completed" } });
-    const nextRunId = await dispatchBotMessageWake(prisma, wake.id);
+    const nextRunId = (await dispatchBotMessageWake(prisma, wake.id)).runId;
     expect(nextRunId).toBeTruthy();
   });
 
@@ -1368,7 +1368,7 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
     const wake = await prisma.botMessageWake.findFirstOrThrow({
       where: { rootTaskId: f.rootTask.id },
     });
-    const runId = await dispatchBotMessageWake(prisma, wake.id);
+    const runId = (await dispatchBotMessageWake(prisma, wake.id)).runId;
     if (!runId) throw new Error("Queued reply was not dispatched.");
     const run = await prisma.run.update({
       where: { id: runId },
@@ -1799,9 +1799,9 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
         where: { goalId: f.goal.id, clientNonce: wakes[0]!.clientNonce },
       }),
     ).toBe(0);
-    expect(await dispatchBotMessageWake(prisma, wakes[0]!.id)).toBeNull();
+    expect((await dispatchBotMessageWake(prisma, wakes[0]!.id)).runId).toBeNull();
     await prisma.run.update({ where: { id: f.activeRun!.id }, data: { status: "completed" } });
-    const rebound = await dispatchBotMessageWake(prisma, wakes[0]!.id);
+    const rebound = (await dispatchBotMessageWake(prisma, wakes[0]!.id)).runId;
     expect(rebound).toBeTruthy();
     const boundRun = await prisma.run.findUniqueOrThrow({ where: { id: rebound! } });
     const boundTask = await prisma.task.findUniqueOrThrow({ where: { id: boundRun.taskId } });
@@ -2066,12 +2066,12 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
       }
       expect(updated).toMatchObject({ state: "retry_wait", attempts: index + 1 });
       expect(updated.nextAttemptAt!.getTime() - Date.now()).toBeGreaterThan(delay - 5_000);
-      expect(await dispatchBotMessageWake(prisma, wake.id)).toBeNull();
+      expect((await dispatchBotMessageWake(prisma, wake.id)).runId).toBeNull();
       await prisma.botMessageWake.update({
         where: { id: wake.id },
         data: { nextAttemptAt: new Date(0) },
       });
-      runId = (await dispatchBotMessageWake(prisma, wake.id))!;
+      runId = (await dispatchBotMessageWake(prisma, wake.id)).runId!;
       expect(runId).toBeTruthy();
     }
     expect(
@@ -2107,7 +2107,7 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
       where: { deliveryIds: { has: question.deliveryId } },
     });
     await prisma.run.update({ where: { id: f.activeRun!.id }, data: { status: "completed" } });
-    const questionRunId = await dispatchBotMessageWake(prisma, questionWake.id);
+    const questionRunId = (await dispatchBotMessageWake(prisma, questionWake.id)).runId;
     expect(questionRunId).toBeTruthy();
     const questionRun = await prisma.run.update({
       where: { id: questionRunId! },
@@ -2220,7 +2220,7 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
         .coordinatorWokenAt,
     ).not.toBeNull();
     await prisma.run.update({ where: { id: f.activeRun!.id }, data: { status: "completed" } });
-    expect(await dispatchBotMessageWake(prisma, wake.id)).toBeTruthy();
+    expect((await dispatchBotMessageWake(prisma, wake.id)).runId).toBeTruthy();
   });
 
   it("expires a pending result before it can execute and projects Expired", async () => {
@@ -2240,7 +2240,14 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
       data: { expiresAt: new Date(0) },
     });
     await prisma.run.update({ where: { id: f.activeRun!.id }, data: { status: "completed" } });
-    expect(await dispatchBotMessageWake(prisma, wake.id)).toBeNull();
+    const notify = vi.fn(async () => undefined);
+    await createJobReconciler({
+      prisma,
+      jobs: f.jobs,
+      events: { notify } as unknown as ReturnType<typeof createThreadEvents>,
+    }).reconcileOnce();
+    expect(notify).toHaveBeenCalledWith(f.workerThread.id, expect.any(Number));
+    expect(notify).toHaveBeenCalledWith(f.room.id, expect.any(Number));
     expect(await prisma.botMessageWake.findUniqueOrThrow({ where: { id: wake.id } })).toMatchObject(
       { state: "cancelled" },
     );
@@ -2284,7 +2291,7 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
       data: { expiresAt: new Date(0) },
     });
     await prisma.run.update({ where: { id: f.activeRun!.id }, data: { status: "completed" } });
-    const runId = await dispatchBotMessageWake(prisma, wake.id);
+    const runId = (await dispatchBotMessageWake(prisma, wake.id)).runId;
     expect(runId).toBeTruthy();
     expect(await prisma.botMessageWake.findUniqueOrThrow({ where: { id: wake.id } })).toMatchObject(
       { deliveryIds: [result.deliveryId] },

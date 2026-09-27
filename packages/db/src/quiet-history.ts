@@ -1,5 +1,5 @@
 import type { MessageBlock } from "@ardurbot/contracts";
-import type { PrismaClient } from "@ardurbot/db";
+import type { PrismaClient } from "./client.js";
 
 /** Quiet deliveries enter a turn only through its claimed required context. */
 export async function quietHistoryDeliveryIds(
@@ -22,6 +22,7 @@ export async function quietHistoryDeliveryIds(
       id: { in: deliveryIds },
       recipientThreadId: threadId,
       OR: [{ intent: { in: ["status", "fyi"] } }, { intent: "result", inReplyToDeliveryId: null }],
+      AND: [{ OR: [{ outcome: null }, { outcome: { in: ["expired", "failed"] } }] }],
     },
     select: { id: true },
   });

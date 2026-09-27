@@ -6,12 +6,15 @@ import type {
 } from "@ardurbot/adapter-kit";
 import { historyCompactJob } from "@ardurbot/adapter-kit";
 import type { MessageBlock, RuntimeProblem } from "@ardurbot/contracts";
-import { blocksToAgentHistoryText } from "@ardurbot/core";
-import type { PrismaClient } from "@ardurbot/db";
+import {
+  blocksToAgentHistoryText,
+  RECEIPT_FILTERED_SUMMARY_MARKER,
+  receiptFilteredSummary,
+} from "@ardurbot/core";
+import { type PrismaClient, quietHistoryDeliveryIds } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 import { formatCurrentTimeInstruction } from "./current-time.js";
 import type { MemoryProviderResolver } from "./memory-provider-factory.js";
-import { quietHistoryDeliveryIds } from "./quiet-history.js";
 import { accountRuntimeUsage } from "./runtime-usage.js";
 
 /**
@@ -99,7 +102,7 @@ export function selectCompactedHistory(options: {
   historyCompactedUpToSeq: number | null;
 }): CompactedHistorySelection {
   const messages = [...options.messages].sort((left, right) => left.seq - right.seq);
-  const summary = options.summary?.trim() || null;
+  const summary = receiptFilteredSummary(options.summary);
   const cursor = options.historyCompactedUpToSeq;
   if (!summary || summary.length > MAX_COMPACTED_SUMMARY_CHARS || cursor == null) {
     return { history: messages, summary: null, usedLocalSummary: false };
@@ -200,11 +203,29 @@ export async function compactHistory(
         )?.botId
       : null);
   if (!botId) return;
-  const previousCursor = thread.historyCompactedUpToSeq;
+  let previousCursor = thread.historyCompactedUpToSeq;
   const previousGeneration = thread.historyCompactionGeneration;
-  const previousSummary = thread.historyCompactionSummary?.trim() || null;
+  const storedSummary = thread.historyCompactionSummary;
+  let previousSummary = receiptFilteredSummary(storedSummary);
+  const invalidatedSummary = Boolean(storedSummary && !previousSummary);
+  if (invalidatedSummary) {
+    // Discard pre-filtering summaries before they can seed another summary. Rebuild
+    // from raw rows; a concurrent compactor wins through the cursor CAS below.
+    const cleared = await deps.prisma.thread.updateMany({
+      where: {
+        id: threadId,
+        historyCompactedUpToSeq: previousCursor,
+        historyCompactionGeneration: previousGeneration,
+        historyCompactionSummary: storedSummary,
+      },
+      data: { historyCompactedUpToSeq: null, historyCompactionSummary: null },
+    });
+    if (!cleared.count) return;
+    previousCursor = null;
+    previousSummary = null;
+  }
   const needsLocalBootstrap =
-    previousGeneration === 0 && previousCursor !== null && !previousSummary;
+    !invalidatedSummary && previousGeneration === 0 && previousCursor !== null && !previousSummary;
   const wasClearedBeforeGenerationTracking = needsLocalBootstrap
     ? Boolean(
         await deps.prisma.event.findFirst({
@@ -223,7 +244,7 @@ export async function compactHistory(
   let fromSeqExclusive = previousCursor ?? NOTHING_COMPACTED;
   let batch: Array<{ seq: number; role: string; blocks: unknown }> = [];
   let bootstrappingLocalSummary = false;
-  if (needsLocalBootstrap) {
+  if (needsLocalBootstrap && previousCursor !== null) {
     if (previousCursor < 0) {
       getLogger().error(`history.compact skipped for thread ${threadId}: legacy cursor is invalid`);
       return;
@@ -401,7 +422,7 @@ export async function compactHistory(
   if (!summary) {
     throw new Error(`history.compact summarizer returned no summary for thread ${threadId}`);
   }
-  if (summary.length > MAX_COMPACTED_SUMMARY_CHARS) {
+  if (summary.length + RECEIPT_FILTERED_SUMMARY_MARKER.length > MAX_COMPACTED_SUMMARY_CHARS) {
     getLogger().error(`history.compact skipped for thread ${threadId}: summary is too large`);
     return;
   }
@@ -415,7 +436,7 @@ export async function compactHistory(
     },
     data: {
       historyCompactedUpToSeq: lastSeq,
-      historyCompactionSummary: summary,
+      historyCompactionSummary: `${RECEIPT_FILTERED_SUMMARY_MARKER}${summary}`,
     },
   });
   if (advanced.count === 0) return;

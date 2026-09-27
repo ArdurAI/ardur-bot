@@ -3,6 +3,7 @@ import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { gunzipSync } from "node:zlib";
+import type { AgentRuntime } from "@ardurbot/adapter-kit";
 import {
   archiveBot,
   ComposioEmulator,
@@ -20,7 +21,11 @@ import {
   toComputerRef,
 } from "@ardurbot/adapters";
 import type { DelegationSnapshot, MemoryPage, TaughtSkill } from "@ardurbot/contracts";
-import { ACTIVE_RUN_STATUSES, ONCE_ROUTINE_CRON } from "@ardurbot/core";
+import {
+  ACTIVE_RUN_STATUSES,
+  ONCE_ROUTINE_CRON,
+  RECEIPT_FILTERED_SUMMARY_MARKER,
+} from "@ardurbot/core";
 import {
   admitDelegation,
   appendEvent,
@@ -34,6 +39,8 @@ import {
   updateWorkerTask,
   wakeGoalCoordinatorForDelegation,
 } from "@ardurbot/db";
+import type { MemoryService } from "@ardurbot/memory";
+import { markBriefPending, refreshRunBrief } from "@ardurbot/memory";
 import { afterAll, beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
 import type { createApp } from "../../../apps/api/src/app.ts";
 import * as turnContext from "../../adapters/src/context/assemble.js";
@@ -3798,7 +3805,7 @@ describeJourneys("required product journeys", () => {
       const deliveries = [];
       for (const label of ["expired", "claimed"]) {
         const id = randomUUID();
-        const text = `${label}-${id}`;
+        const text = label === "claimed" ? `claimed-${id}: deadline Friday` : `${label}-${id}`;
         const outbound = await createThreadMessage(prisma, {
           threadId: workerThread.id,
           role: "bot",
@@ -3878,7 +3885,7 @@ describeJourneys("required product journeys", () => {
         where: { id: group.threadId },
         data: {
           historyCompactedUpToSeq: expiredMessage.seq - 1,
-          historyCompactionSummary: summaryMarker,
+          historyCompactionSummary: `${RECEIPT_FILTERED_SUMMARY_MARKER}${summaryMarker}`,
         },
       });
       let selectedBoth = false;
@@ -3995,6 +4002,119 @@ describeJourneys("required product journeys", () => {
       expect(
         await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id: claimed.id } }),
       ).toMatchObject({ outcome: "consumed", quietClaimRunId: null });
+
+      if (!expiresDuringAssembly) {
+        await markBriefPending(prisma, run.id);
+        await prisma.botBrief.update({
+          where: { botId_threadId: { botId: coordinator.id, threadId: group.threadId } },
+          data: { lastMessageSeq: -1, attemptedAt: null },
+        });
+        const briefInputs: string[] = [];
+        const briefRuntime = {
+          describe: () => ({
+            id: "brief-fixture",
+            contractVersion: "1",
+            adapterVersion: "1",
+            capabilities: { streaming: true, tools: false },
+          }),
+          async *run(request: { prompt: string }) {
+            briefInputs.push(request.prompt);
+            const contaminated = request.prompt.includes(`expired-${expired.id}`);
+            yield {
+              type: "done" as const,
+              text: `## Goal\n${contaminated ? `expired-${expired.id}` : "Verified brief"}`,
+            };
+          },
+        } as unknown as AgentRuntime;
+        const memoryDocuments = {
+          list: async () => ({ items: [] }),
+          commit: async (input: { content: string }) => {
+            const document = await prisma.memoryDocument.create({
+              data: {
+                spaceId: coordinator.spaceId,
+                userId: actor.userId,
+                botId: coordinator.id,
+                scope: "group",
+                scopeKey: `${coordinator.id}:${group.id}`,
+                path: `briefs/${group.id}.md`,
+                content: input.content,
+              },
+            });
+            return document;
+          },
+        } as unknown as MemoryService;
+        await refreshRunBrief(
+          {
+            prisma,
+            memoryDocuments,
+            secrets: [],
+            claim: ({ claim }) => prisma.$transaction((tx) => claim(tx)),
+            resolve: async () => ({
+              runtime: briefRuntime,
+              model: { provider: "fixture", id: "fixture" },
+            }),
+          },
+          run.id,
+        );
+        const briefState = await prisma.botBrief.findUniqueOrThrow({
+          where: { botId_threadId: { botId: coordinator.id, threadId: group.threadId } },
+        });
+        expect(
+          briefInputs,
+          JSON.stringify({
+            reason: briefState.reason,
+            pendingRunId: briefState.pendingRunId,
+            attemptedAt: briefState.attemptedAt,
+          }),
+        ).toHaveLength(1);
+        expect(briefInputs[0]).not.toContain(`expired-${expired.id}`);
+      }
+
+      const followUpTask = await prisma.task.create({
+        data: {
+          spaceId: coordinator.spaceId,
+          userId: actor.userId,
+          botId: coordinator.id,
+          threadId: group.threadId,
+          prompt: "What deadline did the earlier update give?",
+          status: "queued",
+        },
+      });
+      const followUpRun = await prisma.run.create({
+        data: {
+          spaceId: coordinator.spaceId,
+          userId: actor.userId,
+          botId: coordinator.id,
+          threadId: group.threadId,
+          taskId: followUpTask.id,
+          status: "queued",
+          trigger: "follow_up",
+          goalId: goal.id,
+          delegationRootTaskId: goal.rootTaskId,
+        },
+      });
+      const followUpInputs: string[] = [];
+      const followUpSpy = vi
+        .spyOn(ScriptedAgentRuntime.prototype, "run")
+        .mockImplementation(async function* (request) {
+          if (request.runId === followUpRun.id)
+            followUpInputs.push(
+              [request.prompt, ...request.history.map((message) => message.content)].join("\n"),
+            );
+          yield { type: "done", text: "The deadline was Friday." };
+        });
+      try {
+        await executor.continueRun(followUpRun.id, `quiet-follow-up-${followUpRun.id}`);
+      } finally {
+        followUpSpy.mockRestore();
+      }
+      expect(followUpInputs).toHaveLength(1);
+      expect(followUpInputs[0]).toContain(`claimed-${claimed.id}: deadline Friday`);
+      expect(followUpInputs[0]).not.toContain(`quiet-deliveries:${followUpRun.id}`);
+      if (!expiresDuringAssembly) {
+        expect(followUpInputs[0]).toContain("<group_brief>");
+        expect(followUpInputs[0]).not.toContain(`expired-${expired.id}`);
+      }
     }
     await settleFixtureWork([coordinator.id, worker.id], goal.id);
   });
@@ -4348,7 +4468,7 @@ describeJourneys("required product journeys", () => {
       runtimeSpy.mockRestore();
     }
     if (requests.length === 0) {
-      const skipped = await prisma.run.findUniqueOrThrow({ where: { id: wake.id } });
+      const skipped = await prisma.run.findUniqueOrThrow({ where: { id: wakeId! } });
       throw new Error(
         `Wake runtime was not entered: ${skipped.status}: ${skipped.error ?? "none"}`,
       );
