@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -63,7 +63,13 @@ function runtimeTypeScriptImports(desktopSrc: string): string[] {
     seen.add(file);
     const source = readFileSync(file, "utf8");
     for (const specifier of valueImportSpecifiers(source)) {
-      if (specifier.startsWith("node:") || specifier.startsWith(".")) continue;
+      if (specifier.startsWith(".")) {
+        const relative = path.resolve(path.dirname(file), specifier);
+        const sourceFile = existsSync(relative) ? relative : relative.replace(/\.js$/, ".ts");
+        if (existsSync(sourceFile)) pending.push(sourceFile);
+        continue;
+      }
+      if (specifier.startsWith("node:")) continue;
       if (!specifier.startsWith("@ardurbot/")) continue;
       const resolved = resolveWorkspaceSpecifier(specifier);
       if (!resolved) continue;

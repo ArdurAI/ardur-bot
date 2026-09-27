@@ -969,6 +969,43 @@ describe("packaged and unpackaged service launch", () => {
 });
 
 describe("database lifecycle", () => {
+  it("reports and cleans up a second database exit after staged preparation", async () => {
+    const root = await userData();
+    const processes: Array<EventEmitter & { exitCode: number | null; signalCode: null }> = [];
+    const failed: string[] = [];
+    const controller = new LocalModeController(
+      harness(root, {
+        allocatePort: async () => 23456,
+        portAvailable: async () => true,
+        postgresFactory: () => {
+          const process = Object.assign(new EventEmitter(), { exitCode: null, signalCode: null });
+          processes.push(process);
+          return {
+            process,
+            initialise: async () => undefined,
+            start: async () => undefined,
+            stop: async () => undefined,
+          } as EmbeddedPostgresLike;
+        },
+        onFailed: (message) => failed.push(message),
+      }),
+    );
+    const signal = new AbortController().signal;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      expect(await controller.prepareDatabase(signal)).toMatchObject({ phase: "database" });
+      expect(processes).toHaveLength(attempt);
+      processes[attempt - 1]!.exitCode = 1;
+      processes[attempt - 1]!.emit("exit", 1, null);
+      await vi.waitFor(() => expect(failed).toHaveLength(attempt));
+      expect(controller.state()).toMatchObject({
+        phase: "failed",
+        message: "The database stopped.",
+      });
+      expect(controller.running()).toBe(false);
+    }
+    await controller.stop();
+  });
+
   it("stops Postgres when migration fails and clears the handle", async () => {
     const root = await userData();
     let stops = 0;
