@@ -1,4 +1,32 @@
 export const RU_MESSAGES: Record<string, string> = {
+  Antigravity: "Antigravity",
+  "Antigravity did not finish in time. Try again.":
+    "Antigravity не завершил запрос вовремя. Повторите попытку.",
+  "Antigravity's live model list could not be checked. Check again.":
+    "Не удалось проверить актуальный список моделей Antigravity. Проверьте ещё раз.",
+  "Update Antigravity to version 1.2.12 or later.":
+    "Обновите Antigravity до версии 1.2.12 или новее.",
+  "Antigravity cannot use images yet. Remove the image and try again.":
+    "Antigravity пока не поддерживает изображения. Удалите изображение и повторите попытку.",
+  "Antigravity cannot run comparison turns yet. Choose another runtime.":
+    "Antigravity пока не поддерживает сравнение. Выберите другую среду выполнения.",
+  "Antigravity input is too large. Shorten the message or conversation and try again.":
+    "Входные данные Antigravity слишком велики. Сократите сообщение или историю и повторите попытку.",
+  "Antigravity could not run this turn. Check the runtime and try again.":
+    "Antigravity не смог выполнить этот запрос. Проверьте среду выполнения и повторите попытку.",
+  "Antigravity tried to use its own tools, which Ardur does not allow yet. The turn was stopped.":
+    "Antigravity попытался использовать собственные инструменты, которые Ardur пока не разрешает. Выполнение остановлено.",
+  "Antigravity did not recognise the model {model}. Pick a model from its list.":
+    "Antigravity не распознал модель {model}. Выберите модель из его списка.",
+  "Antigravity could not run this turn: {reason}.":
+    "Antigravity не смог выполнить этот запрос: {reason}.",
+  "Cost unavailable": "Стоимость недоступна",
+  "Antigravity is installed (version {version})": "Antigravity установлен (версия {version})",
+  "Sign-in unknown until the first run": "Статус входа неизвестен до первого запуска",
+  "Antigravity is not installed on this computer. Install it and sign in there, then check again.":
+    "Antigravity не установлен на этом компьютере. Установите его, войдите в аккаунт и проверьте снова.",
+  "Sign in to Antigravity on this computer, then check again.":
+    "Войдите в Antigravity на этом компьютере и проверьте снова.",
   "Sign-in timed out.": "Время входа истекло.",
   "Needs sign-in": "Требуется вход",
   "Not available": "Недоступно",
@@ -72,6 +100,15 @@ export const RU_MESSAGES: Record<string, string> = {
   "Could not start a new chat": "Не удалось начать новый чат",
   "Delivered to {peer}": "Доставлено для {peer}",
   "Delivered from {peer}": "Получено от {peer}",
+  "Sent to {peer}": "Отправлено для {peer}",
+  "to {peer}": "для {peer}",
+  "from {peer}": "от {peer}",
+  Sent: "Отправлено",
+  "Read by {recipient}": "Прочитано: {recipient}",
+  Read: "Прочитано",
+  Replied: "Получен ответ",
+  "Waiting for a turn": "Ожидает очереди",
+  Expired: "Срок истёк",
   "Could not update learning. Try again.": "Не удалось обновить обучение. Повторите попытку.",
   "Could not update this task; try again.": "Не удалось обновить задачу. Повторите попытку.",
   Curator: "Куратор",

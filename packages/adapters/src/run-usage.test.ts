@@ -52,6 +52,7 @@ it.each(["running", "completed"])(
       delegation: { findUniqueOrThrow: vi.fn(async () => row), update: vi.fn() },
       delegationRoot: { update: vi.fn() },
       usageRecord: { create: vi.fn(async () => ({ id: "usage" })) },
+      botMessageDelivery: { findMany: vi.fn(async () => []) },
     };
     const prisma = {
       ...tx,
@@ -99,6 +100,7 @@ it("charges coordinator usage to the existing root under the admission lock", as
     $queryRaw: vi.fn(async () => []),
     delegationRoot: { updateMany: vi.fn() },
     usageRecord: { create: vi.fn(async () => ({ id: "usage" })) },
+    botMessageDelivery: { findMany: vi.fn(async () => []) },
   };
   const prisma = {
     ...tx,

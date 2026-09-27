@@ -1,6 +1,6 @@
 import type { ModelCatalogEntry, ProviderErrorKind, RuntimeProblem } from "@ardurbot/contracts";
 import { Button } from "@ardurbot/ui-web";
-import { Trans } from "@lingui/react/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { parseProviderError } from "../../lib/provider-error";
 
 export function ProviderErrorMessage({
@@ -18,6 +18,7 @@ export function ProviderErrorMessage({
   catalog?: ModelCatalogEntry[];
   onConnect?: () => void;
 }) {
+  const { t } = useLingui();
   if (runtimeProblem) {
     if (runtimeProblem.code === "locality-denied")
       return (
@@ -41,11 +42,58 @@ export function ProviderErrorMessage({
       "an unset provider";
     const model = entry?.label ?? pin.modelId ?? "an unset model";
     const effort = pin.effort ?? "an unset effort";
+    const antigravityReason = (() => {
+      if (pin.runtimeKind !== "antigravity") return null;
+      switch (
+        runtimeProblem.reasonId ??
+        (runtimeProblem.code === "pin-model-unknown" ? "model-unrecognised" : undefined)
+      ) {
+        case "timeout":
+          return t`Antigravity did not finish in time. Try again.`;
+        case "catalogue-unavailable":
+          return t`Antigravity's live model list could not be checked. Check again.`;
+        case "version-too-old":
+          return t`Update Antigravity to version 1.2.12 or later.`;
+        case "model-unrecognised":
+          return t`Antigravity did not recognise the model ${pin.modelId ?? ""}. Pick a model from its list.`;
+        case "native-tool-attempted":
+          return t`Antigravity tried to use its own tools, which Ardur does not allow yet. The turn was stopped.`;
+        case "sign-in-unknown":
+          return t`Sign-in unknown until the first run`;
+        case "signed-out":
+          return t`Sign in to Antigravity on this computer, then check again.`;
+        case "image-unsupported":
+          return t`Antigravity cannot use images yet. Remove the image and try again.`;
+        case "comparison-unsupported":
+          return t`Antigravity cannot run comparison turns yet. Choose another runtime.`;
+        case "input-too-large":
+          return t`Antigravity input is too large. Shorten the message or conversation and try again.`;
+        case "not-installed":
+          return t`Antigravity is not installed on this computer. Install it and sign in there, then check again.`;
+        case "unavailable":
+        case "version-unchecked":
+        case "probe-failed":
+        case "invalid-pin":
+        case "effort-unsupported":
+        case "tools-unsupported":
+        case "resume-unsupported":
+        case "host-directory-required":
+        case "input-write-failed":
+        case "stopped-early":
+        case "runtime-error":
+        case "invalid-response":
+        case "text-too-large":
+        case "empty-response":
+          return t`Antigravity could not run this turn. Check the runtime and try again.`;
+        default:
+          return runtimeProblem.reason;
+      }
+    })();
     return (
       <>
         <span className="min-w-0 flex-1">
           {pin.runtimeKind !== "pi" || runtimeProblem.code !== "pin-credential-missing" ? (
-            runtimeProblem.reason
+            (antigravityReason ?? runtimeProblem.reason)
           ) : (
             <Trans>
               This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin.

@@ -129,7 +129,7 @@ import { createPortal } from "react-dom";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArtifactFileCard } from "../components/ArtifactFileCard";
 import { AskCard } from "../components/AskCard";
-import { ActiveBotGlyph, CollaborationMarker } from "../components/ai/CollaborationMarker";
+import { ActiveBotGlyph } from "../components/ai/CollaborationMarker";
 import { CloudAgentCard } from "../components/CloudAgentCard";
 import { ComputerMaintenanceActions } from "../components/ComputerMaintenanceActions";
 import {
@@ -151,6 +151,7 @@ import { useComposerCommands } from "../components/composer/use-composer-command
 import type { FeedbackEdit } from "../components/MessageFeedback";
 import { MessageFeedback } from "../components/MessageFeedback";
 import { MessageHoverMetadata } from "../components/MessageHoverMetadata";
+import { PeerMessageReceipt } from "../components/PeerMessageReceipt";
 import { ThreadCommandBlock } from "../components/ThreadCommandBlock";
 import { SkillDraftCard } from "../components/teach/SkillDraftCard";
 import { TeachCaptureOverlay } from "../components/teach/TeachCaptureOverlay";
@@ -6149,26 +6150,15 @@ const MessageView = memo(function MessageView({
           );
         }
         if (block.kind === "bot_message_sent" || block.kind === "bot_message_received") {
-          const sent = block.kind === "bot_message_sent";
-          const peer = sent ? block.toBotName : block.fromBotName;
-          const peerBotId = sent ? block.toBotId : block.fromBotId;
-          const label =
-            block.deliveryState === "delivered"
-              ? sent
-                ? t`Delivered to ${peer}`
-                : t`Delivered from ${peer}`
-              : sent
-                ? t`Messaged ${peer}`
-                : t`Message from ${peer}`;
-          const visibleLabel = block.queuedForBusy ? `${label} · ${t`Queued`}` : label;
           return (
-            <CollaborationMarker
+            <PeerMessageReceipt
               key={i}
-              ariaLabel={visibleLabel}
-              color={peerBot(peerBotId)?.color ?? FALLBACK_BOT_COLOR}
-              identity={peerBotId}
-              label={visibleLabel}
-              onClick={() => onOpenPeerMessages({ peerBotId, peerBotName: peer })}
+              block={block}
+              color={
+                peerBot(block.kind === "bot_message_sent" ? block.toBotId : block.fromBotId)
+                  ?.color ?? FALLBACK_BOT_COLOR
+              }
+              onOpen={onOpenPeerMessages}
             />
           );
         }

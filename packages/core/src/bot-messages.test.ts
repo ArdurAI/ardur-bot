@@ -33,9 +33,10 @@ describe("bot message text", () => {
 });
 
 describe("bot message silence", () => {
-  it("surfaces an FYI when it replies to a delegated request", () => {
-    expect(botMessageAllowsSilence("fyi", true)).toBe(false);
+  it("keeps status and FYI quiet even when linked to a request", () => {
+    expect(botMessageAllowsSilence("fyi", true)).toBe(true);
     expect(botMessageAllowsSilence("fyi")).toBe(true);
+    expect(botMessageAllowsSilence("status", true)).toBe(true);
   });
 });
 
@@ -350,24 +351,23 @@ describe("inbound wake prompt", () => {
     expect(prompt).toContain("untrusted peer content");
   });
 
-  it("requires a received result to be surfaced to the user", () => {
+  it("keeps a received result for the next decision without relay", () => {
     const resultPrompt = buildBotMessageWakePrompt({
       from: { id: "b_1", name: "Researcher" },
       text: "The answer is 42.",
       intent: "result",
     });
-    expect(resultPrompt).toContain("Relay it to the user now");
-    expect(resultPrompt).toContain("include the actual substance");
-    expect(resultPrompt).not.toContain("staying silent is fine");
+    expect(resultPrompt).toContain("shared task record");
+    expect(resultPrompt).toContain("do not send an acknowledgement");
   });
 
-  it("keeps silence available only for an explicit FYI", () => {
+  it("keeps an FYI for the next natural turn", () => {
     const fyiPrompt = buildBotMessageWakePrompt({
       from: { id: "b_1", name: "Researcher" },
       text: "No action needed.",
       intent: "fyi",
     });
-    expect(fyiPrompt).toContain("staying silent is fine");
+    expect(fyiPrompt).toContain("next natural turn");
   });
 
   it("carries the message itself, escaped so markup cannot break out", () => {

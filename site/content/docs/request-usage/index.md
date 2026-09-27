@@ -91,7 +91,10 @@ It snapshots the admitted run or helper pin while retaining the usage's observed
 This is attribution, not pin attestation. The runtime remains responsible for honoring the pin.
 Pins are not reconstructed from mutable bot settings.
 
-Purposes are `main`, `retry`, `helper`, `summary`, `delegated`, and `detached-learning`.
+Purposes are `main`, `unknown`, `retry`, `helper`, `summary`, `delegated`, and `detached-learning`.
+`unknown` is synchronous spend whose internal role cannot be established. It counts toward task
+budgets but stays out of metrics restricted to identified primary calls. A repeated request is
+not labeled a retry solely because it follows another request.
 Detached learning retains its root attribution and spend but never increments synchronous task
 budgets. Delegation admission also excludes it when seeding an initially absent root budget.
 Accepted-task reporting must join actual task acceptance and select synchronous purposes; a
@@ -159,6 +162,44 @@ aborted, without releasing further text or tool events. Failure or cancellation 
 produces an unavailable receipt, not measured zero. Existing totals-only runtimes receive a
 runtime-call identity with limited coverage. Scripted and command-replay execution retain their
 existing path.
+
+## Worker provider broker
+
+`HermesProviderBroker` is a worker-only, dormant Chat Completions admission boundary. No runtime
+selection or host relay is enabled by this module. A worker supplies the persisted run scope,
+complete pin, lease and host generation, an exact connection record, and the frozen Ardur bridge
+tool catalog. The grant holds an opaque ID, bearer value and expiry in memory. Neither it nor the
+provider credential enters the ledger. The worker must revoke the grant on stop, pause, failure,
+completion, deletion or lease loss. A fresh grant does not reset a run's ledger allowance.
+
+Only the qualified `openai-completions` route and `/v1/chat/completions` operation are admitted.
+The connection profile explicitly declares finite context/output limits, image and developer-role
+support, effort field and supported values, and whether the provider must report a model. The
+broker rejects unknown request fields, foreign or malformed tools, duplicate or colliding
+sanitized names, conflicting model/effort, and unsupported output limits before provider I/O.
+Accepted tool definitions are replaced by the saved Ardur schemas. Image content is limited to
+bounded data URLs. The existing compatible-provider address-checked transport, HTTPS/key rule and
+redirect denial apply. The broker does no protocol translation or automatic retry.
+
+Before forwarding, `recordBrokerRunUsage` writes a started receipt under the existing root-task
+lock. Its typed `admission` metadata records only a conservative token reservation and the run's
+request/token ceilings. Admission checks the persisted run pin and lease, then counts all prior
+broker starts for that run, including requests with unknown or missing usage. A failed started
+write prevents provider I/O. The reservation is the declared context window plus the capped
+output allowance. It is a conservative admission bound, not a measured token count or a dollar
+cap; the provider's adherence to its declared context limit remains a route qualification.
+
+JSON and SSE responses are bounded to 8 MiB and reduced to documented numeric usage fields.
+Absent categories stay `null`; reported zero stays zero. A provider-reported model mismatch fails
+the call, and a profile may require a reported model. Error payloads and provider headers are
+not returned to the harness. The current worker API buffers a bounded response before returning
+it; a later host relay must preserve backpressure and callback framing. Started receipts may
+remain after a crash, and their reservation remains consumed. This avoids silently treating an
+uncertain bill as zero.
+
+A runtime with `usageAccounting: "external"` leaves provider spend to the broker sink. Executor
+accounting ignores its ACP aggregate usage events and creates no fallback request receipt, so
+the same invocation cannot be charged twice. The ordinary runtime accounting path is unchanged.
 
 Background handlers connect Ardur summaries and detached reviews to `recordRunUsage`. New
 `history.compact` jobs carry `sourceRunId`; older queued jobs select the latest run within the same

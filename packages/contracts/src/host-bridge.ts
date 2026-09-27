@@ -233,7 +233,7 @@ export const HostOperationSchema = /* @__PURE__ */ (() =>
       cwd: path.optional(),
     }),
     z.strictObject({ op: z.literal("runtime.turn"), homeKey: id, request: HostTurnSchema }),
-    z.strictObject({ op: z.literal("host.health") }),
+    z.strictObject({ op: z.literal("host.health"), refreshSignIn: z.boolean().optional() }),
   ]))();
 export type HostOperation = z.infer<typeof HostOperationSchema>;
 export const HostRequestSchema = /* @__PURE__ */ (() =>
@@ -253,6 +253,7 @@ export const HostHealthSchema = z.strictObject({
   load: z.number().int().min(0).max(HOST_IN_FLIGHT),
   claude: RuntimeAvailabilitySchema,
   codex: RuntimeAvailabilitySchema,
+  antigravity: RuntimeAvailabilitySchema.optional(),
   environment: HostEnvironmentSchema.optional(),
   integrations: z.array(HostIntegrationSchema).max(16).optional(),
 });
@@ -298,6 +299,7 @@ export const HostFrameSchema = /* @__PURE__ */ (() =>
         "executeTool",
         "onToolCompleted",
         "onRuntimeInfo",
+        "acknowledgeInput",
         "claimSteering",
       ]),
       args: z.array(z.unknown()).max(5),

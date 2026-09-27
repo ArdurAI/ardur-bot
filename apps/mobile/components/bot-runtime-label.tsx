@@ -15,7 +15,9 @@ export function BotRuntimeLabel({
   const { t } = useI18n();
   const tokens = useMobileTokens();
   const effort =
-    bot.runtimeKind === "claude-code" ? botEffortLabel(bot, run, t("requested")) : null;
+    bot.runtimeKind === "claude-code" || bot.runtimeKind === "antigravity"
+      ? botEffortLabel(bot, run, t("requested"))
+      : null;
   return (
     <Text numberOfLines={1} style={{ color: tokens.mutedForeground, fontSize: 12 }}>
       {runtimeNames[bot.runtimeKind ?? "pi"]}

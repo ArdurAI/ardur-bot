@@ -1,13 +1,15 @@
+import type { RuntimePin } from "@ardurbot/contracts";
 import {
   type Actor,
   GROUP_MEMBER_MAX,
   GROUP_MEMBER_MIN,
   type Group,
   type GroupMember,
+  RuntimePinSchema,
   type SpaceGroup,
 } from "@ardurbot/contracts";
 import { cancelRunsInTransaction } from "./cancel-runs.js";
-import type { Prisma, PrismaClient } from "./client.js";
+import { Prisma, type PrismaClient } from "./client.js";
 import { expireComputerExecutionLeases } from "./computers.js";
 import { IsolationError } from "./scope.js";
 import { lockSpaceForContentCreation } from "./spaces.js";
@@ -247,13 +249,45 @@ export function createGroupRepos(prisma: PrismaClient) {
       return group;
     },
 
-    async createGroup(actor: Actor, input: { name: string; botIds: string[] }): Promise<Group> {
+    async createGroup(
+      actor: Actor,
+      input: { name: string; botIds: string[]; copyPinsFromGroupId?: string },
+    ): Promise<Group> {
       const members = await assertOwnedBots(prisma, actor, input.botIds);
       const created = await prisma.$transaction(async (tx) => {
         await lockSpaceForContentCreation(tx, {
           spaceId: actor.spaceId,
           userId: actor.userId,
         });
+        const copiedPins = new Map<string, RuntimePin>();
+        if (input.copyPinsFromGroupId) {
+          await lockOwnedGroup(tx, actor, input.copyPinsFromGroupId);
+          const source = await tx.chatGroup.findFirst({
+            where: {
+              id: input.copyPinsFromGroupId,
+              spaceId: actor.spaceId,
+              userId: actor.userId,
+              archivedAt: null,
+            },
+            select: {
+              members: {
+                where: { bot: { archivedAt: null } },
+                select: { botId: true, runtimePin: true, modelPinRevision: true },
+              },
+            },
+          });
+          if (
+            !source ||
+            source.members.length !== members.length ||
+            source.members.some((member) => !members.some((next) => next.botId === member.botId))
+          )
+            throw new IsolationError();
+          for (const member of source.members) {
+            const pin = storedMemberPin(member.runtimePin, member.modelPinRevision);
+            if (!pin) continue;
+            copiedPins.set(member.botId, { ...pin, revision: 1 });
+          }
+        }
         const group = await tx.chatGroup.create({
           data: {
             spaceId: actor.spaceId,
@@ -262,7 +296,13 @@ export function createGroupRepos(prisma: PrismaClient) {
           },
         });
         await tx.chatGroupMember.createMany({
-          data: members.map((member) => ({ groupId: group.id, botId: member.botId })),
+          data: members.map((member) => ({
+            groupId: group.id,
+            botId: member.botId,
+            ...(copiedPins.has(member.botId)
+              ? { runtimePin: copiedPins.get(member.botId)!, modelPinRevision: 1 }
+              : {}),
+          })),
         });
         await tx.thread.create({
           data: {
@@ -345,10 +385,20 @@ export function createGroupRepos(prisma: PrismaClient) {
           });
         }
         if (members) {
-          await tx.chatGroupMember.deleteMany({ where: { groupId: input.groupId } });
-          await tx.chatGroupMember.createMany({
-            data: members.map((member) => ({ groupId: input.groupId, botId: member.botId })),
-          });
+          if (removedBotIds.length) {
+            await tx.chatGroupMember.deleteMany({
+              where: { groupId: input.groupId, botId: { in: removedBotIds } },
+            });
+          }
+          const existingBotIds = new Set(current.members.map((member) => member.botId));
+          const addedBotIds = members
+            .map((member) => member.botId)
+            .filter((botId) => !existingBotIds.has(botId));
+          if (addedBotIds.length) {
+            await tx.chatGroupMember.createMany({
+              data: addedBotIds.map((botId) => ({ groupId: input.groupId, botId })),
+            });
+          }
         }
         await tx.chatGroup.update({
           where: { id: input.groupId },
@@ -506,5 +556,118 @@ export async function touchGroupUpdatedAt(
   await prisma.chatGroup.update({
     where: { id: groupId },
     data: { updatedAt: new Date() },
+  });
+}
+
+export type GroupMemberPinState = {
+  memberId: string;
+  botId: string;
+  runtimePin: RuntimePin | null;
+  modelPinRevision: number;
+};
+
+function storedMemberPin(raw: unknown, revision: number): RuntimePin | null {
+  if (raw === null) return null;
+  const pin = RuntimePinSchema.safeParse(raw);
+  if (!pin.success || pin.data.revision !== revision) throw new IsolationError();
+  return pin.data;
+}
+
+function sameChoice(left: RuntimePin, right: RuntimePin): boolean {
+  return (
+    left.runtimeKind === right.runtimeKind &&
+    left.provider === right.provider &&
+    left.modelId === right.modelId &&
+    left.effort === right.effort &&
+    left.credentialId === right.credentialId
+  );
+}
+
+/** Returns explicit choices and inherited members without resolving the bot's current pin. */
+export async function getGroupMemberPinStates(
+  prisma: PrismaClient,
+  actor: Actor,
+  groupId: string,
+): Promise<GroupMemberPinState[]> {
+  const group = await prisma.chatGroup.findFirst({
+    where: { id: groupId, spaceId: actor.spaceId, userId: actor.userId },
+    select: {
+      members: {
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        select: { id: true, botId: true, runtimePin: true, modelPinRevision: true },
+      },
+    },
+  });
+  if (!group) throw new IsolationError();
+  return group.members.map((member) => ({
+    memberId: member.id,
+    botId: member.botId,
+    runtimePin: storedMemberPin(member.runtimePin, member.modelPinRevision),
+    modelPinRevision: member.modelPinRevision,
+  }));
+}
+
+export async function setGroupMemberPin(
+  prisma: PrismaClient,
+  actor: Actor,
+  groupId: string,
+  botId: string,
+  choice: Omit<RuntimePin, "revision">,
+): Promise<GroupMemberPinState> {
+  const normalized = RuntimePinSchema.parse({ ...choice, revision: 0 });
+  return prisma.$transaction(async (tx) => {
+    await lockOwnedGroup(tx, actor, groupId);
+    const member = await tx.chatGroupMember.findUnique({
+      where: { groupId_botId: { groupId, botId } },
+    });
+    if (!member) throw new IsolationError();
+    const current = storedMemberPin(member.runtimePin, member.modelPinRevision);
+    if (current && sameChoice(current, normalized)) {
+      return {
+        memberId: member.id,
+        botId,
+        runtimePin: current,
+        modelPinRevision: member.modelPinRevision,
+      };
+    }
+    if (member.modelPinRevision >= 2_147_483_647) throw new IsolationError();
+    const revision = member.modelPinRevision + 1;
+    const runtimePin = { ...normalized, revision };
+    await tx.chatGroupMember.update({
+      where: { id: member.id },
+      data: { runtimePin, modelPinRevision: revision },
+    });
+    return { memberId: member.id, botId, runtimePin, modelPinRevision: revision };
+  });
+}
+
+export async function clearGroupMemberPin(
+  prisma: PrismaClient,
+  actor: Actor,
+  groupId: string,
+  botId: string,
+): Promise<GroupMemberPinState> {
+  return prisma.$transaction(async (tx) => {
+    await lockOwnedGroup(tx, actor, groupId);
+    const member = await tx.chatGroupMember.findUnique({
+      where: { groupId_botId: { groupId, botId } },
+    });
+    if (!member) throw new IsolationError();
+    const current = storedMemberPin(member.runtimePin, member.modelPinRevision);
+    if (!current) {
+      return {
+        memberId: member.id,
+        botId,
+        runtimePin: null,
+        modelPinRevision: member.modelPinRevision,
+      };
+    }
+    if (member.modelPinRevision >= 2_147_483_647) throw new IsolationError();
+    const revision = member.modelPinRevision + 1;
+    await tx.chatGroupMember.update({
+      where: { id: member.id },
+      data: { runtimePin: Prisma.DbNull, modelPinRevision: revision },
+    });
+    return { memberId: member.id, botId, runtimePin: null, modelPinRevision: revision };
   });
 }

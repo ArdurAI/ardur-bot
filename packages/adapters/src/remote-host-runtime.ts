@@ -20,14 +20,19 @@ export class RemoteHostRuntime implements AgentRuntime {
   private active = new Map<string, AbortController>();
   constructor(
     private readonly client: HostClient,
-    private readonly kind: "claude-code" | "codex-app-server",
+    private readonly kind: "claude-code" | "codex-app-server" | "antigravity",
   ) {}
   describe() {
     return {
       id: this.kind,
       contractVersion: "1",
       adapterVersion: "0.1.0",
-      capabilities: { streaming: true, compaction: false, tools: true, scripted: false },
+      capabilities: {
+        streaming: true,
+        compaction: false,
+        tools: this.kind !== "antigravity",
+        scripted: false,
+      },
     };
   }
   async abort(runId: string) {
@@ -84,6 +89,19 @@ export class RemoteHostRuntime implements AgentRuntime {
           abort.signal.throwIfAborted();
           if (frame.method === "onRuntimeInfo") {
             await request.onRuntimeInfo?.(RuntimeInfoSchema.parse(frame.args[0]));
+            return;
+          }
+          if (frame.method === "acknowledgeInput") {
+            const input = z
+              .object({
+                runId: z.string(),
+                leaseFence: z.number().int().nonnegative(),
+                deliveryIds: z.array(z.string()).max(32),
+                mode: z.enum(["initial", "steering"]),
+              })
+              .strict()
+              .parse(frame.args[0]);
+            await request.acknowledgeInput?.(input);
             return;
           }
           if (frame.method === "claimSteering")

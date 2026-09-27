@@ -60,6 +60,7 @@ export function HostComputerSettings() {
   const versions = [
     status.health?.claude.version ? `claude ${status.health.claude.version}` : "",
     status.health?.codex.version ? `codex ${status.health.codex.version}` : "",
+    status.health?.antigravity?.version ? `Antigravity ${status.health.antigravity.version}` : "",
   ].filter(Boolean);
   return (
     <section className="space-y-3 py-4" data-testid="host-computer-settings">

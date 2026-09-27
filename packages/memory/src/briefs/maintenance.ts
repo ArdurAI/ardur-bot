@@ -1,8 +1,13 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { AgentRunRequest, AgentRuntime, AgentUsage } from "@ardurbot/adapter-kit";
 import type { MessageBlock } from "@ardurbot/contracts";
-import { blocksToAgentHistoryText, isMessagingChannelRun, redactSecrets } from "@ardurbot/core";
-import type { Prisma, PrismaClient } from "@ardurbot/db";
+import {
+  blocksToAgentHistoryText,
+  isMessagingChannelRun,
+  receiptFilteredSummary,
+  redactSecrets,
+} from "@ardurbot/core";
+import { type Prisma, type PrismaClient, quietHistoryDeliveryIds } from "@ardurbot/db";
 import type { MemoryService } from "../service.js";
 import { readBrief, rewriteBrief } from "./brief.js";
 import { hasNewBriefFacts } from "./novelty.js";
@@ -229,9 +234,14 @@ export async function refreshRunBrief(deps: BriefMaintenanceDeps, runId: string)
         }),
         readBrief(deps.memoryDocuments, run.botId, run.thread.groupId, context),
       ]);
+      const excludedDeliveryIds = await quietHistoryDeliveryIds(
+        deps.prisma,
+        run.threadId,
+        messages.map((message) => message.blocks as MessageBlock[]),
+      );
       const evidence = messages.reverse().map((message) => ({
         role: message.role,
-        text: blocksToAgentHistoryText(message.blocks as MessageBlock[]),
+        text: blocksToAgentHistoryText(message.blocks as MessageBlock[], excludedDeliveryIds),
       }));
       const changedCards = cards.some(
         (card) =>
@@ -297,7 +307,7 @@ export async function refreshRunBrief(deps: BriefMaintenanceDeps, runId: string)
                       current,
                       messages: transcript,
                       toolResults: state.toolResults,
-                      summary: run.thread.historyCompactionSummary,
+                      summary: receiptFilteredSummary(run.thread.historyCompactionSummary),
                       cards,
                       threadId: run.threadId,
                       taskId: run.taskId,

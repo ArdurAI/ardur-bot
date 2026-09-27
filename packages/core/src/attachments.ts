@@ -102,9 +102,18 @@ export function promptTextForAttachments(
   return [caption, ...notes].filter(Boolean).join("\n\n") || "See attached files.";
 }
 
-export function blocksToAgentHistoryText(blocks: MessageBlock[]): string {
+export function blocksToAgentHistoryText(
+  blocks: MessageBlock[],
+  excludedDeliveryIds: ReadonlySet<string> = new Set(),
+): string {
   return blocks
     .map((block) => {
+      if (
+        block.kind === "bot_message_received" &&
+        block.deliveryId &&
+        excludedDeliveryIds.has(block.deliveryId)
+      )
+        return "";
       if (block.kind === "text") return block.text;
       if (block.kind === "chart") return `[chart: ${block.name}]`;
       if (block.kind === "image") return `[image: ${block.name}]`;

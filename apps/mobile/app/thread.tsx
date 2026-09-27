@@ -127,7 +127,7 @@ import {
 import { native, useMobileTokens, useResolvedAppearance } from "../lib/native";
 import { type PickedAttachment, pickDocuments, pickFromLibrary } from "../lib/pick-attachments";
 import { threadRefreshDelayMs } from "../lib/refresh";
-import { runtimePinRecovery } from "../lib/runtime-pin-recovery";
+import { antigravityProblemMessage, runtimePinRecovery } from "../lib/runtime-pin-recovery";
 import {
   type ThreadScrollAction,
   ThreadScrollBehavior,
@@ -1392,7 +1392,9 @@ function Thread() {
       ? snap.run.runtimeProblem
         ? snap.run.runtimeProblem.pin.runtimeKind !== "pi" ||
           snap.run.runtimeProblem.code !== "pin-credential-missing"
-          ? snap.run.runtimeProblem.reason
+          ? snap.run.runtimeProblem.pin.runtimeKind === "antigravity"
+            ? antigravityProblemMessage(snap.run.runtimeProblem)
+            : snap.run.runtimeProblem.reason
           : runtimePinMessage(snap.run.runtimeProblem.pin)
         : (snap.run.error ?? null)
       : null;
@@ -2496,6 +2498,7 @@ const MessageBubble = memo(function MessageBubble({
       <PeerMessageReceipt
         block={peerMessage}
         color={peerColor}
+        recipientName={groupId ? undefined : botName}
         actionProps={actionProps}
         onOpenPeer={onOpenBot}
       />

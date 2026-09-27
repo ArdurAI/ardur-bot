@@ -226,7 +226,10 @@ function attachNovncProxy(server: ViteDevServer | PreviewServer, secret: string,
 }
 
 export default defineConfig(({ mode }) => {
-  const rootEnv = loadEnv(mode, path.resolve(import.meta.dirname, "../.."), "");
+  const rootEnv =
+    process.env.TESTKIT_SKIP_ROOT_ENV === "1"
+      ? {}
+      : loadEnv(mode, path.resolve(import.meta.dirname, "../.."), "");
   const api = process.env.API_PROXY_TARGET ?? rootEnv.API_PROXY_TARGET ?? "http://127.0.0.1:3100";
   const previewHost = process.env.ARDURBOT_HOST ?? rootEnv.ARDURBOT_HOST ?? "localhost";
   const screenProxySecret = () =>

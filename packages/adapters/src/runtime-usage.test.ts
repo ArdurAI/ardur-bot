@@ -16,6 +16,30 @@ async function collect(events: AsyncIterable<AgentRuntimeEvent>) {
   return result;
 }
 describe("usage persistence around runtime streams", () => {
+  it("does not charge an ACP aggregate or invent fallback usage in external mode", async () => {
+    const record = vi.fn(async () => undefined);
+    const events = (async function* (): AsyncGenerator<AgentRuntimeEvent> {
+      yield {
+        type: "usage",
+        provider: "fixture",
+        model: "fixture",
+        inputTokens: 80,
+        outputTokens: 20,
+      };
+      yield { type: "done" };
+    })();
+    expect(
+      await collect(
+        accountRuntimeUsage(events, {
+          provider: "fixture",
+          model: "fixture",
+          accounting: "external",
+          record,
+        }),
+      ),
+    ).toEqual([{ type: "done" }]);
+    expect(record).not.toHaveBeenCalled();
+  });
   it("returns only newly measured spend, preserving measured zero and legacy deltas", () => {
     const request = collector();
     const totals = new ObservedUsageTotals();

@@ -745,6 +745,57 @@ msgstr "Respondido: {0}"
 msgid "Answered: {answer}"
 msgstr "Respondido: {answer}"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Antigravity"
+msgstr "Antigravity"
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity cannot run comparison turns yet. Choose another runtime."
+msgstr "Antigravity aún no puede ejecutar turnos de comparación. Elige otro entorno de ejecución."
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity cannot use images yet. Remove the image and try again."
+msgstr "Antigravity aún no admite imágenes. Quita la imagen e inténtalo de nuevo."
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity could not run this turn. Check the runtime and try again."
+msgstr "Antigravity no pudo ejecutar este turno. Comprueba el entorno de ejecución e inténtalo de nuevo."
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity did not finish in time. Try again."
+msgstr "Antigravity no terminó a tiempo. Inténtalo de nuevo."
+
+#. placeholder {0}: pin.modelId ?? ""
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity did not recognise the model {0}. Pick a model from its list."
+msgstr "Antigravity no reconoció el modelo {0}. Elige un modelo de su lista."
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity input is too large. Shorten the message or conversation and try again."
+msgstr "La entrada de Antigravity es demasiado grande. Acorta el mensaje o la conversación e inténtalo de nuevo."
+
+#. placeholder {0}: availability.version
+#: src/pages/shell/runtime-settings.tsx
+msgid "Antigravity is installed (version {0})"
+msgstr "Antigravity está instalado (versión {0})"
+
+#: src/pages/shell/provider-error-message.tsx
+#: src/pages/shell/runtime-settings.tsx
+msgid "Antigravity is not installed on this computer. Install it and sign in there, then check again."
+msgstr "Antigravity no está instalado en este equipo. Instálalo, inicia sesión allí y vuelve a comprobarlo."
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Antigravity runs on a connected host computer."
+msgstr "Antigravity se ejecuta en un equipo anfitrión conectado."
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity tried to use its own tools, which Ardur does not allow yet. The turn was stopped."
+msgstr "Antigravity intentó usar sus propias herramientas, que Ardur todavía no permite. Se detuvo el turno."
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity's live model list could not be checked. Check again."
+msgstr "No se pudo comprobar la lista actual de modelos de Antigravity. Vuelve a comprobarla."
+
 #: src/pages/ModelDestinations.tsx
 msgid "Any"
 msgstr ""
@@ -1606,6 +1657,7 @@ msgid "Client secret"
 msgstr ""
 
 #: src/pages/board/Board.tsx
+#: src/pages/customize/ExtensionsPage.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/memory/MemoryDocuments.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -2112,6 +2164,10 @@ msgstr ""
 msgid "Cost"
 msgstr ""
 
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Cost unavailable"
+msgstr "Costo no disponible"
+
 #: src/pages/ScratchpadSection.tsx
 msgid "Could not add"
 msgstr "No se pudo agregar"
@@ -2464,6 +2520,10 @@ msgstr ""
 #: src/pages/TeamBoard.tsx
 msgid "Could not load Team; retry."
 msgstr ""
+
+#: src/pages/customize/ExtensionsPage.tsx
+msgid "Could not load the extension catalogue. Check the connection and try again."
+msgstr "No se pudo cargar el catálogo de extensiones. Comprueba la conexión e inténtalo de nuevo."
 
 #: src/pages/LearningCurator.tsx
 msgid "Could not load the last check."
@@ -3070,11 +3130,11 @@ msgstr "eliminado"
 msgid "Deleting…"
 msgstr "Eliminando…"
 
-#: src/pages/Shell.tsx
+#: src/components/PeerMessageReceipt.tsx
 msgid "Delivered from {peer}"
 msgstr "Entregado por {peer}"
 
-#: src/pages/Shell.tsx
+#: src/components/PeerMessageReceipt.tsx
 msgid "Delivered to {peer}"
 msgstr "Entregado a {peer}"
 
@@ -3559,10 +3619,11 @@ msgstr "Expandir {0}"
 msgid "Experimental"
 msgstr ""
 
+#: src/components/PeerMessageReceipt.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/memory/MemoryProposals.tsx
 msgid "Expired"
-msgstr ""
+msgstr "Caducado"
 
 #: src/pages/DevicesSettings.tsx
 msgid "Expires in five minutes."
@@ -3618,6 +3679,7 @@ msgstr ""
 msgid "failed"
 msgstr "fallido"
 
+#: src/components/PeerMessageReceipt.tsx
 #: src/lib/run-status-label.ts
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
@@ -3764,6 +3826,10 @@ msgstr "Gratis"
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Free memory"
 msgstr ""
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "from {peer}"
+msgstr "de {peer}"
 
 #: src/pages/customize/PluginsPage.tsx
 #: src/pages/customize/SkillsPage.tsx
@@ -4123,6 +4189,7 @@ msgid "Insights ({insights})"
 msgstr ""
 
 #: src/pages/customize/ConfigureExtension.tsx
+#: src/pages/customize/ExtensionsPage.tsx
 #: src/pages/customize/PluginsPage.tsx
 msgid "Install"
 msgstr ""
@@ -4525,6 +4592,10 @@ msgstr "Cargando reglas…"
 msgid "Loading system settings…"
 msgstr ""
 
+#: src/pages/customize/ExtensionsPage.tsx
+msgid "Loading the extension catalogue…"
+msgstr "Cargando el catálogo de extensiones…"
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Loading tools…"
 msgstr ""
@@ -4828,7 +4899,7 @@ msgstr "Redactor de mensajes"
 msgid "Message event"
 msgstr ""
 
-#: src/pages/Shell.tsx
+#: src/components/PeerMessageReceipt.tsx
 msgid "Message from {peer}"
 msgstr "Mensaje de {peer}"
 
@@ -4840,10 +4911,6 @@ msgstr ""
 #: src/pages/system/QuickComposer.tsx
 msgid "Message…"
 msgstr "Mensaje…"
-
-#: src/pages/Shell.tsx
-msgid "Messaged {peer}"
-msgstr "Mensaje enviado a {peer}"
 
 #: src/pages/account/AccountMore.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -5194,6 +5261,10 @@ msgstr ""
 msgid "No embedding service is configured."
 msgstr ""
 
+#: src/pages/customize/ExtensionsPage.tsx
+msgid "No extensions are in the built-in catalogue yet. Use Add to install an extension bundle (.mcpb or .dxt file) from this computer."
+msgstr "Aún no hay extensiones en el catálogo integrado. Usa Agregar para instalar un paquete de extensión (archivo .mcpb o .dxt) desde esta computadora."
+
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "No group chats yet."
 msgstr "Aún no hay chats de grupo."
@@ -5530,7 +5601,6 @@ msgstr ""
 msgid "Only space-shared documents go to this repository."
 msgstr ""
 
-#: src/pages/customize/ExtensionsPage.tsx
 #: src/pages/customize/SkillsPage.tsx
 #: src/pages/ide/IdePage.tsx
 #: src/pages/ide/terminal.tsx
@@ -6017,7 +6087,6 @@ msgstr "Espera en cola"
 #: src/pages/ComparePanel.tsx
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/DelegationLines.tsx
-#: src/pages/Shell.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Queued"
 msgstr "En cola"
@@ -6047,8 +6116,13 @@ msgid "Reactions"
 msgstr "Reacciones"
 
 #: src/components/integrations/catalog/ToolPicker.tsx
+#: src/components/PeerMessageReceipt.tsx
 msgid "Read"
-msgstr ""
+msgstr "Leído"
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Read by {recipient}"
+msgstr "Leído por {recipient}"
 
 #: src/pages/ide/IdePage.tsx
 msgid "Read only: file is larger than 2 MB"
@@ -6348,6 +6422,10 @@ msgstr "Reemplazar clave de API"
 msgid "Replace key"
 msgstr "Reemplazar clave"
 
+#: src/components/PeerMessageReceipt.tsx
+msgid "Replied"
+msgstr "Respondido"
+
 #: src/pages/Shell.tsx
 msgid "Reply"
 msgstr "Responder"
@@ -6519,6 +6597,7 @@ msgstr ""
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/capabilities/CapabilitiesSettings.tsx
 #: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/customize/ExtensionsPage.tsx
 #: src/pages/dashboard/DashboardPage.tsx
 #: src/pages/GitMemorySettings.tsx
 #: src/pages/import/LocalImportPage.tsx
@@ -6989,6 +7068,14 @@ msgstr ""
 msgid "Sends memory text to {host}"
 msgstr ""
 
+#: src/components/PeerMessageReceipt.tsx
+msgid "Sent"
+msgstr "Enviado"
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Sent to {peer}"
+msgstr "Enviado a {peer}"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Sentry alert"
 msgstr "Alerta de Sentry"
@@ -7160,6 +7247,11 @@ msgstr "Iniciar sesión"
 msgid "Sign in again to manage sessions."
 msgstr ""
 
+#: src/pages/shell/provider-error-message.tsx
+#: src/pages/shell/runtime-settings.tsx
+msgid "Sign in to Antigravity on this computer, then check again."
+msgstr "Inicia sesión en Antigravity en este equipo y vuelve a comprobarlo."
+
 #: src/pages/Auth.tsx
 msgid "Sign in to Ardur"
 msgstr "Inicia sesión en Ardur"
@@ -7196,6 +7288,11 @@ msgstr ""
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Sign-in timed out."
 msgstr ""
+
+#: src/pages/shell/provider-error-message.tsx
+#: src/pages/shell/runtime-settings.tsx
+msgid "Sign-in unknown until the first run"
+msgstr "El inicio de sesión se desconoce hasta la primera ejecución"
 
 #: src/lib/mcp-sign-in.ts
 msgid "Sign-in was cancelled."
@@ -7883,6 +7980,10 @@ msgstr ""
 msgid "Title"
 msgstr "Título"
 
+#: src/components/PeerMessageReceipt.tsx
+msgid "to {peer}"
+msgstr "a {peer}"
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "To use your Claude subscription, choose Runs on → Claude Code in a bot's settings."
 msgstr ""
@@ -8073,6 +8174,10 @@ msgstr "Actualizado"
 msgid "Update"
 msgstr "Actualizar"
 
+#: src/pages/shell/provider-error-message.tsx
+msgid "Update Antigravity to version 1.2.12 or later."
+msgstr "Actualiza Antigravity a la versión 1.2.12 o posterior."
+
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Update available"
 msgstr "Actualización disponible"
@@ -8237,6 +8342,10 @@ msgstr "Voz"
 #: src/pages/system/SystemPage.tsx
 msgid "Voice shortcut"
 msgstr ""
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Waiting for a turn"
+msgstr "Esperando un turno"
 
 #: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx

@@ -63,7 +63,7 @@ async function fixture(events: AgentRuntimeEvent[] = [{ type: "done" }]) {
       send: async (frame) => hub.fromHost(host, decodeHostFrame(encodeHostFrame(frame))),
       close: () => hub.detach(),
     },
-    { "claude-code": fakeRuntime, "codex-app-server": fakeRuntime },
+    { "claude-code": fakeRuntime, "codex-app-server": fakeRuntime, antigravity: fakeRuntime },
   );
   await agent.initialize();
   hub.attach(host, "owner", "generation");
@@ -112,6 +112,7 @@ describe("worker to API hub to host protocol", () => {
   it.each([
     ["claude-code", "anthropic"],
     ["codex-app-server", "openai-codex"],
+    ["antigravity", "antigravity"],
   ] as const)("round-trips optional cache usage and completion for %s", async (kind, provider) => {
     const events: AgentRuntimeEvent[] = [undefined, 0, 42].map((cachedTokens) => ({
       type: "usage",
@@ -124,6 +125,7 @@ describe("worker to API hub to host protocol", () => {
     events.push({ type: "done", text: "Complete" });
     const { client } = await fixture(events);
     const runtime = new RemoteHostRuntime(client, kind);
+    if (kind === "antigravity") expect(runtime.describe().capabilities.tools).toBe(false);
     const received: AgentRuntimeEvent[] = [];
     for await (const event of runtime.run(
       {

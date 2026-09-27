@@ -8,8 +8,8 @@ import {
   showOllamaModel,
   suggestedModelEffort,
 } from "@ardurbot/adapters";
-import type { Actor, UpdateBotInput } from "@ardurbot/contracts";
-import { ollamaThink } from "@ardurbot/contracts";
+import type { Actor, RuntimeKind, UpdateBotInput } from "@ardurbot/contracts";
+import { nativeRuntimeProviders, ollamaThink, validateAntigravityPin } from "@ardurbot/contracts";
 import type { Prisma } from "@ardurbot/db";
 import { findBoundModelCredential, findModelCredential } from "@ardurbot/db";
 import { ORPCError } from "@orpc/server";
@@ -49,22 +49,29 @@ export async function botModelPinUpdate(
   const modelId = input.modelId === undefined ? existing.modelId : input.modelId;
   const runtimeKind = input.runtimeKind ?? existing.runtimeKind ?? "pi";
   if (runtimeKind !== "pi") {
-    if (runtimeKind !== "claude-code" && runtimeKind !== "codex-app-server")
+    if (!(runtimeKind in nativeRuntimeProviders))
       throw new ORPCError("BAD_REQUEST", { message: "Choose a runtime." });
-    const nativeProvider = runtimeKind === "claude-code" ? "anthropic" : "openai-codex";
+    const nativeProvider =
+      nativeRuntimeProviders[runtimeKind as keyof typeof nativeRuntimeProviders];
     if (input.modelCredentialId && input.modelCredentialId !== `native:${runtimeKind}`)
       throw new ORPCError("BAD_REQUEST", {
         message:
           "Native runtimes use their own sign-in. Remove the pinned connection or change the runtime.",
       });
-    const effort = input.thinkingLevel ?? existing.thinkingLevel;
-    if (provider !== nativeProvider || !modelId || !effort)
+    const effort = input.thinkingLevel === undefined ? existing.thinkingLevel : input.thinkingLevel;
+    if (provider !== nativeProvider || !modelId || (runtimeKind !== "antigravity" && !effort))
       throw new ORPCError("BAD_REQUEST", {
         message: "Choose a model and effort for this runtime.",
       });
-    const availability = await nativeRuntimeAvailability(runtimeKind);
+    const availability = await nativeRuntimeAvailability(runtimeKind as RuntimeKind);
     const model = availability.models.find((entry) => entry.id === modelId);
-    if (availability.available && !model?.efforts.includes(effort))
+    if (runtimeKind === "antigravity") {
+      const problem = validateAntigravityPin(
+        { runtimeKind, provider, modelId, effort, credentialId: "native:antigravity", revision: 0 },
+        availability.models,
+      );
+      if (problem) throw new ORPCError("BAD_REQUEST", { message: problem.reason });
+    } else if (availability.available && !model?.efforts.includes(effort!))
       throw new ORPCError("BAD_REQUEST", {
         message: "This runtime cannot honor that model and effort.",
       });

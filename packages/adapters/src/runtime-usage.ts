@@ -83,6 +83,7 @@ export async function* accountRuntimeUsage(
     signal?: AbortSignal;
     record: (usage: UsageEvent) => Promise<void>;
     totals?: ObservedUsageTotals;
+    accounting?: "runtime" | "external";
   },
 ): AsyncGenerator<AgentRuntimeEvent> {
   const pending = new Map<string, UsageEvent>();
@@ -156,8 +157,9 @@ export async function* accountRuntimeUsage(
         break;
       }
       const event = next.value;
-      if (event.type === "usage") await recordUsage(event);
-      else {
+      if (event.type === "usage") {
+        if (options.accounting !== "external") await recordUsage(event);
+      } else {
         if (event.type === "done") outcome = "success";
         yield event;
       }
@@ -183,14 +185,15 @@ export async function* accountRuntimeUsage(
               exhausted = true;
               break;
             }
-            if (next.value.type === "usage") await recordUsage(next.value);
+            if (next.value.type === "usage" && options.accounting !== "external")
+              await recordUsage(next.value);
           }
         } finally {
           await iterator.return?.();
         }
       }
     } else if (!exhausted) await iterator.return?.();
-    if (!observed) {
+    if (!observed && options.accounting !== "external") {
       await persist({ type: "usage", ...fallback.start() });
       await persist({ type: "usage", ...fallback.finish(outcome) });
     }

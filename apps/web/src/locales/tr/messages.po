@@ -745,6 +745,57 @@ msgstr "Yanıtlandı: {0}"
 msgid "Answered: {answer}"
 msgstr "Yanıtlandı: {answer}"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Antigravity"
+msgstr "Antigravity"
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity cannot run comparison turns yet. Choose another runtime."
+msgstr "Antigravity henüz karşılaştırma turlarını çalıştıramıyor. Başka bir çalışma ortamı seçin."
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity cannot use images yet. Remove the image and try again."
+msgstr "Antigravity henüz görselleri kullanamıyor. Görseli kaldırıp tekrar deneyin."
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity could not run this turn. Check the runtime and try again."
+msgstr "Antigravity bu turu çalıştıramadı. Çalışma ortamını kontrol edip tekrar deneyin."
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity did not finish in time. Try again."
+msgstr "Antigravity zamanında tamamlanmadı. Tekrar deneyin."
+
+#. placeholder {0}: pin.modelId ?? ""
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity did not recognise the model {0}. Pick a model from its list."
+msgstr "Antigravity {0} modelini tanımadı. Listesinden bir model seçin."
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity input is too large. Shorten the message or conversation and try again."
+msgstr "Antigravity girdisi çok büyük. Mesajı veya konuşmayı kısaltıp tekrar deneyin."
+
+#. placeholder {0}: availability.version
+#: src/pages/shell/runtime-settings.tsx
+msgid "Antigravity is installed (version {0})"
+msgstr "Antigravity yüklü (sürüm {0})"
+
+#: src/pages/shell/provider-error-message.tsx
+#: src/pages/shell/runtime-settings.tsx
+msgid "Antigravity is not installed on this computer. Install it and sign in there, then check again."
+msgstr "Antigravity bu bilgisayarda yüklü değil. Yükleyip oturum açın, ardından yeniden kontrol edin."
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Antigravity runs on a connected host computer."
+msgstr "Antigravity bağlı bir ana bilgisayarda çalışır."
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity tried to use its own tools, which Ardur does not allow yet. The turn was stopped."
+msgstr "Antigravity kendi araçlarını kullanmayı denedi; Ardur buna henüz izin vermiyor. İşlem durduruldu."
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity's live model list could not be checked. Check again."
+msgstr "Antigravity güncel model listesi kontrol edilemedi. Tekrar kontrol edin."
+
 #: src/pages/ModelDestinations.tsx
 msgid "Any"
 msgstr ""
@@ -1606,6 +1657,7 @@ msgid "Client secret"
 msgstr ""
 
 #: src/pages/board/Board.tsx
+#: src/pages/customize/ExtensionsPage.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/memory/MemoryDocuments.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -2112,6 +2164,10 @@ msgstr ""
 msgid "Cost"
 msgstr ""
 
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Cost unavailable"
+msgstr "Maliyet bilgisi yok"
+
 #: src/pages/ScratchpadSection.tsx
 msgid "Could not add"
 msgstr "Eklenemedi"
@@ -2464,6 +2520,10 @@ msgstr ""
 #: src/pages/TeamBoard.tsx
 msgid "Could not load Team; retry."
 msgstr ""
+
+#: src/pages/customize/ExtensionsPage.tsx
+msgid "Could not load the extension catalogue. Check the connection and try again."
+msgstr "Uzantı kataloğu yüklenemedi. Bağlantıyı kontrol edip tekrar deneyin."
 
 #: src/pages/LearningCurator.tsx
 msgid "Could not load the last check."
@@ -3070,11 +3130,11 @@ msgstr "silindi"
 msgid "Deleting…"
 msgstr "Siliniyor…"
 
-#: src/pages/Shell.tsx
+#: src/components/PeerMessageReceipt.tsx
 msgid "Delivered from {peer}"
 msgstr "{peer} tarafından iletildi"
 
-#: src/pages/Shell.tsx
+#: src/components/PeerMessageReceipt.tsx
 msgid "Delivered to {peer}"
 msgstr "{peer} kişisine iletildi"
 
@@ -3559,10 +3619,11 @@ msgstr ""
 msgid "Experimental"
 msgstr ""
 
+#: src/components/PeerMessageReceipt.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/memory/MemoryProposals.tsx
 msgid "Expired"
-msgstr ""
+msgstr "Süresi doldu"
 
 #: src/pages/DevicesSettings.tsx
 msgid "Expires in five minutes."
@@ -3618,6 +3679,7 @@ msgstr ""
 msgid "failed"
 msgstr "başarısız"
 
+#: src/components/PeerMessageReceipt.tsx
 #: src/lib/run-status-label.ts
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
@@ -3764,6 +3826,10 @@ msgstr ""
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Free memory"
 msgstr ""
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "from {peer}"
+msgstr "{peer} kaynağından"
 
 #: src/pages/customize/PluginsPage.tsx
 #: src/pages/customize/SkillsPage.tsx
@@ -4123,6 +4189,7 @@ msgid "Insights ({insights})"
 msgstr ""
 
 #: src/pages/customize/ConfigureExtension.tsx
+#: src/pages/customize/ExtensionsPage.tsx
 #: src/pages/customize/PluginsPage.tsx
 msgid "Install"
 msgstr ""
@@ -4525,6 +4592,10 @@ msgstr "Kurallar yükleniyor…"
 msgid "Loading system settings…"
 msgstr ""
 
+#: src/pages/customize/ExtensionsPage.tsx
+msgid "Loading the extension catalogue…"
+msgstr "Uzantı kataloğu yükleniyor…"
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Loading tools…"
 msgstr ""
@@ -4828,9 +4899,9 @@ msgstr ""
 msgid "Message event"
 msgstr ""
 
-#: src/pages/Shell.tsx
+#: src/components/PeerMessageReceipt.tsx
 msgid "Message from {peer}"
-msgstr "{peer} botundan mesaj"
+msgstr "{peer} kaynağından mesaj"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Message from anywhere on your desktop."
@@ -4840,10 +4911,6 @@ msgstr ""
 #: src/pages/system/QuickComposer.tsx
 msgid "Message…"
 msgstr "Mesaj…"
-
-#: src/pages/Shell.tsx
-msgid "Messaged {peer}"
-msgstr "{peer} botuna mesaj gönderildi"
 
 #: src/pages/account/AccountMore.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -5194,6 +5261,10 @@ msgstr ""
 msgid "No embedding service is configured."
 msgstr ""
 
+#: src/pages/customize/ExtensionsPage.tsx
+msgid "No extensions are in the built-in catalogue yet. Use Add to install an extension bundle (.mcpb or .dxt file) from this computer."
+msgstr "Yerleşik katalogda henüz uzantı yok. Bu bilgisayardan bir uzantı paketi (.mcpb veya .dxt dosyası) yüklemek için Ekle'yi kullanın."
+
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "No group chats yet."
 msgstr ""
@@ -5530,7 +5601,6 @@ msgstr ""
 msgid "Only space-shared documents go to this repository."
 msgstr ""
 
-#: src/pages/customize/ExtensionsPage.tsx
 #: src/pages/customize/SkillsPage.tsx
 #: src/pages/ide/IdePage.tsx
 #: src/pages/ide/terminal.tsx
@@ -6017,7 +6087,6 @@ msgstr "Kuyruk bekleme süresi"
 #: src/pages/ComparePanel.tsx
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/DelegationLines.tsx
-#: src/pages/Shell.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Queued"
 msgstr "Kuyrukta"
@@ -6047,8 +6116,13 @@ msgid "Reactions"
 msgstr "Tepkiler"
 
 #: src/components/integrations/catalog/ToolPicker.tsx
+#: src/components/PeerMessageReceipt.tsx
 msgid "Read"
-msgstr ""
+msgstr "Okundu"
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Read by {recipient}"
+msgstr "{recipient} tarafından okundu"
 
 #: src/pages/ide/IdePage.tsx
 msgid "Read only: file is larger than 2 MB"
@@ -6348,6 +6422,10 @@ msgstr "API anahtarını değiştir"
 msgid "Replace key"
 msgstr "Anahtarı değiştir"
 
+#: src/components/PeerMessageReceipt.tsx
+msgid "Replied"
+msgstr "Yanıtlandı"
+
 #: src/pages/Shell.tsx
 msgid "Reply"
 msgstr "Yanıtla"
@@ -6519,6 +6597,7 @@ msgstr ""
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/capabilities/CapabilitiesSettings.tsx
 #: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/customize/ExtensionsPage.tsx
 #: src/pages/dashboard/DashboardPage.tsx
 #: src/pages/GitMemorySettings.tsx
 #: src/pages/import/LocalImportPage.tsx
@@ -6989,6 +7068,14 @@ msgstr ""
 msgid "Sends memory text to {host}"
 msgstr ""
 
+#: src/components/PeerMessageReceipt.tsx
+msgid "Sent"
+msgstr "Gönderildi"
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Sent to {peer}"
+msgstr "{peer} için gönderildi"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Sentry alert"
 msgstr ""
@@ -7160,6 +7247,11 @@ msgstr "Oturum aç"
 msgid "Sign in again to manage sessions."
 msgstr ""
 
+#: src/pages/shell/provider-error-message.tsx
+#: src/pages/shell/runtime-settings.tsx
+msgid "Sign in to Antigravity on this computer, then check again."
+msgstr "Bu bilgisayarda Antigravity oturumu açın, ardından yeniden kontrol edin."
+
 #: src/pages/Auth.tsx
 msgid "Sign in to Ardur"
 msgstr "Ardur'da oturum aç"
@@ -7196,6 +7288,11 @@ msgstr ""
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Sign-in timed out."
 msgstr ""
+
+#: src/pages/shell/provider-error-message.tsx
+#: src/pages/shell/runtime-settings.tsx
+msgid "Sign-in unknown until the first run"
+msgstr "İlk çalıştırmaya kadar oturum açma durumu bilinmiyor"
 
 #: src/lib/mcp-sign-in.ts
 msgid "Sign-in was cancelled."
@@ -7883,6 +7980,10 @@ msgstr ""
 msgid "Title"
 msgstr "Başlık"
 
+#: src/components/PeerMessageReceipt.tsx
+msgid "to {peer}"
+msgstr "{peer} için"
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "To use your Claude subscription, choose Runs on → Claude Code in a bot's settings."
 msgstr ""
@@ -8073,6 +8174,10 @@ msgstr ""
 msgid "Update"
 msgstr ""
 
+#: src/pages/shell/provider-error-message.tsx
+msgid "Update Antigravity to version 1.2.12 or later."
+msgstr "Antigravity uygulamasını 1.2.12 veya sonraki bir sürüme güncelleyin."
+
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Update available"
 msgstr ""
@@ -8237,6 +8342,10 @@ msgstr "Ses"
 #: src/pages/system/SystemPage.tsx
 msgid "Voice shortcut"
 msgstr ""
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Waiting for a turn"
+msgstr "Sıra bekliyor"
 
 #: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx

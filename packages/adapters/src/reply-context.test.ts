@@ -3,7 +3,11 @@ import type { PrismaClient } from "@ardurbot/db";
 import { describe, expect, it, vi } from "vitest";
 import { loadReplyContext, messageToAgentHistoryText } from "./reply-context.js";
 
-function harness(replyTo: unknown = null, replyQuote: string | null = null) {
+function harness(
+  replyTo: unknown = null,
+  replyQuote: string | null = null,
+  quietDeliveryIds: string[] = [],
+) {
   const findFirst = vi.fn().mockResolvedValue({
     id: "user-reply",
     threadId: "thread-1",
@@ -13,7 +17,12 @@ function harness(replyTo: unknown = null, replyQuote: string | null = null) {
     replyQuote,
     replyTo,
   });
-  return { prisma: { message: { findFirst } } as unknown as PrismaClient, findFirst };
+  const findMany = vi.fn().mockResolvedValue(quietDeliveryIds.map((id) => ({ id })));
+  return {
+    prisma: { message: { findFirst }, botMessageDelivery: { findMany } } as unknown as PrismaClient,
+    findFirst,
+    findMany,
+  };
 }
 
 const target = {
@@ -131,6 +140,28 @@ describe("reply context", () => {
     expect(context).toContain('"quotedText":"just this span"');
     expect(context).not.toContain("Test message 1/3: Hello!");
     expect(context).toContain('"messageId":"message-first"');
+  });
+
+  it("does not reintroduce a quiet receipt through a stored reply quote", async () => {
+    const receipt = {
+      ...target,
+      blocks: [
+        {
+          kind: "bot_message_received",
+          fromBotId: "sender",
+          fromBotName: "Sender",
+          text: "EXPIRED_QUOTE_SENTINEL",
+          deliveryId: "quiet-quote",
+        },
+        { kind: "text", text: "Keep adjacent text" },
+      ],
+    };
+    const { prisma } = harness(receipt, "EXPIRED_QUOTE_SENTINEL", ["quiet-quote"]);
+
+    const context = await loadReplyContext(prisma, "thread-1", "user-reply");
+
+    expect(context).not.toContain("EXPIRED_QUOTE_SENTINEL");
+    expect(context).toContain("Keep adjacent text");
   });
 
   it("caps a stored excerpt at the quote limit", async () => {

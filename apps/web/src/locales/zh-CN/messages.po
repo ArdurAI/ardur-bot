@@ -745,6 +745,57 @@ msgstr "已回答：{0}"
 msgid "Answered: {answer}"
 msgstr "已回答：{answer}"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Antigravity"
+msgstr "Antigravity"
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity cannot run comparison turns yet. Choose another runtime."
+msgstr "Antigravity 暂不支持对比运行。请选择其他运行环境。"
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity cannot use images yet. Remove the image and try again."
+msgstr "Antigravity 暂不支持图片。请移除图片后重试。"
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity could not run this turn. Check the runtime and try again."
+msgstr "Antigravity 无法完成本轮运行。请检查运行环境后重试。"
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity did not finish in time. Try again."
+msgstr "Antigravity 未能按时完成。请重试。"
+
+#. placeholder {0}: pin.modelId ?? ""
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity did not recognise the model {0}. Pick a model from its list."
+msgstr "Antigravity 无法识别模型 {0}。请从其列表中选择模型。"
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity input is too large. Shorten the message or conversation and try again."
+msgstr "Antigravity 输入过大。请缩短消息或对话后重试。"
+
+#. placeholder {0}: availability.version
+#: src/pages/shell/runtime-settings.tsx
+msgid "Antigravity is installed (version {0})"
+msgstr "Antigravity 已安装（版本 {0}）"
+
+#: src/pages/shell/provider-error-message.tsx
+#: src/pages/shell/runtime-settings.tsx
+msgid "Antigravity is not installed on this computer. Install it and sign in there, then check again."
+msgstr "此计算机未安装 Antigravity。安装并登录后重新检查。"
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Antigravity runs on a connected host computer."
+msgstr "Antigravity 在已连接的主机上运行。"
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity tried to use its own tools, which Ardur does not allow yet. The turn was stopped."
+msgstr "Antigravity 尝试使用自己的工具，Ardur 目前尚不允许此操作。已停止本轮运行。"
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Antigravity's live model list could not be checked. Check again."
+msgstr "无法检查 Antigravity 的实时模型列表。请重新检查。"
+
 #: src/pages/ModelDestinations.tsx
 msgid "Any"
 msgstr ""
@@ -1606,6 +1657,7 @@ msgid "Client secret"
 msgstr ""
 
 #: src/pages/board/Board.tsx
+#: src/pages/customize/ExtensionsPage.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/memory/MemoryDocuments.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -2112,6 +2164,10 @@ msgstr ""
 msgid "Cost"
 msgstr "费用"
 
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Cost unavailable"
+msgstr "费用不可用"
+
 #: src/pages/ScratchpadSection.tsx
 msgid "Could not add"
 msgstr "无法添加"
@@ -2464,6 +2520,10 @@ msgstr ""
 #: src/pages/TeamBoard.tsx
 msgid "Could not load Team; retry."
 msgstr ""
+
+#: src/pages/customize/ExtensionsPage.tsx
+msgid "Could not load the extension catalogue. Check the connection and try again."
+msgstr "无法加载扩展目录。请检查连接后重试。"
 
 #: src/pages/LearningCurator.tsx
 msgid "Could not load the last check."
@@ -3070,11 +3130,11 @@ msgstr "已删除"
 msgid "Deleting…"
 msgstr "正在删除…"
 
-#: src/pages/Shell.tsx
+#: src/components/PeerMessageReceipt.tsx
 msgid "Delivered from {peer}"
 msgstr "已收到 {peer} 的消息"
 
-#: src/pages/Shell.tsx
+#: src/components/PeerMessageReceipt.tsx
 msgid "Delivered to {peer}"
 msgstr "已发送给 {peer}"
 
@@ -3559,10 +3619,11 @@ msgstr "展开 {0}"
 msgid "Experimental"
 msgstr ""
 
+#: src/components/PeerMessageReceipt.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/memory/MemoryProposals.tsx
 msgid "Expired"
-msgstr ""
+msgstr "已过期"
 
 #: src/pages/DevicesSettings.tsx
 msgid "Expires in five minutes."
@@ -3618,6 +3679,7 @@ msgstr ""
 msgid "failed"
 msgstr "失败"
 
+#: src/components/PeerMessageReceipt.tsx
 #: src/lib/run-status-label.ts
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
@@ -3764,6 +3826,10 @@ msgstr "免费"
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Free memory"
 msgstr ""
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "from {peer}"
+msgstr "来自 {peer}"
 
 #: src/pages/customize/PluginsPage.tsx
 #: src/pages/customize/SkillsPage.tsx
@@ -4123,6 +4189,7 @@ msgid "Insights ({insights})"
 msgstr "建议（{insights}）"
 
 #: src/pages/customize/ConfigureExtension.tsx
+#: src/pages/customize/ExtensionsPage.tsx
 #: src/pages/customize/PluginsPage.tsx
 msgid "Install"
 msgstr ""
@@ -4525,6 +4592,10 @@ msgstr "正在加载规则…"
 msgid "Loading system settings…"
 msgstr ""
 
+#: src/pages/customize/ExtensionsPage.tsx
+msgid "Loading the extension catalogue…"
+msgstr "正在加载扩展目录…"
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Loading tools…"
 msgstr ""
@@ -4828,7 +4899,7 @@ msgstr "消息输入框"
 msgid "Message event"
 msgstr ""
 
-#: src/pages/Shell.tsx
+#: src/components/PeerMessageReceipt.tsx
 msgid "Message from {peer}"
 msgstr "来自 {peer} 的消息"
 
@@ -4840,10 +4911,6 @@ msgstr ""
 #: src/pages/system/QuickComposer.tsx
 msgid "Message…"
 msgstr "消息…"
-
-#: src/pages/Shell.tsx
-msgid "Messaged {peer}"
-msgstr "已发给 {peer}"
 
 #: src/pages/account/AccountMore.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -5194,6 +5261,10 @@ msgstr ""
 msgid "No embedding service is configured."
 msgstr ""
 
+#: src/pages/customize/ExtensionsPage.tsx
+msgid "No extensions are in the built-in catalogue yet. Use Add to install an extension bundle (.mcpb or .dxt file) from this computer."
+msgstr "内置目录中还没有扩展。使用“添加”从这台电脑安装扩展包（.mcpb 或 .dxt 文件）。"
+
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "No group chats yet."
 msgstr "还没有群聊。"
@@ -5530,7 +5601,6 @@ msgstr ""
 msgid "Only space-shared documents go to this repository."
 msgstr ""
 
-#: src/pages/customize/ExtensionsPage.tsx
 #: src/pages/customize/SkillsPage.tsx
 #: src/pages/ide/IdePage.tsx
 #: src/pages/ide/terminal.tsx
@@ -6017,7 +6087,6 @@ msgstr "排队等待"
 #: src/pages/ComparePanel.tsx
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/DelegationLines.tsx
-#: src/pages/Shell.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Queued"
 msgstr "排队中"
@@ -6047,8 +6116,13 @@ msgid "Reactions"
 msgstr "表情回应"
 
 #: src/components/integrations/catalog/ToolPicker.tsx
+#: src/components/PeerMessageReceipt.tsx
 msgid "Read"
-msgstr ""
+msgstr "已读"
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Read by {recipient}"
+msgstr "已由 {recipient} 阅读"
 
 #: src/pages/ide/IdePage.tsx
 msgid "Read only: file is larger than 2 MB"
@@ -6348,6 +6422,10 @@ msgstr "替换 API 密钥"
 msgid "Replace key"
 msgstr "替换密钥"
 
+#: src/components/PeerMessageReceipt.tsx
+msgid "Replied"
+msgstr "已回复"
+
 #: src/pages/Shell.tsx
 msgid "Reply"
 msgstr "回复"
@@ -6519,6 +6597,7 @@ msgstr ""
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/capabilities/CapabilitiesSettings.tsx
 #: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/customize/ExtensionsPage.tsx
 #: src/pages/dashboard/DashboardPage.tsx
 #: src/pages/GitMemorySettings.tsx
 #: src/pages/import/LocalImportPage.tsx
@@ -6989,6 +7068,14 @@ msgstr ""
 msgid "Sends memory text to {host}"
 msgstr ""
 
+#: src/components/PeerMessageReceipt.tsx
+msgid "Sent"
+msgstr "已发送"
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Sent to {peer}"
+msgstr "已发送给 {peer}"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Sentry alert"
 msgstr "Sentry 告警"
@@ -7160,6 +7247,11 @@ msgstr "登录"
 msgid "Sign in again to manage sessions."
 msgstr ""
 
+#: src/pages/shell/provider-error-message.tsx
+#: src/pages/shell/runtime-settings.tsx
+msgid "Sign in to Antigravity on this computer, then check again."
+msgstr "在此计算机登录 Antigravity，然后重新检查。"
+
 #: src/pages/Auth.tsx
 msgid "Sign in to Ardur"
 msgstr "登录 Ardur"
@@ -7196,6 +7288,11 @@ msgstr "需要登录。请重新连接。"
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Sign-in timed out."
 msgstr ""
+
+#: src/pages/shell/provider-error-message.tsx
+#: src/pages/shell/runtime-settings.tsx
+msgid "Sign-in unknown until the first run"
+msgstr "首次运行前无法确定登录状态"
 
 #: src/lib/mcp-sign-in.ts
 msgid "Sign-in was cancelled."
@@ -7883,6 +7980,10 @@ msgstr ""
 msgid "Title"
 msgstr "标题"
 
+#: src/components/PeerMessageReceipt.tsx
+msgid "to {peer}"
+msgstr "发送给 {peer}"
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "To use your Claude subscription, choose Runs on → Claude Code in a bot's settings."
 msgstr ""
@@ -8073,6 +8174,10 @@ msgstr "已是最新"
 msgid "Update"
 msgstr "更新"
 
+#: src/pages/shell/provider-error-message.tsx
+msgid "Update Antigravity to version 1.2.12 or later."
+msgstr "请将 Antigravity 更新至 1.2.12 或更高版本。"
+
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Update available"
 msgstr "有可用更新"
@@ -8237,6 +8342,10 @@ msgstr "语音"
 #: src/pages/system/SystemPage.tsx
 msgid "Voice shortcut"
 msgstr ""
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Waiting for a turn"
+msgstr "等待轮次"
 
 #: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx
