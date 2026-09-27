@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { COMPUTER_IMAGE_DOWNLOAD_FAILED_CODE, errorDataCode } from "@ardurbot/contracts";
-import { act, useReducer, useState } from "react";
+import { act, useReducer, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 
@@ -10,7 +10,6 @@ vi.mock("@lingui/core/macro", () => ({
 
 import { loadComputerScreen } from "../../lib/computer-screen";
 import {
-  computerScreenResultAction,
   initialComputerErrorState,
   reduceComputerError,
   visibleComputerError,
@@ -71,16 +70,21 @@ it("keeps a boot download error after a pending screen request returns no URL", 
 
   function Harness() {
     const [state, dispatch] = useReducer(reduceComputerError, initialComputerErrorState);
+    const currentRequest = useRef(0);
     const displayedError = visibleComputerError(state, false);
     return (
       <>
         <button
           type="button"
           onClick={() => {
+            const requestId = ++currentRequest.current;
+            dispatch({ type: "screen-requested", requestId, computerId: "computer" });
             void loadComputerScreen({
               load: () => screenRequest,
-              isCurrent: () => true,
-              commit: (result) => dispatch({ type: "screen-result", error: result.error }),
+              isCurrent: () => requestId === currentRequest.current,
+              observe: (result) =>
+                dispatch({ type: "screen-result", requestId, computerId: "computer", result }),
+              commit: () => undefined,
               fallbackError: "Could not connect",
             });
           }}
@@ -143,19 +147,6 @@ it("keeps a boot download error after a pending screen request returns no URL", 
   await act(async () => root.unmount());
 });
 
-it("keeps a download failure after an earlier explicit retry succeeds late", () => {
-  const failed = reduceComputerError(initialComputerErrorState, {
-    type: "operation-failed",
-    message: "Computer image could not be downloaded",
-    code: COMPUTER_IMAGE_DOWNLOAD_FAILED_CODE,
-  });
-  const recovered = reduceComputerError(
-    failed,
-    computerScreenResultAction({ url: "/screen", error: null }, true),
-  );
-  expect(visibleComputerError(recovered, true)?.code).toBe(COMPUTER_IMAGE_DOWNLOAD_FAILED_CODE);
-});
-
 it("shows the screen after an explicit retry recovers from a post-boot refresh failure", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const container = document.createElement("div");
@@ -169,6 +160,7 @@ it("shows the screen after an explicit retry recovers from a post-boot refresh f
   function Harness() {
     const [state, dispatch] = useReducer(reduceComputerError, initialComputerErrorState);
     const [screenUrl, setScreenUrl] = useState<string | null>(null);
+    const currentRequest = useRef(0);
     const displayedError = visibleComputerError(state, Boolean(screenUrl));
     return (
       <>
@@ -191,13 +183,19 @@ it("shows the screen after an explicit retry recovers from a post-boot refresh f
             code={displayedError.code}
             onRetryProvision={() => undefined}
             onRetryScreen={() => {
+              const requestId = ++currentRequest.current;
+              dispatch({
+                type: "screen-requested",
+                requestId,
+                computerId: "computer",
+                retryErrorId: state.operation?.errorId,
+              });
               void loadComputerScreen({
                 load: loadScreen,
-                isCurrent: () => true,
-                commit: (result) => {
-                  setScreenUrl(result.url);
-                  dispatch(computerScreenResultAction(result, true));
-                },
+                isCurrent: () => requestId === currentRequest.current,
+                observe: (result) =>
+                  dispatch({ type: "screen-result", requestId, computerId: "computer", result }),
+                commit: (result) => setScreenUrl(result.url),
                 fallbackError: "Could not connect",
               });
             }}
@@ -223,6 +221,79 @@ it("shows the screen after an explicit retry recovers from a post-boot refresh f
   );
   expect(loadScreen).toHaveBeenCalledOnce();
   expect(container.querySelector('[role="alert"]')).toBeNull();
+  expect(container.querySelector("iframe")?.getAttribute("src")).toBe("/screen");
+  await act(async () => root.unmount());
+});
+
+it("keeps an explicit retry when a background screen request supersedes it", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const container = document.createElement("div");
+  document.body.append(container);
+  containers.push(container);
+  const root = createRoot(container);
+  let finishRetry!: (screen: { url: string | null }) => void;
+  let finishBackground!: (screen: { url: string | null }) => void;
+  const retryRequest = new Promise<{ url: string | null }>((resolve) => {
+    finishRetry = resolve;
+  });
+  const backgroundRequest = new Promise<{ url: string | null }>((resolve) => {
+    finishBackground = resolve;
+  });
+  const failed = reduceComputerError(initialComputerErrorState, {
+    type: "operation-failed",
+    message: "Refresh failed",
+  });
+
+  function Harness() {
+    const [state, dispatch] = useReducer(reduceComputerError, failed);
+    const [screenUrl, setScreenUrl] = useState<string | null>(null);
+    const currentRequest = useRef(0);
+    const displayedError = visibleComputerError(state, Boolean(screenUrl));
+    function startScreenRequest(load: () => Promise<{ url: string | null }>, retry = false) {
+      const requestId = ++currentRequest.current;
+      dispatch({
+        type: "screen-requested",
+        requestId,
+        computerId: "computer",
+        retryErrorId: retry ? state.operation?.errorId : undefined,
+      });
+      void loadComputerScreen({
+        load,
+        isCurrent: () => requestId === currentRequest.current,
+        observe: (result) =>
+          dispatch({ type: "screen-result", requestId, computerId: "computer", result }),
+        commit: (result) => setScreenUrl(result.url),
+        fallbackError: "Could not connect",
+      });
+    }
+    return (
+      <>
+        <button type="button" onClick={() => startScreenRequest(() => backgroundRequest)}>
+          Background refresh
+        </button>
+        {displayedError ? (
+          <ComputerScreenError
+            message={displayedError.message}
+            code={displayedError.code}
+            onRetryProvision={() => undefined}
+            onRetryScreen={() => startScreenRequest(() => retryRequest, true)}
+          />
+        ) : screenUrl ? (
+          <iframe title="Computer screen" src={screenUrl} />
+        ) : null}
+      </>
+    );
+  }
+
+  await act(async () => root.render(<Harness />));
+  await act(async () =>
+    container.querySelector<HTMLButtonElement>('[role="alert"] button')?.click(),
+  );
+  await act(async () => container.querySelector<HTMLButtonElement>("button")?.click());
+  await act(async () => finishRetry({ url: "/older-screen" }));
+  expect(container.querySelector('[role="alert"]')).toBeNull();
+  expect(container.querySelector("iframe")).toBeNull();
+  await act(async () => finishBackground({ url: "/screen" }));
   expect(container.querySelector("iframe")?.getAttribute("src")).toBe("/screen");
   await act(async () => root.unmount());
 });

@@ -234,7 +234,6 @@ import { BotSettings, CreateBotForm } from "./shell/bot-panel";
 import { BotCreatePicker } from "./shell/bot-picker";
 import { CommandPalette, isCommandPaletteHotkey } from "./shell/command-palette";
 import {
-  computerScreenResultAction,
   initialComputerErrorState,
   reduceComputerError,
   visibleComputerError,
@@ -968,15 +967,27 @@ export function ShellPage({
   async function refreshComputerScreen(id: string, explicitRetry = false) {
     if (!computerVisible.current) return null;
     const request = ++screenRequest.current;
+    dispatchComputerError({
+      type: "screen-requested",
+      requestId: request,
+      computerId: id,
+      retryErrorId: explicitRetry ? computerErrorState.operation?.errorId : undefined,
+    });
     return loadComputerScreen({
       load: () => rpc.computer.screenUrl({ botId: id }),
+      observe: (result) =>
+        dispatchComputerError({
+          type: "screen-result",
+          requestId: request,
+          computerId: id,
+          result,
+        }),
       isCurrent: () =>
         request === screenRequest.current &&
         (activeBotId.current === id || computerBotIdRef.current === id) &&
         computerVisible.current,
       commit: (screen) => {
         setScreenUrl(screen.url);
-        dispatchComputerError(computerScreenResultAction(screen, explicitRetry));
         cacheComputerFor(id, { screenUrl: screen.url });
       },
       fallbackError: t`Could not connect to the computer screen`,
