@@ -176,8 +176,12 @@ export function BotModelChip({
   ]
     .filter(Boolean)
     .join(" · ");
+  // An admitted explicit group pin can still carry the stored "off"; compare both sides in
+  // the same representation so an unchanged local selection never reads as a change.
   const nextDiffers =
-    display === "using" && run?.runtimePin && !sameSelection(run.runtimePin, next);
+    display === "using" &&
+    run?.runtimePin &&
+    !sameSelection(normalizeSuppliedNextPin(run.runtimePin, settings), next);
   return (
     <span className="inline-flex min-w-0 items-center gap-1">
       {onClick ? (

@@ -469,6 +469,39 @@ describe("group model control", () => {
     },
   );
 
+  it("does not disclose an admitted explicit-off group run that still stores off", async () => {
+    // The stored override keeps "off" for a reasoning-capable local model and the admitted run
+    // carries that same value; only the display normalises it.
+    const effectiveRuntimePin = {
+      ...pin,
+      provider: "ollama",
+      modelId: "local-model",
+      effort: "off",
+      revision: 4,
+    };
+    const localSettings = {
+      ...settings!,
+      catalog: [
+        { ...settings!.catalog[0]!, provider: "ollama", id: "local-model", reasoning: true },
+      ],
+      credentials: [{ ...settings!.credentials[0]!, provider: "ollama", modelId: "local-model" }],
+    };
+    await act(async () =>
+      root.render(
+        <BotModelChip
+          bot={{ ...bot, modelProvider: "ollama", modelId: "local-model", thinkingLevel: "off" }}
+          settings={localSettings}
+          pin={effectiveRuntimePin}
+          nextPin={effectiveRuntimePin}
+          display="using"
+          run={{ runtimePin: { ...effectiveRuntimePin } }}
+        />,
+      ),
+    );
+    expect(container.querySelector("details")).toBeNull();
+    expect(container.textContent).not.toContain("Next run");
+  });
+
   it("shows a running disabled reasoning choice as off and available", async () => {
     const localSettings = {
       ...settings!,
