@@ -200,7 +200,7 @@ export async function resolveRunModelPin(input: {
     if (error instanceof AnthropicOAuthUnavailableError) {
       return runtimePinProblem(pin, "pin-credential-missing", error.message);
     }
-    if (error instanceof RuntimePinError) return error.problem;
+    if (error instanceof RuntimePinError) return { ...error.problem, pin };
     throw error;
   }
 }

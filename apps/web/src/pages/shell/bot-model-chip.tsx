@@ -100,6 +100,20 @@ function nextBotPin(bot: Bot, settings: ModelSettings | null): Omit<RuntimePin, 
   };
 }
 
+function normalizeSuppliedNextPin(pin: RuntimePin, settings: ModelSettings | null): RuntimePin {
+  if (pin.provider !== "ollama" || pin.effort !== "off") return pin;
+  const credential = settings?.credentials.find(
+    (item) => item.id === pin.credentialId && item.provider === pin.provider,
+  );
+  const entry = settings?.catalog.find(
+    (item) => item.provider === pin.provider && item.id === pin.modelId,
+  );
+  return {
+    ...pin,
+    effort: inheritedOllamaEffort("off", credential?.reasoning ?? entry?.reasoning),
+  };
+}
+
 function sameSelection(a: Omit<RuntimePin, "revision">, b: Omit<RuntimePin, "revision">): boolean {
   return (
     a.runtimeKind === b.runtimeKind &&
@@ -151,7 +165,7 @@ export function BotModelChip({
       : (model.effortLabel ?? model.thinkingLevel);
   const label = `${displayBot.runtimeKind && displayBot.runtimeKind !== "pi" ? "" : "Ardur · "}${model.providerLabel} · ${model.label}${effort ? ` · ${effort}` : ""}${model.unavailable ? t` · not available` : ""}`;
   const currentId = requested?.modelId ?? displayBot.modelId ?? model.label;
-  const next = nextPin ?? nextBotPin(bot, settings);
+  const next = nextPin ? normalizeSuppliedNextPin(nextPin, settings) : nextBotPin(bot, settings);
   const connection = settings?.credentials.find((item) => item.id === next.credentialId);
   const nextLabel = [
     runtimeNames[next.runtimeKind],

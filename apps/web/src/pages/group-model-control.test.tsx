@@ -420,6 +420,55 @@ describe("group model control", () => {
     },
   );
 
+  it.each([false, true])(
+    "does not disclose an unchanged explicit-off group selection with reasoning %s",
+    async (reasoning) => {
+      const effectiveRuntimePin = {
+        ...pin,
+        provider: "ollama",
+        modelId: "local-model",
+        effort: "off",
+        revision: 4,
+      };
+      const groupMember = { ...member, effectiveRuntimePin };
+      const localSettings = {
+        ...settings!,
+        catalog: [
+          {
+            ...settings!.catalog[0]!,
+            provider: "ollama",
+            id: "local-model",
+            reasoning,
+          },
+        ],
+        credentials: [{ ...settings!.credentials[0]!, provider: "ollama", modelId: "local-model" }],
+      };
+      await act(async () =>
+        root.render(
+          <BotModelChip
+            bot={{
+              ...bot,
+              modelProvider: "ollama",
+              modelId: "local-model",
+              thinkingLevel: "off",
+            }}
+            settings={localSettings}
+            pin={groupMember.effectiveRuntimePin}
+            nextPin={groupMember.effectiveRuntimePin}
+            display="using"
+            run={{
+              runtimePin: {
+                ...effectiveRuntimePin,
+                effort: reasoning ? "none" : null,
+              },
+            }}
+          />,
+        ),
+      );
+      expect(container.querySelector("details")).toBeNull();
+    },
+  );
+
   it("shows a running disabled reasoning choice as off and available", async () => {
     const localSettings = {
       ...settings!,
