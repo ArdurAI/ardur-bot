@@ -255,6 +255,7 @@ async function handle(value) {
       "ask-user-held-text",
       "tool-held-text",
       "tool-held-text-complete",
+      "tool-split-secret",
       "takeover",
       "pending-tool-malformed",
       "queue-overflow",
@@ -268,6 +269,13 @@ async function handle(value) {
       scenario === "tool-held-text-complete"
     )
       message(`Please approve the dif${process.env.ARDUR_HERMES_PROVIDER_KEY[0]}`);
+    const splitSecret =
+      scenario === "tool-split-secret"
+        ? value.params.prompt[0].text === "provider"
+          ? process.env.ARDUR_HERMES_PROVIDER_KEY
+          : mcp.args.at(-1)
+        : undefined;
+    if (splitSecret) message(`before ${splitSecret.slice(0, 4)}`);
     const client = new Client({ name: "fixture", version: "0.1.0" });
     const transport = new StdioClientTransport({
       command: mcp.command,
@@ -301,7 +309,11 @@ async function handle(value) {
           : { value: "hello" };
     const result = await client.callTool({ name: toolName, arguments: args });
     message(
-      scenario === "tool-held-text-complete" ? " after tool" : JSON.stringify(result.content),
+      scenario === "tool-split-secret"
+        ? `${splitSecret.slice(4)} after tool`
+        : scenario === "tool-held-text-complete"
+          ? " after tool"
+          : JSON.stringify(result.content),
     );
     await client.close();
     send({ id: value.id, result: { stopReason: "end_turn" } });

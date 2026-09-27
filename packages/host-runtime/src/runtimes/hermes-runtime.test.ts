@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import type { AgentRunRequest, AgentRuntimeEvent } from "@ardurbot/adapter-kit";
 import { describe, expect, it, vi } from "vitest";
+import { createArdurToolBridge } from "./claude-mcp-bridge.js";
 import {
   createHermesTextRedactor,
   HermesRuntime,
@@ -226,7 +227,7 @@ describe("HermesRuntime M0 ACP seam", () => {
     expect(events.some((event) => event.type === "done")).toBe(false);
   });
 
-  it("flushes held text before an ordinary tool event", async () => {
+  it("keeps held text across an ordinary tool event", async () => {
     const events = await collect(
       runtime("tool-held-text-complete"),
       request({
@@ -235,19 +236,74 @@ describe("HermesRuntime M0 ACP seam", () => {
       }),
     );
     const textAndTool = events.filter((event) => event.type === "text" || event.type === "tool");
-    expect(textAndTool.map((event) => event.type)).toEqual(["text", "text", "tool", "text"]);
-    expect(
-      textAndTool
-        .slice(0, 2)
-        .map((event) => (event.type === "text" ? event.text : ""))
-        .join(""),
-    ).toBe("Please approve the diff");
-    expect(textAndTool.at(-1)).toMatchObject({ type: "text", text: " after tool" });
+    expect(textAndTool.map((event) => event.type)).toEqual(["text", "tool", "text"]);
+    expect(textAndTool[0]).toMatchObject({ type: "text", text: "Please approve the dif" });
+    expect(textAndTool.at(-1)).toMatchObject({ type: "text", text: "f after tool" });
     expect(events.map((event) => (event.type === "text" ? event.text : "")).join("")).not.toContain(
       "fixture-provider-key-123",
     );
     expect(events.at(-1)).toEqual({ type: "done" });
   });
+
+  for (const kind of ["provider", "relay"] as const) {
+    it(`holds a ${kind} prefix across an ordinary bridge tool event`, async () => {
+      const relay = "a1".repeat(32);
+      const run = request({
+        tools: [{ name: "fixture_echo", description: "Echo", inputSchema: { type: "object" } }],
+        executeTool: async () => ({ echoed: "hello" }),
+      });
+      const secret = kind === "provider" ? run.model.apiKey! : relay;
+      const events: AgentRuntimeEvent[] = [];
+      const emitText = createHermesTextRedactor([run.model.apiKey!, relay], (text) => {
+        events.push({ type: "text", text });
+      });
+      const pause = vi.fn();
+      const bridge = createArdurToolBridge(
+        run,
+        (event) => events.push(event),
+        pause,
+        () => true,
+        () => emitText("", true),
+      );
+      emitText(`before ${secret.slice(0, 4)}`);
+      await bridge.call("fixture_echo", { value: "hello" });
+      emitText(`${secret.slice(4)} after tool`);
+      emitText("", true);
+
+      const text = events
+        .filter((event) => event.type === "text")
+        .map((event) => event.text)
+        .join("");
+      expect(text.includes(secret)).toBe(false);
+      expect(text.includes("[redacted]")).toBe(true);
+      expect(events.map((event) => event.type)).toEqual(["text", "tool", "text"]);
+      expect(events.some((event) => event.type === "tool" && event.name === "fixture_echo")).toBe(
+        true,
+      );
+      expect(pause).not.toHaveBeenCalled();
+    });
+
+    it(`redacts a ${kind} secret split around a successful tool call`, async () => {
+      const run = request({
+        prompt: kind,
+        tools: [{ name: "fixture_echo", description: "Echo", inputSchema: { type: "object" } }],
+        executeTool: async () => ({ echoed: "hello" }),
+      });
+      const events = await collect(runtime("tool-split-secret"), run);
+      const text = events
+        .filter((event) => event.type === "text")
+        .map((event) => event.text)
+        .join("");
+      expect(
+        kind === "provider" ? text.includes(run.model.apiKey!) : /[a-f0-9]{64}/.test(text),
+      ).toBe(false);
+      expect(text.includes("[redacted]")).toBe(true);
+      expect(events.some((event) => event.type === "tool" && event.name === "fixture_echo")).toBe(
+        true,
+      );
+      expect(events.at(-1)).toEqual({ type: "done" });
+    });
+  }
 
   for (const scenario of ["held-native", "held-malformed"]) {
     it(`flushes held text before ${scenario} fails`, async () => {
