@@ -171,6 +171,67 @@ describe("GuidedSetupView", () => {
     }
   });
 
+  it("offers Start after cancellation so saved progress can be checked again", async () => {
+    const view = mount();
+    try {
+      const snapshot = fixture("waiting-input");
+      snapshot.currentStep = null;
+      snapshot.steps[1]!.status = "cancelled";
+      await view.render(snapshot);
+      const start = [...view.host.querySelectorAll("button")].find(
+        (button) => button.textContent === "Start setup",
+      );
+      expect(start).toBeDefined();
+      await act(async () => start?.click());
+      expect(view.actions.onStart).toHaveBeenCalledOnce();
+    } finally {
+      await view.cleanup();
+    }
+  });
+
+  it.each(["command-collision", "setup-step-failed"])(
+    "lets a failed optional command (%s) be skipped without promising a location control",
+    async (reasonCode) => {
+      const view = mount();
+      try {
+        const snapshot = fixture("failed");
+        snapshot.currentStep = "command";
+        snapshot.steps[1]!.status = "succeeded";
+        snapshot.steps[3]!.status = "failed";
+        snapshot.steps[3]!.attempt = 1;
+        snapshot.steps[3]!.reasonCode = reasonCode;
+        await view.render(snapshot);
+        expect(view.host.textContent).not.toContain("Choose another location.");
+        const skip = [...view.host.querySelectorAll("button")].find(
+          (button) => button.textContent === "Skip",
+        );
+        expect(skip).toBeDefined();
+        await act(async () => skip?.click());
+        expect(view.actions.onSkip).toHaveBeenCalledWith("command");
+      } finally {
+        await view.cleanup();
+      }
+    },
+  );
+
+  it("offers Retry stop before Resume when reopened cleanup is incomplete", async () => {
+    const view = mount();
+    try {
+      const snapshot = fixture("failed");
+      snapshot.interrupted = true;
+      snapshot.blocked = true;
+      snapshot.steps[1]!.reasonCode = "cleanup-incomplete";
+      await view.render(snapshot);
+      const actions = [...view.host.querySelectorAll(".guided-actions button")];
+      expect(actions.map((button) => button.textContent)).toEqual(["Retry stop"]);
+      await act(async () => actions[0]?.click());
+      expect(view.actions.onCancel).toHaveBeenCalledOnce();
+      expect(view.actions.onResume).not.toHaveBeenCalled();
+    } finally {
+      await view.cleanup();
+    }
+  });
+
   it("renders measured durations without announcing timer ticks", async () => {
     vi.useFakeTimers();
     const view = mount();

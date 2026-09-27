@@ -350,13 +350,91 @@ describe("SetupEngine", () => {
 
   it("does not trust saved success to authorize a dependent skip before recheck", async () => {
     const files = memoryStore();
+    const check = vi.fn(async () => ({
+      kind: "satisfied" as const,
+      checkedAt: clock.wall(),
+      evidence: "ready",
+    }));
     const command = step({ id: "command", canSkip: true, requires: ["prerequisites"] });
-    const first = await SetupEngine.open(files.store, [step(), command], clock);
+    const steps = [step({ check }), command];
+    const first = await SetupEngine.open(files.store, steps, clock);
     await first.start();
-    const reopened = await SetupEngine.open(files.store, [step(), command], clock);
+    const reopened = await SetupEngine.open(files.store, steps, clock);
     expect(reopened.snapshot().steps[0]?.status).toBe("succeeded");
     await reopened.skip("command");
-    expect(reopened.snapshot().steps[3]?.status).toBe("waiting-input");
+    expect(check).toHaveBeenCalledTimes(2);
+    expect(reopened.snapshot().steps[3]?.status).toBe("skipped");
+  });
+
+  it.each(["retry", "skip"] as const)(
+    "rechecks a reopened command prompt before %s",
+    async (action) => {
+      const files = memoryStore();
+      const checks = vi.fn(async () => ({
+        kind: "satisfied" as const,
+        checkedAt: clock.wall(),
+        evidence: "ready",
+      }));
+      const run = vi.fn(async () => ({ kind: "verified" as const, proof: "command" }));
+      const steps = [
+        step({ check: checks }),
+        step({ id: "command", requires: ["prerequisites"], canSkip: true, run }),
+      ];
+      await (await SetupEngine.open(files.store, steps, clock)).start();
+      const reopened = await SetupEngine.open(files.store, steps, clock);
+      expect(reopened.snapshot().steps[3]?.status).toBe("waiting-input");
+      const result = await reopened[action]("command");
+      expect(checks).toHaveBeenCalledTimes(2);
+      expect(result.steps[3]?.status).toBe(action === "retry" ? "succeeded" : "skipped");
+      expect(run).toHaveBeenCalledTimes(action === "retry" ? 1 : 0);
+    },
+  );
+
+  it.each(["retry", "skip"] as const)(
+    "keeps %s blocked when a saved prerequisite fails its fresh check",
+    async (action) => {
+      const files = memoryStore();
+      let available = true;
+      const run = vi.fn(async () => ({ kind: "verified" as const, proof: "command" }));
+      const prerequisites = step({
+        check: async () =>
+          available
+            ? { kind: "satisfied", checkedAt: clock.wall(), evidence: "ready" }
+            : { kind: "blocked", reasonCode: "no-longer-ready" },
+      });
+      const steps = [
+        prerequisites,
+        step({ id: "command", requires: ["prerequisites"], canSkip: true, run }),
+      ];
+      await (await SetupEngine.open(files.store, steps, clock)).start();
+      available = false;
+      const reopened = await SetupEngine.open(files.store, steps, clock);
+      const result = await reopened[action]("command");
+      expect(result.steps[0]?.status).toBe("failed");
+      expect(result.steps[3]?.status).toBe("waiting-input");
+      expect(run).not.toHaveBeenCalled();
+    },
+  );
+
+  it("starts a fresh checked attempt after a successful stop", async () => {
+    const files = memoryStore();
+    const checks = vi.fn(async () => ({
+      kind: "satisfied" as const,
+      checkedAt: clock.wall(),
+      evidence: "ready",
+    }));
+    const steps = [
+      step({ check: checks }),
+      step({ id: "command", requires: ["prerequisites"], canSkip: true }),
+    ];
+    const engine = await SetupEngine.open(files.store, steps, clock);
+    await engine.start();
+    await engine.cancel();
+    expect(engine.snapshot().steps[3]?.status).toBe("cancelled");
+    const reopened = await SetupEngine.open(files.store, steps, clock);
+    const restarted = await reopened.start();
+    expect(checks).toHaveBeenCalledTimes(2);
+    expect(restarted.steps[3]?.status).toBe("waiting-input");
   });
 
   it("stops before mutation when the pending journal write fails", async () => {

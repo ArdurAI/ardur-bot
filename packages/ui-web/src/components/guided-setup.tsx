@@ -76,7 +76,6 @@ export const guidedSetupText = {
     "first-bot": "The first bot could not be created. Try again.",
     finish: "Could not save setup. Try again.",
   },
-  commandCollision: "The terminal command points to another app. Choose another location.",
   reasons: {
     "unsupported-computer": "This computer cannot run local setup. Connect to a server.",
     "embedded-binaries-missing": "This build is missing local storage files. Try another build.",
@@ -128,7 +127,6 @@ function rowState(row: SetupStepSnapshot): string {
 }
 
 function failureSentence(row: SetupStepSnapshot): string {
-  if (row.reasonCode === "command-collision") return guidedSetupText.commandCollision;
   if (row.reasonCode && row.reasonCode in guidedSetupText.reasons)
     return guidedSetupText.reasons[row.reasonCode as keyof typeof guidedSetupText.reasons];
   return guidedSetupText.errors[row.id];
@@ -169,6 +167,7 @@ export function GuidedSetupView(props: GuidedSetupViewProps) {
     snapshot.steps.slice(0, 3).every((row) => row.status === "succeeded") &&
     ["succeeded", "skipped", "not-applicable"].includes(snapshot.steps[3]?.status ?? "");
   const started = snapshot.steps.some((row) => row.attempt > 0 || row.status !== "pending");
+  const cancelled = snapshot.steps.some((row) => row.status === "cancelled");
 
   useEffect(() => {
     const update = () => setVisible(!document.hidden);
@@ -281,9 +280,21 @@ export function GuidedSetupView(props: GuidedSetupViewProps) {
                     </div>
                   )}
                   {row.status === "failed" && !stopFailed && !newerJournal && (
-                    <Button ref={failureRef} type="button" onClick={() => props.onRetry(row.id)}>
-                      {guidedSetupText.retry}
-                    </Button>
+                    <div className="guided-row-actions">
+                      <Button ref={failureRef} type="button" onClick={() => props.onRetry(row.id)}>
+                        {guidedSetupText.retry}
+                      </Button>
+                      {row.id === "command" && (
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          className="guided-secondary"
+                          onClick={() => props.onSkip(row.id)}
+                        >
+                          {guidedSetupText.skip}
+                        </Button>
+                      )}
+                    </div>
                   )}
                   {row.waitingElapsedMs > 0 && (
                     <p className="guided-time" aria-hidden="true">
@@ -324,7 +335,11 @@ export function GuidedSetupView(props: GuidedSetupViewProps) {
         })}
       </ol>
       <div className="guided-actions">
-        {snapshot.interrupted ? (
+        {stopFailed ? (
+          <Button type="button" onClick={props.onCancel}>
+            {guidedSetupText.retryStop}
+          </Button>
+        ) : snapshot.interrupted ? (
           <>
             <Button type="button" onClick={props.onResume}>
               {guidedSetupText.resume}
@@ -342,11 +357,7 @@ export function GuidedSetupView(props: GuidedSetupViewProps) {
           <Button type="button" onClick={props.onClose}>
             {guidedSetupText.close}
           </Button>
-        ) : stopFailed ? (
-          <Button type="button" onClick={props.onCancel}>
-            {guidedSetupText.retryStop}
-          </Button>
-        ) : !started ? (
+        ) : !started || cancelled ? (
           <Button type="button" onClick={props.onStart}>
             {guidedSetupText.start}
           </Button>

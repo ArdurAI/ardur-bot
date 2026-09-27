@@ -7,12 +7,14 @@ import { createRoot } from "react-dom/client";
 const bridge = (window as Window & { ardurbotSetup?: ArdurBotSetup }).ardurbotSetup;
 document.documentElement.dataset.platform = bridge?.platform ?? "browser";
 
-function SetupDocument() {
+export function SetupDocument({ setupBridge = bridge }: { setupBridge?: ArdurBotSetup }) {
+  const bridge = setupBridge;
   const [snapshot, setSnapshot] = useState<SetupSnapshot | null>(null);
   const [mode, setMode] = useState<"local" | "server">("local");
   const [server, setServer] = useState("");
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
+  const [cancelBusy, setCancelBusy] = useState(false);
 
   useEffect(() => {
     const guided = bridge?.guidedSetup;
@@ -36,7 +38,7 @@ function SetupDocument() {
   }, []);
 
   async function run(action: () => Promise<SetupSnapshot>) {
-    if (busy) return;
+    if (busy || cancelBusy) return;
     setBusy(true);
     setStatus("");
     try {
@@ -49,8 +51,23 @@ function SetupDocument() {
     }
   }
 
+  async function cancelSetup() {
+    const guided = bridge?.guidedSetup;
+    if (!guided || cancelBusy) return;
+    setCancelBusy(true);
+    setStatus("");
+    try {
+      const next = await guided.cancel();
+      setSnapshot((old) => (old && old.sequence > next.sequence ? old : next));
+    } catch {
+      setStatus(guidedSetupText.updateFailed);
+    } finally {
+      setCancelBusy(false);
+    }
+  }
+
   async function connect() {
-    if (!bridge || busy) return;
+    if (!bridge || busy || cancelBusy) return;
     setBusy(true);
     setStatus(guidedSetupText.checking);
     try {
@@ -69,13 +86,14 @@ function SetupDocument() {
   }
 
   const guided = bridge?.guidedSetup;
-  const started = snapshot?.steps.some((row) => row.attempt > 0 || row.status !== "pending");
-  const prerequisiteFailed =
-    snapshot?.steps[0]?.status === "failed" &&
-    snapshot.steps.slice(1).every((row) => row.attempt === 0);
-  const modeLocked = busy || (started && !prerequisiteFailed);
+  const modeLocked =
+    busy ||
+    cancelBusy ||
+    !!snapshot?.steps.some((row) =>
+      ["checking", "running", "verifying", "cancelling"].includes(row.status),
+    );
   async function continueSetup() {
-    if (!bridge || !guided || busy) return;
+    if (!bridge || !guided || busy || cancelBusy) return;
     setBusy(true);
     setStatus("");
     try {
@@ -157,7 +175,7 @@ function SetupDocument() {
             onStart={() => void run(() => guided.start())}
             onRetry={(id: SetupStepId) => void run(() => guided.retry(id))}
             onSkip={(id: SetupStepId) => void run(() => guided.skip(id))}
-            onCancel={() => void run(() => guided.cancel())}
+            onCancel={() => void cancelSetup()}
             onResume={() => void run(() => guided.resume())}
             onClose={() => void bridge?.quit()}
             onContinue={() => void continueSetup()}
