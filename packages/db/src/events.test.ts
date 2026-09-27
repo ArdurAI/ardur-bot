@@ -1852,6 +1852,7 @@ describe("sendUserMessage", () => {
       const fanout = new TestFanout();
       const publish = vi.spyOn(fanout, "publish");
       const tx = {
+        $queryRaw: vi.fn(async () => [{ id: "bot-1" }]),
         thread: {
           update: vi
             .fn()
@@ -1933,6 +1934,7 @@ describe("sendUserMessage", () => {
 
   it("persists steering instead of starting a parallel run when the bot is busy", async () => {
     const tx = {
+      $queryRaw: vi.fn(async () => [{ id: "bot-1" }]),
       thread: {
         update: vi
           .fn()

@@ -4,6 +4,24 @@ import { assembleTurnContext, needsRecall } from "./assemble.js";
 import { markStablePrefix } from "./provider-cache.js";
 
 describe("turn context", () => {
+  it("keeps private brief, compacted summary, desk history and recall out of a peer request", async () => {
+    const recall = vi.fn(async () => "PRIVATE_RECALL_SENTINEL");
+    const context = await assembleTurnContext({
+      peerReadOnly: true,
+      instructions: "Read only the card.",
+      brief: "PRIVATE_BRIEF_SENTINEL",
+      summary: "PRIVATE_SUMMARY_SENTINEL",
+      history: [{ id: "old", role: "user", content: "PRIVATE_HISTORY_SENTINEL" }],
+      message: "<task_card>Authorized fixture</task_card>",
+      query: "What happened earlier?",
+      recall,
+    });
+
+    expect(context.history).toEqual([]);
+    expect(context.prompt).toContain("Authorized fixture");
+    expect(JSON.stringify(context)).not.toMatch(/PRIVATE_(BRIEF|SUMMARY|HISTORY|RECALL)_SENTINEL/);
+    expect(recall).not.toHaveBeenCalled();
+  });
   it("orders bounded layers and keeps the stable prefix byte-identical", async () => {
     const recall = vi.fn(async () => "[ardur-memory:document:3] " + "fact ".repeat(4000));
     const run = {

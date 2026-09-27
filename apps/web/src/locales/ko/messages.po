@@ -3065,11 +3065,11 @@ msgstr "삭제 중…"
 
 #: src/pages/Shell.tsx
 msgid "Delivered from {peer}"
-msgstr ""
+msgstr "{peer}에게서 전달됨"
 
 #: src/pages/Shell.tsx
 msgid "Delivered to {peer}"
-msgstr ""
+msgstr "{peer}에게 전달됨"
 
 #: src/pages/LearningObservation.tsx
 msgid "Delta"

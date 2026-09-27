@@ -50,7 +50,9 @@ export async function lockDelegationRootForRun(tx: Prisma.TransactionClient, run
   return { run: await tx.run.findUniqueOrThrow({ where: { id: runId } }), rootTaskId };
 }
 
-/** Canonical order for transactions touching both rows: coordinator thread, then root task. */
+/** Canonical order: bot/group, coordinator thread, recipient thread, then root task.
+ * Message submission takes bot before thread; finalization and thread clearing follow it.
+ */
 export async function lockDelegationRoot(tx: Prisma.TransactionClient, rootTaskId: string) {
   const root = await tx.delegationRoot.findUniqueOrThrow({
     where: { rootTaskId },

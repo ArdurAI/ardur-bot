@@ -3065,11 +3065,11 @@ msgstr "Excluindo…"
 
 #: src/pages/Shell.tsx
 msgid "Delivered from {peer}"
-msgstr ""
+msgstr "Entregue por {peer}"
 
 #: src/pages/Shell.tsx
 msgid "Delivered to {peer}"
-msgstr ""
+msgstr "Entregue a {peer}"
 
 #: src/pages/LearningObservation.tsx
 msgid "Delta"

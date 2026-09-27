@@ -276,7 +276,37 @@ export async function clearThread(
     } else {
       await tx.$queryRaw`SELECT id FROM bots WHERE id = ${input.botId} AND "spaceId" = ${input.spaceId} FOR UPDATE`;
     }
-    // Bot or group row precedes the thread, which precedes cancelled runs.
+    // A desk cancellation also writes the coordinator's thread. Find those roots while the
+    // recipient bot/group is locked, then lock coordinator threads before the recipient thread.
+    const pendingDeskRuns = await tx.run.findMany({
+      where: {
+        spaceId: input.spaceId,
+        threadId: input.threadId,
+        ...(input.groupId ? {} : { botId: input.botId }),
+        goalId: { not: null },
+        delegationId: { not: null },
+        status: { in: ["queued", "leased", "running", "waiting_input", "waiting_takeover"] },
+      },
+      select: { delegationRootTaskId: true },
+    });
+    const rootTaskIds = [
+      ...new Set(
+        pendingDeskRuns.flatMap((run) =>
+          run.delegationRootTaskId ? [run.delegationRootTaskId] : [],
+        ),
+      ),
+    ];
+    const roots = rootTaskIds.length
+      ? await tx.delegationRoot.findMany({
+          where: { rootTaskId: { in: rootTaskIds } },
+          select: { coordinatorThreadId: true },
+        })
+      : [];
+    for (const threadId of [...new Set(roots.map((root) => root.coordinatorThreadId))]
+      .filter((threadId) => threadId !== input.threadId)
+      .sort())
+      await tx.$queryRaw`SELECT id FROM threads WHERE id = ${threadId} FOR UPDATE`;
+    // Bot or group row precedes both threads, which precede cancelled runs and roots.
     const thread = await tx.thread.update({
       where: {
         id: input.threadId,
@@ -293,10 +323,30 @@ export async function clearThread(
         ...(input.groupId ? {} : { botId: input.botId }),
         status: { in: ["queued", "leased", "running", "waiting_input", "waiting_takeover"] },
       },
-      select: { id: true, taskId: true },
+      select: { id: true, taskId: true, delegationId: true, goalId: true },
     });
     const now = new Date();
     const runIds = activeRuns.map((run) => run.id);
+    const goalDelegationIds = activeRuns.flatMap((run) =>
+      run.goalId && run.delegationId ? [run.delegationId] : [],
+    );
+    const deskCards = goalDelegationIds.length
+      ? await tx.delegation.findMany({
+          where: { id: { in: goalDelegationIds }, kind: "message" },
+          select: { id: true },
+        })
+      : [];
+    const deskCardIds = new Set(deskCards.map((card) => card.id));
+    for (const run of activeRuns) {
+      if (run.delegationId && deskCardIds.has(run.delegationId))
+        await finishDelegation(
+          tx,
+          run.delegationId,
+          "cancelled",
+          "The recipient thread was cleared before finishing.",
+          run.id,
+        );
+    }
     await cancelRunsInTransaction(tx, activeRuns, now);
     // Expire as tombstones so a still-open provider screen claim cannot reset fencing to 1.
     await expireComputerExecutionLeases(tx, { runId: { in: runIds } });
@@ -396,6 +446,9 @@ export async function sendUserMessage(
 
   const commit = () =>
     prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+      // Bot before thread: finalization and clearThread take this order. SteeringMessage's
+      // bot foreign key otherwise waits behind finalization while finalization waits here.
+      await tx.$queryRaw`SELECT id FROM bots WHERE id = ${input.botId} AND "spaceId" = ${input.spaceId} FOR UPDATE`;
       // Message first: its thread-row lock serializes the whole send against clearThread, so a
       // concurrent clear either sees the committed run and cancels it, or strictly precedes this
       // transaction. Created in separate transactions, the run could land inside the clear's

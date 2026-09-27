@@ -3065,11 +3065,11 @@ msgstr "正在删除…"
 
 #: src/pages/Shell.tsx
 msgid "Delivered from {peer}"
-msgstr ""
+msgstr "已收到 {peer} 的消息"
 
 #: src/pages/Shell.tsx
 msgid "Delivered to {peer}"
-msgstr ""
+msgstr "已发送给 {peer}"
 
 #: src/pages/LearningObservation.tsx
 msgid "Delta"

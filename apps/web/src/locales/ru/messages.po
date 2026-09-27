@@ -3065,11 +3065,11 @@ msgstr "Удаление…"
 
 #: src/pages/Shell.tsx
 msgid "Delivered from {peer}"
-msgstr ""
+msgstr "Получено от {peer}"
 
 #: src/pages/Shell.tsx
 msgid "Delivered to {peer}"
-msgstr ""
+msgstr "Доставлено для {peer}"
 
 #: src/pages/LearningObservation.tsx
 msgid "Delta"

@@ -66,6 +66,8 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Could not run routine": "无法运行例行任务",
   "Could not save memory": "无法保存记忆",
   "Could not start a new chat": "无法开始新对话",
+  "Delivered to {peer}": "已发送给 {peer}",
+  "Delivered from {peer}": "已收到 {peer} 的消息",
   "Could not update learning. Try again.": "无法更新学习设置。请重试。",
   "Could not update this task; try again.": "无法更新此任务，请重试。",
   Curator: "整理",

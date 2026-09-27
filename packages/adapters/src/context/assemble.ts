@@ -42,6 +42,7 @@ export function boundMessages(messages: Message[], budget: number): Message[] {
   return result;
 }
 export async function assembleTurnContext(run: {
+  peerReadOnly?: boolean;
   instructions: string;
   tools?: AgentRunRequest["tools"];
   brief?: string | null;
@@ -75,13 +76,21 @@ export async function assembleTurnContext(run: {
     );
   if (run.message.length > budgets.message)
     throw new Error("This message exceeds the context budget. Send a shorter message.");
-  const brief = frame("group_brief", run.brief ?? "", budgets.brief);
-  const summary = frame("thread_summary", run.summary ?? "", budgets.summary);
+  const brief = frame("group_brief", run.peerReadOnly ? "" : (run.brief ?? ""), budgets.brief);
+  const summary = frame(
+    "thread_summary",
+    run.peerReadOnly ? "" : (run.summary ?? ""),
+    budgets.summary,
+  );
   const messages = boundMessages(
-    run.history.filter((message) => !run.sourceMessageId || message.id !== run.sourceMessageId),
+    (run.peerReadOnly ? [] : run.history).filter(
+      (message) => !run.sourceMessageId || message.id !== run.sourceMessageId,
+    ),
     budgets.messages,
   );
-  const recallRan = Boolean(run.recall && needsRecall(run.query ?? run.message, run.brief ?? ""));
+  const recallRan = Boolean(
+    !run.peerReadOnly && run.recall && needsRecall(run.query ?? run.message, run.brief ?? ""),
+  );
   const recall = frame("recalled_memory", recallRan ? await run.recall!() : "", budgets.recall);
   const history: Message[] = [
     ...(brief ? [{ role: "user" as const, content: brief }] : []),

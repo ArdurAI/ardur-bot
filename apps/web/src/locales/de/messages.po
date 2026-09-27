@@ -3065,11 +3065,11 @@ msgstr "Wird gelöscht…"
 
 #: src/pages/Shell.tsx
 msgid "Delivered from {peer}"
-msgstr ""
+msgstr "Von {peer} zugestellt"
 
 #: src/pages/Shell.tsx
 msgid "Delivered to {peer}"
-msgstr ""
+msgstr "An {peer} zugestellt"
 
 #: src/pages/LearningObservation.tsx
 msgid "Delta"

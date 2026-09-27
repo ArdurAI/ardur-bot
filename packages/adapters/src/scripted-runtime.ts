@@ -49,7 +49,15 @@ export class ScriptedAgentRuntime implements AgentRuntime {
         yield { type: "done", text: "stopped" };
         return;
       }
-      const script = request.script ?? inferScript(request.prompt, request.resumeFromCheckpoint);
+      const goalWake = /review (?:worker's|reviewer's) completed assignment/i.test(request.prompt);
+      const script = goalWake
+        ? inferScript(
+            request.prompt,
+            request.resumeFromCheckpoint,
+            false,
+            request.history.map((message) => message.content).join("\n"),
+          )
+        : (request.script ?? inferScript(request.prompt, request.resumeFromCheckpoint));
       // Per-run call index so repeated tools (e.g. message_agent) get distinct
       // executionIds — delivery keys and effect replays key off this value.
       let toolCallSeq = 0;
@@ -137,6 +145,8 @@ export function inferScript(
   prompt: string,
   resumeFromCheckpoint?: string,
   fromCard = false,
+  deliveredHistory = "",
+  cardInputs: unknown[] = [],
 ): NonNullable<AgentRunRequest["script"]> {
   if (!fromCard) {
     const framed = /<task_card>([\s\S]*?)<\/task_card>/.exec(prompt);
@@ -145,7 +155,13 @@ export function inferScript(
       try {
         const card: unknown = JSON.parse(cardJson);
         if (card && typeof card === "object" && "goal" in card && typeof card.goal === "string")
-          return inferScript(card.goal, resumeFromCheckpoint, true);
+          return inferScript(
+            card.goal,
+            resumeFromCheckpoint,
+            true,
+            deliveredHistory,
+            "inputs" in card && Array.isArray(card.inputs) ? card.inputs : [],
+          );
       } catch {
         // Malformed test cards retain the ordinary scripted path.
       }
@@ -185,7 +201,12 @@ export function inferScript(
         complete: true,
       },
     ];
-  if (lower.includes("review worker's completed assignment"))
+  if (lower.includes("review worker's completed assignment")) {
+    const workerResult =
+      /The sort is ascending, so the corrected wording is: (Results show [^\n]+\.)/.exec(
+        deliveredHistory,
+      )?.[1];
+    if (!workerResult) throw new Error("Worker result was not delivered to the coordinator.");
     return [
       {
         assistant: "I asked Reviewer for an independent check.",
@@ -198,7 +219,7 @@ export function inferScript(
               intent: "request",
               card: {
                 goal: `Check the correction against the fixture: ${firstLoopFixture}`,
-                inputs: [{ type: "text", text: correctedFixture }],
+                inputs: [{ type: "text", text: workerResult }],
                 doneWhen: ["Confirm or correct the wording"],
                 deadlineAt: null,
               },
@@ -208,23 +229,42 @@ export function inferScript(
         complete: true,
       },
     ];
+  }
   if (
     lower.includes("check the correction against the fixture:") &&
     prompt.includes(firstLoopFixture)
-  )
+  ) {
+    const proposed = cardInputs.find((input): input is { type: "text"; text: string } =>
+      Boolean(
+        input &&
+          typeof input === "object" &&
+          "type" in input &&
+          input.type === "text" &&
+          "text" in input &&
+          typeof input.text === "string",
+      ),
+    )?.text;
+    if (!proposed) throw new Error("The proposed correction was not delivered to Reviewer.");
     return [
       {
-        assistant: `Independent check: ${correctedFixture} The original wording contradicts the ascending sort.`,
+        assistant: `Independent check: ${proposed} The original wording contradicts the ascending sort.`,
         complete: true,
       },
     ];
-  if (lower.includes("review reviewer's completed assignment"))
+  }
+  if (lower.includes("review reviewer's completed assignment")) {
+    const reviewed =
+      /Independent check: (Results show [^\n]+\.) The original wording contradicts the ascending sort\./.exec(
+        deliveredHistory,
+      )?.[1];
+    if (!reviewed) throw new Error("Reviewer result was not delivered to the coordinator.");
     return [
       {
-        assistant: `Worker found the contradiction and Reviewer checked it. ${correctedFixture} The fixture does not say how ties are ordered.`,
+        assistant: `Worker found the contradiction and Reviewer checked it. ${reviewed} The fixture does not say how ties are ordered.`,
         complete: true,
       },
     ];
+  }
   if (resumeFromCheckpoint === "takeover-skipped") {
     return [
       {

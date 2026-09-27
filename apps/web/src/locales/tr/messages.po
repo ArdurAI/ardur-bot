@@ -3065,11 +3065,11 @@ msgstr "Siliniyor…"
 
 #: src/pages/Shell.tsx
 msgid "Delivered from {peer}"
-msgstr ""
+msgstr "{peer} tarafından iletildi"
 
 #: src/pages/Shell.tsx
 msgid "Delivered to {peer}"
-msgstr ""
+msgstr "{peer} kişisine iletildi"
 
 #: src/pages/LearningObservation.tsx
 msgid "Delta"
