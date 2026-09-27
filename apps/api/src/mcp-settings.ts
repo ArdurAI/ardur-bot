@@ -367,7 +367,20 @@ export function createMcpSettings(deps: {
         storedMaterials.map(({ slug, stored }) => [slug, independentMcpRedactions(stored)]),
       );
       const argumentRedactions = Object.fromEntries(
-        storedMaterials.map(({ slug, stored }) => [slug, stored.argumentRedactions ?? []]),
+        storedMaterials.map(({ slug, stored }) => {
+          const launch = before.mcpServers[slug];
+          return [
+            slug,
+            stored.argumentRedactions ??
+              (stored.redactions ?? []).filter(
+                (value) =>
+                  launch &&
+                  [launch.command, ...launch.args].some((part) =>
+                    mcpTextContainsSecret(part, value),
+                  ),
+              ),
+          ];
+        }),
       );
       for (const [slug, server] of Object.entries(config.mcpServers)) {
         if (rows.some((row) => row.slug === slug && (row.managedBy || row.catalogId)))
@@ -489,21 +502,27 @@ export function createMcpSettings(deps: {
               const flags = mcpCredentialFlagsForEntries(previous, { env: server.env });
               const envValues = Object.values(server.env);
               const launchParts = [server.command, ...server.args];
+              const namedSecrets = new Set([
+                ...(server.secret ? [server.secret] : []),
+                ...Object.entries(server.env).flatMap(([key, value]) =>
+                  mcpEntryIsSecret(flags, "env", key) ? [value] : [],
+                ),
+              ]);
               const redactions = independentMcpRedactions({
                 redactions: preview.redactions[slug],
                 env: server.env,
               });
-              // Argument-bound credentials stay protected even when an ordinary named entry
-              // has the same value. Only removing the value from the launch command/args drops it.
+              // Retain old argument credentials after their named entry is removed or rotated.
+              // An ordinary named value cannot replace that independent protection.
+              const removedCredentials = [
+                ...(previous.secret ? [previous.secret] : []),
+                ...Object.entries(previous.env ?? {}).flatMap(([key, value]) =>
+                  mcpEntryIsSecret(previous.credentialFlags, "env", key) ? [value] : [],
+                ),
+              ].filter((value) => !namedSecrets.has(value));
               const argumentRedactions = [
                 ...new Set(
-                  [
-                    ...(preview.argumentRedactions[slug] ?? []),
-                    ...(previous.secret ? [previous.secret] : []),
-                    ...Object.entries(previous.env ?? {}).flatMap(([key, value]) =>
-                      mcpEntryIsSecret(previous.credentialFlags, "env", key) ? [value] : [],
-                    ),
-                  ].filter(
+                  [...(preview.argumentRedactions[slug] ?? []), ...removedCredentials].filter(
                     (value) =>
                       value && launchParts.some((part) => mcpTextContainsSecret(part, value)),
                   ),

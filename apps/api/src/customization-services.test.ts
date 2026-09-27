@@ -812,6 +812,134 @@ describe("customization service boundaries", () => {
       }
     },
   );
+  it("promotes legacy launch redactions before a matching ordinary env entry is added", async () => {
+    const f = await fixture();
+    const value = "synthetic-credential";
+    const initial = await f.mcp.config(actor);
+    const created = await f.mcp.preview(actor, {
+      revision: initial.revision,
+      json: JSON.stringify({
+        mcpServers: {
+          fixture: {
+            name: "Fixture",
+            command: "node",
+            args: ["server.js", value],
+            secret: value,
+          },
+        },
+      }),
+    });
+    await f.mcp.apply(actor, created.id);
+    const row = f.tables.mcpServer![0]!;
+    const encrypted = f.tables.secret![0]!;
+    const legacy = await f.deps.secrets.put(
+      JSON.stringify({
+        command: "node",
+        args: ["server.js", value],
+        env: {},
+        redactions: [value],
+      }),
+      {
+        spaceId: actor.spaceId,
+        userId: actor.userId,
+        operationId: "fixture",
+        traceId: "fixture",
+        signal: AbortSignal.timeout(10_000),
+      },
+    );
+    Object.assign(encrypted, legacy);
+    row.secretId = legacy.id;
+
+    const current = await f.mcp.config(actor);
+    const withEnvironment = JSON.parse(current.json);
+    withEnvironment.mcpServers.fixture.env = { LOG_LEVEL: value };
+    const added = await f.mcp.preview(actor, {
+      revision: current.revision,
+      json: JSON.stringify(withEnvironment),
+    });
+    expect(JSON.stringify(added)).not.toContain(value);
+    await f.mcp.apply(actor, added.id);
+    const saved = f.tables.secret!.find((entry) => entry.id === row.secretId)!;
+    const material = JSON.parse(f.deps.secrets.load(String(saved.ciphertext), String(saved.id)));
+    expect(material.argumentRedactions).toContain(value);
+    expect(oauthMaterialSecrets(material)).toContain(value);
+    expect(redactMcpValue({ result: value }, oauthMaterialSecrets(material))).toEqual({
+      result: "[redacted]",
+    });
+
+    const exported = await f.mcp.config(actor);
+    const withoutEnvironment = JSON.parse(exported.json);
+    withoutEnvironment.mcpServers.fixture.env = {};
+    const removed = await f.mcp.preview(actor, {
+      revision: exported.revision,
+      json: JSON.stringify(withoutEnvironment),
+    });
+    await f.mcp.apply(actor, removed.id);
+    expect(JSON.stringify(f.tables.mcpServer)).not.toContain(value);
+    expect((await f.mcp.list(actor))[0]?.args).toEqual(["server.js", "[redacted]"]);
+    expect((await f.mcp.config(actor)).json).not.toContain(value);
+  });
+  it("lets an owner mark a still-named launch value non-secret after a config save", async () => {
+    const f = await fixture();
+    const initial = await f.mcp.config(actor);
+    const created = await f.mcp.preview(actor, {
+      revision: initial.revision,
+      json: JSON.stringify({
+        mcpServers: {
+          fixture: {
+            name: "Fixture",
+            command: "node",
+            args: ["server.js", "--root", "/workspace"],
+            env: { ROOT_DIR: "/workspace" },
+          },
+        },
+      }),
+    });
+    await f.mcp.apply(actor, created.id);
+    const current = await f.mcp.config(actor);
+    const renamed = await f.mcp.preview(actor, {
+      revision: current.revision,
+      json: current.json.replace('"Fixture"', '"Updated"'),
+    });
+    await f.mcp.apply(actor, renamed.id);
+    const row = f.tables.mcpServer![0]!;
+    const db = f.deps.prisma;
+    Object.assign(db, { spaceMember: { findUnique: vi.fn(async () => ({ role: "owner" })) } });
+    Object.assign(db.mcpServer, {
+      findFirstOrThrow: vi.fn(async ({ where }: { where: Row }) => {
+        const found = f.tables.mcpServer!.find((entry) => matches(entry, where));
+        if (!found) throw new Error("Missing row");
+        return { ...found };
+      }),
+    });
+    const handler = new RPCHandler(
+      createRouter({
+        ...f.deps,
+        mcpOAuth: { statusFor: vi.fn(async () => "none") } as RouterDeps["mcpOAuth"],
+      }),
+    );
+    const { response } = await handler.handle(
+      new Request("https://app.example.test/rpc/mcp/servers/update", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          json: { id: row.id, credentialFlags: { env: { ROOT_DIR: false }, headers: {} } },
+        }),
+      }),
+      { prefix: "/rpc", context: { actor } },
+    );
+    expect(response?.status).toBe(200);
+    const encrypted = f.tables.secret!.find((entry) => entry.id === row.secretId)!;
+    const material = JSON.parse(
+      f.deps.secrets.load(String(encrypted.ciphertext), String(encrypted.id)),
+    );
+    expect(material.credentialFlags.env.ROOT_DIR).toBe(false);
+    expect(material.argumentRedactions).not.toContain("/workspace");
+    const runtimeSecrets = oauthMaterialSecrets(material);
+    expect(redactMcpValue({ result: "/workspace/report.txt" }, runtimeSecrets)).toEqual({
+      result: "/workspace/report.txt",
+    });
+  });
   it("does not persist an ordinary environment value as a redaction after a config edit", async () => {
     const f = await fixture();
     const initial = await f.mcp.config(actor);
