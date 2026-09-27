@@ -27,6 +27,7 @@ const run = {
 function harness(
   sourceBlocks: unknown,
   existing?: { sourceRuns: { id: string; botId: string }[] },
+  goal = false,
 ) {
   const runCreate = vi.fn(async () => ({ id: "run-b" }));
   const messageCreate = vi.fn(async () => ({ id: "message-1" }));
@@ -36,6 +37,7 @@ function harness(
     chatGroup: {
       findFirst: vi.fn(async () => ({
         id: "group-1",
+        coordinatorBotId: "bot-a",
         members: ["bot-a", "bot-b", "bot-c"].map((id) => ({
           bot: { id, name: id.toUpperCase() },
         })),
@@ -45,13 +47,17 @@ function harness(
     run: {
       findFirst: vi.fn(async () => ({
         id: run.id,
+        goalId: goal ? "goal-1" : null,
         sourceMessage: { blocks: sourceBlocks },
       })),
       findUnique: vi.fn(async () => ({ status: "running" })),
       create: runCreate,
     },
     message: {
-      findUnique: vi.fn(async () => existing ?? null),
+      findUnique: vi.fn(
+        async (_input: { where: { threadId_clientNonce: { clientNonce: string } } }) =>
+          existing ?? null,
+      ),
       create: messageCreate,
     },
     thread: {
@@ -60,8 +66,19 @@ function harness(
       ),
     },
     task: { create: vi.fn(async () => ({ id: "task-b" })) },
+    teamGoal: {
+      findFirst: vi.fn(async () =>
+        goal
+          ? {
+              id: "goal-1",
+              perWorkerTokens: 30_000,
+              untilAt: new Date("2030-01-01T00:00:00Z"),
+            }
+          : null,
+      ),
+    },
     event: {
-      findFirst: vi.fn(async () => ({ seq: 1 })),
+      findMany: vi.fn(async () => [{ seq: 1, payload: { botId: "bot-b" } }]),
       create: vi.fn(async () => ({ seq: 1 })),
     },
   };
@@ -75,6 +92,8 @@ function harness(
       jobs: { enqueue: vi.fn(async () => undefined) },
     },
     messageCreate,
+    messageFindUnique: tx.message.findUnique,
+    eventFindMany: tx.event.findMany,
     runCreate,
   };
 }
@@ -169,6 +188,51 @@ describe("group handoff ownership", () => {
     ).resolves.toEqual({ error: "cannot verify the group handoff chain" });
     expect(runCreate).not.toHaveBeenCalled();
   });
+});
+
+it("assigns two members with distinct per-target admission keys", async () => {
+  const f = harness([], undefined, true);
+  const card = { goal: "Review a lane", doneWhen: ["Report the result"] };
+  for (const botId of ["bot-b", "bot-c"]) {
+    expect(
+      await handoffToGroupBot(f.deps as never, run, "group-1", {
+        mode: "assign",
+        bot_id: botId,
+        message: card.goal,
+        card,
+      }),
+    ).toMatchObject({ ok: true, botId });
+  }
+  expect(
+    f.messageFindUnique.mock.calls.map(([input]) => input.where.threadId_clientNonce.clientNonce),
+  ).toEqual(["group-handoff:run-a:bot-b", "group-handoff:run-a:bot-c"]);
+  expect(f.runCreate).toHaveBeenCalledTimes(2);
+  expect(prepareDelegation).toHaveBeenLastCalledWith(
+    expect.anything(),
+    expect.objectContaining({
+      admissionKey: "group-handoff:run-a:bot-c",
+      tokens: 30_000,
+      deadlineAt: new Date("2030-01-01T00:00:00Z"),
+    }),
+    undefined,
+  );
+});
+
+it("replays the event for the assigned target rather than the latest assignment", async () => {
+  const f = harness([], { sourceRuns: [{ id: "run-b", botId: "bot-b" }] }, true);
+  f.eventFindMany.mockResolvedValueOnce([
+    { seq: 9, payload: { botId: "bot-c" } },
+    { seq: 7, payload: { botId: "bot-b" } },
+  ]);
+  expect(
+    await handoffToGroupBot(f.deps as never, run, "group-1", {
+      mode: "assign",
+      bot_id: "bot-b",
+      message: "Review",
+      card: { goal: "Review" },
+    }),
+  ).toMatchObject({ ok: true, botId: "bot-b" });
+  expect(f.deps.events.notify).toHaveBeenCalledWith("thread-1", 7);
 });
 
 it("returns the shared admission problem without creating a run", async () => {

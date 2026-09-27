@@ -4,6 +4,7 @@ import path from "node:path";
 import { gunzipSync } from "node:zlib";
 import {
   ComposioEmulator,
+  createJobReconciler,
   createScheduleFromTool,
   DesktopSandboxProvider,
   FakeSandboxProvider,
@@ -1903,7 +1904,109 @@ describeJourneys("required product journeys", () => {
     ).toBe("revoked");
   });
 
-  it("54: group chats share one transcript with mentions and handoffs", async () => {
+  it("54: a coordinator assigns two members and receives one wake per finished assignment", async () => {
+    const owner = await signup(app, `goal-${stamp}@ardurbot.test`, "Goal Owner");
+    const coordinator = await rpc<Bot>(app, owner, "bots/create", {
+      name: "Coordinator",
+      title: "Lead",
+      description: "",
+      instructions: "",
+      notifyOnFinish: true,
+    });
+    const first = await rpc<Bot>(app, owner, "bots/create", {
+      name: "BotA",
+      title: "Reviewer",
+      description: "",
+      instructions: "",
+      notifyOnFinish: true,
+    });
+    const second = await rpc<Bot>(app, owner, "bots/create", {
+      name: "BotB",
+      title: "Reviewer",
+      description: "",
+      instructions: "",
+      notifyOnFinish: true,
+    });
+    const group = await rpc<{ id: string; threadId: string }>(app, owner, "groups/create", {
+      name: "Review room",
+      botIds: [coordinator.id, first.id, second.id],
+    });
+    await rpc(app, owner, "groups/update", { groupId: group.id, coordinatorBotId: coordinator.id });
+    const goal = await rpc<{ id: string; rootTaskId: string; tokenLimit: number }>(
+      app,
+      owner,
+      "goals/start",
+      {
+        groupId: group.id,
+        objective: "Review the repository",
+        doneWhen: ["Both reviews are posted"],
+      },
+    );
+    expect(goal.tokenLimit).toBe(600_000);
+    await sendGroupAndWait(
+      app,
+      owner,
+      group.id,
+      "Let's review the repo. Coordinate BotA and BotB to review.",
+      coordinator.id,
+    );
+    await waitForDatabase(
+      async () =>
+        (await prisma.delegation.count({
+          where: {
+            rootTaskId: goal.rootTaskId,
+            kind: "group-handoff",
+            status: "completed",
+            coordinatorWokenAt: { not: null },
+          },
+        })) === 2,
+    );
+    const assignments = await prisma.delegation.findMany({
+      where: { rootTaskId: goal.rootTaskId, kind: "group-handoff" },
+      orderBy: { createdAt: "asc" },
+    });
+    expect(assignments).toHaveLength(2);
+    expect(new Set(assignments.map((assignment) => assignment.actingBotId))).toEqual(
+      new Set([first.id, second.id]),
+    );
+    const root = await prisma.delegationRoot.findUniqueOrThrow({
+      where: { rootTaskId: goal.rootTaskId },
+    });
+    expect(root.tokenLimit).toBe(goal.tokenLimit);
+    const workerMessages = await prisma.message.findMany({
+      where: {
+        threadId: group.threadId,
+        runId: { in: assignments.map((assignment) => assignment.runId!).filter(Boolean) },
+        role: "bot",
+      },
+      select: { botId: true, runId: true },
+    });
+    for (const assignment of assignments) {
+      expect(
+        workerMessages.some(
+          (message) =>
+            message.runId === assignment.runId && message.botId === assignment.actingBotId,
+        ),
+      ).toBe(true);
+    }
+    const wakes = await prisma.run.findMany({
+      where: { goalId: goal.id, clientNonce: { startsWith: "goal-wake:" } },
+      select: { clientNonce: true },
+    });
+    expect(new Set(wakes.map((wake) => wake.clientNonce))).toEqual(
+      new Set(assignments.map((assignment) => `goal-wake:${assignment.id}`)),
+    );
+    const replay = createJobReconciler({ prisma, jobs }, { batchSize: 100 });
+    await replay.reconcileOnce();
+    expect(
+      await prisma.run.count({
+        where: { goalId: goal.id, clientNonce: { startsWith: "goal-wake:" } },
+      }),
+    ).toBe(2);
+    await rpc(app, owner, "goals/stop", { goalId: goal.id });
+  });
+
+  it("55: group chats share one transcript with mentions and handoffs", async () => {
     const ada = await signup(app, `ada-g-${stamp}@ardurbot.test`, "Ada Groups");
     const adaMe = await rpc<Me>(app, ada, "me");
     const botA = await rpc<Bot>(app, ada, "bots/create", {

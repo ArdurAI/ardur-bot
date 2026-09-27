@@ -5,6 +5,7 @@ import type { PrismaClient } from "@ardurbot/db";
 
 type QuotedMessage = { id: string; threadId: string; role: string; blocks: unknown };
 type ReplyMessage = QuotedMessage & {
+  botId?: string | null;
   replyToMessageId?: string | null;
   replyQuote?: string | null;
   replyTo?: QuotedMessage | null;
@@ -47,6 +48,23 @@ export function messageToAgentHistoryText(message: ReplyMessage): string {
   return [replyContext(message, message.threadId), blocksToAgentHistoryText(messageBlocks(message))]
     .filter(Boolean)
     .join("\n\n");
+}
+
+/** Peer room replies are attributed data, never the current bot's prior assistant turn. */
+export function agentHistoryTurn(
+  message: ReplyMessage,
+  currentBotId: string,
+  group: boolean,
+  names: ReadonlyMap<string, string>,
+): { role: "user" | "assistant" | "system"; content: string } {
+  const content = messageToAgentHistoryText(message);
+  if (message.role === "user") return { role: "user", content };
+  if (message.role === "system") return { role: "system", content };
+  if (group && message.botId !== currentBotId) {
+    const name = message.botId ? names.get(message.botId) : undefined;
+    return { role: "user", content: `[${name ?? "Bot"}]: ${content}` };
+  }
+  return { role: "assistant", content };
 }
 
 /** Fetch the explicit target even when it has fallen outside the history window. */

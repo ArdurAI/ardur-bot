@@ -43,6 +43,7 @@ import {
   RoutingRuleSchema,
   RuntimePinError,
   runtimePinProblem,
+  TaskCardRequestSchema,
   ToolResumedPayloadSchema,
 } from "@ardurbot/contracts";
 import { BoardError } from "@ardurbot/contracts/board";
@@ -247,6 +248,7 @@ import { prepareDelegationWorkspace, taskWorkspacePath } from "./delegation-work
 import { resolveDeploymentModel } from "./deployment-model.js";
 import { startExecutionHeartbeat } from "./execution-heartbeat.js";
 import { beforeFileChange, fileChangeText, recordFileChange } from "./file-changes.js";
+import { wakeGoalAfterDelegation } from "./goal-wake.js";
 import { handoffToGroupBot, loadGroupContext } from "./group-handoff.js";
 import {
   LEGACY_HISTORY_WINDOW_SIZE,
@@ -317,7 +319,7 @@ import {
   stopRemoteComputerWork,
 } from "./remote-execution.js";
 import type { RemoteTransportDependencies } from "./remote-mcp.js";
-import { loadReplyContext, messageToAgentHistoryText } from "./reply-context.js";
+import { agentHistoryTurn, loadReplyContext } from "./reply-context.js";
 import { resolveRunModelPin } from "./run-model-pin.js";
 import {
   commitConsumedRunSecret,
@@ -1267,9 +1269,32 @@ export function createRunExecutor(deps: ExecutorDeps) {
       const run = await deps.prisma.run.findUnique({ where: { id: runId } });
       if (!run) return;
       if (isTerminal(run.status as RunStatus)) return;
+      if (!run.delegationId && !run.goalId) {
+        const goal = await deps.prisma.teamGoal?.findFirst({
+          where: {
+            spaceId: run.spaceId,
+            userId: run.userId,
+            threadId: run.threadId,
+            coordinatorBotId: run.botId,
+            status: "running",
+          },
+        });
+        if (goal) {
+          await deps.prisma.run.updateMany({
+            where: { id: run.id, goalId: null, delegationRootTaskId: null },
+            data: { goalId: goal.id, delegationRootTaskId: goal.rootTaskId },
+          });
+          run.goalId = goal.id;
+          run.delegationRootTaskId = goal.rootTaskId;
+        }
+      }
       if (run.cancelRequestedAt && run.status === "queued" && !run.startedAt) {
-        if (await confirmDispatchStop(deps.prisma, runId))
+        if (await confirmDispatchStop(deps.prisma, runId)) {
           tracePoint(runId, "terminal.committed", { outcome: "cancelled" });
+          await wakeGoalAfterDelegation(deps, run.delegationId).catch((error) =>
+            getLogger().error("goal wake", error),
+          );
+        }
         return;
       }
       let { resumeCheckpoint, heldForTakeover, resumeHeldLease, takeoverResume } =
@@ -1709,17 +1734,34 @@ export function createRunExecutor(deps: ExecutorDeps) {
         const discoveredPromise = deps.connector
           ? deps.connector.discoverTools(context)
           : Promise.resolve([]);
+        const historyBotIds = thread.groupId
+          ? [
+              ...new Set(
+                messages.flatMap((message) =>
+                  message.role === "bot" && message.botId && message.botId !== bot.id
+                    ? [message.botId]
+                    : [],
+                ),
+              ),
+            ]
+          : [];
+        const historyBotNames = new Map(
+          historyBotIds.length
+            ? (
+                await deps.prisma.bot.findMany({
+                  where: { id: { in: historyBotIds }, spaceId: run.spaceId, userId: run.userId },
+                  select: { id: true, name: true },
+                })
+              ).map((peer) => [peer.id, peer.name] as const)
+            : [],
+        );
         const threadContext = threadContextForRun(
           run.trigger,
           {
             messages: [...messages].reverse().map((m) => ({
               id: m.id,
               seq: m.seq,
-              role: (m.role === "user" ? "user" : m.role === "system" ? "system" : "assistant") as
-                | "user"
-                | "assistant"
-                | "system",
-              content: messageToAgentHistoryText(m),
+              ...agentHistoryTurn(m, bot.id, Boolean(thread.groupId), historyBotNames),
             })),
             summary: thread.historyCompactionSummary,
             historyCompactedUpToSeq: thread.historyCompactedUpToSeq,
@@ -1904,6 +1946,18 @@ export function createRunExecutor(deps: ExecutorDeps) {
         const graphicalToolsAllowed = graphical && acceptsImages && !heldForTakeover;
         const pageBrowserAllowed =
           graphical && browser.describe().capabilities.page && !heldForTakeover;
+        const goalRoom =
+          run.goalId && thread.groupId && !run.delegationId
+            ? await deps.prisma.teamGoal.findFirst({
+                where: {
+                  id: run.goalId,
+                  groupId: thread.groupId,
+                  threadId: thread.id,
+                  coordinatorBotId: run.botId,
+                  status: "running",
+                },
+              })
+            : null;
         const builtins = [
           ...selectBuiltinToolsForRun({
             graphicalToolsAllowed,
@@ -1913,6 +1967,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             semanticMemoryEnabled,
             cloudAgentEnabled: cloudAgentsEnabled(cloudAgent, run.spaceId),
             messagingChannelRun,
+            goalCoordinator: Boolean(goalRoom),
           }),
           // Cross-owner agent connections only exist for chat-linked bots.
           ...(hasMessagingIdentity ? agentConnectionTools : []),
@@ -4209,6 +4264,25 @@ export function createRunExecutor(deps: ExecutorDeps) {
             if ("ok" in result && result.ok) handedOff = true;
             return finish(result);
           }
+          if (name === "assign") {
+            if (!thread.groupId || !goalRoom)
+              return finish({ error: "assign requires an active group goal" });
+            const card = TaskCardRequestSchema.safeParse(args.card);
+            if (!card.success) return finish({ error: "assign requires a valid task card" });
+            const result = await handoffToGroupBot(
+              { ...deps, resolveDelegationPin: (target) => resolvePin(run, target) },
+              run,
+              thread.groupId,
+              {
+                bot_id: String(args.member ?? ""),
+                message: redactSecrets(card.data.goal, runSecrets),
+                card: redactTaskValue(card.data, runSecrets),
+                tokens: args.tokens === undefined ? undefined : Number(args.tokens),
+                mode: "assign",
+              },
+            );
+            return finish(result);
+          }
           if (name === "archive_bot" || name === "delete_bot") {
             const archived = await archiveSpawnedBot(
               deps,
@@ -5550,6 +5624,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
         }
         if (stopConfirmed && (await confirmDispatchStop(deps.prisma, runId)))
           tracePoint(runId, "terminal.committed", { attempt: fence, outcome: "cancelled" });
+        await wakeGoalAfterDelegation(deps, run.delegationId).catch((error) =>
+          getLogger().error("goal wake", error),
+        );
         await scheduleCompactionAfterTurn(deps.prisma, deps.jobs, runId).catch((error) =>
           getLogger().error("history.compact enqueue failed", error),
         );
@@ -5734,6 +5811,7 @@ export function selectBuiltinToolsForRun(options: {
   semanticMemoryEnabled: boolean;
   cloudAgentEnabled?: boolean;
   messagingChannelRun: boolean;
+  goalCoordinator?: boolean;
 }) {
   return selectCloudAgentTools(
     selectMemoryTools(
@@ -5752,9 +5830,10 @@ export function selectBuiltinToolsForRun(options: {
     Boolean(options.cloudAgentEnabled),
   ).filter(
     (tool) =>
-      !options.messagingChannelRun ||
-      (!["remember", "save_memory", "recall_memory", "forget_memory"].includes(tool.name) &&
-        !tool.name.startsWith("scratchpad_")),
+      (tool.name !== "assign" || options.goalCoordinator) &&
+      (!options.messagingChannelRun ||
+        (!["remember", "save_memory", "recall_memory", "forget_memory"].includes(tool.name) &&
+          !tool.name.startsWith("scratchpad_"))),
   );
 }
 

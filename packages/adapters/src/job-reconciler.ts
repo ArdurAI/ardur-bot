@@ -6,6 +6,7 @@ import { getLogger } from "@ardurbot/logging";
 import type { PoolClient } from "pg";
 import { returnBotMessageOutcome } from "./bot-messages.js";
 import { scheduleComputerControlExpiry } from "./computer-control.js";
+import { wakeGoalAfterDelegation } from "./goal-wake.js";
 import { isUserProgressClientNonce } from "./user-progress.js";
 
 const DEFAULT_INTERVAL_MS = 30_000;
@@ -338,6 +339,33 @@ export function createJobReconciler(
           }
         }),
       );
+    }
+
+    // A process may exit after a worker is finalized but before its coordinator wake is made.
+    // The root lock and coordinatorWokenAt marker make this pass safe to replay.
+    if (deps.prisma.teamGoal && deps.prisma.delegation) {
+      const goals = await deps.prisma.teamGoal.findMany({
+        where: { status: "running" },
+        select: { rootTaskId: true },
+      });
+      if (goals.length) {
+        const terminal = await deps.prisma.delegation.findMany({
+          where: {
+            rootTaskId: { in: goals.map((goal) => goal.rootTaskId) },
+            kind: "group-handoff",
+            status: { in: ["completed", "failed", "cancelled", "accepted"] },
+            coordinatorWokenAt: null,
+          },
+          orderBy: [{ completedAt: "asc" }, { id: "asc" }],
+          take: batchSize,
+          select: { id: true },
+        });
+        for (const row of terminal) {
+          await wakeGoalAfterDelegation(deps, row.id).catch((error) =>
+            getLogger().error("goal wake reconciliation", error),
+          );
+        }
+      }
     }
 
     await Promise.all([

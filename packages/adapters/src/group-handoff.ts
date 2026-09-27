@@ -1,5 +1,5 @@
 import { runContinueJob } from "@ardurbot/adapter-kit";
-import { MessageBlock } from "@ardurbot/contracts";
+import { MessageBlock, TaskCardRequestSchema } from "@ardurbot/contracts";
 import {
   botMessageHopExhausted,
   nextBotMessageHop,
@@ -33,10 +33,16 @@ export async function handoffToGroupBot(
     userId: string;
   },
   groupId: string,
-  input: { bot_id?: string; confirm_name?: string; message: string; card?: unknown },
+  input: {
+    bot_id?: string;
+    confirm_name?: string;
+    message: string;
+    card?: unknown;
+    tokens?: number;
+    mode?: "handoff" | "assign";
+  },
 ) {
   input = { ...input, message: redactTaskValue(input.message) };
-  const deliveryKey = `group-handoff:${run.id}`;
   const committed = await withTransactionRetry(() =>
     deps.prisma.$transaction(async (tx) => {
       try {
@@ -66,13 +72,55 @@ export async function handoffToGroupBot(
             userId: run.userId,
             status: "running",
           },
-          select: { id: true, sourceMessage: { select: { blocks: true } } },
+          select: {
+            id: true,
+            goalId: true,
+            sourceMessage: { select: { blocks: true } },
+          },
         }),
       ]);
       if (!group || !activeSource) return { error: "source run is no longer active" } as const;
       if (!group.members.some((member) => member.bot.id === run.botId)) {
         return { error: "source bot is no longer a group member" } as const;
       }
+
+      let targetId = input.bot_id?.trim();
+      if (
+        input.mode === "assign" &&
+        targetId &&
+        !group.members.some((member) => member.bot.id === targetId)
+      ) {
+        const name = targetId.toLowerCase();
+        targetId = group.members.find((member) => member.bot.name.toLowerCase() === name)?.bot.id;
+      }
+      if (!targetId && input.confirm_name?.trim()) {
+        const name = input.confirm_name.trim().toLowerCase();
+        targetId = group.members.find((member) => member.bot.name.toLowerCase() === name)?.bot.id;
+      }
+      if (!targetId) return { error: "handoff target bot is required" } as const;
+      if (targetId === run.botId) return { error: "cannot hand off to yourself" } as const;
+      if (!group.members.some((member) => member.bot.id === targetId)) {
+        return { error: "handoff target is not a group member" } as const;
+      }
+      const goal =
+        input.mode === "assign"
+          ? await tx.teamGoal.findFirst({
+              where: {
+                id: activeSource.goalId ?? "",
+                groupId,
+                threadId: run.threadId,
+                coordinatorBotId: run.botId,
+                status: "running",
+              },
+            })
+          : null;
+      if (input.mode === "assign" && (!goal || group.coordinatorBotId !== run.botId)) {
+        return { error: "only the active goal coordinator can assign room work" } as const;
+      }
+      const card = input.mode === "assign" ? TaskCardRequestSchema.safeParse(input.card) : null;
+      if (card && !card.success) return { error: "assign requires a valid task card" } as const;
+      const deliveryKey =
+        input.mode === "assign" ? `group-handoff:${run.id}:${targetId}` : `group-handoff:${run.id}`;
 
       const existing = await tx.message.findUnique({
         where: { threadId_clientNonce: { threadId: run.threadId, clientNonce: deliveryKey } },
@@ -86,24 +134,23 @@ export async function handoffToGroupBot(
       });
       if (existing) {
         const nextRun = existing.sourceRuns[0];
-        const event = await tx.event.findFirst({
-          where: { threadId: run.threadId, runId: run.id, type: "group.handoff" },
+        const events = await tx.event.findMany({
+          where: {
+            threadId: run.threadId,
+            runId: run.id,
+            type: input.mode === "assign" ? "goal.assigned" : "group.handoff",
+          },
           orderBy: { seq: "desc" },
-          select: { seq: true },
+          select: { seq: true, payload: true },
         });
+        const event =
+          input.mode === "assign"
+            ? events.find(
+                (candidate) => (candidate.payload as { botId?: string }).botId === targetId,
+              )
+            : events[0];
         if (!nextRun || !event) return { error: "recorded handoff is incomplete" } as const;
         return { ok: true, botId: nextRun.botId, runId: nextRun.id, eventSeq: event.seq } as const;
-      }
-
-      let targetId = input.bot_id?.trim();
-      if (!targetId && input.confirm_name?.trim()) {
-        const name = input.confirm_name.trim().toLowerCase();
-        targetId = group.members.find((member) => member.bot.name.toLowerCase() === name)?.bot.id;
-      }
-      if (!targetId) return { error: "handoff target bot is required" } as const;
-      if (targetId === run.botId) return { error: "cannot hand off to yourself" } as const;
-      if (!group.members.some((member) => member.bot.id === targetId)) {
-        return { error: "handoff target is not a group member" } as const;
       }
 
       let sourceBlocks: MessageBlock[] = [];
@@ -142,6 +189,10 @@ export async function handoffToGroupBot(
           admissionKey: deliveryKey,
           prompt: input.message,
           card: input.card,
+          tokens: goal
+            ? Math.min(input.tokens ?? goal.perWorkerTokens, goal.perWorkerTokens)
+            : undefined,
+          deadlineAt: goal?.untilAt,
         },
         deps.resolveDelegationPin,
       );
@@ -201,6 +252,16 @@ export async function handoffToGroupBot(
           text: input.message,
         },
       });
+      const assignedEvent = goal
+        ? await appendEventInTransaction(tx, {
+            spaceId: run.spaceId,
+            threadId: run.threadId,
+            botId: run.botId,
+            type: "goal.assigned",
+            runId: run.id,
+            payload: { goalId: goal.id, delegationId: admitted.record.id, botId: targetId },
+          })
+        : null;
       await tx.delegation.update({
         where: { id: admitted.record.id },
         data: { runId: nextRun.id },
@@ -210,7 +271,7 @@ export async function handoffToGroupBot(
         ok: true,
         botId: targetId,
         runId: nextRun.id,
-        eventSeq: event.seq,
+        eventSeq: assignedEvent?.seq ?? event.seq,
         differences: admitted.record.differences,
         delegationId: admitted.record.id,
       } as const;
@@ -230,7 +291,10 @@ export async function handoffToGroupBot(
     runId: committed.runId,
     differences: "differences" in committed ? committed.differences : [],
     delegationId: "delegationId" in committed ? committed.delegationId : undefined,
-    note: "Handoff recorded. End this turn without narrating it; the next bot owns the next stage.",
+    note:
+      input.mode === "assign"
+        ? "Assignment recorded. Continue coordinating this turn."
+        : "Handoff recorded. End this turn without narrating it; the next bot owns the next stage.",
   };
 }
 

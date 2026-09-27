@@ -2070,6 +2070,7 @@ model TeamGoal {
   runs Run[]
 
   @@index([spaceId, userId, groupId, status])
+  @@index([threadId, status])
   @@map("team_goals")
 }
 model Delegation {

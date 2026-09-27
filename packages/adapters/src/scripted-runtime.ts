@@ -30,6 +30,7 @@ export class ScriptedAgentRuntime implements AgentRuntime {
     running.set(request.runId, controller);
     const signal = context?.signal ?? controller.signal;
     try {
+      if (request.prompt.includes("scripted slow review")) await abortableDelay(2_000, signal);
       if (shouldFail(request.prompt)) {
         throw new Error("Scripted run failure");
       }
@@ -145,6 +146,30 @@ export function inferScript(
       {
         assistant:
           "signed in. the session stays in this computer — protected input never hit the thread.",
+        complete: true,
+      },
+    ];
+  }
+  // Deterministic room assignment fixture used by the database journey.
+  const pairedReview = /coordinate\s+([A-Za-z0-9_-]+)\s+and\s+([A-Za-z0-9_-]+)\s+to\s+review/i.exec(
+    prompt,
+  );
+  if (pairedReview) {
+    return [
+      {
+        assistant: "assigning both reviews in the room.",
+        toolCalls: pairedReview.slice(1, 3).map((member) => ({
+          name: "assign",
+          args: {
+            member,
+            card: {
+              goal: `Review the repository as ${member}${member === pairedReview[2] ? " (scripted slow review)" : ""}`,
+              inputs: [],
+              doneWhen: ["Post findings in the room"],
+              deadlineAt: null,
+            },
+          },
+        })),
         complete: true,
       },
     ];

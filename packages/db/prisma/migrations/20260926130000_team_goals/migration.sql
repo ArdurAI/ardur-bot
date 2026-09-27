@@ -24,6 +24,7 @@ CREATE TABLE "team_goals" (
 
 CREATE UNIQUE INDEX "team_goals_rootTaskId_key" ON "team_goals"("rootTaskId");
 CREATE INDEX "team_goals_spaceId_userId_groupId_status_idx" ON "team_goals"("spaceId", "userId", "groupId", "status");
+CREATE INDEX "team_goals_threadId_status_idx" ON "team_goals"("threadId", "status");
 CREATE UNIQUE INDEX "team_goals_one_active_group_key" ON "team_goals"("groupId") WHERE "status" IN ('running', 'needs-owner', 'paused', 'blocked', 'completed');
 ALTER TABLE "team_goals" ADD CONSTRAINT "team_goals_groupId_fkey" FOREIGN KEY ("groupId") REFERENCES "chat_groups"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "team_goals" ADD CONSTRAINT "team_goals_rootTaskId_fkey" FOREIGN KEY ("rootTaskId") REFERENCES "tasks"("id") ON DELETE CASCADE ON UPDATE CASCADE;

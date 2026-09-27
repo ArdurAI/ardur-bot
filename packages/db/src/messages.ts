@@ -31,6 +31,7 @@ export function loadRunHistoryMessages(
       seq: true,
       role: true,
       runId: true,
+      botId: true,
       blocks: true,
       replyToMessageId: true,
       replyQuote: true,

@@ -180,3 +180,106 @@ export async function stopGoal(prisma: PrismaClient, actor: Actor, goalId: strin
   if (!stopped) throw new Error("Goal could not be loaded");
   return stopped;
 }
+
+/** A terminal room assignment wakes its coordinator once, or steers a run already in flight. */
+export async function wakeGoalCoordinatorForDelegation(prisma: PrismaClient, delegationId: string) {
+  return withTransactionRetry(() =>
+    prisma.$transaction(async (tx) => {
+      const initial = await tx.delegation.findUnique({ where: { id: delegationId } });
+      if (!initial) return null;
+      await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${initial.rootTaskId} FOR UPDATE`;
+      const row = await tx.delegation.findUniqueOrThrow({ where: { id: delegationId } });
+      if (
+        row.coordinatorWokenAt ||
+        row.kind !== "group-handoff" ||
+        !["completed", "failed", "cancelled", "accepted"].includes(row.status)
+      )
+        return null;
+      const goal = await tx.teamGoal.findUnique({ where: { rootTaskId: row.rootTaskId } });
+      if (!goal || goal.spaceId !== row.spaceId || goal.userId !== row.userId) return null;
+      const root = await tx.delegationRoot.findUniqueOrThrow({
+        where: { rootTaskId: row.rootTaskId },
+      });
+      const now = new Date();
+      if (goal.status !== "running" || root.cancelRequestedAt || goal.untilAt <= now) {
+        await tx.delegation.update({ where: { id: row.id }, data: { coordinatorWokenAt: now } });
+        return null;
+      }
+      if (!row.summaryMessageId) return null;
+      const group = await tx.chatGroup.findFirst({
+        where: {
+          id: goal.groupId,
+          spaceId: goal.spaceId,
+          userId: goal.userId,
+          archivedAt: null,
+          coordinatorBotId: goal.coordinatorBotId,
+          members: { some: { botId: goal.coordinatorBotId, bot: { archivedAt: null } } },
+        },
+        select: { id: true },
+      });
+      if (!group) return null;
+      const active = await tx.run.findFirst({
+        where: {
+          spaceId: goal.spaceId,
+          userId: goal.userId,
+          threadId: goal.threadId,
+          botId: goal.coordinatorBotId,
+          status: { in: ["queued", "leased", "running", "waiting_input", "waiting_takeover"] },
+        },
+        orderBy: { createdAt: "asc" },
+      });
+      let runId: string | null = null;
+      if (active) {
+        await tx.steeringMessage.create({
+          data: {
+            messageId: row.summaryMessageId,
+            botId: goal.coordinatorBotId,
+            userId: goal.userId,
+            runId: active.id,
+          },
+        });
+      } else {
+        const task = await tx.task.create({
+          data: {
+            spaceId: goal.spaceId,
+            userId: goal.userId,
+            botId: goal.coordinatorBotId,
+            threadId: goal.threadId,
+            prompt: `Review ${row.actingName}'s ${row.status} assignment and decide the next step for this goal: ${goal.objective}`,
+            status: "queued",
+          },
+        });
+        const wake = await tx.run.create({
+          data: {
+            spaceId: goal.spaceId,
+            userId: goal.userId,
+            botId: goal.coordinatorBotId,
+            threadId: goal.threadId,
+            taskId: task.id,
+            status: "queued",
+            trigger: "follow_up",
+            sourceMessageId: row.summaryMessageId,
+            clientNonce: `goal-wake:${row.id}`,
+            goalId: goal.id,
+            delegationRootTaskId: goal.rootTaskId,
+          },
+        });
+        runId = wake.id;
+      }
+      await tx.delegation.update({ where: { id: row.id }, data: { coordinatorWokenAt: now } });
+      const event = await appendEventInTransaction(tx, {
+        spaceId: goal.spaceId,
+        threadId: goal.threadId,
+        botId: goal.coordinatorBotId,
+        type: "goal.wake",
+        payload: {
+          goalId: goal.id,
+          delegationId: row.id,
+          rule: "completion",
+          ...(runId ? { runId } : { steeringRunId: active?.id }),
+        },
+      });
+      return { runId, threadId: goal.threadId, eventSeq: event.seq };
+    }),
+  );
+}
