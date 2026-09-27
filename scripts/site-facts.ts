@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -316,8 +317,12 @@ export async function videosFromMedia(rootDir = root, probe: Probe = ffprobe): P
       durationSeconds?: unknown;
       width?: unknown;
       height?: unknown;
+      mp4Sha256?: unknown;
     };
     if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      Array.isArray(parsed) ||
       !Number.isInteger(sidecar.width) ||
       (sidecar.width as number) <= 0 ||
       !Number.isInteger(sidecar.height) ||
@@ -328,6 +333,13 @@ export async function videosFromMedia(rootDir = root, probe: Probe = ffprobe): P
     ) {
       throw new Error(
         "site/media/routines-demo.json must contain positive integer width and height and finite positive durationSeconds.",
+      );
+    }
+    const mp4Bytes = await readFile(path.join(rootDir, "site", files.mp4));
+    const mp4Sha256 = createHash("sha256").update(mp4Bytes).digest("hex");
+    if (typeof sidecar.mp4Sha256 !== "string" || sidecar.mp4Sha256 !== mp4Sha256) {
+      throw new Error(
+        "site/media/routines-demo.json describes a different routines-demo.mp4; re-run the export.",
       );
     }
     width = sidecar.width as number;
