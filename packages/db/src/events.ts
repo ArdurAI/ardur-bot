@@ -1620,7 +1620,7 @@ async function finalizeRunOnce(
       input.outcome === "completed",
       input.outcome === "failed" ? input.runtimeProblem?.code : undefined,
     );
-    await settleQuietBotMessageClaimsInTransaction(
+    const quietUpdates = await settleQuietBotMessageClaimsInTransaction(
       tx,
       input.runId,
       input.leaseFence,
@@ -1660,7 +1660,7 @@ async function finalizeRunOnce(
       seq: lastEvent.seq,
       continuationRunId,
       summary,
-      updatedThreads: peerSettlement.updatedThreads,
+      updatedThreads: [...peerSettlement.updatedThreads, ...quietUpdates],
     };
   });
 }

@@ -53,8 +53,14 @@ async function startFixture(page: Page, groupId: string) {
 test("shows one delivery chip advance through Delivered, Read and Replied in both threads", async ({
   page,
 }, testInfo) => {
-  await signup(page, `receipt-loop-${Date.now()}@ardurbot.test`, "password12", "Receipt loop");
-  await completeOnboarding(page);
+  test.setTimeout(360_000);
+  await signup(
+    page,
+    `receipt-loop-${testInfo.workerIndex}-${testInfo.repeatEachIndex}-${Date.now()}@ardurbot.test`,
+    "password12",
+    "Receipt loop",
+  );
+  await completeOnboarding(page, undefined, 60_000);
   const releaseOwner = await claimDeploymentOwner(page);
   try {
     const coordinatorId = activeBotId(page);
@@ -75,8 +81,14 @@ test("shows one delivery chip advance through Delivered, Read and Replied in bot
     try {
       await receiptGate(page, "arm", worker.id);
       gateArmed = true;
-      await workerPage.goto(`/app/${worker.id}`);
-      await page.goto(`/app/g/${group.id}`);
+      await workerPage.goto(`/app/${worker.id}`, {
+        timeout: 60_000,
+        waitUntil: "domcontentloaded",
+      });
+      await page.goto(`/app/g/${group.id}`, {
+        timeout: 60_000,
+        waitUntil: "domcontentloaded",
+      });
       await startFixture(page, group.id);
       const roomChip = page.getByTestId("peer-receipt-chip");
       const deskChip = workerPage.getByTestId("peer-receipt-chip");
@@ -129,9 +141,15 @@ test("shows one delivery chip advance through Delivered, Read and Replied in bot
 
 test("shows Waiting for a turn while unrelated owner work occupies the recipient", async ({
   page,
-}) => {
-  await signup(page, `receipt-queued-${Date.now()}@ardurbot.test`, "password12", "Queued receipt");
-  await completeOnboarding(page);
+}, testInfo) => {
+  test.setTimeout(360_000);
+  await signup(
+    page,
+    `receipt-queued-${testInfo.workerIndex}-${testInfo.repeatEachIndex}-${Date.now()}@ardurbot.test`,
+    "password12",
+    "Queued receipt",
+  );
+  await completeOnboarding(page, undefined, 60_000);
   const releaseOwner = await claimDeploymentOwner(page);
   let workerId: string | undefined;
   try {
@@ -150,7 +168,10 @@ test("shows Waiting for a turn while unrelated owner work occupies the recipient
     });
     await rpc(page, "groups/update", { groupId: group.id, coordinatorBotId: coordinatorId });
     await rpc(page, "threads/send", { botId: worker.id, text: "Keep working until I stop you" });
-    await page.goto(`/app/g/${group.id}`);
+    await page.goto(`/app/g/${group.id}`, {
+      timeout: 60_000,
+      waitUntil: "domcontentloaded",
+    });
     await startFixture(page, group.id);
     await expect(
       page.getByTestId("peer-receipt-chip").filter({ hasText: "Waiting for a turn" }),

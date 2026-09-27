@@ -1428,6 +1428,208 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
     }
   });
 
+  it("removes Waiting on both quiet receipt blocks after a native turn consumes them", async () => {
+    const f = await fixture();
+    await prisma.run.update({ where: { id: f.coordinatorRun.id }, data: { status: "running" } });
+    const ids: string[] = [];
+    for (const intent of ["status", "fyi", "result"] as const) {
+      const deliveryKey = `quiet-native-${intent}-${f.parent.id}`;
+      const sent = await messageBot(f.deps, f.coordinatorRun, f.coordinator, {
+        bot_id: f.worker.id,
+        intent,
+        message: `${intent} update`,
+        deliveryKey,
+      });
+      if (!sent.ok) throw new Error(sent.error);
+      const delivery = await prisma.botMessageDelivery.findUniqueOrThrow({
+        where: {
+          spaceId_userId_idempotencyKey: {
+            spaceId,
+            userId,
+            idempotencyKey: `bot-message:${deliveryKey}`,
+          },
+        },
+      });
+      ids.push(delivery.id);
+    }
+    expect(await prisma.botMessageWake.count({ where: { rootTaskId: f.rootTask.id } })).toBe(0);
+    for (const id of ids) {
+      const delivery = await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id } });
+      for (const messageId of [delivery.outboundMessageId, delivery.inboundMessageId]) {
+        const message = await prisma.message.findUniqueOrThrow({ where: { id: messageId! } });
+        const block = (message.blocks as Array<{ deliveryId?: string }>).find(
+          (item) => item.deliveryId === id,
+        );
+        expect(botMessageReceiptKind(block as Parameters<typeof botMessageReceiptKind>[0])).toBe(
+          "waiting",
+        );
+      }
+    }
+    await prisma.run.update({ where: { id: f.workerRun.id }, data: { status: "completed" } });
+    const task = await prisma.task.create({
+      data: {
+        spaceId,
+        userId,
+        botId: f.worker.id,
+        threadId: f.workerThread.id,
+        prompt: "Review quiet updates",
+        status: "running",
+      },
+    });
+    const run = await prisma.run.create({
+      data: {
+        spaceId,
+        userId,
+        botId: f.worker.id,
+        threadId: f.workerThread.id,
+        taskId: task.id,
+        status: "running",
+        trigger: "follow_up",
+        goalId: f.goal.id,
+        delegationRootTaskId: f.rootTask.id,
+        leaseOwner: "fixture-quiet-native",
+        leaseFence: 1,
+        leaseExpiresAt: f.goal.untilAt,
+      },
+    });
+    expect(
+      await claimQuietBotMessages(prisma, {
+        runId: run.id,
+        leaseOwner: "fixture-quiet-native",
+        leaseFence: 1,
+        deliveryIds: ids,
+      }),
+    ).toEqual(ids);
+    expect(
+      await noteBotMessageReadUnconfirmed(prisma, {
+        runId: run.id,
+        leaseFence: 1,
+        deliveryIds: ids,
+      }),
+    ).toBe(3);
+    const attempt = await prisma.attempt.create({
+      data: { runId: run.id, fence: 1, status: "running" },
+    });
+    const publish = vi.fn(async (_topic: string, _payload: string) => undefined);
+    expect(
+      await finalizeRun(
+        prisma,
+        {
+          spaceId,
+          threadId: f.workerThread.id,
+          botId: f.worker.id,
+          runId: run.id,
+          taskId: task.id,
+          attemptId: attempt.id,
+          leaseOwner: "fixture-quiet-native",
+          leaseFence: 1,
+          outcome: "completed",
+          blocks: [],
+        },
+        { publish } as never,
+      ),
+    ).not.toBe(false);
+    for (const id of ids) {
+      const delivery = await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id } });
+      expect(delivery).toMatchObject({
+        state: "delivered",
+        outcome: "consumed",
+        failureCode: "read-unconfirmed",
+      });
+      for (const messageId of [delivery.outboundMessageId, delivery.inboundMessageId]) {
+        const message = await prisma.message.findUniqueOrThrow({ where: { id: messageId! } });
+        const block = (message.blocks as Array<{ deliveryId?: string }>).find(
+          (item) => item.deliveryId === id,
+        );
+        expect(botMessageReceiptKind(block as Parameters<typeof botMessageReceiptKind>[0])).toBe(
+          "delivered",
+        );
+        const event = await prisma.event.findFirstOrThrow({
+          where: {
+            threadId: message.threadId,
+            type: "thread.message.updated",
+            payload: { path: ["messageId"], equals: messageId! },
+          },
+          orderBy: { seq: "desc" },
+        });
+        expect(publish).toHaveBeenCalledWith(
+          `thread:${message.threadId}`,
+          JSON.stringify({ cursor: event.seq }),
+        );
+      }
+    }
+  });
+
+  it.each(["goal-unavailable", "expired"] as const)(
+    "publishes a pending reply that becomes %s during finalization",
+    async (ending) => {
+      const f = await fixture("owner");
+      const reply = await replyToBotDelivery(f.deps, f.workerRun, f.worker, {
+        inReplyToDeliveryId: f.parent.id,
+        message: "The fixture is complete.",
+        intent: "result",
+        deliveryKey: `finalize-${ending}-${f.parent.id}`,
+      });
+      if (!reply.ok) throw new Error(reply.error);
+      const wake = await prisma.botMessageWake.findFirstOrThrow({
+        where: { rootTaskId: f.rootTask.id },
+      });
+      expect(wake).toMatchObject({ state: "pending", runId: null });
+      await prisma.run.update({
+        where: { id: f.activeRun!.id },
+        data: { goalId: f.goal.id, delegationRootTaskId: f.rootTask.id },
+      });
+      if (ending === "goal-unavailable")
+        await prisma.teamGoal.update({
+          where: { id: f.goal.id },
+          data: { untilAt: new Date(0) },
+        });
+      else
+        await prisma.botMessageDelivery.update({
+          where: { id: reply.deliveryId },
+          data: { expiresAt: new Date(0) },
+        });
+      const attempt = await prisma.attempt.create({
+        data: { runId: f.activeRun!.id, fence: 1, status: "running" },
+      });
+      const publish = vi.fn(async (_topic: string, _payload: string) => undefined);
+      expect(
+        await finalizeRun(
+          prisma,
+          {
+            spaceId,
+            threadId: f.room.id,
+            botId: f.coordinator.id,
+            runId: f.activeRun!.id,
+            taskId: f.activeRun!.taskId,
+            attemptId: attempt.id,
+            leaseOwner: "fixture-active",
+            leaseFence: 1,
+            outcome: "completed",
+            blocks: [],
+          },
+          { publish } as never,
+        ),
+      ).not.toBe(false);
+      const delivery = await prisma.botMessageDelivery.findUniqueOrThrow({
+        where: { id: reply.deliveryId },
+      });
+      expect(delivery.state).toBe(ending === "expired" ? "expired" : "failed");
+      const senderEvent = await prisma.event.findFirstOrThrow({
+        where: {
+          threadId: f.workerThread.id,
+          type: "thread.message.updated",
+          payload: { path: ["messageId"], equals: delivery.outboundMessageId },
+        },
+        orderBy: { seq: "desc" },
+      });
+      expect(publish).toHaveBeenCalledWith(
+        `thread:${f.workerThread.id}`,
+        JSON.stringify({ cursor: senderEvent.seq }),
+      );
+    },
+  );
+
   it("repairs a committed reply after enqueue failure", async () => {
     const f = await fixture();
     const rejectedJobs: JobPublisher = {

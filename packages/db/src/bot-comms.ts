@@ -428,7 +428,7 @@ export async function appendBotMessageWakeInTransaction(
       !canAppendBotMessageToBatch(open.deliveryIds.length, open.promptCharacters, promptCharacters))
   ) {
     if (!admissionProblem) {
-      const runId = await bindBotMessageWakeInTransaction(tx, open.id);
+      const { runId } = await bindBotMessageWakeInTransaction(tx, open.id);
       if (runId) queuedRunIds.push(runId);
     }
     const sealed = await tx.botMessageWake.findUniqueOrThrow({ where: { id: open.id } });
@@ -537,6 +537,7 @@ async function wakePrompt(tx: Prisma.TransactionClient, deliveryIds: string[], n
   const byId = new Map(deliveries.map((row) => [row.id, row]));
   const prompts: string[] = [];
   const liveIds: string[] = [];
+  const updatedThreads: ThreadCursor[] = [];
   let lastMessageId: string | null = null;
   for (const id of deliveryIds) {
     const delivery = byId.get(id);
@@ -549,7 +550,7 @@ async function wakePrompt(tx: Prisma.TransactionClient, deliveryIds: string[], n
           where: { id },
           data: { state: "expired", outcome: "expired" },
         });
-        await projectDeliveryState(tx, id, "expired");
+        updatedThreads.push(...(await projectDeliveryState(tx, id, "expired")));
       }
       continue;
     }
@@ -575,19 +576,20 @@ async function wakePrompt(tx: Prisma.TransactionClient, deliveryIds: string[], n
     liveIds.push(id);
     lastMessageId = delivery.inboundMessageId;
   }
-  return { prompt: prompts.join("\n\n"), lastMessageId, liveIds };
+  return { prompt: prompts.join("\n\n"), lastMessageId, liveIds, updatedThreads };
 }
 
 async function bindBotMessageWakeInTransaction(
   tx: Prisma.TransactionClient,
   wakeId: string,
-): Promise<string | null> {
+): Promise<{ runId: string | null; updatedThreads: ThreadCursor[] }> {
+  const updatedThreads: ThreadCursor[] = [];
   let wake = await tx.botMessageWake.findUniqueOrThrow({ where: { id: wakeId } });
   if (
     !["pending", "sealed", "retry_wait"].includes(wake.state) ||
     (wake.nextAttemptAt && wake.nextAttemptAt > new Date())
   )
-    return null;
+    return { runId: null, updatedThreads };
   const goal = wake.goalId
     ? await tx.teamGoal.findFirst({
         where: {
@@ -609,16 +611,16 @@ async function bindBotMessageWakeInTransaction(
     root.cancelRequestedAt ||
     root.usedTokens >= Math.min(goal.tokenLimit, root.tokenLimit)
   ) {
-    await finishWake(tx, wake, "cancelled", "goal-unavailable", true);
-    return null;
+    updatedThreads.push(...(await finishWake(tx, wake, "cancelled", "goal-unavailable", true)));
+    return { runId: null, updatedThreads };
   }
   const thread = await tx.thread.findUnique({
     where: { id: wake.recipientThreadId },
     select: { id: true, botId: true, groupId: true },
   });
   if (!thread || thread.id !== goal.threadId || thread.groupId !== goal.groupId) {
-    await finishWake(tx, wake, "cancelled", "thread-unavailable", true);
-    return null;
+    updatedThreads.push(...(await finishWake(tx, wake, "cancelled", "thread-unavailable", true)));
+    return { runId: null, updatedThreads };
   }
   const recipient = await tx.bot.findFirst({
     where: {
@@ -630,12 +632,14 @@ async function bindBotMessageWakeInTransaction(
     select: { id: true },
   });
   if (!recipient) {
-    await finishWake(tx, wake, "cancelled", "recipient-unavailable", true);
-    return null;
+    updatedThreads.push(
+      ...(await finishWake(tx, wake, "cancelled", "recipient-unavailable", true)),
+    );
+    return { runId: null, updatedThreads };
   }
   if (!(await currentCoordinatorGroup(tx, wake, goal))) {
-    await finishWake(tx, wake, "cancelled", "group-unavailable", true);
-    return null;
+    updatedThreads.push(...(await finishWake(tx, wake, "cancelled", "group-unavailable", true)));
+    return { runId: null, updatedThreads };
   }
   const authorityFingerprint = await goalBotAuthorityFingerprint(tx, {
     spaceId: wake.spaceId,
@@ -645,8 +649,8 @@ async function bindBotMessageWakeInTransaction(
     botId: wake.recipientBotId,
   });
   if (authorityFingerprint !== wake.authorityFingerprint) {
-    await finishWake(tx, wake, "cancelled", "authority-changed", true);
-    return null;
+    updatedThreads.push(...(await finishWake(tx, wake, "cancelled", "authority-changed", true)));
+    return { runId: null, updatedThreads };
   }
   const deferred = await tx.botMessageDelivery.findMany({
     where: {
@@ -656,8 +660,8 @@ async function bindBotMessageWakeInTransaction(
     select: { failureCode: true },
   });
   if (deferred.some((row) => row.failureCode === "prompt-too-large")) {
-    await finishWake(tx, wake, "failed", "prompt-too-large", true);
-    return null;
+    updatedThreads.push(...(await finishWake(tx, wake, "failed", "prompt-too-large", true)));
+    return { runId: null, updatedThreads };
   }
   if (deferred.length) {
     const outstanding = await tx.botMessageDelivery.count({
@@ -675,7 +679,7 @@ async function bindBotMessageWakeInTransaction(
         where: { id: wake.id },
         data: { nextAttemptAt: new Date(now.getTime() + RETRY_DELAYS_MS[0]) },
       });
-      return null;
+      return { runId: null, updatedThreads };
     }
     await tx.botMessageDelivery.updateMany({
       where: { id: { in: wake.deliveryIds }, failureCode: "inbox-full" },
@@ -684,13 +688,14 @@ async function bindBotMessageWakeInTransaction(
     await tx.botMessageWake.update({ where: { id: wake.id }, data: { nextAttemptAt: null } });
   }
   const prepared = await wakePrompt(tx, wake.deliveryIds, now);
+  updatedThreads.push(...prepared.updatedThreads);
   if (prepared.liveIds.length !== wake.deliveryIds.length) {
     if (prepared.liveIds.length === 0) {
       await tx.botMessageWake.update({
         where: { id: wake.id },
         data: { state: "cancelled", deliveryIds: [], promptCharacters: 0 },
       });
-      return null;
+      return { runId: null, updatedThreads };
     }
     wake = await tx.botMessageWake.update({
       where: { id: wake.id },
@@ -737,7 +742,7 @@ async function bindBotMessageWakeInTransaction(
     active.trigger !== "user" &&
     sameCard &&
     active.peerAuthorityFingerprint === wake.authorityFingerprint;
-  if (active && !compatible) return null;
+  if (active && !compatible) return { runId: null, updatedThreads };
   if (
     compatible &&
     (await tx.botMessageWake.findFirst({
@@ -745,7 +750,7 @@ async function bindBotMessageWakeInTransaction(
       select: { id: true },
     }))
   )
-    return null;
+    return { runId: null, updatedThreads };
   if (compatible) {
     let steeringMessageId: string | null = null;
     for (const deliveryId of wake.deliveryIds) {
@@ -773,9 +778,9 @@ async function bindBotMessageWakeInTransaction(
       where: { id: wake.id },
       data: { state: "bound", runId: active.id, steeringMessageId },
     });
-    return null;
+    return { runId: null, updatedThreads };
   }
-  return createWakeRunInTransaction(tx, wake);
+  return { runId: await createWakeRunInTransaction(tx, wake, updatedThreads), updatedThreads };
 }
 
 async function createWakeRunInTransaction(
@@ -791,8 +796,15 @@ async function createWakeRunInTransaction(
     deliveryIds: string[];
     clientNonce: string;
   },
+  updatedThreads: ThreadCursor[],
 ) {
-  const { prompt, lastMessageId, liveIds } = await wakePrompt(tx, wake.deliveryIds, new Date());
+  const {
+    prompt,
+    lastMessageId,
+    liveIds,
+    updatedThreads: expiredThreads,
+  } = await wakePrompt(tx, wake.deliveryIds, new Date());
+  updatedThreads.push(...expiredThreads);
   if (liveIds.length === 0) {
     await tx.botMessageWake.update({
       where: { id: wake.id },
@@ -869,7 +881,7 @@ export async function dispatchBotMessageWake(prisma: PrismaClient, wakeId: strin
       ])
         await tx.$queryRaw`SELECT id FROM threads WHERE id = ${threadId} FOR UPDATE`;
       await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${candidate.rootTaskId} FOR UPDATE`;
-      return bindBotMessageWakeInTransaction(tx, wakeId);
+      return (await bindBotMessageWakeInTransaction(tx, wakeId)).runId;
     }),
   );
 }
@@ -969,12 +981,24 @@ export async function settleQuietBotMessageClaimsInTransaction(
   leaseFence: number,
   completed: boolean,
 ) {
-  await tx.botMessageDelivery.updateMany({
-    where: { quietClaimRunId: runId, quietClaimLeaseFence: leaseFence, outcome: null },
-    data: completed
-      ? { outcome: "consumed", quietClaimRunId: null, quietClaimLeaseFence: null }
-      : { quietClaimRunId: null, quietClaimLeaseFence: null },
-  });
+  const where = { quietClaimRunId: runId, quietClaimLeaseFence: leaseFence, outcome: null };
+  if (!completed) {
+    await tx.botMessageDelivery.updateMany({
+      where,
+      data: { quietClaimRunId: null, quietClaimLeaseFence: null },
+    });
+    return [];
+  }
+  const claims = await tx.botMessageDelivery.findMany({ where, select: { id: true } });
+  const updatedThreads: ThreadCursor[] = [];
+  for (const claim of claims) {
+    const settled = await tx.botMessageDelivery.updateMany({
+      where: { ...where, id: claim.id },
+      data: { outcome: "consumed", quietClaimRunId: null, quietClaimLeaseFence: null },
+    });
+    if (settled.count) updatedThreads.push(...(await projectDeliveryState(tx, claim.id, null)));
+  }
+  return updatedThreads;
 }
 
 export async function reconcileQuietBotMessageClaims(prisma: PrismaClient, limit = 100) {
@@ -1206,11 +1230,13 @@ export async function settleBotMessageWakesInTransaction(
         orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         select: { id: true },
       });
-      if (pending)
+      if (pending) {
+        const binding = await bindBotMessageWakeInTransaction(tx, pending.id);
         return {
-          continuationRunId: await bindBotMessageWakeInTransaction(tx, pending.id),
-          updatedThreads,
+          continuationRunId: binding.runId,
+          updatedThreads: [...updatedThreads, ...binding.updatedThreads],
         };
+      }
     }
   }
   return { continuationRunId: null, updatedThreads };
