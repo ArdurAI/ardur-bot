@@ -440,8 +440,8 @@
     },
     "homebrew": {
       "tapRepo": "ArdurAI/homebrew-tap",
-      "caskPath": "Casks/ardur-bot.rb",
-      "command": "brew install --cask ardurai/tap/ardur-bot"
+      "caskPath": "Casks/ardur.rb",
+      "command": "brew install --cask ardurai/tap/ardur"
     }
   },
   "personas": [
