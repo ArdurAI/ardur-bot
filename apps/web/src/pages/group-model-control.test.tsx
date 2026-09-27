@@ -371,14 +371,22 @@ describe("group model control", () => {
     expect(container.querySelector("details")?.textContent).not.toContain("Newer");
   });
 
-  it.each([null, "off"] as const)(
-    "hides an unchanged inherited non-reasoning choice with bot effort %s",
-    async (thinkingLevel) => {
+  it.each(["inherited", "explicit"] as const)(
+    "shows a non-reasoning %s choice without a change disclosure",
+    async (selection) => {
       const localSettings = {
         ...settings!,
         me: { defaultProvider: "ollama", defaultModel: "local-model" },
         catalog: [
-          { ...settings!.catalog[0]!, provider: "ollama", id: "local-model", reasoning: false },
+          {
+            ...settings!.catalog[0]!,
+            provider: "ollama",
+            providerName: "Ollama",
+            id: "local-model",
+            label: "Local model",
+            reasoning: false,
+            thinkingLevels: [] as [],
+          },
         ],
         credentials: [{ ...settings!.credentials[0]!, provider: "ollama", modelId: "local-model" }],
       };
@@ -387,10 +395,10 @@ describe("group model control", () => {
           <BotModelChip
             bot={{
               ...bot,
-              modelProvider: null,
-              modelId: null,
-              modelCredentialId: null,
-              thinkingLevel,
+              modelProvider: selection === "explicit" ? "ollama" : null,
+              modelId: selection === "explicit" ? "local-model" : null,
+              modelCredentialId: selection === "explicit" ? "credential" : null,
+              thinkingLevel: "off",
             }}
             settings={localSettings}
             display="using"
@@ -399,15 +407,59 @@ describe("group model control", () => {
                 ...pin,
                 provider: "ollama",
                 modelId: "local-model",
-                effort: thinkingLevel === "off" ? "none" : null,
+                effort: null,
               },
             }}
           />,
         ),
       );
+      expect(container.querySelector('[role="status"]')?.textContent).toBe(
+        "Ardur · Ollama · Local model · not applicable",
+      );
       expect(container.querySelector("details")).toBeNull();
     },
   );
+
+  it("shows a running disabled reasoning choice as off and available", async () => {
+    const localSettings = {
+      ...settings!,
+      me: { defaultProvider: "ollama", defaultModel: "local-model" },
+      catalog: [
+        {
+          ...settings!.catalog[0]!,
+          provider: "ollama",
+          providerName: "Ollama",
+          id: "local-model",
+          label: "Local model",
+          reasoning: true,
+          thinkingLevels: ["off", "low"] as ["off", "low"],
+        },
+      ],
+      credentials: [{ ...settings!.credentials[0]!, provider: "ollama", modelId: "local-model" }],
+    };
+    await act(async () =>
+      root.render(
+        <BotModelChip
+          bot={{
+            ...bot,
+            modelProvider: null,
+            modelId: null,
+            modelCredentialId: null,
+            thinkingLevel: "off",
+          }}
+          settings={localSettings}
+          display="using"
+          run={{
+            runtimePin: { ...pin, provider: "ollama", modelId: "local-model", effort: "none" },
+          }}
+        />,
+      ),
+    );
+    expect(container.querySelector('[role="status"]')?.textContent).toBe(
+      "Ardur · Ollama · Local model · off",
+    );
+    expect(container.querySelector("details")).toBeNull();
+  });
 
   it("discloses an inherited effort change with the same model", async () => {
     const inheritedSettings = {

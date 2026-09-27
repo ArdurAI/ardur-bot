@@ -8,7 +8,8 @@ import {
 
 it("records inherited local effort in the run pin representation", () => {
   expect(inheritedOllamaEffort(null, false)).toBeNull();
-  expect(inheritedOllamaEffort("off", false)).toBe("none");
+  expect(inheritedOllamaEffort("off", false)).toBeNull();
+  expect(inheritedOllamaEffort("off", true)).toBe("none");
   expect(inheritedOllamaEffort(null, true)).toBe("medium");
 });
 

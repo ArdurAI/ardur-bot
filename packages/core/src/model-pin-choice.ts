@@ -46,6 +46,6 @@ export function inheritedOllamaEffort(
   thinkingLevel: ThinkingLevel | null | undefined,
   reasoning: boolean | undefined,
 ): ThinkingLevel | "none" | null {
-  if (thinkingLevel === "off") return "none";
+  if (thinkingLevel === "off") return reasoning === false ? null : "none";
   return thinkingLevel ?? (reasoning ? "medium" : null);
 }

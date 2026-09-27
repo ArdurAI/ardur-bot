@@ -180,6 +180,10 @@ export async function resolveRunModelPin(input: {
   const selected = selectConfiguredModel({ pin, credential });
   if (selected.kind === "problem") return selected;
   try {
+    if (input.snapshot == null && pin.provider === "ollama" && bot?.thinkingLevel === "off") {
+      const discovered = await input.loadKey(credential, pin, true);
+      pin.effort = inheritedOllamaEffort(bot.thinkingLevel, discovered.reasoning);
+    }
     const model = loadedModel ?? (await input.loadKey(credential, pin));
     const resolved = { ...model, runtimePin: pin, thinkingLevel: selected.thinkingLevel };
     const space = await input.prisma.space.findUnique({ where: { id: input.scope.spaceId } });

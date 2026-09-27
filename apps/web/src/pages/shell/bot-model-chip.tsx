@@ -59,7 +59,10 @@ export function effectiveBotModel(
     unavailable: useOverride
       ? Boolean(
           (bot.modelCredentialId && !credential) ||
-            (thinkingLevel && levels && !levels.includes(thinkingLevel)) ||
+            (thinkingLevel &&
+              levels &&
+              !levels.includes(thinkingLevel) &&
+              !(provider === "ollama" && reasoning === false && thinkingLevel === "off")) ||
             modelUnavailable({ catalog, credentials }, provider, modelId),
         )
       : spaceDefaultUnavailable({ me, catalog, credentials }),
@@ -82,16 +85,17 @@ function nextBotPin(bot: Bot, settings: ModelSettings | null): Omit<RuntimePin, 
     runtimeKind: bot.runtimeKind ?? "pi",
     provider,
     modelId,
-    effort: overridden
-      ? (bot.thinkingLevel ?? null)
-      : provider === "ollama"
+    effort:
+      provider === "ollama" && (!overridden || bot.thinkingLevel === "off")
         ? inheritedOllamaEffort(bot.thinkingLevel, credential?.reasoning ?? entry?.reasoning)
-        : (bot.thinkingLevel ??
-          credential?.thinkingLevel ??
-          spaceDefaultEffort(
-            credential?.reasoning ?? entry?.reasoning,
-            credential?.thinkingLevels ?? entry?.thinkingLevels,
-          )),
+        : overridden
+          ? (bot.thinkingLevel ?? null)
+          : (bot.thinkingLevel ??
+            credential?.thinkingLevel ??
+            spaceDefaultEffort(
+              credential?.reasoning ?? entry?.reasoning,
+              credential?.thinkingLevels ?? entry?.thinkingLevels,
+            )),
     credentialId: bot.modelCredentialId ?? credential?.id ?? null,
   };
 }
@@ -132,7 +136,9 @@ export function BotModelChip({
         runtimeKind: requested.runtimeKind,
         modelProvider: requested.provider,
         modelId: requested.modelId,
-        thinkingLevel: requested.effort as Bot["thinkingLevel"],
+        thinkingLevel: (requested.provider === "ollama" && requested.effort === "none"
+          ? "off"
+          : requested.effort) as Bot["thinkingLevel"],
         modelCredentialId: requested.credentialId,
         modelPinRevision: pin ? requested.revision : bot.modelPinRevision,
       }

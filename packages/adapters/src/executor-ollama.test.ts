@@ -10,7 +10,7 @@ const http = vi.hoisted(() => ({ fetch: vi.fn<typeof fetch>() }));
 vi.mock("./undici-fetch.js", () => ({ dispatcherFetch: http.fetch }));
 afterEach(() => vi.resetAllMocks());
 
-function fixture(reasoning = true) {
+function fixture(reasoning = true, supportsThinkingOff = true) {
   let installed = true;
   http.fetch.mockImplementation(async (url) => {
     const path = new URL(String(url)).pathname;
@@ -20,6 +20,7 @@ function fixture(reasoning = true) {
       return Response.json({
         capabilities: reasoning ? ["thinking", "completion"] : ["completion"],
         model_info: { "qwen3.context_length": 40960 },
+        ...(supportsThinkingOff ? {} : { thinking: { values: [true] } }),
       });
     throw new Error("Inference must not run during pin resolution");
   });
@@ -144,6 +145,32 @@ describe("Ollama run pins", () => {
       thinkingLevel: "off",
     });
   });
+  it("rejects thinking off when the selected reasoning model cannot disable it", async () => {
+    const f = fixture(true, false);
+    expect(
+      await resolveRunModelPin({ ...f.input, snapshot: undefined, bot: { thinkingLevel: "off" } }),
+    ).toMatchObject({ kind: "problem", code: "pin-effort-unsupported" });
+  });
+  it.each(["inherited", "explicit"] as const)(
+    "admits a non-reasoning %s choice with thinking off",
+    async (selection) => {
+      const f = fixture(false);
+      const bot =
+        selection === "explicit"
+          ? {
+              modelProvider: "ollama",
+              modelId: f.pin.modelId,
+              modelCredentialId: f.pin.credentialId,
+              thinkingLevel: "off",
+            }
+          : { thinkingLevel: "off" };
+      expect(await resolveRunModelPin({ ...f.input, snapshot: undefined, bot })).toMatchObject({
+        kind: "resolved",
+        pin: { provider: "ollama", effort: null },
+        thinkingLevel: "off",
+      });
+    },
+  );
   it("snapshots the existing off storage value as Ollama none", () => {
     expect(
       requestedBotPin({ modelProvider: "ollama", modelId: "qwen3:8b", thinkingLevel: "off" })
