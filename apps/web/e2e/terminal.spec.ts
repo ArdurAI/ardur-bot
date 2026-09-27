@@ -88,10 +88,12 @@ test("Terminal loads on demand and shell shortcuts stay in the terminal", async 
     });
   });
   await page.reload();
+  await expect(page.getByRole("button", { name: "Search", exact: true })).toBeVisible();
+  await page.locator("body").click();
   await page.keyboard.press("ControlOrMeta+K");
   await expect(page.getByTestId("command-palette")).toBeVisible();
   await page.getByRole("option", { name: "Open terminal", exact: true }).click();
-  await expect(page.getByRole("textbox", { name: "Terminal", exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Terminal", exact: true })).toBeVisible();
   await page.getByRole("textbox", { name: "Terminal", exact: true }).focus();
   await page.keyboard.press("ControlOrMeta+K");
   await expect(page.getByTestId("command-palette")).toBeHidden();
