@@ -53,7 +53,10 @@ test("shows the first goal desk request, independent check, and coordinator answ
   await expect(
     page.getByText("Results show oldest first; sort results by createdAt ascending.").last(),
   ).toBeVisible({ timeout: 60_000 });
-  await expect(page.getByText(/The fixture does not say how ties are ordered/)).toBeVisible({
+  // Scope to the transcript: the group list preview repeats the final answer in the sidebar.
+  await expect(
+    page.getByTestId("transcript").getByText(/The fixture does not say how ties are ordered/),
+  ).toBeVisible({
     timeout: 60_000,
   });
   await captureScreenshot(page, testInfo, "bot-comms-first-loop");
