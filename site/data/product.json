@@ -36,7 +36,7 @@
       "id": "delegate",
       "eyebrow": "DELEGATION",
       "title": "Bots work together",
-      "body": "A goal coordinator can send bounded requests to group members' desk threads and receive their results. Bots can also hand off room work or use short-lived subagents.",
+      "body": "A goal coordinator can send bounded requests to group members' desk threads. A receipt shows Delivered, then Read when the recipient runtime confirms input acceptance, and Replied after a linked result. Unrelated work keeps the message waiting for a turn. Bots can also hand off room work or use short-lived subagents.",
       "source": "README.md#What you get today"
     },
     {

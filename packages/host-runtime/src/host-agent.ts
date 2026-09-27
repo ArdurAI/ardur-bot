@@ -437,6 +437,7 @@ export class HostAgent {
         | "executeTool"
         | "onToolCompleted"
         | "onRuntimeInfo"
+        | "acknowledgeInput"
         | "claimSteering",
       args: unknown[],
     ) => {
@@ -488,6 +489,9 @@ export class HostAgent {
       },
       onRuntimeInfo: async (info) => {
         await callback("onRuntimeInfo", [info]);
+      },
+      acknowledgeInput: async (input) => {
+        await callback("acknowledgeInput", [input]);
       },
       claimSteering: async (seen) =>
         (await callback("claimSteering", [seen])) as Awaited<

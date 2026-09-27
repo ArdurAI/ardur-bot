@@ -91,6 +91,19 @@ export class RemoteHostRuntime implements AgentRuntime {
             await request.onRuntimeInfo?.(RuntimeInfoSchema.parse(frame.args[0]));
             return;
           }
+          if (frame.method === "acknowledgeInput") {
+            const input = z
+              .object({
+                runId: z.string(),
+                leaseFence: z.number().int().nonnegative(),
+                deliveryIds: z.array(z.string()).max(32),
+                mode: z.enum(["initial", "steering"]),
+              })
+              .strict()
+              .parse(frame.args[0]);
+            await request.acknowledgeInput?.(input);
+            return;
+          }
           if (frame.method === "claimSteering")
             return (
               request.claimSteering?.(z.array(z.string()).max(1024).parse(frame.args[0])) ?? []

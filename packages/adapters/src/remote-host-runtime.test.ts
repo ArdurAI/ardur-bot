@@ -63,6 +63,24 @@ async function collect(source: ReturnType<RemoteHostRuntime["run"]>) {
   return events;
 }
 describe("worker-owned remote runtime callbacks", () => {
+  it("forwards receipt callbacks to the executor, which can refuse native acknowledgement", async () => {
+    const acknowledgeInput = vi.fn(async () => {
+      throw new Error("Input acknowledgement is unsupported by this runtime.");
+    });
+    const input = {
+      runId: "run",
+      leaseFence: 2,
+      deliveryIds: ["delivery"],
+      mode: "initial" as const,
+    };
+    const remote = runtime(async (callback) => {
+      await callback(frame("acknowledgeInput", [input]));
+    });
+    await expect(collect(remote.run({ ...request(), acknowledgeInput }))).rejects.toThrow(
+      "unsupported",
+    );
+    expect(acknowledgeInput).toHaveBeenCalledWith(input);
+  });
   it("retains effort evidence across the host callback schema", async () => {
     const onRuntimeInfo = vi.fn();
     const info = {
