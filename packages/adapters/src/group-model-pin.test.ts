@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@ardurbot/db";
 import { describe, expect, it, vi } from "vitest";
 import { captureRunModelPin, selectRunPinSource } from "./group-model-pin.js";
+import { loadInsightFacts } from "./learning-insights.js";
 
 const pin = {
   runtimeKind: "pi" as const,
@@ -261,6 +262,113 @@ describe("fenced run pin capture", () => {
         pin,
       }),
     ).toMatchObject({ pin });
+  });
+
+  it("refreshes the actual destination when a paused run resumes with its saved pin", async () => {
+    const f = fixture(2, 0);
+    const destination = { host: "updated.example.test", local: false };
+    await captureRunModelPin({
+      prisma: f.prisma,
+      scope,
+      runId: "run",
+      workerId: "worker",
+      fence: 7,
+      candidate: { ...f.candidate, membership: null, source: { kind: "bot", botId: "bot" } },
+      pin,
+      destination,
+    });
+    expect(f.updateMany).toHaveBeenLastCalledWith({
+      where: { id: "run", status: "running", leaseOwner: "worker", leaseFence: 7 },
+      data: { modelProvider: pin.provider, modelId: pin.modelId, runtimeDestination: destination },
+    });
+  });
+
+  it("classifies a resumed run from the endpoint it actually used", async () => {
+    const now = new Date("2026-09-01T00:00:00.000Z");
+    const run = {
+      id: "run",
+      botId: "bot",
+      trigger: "user",
+      boardItemId: null,
+      status: "running" as "running" | "completed",
+      error: null,
+      runtimePin: pin,
+      runtimePinSource: { kind: "bot", botId: "bot" },
+      runtimeDestination: { host: "old.example.test", local: true },
+      usageGroupId: null,
+      leaseOwner: "worker",
+      leaseFence: 7,
+      startedAt: now,
+      completedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    };
+    const updateMany = vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
+      if ("runtimePin" in data) return { count: 0 };
+      Object.assign(run, data);
+      return { count: 1 };
+    });
+    const tx = {
+      run: {
+        updateMany,
+        findUnique: vi.fn(async () => run),
+      },
+    };
+    const prisma = {
+      $transaction: vi.fn(async (fn: (client: typeof tx) => Promise<unknown>) => fn(tx)),
+      $queryRaw: vi.fn(async () => []),
+      bot: {
+        findMany: vi.fn(async () => [
+          {
+            id: "bot",
+            name: "Worker",
+            runtimeKind: "pi",
+            ...bot,
+            allowedModelDestinations: { mode: "local" },
+          },
+        ]),
+      },
+      space: { findUnique: vi.fn(async () => ({ allowedModelDestinations: { mode: "local" } })) },
+      run: { findMany: vi.fn(async () => [run]) },
+      spaceModelPreference: {
+        findMany: vi.fn(async () => [{ credential: { id: pin.credentialId } }]),
+      },
+      feedback: { count: vi.fn(async () => 0), findMany: vi.fn(async () => []) },
+      externalEffect: { findMany: vi.fn(async () => []) },
+      actionApprovalRule: { findMany: vi.fn(async () => []) },
+      task: { findMany: vi.fn(async () => []) },
+      routine: { findMany: vi.fn(async () => []) },
+      learningProposal: { findMany: vi.fn(async () => []) },
+    } as unknown as PrismaClient;
+    const destination = { host: "new.example.test", local: false };
+    await captureRunModelPin({
+      prisma,
+      scope,
+      runId: "run",
+      workerId: "worker",
+      fence: 7,
+      candidate: {
+        snapshot: pin,
+        source: { kind: "bot", botId: "bot" },
+        usageGroupId: null,
+        membership: null,
+      },
+      pin,
+      destination,
+    });
+    expect(run.runtimeDestination).toEqual(destination);
+    run.status = "completed";
+    const facts = await loadInsightFacts(
+      prisma,
+      { spaceId: "space", userId: "owner" },
+      {
+        owner: false,
+        learningEnabled: true,
+      },
+      now,
+    );
+    expect(Object.values(facts.models)[0]?.local).toBe(false);
+    expect(facts.bots[0]?.allowed).toEqual([]);
   });
 
   it("fills delegated run model columns from its pre-set committed pin under the lease", async () => {

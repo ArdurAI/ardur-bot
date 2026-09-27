@@ -192,7 +192,11 @@ export async function captureRunModelPin(input: {
           leaseOwner: input.workerId,
           leaseFence: input.fence,
         },
-        data: { modelProvider: committedPin.provider, modelId: committedPin.modelId },
+        data: {
+          modelProvider: committedPin.provider,
+          modelId: committedPin.modelId,
+          ...(input.destination ? { runtimeDestination: input.destination } : {}),
+        },
       });
       if (!metadata.count) return "lost" as const;
     }
