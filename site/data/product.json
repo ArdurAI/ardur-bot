@@ -700,6 +700,22 @@
       }
     ]
   },
+  "videos": [
+    {
+      "id": "routines-demo",
+      "title": "A routine from setup to result",
+      "description": "A Briefing bot creates a Morning checklist routine from sample notes, schedules it for weekdays at 8:00 AM UTC, saves it, runs it once, and shows three checklist bullets and a completed Run history entry.",
+      "durationSeconds": 56,
+      "width": 1920,
+      "height": 1080,
+      "files": {
+        "mp4": "media/routines-demo.mp4",
+        "webm": "media/routines-demo.webm",
+        "poster": "media/routines-demo.jpg",
+        "captions": "media/routines-demo.en.vtt"
+      }
+    }
+  ],
   "screenshots": [
     {
       "id": "app-chat",
