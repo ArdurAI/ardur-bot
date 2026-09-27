@@ -1,5 +1,9 @@
 import type { ProcessEvent } from "@ardurbot/adapter-kit";
-import { ComputerEngineUnavailableError } from "@ardurbot/contracts";
+import {
+  COMPUTER_IMAGE_DOWNLOAD_FAILED_CODE,
+  ComputerEngineUnavailableError,
+  ComputerImageDownloadError,
+} from "@ardurbot/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   DockerSandboxProvider,
@@ -65,15 +69,18 @@ describe("Docker sandbox", () => {
       vi.fn(
         async () =>
           new Response(
-            '{"type":"error","error":"The bot computer image could not be downloaded: network error. Check the network, or build it locally with `pnpm build:computers`."}\n',
+            `{"type":"error","code":"${COMPUTER_IMAGE_DOWNLOAD_FAILED_CODE}","reason":"network error","error":"registry diagnostic detail"}\n`,
             { headers: { "content-type": "application/x-ndjson" } },
           ),
       ),
     );
     const provider = new DockerSandboxProvider("http://supervisor.test", "test-token");
-    await expect(
-      provider.provision({ botId: "bot", homePath: "/tmp/bot" }, context),
-    ).rejects.toThrow("The bot computer image could not be downloaded: network error");
+    const failure = await provider
+      .provision({ botId: "bot", homePath: "/tmp/bot" }, context)
+      .catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(ComputerImageDownloadError);
+    expect(failure).toMatchObject({ reason: "network error" });
+    expect((failure as Error).message).not.toContain("diagnostic detail");
   });
 
   it("sends the bounded timeout to the supervisor and preserves its honest result", async () => {

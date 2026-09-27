@@ -17,8 +17,11 @@ import type {
   ScreenSession,
 } from "@ardurbot/adapter-kit";
 import {
+  COMPUTER_IMAGE_DOWNLOAD_FAILED_CODE,
   ComputerEngineUnavailableError,
   ComputerEngineUnavailableSchema,
+  ComputerImageDownloadError,
+  isComputerImageDownloadReason,
   profileCommandError,
 } from "@ardurbot/contracts";
 import { CapacitySnapshotSchema, unknownCapacity } from "@ardurbot/contracts/fleet";
@@ -106,10 +109,18 @@ async function readProvisionStream(
       percent?: number | null;
       value?: { id: string; resumed?: boolean };
       error?: string;
+      code?: string;
+      reason?: unknown;
     };
     if (frame.type === "progress") {
       await context.onComputerImageProgress?.(frame.percent ?? null);
     } else if (frame.type === "error") {
+      if (frame.code === COMPUTER_IMAGE_DOWNLOAD_FAILED_CODE) {
+        if (!isComputerImageDownloadReason(frame.reason)) {
+          throw new Error("Computer provisioning returned an invalid image download reason.");
+        }
+        throw new ComputerImageDownloadError(frame.reason);
+      }
       throw new Error(frame.error ?? "Computer provisioning failed.");
     } else if (frame.type === "result") {
       result = frame.value;

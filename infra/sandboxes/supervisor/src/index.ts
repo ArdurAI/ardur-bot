@@ -6,7 +6,12 @@ import http from "node:http";
 import { cpus, freemem, loadavg, totalmem } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { ComputerProfileSchema, computerImage } from "@ardurbot/contracts";
+import {
+  COMPUTER_IMAGE_DOWNLOAD_FAILED_CODE,
+  ComputerImageDownloadError,
+  ComputerProfileSchema,
+  computerImage,
+} from "@ardurbot/contracts";
 import {
   boundedSandboxCommandTimeoutMs,
   COMMAND_OUTPUT_LIMIT,
@@ -414,7 +419,12 @@ app.post("/computers", async (c) => {
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      return c.json({ error: message }, 500);
+      return c.json(
+        error instanceof ComputerImageDownloadError
+          ? { error: message, code: COMPUTER_IMAGE_DOWNLOAD_FAILED_CODE, reason: error.reason }
+          : { error: message },
+        500,
+      );
     }
   };
   if (c.req.header("accept") !== "application/x-ndjson") return provision();
@@ -425,9 +435,15 @@ app.post("/computers", async (c) => {
         controller.enqueue(encoder.encode(`${JSON.stringify(frame)}\n`));
       try {
         const response = await provision(async (percent) => write({ type: "progress", percent }));
-        const result = (await response.json()) as { error?: string };
+        const result = (await response.json()) as {
+          error?: string;
+          code?: string;
+          reason?: string;
+        };
         write(
-          response.ok ? { type: "result", value: result } : { type: "error", error: result.error },
+          response.ok
+            ? { type: "result", value: result }
+            : { type: "error", error: result.error, code: result.code, reason: result.reason },
         );
       } catch {
         write({ type: "error", error: "Computer provisioning failed." });

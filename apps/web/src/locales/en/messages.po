@@ -5857,6 +5857,14 @@ msgstr "Preferences"
 msgid "Preferred computer"
 msgstr "Preferred computer"
 
+#: src/pages/Shell.tsx
+msgid "Preparing the bot computer…"
+msgstr "Preparing the bot computer…"
+
+#: src/pages/Shell.tsx
+msgid "Preparing the bot computer… {percent}%"
+msgstr "Preparing the bot computer… {percent}%"
+
 #: src/pages/system/SystemPage.tsx
 msgid "Prevent idle sleep while routines are enabled; your display can turn off, and closing the lid still puts the computer to sleep."
 msgstr "Prevent idle sleep while routines are enabled; your display can turn off, and closing the lid still puts the computer to sleep."
@@ -6536,7 +6544,7 @@ msgstr "Retry {0}"
 msgid "Retry now"
 msgstr "Retry now"
 
-#: src/pages/Shell.tsx
+#: src/pages/shell/computer-screen-error.tsx
 msgid "Retry screen"
 msgstr "Retry screen"
 
@@ -7966,6 +7974,7 @@ msgstr "Trusted folders"
 #: src/pages/customize/CustomizeControls.tsx
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/shell/computer-screen-error.tsx
 msgid "Try again"
 msgstr "Try again"
 

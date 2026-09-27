@@ -1,9 +1,12 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import type { SandboxProvider } from "@ardurbot/adapter-kit";
 import { createRunSandbox } from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
 import {
+  COMPUTER_IMAGE_DOWNLOAD_FAILED_CODE,
+  ComputerImageDownloadError,
   ENGINE_MISSING_CODE,
   HOST_MOVE_UNAVAILABLE_CODE,
   HOST_MOVE_UNAVAILABLE_MESSAGE,
@@ -252,6 +255,80 @@ it("says which engine is missing when a computer is started", async () => {
         "This computer runs on E2B, which is not configured here. Reset it in Settings, Computers to start it on this deployment's engine, or configure E2B again.",
       data: { code: ENGINE_MISSING_CODE },
     });
+  } finally {
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+it("serializes a safe image download refusal from computer.boot", async () => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), "ardurbot-image-refusal-rpc-"));
+  const computer = {
+    id: "computer",
+    kind: "docker",
+    state: "stopped",
+    scope: "dedicated",
+    homeKey: "home",
+    providerRef: null,
+    connectionId: null,
+    maintenanceId: null,
+    controlHolder: "none",
+    controlLeaseId: null,
+    updatedAt: new Date(0),
+  };
+  const prisma = {
+    bot: {
+      findFirst: async () => ({
+        id: "bot",
+        spaceId: "space",
+        userId: "owner",
+        archivedAt: null,
+        thread: { id: "thread" },
+        computer,
+      }),
+    },
+    computer: {
+      findUniqueOrThrow: async () => computer,
+      updateMany: async () => ({ count: 1 }),
+    },
+    thread: { findFirst: async () => null },
+  } as unknown as PrismaClient;
+  const sandbox = {
+    provision: async () => {
+      throw new ComputerImageDownloadError("not found or private", {
+        cause: new Error("https://registry.invalid/private/diagnostic-path"),
+      });
+    },
+  } as unknown as SandboxProvider;
+  const handler = new RPCHandler(
+    createRouter({
+      prisma,
+      sandbox,
+      home: {},
+      dataDir,
+      env: { sandboxProvider: "docker" },
+    } as unknown as RouterDeps),
+    { clientInterceptors: [onError((error, { path }) => logUnexpectedRpcError(error, path))] },
+  );
+  try {
+    const { response } = await handler.handle(
+      new Request("http://127.0.0.1/rpc/computer/boot", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ json: { botId: "bot" } }),
+      }),
+      { prefix: "/rpc", context: { actor } },
+    );
+    expect(response?.status).toBe(400);
+    const body = (await response?.json()) as {
+      json?: { code?: string; message?: string; data?: { code?: string; reason?: string } };
+    };
+    expect(body.json).toMatchObject({
+      code: "BAD_REQUEST",
+      message:
+        "The bot computer image could not be downloaded: not found or private. Check the network, or build it locally with `pnpm build:computers`.",
+      data: { code: COMPUTER_IMAGE_DOWNLOAD_FAILED_CODE, reason: "not found or private" },
+    });
+    expect(JSON.stringify(body)).not.toContain("registry.invalid");
   } finally {
     await rm(dataDir, { recursive: true, force: true });
   }

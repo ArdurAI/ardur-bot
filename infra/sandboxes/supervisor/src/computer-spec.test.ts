@@ -55,6 +55,14 @@ describe("computer image resolution", () => {
       "ghcr.io/ardurai/ardur-bot/computer:dev",
     ],
     [
+      { override: "", channel: "", localPresent: false, appVersion: "0.1.0-alpha.1" },
+      "ghcr.io/ardurai/ardur-bot/computer:dev",
+    ],
+    [
+      { override: "  ", channel: "  ", localPresent: false, appVersion: "0.1.0" },
+      "ghcr.io/ardurai/ardur-bot/computer:0.1.0",
+    ],
+    [
       { localPresent: false, appVersion: "0.1.0", channel: "dev" },
       "ghcr.io/ardurai/ardur-bot/computer:dev",
     ],

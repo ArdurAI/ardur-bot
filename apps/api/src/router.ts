@@ -110,6 +110,8 @@ import {
 import type { Auth } from "@ardurbot/auth";
 import type { Actor, ComputerStatus, Me, SpaceNavigation } from "@ardurbot/contracts";
 import {
+  COMPUTER_IMAGE_DOWNLOAD_FAILED_CODE,
+  ComputerImageDownloadError,
   ENGINE_MISSING_CODE,
   HOST_MOVE_UNAVAILABLE_CODE,
   HostMoveUnavailableError,
@@ -6000,6 +6002,11 @@ async function runComputerReplace(
 
 /** A missing engine or a refused host move already says what to do, so it reaches the user. */
 function engineRefusal(error: unknown) {
+  if (error instanceof ComputerImageDownloadError)
+    return new ORPCError("BAD_REQUEST", {
+      message: error.message,
+      data: { code: COMPUTER_IMAGE_DOWNLOAD_FAILED_CODE, reason: error.reason },
+    });
   if (error instanceof MissingComputerProviderError)
     return new ORPCError("BAD_REQUEST", {
       message: error.message,

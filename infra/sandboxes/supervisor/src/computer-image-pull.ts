@@ -1,3 +1,4 @@
+import { ComputerImageDownloadError } from "@ardurbot/contracts";
 import type Docker from "dockerode";
 
 export type ImagePullProgress = (percent: number | null) => Promise<void> | void;
@@ -10,7 +11,7 @@ type PullFrame = {
   progressDetail?: { current?: number; total?: number };
 };
 
-export function computerImagePullFailure(error: unknown): Error {
+export function computerImagePullFailure(error: unknown): ComputerImageDownloadError {
   const detail = error instanceof Error ? error.message : String(error);
   const code = (error as { code?: string; statusCode?: number })?.code ?? "";
   const status = (error as { statusCode?: number })?.statusCode;
@@ -24,10 +25,7 @@ export function computerImagePullFailure(error: unknown): Error {
           /network|timeout|timed out|connection|TLS|DNS/i.test(detail)
         ? "network error"
         : "download failed";
-  return new Error(
-    `The bot computer image could not be downloaded: ${reason}. Check the network, or build it locally with \`pnpm build:computers\`.`,
-    { cause: error },
-  );
+  return new ComputerImageDownloadError(reason, { cause: error });
 }
 
 /** Parse the engine's newline-delimited progress frames across arbitrary stream chunks. */

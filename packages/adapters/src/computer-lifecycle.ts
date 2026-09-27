@@ -343,7 +343,9 @@ export async function provisionComputer(
   let bootActivated = false;
   let imagePullReported = false;
   let progressThreadId: string | undefined;
-  const reportImageStatus = async (status: "running" | "error") => {
+  const reportImageStatus = async (
+    status: "stopped" | "booting" | "running" | "suspended" | "error",
+  ) => {
     if (!imagePullReported || !progressThreadId || !context.botId) return;
     await deps.events
       .append({
@@ -359,7 +361,7 @@ export async function provisionComputer(
     await onProgress?.("recreating");
     const progressThread =
       existing.kind === "docker" && context.botId
-        ? await deps.prisma.thread.findFirst({
+        ? await deps.prisma.thread?.findFirst?.({
             where: { botId: context.botId, userId: context.userId, spaceId: context.spaceId },
             select: { id: true },
           })
@@ -378,20 +380,24 @@ export async function provisionComputer(
       },
       {
         ...context,
-        onComputerImageProgress: async (percent) => {
-          if (!progressThread || !context.botId || percent === lastImagePercent) return;
-          lastImagePercent = percent;
-          imagePullReported = true;
-          await deps.events
-            .append({
-              spaceId: context.spaceId,
-              threadId: progressThread.id,
-              botId: context.botId,
-              type: "computer.status",
-              payload: { status: "booting", imagePulling: true, imagePullPercent: percent },
-            })
-            .catch(() => undefined);
-        },
+        ...(progressThread && context.botId
+          ? {
+              onComputerImageProgress: async (percent: number | null) => {
+                if (percent === lastImagePercent) return;
+                lastImagePercent = percent;
+                imagePullReported = true;
+                await deps.events
+                  .append({
+                    spaceId: context.spaceId,
+                    threadId: progressThread.id,
+                    botId: context.botId!,
+                    type: "computer.status",
+                    payload: { status: "booting", imagePulling: true, imagePullPercent: percent },
+                  })
+                  .catch(() => undefined);
+              },
+            }
+          : {}),
       },
     );
     provisioned = ref;
@@ -467,8 +473,9 @@ export async function provisionComputer(
       provisioned && (!reconnecting || provisioned.fresh === true)
         ? await rollbackProvisionedComputer(deps.sandbox, provisioned, context, error)
         : undefined;
+    let failed: { count: number };
     try {
-      await deps.prisma.computer.updateMany({
+      failed = await deps.prisma.computer.updateMany({
         where: {
           id: computerId,
           state: "booting",
@@ -490,7 +497,24 @@ export async function provisionComputer(
         "Computer provisioning failed and its failure could not be recorded",
       );
     }
-    await reportImageStatus(reconnecting ? "running" : "error");
+    if (failed.count === 1) {
+      await reportImageStatus(reconnecting ? "running" : "error");
+    } else if (imagePullReported) {
+      const current = await deps.prisma.computer.findUnique({
+        where: { id: computerId },
+        select: { state: true },
+      });
+      const state = current?.state;
+      if (
+        state === "stopped" ||
+        state === "booting" ||
+        state === "running" ||
+        state === "suspended" ||
+        state === "error"
+      ) {
+        await reportImageStatus(state);
+      }
+    }
     if (rollbackError) {
       throw new AggregateError(
         [error, rollbackError],

@@ -2,6 +2,7 @@ import type * as NodeFsPromises from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 import { Readable } from "node:stream";
+import { COMPUTER_IMAGE_DOWNLOAD_FAILED_CODE } from "@ardurbot/contracts";
 import { resolveSupervisorToken } from "@ardurbot/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { COMPUTER_IMAGE, computerNetworkNameFor, hostComputerUser } from "./computer-spec.js";
@@ -371,11 +372,18 @@ describe("provisioning network rollback", () => {
       inspect: vi.fn().mockRejectedValue(Object.assign(new Error("missing"), { statusCode: 404 })),
     });
     mocks.docker.pull.mockResolvedValue(Readable.from(['{"error":"manifest unknown"}\n']));
-    const response = await provisionNamed("bot-a");
-    expect(response.status).toBe(500);
-    expect(await response.json()).toEqual({
+    const response = await provisionNamed("bot-a", true);
+    expect(response.status).toBe(200);
+    const frames = (await response.text())
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    expect(frames.at(-1)).toEqual({
+      type: "error",
       error:
         "The bot computer image could not be downloaded: not found or private. Check the network, or build it locally with `pnpm build:computers`.",
+      code: COMPUTER_IMAGE_DOWNLOAD_FAILED_CODE,
+      reason: "not found or private",
     });
     expect(mocks.docker.createContainer).not.toHaveBeenCalled();
   });

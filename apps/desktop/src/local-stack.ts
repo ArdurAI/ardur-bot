@@ -102,6 +102,20 @@ const GENERATED_SECRETS: Record<string, number> = {
   SANDBOX_SUPERVISOR_TOKEN: 32,
 };
 const LAUNCH_SUPPLIED = ["ARDURBOT_IMAGE_TAG"];
+const PREVIOUS_GENERATED_COMPUTER_IMAGE = "ghcr.io/ardurai/ardur-bot/computer";
+const MAX_STACK_ENV_BYTES = 64 * 1024;
+
+function migrateGeneratedComputerImage(contents: string): string {
+  const lines = contents.split("\n");
+  if (lines.some((line) => /^ARDURBOT_COMPUTER_IMAGE_TAG=.+/.test(line))) return contents;
+  let changed = false;
+  const migrated = lines.map((line) => {
+    if (line !== `ARDURBOT_COMPUTER_IMAGE=${PREVIOUS_GENERATED_COMPUTER_IMAGE}`) return line;
+    changed = true;
+    return "ARDURBOT_COMPUTER_IMAGE=";
+  });
+  return changed ? migrated.join("\n") : contents;
+}
 
 /**
  * Port of install-images.sh `create_env`: fills the empty secret lines with random
@@ -124,18 +138,25 @@ export function renderStackEnv(template: string, randomHex: (bytes: number) => s
   return rendered.join("\n");
 }
 
-/** Keeps an existing regular `.env`, but replaces a final symlink instead of trusting its target. */
+/** Migrates only the previous generated image default; preserves other existing settings. */
 export async function ensureStackEnv(
   dir: string,
   template: string,
   randomHex: (bytes: number) => string,
 ): Promise<"kept" | "created"> {
   const destination = path.join(dir, STACK_ENV_FILE);
+  let info: Awaited<ReturnType<typeof lstat>> | undefined;
   try {
-    const info = await lstat(destination);
-    if (!info.isSymbolicLink()) return "kept";
-  } catch {
-    // Missing files are created below.
+    info = await lstat(destination);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  if (info && !info.isSymbolicLink()) {
+    const current = await readPrivateFile(destination, MAX_STACK_ENV_BYTES);
+    if (current === null) throw new Error("The existing stack settings could not be checked.");
+    const migrated = migrateGeneratedComputerImage(current);
+    if (migrated !== current) await writePrivateFile(destination, migrated);
+    return "kept";
   }
   await writePrivateFile(destination, renderStackEnv(template, randomHex));
   return "created";

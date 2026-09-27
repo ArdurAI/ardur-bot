@@ -121,6 +121,41 @@ describe("ensureStackEnv", () => {
     await expect(readFile(path.join(dir, STACK_ENV_FILE), "utf8")).resolves.toBe("sentinel\n");
   });
 
+  it("upgrades the previous launcher's generated image setting to automatic selection", async () => {
+    // The previous launcher removed both image-tag lines and supplied the tag per invocation.
+    const previousGenerated =
+      "ARDURBOT_IMAGE=ghcr.io/ardurai/ardur-bot/app\n" +
+      "ARDURBOT_COMPUTER_IMAGE=ghcr.io/ardurai/ardur-bot/computer\n" +
+      "POSTGRES_PASSWORD=fixture-only\n";
+    await writeFile(path.join(dir, STACK_ENV_FILE), previousGenerated, "utf8");
+
+    await expect(ensureStackEnv(dir, "unused template\n", fakeHex)).resolves.toBe("kept");
+    await expect(readFile(path.join(dir, STACK_ENV_FILE), "utf8")).resolves.toBe(
+      previousGenerated.replace(
+        "ARDURBOT_COMPUTER_IMAGE=ghcr.io/ardurai/ardur-bot/computer",
+        "ARDURBOT_COMPUTER_IMAGE=",
+      ),
+    );
+  });
+
+  it("preserves an existing image override and its explicit tag", async () => {
+    const custom =
+      "ARDURBOT_COMPUTER_IMAGE=ghcr.io/ardurai/ardur-bot/computer\n" +
+      "ARDURBOT_COMPUTER_IMAGE_TAG=chosen\n";
+    await writeFile(path.join(dir, STACK_ENV_FILE), custom, "utf8");
+    await expect(ensureStackEnv(dir, "unused template\n", fakeHex)).resolves.toBe("kept");
+    await expect(readFile(path.join(dir, STACK_ENV_FILE), "utf8")).resolves.toBe(custom);
+  });
+
+  it("keeps oversized existing settings intact when migration cannot inspect them", async () => {
+    const oversized = `ARDURBOT_COMPUTER_IMAGE=ghcr.io/ardurai/ardur-bot/computer\n${"x".repeat(64 * 1024)}`;
+    await writeFile(path.join(dir, STACK_ENV_FILE), oversized, "utf8");
+    await expect(ensureStackEnv(dir, "replacement\n", fakeHex)).rejects.toThrow(
+      "could not be checked",
+    );
+    await expect(readFile(path.join(dir, STACK_ENV_FILE), "utf8")).resolves.toBe(oversized);
+  });
+
   it.runIf(process.platform !== "win32")(
     "replaces a symlinked .env without touching its target",
     async () => {

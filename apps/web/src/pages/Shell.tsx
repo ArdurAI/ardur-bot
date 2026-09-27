@@ -29,6 +29,7 @@ import type {
 import {
   ATTACHMENT_ALLOWED_MIME_TYPES,
   canReactToThreadMessage,
+  errorDataCode,
   MESSAGE_REACTIONS,
   normalizeCreateBotProfile,
 } from "@ardurbot/contracts";
@@ -231,6 +232,7 @@ import { BotModelChip } from "./shell/bot-model-chip";
 import { BotSettings, CreateBotForm } from "./shell/bot-panel";
 import { BotCreatePicker } from "./shell/bot-picker";
 import { CommandPalette, isCommandPaletteHotkey } from "./shell/command-palette";
+import { ComputerScreenError } from "./shell/computer-screen-error";
 import { useComputerTerminal } from "./shell/computer-terminal";
 import {
   ClearConversationDialog,
@@ -614,6 +616,7 @@ export function ShellPage({
     offsetTop: number;
   } | null>(null);
   const [computerError, setComputerError] = useState<string | null>(null);
+  const [computerErrorCode, setComputerErrorCode] = useState<string | undefined>();
   // Screen-load failures can sit beside a still-valid embed URL; boot and
   // takeover failures must stay visible even when a URL remains.
   const [computerErrorFromScreen, setComputerErrorFromScreen] = useState(false);
@@ -968,6 +971,7 @@ export function ShellPage({
       commit: (screen) => {
         setScreenUrl(screen.url);
         setComputerError(screen.error);
+        setComputerErrorCode(undefined);
         setComputerErrorFromScreen(Boolean(screen.error));
         cacheComputerFor(id, { screenUrl: screen.url });
       },
@@ -1194,6 +1198,7 @@ export function ShellPage({
     }
     screenRequest.current += 1;
     setComputerError(null);
+    setComputerErrorCode(undefined);
     setComputerErrorFromScreen(false);
     const cached = computerCacheRef.current.get(active.id);
     if (cached) {
@@ -2351,6 +2356,7 @@ export function ShellPage({
     const needsBoot = force || targetComputer?.state !== "running" || !targetScreen;
     if (overlay && needsBoot) setBooting(true);
     setComputerError(null);
+    setComputerErrorCode(undefined);
     setComputerErrorFromScreen(false);
     try {
       if (needsBoot) {
@@ -2367,6 +2373,7 @@ export function ShellPage({
     } catch (error) {
       if (!stillThisBoot() || !stillThisBot()) return;
       setComputerError(error instanceof Error ? error.message : t`Could not take control`);
+      setComputerErrorCode(errorDataCode(error));
       setComputerErrorFromScreen(false);
       throw error;
     } finally {
@@ -2426,6 +2433,7 @@ export function ShellPage({
   useEffect(() => {
     setComputerOpen(false);
     setComputerError(null);
+    setComputerErrorCode(undefined);
     setComputerErrorFromScreen(false);
     setComputerBotId(active?.id);
   }, [active?.id]);
@@ -2441,6 +2449,7 @@ export function ShellPage({
   useEffect(() => {
     if (!computer?.busyBotName) {
       setComputerError(null);
+      setComputerErrorCode(undefined);
       setComputerErrorFromScreen(false);
     }
   }, [computer?.busyBotName]);
@@ -2555,6 +2564,7 @@ export function ShellPage({
       } catch {
         if (computerBotIdRef.current !== botId && activeBotId.current !== botId) return;
         setComputerError(t`Could not continue`);
+        setComputerErrorCode(undefined);
         setComputerErrorFromScreen(false);
       }
     },
@@ -2589,33 +2599,24 @@ export function ShellPage({
     onOpen: () => setComputerOpen(true),
   });
   const hideScreenLoadError = computerErrorFromScreen && Boolean(embeddedScreenUrl);
-  const imagePullFailed = computerError?.startsWith(
-    "The bot computer image could not be downloaded:",
-  );
   const computerScreenError =
     computerError && !hideScreenLoadError ? (
-      <div role="alert" className="flex flex-col items-center gap-3 px-6 text-center text-sm">
-        <p className="text-destructive">{computerError}</p>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            if (!computerBot) return;
-            if (imagePullFailed) {
-              void bootComputer({
-                botId: computerBot.id,
-                takeControl: false,
-                overlay: true,
-                force: true,
-              }).catch(() => undefined);
-            } else {
-              void refreshComputerScreen(computerBot.id);
-            }
-          }}
-        >
-          {imagePullFailed ? t`Try again` : t`Retry screen`}
-        </Button>
-      </div>
+      <ComputerScreenError
+        message={computerError}
+        code={computerErrorCode}
+        onRetryProvision={() => {
+          if (!computerBot) return;
+          void bootComputer({
+            botId: computerBot.id,
+            takeControl: false,
+            overlay: true,
+            force: true,
+          }).catch(() => undefined);
+        }}
+        onRetryScreen={() => {
+          if (computerBot) void refreshComputerScreen(computerBot.id);
+        }}
+      />
     ) : null;
 
   const userName = session.data?.user.name ?? t`You`;
