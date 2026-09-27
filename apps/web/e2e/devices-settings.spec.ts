@@ -108,7 +108,9 @@ test("devices shows pairing, listener state and revocable grants", async ({ page
   await expect(settings.getByRole("img", { name: "Pair device" })).toBeVisible();
   await expect(settings.getByText("TESTCODE", { exact: true })).toBeVisible();
   await settings.getByRole("button", { name: "Pair a chat account", exact: true }).click();
-  await expect(settings.getByRole("combobox", { name: "Bot" })).toHaveValue(pairedBotId);
+  await expect(settings.getByRole("combobox", { name: "Bot", exact: true })).toHaveValue(
+    pairedBotId,
+  );
   await settings.getByRole("button", { name: "Get pairing code", exact: true }).click();
   await expect(settings.getByText("PAIRTEST1234", { exact: true })).toBeVisible();
   await captureScreenshot(page, testInfo, "settings-devices-pairing");
