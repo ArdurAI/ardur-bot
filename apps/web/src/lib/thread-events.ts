@@ -70,10 +70,13 @@ export function activeThreadRuns(
 }
 
 export function activeMemberRun(runs: readonly Run[], botId: string): Run | null {
-  // Snapshots list runs newest first. A run that already captured its model choice is the
-  // one executing; a newer queued run without a pin must not hide it.
+  // Snapshots list runs newest first. A run that has left the queue is the one the member is
+  // working on; a newer queued run, pinned or not, must not hide it. Among equals, prefer the
+  // run whose model choice was already captured.
   const active = runs.filter((run) => run.botId === botId && isActive(run.status));
-  return active.find((run) => run.runtimePin != null) ?? active[0] ?? null;
+  const started = active.filter((run) => run.status !== "queued");
+  const pool = started.length ? started : active;
+  return pool.find((run) => run.runtimePin != null) ?? pool[0] ?? null;
 }
 
 /**

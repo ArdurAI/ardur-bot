@@ -67,6 +67,15 @@ describe("thread event reduction", () => {
     };
     expect(activeMemberRun([queued, admitted], "member")).toBe(admitted);
     expect(activeMemberRun([queued], "member")).toBe(queued);
+    // A queued handoff already carries a pin; the waiting run still wins.
+    const waiting = { ...admitted, id: "waiting", status: "waiting_input" as const };
+    const queuedHandoff = {
+      ...queued,
+      id: "handoff",
+      runtimePin: { ...admitted.runtimePin, modelId: "next", revision: 2 },
+    };
+    expect(activeMemberRun([queuedHandoff, waiting], "member")).toBe(waiting);
+    expect(activeMemberRun([queuedHandoff, queued], "member")).toBe(queuedHandoff);
   });
   it.each(["completed", "failed", "cancelled"] as const)(
     "does not display a terminal %s pin as the current member choice",
