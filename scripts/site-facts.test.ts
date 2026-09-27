@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promis
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   GITHUB_MATCHING_ROUTINES_LIMIT,
   ROUTINE_HISTORY_LIMIT,
@@ -24,6 +24,7 @@ import {
   routinesFromCode,
   runSiteFacts,
   validateReferences,
+  videosFromMedia,
 } from "./site-facts";
 
 const sourceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -44,7 +45,13 @@ async function fixture() {
     "apps/web/src/locales/en/messages.po",
   ]) {
     await mkdir(path.dirname(path.join(root, file)), { recursive: true });
-    await writeFile(path.join(root, file), await readFile(path.join(sourceRoot, file)));
+    let content = await readFile(path.join(sourceRoot, file), "utf8");
+    if (file === "site/data/product.json") {
+      const parsed = JSON.parse(content);
+      delete parsed.videos;
+      content = `${JSON.stringify(parsed, null, 2)}\n`;
+    }
+    await writeFile(path.join(root, file), content);
   }
   return root;
 }
@@ -209,6 +216,48 @@ describe("site facts", () => {
     await expect(validateReferences(product, root)).rejects.toThrow(
       "is missing site/media/routines-demo.mp4",
     );
+  });
+
+  it("publishes measured video facts only when all media files exist", async () => {
+    const root = await fixture();
+    const missing = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      expect(
+        await videosFromMedia(root, () => {
+          throw new Error("ffprobe should not run");
+        }),
+      ).toEqual([]);
+      expect(missing).toHaveBeenCalledWith(
+        expect.stringContaining("missing media/routines-demo.mp4"),
+      );
+    } finally {
+      missing.mockRestore();
+    }
+    const media = path.join(root, "site/media");
+    await mkdir(media, { recursive: true });
+    for (const name of [
+      "routines-demo.mp4",
+      "routines-demo.webm",
+      "routines-demo.jpg",
+      "routines-demo.en.vtt",
+    ])
+      await writeFile(path.join(media, name), name.endsWith(".vtt") ? "WEBVTT\n\n" : "fixture");
+    const probe = vi.fn(() =>
+      JSON.stringify({
+        streams: [{ width: 1920, height: 1080 }],
+        format: { duration: "56.040000" },
+      }),
+    );
+    const [video] = await videosFromMedia(root, probe);
+    expect(probe).toHaveBeenCalledOnce();
+    expect(video).toMatchObject({
+      id: "routines-demo",
+      durationSeconds: 56.04,
+      width: 1920,
+      height: 1080,
+      files: { captions: "media/routines-demo.en.vtt" },
+    });
+    expect(video?.description).toContain("completed Run history entry");
   });
 
   it("is idempotent and regenerates changed README blocks", async () => {
