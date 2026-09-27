@@ -130,6 +130,87 @@ describe("HermesRuntime M0 ACP seam", () => {
     });
   }
 
+  it("drops a queued ask when an aborted consumer resumes after a bridge pause", async () => {
+    let pauseObserved!: () => void;
+    const paused = new Promise<void>((resolve) => {
+      pauseObserved = resolve;
+    });
+    const adapter = runtime("ask-user");
+    const run = request({
+      tools: [{ name: "ask_user", description: "Ask", inputSchema: { type: "object" } }],
+      executeTool: vi.fn(async () => ({ unexpected: true })),
+      onToolCompleted: async ({ paused: didPause }) => {
+        if (didPause) pauseObserved();
+      },
+    });
+    const events = adapter.run(run)[Symbol.asyncIterator]();
+    try {
+      expect((await events.next()).done).toBe(false);
+      await paused;
+      await adapter.abort(run.runId);
+      expect(await events.next()).toEqual({ value: undefined, done: true });
+      expect(run.executeTool).not.toHaveBeenCalled();
+    } finally {
+      await events.return?.();
+    }
+  });
+
+  it("flushes held text before the ask that pauses the turn", async () => {
+    const events = await collect(
+      runtime("ask-user-held-text"),
+      request({
+        tools: [{ name: "ask_user", description: "Ask", inputSchema: { type: "object" } }],
+        executeTool: vi.fn(async () => ({ unexpected: true })),
+      }),
+    );
+    const textAndAsk = events.filter((event) => event.type === "text" || event.type === "ask");
+    expect(textAndAsk.map((event) => event.type)).toEqual(["text", "text", "ask"]);
+    expect(
+      textAndAsk
+        .filter((event) => event.type === "text")
+        .map((event) => event.text)
+        .join(""),
+    ).toBe("Please approve the diff");
+    expect(events.some((event) => event.type === "done")).toBe(false);
+  });
+
+  it("flushes held text before a tool result pauses the turn", async () => {
+    const events = await collect(
+      runtime("tool-held-text"),
+      request({
+        tools: [{ name: "fixture_echo", description: "Echo", inputSchema: { type: "object" } }],
+        executeTool: async () => ({
+          kind: "agent_tool_result",
+          terminate: true,
+          details: { approval: "paused" },
+          content: [],
+        }),
+      }),
+    );
+    const textAndTool = events.filter((event) => event.type === "text" || event.type === "tool");
+    expect(textAndTool.map((event) => event.type)).toEqual(["text", "text", "tool"]);
+    expect(
+      textAndTool
+        .filter((event) => event.type === "text")
+        .map((event) => event.text)
+        .join(""),
+    ).toBe("Please approve the diff");
+    expect(events.some((event) => event.type === "done")).toBe(false);
+  });
+
+  for (const scenario of ["held-native", "held-malformed"]) {
+    it(`flushes held text before ${scenario} fails`, async () => {
+      const text: string[] = [];
+      const read = async () => {
+        for await (const event of runtime(scenario).run(request())) {
+          if (event.type === "text") text.push(event.text);
+        }
+      };
+      await expect(read()).rejects.toThrow();
+      expect(text.join("")).toBe("before failure f");
+    });
+  }
+
   it("propagates a forbidden tool after text in one ACP write", async () => {
     await expect(collect(runtime("buffered-native"), request())).rejects.toThrow(
       "Hermes tried to use a tool this bot was not given.",

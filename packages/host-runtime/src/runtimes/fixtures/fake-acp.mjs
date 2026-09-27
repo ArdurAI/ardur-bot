@@ -92,6 +92,20 @@ async function handle(value) {
     return;
   }
   if (scenario === "exit") process.exit(4);
+  if (scenario === "held-malformed") {
+    message(`before failure ${process.env.ARDUR_HERMES_PROVIDER_KEY[0]}`);
+    process.stdout.write("{broken\n");
+    return;
+  }
+  if (scenario === "held-native") {
+    message(`before failure ${process.env.ARDUR_HERMES_PROVIDER_KEY[0]}`);
+    update({
+      sessionUpdate: "tool_call",
+      toolCallId: "native-held",
+      title: "terminal: unavailable",
+    });
+    return;
+  }
   if (scenario === "native" || scenario === "foreign-mcp") {
     update({
       sessionUpdate: "tool_call",
@@ -223,6 +237,8 @@ async function handle(value) {
       "before-tool",
       "during-tool",
       "ask-user",
+      "ask-user-held-text",
+      "tool-held-text",
       "takeover",
       "pending-tool-malformed",
       "queue-overflow",
@@ -230,6 +246,8 @@ async function handle(value) {
   ) {
     if (scenario === "pending-tool-malformed" || scenario === "queue-overflow")
       message("before protocol failure.");
+    if (scenario === "ask-user-held-text" || scenario === "tool-held-text")
+      message(`Please approve the dif${process.env.ARDUR_HERMES_PROVIDER_KEY[0]}`);
     const client = new Client({ name: "fixture", version: "0.1.0" });
     const transport = new StdioClientTransport({
       command: mcp.command,
@@ -243,7 +261,7 @@ async function handle(value) {
     await client.connect(transport);
     const listed = await client.listTools();
     const toolName =
-      scenario === "ask-user"
+      scenario === "ask-user" || scenario === "ask-user-held-text"
         ? "ask_user"
         : scenario === "takeover"
           ? "request_takeover"
@@ -256,7 +274,7 @@ async function handle(value) {
       status: "pending",
     });
     const args =
-      scenario === "ask-user"
+      scenario === "ask-user" || scenario === "ask-user-held-text"
         ? { question: "Which path?", options: ["First", "Second"] }
         : scenario === "takeover"
           ? { reason: "Please take over." }

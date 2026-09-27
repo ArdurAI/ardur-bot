@@ -193,6 +193,7 @@ export function createHermesTextRedactor(secrets: readonly string[], emit: (text
 interface ActiveTurn {
   active: boolean;
   stopReason?: "done" | "cancel" | "pause" | "failure";
+  flushText?: () => void;
   cleanup?: Promise<void>;
   cleanupChild?: ChildProcessWithoutNullStreams;
   child?: ChildProcessWithoutNullStreams;
@@ -233,21 +234,28 @@ export class HermesRuntime implements AgentRuntime {
   ) {
     const turn = this.running.get(runId);
     if (!turn) return;
-    if (!turn.active && reason === "cancel" && turn.stopReason === "done")
+    if (
+      !turn.active &&
+      reason === "cancel" &&
+      (turn.stopReason === "done" || turn.stopReason === "pause")
+    )
       turn.stopReason = "cancel";
     if (turn.active) {
-      turn.active = false;
-      let finalReason = reason;
-      let finalError = error;
-      if (reason === "done") {
-        const overflow = turn.queue.push({ type: "done" });
-        if (overflow) {
-          finalReason = "failure";
-          finalError = new Error("Hermes could not complete this turn.", { cause: overflow });
+      if (reason === "pause" || reason === "failure") turn.flushText?.();
+      if (turn.active) {
+        turn.active = false;
+        let finalReason = reason;
+        let finalError = error;
+        if (reason === "done") {
+          const overflow = turn.queue.push({ type: "done" });
+          if (overflow) {
+            finalReason = "failure";
+            finalError = new Error("Hermes could not complete this turn.", { cause: overflow });
+          }
         }
+        turn.stopReason = finalReason;
+        turn.queue.end(finalError);
       }
-      turn.stopReason = finalReason;
-      turn.queue.end(finalError);
     }
     if (turn.child && !turn.cleanupChild) {
       const child = turn.child;
@@ -328,6 +336,7 @@ export class HermesRuntime implements AgentRuntime {
           void this.finishTurn(request.runId, "pause").catch(() => {});
         },
         () => turn.active,
+        () => turn.flushText?.(),
       );
       mcp = await startArdurMcpServer(bridge);
       if (!turn.active) return;
@@ -339,6 +348,7 @@ export class HermesRuntime implements AgentRuntime {
       const emitText = createHermesTextRedactor(secrets, (safe) => {
         if (turn.active) enqueue({ type: "text", text: safe });
       });
+      turn.flushText = () => emitText("", true);
       const result = await this.options.launch({
         command: this.options.command,
         args: this.options.args ?? [],
