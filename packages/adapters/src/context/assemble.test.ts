@@ -38,7 +38,44 @@ describe("turn context", () => {
       { id: "required-result:summary", role: "user", content: result },
     ]);
     expect(context.history.at(-1)?.content).toBe(result);
-    expect(context.snapshot.layers.messages).toBe(12_000 + result.length);
+    expect(context.snapshot.layers.messages).toBeLessThanOrEqual(12_000);
+    expect(context.history.find((message) => message.id === "newer")?.content).toHaveLength(
+      12_000 - result.length,
+    );
+  });
+  it("gives rolling history exactly the space left by a required result", async () => {
+    const context = await assembleTurnContext({
+      instructions: "Review completed work.",
+      history: [{ id: "newer", role: "user", content: "h".repeat(200) }],
+      requiredContext: { id: "required", role: "user", content: "r".repeat(80) },
+      message: "Review the result.",
+      budgets: { messages: 200 },
+    });
+    expect(context.history).toEqual([
+      { id: "newer", role: "user", content: "h".repeat(120) },
+      { id: "required", role: "user", content: "r".repeat(80) },
+    ]);
+    expect(context.snapshot.layers.messages).toBe(200);
+  });
+  it("keeps the head of an oversized required result with a visible budget marker", async () => {
+    const marker =
+      "[Result truncated to fit the history budget; open the thread for the full report.]";
+    const context = await assembleTurnContext({
+      instructions: "Review completed work.",
+      history: [{ id: "newer", role: "user", content: "private rolling history" }],
+      requiredContext: { id: "required", role: "user", content: "r".repeat(300) },
+      message: "Review the result.",
+      budgets: { messages: 200 },
+    });
+    expect(context.history).toEqual([
+      {
+        id: "required",
+        role: "user",
+        content: `${"r".repeat(200 - marker.length - 1)}\n${marker}`,
+      },
+    ]);
+    expect(context.history[0]?.content.endsWith(marker)).toBe(true);
+    expect(context.snapshot.layers.messages).toBe(200);
   });
   it("orders bounded layers and keeps the stable prefix byte-identical", async () => {
     const recall = vi.fn(async () => "[ardur-memory:document:3] " + "fact ".repeat(4000));

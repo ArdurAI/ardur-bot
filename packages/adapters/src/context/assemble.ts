@@ -3,6 +3,8 @@ import type { ContextBudgets, ContextSnapshot, RoutingRule } from "@ardurbot/con
 import { ContextBudgetsSchema } from "@ardurbot/contracts";
 
 type Message = AgentRunRequest["history"][number];
+const RESULT_TRUNCATED_MARKER =
+  "[Result truncated to fit the history budget; open the thread for the full report.]";
 const STOP_WORDS = new Set(
   "the a an and or but is are was were be been do does did have has had i we you it this that these those what which who when where how why please about for from with can could would should tell me our your in on of to at as my any".split(
     " ",
@@ -83,11 +85,22 @@ export async function assembleTurnContext(run: {
     run.peerReadOnly ? "" : (run.summary ?? ""),
     budgets.summary,
   );
+  const required = run.peerReadOnly ? undefined : run.requiredContext;
+  const requiredAllowance = Math.min(required?.content.length ?? 0, budgets.messages);
+  const requiredMessage = required
+    ? {
+        ...required,
+        content:
+          required.content.length > budgets.messages
+            ? `${required.content.slice(0, budgets.messages - RESULT_TRUNCATED_MARKER.length - 1)}\n${RESULT_TRUNCATED_MARKER}`
+            : required.content,
+      }
+    : undefined;
   const messages = boundMessages(
     (run.peerReadOnly ? [] : run.history).filter(
       (message) => !run.sourceMessageId || message.id !== run.sourceMessageId,
     ),
-    budgets.messages,
+    budgets.messages - requiredAllowance,
   );
   const recallRan = Boolean(
     !run.peerReadOnly && run.recall && needsRecall(run.query ?? run.message, run.brief ?? ""),
@@ -97,7 +110,7 @@ export async function assembleTurnContext(run: {
     ...(brief ? [{ role: "user" as const, content: brief }] : []),
     ...(summary ? [{ role: "user" as const, content: summary }] : []),
     ...messages,
-    ...(run.requiredContext && !run.peerReadOnly ? [run.requiredContext] : []),
+    ...(requiredMessage ? [requiredMessage] : []),
     ...(recall ? [{ role: "user" as const, content: recall }] : []),
   ];
   const snapshot: ContextSnapshot = {
@@ -107,7 +120,7 @@ export async function assembleTurnContext(run: {
       summary: summary.length,
       messages:
         messages.reduce((size, message) => size + message.content.length, 0) +
-        (run.peerReadOnly ? 0 : (run.requiredContext?.content.length ?? 0)),
+        (requiredMessage?.content.length ?? 0),
       recall: recall.length,
       message: run.message.length,
     },

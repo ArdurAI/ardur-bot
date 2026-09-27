@@ -3268,6 +3268,24 @@ describeJourneys("required product journeys", () => {
     expect(
       await prisma.steeringMessage.findFirstOrThrow({ where: { messageId: sent.messageId } }),
     ).toMatchObject({ runId: continuation.id, claimedAt: null });
+    // This owner-origin private fixture is deliberately unassigned so the peer could claim it.
+    const unassignedText = "UNASSIGNED_PRIVATE_STEERING_SENTINEL";
+    const unassignedMessage = await createThreadMessage(prisma, {
+      threadId: peerThreadId,
+      role: "user",
+      origin: "user",
+      actorId: ownerMe.userId,
+      blocks: [{ kind: "text", text: unassignedText }],
+    });
+    const unassignedSteering = await prisma.steeringMessage.create({
+      data: {
+        messageId: unassignedMessage.id,
+        botId: peer.id,
+        userId: ownerMe.userId,
+        runId: null,
+        claimedAt: null,
+      },
+    });
     await prisma.run.update({
       where: { id: delivery.runId },
       data: { status: "running", leaseOwner: "peer-fixture", leaseFence: 1 },
@@ -3281,9 +3299,67 @@ describeJourneys("required product journeys", () => {
       seenIds: [],
     });
     expect(steering).toEqual([]);
+    expect(
+      await prisma.steeringMessage.findUniqueOrThrow({ where: { id: unassignedSteering.id } }),
+    ).toMatchObject({ runId: null, claimedAt: null });
     expect(promptWithInitialSteering("Read only the peer card.", steering)).not.toContain(
       privateText,
     );
+    const originalDescribe = ScriptedAgentRuntime.prototype.describe;
+    let describeCalls = 0;
+    const describeSpy = vi
+      .spyOn(ScriptedAgentRuntime.prototype, "describe")
+      .mockImplementation(() => {
+        const description = originalDescribe.call(new ScriptedAgentRuntime());
+        describeCalls++;
+        return {
+          ...description,
+          // Keep fixture pin admission intact, then exercise the live steering callback branch.
+          capabilities: { ...description.capabilities, scripted: describeCalls < 4 },
+        };
+      });
+    const requests: Array<{ claimSteering: unknown; prompt: string; history: unknown }> = [];
+    const runtimeSpy = vi
+      .spyOn(ScriptedAgentRuntime.prototype, "run")
+      .mockImplementation(async function* (request) {
+        if (request.runId === delivery.runId) {
+          requests.push({
+            claimSteering: request.claimSteering,
+            prompt: request.prompt,
+            history: request.history,
+          });
+        }
+        yield { type: "done", text: "Peer fixture complete." };
+      });
+    try {
+      await prisma.run.update({
+        where: { id: delivery.runId },
+        data: { status: "queued", leaseOwner: null },
+      });
+      await executor.continueRun(delivery.runId, "peer-steering-executor-fixture");
+    } finally {
+      runtimeSpy.mockRestore();
+      describeSpy.mockRestore();
+    }
+    expect(
+      requests,
+      JSON.stringify(
+        await prisma.run.findUnique({
+          where: { id: delivery.runId },
+          select: { status: true, error: true },
+        }),
+      ),
+    ).toHaveLength(1);
+    expect(requests[0]?.claimSteering).toBeUndefined();
+    expect(JSON.stringify([requests[0]?.prompt, requests[0]?.history])).not.toContain(
+      unassignedText,
+    );
+    expect((await prisma.run.findUniqueOrThrow({ where: { id: delivery.runId } })).status).toBe(
+      "completed",
+    );
+    expect(
+      await prisma.steeringMessage.findUniqueOrThrow({ where: { id: unassignedSteering.id } }),
+    ).toMatchObject({ runId: null, claimedAt: null });
     await settleFixtureWork([coordinator.id, peer.id], goal.id);
   });
 
