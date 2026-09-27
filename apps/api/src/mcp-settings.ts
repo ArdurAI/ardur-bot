@@ -369,16 +369,15 @@ export function createMcpSettings(deps: {
       const argumentRedactions = Object.fromEntries(
         storedMaterials.map(({ slug, stored }) => {
           const launch = before.mcpServers[slug];
+          const legacyLaunchRedactions = independentMcpRedactions(stored).filter(
+            (value) =>
+              value !== stored.secret &&
+              launch &&
+              [launch.command, ...launch.args].some((part) => mcpTextContainsSecret(part, value)),
+          );
           return [
             slug,
-            stored.argumentRedactions ??
-              (stored.redactions ?? []).filter(
-                (value) =>
-                  launch &&
-                  [launch.command, ...launch.args].some((part) =>
-                    mcpTextContainsSecret(part, value),
-                  ),
-              ),
+            [...new Set([...(stored.argumentRedactions ?? []), ...legacyLaunchRedactions])],
           ];
         }),
       );

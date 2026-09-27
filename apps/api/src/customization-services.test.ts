@@ -812,9 +812,100 @@ describe("customization service boundaries", () => {
       }
     },
   );
-  it("promotes legacy launch redactions before a matching ordinary env entry is added", async () => {
+  it.each([
+    { name: "absent", argumentRedactions: undefined, otherArgument: undefined },
+    { name: "empty", argumentRedactions: [], otherArgument: undefined },
+    {
+      name: "already covered",
+      argumentRedactions: ["synthetic-credential"],
+      otherArgument: undefined,
+    },
+    {
+      name: "covering another launch credential",
+      argumentRedactions: ["other-credential"],
+      otherArgument: "other-credential",
+    },
+  ])(
+    "promotes legacy launch redactions with $name argument redactions",
+    async ({ argumentRedactions, otherArgument }) => {
+      const f = await fixture();
+      const value = "synthetic-credential";
+      const args = ["server.js", value, ...(otherArgument ? [otherArgument] : [])];
+      const redactedArgs = ["server.js", "[redacted]", ...(otherArgument ? ["[redacted]"] : [])];
+      const initial = await f.mcp.config(actor);
+      const created = await f.mcp.preview(actor, {
+        revision: initial.revision,
+        json: JSON.stringify({
+          mcpServers: {
+            fixture: {
+              name: "Fixture",
+              command: "node",
+              args,
+              secret: value,
+            },
+          },
+        }),
+      });
+      await f.mcp.apply(actor, created.id);
+      const row = f.tables.mcpServer![0]!;
+      const encrypted = f.tables.secret![0]!;
+      const legacy = await f.deps.secrets.put(
+        JSON.stringify({
+          command: "node",
+          args,
+          env: {},
+          redactions: [value],
+          ...(argumentRedactions ? { argumentRedactions } : {}),
+        }),
+        {
+          spaceId: actor.spaceId,
+          userId: actor.userId,
+          operationId: "fixture",
+          traceId: "fixture",
+          signal: AbortSignal.timeout(10_000),
+        },
+      );
+      Object.assign(encrypted, legacy);
+      row.secretId = legacy.id;
+
+      const current = await f.mcp.config(actor);
+      const withEnvironment = JSON.parse(current.json);
+      withEnvironment.mcpServers.fixture.env = { LOG_LEVEL: value };
+      const added = await f.mcp.preview(actor, {
+        revision: current.revision,
+        json: JSON.stringify(withEnvironment),
+      });
+      expect(JSON.stringify(added)).not.toContain(value);
+      await f.mcp.apply(actor, added.id);
+      expect((await f.mcp.list(actor))[0]?.args).toEqual(redactedArgs);
+      const saved = f.tables.secret!.find((entry) => entry.id === row.secretId)!;
+      const material = JSON.parse(f.deps.secrets.load(String(saved.ciphertext), String(saved.id)));
+      expect(material.argumentRedactions).toEqual(otherArgument ? [otherArgument, value] : [value]);
+      expect(oauthMaterialSecrets(material)).toContain(value);
+      const logs = new McpLogBuffer(oauthMaterialSecrets(material));
+      logs.append(`diagnostic ${value}\n`);
+      expect(JSON.stringify(logs.snapshot())).not.toContain(value);
+      expect(redactMcpValue({ result: value }, oauthMaterialSecrets(material))).toEqual({
+        result: "[redacted]",
+      });
+
+      const exported = await f.mcp.config(actor);
+      const withoutEnvironment = JSON.parse(exported.json);
+      withoutEnvironment.mcpServers.fixture.env = {};
+      const removed = await f.mcp.preview(actor, {
+        revision: exported.revision,
+        json: JSON.stringify(withoutEnvironment),
+      });
+      await f.mcp.apply(actor, removed.id);
+      expect(JSON.stringify(f.tables.mcpServer)).not.toContain(value);
+      expect((await f.mcp.list(actor))[0]?.args).toEqual(redactedArgs);
+      expect((await f.mcp.config(actor)).json).not.toContain(value);
+    },
+  );
+  it("lets an owner mark a still-named launch value non-secret after a config save", async () => {
     const f = await fixture();
-    const value = "synthetic-credential";
+    const credential = "synthetic-credential";
+    const namedCredential = "named-credential";
     const initial = await f.mcp.config(actor);
     const created = await f.mcp.preview(actor, {
       revision: initial.revision,
@@ -823,21 +914,23 @@ describe("customization service boundaries", () => {
           fixture: {
             name: "Fixture",
             command: "node",
-            args: ["server.js", value],
-            secret: value,
+            args: ["server.js", "--root", "/workspace", credential, namedCredential],
+            env: { ROOT_DIR: "/workspace" },
+            secret: namedCredential,
           },
         },
       }),
     });
     await f.mcp.apply(actor, created.id);
     const row = f.tables.mcpServer![0]!;
-    const encrypted = f.tables.secret![0]!;
+    const encrypted = f.tables.secret!.find((entry) => entry.id === row.secretId)!;
     const legacy = await f.deps.secrets.put(
       JSON.stringify({
         command: "node",
-        args: ["server.js", value],
-        env: {},
-        redactions: [value],
+        args: ["server.js", "--root", "/workspace", credential, namedCredential],
+        env: { ROOT_DIR: "/workspace" },
+        secret: namedCredential,
+        redactions: ["/workspace", credential, namedCredential],
       }),
       {
         spaceId: actor.spaceId,
@@ -849,60 +942,12 @@ describe("customization service boundaries", () => {
     );
     Object.assign(encrypted, legacy);
     row.secretId = legacy.id;
-
-    const current = await f.mcp.config(actor);
-    const withEnvironment = JSON.parse(current.json);
-    withEnvironment.mcpServers.fixture.env = { LOG_LEVEL: value };
-    const added = await f.mcp.preview(actor, {
-      revision: current.revision,
-      json: JSON.stringify(withEnvironment),
-    });
-    expect(JSON.stringify(added)).not.toContain(value);
-    await f.mcp.apply(actor, added.id);
-    const saved = f.tables.secret!.find((entry) => entry.id === row.secretId)!;
-    const material = JSON.parse(f.deps.secrets.load(String(saved.ciphertext), String(saved.id)));
-    expect(material.argumentRedactions).toContain(value);
-    expect(oauthMaterialSecrets(material)).toContain(value);
-    expect(redactMcpValue({ result: value }, oauthMaterialSecrets(material))).toEqual({
-      result: "[redacted]",
-    });
-
-    const exported = await f.mcp.config(actor);
-    const withoutEnvironment = JSON.parse(exported.json);
-    withoutEnvironment.mcpServers.fixture.env = {};
-    const removed = await f.mcp.preview(actor, {
-      revision: exported.revision,
-      json: JSON.stringify(withoutEnvironment),
-    });
-    await f.mcp.apply(actor, removed.id);
-    expect(JSON.stringify(f.tables.mcpServer)).not.toContain(value);
-    expect((await f.mcp.list(actor))[0]?.args).toEqual(["server.js", "[redacted]"]);
-    expect((await f.mcp.config(actor)).json).not.toContain(value);
-  });
-  it("lets an owner mark a still-named launch value non-secret after a config save", async () => {
-    const f = await fixture();
-    const initial = await f.mcp.config(actor);
-    const created = await f.mcp.preview(actor, {
-      revision: initial.revision,
-      json: JSON.stringify({
-        mcpServers: {
-          fixture: {
-            name: "Fixture",
-            command: "node",
-            args: ["server.js", "--root", "/workspace"],
-            env: { ROOT_DIR: "/workspace" },
-          },
-        },
-      }),
-    });
-    await f.mcp.apply(actor, created.id);
     const current = await f.mcp.config(actor);
     const renamed = await f.mcp.preview(actor, {
       revision: current.revision,
       json: current.json.replace('"Fixture"', '"Updated"'),
     });
     await f.mcp.apply(actor, renamed.id);
-    const row = f.tables.mcpServer![0]!;
     const db = f.deps.prisma;
     Object.assign(db, { spaceMember: { findUnique: vi.fn(async () => ({ role: "owner" })) } });
     Object.assign(db.mcpServer, {
@@ -929,15 +974,18 @@ describe("customization service boundaries", () => {
       { prefix: "/rpc", context: { actor } },
     );
     expect(response?.status).toBe(200);
-    const encrypted = f.tables.secret!.find((entry) => entry.id === row.secretId)!;
+    const currentSecret = f.tables.secret!.find((entry) => entry.id === row.secretId)!;
     const material = JSON.parse(
-      f.deps.secrets.load(String(encrypted.ciphertext), String(encrypted.id)),
+      f.deps.secrets.load(String(currentSecret.ciphertext), String(currentSecret.id)),
     );
     expect(material.credentialFlags.env.ROOT_DIR).toBe(false);
-    expect(material.argumentRedactions).not.toContain("/workspace");
+    expect(material.argumentRedactions).toEqual([credential]);
     const runtimeSecrets = oauthMaterialSecrets(material);
     expect(redactMcpValue({ result: "/workspace/report.txt" }, runtimeSecrets)).toEqual({
       result: "/workspace/report.txt",
+    });
+    expect(redactMcpValue({ result: credential }, runtimeSecrets)).toEqual({
+      result: "[redacted]",
     });
   });
   it("does not persist an ordinary environment value as a redaction after a config edit", async () => {
