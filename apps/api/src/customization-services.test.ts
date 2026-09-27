@@ -17,6 +17,7 @@ import { createCustomizationSkills, customizationCatalog } from "./customization
 import { authorizeHostMcp } from "./host-mcp-authorization.js";
 import { configDiff, createMcpSettings, parseServerConfig } from "./mcp-settings.js";
 import type { RouterDeps } from "./router.js";
+import { createRouter } from "./router.js";
 
 const actor: Actor = {
   spaceId: "space",
@@ -42,6 +43,13 @@ function matches(row: Row, where: Row): boolean {
     }
     return row[key] === value;
   });
+}
+function signal() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
 }
 async function fixture() {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), "ardur-customization-test-"));
@@ -519,6 +527,126 @@ describe("customization service boundaries", () => {
     expect(redactMcpText("/workspace/report.txt", protectedValues)).toBe("/workspace/report.txt");
     expect(() => assertMemorySafe("/workspace/report.txt", protectedValues)).not.toThrow();
   });
+  it.each(["registration first", "classification first"])(
+    "serializes managed registration and owner classification: %s",
+    async (order) => {
+      const f = await fixture();
+      const initial = ManagedServerInputSchema.parse({
+        managedId: "fixture",
+        managedBy: "extension",
+        name: "Fixture",
+        description: "",
+        placement: "worker",
+        command: "node",
+        args: ["server.js"],
+        env: { TOKEN: "synthetic-initial" },
+        secretValues: ["synthetic-initial"],
+        cwd: "/fixture",
+      });
+      await f.mcp.register(actor, initial);
+      const row = f.tables.mcpServer![0]!;
+      const db = f.deps.prisma;
+      Object.assign(db, { spaceMember: { findUnique: vi.fn(async () => ({ role: "owner" })) } });
+      Object.assign(db.mcpServer, {
+        findFirstOrThrow: vi.fn(async ({ where }: { where: Row }) => {
+          const found = f.tables.mcpServer!.find((entry) => matches(entry, where));
+          if (!found) throw new Error("Missing row");
+          return { ...found };
+        }),
+      });
+
+      // Each fake transaction owns advisory locks until its callback finishes.
+      const held = new Set<string>();
+      const waiters = new Map<string, Array<() => void>>();
+      const blocked = signal();
+      Object.assign(db, {
+        $transaction: async (callback: (tx: unknown) => Promise<unknown>) => {
+          const releases: Array<() => void> = [];
+          const tx = Object.assign(Object.create(db), {
+            $executeRaw: async (parts: TemplateStringsArray, ...values: unknown[]) => {
+              const kind = parts[0]?.match(/hashtext\('([^']+)'\)/)?.[1];
+              const key = `${kind}:${String(values[0])}`;
+              if (held.has(key)) {
+                blocked.resolve();
+                await new Promise<void>((resume) => {
+                  waiters.set(key, [...(waiters.get(key) ?? []), resume]);
+                });
+              }
+              held.add(key);
+              releases.push(() => {
+                const next = waiters.get(key)?.shift();
+                if (next) next();
+                else held.delete(key);
+              });
+              return 1;
+            },
+          });
+          try {
+            return await callback(tx);
+          } finally {
+            for (const release of releases.reverse()) release();
+          }
+        },
+      });
+      const handler = new RPCHandler(
+        createRouter({
+          ...f.deps,
+          mcpOAuth: { statusFor: vi.fn(async () => "none") } as RouterDeps["mcpOAuth"],
+        }),
+      );
+      const classify = async () => {
+        const { response } = await handler.handle(
+          new Request("https://app.example.test/rpc/mcp/servers/update", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              json: { id: row.id, credentialFlags: { env: { TOKEN: false }, headers: {} } },
+            }),
+          }),
+          { prefix: "/rpc", context: { actor } },
+        );
+        expect(response?.status).toBe(200);
+      };
+      const refresh = () =>
+        f.mcp.register(actor, {
+          ...initial,
+          args: ["server.js", "--mode=refreshed"],
+          env: { TOKEN: "synthetic-rotated" },
+          secretValues: ["synthetic-rotated"],
+        });
+      const firstAtPut = signal();
+      const secondAtPut = signal();
+      const releaseFirst = signal();
+      const put = f.deps.secrets.put.bind(f.deps.secrets);
+      let puts = 0;
+      vi.spyOn(f.deps.secrets, "put").mockImplementation(async (...args) => {
+        puts++;
+        if (puts === 1) {
+          firstAtPut.resolve();
+          await releaseFirst.promise;
+        } else secondAtPut.resolve();
+        return put(...args);
+      });
+      const first = order === "registration first" ? refresh() : classify();
+      await firstAtPut.promise;
+      const second = order === "registration first" ? classify() : refresh();
+      const progress = await Promise.race([
+        blocked.promise.then(() => "blocked"),
+        secondAtPut.promise.then(() => "wrote"),
+      ]);
+      if (progress === "wrote") await second;
+      releaseFirst.resolve();
+      await first;
+      await second;
+      const stored = f.tables.secret!.find((entry) => entry.id === row.secretId)!;
+      const material = JSON.parse(
+        f.deps.secrets.load(String(stored.ciphertext), String(stored.id)),
+      );
+      expect(material.env).toEqual({ TOKEN: "synthetic-rotated" });
+      expect(material.args).toEqual(["server.js", "--mode=refreshed"]);
+      expect(material.credentialFlags.env.TOKEN).toBe(false);
+    },
+  );
   it("validates and previews config without leaking secrets, and fences stale applies", async () => {
     const f = await fixture();
     const initial = await f.mcp.config(actor);
@@ -559,6 +687,76 @@ describe("customization service boundaries", () => {
     const before = parseServerConfig(json);
     expect(configDiff(before, before)).toEqual([]);
   });
+  it.each([
+    {
+      name: "removed positional secret",
+      credential: { secret: "synthetic-credential" },
+      value: "synthetic-credential",
+      argument: "synthetic-credential",
+      remove: (server: Row) => {
+        delete server.secret;
+      },
+    },
+    {
+      name: "removed URL-encoded environment credential",
+      credential: { env: { TOKEN: "synthetic/credential?" } },
+      value: "synthetic/credential?",
+      argument: "--token=synthetic%2Fcredential%3F",
+      remove: (server: Row) => {
+        server.env = {};
+      },
+    },
+    {
+      name: "removed secret also entered as an ordinary environment value",
+      credential: { secret: "synthetic-credential" },
+      value: "synthetic-credential",
+      argument: "synthetic-credential",
+      remove: (server: Row) => {
+        delete server.secret;
+        server.env = { LOG_LEVEL: "synthetic-credential" };
+      },
+    },
+  ])(
+    "keeps a $name protected after its named entry is removed",
+    async ({ credential, value, argument, remove }) => {
+      const f = await fixture();
+      const initial = await f.mcp.config(actor);
+      const created = await f.mcp.preview(actor, {
+        revision: initial.revision,
+        json: JSON.stringify({
+          mcpServers: {
+            fixture: {
+              name: "Fixture",
+              command: "node",
+              args: ["server.js", argument],
+              ...credential,
+            },
+          },
+        }),
+      });
+      await f.mcp.apply(actor, created.id);
+      const current = await f.mcp.config(actor);
+      const changed = JSON.parse(current.json);
+      remove(changed.mcpServers.fixture);
+      const removal = await f.mcp.preview(actor, {
+        revision: current.revision,
+        json: JSON.stringify(changed),
+      });
+      await f.mcp.apply(actor, removal.id);
+      expect(JSON.stringify(f.tables.mcpServer)).not.toContain(argument);
+      expect((await f.mcp.list(actor))[0]?.args).toEqual([
+        "server.js",
+        argument.startsWith("--token=") ? "--token=[redacted]" : "[redacted]",
+      ]);
+      expect((await f.mcp.config(actor)).json).not.toContain(argument);
+      const row = f.tables.mcpServer![0]!;
+      const encrypted = f.tables.secret!.find((entry) => entry.id === row.secretId)!;
+      const material = JSON.parse(
+        f.deps.secrets.load(String(encrypted.ciphertext), String(encrypted.id)),
+      );
+      expect(material.redactions).toContain(value);
+    },
+  );
   it("does not persist an ordinary environment value as a redaction after a config edit", async () => {
     const f = await fixture();
     const initial = await f.mcp.config(actor);

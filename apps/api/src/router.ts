@@ -3838,7 +3838,18 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
                   ciphertext: stored.ciphertext,
                 },
               });
-              await bumpMcpServerRevision(tx, existing.id, context.actor, { secretId: stored.id });
+              if (
+                !(await bumpMcpServerRevision(
+                  tx,
+                  existing.id,
+                  context.actor,
+                  { secretId: stored.id },
+                  { revision: existing.revision, secretId: existing.secretId },
+                ))
+              )
+                throw new ORPCError("CONFLICT", {
+                  message: "The server configuration changed. Reload it and try again.",
+                });
               await tx.secret.deleteMany({
                 where: {
                   id: existingSecret.id,

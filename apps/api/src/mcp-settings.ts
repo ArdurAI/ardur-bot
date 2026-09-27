@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { AdapterContext } from "@ardurbot/adapter-kit";
 import type { EncryptedSecretStore } from "@ardurbot/adapters";
-import { McpConnector } from "@ardurbot/adapters";
+import { lockMcpServerRevision, McpConnector } from "@ardurbot/adapters";
 import type {
   Actor,
   LocalServerConfig,
@@ -16,7 +16,11 @@ import {
 } from "@ardurbot/contracts";
 import type { McpServer, Prisma, PrismaClient } from "@ardurbot/db";
 import { IsolationError } from "@ardurbot/db";
-import { redactMcpArguments, redactMcpText } from "@ardurbot/host-runtime/mcp-diagnostics";
+import {
+  mcpTextContainsSecret,
+  redactMcpArguments,
+  redactMcpText,
+} from "@ardurbot/host-runtime/mcp-diagnostics";
 import { ORPCError } from "@orpc/server";
 import type * as z from "zod";
 import type { HostBridge } from "./host-bridge.js";
@@ -221,9 +225,13 @@ export function createMcpSettings(deps: {
       const row = await deps.prisma.$transaction(async (tx) => {
         const lock = `${owner.spaceId}:${owner.userId}:${input.managedBy}:${input.managedId}`;
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('managed-mcp'), hashtext(${lock}))`;
-        const existing = await tx.mcpServer.findFirst({
+        const candidate = await tx.mcpServer.findFirst({
           where: { ...scope(owner), managedBy: input.managedBy, managedId: input.managedId },
         });
+        if (candidate) await lockMcpServerRevision(tx, candidate.id, owner);
+        const existing = candidate
+          ? await tx.mcpServer.findFirst({ where: { ...scope(owner), id: candidate.id } })
+          : null;
         const previous = existing ? await material(existing, tx) : {};
         const value: Material = {
           command: input.command,
@@ -266,7 +274,11 @@ export function createMcpSettings(deps: {
         };
         const updated = existing
           ? await tx.mcpServer.update({
-              where: { id: existing.id },
+              where: {
+                id: existing.id,
+                revision: existing.revision,
+                secretId: existing.secretId,
+              },
               data: { ...data, revision: { increment: 1 } },
             })
           : await tx.mcpServer.create({
@@ -477,14 +489,19 @@ export function createMcpSettings(deps: {
                     redactions: preview.redactions[slug],
                     env: server.env,
                   }),
-                  // A formerly named secret may still be present in the launch command.
-                  ...Object.entries(previous.env ?? {}).flatMap(([key, value]) =>
-                    value &&
-                    mcpEntryIsSecret(previous.credentialFlags, "env", key) &&
-                    !envValues.includes(value) &&
-                    launchParts.some((part) => part.includes(value))
-                      ? [value]
-                      : [],
+                  // A removed or rotated credential may still occur in a launch argument,
+                  // including spellings decoded by the shared MCP redactor.
+                  ...[
+                    ...(previous.secret ? [previous.secret] : []),
+                    ...Object.entries(previous.env ?? {}).flatMap(([key, value]) =>
+                      mcpEntryIsSecret(previous.credentialFlags, "env", key) &&
+                      !envValues.includes(value)
+                        ? [value]
+                        : [],
+                    ),
+                  ].filter(
+                    (value) =>
+                      value && launchParts.some((part) => mcpTextContainsSecret(part, value)),
                   ),
                 ]),
               ];
