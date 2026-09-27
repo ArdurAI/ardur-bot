@@ -1,4 +1,5 @@
 import type { DesktopCustomization } from "./desktop-extensions.js";
+import type { GuidedSetupBridge } from "./desktop-setup.js";
 
 /**
  * `unsupported` covers an unpackaged build and a repository with no published releases, which is
@@ -189,6 +190,7 @@ export type DesktopSetupLink = "docker-desktop" | "orbstack" | "docker-engine";
  * narrower `ardurbotDesktop` bridge so a connected server can never re-point the app.
  */
 export interface ArdurBotSetup {
+  guidedSetup?: GuidedSetupBridge;
   /** Used only to reserve space for native window controls in the local setup UI. */
   platform: string;
   state: () => Promise<DesktopSetupState>;
