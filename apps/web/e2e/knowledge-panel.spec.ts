@@ -1,5 +1,4 @@
-import { readFile } from "node:fs/promises";
-import type { MemoryDocument } from "@ardurbot/contracts";
+import type { MemoryPage } from "@ardurbot/contracts";
 import { expect, test } from "@playwright/test";
 import {
   activeBotId,
@@ -15,64 +14,25 @@ test("memory and skills are readable and editable in the app", async ({ page }, 
   const userName = `Knowledge ${stamp}`;
   await signup(page, `knowledge-${stamp}@ardurbot.test`, "password12", userName);
   await completeOnboarding(page);
-  await page.goto("/app");
-  await page.waitForURL(/\/app\/[^/]+$/);
+  await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
 
-  // Space-wide documents live in Settings → Memory. Open that before bot
-  // settings so the Knowledge Memory tab cannot steal this click.
+  // Shared memory is presented as topics in Settings; bot documents retain
+  // their explicit editor under the bot's Knowledge section.
   await openUserSettings(page, "memory");
   await expect(page.getByLabel("Close memory settings")).toBeVisible();
-  const spaceDocs = page.getByTestId("space-memory-documents");
-  await expect(spaceDocs.getByText("Shared documents")).toBeVisible();
-  const memoryRow = spaceDocs.getByRole("button", { name: /MEMORY\.md/ });
+  const memory = page.getByTestId("memory-settings-page");
+  await expect(memory.getByRole("group", { name: "Topics" })).toBeVisible();
+  const memoryRow = memory.getByRole("button", { name: /Space memory/ });
   await expect(memoryRow).toBeVisible();
   await memoryRow.click();
-  const docEditor = spaceDocs.locator("textarea");
-  const marker = `Edited in e2e ${stamp}`;
-  await docEditor.fill(`# Memory\n\n${marker}\n`);
-  await captureScreenshot(page, testInfo, "83-space-memory-editor");
-  let releaseSave!: () => void;
-  const saveGate = new Promise<void>((resolve) => {
-    releaseSave = resolve;
-  });
-  await page.route(
-    "**/rpc/memory/update",
-    async (route) => {
-      await saveGate;
-      await route.continue();
-    },
-    { times: 1 },
+  const sharedDocument = memory.getByRole("region", { name: "Memory document" });
+  await expect(sharedDocument.getByRole("heading", { name: "Space memory" })).toBeVisible();
+  await expect(sharedDocument).toContainText(
+    "Preferences and context kept within this space live here.",
   );
-  await spaceDocs.getByRole("button", { name: "Save", exact: true }).click();
-  try {
-    await expect(docEditor).toBeDisabled();
-    await expect(memoryRow).toBeDisabled();
-    await expect(spaceDocs.getByRole("button", { name: "Cancel", exact: true })).toBeDisabled();
-  } finally {
-    releaseSave();
-  }
-  await expect(spaceDocs.getByText("rev 2")).toBeVisible();
-
-  // The save persisted: reopen the document and find the marker.
-  await memoryRow.click();
-  await expect(docEditor).toHaveValue(new RegExp(marker));
-  await captureScreenshot(page, testInfo, "84-space-memory-saved");
-  const sharedDocuments = await rpc<MemoryDocument[]>(page, "memory/list", { scope: "user" });
-  expect(sharedDocuments).toContainEqual(
-    expect.objectContaining({ content: `# Memory\n\n${marker}\n`, revision: 2 }),
-  );
-  // Export must fetch fresh content and exclude the bot's private document.
-  const sharedDocument = sharedDocuments.find((doc) => doc.path === "MEMORY.md")!;
-  const latestMarker = `Latest shared memory ${stamp}`;
-  await rpc(page, "memory/update", { documentId: sharedDocument.id, content: latestMarker });
-  const downloadPromise = page.waitForEvent("download");
-  await spaceDocs.getByRole("button", { name: "Download as markdown" }).click();
-  const download = await downloadPromise;
-  expect(download.suggestedFilename()).toBe("space-memory.md");
-  const exported = await readFile((await download.path())!, "utf8");
-  expect(exported).toContain(latestMarker);
-  expect(exported).not.toContain(marker);
-  expect(exported).not.toContain("# Chief");
+  await sharedDocument.getByText("History", { exact: true }).click();
+  await expect(sharedDocument.getByRole("button", { name: /^Revision 1/ })).toBeVisible();
+  await captureScreenshot(page, testInfo, "83-space-memory-topic");
   await page.getByLabel("Close memory settings").click();
   await expect(page.getByLabel("Close memory settings")).toHaveCount(0);
 
@@ -102,10 +62,12 @@ test("memory and skills are readable and editable in the app", async ({ page }, 
   await botMemory.getByRole("button", { name: "Save", exact: true }).click();
   await expect(botMemory.getByText("rev 2")).toBeVisible();
   expect(
-    await rpc<MemoryDocument[]>(page, "memory/list", {
-      botId: activeBotId(page),
-      scope: "bot",
-    }),
+    (
+      await rpc<MemoryPage>(page, "memory/list", {
+        botId: activeBotId(page),
+        scope: "bot",
+      })
+    ).items,
   ).toContainEqual(expect.objectContaining({ content: `# Chief\n\n${botMarker}\n`, revision: 2 }));
   await botMemoryRow.click();
   await expect(botDocEditor).toHaveValue(new RegExp(botMarker));
@@ -134,9 +96,7 @@ test("memory and skills are readable and editable in the app", async ({ page }, 
   await captureScreenshot(page, testInfo, "82-knowledge-skill-listed");
   const composer = page.getByRole("combobox", { name: /^Message/ });
   await composer.fill("/");
-  await expect(
-    page.getByRole("button", { name: "Skill greet-politely", exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole("option", { name: /\/greet-politely/ })).toBeVisible();
   await composer.fill("");
 
   // A provider-owned skill uses the same viewer without mutation controls.
@@ -195,9 +155,7 @@ test("memory and skills are readable and editable in the app", async ({ page }, 
   await knowledge.getByRole("button", { name: "Confirm delete", exact: true }).click();
   await expect(skillRow).toBeHidden();
   await composer.fill("/");
-  await expect(page.getByRole("button", { name: "Skill greet-politely", exact: true })).toHaveCount(
-    0,
-  );
+  await expect(page.getByRole("option", { name: /\/greet-politely/ })).toHaveCount(0);
   expect(await rpc<Array<{ name: string }>>(page, "agentSkills/list", {})).not.toContainEqual(
     expect.objectContaining({ name: "greet-politely" }),
   );

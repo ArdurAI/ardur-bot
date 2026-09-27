@@ -33,7 +33,6 @@ test("learning inbox separates suggestions from applied changes and shows Undo",
 }, testInfo) => {
   await signup(page, `learning-${Date.now()}@ardurbot.test`, "password12", "Learning fixture");
   await completeOnboarding(page);
-  await page.goto("/app");
   let status = "pending";
   const proposal = () => ({
     id: "proposal",
@@ -106,13 +105,14 @@ test("learning inbox separates suggestions from applied changes and shows Undo",
                   ? proposal()
                   : action === "curate"
                     ? { ok: true }
-                    : action === "grants"
-                      ? { grants: [], offers: [] }
-                      : { proposal: proposal() };
+                    : action === "insights"
+                      ? { insights: [] }
+                      : action === "grants"
+                        ? { grants: [], offers: [] }
+                        : { proposal: proposal() };
     await route.fulfill({ contentType: "application/json", body: JSON.stringify({ json }) });
   });
-  await openUserSettings(page, "memory");
-  await page.getByRole("tab", { name: /Learning/ }).click();
+  await openUserSettings(page, "learning");
   const inbox = page.getByTestId("learning-inbox");
   await expect(inbox.getByText("3 suggestions to review", { exact: true })).toBeVisible();
   await captureScreenshot(page, testInfo, "learning-inbox-pending");
@@ -122,7 +122,9 @@ test("learning inbox separates suggestions from applied changes and shows Undo",
   await expect(inbox.getByText("Not enough runs to tell", { exact: true })).toBeVisible();
   await captureScreenshot(page, testInfo, "learning-inbox-applied");
   await inbox.getByRole("tab", { name: "Timeline", exact: true }).click();
-  await expect(inbox.getByText("document:1", { exact: false })).toBeVisible();
+  await expect(
+    inbox.getByRole("button", { name: "Revision and observations document:1" }),
+  ).toBeVisible();
   await captureScreenshot(page, testInfo, "learning-timeline");
   await inbox.getByRole("tab", { name: "Inbox", exact: true }).click();
   await inbox.getByRole("button", { name: "Undo", exact: true }).click();
@@ -204,11 +206,13 @@ test("learning inbox shows board-item suggestions, their outcome, and a close th
           }
         : action === "grants"
           ? { grants: [], offers: [] }
-          : action === "curator"
-            ? { skills: [], reports: [] }
-            : action === "proposal"
-              ? proposals[0]
-              : [];
+          : action === "insights"
+            ? { insights: [] }
+            : action === "curator"
+              ? { skills: [], reports: [] }
+              : action === "proposal"
+                ? proposals[0]
+                : [];
   await page.route("**/api/auth/get-session*", (route) => route.fulfill({ json: fixture.session }));
   await page.route("**/rpc/**", async (route) => {
     const procedure = new URL(route.request().url()).pathname.slice("/rpc/".length);

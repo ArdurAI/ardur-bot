@@ -8,14 +8,25 @@ import { captureScreenshot, completeOnboarding, openUserSettings, signup } from 
 test("owner previews, imports and removes local tool data", async ({ page }, testInfo) => {
   await signup(page, `import-${Date.now()}@ardurbot.test`, "password12", "Import fixture");
   await completeOnboarding(page);
+  // Settings reads deployment ownership from bootstrap, the Import page from me; after another
+  // test has claimed ownership this account is a non-owner, so both responses are patched.
+  await page.route("**/rpc/bootstrap", async (route) => {
+    const response = await route.fetch();
+    const body = await response.json();
+    await route.fulfill({
+      response,
+      json: { json: { ...body.json, me: { ...body.json.me, isDeploymentOwner: true } } },
+    });
+  });
   await page.route("**/rpc/me", async (route) => {
     const response = await route.fetch();
     const body = await response.json();
     await route.fulfill({
-      json: { json: { ...body.json, me: { ...body.json.me, isDeploymentOwner: true } } },
+      response,
+      json: { json: { ...body.json, isDeploymentOwner: true } },
     });
   });
-  await page.goto("/app");
+  await page.goto("/app/bots");
   let imported = false;
   const skill = localImportFixture.items[1]!;
   await page.route("**/rpc/localImport/**", async (route) => {

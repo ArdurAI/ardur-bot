@@ -1086,3 +1086,30 @@ it("keeps a native pin failure's real reason and offers only Change pin", async 
     "Change pin",
   ]);
 });
+
+it("focuses the model select when modelFocusRequest is set", async () => {
+  await act(async () => root.render(settings({}, 1)));
+  expect(document.activeElement).toBe(modelSelect());
+});
+
+it("focuses the model select when modelFocusRequest increments from 0", async () => {
+  await act(async () => root.render(settings({}, 0)));
+  expect(document.activeElement).not.toBe(modelSelect());
+  await act(async () => root.render(settings({}, 1)));
+  expect(document.activeElement).toBe(modelSelect());
+});
+
+it("focuses the model select once it appears after a focus request made for another runtime", async () => {
+  await act(async () => root.render(settings({ runtimeKind: "claude-code" }, 1)));
+  // The native runtime shows its own model select; the built-in one is not mounted yet.
+  const nativeModel = container.querySelector<HTMLSelectElement>('select[id$="-model"]');
+  expect(document.activeElement).toBe(document.body);
+  const runtime = container.querySelector<HTMLSelectElement>('select[id$="-runtime"]');
+  if (!runtime) throw new Error("Missing runtime select");
+  await act(async () => {
+    runtime.value = "pi";
+    runtime.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  expect(nativeModel?.isConnected).toBe(false);
+  expect(document.activeElement).toBe(modelSelect());
+});

@@ -11,6 +11,8 @@ test("connects an MCP server through the OAuth popup callback", async ({ page },
 
   let oauthStatus: McpServer["oauthStatus"] = "none";
   let hasSecret = false;
+  let pendingOauthSessionId: string | null = null;
+  let connectionState = "needs-sign-in";
   const server: McpServer = {
     id: "mcp-oauth-server",
     spaceId: "mcp-oauth-workspace",
@@ -43,7 +45,9 @@ test("connects an MCP server through the OAuth popup callback", async ({ page },
   await page.context().route("**/rpc/mcp/servers/list", async (route) => {
     await route.fulfill({
       contentType: "application/json",
-      body: JSON.stringify({ json: [{ ...server, hasSecret, oauthStatus }] }),
+      body: JSON.stringify({
+        json: [{ ...server, hasSecret, oauthStatus, pendingOauthSessionId, connectionState }],
+      }),
     });
   });
   await page.context().route("**/rpc/mcp/assignments/all", async (route) => {
@@ -56,6 +60,7 @@ test("connects an MCP server through the OAuth popup callback", async ({ page },
         redirectUri: `${browserOrigin}/api/oauth/done`,
       },
     });
+    pendingOauthSessionId = "mcp-oauth-session";
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({
@@ -77,6 +82,8 @@ test("connects an MCP server through the OAuth popup callback", async ({ page },
     });
     markCompletionStarted();
     await completionGate;
+    pendingOauthSessionId = null;
+    connectionState = "connected";
     oauthStatus = "connected";
     await route.fulfill({
       contentType: "application/json",
@@ -102,9 +109,10 @@ test("connects an MCP server through the OAuth popup callback", async ({ page },
 
   await page.getByRole("button", { name: "Cancel", exact: true }).click();
 
-  const popupPromise = page.waitForEvent("popup");
+  const popupPromise = page.context().waitForEvent("page");
   await page.getByRole("button", { name: "Connect OAuth", exact: true }).click();
   const popup = await popupPromise;
+  await popup.waitForURL(/\/mcp\/oauth\/callback\?code=fake-code&state=mcp-oauth-session/);
   await completionStarted;
   await expect(popup.getByText("Finishing MCP connection…", { exact: true })).toBeVisible();
   await captureScreenshot(popup, testInfo, "mcp-oauth-callback");

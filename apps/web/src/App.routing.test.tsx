@@ -2,14 +2,21 @@
 import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { MemoryRouter, useParams } from "react-router-dom";
+import { MemoryRouter, useLocation, useParams } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { App } from "./App";
+import { authReturnPath } from "./lib/auth-return-path";
 import { readOpenTo, writeOpenTo } from "./pages/shell/open-to";
+
+let mockSessionUser: { id: string } | null = { id: "viewer" };
 
 vi.mock("./lib/auth", () => ({
   authClient: {
-    useSession: () => ({ data: { user: { id: "viewer" } }, isPending: false, error: null }),
+    useSession: () => ({
+      data: mockSessionUser ? { user: mockSessionUser } : null,
+      isPending: false,
+      error: null,
+    }),
   },
 }));
 vi.mock("./lib/performance", () => ({ markOnce: () => {}, markAfterPaint: () => {} }));
@@ -17,6 +24,19 @@ vi.mock("./components/PreferencesProvider", () => ({
   PreferencesProvider: ({ children }: { children: ReactNode }) => children,
 }));
 vi.mock("./pages/system/QuickComposer", () => ({ QuickComposer: () => null }));
+vi.mock("./pages/Auth", () => ({
+  AuthPage: ({ mode }: { mode: string }) => {
+    const location = useLocation();
+    return (
+      <output data-testid="auth-page">{`${mode}:${location.pathname}${location.search}`}</output>
+    );
+  },
+  PasswordResetPage: () => null,
+}));
+vi.mock("./pages/Onboarding", () => ({
+  OnboardingPage: () => <output data-testid="onboarding-page">onboarding</output>,
+}));
+vi.mock("./pages/ide/IdePage", () => ({ default: () => <output>ide</output> }));
 vi.mock("./pages/Shell", () => ({
   ShellPage: ({
     dashboard,
@@ -55,6 +75,17 @@ let node: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  window.matchMedia = vi.fn().mockImplementation((query) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }));
+  mockSessionUser = { id: "viewer" };
   const storage = new Map<string, string>();
   vi.stubGlobal("localStorage", {
     getItem: (key: string) => storage.get(key) ?? null,
@@ -120,3 +151,39 @@ it("defaults malformed preferences to Dashboard and does not use an account iden
   expect(localStorage.length).toBe(1);
   writeOpenTo("dashboard");
 });
+
+it.each([
+  ["/onboarding", "/sign-in?next=%2Fonboarding"],
+  ["/mcp/oauth/callback", "/sign-in?next=%2Fmcp%2Foauth%2Fcallback"],
+  [
+    "/mcp/oauth/callback?code=sample&state=local-state",
+    "/sign-in?next=%2Fmcp%2Foauth%2Fcallback%3Fcode%3Dsample%26state%3Dlocal-state",
+  ],
+  ["/integrations/setup", "/sign-in?next=%2Fintegrations%2Fsetup"],
+  ["/integrations/setup?mode=mcp", "/sign-in?next=%2Fintegrations%2Fsetup%3Fmode%3Dmcp"],
+  ["/app/board", "/sign-in?next=%2Fapp%2Fboard"],
+  ["/app/ide", "/sign-in?next=%2Fapp%2Fide"],
+  ["/app/team", "/sign-in?next=%2Fapp%2Fteam"],
+  ["/app", "/sign-in?next=%2Fapp"],
+  ["/app/bots", "/sign-in?next=%2Fapp%2Fbots"],
+  ["/app/g/group-id", "/sign-in?next=%2Fapp%2Fg%2Fgroup-id"],
+  ["/app/bot-id", "/sign-in?next=%2Fapp%2Fbot-id"],
+])(
+  "redirects unauthenticated visit to %s to sign-in with preserved return path",
+  async (path, expectedSignIn) => {
+    mockSessionUser = null;
+    await act(async () =>
+      root.render(
+        <MemoryRouter initialEntries={[path]}>
+          <App />
+        </MemoryRouter>,
+      ),
+    );
+    expect(node.querySelector('[data-testid="auth-page"]')?.textContent).toBe(
+      `in:${expectedSignIn}`,
+    );
+    expect(
+      authReturnPath(new URL(expectedSignIn, "http://localhost").searchParams.get("next")),
+    ).toBe(path);
+  },
+);

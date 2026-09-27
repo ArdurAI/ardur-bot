@@ -17,6 +17,7 @@ const AUTH_CAPABILITIES_TIMEOUT_MS = 8_000;
 const MAX_AUTH_CAPABILITIES_RESPONSE_BYTES = 64 * 1024;
 
 export function AuthPage({ mode }: { mode: AuthMode }) {
+  const { refetch: refreshAuthSession } = authClient.useSession();
   const { t } = useLingui();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -105,6 +106,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
         return;
       }
       clearSpaceSelection();
+      await refreshAuthSession();
       navigate(mode === "up" ? "/onboarding" : authReturnPath(searchParams.get("next")));
     } catch {
       setError(t`Could not reach the server`);

@@ -113,6 +113,7 @@ test("a new space auto-completes onboarding and can be deleted from its menu", a
   await expect(deleteSpaceDialog).toBeVisible();
   await captureScreenshot(page, testInfo, "delete-space-dialog");
   await deleteSpaceDialog.getByRole("button", { name: "Delete", exact: true }).click();
+  await expect(page).toHaveURL(/\/app\/bots$/);
   await expect(sidebar.getByText("Temporary", { exact: true })).toHaveCount(0);
   await expect(page).not.toHaveURL(/\/onboarding/);
   await expect(sidebar.getByRole("button", { name: /^Chief/ })).toHaveCount(1);
@@ -132,6 +133,7 @@ test("deleting the last bot in a space stays in the app after first use", async 
   expect(chief).toBeTruthy();
   await rpc(page, "bots/archive", { botId: chief!.id });
   await page.reload();
+  await expect(page).toHaveURL(/\/app\/bots$/);
   await expect(page).not.toHaveURL(/\/onboarding/);
 
   const sidebar = page.locator("aside").first();
@@ -154,6 +156,7 @@ test("deleting the last bot in a space stays in the app after first use", async 
   const deleteDialog = page.getByRole("alertdialog", { name: /Delete Chief/ });
   await expect(deleteDialog).toBeVisible();
   await deleteDialog.getByRole("button", { name: "Delete", exact: true }).click();
+  await expect(page).toHaveURL(/\/app\/bots$/);
   await expect(sideBot).toHaveCount(0);
   await expect(page).not.toHaveURL(/\/onboarding/);
   await page.reload();

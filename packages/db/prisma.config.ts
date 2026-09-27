@@ -6,8 +6,10 @@ import { defineConfig } from "prisma/config";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const rootEnv = path.resolve(here, "../../.env");
-if (existsSync(rootEnv)) config({ path: rootEnv });
-config();
+if (process.env.TESTKIT_SKIP_ROOT_ENV !== "1") {
+  if (existsSync(rootEnv)) config({ path: rootEnv });
+  config();
+}
 
 export default defineConfig({
   schema: "prisma/schema.prisma",

@@ -162,7 +162,6 @@ test("Executor reconnect saves a replacement token before discovery", async ({ p
           transport: "streamable_http",
           endpoint: "http://localhost:8765/mcp",
           secret: "fake-old-token",
-          headers: { "X-Test": "fake-header" },
         },
       }),
     });
@@ -177,7 +176,7 @@ test("Executor reconnect saves a replacement token before discovery", async ({ p
     const response = await route.fetch();
     expect(response.ok()).toBe(true);
     const updated = (await response.json()).json;
-    expect(updated.headerKeys).toEqual(["X-Test"]);
+    expect(updated.headerKeys).toEqual([]);
     expect(updated.revision).toBe(server.revision + 1);
     saved = true;
     await route.fulfill({ response });
@@ -197,14 +196,19 @@ test("Executor reconnect saves a replacement token before discovery", async ({ p
       },
     });
   });
-  await reportConnected(page, () => discovered);
+  const listed = await reportConnected(page, () => discovered);
   await page.getByRole("button", { name: "Executor", exact: true }).click();
   await page
     .getByRole("textbox", { name: "Server URL", exact: true })
     .fill("http://localhost:8765/mcp");
   await page.getByLabel("Access token", { exact: true }).fill("fake-new-token");
+  const listedBefore = listed.served();
   await page.getByRole("button", { name: "Connect", exact: true }).click();
   await expect.poll(() => saved).toBe(true);
+  await expect.poll(() => discovered).toBe(server.id);
+  // The list refresh that follows discovery must finish before the test ends; otherwise the
+  // route handler is still reading a response that closing the context disposes.
+  await expect.poll(() => listed.served()).toBeGreaterThan(listedBefore);
   await expect(page.getByRole("alert")).toBeHidden();
 });
 
@@ -271,7 +275,9 @@ test("configured server owners manage providers from settings", async ({ page },
     .click();
   const settings = page.getByTestId("user-settings");
   await settings.getByTestId("settings-nav-account").click();
-  const link = settings.getByRole("link", { name: "Server integrations", exact: true });
+  const link = settings
+    .getByRole("group", { name: "Server integrations" })
+    .getByRole("link", { name: "Manage", exact: true });
   await expect(link).toBeVisible();
   await captureScreenshot(page, testInfo, "server-integrations-settings");
   await link.click();
@@ -283,6 +289,7 @@ test("configured server owners manage providers from settings", async ({ page },
 
 /** These tests fake the API's connection probe, so they also fake the state it records. */
 async function reportConnected(page: Page, serverId: () => string) {
+  let served = 0;
   await page.route("**/rpc/mcp/servers/list", async (route) => {
     const response = await route.fetch();
     const body = (await response.json()) as { json: Array<{ id: string }> };
@@ -295,5 +302,7 @@ async function reportConnected(page: Page, serverId: () => string) {
         ),
       },
     });
+    served += 1;
   });
+  return { served: () => served };
 }

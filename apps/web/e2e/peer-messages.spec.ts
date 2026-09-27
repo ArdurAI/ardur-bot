@@ -5,8 +5,7 @@ test("shows peer chips in transcript and opens view-only peer chat", async ({ pa
   const stamp = Date.now();
   await signup(page, `peer-msg-${stamp}@ardurbot.test`, "password12", "Peer Msg");
   await completeOnboarding(page);
-  await page.goto("/app");
-  await page.waitForURL(/\/app\/[^/]+$/);
+  await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
 
   const chiefId = activeBotId(page);
   await rpc(page, "bots/create", {

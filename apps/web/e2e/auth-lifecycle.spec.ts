@@ -104,7 +104,7 @@ test("logout protects bot deep links and sign-in restores the session", async ({
       .locator("form")
       .getByText(/invalid email or password|invalid credentials|incorrect password/i),
   ).toBeVisible();
-  await expect(page).toHaveURL(/\/sign-in$/);
+  await expect(page).toHaveURL(/\/sign-in(?:\?|$)/);
   await captureScreenshot(page, testInfo, "39-invalid-credentials");
 
   await page.getByPlaceholder("Password").fill(password);

@@ -54,7 +54,6 @@ test("production shell startup, fake-provider first token, and three motions", a
   const tokens: number[] = [];
   for (let sample = 0; sample < 5; sample++) {
     const context = await browser.newContext({ viewport: { width: 1440, height: 900 } });
-    await context.tracing.start({ screenshots: true, snapshots: true, sources: false });
     const page = await context.newPage();
     await installPerformanceFixture(page);
     const cdp = await context.newCDPSession(page);
@@ -144,7 +143,6 @@ test("production shell startup, fake-provider first token, and three motions", a
           });
         }
       }
-      await context.tracing.stop({ path: testInfo.outputPath(`launch-${sample}.zip`) });
       await context.close();
     }
   }

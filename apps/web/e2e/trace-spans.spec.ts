@@ -71,13 +71,21 @@ test("committed streaming updates do not restart the pending two-frame paint obs
 for (const overflow of ["auto", "hidden", "clip"]) {
   test(`paint excludes text clipped by a nested overflow ${overflow} ancestor`, async ({
     page,
-  }) => {
-    const manifest = JSON.parse(
-      await readFile(new URL("../dist/.vite/manifest.json", import.meta.url), "utf8"),
+  }, testInfo) => {
+    // The dev-server suite imports the source module; the trace and performance configs run
+    // against `vite preview`, which serves only the built asset named in the manifest.
+    const productionPreview = /playwright\.(?:trace|performance)\.config\.ts$/.test(
+      testInfo.config.configFile ?? "",
     );
-    const moduleUrl = `/${manifest["src/lib/scoreboard-trace.ts"].file}`;
+    const moduleUrl = productionPreview
+      ? `/${
+          JSON.parse(
+            await readFile(new URL("../dist/.vite/manifest.json", import.meta.url), "utf8"),
+          )["src/lib/scoreboard-trace.ts"].file
+        }`
+      : "/src/lib/scoreboard-trace.ts";
     // Isolate geometry from the Shell's asynchronous bootstrap commits. The imported collector
-    // is still the production build; a separate test above exercises its real React lifecycle.
+    // is the module the app ships; a separate test above exercises its React lifecycle.
     await page.route("**/trace-fixture", (route) =>
       route.fulfill({
         contentType: "text/html",
