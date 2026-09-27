@@ -18,6 +18,7 @@ function effortLabel(level: string, t: (message: string) => string) {
   if (level === "high") return t("High");
   if (level === "minimal") return t("Minimal");
   if (level === "max") return t("Max");
+  if (level === "off") return t("Off");
   return level.slice(0, 1).toUpperCase() + level.slice(1);
 }
 

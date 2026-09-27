@@ -11,7 +11,10 @@ import { RpcError } from "./rpc-error";
 
 vi.mock("./api", () => ({ rpc: vi.fn() }));
 vi.mock("./message-action-sheet", () => ({ presentMessageActionSheet: vi.fn() }));
-vi.mock("./i18n", () => ({ useI18n: () => ({ t: (text: string) => text }) }));
+const translations: Record<string, string> = {};
+vi.mock("./i18n", () => ({
+  useI18n: () => ({ t: (text: string) => translations[text] ?? text }),
+}));
 vi.mock("./native", () => ({ useMobileTokens: () => ({}), useResolvedAppearance: () => "light" }));
 vi.mock("react-native", () => ({
   Pressable: ({
@@ -45,6 +48,7 @@ const member: GroupMember = {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(rpc).mockReset();
+  for (const key of Object.keys(translations)) delete translations[key];
 });
 
 it("uses the native model sheet to save and clear the selected member pin", async () => {
@@ -361,5 +365,47 @@ it("reloads the group on conflict and sends the refreshed revision on the next s
     },
   });
   expect(onSaved).toHaveBeenLastCalledWith(savedGroup);
+  await act(async () => root.unmount());
+});
+
+it("translates an off effort in the thinking row", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  translations.Off = "Выключено";
+  const pinnedOff = {
+    ...member,
+    runtimePin: {
+      runtimeKind: "pi" as const,
+      provider: "fixture",
+      modelId: "valid",
+      credentialId: "connection",
+      effort: "off",
+      revision: 2,
+    },
+  };
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  await act(async () =>
+    root.render(
+      createElement(GroupMemberModelControl, {
+        groupId: "room",
+        member: pinnedOff,
+        catalog: [
+          {
+            provider: "fixture",
+            providerName: "Fixture",
+            id: "valid",
+            label: "Valid",
+            reasoning: true,
+            thinkingLevels: ["off", "low", "high"],
+          },
+        ],
+        credentials: [{ id: "connection", provider: "fixture", label: "Connection" }],
+        onSaved: vi.fn(),
+        onError: vi.fn(),
+      } as never),
+    ),
+  );
+  expect(node.textContent).toContain("Выключено");
+  expect(node.textContent).not.toContain("Off");
   await act(async () => root.unmount());
 });

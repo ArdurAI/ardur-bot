@@ -47,6 +47,27 @@ describe("thread event reduction", () => {
       expect(activeMemberRun([run], "other")).toBeNull();
     },
   );
+  it("prefers the admitted run over a newer queued run for the same member", () => {
+    const admitted = {
+      ...threadRun("running", "member"),
+      status: "running" as const,
+      runtimePin: {
+        runtimeKind: "pi" as const,
+        provider: "fixture",
+        modelId: "original",
+        effort: "off",
+        credentialId: "credential",
+        revision: 1,
+      },
+    };
+    const queued = {
+      ...threadRun("queued", "member"),
+      status: "queued" as const,
+      runtimePin: null,
+    };
+    expect(activeMemberRun([queued, admitted], "member")).toBe(admitted);
+    expect(activeMemberRun([queued], "member")).toBe(queued);
+  });
   it.each(["completed", "failed", "cancelled"] as const)(
     "does not display a terminal %s pin as the current member choice",
     (status) => {
