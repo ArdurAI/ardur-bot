@@ -11,6 +11,7 @@ import type { PrismaClient } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 import { formatCurrentTimeInstruction } from "./current-time.js";
 import type { MemoryProviderResolver } from "./memory-provider-factory.js";
+import { quietHistoryDeliveryIds } from "./quiet-history.js";
 import { accountRuntimeUsage } from "./runtime-usage.js";
 
 /**
@@ -275,8 +276,14 @@ export async function compactHistory(
   }
   if (batch.length === 0) return;
 
+  const quietHistoryIds = await quietHistoryDeliveryIds(
+    deps.prisma,
+    threadId,
+    batch.map((message) => message.blocks as MessageBlock[]),
+  );
   const transcriptParts = batch.map(
-    (message) => `${message.role}: ${blocksToAgentHistoryText(message.blocks as MessageBlock[])}`,
+    (message) =>
+      `${message.role}: ${blocksToAgentHistoryText(message.blocks as MessageBlock[], quietHistoryIds)}`,
   );
   let transcript = transcriptParts.join("\n\n");
   if (transcript.length > MAX_TRANSCRIPT_CHARS) {
