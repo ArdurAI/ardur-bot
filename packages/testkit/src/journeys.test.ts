@@ -3864,6 +3864,23 @@ describeJourneys("required product journeys", () => {
         );
       }
       const [expired, claimed] = deliveries;
+      await createThreadMessage(prisma, {
+        threadId: group.threadId,
+        role: "user",
+        blocks: [{ kind: "text", text: `AFTER_QUIET_${run.id}` }],
+      });
+      const expiredMessage = await prisma.message.findUniqueOrThrow({
+        where: { id: expired.inboundMessageId! },
+        select: { seq: true },
+      });
+      const summaryMarker = `SUMMARY_BEFORE_QUIET_${run.id}`;
+      await prisma.thread.update({
+        where: { id: group.threadId },
+        data: {
+          historyCompactedUpToSeq: expiredMessage.seq - 1,
+          historyCompactionSummary: summaryMarker,
+        },
+      });
       let selectedBoth = false;
       let enterAssembly!: () => void;
       let resumeAssembly!: () => void;
@@ -3948,6 +3965,10 @@ describeJourneys("required product journeys", () => {
         requests[0]?.prompt,
         ...(requests[0]?.history ?? []).map((message) => message.content),
       ].join("\n");
+      expect(runtimeInput).toContain(summaryMarker);
+      expect(requests[0]?.history.some((message) => message.id === expired.inboundMessageId)).toBe(
+        true,
+      );
       expect(runtimeInput).not.toContain(`expired-${expired.id}`);
       expect(runtimeInput).not.toContain(expired.id);
       expect(runtimeInput.split(`claimed-${claimed.id}`)).toHaveLength(2);
@@ -3976,6 +3997,146 @@ describeJourneys("required product journeys", () => {
       ).toMatchObject({ outcome: "consumed", quietClaimRunId: null });
     }
     await settleFixtureWork([coordinator.id, worker.id], goal.id);
+  });
+
+  it("omits an expired private quiet receipt on a direct turn without a goal", async () => {
+    const owner = await signup(app, `private-quiet-${stamp}@ardurbot.test`, "Private owner");
+    const actor = await rpc<Me>(app, owner, "me");
+    await prisma.deploymentSettings.update({
+      where: { id: "default" },
+      data: { ownerUserId: actor.userId },
+    });
+    const sender = await rpc<Bot>(app, owner, "bots/create", {
+      name: "Sender",
+      title: "Member",
+      description: "",
+      instructions: "",
+    });
+    const recipient = await rpc<Bot>(app, owner, "bots/create", {
+      name: "Recipient",
+      title: "Member",
+      description: "",
+      instructions: "",
+    });
+    const senderThread = await prisma.thread.findFirstOrThrow({
+      where: { botId: sender.id, spaceId: sender.spaceId },
+    });
+    const recipientThread = await prisma.thread.findFirstOrThrow({
+      where: { botId: recipient.id, spaceId: recipient.spaceId },
+    });
+    const deliveryId = randomUUID();
+    const receiptText = `EXPIRED_PRIVATE_QUIET_${deliveryId}`;
+    const outbound = await createThreadMessage(prisma, {
+      threadId: senderThread.id,
+      role: "bot",
+      botId: sender.id,
+      blocks: [
+        {
+          kind: "bot_message_sent",
+          toBotId: recipient.id,
+          toBotName: recipient.name,
+          text: receiptText,
+          intent: "fyi",
+          deliveryId,
+          deliveryState: "delivered",
+        },
+      ],
+    });
+    const inbound = await createThreadMessage(prisma, {
+      threadId: recipientThread.id,
+      role: "user",
+      origin: "peer-bot",
+      actorId: sender.id,
+      blocks: [
+        {
+          kind: "bot_message_received",
+          fromBotId: sender.id,
+          fromBotName: sender.name,
+          text: receiptText,
+          intent: "fyi",
+          deliveryId,
+          deliveryState: "expired",
+        },
+        { kind: "text", text: "Keep this adjacent note" },
+      ],
+      markUnread: false,
+    });
+    const userMessage = await createThreadMessage(prisma, {
+      threadId: recipientThread.id,
+      role: "user",
+      origin: "user",
+      actorId: actor.userId,
+      blocks: [{ kind: "text", text: "Review my direct request" }],
+    });
+    const task = await prisma.task.create({
+      data: {
+        spaceId: recipient.spaceId,
+        userId: actor.userId,
+        botId: recipient.id,
+        threadId: recipientThread.id,
+        prompt: "Review my direct request",
+        status: "queued",
+      },
+    });
+    const run = await prisma.run.create({
+      data: {
+        spaceId: recipient.spaceId,
+        userId: actor.userId,
+        botId: recipient.id,
+        threadId: recipientThread.id,
+        taskId: task.id,
+        sourceMessageId: userMessage.id,
+        status: "queued",
+        trigger: "user",
+      },
+    });
+    await prisma.botMessageDelivery.create({
+      data: {
+        id: deliveryId,
+        spaceId: recipient.spaceId,
+        userId: actor.userId,
+        rootTaskId: task.id,
+        conversationId: deliveryId,
+        senderBotId: sender.id,
+        recipientBotId: recipient.id,
+        senderThreadId: senderThread.id,
+        recipientThreadId: recipientThread.id,
+        sourceRunId: run.id,
+        intent: "fyi",
+        outboundMessageId: outbound.id,
+        inboundMessageId: inbound.id,
+        state: "expired",
+        outcome: "expired",
+        hop: 1,
+        authorityFingerprint: "fixture",
+        requestFingerprint: deliveryId,
+        idempotencyKey: `private-quiet:${deliveryId}`,
+        expiresAt: new Date(Date.now() - 1_000),
+      },
+    });
+    const requests: Array<{ prompt: string; history: Array<{ content: string }> }> = [];
+    const runtimeSpy = vi
+      .spyOn(ScriptedAgentRuntime.prototype, "run")
+      .mockImplementation(async function* (request) {
+        if (request.runId === run.id)
+          requests.push({ prompt: request.prompt, history: request.history });
+        yield { type: "done", text: "Direct request reviewed." };
+      });
+    try {
+      await executor.continueRun(run.id, `private-quiet-${run.id}`);
+    } finally {
+      runtimeSpy.mockRestore();
+    }
+    expect(requests).toHaveLength(1);
+    const runtimeInput = [
+      requests[0]?.prompt,
+      ...requests[0]!.history.map((row) => row.content),
+    ].join("\n");
+    expect(runtimeInput).not.toContain(receiptText);
+    expect(runtimeInput).toContain("Keep this adjacent note");
+    expect(runtimeInput).toContain("Review my direct request");
+    expect((await prisma.run.findUniqueOrThrow({ where: { id: run.id } })).goalId).toBeNull();
+    await settleFixtureWork([sender.id, recipient.id]);
   });
 
   it("keeps a goal wake's source result after a newer room message fills history", async () => {

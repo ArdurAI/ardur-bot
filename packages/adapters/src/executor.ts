@@ -324,6 +324,7 @@ import {
   searchChartCatalog,
 } from "./plot-tool.js";
 import { classifyProviderError } from "./provider-error.js";
+import { quietHistoryDeliveryIds } from "./quiet-history.js";
 import {
   approvalRequestRoute,
   bindDeviceApproval,
@@ -1872,36 +1873,14 @@ export function createRunExecutor(deps: ExecutorDeps) {
         const discoveredPromise = deps.connector
           ? deps.connector.discoverTools(context)
           : Promise.resolve([]);
-        // Unconsumed quiet receipts enter through the claimed required context. Expired
-        // receipts must never re-enter through the ordinary thread history.
-        const quietHistoryMessageIds = new Set(
-          run.goalId && run.delegationRootTaskId && messages.length
-            ? (
-                await deps.prisma.botMessageDelivery.findMany({
-                  where: {
-                    spaceId: run.spaceId,
-                    userId: run.userId,
-                    goalId: run.goalId,
-                    rootTaskId: run.delegationRootTaskId,
-                    recipientBotId: run.botId,
-                    recipientThreadId: run.threadId,
-                    inboundMessageId: { in: messages.map((message) => message.id) },
-                    AND: [
-                      { OR: [{ outcome: null }, { outcome: { in: ["expired", "failed"] } }] },
-                      {
-                        OR: [
-                          { intent: { in: ["status", "fyi"] } },
-                          { intent: "result", inReplyToDeliveryId: null },
-                        ],
-                      },
-                    ],
-                  },
-                  select: { inboundMessageId: true },
-                })
-              ).flatMap((delivery) =>
-                delivery.inboundMessageId ? [delivery.inboundMessageId] : [],
-              )
-            : [],
+        const quietHistoryIds = await quietHistoryDeliveryIds(
+          deps.prisma,
+          run.threadId,
+          messages.flatMap((message) =>
+            message.replyTo
+              ? [message.blocks as MessageBlock[], message.replyTo.blocks as MessageBlock[]]
+              : [message.blocks as MessageBlock[]],
+          ),
         );
         const historyBotIds = thread.groupId
           ? [
@@ -1927,14 +1906,17 @@ export function createRunExecutor(deps: ExecutorDeps) {
         const threadContext = threadContextForRun(
           run.trigger,
           {
-            messages: [...messages]
-              .reverse()
-              .filter((message) => !quietHistoryMessageIds.has(message.id))
-              .map((m) => ({
-                id: m.id,
-                seq: m.seq,
-                ...agentHistoryTurn(m, bot.id, Boolean(thread.groupId), historyBotNames),
-              })),
+            messages: [...messages].reverse().map((m) => ({
+              id: m.id,
+              seq: m.seq,
+              ...agentHistoryTurn(
+                m,
+                bot.id,
+                Boolean(thread.groupId),
+                historyBotNames,
+                quietHistoryIds,
+              ),
+            })),
             summary: thread.historyCompactionSummary,
             historyCompactedUpToSeq: thread.historyCompactedUpToSeq,
           },

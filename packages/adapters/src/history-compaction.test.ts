@@ -225,6 +225,7 @@ function compactionHarness(
     deploymentModelKey?: string;
     settings?: { defaultModelProvider: string | null; defaultModelId: string | null } | null;
     messages?: HarnessMessage[];
+    quietReceiptIds?: string[];
     nextMessageSeq?: number;
     historyCompactedUpToSeq?: number | null;
     historyCompactionSummary?: string | null;
@@ -310,6 +311,9 @@ function compactionHarness(
           return ordered.slice(0, args.take ?? ordered.length);
         },
       ),
+    },
+    botMessageDelivery: {
+      findMany: vi.fn(async () => (options.quietReceiptIds ?? []).map((id) => ({ id }))),
     },
     deploymentSettings: {
       findUnique: vi.fn(async () => options.settings ?? null),
@@ -531,6 +535,41 @@ describe("compactHistory", () => {
     const [request] = harness.runtime.run.mock.calls[0]!;
     expect(request.prompt).toContain("[file: plan.pdf (application/pdf, 123 bytes)]");
     expect(request.prompt).toContain("[image: diagram.png]");
+  });
+
+  it("omits ineligible quiet receipt text from a compacted transcript", async () => {
+    const messages: HarnessMessage[] = Array.from({ length: 50 }, (_, seq) => ({
+      seq,
+      role: "user",
+      blocks: [{ kind: "text", text: `message ${seq}` }],
+    }));
+    messages[12]!.blocks = [
+      {
+        kind: "bot_message_received",
+        fromBotId: "sender",
+        fromBotName: "Sender",
+        text: "EXPIRED_RECEIPT_SENTINEL",
+        deliveryId: "quiet-12",
+      },
+      { kind: "text", text: "Keep adjacent content" },
+    ];
+    const harness = compactionHarness({
+      deploymentModelKey: "fixture-key",
+      messages,
+      quietReceiptIds: ["quiet-12"],
+    });
+    harness.runtime.run.mockImplementationOnce(async function* (request) {
+      yield { type: "done", text: request.prompt };
+    });
+
+    await compactHistory(harness.deps, "thread-1");
+
+    const [request] = harness.runtime.run.mock.calls[0]!;
+    expect(request.prompt).not.toContain("EXPIRED_RECEIPT_SENTINEL");
+    expect(request.prompt).toContain("Keep adjacent content");
+    expect(harness.thread.historyCompactionSummary).not.toContain("EXPIRED_RECEIPT_SENTINEL");
+    expect(harness.thread.historyCompactionSummary).toContain("Keep adjacent content");
+    expect(harness.thread.historyCompactedUpToSeq).toBe(49);
   });
 
   it("compacts locally without a semantic memory provider", async () => {
