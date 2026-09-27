@@ -177,6 +177,7 @@ const connected: IntegrationConnection = {
   catalogId: "github",
   state: "connected",
   needsReview: false,
+  spaceAllowedTools: ["synthetic_read", "synthetic_update"],
   spaceToolPolicies: {},
   manifest: {
     capturedAt: "2026-09-23T00:00:00.000Z",
@@ -233,7 +234,12 @@ beforeEach(() => {
   api.resourceTools.mockResolvedValue([]);
   api.searchResources.mockResolvedValue([]);
   api.assign.mockImplementation(async (input) =>
-    input.botIds.map((botId: string) => ({ botId, toolIds: input.toolIds, needsReview: false })),
+    input.overrides
+      .filter((entry: { access: string }) => entry.access !== "inherit")
+      .map((entry: { botId: string; access: string; toolIds: string[] }) => ({
+        ...entry,
+        needsReview: false,
+      })),
   );
   api.connect.mockImplementation(async () => {
     connections = [connected];
@@ -335,7 +341,7 @@ describe("Settings integration catalog", () => {
     );
     expect(container.textContent).not.toContain("api.githubcopilot");
   });
-  it("connects, starts with no grants, then saves only the selected bots and tools", async () => {
+  it("connects with access for every bot and saves space tools", async () => {
     await mount();
     await click(button("Connect", container.querySelector('[data-testid="integration-github"]')!));
     expect(api.connect).toHaveBeenCalledWith({
@@ -346,17 +352,17 @@ describe("Settings integration catalog", () => {
       token: undefined,
     });
     expect(api.assign).not.toHaveBeenCalled();
-    const checks = [...container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')];
+    const checks = [...container.querySelectorAll<HTMLInputElement>('input[aria-label="Helper"]')];
     expect(checks).toHaveLength(1);
-    expect(checks.every((input) => !input.checked)).toBe(true);
+    expect(checks.every((input) => input.checked)).toBe(true);
+    expect(container.textContent).toContain("All bots have access (bots you create later too).");
     expect(container.querySelectorAll("select")).toHaveLength(2);
-    await click(container.querySelector('[aria-label="Helper"]')!);
     await permission("synthetic_update", "ask");
     await click(button("Save"));
     expect(api.assign).toHaveBeenCalledWith({
       connectionId: "connection",
-      botIds: ["bot"],
-      toolIds: ["synthetic_update"],
+      overrides: [],
+      toolIds: ["synthetic_read", "synthetic_update"],
       spaceToolPolicies: { synthetic_update: "ask-first" },
     });
     expect(container.textContent).toContain("Your bots can use the selected tools.");
@@ -450,13 +456,28 @@ describe("Settings integration catalog", () => {
     }
   });
   it("loads, changes, saves and reopens a per-connection read approval", async () => {
-    connections = [{ ...connected, spaceToolPolicies: { synthetic_read: "allow" } }];
+    connections = [
+      {
+        ...connected,
+        spaceAllowedTools: ["synthetic_read"],
+        spaceToolPolicies: { synthetic_read: "allow" },
+      },
+    ];
     api.grants.mockResolvedValue([
-      { botId: "bot", toolIds: ["synthetic_read"], needsReview: false },
+      { botId: "bot", access: "custom", toolIds: ["synthetic_read"], needsReview: false },
     ]);
     api.assign.mockImplementation(async (input) => {
-      connections = [{ ...connected, spaceToolPolicies: input.spaceToolPolicies }];
-      return [{ botId: "bot", toolIds: input.toolIds, needsReview: false }];
+      connections = [
+        {
+          ...connected,
+          spaceAllowedTools: input.toolIds,
+          spaceToolPolicies: input.spaceToolPolicies,
+        },
+      ];
+      return input.overrides.map((entry: { botId: string; access: string; toolIds: string[] }) => ({
+        ...entry,
+        needsReview: false,
+      }));
     });
     await mount();
     await click(button("Manage"));
@@ -468,7 +489,7 @@ describe("Settings integration catalog", () => {
     await click(button("Save"));
     expect(api.assign).toHaveBeenCalledWith({
       connectionId: "connection",
-      botIds: ["bot"],
+      overrides: [{ botId: "bot", access: "custom", toolIds: ["synthetic_read"] }],
       toolIds: ["synthetic_read"],
       spaceToolPolicies: { synthetic_read: "ask-first" },
     });
@@ -2181,7 +2202,7 @@ describe("token and destination controls", () => {
     });
     await mount();
     await click(button("Manage"));
-    await fill("Notion page URL or ID", "https://www.notion.so/Notes-" + "a".repeat(32));
+    await fill("Notion page URL or ID", `https://www.notion.so/Notes-${"a".repeat(32)}`);
     await click(button("Save"));
     expect(api.assign).toHaveBeenCalledWith(
       expect.objectContaining({

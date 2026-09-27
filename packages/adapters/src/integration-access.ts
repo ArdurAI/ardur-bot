@@ -19,6 +19,7 @@ export function stringTools(value: unknown): string[] {
 }
 
 export type McpGrant = {
+  access?: string;
   allowAllTools: boolean;
   needsReview?: boolean;
   allowedTools: unknown;
@@ -28,14 +29,26 @@ export type McpGrant = {
     connectionState?: string;
     manifest?: unknown;
     spaceAllowedTools?: unknown;
+    needsReview?: boolean;
     spaceToolPolicies?: unknown;
     resourceConstraints?: unknown;
   };
 };
 
 export function grantedMcpTools(assignment: McpGrant, offered: readonly string[]): string[] {
-  if (!assignment.server.enabled || assignment.needsReview || assignment.allowAllTools) return [];
-  const bot = stringTools(assignment.allowedTools);
+  if (
+    !assignment.server.enabled ||
+    assignment.server.needsReview ||
+    assignment.needsReview ||
+    assignment.allowAllTools ||
+    assignment.access === "none" ||
+    (assignment.access !== undefined && !["custom", "inherit"].includes(assignment.access))
+  )
+    return [];
+  const bot =
+    assignment.access === "inherit"
+      ? stringTools(assignment.server.spaceAllowedTools)
+      : stringTools(assignment.allowedTools);
   if (!assignment.server.catalogId) return effectiveTools(offered, bot, bot);
   const descriptor = integrationById(assignment.server.catalogId);
   const manifest = IntegrationManifestSchema.safeParse(assignment.server.manifest);
@@ -49,6 +62,50 @@ export function grantedMcpTools(assignment: McpGrant, offered: readonly string[]
   return effectiveTools(offered, stringTools(assignment.server.spaceAllowedTools), bot).filter(
     (id) => captured.has(id) && descriptor.toolPolicies[id]?.approval !== "disabled",
   );
+}
+
+export async function mcpGrantForBot(
+  prisma: PrismaClient,
+  context: Pick<AdapterContext, "spaceId" | "userId" | "botId">,
+  serverId: string,
+) {
+  if (!context.botId) return null;
+  const assignment = await prisma.botMcpServer.findFirst({
+    where: {
+      botId: context.botId,
+      serverId,
+      spaceId: context.spaceId,
+      userId: context.userId,
+      server: { enabled: true },
+    },
+    include: { server: true },
+  });
+  if (assignment && assignment.server.transport !== "host-cli") return assignment;
+  const bot = await prisma.bot.findFirst({
+    where: {
+      id: context.botId,
+      spaceId: context.spaceId,
+      userId: context.userId,
+      archivedAt: null,
+    },
+    select: { id: true, computer: { select: { kind: true } } },
+  });
+  if (!bot || (assignment?.server.transport === "host-cli" && bot.computer?.kind !== "desktop"))
+    return null;
+  if (assignment) return assignment;
+  const server = await prisma.mcpServer.findFirst({
+    where: { id: serverId, spaceId: context.spaceId, userId: context.userId, enabled: true },
+  });
+  if (!server || (server.transport === "host-cli" && bot.computer?.kind !== "desktop")) return null;
+  return {
+    id: null,
+    serverId,
+    access: "inherit",
+    allowAllTools: false,
+    needsReview: false,
+    allowedTools: server.spaceAllowedTools,
+    server,
+  };
 }
 
 /** Fresh DB state is authoritative, including during an approved replay or nested execution. */
@@ -80,16 +137,7 @@ export async function integrationApprovalDetailsForCall(
 > {
   if (route?.connectorId !== "mcp" || !route.resourceId) return undefined;
   if (!context.botId) return { approval: "disabled" };
-  const assignment = await prisma.botMcpServer.findFirst({
-    where: {
-      botId: context.botId,
-      serverId: route.resourceId,
-      spaceId: context.spaceId,
-      userId: context.userId,
-      server: { enabled: true },
-    },
-    include: { server: true },
-  });
+  const assignment = await mcpGrantForBot(prisma, context, route.resourceId);
   if (!assignment || !grantedMcpTools(assignment, [route.toolName]).length)
     return { approval: "disabled" };
   if (!assignment.server.catalogId && !assignment.server.manifest) return undefined;

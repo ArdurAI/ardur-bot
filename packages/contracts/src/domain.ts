@@ -751,6 +751,8 @@ export type McpServerConfigInput = z.infer<typeof McpServerConfigInput>;
 
 export const McpServerSchema = z.object({
   imported: ImportedProvenanceSchema.optional(),
+  needsReview: z.boolean().optional(),
+  spaceAllowedTools: z.array(z.string()).optional(),
   spaceToolPolicies: SpaceToolPoliciesSchema.optional(),
   catalogId: z.string().nullable().optional(),
   managedBy: z.enum(["extension", "plugin"]).nullable().optional(),
@@ -785,6 +787,7 @@ export const BotMcpServerSchema = z.object({
   id: Id,
   botId: Id,
   serverId: Id,
+  access: z.enum(["inherit", "custom", "none"]).default("custom"),
   allowAllTools: z.boolean(),
   needsReview: z.boolean().default(false),
   allowedTools: z.array(z.string().min(1).max(200)),

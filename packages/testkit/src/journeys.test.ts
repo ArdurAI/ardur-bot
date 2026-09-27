@@ -4,11 +4,13 @@ import path from "node:path";
 import { gunzipSync } from "node:zlib";
 import {
   ComposioEmulator,
+  captureIntegrationManifest,
   createScheduleFromTool,
   DesktopSandboxProvider,
   FakeSandboxProvider,
   handoffToGroupBot,
   ManagedSandboxEmulator,
+  McpConnector,
   owningSandbox,
   toComputerRef,
 } from "@ardurbot/adapters";
@@ -131,6 +133,117 @@ describeJourneys("required product journeys", () => {
 
   afterAll(async () => {
     await stop?.();
+  });
+
+  it("new bots inherit a connected tool while an explicit removal survives saves and review", async () => {
+    const cookie = await signup(app, `integration-access-${stamp}@ardurbot.test`, "Workspace");
+    const otherCookie = await signup(
+      app,
+      `integration-access-other-${stamp}@ardurbot.test`,
+      "Other workspace",
+    );
+    const owner = await rpc<Me>(app, cookie, "me");
+    const tool = {
+      name: "synthetic_read",
+      description: "Read a fixture",
+      inputSchema: { type: "object" },
+    };
+    const manifest = captureIntegrationManifest([tool], "fixture");
+    const server = await prisma.mcpServer.create({
+      data: {
+        spaceId: owner.spaceId,
+        userId: owner.userId,
+        slug: `fixture-${stamp}`,
+        name: "Fixture connection",
+        transport: "streamable_http",
+        endpoint: "https://example.test/mcp",
+        catalogId: "github",
+        enabled: true,
+        connectionState: "connected",
+        manifest,
+        spaceAllowedTools: [tool.name],
+      },
+    });
+    const first = await rpc<Bot>(app, cookie, "bots/create", {
+      name: "First",
+      title: "First",
+      description: "Fixture",
+      instructions: "",
+    });
+    const second = await rpc<Bot>(app, cookie, "bots/create", {
+      name: "Second",
+      title: "Second",
+      description: "Fixture",
+      instructions: "",
+    });
+    const outsider = await rpc<Bot>(app, otherCookie, "bots/create", {
+      name: "Outside",
+      title: "Outside",
+      description: "Fixture",
+      instructions: "",
+    });
+    const mcp = new McpConnector(prisma, {} as never);
+    (
+      mcp as unknown as {
+        sessionFor: () => Promise<{ listTools: () => Promise<{ tools: (typeof tool)[] }> }>;
+      }
+    ).sessionFor = async () => ({ listTools: async () => ({ tools: [tool] }) });
+    const listed = (botId: string, scope = owner) =>
+      mcp.discoverTools({
+        botId,
+        spaceId: scope.spaceId,
+        userId: scope.userId,
+        operationId: "fixture",
+        traceId: "fixture",
+        signal: new AbortController().signal,
+      });
+    try {
+      expect((await listed(first.id)).map((entry) => entry.name)).toContain(
+        `mcp__${server.slug}__synthetic_read`,
+      );
+      expect(await rpc(app, cookie, "integrations/available", { botId: first.id })).toEqual([
+        { id: server.id, name: "Fixture connection" },
+      ]);
+      await rpc(app, cookie, "integrations/assign", {
+        connectionId: server.id,
+        toolIds: [tool.name],
+        overrides: [{ botId: first.id, access: "none", toolIds: [] }],
+      });
+      expect(await listed(first.id)).toEqual([]);
+      expect(await rpc(app, cookie, "integrations/available", { botId: first.id })).toEqual([]);
+      expect((await listed(second.id)).map((entry) => entry.route?.resourceId)).toContain(
+        server.id,
+      );
+      await rpc(app, cookie, "integrations/assign", {
+        connectionId: server.id,
+        toolIds: [tool.name],
+        overrides: [],
+      });
+      await prisma.mcpServer.update({
+        where: { id: server.id },
+        data: { needsReview: true, spaceAllowedTools: [], revision: { increment: 1 } },
+      });
+      expect(await listed(second.id)).toEqual([]);
+      await rpc(app, cookie, "integrations/assign", {
+        connectionId: server.id,
+        toolIds: [tool.name],
+        overrides: [],
+      });
+      expect(await listed(first.id)).toEqual([]);
+      expect((await listed(second.id)).map((entry) => entry.route?.resourceId)).toContain(
+        server.id,
+      );
+      const third = await rpc<Bot>(app, cookie, "bots/create", {
+        name: "Later",
+        title: "Later",
+        description: "Fixture",
+        instructions: "",
+      });
+      expect((await listed(third.id)).map((entry) => entry.route?.resourceId)).toContain(server.id);
+      expect(await listed(outsider.id, await rpc<Me>(app, otherCookie, "me"))).toEqual([]);
+    } finally {
+      await mcp.close();
+    }
   });
 
   it("computer updates preserve the workspace and reserve the shared computer until completion", async () => {

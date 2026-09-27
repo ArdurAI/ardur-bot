@@ -589,8 +589,19 @@ msgstr "사용 Bot:"
 msgid "All bots"
 msgstr ""
 
+#: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/components/integrations/catalog/McpToolReview.tsx
+#: src/pages/McpServersOverlay.tsx
+msgid "All bots have access (bots you create later too)."
+msgstr ""
+
 #: src/pages/customize/CustomizeControls.tsx
 msgid "All categories"
+msgstr ""
+
+#: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/components/integrations/catalog/McpToolReview.tsx
+msgid "All desktop bots have access (including ones you create later)."
 msgstr ""
 
 #: src/components/integrations/catalog/ToolPicker.tsx
@@ -1513,10 +1524,6 @@ msgstr "새 비밀번호 선택"
 
 #: src/components/composer/command-description.ts
 msgid "Choose a taught skill"
-msgstr ""
-
-#: src/components/integrations/catalog/IntegrationManage.tsx
-msgid "Choose bots and the tools they can use."
 msgstr ""
 
 #: src/pages/shell/runtime-settings.tsx
@@ -4157,6 +4164,7 @@ msgid "Integration options"
 msgstr ""
 
 #: src/components/composer/ComposerMenu.tsx
+#: src/components/Context.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/settings-sections.ts
 #: src/pages/Shell.tsx
@@ -4397,6 +4405,11 @@ msgstr ""
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Light"
 msgstr "라이트"
+
+#: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/components/integrations/catalog/McpToolReview.tsx
+msgid "Limit tools"
+msgstr ""
 
 #: src/pages/RoutineEditor.tsx
 msgid "Linear issue"
@@ -5279,6 +5292,10 @@ msgstr ""
 #: src/pages/GroupPanel.tsx
 msgid "None"
 msgstr "없음"
+
+#: src/components/Context.tsx
+msgid "None available"
+msgstr ""
 
 #: src/pages/HostComputerSettings.tsx
 msgid "None detected"
@@ -6236,6 +6253,11 @@ msgstr "작업 기술 {0} 삭제"
 #: src/pages/RoutineEditor.tsx
 msgid "Remove webhook"
 msgstr "웹훅 제거"
+
+#: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/components/integrations/catalog/McpToolReview.tsx
+msgid "Removed"
+msgstr ""
 
 #. placeholder {0}: LOCAL_IMPORT_TOOL_NAMES[entry.importedFrom]
 #: src/pages/LearningTimeline.tsx
@@ -8072,6 +8094,15 @@ msgstr "찾은 모델 중에서 선택"
 
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Use a token"
+msgstr ""
+
+#: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/components/integrations/catalog/McpToolReview.tsx
+msgid "Use all selected tools"
+msgstr ""
+
+#: src/components/integrations/catalog/IntegrationManage.tsx
+msgid "Use all selected tools, or choose a subset for this bot."
 msgstr ""
 
 #: src/pages/ExternalConversationSettings.tsx

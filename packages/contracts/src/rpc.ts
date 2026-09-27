@@ -1100,7 +1100,17 @@ export const appContract = {
       .input(
         z.object({
           connectionId: Id,
-          botIds: z.array(Id).max(500),
+          botIds: z.array(Id).max(500).optional(),
+          overrides: z
+            .array(
+              z.object({
+                botId: Id,
+                access: z.enum(["inherit", "custom", "none"]),
+                toolIds: z.array(z.string().min(1).max(200)).max(2000).default([]),
+              }),
+            )
+            .max(500)
+            .optional(),
           toolIds: z.array(z.string().min(1).max(200)).max(2000),
           spaceToolPolicies: SpaceToolPoliciesSchema.optional(),
           resourceConstraints: IntegrationResourceConstraintsSchema.optional(),
@@ -1121,6 +1131,7 @@ export const appContract = {
       )
       .output(z.array(IntegrationResourceChoiceSchema)),
     grants: oc.input(z.object({ connectionId: Id })).output(z.array(IntegrationGrantSchema)),
+    available: oc.input(botId).output(z.array(z.object({ id: Id, name: z.string() }))),
     revoke: oc.input(z.object({ connectionId: Id })).output(z.object({ ok: z.literal(true) })),
     cancel: oc.input(z.object({ connectionId: Id })).output(z.object({ ok: z.literal(true) })),
     discover: oc.input(z.object({ connectionId: Id })).output(z.object({ ok: z.literal(true) })),
@@ -1131,7 +1142,17 @@ export const appContract = {
         .input(
           z.object({
             serverId: Id,
-            botIds: z.array(Id).max(100),
+            botIds: z.array(Id).max(100).optional(),
+            overrides: z
+              .array(
+                z.object({
+                  botId: Id,
+                  access: z.enum(["inherit", "custom", "none"]),
+                  toolIds: z.array(z.string().min(1).max(200)).max(500).default([]),
+                }),
+              )
+              .max(100)
+              .optional(),
             toolIds: z.array(z.string().min(1).max(200)).max(500),
             spaceToolPolicies: SpaceToolPoliciesSchema.optional(),
           }),
@@ -1170,6 +1191,7 @@ export const appContract = {
                   .default(false)
                   .refine((value) => !value, "Choose explicit tools"),
                 needsReview: z.boolean().default(false),
+                access: z.enum(["inherit", "custom", "none"]).default("custom"),
                 allowedTools: z.array(z.string().min(1).max(200)).max(500).default([]),
               }),
             ),

@@ -24,6 +24,10 @@ it("routes packaged discovery and calls with the current run's identity without 
     needsReview: false,
   };
   const prisma = {
+    bot: {
+      findFirst: vi.fn(async ({ where }) => ({ id: where.id, computer: { kind: "desktop" } })),
+    },
+    mcpServer: { findMany: vi.fn(async () => [{ ...server, assignments: [assignment] }]) },
     botMcpServer: {
       findMany: vi.fn(async () => [assignment]),
       findFirst: vi.fn(async () => assignment),

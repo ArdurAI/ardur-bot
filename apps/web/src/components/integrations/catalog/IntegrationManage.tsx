@@ -29,8 +29,8 @@ export function IntegrationManage({
   const controlId = useId();
   const [bots, setBots] = useState<Bot[]>([]);
   const [grants, setGrants] = useState<IntegrationGrant[]>([]);
-  const [botIds, setBotIds] = useState<string[]>([]);
-  const [toolIds, setToolIds] = useState<string[]>([]);
+  const [overrides, setOverrides] = useState<IntegrationGrant[]>([]);
+  const [toolIds, setToolIds] = useState<string[]>(connection.spaceAllowedTools ?? []);
   const [spaceToolPolicies, setSpaceToolPolicies] = useState<SpaceToolPolicies>(
     connection.spaceToolPolicies,
   );
@@ -70,13 +70,9 @@ export function IntegrationManage({
         ),
       );
       setGrants(grants);
+      setOverrides(grants);
       setSpaceToolPolicies(connection.spaceToolPolicies);
-      setBotIds(grants.map((grant) => grant.botId));
-      // A shared editor must never silently broaden different bots' grants.
-      setToolIds(
-        grants[0]?.toolIds.filter((id) => grants.every((grant) => grant.toolIds.includes(id))) ??
-          [],
-      );
+      setToolIds(connection.spaceAllowedTools ?? []);
     } catch {
       setError(true);
     } finally {
@@ -112,7 +108,14 @@ export function IntegrationManage({
       setScopeError(false);
       const updated = await rpc.integrations.assign({
         connectionId: connection.id,
-        botIds,
+        overrides: overrides.map((override) => ({
+          botId: override.botId,
+          access: override.access,
+          toolIds:
+            override.access === "custom"
+              ? override.toolIds.filter((id) => toolIds.includes(id))
+              : [],
+        })),
         toolIds,
         ...(["notion", "atlassian"].includes(descriptor.id) ? { resourceConstraints } : {}),
         ...(JSON.stringify(spaceToolPolicies) === JSON.stringify(connection.spaceToolPolicies)
@@ -120,6 +123,7 @@ export function IntegrationManage({
           : { spaceToolPolicies }),
       });
       setGrants(updated);
+      setOverrides(updated);
       setSaved(true);
       await onChanged();
     } catch {
@@ -174,28 +178,89 @@ export function IntegrationManage({
               ? t`Your bots can use the selected tools.`
               : connection.needsReview || grants.some((grant) => grant.needsReview)
                 ? t`Review tools before your bots can use this account.`
-                : t`Choose bots and the tools they can use.`}
+                : connection.transport === "host-cli"
+                  ? t`All desktop bots have access (including ones you create later).`
+                  : t`All bots have access (bots you create later too).`}
           </p>
           <fieldset disabled={busy} className="space-y-2">
             <legend className="mb-2 text-sm font-medium">{t`Bots`}</legend>
-            {bots.map((bot) => (
-              <label
-                key={bot.id}
-                htmlFor={`${controlId}-${bot.id}`}
-                className="flex items-center gap-3 text-sm"
-              >
-                <Checkbox
-                  id={`${controlId}-${bot.id}`}
-                  aria-label={bot.name}
-                  checked={botIds.includes(bot.id)}
-                  onCheckedChange={(checked) => {
-                    setSaved(false);
-                    setBotIds(checked ? [...botIds, bot.id] : botIds.filter((id) => id !== bot.id));
-                  }}
-                />
-                {bot.name}
-              </label>
-            ))}
+            {bots.map((bot) => {
+              const override = overrides.find((entry) => entry.botId === bot.id);
+              const removed = override?.access === "none";
+              return (
+                <div key={bot.id} className="space-y-2">
+                  <label
+                    htmlFor={`${controlId}-${bot.id}`}
+                    className="flex items-center gap-3 text-sm"
+                  >
+                    <Checkbox
+                      id={`${controlId}-${bot.id}`}
+                      aria-label={bot.name}
+                      checked={!removed}
+                      onCheckedChange={(checked) => {
+                        setSaved(false);
+                        setOverrides((current) => [
+                          ...current.filter((entry) => entry.botId !== bot.id),
+                          {
+                            botId: bot.id,
+                            access: checked ? "inherit" : "none",
+                            toolIds: [],
+                            needsReview: false,
+                          },
+                        ]);
+                      }}
+                    />
+                    {bot.name}
+                    {removed ? <span className="text-muted-foreground">{t`Removed`}</span> : null}
+                  </label>
+                  {!removed && connection.manifest ? (
+                    <details className="ml-7 text-sm">
+                      <summary className="cursor-pointer">{t`Limit tools`}</summary>
+                      <p className="text-muted-foreground">{t`Use all selected tools, or choose a subset for this bot.`}</p>
+                      <Button
+                        variant="ghost"
+                        onClick={() =>
+                          setOverrides((current) => [
+                            ...current.filter((entry) => entry.botId !== bot.id),
+                            { botId: bot.id, access: "inherit", toolIds: [], needsReview: false },
+                          ])
+                        }
+                      >{t`Use all selected tools`}</Button>
+                      {connection.manifest.tools
+                        .filter((tool) => toolIds.includes(tool.id))
+                        .map((tool) => (
+                          <div key={tool.id} className="flex items-center gap-2">
+                            <Checkbox
+                              aria-label={`${bot.name}: ${tool.id}`}
+                              checked={
+                                override?.access !== "custom" || override.toolIds.includes(tool.id)
+                              }
+                              onCheckedChange={(checked) => {
+                                setSaved(false);
+                                const currentTools =
+                                  override?.access === "custom" ? override.toolIds : toolIds;
+                                const next = checked
+                                  ? [...new Set([...currentTools, tool.id])]
+                                  : currentTools.filter((id) => id !== tool.id);
+                                setOverrides((current) => [
+                                  ...current.filter((entry) => entry.botId !== bot.id),
+                                  {
+                                    botId: bot.id,
+                                    access: "custom",
+                                    toolIds: next,
+                                    needsReview: false,
+                                  },
+                                ]);
+                              }}
+                            />
+                            {tool.id}
+                          </div>
+                        ))}
+                    </details>
+                  ) : null}
+                </div>
+              );
+            })}
           </fieldset>
           {descriptor.id === "notion" ? (
             <fieldset disabled={busy} className="space-y-2">

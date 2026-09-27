@@ -57,6 +57,7 @@ import {
   enqueueLearningReview,
   enqueueTakeoverContinuation,
   expireComputerControl,
+  grantedMcpTools,
   hasActiveComputerControl,
   isAutoReviewCheckerConfigured,
   isComputerScreenUnavailable,
@@ -437,6 +438,7 @@ function mcpAssignmentDto(row: {
   id: string;
   botId: string;
   serverId: string;
+  access?: string;
   allowAllTools: boolean;
   allowedTools: unknown;
   needsReview?: boolean;
@@ -447,6 +449,10 @@ function mcpAssignmentDto(row: {
     id: row.id,
     botId: row.botId,
     serverId: row.serverId,
+    access: (row.access === "none" ? "none" : row.access === "inherit" ? "inherit" : "custom") as
+      | "none"
+      | "inherit"
+      | "custom",
     allowAllTools: false,
     needsReview: row.needsReview === true || row.allowAllTools,
     allowedTools:
@@ -1364,6 +1370,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
               allowAllTools: false,
               needsReview: assignment.needsReview || assignment.allowAllTools,
               allowedTools: assignment.allowedTools as Prisma.InputJsonValue,
+              access: assignment.access,
             })),
           });
         }
@@ -3478,6 +3485,50 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       }),
     },
     integrations: {
+      available: authed.integrations.available.handler(async ({ context, input }) => {
+        const bot = await deps.prisma.bot.findFirst({
+          where: {
+            id: input.botId,
+            spaceId: context.actor.spaceId,
+            userId: context.actor.userId,
+            archivedAt: null,
+          },
+          select: { id: true, computer: { select: { kind: true } } },
+        });
+        if (!bot) throw new IsolationError();
+        const servers = await deps.prisma.mcpServer.findMany({
+          where: { spaceId: context.actor.spaceId, userId: context.actor.userId, enabled: true },
+          include: {
+            assignments: {
+              where: {
+                botId: bot.id,
+                spaceId: context.actor.spaceId,
+                userId: context.actor.userId,
+              },
+            },
+          },
+        });
+        return servers
+          .filter((server) => {
+            if (server.transport === "host-cli" && bot.computer?.kind !== "desktop") return false;
+            const row = server.assignments[0];
+            const grant = row ?? {
+              access: "inherit",
+              allowAllTools: false,
+              needsReview: false,
+              allowedTools: server.spaceAllowedTools,
+            };
+            const source =
+              server.catalogId || server.manifest
+                ? server.spaceAllowedTools
+                : (row?.allowedTools ?? server.spaceAllowedTools);
+            const offered = Array.isArray(source)
+              ? source.filter((id): id is string => typeof id === "string")
+              : [];
+            return grantedMcpTools({ ...grant, server }, offered).length > 0;
+          })
+          .map((server) => ({ id: server.id, name: server.name }));
+      }),
       status: authed.integrations.status.handler(async ({ context, input }) => {
         await integrations.expireConsent(context.actor);
         return connectionDto(await integrations.owned(context.actor, input.connectionId));
@@ -3628,6 +3679,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
                   serverId: existing.id,
                   spaceId: context.actor.spaceId,
                   userId: context.actor.userId,
+                  access: "custom",
                 },
                 data: { needsReview: true, allowAllTools: false, allowedTools: [] },
               });
@@ -3640,6 +3692,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
                   // else clears its pending id once the server is no longer enabled.
                   pendingOauthSessionId: null,
                   consentStartedAt: null,
+                  needsReview: true,
                   revision: { increment: 1 },
                 },
               });
@@ -3868,8 +3921,9 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
                 botId: bot.id,
                 serverId: server.id,
                 allowAllTools: false,
-                needsReview: true,
+                needsReview: false,
                 allowedTools: [],
+                access: "inherit",
               },
               update: {},
             });
@@ -3913,6 +3967,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
                   allowAllTools: false,
                   needsReview: assignment.needsReview,
                   allowedTools: assignment.allowedTools as Prisma.InputJsonValue,
+                  access: assignment.access,
                 })),
               });
             return tx.botMcpServer.findMany({

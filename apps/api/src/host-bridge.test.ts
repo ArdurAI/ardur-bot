@@ -43,6 +43,7 @@ function fixture() {
         allowedTools: ["read_fixture"],
         allowAllTools: false,
         needsReview: false,
+        server: { id: "server", enabled: true, catalogId: null, transport: "stdio" },
       })),
     },
     $transaction: vi.fn(async (work: (tx: unknown) => Promise<unknown>) => work(prisma)),
@@ -357,6 +358,7 @@ it("keeps MCP calls tied to active bot runs and tool grants alongside settings r
       allowedTools: [],
       allowAllTools: false,
       needsReview: true,
+      server: { id: "server", enabled: true, catalogId: null, transport: "stdio" },
     });
     await bridge.hub.fromHost(host, {
       v: 1,
