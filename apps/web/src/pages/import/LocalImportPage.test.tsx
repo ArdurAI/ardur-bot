@@ -29,6 +29,7 @@ const translate = (parts: TemplateStringsArray, ...values: unknown[]) =>
 vi.mock("@lingui/react/macro", () => ({
   useLingui: () => ({ t: translate }),
   Trans: ({ children }: { children: ReactNode }) => children,
+  Plural: ({ value, one, other }: any) => (value === 1 ? one : other.replace("#", value)),
 }));
 vi.mock("@ardurbot/ui-web", () => ({
   Button: ({
@@ -157,7 +158,16 @@ it("keeps the Source folder form visible with its error after a stopped re-scan"
     sources: [{ ...localImportFixture.sources[0]!, defaultMissing: true }],
   };
   fake.status.mockResolvedValue({ ...localImportStatusFixture, manifest });
-  fake.configure.mockResolvedValue({});
+  fake.configure.mockImplementation(async () => {
+    fake.status.mockResolvedValue({
+      ...localImportStatusFixture,
+      manifest: {
+        ...manifest,
+        sources: [{ ...manifest.sources[0]!, defaultMissing: false }],
+      },
+    });
+    return {};
+  });
   fake.run.mockResolvedValue({ stopped: "host" });
   const node = await render();
   await act(async () => {
@@ -174,8 +184,8 @@ it("keeps the Source folder form visible with its error after a stopped re-scan"
   expect(node.querySelector('[role="alert"]')?.textContent).toBe(
     "Import could not finish. Check this computer is connected, then re-scan.",
   );
-  // configure() already cleared the manifest server-side; the page must not have
-  // refreshed into that empty state and lost the form the user was using.
+  // The previous scan stays valid until a new scan succeeds, so the page keeps
+  // the form and the found items instead of refreshing.
   expect(node.querySelector('[aria-label="Source folder for Claude Code"]')).not.toBeNull();
 });
 it("names the fix for an invalid custom folder instead of suggesting a retry", async () => {
@@ -185,8 +195,9 @@ it("names the fix for an invalid custom folder instead of suggesting a retry", a
   };
   fake.status.mockResolvedValue({ ...localImportStatusFixture, manifest });
   fake.configure.mockRejectedValue(
-    new ORPCError(LOCAL_IMPORT_INVALID_FOLDER_CODE, {
+    new ORPCError("BAD_REQUEST", {
       message: "Choose a folder inside the owner's home.",
+      data: { code: LOCAL_IMPORT_INVALID_FOLDER_CODE },
     }),
   );
   const node = await render();

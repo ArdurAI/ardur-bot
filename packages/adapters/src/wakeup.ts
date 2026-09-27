@@ -38,6 +38,7 @@ export class GraphileJobPublisher implements JobPublisher {
       runAt: job.availableAt,
       jobKey: job.replaceKey,
       ...(job.name === "memory.git-push" ? { jobKeyMode: "replace" as const } : {}),
+      ...(job.preserveRunAt && job.replaceKey ? { jobKeyMode: "preserve_run_at" as const } : {}),
       // An import request is answered once; a retry would repeat the whole import unseen.
       ...(job.name === "local-import.run" ? { maxAttempts: 1 } : {}),
       ...(["memory.deliver", "memory.git-push"].includes(job.name)
@@ -140,6 +141,7 @@ export class GraphileJobWorkerHost implements JobWorkerHost {
       ]),
     );
     if (handlers["learning.curate"]) taskList.learning_curate = taskList["learning.curate"]!;
+    if (handlers["learning.insights"]) taskList.learning_insights = taskList["learning.insights"]!;
     if (handlers["local-import.refresh"])
       taskList.local_import_refresh = taskList["local-import.refresh"]!;
     if (handlers["briefs.maintain"]) taskList.briefs_maintain = taskList["briefs.maintain"]!;
@@ -153,6 +155,9 @@ export class GraphileJobWorkerHost implements JobWorkerHost {
         [
           handlers["learning.curate"]
             ? "0 3 * * 1 learning_curate ?id=learningCurator&fill=1w"
+            : null,
+          handlers["learning.insights"]
+            ? "30 4 * * * learning_insights ?id=learningInsights&fill=1d"
             : null,
           handlers["local-import.refresh"]
             ? "0 * * * * local_import_refresh ?id=localImport&fill=1h"
@@ -223,6 +228,7 @@ interface QueuedJob {
   payload: unknown;
   availableAt?: Date;
   replaceKey?: string;
+  preserveRunAt?: boolean;
   queueName?: string;
 }
 
@@ -232,6 +238,7 @@ function toQueuedJob(job: BackgroundJob): QueuedJob {
     payload: wrapJobPayload(job.payload),
     availableAt: job.availableAt,
     replaceKey: job.replaceKey,
+    preserveRunAt: job.preserveRunAt,
     queueName: memoryDeliveryQueue(job),
   };
 }
@@ -259,6 +266,8 @@ export class InMemoryJobQueue implements JobPublisher, JobWorkerHost {
       this.enqueueWhileClosing(stored);
       return;
     }
+    // A pending debounced job keeps its time; this trigger joins it.
+    if (stored.replaceKey && stored.preserveRunAt && this.keyed.has(stored.replaceKey)) return;
     if (stored.replaceKey) {
       await this.cancel(stored.replaceKey);
       if (this.closed) throw new Error("Background job publisher is closed");

@@ -640,6 +640,8 @@ export interface BackgroundJobPayloads {
   "local-import.refresh": Record<string, never>;
   "briefs.maintain": { runId?: string };
   "learning.curate": { spaceId?: string; requestedBy?: string; requestId?: string };
+  /** One person when both are set, one space's members with spaceId, else the daily pass. */
+  "learning.insights": { spaceId?: string; userId?: string };
   "learning.review": {
     runId: string;
     historyGeneration: number;
@@ -674,6 +676,8 @@ export type BackgroundJob = {
     payload: BackgroundJobPayloads[Name];
     availableAt?: Date;
     replaceKey?: string;
+    /** With replaceKey: a pending job keeps its run time, so repeated triggers debounce. */
+    preserveRunAt?: boolean;
   };
 }[BackgroundJobName];
 

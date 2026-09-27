@@ -1,4 +1,5 @@
 import type { McpServer } from "@ardurbot/contracts";
+import { errorDataCode } from "@ardurbot/contracts";
 import type {
   LocalImportAction,
   LocalImportCategory,
@@ -15,7 +16,7 @@ import {
   LOCAL_IMPORT_TOOL_NAMES,
 } from "@ardurbot/contracts/local-import";
 import { Button, Checkbox, Input, Switch } from "@ardurbot/ui-web";
-import { Trans, useLingui } from "@lingui/react/macro";
+import { Plural, Trans, useLingui } from "@lingui/react/macro";
 import { ORPCError } from "@orpc/client";
 import { useEffect, useState } from "react";
 import { rpc } from "../../lib/rpc";
@@ -97,7 +98,7 @@ export function LocalImportPage() {
       if (refresh !== false) setStatus(await rpc.localImport.status());
     } catch (error) {
       setError(
-        error instanceof ORPCError && error.code === LOCAL_IMPORT_INVALID_FOLDER_CODE
+        error instanceof ORPCError && errorDataCode(error) === LOCAL_IMPORT_INVALID_FOLDER_CODE
           ? "invalid-folder"
           : "unavailable",
       );
@@ -234,7 +235,11 @@ export function LocalImportPage() {
       {manifest?.limited ? (
         <p role="status" className="text-sm text-muted-foreground">
           {manifest.unscanned ? (
-            <Trans>{manifest.unscanned} items were not scanned because of the scan limits.</Trans>
+            <Plural
+              value={manifest.unscanned}
+              one="1 item was not scanned because of the scan limits."
+              other="# items were not scanned because of the scan limits."
+            />
           ) : (
             <Trans>Some items exceeded the scan limits.</Trans>
           )}
@@ -445,9 +450,8 @@ export function LocalImportPage() {
                       const response = await rpc.localImport.run({ action: "scan" });
                       if (response.stopped) {
                         setError(response.stopped);
-                        // configure() already cleared the manifest; keep showing this
-                        // form and the rest of what was found instead of refreshing
-                        // into an empty page.
+                        // The previous scan stays valid until a new scan succeeds, so the
+                        // page keeps the form and the found items instead of refreshing.
                         return false;
                       }
                     });

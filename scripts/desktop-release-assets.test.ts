@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -39,6 +40,17 @@ it("assembles required installers, merges both Mac architectures, and refuses mi
     expect(await readFile(path.join(output, "ardur-bot.rb"), "utf8")).not.toContain(
       "@ARM64_SHA256@",
     );
+    const checksums = await readFile(path.join(output, "checksums.txt"), "utf8");
+    for (const file of [
+      "install.sh",
+      "ArdurAI.ArdurBot.installer.yaml",
+      "ArdurAI.ArdurBot.locale.en-US.yaml",
+      "ArdurAI.ArdurBot.yaml",
+    ]) {
+      const content = await readFile(path.join(output, file));
+      const hash = createHash("sha256").update(content).digest("hex");
+      expect(checksums).toContain(`${hash}  ${file}`);
+    }
     await rm(path.join(source, "win-x64/latest.yml"));
     expect(() =>
       execFileSync(

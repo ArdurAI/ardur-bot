@@ -113,7 +113,7 @@ connection permissions.
 
 The Models Anthropic panel links a current bot to **Runs on → Claude Code**.
 The built-in runtime still accepts an API key only. See
-[integration lifecycle](/docs/decisions/integration-lifecycle/) for callback,
+[integration lifecycle](https://github.com/ArdurAI/ardur-bot/blob/__ARDUR_BOT_SOURCE_REF__/docs/decisions/integration-lifecycle.md) for callback,
 refresh, provider limitations and manual verification.
 
 ## Auto Review configuration

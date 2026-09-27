@@ -161,3 +161,12 @@ export const scriptedCatalogEntry: PiCatalogEntry = {
   auth: "api-key",
   subscription: false,
 };
+
+let cachedRegistry: ReturnType<typeof builtinModels> | undefined;
+
+/** Capability data from the bundled model registry; undefined when the registry does not know it. */
+export function piModelContextWindow(provider: string, id: string): number | undefined {
+  cachedRegistry ??= builtinModels();
+  const contextWindow = cachedRegistry.getModel(provider, id)?.contextWindow;
+  return typeof contextWindow === "number" && contextWindow > 0 ? contextWindow : undefined;
+}

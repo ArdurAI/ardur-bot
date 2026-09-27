@@ -1,10 +1,10 @@
 # Self-hosting Ardur Bot
 
-The signed-in product is a long-running API, a Graphile Worker, Postgres, and a computer provider (Docker supervisor, E2B, Daytona, or Box). It is not a static site. The marketing site in `apps/www` can be hosted separately.
+The signed-in product is a long-running API, a Graphile Worker, and Postgres. It uses the computer it is installed on by default. Docker, Podman, Kubernetes, and SSH are optional added computers. It is not a static site. The marketing site in `apps/www` can be hosted separately.
 
 ## Local (source checkout)
 
-Same as the README quick start: `.env` from `.env.example`, Postgres via Compose, `pnpm sandbox:build`, `pnpm dev`, then [http://127.0.0.1:5173](http://127.0.0.1:5173) (or `http://localhost:5173` — both loopback hosts are trusted). Electron during source development: `pnpm --filter @ardurbot/desktop dev` while that stack is up, choosing **Existing instance** with that address.
+Same as the README quick start: `.env` from `.env.example`, Postgres via embedded binary, `pnpm dev`, then [http://127.0.0.1:5173](http://127.0.0.1:5173) (or `http://localhost:5173` — both loopback hosts are trusted). Electron during source development: `pnpm --filter @ardurbot/desktop dev` while that stack is up, choosing **Existing instance** with that address.
 
 The installed desktop app's **This computer** choice does not use Compose. It starts an embedded Postgres on a loopback port, applies the database migrations, and runs the API and worker on this computer. See [What commands can do on this computer](#what-commands-can-do-on-this-computer) and [Local mode data](#local-mode-data) for what it keeps and how to reset it. A data folder that already contains `stack/.env` keeps the Docker Compose stack, including its remembered web port (45173 unless that port was taken). **Existing instance** is unchanged. Compose below remains the way to run a server or to add Docker.
 

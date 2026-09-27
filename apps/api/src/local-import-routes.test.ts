@@ -3,6 +3,7 @@ import { parseBackgroundJob } from "@ardurbot/adapter-kit";
 import { assertLocalImportOwner, EncryptedSecretStore } from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
+import { createLogger, createTestSink, installLogger } from "@ardurbot/logging";
 import { RPCHandler } from "@orpc/server/fetch";
 import { expect, it, vi } from "vitest";
 import { LocalImportRequests } from "./local-import-requests.js";
@@ -131,30 +132,40 @@ it.each([
 });
 
 it("answers a custom folder outside the home with a typed, named error", async () => {
+  const sink = createTestSink();
+  installLogger(createLogger({ service: "ardurbot-api", sinks: [sink] }));
   const f = fixture();
-  f.config.manifest = {
-    scanId: "00000000-0000-4000-8000-000000000099",
-    scannedAt: "2026-09-24T12:00:00.000Z",
-    platform: "darwin",
-    limited: false,
-    sources: [
-      {
-        tool: "codex",
-        detected: false,
-        defaultMissing: true,
-        counts: { instructions: 0, memories: 0, skills: 0, servers: 0, plugins: 0, other: 0 },
-        memoryFolders: 0,
-      },
-    ],
-    items: [],
-  };
-  const response = await f.rawCall("configure", { roots: { codex: "../outside" } });
-  expect(response.status).not.toBe(200);
-  const body = (await response.json()) as { json: { code: string; message: string } };
-  expect(body.json).toMatchObject({
-    code: "LOCAL_IMPORT_INVALID_FOLDER",
-    message: "Choose a folder inside the owner's home.",
-  });
+  try {
+    f.config.manifest = {
+      scanId: "00000000-0000-4000-8000-000000000099",
+      scannedAt: "2026-09-24T12:00:00.000Z",
+      platform: "darwin",
+      limited: false,
+      sources: [
+        {
+          tool: "codex",
+          detected: false,
+          defaultMissing: true,
+          counts: { instructions: 0, memories: 0, skills: 0, servers: 0, plugins: 0, other: 0 },
+          memoryFolders: 0,
+        },
+      ],
+      items: [],
+    };
+    const response = await f.rawCall("configure", { roots: { codex: "../outside" } });
+    expect(response.status).not.toBe(200);
+    const body = (await response.json()) as {
+      json: { code: string; message: string; data?: { code: string } };
+    };
+    expect(body.json).toMatchObject({
+      code: "BAD_REQUEST",
+      message: "Choose a folder inside the owner's home.",
+      data: { code: "LOCAL_IMPORT_INVALID_FOLDER" },
+    });
+    expect(sink.events.filter((e) => e.level === "error")).toEqual([]);
+  } finally {
+    installLogger(createLogger({ service: "ardurbot-api", level: "off", sinks: [] }));
+  }
 });
 
 it("builds the ownership selector explicitly even when a caller supplies a full actor", async () => {

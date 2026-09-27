@@ -13,6 +13,7 @@ function handlers(): BackgroundJobHandlers {
     "board.run": vi.fn(async () => undefined),
     "briefs.maintain": async () => undefined,
     "learning.curate": async () => undefined,
+    "learning.insights": async () => undefined,
     "learning.review": async () => undefined,
     "memory.git-push": async () => undefined,
     "memory.deliver": async () => undefined,
