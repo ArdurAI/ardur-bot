@@ -11,6 +11,35 @@ import {
 
 const fixture = "Results show newest first; sort results by createdAt ascending";
 
+async function receiptGate(page: Page, action: "arm" | "accept" | "reply", botId?: string) {
+  const apiUrl = process.env.API_URL;
+  const token = process.env.TESTKIT_E2E_OWNER_TOKEN;
+  if (!apiUrl || !token || process.env.VERIFY_DATABASE !== "1")
+    throw new Error("Receipt gate requires the isolated E2E harness.");
+  const response = await page.request.post(`${apiUrl}/__e2e/receipt-gate`, {
+    headers: { "x-e2e-owner-token": token },
+    data: { action, botId },
+  });
+  if (!response.ok()) throw new Error(`Receipt gate ${action} failed: ${response.status()}`);
+}
+
+async function receiptTimeline(page: Page, outboundMessageId: string, inboundMessageId: string) {
+  const apiUrl = process.env.API_URL;
+  const token = process.env.TESTKIT_E2E_OWNER_TOKEN;
+  if (!apiUrl || !token || process.env.VERIFY_DATABASE !== "1")
+    throw new Error("Receipt timeline requires the isolated E2E harness.");
+  const query = new URLSearchParams({ outboundMessageId, inboundMessageId });
+  const response = await page.request.get(`${apiUrl}/__e2e/receipt-timeline?${query}`, {
+    headers: { "x-e2e-owner-token": token },
+  });
+  if (!response.ok()) throw new Error(`Receipt timeline failed: ${response.status()}`);
+  return (await response.json()) as {
+    state: string;
+    readAt: string | null;
+    repliedAt: string | null;
+  };
+}
+
 async function startFixture(page: Page, groupId: string) {
   await rpc(page, "goals/start", {
     groupId,
@@ -42,7 +71,10 @@ test("shows one delivery chip advance through Delivered, Read and Replied in bot
     });
     await rpc(page, "groups/update", { groupId: group.id, coordinatorBotId: coordinatorId });
     const workerPage = await page.context().newPage();
+    let gateArmed = false;
     try {
+      await receiptGate(page, "arm", worker.id);
+      gateArmed = true;
       await workerPage.goto(`/app/${worker.id}`);
       await page.goto(`/app/g/${group.id}`);
       await startFixture(page, group.id);
@@ -67,18 +99,27 @@ test("shows one delivery chip advance through Delivered, Read and Replied in bot
       const deskRequest = workerPage.locator(
         `[data-message-id="${deskMessageId}"] [data-testid="peer-receipt-chip"]`,
       );
+      await receiptGate(page, "accept");
       await expect(roomRequest).toHaveText("Read by Worker", {
         timeout: 60_000,
       });
       await expect(deskRequest).toHaveText("Read by Worker");
+      await receiptGate(page, "reply");
+      gateArmed = false;
       await expect(roomRequest).toHaveText("Replied", {
         timeout: 60_000,
       });
       await expect(deskRequest).toHaveText("Replied");
       await expect(roomRequest).toHaveCount(1);
       await expect(deskRequest).toHaveCount(1);
+      const timeline = await receiptTimeline(page, roomMessageId, deskMessageId);
+      expect(timeline.state).toBe("replied");
+      expect(timeline.readAt).not.toBeNull();
+      expect(timeline.repliedAt).not.toBeNull();
+      expect(Date.parse(timeline.readAt!)).toBeLessThan(Date.parse(timeline.repliedAt!));
       await captureScreenshot(page, testInfo, "bot-comms-receipts");
     } finally {
+      if (gateArmed) await receiptGate(page, "reply");
       await workerPage.close();
     }
   } finally {

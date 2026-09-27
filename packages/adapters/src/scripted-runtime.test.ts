@@ -3,8 +3,18 @@ import { describe, expect, it, vi } from "vitest";
 import { inferScript, ScriptedAgentRuntime } from "./scripted-runtime.js";
 
 it("acknowledges a scripted turn after input acceptance and before output", async () => {
-  const acknowledgeInput = vi.fn(async () => undefined);
-  const runtime = new ScriptedAgentRuntime();
+  const stages: string[] = [];
+  const acknowledgeInput = vi.fn(async () => {
+    stages.push("acknowledged");
+  });
+  const runtime = new ScriptedAgentRuntime({
+    beforeAcknowledge: async () => {
+      stages.push("before");
+    },
+    afterAcknowledge: async () => {
+      stages.push("after");
+    },
+  });
   const events = runtime.run({
     botId: "recipient",
     threadId: "thread",
@@ -26,6 +36,7 @@ it("acknowledges a scripted turn after input acceptance and before output", asyn
     deliveryIds: ["delivery"],
     mode: "initial",
   });
+  expect(stages).toEqual(["before", "acknowledged", "after"]);
   await events[Symbol.asyncIterator]().return?.();
 });
 

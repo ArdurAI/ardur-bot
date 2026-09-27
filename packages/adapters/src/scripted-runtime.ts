@@ -9,6 +9,13 @@ import { abortableDelay, inferHandoffTargetName } from "@ardurbot/core";
 const running = new Map<string, AbortController>();
 
 export class ScriptedAgentRuntime implements AgentRuntime {
+  constructor(
+    private readonly inputHooks?: {
+      beforeAcknowledge?: (request: AgentRunRequest) => Promise<void>;
+      afterAcknowledge?: (request: AgentRunRequest) => Promise<void>;
+    },
+  ) {}
+
   describe() {
     return {
       id: "scripted",
@@ -60,13 +67,16 @@ export class ScriptedAgentRuntime implements AgentRuntime {
             request.history.map((message) => message.content).join("\n"),
           )
         : (request.script ?? inferScript(request.prompt, request.resumeFromCheckpoint));
-      if (request.inputReceipt?.deliveryIds.length)
+      if (request.inputReceipt?.deliveryIds.length) {
+        await this.inputHooks?.beforeAcknowledge?.(request);
         await request.acknowledgeInput?.({
           runId: request.runId,
           leaseFence: request.inputReceipt.leaseFence,
           deliveryIds: request.inputReceipt.deliveryIds,
           mode: "initial",
         });
+        await this.inputHooks?.afterAcknowledge?.(request);
+      }
       if (request.prompt.includes("Identify the contradiction:"))
         await abortableDelay(2_000, signal);
       // Per-run call index so repeated tools (e.g. message_agent) get distinct
