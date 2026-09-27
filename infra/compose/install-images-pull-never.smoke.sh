@@ -26,27 +26,25 @@ tmp="$(mktemp -d "${TMPDIR:-/tmp}/install-images-smoke.XXXXXX")"
 cleanup_tmp() { rm -rf "$tmp"; }
 trap cleanup_tmp EXIT
 
-# Exercise the POSIX JSON-field fallback with jq hidden from PATH.
+# Exercise the POSIX JSON-field fallback with only awk on PATH, so it runs even where jq is installed.
 mkdir -p "$tmp/fallback-bin"
 ln -s "$(command -v awk)" "$tmp/fallback-bin/awk"
-if ! PATH="/bin:$tmp/fallback-bin" command -v jq >/dev/null 2>&1; then
-  (
-    eval "$(sed -n '/^compose_field() {/,/^}/p' "$src")"
-    image=$(PATH="/bin:$tmp/fallback-bin" compose_field computer image < "$root/computer-config.fixture.json")
-    channel=$(PATH="/bin:$tmp/fallback-bin" compose_field selection channel < "$root/computer-config.fixture.json")
-    [[ "$image" == "ghcr.io/ardurai/ardur-bot/computer:1.2.3" && "$channel" == release ]] \
-      || fail "POSIX Compose JSON extraction disagreed with the recorded config"
+(
+  eval "$(sed -n '/^compose_field() {/,/^}/p' "$src")"
+  image=$(PATH="$tmp/fallback-bin" compose_field computer image < "$root/computer-config.fixture.json")
+  channel=$(PATH="$tmp/fallback-bin" compose_field selection channel < "$root/computer-config.fixture.json")
+  [[ "$image" == "ghcr.io/ardurai/ardur-bot/computer:1.2.3" && "$channel" == release ]] \
+    || fail "POSIX Compose JSON extraction disagreed with the recorded config"
 
-    # A host without jq must drain large configurations without SIGPIPE (141) under pipefail.
-    large_config=$(
-      sed '$d' "$root/computer-config.fixture.json"
-      printf ',\n  "x-trailing": {\n    "data": "%200000s"\n  }\n}\n' ' '
-    )
-    image_large=$(printf '%s\n' "$large_config" | PATH="/bin:$tmp/fallback-bin" compose_field computer image)
-    [[ "$image_large" == "ghcr.io/ardurai/ardur-bot/computer:1.2.3" ]] \
-      || fail "POSIX Compose JSON extraction failed to drain large configuration"
+  # A host without jq must drain large configurations without SIGPIPE (141) under pipefail.
+  large_config=$(
+    sed '$d' "$root/computer-config.fixture.json"
+    printf ',\n  "x-trailing": {\n    "data": "%200000s"\n  }\n}\n' ' '
   )
-fi
+  image_large=$(printf '%s\n' "$large_config" | PATH="$tmp/fallback-bin" compose_field computer image)
+  [[ "$image_large" == "ghcr.io/ardurai/ardur-bot/computer:1.2.3" ]] \
+      || fail "POSIX Compose JSON extraction failed to drain large configuration"
+)
 
 write_stubs() {
   local bin="$1"
