@@ -254,6 +254,7 @@ async function handle(value) {
       "ask-user",
       "ask-user-held-text",
       "tool-held-text",
+      "tool-held-text-complete",
       "takeover",
       "pending-tool-malformed",
       "queue-overflow",
@@ -261,7 +262,11 @@ async function handle(value) {
   ) {
     if (scenario === "pending-tool-malformed" || scenario === "queue-overflow")
       message("before protocol failure.");
-    if (scenario === "ask-user-held-text" || scenario === "tool-held-text")
+    if (
+      scenario === "ask-user-held-text" ||
+      scenario === "tool-held-text" ||
+      scenario === "tool-held-text-complete"
+    )
       message(`Please approve the dif${process.env.ARDUR_HERMES_PROVIDER_KEY[0]}`);
     const client = new Client({ name: "fixture", version: "0.1.0" });
     const transport = new StdioClientTransport({
@@ -295,7 +300,9 @@ async function handle(value) {
           ? { reason: "Please take over." }
           : { value: "hello" };
     const result = await client.callTool({ name: toolName, arguments: args });
-    message(JSON.stringify(result.content));
+    message(
+      scenario === "tool-held-text-complete" ? " after tool" : JSON.stringify(result.content),
+    );
     await client.close();
     send({ id: value.id, result: { stopReason: "end_turn" } });
     return;

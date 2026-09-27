@@ -226,6 +226,29 @@ describe("HermesRuntime M0 ACP seam", () => {
     expect(events.some((event) => event.type === "done")).toBe(false);
   });
 
+  it("flushes held text before an ordinary tool event", async () => {
+    const events = await collect(
+      runtime("tool-held-text-complete"),
+      request({
+        tools: [{ name: "fixture_echo", description: "Echo", inputSchema: { type: "object" } }],
+        executeTool: async () => ({ echoed: "hello" }),
+      }),
+    );
+    const textAndTool = events.filter((event) => event.type === "text" || event.type === "tool");
+    expect(textAndTool.map((event) => event.type)).toEqual(["text", "text", "tool", "text"]);
+    expect(
+      textAndTool
+        .slice(0, 2)
+        .map((event) => (event.type === "text" ? event.text : ""))
+        .join(""),
+    ).toBe("Please approve the diff");
+    expect(textAndTool.at(-1)).toMatchObject({ type: "text", text: " after tool" });
+    expect(events.map((event) => (event.type === "text" ? event.text : "")).join("")).not.toContain(
+      "fixture-provider-key-123",
+    );
+    expect(events.at(-1)).toEqual({ type: "done" });
+  });
+
   for (const scenario of ["held-native", "held-malformed"]) {
     it(`flushes held text before ${scenario} fails`, async () => {
       const text: string[] = [];
