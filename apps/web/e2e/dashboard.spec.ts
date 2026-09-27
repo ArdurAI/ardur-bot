@@ -5,6 +5,58 @@ import { captureScreenshot } from "./helpers";
 
 test.use({ viewport: { width: 1280, height: 900 } });
 
+test("Dashboard account opens Settings, Usage, and Integrations at phone width", async ({
+  page,
+}, testInfo) => {
+  const fixture = dashboardFixture();
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.route("**/api/auth/get-session*", (route) => route.fulfill({ json: fixture.session }));
+  await page.route("**/rpc/**", async (route) => {
+    const procedure = new URL(route.request().url()).pathname.slice("/rpc/".length);
+    if (procedure === "threads/subscribe") {
+      await route.fulfill({ contentType: "text/event-stream", body: "" });
+    } else {
+      await route.fulfill({
+        json: { json: fixture.rpc(procedure, route.request().postDataJSON()?.json) },
+      });
+    }
+  });
+  await page.goto("/app?view=dashboard");
+  const area = page.getByTestId("dashboard-account");
+  await expect(area.getByTestId("user-menu-trigger")).toContainText("Owner");
+  await expect(area.getByRole("button", { name: "Settings", exact: true })).toBeVisible();
+  await expect(area.getByRole("button", { name: "Integrations", exact: true })).toBeVisible();
+  const bounds = await area.boundingBox();
+  expect(bounds).not.toBeNull();
+  expect((bounds?.x ?? 0) + (bounds?.width ?? 0)).toBeLessThanOrEqual(375);
+  await captureScreenshot(page, testInfo, "dashboard-account-phone");
+
+  const settings = page.getByTestId("user-settings");
+  await area.getByRole("button", { name: "Settings", exact: true }).click();
+  await expect(settings).toHaveAttribute("data-settings-section", "general");
+  await settings.getByRole("button", { name: "Close user settings" }).click();
+
+  await area.getByTestId("user-menu-trigger").click();
+  await page
+    .locator('[data-slot="popover-content"]')
+    .getByRole("button", { name: "Usage" })
+    .click();
+  await expect(settings).toHaveAttribute("data-settings-section", "usage");
+  await settings.getByRole("button", { name: "Close user settings" }).click();
+
+  await area.getByRole("button", { name: "Integrations", exact: true }).click();
+  await expect(settings).toHaveAttribute("data-settings-section", "integrations");
+  await settings.getByRole("button", { name: "Close user settings" }).click();
+
+  await page.keyboard.press("Control+2");
+  const sidebar = page.getByTestId("bots-sidebar");
+  for (const name of ["Settings", "Integrations"])
+    await expect(sidebar.getByRole("button", { name, exact: true })).toHaveCount(0);
+  await expect(sidebar.getByTestId("user-menu-trigger")).toHaveCount(0);
+  await page.locator("header.app-drag").getByRole("button", { name: "Settings" }).click();
+  await expect(settings).toHaveAttribute("data-settings-section", "general");
+});
+
 test("starts the first board through the source-mode worker from Settings", async ({ page }) => {
   const { sourceBoardFixture } = await import("./board-source-fixture");
   const source = await sourceBoardFixture();
@@ -209,7 +261,7 @@ test("Dashboard opens first, preserves Bots navigation and approves through the 
   });
   expect(cachedRenderMs).toBeLessThan(200);
   await expect(page.getByTestId("dashboard")).toBeVisible();
-  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.locator("header.app-drag").getByRole("button", { name: "Settings" }).click();
   await page.getByRole("combobox", { name: "Open to", exact: true }).selectOption("bots");
   await page.keyboard.press("Escape");
   await page.goto("/app");

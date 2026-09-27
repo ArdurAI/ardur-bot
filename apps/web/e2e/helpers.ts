@@ -124,7 +124,7 @@ export async function createBotFromPicker(
   await expect(page.getByTestId("side-panel")).toHaveAttribute("data-panel", "closed");
 }
 
-/** Open the user Settings overlay, optionally switching to a sidebar section. */
+/** Open Settings from the global header, optionally switching to a section. */
 export async function openUserSettings(
   page: Page,
   section?:
@@ -136,12 +136,12 @@ export async function openUserSettings(
     | "import"
     | "voice"
     | "usage"
+    | "integrations"
     | "computer"
     | "updates",
 ) {
-  await page.getByTestId("user-menu-trigger").click();
   await page
-    .locator('[data-slot="popover-content"]')
+    .locator("header.app-drag")
     .getByRole("button", { name: "Settings", exact: true })
     .click();
   const settings = page.getByTestId("user-settings");
