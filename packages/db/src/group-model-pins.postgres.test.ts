@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import type { PoolClient } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, type PrismaClient } from "./client.js";
 import {
@@ -33,6 +34,7 @@ function createControllablePrisma(
   base: PrismaClient,
   hooks: {
     onBeforeUpdate?: () => Promise<void> | void;
+    onTransactionStart?: (pid: number) => void;
   },
 ): PrismaClient {
   return new Proxy(base, {
@@ -43,6 +45,12 @@ function createControllablePrisma(
           options?: unknown,
         ) => {
           return (target as any).$transaction(async (tx: any) => {
+            if (hooks.onTransactionStart) {
+              const rows = (await tx.$queryRawUnsafe("SELECT pg_backend_pid() AS pid")) as Array<{
+                pid: number;
+              }>;
+              hooks.onTransactionStart(rows[0]!.pid);
+            }
             const wrappedTx = new Proxy(tx, {
               get(txTarget, txProp, txReceiver) {
                 if (txProp === "chatGroupMember") {
@@ -73,17 +81,93 @@ function createControllablePrisma(
 
 async function waitForBlockedLock(
   pool: ReturnType<typeof createDb>["pool"],
-  timeoutMs = 250,
+  waitingPid: number,
+  blockingPid: number,
+  timeoutMs = 2_000,
 ): Promise<boolean> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    const res = await pool.query<{ count: string }>(
-      "SELECT count(*) FROM pg_locks WHERE NOT granted",
+    const res = await pool.query<{ blocked: boolean }>(
+      `SELECT EXISTS (
+        SELECT 1 FROM pg_stat_activity AS activity
+        WHERE activity.pid = $1
+          AND activity.wait_event_type = 'Lock'
+          AND $2 = ANY(pg_blocking_pids(activity.pid))
+          AND EXISTS (
+            SELECT 1 FROM pg_locks AS waiting
+            WHERE waiting.pid = activity.pid AND NOT waiting.granted
+          )
+      ) AS blocked`,
+      [waitingPid, blockingPid],
     );
-    if (Number(res.rows[0]?.count) > 0) return true;
+    if (res.rows[0]?.blocked) return true;
     await new Promise((r) => setTimeout(r, 10));
   }
   return false;
+}
+
+async function waitForTransactionPid(pid: Promise<number>, timeoutMs = 2_000): Promise<number> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      pid,
+      new Promise<number>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error("Competing transaction did not start")),
+          timeoutMs,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function runMigrationInScratchSchema(
+  pool: ReturnType<typeof createDb>["pool"],
+  schema: string,
+  options: {
+    populated?: boolean;
+    beforeMigrationSql?: string;
+    verify?: (client: PoolClient) => Promise<void>;
+    afterRollback?: (client: PoolClient) => Promise<void>;
+  } = {},
+) {
+  const client = await pool.connect();
+  try {
+    await client.query(`CREATE SCHEMA "${schema}"`);
+    await client.query("BEGIN");
+    await client.query(`SET LOCAL search_path TO "${schema}"`);
+    await client.query("CREATE TABLE chat_group_members (id TEXT PRIMARY KEY)");
+    await client.query("CREATE TABLE runs (id TEXT PRIMARY KEY)");
+    await client.query(
+      'CREATE TABLE usage_records (id TEXT PRIMARY KEY, "spaceId" TEXT NOT NULL, "userId" TEXT NOT NULL, "createdAt" TIMESTAMP NOT NULL)',
+    );
+    if (options.populated) {
+      await client.query("INSERT INTO chat_group_members (id) VALUES ('member')");
+      await client.query("INSERT INTO runs (id) VALUES ('run')");
+      await client.query(
+        "INSERT INTO usage_records (id, \"spaceId\", \"userId\", \"createdAt\") VALUES ('usage', 'space', 'user', NOW())",
+      );
+    }
+    if (options.beforeMigrationSql) await client.query(options.beforeMigrationSql);
+    await client.query(migration);
+    await client.query("COMMIT");
+    await client.query(`SET search_path TO "${schema}"`);
+    await options.verify?.(client);
+  } finally {
+    try {
+      await client.query("ROLLBACK").catch(() => {});
+      await options.afterRollback?.(client);
+    } finally {
+      try {
+        await client.query("RESET search_path").catch(() => {});
+        await client.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`).catch(() => {});
+      } finally {
+        client.release();
+      }
+    }
+  }
 }
 
 describePostgres("group member pins (PostgreSQL)", () => {
@@ -162,98 +246,67 @@ describePostgres("group member pins (PostgreSQL)", () => {
 
   it.each([false, true])("migrates an existing schema with populated=%s", async (populated) => {
     const schema = `g1_migration_${process.pid}_${Date.now()}_${populated ? 1 : 0}`;
-    const client = await pool.connect();
-    try {
-      await client.query(`CREATE SCHEMA "${schema}"`);
-      await client.query("BEGIN");
-      await client.query(`SET LOCAL search_path TO "${schema}"`);
-      await client.query("CREATE TABLE chat_group_members (id TEXT PRIMARY KEY)");
-      await client.query("CREATE TABLE runs (id TEXT PRIMARY KEY)");
-      await client.query(
-        'CREATE TABLE usage_records (id TEXT PRIMARY KEY, "spaceId" TEXT NOT NULL, "userId" TEXT NOT NULL, "createdAt" TIMESTAMP NOT NULL)',
-      );
-      if (populated) {
-        await client.query("INSERT INTO chat_group_members (id) VALUES ('member')");
-        await client.query("INSERT INTO runs (id) VALUES ('run')");
-        await client.query(
-          "INSERT INTO usage_records (id, \"spaceId\", \"userId\", \"createdAt\") VALUES ('usage', 'space', 'user', NOW())",
-        );
-      }
-      await client.query(migration);
-      await client.query("COMMIT");
-      await client.query(`SET search_path TO "${schema}"`);
-      if (populated) {
-        const member = await client.query(
-          'SELECT "runtimePin", "modelPinRevision" FROM chat_group_members',
-        );
-        expect(member.rows).toEqual([{ runtimePin: null, modelPinRevision: 0 }]);
-        const run = await client.query('SELECT "runtimePinSource", "usageGroupId" FROM runs');
-        expect(run.rows).toEqual([{ runtimePinSource: null, usageGroupId: null }]);
-        const usage = await client.query(
-          'SELECT "groupId", "threadId", "runtimePinSource" FROM usage_records',
-        );
-        expect(usage.rows).toEqual([{ groupId: null, threadId: null, runtimePinSource: null }]);
-      }
-      await expect(
-        client.query(
-          'INSERT INTO chat_group_members (id, "runtimePin", "modelPinRevision") VALUES ($1, $2::jsonb, 1)',
-          ["partial", JSON.stringify({ provider: "fixture", revision: 1 })],
-        ),
-      ).rejects.toMatchObject({ code: "23514" });
-      await expect(
-        client.query('INSERT INTO chat_group_members (id, "runtimePin") VALUES ($1, $2::jsonb)', [
-          "json-null",
-          "null",
-        ]),
-      ).rejects.toMatchObject({ code: "23514" });
-      await expect(
-        client.query(
-          'INSERT INTO chat_group_members (id, "runtimePin", "modelPinRevision") VALUES ($1, $2::jsonb, 2)',
-          ["mismatch", JSON.stringify({ ...choice, revision: 1 })],
-        ),
-      ).rejects.toMatchObject({ code: "23514" });
-      await expect(
-        client.query('INSERT INTO chat_group_members (id, "modelPinRevision") VALUES ($1, -1)', [
-          "negative",
-        ]),
-      ).rejects.toMatchObject({ code: "23514" });
-    } finally {
-      try {
-        await client.query("ROLLBACK").catch(() => {});
-        await client.query("RESET search_path").catch(() => {});
-        await client.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`).catch(() => {});
-      } finally {
-        client.release();
-      }
-    }
+    await runMigrationInScratchSchema(pool, schema, {
+      populated,
+      verify: async (client) => {
+        if (populated) {
+          const member = await client.query(
+            'SELECT "runtimePin", "modelPinRevision" FROM chat_group_members',
+          );
+          expect(member.rows).toEqual([{ runtimePin: null, modelPinRevision: 0 }]);
+          const run = await client.query('SELECT "runtimePinSource", "usageGroupId" FROM runs');
+          expect(run.rows).toEqual([{ runtimePinSource: null, usageGroupId: null }]);
+          const usage = await client.query(
+            'SELECT "groupId", "threadId", "runtimePinSource" FROM usage_records',
+          );
+          expect(usage.rows).toEqual([{ groupId: null, threadId: null, runtimePinSource: null }]);
+        }
+        await expect(
+          client.query(
+            'INSERT INTO chat_group_members (id, "runtimePin", "modelPinRevision") VALUES ($1, $2::jsonb, 1)',
+            ["partial", JSON.stringify({ provider: "fixture", revision: 1 })],
+          ),
+        ).rejects.toMatchObject({ code: "23514" });
+        await expect(
+          client.query('INSERT INTO chat_group_members (id, "runtimePin") VALUES ($1, $2::jsonb)', [
+            "json-null",
+            "null",
+          ]),
+        ).rejects.toMatchObject({ code: "23514" });
+        await expect(
+          client.query(
+            'INSERT INTO chat_group_members (id, "runtimePin", "modelPinRevision") VALUES ($1, $2::jsonb, 2)',
+            ["mismatch", JSON.stringify({ ...choice, revision: 1 })],
+          ),
+        ).rejects.toMatchObject({ code: "23514" });
+        await expect(
+          client.query('INSERT INTO chat_group_members (id, "modelPinRevision") VALUES ($1, -1)', [
+            "negative",
+          ]),
+        ).rejects.toMatchObject({ code: "23514" });
+      },
+    });
   });
 
   it("rolls back unfinished transaction and releases client when migration statement fails", async () => {
     const schema = `g1_migration_fault_${process.pid}_${Date.now()}`;
-    const initialCheckedOut = pool.totalCount - pool.idleCount;
-    const client = await pool.connect();
-    let caught: unknown;
-    try {
-      try {
-        await client.query(`CREATE SCHEMA "${schema}"`);
-        await client.query("BEGIN");
-        await client.query(`SET LOCAL search_path TO "${schema}"`);
-        await client.query("THIS IS INVALID SQL STATEMENT TO FORCE ABORT");
-        await client.query(migration);
-        await client.query("COMMIT");
-      } finally {
-        await client.query("ROLLBACK").catch(() => {});
-        await client.query("RESET search_path").catch(() => {});
-        await client.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`).catch(() => {});
-      }
-    } catch (error) {
-      caught = error;
-    } finally {
-      client.release();
-    }
-    expect(caught).toBeDefined();
-    expect((caught as { code?: string }).code).toBe("42601");
-    expect(pool.totalCount - pool.idleCount).toBe(initialCheckedOut);
+    await pool.query("SELECT 1");
+    const initialTotal = pool.totalCount;
+    const initialIdle = pool.idleCount;
+    await expect(
+      runMigrationInScratchSchema(pool, schema, {
+        beforeMigrationSql: "THIS IS INVALID SQL STATEMENT TO FORCE ABORT",
+        afterRollback: async (client) => {
+          const tables = await client.query(
+            "SELECT 1 FROM information_schema.tables WHERE table_schema = $1",
+            [schema],
+          );
+          expect(tables.rows).toHaveLength(0);
+        },
+      }),
+    ).rejects.toMatchObject({ code: "42601" });
+    expect(pool.totalCount).toBe(initialTotal);
+    expect(pool.idleCount).toBe(initialIdle);
     const remaining = await pool.query(
       "SELECT 1 FROM information_schema.schemata WHERE schema_name = $1",
       [schema],
@@ -400,20 +453,35 @@ describePostgres("group member pins (PostgreSQL)", () => {
 
     const firstHoldingLock = createDeferred();
     const releaseFirst = createDeferred();
+    const firstPid = createDeferred<number>();
+    const secondPid = createDeferred<number>();
 
     const client1 = createControllablePrisma(prisma, {
+      onTransactionStart: firstPid.resolve,
       onBeforeUpdate: async () => {
         firstHoldingLock.resolve();
         await releaseFirst.promise;
       },
     });
+    const client2 = createControllablePrisma(prisma, { onTransactionStart: secondPid.resolve });
 
     const p1 = setGroupMemberPin(client1, actor, group.id, botId, choiceA);
     await firstHoldingLock.promise;
 
-    const p2 = setGroupMemberPin(prisma, actor, group.id, botId, choiceB);
-    await waitForBlockedLock(pool);
-    releaseFirst.resolve();
+    const p2 = setGroupMemberPin(client2, actor, group.id, botId, choiceB);
+    const settled = Promise.allSettled([p1, p2]);
+    try {
+      expect(
+        await waitForBlockedLock(
+          pool,
+          await waitForTransactionPid(secondPid.promise),
+          await firstPid.promise,
+        ),
+      ).toBe(true);
+    } finally {
+      releaseFirst.resolve();
+      await settled;
+    }
 
     const [first, second] = await Promise.all([p1, p2]);
 
@@ -440,20 +508,35 @@ describePostgres("group member pins (PostgreSQL)", () => {
 
     const firstHoldingLock = createDeferred();
     const releaseFirst = createDeferred();
+    const firstPid = createDeferred<number>();
+    const secondPid = createDeferred<number>();
 
     const client1 = createControllablePrisma(prisma, {
+      onTransactionStart: firstPid.resolve,
       onBeforeUpdate: async () => {
         firstHoldingLock.resolve();
         await releaseFirst.promise;
       },
     });
+    const client2 = createControllablePrisma(prisma, { onTransactionStart: secondPid.resolve });
 
     const p1 = setGroupMemberPin(client1, actor, group.id, botId, choice);
     await firstHoldingLock.promise;
 
-    const p2 = clearGroupMemberPin(prisma, actor, group.id, botId);
-    await waitForBlockedLock(pool);
-    releaseFirst.resolve();
+    const p2 = clearGroupMemberPin(client2, actor, group.id, botId);
+    const settled = Promise.allSettled([p1, p2]);
+    try {
+      expect(
+        await waitForBlockedLock(
+          pool,
+          await waitForTransactionPid(secondPid.promise),
+          await firstPid.promise,
+        ),
+      ).toBe(true);
+    } finally {
+      releaseFirst.resolve();
+      await settled;
+    }
 
     const [first, second] = await Promise.all([p1, p2]);
 
