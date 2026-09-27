@@ -122,6 +122,32 @@ test("capabilities and memory use persisted settings, confirmation, and proposal
         ),
         nextCursor: null,
       };
+    if (path === "memory/history") {
+      const document = documents.find((item) => item.id === body.documentId);
+      result = {
+        items: document
+          ? [
+              {
+                kind: document.kind,
+                documentId: document.id,
+                revision: approved && document.id === "preferences" ? 2 : 1,
+                scopeKey: document.scopeKey,
+                path: document.path,
+                content:
+                  approved && document.id === "preferences" ? importedContent : document.content,
+                author: document.author,
+                model: document.model,
+                runId: document.runId,
+                threadId: document.threadId,
+                references: document.references,
+                createdAt: document.createdAt,
+                deletedAt: document.deletedAt,
+              },
+            ]
+          : [],
+        nextCursor: null,
+      };
+    }
     if (path === "memory/propose") {
       if (body.intent === "import" && String(body.text).includes(fakeToken)) {
         await route.fulfill({
@@ -214,6 +240,11 @@ test("capabilities and memory use persisted settings, confirmation, and proposal
     .getByRole("region", { name: "Memory document" })
     .locator("p.whitespace-pre-wrap");
   await expect.poll(() => documentContent.textContent()).toBe(importedContent);
+  await expect
+    .poll(() =>
+      calls.filter((call) => call.path === "memory/history").map((call) => call.body.documentId),
+    )
+    .toContain("preferences");
   await page.getByLabel("Tell your bot what to change or remove").fill("Use concise answers.");
   await page.getByRole("button", { name: "Send", exact: true }).click();
   await expect.poll(() => calls.filter((call) => call.path === "memory/propose")).toHaveLength(3);

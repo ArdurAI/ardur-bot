@@ -2,8 +2,17 @@ import { createHash, randomUUID } from "node:crypto";
 import type { AdapterContext } from "@ardurbot/adapter-kit";
 import type { EncryptedSecretStore } from "@ardurbot/adapters";
 import { McpConnector } from "@ardurbot/adapters";
-import type { Actor, LocalServerConfig, ManagedServerInputSchema } from "@ardurbot/contracts";
-import { LocalServerConfigSchema, McpDiagnosticsSchema } from "@ardurbot/contracts";
+import type {
+  Actor,
+  LocalServerConfig,
+  ManagedServerInputSchema,
+  McpCredentialFlags,
+} from "@ardurbot/contracts";
+import {
+  LocalServerConfigSchema,
+  McpDiagnosticsSchema,
+  mcpCredentialFlagsForEntries,
+} from "@ardurbot/contracts";
 import type { McpServer, Prisma, PrismaClient } from "@ardurbot/db";
 import { IsolationError } from "@ardurbot/db";
 import { redactMcpArguments, redactMcpText } from "@ardurbot/host-runtime/mcp-diagnostics";
@@ -21,6 +30,7 @@ type Material = {
   env?: Record<string, string>;
   cwd?: string;
   secret?: string;
+  credentialFlags?: McpCredentialFlags;
 };
 type ManagedInput = z.infer<typeof ManagedServerInputSchema>;
 const saved = "[saved]";
@@ -185,7 +195,13 @@ export function createMcpSettings(deps: {
     return { mcpServers: Object.fromEntries(entries) };
   }
   async function store(owner: Owner, value: Material, tx: Prisma.TransactionClient) {
-    const secret = await deps.secrets.put(JSON.stringify(value), context(owner));
+    const secret = await deps.secrets.put(
+      JSON.stringify({
+        ...value,
+        credentialFlags: value.credentialFlags ?? mcpCredentialFlagsForEntries({}, value),
+      }),
+      context(owner),
+    );
     await tx.secret.create({
       data: { ...scope(owner), id: secret.id, kind: "mcp", ciphertext: secret.ciphertext },
     });
@@ -210,6 +226,7 @@ export function createMcpSettings(deps: {
           command: input.command,
           args: input.args,
           env: input.env,
+          credentialFlags: mcpCredentialFlagsForEntries({}, { env: input.env }),
           cwd: input.cwd,
           redactions: input.secretValues,
         };
@@ -451,6 +468,10 @@ export function createMcpSettings(deps: {
                   env: server.env,
                   secret: server.secret,
                   redactions: preview.redactions[slug] ?? [],
+                  credentialFlags: mcpCredentialFlagsForEntries(
+                    existing ? await material(existing, tx) : {},
+                    { env: server.env },
+                  ),
                 },
                 tx,
               );

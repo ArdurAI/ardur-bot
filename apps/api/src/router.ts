@@ -231,7 +231,8 @@ import { connectionDto, IntegrationConnections } from "./integration-connections
 import { createLearningService } from "./learning.js";
 import { saveImportedServerCredentials } from "./local-import-credentials.js";
 import type { LocalImportRequests } from "./local-import-requests.js";
-import { buildMcpUpdateMaterial } from "./mcp-material.js";
+import type { McpSecretMaterial } from "./mcp-material.js";
+import { buildMcpUpdateMaterial, visibleMcpCredentialFlags } from "./mcp-material.js";
 import { mcpServerDto } from "./mcp-server-dto.js";
 import { changeGitMemoryLocation } from "./memory-git-location.js";
 import { changeMemoryLocation } from "./memory-location.js";
@@ -3635,7 +3636,39 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
               row.secretId ? ciphertextById.get(row.secretId) : undefined,
               row.secretId ?? undefined,
             );
-            return mcpServerDto(row, status.oauthStatus, status.credentialConflict);
+            let material: McpSecretMaterial = {};
+            const ciphertext = row.secretId ? ciphertextById.get(row.secretId) : undefined;
+            if (ciphertext && row.secretId) {
+              try {
+                material = JSON.parse(
+                  deps.secrets.load(ciphertext, row.secretId),
+                ) as McpSecretMaterial;
+              } catch {
+                // Unknown material remains classified as secret in the settings view.
+              }
+            }
+            return mcpServerDto(
+              row,
+              status.oauthStatus,
+              status.credentialConflict,
+              visibleMcpCredentialFlags({
+                ...material,
+                env: Object.fromEntries(
+                  Object.keys(
+                    row.env && typeof row.env === "object" && !Array.isArray(row.env)
+                      ? row.env
+                      : {},
+                  ).map((key) => [key, ""]),
+                ),
+                headers: Object.fromEntries(
+                  Object.keys(
+                    row.headers && typeof row.headers === "object" && !Array.isArray(row.headers)
+                      ? row.headers
+                      : {},
+                  ).map((key) => [key, ""]),
+                ),
+              }),
+            );
           });
         }),
         create: authed.mcp.servers.create.handler(async ({ context, input }) => {
@@ -3690,7 +3723,8 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         }),
         update: authed.mcp.servers.update.handler(async ({ context, input }) => {
           // A token or header on its own replaces the credential, not the definition.
-          const credentialOnly = "secret" in input || "headers" in input;
+          const credentialOnly =
+            "secret" in input || "headers" in input || "credentialFlags" in input;
           const row = await deps.prisma.$transaction(async (tx) => {
             // Share the OAuth broker's per-server lock so a stale authorization
             // snapshot cannot overwrite a simultaneous credential edit.
@@ -3749,16 +3783,50 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
                 })
               : null;
             let existingMaterial: Record<string, unknown> = {};
+            let materialValid = false;
             if (existingSecret) {
               try {
                 const value = JSON.parse(
                   deps.secrets.load(existingSecret.ciphertext, existingSecret.id),
                 );
-                if (value && typeof value === "object" && !Array.isArray(value))
+                if (value && typeof value === "object" && !Array.isArray(value)) {
                   existingMaterial = value as Record<string, unknown>;
+                  materialValid = true;
+                }
               } catch {
                 /* Existing malformed secrets are replaced only when new credentials are supplied. */
               }
+            }
+            if ("credentialFlags" in input) {
+              if (!existingSecret || !materialValid)
+                throw new ORPCError("BAD_REQUEST", { message: "No saved entries to update." });
+              for (const kind of ["env", "headers"] as const) {
+                const names = Object.keys(
+                  (existingMaterial[kind] as Record<string, string> | undefined) ?? {},
+                );
+                const supplied = Object.keys(input.credentialFlags[kind]);
+                if (
+                  names.length !== supplied.length ||
+                  names.some((name) => !Object.hasOwn(input.credentialFlags[kind], name))
+                )
+                  throw new ORPCError("CONFLICT", {
+                    message: "Server entries changed. Reload and try again.",
+                  });
+              }
+              const stored = await deps.secrets.put(
+                JSON.stringify({ ...existingMaterial, credentialFlags: input.credentialFlags }),
+                computerContext(context.actor, "mcp", "mcp.flags"),
+              );
+              await tx.secret.create({ data: { ...stored, ...context.actor, kind: "mcp" } });
+              await bumpMcpServerRevision(tx, existing.id, context.actor, { secretId: stored.id });
+              await tx.secret.deleteMany({
+                where: {
+                  id: existingSecret.id,
+                  spaceId: context.actor.spaceId,
+                  userId: context.actor.userId,
+                },
+              });
+              return tx.mcpServer.findFirstOrThrow({ where: { id: existing.id } });
             }
             // `secret: null` drops a stale token without a new value, so the header
             // it leaves behind must be the one already stored, not a blank slate.

@@ -10,6 +10,7 @@ import {
 import { HostIntegrationSchema } from "./host-integrations.js";
 import { IDE_FILE_BYTES } from "./ide.js";
 import { LocalImportRootsSchema } from "./local-import.js";
+import { McpCredentialFlagsSchema } from "./mcp.js";
 import { RequestUsageObservationSchema } from "./request-usage.js";
 import {
   RuntimeAvailabilitySchema,
@@ -139,7 +140,8 @@ export const HostTurnSchema = z.strictObject({
 });
 export type HostTurn = z.infer<typeof HostTurnSchema>;
 export const HostMcpRegistrationSchema = z.strictObject({
-  redactions: z.array(z.string().max(4096)).max(256).default([]),
+  redactions: z.array(z.string().max(16384)).max(512).default([]),
+  credentialFlags: McpCredentialFlagsSchema.optional(),
   serverId: id,
   userId: id,
   spaceId: id,

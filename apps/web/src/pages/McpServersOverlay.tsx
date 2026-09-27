@@ -1,4 +1,11 @@
-import type { Bot, BotMcpServer, McpServer, McpTransport } from "@ardurbot/contracts";
+import type {
+  Bot,
+  BotMcpServer,
+  McpCredentialFlags,
+  McpServer,
+  McpTransport,
+} from "@ardurbot/contracts";
+import { mcpEntryIsSecret } from "@ardurbot/contracts";
 import { LOCAL_IMPORT_TOOL_NAMES } from "@ardurbot/contracts/local-import";
 import { deriveMcpSlug } from "@ardurbot/core";
 import {
@@ -17,6 +24,7 @@ import {
   FieldGroup,
   FieldLabel,
   Input,
+  Switch,
   Tabs,
   TabsList,
   TabsTrigger,
@@ -331,6 +339,39 @@ export function McpServersOverlay({
     }
   }
 
+  async function setEntrySecret(
+    server: McpServer,
+    kind: keyof McpCredentialFlags,
+    name: string,
+    secret: boolean,
+  ) {
+    setError(null);
+    setSaving(true);
+    const flags: McpCredentialFlags = {
+      env: Object.fromEntries(
+        (server.envKeys ?? []).map((key) => [
+          key,
+          mcpEntryIsSecret(server.credentialFlags, "env", key),
+        ]),
+      ),
+      headers: Object.fromEntries(
+        (server.headerKeys ?? []).map((key) => [
+          key,
+          mcpEntryIsSecret(server.credentialFlags, "headers", key),
+        ]),
+      ),
+    };
+    flags[kind][name] = secret;
+    try {
+      await rpc.mcp.servers.update({ id: server.id, credentialFlags: flags });
+      await refresh();
+    } catch {
+      setError(t`Could not update this field. Retry.`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <McpSettingsFrame embedded={embedded} onClose={onClose}>
       <div className="contents">
@@ -534,6 +575,8 @@ export function McpServersOverlay({
               ) : (
                 servers.map((server) => {
                   const statusText = oauthStatusText(server);
+                  const envKeys = server.envKeys ?? [];
+                  const headerKeys = server.headerKeys ?? [];
                   return (
                     <Card key={server.id} id={`mcp-server-${server.id}`} tabIndex={-1} size="sm">
                       <CardContent>
@@ -563,6 +606,39 @@ export function McpServersOverlay({
                           server={server}
                           onSaved={() => refresh().then(() => undefined)}
                         />
+                        {envKeys.length || headerKeys.length ? (
+                          <details className="mt-2 text-xs">
+                            <summary className="cursor-pointer">
+                              <Trans>Credential fields</Trans>
+                            </summary>
+                            {(["env", "headers"] as const).flatMap((kind) =>
+                              (kind === "env" ? envKeys : headerKeys).map((key) => (
+                                <div
+                                  key={`${kind}:${key}`}
+                                  className="flex items-center justify-between gap-3 py-1"
+                                >
+                                  <span className="truncate">{key}</span>
+                                  <span className="flex items-center gap-2">
+                                    <Trans>Secret</Trans>
+                                    <Switch
+                                      aria-label={t`Secret for ${key}`}
+                                      checked={mcpEntryIsSecret(server.credentialFlags, kind, key)}
+                                      disabled={
+                                        saving ||
+                                        !server.hasSecret ||
+                                        Boolean(server.managedBy) ||
+                                        Boolean(server.catalogId)
+                                      }
+                                      onCheckedChange={(checked) =>
+                                        void setEntrySecret(server, kind, key, checked)
+                                      }
+                                    />
+                                  </span>
+                                </div>
+                              )),
+                            )}
+                          </details>
+                        ) : null}
                         {statusText ? (
                           <p
                             className={`mt-2 text-[11px] ${server.oauthStatus === "reconnect" ? "text-warning" : "text-muted-foreground"}`}

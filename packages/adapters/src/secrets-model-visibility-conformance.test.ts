@@ -82,6 +82,14 @@ describe("secrets model-visibility conformance", () => {
         },
       );
     });
+    it("redacts credential arguments echoed by a server", () => {
+      const secrets = oauthMaterialSecrets({ args: ["--token", "fixture-private-value", "/tmp"] });
+      expect(secrets).toContain("fixture-private-value");
+      expect(secrets).not.toContain("/tmp");
+      expect(redactConnectorPayload("echo fixture-private-value at /tmp/report.txt", secrets)).toBe(
+        "echo [redacted] at /tmp/report.txt",
+      );
+    });
     it("redacts Cookie/X-Session and short auth material without corrupting config enums", () => {
       const material: OAuthMaterial = {
         secret: "Bearer static-mcp-token-value",
@@ -94,6 +102,19 @@ describe("secrets model-visibility conformance", () => {
           COOKIE_DOMAIN: "example.test",
           SHORT_API_KEY: "ab12",
           ACCESS_TOKEN: "123456",
+        },
+        credentialFlags: {
+          env: {
+            API_TOKEN: true,
+            API_SECRET: true,
+            NODE_ENV: false,
+            AUTH_MODE: false,
+            SESSION_TIMEOUT: false,
+            COOKIE_DOMAIN: false,
+            SHORT_API_KEY: true,
+            ACCESS_TOKEN: true,
+          },
+          headers: { "X-Api-Key": true, Cookie: true, "X-Session": true, "X-Env": false },
         },
         headers: {
           "X-Api-Key": "header-mcp-token-value",
@@ -175,7 +196,7 @@ describe("secrets model-visibility conformance", () => {
       expect(secrets).not.toContain("oauth-access-token-before-rotation");
     });
 
-    it("registers numeric-only values under explicit credential keys", () => {
+    it("treats entries without flags as secret regardless of their names", () => {
       const secrets = oauthMaterialSecrets({
         env: {
           ACCESS_TOKEN: "123456",
@@ -185,7 +206,7 @@ describe("secrets model-visibility conformance", () => {
       });
       expect(secrets).toContain("123456");
       expect(secrets).toContain("secret-value");
-      expect(secrets).not.toContain("3600");
+      expect(secrets).toContain("3600");
     });
   });
 

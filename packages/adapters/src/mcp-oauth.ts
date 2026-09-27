@@ -1,11 +1,14 @@
 import { randomUUID } from "node:crypto";
+import type { McpCredentialFlags } from "@ardurbot/contracts";
 import {
   isLocalMcpHost,
   mcpCredentialConflict,
+  mcpEntryIsSecret,
   mcpReauthorizationDeclinedDiagnostic,
   mcpSignInDiagnostic,
 } from "@ardurbot/contracts";
 import type { Prisma, PrismaClient } from "@ardurbot/db";
+import { argumentSecrets } from "@ardurbot/host-runtime/mcp-diagnostics";
 import type {
   OAuthClientProvider,
   OAuthDiscoveryState,
@@ -19,7 +22,6 @@ import type {
   OAuthTokens,
 } from "@modelcontextprotocol/sdk/shared/auth.js";
 import { transientIntegrationError } from "./integration-lifecycle.js";
-import { isMcpCredentialField } from "./mcp-credential-fields.js";
 import { secureFetch, validateUrl, withEndpointOriginFallback } from "./mcp-transport.js";
 import type { RemoteTransportDependencies } from "./remote-mcp.js";
 import type { EncryptedSecretStore } from "./secrets.js";
@@ -42,6 +44,7 @@ export type OAuthMaterial = {
   secret?: string;
   env?: Record<string, string>;
   headers?: Record<string, string>;
+  credentialFlags?: McpCredentialFlags;
   oauth?: OAuthState;
 };
 
@@ -55,6 +58,7 @@ export function oauthMaterialSecrets(material: OAuthMaterial): string[] {
     if (bearer?.[1]) values.push(bearer[1]);
   };
   for (const value of material.redactions ?? []) add(value);
+  for (const value of argumentSecrets(material.args ?? [])) add(value);
   add(material.secret);
   add(material.oauth?.tokens?.access_token);
   add(material.oauth?.tokens?.refresh_token);
@@ -63,9 +67,9 @@ export function oauthMaterialSecrets(material: OAuthMaterial): string[] {
     add(client.client_secret);
   }
   for (const [key, value] of Object.entries(material.headers ?? {}))
-    if (isMcpCredentialField(key, true)) add(value);
+    if (mcpEntryIsSecret(material.credentialFlags, "headers", key)) add(value);
   for (const [key, value] of Object.entries(material.env ?? {})) {
-    if (isMcpCredentialField(key)) add(value);
+    if (mcpEntryIsSecret(material.credentialFlags, "env", key)) add(value);
   }
   return [...new Set(values)];
 }

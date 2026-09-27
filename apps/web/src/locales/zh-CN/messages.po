@@ -2847,6 +2847,10 @@ msgstr ""
 msgid "Could not update this computer. Try again."
 msgstr ""
 
+#: src/pages/McpServersOverlay.tsx
+msgid "Could not update this field. Retry."
+msgstr ""
+
 #: src/pages/board/Board.tsx
 #: src/pages/board/ItemForm.tsx
 msgid "Could not update this item."
@@ -2948,6 +2952,10 @@ msgstr "正在创建…"
 #: src/pages/PluginsOverlay.tsx
 msgid "Credential"
 msgstr "凭据"
+
+#: src/pages/McpServersOverlay.tsx
+msgid "Credential fields"
+msgstr ""
 
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
@@ -6586,6 +6594,7 @@ msgstr ""
 #: src/pages/LearningObservation.tsx
 #: src/pages/LearningTimeline.tsx
 #: src/pages/memory/MemoryPage.tsx
+#: src/pages/MemoryHistory.tsx
 #: src/pages/RoutineHistory.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/UploadedFiles.tsx
@@ -6978,6 +6987,14 @@ msgstr ""
 #: src/pages/SpaceSearch.tsx
 msgid "Searching…"
 msgstr "正在搜索…"
+
+#: src/pages/McpServersOverlay.tsx
+msgid "Secret"
+msgstr ""
+
+#: src/pages/McpServersOverlay.tsx
+msgid "Secret for {key}"
+msgstr ""
 
 #: src/pages/account/AccountProfile.tsx
 msgid "Select"

@@ -11,6 +11,7 @@ import { SpaceToolPoliciesSchema } from "./integration-catalog.js";
 import { LearningJourneyEntrySchema, LearningObservationSchema } from "./learning.js";
 import { ImportedProvenanceSchema } from "./local-import.js";
 import {
+  McpCredentialFlagsSchema,
   McpHeadersSchema,
   McpRemoteEndpointSchema,
   McpTransportSchema,
@@ -773,6 +774,7 @@ export const McpServerSchema = z.object({
   args: z.array(z.string()),
   envKeys: z.array(z.string()),
   headerKeys: z.array(z.string()),
+  credentialFlags: McpCredentialFlagsSchema.optional(),
   hasSecret: z.boolean(),
   /** A stored credential from before one was enforced still holds a token and a header. */
   credentialConflict: z.boolean().optional(),

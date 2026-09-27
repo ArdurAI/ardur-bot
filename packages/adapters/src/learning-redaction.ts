@@ -1,5 +1,6 @@
 import type { PrismaClient } from "@ardurbot/db";
-import { isMcpCredentialField } from "./mcp-credential-fields.js";
+import type { OAuthMaterial } from "./mcp-oauth.js";
+import { oauthMaterialSecrets } from "./mcp-oauth.js";
 import type { EncryptedSecretStore } from "./secrets.js";
 
 /** Only encrypted credential slots enter the shared exact-match redactor. */
@@ -26,13 +27,16 @@ export async function learningSecrets(
     value && typeof value === "object" && !Array.isArray(value)
       ? (value as Record<string, unknown>)
       : {};
-  const addCredentialFields = (value: unknown, header = false) => {
-    for (const [name, credential] of Object.entries(record(value))) {
-      if (isMcpCredentialField(name, header)) add(credential);
-    }
-  };
   for (const secret of secrets) {
     const plaintext = store.load(secret.ciphertext, secret.id);
+    if (
+      secret.kind === "agent-environment" ||
+      secret.kind === "webhook" ||
+      secret.kind?.startsWith("run-secret:")
+    ) {
+      add(plaintext);
+      continue;
+    }
     let parsed: unknown;
     try {
       parsed = JSON.parse(plaintext);
@@ -50,15 +54,7 @@ export async function learningSecrets(
     }
     const data = record(parsed);
     if (secret.kind === "mcp") {
-      add(data.secret);
-      addCredentialFields(data.env);
-      addCredentialFields(data.headers, true);
-      if (Array.isArray(data.redactions)) for (const value of data.redactions) add(value);
-      const oauth = record(data.oauth);
-      const tokens = record(oauth.tokens);
-      add(tokens.access_token);
-      add(tokens.refresh_token);
-      add(record(oauth.clientInformation).client_secret);
+      for (const value of oauthMaterialSecrets(data as OAuthMaterial)) add(value);
     } else if (secret.kind === "model") {
       // A raw key, an OAuth object, or a compatible connection object.
       add(data.access);

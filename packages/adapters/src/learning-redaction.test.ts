@@ -1,5 +1,6 @@
 import { containsSecret } from "@ardurbot/core";
 import { expect, it, vi } from "vitest";
+import { assertSafeMemoryContent } from "./learning-memory-safety.js";
 import { learningSecrets } from "./learning-redaction.js";
 
 it("collects stored credential formats without connection metadata", async () => {
@@ -28,10 +29,14 @@ it("collects stored credential formats without connection metadata", async () =>
         name: "code",
         description: "project",
         mode: "plain",
-        args: ["plain"],
+        args: ["--token", "argument-456", "/tmp"],
         secret: "mcp-secret",
-        env: { SERVICE_KEY: "env-456", LOG_LEVEL: "info", ROOT_DIR: "/tmp" },
-        headers: { Authorization: "header-789", "X-Mode": "plain" },
+        env: { PGPASSWORD: "bluebird-42", LOG_LEVEL: "info" },
+        headers: { "X-Auth": "header-789", "X-Mode": "plain" },
+        credentialFlags: {
+          env: { PGPASSWORD: true, LOG_LEVEL: false },
+          headers: { "X-Auth": true, "X-Mode": false },
+        },
         oauth: { tokens: { access_token: "access-123", refresh_token: "refresh-123" } },
       }),
     },
@@ -52,6 +57,7 @@ it("collects stored credential formats without connection metadata", async () =>
       }),
     },
     { kind: "computer", value: JSON.stringify({ inline: "config-123", path: "plain" }) },
+    { kind: "agent-environment", value: '{"opaque":"host-123"}' },
   ];
   const prisma = {
     secret: {
@@ -79,16 +85,18 @@ it("collects stored credential formats without connection metadata", async () =>
     "ab12cd",
     "opaque-refresh-42",
     "key-987",
+    "argument-456",
     "mcp-secret",
-    "env-456",
-    "header-789",
     "access-123",
     "refresh-123",
+    "header-789",
+    "bluebird-42",
     "other-123",
     "provider-456",
     "memory-789",
     "git-123",
     "config-123",
+    '{"opaque":"host-123"}',
     "bot123",
   ]);
   for (const metadata of [
@@ -104,4 +112,16 @@ it("collects stored credential formats without connection metadata", async () =>
   ])
     expect(collected).not.toContain(metadata);
   expect(containsSecret("Include useful information.", collected)).toBe(false);
+  expect(() => assertSafeMemoryContent("information", collected)).not.toThrow();
+  for (const value of ["bluebird-42", "header-789"]) {
+    try {
+      assertSafeMemoryContent(`Remember ${value} in this note.`, collected);
+      throw new Error("Expected the import to be rejected");
+    } catch (error) {
+      expect(error).toMatchObject({
+        lineNumber: 1,
+        maskedLine: "Remember [redacted] in this note.",
+      });
+    }
+  }
 });

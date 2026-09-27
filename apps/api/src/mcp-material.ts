@@ -1,4 +1,5 @@
-import type { McpServerConfigInput } from "@ardurbot/contracts";
+import type { McpCredentialFlags, McpServerConfigInput } from "@ardurbot/contracts";
+import { mcpCredentialFlagsForEntries } from "@ardurbot/contracts";
 import { redactMcpArguments } from "@ardurbot/host-runtime/mcp-diagnostics";
 
 /** Shape of the encrypted MCP credential blob. `oauth` holds SDK OAuth state
@@ -10,12 +11,17 @@ export type McpSecretMaterial = {
   secret?: string;
   env?: Record<string, string>;
   headers?: Record<string, string>;
+  credentialFlags?: McpCredentialFlags;
   oauth?: Record<string, unknown>;
 };
 
 export type McpMaterialUpdate =
   | { action: "keep" }
   | { action: "store"; material: McpSecretMaterial };
+
+export function visibleMcpCredentialFlags(material: McpSecretMaterial): McpCredentialFlags {
+  return mcpCredentialFlagsForEntries(material, material);
+}
 
 /** Compute the next encrypted credential blob for an MCP server update.
  *
@@ -85,5 +91,8 @@ export function buildMcpUpdateMaterial(
     next.headers = namedHeaders;
     delete next.secret;
   } else if (headers !== undefined) next.headers = headers;
+  if (Object.keys(next.env ?? {}).length || Object.keys(next.headers ?? {}).length)
+    next.credentialFlags = mcpCredentialFlagsForEntries(existing, next);
+  else delete next.credentialFlags;
   return { action: "store", material: next };
 }
