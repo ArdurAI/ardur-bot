@@ -11,7 +11,7 @@ import type {
 } from "@ardurbot/adapter-kit";
 import type { RuntimeInfo } from "@ardurbot/contracts/runtime-pins";
 import { redactMcpText } from "../mcp-diagnostics.js";
-import { AcpClient } from "./acp-client.js";
+import { AcpClient, AcpClientError } from "./acp-client.js";
 import { startArdurMcpServer } from "./ardur-mcp-server.js";
 import { createArdurToolBridge } from "./claude-mcp-bridge.js";
 import { RuntimeQueue, stopNative } from "./native-process.js";
@@ -154,11 +154,11 @@ function textFromUpdate(update: Record<string, unknown>) {
 
 interface ActiveTurn {
   active: boolean;
-  child: ChildProcessWithoutNullStreams;
-  client: AcpClient;
+  child?: ChildProcessWithoutNullStreams;
+  client?: AcpClient;
   sessionId?: string;
   queue: RuntimeQueue<AgentRuntimeEvent>;
-  teardown: () => Promise<void>;
+  teardown?: () => Promise<void>;
 }
 
 /** M0 only: caller constructs this directly; the runtime registry has no Hermes kind yet. */
@@ -188,16 +188,17 @@ export class HermesRuntime implements AgentRuntime {
     if (!turn?.active) return;
     turn.active = false;
     turn.queue.end();
-    if (turn.sessionId) {
+    if (turn.sessionId && turn.client) {
       try {
         turn.client.notify("session/cancel", { sessionId: turn.sessionId });
       } catch {
         // A dead ACP process is already cancelled.
       }
     }
+    if (!turn.child) return;
     await new Promise((resolve) => setTimeout(resolve, 200));
     try {
-      await turn.teardown();
+      await turn.teardown?.();
     } finally {
       await stopNative(turn.child);
     }
@@ -209,12 +210,18 @@ export class HermesRuntime implements AgentRuntime {
   ): AsyncIterable<AgentRuntimeEvent> {
     if (this.running.has(request.runId)) throw new Error("This Hermes run is already active.");
     const config = hermesConfig(request);
-    const home = await mkdtemp(join(tmpdir(), "ardur-hermes-"));
-    const workspace = join(home, "workspace");
     const queue = new RuntimeQueue<AgentRuntimeEvent>();
-    let turn: ActiveTurn | undefined;
+    const turn: ActiveTurn = { active: true, queue };
+    this.running.set(request.runId, turn);
+    const stopOnSignal = () => void this.abort(request.runId);
+    context?.signal?.addEventListener("abort", stopOnSignal, { once: true });
+    if (context?.signal?.aborted) stopOnSignal();
+    let home: string | undefined;
     let mcp: Awaited<ReturnType<typeof startArdurMcpServer>> | undefined;
     try {
+      if (!turn.active) return;
+      home = await mkdtemp(join(tmpdir(), "ardur-hermes-"));
+      const workspace = join(home, "workspace");
       await mkdir(workspace, { mode: 0o700 });
       await writeFile(join(home, "config.yaml"), `${JSON.stringify(config, null, 2)}\n`, {
         mode: 0o600,
@@ -237,24 +244,39 @@ export class HermesRuntime implements AgentRuntime {
         () => !fenced && !!turn?.active && !context?.signal?.aborted,
       );
       mcp = await startArdurMcpServer(bridge);
+      if (!turn.active || context?.signal?.aborted) return;
       const relayKey = mcp.config.args.at(-1) ?? "";
       const secrets = [request.model.apiKey!, relayKey];
-      const hold = Math.max(
-        ...secrets.flatMap((value) => [
-          value.length,
-          encodeURIComponent(value).length,
-          JSON.stringify(value).length - 2,
-        ]),
-        1,
+      const allowedToolTitles = new Set(
+        Array.isArray(request.tools) ? request.tools.map((tool) => `mcp__ardur__${tool.name}`) : [],
       );
+      const spellings = secrets.flatMap((value) => [
+        value,
+        encodeURIComponent(value),
+        JSON.stringify(value).slice(1, -1),
+      ]);
       let pendingText = "";
       const emitText = (flush = false) => {
-        const count = flush ? pendingText.length : Math.max(0, pendingText.length - hold);
+        pendingText = redactMcpText(pendingText, secrets);
+        let held = 0;
+        if (!flush)
+          for (const spelling of spellings) {
+            for (
+              let size = Math.min(spelling.length - 1, pendingText.length);
+              size > held;
+              size--
+            ) {
+              if (pendingText.endsWith(spelling.slice(0, size))) {
+                held = size;
+                break;
+              }
+            }
+          }
+        const count = pendingText.length - held;
         if (!count) return;
         const safe = pendingText.slice(0, count);
         pendingText = pendingText.slice(count);
-        const redacted = redactMcpText(safe, secrets);
-        if (redacted && turn?.active) queue.push({ type: "text", text: redacted });
+        if (safe && turn.active) queue.push({ type: "text", text: safe });
       };
       const launch = this.options.launch ?? launchLocal;
       const result = await launch({
@@ -270,11 +292,18 @@ export class HermesRuntime implements AgentRuntime {
           ARDUR_HERMES_PROVIDER_KEY: request.model.apiKey!,
         },
       });
+      turn.child = result.child;
+      turn.teardown = result.teardown;
+      if (!turn.active || context?.signal?.aborted) {
+        await result.teardown();
+        await stopNative(result.child);
+        return;
+      }
       const child = result.child;
       const client = new AcpClient(child, {
         timeoutMs: 90_000,
         onPermissionAttempt: () => {
-          if (turn?.active) {
+          if (turn.active) {
             queue.push({
               type: "progress",
               text: "Hermes requested a native permission.",
@@ -284,14 +313,16 @@ export class HermesRuntime implements AgentRuntime {
           }
         },
         onUpdate: (sessionId, update) => {
-          if (!turn?.active || sessionId !== turn.sessionId) return;
+          if (!turn.active || sessionId !== turn.sessionId) return;
           const kind = update.sessionUpdate;
           if (kind === "agent_message_chunk") {
             pendingText += textFromUpdate(update);
             emitText();
           } else if (kind === "tool_call") {
             const title = typeof update.title === "string" ? update.title : "";
-            if (!title.startsWith("mcp__ardur__")) {
+            // The pinned adapter's generic MCP fallback uses the exact tool name as title;
+            // rawInput contains arguments and kind is only a coarse category.
+            if (!allowedToolTitles.has(title)) {
               fenced = true;
               queue.end(new Error("Hermes tried to use a tool this bot was not given."));
               void this.abort(request.runId);
@@ -303,12 +334,8 @@ export class HermesRuntime implements AgentRuntime {
           }
         },
       });
-      turn = { active: true, child, client, queue, teardown: result.teardown };
-      this.running.set(request.runId, turn);
+      turn.client = client;
       child.stderr.resume();
-      const stopOnSignal = () => void this.abort(request.runId);
-      context?.signal?.addEventListener("abort", stopOnSignal, { once: true });
-      if (context?.signal?.aborted) stopOnSignal();
       const runProtocol = async () => {
         try {
           const initialized = await client.request("initialize", {
@@ -319,8 +346,9 @@ export class HermesRuntime implements AgentRuntime {
             },
             clientInfo: { name: "ardur", version: "0.1.0" },
           });
-          if (initialized.protocolVersion !== 1) throw new Error("ACP protocol version changed.");
-          if (!turn?.active) return;
+          if (initialized.protocolVersion !== 1)
+            throw new AcpClientError("ACP protocol version changed.");
+          if (!turn.active || context?.signal?.aborted) return;
           const mcpConfig = result.mcpConfig ?? mcp!.config;
           const created = await client.request("session/new", {
             cwd: result.sessionCwd ?? workspace,
@@ -334,8 +362,8 @@ export class HermesRuntime implements AgentRuntime {
             ],
           });
           if (typeof created.sessionId !== "string" || !created.sessionId)
-            throw new Error("ACP did not create a session.");
-          if (!turn?.active) return;
+            throw new AcpClientError("ACP did not create a session.");
+          if (!turn.active || context?.signal?.aborted) return;
           turn.sessionId = created.sessionId;
           await request.onRuntimeInfo?.({
             runtimeKind: "hermes" as RuntimeInfo["runtimeKind"],
@@ -343,6 +371,7 @@ export class HermesRuntime implements AgentRuntime {
             effortAttested: false,
             effortAttestationReason: "ACP does not attest the effort applied to provider requests.",
           });
+          if (!turn.active || context?.signal?.aborted) return;
           const prompt = [
             { type: "text", text: request.prompt },
             ...(request.currentTurnImages ?? []).map((image) => ({
@@ -359,7 +388,7 @@ export class HermesRuntime implements AgentRuntime {
             },
             180_000,
           );
-          if (!turn?.active) return;
+          if (!turn.active || context?.signal?.aborted) return;
           if (response.stopReason !== "end_turn")
             throw new Error("Hermes did not complete the turn.");
           emitText(true);
@@ -385,8 +414,13 @@ export class HermesRuntime implements AgentRuntime {
           }
           queue.push({ type: "done" });
           queue.end();
-        } catch {
-          if (turn?.active) queue.end(new Error("Hermes could not complete this turn."));
+        } catch (error) {
+          if (turn.active)
+            queue.end(
+              new Error("Hermes could not complete this turn.", {
+                cause: error instanceof AcpClientError ? error : undefined,
+              }),
+            );
         }
       };
       const protocol = runProtocol();
@@ -395,14 +429,14 @@ export class HermesRuntime implements AgentRuntime {
       } finally {
         await this.abort(request.runId);
         await protocol;
-        context?.signal?.removeEventListener("abort", stopOnSignal);
       }
     } finally {
       this.running.delete(request.runId);
+      context?.signal?.removeEventListener("abort", stopOnSignal);
       try {
         await mcp?.close();
       } finally {
-        await rm(home, { recursive: true, force: true });
+        if (home) await rm(home, { recursive: true, force: true });
       }
     }
   }

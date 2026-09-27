@@ -1,7 +1,9 @@
+import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import type { AgentRunRequest, AgentRuntimeEvent } from "@ardurbot/adapter-kit";
 import { describe, expect, it, vi } from "vitest";
 import { HermesRuntime } from "./hermes-runtime.js";
+import { stopNative } from "./native-process.js";
 
 const fixture = fileURLToPath(new URL("./fixtures/fake-acp.mjs", import.meta.url));
 
@@ -25,9 +27,9 @@ function request(overrides: Partial<AgentRunRequest> = {}): AgentRunRequest {
   };
 }
 
-async function collect(runtime: HermesRuntime, run: AgentRunRequest) {
+async function collect(runtime: HermesRuntime, run: AgentRunRequest, signal?: AbortSignal) {
   const events: AgentRuntimeEvent[] = [];
-  for await (const event of runtime.run(run)) events.push(event);
+  for await (const event of runtime.run(run, { signal })) events.push(event);
   return events;
 }
 
@@ -88,6 +90,12 @@ describe("HermesRuntime M0 ACP seam", () => {
     );
   });
 
+  it("fails closed on an unlisted tool using the Ardur MCP name prefix", async () => {
+    await expect(collect(runtime("foreign-mcp"), request())).rejects.toThrow(
+      "Hermes tried to use a tool this bot was not given.",
+    );
+  });
+
   it("selects the offered reject_once option and records the attempt", async () => {
     const attempted = vi.fn();
     const events = await collect(runtime("permission", attempted), request());
@@ -110,11 +118,16 @@ describe("HermesRuntime M0 ACP seam", () => {
     ).toBe("capability denied");
   });
 
-  for (const scenario of ["malformed", "oversize", "exit"]) {
+  for (const [scenario, cause] of [
+    ["malformed", "ACP sent malformed JSON."],
+    ["oversize", "ACP line exceeded its size limit."],
+    ["exit", "ACP closed before the turn completed."],
+  ] as const) {
     it(`ends cleanly when the agent sends ${scenario}`, async () => {
-      await expect(collect(runtime(scenario), request())).rejects.toThrow(
-        "Hermes could not complete this turn.",
-      );
+      await expect(collect(runtime(scenario), request())).rejects.toMatchObject({
+        message: "Hermes could not complete this turn.",
+        cause: { message: cause },
+      });
     });
   }
 
@@ -153,8 +166,92 @@ describe("HermesRuntime M0 ACP seam", () => {
       .map((event) => event.text)
       .join("");
     expect(text).not.toContain("fixture-provider-key-123");
-    expect(text).toContain("[redacted]");
+    expect(text).not.toMatch(/[a-f0-9]{64}/);
+    expect(text.match(/\[redacted\]/g)).toHaveLength(2);
     expect(text).toContain("suffix");
+  });
+
+  for (const split of ["1", "63", "64", "three"]) {
+    it(`redacts a relay capability split at ${split}`, async () => {
+      const events = await collect(runtime("redact-boundaries"), request({ prompt: split }));
+      const text = events
+        .filter((event) => event.type === "text")
+        .map((event) => event.text)
+        .join("");
+      expect(text).not.toMatch(/[a-f0-9]{64}/);
+      expect(text.match(/\[redacted\]/g)).toHaveLength(2);
+    });
+  }
+
+  it("reserves a run during launch and fences an abort before ACP starts", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let launched!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      launched = resolve;
+    });
+    const writes: string[] = [];
+    const adapter = new HermesRuntime({
+      command: process.execPath,
+      launch: async (spec) => {
+        launched();
+        await gate;
+        const child = spawn(spec.command, [fixture, "text"], {
+          cwd: spec.cwd,
+          env: spec.env,
+          stdio: "pipe",
+        });
+        const write = child.stdin.write.bind(child.stdin);
+        child.stdin.write = ((value: string) => {
+          writes.push(value);
+          return write(value);
+        }) as typeof child.stdin.write;
+        return { child, teardown: async () => stopNative(child) };
+      },
+    });
+    const run = request();
+    const first = collect(adapter, run);
+    await entered;
+    const second = collect(adapter, run).then(
+      () => "completed",
+      (error: Error) => error.message,
+    );
+    await adapter.abort(run.runId);
+    release();
+    expect(await first).not.toContainEqual({ type: "done" });
+    expect(await second).toBe("This Hermes run is already active.");
+    expect(writes.some((line) => line.includes("session/prompt"))).toBe(false);
+    expect(writes.some((line) => line.includes("session/new"))).toBe(false);
+  });
+
+  it("does not prompt after cancellation in onRuntimeInfo", async () => {
+    const writes: string[] = [];
+    const adapter = new HermesRuntime({
+      command: process.execPath,
+      launch: async (spec) => {
+        const child = spawn(spec.command, [fixture, "text"], {
+          cwd: spec.cwd,
+          env: spec.env,
+          stdio: "pipe",
+        });
+        const write = child.stdin.write.bind(child.stdin);
+        child.stdin.write = ((value: string) => {
+          writes.push(value);
+          return write(value);
+        }) as typeof child.stdin.write;
+        return { child, teardown: async () => stopNative(child) };
+      },
+    });
+    const run = request();
+    const controller = new AbortController();
+    run.onRuntimeInfo = async () => {
+      controller.abort();
+      await Promise.resolve();
+    };
+    expect(await collect(adapter, run, controller.signal)).not.toContainEqual({ type: "done" });
+    expect(writes.some((line) => line.includes("session/prompt"))).toBe(false);
   });
 
   it("does not turn an ACP default zero into measured output usage", async () => {

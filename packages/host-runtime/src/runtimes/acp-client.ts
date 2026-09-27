@@ -2,6 +2,8 @@ import type { ChildProcessWithoutNullStreams } from "node:child_process";
 
 type JsonObject = Record<string, unknown>;
 
+export class AcpClientError extends Error {}
+
 export interface AcpClientOptions {
   maxLineBytes?: number;
   timeoutMs?: number;
@@ -29,19 +31,24 @@ export class AcpClient {
     this.timeoutMs = options.timeoutMs ?? 30_000;
     child.stdout.on("data", (chunk: Buffer) => this.receive(chunk));
     child.stdout.on("end", () => this.fail("ACP closed before the turn completed."));
+    child.stdin.on("error", () => this.fail("ACP input closed."));
     child.on("error", () => this.fail("ACP process failed."));
     child.on("close", () => this.fail("ACP process exited before the turn completed."));
   }
 
   private send(value: JsonObject) {
     if (this.closed) throw this.closed;
+    if (this.child.stdin.destroyed || !this.child.stdin.writable) {
+      this.fail("ACP input closed.");
+      throw this.closed;
+    }
     const line = `${JSON.stringify(value)}\n`;
     this.child.stdin.write(line);
   }
 
   private fail(message: string) {
     if (this.closed) return;
-    this.closed = new Error(message);
+    this.closed = new AcpClientError(message);
     this.buffer = Buffer.alloc(0);
     for (const entry of this.pending.values()) {
       clearTimeout(entry.timer);
@@ -144,21 +151,21 @@ export class AcpClient {
     }
     this.pending.delete(message.id);
     clearTimeout(entry.timer);
-    if (message.error !== undefined) entry.reject(new Error("ACP request failed."));
+    if (message.error !== undefined) entry.reject(new AcpClientError("ACP request failed."));
     else if (message.result && typeof message.result === "object" && !Array.isArray(message.result))
       entry.resolve(message.result as JsonObject);
-    else entry.reject(new Error("ACP sent an invalid response."));
+    else entry.reject(new AcpClientError("ACP sent an invalid response."));
   }
 
   request(method: string, params: JsonObject, timeoutMs = this.timeoutMs): Promise<JsonObject> {
     if (this.closed) return Promise.reject(this.closed);
     if (!Number.isSafeInteger(this.nextId))
-      return Promise.reject(new Error("ACP request IDs were exhausted."));
+      return Promise.reject(new AcpClientError("ACP request IDs were exhausted."));
     const id = this.nextId++;
     return new Promise<JsonObject>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        reject(new Error("ACP request timed out."));
+        reject(new AcpClientError("ACP request timed out."));
       }, timeoutMs);
       this.pending.set(id, { resolve, reject, timer });
       try {

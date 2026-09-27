@@ -61,13 +61,14 @@ async function handle(value) {
     return;
   }
   if (scenario === "exit") process.exit(4);
-  if (scenario === "native") {
+  if (scenario === "native" || scenario === "foreign-mcp") {
     update({
       sessionUpdate: "tool_call",
       toolCallId: "native-1",
-      title: "terminal: unavailable",
+      title: scenario === "native" ? "terminal: unavailable" : "mcp__ardur__unlisted",
       status: "pending",
     });
+    if (scenario === "foreign-mcp") send({ id: value.id, result: { stopReason: "end_turn" } });
     return;
   }
   if (scenario === "permission") {
@@ -112,6 +113,21 @@ async function handle(value) {
     process.stderr.write(`${process.env.ARDUR_HERMES_PROVIDER_KEY} ${relayKey}\n`);
     message(`prefix ${process.env.ARDUR_HERMES_PROVIDER_KEY.slice(0, 4)}`);
     message(`${process.env.ARDUR_HERMES_PROVIDER_KEY.slice(4)} ${relayKey} suffix`);
+    send({ id: value.id, result: { stopReason: "end_turn" } });
+    return;
+  }
+  if (scenario === "redact-boundaries") {
+    const relayKey = mcp.args.at(-1);
+    const chunks =
+      value.params.prompt[0].text === "three"
+        ? [relayKey.slice(0, 1), relayKey.slice(1, -1), relayKey.slice(-1)]
+        : (() => {
+            const cut = Number(value.params.prompt[0].text);
+            return [relayKey.slice(0, cut), relayKey.slice(cut)];
+          })();
+    message("prefix ");
+    for (const chunk of chunks) message(chunk);
+    message(` ${process.env.ARDUR_HERMES_PROVIDER_KEY} suffix`);
     send({ id: value.id, result: { stopReason: "end_turn" } });
     return;
   }

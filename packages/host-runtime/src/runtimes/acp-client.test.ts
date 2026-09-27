@@ -24,4 +24,24 @@ describe("AcpClient request correlation", () => {
       await stopNative(child);
     }
   });
+  it("fails a write after the agent closes stdin without an unhandled stream error", async () => {
+    const child = spawn(
+      process.execPath,
+      [
+        "-e",
+        'const fs=require("node:fs");process.stdin.once("data",chunk=>{const item=JSON.parse(chunk.toString());process.stdout.write(JSON.stringify({jsonrpc:"2.0",id:item.id,result:{ok:true}})+"\\n");fs.closeSync(0);setTimeout(()=>{},1000)})',
+      ],
+      { env: { PATH: "/usr/bin:/bin" }, stdio: "pipe" },
+    );
+    child.stderr.resume();
+    const client = new AcpClient(child);
+    try {
+      expect(await client.request("first", {})).toEqual({ ok: true });
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      await expect(client.request("second", {}, 500)).rejects.toThrow("ACP input closed.");
+    } finally {
+      client.close();
+      await stopNative(child);
+    }
+  });
 });
