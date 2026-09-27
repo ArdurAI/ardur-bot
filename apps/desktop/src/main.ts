@@ -697,7 +697,7 @@ function oauthPopupWindowOptions() {
   };
 }
 
-function createSetupWindow() {
+function createSetupWindow(options: { resume?: boolean } = {}) {
   const icon = developmentIcon();
   const win = new BrowserWindow({
     ...setupWindowOptions(process.platform),
@@ -721,7 +721,10 @@ function createSetupWindow() {
     restoreAppWindowAfterSetup();
   });
   void win.loadFile(
-    path.join(import.meta.dirname, guidedEngine ? "guided-setup.html" : "setup.html"),
+    path.join(
+      import.meta.dirname,
+      guidedEngine && !options.resume ? "guided-setup.html" : "setup.html",
+    ),
   );
   markOnce("rk:main:setup-window-created");
   return win;
@@ -737,7 +740,7 @@ function showSetupWindow(error: string | null = null, options: { resume?: boolea
     if (error !== null) setupWindow.reload();
     win = setupWindow;
   } else {
-    win = createSetupWindow();
+    win = createSetupWindow(options);
   }
   if (mainWindow !== null && !mainWindow.isDestroyed()) mainWindow.hide();
   win.show();

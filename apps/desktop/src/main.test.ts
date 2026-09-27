@@ -125,6 +125,47 @@ describe("first-launch setup dispatch", () => {
 });
 
 describe("guided setup service handoff", () => {
+  it.each([
+    { resume: true, document: "setup.html" },
+    { resume: false, document: "guided-setup.html" },
+  ])("loads $document when setup resume is $resume", ({ resume, document }) => {
+    const source = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
+    const start = source.indexOf("function createSetupWindow(");
+    const end = source.indexOf("/**\n * After setup", start);
+    expect(start).toBeGreaterThan(0);
+    expect(end).toBeGreaterThan(start);
+    const loadFile = vi.fn(async () => undefined);
+    class SetupWindow extends WindowFake {
+      loadFile = loadFile;
+      reload = vi.fn();
+    }
+    const context = {
+      BrowserWindow: SetupWindow,
+      setupWindow: null,
+      mainWindow: null,
+      setupError: null,
+      setupResumesLocal: false,
+      guidedEngine: { running: () => false },
+      path,
+      __dirname: "/fixture",
+      process: { platform: "linux" },
+      developmentIcon: () => undefined,
+      setupWindowOptions: () => ({}),
+      restoreAppWindowAfterSetup: vi.fn(),
+      markOnce: vi.fn(),
+    };
+    vm.runInNewContext(
+      stripTypeScriptTypes(source.slice(start, end)).replaceAll("import.meta.dirname", "__dirname"),
+      context,
+    );
+    (
+      context as typeof context & {
+        showSetupWindow: (error: null, options: { resume: boolean }) => void;
+      }
+    ).showSetupWindow(null, { resume });
+    expect(loadFile).toHaveBeenCalledWith(path.join("/fixture", document));
+  });
+
   it("starts local services only after fresh pilot verification", () => {
     const source = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
     const start = source.indexOf('ipcMain.handle("desktop.setup.stack.start"');
