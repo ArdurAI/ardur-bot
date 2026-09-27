@@ -95,7 +95,7 @@ describe("display and warnings", () => {
 });
 
 describe("probeApiBase", () => {
-  it("accepts a Ardur Bot /rpc/health response", async () => {
+  it("accepts an Ardur /rpc/health response", async () => {
     const fetchImpl = vi.fn(
       async () =>
         new Response(JSON.stringify({ json: { ok: true, version: "0.1.0" } }), { status: 200 }),
@@ -110,7 +110,7 @@ describe("probeApiBase", () => {
     );
   });
 
-  it("rejects a host that is up but is not Ardur Bot", async () => {
+  it("rejects a host that is up but is not Ardur", async () => {
     const fetchImpl = vi.fn(
       async () => new Response("ok", { status: 200 }),
     ) as unknown as typeof fetch;

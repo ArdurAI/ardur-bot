@@ -2,7 +2,7 @@ import type { IntegrationConnection, McpServer } from "@ardurbot/contracts";
 import type { Locator } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 import { integrationCatalog } from "../../../packages/adapters/src/integration-catalog.js";
-import { captureScreenshot, completeOnboarding, signup } from "./helpers";
+import { captureScreenshot, completeOnboarding, openUserSettings, signup } from "./helpers";
 
 test("Settings catalog connects and grants only selected tools", async ({ page }, testInfo) => {
   await signup(page, `catalog-${Date.now()}@ardurbot.test`, "password12", "Catalog test");
@@ -65,7 +65,7 @@ test("Settings catalog connects and grants only selected tools", async ({ page }
     connections = [connection];
     await route.fulfill({
       contentType: "text/html",
-      body: "<p>Connected to Notion. You can close this tab and return to Ardur Bot.</p><script>window.close()</script>",
+      body: "<p>Connected to Notion. You can close this tab and return to Ardur.</p><script>window.close()</script>",
     });
   });
   let assigned:
@@ -83,12 +83,7 @@ test("Settings catalog connects and grants only selected tools", async ({ page }
       },
     });
   });
-  await page
-    .locator("aside")
-    .first()
-    .getByRole("button", { name: "Integrations", exact: true })
-    .click();
-  const settings = page.getByTestId("user-settings");
+  const settings = await openUserSettings(page, "integrations");
   await expect(settings).toHaveAttribute("data-settings-section", "integrations");
   await expect(settings.locator("tbody tr")).toHaveCount(10);
   await settings.getByRole("searchbox", { name: "Search integrations" }).fill("Notion");
@@ -287,12 +282,7 @@ test("Find apps connects a token app, waits for an OAuth app, and manages custom
     }),
   );
 
-  await page
-    .locator("aside")
-    .first()
-    .getByRole("button", { name: "Integrations", exact: true })
-    .click();
-  const settings = page.getByTestId("user-settings");
+  const settings = await openUserSettings(page, "integrations");
   await expect(settings).toHaveAttribute("data-settings-section", "integrations");
   await settings.getByRole("button", { name: "Find apps", exact: true }).click();
   const finder = settings.getByTestId("find-apps");

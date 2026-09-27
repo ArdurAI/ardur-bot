@@ -1260,7 +1260,7 @@ it("never restores a computer whose engine is gone onto the host", async () => {
         HostMoveUnavailableError,
       );
       await expect(replaceComputer(deps, "computer", mode, runContext)).rejects.toThrow(
-        "Moving a computer onto the machine running Ardur Bot is not available yet. Choose a saved connection or keep the current engine.",
+        "Moving a computer onto the machine running Ardur is not available yet. Choose a saved connection or keep the current engine.",
       );
       expect(computer.updateMany).not.toHaveBeenCalled();
       expect(notes).toEqual([]);
@@ -1934,7 +1934,7 @@ it("refuses to clear a connection while the deployment default is the host", asy
       { imageProfile: "base", connectionId: null },
     ),
   ).rejects.toThrow(
-    "Moving a computer onto the machine running Ardur Bot is not available yet. Choose a saved connection or keep the current engine.",
+    "Moving a computer onto the machine running Ardur is not available yet. Choose a saved connection or keep the current engine.",
   );
   expect(podman.destroy).not.toHaveBeenCalled();
   expect(computer.updateMany).not.toHaveBeenCalled();

@@ -1,7 +1,7 @@
-export const SITE_NAME = "Ardur Bot";
+export const SITE_NAME = "Ardur";
 export const SITE_URL = "https://bot.ardur.ai";
 export const SITE_DESCRIPTION =
-  "Ardur Bot is an open source Grok Bot alternative for persistent AI teammates that do real work. Your keys, your model, your machine.";
+  "Ardur is an open source Grok Bot alternative for persistent AI teammates that do real work. Your keys, your model, your machine.";
 
 export const GITHUB_URL = "https://github.com/ardurai/ardur-bot";
 export const GITHUB_API_REPO = "https://api.github.com/repos/ardurai/ardur-bot";

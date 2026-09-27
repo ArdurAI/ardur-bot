@@ -731,7 +731,7 @@ describe("composio tool mapping", () => {
     ).toEqual({ connectIds: ["row-gh"], revokeIds: [] });
   });
 
-  it("only fetches live Composio slugs when a Ardur Bot row is still pending or errored", () => {
+  it("only fetches live Composio slugs when a Ardur row is still pending or errored", () => {
     expect(needsLivePluginSync([{ status: "connected" }, { status: "revoked" }])).toBe(false);
     expect(needsLivePluginSync([{ status: "pending" }])).toBe(true);
     expect(needsLivePluginSync([{ status: "error" }])).toBe(true);
@@ -746,7 +746,7 @@ describe("composio tool mapping", () => {
     ).toEqual([{ provider: "github", displayName: "GitHub" }]);
   });
 
-  it("plans DB sync when Composio is connected but Ardur Bot is still pending", () => {
+  it("plans DB sync when Composio is connected but Ardur is still pending", () => {
     expect(
       planLiveConnectionSync(
         [

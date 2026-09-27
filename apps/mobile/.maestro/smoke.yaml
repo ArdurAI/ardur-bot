@@ -1,21 +1,21 @@
 appId: ai.ardur.bot
-name: Ardur Bot mobile smoke
+name: Ardur mobile smoke
 ---
 - launchApp:
     clearState: true
 
-- assertVisible: "Sign in to Ardur Bot"
+- assertVisible: "Sign in to Ardur"
 - assertVisible: "Sign up"
 - tapOn: "Sign up"
-- assertVisible: "Sign up for Ardur Bot"
+- assertVisible: "Sign up for Ardur"
 - assertVisible: "Name"
 - tapOn: "Sign in"
-- assertVisible: "Sign in to Ardur Bot"
+- assertVisible: "Sign in to Ardur"
 - tapOn: "Email"
 - inputText: ${ARDURBOT_E2E_EMAIL}
 - tapOn: "Password"
 - inputText: ${ARDURBOT_E2E_PASSWORD}
-- tapOn: "Sign in to Ardur Bot"
+- tapOn: "Sign in to Ardur"
 - tapOn: "Sign in"
 
 - extendedWaitUntil:

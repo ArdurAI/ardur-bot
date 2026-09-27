@@ -1,5 +1,5 @@
 name: Feature request
-description: Something Ardur Bot should do.
+description: Something Ardur should do.
 labels: ["enhancement"]
 body:
   - type: textarea

@@ -233,7 +233,7 @@ test("learning inbox shows board-item suggestions, their outcome, and a close th
   await expect(dialog.getByText("A board item filed by a bot could not be closed.")).toBeVisible();
   await expect(
     dialog.getByText(
-      "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected.",
+      "Ardur tried five times. Close it on the Board, or check that this computer is connected.",
       { exact: true },
     ),
   ).toBeVisible();

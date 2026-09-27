@@ -1733,7 +1733,7 @@ model ComputerAdmission {
 model InstanceIdentity {
   id String @id @default("home")
   instanceId String @unique
-  homeName String @default("Ardur Bot")
+  homeName String @default("Ardur")
   publicKey String
   fingerprint String
   certificate String

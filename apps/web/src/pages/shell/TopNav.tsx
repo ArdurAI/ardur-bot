@@ -15,10 +15,10 @@ export function TopNav() {
     pathname === "/app/board" ||
     (pathname === "/app" && new URLSearchParams(search).get("view") === "board");
   const title = board
-    ? `${i18n._(msg`Board`)} — Ardur Bot`
+    ? `${i18n._(msg`Board`)} — Ardur`
     : current
-      ? `${i18n._(current.label)} — Ardur Bot`
-      : "Ardur Bot";
+      ? `${i18n._(current.label)} — Ardur`
+      : "Ardur";
   useEffect(() => {
     document.title = title;
   }, [title]);

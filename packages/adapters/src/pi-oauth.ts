@@ -27,21 +27,19 @@ export const SUBSCRIPTION_SIGN_IN_PROVIDERS: Record<
     mode: "device-code",
     loginLabel: "Sign in with ChatGPT Plus/Pro",
     hint: "ChatGPT Plus/Pro",
-    billing:
-      "Sign in with ChatGPT Plus or Pro. Uses your OpenAI subscription. Ardur Bot does not pay.",
+    billing: "Sign in with ChatGPT Plus or Pro. Uses your OpenAI subscription. Ardur does not pay.",
   },
   [COPILOT_OAUTH_PROVIDER]: {
     mode: "device-code",
     loginLabel: "Sign in with GitHub Copilot",
     hint: "Copilot",
-    billing: "Sign in with GitHub Copilot. Uses your Copilot subscription. Ardur Bot does not pay.",
+    billing: "Sign in with GitHub Copilot. Uses your Copilot subscription. Ardur does not pay.",
   },
   [XAI_OAUTH_PROVIDER]: {
     mode: "device-code",
     loginLabel: "Sign in with SuperGrok or X Premium",
     hint: "SuperGrok / key",
-    billing:
-      "Sign in with SuperGrok or X Premium, or paste an xAI API key. Ardur Bot does not pay.",
+    billing: "Sign in with SuperGrok or X Premium, or paste an xAI API key. Ardur does not pay.",
   },
 };
 

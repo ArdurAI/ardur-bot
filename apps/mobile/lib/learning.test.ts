@@ -507,7 +507,7 @@ it("says a board close that keeps failing could not be closed, and what to do", 
   });
   const title = "A board item filed by a bot could not be closed.";
   const body =
-    "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected.";
+    "Ardur tried five times. Close it on the Board, or check that this computer is connected.";
   const container = document.createElement("div");
   const root = createRoot(container);
   try {

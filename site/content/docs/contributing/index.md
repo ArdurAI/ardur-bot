@@ -1,12 +1,12 @@
 ---
-title: "Contributing to Ardur Bot"
-description: "Thanks for helping. Ardur Bot is early and moves fast, so the process is deliberately light."
+title: "Contributing to Ardur"
+description: "Thanks for helping. Ardur is early and moves fast, so the process is deliberately light."
 source_path: "CONTRIBUTING.md"
 ---
 
 > [Source: CONTRIBUTING.md](https://github.com/ArdurAI/ardur-bot/blob/__ARDUR_BOT_SOURCE_REF__/CONTRIBUTING.md). Edit the source file, then run `python3 site/scripts/sync_docs.py` to refresh this page.
 
-Thanks for helping. Ardur Bot is early and moves fast, so the process is deliberately light.
+Thanks for helping. Ardur is early and moves fast, so the process is deliberately light.
 
 ## How work flows
 
@@ -38,7 +38,7 @@ you touch that area.
 
 ## Syncing with upstream
 
-Ardur Bot is a fork of [Rakazo](https://github.com/elie222/rakazo). To pull upstream changes:
+Ardur is a fork of [Rakazo](https://github.com/elie222/rakazo). To pull upstream changes:
 
 ```sh
 git fetch upstream
