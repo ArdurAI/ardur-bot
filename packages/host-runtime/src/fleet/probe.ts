@@ -4,6 +4,14 @@ import type { FleetProcess } from "./process.js";
 /** Only stable connection failures become user-facing results; never return raw CLI stderr. */
 export function engineFailureReason(error: unknown): FleetReachabilityReason | null {
   const message = error instanceof Error ? error.message : String(error);
+  if (
+    message === "permission-denied" ||
+    message === "timed-out" ||
+    message === "socket-missing" ||
+    message === "engine-not-running" ||
+    message === "not-reachable"
+  )
+    return message;
   if (/permission denied|eacces|eperm|access is denied/i.test(message)) return "permission-denied";
   if (/timed? out|timeout|aborted|operation stopped/i.test(message)) return "timed-out";
   if (/enoent|no such file|does not exist/i.test(message)) return "socket-missing";
@@ -14,7 +22,7 @@ export function engineFailureReason(error: unknown): FleetReachabilityReason | n
   )
     return "not-reachable";
   if (
-    /engine-not-running|engine not running|refused|cannot connect|connection failed|unavailable|unreachable|no route|dial unix|error during connect/i.test(
+    /engine-not-running|engine not running|is not running or not reachable|refused|cannot connect|connection failed|unavailable|unreachable|no route|dial unix|error during connect/i.test(
       message,
     )
   )

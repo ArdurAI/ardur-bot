@@ -61,6 +61,59 @@ function storedComputer(overrides: Record<string, unknown> = {}) {
   };
 }
 
+it("keeps an explicit failed Test ahead of cached healthy capacity", async () => {
+  const capacity = {
+    ...unknownCapacity(),
+    source: "docker" as const,
+    memoryFree: 8 * 1024 ** 3,
+    memoryTotal: 16 * 1024 ** 3,
+  };
+  const prisma = {
+    connection: {
+      findMany: async () => [
+        {
+          id: "saved",
+          displayName: "Docker",
+          status: "connected",
+          metadata: { engine: "docker", endpoint: "unix:///fixture/docker.sock" },
+        },
+      ],
+    },
+    bot: { findMany: async () => [] },
+    space: { findUniqueOrThrow: async () => ({ placement: { mode: "free-memory" } }) },
+    deploymentSettings: { findUnique: async () => null },
+    hostRegistration: { findUnique: async () => null },
+  } as unknown as PrismaClient;
+  const fallback = {
+    describe: () => ({ id: "docker", kind: "docker" }),
+    capacity: async () => capacity,
+  } as unknown as SandboxProvider;
+  const catalog = new FleetCatalog(prisma, { load: () => "" }, {}, fallback);
+  vi.spyOn(catalog.connections, "resolve").mockResolvedValue({
+    capacity: async () => capacity,
+  } as never);
+  catalog.recordTest("saved", {
+    reachability: {
+      status: "installed-not-running",
+      reason: "engine-not-running",
+      checkedAt: new Date().toISOString(),
+    },
+  });
+  const context: AdapterContext = {
+    userId: "owner",
+    spaceId: "space",
+    operationId: "test",
+    traceId: "test",
+    signal: new AbortController().signal,
+  };
+  const fleet = await catalog.list(context);
+  expect(fleet.targets.find((target) => target.id === "saved")).toMatchObject({
+    state: "unavailable",
+    reachability: { status: "installed-not-running" },
+    capacity: { memoryFree: null },
+  });
+});
+
 function localDocker(ref: Partial<ComputerRef> = {}) {
   return {
     provision: vi.spyOn(DockerSandboxProvider.prototype, "provision").mockResolvedValue({

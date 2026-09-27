@@ -43,7 +43,7 @@
       "id": "choose",
       "eyebrow": "CHOICE",
       "title": "Choose each bot's model",
-      "body": "Choose each bot's runtime and model, including experimental Antigravity text conversations on a connected computer.",
+      "body": "Choose each bot's runtime and model, and manage saved computer connections from Settings.",
       "source": "README.md#What you get today"
     },
     {

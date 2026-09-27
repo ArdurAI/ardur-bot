@@ -20,6 +20,20 @@ import { rpc } from "../../lib/rpc";
 import { useTargetName } from "./target-name";
 
 type Fleet = Awaited<ReturnType<typeof rpc.fleet.list>>;
+type ConnectionDetails = Awaited<ReturnType<typeof rpc.fleet.details>>;
+
+export function discoveredFormKind(
+  target?: FleetTarget,
+): "docker" | "podman" | "kubernetes" | "ssh" {
+  if (target?.kind === "kubernetes") return "kubernetes";
+  if (target?.kind === "ssh" || target?.kind === "tailscale" || !target) return "ssh";
+  if (
+    target.kind === "podman" &&
+    /(?:^|[/.:-])podman(?:[/.:-]|$)/i.test(`${target.endpoint ?? ""} ${target.context ?? ""}`)
+  )
+    return "podman";
+  return "docker";
+}
 
 function ReachabilityReason({ reason }: { reason: FleetReachabilityReason }) {
   const { t } = useLingui();
@@ -44,7 +58,12 @@ export function FleetSettings() {
   const [fleet, setFleet] = useState<Fleet | null>(null);
   const targetName = useTargetName(fleet?.hostLabel);
   const [discovered, setDiscovered] = useState<FleetTarget[]>([]);
-  const [adding, setAdding] = useState<{ target?: FleetTarget } | null>(null);
+  const [adding, setAdding] = useState<{
+    target?: FleetTarget;
+    details?: ConnectionDetails;
+  } | null>(null);
+  const [removing, setRemoving] = useState<FleetTarget | null>(null);
+  const [removeError, setRemoveError] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const refresh = async () => setFleet(await rpc.fleet.list());
@@ -159,28 +178,56 @@ export function FleetSettings() {
                   {target.kind === "tailscale" ? t`Add as SSH computer` : t`Add`}
                 </Button>
               ) : (
-                <Button
-                  variant="ghost"
-                  disabled={busy}
-                  onClick={() =>
-                    void perform(async () => {
-                      const tested = await rpc.fleet.test({ connectionId: target.connectionId });
-                      setFleet((current) =>
-                        current
-                          ? {
-                              ...current,
-                              targets: current.targets.map(
-                                (row) =>
-                                  tested.targets.find((result) => result.id === row.id) ?? row,
-                              ),
-                            }
-                          : current,
-                      );
-                    })
-                  }
-                >
-                  <Trans>Test</Trans>
-                </Button>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    disabled={busy}
+                    onClick={() =>
+                      void perform(async () => {
+                        const tested = await rpc.fleet.test({ connectionId: target.connectionId });
+                        setFleet((current) =>
+                          current
+                            ? {
+                                ...current,
+                                targets: current.targets.map(
+                                  (row) =>
+                                    tested.targets.find((result) => result.id === row.id) ?? row,
+                                ),
+                              }
+                            : current,
+                        );
+                      })
+                    }
+                  >
+                    <Trans>Test</Trans>
+                  </Button>
+                  {target.connectionId ? (
+                    <>
+                      <Button
+                        variant="ghost"
+                        disabled={busy}
+                        onClick={() =>
+                          void rpc.fleet
+                            .details({ connectionId: target.connectionId! })
+                            .then((details) => setAdding({ target, details }))
+                            .catch(() => setError(t`Could not load this computer. Try again.`))
+                        }
+                      >
+                        <Trans>Edit</Trans>
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        disabled={busy}
+                        onClick={() => {
+                          setRemoveError("");
+                          setRemoving(target);
+                        }}
+                      >
+                        <Trans>Remove</Trans>
+                      </Button>
+                    </>
+                  ) : null}
+                </div>
               )}
             </div>
             <CapacityBar target={target} />
@@ -256,6 +303,8 @@ export function FleetSettings() {
         <AddComputer
           key={adding.target?.id ?? "new"}
           target={adding.target}
+          details={adding.details}
+          onRefresh={refresh}
           onCancel={() => setAdding(null)}
           onSaved={async () => {
             setAdding(null);
@@ -263,6 +312,72 @@ export function FleetSettings() {
             window.dispatchEvent(new Event("fleet:changed"));
           }}
         />
+      ) : null}
+      {removing ? (
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            if (!open && !busy) setRemoving(null);
+          }}
+        >
+          <DialogContent aria-label={t`Remove computer`} aria-describedby={undefined}>
+            <DialogHeader>
+              <DialogTitle>
+                <Trans>Remove computer</Trans>
+              </DialogTitle>
+            </DialogHeader>
+            <p className="text-sm">
+              <Trans>
+                Remove {targetName(removing)}? Its saved connection and credentials will be deleted.
+                Past run history remains.
+              </Trans>
+            </p>
+            {removing.bots.length ? (
+              <p className="text-sm text-muted-foreground">
+                <Trans>
+                  Bots on this computer: {removing.bots.map((bot) => bot.name).join(", ")}
+                </Trans>
+              </p>
+            ) : null}
+            {removeError ? (
+              <p role="alert" className="text-sm text-destructive">
+                {removeError}
+              </p>
+            ) : null}
+            <div className="flex gap-2">
+              <Button
+                variant="destructive"
+                disabled={busy}
+                onClick={() => {
+                  setBusy(true);
+                  void rpc.fleet
+                    .remove({ connectionId: removing.connectionId! })
+                    .then(async () => {
+                      setRemoving(null);
+                      await refresh();
+                      window.dispatchEvent(new Event("fleet:changed"));
+                    })
+                    .catch((cause: unknown) =>
+                      setRemoveError(
+                        cause instanceof Error &&
+                          /^\d+ (?:bot runs|bots run) on this computer: .+\. Move (?:it|them) first\.$/.test(
+                            cause.message,
+                          )
+                          ? cause.message
+                          : t`Could not remove this computer. Try again.`,
+                      ),
+                    )
+                    .finally(() => setBusy(false));
+                }}
+              >
+                <Trans>Remove</Trans>
+              </Button>
+              <Button variant="ghost" disabled={busy} onClick={() => setRemoving(null)}>
+                <Trans>Cancel</Trans>
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       ) : null}
     </section>
   );
@@ -378,47 +493,53 @@ function PlacementControls({
 
 function AddComputer({
   target,
+  details,
   onCancel,
   onSaved,
+  onRefresh,
 }: {
   target?: FleetTarget;
+  details?: ConnectionDetails;
   onCancel: () => void;
   onSaved: () => Promise<void>;
+  onRefresh: () => Promise<void>;
 }) {
   const { t } = useLingui();
-  const [kind, setKind] = useState(
-    target?.kind === "kubernetes"
-      ? "kubernetes"
-      : target?.kind === "docker" || target?.kind === "podman"
-        ? target.kind
-        : "ssh",
+  const [kind, setKind] = useState(details?.settings.engine ?? discoveredFormKind(target));
+  const [name, setName] = useState(details?.name ?? target?.name ?? "");
+  const [host, setHost] = useState(details?.settings.ssh?.host ?? target?.ssh?.host ?? "");
+  const [user, setUser] = useState(details?.settings.ssh?.user ?? target?.ssh?.user ?? "");
+  const [port, setPort] = useState(details?.settings.ssh?.port ?? target?.ssh?.port ?? 22);
+  const [authentication, setAuthentication] = useState(
+    details?.settings.ssh?.authentication ?? target?.ssh?.authentication ?? "agent",
   );
-  const [name, setName] = useState(target?.name ?? "");
-  const [host, setHost] = useState(target?.ssh?.host ?? "");
-  const [user, setUser] = useState(target?.ssh?.user ?? "");
-  const [port, setPort] = useState(target?.ssh?.port ?? 22);
-  const [authentication, setAuthentication] = useState(target?.ssh?.authentication ?? "agent");
   const [keyPath, setKeyPath] = useState("");
-  const [jumpHost, setJumpHost] = useState("");
-  const [baseDirectory, setBaseDirectory] = useState("~/.ardurbot/computers");
-  const [endpoint, setEndpoint] = useState(target?.endpoint ?? "");
-  const [context, setContext] = useState(target?.context ?? "");
-  const [namespace, setNamespace] = useState("ardurbot");
+  const [jumpHost, setJumpHost] = useState(details?.settings.ssh?.jumpHost ?? "");
+  const [baseDirectory, setBaseDirectory] = useState(
+    details?.settings.ssh?.baseDirectory ?? "~/.ardurbot/computers",
+  );
+  const [endpoint, setEndpoint] = useState(
+    details?.settings.endpoint ?? details?.settings.socket ?? target?.endpoint ?? "",
+  );
+  const [context, setContext] = useState(details?.settings.context ?? target?.context ?? "");
+  const [namespace, setNamespace] = useState(details?.settings.namespace ?? "ardurbot");
   const [kubeconfig, setKubeconfig] = useState("");
-  const [kubeconfigPath, setKubeconfigPath] = useState("");
+  const [kubeconfigPath, setKubeconfigPath] = useState(details?.kubeconfigPath ?? "");
   const [resources, setResources] = useState({
-    storageSize: "10Gi",
-    storageClass: "",
-    cpuRequest: "250m",
-    cpuLimit: "2",
-    memoryRequest: "256Mi",
-    memoryLimit: "2Gi",
+    storageSize: details?.settings.storageSize ?? "10Gi",
+    storageClass: details?.settings.storageClass ?? "",
+    cpuRequest: details?.settings.cpuRequest ?? "250m",
+    cpuLimit: details?.settings.cpuLimit ?? "2",
+    memoryRequest: details?.settings.memoryRequest ?? "256Mi",
+    memoryLimit: details?.settings.memoryLimit ?? "2Gi",
   });
   const [tls, setTls] = useState({ ca: "", cert: "", key: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  async function save(event: FormEvent) {
-    event.preventDefault();
+  const [probeReason, setProbeReason] = useState<FleetReachabilityReason | null>(null);
+  const [confirmActive, setConfirmActive] = useState(false);
+  async function save(event?: FormEvent) {
+    event?.preventDefault();
     setBusy(true);
     setError("");
     try {
@@ -443,23 +564,61 @@ function AddComputer({
                 storageClass: resources.storageClass || undefined,
               }
             : {
-                endpoint,
-                ...(target?.context && endpoint === target.endpoint
-                  ? { dockerContext: target.context }
+                ...(details?.settings.socket && endpoint === details.settings.socket
+                  ? { socket: endpoint }
+                  : { endpoint }),
+                ...((details?.settings.dockerContext ?? target?.context) &&
+                endpoint === (details?.settings.endpoint ?? target?.endpoint)
+                  ? { dockerContext: details?.settings.dockerContext ?? target?.context }
                   : {}),
               }),
       });
-      await rpc.computer.connect({
+      const connection = {
         name,
         settings,
-        ...(kind === "ssh" && authentication === "private-key" ? { privateKeyPath: keyPath } : {}),
+        ...(kind === "ssh" && authentication === "private-key" && keyPath
+          ? { privateKeyPath: keyPath }
+          : {}),
         ...(kind === "kubernetes" && kubeconfig ? { kubeconfig } : {}),
-        ...(kind === "kubernetes" && kubeconfigPath ? { kubeconfigPath } : {}),
-        ...(endpoint.startsWith("tcp://") ? { tlsPaths: tls } : {}),
-      });
+        ...(kind === "kubernetes" && kubeconfigPath && kubeconfigPath !== details?.kubeconfigPath
+          ? { kubeconfigPath }
+          : {}),
+        ...(endpoint.startsWith("tcp://") && Object.values(tls).some(Boolean)
+          ? { tlsPaths: tls }
+          : {}),
+      };
+      if (details) {
+        const changed =
+          JSON.stringify({ ...settings, hostSecretId: undefined }) !==
+            JSON.stringify({ ...details.settings, hostSecretId: undefined }) ||
+          Boolean(
+            keyPath ||
+              kubeconfig ||
+              (kubeconfigPath && kubeconfigPath !== details.kubeconfigPath) ||
+              Object.values(tls).some(Boolean),
+          );
+        if (details.activeRuns && changed && !confirmActive) {
+          setConfirmActive(true);
+          return;
+        }
+        const result = await rpc.fleet.update({
+          connectionId: details.id,
+          connection,
+          confirmActive,
+        });
+        if (!result.ok) {
+          setProbeReason(result.reason);
+          await onRefresh();
+          return;
+        }
+      } else await rpc.computer.connect(connection);
       await onSaved();
     } catch {
-      setError(t`Could not add the computer. Check its settings and try again.`);
+      setError(
+        details
+          ? t`Could not update the computer. Check its settings and try again.`
+          : t`Could not add the computer. Check its settings and try again.`,
+      );
     } finally {
       setBusy(false);
     }
@@ -472,7 +631,7 @@ function AddComputer({
       }}
     >
       <DialogContent
-        aria-label={t`Add computer`}
+        aria-label={details ? t`Edit computer` : t`Add computer`}
         aria-labelledby="add-computer-dialog-title"
         aria-describedby={undefined}
         showCloseButton={!busy}
@@ -480,14 +639,14 @@ function AddComputer({
       >
         <DialogHeader>
           <DialogTitle id="add-computer-dialog-title">
-            <Trans>Add computer</Trans>
+            {details ? <Trans>Edit computer</Trans> : <Trans>Add computer</Trans>}
           </DialogTitle>
         </DialogHeader>
         <form onSubmit={(event) => void save(event)} className="space-y-3">
           <NativeSelect
             aria-label={t`Connection type`}
             value={kind}
-            onChange={(event) => setKind(event.target.value)}
+            onChange={(event) => setKind(event.target.value as typeof kind)}
           >
             <NativeSelectOption value="ssh">
               <Trans>SSH machine</Trans>
@@ -539,7 +698,7 @@ function AddComputer({
                 <Input
                   aria-label={t`Private key path on this computer`}
                   placeholder={t`Private key path on this computer`}
-                  required
+                  required={!details?.hasCredential}
                   value={keyPath}
                   onChange={(event) => setKeyPath(event.target.value)}
                 />
@@ -660,7 +819,7 @@ function AddComputer({
                             ? t`Client certificate path`
                             : t`Client key path`
                       }
-                      required
+                      required={!details?.hasCredential}
                       value={tls[key]}
                       onChange={(event) => setTls({ ...tls, [key]: event.target.value })}
                     />
@@ -673,9 +832,29 @@ function AddComputer({
               {error}
             </p>
           ) : null}
+          {confirmActive ? (
+            <p role="alert" className="text-sm text-destructive">
+              <Trans>
+                Runs are active on this computer. Saving this connection change may interrupt them.
+                Save anyway?
+              </Trans>
+            </p>
+          ) : null}
+          {probeReason ? (
+            <p role="status" className="text-sm text-destructive">
+              <Trans>Connection saved, but the test failed:</Trans>{" "}
+              <ReachabilityReason reason={probeReason} />
+            </p>
+          ) : null}
           <div className="flex gap-2">
             <Button type="submit" disabled={busy}>
-              <Trans>Add</Trans>
+              {confirmActive ? (
+                <Trans>Save anyway</Trans>
+              ) : details ? (
+                <Trans>Save</Trans>
+              ) : (
+                <Trans>Add</Trans>
+              )}
             </Button>
             <Button type="button" variant="ghost" disabled={busy} onClick={onCancel}>
               <Trans>Cancel</Trans>

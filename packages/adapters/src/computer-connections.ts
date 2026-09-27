@@ -20,9 +20,12 @@ import type { SandboxProviderOptions } from "./sandbox-factory.js";
 
 export type ComputerSecretLoader = { load(ciphertext: string, id: string): string };
 
-/** Immutable connection rows keep every operation on the computer's saved destination. */
+/** Saved connection rows keep every operation on the computer's chosen destination. */
 export class ComputerConnections {
   private readonly providers = new Map<string, Promise<SandboxProvider>>();
+  invalidate(id: string, spaceId: string) {
+    this.providers.delete(`${spaceId}:${id}`);
+  }
   constructor(
     private readonly prisma: PrismaClient,
     private readonly secrets: ComputerSecretLoader,

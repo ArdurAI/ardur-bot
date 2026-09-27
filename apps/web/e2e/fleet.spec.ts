@@ -52,6 +52,13 @@ test("Computers shows fleet capacity, placement and move consent", async ({ page
       kind: "ssh",
       connectionId: "remote",
       state: "connected",
+      ssh: {
+        host: "fixture.example.invalid",
+        user: "runner",
+        port: 22,
+        authentication: "agent",
+        baseDirectory: "~/.ardurbot/computers",
+      },
       capacity,
       bots: [],
     },
@@ -92,6 +99,39 @@ test("Computers shows fleet capacity, placement and move consent", async ({ page
       },
     }),
   );
+  await page.route("**/rpc/fleet/details", (route) =>
+    route.fulfill({
+      json: {
+        json: {
+          id: "remote",
+          name: targets[2]!.name,
+          settings: {
+            engine: "ssh",
+            ssh: targets[2]!.ssh,
+            namespace: "ardurbot",
+            storageSize: "10Gi",
+            cpuRequest: "250m",
+            cpuLimit: "2",
+            memoryRequest: "256Mi",
+            memoryLimit: "2Gi",
+          },
+          hasCredential: false,
+          activeRuns: false,
+        },
+      },
+    }),
+  );
+  await page.route("**/rpc/fleet/update", async (route) => {
+    const request = route.request().postDataJSON() as { json: { connection: { name: string } } };
+    targets[2]!.name = request.json.connection.name;
+    await route.fulfill({
+      json: { json: { ok: true, checkedAt: new Date().toISOString(), targets: [targets[2]] } },
+    });
+  });
+  await page.route("**/rpc/fleet/remove", async (route) => {
+    targets.splice(2, 1);
+    await route.fulfill({ json: { json: { ok: true } } });
+  });
   const discovered = [
     {
       id: "discovered-docker",
@@ -145,6 +185,21 @@ test("Computers shows fleet capacity, placement and move consent", async ({ page
 
   await addDialog.getByRole("button", { name: "Cancel" }).click();
   await expect(addDialog).not.toBeVisible();
+
+  const remoteRow = fleet.locator('[data-fleet-target="remote"]');
+  await remoteRow.getByRole("button", { name: "Edit" }).click();
+  const editDialog = page.getByRole("dialog", { name: "Edit computer" });
+  await expect(editDialog.getByLabel("Name")).toHaveValue("Linux computer");
+  await editDialog.getByLabel("Name").fill("Workshop computer");
+  await editDialog.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(remoteRow).toContainText("Workshop computer");
+  await captureScreenshot(page, testInfo, "fleet-edited-target");
+  await remoteRow.getByRole("button", { name: "Remove" }).click();
+  const removeDialog = page.getByRole("dialog", { name: "Remove computer" });
+  await expect(removeDialog).toContainText("Past run history remains.");
+  await removeDialog.getByRole("button", { name: "Remove", exact: true }).click();
+  await expect(remoteRow).toHaveCount(0);
+  await captureScreenshot(page, testInfo, "fleet-removed-target");
 
   await fleet.getByRole("button", { name: "Add computer", exact: true }).click();
   await expect(addDialog).toBeVisible();

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
-import { mkdir, open, readFile, realpath, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, realpath, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { AdapterContext, ComputerRef, SandboxProvider } from "@ardurbot/adapter-kit";
 import type {
@@ -71,6 +71,15 @@ export class FleetService {
       flag: "wx",
     });
     return { id: secret.id };
+  }
+  async deleteSecret(secretId: string) {
+    await unlink(path.join(this.root, "fleet-secrets", secretId)).catch(
+      (error: NodeJS.ErrnoException) => {
+        if (error.code !== "ENOENT") throw error;
+      },
+    );
+    for (const key of this.providers.keys()) if (key.includes(secretId)) this.providers.delete(key);
+    return { ok: true as const };
   }
   private async load(
     settings: ComputerConnectionSettings,

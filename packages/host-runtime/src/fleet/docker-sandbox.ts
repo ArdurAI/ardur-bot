@@ -2,7 +2,11 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir, userInfo } from "node:os";
 import path from "node:path";
 import type { AdapterContext, ComputerRef, SandboxProvider } from "@ardurbot/adapter-kit";
-import type { ComputerConnectionSettings, SshSettings } from "@ardurbot/contracts";
+import type {
+  CapacitySnapshot,
+  ComputerConnectionSettings,
+  SshSettings,
+} from "@ardurbot/contracts";
 import { ComputerConnectionSettingsSchema, computerImage } from "@ardurbot/contracts";
 import { SshSettingsSchema } from "@ardurbot/contracts/fleet";
 import {
@@ -322,12 +326,21 @@ export class FleetDockerSandboxProvider extends LinuxFleetSandbox {
     const version = String(info.ServerVersion ?? "");
     const os = String(info.OperatingSystem ?? info.OSType ?? "");
     if (info.OSType !== "linux") throw new Error("Choose a Linux container engine.");
-    const localSocket =
-      !this.settings.dockerContext &&
-      (!this.settings.endpoint ||
-        this.settings.endpoint.startsWith("unix://") ||
-        this.settings.endpoint.startsWith("/"));
-    const capacity = dockerCapacity(raw, localSocket ? await hostCapacity() : undefined);
+    let measured: CapacitySnapshot | undefined;
+    if (this.settings.endpoint?.startsWith("ssh://")) {
+      const command = engineCommand(this.settings);
+      const result = await this.processes.run(
+        command.name,
+        [...command.prefix, remoteArgv(LINUX_CAPACITY_COMMAND)],
+        context.signal,
+        undefined,
+        128 * 1024,
+      );
+      if (result.code === 0) measured = parseLinuxCapacity(result.stdout.toString());
+    } else if (!this.settings.endpoint?.startsWith("tcp://")) {
+      measured = await hostCapacity();
+    }
+    const capacity = dockerCapacity(raw, measured);
     if (capacity.memoryFree !== null && capacity.memoryTotal !== null)
       capacity.memoryFree = Math.min(capacity.memoryFree, capacity.memoryTotal);
     return {

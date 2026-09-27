@@ -7,7 +7,7 @@ import {
   parseTailscalePeers,
 } from "./discovery.js";
 import { engineCommand } from "./docker-sandbox.js";
-import { probeEngineEndpoint } from "./probe.js";
+import { engineFailureReason, probeEngineEndpoint } from "./probe.js";
 import type { FleetProcess } from "./process.js";
 
 it("reads JSON-lines Docker contexts and preserves every Kubernetes context", async () => {
@@ -36,6 +36,20 @@ it("names Docker contexts by their actual engine and profile", () => {
   expect(dockerContextName("colima")).toContain("Colima (default)");
   expect(dockerContextName("colima-atrium-beta")).toContain("Colima (atrium-beta)");
   expect(dockerContextName("kind-ardur-test")).toBe("kind (ardur-test)");
+});
+it.each([
+  "permission-denied",
+  "socket-missing",
+  "timed-out",
+  "engine-not-running",
+  "not-reachable",
+] as const)("keeps the stable %s engine failure reason", (reason) =>
+  expect(engineFailureReason(new Error(reason))).toBe(reason),
+);
+it("recognizes the structured engine unavailable sentence", () => {
+  expect(
+    engineFailureReason(new Error("Docker is not running or not reachable at a socket.")),
+  ).toBe("engine-not-running");
 });
 it.each([
   ["answered", { code: 0, stderr: "" }, "running", undefined],

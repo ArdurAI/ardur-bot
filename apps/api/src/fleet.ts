@@ -12,6 +12,7 @@ import {
 import type { PrismaClient } from "@ardurbot/db";
 import { Prisma } from "@ardurbot/db";
 import { engineFailureReason } from "@ardurbot/host-runtime/fleet/probe";
+import { ORPCError } from "@orpc/server";
 import type { RouterDeps } from "./router.js";
 
 const catalogs = new WeakMap<PrismaClient, FleetCatalog>();
@@ -226,13 +227,20 @@ export async function testFleetTarget(
   const checkedAt = new Date().toISOString();
   let details: { version?: string; os?: string; capacity?: FleetTarget["capacity"] };
   try {
-    details =
-      "test" in provider && typeof provider.test === "function"
-        ? ((await provider.test({
-            ...context,
-            signal: AbortSignal.any([context.signal, AbortSignal.timeout(5000)]),
-          })) as { version?: string; os?: string; capacity?: FleetTarget["capacity"] })
-        : {};
+    const probeContext = {
+      ...context,
+      signal: AbortSignal.any([context.signal, AbortSignal.timeout(5000)]),
+    };
+    if ("test" in provider && typeof provider.test === "function")
+      details = (await provider.test(probeContext)) as typeof details;
+    else if ("engineInfo" in provider && typeof provider.engineInfo === "function")
+      details = (await provider.engineInfo(probeContext)) as typeof details;
+    else {
+      const capacity = await provider.capacity?.(probeContext);
+      if (!capacity || capacity.source === "not-reported")
+        throw new Error("Computer test is unavailable.");
+      details = { capacity };
+    }
   } catch (error) {
     const reason = engineFailureReason(error);
     if (!reason) throw error;
@@ -263,4 +271,117 @@ export async function testFleetTarget(
     checkedAt,
     targets: [{ ...target, ...details, kind: settings.engine }],
   };
+}
+
+export async function fleetConnectionDetails(
+  deps: RouterDeps,
+  context: AdapterContext,
+  id: string,
+) {
+  const row = await deps.prisma.connection.findFirstOrThrow({
+    where: { id, spaceId: context.spaceId, userId: context.userId, connectorId: "computer" },
+  });
+  const settings = ComputerConnectionSettingsSchema.parse(row.metadata);
+  const { hostSecretId: _hostSecretId, ...visibleSettings } = settings;
+  const secret = row.secretId
+    ? await deps.prisma.secret.findFirst({
+        where: { id: row.secretId, spaceId: context.spaceId, userId: context.userId },
+      })
+    : null;
+  const source = secret
+    ? (JSON.parse(deps.secrets.load(secret.ciphertext, secret.id)) as { path?: string })
+    : null;
+  return {
+    id: row.id,
+    name: row.displayName,
+    settings: visibleSettings,
+    ...(source?.path ? { kubeconfigPath: source.path } : {}),
+    hasCredential: Boolean(settings.hostSecretId || secret),
+    activeRuns: Boolean(
+      await deps.prisma.run.findFirst({
+        where: {
+          spaceId: context.spaceId,
+          userId: context.userId,
+          status: { in: ["queued", "running", "waiting_input"] },
+          bot: { computer: { connectionId: id } },
+        },
+        select: { id: true },
+      }),
+    ),
+  };
+}
+
+export async function removeFleetTarget(deps: RouterDeps, context: AdapterContext, id: string) {
+  await deps.prisma.$transaction(
+    async (tx) => {
+      await tx.$queryRaw`SELECT id FROM connections WHERE id = ${id} AND "spaceId" = ${context.spaceId} AND "userId" = ${context.userId} AND "connectorId" = 'computer' FOR UPDATE`;
+      const row = await tx.connection.findFirstOrThrow({
+        where: { id, spaceId: context.spaceId, userId: context.userId, connectorId: "computer" },
+      });
+      const pinned = await tx.bot.findMany({
+        where: { spaceId: context.spaceId, userId: context.userId, computer: { connectionId: id } },
+        select: { name: true },
+        orderBy: { name: "asc" },
+      });
+      if (pinned.length) {
+        const names = pinned.map((bot) => bot.name).join(", ");
+        throw new ORPCError("CONFLICT", {
+          message: `${pinned.length} ${pinned.length === 1 ? "bot runs" : "bots run"} on this computer: ${names}. Move ${pinned.length === 1 ? "it" : "them"} first.`,
+        });
+      }
+      const computers = await tx.computer.findMany({
+        where: { spaceId: context.spaceId, userId: context.userId, connectionId: id },
+        select: { id: true },
+      });
+      await tx.computerAdmission.deleteMany({
+        where: { computerId: { in: computers.map((computer) => computer.id) } },
+      });
+      const deleted = await tx.computer.deleteMany({
+        where: {
+          id: { in: computers.map((computer) => computer.id) },
+          spaceId: context.spaceId,
+          userId: context.userId,
+          bots: { none: {} },
+        },
+      });
+      if (deleted.count !== computers.length)
+        throw new ORPCError("CONFLICT", {
+          message: "A bot now runs on this computer. Move it first.",
+        });
+      const space = await tx.space.findUniqueOrThrow({
+        where: { id: context.spaceId },
+        select: { placement: true },
+      });
+      const placement = PlacementSettingsSchema.parse(space.placement ?? {});
+      if (placement.preferredTargetId === id)
+        await tx.space.update({
+          where: { id: context.spaceId },
+          data: { placement: { ...placement, preferredTargetId: "host" } },
+        });
+      await tx.connection.delete({ where: { id: row.id } });
+      if (row.secretId)
+        await tx.secret.deleteMany({
+          where: { id: row.secretId, spaceId: context.spaceId, userId: context.userId },
+        });
+      await tx.fleetAudit.create({
+        data: {
+          spaceId: context.spaceId,
+          userId: context.userId,
+          connectionId: id,
+          action: "removed",
+        },
+      });
+      const hostSecretId = ComputerConnectionSettingsSchema.parse(row.metadata).hostSecretId;
+      if (hostSecretId) {
+        const op = { op: "computer.remote.secret.delete" as const, secretId: hostSecretId };
+        if (process.env.ARDURBOT_HOST_BRIDGE === "api" && deps.hostBridge)
+          await deps.hostBridge.fleetResult(op, context);
+        else await localFleetService().deleteSecret(hostSecretId);
+      }
+    },
+    { timeout: 15_000 },
+  );
+  fleetCatalog(deps).connections.invalidate(id, context.spaceId);
+  fleetCatalog(deps).recordTest(id, {});
+  return { ok: true as const };
 }

@@ -58,3 +58,46 @@ it("returns a typed connection failure while leaving unexpected faults as errors
   list.mockRejectedValueOnce(new Error("list failed"));
   await expect(testFleetTarget(deps, context, "connection")).rejects.toThrow("list failed");
 });
+
+it("probes a saved local socket through engineInfo when the provider has no test method", async () => {
+  const deps = {
+    prisma: {
+      connection: {
+        findFirstOrThrow: async () => ({
+          metadata: { engine: "docker", socket: "unix:///fixture/docker.sock" },
+        }),
+      },
+    },
+    secrets: { load: vi.fn() },
+    env: {},
+    sandbox: { describe: () => ({ id: "docker", kind: "docker" }) },
+  } as unknown as RouterDeps;
+  const context: AdapterContext = {
+    userId: "owner",
+    spaceId: "space",
+    operationId: "test",
+    traceId: "test",
+    signal: new AbortController().signal,
+  };
+  const catalog = fleetCatalog(deps);
+  vi.spyOn(catalog, "list").mockResolvedValue({
+    targets: [
+      {
+        id: "saved",
+        name: "Docker",
+        kind: "docker",
+        connectionId: "saved",
+        state: "unavailable",
+        capacity: unknownCapacity(),
+        bots: [],
+      },
+    ],
+  } as never);
+  const engineInfo = vi.fn().mockRejectedValue(new Error("socket-missing"));
+  vi.spyOn(catalog.connections, "resolve").mockResolvedValue({ engineInfo } as never);
+  await expect(testFleetTarget(deps, context, "saved")).resolves.toMatchObject({
+    ok: false,
+    reason: "socket-missing",
+  });
+  expect(engineInfo).toHaveBeenCalledOnce();
+});

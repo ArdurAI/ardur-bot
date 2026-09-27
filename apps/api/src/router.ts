@@ -201,6 +201,7 @@ import {
   computerEngineInfo,
   listComputerConnections,
   saveComputerConnection,
+  updateComputerConnection,
   validateComputerConfiguration,
 } from "./computer-settings.js";
 import {
@@ -216,8 +217,11 @@ import { getModelDestinations, setModelDestinations } from "./delegation-policy.
 import { listSpaceFeatures, setSpaceFeature } from "./features.js";
 import {
   fleetBotPreference,
+  fleetCatalog,
+  fleetConnectionDetails,
   fleetDiscover,
   fleetList,
+  removeFleetTarget,
   savePlacement,
   testFleetTarget,
 } from "./fleet.js";
@@ -2020,6 +2024,35 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         return testFleetTarget(
           deps,
           computerContext(context.actor, "fleet", "fleet-test"),
+          input.connectionId,
+        );
+      }),
+      details: authed.fleet.details.handler(({ context, input }) => {
+        if (!context.actor.isDeploymentOwner) throw new ORPCError("FORBIDDEN");
+        return fleetConnectionDetails(
+          deps,
+          computerContext(context.actor, "fleet", "fleet-details"),
+          input.connectionId,
+        );
+      }),
+      update: authed.fleet.update.handler(async ({ context, input }) => {
+        if (!context.actor.isDeploymentOwner) throw new ORPCError("FORBIDDEN");
+        const owner = computerContext(context.actor, "fleet", "fleet-update");
+        await updateComputerConnection(
+          deps,
+          input.connectionId,
+          input.connection,
+          input.confirmActive,
+          owner,
+        );
+        fleetCatalog(deps).connections.invalidate(input.connectionId, owner.spaceId);
+        return testFleetTarget(deps, owner, input.connectionId);
+      }),
+      remove: authed.fleet.remove.handler(({ context, input }) => {
+        if (!context.actor.isDeploymentOwner) throw new ORPCError("FORBIDDEN");
+        return removeFleetTarget(
+          deps,
+          computerContext(context.actor, "fleet", "fleet-remove"),
           input.connectionId,
         );
       }),

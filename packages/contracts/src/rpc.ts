@@ -101,6 +101,7 @@ import {
 import { ProductEventSchema } from "./events.js";
 import { featuresContract } from "./features.js";
 import {
+  FleetConnectionDetailsSchema,
   FleetSchema,
   FleetTargetSchema,
   FleetTestResultSchema,
@@ -293,6 +294,17 @@ function createFleetContract() {
     list: oc.output(FleetSchema),
     discover: oc.output(FleetTargetSchema.array()),
     test: oc.input(z.object({ connectionId: Id.nullable() })).output(FleetTestResultSchema),
+    details: oc.input(z.object({ connectionId: Id })).output(FleetConnectionDetailsSchema),
+    update: oc
+      .input(
+        z.object({
+          connectionId: Id,
+          connection: ComputerConnectionInputSchema,
+          confirmActive: z.boolean().default(false),
+        }),
+      )
+      .output(FleetTestResultSchema),
+    remove: oc.input(z.object({ connectionId: Id })).output(z.object({ ok: z.literal(true) })),
     placement: oc.input(PlacementSettingsSchema).output(PlacementSettingsSchema),
     bot: oc
       .input(

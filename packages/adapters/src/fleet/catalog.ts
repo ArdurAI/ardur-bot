@@ -332,6 +332,7 @@ export class FleetCatalog {
             return unknownCapacity();
           });
         capacity = (recent ? diagnostic?.capacity : undefined) ?? capacity;
+        if (recent && diagnostic?.reachability?.status !== "running") capacity = unknownCapacity();
         if (rowState(settings.engine, capacity) === "unavailable") {
           state = "unavailable";
           if (!reachability && (settings.engine === "docker" || settings.engine === "podman")) {
@@ -358,7 +359,7 @@ export class FleetCatalog {
               };
             }
           }
-        } else if (settings.engine === "docker" || settings.engine === "podman") {
+        } else if (!recent && (settings.engine === "docker" || settings.engine === "podman")) {
           reachability = { status: "running", checkedAt: new Date().toISOString() };
         }
         if (reachability?.status === "running") state = "connected";

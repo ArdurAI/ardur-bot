@@ -129,4 +129,8 @@ export const RemoteSecretSchema = /* @__PURE__ */ (() =>
     privateKeyPath: path.optional(),
     tlsPaths: z.strictObject({ ca: path, cert: path, key: path }).optional(),
   }))();
+export const RemoteSecretDeleteSchema = z.strictObject({
+  op: z.literal("computer.remote.secret.delete"),
+  secretId: z.string().uuid(),
+});
 export type RemoteComputerCall = z.infer<typeof RemoteComputerCallSchema>;

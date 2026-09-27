@@ -161,6 +161,28 @@ export const FleetTestResultSchema = z.discriminatedUnion("ok", [
     targets: z.array(FleetTargetSchema),
   }),
 ]);
+export const FleetConnectionDetailsSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  settings: z.object({
+    engine: z.enum(["docker", "podman", "kubernetes", "ssh"]),
+    endpoint: EngineEndpointSchema.optional(),
+    dockerContext: z.string().optional(),
+    socket: z.string().optional(),
+    context: z.string().optional(),
+    namespace: z.string(),
+    storageSize: z.string(),
+    storageClass: z.string().optional(),
+    cpuRequest: z.string(),
+    cpuLimit: z.string(),
+    memoryRequest: z.string(),
+    memoryLimit: z.string(),
+    ssh: SshSettingsSchema.optional(),
+  }),
+  kubeconfigPath: z.string().optional(),
+  hasCredential: z.boolean(),
+  activeRuns: z.boolean(),
+});
 export const PlacementDecisionSchema = z.object({
   targetId: z.string(),
   targetName: z.string().optional(),

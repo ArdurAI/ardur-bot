@@ -1296,6 +1296,11 @@ msgstr "Bots are working"
 msgid "Bots keep the board and memory current"
 msgstr "Bots keep the board and memory current"
 
+#. placeholder {0}: removing.bots.map((bot) => bot.name).join(", ")
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Bots on this computer: {0}"
+msgstr "Bots on this computer: {0}"
+
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Brain label"
 msgstr "Brain label"
@@ -2075,6 +2080,10 @@ msgstr "Connection"
 msgid "Connection lost — reconnecting"
 msgstr "Connection lost — reconnecting"
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Connection saved, but the test failed:"
+msgstr "Connection saved, but the test failed:"
+
 #. placeholder {0}: item.name
 #: src/pages/PluginsOverlay.tsx
 msgid "Connection to {0} is still pending. You can close this and check again."
@@ -2566,6 +2575,10 @@ msgstr "Could not load this account’s tools."
 msgid "Could not load this chat."
 msgstr "Could not load this chat."
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Could not load this computer. Try again."
+msgstr "Could not load this computer. Try again."
+
 #: src/components/ArtifactFileCard.tsx
 msgid "Could not load this file."
 msgstr "Could not load this file."
@@ -2643,6 +2656,10 @@ msgstr "Could not remove group"
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Could not remove rule"
 msgstr "Could not remove rule"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Could not remove this computer. Try again."
+msgstr "Could not remove this computer. Try again."
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not rename connection"
@@ -2866,6 +2883,10 @@ msgstr "Could not update MCP server."
 #: src/pages/Shell.tsx
 msgid "Could not update reaction"
 msgstr "Could not update reaction"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Could not update the computer. Check its settings and try again."
+msgstr "Could not update the computer. Check its settings and try again."
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Could not update the computer. Check the connection and try again."
@@ -3475,9 +3496,14 @@ msgstr "Earlier message"
 
 #: src/components/Context.tsx
 #: src/pages/board/Board.tsx
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/LearningInbox.tsx
 msgid "Edit"
 msgstr "Edit"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Edit computer"
+msgstr "Edit computer"
 
 #: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/McpServersOverlay.tsx
@@ -6379,6 +6405,7 @@ msgstr "Remote setup"
 #: src/pages/customize/ConfigureExtension.tsx
 #: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/customize/SkillsPage.tsx
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
@@ -6389,6 +6416,15 @@ msgstr "Remove"
 #: src/pages/Shell.tsx
 msgid "Remove {0}"
 msgstr "Remove {0}"
+
+#. placeholder {0}: targetName(removing)
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Remove {0}? Its saved connection and credentials will be deleted. Past run history remains."
+msgstr "Remove {0}? Its saved connection and credentials will be deleted. Past run history remains."
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Remove computer"
+msgstr "Remove computer"
 
 #: src/components/MessageFeedback.tsx
 msgid "Remove feedback"
@@ -6845,6 +6881,10 @@ msgstr "Running · Stop"
 msgid "Running…"
 msgstr "Running…"
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Runs are active on this computer. Saving this connection change may interrupt them. Save anyway?"
+msgstr "Runs are active on this computer. Saving this connection change may interrupt them. Save anyway?"
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Runs on"
@@ -6893,6 +6933,7 @@ msgstr "Sans"
 #: src/pages/customize/McpCredentialFix.tsx
 #: src/pages/DevicesSettings.tsx
 #: src/pages/ExternalConversationSettings.tsx
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/ide/IdePage.tsx
 #: src/pages/KnowledgeSection.tsx
@@ -6908,6 +6949,10 @@ msgstr "Save"
 #: src/components/composer/command-description.ts
 msgid "Save a memory note"
 msgstr "Save a memory note"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Save anyway"
+msgstr "Save anyway"
 
 #: src/pages/import/ImportedServerCredentials.tsx
 msgid "Save credentials"

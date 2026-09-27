@@ -1120,6 +1120,19 @@ model ComputerExecutionLease {
   @@map("computer_execution_leases")
 }
 
+/// Content-free history of owner changes to saved computer connections.
+model FleetAudit {
+  id String @id @default(cuid())
+  spaceId String
+  userId String
+  connectionId String
+  action String
+  createdAt DateTime @default(now())
+
+  @@index([spaceId, createdAt])
+  @@map("fleet_audits")
+}
+
 model Artifact {
   id         String     @id @default(cuid())
   spaceId    String

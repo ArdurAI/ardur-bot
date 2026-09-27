@@ -59,6 +59,23 @@ function fixture(metadata: Record<string, unknown>) {
   };
 }
 
+it("drops a cached provider after a saved connection changes", async () => {
+  const { prisma, connections } = fixture({
+    engine: "docker",
+    socket: "unix:///fixture/first.sock",
+  });
+  const first = await connections.resolve("saved", context);
+  prisma.connection.findFirst.mockResolvedValue({
+    id: "saved",
+    metadata: { engine: "docker", socket: "unix:///fixture/second.sock" },
+    secretId: "encrypted",
+    userId: "owner",
+  });
+  expect(await connections.resolve("saved", context)).toBe(first);
+  connections.invalidate("saved", "space");
+  expect(await connections.resolve("saved", context)).not.toBe(first);
+});
+
 describe("saved computer connections", () => {
   it.each([undefined, "saved"])(
     "forwards history cwd options through connection %s and preserves execution defaults",

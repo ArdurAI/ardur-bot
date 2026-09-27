@@ -1296,6 +1296,11 @@ msgstr "Боты работают"
 msgid "Bots keep the board and memory current"
 msgstr "Боты поддерживают доску и память в актуальном состоянии"
 
+#. placeholder {0}: removing.bots.map((bot) => bot.name).join(", ")
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Bots on this computer: {0}"
+msgstr "Боты на этом компьютере: {0}"
+
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Brain label"
 msgstr ""
@@ -1532,7 +1537,7 @@ msgstr ""
 #. placeholder {0}: new Date(target.reachability.checkedAt).toLocaleString()
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Checked {0}"
-msgstr ""
+msgstr "Проверено {0}"
 
 #: src/components/DesktopUpdates.tsx
 #: src/components/OllamaSettings.tsx
@@ -1772,20 +1777,20 @@ msgstr "программирования"
 #. placeholder {0}: target.context.slice(7)
 #: src/pages/fleet/target-name.ts
 msgid "Colima ({0}) on this computer"
-msgstr ""
+msgstr "Colima ({0}) на этом компьютере"
 
 #. placeholder {0}: target.context.slice(7)
 #: src/pages/fleet/target-name.ts
 msgid "Colima ({0}) on this Mac"
-msgstr ""
+msgstr "Colima ({0}) на этом Mac"
 
 #: src/pages/fleet/target-name.ts
 msgid "Colima (default) on this computer"
-msgstr ""
+msgstr "Colima (по умолчанию) на этом компьютере"
 
 #: src/pages/fleet/target-name.ts
 msgid "Colima (default) on this Mac"
-msgstr ""
+msgstr "Colima (по умолчанию) на этом Mac"
 
 #. placeholder {0}: group.title
 #: src/pages/Shell.tsx
@@ -2074,6 +2079,10 @@ msgstr ""
 #: src/pages/shell/terminal-session.tsx
 msgid "Connection lost — reconnecting"
 msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Connection saved, but the test failed:"
+msgstr "Подключение сохранено, но проверка не прошла:"
 
 #. placeholder {0}: item.name
 #: src/pages/PluginsOverlay.tsx
@@ -2566,6 +2575,10 @@ msgstr ""
 msgid "Could not load this chat."
 msgstr "Не удалось загрузить этот чат."
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Could not load this computer. Try again."
+msgstr "Не удалось загрузить этот компьютер. Повторите попытку."
+
 #: src/components/ArtifactFileCard.tsx
 msgid "Could not load this file."
 msgstr "Не удалось загрузить этот файл."
@@ -2643,6 +2656,10 @@ msgstr "Не удалось удалить группу"
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Could not remove rule"
 msgstr "Не удалось удалить правило"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Could not remove this computer. Try again."
+msgstr "Не удалось удалить этот компьютер. Повторите попытку."
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not rename connection"
@@ -2866,6 +2883,10 @@ msgstr ""
 #: src/pages/Shell.tsx
 msgid "Could not update reaction"
 msgstr "Не удалось обновить реакцию"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Could not update the computer. Check its settings and try again."
+msgstr "Не удалось обновить этот компьютер. Проверьте настройки и повторите попытку."
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Could not update the computer. Check the connection and try again."
@@ -3358,27 +3379,27 @@ msgstr "Docker"
 
 #: src/pages/fleet/target-name.ts
 msgid "Docker Desktop on this computer"
-msgstr ""
+msgstr "Docker Desktop на этом компьютере"
 
 #: src/pages/fleet/target-name.ts
 msgid "Docker Desktop on this Mac"
-msgstr ""
+msgstr "Docker Desktop на этом Mac"
 
 #: src/pages/fleet/target-name.ts
 msgid "Docker engine (default context) on this computer"
-msgstr ""
+msgstr "Движок Docker на этом компьютере (контекст по умолчанию)"
 
 #: src/pages/fleet/target-name.ts
 msgid "Docker engine (default context) on this Mac"
-msgstr ""
+msgstr "Движок Docker на этом Mac (контекст по умолчанию)"
 
 #: src/pages/fleet/target-name.ts
 msgid "Docker engine on this computer"
-msgstr ""
+msgstr "Движок Docker на этом компьютере"
 
 #: src/pages/fleet/target-name.ts
 msgid "Docker engine on this Mac"
-msgstr ""
+msgstr "Движок Docker на этом Mac"
 
 #: src/pages/HostComputerPrompt.tsx
 msgid "Docker limits access to your computer for added security. Using {hostLabel} lets bots work with your local files and tools."
@@ -3475,9 +3496,14 @@ msgstr "Предыдущее сообщение"
 
 #: src/components/Context.tsx
 #: src/pages/board/Board.tsx
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/LearningInbox.tsx
 msgid "Edit"
 msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Edit computer"
+msgstr "Изменить компьютер"
 
 #: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/McpServersOverlay.tsx
@@ -3527,11 +3553,11 @@ msgstr ""
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Engine not reachable"
-msgstr ""
+msgstr "Движок недоступен"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Engine not running"
-msgstr ""
+msgstr "Движок не запущен"
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Engine: {label}"
@@ -4263,7 +4289,7 @@ msgstr ""
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Installed, not running"
-msgstr ""
+msgstr "Установлен, но не запущен"
 
 #: src/pages/customize/PluginsPage.tsx
 msgid "Installing"
@@ -4418,7 +4444,7 @@ msgstr "ключ"
 #. placeholder {0}: target.context.slice(5)
 #: src/pages/fleet/target-name.ts
 msgid "kind ({0})"
-msgstr ""
+msgstr "kind ({0})"
 
 #: src/pages/KnowledgeSection.tsx
 msgid "Knowledge"
@@ -5516,7 +5542,7 @@ msgstr "Не сейчас"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Not reachable"
-msgstr ""
+msgstr "Недоступен"
 
 #: src/components/ThreadCommandBlock.tsx
 #: src/pages/ide/diff.tsx
@@ -5798,11 +5824,11 @@ msgstr "Или вставьте ключ API"
 
 #: src/pages/fleet/target-name.ts
 msgid "OrbStack on this computer"
-msgstr ""
+msgstr "OrbStack на этом компьютере"
 
 #: src/pages/fleet/target-name.ts
 msgid "OrbStack on this Mac"
-msgstr ""
+msgstr "OrbStack на этом Mac"
 
 #: src/pages/account/AccountProfile.tsx
 msgid "Organic"
@@ -5913,7 +5939,7 @@ msgstr "Приостановлено"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Permission denied on the socket"
-msgstr ""
+msgstr "Нет доступа к сокету"
 
 #. placeholder {0}: tool.id
 #: src/components/integrations/manage/ToolPermissions.tsx
@@ -6379,6 +6405,7 @@ msgstr ""
 #: src/pages/customize/ConfigureExtension.tsx
 #: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/customize/SkillsPage.tsx
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
@@ -6389,6 +6416,15 @@ msgstr "Удалить"
 #: src/pages/Shell.tsx
 msgid "Remove {0}"
 msgstr "Удалить {0}"
+
+#. placeholder {0}: targetName(removing)
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Remove {0}? Its saved connection and credentials will be deleted. Past run history remains."
+msgstr "Удалить {0}? Сохранённое подключение и учётные данные будут удалены. История прошлых запусков сохранится."
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Remove computer"
+msgstr "Удалить компьютер"
 
 #: src/components/MessageFeedback.tsx
 msgid "Remove feedback"
@@ -6845,6 +6881,10 @@ msgstr "Выполняется · Остановить"
 msgid "Running…"
 msgstr "Выполняется…"
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Runs are active on this computer. Saving this connection change may interrupt them. Save anyway?"
+msgstr "На этом компьютере есть активные запуски. Изменение подключения может прервать их. Всё равно сохранить?"
+
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Runs on"
@@ -6893,6 +6933,7 @@ msgstr ""
 #: src/pages/customize/McpCredentialFix.tsx
 #: src/pages/DevicesSettings.tsx
 #: src/pages/ExternalConversationSettings.tsx
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/ide/IdePage.tsx
 #: src/pages/KnowledgeSection.tsx
@@ -6908,6 +6949,10 @@ msgstr "Сохранить"
 #: src/components/composer/command-description.ts
 msgid "Save a memory note"
 msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Save anyway"
+msgstr "Всё равно сохранить"
 
 #: src/pages/import/ImportedServerCredentials.tsx
 msgid "Save credentials"
@@ -7399,7 +7444,7 @@ msgstr ""
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Socket missing"
-msgstr ""
+msgstr "Сокет не найден"
 
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Software update"
@@ -7536,7 +7581,7 @@ msgstr "Начать запись"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Start the engine and press Test."
-msgstr ""
+msgstr "Запустите движок и нажмите «Проверить»."
 
 #: src/lib/run-status-label.ts
 msgid "Starting"
@@ -8026,7 +8071,7 @@ msgstr "Время до первого токена"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Timed out"
-msgstr ""
+msgstr "Время ожидания истекло"
 
 #: src/pages/LearningInbox.tsx
 #: src/pages/TeamBoard.tsx
