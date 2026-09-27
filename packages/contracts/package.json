@@ -11,6 +11,7 @@
     },
     "./desktop-errors": "./src/desktop-errors.js",
     "./computer-image": "./src/computer-image.js",
+    "./desktop-setup": "./src/desktop-setup.js",
     "./host-folders": "./src/host-folders.js",
     "./device-paths": "./src/device-paths.js",
     "./local-settings": "./src/local-settings.js",
