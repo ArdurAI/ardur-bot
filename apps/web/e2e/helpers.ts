@@ -24,6 +24,13 @@ export async function rpc<T>(page: Page, procedure: string, body: unknown): Prom
   return parsed.json as T;
 }
 
+export async function claimDeploymentOwner(page: Page): Promise<void> {
+  const apiUrl = process.env.API_URL;
+  if (!apiUrl) throw new Error("The e2e API URL is missing");
+  const response = await page.request.post(`${apiUrl}/__e2e/deployment-owner`);
+  if (!response.ok()) throw new Error(`Cannot set up deployment owner: ${response.status()}`);
+}
+
 export async function completeOnboarding(page: Page, testInfo?: TestInfo) {
   await page.waitForURL(/\/(onboarding|app)/, { timeout: 20_000 });
   // Optional Server integrations step (needsSetup). Skip when shown, then the

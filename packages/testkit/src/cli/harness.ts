@@ -18,6 +18,7 @@ const runtimeArg = process.argv.find((arg) => arg.startsWith("--runtime="));
 const workersArg = process.argv.find((arg) => arg.startsWith("--workers="));
 const shardArg = process.argv.find((arg) => arg.startsWith("--shard="));
 const repeatEachArg = process.argv.find((arg) => arg.startsWith("--repeat-each="));
+const integrationRepeats = Number(repeatEachArg?.slice("--repeat-each=".length) ?? "1");
 const sandboxProvider = sandboxArg?.slice("--sandbox=".length) ?? "fake";
 const e2eSpec = specArg?.slice("--spec=".length);
 const e2eGrep = grepArg?.slice("--grep=".length);
@@ -27,6 +28,9 @@ const agentRuntime = runtimeArg?.slice("--runtime=".length) ?? "scripted";
 
 if (Number(integration) + Number(e2e) !== 1) {
   throw new Error("Pass exactly one of --integration or --e2e");
+}
+if (!Number.isSafeInteger(integrationRepeats) || integrationRepeats < 1) {
+  throw new Error("--repeat-each must be a positive integer");
 }
 if (!["fake", "e2b", "daytona", "box"].includes(sandboxProvider)) {
   throw new Error('Sandbox must be "fake", "e2b", "daytona", or "box"');
@@ -142,12 +146,15 @@ async function main() {
         if (result.exitCode !== 0)
           throw new Error("Isolated integration database operation failed");
       };
+      const selectedSuites = e2eSpec ? suites.filter((suite) => suite === e2eSpec) : suites;
+      if (selectedSuites.length === 0) throw new Error(`Unknown integration suite: ${e2eSpec}`);
       const result = await runIntegrationSuites({
-        suites,
+        suites: Array.from({ length: integrationRepeats }, () => selectedSuites).flat(),
         databaseUrl,
         template: container.getDatabase(),
         databaseCommand,
         env: process.env,
+        testNamePattern: e2eGrep,
       });
       await writeSummary(reportDir, {
         ...result,
@@ -197,6 +204,26 @@ async function main() {
       fetch: async (request) => {
         if (new URL(request.url).pathname === "/__e2e/emails") {
           return Response.json(email.sent, { headers: { "cache-control": "no-store" } });
+        }
+        if (new URL(request.url).pathname === "/__e2e/deployment-owner") {
+          if (request.method !== "POST") return new Response(null, { status: 405 });
+          const headers = new Headers(request.headers);
+          headers.set("content-type", "application/json");
+          const sessionResponse = await handles.app.fetch(
+            new Request(new URL("/rpc/me", request.url), {
+              method: "POST",
+              headers,
+              body: JSON.stringify({ json: {} }),
+            }),
+          );
+          if (!sessionResponse.ok) return new Response(null, { status: 401 });
+          const me = (await sessionResponse.json()) as { json?: { userId?: string } };
+          if (!me.json?.userId) return new Response(null, { status: 401 });
+          await handles.prisma.deploymentSettings.update({
+            where: { id: "default" },
+            data: { ownerUserId: me.json.userId },
+          });
+          return Response.json({ ok: true });
         }
         activeRequests += 1;
         try {

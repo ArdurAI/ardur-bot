@@ -8,7 +8,7 @@ import path from "node:path";
 import { MigrationApplyError, MigrationHistoryError } from "@ardurbot/db/migrate";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { localFoldersFile } from "./local-folders.js";
-import { appendCappedLog, LOG_CAP_BYTES } from "./local-logs.js";
+import { appendCappedLog, LOG_CAP_BYTES, writeServiceLog } from "./local-logs.js";
 import {
   LocalModeController,
   localResetFailure,
@@ -224,9 +224,16 @@ describe("local mode persistence and supervision", () => {
     expect(children).toHaveLength(running);
     expect(failed.some((message) => message === "The worker stopped.")).toBe(true);
     const starts = children.length;
-    restarted.reportDatabaseDown();
+    await restarted.reportDatabaseDown();
     expect(failed).toContain("The database stopped.");
     expect(children).toHaveLength(starts);
+    await restarted.stop();
+    // Service output is written asynchronously; its per-file queue must drain before rm.
+    await Promise.all(
+      ["api", "worker"].map((service) =>
+        writeServiceLog(path.join(root, "logs", `${service}.log`), Buffer.alloc(0)),
+      ),
+    );
   });
 });
 

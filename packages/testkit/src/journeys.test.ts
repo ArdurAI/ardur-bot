@@ -3744,6 +3744,13 @@ describeJourneys("required product journeys", () => {
       where: { goalId: goal.id, clientNonce: `goal-start:${goal.id}` },
     });
     await executor.continueRun(startRun.id, "wake-start-fixture");
+    await waitForDatabase(async () => {
+      const current = await prisma.run.findUnique({
+        where: { id: startRun.id },
+        select: { status: true },
+      });
+      return current?.status === "completed";
+    });
     const completedStart = await prisma.run.findUniqueOrThrow({ where: { id: startRun.id } });
     const distinctResult = "WORKER_RESULT_OLDEST_FIRST_SENTINEL";
     const coordinatorTask = await prisma.task.create({
@@ -3846,35 +3853,13 @@ describeJourneys("required product journeys", () => {
         status: "queued",
       },
     });
-    const wake = await prisma.run.create({
-      data: {
-        spaceId: coordinator.spaceId,
-        userId: ownerMe.userId,
-        botId: coordinator.id,
-        threadId: group.threadId,
-        taskId: wakeTask.id,
-        status: "queued",
-        trigger: "follow_up",
-        sourceMessageId: summary.summaryMessageId,
-        clientNonce: `goal-wake:wake-budget-${stamp}`,
-        goalId: goal.id,
-        delegationRootTaskId: goal.rootTaskId,
-        runtimePin: completedStart.runtimePin ?? pin,
-        runtimeDestination: completedStart.runtimeDestination ?? undefined,
-        runtimeComputer: completedStart.runtimeComputer ?? undefined,
-      },
-    });
-    await createThreadMessage(prisma, {
-      threadId: group.threadId,
-      role: "user",
-      blocks: [{ kind: "text", text: `Later room context: ${"x".repeat(12_100)}` }],
-    });
     const requests: string[] = [];
     const originalRun = ScriptedAgentRuntime.prototype.run;
+    let wakeId: string | null = null;
     const runtimeSpy = vi
       .spyOn(ScriptedAgentRuntime.prototype, "run")
       .mockImplementation((request, context) => {
-        if (request.runId === wake.id) {
+        if (request.runId === wakeId) {
           requests.push(
             toHistory(request.history, request.prompt, request.sourceMessageId)
               .map((message) => message.content)
@@ -3884,6 +3869,32 @@ describeJourneys("required product journeys", () => {
         return originalRun.call(new ScriptedAgentRuntime(), request, context);
       });
     try {
+      // The reconciler only dispatches queued runs. Hold this fixture in waiting_input
+      // until the explicit continuation so the spy observes its sole execution.
+      const wake = await prisma.run.create({
+        data: {
+          spaceId: coordinator.spaceId,
+          userId: ownerMe.userId,
+          botId: coordinator.id,
+          threadId: group.threadId,
+          taskId: wakeTask.id,
+          status: "waiting_input",
+          trigger: "follow_up",
+          sourceMessageId: summary.summaryMessageId,
+          clientNonce: `goal-wake:wake-budget-${stamp}`,
+          goalId: goal.id,
+          delegationRootTaskId: goal.rootTaskId,
+          runtimePin: completedStart.runtimePin ?? pin,
+          runtimeDestination: completedStart.runtimeDestination ?? undefined,
+          runtimeComputer: completedStart.runtimeComputer ?? undefined,
+        },
+      });
+      wakeId = wake.id;
+      await createThreadMessage(prisma, {
+        threadId: group.threadId,
+        role: "user",
+        blocks: [{ kind: "text", text: `Later room context: ${"x".repeat(12_100)}` }],
+      });
       await executor.continueRun(wake.id, "wake-budget-fixture");
     } finally {
       runtimeSpy.mockRestore();

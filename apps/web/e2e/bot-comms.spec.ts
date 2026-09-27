@@ -1,11 +1,19 @@
 import { expect, test } from "@playwright/test";
-import { activeBotId, captureScreenshot, completeOnboarding, rpc, signup } from "./helpers";
+import {
+  activeBotId,
+  captureScreenshot,
+  claimDeploymentOwner,
+  completeOnboarding,
+  rpc,
+  signup,
+} from "./helpers";
 
 test("shows the first goal desk request, independent check, and coordinator answer", async ({
   page,
 }, testInfo) => {
   await signup(page, `desk-loop-${Date.now()}@ardurbot.test`, "password12", "Desk loop");
   await completeOnboarding(page);
+  await claimDeploymentOwner(page);
   const chiefId = activeBotId(page);
   await rpc(page, "bots/update", { botId: chiefId, name: "Chief of Staff" });
   const worker = await rpc<{ id: string }>(page, "bots/create", {
