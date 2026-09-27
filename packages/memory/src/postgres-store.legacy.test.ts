@@ -55,6 +55,14 @@ describe("PostgresMemoryJournal with documents that predate revision rows", () =
         },
       },
       memoryRevision: {
+        findMany: async ({ where, take }: { where: { revision?: { lt: number } }; take: number }) =>
+          row.revisions
+            .filter(
+              (value) =>
+                !where.revision || (value as { revision: number }).revision < where.revision.lt,
+            )
+            .toReversed()
+            .slice(0, take),
         create: async ({ data }: { data: object }) => {
           row.revisions.push({
             sourceRunId: null,

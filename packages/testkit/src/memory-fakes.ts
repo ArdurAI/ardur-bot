@@ -1,24 +1,56 @@
 import type { Prisma } from "@ardurbot/db";
 import type { JournalDocument } from "@ardurbot/memory";
-import { JournalDocumentStore, MemoryService } from "@ardurbot/memory";
+import { JournalDocumentStore, MemoryService, matchesDocumentWhere } from "@ardurbot/memory";
 
 /** Minimal relational fake exercises the production mapper; real concurrency stays in PostgreSQL tests. */
 export function memoryDatabaseFake() {
-  type Row = Record<string, unknown> & { id: string; spaceId: string; revision: number };
+  type Row = Record<string, unknown> & {
+    id: string;
+    spaceId: string;
+    userId: string;
+    botId: string | null;
+    scope: string;
+    scopeKey: string | null;
+    deletedAt: Date | null;
+    revision: number;
+  };
   const documents = new Map<string, Row>();
   const revisions: Array<Record<string, unknown>> = [];
   let fail = false;
   const tx = {
     memoryDocument: {
-      findMany: async ({ where }: { where: { spaceId: string } }) =>
+      findMany: async ({
+        where,
+        orderBy,
+        take,
+        include,
+        select,
+      }: {
+        where: Prisma.MemoryDocumentWhereInput;
+        orderBy?: { id?: "asc" | "desc" };
+        take?: number;
+        include?: { revisions?: { orderBy?: { revision: "asc" | "desc" }; take?: number } };
+        select?: Prisma.MemoryDocumentSelect;
+      }) =>
         [...documents.values()]
-          .filter((row) => row.spaceId === where.spaceId)
-          .map((row) => ({
-            ...row,
-            revisions: revisions
-              .filter((r) => r.documentId === row.id)
-              .sort((a, b) => Number(a.revision) - Number(b.revision)),
-          })),
+          .filter((row) => matchesDocumentWhere(row, where))
+          .sort((a, b) =>
+            orderBy?.id ? (orderBy.id === "asc" ? 1 : -1) * a.id.localeCompare(b.id) : 0,
+          )
+          .slice(0, take)
+          .map((row) => {
+            const revisionQuery =
+              typeof select?.revisions === "object" ? select.revisions : include?.revisions;
+            const order = revisionQuery?.orderBy;
+            const descending = order && !Array.isArray(order) && order.revision === "desc";
+            return {
+              ...row,
+              revisions: revisions
+                .filter((r) => r.documentId === row.id)
+                .sort((a, b) => (descending ? -1 : 1) * (Number(a.revision) - Number(b.revision)))
+                .slice(0, revisionQuery?.take),
+            };
+          }),
       upsert: async ({
         where,
         create,
@@ -41,6 +73,26 @@ export function memoryDatabaseFake() {
       },
     },
     memoryRevision: {
+      findMany: async ({
+        where,
+        orderBy,
+        take,
+      }: {
+        where: { documentId: string; revision?: { lt: number } };
+        orderBy?: { revision: "asc" | "desc" };
+        take?: number;
+      }) =>
+        revisions
+          .filter(
+            (row) =>
+              row.documentId === where.documentId &&
+              (where.revision?.lt === undefined || Number(row.revision) < where.revision.lt),
+          )
+          .sort(
+            (a, b) =>
+              (orderBy?.revision === "desc" ? -1 : 1) * (Number(a.revision) - Number(b.revision)),
+          )
+          .slice(0, take),
       updateMany: async ({
         where,
         data,
