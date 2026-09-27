@@ -33,7 +33,8 @@ export interface HermesLaunchResult {
 
 export type HermesLaunch = (spec: HermesLaunchSpec) => Promise<HermesLaunchResult>;
 
-async function launchLocal(spec: HermesLaunchSpec): Promise<HermesLaunchResult> {
+/** For fake agents and spikes only; never run real Hermes without qualified confinement. */
+export async function launchUnconfinedProcess(spec: HermesLaunchSpec): Promise<HermesLaunchResult> {
   const child = spawn(spec.command, spec.args, {
     cwd: spec.cwd,
     env: spec.env,
@@ -169,10 +170,12 @@ export class HermesRuntime implements AgentRuntime {
     private readonly options: {
       command: string;
       args?: string[];
-      launch?: HermesLaunch;
+      launch: HermesLaunch;
       onPermissionAttempt?: () => void;
     },
-  ) {}
+  ) {
+    if (typeof options.launch !== "function") throw new Error("Hermes needs an explicit launcher.");
+  }
 
   describe() {
     return {
@@ -278,8 +281,7 @@ export class HermesRuntime implements AgentRuntime {
         pendingText = pendingText.slice(count);
         if (safe && turn.active) queue.push({ type: "text", text: safe });
       };
-      const launch = this.options.launch ?? launchLocal;
-      const result = await launch({
+      const result = await this.options.launch({
         command: this.options.command,
         args: this.options.args ?? [],
         cwd: workspace,
@@ -425,7 +427,10 @@ export class HermesRuntime implements AgentRuntime {
       };
       const protocol = runProtocol();
       try {
-        for await (const event of queue) yield event;
+        for await (const event of queue) {
+          if (!turn.active || context?.signal?.aborted) break;
+          yield event;
+        }
       } finally {
         await this.abort(request.runId);
         await protocol;

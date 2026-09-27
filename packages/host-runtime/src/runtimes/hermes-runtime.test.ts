@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import type { AgentRunRequest, AgentRuntimeEvent } from "@ardurbot/adapter-kit";
 import { describe, expect, it, vi } from "vitest";
-import { HermesRuntime } from "./hermes-runtime.js";
+import { HermesRuntime, launchUnconfinedProcess } from "./hermes-runtime.js";
 import { stopNative } from "./native-process.js";
 
 const fixture = fileURLToPath(new URL("./fixtures/fake-acp.mjs", import.meta.url));
@@ -37,11 +37,22 @@ function runtime(scenario: string, onPermissionAttempt?: () => void) {
   return new HermesRuntime({
     command: process.execPath,
     args: [fixture, scenario],
+    launch: launchUnconfinedProcess,
     onPermissionAttempt,
   });
 }
 
 describe("HermesRuntime M0 ACP seam", () => {
+  it("requires an explicit launcher at construction", () => {
+    expect(
+      () =>
+        new HermesRuntime({
+          command: process.execPath,
+          args: [fixture, "text"],
+        } as ConstructorParameters<typeof HermesRuntime>[0]),
+    ).toThrow("Hermes needs an explicit launcher.");
+  });
+
   it("handshakes, streams text once and completes without manufactured usage", async () => {
     const info = vi.fn(async () => {});
     const events = await collect(runtime("text"), request({ onRuntimeInfo: info }));
@@ -294,5 +305,33 @@ describe("HermesRuntime M0 ACP seam", () => {
     await adapter.abort(run.runId);
     release();
     expect(await events).not.toContainEqual({ type: "done" });
+  });
+
+  it("drops buffered text and completion after abort while the consumer is paused", async () => {
+    let promptCompleted!: () => void;
+    const completed = new Promise<void>((resolve) => {
+      promptCompleted = resolve;
+    });
+    const adapter = new HermesRuntime({
+      command: process.execPath,
+      args: [fixture, "text"],
+      launch: async (spec) => {
+        const result = await launchUnconfinedProcess(spec);
+        let output = "";
+        result.child.stdout.on("data", (chunk: Buffer) => {
+          output += chunk.toString("utf8");
+          if (output.includes('"stopReason":"end_turn"')) promptCompleted();
+        });
+        return result;
+      },
+    });
+    const run = request();
+    const events = adapter.run(run)[Symbol.asyncIterator]();
+    expect(await events.next()).toEqual({ value: { type: "text", text: "first " }, done: false });
+    await completed;
+    // Let the prompt response enqueue done while the consumer is still paused.
+    await new Promise((resolve) => setImmediate(resolve));
+    await adapter.abort(run.runId);
+    expect(await events.next()).toEqual({ value: undefined, done: true });
   });
 });
