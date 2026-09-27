@@ -102,6 +102,7 @@ describe("goal scheduling", () => {
 
   it("marks a spent goal exhausted and records the transition only once", async () => {
     let status = "running";
+    let cancelRequestedAt: Date | null = null;
     const updateMany = vi.fn(async () => {
       status = "exhausted";
       return { count: 1 };
@@ -113,6 +114,7 @@ describe("goal scheduling", () => {
           id: "goal-1",
           rootTaskId: "task-root",
           spaceId: "space-1",
+          userId: "owner-1",
           threadId: "thread-1",
           coordinatorBotId: "bot-1",
           status,
@@ -122,8 +124,17 @@ describe("goal scheduling", () => {
         updateMany,
       },
       delegationRoot: {
-        findUnique: vi.fn(async () => ({ usedTokens: 100, cancelRequestedAt: null })),
+        findUnique: vi.fn(async () => ({ usedTokens: 100, cancelRequestedAt })),
+        findUniqueOrThrow: vi.fn(async () => ({ coordinatorThreadId: "thread-1" })),
+        findFirstOrThrow: vi.fn(async () => ({ rootTaskId: "task-root", cancelRequestedAt })),
+        update: vi.fn(async ({ data }: { data: { cancelRequestedAt: Date } }) => {
+          cancelRequestedAt = data.cancelRequestedAt;
+          return {};
+        }),
       },
+      delegation: { findMany: vi.fn(async () => []), updateMany: vi.fn(async () => ({})) },
+      run: { updateMany: vi.fn(async () => ({})) },
+      $queryRaw: vi.fn(async () => []),
       thread: { update: vi.fn(async () => ({ nextEventSeq: 1 })) },
       event: { create: eventCreate },
     };
@@ -131,6 +142,7 @@ describe("goal scheduling", () => {
       $transaction: (fn: (client: typeof tx) => Promise<unknown>) => fn(tx),
     } as unknown as PrismaClient;
     expect(await reconcileGoalExhaustion(prisma, "goal-1")).toBe("tokens");
+    expect(cancelRequestedAt).toBeInstanceOf(Date);
     expect(await reconcileGoalExhaustion(prisma, "goal-1")).toBeNull();
     expect(updateMany).toHaveBeenCalledTimes(1);
     expect(eventCreate).toHaveBeenCalledTimes(1);

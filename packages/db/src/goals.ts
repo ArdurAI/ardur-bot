@@ -9,7 +9,7 @@ import {
   GoalStartInputSchema,
 } from "@ardurbot/contracts";
 import type { Prisma, PrismaClient, TeamGoal } from "./client.js";
-import { requestCancel } from "./delegation.js";
+import { requestCancel, requestCancelInTransaction } from "./delegation.js";
 import { appendEventInTransaction } from "./events.js";
 import { IsolationError } from "./scope.js";
 import { withTransactionRetry } from "./transaction-retry.js";
@@ -72,29 +72,37 @@ export function goalExhaustionReason(
 
 /** Idempotently closes a running goal whose shared root can no longer execute. */
 export async function reconcileGoalExhaustion(prisma: PrismaClient, goalId: string) {
-  return prisma.$transaction(async (tx) => {
-    const goal = await tx.teamGoal.findUnique({ where: { id: goalId } });
-    if (goal?.status !== "running") return null;
-    const root = await tx.delegationRoot.findUnique({
-      where: { rootTaskId: goal.rootTaskId },
-      select: { usedTokens: true, tokenLimit: true, deadlineAt: true, cancelRequestedAt: true },
-    });
-    const reason = goalExhaustionReason(goal, root, new Date());
-    if (!reason) return null;
-    const changed = await tx.teamGoal.updateMany({
-      where: { id: goal.id, status: "running" },
-      data: { status: "exhausted" },
-    });
-    if (!changed.count) return null;
-    await appendEventInTransaction(tx, {
-      spaceId: goal.spaceId,
-      threadId: goal.threadId,
-      botId: goal.coordinatorBotId,
-      type: "goal.exhausted",
-      payload: { goalId: goal.id, reason },
-    });
-    return reason;
-  });
+  return withTransactionRetry(() =>
+    prisma.$transaction(async (tx) => {
+      const goal = await tx.teamGoal.findUnique({ where: { id: goalId } });
+      if (goal?.status !== "running") return null;
+      const root = await tx.delegationRoot.findUnique({
+        where: { rootTaskId: goal.rootTaskId },
+        select: { usedTokens: true, tokenLimit: true, deadlineAt: true, cancelRequestedAt: true },
+      });
+      const reason = goalExhaustionReason(goal, root, new Date());
+      if (!reason) return null;
+      // Cancellation locks coordinator thread, then root task, before the terminal state commits.
+      await requestCancelInTransaction(
+        tx,
+        { spaceId: goal.spaceId, userId: goal.userId },
+        goal.rootTaskId,
+      );
+      const changed = await tx.teamGoal.updateMany({
+        where: { id: goal.id, status: "running" },
+        data: { status: "exhausted" },
+      });
+      if (!changed.count) return null;
+      await appendEventInTransaction(tx, {
+        spaceId: goal.spaceId,
+        threadId: goal.threadId,
+        botId: goal.coordinatorBotId,
+        type: "goal.exhausted",
+        payload: { goalId: goal.id, reason },
+      });
+      return reason;
+    }),
+  );
 }
 
 export async function startGoal(prisma: PrismaClient, actor: Actor, raw: GoalStartInput) {
@@ -234,9 +242,13 @@ export async function stopGoal(prisma: PrismaClient, actor: Actor, goalId: strin
     where: { id: goalId, spaceId: actor.spaceId, userId: actor.userId },
   });
   if (!goal) throw new IsolationError();
-  if (goal.status === "running") {
+  if (goal.status === "running" || goal.status === "exhausted") {
     await requestCancel(prisma, { spaceId: actor.spaceId, userId: actor.userId }, goal.rootTaskId);
+  }
+  if (goal.status === "running") {
     await prisma.$transaction(async (tx) => {
+      // Keep the coordinator thread ahead of goal/event writes as in wake and exhaustion.
+      await tx.$queryRaw`SELECT id FROM threads WHERE id = ${goal.threadId} FOR UPDATE`;
       const changed = await tx.teamGoal.updateMany({
         where: { id: goal.id, status: "running" },
         data: { status: "stopped", stoppedAt: new Date() },
@@ -267,6 +279,7 @@ export async function wakeGoalCoordinatorForDelegation(prisma: PrismaClient, del
         select: { threadId: true },
       });
       if (!candidateGoal) return null;
+      // Canonical order: coordinator thread, then root task. Finalization uses the same order.
       await tx.$queryRaw`SELECT id FROM threads WHERE id = ${candidateGoal.threadId} FOR UPDATE`;
       await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${initial.rootTaskId} FOR UPDATE`;
       const row = await tx.delegation.findUniqueOrThrow({ where: { id: delegationId } });

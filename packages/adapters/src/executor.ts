@@ -1310,6 +1310,33 @@ export function createRunExecutor(deps: ExecutorDeps) {
         }
         return;
       }
+      if (run.cancelRequestedAt && run.status === "waiting_input") {
+        // The ask ended its executor turn; stop run-scoped computer work without waiting
+        // for the room lease, which an ordinary message may now hold.
+        const bot = await deps.prisma.bot.findUnique({
+          where: { id: run.botId },
+          select: { computerId: true },
+        });
+        const computerId = run.runtimeComputer
+          ? DelegationSnapshotSchema.shape.computer.parse(run.runtimeComputer).id
+          : bot?.computerId;
+        if (computerId) {
+          const stopTarget = await stoppedRunComputer(deps.prisma, run, computerId);
+          if (
+            stopTarget &&
+            (await stopRemoteComputerWork(
+              deps.sandbox,
+              stopTarget.computer,
+              computerId,
+              runId,
+              stopTarget.context,
+            )) &&
+            (await confirmDispatchStop(deps.prisma, runId))
+          )
+            tracePoint(runId, "terminal.committed", { outcome: "cancelled" });
+        }
+        return;
+      }
       let { resumeCheckpoint, heldForTakeover, resumeHeldLease, takeoverResume } =
         takeoverContinuePlan(run);
 

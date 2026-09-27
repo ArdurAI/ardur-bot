@@ -21,6 +21,8 @@ import {
   createThreadEvents,
   createThreadMessage,
   RunHistoryWriteError,
+  updateWorkerTask,
+  wakeGoalCoordinatorForDelegation,
 } from "@ardurbot/db";
 import { afterAll, beforeAll, describe, expect, it, onTestFinished, vi } from "vitest";
 import type { createApp } from "../../../apps/api/src/app.ts";
@@ -2042,6 +2044,109 @@ describeJourneys("required product journeys", () => {
         where: { goalId: goal.id, clientNonce: { startsWith: "goal-wake:" } },
       }),
     ).toBe(2);
+    const racingAssignment = assignments[0]!;
+    const racingRun = await prisma.run.findUniqueOrThrow({
+      where: { id: racingAssignment.runId! },
+    });
+    await prisma.run.update({
+      where: { id: racingAssignment.runId! },
+      data: {
+        status: "running",
+        completedAt: null,
+        leaseOwner: "progress-fixture",
+        leaseExpiresAt: new Date(Date.now() + 60_000),
+      },
+    });
+    await prisma.delegation.update({
+      where: { id: racingAssignment.id },
+      data: { status: "running", coordinatorWokenAt: null },
+    });
+    // A real PostgreSQL pair: progress pauses immediately after its first row lock while
+    // the coordinator wake takes the competing lock. Repeating catches order regressions.
+    for (let index = 0; index < 12; index += 1) {
+      let reachedFirstLock!: () => void;
+      let reachedSecondLock!: () => void;
+      let reachedWakeThread!: () => void;
+      let resumeWorker!: () => void;
+      let resumeWake!: () => void;
+      const firstLock = new Promise<void>((resolve) => {
+        reachedFirstLock = resolve;
+      });
+      const resume = new Promise<void>((resolve) => {
+        resumeWorker = resolve;
+      });
+      const wakeThread = new Promise<void>((resolve) => {
+        reachedWakeThread = resolve;
+      });
+      const secondLock = new Promise<void>((resolve) => {
+        reachedSecondLock = resolve;
+      });
+      const wakeResume = new Promise<void>((resolve) => {
+        resumeWake = resolve;
+      });
+      const progress = prisma.$transaction(async (tx) => {
+        let paused = false;
+        const gated = new Proxy(tx, {
+          get(target, property, receiver) {
+            if (property !== "$queryRaw") return Reflect.get(target, property, receiver);
+            return async (...args: Parameters<typeof tx.$queryRaw>) => {
+              if (paused) reachedSecondLock();
+              const result = await tx.$queryRaw(...args);
+              if (!paused) {
+                paused = true;
+                reachedFirstLock();
+                await resume;
+              }
+              return result;
+            };
+          },
+        });
+        return updateWorkerTask(gated, {
+          runId: racingAssignment.runId!,
+          spaceId: racingRun.spaceId,
+          userId: racingRun.userId,
+          botId: racingAssignment.actingBotId,
+          executionId: `progress-race-${index}`,
+          tool: "report_progress",
+          args: { state: "progress", text: `Progress ${index}` },
+        });
+      });
+      void progress.catch(() => undefined);
+      await firstLock;
+      const wakePrisma = new Proxy(prisma, {
+        get(target, property, receiver) {
+          if (property !== "$transaction") return Reflect.get(target, property, receiver);
+          return (callback: (tx: Parameters<typeof updateWorkerTask>[0]) => Promise<unknown>) =>
+            prisma.$transaction((tx) =>
+              callback(
+                new Proxy(tx, {
+                  get(inner, key, innerReceiver) {
+                    if (key !== "$queryRaw") return Reflect.get(inner, key, innerReceiver);
+                    return async (...args: Parameters<typeof tx.$queryRaw>) => {
+                      const result = await tx.$queryRaw(...args);
+                      if (args[0]?.[0]?.includes("FROM threads")) {
+                        reachedWakeThread();
+                        await wakeResume;
+                      }
+                      return result;
+                    };
+                  },
+                }),
+              ),
+            );
+        },
+      });
+      const wake = wakeGoalCoordinatorForDelegation(wakePrisma, racingAssignment.id);
+      const wakeOwnsThread = await Promise.race([
+        wakeThread.then(() => true),
+        new Promise<false>((resolve) => setTimeout(() => resolve(false), 100)),
+      ]);
+      resumeWorker();
+      if (wakeOwnsThread) await secondLock;
+      resumeWake();
+      const outcomes = await Promise.allSettled([progress, wake]);
+      expect(outcomes.map((outcome) => outcome.status)).toEqual(["fulfilled", "fulfilled"]);
+    }
     const stopped = await rpc<{ status: string }>(app, owner, "goals/stop", { goalId: goal.id });
     expect(stopped.status).toBe("stopped");
     expect(
@@ -2053,7 +2158,7 @@ describeJourneys("required product journeys", () => {
     ).not.toBeNull();
   });
 
-  it("a spent goal releases new room messages and becomes terminal once", async () => {
+  it("a spent goal cancels a waiting coordinator and releases new room messages", async () => {
     const owner = ownerCookie;
     const coordinator = await rpc<Bot>(app, owner, "bots/create", {
       name: "Budget Lead",
@@ -2076,7 +2181,11 @@ describeJourneys("required product journeys", () => {
       app,
       owner,
       "goals/start",
-      { groupId: group.id, objective: "Report readiness", tokenLimit: 100 },
+      {
+        groupId: group.id,
+        objective: "Ask me which city before reporting readiness",
+        tokenLimit: 100,
+      },
     );
     const first = await prisma.run.findFirstOrThrow({
       where: { goalId: goal.id, clientNonce: `goal-start:${goal.id}` },
@@ -2084,16 +2193,23 @@ describeJourneys("required product journeys", () => {
     await waitForDatabase(
       async () =>
         (await prisma.run.findUnique({ where: { id: first.id }, select: { status: true } }))
-          ?.status === "completed",
+          ?.status === "waiting_input",
     );
     await prisma.delegationRoot.update({
       where: { rootTaskId: goal.rootTaskId },
       data: { usedTokens: goal.tokenLimit },
     });
+    const reconciler = createJobReconciler({ prisma, jobs });
+    await reconciler.reconcileOnce();
+    expect(
+      (await prisma.delegationRoot.findUniqueOrThrow({ where: { rootTaskId: goal.rootTaskId } }))
+        .cancelRequestedAt,
+    ).not.toBeNull();
     const { runId } = await rpc<{ runId: string }>(app, owner, "threads/send", {
       groupId: group.id,
       text: "Say hello to the room",
     });
+    expect(runId).not.toBe(first.id);
     await waitForDatabase(
       async () =>
         (await prisma.run.findUnique({ where: { id: runId }, select: { status: true } }))
@@ -2102,13 +2218,30 @@ describeJourneys("required product journeys", () => {
     const ordinary = await prisma.run.findUniqueOrThrow({ where: { id: runId } });
     expect(ordinary.goalId).toBeNull();
     expect(ordinary.delegationRootTaskId).toBeNull();
-    const reconciler = createJobReconciler({ prisma, jobs });
     await reconciler.reconcileOnce();
+    await executor.continueRun(first.id, "goal-stop-fixture");
+    expect(
+      await prisma.run.findUnique({
+        where: { id: first.id },
+        select: { status: true, cancelRequestedAt: true, leaseOwner: true },
+      }),
+    ).toMatchObject({ status: "cancelled", cancelRequestedAt: expect.any(Date) });
     await reconciler.reconcileOnce();
     const current = await rpc<{ status: string }>(app, owner, "goals/get", {
       groupId: group.id,
     });
     expect(current.status).toBe("exhausted");
+    await prisma.delegationRoot.update({
+      where: { rootTaskId: goal.rootTaskId },
+      data: { cancelRequestedAt: null },
+    });
+    expect(
+      (await rpc<{ status: string }>(app, owner, "goals/stop", { goalId: goal.id })).status,
+    ).toBe("exhausted");
+    expect(
+      (await prisma.delegationRoot.findUniqueOrThrow({ where: { rootTaskId: goal.rootTaskId } }))
+        .cancelRequestedAt,
+    ).not.toBeNull();
     expect(
       await prisma.event.count({
         where: { threadId: group.threadId, type: "goal.exhausted" },

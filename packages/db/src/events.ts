@@ -21,7 +21,7 @@ import { cancelRunsInTransaction } from "./cancel-runs.js";
 import type { Prisma, PrismaClient } from "./client.js";
 import { materializeCommandEvent } from "./command-blocks.js";
 import { expireComputerExecutionLeases } from "./computers.js";
-import { finishDelegation } from "./delegation.js";
+import { finishDelegation, lockDelegationRoot } from "./delegation.js";
 import { delegationAnswerThread, delegationApprovalTarget } from "./delegation-approval.js";
 import { inheritedRemoteOrigin, persistDispatchSummary } from "./dispatch.js";
 import {
@@ -270,6 +270,7 @@ export async function clearThread(
   realtime?: RealtimeFanout,
 ): Promise<ClearThreadResult> {
   const committed = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    // Thread row precedes any task row cancelled by clearThread.
     const thread = await tx.thread.update({
       where: {
         id: input.threadId,
@@ -525,6 +526,7 @@ export async function claimSteering(
   input: ClaimSteeringInput,
 ): Promise<ClaimedSteeringMessage[]> {
   return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    // The thread row is locked before any run state changes.
     await tx.$queryRaw`SELECT id FROM threads WHERE id = ${input.threadId} FOR UPDATE`;
     const run = await tx.run.findFirst({
       where: {
@@ -623,7 +625,7 @@ async function commitAnswerRunInput(
   input: AnswerRunInput,
   runSecretWriter?: RunSecretWriter,
 ): Promise<{ threadId: string; seq: number } | null> {
-  // Thread row first, then run rows — the same order as clearThread and finalizeRun, so a
+  // Thread row first, then run and task rows — the same order as clearThread and finalizeRun, so a
   // concurrent clear cannot deadlock against this transaction.
   await tx.$queryRaw`SELECT id FROM threads WHERE id = ${input.threadId} FOR UPDATE`;
   const runThreadId = await delegationAnswerThread(tx, input);
@@ -843,8 +845,7 @@ async function pauseRunForInputOnce(prisma: PrismaClient, input: PauseRunForInpu
       input.blocks,
       input.helperDelegationId,
     );
-    // Thread row first, then run rows — the same order as clearThread and finalizeRun, so a
-    // concurrent clear cannot deadlock against this transaction.
+    // Thread row first, then the delegated root task. clearThread and finalizeRun agree.
     await tx.$queryRaw`SELECT id FROM threads WHERE id = ${input.threadId} FOR UPDATE`;
     const paused = await tx.run.updateMany({
       where: {
@@ -907,7 +908,8 @@ async function pauseRunForInputOnce(prisma: PrismaClient, input: PauseRunForInpu
     const waitingDelegationId = input.helperDelegationId ?? waitingRun?.delegationId;
     if (waitingDelegationId) {
       const row = await tx.delegation.findUniqueOrThrow({ where: { id: waitingDelegationId } });
-      await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${row.rootTaskId} FOR UPDATE`;
+      // Acquire the coordinator thread before the root task, even for a worker thread.
+      await lockDelegationRoot(tx, row.rootTaskId);
       await appendTaskEvent(
         tx,
         row,
@@ -935,6 +937,7 @@ export async function pauseRunForTakeover(
   realtime?: RealtimeFanout,
 ): Promise<boolean> {
   const committed = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    // A takeover pause serializes on the thread before run state changes.
     await tx.$queryRaw`SELECT id FROM threads WHERE id = ${input.threadId} FOR UPDATE`;
     const paused = await tx.run.updateMany({
       where: {
@@ -1174,6 +1177,7 @@ async function finalizeRunOnce(
   summary?: { threadId: string; seq: number };
 } | null> {
   return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    // Canonical order: thread first, then the run task and delegated root task.
     await tx.$queryRaw`SELECT id FROM threads WHERE id = ${input.threadId} FOR UPDATE`;
     let writableRun:
       | {

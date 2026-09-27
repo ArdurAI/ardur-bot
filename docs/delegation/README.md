@@ -9,7 +9,9 @@ optional runtime kind and computer policy.
 
 ## Limits and accounting
 
-The root task row is locked before admission. `delegation_roots` persists the
+Transactions that touch both rows lock the coordinator thread before the root task.
+This order covers admission, worker card updates, cancellation, acceptance, rework,
+completion finalization, input pause, and coordinator wakes. `delegation_roots` persists the
 counters so separate workers share the same limits. Defaults are one level of
 delegation, four active descendants, six hops, twelve total descendants,
 120,000 tokens and one hour from the root run's creation. Each admission reserves
@@ -62,6 +64,9 @@ their own work and reuse Dispatch's background-work stop confirmation. Only then
 is cancellation confirmed and remaining capacity released. Stop also covers runs
 waiting for input or computer takeover. After a worker restart, stopping its parent
 confirms and releases any remaining helper admissions owned by that run.
+Goal exhaustion invokes that cancellation in the same database transaction as the
+terminal goal event, so a crash cannot leave an exhausted goal with unrequested
+live runs. A room message skips runs from exhausted or cancelled goal roots.
 
 `delegation_status`, `stop_delegation` and `accept_delegation` expose ids and lifecycle
 to the coordinator. The first two accept an optional earlier root task id. Web

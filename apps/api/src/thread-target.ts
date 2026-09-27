@@ -999,11 +999,54 @@ export async function sendThreadMessage(
           botId: { in: targetBotIds },
           status: { in: [...ACTIVE_RUN_STATUSES] },
         },
-        select: { id: true, taskId: true, botId: true, status: true },
+        select: {
+          id: true,
+          taskId: true,
+          botId: true,
+          status: true,
+          goalId: true,
+          delegationRootTaskId: true,
+        },
+      });
+      const goalIds = activeRuns.flatMap((run) => (run.goalId ? [run.goalId] : []));
+      const rootTaskIds = activeRuns.flatMap((run) =>
+        run.delegationRootTaskId ? [run.delegationRootTaskId] : [],
+      );
+      const runGoals =
+        goalIds.length || rootTaskIds.length
+          ? await tx.teamGoal.findMany({
+              where: { OR: [{ id: { in: goalIds } }, { rootTaskId: { in: rootTaskIds } }] },
+              select: { id: true, rootTaskId: true, status: true, untilAt: true, tokenLimit: true },
+            })
+          : [];
+      const runRoots = runGoals.length
+        ? await tx.delegationRoot.findMany({
+            where: { rootTaskId: { in: runGoals.map((goal) => goal.rootTaskId) } },
+            select: {
+              rootTaskId: true,
+              usedTokens: true,
+              tokenLimit: true,
+              deadlineAt: true,
+              cancelRequestedAt: true,
+            },
+          })
+        : [];
+      const goalsById = new Map(runGoals.map((goal) => [goal.id, goal]));
+      const goalsByRoot = new Map(runGoals.map((goal) => [goal.rootTaskId, goal]));
+      const rootsById = new Map(runRoots.map((root) => [root.rootTaskId, root]));
+      const routableRuns = activeRuns.filter((run) => {
+        const goal =
+          (run.goalId ? goalsById.get(run.goalId) : undefined) ??
+          (run.delegationRootTaskId ? goalsByRoot.get(run.delegationRootTaskId) : undefined);
+        if (!goal) return !run.goalId;
+        return (
+          goal.status === "running" &&
+          !goalExhaustionReason(goal, rootsById.get(goal.rootTaskId) ?? null, new Date())
+        );
       });
       const activeByBotId = new Map<string, (typeof activeRuns)[number]>();
       const answeredByBotId = new Map<string, Array<(typeof activeRuns)[number]>>();
-      for (const run of activeRuns) {
+      for (const run of routableRuns) {
         if (run.status === "waiting_input") {
           const answerText = input.text?.trim();
           if (!answerText) {

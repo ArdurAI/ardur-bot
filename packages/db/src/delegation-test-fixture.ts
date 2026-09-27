@@ -156,6 +156,7 @@ export function fixture() {
           }),
       ),
       update: vi.fn(async ({ data }) => apply(state.root, data)),
+      findUnique: vi.fn(async () => state.root),
       findFirstOrThrow: vi.fn(async () => state.root),
       findUniqueOrThrow: vi.fn(async () => state.root),
     },

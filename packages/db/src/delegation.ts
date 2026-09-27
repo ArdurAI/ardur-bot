@@ -45,8 +45,31 @@ type Scope = Pick<Actor, "spaceId" | "userId">;
 export async function lockDelegationRootForRun(tx: Prisma.TransactionClient, runId: string) {
   const run = await tx.run.findUniqueOrThrow({ where: { id: runId } });
   const rootTaskId = run.delegationRootTaskId ?? run.taskId;
-  await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${rootTaskId} FOR UPDATE`;
+  const root = await tx.delegationRoot.findUnique({
+    where: { rootTaskId },
+    select: { coordinatorThreadId: true },
+  });
+  // The first admission creates its root after locking; its parent run supplies the thread.
+  await lockThreadThenRootTask(tx, root?.coordinatorThreadId ?? run.threadId, rootTaskId);
   return { run: await tx.run.findUniqueOrThrow({ where: { id: runId } }), rootTaskId };
+}
+
+/** Canonical order for transactions touching both rows: coordinator thread, then root task. */
+export async function lockDelegationRoot(tx: Prisma.TransactionClient, rootTaskId: string) {
+  const root = await tx.delegationRoot.findUniqueOrThrow({
+    where: { rootTaskId },
+    select: { coordinatorThreadId: true },
+  });
+  await lockThreadThenRootTask(tx, root.coordinatorThreadId, rootTaskId);
+}
+
+async function lockThreadThenRootTask(
+  tx: Prisma.TransactionClient,
+  threadId: string,
+  rootTaskId: string,
+) {
+  await tx.$queryRaw`SELECT id FROM threads WHERE id = ${threadId} FOR UPDATE`;
+  await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${rootTaskId} FOR UPDATE`;
 }
 
 /** The caller creates the run in this SAME transaction. A refusal rolls everything back. */
@@ -320,32 +343,40 @@ export async function requestCancel(
   now = new Date(),
 ) {
   return withTransactionRetry(() =>
-    prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${rootTaskId} FOR UPDATE`;
-      const root = await tx.delegationRoot.findFirstOrThrow({ where: { rootTaskId, ...scope } });
-      await tx.delegationRoot.update({
-        where: { rootTaskId: root.rootTaskId },
-        data: { cancelRequestedAt: now },
-      });
-      const stopping = await tx.delegation.findMany({
-        where: { rootTaskId, status: { in: ["queued", "running"] } },
-      });
-      for (const row of stopping) await appendTaskEvent(tx, row, "cancel-requested");
-      await tx.delegation.updateMany({
-        where: { rootTaskId, status: { in: ACTIVE_DELEGATIONS } },
-        data: { status: "cancel-requested", cancelRequestedAt: now },
-      });
-      await tx.run.updateMany({
-        where: {
-          ...scope,
-          OR: [{ taskId: rootTaskId }, { delegationRootTaskId: rootTaskId }],
-          status: { in: ["queued", "leased", "running", "waiting_input", "waiting_takeover"] },
-        },
-        data: { cancelRequestedAt: now },
-      });
-      return { cancelRequested: true as const };
-    }),
+    prisma.$transaction((tx) => requestCancelInTransaction(tx, scope, rootTaskId, now)),
   );
+}
+
+/** Shares the caller's transaction so a terminal goal and its cancellation commit together. */
+export async function requestCancelInTransaction(
+  tx: Prisma.TransactionClient,
+  scope: Scope,
+  rootTaskId: string,
+  now = new Date(),
+) {
+  await lockDelegationRoot(tx, rootTaskId);
+  const root = await tx.delegationRoot.findFirstOrThrow({ where: { rootTaskId, ...scope } });
+  await tx.delegationRoot.update({
+    where: { rootTaskId: root.rootTaskId },
+    data: { cancelRequestedAt: root.cancelRequestedAt ?? now },
+  });
+  const stopping = await tx.delegation.findMany({
+    where: { rootTaskId, status: { in: ["queued", "running"] } },
+  });
+  for (const row of stopping) await appendTaskEvent(tx, row, "cancel-requested");
+  await tx.delegation.updateMany({
+    where: { rootTaskId, status: { in: ACTIVE_DELEGATIONS } },
+    data: { status: "cancel-requested", cancelRequestedAt: now },
+  });
+  await tx.run.updateMany({
+    where: {
+      ...scope,
+      OR: [{ taskId: rootTaskId }, { delegationRootTaskId: rootTaskId }],
+      status: { in: ["queued", "leased", "running", "waiting_input", "waiting_takeover"] },
+    },
+    data: { cancelRequestedAt: now },
+  });
+  return { cancelRequested: true as const };
 }
 
 /** Called only after the executor finishes or confirms its abort. The unique summary is durable. */
@@ -357,7 +388,7 @@ export async function finishDelegation(
   expectedRunId?: string | null,
 ) {
   let row = await tx.delegation.findUniqueOrThrow({ where: { id } });
-  await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${row.rootTaskId} FOR UPDATE`;
+  await lockDelegationRoot(tx, row.rootTaskId);
   row = await tx.delegation.findUniqueOrThrow({ where: { id } });
   if (expectedRunId !== undefined && row.runId !== expectedRunId) return;
   if (row.status === "cancel-requested" && status !== "cancelled") return;
@@ -423,7 +454,7 @@ export async function acceptDelegation(
   const root = await tx.delegationRoot.findFirstOrThrow({
     where: { rootTaskId: row.rootTaskId, coordinatorBotId, ...scope },
   });
-  await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${root.rootTaskId} FOR UPDATE`;
+  await lockDelegationRoot(tx, root.rootTaskId);
   row = await tx.delegation.findUniqueOrThrow({ where: { id } });
   const changed = await tx.delegation.updateMany({
     where: { id, status: "completed" },
