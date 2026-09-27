@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import type { HermesLaunch, HermesLaunchSpec } from "./hermes-runtime.js";
 import { stopNative } from "./native-process.js";
 
@@ -39,6 +40,26 @@ export function probeHermesInstall(root: string): { python: string; root: string
 
 export function hermesLauncherAsset(bundleFile: string): string {
   return path.join(path.dirname(bundleFile), "python", "hermes_launcher.py");
+}
+
+export function resolveHermesLauncherAsset(
+  bundleFile: string,
+  moduleUrl: string | undefined,
+): string {
+  const bundled = hermesLauncherAsset(bundleFile);
+  if (existsSync(bundled)) return bundled;
+  try {
+    if (moduleUrl) {
+      const source = path.resolve(
+        path.dirname(fileURLToPath(moduleUrl)),
+        "../python/hermes_launcher.py",
+      );
+      if (existsSync(source)) return source;
+    }
+  } catch {
+    // Bundled builds may have no module URL. A missing asset always fails closed.
+  }
+  throw new Error("Pinned Hermes launcher is unavailable.");
 }
 
 /** Native execution has host authority; qualification and the broker remain mandatory. */

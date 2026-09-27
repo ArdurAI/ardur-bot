@@ -1,5 +1,4 @@
 import { createHash, randomUUID } from "node:crypto";
-import { existsSync } from "node:fs";
 import { mkdir, realpath } from "node:fs/promises";
 import { hostname } from "node:os";
 import path from "node:path";
@@ -43,9 +42,9 @@ import { AntigravityRuntime, probeAntigravity } from "./runtimes/antigravity-run
 import { ClaudeCodeRuntime, probeClaude } from "./runtimes/claude-code-runtime.js";
 import { CodexAppServerRuntime, probeCodex } from "./runtimes/codex-app-server-runtime.js";
 import {
-  hermesLauncherAsset,
   pinnedHermesLaunch,
   probeHermesInstall,
+  resolveHermesLauncherAsset,
 } from "./runtimes/hermes-install.js";
 import { startHermesProviderRelay } from "./runtimes/hermes-provider-relay.js";
 import { HermesRuntime } from "./runtimes/hermes-runtime.js";
@@ -546,10 +545,7 @@ export class HostAgent {
           (overlap !== ".." && !overlap.startsWith(`..${path.sep}`) && !path.isAbsolute(overlap))
         )
           throw new Error("Hermes staging cannot overlap its install.");
-        const bundled = hermesLauncherAsset(process.argv[1] ?? "");
-        const launcher = existsSync(bundled)
-          ? bundled
-          : path.resolve("packages/host-runtime/python/hermes_launcher.py");
+        const launcher = resolveHermesLauncherAsset(process.argv[1] ?? "", import.meta.url);
         hermes = new HermesRuntime({
           command: qualified.python,
           args: [launcher],
