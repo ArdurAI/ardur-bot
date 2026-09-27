@@ -161,7 +161,7 @@ test("Dashboard opens first, preserves Bots navigation and approves through the 
   } finally {
     releaseNow();
   }
-  await expect(page).toHaveTitle("Dashboard — Ardur Bot");
+  await expect(page).toHaveTitle("Dashboard — Ardur");
   await expect(page.getByText("Waiting for your approval", { exact: true })).toBeVisible();
   const governance = page.locator('[data-panel="governance"]');
   await expect(governance.getByRole("link")).toHaveText(
@@ -183,7 +183,7 @@ test("Dashboard opens first, preserves Bots navigation and approves through the 
   await page.keyboard.press("Control+2");
   await expect(page).toHaveURL(/\/app\/(?:bots|bot)$/);
   await expect(page.getByTestId("bot-settings-trigger")).toBeVisible();
-  await expect(page).toHaveTitle("Bots — Ardur Bot");
+  await expect(page).toHaveTitle("Bots — Ardur");
   const cachedRenderMs = await page.evaluate(
     () =>
       new Promise<number>((resolve) => {
@@ -213,13 +213,13 @@ test("Dashboard opens first, preserves Bots navigation and approves through the 
   await page.getByRole("combobox", { name: "Open to", exact: true }).selectOption("bots");
   await page.keyboard.press("Escape");
   await page.goto("/app");
-  await expect(page).toHaveTitle("Bots — Ardur Bot");
+  await expect(page).toHaveTitle("Bots — Ardur");
   await expect(page.getByTestId("dashboard")).toHaveCount(0);
   await page.keyboard.press("Control+1");
   await expect(page.getByTestId("dashboard")).toBeVisible();
   await page.keyboard.press("Control+3");
   await expect(page).toHaveURL(/\/app\/ide$/);
-  await expect(page).toHaveTitle("IDE — Ardur Bot");
+  await expect(page).toHaveTitle("IDE — Ardur");
   await page.keyboard.press("Control+1");
   await page
     .getByRole("navigation", { name: "Dashboard", exact: true })
@@ -227,7 +227,7 @@ test("Dashboard opens first, preserves Bots navigation and approves through the 
     .click();
   await expect(page).toHaveURL(/\/app\/board$/);
   await expect(page.getByRole("heading", { name: "Board", exact: true })).toBeVisible();
-  await expect(page).toHaveTitle("Board — Ardur Bot");
+  await expect(page).toHaveTitle("Board — Ardur");
   const card = page.locator('[data-board-item="work-1"]');
   await card.dragTo(page.locator('[data-board-column="in_progress"]'));
   await expect(
@@ -239,7 +239,7 @@ test("Dashboard opens first, preserves Bots navigation and approves through the 
   ).toBeVisible();
   await page.goto("/app/board?workspace=board&item=work-1");
   await expect(page.getByRole("dialog")).toContainText("Check the work");
-  await expect(page).toHaveTitle("Board — Ardur Bot");
+  await expect(page).toHaveTitle("Board — Ardur");
   await page.getByRole("button", { name: "Follow", exact: true }).click();
   await expect(page.getByRole("button", { name: "Unfollow", exact: true })).toBeVisible();
   await captureScreenshot(page, testInfo, "dashboard-board-item");

@@ -24,7 +24,7 @@ describe("winget manifests", () => {
 
     expect(locale.PackageIdentifier).toBe("ArdurAI.ArdurBot");
     expect(locale.Publisher).toBe("ArdurAI");
-    expect(locale.PackageName).toBe("Ardur Bot");
+    expect(locale.PackageName).toBe("Ardur");
 
     expect(version.PackageIdentifier).toBe("ArdurAI.ArdurBot");
     expect(version.DefaultLocale).toBe("en-US");

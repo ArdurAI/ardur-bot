@@ -457,7 +457,7 @@ code-b
         toolCalls: [
           {
             name: "destination.write",
-            args: { collection: "notes", title: "Ardur Bot result", body: prompt },
+            args: { collection: "notes", title: "Ardur result", body: prompt },
           },
         ],
         complete: true,

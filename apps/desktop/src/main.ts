@@ -78,6 +78,7 @@ import { installSystemRuntime } from "./system/runtime.js";
 import { systemTray } from "./system/tray.js";
 import { staysRunning } from "./tray.js";
 import { UnsavedFiles } from "./unsaved-files.js";
+import { configureDesktopUserData } from "./user-data-path.js";
 import { shouldOpenInAppPopup } from "./window-open.js";
 import {
   browserWindowOptions,
@@ -156,10 +157,7 @@ let localShutdown: Promise<void> | null = null;
 const remoteListener = new RemoteListener();
 
 markOnce("rk:main:module-evaluated");
-if (PERFORMANCE_USER_DATA) {
-  app.setPath("userData", PERFORMANCE_USER_DATA);
-  app.setPath("sessionData", path.join(PERFORMANCE_USER_DATA, "session"));
-}
+configureDesktopUserData(app, PERFORMANCE_USER_DATA);
 // Chromium ignores this switch once ready; it must be appended before that.
 capDiskCacheSize(app.commandLine);
 if (!app.requestSingleInstanceLock()) process.exit(0);
@@ -561,7 +559,7 @@ function loadAppUrl(win: BrowserWindow, url: string): Promise<void> {
  * not a usable app. After session resolves, wait for a bootstrapped shell
  * (`data-ready` / shell-ready mark) or an auth/welcome/onboarding surface so a
  * bare Suspense fallback or pre-bootstrap ShellPage cannot pass. Plain e2e
- * fixtures omit the Ardur Bot app-state marker.
+ * fixtures omit the Ardur app-state marker.
  */
 async function waitForMountedAppDocument(contents: Electron.WebContents) {
   const deadline = Date.now() + 8_000;
@@ -596,7 +594,7 @@ async function waitForMountedAppDocument(contents: Electron.WebContents) {
         performance.getEntriesByName("rk:renderer:session-committed").length > 0;
       if (sessionReady && surfaceReady) return true;
 
-      // Desktop e2e fixtures mount a plain page without Ardur Bot app-state markers.
+      // Desktop e2e fixtures mount a plain page without Ardur app-state markers.
       if (appState === null) {
         const bodyText = (document.body?.innerText || "").trim();
         if (bodyText.includes("Opening your Space")) return false;
@@ -761,7 +759,7 @@ async function confirmLocalReset(parent: BrowserWindow): Promise<boolean> {
     type: "warning",
     message: "Reset local data?",
     detail:
-      "Bots, conversations and files on this computer move to a backup folder, and Ardur Bot starts fresh.",
+      "Bots, conversations and files on this computer move to a backup folder, and Ardur starts fresh.",
     buttons: ["Cancel", "Reset"],
     defaultId: 0,
     cancelId: 0,
@@ -910,7 +908,7 @@ function installApplicationMenu() {
   };
   const changeServer: Electron.MenuItemConstructorOptions = {
     id: "change-ardurbot-server",
-    label: "Change Ardur Bot Server…",
+    label: "Change Ardur Server…",
     accelerator: "CmdOrCtrl+Shift+K",
     click: () => showSetupWindow(),
   };
@@ -963,7 +961,7 @@ function installApplicationMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-/** Setup IPC must only answer the setup window, never a connected Ardur Bot server. */
+/** Setup IPC must only answer the setup window, never a connected Ardur server. */
 function fromSetupWindow(event: Electron.IpcMainInvokeEvent) {
   return (
     setupWindow !== null && !setupWindow.isDestroyed() && event.sender === setupWindow.webContents
@@ -990,7 +988,7 @@ async function probeServer(rawUrl: string, signal?: AbortSignal): Promise<Deskto
         ok: false,
         status: response.status,
         url,
-        error: "That address redirects elsewhere. Enter the final Ardur Bot server address.",
+        error: "That address redirects elsewhere. Enter the final Ardur server address.",
       };
     }
     if (!response.ok) {
@@ -1007,7 +1005,7 @@ async function probeServer(rawUrl: string, signal?: AbortSignal): Promise<Deskto
         ok: false,
         status: response.status,
         url,
-        error: "That address did not respond like a Ardur Bot server.",
+        error: "That address did not respond like an Ardur server.",
       };
     }
     return {
@@ -1240,7 +1238,7 @@ async function saveSetup(payload: unknown, userDataDir: string) {
       if (!ready || managedUrl === null) {
         return {
           ok: false,
-          error: "The app-managed Ardur Bot services are not ready. Retry setup.",
+          error: "The app-managed Ardur services are not ready. Retry setup.",
         };
       }
       openSetup = { mode: "new", serverUrl: managedUrl };

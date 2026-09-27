@@ -77,7 +77,7 @@ describe("computer connection settings", () => {
     };
     for (const provider of ["docker", "desktop"])
       await expect(validateComputerConfiguration(prisma, "space", move, provider)).rejects.toThrow(
-        "Moving a computer onto the machine running Ardur Bot is not available yet. Choose a saved connection or keep the current engine.",
+        "Moving a computer onto the machine running Ardur is not available yet. Choose a saved connection or keep the current engine.",
       );
     // Leaving the connection out keeps the computer where it is, so nothing is refused.
     const { connectionId: _, ...stay } = move;

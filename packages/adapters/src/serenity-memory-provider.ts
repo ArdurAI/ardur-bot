@@ -204,7 +204,7 @@ export class SerenityMemoryProvider implements SemanticMemoryProvider {
     request: SemanticMemoryRecallRequest,
     context: AdapterContext,
   ): Promise<SemanticMemoryResponse<SemanticMemoryResult[]>> {
-    // History compaction stays in Ardur Bot; Serenity is the durable brain only.
+    // History compaction stays in Ardur; Serenity is the durable brain only.
     const entities = request.documentIds
       ? request.documentIds.map((id) =>
           documentEntity(context.spaceId, id, this.connection.brainLabel),

@@ -26,7 +26,7 @@ export async function ensureInstanceIdentity(prisma: PrismaClient, secrets: Encr
     create: {
       id: "home",
       instanceId,
-      homeName: "Ardur Bot",
+      homeName: "Ardur",
       publicKey: material.publicKey,
       certificate: material.certificate,
       privateKeyCiphertext: encrypted.ciphertext,

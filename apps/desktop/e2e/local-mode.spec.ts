@@ -66,7 +66,7 @@ test("a fresh install starts its own database and services, and opens the app af
   await expect(setup.locator("#stack-phase")).toHaveText(
     /^(Starting the database|Preparing the database|Starting services)\.$/,
   );
-  await expect(setup.locator("#stack-phase")).toHaveText("Ardur Bot is ready.", {
+  await expect(setup.locator("#stack-phase")).toHaveText("Ardur is ready.", {
     timeout: 330_000,
   });
   // Nothing is saved until the person chooses Continue.

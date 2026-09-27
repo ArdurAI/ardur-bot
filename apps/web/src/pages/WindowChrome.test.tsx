@@ -58,7 +58,7 @@ it("registers all three destinations before a direct IDE load and navigates with
       </MemoryRouter>,
     ),
   );
-  expect(document.title).toBe("IDE — Ardur Bot");
+  expect(document.title).toBe("IDE — Ardur");
   expect(node.querySelector('[aria-current="page"]')?.textContent).toBe("IDE");
   for (const [key, label, path] of [
     ["1", "Dashboard", "/app"],
@@ -75,7 +75,7 @@ it("registers all three destinations before a direct IDE load and navigates with
       ),
     );
     expect(node.querySelector("output")?.textContent).toBe(path);
-    expect(document.title).toBe(`${label} — Ardur Bot`);
+    expect(document.title).toBe(`${label} — Ardur`);
   }
   await act(async () => root.unmount());
 });
@@ -92,7 +92,7 @@ it("keeps Board deep links inside Dashboard while naming the active view", async
     ),
   );
   expect(node.querySelector('[aria-current="page"]')?.textContent).toBe("Dashboard");
-  expect(document.title).toBe("Board — Ardur Bot");
+  expect(document.title).toBe("Board — Ardur");
   expect(node.querySelectorAll("nav a")).toHaveLength(3);
   await act(async () => root.unmount());
 });

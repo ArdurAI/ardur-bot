@@ -1,5 +1,5 @@
 ---
-title: "Self-hosting Ardur Bot"
+title: "Self-hosting Ardur"
 description: "The signed-in product is a long-running API, a Graphile Worker, and Postgres. It uses the computer it is installed on by default. Docker, Podman, Kubernetes, and SSH are optional…"
 source_path: "docs/self-host.md"
 ---
@@ -173,20 +173,20 @@ Keep an installation without email on a trusted local network.
 ### Verification and password recovery email
 
 Password changes for signed-in users require no email configuration. Forgotten-password recovery
-appears on sign-in only when a transactional email provider is available. Ardur Bot uses a
+appears on sign-in only when a transactional email provider is available. Ardur uses a
 provider-neutral contract and ships an SMTP adapter, so Amazon SES, Resend, and self-hosted SMTP
 servers use the same configuration:
 
 ```env
 SMTP_URL=smtps://smtp-user:replace-with-password@smtp.example.com:465
-EMAIL_FROM=Ardur Bot <no-reply@example.com>
+EMAIL_FROM=Ardur <no-reply@example.com>
 ```
 
 For Resend, use `smtp.resend.com`, username `resend`, and an API key as the password. For Amazon
 SES, use the regional SMTP endpoint and SES SMTP credentials; these are different from ordinary AWS
 access keys. Verify the sender/domain with the provider before testing delivery. Keep credentials in
 `.env`, never in tracked files. `smtps://` uses implicit TLS; `smtp://` is also supported but requires
-STARTTLS. Ardur Bot rejects configuration that disables TLS or certificate verification.
+STARTTLS. Ardur rejects configuration that disables TLS or certificate verification.
 
 Local source development can use the offline email emulator instead. It captures email without
 contacting a provider:
@@ -235,7 +235,7 @@ BOX_API_KEY=              # when SANDBOX_PROVIDER=box
 Open **Settings → Models → Ollama**, then **Test**. The result shows the server version and
 installed models. **Save** stores a keyless connection. Choose an installed model and use it as
 the space default, or select it under **Local** in a bot's model settings to pin that bot.
-No Ardur Bot environment variables or hand-entered model list are required.
+No Ardur environment variables or hand-entered model list are required.
 
 Source deployments default to `http://127.0.0.1:11434`. Packaged **This computer** deployments
 use `http://host.docker.internal:11434`, because the API and worker run in containers. The
@@ -296,7 +296,7 @@ ARDURBOT_LOCAL_MAX_TOKENS=4096
 ARDURBOT_LOCAL_VISION_MODELS=qwen3-vl
 ```
 
-The loopback default is suitable when running Ardur Bot from a source checkout. From containers,
+The loopback default is suitable when running Ardur from a source checkout. From containers,
 prefer a stable LAN RFC1918 address (not Compose service DNS alone). On Docker Desktop,
 `host.docker.internal` also works.
 On Docker Desktop, a bot computer shell can often reach services bound to host `127.0.0.1`
@@ -304,7 +304,7 @@ through that same hostname. Do not run sensitive unauthenticated services on loo
 bots run, or firewall / block that path. Linux does not get `host.docker.internal` the same
 way by default.
 Only configure an endpoint you control: prompts, attachments, and tool results sent to that model
-leave Ardur Bot through this URL. Leave `ARDURBOT_LOCAL_MODELS` blank to disable the provider.
+leave Ardur through this URL. Leave `ARDURBOT_LOCAL_MODELS` blank to disable the provider.
 
 Each user can also connect their own OpenAI-compatible endpoint from **Connect a model** /
 **Settings → Models** on web and mobile. Choose **OpenAI-compatible**, enter the server base URL
@@ -322,7 +322,7 @@ Existing connections default to disabled. Reconnect former Qwen-list or deployme
 via **Settings → Models** and turn it on; the old environment list is no longer read.
 
 Enabled connections default to medium thinking. Web and desktop expose **Thinking** in a bot's
-advanced settings; mobile inherits the same backend policy. Ardur Bot sends standard
+advanced settings; mobile inherits the same backend policy. Ardur sends standard
 `reasoning_effort` (`minimal`, `low`, `medium`, `high`, or `none` when off); the server owns
 model-specific translation. Leave **Supports thinking** off when the server lacks standard effort
 support. Existing token limits still apply; effort is not a separate reasoning-token budget.
@@ -335,7 +335,7 @@ Optional messaging platforms (iMessage, Slack, WhatsApp, Telegram, Feishu/Lark) 
 
 The installed desktop app runs bots' work on the computer it is installed on. Docker, Podman,
 Kubernetes and SSH machines are computers you add in **Settings → Computers**. Where a new
-computer starts depends on how Ardur Bot was installed:
+computer starts depends on how Ardur was installed:
 
 - **The installed desktop app** runs its own database and services, and new computers start on
   this computer. It never asks where bots should run. **Settings → Computers** shows this
@@ -364,13 +364,13 @@ The Electron desktop app is a client of the same API; [where bots run](#where-bo
 - **Docker** is the quick-start default for published images and for a source checkout / full local
   Compose stack. Workspace bots share a persistent Team Computer by default; Private computers are
   optional. Keep the supervisor private, as the included Compose files do.
-- **E2B** runs bot computers away from the Ardur Bot host and is a good choice for public or multi-user
-  production deployments. Ardur Bot checkpoints the portable workspace and browser-profile directory to
+- **E2B** runs bot computers away from the Ardur host and is a good choice for public or multi-user
+  production deployments. Ardur checkpoints the portable workspace and browser-profile directory to
   `DATA_DIR`; the E2B disk is a runtime cache, not the durable source of truth.
 - **Daytona** provides the same remote-computer contract through Daytona sandboxes. Configure
   `DAYTONA_API_KEY` and optionally `DAYTONA_API_URL` / `DAYTONA_TARGET`.
 - **Box by ASCII** provides a managed Linux desktop through `BOX_API_KEY` and optionally
-  `BOX_API_URL`. Ardur Bot always creates or resumes boxes with `noEnv: true`, keeps the portable
+  `BOX_API_URL`. Ardur always creates or resumes boxes with `noEnv: true`, keeps the portable
   workspace under `/home/user/ardurbot-home`, and refreshes a two-hour TTL. Box uses the shared Linux
   desktop runtime and protected port routes for concurrent bot desktops. Each bot has its own
   persistent Chrome profile; logins are not shared between bots.

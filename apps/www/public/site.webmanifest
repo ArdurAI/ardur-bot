@@ -1,6 +1,6 @@
 {
-  "name": "Ardur Bot",
-  "short_name": "Ardur Bot",
+  "name": "Ardur",
+  "short_name": "Ardur",
   "description": "An open source Grok Bot alternative for persistent AI teammates that do real work.",
   "start_url": "/",
   "display": "browser",

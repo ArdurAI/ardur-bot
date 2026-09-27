@@ -72,7 +72,7 @@ The root version is the sole editable input. `scripts/desktop-version.mjs` copie
 desktop package before every desktop build; that package field is derived packaging metadata.
 The executable's `--version` flag prints `app.getVersion()` and exits before taking the instance
 lock, opening a window, checking updates, or starting the embedded Postgres server. With the Homebrew cask or Linux deb,
-run `ardur-bot --version`; from a DMG install run the bundle executable with `--version`.
+run `ardur --version`; from a DMG install run the bundle executable with `--version`.
 
 Release notes count commits since the previous reachable `v*` tag (all ancestors for the first
 release), grouped by `feat`, `fix`, `perf`, `docs`, `build`, `ci`, `test`, `refactor`, `chore`, `style`,
@@ -99,7 +99,7 @@ Unsigned macOS apps cannot apply electron-updater updates automatically; its
 code signing. These unsigned previews use download-only updates on all desktop platforms, so the
 UI never claims a verified in-place installation. On discovery it shows **“A new version is
 available — download”**, linking to the official release page. This copy appears only when a new
-version exists; removing it would leave users without an update action. “Open Ardur Bot” and “Quit”
+version exists; removing it would leave users without an update action. “Open Ardur” and “Quit”
 are the tray actions, necessary to reopen or leave the background app.
 
 `autoDownload` and `autoInstallOnAppQuit` remain off for preview installs, pre-release discovery is
@@ -131,7 +131,7 @@ builds come later and require an explicit change to this policy.
    ```
 
 4. Wait for the pre-release assets. Download the DMG matching the Mac architecture, drag
-   **Ardur Bot.app** to **Applications**, eject the DMG, and follow the unsigned-opening steps
+   **Ardur.app** to **Applications**, eject the DMG, and follow the unsigned-opening steps
    in the [README](../README.md#install-a-desktop-preview). Open it, confirm the version in update
    settings, and complete setup. **This computer** starts the app's own database and services; see
    [what commands can do on this computer](self-host.md#what-commands-can-do-on-this-computer).
@@ -154,6 +154,8 @@ CSC_IDENTITY_AUTO_DISCOVERY=false pnpm --filter @ardurbot/desktop pack:dir
 unpackaged launch. Point it at an empty temporary directory when checking a packaged
 build so the app does not write into the default profile. `ARDURBOT_PERFORMANCE_USER_DATA`
 is still used when `ARDURBOT_USER_DATA_DIR` is unset.
+The display-name change keeps the existing desktop app ID and its previous user-data folder,
+so an installed build reads the same setup, database, and files after upgrading.
 
 `--dir` validates and packages an unpacked app; it does not exercise DMG mounting, quarantine,
 NSIS installation, or deb dependencies. The desktop Playwright suite belongs in CI, where it
@@ -161,22 +163,22 @@ runs in a virtual display.
 
 ## Homebrew tap handoff
 
-`homebrew/Casks/ardur-bot.rb` is a template, not an installable cask yet. The release workflow
+`homebrew/Casks/ardur.rb` is a template, not an installable cask yet. The release workflow
 fills its version, architecture-specific DMG URLs, and SHA-256 values from the built files and
-attaches `ardur-bot.rb` to the pre-release. It never contacts a tap or makes a repository commit.
+attaches `ardur.rb` to the pre-release. It never contacts a tap or makes a repository commit.
 
 After the owner creates `ArdurAI/homebrew-tap`, these **two commands** publish the first cask:
 
 ```sh
-gh release download v0.1.0-alpha.1 --repo ArdurAI/ardur-bot --pattern ardur-bot.rb --dir homebrew/Casks --clobber
-gh api repos/ArdurAI/homebrew-tap/contents/Casks/ardur-bot.rb --method PUT -f message='build: publish desktop cask' -f content="$(base64 < homebrew/Casks/ardur-bot.rb | tr -d '\n')"
+gh release download v0.1.0-alpha.1 --repo ArdurAI/ardur-bot --pattern ardur.rb --dir homebrew/Casks --clobber
+gh api repos/ArdurAI/homebrew-tap/contents/Casks/ardur.rb --method PUT -f message='build: publish desktop cask' -f content="$(base64 < homebrew/Casks/ardur.rb | tr -d '\n')"
 ```
 
 For later updates, the second command also needs the current cask file's `sha` parameter.
 Users can then run:
 
 ```sh
-brew install --cask ardurai/tap/ardur-bot
+brew install --cask ardurai/tap/ardur
 ```
 
 Homebrew verifies the downloaded checksum. It does not sign, notarize, or silently remove

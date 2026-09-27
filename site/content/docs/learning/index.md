@@ -12,7 +12,7 @@ default, or call tools. A pass that changes nothing is a normal result.
 
 ## Insights
 
-Insights tell a person how to get more out of Ardur Bot from their own work. Each is one plain
+Insights tell a person how to get more out of Ardur from their own work. Each is one plain
 sentence, the evidence behind it, and one action that opens the place to act. An insight never
 changes anything itself: the person makes the change there, as with pins.
 

@@ -16,7 +16,7 @@ import { inspectBuild, inspectHermes, sanitize } from "./provenance.js";
 import type { PairPlan } from "./scheduler.js";
 import { planPairs } from "./scheduler.js";
 
-export const HELP = `Ardur Bot versus Hermes benchmark
+export const HELP = `Ardur versus Hermes benchmark
 
 pnpm --filter @ardurbot/testkit exec tsx src/versus/cli.ts --dry-run --suite core24 --out ./artifacts/versus/dry
 pnpm --filter @ardurbot/testkit exec tsx src/versus/cli.ts --self-test --out ./artifacts/versus/self-test

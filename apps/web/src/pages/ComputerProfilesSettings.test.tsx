@@ -595,7 +595,7 @@ it("shows the host refusal as its own sentence instead of the generic failure", 
   await act(async () => button("Apply").click());
   await act(async () => button("Continue").click());
   expect(element.querySelector('[role="alert"]')?.textContent).toBe(
-    "Moving a computer onto the machine running Ardur Bot is not available yet. Choose a saved connection or keep the current engine.",
+    "Moving a computer onto the machine running Ardur is not available yet. Choose a saved connection or keep the current engine.",
   );
   await act(async () => root.unmount());
 });

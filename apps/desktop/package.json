@@ -1,6 +1,6 @@
 {
   "name": "@ardurbot/desktop",
-  "productName": "Ardur Bot",
+  "productName": "Ardur",
   "version": "0.1.0-alpha.1",
   "license": "Apache-2.0",
   "type": "module",
@@ -110,14 +110,14 @@
       "signExecutable": false
     },
     "linux": {
-      "executableName": "ardur-bot",
+      "executableName": "ardur",
       "icon": "assets/icon.png",
       "target": [
         "AppImage",
         "deb"
       ],
       "category": "Utility",
-      "maintainer": "Ardur Bot maintainers"
+      "maintainer": "Ardur maintainers"
     },
     "publish": [
       {
@@ -127,11 +127,11 @@
         "releaseType": "prerelease"
       }
     ],
-    "artifactName": "ardur-bot-${version}-${os}-${arch}.${ext}",
+    "artifactName": "ardur-${version}-${os}-${arch}.${ext}",
     "forceCodeSigning": false,
     "protocols": [
       {
-        "name": "Ardur Bot integrations",
+        "name": "Ardur integrations",
         "schemes": [
           "ardurbot"
         ]
@@ -140,5 +140,5 @@
   },
   "description": "Persistent bots on computers and models you choose",
   "homepage": "https://github.com/ArdurAI/ardur-bot",
-  "author": "Ardur Bot maintainers"
+  "author": "Ardur maintainers"
 }

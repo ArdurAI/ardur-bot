@@ -718,7 +718,7 @@ describe("reset", () => {
       expect(await readdir(path.join(root, "backups"))).toEqual([]);
       // A folder the app cannot write to (EACCES) is a permissions problem, not a locked file.
       expect(localResetFailure(failure)).toBe(
-        "Ardur Bot cannot move its local data. Check the permissions of its data folder, then try Reset local data again.",
+        "Ardur cannot move its local data. Check the permissions of its data folder, then try Reset local data again.",
       );
 
       const backup = await controller.resetData();
@@ -893,13 +893,13 @@ describe("reset failure sentences", () => {
 
   it("means the app cannot write to the folder on EACCES", () => {
     expect(resetMoveFailure(errorWithCode("EACCES"), "darwin")).toBe(
-      "Ardur Bot cannot move its local data. Check the permissions of its data folder, then try Reset local data again.",
+      "Ardur cannot move its local data. Check the permissions of its data folder, then try Reset local data again.",
     );
   });
 
   it("means the app cannot write to the folder on EPERM off Windows", () => {
     expect(resetMoveFailure(errorWithCode("EPERM"), "linux")).toBe(
-      "Ardur Bot cannot move its local data. Check the permissions of its data folder, then try Reset local data again.",
+      "Ardur cannot move its local data. Check the permissions of its data folder, then try Reset local data again.",
     );
   });
 });
@@ -1146,12 +1146,12 @@ describe("database lifecycle", () => {
   it.each([
     [
       "newer",
-      "This data was last opened by a newer version of Ardur Bot. Install the latest version of Ardur Bot, then Retry.",
+      "This data was last opened by a newer version of Ardur. Install the latest version of Ardur, then Retry.",
       undefined,
     ],
     [
       "modified",
-      "This version of Ardur Bot does not match its database. Install the latest version of Ardur Bot, then Retry.",
+      "This version of Ardur does not match its database. Install the latest version of Ardur, then Retry.",
       undefined,
     ],
     [
@@ -1223,7 +1223,7 @@ describe("database lifecycle", () => {
         },
       }),
     );
-    const sentence = "Part of this installation is missing. Reinstall Ardur Bot.";
+    const sentence = "Part of this installation is missing. Reinstall Ardur.";
     expect(await controller.start()).toMatchObject({ phase: "failed", message: sentence });
     expect(failed).toEqual([sentence]);
     expect(controller.running()).toBe(false);

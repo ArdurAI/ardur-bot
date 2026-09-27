@@ -65,7 +65,7 @@ test("Settings catalog connects and grants only selected tools", async ({ page }
     connections = [connection];
     await route.fulfill({
       contentType: "text/html",
-      body: "<p>Connected to Notion. You can close this tab and return to Ardur Bot.</p><script>window.close()</script>",
+      body: "<p>Connected to Notion. You can close this tab and return to Ardur.</p><script>window.close()</script>",
     });
   });
   let assigned:

@@ -64,7 +64,7 @@ export function QuickComposer({ signedIn }: { signedIn: boolean }) {
       {!signedIn ? (
         <>
           <p className="text-sm">{t`Sign in to use quick access.`}</p>
-          <Button onClick={() => void bridge.openMain?.()}>{t`Open Ardur Bot`}</Button>
+          <Button onClick={() => void bridge.openMain?.()}>{t`Open Ardur`}</Button>
         </>
       ) : (
         <>

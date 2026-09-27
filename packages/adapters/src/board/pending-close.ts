@@ -6,7 +6,7 @@ import { getLogger } from "@ardurbot/logging";
 
 export const BOARD_CLOSE_FAILED_TITLE = "A board item filed by a bot could not be closed.";
 export const BOARD_CLOSE_FAILED_BODY =
-  "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected.";
+  "Ardur tried five times. Close it on the Board, or check that this computer is connected.";
 const CLOSE_NOTIFY_ATTEMPT = 5;
 const CLOSE_BACKOFF_MS = 30_000;
 const CLOSE_BACKOFF_CAP_MS = 15 * 60_000;

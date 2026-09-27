@@ -206,7 +206,7 @@ export function LocalImportPage() {
       </div>
       <p className="text-sm text-muted-foreground">
         <Trans>
-          Ardur Bot reads instructions, memories, skills and server lists from these tools on this
+          Ardur reads instructions, memories, skills and server lists from these tools on this
           computer and never their sign-ins, tokens or chat history.
         </Trans>
       </p>
