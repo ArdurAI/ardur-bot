@@ -34,12 +34,13 @@ function dockerProviderKey(providerKey: string) {
 }
 
 async function stagingDirectory() {
-  // Colima mounts $HOME, so fixture bind mounts must be staged below it.
+  // The default Colima VM only mounts HOME; other Docker endpoints can mount writable parents elsewhere.
   const parent = process.env.ARDUR_HERMES_STAGING_PARENT ?? process.cwd();
   const outsideHome = relative(homedir(), parent);
   if (
-    outsideHome === ".." ||
-    outsideHome.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`)
+    dockerEnvironment().DOCKER_HOST === `unix://${homedir()}/.colima/default/docker.sock` &&
+    (outsideHome === ".." ||
+      outsideHome.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`))
   )
     throw new Error("Hermes image staging must be below HOME.");
   await mkdir(parent, { recursive: true, mode: 0o700 });
@@ -69,7 +70,7 @@ it("uses portable image lane paths and the selected Docker endpoint", async () =
   const previousEvidence = process.env.ARDUR_HERMES_EVIDENCE_DIR;
   const previousHost = process.env.DOCKER_HOST;
   const previousStaging = process.env.ARDUR_HERMES_STAGING_PARENT;
-  const stagingParent = await mkdtemp(join(process.cwd(), ".hermes-staging-parent-"));
+  const stagingParent = await mkdtemp(join(tmpdir(), ".hermes-staging-parent-"));
   let staging: string | undefined;
   try {
     process.env.ARDUR_HERMES_EVIDENCE_DIR = join(tmpdir(), "fixture-evidence");
@@ -78,7 +79,6 @@ it("uses portable image lane paths and the selected Docker endpoint", async () =
     staging = await stagingDirectory();
     expect(evidenceDirectory()).toBe(join(tmpdir(), "fixture-evidence"));
     expect(dockerEnvironment().DOCKER_HOST).toBe("unix:///fixture/docker.sock");
-    expect(staging.startsWith(homedir())).toBe(true);
     expect(dirname(staging)).toBe(stagingParent);
   } finally {
     if (previousEvidence === undefined) delete process.env.ARDUR_HERMES_EVIDENCE_DIR;
@@ -91,6 +91,54 @@ it("uses portable image lane paths and the selected Docker endpoint", async () =
     await rm(stagingParent, { recursive: true, force: true });
   }
 });
+
+const temporaryParentIsBelowHome = (() => {
+  const path = relative(homedir(), tmpdir());
+  return path !== ".." && !path.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`);
+})();
+
+it.skipIf(temporaryParentIsBelowHome)(
+  "rejects Colima staging outside HOME (skipped when the temporary directory is below HOME)",
+  async () => {
+    const previousHost = process.env.DOCKER_HOST;
+    const previousStaging = process.env.ARDUR_HERMES_STAGING_PARENT;
+    const stagingParent = await mkdtemp(join(tmpdir(), ".hermes-staging-parent-"));
+    try {
+      process.env.DOCKER_HOST = `unix://${homedir()}/.colima/default/docker.sock`;
+      process.env.ARDUR_HERMES_STAGING_PARENT = stagingParent;
+      await expect(stagingDirectory()).rejects.toThrow("Hermes image staging must be below HOME.");
+    } finally {
+      if (previousHost === undefined) delete process.env.DOCKER_HOST;
+      else process.env.DOCKER_HOST = previousHost;
+      if (previousStaging === undefined) delete process.env.ARDUR_HERMES_STAGING_PARENT;
+      else process.env.ARDUR_HERMES_STAGING_PARENT = previousStaging;
+      await rm(stagingParent, { recursive: true, force: true });
+    }
+  },
+);
+
+it.skipIf(!temporaryParentIsBelowHome)(
+  "accepts Colima staging below HOME (skipped when the temporary directory is outside HOME)",
+  async () => {
+    const previousHost = process.env.DOCKER_HOST;
+    const previousStaging = process.env.ARDUR_HERMES_STAGING_PARENT;
+    const stagingParent = await mkdtemp(join(tmpdir(), ".hermes-staging-parent-"));
+    let staging: string | undefined;
+    try {
+      process.env.DOCKER_HOST = `unix://${homedir()}/.colima/default/docker.sock`;
+      process.env.ARDUR_HERMES_STAGING_PARENT = stagingParent;
+      staging = await stagingDirectory();
+      expect(dirname(staging)).toBe(stagingParent);
+    } finally {
+      if (previousHost === undefined) delete process.env.DOCKER_HOST;
+      else process.env.DOCKER_HOST = previousHost;
+      if (previousStaging === undefined) delete process.env.ARDUR_HERMES_STAGING_PARENT;
+      else process.env.ARDUR_HERMES_STAGING_PARENT = previousStaging;
+      if (staging) await rm(staging, { recursive: true, force: true });
+      await rm(stagingParent, { recursive: true, force: true });
+    }
+  },
+);
 
 it("keeps the fake provider key out of Docker argv", () => {
   const key = "fixture-provider-key-123";
