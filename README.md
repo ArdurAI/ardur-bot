@@ -1,15 +1,15 @@
-# Ardur Bot
+# Ardur
 
 Open-source desktop bots that run on your own AI subscriptions and keys.
 
-Ardur Bot gives you named bots that keep their memory, talk to each other in group chats,
+Ardur gives you named bots that keep their memory, talk to each other in group chats,
 run routines on a schedule, use connectors, and ask before doing anything consequential.
 Each bot is pinned to a provider, model and effort level you choose: a review bot that
 always uses your ChatGPT account at `xhigh` effort, a research bot on Kimi, a local bot on
 Ollama. Bots work on computers you control: your machine, Docker, and (planned) Podman and
 Kubernetes.
 
-Ardur Bot is a fork of [Rakazo](https://github.com/elie222/rakazo) (Apache-2.0). See
+Ardur is a fork of [Rakazo](https://github.com/elie222/rakazo) (Apache-2.0). See
 [NOTICE](NOTICE) and [ADR-001](docs/decisions/ADR-001-fork-and-rename.md).
 
 > **Status: pre-alpha.** Everything lands on the `dev` branch; `main` moves only after a
@@ -23,10 +23,14 @@ Inherited from Rakazo and working:
 - Persistent bots with their own conversation, memory, routines and history
 - Group chats and delegation between bots, plus short-lived subagents
 - A provider, model and thinking level per bot
-- Providers: OpenRouter, OpenAI Codex (ChatGPT account), Anthropic (API key), OpenAI,
-  Google, Vercel AI Gateway, and any OpenAI-compatible server, which covers Kimi Code,
-  Z.ai, and local Ollama, LM Studio or llama.cpp
-- Computers: the computer Ardur Bot is installed on, plus Docker, Podman, Kubernetes or SSH
+<!-- site-facts:providers:start -->
+<!-- Generated from site/data/product.json by pnpm site:facts; edit that file. -->
+- Providers: OpenRouter, OpenAI Codex (ChatGPT account), Anthropic (API key),
+  OpenAI, Google, Vercel AI Gateway, and 36 more in the searchable model catalog.
+  OpenAI-compatible servers cover local Ollama, LM Studio and llama.cpp.
+  Planned additions include Claude Pro/Max through the CLI and Ollama as a direct local choice.
+<!-- site-facts:providers:end -->
+- Computers: the computer Ardur is installed on, plus Docker, Podman, Kubernetes or SSH
   machines you add, and E2B, Daytona or Box on a server, with a browser, terminal, files and a
   graphical desktop ([where bots run](docs/self-host.md#where-bots-run))
 - Connectors: MCP servers, OpenAPI documents, Composio, Pipedream Connect
@@ -51,7 +55,7 @@ Download your OS and architecture from [GitHub pre-releases](https://github.com/
 These builds are **unsigned**; macOS builds are also **not notarized**. Signed builds come later.
 Only approve a download you trust from the official release page.
 
-- **macOS:** open the arm64 DMG for Apple Silicon or x64 DMG for Intel, drag **Ardur Bot.app**
+- **macOS:** open the arm64 DMG for Apple Silicon or x64 DMG for Intel, drag **Ardur.app**
   into **Applications**, and eject the DMG. Gatekeeper can say the developer cannot be verified
   or the app cannot be checked for malicious software. In Finder, right-click → **Open** →
   **Open**. On recent macOS versions where that override is unavailable, attempt to open once,
@@ -59,8 +63,8 @@ Only approve a download you trust from the official release page.
   **Open**. A terminal alternative for that downloaded app is:
 
   ```sh
-  xattr -d com.apple.quarantine "/Applications/Ardur Bot.app"
-  open "/Applications/Ardur Bot.app"
+  xattr -d com.apple.quarantine "/Applications/Ardur.app"
+  open "/Applications/Ardur.app"
   ```
 
   The ZIP contains the same app for manual installation. Approving quarantine does not add a
@@ -72,15 +76,15 @@ Only approve a download you trust from the official release page.
 - **Linux:** download the matching AppImage, then run:
 
   ```sh
-  chmod +x ./ardur-bot-*.AppImage
-  ./ardur-bot-0.1.0-alpha.1-linux-x64.AppImage
+  chmod +x ./ardur-*.AppImage
+  ./ardur-0.1.0-alpha.1-linux-x64.AppImage
   ```
 
   Substitute your downloaded version and architecture. Linux commonly requires the executable
   permission rather than displaying a SmartScreen-style publisher prompt. Some distributions
   require FUSE support for AppImages. On Debian/Ubuntu, the `.deb` alternative installs with
-  `sudo apt install ./ardur-bot-*.deb`; a standalone deb has no distribution-repository trust
-  guarantee. Run `ardur-bot --version` after installing it.
+  `sudo apt install ./ardur-*.deb`; a standalone deb has no distribution-repository trust
+  guarantee. Run `ardur --version` after installing it.
 
 **This computer** starts the app's own database and services. Docker is not required for that
 first launch. You can still connect the client to an existing server. See
@@ -92,8 +96,8 @@ to run a server. Unsigned previews use manual downloads for updates on every OS.
 After the owner publishes the [Homebrew tap](docs/desktop-release.md#homebrew-tap-handoff):
 
 ```sh
-brew install --cask ardurai/tap/ardur-bot
-ardur-bot --version
+brew install --cask ardurai/tap/ardur
+ardur --version
 ```
 
 The cask does not bypass macOS quarantine. The tap is a separate publication step; no existing
@@ -102,8 +106,10 @@ for build and acceptance instructions.
 
 ## Run from source
 
-You need Node.js 22.22.2 or newer in the 22.x line, Node.js 24.x, or Node.js 26+; pnpm 9;
-and Docker. Node.js 23.x and 25.x are not supported.
+<!-- site-facts:from-source:start -->
+<!-- Generated from site/data/product.json by pnpm site:facts; edit that file. -->
+You need Node.js 22.22.2 or newer in the 22.x line,
+Node.js 24.x, or Node.js 26+; pnpm 9; and Docker. Node.js 23.x and 25.x are not supported.
 
 ```sh
 git clone https://github.com/ArdurAI/ardur-bot.git
@@ -112,10 +118,11 @@ git checkout dev
 cp .env.example .env
 ```
 
-In `.env`, set `POSTGRES_PASSWORD` (for example `openssl rand -hex 16`) and put the same
-value in `DATABASE_URL`. Set `BETTER_AUTH_SECRET`, `ENCRYPTION_KEY`, `SCREEN_PROXY_SECRET`
-and `SANDBOX_SUPERVISOR_TOKEN` to separate long random values (`openssl rand -hex 32`).
-Model credentials are added in the app, or set `OPENROUTER_API_KEY` here.
+In `.env`, set `POSTGRES_PASSWORD` to a random value (for example, `openssl rand -hex 16`)
+and put the same value in `DATABASE_URL`.
+Set `BETTER_AUTH_SECRET`, `ENCRYPTION_KEY`, `SCREEN_PROXY_SECRET`
+and `SANDBOX_SUPERVISOR_TOKEN` to separate long random values (for example, `openssl rand -hex 32`).
+Add model credentials in the app or set `OPENROUTER_API_KEY`.
 
 ```sh
 docker compose --env-file .env \
@@ -128,6 +135,7 @@ pnpm db:migrate
 pnpm sandbox:build
 pnpm dev
 ```
+<!-- site-facts:from-source:end -->
 
 Open [http://127.0.0.1:5173](http://127.0.0.1:5173), create an account, connect a model, and
 create your first bot. Local Docker computers are on by default.

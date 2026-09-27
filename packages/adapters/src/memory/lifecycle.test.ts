@@ -59,6 +59,7 @@ function fixture() {
     secrets: { load: vi.fn() } as never,
     jobs: { enqueue, cancel: async () => undefined, close: async () => undefined },
     dataDir: "/fixture/data",
+    selectListIds: database.selectListIds,
   };
   return { config, database, tx, enqueue, deps, ...createMemoryLifecycle(deps) };
 }

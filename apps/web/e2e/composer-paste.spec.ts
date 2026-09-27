@@ -5,8 +5,7 @@ async function openComposer(page: Page) {
   const stamp = Date.now();
   await signup(page, `composer-paste-${stamp}@ardurbot.test`, "password12", "Paste Test");
   await completeOnboarding(page);
-  await page.goto("/app");
-  await page.waitForURL(/\/app\/[^/]+$/);
+  await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
   const composer = page.getByRole("combobox", { name: /Message/ });
   await expect(composer).toBeVisible();
   return composer;

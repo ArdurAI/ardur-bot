@@ -85,11 +85,7 @@ test("general settings language picker includes Russian and persists it", async 
   await signup(page, `ui-locale-ru-${stamp}@ardurbot.test`, "password12", "Locale QA");
   await completeOnboarding(page, testInfo);
 
-  await page.getByTestId("user-menu-trigger").click();
-  await page
-    .locator('[data-slot="popover-content"]')
-    .getByRole("button", { name: "Settings", exact: true })
-    .click();
+  await page.locator("header.app-drag").getByRole("button", { name: "Settings" }).click();
   const settings = page.getByTestId("user-settings");
   await settings.getByTestId("settings-nav-general").click();
   await expect(settings).toBeVisible();

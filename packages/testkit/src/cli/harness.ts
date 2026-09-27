@@ -7,7 +7,7 @@ import type { createApp } from "../../../../apps/api/src/app.ts";
 import { runIntegrationSuites } from "./integration.js";
 import { runProcess } from "./process.js";
 
-loadRootEnv();
+if (process.env.TESTKIT_SKIP_ROOT_ENV !== "1") loadRootEnv();
 
 const integration = process.argv.includes("--integration");
 const e2e = process.argv.includes("--e2e");
@@ -15,9 +15,13 @@ const sandboxArg = process.argv.find((arg) => arg.startsWith("--sandbox="));
 const specArg = process.argv.find((arg) => arg.startsWith("--spec="));
 const grepArg = process.argv.find((arg) => arg.startsWith("--grep="));
 const runtimeArg = process.argv.find((arg) => arg.startsWith("--runtime="));
+const workersArg = process.argv.find((arg) => arg.startsWith("--workers="));
+const shardArg = process.argv.find((arg) => arg.startsWith("--shard="));
 const sandboxProvider = sandboxArg?.slice("--sandbox=".length) ?? "fake";
 const e2eSpec = specArg?.slice("--spec=".length);
 const e2eGrep = grepArg?.slice("--grep=".length);
+const e2eWorkers = workersArg?.slice("--workers=".length);
+const e2eShard = shardArg?.slice("--shard=".length);
 const agentRuntime = runtimeArg?.slice("--runtime=".length) ?? "scripted";
 
 if (Number(integration) + Number(e2e) !== 1) {
@@ -44,7 +48,7 @@ if (sandboxProvider === "box" && !process.env.BOX_API_KEY) {
 
 async function main() {
   const mode = integration ? "integration" : "e2e";
-  const reportDir = path.resolve("test-report", mode);
+  const reportDir = path.resolve(process.env.TEST_REPORT_DIR ?? "test-report", mode);
   await mkdir(reportDir, { recursive: true });
   const container = await new PostgreSqlContainer("postgres:16-alpine").start();
   try {
@@ -109,6 +113,8 @@ async function main() {
         "packages/adapters/src/board/filing.postgres.test.ts",
         "packages/adapters/src/board/delivery.postgres.test.ts",
         "packages/memory/src/commit.postgres.test.ts",
+        "packages/memory/src/scoped-reads.postgres.test.ts",
+        "packages/adapters/src/memory/scoped-reads-wrapper.postgres.test.ts",
         "packages/adapters/src/wakeup.postgres.test.ts",
         "packages/adapters/src/realtime.postgres.test.ts",
         "packages/adapters/src/run-usage.postgres.test.ts",
@@ -217,6 +223,8 @@ async function main() {
             "test",
             ...(e2eSpec ? [e2eSpec] : []),
             ...(e2eGrep ? ["--grep", e2eGrep] : []),
+            ...(e2eWorkers ? ["--workers", e2eWorkers] : []),
+            ...(e2eShard ? ["--shard", e2eShard] : []),
           ],
           {
             ...process.env,

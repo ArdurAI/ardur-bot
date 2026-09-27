@@ -14,8 +14,7 @@ test("create opens form, then empty chat; picker lists bots; sidebar collapses",
   const stamp = Date.now();
   await signup(page, `new-bot-ux-${stamp}@ardurbot.test`, "password12", "New Bot UX");
   await completeOnboarding(page);
-  await page.goto("/app");
-  await page.waitForURL(/\/app\/[^/]+$/);
+  await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
 
   await page.getByTestId("create-menu-trigger").click();
   const picker = page.getByTestId("bot-create-picker");
@@ -74,8 +73,7 @@ test("picker rows explain groups and spaces", async ({ page }, testInfo) => {
   const stamp = Date.now();
   await signup(page, `picker-info-${stamp}@ardurbot.test`, "password12", "Picker Info");
   await completeOnboarding(page);
-  await page.goto("/app");
-  await page.waitForURL(/\/app\/[^/]+$/);
+  await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
 
   await page.getByTestId("create-menu-trigger").click();
   const picker = page.getByTestId("bot-create-picker");
@@ -152,8 +150,7 @@ test("plus picker can create a Private computer bot", async ({ page }, testInfo)
   const stamp = Date.now();
   await signup(page, `new-bot-private-${stamp}@ardurbot.test`, "password12", "New Bot Private");
   await completeOnboarding(page);
-  await page.goto("/app");
-  await page.waitForURL(/\/app\/[^/]+$/);
+  await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
 
   await createBotFromPicker(page, { computerMode: "dedicated" });
   await expect(page.getByPlaceholder("Message New Bot")).toBeVisible();
@@ -168,8 +165,7 @@ test("second bot from plus opens create form before persist", async ({ page }, t
   const stamp = Date.now();
   await signup(page, `second-bot-form-${stamp}@ardurbot.test`, "password12", "Second Bot Form");
   await completeOnboarding(page);
-  await page.goto("/app");
-  await page.waitForURL(/\/app\/[^/]+$/);
+  await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
 
   await openNewBot(page);
   const form = page.getByTestId("create-bot-form");

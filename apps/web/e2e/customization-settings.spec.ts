@@ -14,7 +14,9 @@ test("customization settings share searchable lists and hide native pages on web
     await settings.getByTestId(`settings-nav-${section}`).click();
     await expect(settings).toHaveAttribute("data-settings-section", section);
     await expect(settings.getByRole("tab", { name: "Yours", exact: true })).toBeVisible();
-    await expect(settings.getByRole("searchbox")).toBeVisible();
+    await expect(
+      settings.getByPlaceholder(/Search (skills and plugins|integrations)/),
+    ).toBeVisible();
     await settings.getByRole("tab", { name: "Catalog", exact: true }).click();
     await captureScreenshot(page, testInfo, `customization-${section}`);
   }

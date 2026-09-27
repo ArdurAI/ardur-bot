@@ -980,6 +980,10 @@ model MemoryDocument {
   @@unique([spaceId, scopeKey, path])
   @@index([deliveryStatus])
   @@index([spaceId, userId])
+  // The C-collated (spaceId, id) index is maintained by migration
+  // 20260927000000_memory_documents_id_collate_c. Prisma 7 @@index cannot express
+  // a per-column PostgreSQL COLLATE clause; adding @@index here would create a
+  // different, database-collated index.
   @@map("memory_documents")
 }
 
@@ -1735,7 +1739,7 @@ model ComputerAdmission {
 model InstanceIdentity {
   id String @id @default("home")
   instanceId String @unique
-  homeName String @default("Ardur Bot")
+  homeName String @default("Ardur")
   publicKey String
   fingerprint String
   certificate String

@@ -138,18 +138,18 @@ function catalogBilling(
   const signInMeta = SUBSCRIPTION_SIGN_IN_PROVIDERS[providerId];
   if (signInMeta) return signInMeta.billing;
   if (providerId === LOCAL_PROVIDER_ID) {
-    return "Runs on infrastructure configured by the deployment owner. No model charges from Ardur Bot.";
+    return "Runs on infrastructure configured by the deployment owner. No model charges from Ardur.";
   }
   if (providerId === OPENAI_COMPATIBLE_PROVIDER_ID) {
-    return "Runs on a URL you control. Ardur Bot does not pay for model usage.";
+    return "Runs on a URL you control. Ardur does not pay for model usage.";
   }
   if (opts.oauth && !opts.apiKey) {
-    return `${name} subscription login is not in the Ardur Bot UI yet. Skip if this deployment already has credentials.`;
+    return `${name} subscription login is not in the Ardur UI yet. Skip if this deployment already has credentials.`;
   }
   if (opts.apiKey) {
-    return `Uses your ${name} API key. Ardur Bot does not pay for model usage.`;
+    return `Uses your ${name} API key. Ardur does not pay for model usage.`;
   }
-  return `Uses your ${name} key. Ardur Bot does not pay for model usage.`;
+  return `Uses your ${name} key. Ardur does not pay for model usage.`;
 }
 
 export const scriptedCatalogEntry: PiCatalogEntry = {

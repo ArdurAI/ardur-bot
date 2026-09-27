@@ -861,11 +861,11 @@ msgid "Ardur (built-in)"
 msgstr ""
 
 #: src/pages/import/LocalImportPage.tsx
-msgid "Ardur Bot reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history."
+msgid "Ardur reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history."
 msgstr ""
 
 #: src/lib/board-close-copy.ts
-msgid "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected."
+msgid "Ardur tried five times. Close it on the Board, or check that this computer is connected."
 msgstr ""
 
 #: src/pages/customize/McpDiagnostics.tsx
@@ -1538,8 +1538,8 @@ msgid "Choose one credential: a token or a header."
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
-msgid "Choose which connected model Ardur Bot uses."
-msgstr "चुनें कि Ardur Bot किस कनेक्टेड मॉडल का उपयोग करे।"
+msgid "Choose which connected model Ardur uses."
+msgstr "चुनें कि Ardur किस कनेक्टेड मॉडल का उपयोग करे।"
 
 #. placeholder {0}: browser.name
 #: src/pages/system/SystemPage.tsx
@@ -2860,8 +2860,8 @@ msgid "Create space"
 msgstr ""
 
 #: src/pages/Auth.tsx
-msgid "Create your Ardur Bot"
-msgstr "अपना Ardur Bot बनाएं"
+msgid "Create your Ardur"
+msgstr "अपना Ardur बनाएं"
 
 #: src/components/AskCard.tsx
 #: src/pages/account/AccountTables.tsx
@@ -4180,9 +4180,9 @@ msgid "Integration options"
 msgstr ""
 
 #: src/components/composer/ComposerMenu.tsx
+#: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/settings-sections.ts
-#: src/pages/Shell.tsx
 msgid "Integrations"
 msgstr "इंटीग्रेशन"
 
@@ -4560,7 +4560,7 @@ msgid "Local Server Settings"
 msgstr ""
 
 #: src/pages/account/AccountSettings.tsx
-#: src/pages/Shell.tsx
+#: src/pages/dashboard/DashboardAccountArea.tsx
 msgid "Log out"
 msgstr "लॉग आउट"
 
@@ -5528,7 +5528,7 @@ msgid "Open Accessibility settings"
 msgstr ""
 
 #: src/pages/system/QuickComposer.tsx
-msgid "Open Ardur Bot"
+msgid "Open Ardur"
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
@@ -5734,8 +5734,8 @@ msgid "Paste a replacement key"
 msgstr "बदलने के लिए नई कुंजी पेस्ट करें"
 
 #: src/pages/ModelSettingsOverlay.tsx
-msgid "Paste the OpenAI-compatible address from your server. Ardur Bot adds /v1 if needed."
-msgstr "अपने सर्वर से OpenAI-संगत पता पेस्ट करें। ज़रूरत होने पर Ardur Bot /v1 जोड़ देता है।"
+msgid "Paste the OpenAI-compatible address from your server. Ardur adds /v1 if needed."
+msgstr "अपने सर्वर से OpenAI-संगत पता पेस्ट करें। ज़रूरत होने पर Ardur /v1 जोड़ देता है।"
 
 #: src/pages/memory/MemoryImport.tsx
 msgid "Paste the response"
@@ -6506,8 +6506,8 @@ msgid "Retry screen"
 msgstr ""
 
 #: src/pages/McpOAuthCallback.tsx
-msgid "Return to Ardur Bot"
-msgstr "Ardur Bot पर लौटें"
+msgid "Return to Ardur"
+msgstr "Ardur पर लौटें"
 
 #. placeholder {0}: doc.revision
 #: src/pages/KnowledgeSection.tsx
@@ -7023,11 +7023,11 @@ msgstr ""
 msgid "Set up servers"
 msgstr ""
 
+#: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/settings-sections.ts
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
-#: src/pages/shell/sidebar-settings.tsx
 msgid "Settings"
 msgstr "सेटिंग्स"
 
@@ -7118,8 +7118,8 @@ msgid "Sign in again to manage sessions."
 msgstr ""
 
 #: src/pages/Auth.tsx
-msgid "Sign in to Ardur Bot"
-msgstr "Ardur Bot में साइन इन करें"
+msgid "Sign in to Ardur"
+msgstr "Ardur में साइन इन करें"
 
 #: src/pages/system/QuickComposer.tsx
 msgid "Sign in to use quick access."
@@ -7806,8 +7806,8 @@ msgid "This signs out every other session and keeps this one signed in."
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
-msgid "This subscription sign-in is not available in Ardur Bot yet. Use a deployment credential or choose another provider."
-msgstr "यह सब्सक्रिप्शन साइन-इन अभी Ardur Bot में उपलब्ध नहीं है। किसी डिप्लॉयमेंट क्रेडेंशियल का उपयोग करें या दूसरा प्रोवाइडर चुनें।"
+msgid "This subscription sign-in is not available in Ardur yet. Use a deployment credential or choose another provider."
+msgstr "यह सब्सक्रिप्शन साइन-इन अभी Ardur में उपलब्ध नहीं है। किसी डिप्लॉयमेंट क्रेडेंशियल का उपयोग करें या दूसरा प्रोवाइडर चुनें।"
 
 #: src/pages/memory/MemoryProposals.tsx
 msgid "This suggestion cannot be approved here."
@@ -8100,9 +8100,9 @@ msgid "Uploaded files"
 msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/dashboard/panels.ts
 #: src/pages/settings-sections.ts
-#: src/pages/Shell.tsx
 msgid "Usage"
 msgstr "उपयोग"
 

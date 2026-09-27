@@ -5,8 +5,7 @@ test("titled sidebar section expands and collapses", async ({ page }, testInfo) 
   const stamp = Date.now();
   await signup(page, `sidebar-collapse-${stamp}@ardurbot.test`, "password12", "Test User");
   await completeOnboarding(page);
-  await page.goto("/app");
-  await page.waitForURL(/\/app\/[^/]+$/);
+  await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
 
   const sidebar = page.locator("aside").first();
   const bot = sidebar.getByRole("button", { name: /^Chief/ });

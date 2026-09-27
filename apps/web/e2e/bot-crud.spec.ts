@@ -11,8 +11,7 @@ test("bot creation, editing, and deletion persist", async ({ page }, testInfo) =
   const stamp = Date.now();
   await signup(page, `bot-crud-${stamp}@ardurbot.test`, "password12", "Bot CRUD");
   await completeOnboarding(page);
-  await page.goto("/app");
-  await page.waitForURL(/\/app\/[^/]+$/);
+  await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
 
   const botList = page.locator("aside").first();
   await expect(botList.getByRole("button", { name: /^Chief/ })).toBeVisible();
@@ -63,7 +62,7 @@ test("bot creation, editing, and deletion persist", async ({ page }, testInfo) =
   await captureScreenshot(page, testInfo, "27-created-bot");
 
   await page.locator("main").getByRole("button", { name: "New Bot", exact: true }).click();
-  await expect(page.getByText("Settings", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("side-panel").getByText("Settings", { exact: true })).toBeVisible();
   const nameInput = page.locator("label:has-text('Name') input");
   const titleInput = page.locator("label:has-text('Title') input");
   const descriptionInput = page.locator("label:has-text('Description') textarea");
@@ -99,7 +98,7 @@ test("bot creation, editing, and deletion persist", async ({ page }, testInfo) =
   const teamComputer = settings.getByRole("button", { name: "Team" });
   const openWork = settings.getByTestId("bot-scratchpad");
   await expect(teamComputer).toBeHidden();
-  await expect(modelSelect).toBeHidden();
+  await expect(modelSelect).toBeVisible();
   await expect(openWork).toBeHidden();
   await expect(settings.getByRole("button", { name: "Save", exact: true })).toBeVisible();
   await expect(settings.getByRole("button", { name: "Recover computer" })).toHaveCount(0);

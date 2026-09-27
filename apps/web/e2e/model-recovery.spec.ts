@@ -1,22 +1,38 @@
-import type { Bot, Me, ModelCatalogEntry } from "@ardurbot/contracts";
-import { expect, test } from "@playwright/test";
+import type {
+  AppBootstrap,
+  Bot,
+  Me,
+  ModelCatalogEntry,
+  SpaceNavigation,
+} from "@ardurbot/contracts";
+import { expect, type Page, test } from "@playwright/test";
 import { captureScreenshot, completeOnboarding, signup } from "./helpers";
+
+async function patchBotNavigation(page: Page, patch: Partial<Bot>) {
+  const update = (bots: Bot[]) => bots.map((bot) => ({ ...bot, ...patch }));
+  await page.route("**/rpc/bootstrap", async (route) => {
+    const response = await route.fetch();
+    const body = (await response.json()) as { json: AppBootstrap };
+    body.json.bots = update(body.json.bots);
+    await route.fulfill({ response, json: body });
+  });
+  await page.route("**/rpc/spaces/list", async (route) => {
+    const response = await route.fetch();
+    const body = (await response.json()) as { json: SpaceNavigation };
+    body.json.current.bots = update(body.json.current.bots);
+    await route.fulfill({ response, json: body });
+  });
+}
 
 test("an unbound legacy pin asks which connection to use", async ({ page }, testInfo) => {
   await signup(page, `legacy-pin-${Date.now()}@ardurbot.test`, "password12", "Legacy Pin");
   await completeOnboarding(page);
-  await page.route("**/rpc/bots/list", async (route) => {
-    const response = await route.fetch();
-    const body = (await response.json()) as { json: Bot[] };
-    body.json = body.json.map((bot) => ({
-      ...bot,
-      modelProvider: "xai",
-      modelId: "grok-4.6",
-      modelCredentialId: null,
-      modelPinRevision: 0,
-      thinkingLevel: null,
-    }));
-    await route.fulfill({ response, json: body });
+  await patchBotNavigation(page, {
+    modelProvider: "xai",
+    modelId: "grok-4.6",
+    modelCredentialId: null,
+    modelPinRevision: 0,
+    thinkingLevel: null,
   });
   await page.route("**/rpc/models/list", (route) =>
     route.fulfill({
@@ -130,7 +146,7 @@ test("the model chip and provider error open the bot model control", async ({ pa
   });
   await page.reload();
   const chip = page.getByRole("button", {
-    name: "Change model: Codex · GPT-6 Astra · medium",
+    name: "Change model: Ardur · Codex · GPT-6 Astra · medium",
     exact: true,
   });
   await expect(chip).toBeVisible();
@@ -224,20 +240,19 @@ test("a pin failure opens its provider settings and the bot model control", asyn
       },
     }),
   );
-  await page.route("**/rpc/threads/get", async (route) => {
-    const response = await route.fetch();
-    const body = await response.json();
+  const failedRun = (thread: { botId?: string; threadId: string }) => {
     const pin = {
+      runtimeKind: "pi" as const,
       provider: "xai",
       modelId: "grok-4.6",
       effort: "high",
       credentialId: "deleted",
       revision: 1,
     };
-    body.json.run = {
+    return {
       id: "pin-failed",
-      botId: body.json.botId,
-      threadId: body.json.threadId,
+      botId: thread.botId,
+      threadId: thread.threadId,
       taskId: "pin-task",
       status: "failed",
       trigger: "user",
@@ -257,6 +272,20 @@ test("a pin failure opens its provider settings and the bot model control", asyn
       completedAt: new Date().toISOString(),
       createdAt: new Date().toISOString(),
     };
+  };
+  await page.route("**/rpc/bootstrap", async (route) => {
+    const response = await route.fetch();
+    const body = (await response.json()) as { json: AppBootstrap };
+    if (body.json.thread)
+      body.json.thread.run = failedRun(body.json.thread) as NonNullable<
+        AppBootstrap["thread"]
+      >["run"];
+    await route.fulfill({ response, json: body });
+  });
+  await page.route("**/rpc/threads/get", async (route) => {
+    const response = await route.fetch();
+    const body = (await response.json()) as { json: NonNullable<AppBootstrap["thread"]> };
+    body.json.run = failedRun(body.json) as NonNullable<AppBootstrap["thread"]>["run"];
     await route.fulfill({ response, json: body });
   });
   await page.reload();
@@ -282,19 +311,13 @@ test("native runtime settings show unavailable sign-in without replacing the pin
 }, testInfo) => {
   await signup(page, `native-runtime-${Date.now()}@ardurbot.test`, "password12", "Runtime Test");
   await completeOnboarding(page);
-  await page.route("**/rpc/bots/list", async (route) => {
-    const response = await route.fetch();
-    const body = (await response.json()) as { json: Bot[] };
-    body.json = body.json.map((bot) => ({
-      ...bot,
-      runtimeKind: "claude-code",
-      runtimeExperimental: false,
-      modelProvider: "anthropic",
-      modelId: "claude-opus-5",
-      modelCredentialId: "native:claude-code",
-      thinkingLevel: "high",
-    }));
-    await route.fulfill({ response, json: body });
+  await patchBotNavigation(page, {
+    runtimeKind: "claude-code",
+    runtimeExperimental: false,
+    modelProvider: "anthropic",
+    modelId: "claude-opus-5",
+    modelCredentialId: "native:claude-code",
+    thinkingLevel: "high",
   });
   await page.route("**/rpc/runtimes/availability", (route) =>
     route.fulfill({
@@ -347,8 +370,6 @@ test("native runtime settings show unavailable sign-in without replacing the pin
       exact: true,
     }),
   ).toBeVisible();
-  await expect(
-    settings.getByRole("switch", { name: "Experimental", exact: true }),
-  ).not.toBeChecked();
+  await expect(settings.getByRole("switch", { name: /Experimental/ })).not.toBeChecked();
   await captureScreenshot(page, testInfo, "native-runtime-sign-in");
 });

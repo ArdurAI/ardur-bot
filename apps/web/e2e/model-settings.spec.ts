@@ -33,7 +33,9 @@ test("Anthropic offers API keys and asks old subscription connections to reconne
   await page.getByPlaceholder("Search providers").fill("anthropic");
   await page.getByRole("button", { name: /Anthropic/ }).click();
   await expect(
-    page.getByText("Claude subscriptions are not supported here yet; use an API key."),
+    page.getByText(
+      "To use your Claude subscription, choose Runs on → Claude Code in a bot's settings.",
+    ),
   ).toBeVisible();
   await expect(page.getByText("Reconnect with an API key", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /Sign in/ })).toHaveCount(0);
@@ -133,7 +135,7 @@ test("custom connections persist reasoning support and bot thinking", async ({
   await expect(model).toBeVisible();
   await expect(model).toContainText("arbitrary-model");
   // Value key — not a /arbitrary-model/ label match, which also hits "Space default (arbitrary-model)".
-  await model.selectOption("openai-compatible::arbitrary-model");
+  await model.selectOption({ label: "OpenAI-compatible · arbitrary-model" });
   const thinking = settings.getByRole("combobox", { name: "Thinking", exact: true });
   await expect(thinking).toBeVisible();
   await thinking.selectOption("low");
@@ -282,7 +284,9 @@ test("model settings connect, replace, and cancel provider authentication", asyn
   const providerSearch = page.getByPlaceholder("Search providers");
   await providerSearch.fill("scripted");
   await page.getByRole("button", { name: /Scripted/ }).click();
-  await expect(page.getByRole("combobox", { name: "Model" })).toHaveText(/Scripted runtime/);
+  await expect(
+    page.getByTestId("model-settings").getByRole("combobox", { name: "Model", exact: true }),
+  ).toHaveText(/Scripted runtime/);
   const apiKeyInput = page.getByLabel("API key");
   await expect(apiKeyInput).toHaveAttribute("autocomplete", "new-password");
   await apiKeyInput.fill("fake-scripted-key-one");

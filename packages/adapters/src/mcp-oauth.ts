@@ -275,7 +275,7 @@ export class StoredMcpOAuthProvider implements OAuthClientProvider {
     const applicationType = hostname === "localhost" || hostname === "127.0.0.1" ? "native" : "web";
     return {
       redirect_uris: [redirectUri],
-      client_name: "Ardur Bot",
+      client_name: "Ardur",
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
       token_endpoint_auth_method: "none",

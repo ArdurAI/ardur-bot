@@ -1,7 +1,7 @@
 [Desktop Entry]
 Type=Application
-Name=Ardur Bot Browser
-Comment=Chromium with Ardur Bot container flags and profile isolation
+Name=Ardur Browser
+Comment=Chromium with Ardur container flags and profile isolation
 Exec=/usr/local/bin/ardurbot-browser %U
 Terminal=false
 Categories=Network;WebBrowser;

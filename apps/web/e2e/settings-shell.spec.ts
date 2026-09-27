@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { expect, test } from "@playwright/test";
 import { captureScreenshot, completeOnboarding, openUserSettings, rpc, signup } from "./helpers";
 
@@ -9,6 +10,8 @@ test("settings shell is two-pane and deep-links Models Memory Voice Usage", asyn
   await signup(page, `settings-shell-${stamp}@ardurbot.test`, "password12", userName);
   await completeOnboarding(page);
 
+  const botPath = new URL(page.url()).pathname;
+  await page.goto("/app?view=dashboard");
   await page.getByTestId("user-menu-trigger").click();
   const menu = page.locator('[data-slot="popover-content"]');
   await expect(menu.getByRole("button", { name: "Settings", exact: true })).toBeVisible();
@@ -17,10 +20,9 @@ test("settings shell is two-pane and deep-links Models Memory Voice Usage", asyn
   await expect(menu.getByRole("button", { name: "Models", exact: true })).toHaveCount(0);
   await captureScreenshot(page, testInfo, "settings-account-menu-lean");
   await page.keyboard.press("Escape");
-
+  await page.goto(botPath);
   await page
-    .locator("aside")
-    .first()
+    .locator("header.app-drag")
     .getByRole("button", { name: "Settings", exact: true })
     .click();
   const settings = page.getByTestId("user-settings");
@@ -79,12 +81,24 @@ test("settings shell is two-pane and deep-links Models Memory Voice Usage", asyn
   await expect(settings.getByText("settings-fixture.txt", { exact: true })).toBeVisible();
   await expect(settings.getByText(/5 bytes/)).toBeVisible();
   await captureScreenshot(page, testInfo, "settings-shell-privacy");
-  const data = await rpc<{
-    spaces: Array<{ uploads: Array<{ id: string; contentBase64: string }> }>;
-  }>(page, "export/account", {});
-  expect(data.spaces.flatMap((space) => space.uploads)).toEqual(
-    expect.arrayContaining([expect.objectContaining({ id: upload.id, contentBase64: "aGVsbG8=" })]),
+  const downloadPromise = page.waitForEvent("download");
+  await settings
+    .getByRole("group", { name: "Export data" })
+    .getByRole("button", { name: "Export" })
+    .click();
+  const download = await downloadPromise;
+  expect(download.suggestedFilename()).toBe("account-v2.tar.gz");
+  const archive = (await download.path())!;
+  const manifest = JSON.parse(
+    execFileSync("tar", ["-xOzf", archive, "manifest.json"], { encoding: "utf8" }),
   );
+  const exportedUpload = manifest.spaces
+    .flatMap((space: { uploads: Array<{ id: string; archivePath: string }> }) => space.uploads)
+    .find((item: { id: string }) => item.id === upload.id);
+  expect(exportedUpload).toBeDefined();
+  expect(
+    execFileSync("tar", ["-xOzf", archive, exportedUpload.archivePath], { encoding: "utf8" }),
+  ).toBe("hello");
   await settings.getByRole("button", { name: "Delete settings-fixture.txt", exact: true }).click();
   await settings.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(settings.getByText("settings-fixture.txt", { exact: true })).toBeVisible();

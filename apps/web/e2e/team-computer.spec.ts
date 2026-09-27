@@ -22,7 +22,9 @@ test("Team Computer gives bots a home folder plus shared space while Private sta
   const chiefId = activeBotId(page);
 
   await openComputerPanel(page);
-  await expect(page.getByText("Team Computer", { exact: true }).last()).toBeVisible();
+  // The panel caption is the proof the Team computer opened; the old assertion matched the
+  // signed-in user's name ("Team Computer") in the sidebar account row, which no longer exists.
+  await expect(page.getByText("Chief's screen", { exact: true })).toBeVisible();
   await captureScreenshot(page, testInfo, "41-team-computer");
 
   const writerId = await createBot(page, "Writer", "team");
@@ -95,6 +97,12 @@ test("user control leaves another Team bot's screen available", async ({ page },
   await page.getByTestId("computer-preview").hover();
   await page.getByTestId("computer-preview-open").click();
   await expect(page.getByRole("button", { name: "Close computer" })).toBeVisible();
+  await expect
+    .poll(() => rpc(page, "computer/status", { botId: chiefId }))
+    .toMatchObject({
+      controlHolder: "user",
+      controlBotId: chiefId,
+    });
   await page.getByRole("button", { name: "Close computer" }).click();
 
   await openBot(page, "Worker");

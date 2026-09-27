@@ -151,7 +151,7 @@ describe("selectCompactedHistory", () => {
 describe("formatCompactedSummary", () => {
   it("labels the summary as data and records its coverage", () => {
     expect(formatCompactedSummary("facts", 49)).toContain(
-      "Ardur Bot-owned compacted context through message sequence 49",
+      "Ardur-owned compacted context through message sequence 49",
     );
     expect(formatCompactedSummary("facts", 49)).toContain("<compacted_thread_summary>");
   });

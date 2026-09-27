@@ -71,7 +71,7 @@ export default function Layout() {
                   contentStyle: { backgroundColor: String(native.page) },
                 }}
               >
-                <Stack.Screen name="index" options={{ headerShown: false, title: "Ardur Bot" }} />
+                <Stack.Screen name="index" options={{ headerShown: false, title: "Ardur" }} />
                 <Stack.Screen name="sign-in" options={{ headerShown: false }} />
                 <Stack.Screen
                   name="integration-setup"

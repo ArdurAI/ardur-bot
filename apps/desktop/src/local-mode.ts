@@ -66,7 +66,7 @@ const LOCAL_DATA = ["postgres", "data", "secrets.env"] as const;
 const RESET_FAILED = "Could not reset local data. Try again.";
 const DATA_IN_USE = "A local data file is in use; close whatever is using it and try again.";
 const DATA_UNWRITABLE =
-  "Ardur Bot cannot move its local data. Check the permissions of its data folder, then try Reset local data again.";
+  "Ardur cannot move its local data. Check the permissions of its data folder, then try Reset local data again.";
 
 type SecretKey = keyof typeof SECRET_KEYS;
 type ServiceName = "api" | "worker";
@@ -964,7 +964,7 @@ async function readSecrets(file: string): Promise<{
   return { values: parseSecrets(text), problem: null, detail: "" };
 }
 
-const INSTALL_LATEST = "Install the latest version of Ardur Bot, then Retry.";
+const INSTALL_LATEST = "Install the latest version of Ardur, then Retry.";
 
 /**
  * The sentence for a failed migration while the server itself is still up. The migration's
@@ -976,13 +976,13 @@ function migrationFailure(error: unknown): { message: string; offerReset: boolea
   };
   if (failure.reason === "newer") {
     return {
-      message: `This data was last opened by a newer version of Ardur Bot. ${INSTALL_LATEST}`,
+      message: `This data was last opened by a newer version of Ardur. ${INSTALL_LATEST}`,
       offerReset: false,
     };
   }
   if (failure.reason === "modified") {
     return {
-      message: `This version of Ardur Bot does not match its database. ${INSTALL_LATEST}`,
+      message: `This version of Ardur does not match its database. ${INSTALL_LATEST}`,
       offerReset: false,
     };
   }

@@ -84,15 +84,21 @@ test("Korean messaging settings show linked chat apps, channels, and connections
   await signup(page, `messaging-${stamp}@ardurbot.test`, "password12", userName);
   await completeOnboarding(page);
 
-  await page.getByRole("button", { name: new RegExp(userName) }).click();
-  await page.getByRole("button", { name: "Settings" }).click();
+  await page.locator("header.app-drag").getByRole("button", { name: "Settings" }).click();
   const settings = page.getByTestId("user-settings");
   await settings.getByTestId("ui-locale-select").click();
   await settings.getByRole("option", { name: "한국어", exact: true }).click();
-  await expect(settings.getByRole("heading", { name: "메시징", exact: true })).toBeVisible();
+  await settings.getByTestId("settings-nav-account").click();
+  await expect(
+    settings.getByRole("heading", { level: 2, name: "계정", exact: true }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "메시징 설정 관리" }).click();
 
-  await expect(page.getByTestId("messaging-settings")).toBeVisible();
+  const messagingSettings = page.getByTestId("messaging-settings");
+  await expect(messagingSettings).toBeVisible();
+  await expect(
+    messagingSettings.getByRole("heading", { name: "메시징", exact: true }),
+  ).toBeVisible();
   await expect(page.getByText("iMessage · Slack · WhatsApp · Telegram · Feishu")).toBeVisible();
   await expect(page.getByText("iMessage · +15551230001")).toBeVisible();
   await expect(page.getByText("→ Chief")).toBeVisible();
@@ -204,15 +210,19 @@ test("team conversation settings open from messaging overlay", async ({ page }, 
   await signup(page, `team-chat-${stamp}@ardurbot.test`, "password12", userName);
   await completeOnboarding(page);
 
-  await page.getByRole("button", { name: new RegExp(userName) }).click();
-  await page.getByRole("button", { name: "Settings" }).click();
+  await page.locator("header.app-drag").getByRole("button", { name: "Settings" }).click();
+  const settings = page.getByTestId("user-settings");
+  await settings.getByTestId("settings-nav-account").click();
   await expect(
-    page.getByTestId("user-settings").getByRole("heading", { name: "Messaging" }),
+    settings.getByRole("heading", { level: 2, name: "Account", exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Manage messaging settings" }).click();
 
   const messagingSettings = page.getByTestId("messaging-settings");
   await expect(messagingSettings).toBeVisible();
+  await expect(
+    messagingSettings.getByRole("heading", { name: "Messaging", exact: true }),
+  ).toBeVisible();
   await expect(
     messagingSettings.getByRole("heading", { name: "Team conversations" }),
   ).toBeVisible();

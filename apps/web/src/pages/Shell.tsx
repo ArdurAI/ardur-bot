@@ -89,10 +89,7 @@ import {
   ChevronDown,
   Clock,
   Copy,
-  Gauge,
-  LayoutGrid,
   Lock,
-  LogOut,
   Maximize2,
   Menu,
   Mic,
@@ -252,7 +249,6 @@ import {
   McpApprovalCard,
 } from "./shell/message-cards";
 import { ProviderErrorMessage } from "./shell/provider-error-message";
-import { SidebarSettings } from "./shell/sidebar-settings";
 import { SystemDictation } from "./system/SystemDictation";
 import { WindowChrome } from "./WindowChrome";
 
@@ -511,7 +507,6 @@ export function ShellPage({
   const [speakingMessageId, setSpeakingMessageId] = useState<string | null>(null);
   const [dismissedRunErrorIds, setDismissedRunErrorIds] =
     useState<ReadonlySet<string>>(readSeenRunErrorIds);
-  const [menuOpen, setMenuOpen] = useState(false);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const mobileSidebarSwipeRef = useRef<{ startX: number; startY: number } | null>(null);
   const [draggedBotId, setDraggedBotId] = useState<string | null>(null);
@@ -661,6 +656,8 @@ export function ShellPage({
     outputTokens: number;
     runs: number;
   } | null>(null);
+  // Owned here so the menu survives the DashboardPage remount when bootstrap resolves its space.
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const autoBooted = useRef<string | null>(null);
   const routineSavePending = useRef(false);
   const webhookSecretProvisionRef = useRef(new Map<string, Promise<string>>());
@@ -2607,12 +2604,6 @@ export function ShellPage({
     ) : null;
 
   const userName = session.data?.user.name ?? t`You`;
-  const initials = userName
-    .split(" ")
-    .map((p) => p[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
 
   const shell = (
     <div
@@ -3174,79 +3165,6 @@ export function ShellPage({
             </div>
           ) : null}
         </div>
-        <button
-          type="button"
-          onClick={() => openSettings("integrations")}
-          className="mx-3 mb-1 flex items-center gap-3 rounded-xl px-2.5 py-2 hover:bg-sidebar-accent"
-        >
-          <span className="grid h-[30px] w-[30px] place-items-center rounded-lg bg-accent text-foreground/80">
-            <LayoutGrid size={15} strokeWidth={1.8} />
-          </span>
-          <span className="text-[14px] font-medium text-foreground/90">
-            <Trans>Integrations</Trans>
-          </span>
-        </button>
-        <SidebarSettings onClick={() => openSettings("general")} />
-        <Popover open={menuOpen} onOpenChange={setMenuOpen}>
-          <PopoverTrigger
-            data-testid="user-menu-trigger"
-            className="flex items-center gap-[11px] px-[18px] py-3.5"
-          >
-            <span className="grid h-8 w-8 place-items-center rounded-full bg-accent text-[12px] text-foreground/75">
-              {initials}
-            </span>
-            <span className="text-[14.5px] text-foreground/90">{userName}</span>
-          </PopoverTrigger>
-          {menuOpen ? (
-            <PopoverContent
-              side="top"
-              align="start"
-              className="w-[calc(316px-1.5rem)] max-w-[calc(100vw-3rem)] gap-0 p-1 data-closed:animate-none"
-            >
-              <Button
-                variant="ghost"
-                className="w-full justify-start font-normal"
-                aria-label={t`Settings`}
-                onClick={() => {
-                  setMenuOpen(false);
-                  openSettings("general");
-                }}
-              >
-                <Settings className="text-muted-foreground" strokeWidth={1.75} />
-                <Trans>Settings</Trans>
-              </Button>
-              <Button
-                variant="ghost"
-                className="w-full justify-start font-normal"
-                aria-label={t`Usage`}
-                onClick={() => {
-                  setMenuOpen(false);
-                  void rpc.usage
-                    .summary()
-                    .then(setUsage)
-                    .catch(() => undefined);
-                  openSettings("usage");
-                }}
-              >
-                <Gauge className="text-muted-foreground" strokeWidth={1.75} />
-                <Trans>Usage</Trans>
-              </Button>
-              <Button
-                variant="ghost"
-                className="w-full justify-start font-normal"
-                onClick={() =>
-                  void authClient.signOut().then(() => {
-                    clearSpaceSelection();
-                    navigate("/");
-                  })
-                }
-              >
-                <LogOut className="text-muted-foreground" strokeWidth={1.75} />
-                <Trans>Log out</Trans>
-              </Button>
-            </PopoverContent>
-          ) : null}
-        </Popover>
       </aside>
 
       <button
@@ -3298,6 +3216,24 @@ export function ShellPage({
             key={bootstrapMe?.spaceId}
             scope={bootstrapMe ? `${userId}:${bootstrapMe.spaceId}` : ""}
             spaceId={bootstrapMe?.spaceId}
+            account={{
+              name: userName,
+              menuOpen: accountMenuOpen,
+              onMenuOpenChange: setAccountMenuOpen,
+              onUsage: () => {
+                void rpc.usage
+                  .summary()
+                  .then(setUsage)
+                  .catch(() => undefined);
+                openSettings("usage");
+              },
+              onSignOut: () => {
+                void authClient.signOut().then(() => {
+                  clearSpaceSelection();
+                  navigate("/");
+                });
+              },
+            }}
             openSettings={(section) =>
               section === "messaging" ? setMessagingSettingsOpen(true) : openSettings(section)
             }
@@ -4047,6 +3983,7 @@ export function ShellPage({
             onModelEffort={
               contextBot
                 ? () => {
+                    botMenuAnchor.current = null;
                     navigate(`/app/${contextBot.id}`);
                     openBotModelSettings();
                     setBotMenu(null);
@@ -4170,7 +4107,7 @@ export function ShellPage({
               if (effectiveSpaceId === targetId) {
                 // The auth boundary changed, so reload like a space switch.
                 if (selectSpace(result.activeSpaceId)) {
-                  window.location.assign("/app");
+                  window.location.assign("/app/bots");
                   return;
                 }
               }
@@ -5972,7 +5909,7 @@ function firstThreadRoute(
 ): string {
   if (bots[0]) return `/app/${bots[0].id}`;
   if (groups[0]) return `/app/g/${groups[0].id}`;
-  return "/app";
+  return "/app/bots";
 }
 
 function applyThreadEvent(

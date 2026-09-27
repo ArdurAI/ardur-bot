@@ -2,6 +2,7 @@ import type { Actor } from "@ardurbot/contracts";
 import { RoutineRunSchema } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
 import { IsolationError } from "@ardurbot/db";
+import { ROUTINE_HISTORY_LIMIT } from "./limits.js";
 
 export async function routineHistory(prisma: PrismaClient, actor: Actor, routineId: string) {
   const where = { spaceId: actor.spaceId, userId: actor.userId };
@@ -13,7 +14,7 @@ export async function routineHistory(prisma: PrismaClient, actor: Actor, routine
     where: { routineId, ...where },
     select: { id: true, status: true, createdAt: true, completedAt: true },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-    take: 50,
+    take: ROUTINE_HISTORY_LIMIT,
   });
   return attempts.map((attempt) =>
     RoutineRunSchema.parse({

@@ -90,7 +90,7 @@ function settle(ms = 300) {
 describe.each(Object.entries(modes))("setup window with %s", (_name, { starting, stack }) => {
   it("opened from the menu while the stack is ready, shows the choice and saves nothing until Continue", async () => {
     const setup = openSetup({ stack: stack("ready") });
-    await vi.waitFor(() => expect(setup.text("#stack-phase")).toBe("Ardur Bot is ready."));
+    await vi.waitFor(() => expect(setup.text("#stack-phase")).toBe("Ardur is ready."));
     await settle();
     expect((document.getElementById("mode-new") as HTMLInputElement).checked).toBe(true);
     expect(setup.bridge.save).not.toHaveBeenCalled();
@@ -108,7 +108,7 @@ describe.each(Object.entries(modes))("setup window with %s", (_name, { starting,
     const setup = openSetup({ stack: stack(starting) });
     await vi.waitFor(() => expect(setup.bridge.stack.state).toHaveBeenCalled());
     setup.push(stack("ready"));
-    await vi.waitFor(() => expect(setup.text("#stack-phase")).toBe("Ardur Bot is ready."));
+    await vi.waitFor(() => expect(setup.text("#stack-phase")).toBe("Ardur is ready."));
     await settle();
     expect(setup.bridge.save).not.toHaveBeenCalled();
   });
@@ -132,7 +132,7 @@ describe.each(Object.entries(modes))("setup window with %s", (_name, { starting,
       (document.getElementById(id) as HTMLInputElement).click();
     }
     setup.push(stack("ready"));
-    await vi.waitFor(() => expect(setup.text("#stack-phase")).toBe("Ardur Bot is ready."));
+    await vi.waitFor(() => expect(setup.text("#stack-phase")).toBe("Ardur is ready."));
     await settle();
     expect(setup.bridge.save).not.toHaveBeenCalled();
   });

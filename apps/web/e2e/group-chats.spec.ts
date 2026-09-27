@@ -16,8 +16,7 @@ test("create group from + and see two bots in one transcript", async ({ page }, 
   const stamp = Date.now();
   await signup(page, `group-${stamp}@ardurbot.test`, "password12", "Group E2E");
   await completeOnboarding(page);
-  await page.goto("/app");
-  await page.waitForURL(/\/app\/[^/]+$/);
+  await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
 
   const researcherId = await createBot(page, "Researcher");
   const writerId = await createBot(page, "Research Writer");

@@ -12,7 +12,7 @@ export function ThreadCommandBlock({
   block: RecordedCommand;
   spaceId?: string;
 }) {
-  const { t } = useLingui();
+  const { t, i18n } = useLingui();
   const id = useId();
   const [current, setCurrent] = useState<RecordedCommand | null>(null);
   const [query, setQuery] = useState("");
@@ -43,6 +43,7 @@ export function ThreadCommandBlock({
   return (
     <div className="w-full min-w-0 space-y-2" aria-busy={busy}>
       <CommandBlock
+        locale={i18n.locale}
         block={{
           ...block,
           rerunDisabledReason: current ? current.rerunDisabledReason : block.rerunDisabledReason,

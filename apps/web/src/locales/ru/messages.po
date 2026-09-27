@@ -858,15 +858,15 @@ msgstr "В архиве. Чат, память и файлы сохраняютс
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Ardur (built-in)"
-msgstr ""
+msgstr "Ardur (встроенный)"
 
 #: src/pages/import/LocalImportPage.tsx
-msgid "Ardur Bot reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history."
-msgstr ""
+msgid "Ardur reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history."
+msgstr "Ardur читает инструкции, память, навыки и списки серверов этих инструментов на этом компьютере, но не данные входа, токены или историю чатов."
 
 #: src/lib/board-close-copy.ts
-msgid "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected."
-msgstr "Ardur Bot попытался пять раз. Закройте её на доске или проверьте, что этот компьютер подключён."
+msgid "Ardur tried five times. Close it on the Board, or check that this computer is connected."
+msgstr "Ardur попытался пять раз. Закройте её на доске или проверьте, что этот компьютер подключён."
 
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/McpServersOverlay.tsx
@@ -1538,8 +1538,8 @@ msgid "Choose one credential: a token or a header."
 msgstr "Выберите один способ: токен или заголовок."
 
 #: src/pages/ModelSettingsOverlay.tsx
-msgid "Choose which connected model Ardur Bot uses."
-msgstr "Выберите, какую подключенную модель использует Ardur Bot."
+msgid "Choose which connected model Ardur uses."
+msgstr "Выберите, какую подключенную модель использует Ardur."
 
 #. placeholder {0}: browser.name
 #: src/pages/system/SystemPage.tsx
@@ -2860,8 +2860,8 @@ msgid "Create space"
 msgstr "Создайте пространство"
 
 #: src/pages/Auth.tsx
-msgid "Create your Ardur Bot"
-msgstr "Создайте свой Ardur Bot"
+msgid "Create your Ardur"
+msgstr "Создайте свой Ardur"
 
 #: src/components/AskCard.tsx
 #: src/pages/account/AccountTables.tsx
@@ -4180,9 +4180,9 @@ msgid "Integration options"
 msgstr "Параметры интеграции"
 
 #: src/components/composer/ComposerMenu.tsx
+#: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/settings-sections.ts
-#: src/pages/Shell.tsx
 msgid "Integrations"
 msgstr "Интеграции"
 
@@ -4560,7 +4560,7 @@ msgid "Local Server Settings"
 msgstr "Настройки локального сервера"
 
 #: src/pages/account/AccountSettings.tsx
-#: src/pages/Shell.tsx
+#: src/pages/dashboard/DashboardAccountArea.tsx
 msgid "Log out"
 msgstr "Выйти"
 
@@ -5528,8 +5528,8 @@ msgid "Open Accessibility settings"
 msgstr ""
 
 #: src/pages/system/QuickComposer.tsx
-msgid "Open Ardur Bot"
-msgstr ""
+msgid "Open Ardur"
+msgstr "Открыть Ardur"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Open bot settings"
@@ -5734,8 +5734,8 @@ msgid "Paste a replacement key"
 msgstr "Вставьте запасной ключ"
 
 #: src/pages/ModelSettingsOverlay.tsx
-msgid "Paste the OpenAI-compatible address from your server. Ardur Bot adds /v1 if needed."
-msgstr "Вставьте OpenAI-совместимый адрес со своего сервера. При необходимости Ardur Bot добавляет /v1."
+msgid "Paste the OpenAI-compatible address from your server. Ardur adds /v1 if needed."
+msgstr "Вставьте OpenAI-совместимый адрес со своего сервера. При необходимости Ardur добавляет /v1."
 
 #: src/pages/memory/MemoryImport.tsx
 msgid "Paste the response"
@@ -6506,8 +6506,8 @@ msgid "Retry screen"
 msgstr "Повторить загрузку экрана"
 
 #: src/pages/McpOAuthCallback.tsx
-msgid "Return to Ardur Bot"
-msgstr "Вернуться в Ardur Bot"
+msgid "Return to Ardur"
+msgstr "Вернуться в Ardur"
 
 #. placeholder {0}: doc.revision
 #: src/pages/KnowledgeSection.tsx
@@ -7023,11 +7023,11 @@ msgstr "Настроить поиск по памяти"
 msgid "Set up servers"
 msgstr ""
 
+#: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/settings-sections.ts
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
-#: src/pages/shell/sidebar-settings.tsx
 msgid "Settings"
 msgstr "Настройки"
 
@@ -7118,8 +7118,8 @@ msgid "Sign in again to manage sessions."
 msgstr ""
 
 #: src/pages/Auth.tsx
-msgid "Sign in to Ardur Bot"
-msgstr "Войти в Ardur Bot"
+msgid "Sign in to Ardur"
+msgstr "Войти в Ardur"
 
 #: src/pages/system/QuickComposer.tsx
 msgid "Sign in to use quick access."
@@ -7806,8 +7806,8 @@ msgid "This signs out every other session and keeps this one signed in."
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
-msgid "This subscription sign-in is not available in Ardur Bot yet. Use a deployment credential or choose another provider."
-msgstr "Вход по этой подписке пока недоступен в Ardur Bot. Используйте учетные данные развертывания или выберите другого поставщика."
+msgid "This subscription sign-in is not available in Ardur yet. Use a deployment credential or choose another provider."
+msgstr "Вход по этой подписке пока недоступен в Ardur. Используйте учетные данные развертывания или выберите другого поставщика."
 
 #: src/pages/memory/MemoryProposals.tsx
 msgid "This suggestion cannot be approved here."
@@ -8100,9 +8100,9 @@ msgid "Uploaded files"
 msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/dashboard/panels.ts
 #: src/pages/settings-sections.ts
-#: src/pages/Shell.tsx
 msgid "Usage"
 msgstr "Использование"
 

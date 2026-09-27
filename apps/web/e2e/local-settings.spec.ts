@@ -76,6 +76,8 @@ test("local settings open and save integrations without an app session", async (
 
 test("ordinary browsers cannot use local settings", async ({ page }) => {
   await page.goto("/desktop-settings");
-  await expect(page.getByRole("alert")).toContainText("Could not open local settings");
+  await expect(page.getByRole("alert")).toContainText(
+    "Open local settings from the desktop app on the server’s computer.",
+  );
   await expect(page.getByRole("button", { name: "Models", exact: true })).toBeHidden();
 });

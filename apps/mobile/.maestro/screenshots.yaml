@@ -1,5 +1,5 @@
 appId: ai.ardur.bot
-name: Ardur Bot mobile screenshots
+name: Ardur mobile screenshots
 tags:
   - screenshots
 ---
@@ -10,7 +10,7 @@ tags:
 
 # A cold API 34 emulator can show a launcher ANR over the healthy app.
 - extendedWaitUntil:
-    visible: "Sign up for Ardur Bot|Pixel Launcher isn't responding"
+    visible: "Sign up for Ardur|Pixel Launcher isn't responding"
     timeout: 30000
 - runFlow:
     when:
@@ -18,11 +18,11 @@ tags:
     commands:
       - tapOn: "Close app"
 - extendedWaitUntil:
-    visible: "Sign up for Ardur Bot"
+    visible: "Sign up for Ardur"
     timeout: 30000
 - takeScreenshot: "02-sign-up"
 - tapOn: "Sign in"
-- assertVisible: "Sign in to Ardur Bot"
+- assertVisible: "Sign in to Ardur"
 - takeScreenshot: "01-sign-in"
 
 - tapOn: "Use a custom server"

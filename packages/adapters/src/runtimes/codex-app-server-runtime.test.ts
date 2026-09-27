@@ -1,5 +1,8 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { EventEmitter } from "node:events";
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { PassThrough, Writable } from "node:stream";
 import type { AgentRunRequest, AgentRuntimeEvent } from "@ardurbot/adapter-kit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -45,6 +48,7 @@ function fixture(
     | "profile-missing"
     | "profile-network"
     | "turn-rejected"
+    | "thread-rejected"
     | "skills-error"
     | "usage" = "success",
   scenario?: { beforeStart?: Message[]; duringTurn: Message[] },
@@ -107,6 +111,10 @@ function fixture(
           break;
         case "thread/start":
         case "thread/resume":
+          if (mode === "thread-rejected") {
+            send({ id: message.id, error: { code: -32603 } });
+            break;
+          }
           for (const event of scenario?.beforeStart ?? []) send(event);
           result({
             thread: { id: "thread-native" },
@@ -592,4 +600,50 @@ it("runs a native pin while the space has an inherited hosted credential", async
   ]);
   expect(hosted).not.toHaveBeenCalled();
   expect(loadKey).not.toHaveBeenCalled();
+});
+
+describe("instruction file grants", () => {
+  let root: string;
+  afterEach(async () => {
+    if (root) await rm(root, { recursive: true, force: true });
+  });
+  it.each(["thread/start", "thread/resume"] as const)(
+    "grants exactly the ancestor instruction files for %s",
+    async (method) => {
+      root = await mkdtemp(path.join(tmpdir(), "codex-grants-"));
+      const repo = path.join(root, "repo");
+      const folder = path.join(repo, "a", "b");
+      await mkdir(path.join(repo, ".git"), { recursive: true });
+      await mkdir(folder, { recursive: true });
+      const f = fixture();
+      f.request.nativeCwd = folder;
+      if (method === "thread/resume")
+        f.request.nativeSession = { runtimeKind: "codex-app-server", sessionId: "thread-native" };
+      await f.collect();
+      const start = f.messages.find((event) => event.method === method);
+      const config = start?.params?.config as {
+        permissions?: { "ardur-read": { filesystem: Record<string, string> } };
+      };
+      const files = [repo, path.join(repo, "a"), folder].flatMap((dir) => [
+        path.join(dir, "AGENTS.md"),
+        path.join(dir, "AGENTS.override.md"),
+      ]);
+      expect(config.permissions?.["ardur-read"].filesystem).toEqual({
+        ":minimal": "read",
+        [folder]: "read",
+        ...Object.fromEntries(files.map((file) => [file, "read"])),
+      });
+    },
+  );
+  it("reports a rejected session start as such and sends no turn", async () => {
+    const f = fixture("thread-rejected");
+    await expect(f.collect()).rejects.toMatchObject({
+      problem: {
+        code: "runtime-unavailable",
+        reason:
+          "Codex could not start a session in this bot's folder \u2014 change the bot's computer or the pin.",
+      },
+    });
+    expect(f.messages.some((event) => event.method === "turn/start")).toBe(false);
+  });
 });

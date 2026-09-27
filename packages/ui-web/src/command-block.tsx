@@ -2,7 +2,12 @@ import type { CommandBlock as RecordedCommand } from "@ardurbot/core";
 import { commandOutput, commandSummary } from "@ardurbot/core";
 import type { ReactNode } from "react";
 import { useId, useState } from "react";
+import { formatAbsoluteCommandTime, formatCommandTime } from "./command-time.js";
 import { Button } from "./components/ui/button.js";
+import { useLocalDayTick } from "./hooks/use-local-day-tick.js";
+
+export { formatAbsoluteCommandTime, formatCommandTime } from "./command-time.js";
+export { useLocalDayTick } from "./hooks/use-local-day-tick.js";
 
 export type CommandBlockLabels = {
   copyCommand: string;
@@ -20,6 +25,7 @@ export type CommandBlockLabels = {
 export function CommandBlock({
   block,
   labels,
+  locale,
   onExpand,
   onExportRun,
   onExportBlock,
@@ -30,6 +36,7 @@ export function CommandBlock({
 }: {
   block: RecordedCommand;
   labels: CommandBlockLabels;
+  locale?: string;
   onExpand?: () => void;
   onExportRun?: () => void;
   onExportBlock?: () => void;
@@ -42,10 +49,13 @@ export function CommandBlock({
   const [opened, setOpened] = useState(false);
   const [copyFailed, setCopyFailed] = useState(false);
   const id = useId();
+  useLocalDayTick();
   const copy = (text: string) => {
     setCopyFailed(false);
     void navigator.clipboard.writeText(text).catch(() => setCopyFailed(true));
   };
+  const formattedStartedAt = formatCommandTime(block.startedAt, new Date(), locale);
+  const absoluteStartedAt = formatAbsoluteCommandTime(block.startedAt, locale);
   return (
     <section
       data-testid="command-block"
@@ -69,7 +79,9 @@ export function CommandBlock({
         <span className="shrink-0 text-xs text-muted-foreground">{block.outcome}</span>
       </Button>
       <div className="px-3 pb-2 text-xs text-muted-foreground">
-        <time dateTime={block.startedAt ?? undefined}>{block.startedAt ?? labels.notRecorded}</time>
+        <time dateTime={block.startedAt ?? undefined} title={absoluteStartedAt}>
+          {formattedStartedAt ?? labels.notRecorded}
+        </time>
         {block.outcome === "unknown" ? <span> · {labels.incomplete}</span> : null}
       </div>
       <div

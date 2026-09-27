@@ -48,7 +48,7 @@ export interface DeviceStorage {
 }
 export const DEVICE_HOME_KEY = "ardurbot.device.home";
 export const WAITING_FOR_HOME = "Waiting for home";
-export const HOME_UNREACHABLE = "Home unreachable — check that Ardur Bot is running";
+export const HOME_UNREACHABLE = "Home unreachable — check that Ardur is running";
 export const HOME_CHANGED = "This home's identity changed; pair your phone again.";
 export function dispatchReceiptLabel(receipt: Pick<DispatchReceipt, "state" | "cancelRequested">) {
   if (receipt.cancelRequested && !["stopped", "done", "failed"].includes(receipt.state))

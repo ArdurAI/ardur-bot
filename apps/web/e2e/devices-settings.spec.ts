@@ -1,5 +1,11 @@
 import { expect, test } from "@playwright/test";
-import { captureScreenshot, completeOnboarding, openUserSettings, signup } from "./helpers";
+import {
+  activeBotId,
+  captureScreenshot,
+  completeOnboarding,
+  openUserSettings,
+  signup,
+} from "./helpers";
 
 test("devices shows pairing, listener state and revocable grants", async ({ page }, testInfo) => {
   await page.route("**/rpc/bootstrap", async (route) => {
@@ -12,6 +18,7 @@ test("devices shows pairing, listener state and revocable grants", async ({ page
   });
   const fingerprint = "a".repeat(64);
   const certificateFingerprint = "b".repeat(64);
+  let pairedBotId = "";
   const devices = [
     {
       id: "test-phone",
@@ -58,7 +65,7 @@ test("devices shows pairing, listener state and revocable grants", async ({ page
             id: "chat-installation",
             provider: "telegram",
             workspaceId: "telegram",
-            botId: "test-bot",
+            botId: pairedBotId,
           },
         ],
       },
@@ -90,16 +97,20 @@ test("devices shows pairing, listener state and revocable grants", async ({ page
   });
   await signup(page, `devices-${Date.now()}@example.test`, "password12", "Device test");
   await completeOnboarding(page);
+  pairedBotId = activeBotId(page);
   const settings = await openUserSettings(page);
   await settings.getByTestId("settings-nav-devices").click();
   await expect(settings.getByText("Test phone", { exact: true })).toBeVisible();
   await expect(
-    settings.getByLabel("Your phone can reach this Mac on your network."),
+    settings.getByRole("switch", { name: "Your phone can reach this Mac on your network." }),
   ).not.toBeChecked();
   await settings.getByRole("button", { name: "Pair device", exact: true }).click();
   await expect(settings.getByRole("img", { name: "Pair device" })).toBeVisible();
   await expect(settings.getByText("TESTCODE", { exact: true })).toBeVisible();
   await settings.getByRole("button", { name: "Pair a chat account", exact: true }).click();
+  await expect(settings.getByRole("combobox", { name: "Bot", exact: true })).toHaveValue(
+    pairedBotId,
+  );
   await settings.getByRole("button", { name: "Get pairing code", exact: true }).click();
   await expect(settings.getByText("PAIRTEST1234", { exact: true })).toBeVisible();
   await captureScreenshot(page, testInfo, "settings-devices-pairing");
