@@ -102,6 +102,7 @@ import type { Pool } from "@ardurbot/db";
 import {
   acceptDelegation,
   appendEventInTransaction,
+  claimQuietBotMessages,
   confirmDispatchStop,
   createSpaceForMember,
   createThreadMessageInTransaction,
@@ -120,6 +121,7 @@ import {
   type PrismaClient,
   parseComputerMode,
   refreshBoundBotMessageWakeRun,
+  releaseQuietBotMessageClaims,
   requestCancel,
   SpaceLimitError,
   startDelegation,
@@ -5048,10 +5050,15 @@ export function createRunExecutor(deps: ExecutorDeps) {
                     recipientThreadId: run.threadId,
                     state: { in: ["delivered", "read"] },
                     outcome: null,
+                    OR: [{ quietClaimRunId: null }, { quietClaimRunId: run.id }],
                     expiresAt: { gt: new Date() },
-                    OR: [
-                      { intent: { in: ["status", "fyi"] } },
-                      { intent: "result", inReplyToDeliveryId: null },
+                    AND: [
+                      {
+                        OR: [
+                          { intent: { in: ["status", "fyi"] } },
+                          { intent: "result", inReplyToDeliveryId: null },
+                        ],
+                      },
                     ],
                   },
                   orderBy: [{ createdAt: "asc" }, { id: "asc" }],
@@ -5188,17 +5195,12 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 }
               : {}),
           });
-          if (selectedQuietIds.length)
-            await deps.prisma.botMessageDelivery.updateMany({
-              where: {
-                id: { in: selectedQuietIds },
-                recipientBotId: run.botId,
-                recipientThreadId: run.threadId,
-                outcome: null,
-                expiresAt: { gt: new Date() },
-              },
-              data: { outcome: "consumed" },
-            });
+          await claimQuietBotMessages(deps.prisma, {
+            runId,
+            leaseOwner: workerId,
+            leaseFence: fence,
+            deliveryIds: selectedQuietIds,
+          });
           if (!commandReplay)
             for (const exposure of pendingExposures)
               await recordKnowledgeExposure(deps.prisma, { ...context, attempt: fence }, exposure);
@@ -6473,12 +6475,18 @@ async function writeComputerRunRequeue(
     },
     data: releasedHold,
   });
-  if (preserve.count === 1) return true;
+  if (preserve.count === 1) {
+    await releaseQuietBotMessageClaims(deps.prisma, runId, fence);
+    return true;
+  }
   const planned = await deps.prisma.run.updateMany({
     where: { ...whereLease, checkpoint: null },
     data: computerRunRequeueData(resumeCheckpoint, error, heldForTakeover),
   });
-  if (planned.count === 1) return true;
+  if (planned.count === 1) {
+    await releaseQuietBotMessageClaims(deps.prisma, runId, fence);
+    return true;
+  }
   const retried = await deps.prisma.run.updateMany({
     where: {
       ...whereLease,
@@ -6486,6 +6494,7 @@ async function writeComputerRunRequeue(
     },
     data: releasedHold,
   });
+  if (retried.count === 1) await releaseQuietBotMessageClaims(deps.prisma, runId, fence);
   return retried.count === 1;
 }
 

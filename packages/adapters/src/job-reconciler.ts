@@ -7,6 +7,7 @@ import {
   expireQuietBotMessages,
   goalExhaustionReason,
   reconcileGoalExhaustion,
+  reconcileQuietBotMessageClaims,
 } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 import type { PoolClient } from "pg";
@@ -392,10 +393,14 @@ export function createJobReconciler(
       }
     }
 
-    if (deps.prisma.botMessageDelivery)
+    if (deps.prisma.botMessageDelivery) {
       await expireQuietBotMessages(deps.prisma, now, batchSize).catch((error) =>
         getLogger().error("quiet message expiry", error),
       );
+      await reconcileQuietBotMessageClaims(deps.prisma, batchSize).catch((error) =>
+        getLogger().error("quiet message claim reconciliation", error),
+      );
+    }
     const pendingPeerWakes = deps.prisma.botMessageWake
       ? await deps.prisma.botMessageWake.findMany({
           where: {

@@ -184,6 +184,26 @@ export async function goalBotAuthorityFingerprint(
     .digest("hex");
 }
 
+async function currentCoordinatorGroup(
+  tx: Prisma.TransactionClient,
+  wake: { spaceId: string; userId: string; recipientBotId: string },
+  goal: { groupId: string; coordinatorBotId: string },
+) {
+  if (wake.recipientBotId !== goal.coordinatorBotId) return false;
+  const group = await tx.chatGroup.findFirst({
+    where: {
+      id: goal.groupId,
+      spaceId: wake.spaceId,
+      userId: wake.userId,
+      archivedAt: null,
+      coordinatorBotId: goal.coordinatorBotId,
+      members: { some: { botId: goal.coordinatorBotId, bot: { archivedAt: null } } },
+    },
+    select: { id: true },
+  });
+  return Boolean(group);
+}
+
 /** The caller holds the coordinator thread, other threads in ID order, then root. */
 export async function appendBotMessageWakeInTransaction(
   tx: Prisma.TransactionClient,
@@ -198,8 +218,9 @@ export async function appendBotMessageWakeInTransaction(
     authorityFingerprint: string;
   },
   promptCharacters: number,
+  deferAdmission = false,
 ): Promise<string[]> {
-  if (promptCharacters > BOT_MESSAGE_BATCH_MAX_CHARACTERS)
+  if (promptCharacters > BOT_MESSAGE_BATCH_MAX_CHARACTERS && !deferAdmission)
     throw new Error("Message exceeds the batch prompt limit.");
   const outstanding = await tx.botMessageDelivery.count({
     where: {
@@ -211,7 +232,18 @@ export async function appendBotMessageWakeInTransaction(
       expiresAt: { gt: new Date() },
     },
   });
-  if (outstanding > BOT_MESSAGE_PENDING_MAX) throw new BotInboxFullError();
+  const admissionProblem =
+    promptCharacters > BOT_MESSAGE_BATCH_MAX_CHARACTERS
+      ? "prompt-too-large"
+      : outstanding > BOT_MESSAGE_PENDING_MAX
+        ? "inbox-full"
+        : null;
+  if (admissionProblem && !deferAdmission) throw new BotInboxFullError();
+  if (admissionProblem)
+    await tx.botMessageDelivery.update({
+      where: { id: delivery.id },
+      data: { failureCode: admissionProblem },
+    });
   const key = {
     rootTaskId: delivery.rootTaskId,
     recipientBotId: delivery.recipientBotId,
@@ -222,10 +254,13 @@ export async function appendBotMessageWakeInTransaction(
   const queuedRunIds: string[] = [];
   if (
     open &&
-    !canAppendBotMessageToBatch(open.deliveryIds.length, open.promptCharacters, promptCharacters)
+    (admissionProblem ||
+      !canAppendBotMessageToBatch(open.deliveryIds.length, open.promptCharacters, promptCharacters))
   ) {
-    const runId = await bindBotMessageWakeInTransaction(tx, open.id);
-    if (runId) queuedRunIds.push(runId);
+    if (!admissionProblem) {
+      const runId = await bindBotMessageWakeInTransaction(tx, open.id);
+      if (runId) queuedRunIds.push(runId);
+    }
     const sealed = await tx.botMessageWake.findUniqueOrThrow({ where: { id: open.id } });
     if (sealed.state === "pending")
       await tx.botMessageWake.update({ where: { id: open.id }, data: { state: "sealed" } });
@@ -259,9 +294,70 @@ export async function appendBotMessageWakeInTransaction(
       deliveryIds: [delivery.id],
       promptCharacters,
       clientNonce: `peer-wake:${id}:${generation}`,
+      nextAttemptAt: admissionProblem ? new Date(Date.now() + RETRY_DELAYS_MS[0]) : null,
     },
   });
   return queuedRunIds;
+}
+
+/** Recover a delivery committed by an older version before wake rows existed. */
+export async function backfillAutomaticBotMessageWake(prisma: PrismaClient, deliveryId: string) {
+  return withTransactionRetry(() =>
+    prisma.$transaction(async (tx) => {
+      const delivery = await tx.botMessageDelivery.findUnique({ where: { id: deliveryId } });
+      if (!delivery?.idempotencyKey.startsWith("auto-result:")) return null;
+      const root = await tx.delegationRoot.findUnique({
+        where: { rootTaskId: delivery.rootTaskId },
+        select: { coordinatorThreadId: true },
+      });
+      if (!root) return null;
+      for (const threadId of [
+        root.coordinatorThreadId,
+        ...[delivery.recipientThreadId].filter((id) => id !== root.coordinatorThreadId).sort(),
+      ])
+        await tx.$queryRaw`SELECT id FROM threads WHERE id = ${threadId} FOR UPDATE`;
+      await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${delivery.rootTaskId} FOR UPDATE`;
+      const existing = await tx.botMessageWake.findFirst({
+        where: { deliveryIds: { has: delivery.id } },
+        select: { id: true, state: true },
+      });
+      if (existing) {
+        if (delivery.sourceDelegationId)
+          await tx.delegation.updateMany({
+            where: { id: delivery.sourceDelegationId, coordinatorWokenAt: null },
+            data: { coordinatorWokenAt: new Date() },
+          });
+        return ["pending", "sealed", "retry_wait"].includes(existing.state) ? existing.id : null;
+      }
+      if (!delivery.inboundMessageId) return null;
+      const receipt = await tx.message.findUnique({
+        where: { id: delivery.inboundMessageId },
+        select: { blocks: true },
+      });
+      const block = (receipt?.blocks as MessageBlock[] | undefined)?.find(
+        (candidate) => candidate.kind === "bot_message_received",
+      );
+      if (block?.kind !== "bot_message_received") return null;
+      const prompt = buildCompletionReviewPrompt(
+        buildBotMessageWakePrompt({
+          from: { id: delivery.senderBotId, name: block.fromBotName },
+          text: block.text,
+          intent: block.intent,
+        }),
+      );
+      await appendBotMessageWakeInTransaction(tx, delivery, prompt.length, true);
+      if (delivery.sourceDelegationId)
+        await tx.delegation.updateMany({
+          where: { id: delivery.sourceDelegationId, coordinatorWokenAt: null },
+          data: { coordinatorWokenAt: new Date() },
+        });
+      const wake = await tx.botMessageWake.findFirst({
+        where: { deliveryIds: { has: delivery.id } },
+        select: { id: true },
+      });
+      return wake?.id ?? null;
+    }),
+  );
 }
 
 async function wakePrompt(tx: Prisma.TransactionClient, deliveryIds: string[], now: Date) {
@@ -350,7 +446,7 @@ async function bindBotMessageWakeInTransaction(
     where: { id: wake.recipientThreadId },
     select: { id: true, botId: true, groupId: true },
   });
-  if (!thread || (thread.botId !== wake.recipientBotId && thread.groupId !== goal.groupId)) {
+  if (!thread || thread.id !== goal.threadId || thread.groupId !== goal.groupId) {
     await finishWake(tx, wake, "cancelled", "thread-unavailable", true);
     return null;
   }
@@ -367,6 +463,10 @@ async function bindBotMessageWakeInTransaction(
     await finishWake(tx, wake, "cancelled", "recipient-unavailable", true);
     return null;
   }
+  if (!(await currentCoordinatorGroup(tx, wake, goal))) {
+    await finishWake(tx, wake, "cancelled", "group-unavailable", true);
+    return null;
+  }
   const authorityFingerprint = await goalBotAuthorityFingerprint(tx, {
     spaceId: wake.spaceId,
     userId: wake.userId,
@@ -377,6 +477,41 @@ async function bindBotMessageWakeInTransaction(
   if (authorityFingerprint !== wake.authorityFingerprint) {
     await finishWake(tx, wake, "cancelled", "authority-changed", true);
     return null;
+  }
+  const deferred = await tx.botMessageDelivery.findMany({
+    where: {
+      id: { in: wake.deliveryIds },
+      failureCode: { in: ["inbox-full", "prompt-too-large"] },
+    },
+    select: { failureCode: true },
+  });
+  if (deferred.some((row) => row.failureCode === "prompt-too-large")) {
+    await finishWake(tx, wake, "failed", "prompt-too-large", true);
+    return null;
+  }
+  if (deferred.length) {
+    const outstanding = await tx.botMessageDelivery.count({
+      where: {
+        spaceId: wake.spaceId,
+        userId: wake.userId,
+        recipientBotId: wake.recipientBotId,
+        state: { in: ["queued", "delivered", "read"] },
+        outcome: null,
+        expiresAt: { gt: now },
+      },
+    });
+    if (outstanding > BOT_MESSAGE_PENDING_MAX) {
+      await tx.botMessageWake.update({
+        where: { id: wake.id },
+        data: { nextAttemptAt: new Date(now.getTime() + RETRY_DELAYS_MS[0]) },
+      });
+      return null;
+    }
+    await tx.botMessageDelivery.updateMany({
+      where: { id: { in: wake.deliveryIds }, failureCode: "inbox-full" },
+      data: { failureCode: null },
+    });
+    await tx.botMessageWake.update({ where: { id: wake.id }, data: { nextAttemptAt: null } });
   }
   const prepared = await wakePrompt(tx, wake.deliveryIds, now);
   if (prepared.liveIds.length !== wake.deliveryIds.length) {
@@ -598,6 +733,106 @@ export async function expireQuietBotMessages(prisma: PrismaClient, now = new Dat
   return stale.length;
 }
 
+/** Claim assembled quiet context only while this run still owns its lease. */
+export async function claimQuietBotMessages(
+  prisma: PrismaClient,
+  input: { runId: string; leaseOwner: string; leaseFence: number; deliveryIds: string[] },
+) {
+  if (input.deliveryIds.length === 0) return;
+  await withTransactionRetry(() =>
+    prisma.$transaction(async (tx) => {
+      const run = await tx.run.findFirst({
+        where: {
+          id: input.runId,
+          status: "running",
+          leaseOwner: input.leaseOwner,
+          leaseFence: input.leaseFence,
+        },
+        select: { id: true, spaceId: true, userId: true, botId: true, threadId: true },
+      });
+      if (!run) throw new Error("Quiet delivery claim lost its run lease.");
+      for (const id of input.deliveryIds) {
+        const claimed = await tx.botMessageDelivery.updateMany({
+          where: {
+            id,
+            spaceId: run.spaceId,
+            userId: run.userId,
+            recipientBotId: run.botId,
+            recipientThreadId: run.threadId,
+            state: { in: ["delivered", "read"] },
+            outcome: null,
+            expiresAt: { gt: new Date() },
+            OR: [{ quietClaimRunId: null }, { quietClaimRunId: run.id }],
+          },
+          data: { quietClaimRunId: run.id, quietClaimLeaseFence: input.leaseFence },
+        });
+        if (claimed.count !== 1) throw new Error("Quiet delivery changed before runtime input.");
+      }
+    }),
+  );
+}
+
+export async function releaseQuietBotMessageClaims(
+  prisma: PrismaClient,
+  runId: string,
+  leaseFence: number,
+) {
+  await prisma.botMessageDelivery.updateMany({
+    where: { quietClaimRunId: runId, quietClaimLeaseFence: leaseFence, outcome: null },
+    data: { quietClaimRunId: null, quietClaimLeaseFence: null },
+  });
+}
+
+/**
+ * S2b can move consumption to fenced runtime-input acknowledgement here.
+ * Until then, only a completed turn consumes quiet context; every other outcome replays it.
+ */
+export async function settleQuietBotMessageClaimsInTransaction(
+  tx: Prisma.TransactionClient,
+  runId: string,
+  leaseFence: number,
+  completed: boolean,
+) {
+  await tx.botMessageDelivery.updateMany({
+    where: { quietClaimRunId: runId, quietClaimLeaseFence: leaseFence, outcome: null },
+    data: completed
+      ? { outcome: "consumed", quietClaimRunId: null, quietClaimLeaseFence: null }
+      : { quietClaimRunId: null, quietClaimLeaseFence: null },
+  });
+}
+
+export async function reconcileQuietBotMessageClaims(prisma: PrismaClient, limit = 100) {
+  const claims = await prisma.botMessageDelivery.findMany({
+    where: { quietClaimRunId: { not: null }, outcome: null },
+    orderBy: { createdAt: "asc" },
+    take: limit,
+    select: { id: true, quietClaimRunId: true, quietClaimLeaseFence: true },
+  });
+  for (const claim of claims) {
+    const run = await prisma.run.findUnique({
+      where: { id: claim.quietClaimRunId! },
+      select: { status: true, leaseFence: true, leaseExpiresAt: true },
+    });
+    if (
+      run?.status === "running" &&
+      run.leaseFence === claim.quietClaimLeaseFence &&
+      run.leaseExpiresAt &&
+      run.leaseExpiresAt > new Date()
+    )
+      continue;
+    await prisma.botMessageDelivery.updateMany({
+      where: {
+        id: claim.id,
+        quietClaimRunId: claim.quietClaimRunId,
+        quietClaimLeaseFence: claim.quietClaimLeaseFence,
+        outcome: null,
+      },
+      data: { quietClaimRunId: null, quietClaimLeaseFence: null },
+    });
+  }
+  return claims.length;
+}
+
 /** Recheck a leased wake before any runtime input is assembled or executed. */
 export async function refreshBoundBotMessageWakeRun(
   prisma: PrismaClient,
@@ -651,6 +886,26 @@ export async function refreshBoundBotMessageWakeRun(
       if (!run) return false;
       const wake = await tx.botMessageWake.findUniqueOrThrow({ where: { id: candidate.id } });
       if (wake.state !== "bound" || wake.runId !== run.id) return false;
+      const goal = wake.goalId
+        ? await tx.teamGoal.findFirst({
+            where: {
+              id: wake.goalId,
+              rootTaskId: wake.rootTaskId,
+              spaceId: wake.spaceId,
+              userId: wake.userId,
+              status: "running",
+            },
+          })
+        : null;
+      if (!goal || !(await currentCoordinatorGroup(tx, wake, goal))) {
+        await finishWake(tx, wake, "cancelled", "group-unavailable", true);
+        await tx.run.update({
+          where: { id: run.id },
+          data: { status: "cancelled", leaseOwner: null, leaseExpiresAt: null },
+        });
+        await tx.task.update({ where: { id: run.taskId }, data: { status: "cancelled" } });
+        return false;
+      }
       const prepared = await wakePrompt(tx, wake.deliveryIds, new Date());
       if (prepared.liveIds.length === wake.deliveryIds.length) return true;
       if (prepared.liveIds.length === 0) {

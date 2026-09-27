@@ -3,6 +3,7 @@ import type { JobPublisher } from "@ardurbot/adapter-kit";
 import { buildBotMessageWakePrompt } from "@ardurbot/core";
 import {
   appendBotMessageWakeInTransaction,
+  claimQuietBotMessages,
   claimSteering,
   createDb,
   createThreadEvents,
@@ -12,11 +13,13 @@ import {
   finalizeRun,
   goalBotAuthorityFingerprint,
   type PrismaClient,
+  reconcileQuietBotMessageClaims,
   refreshBoundBotMessageWakeRun,
 } from "@ardurbot/db";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { replyToBotDelivery } from "./bot-comms.js";
 import { messageBot } from "./bot-messages.js";
+import { wakeGoalAfterDelegation } from "./goal-wake.js";
 import { createJobReconciler } from "./job-reconciler.js";
 import { recordRunUsage } from "./run-usage.js";
 
@@ -327,6 +330,286 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
       deps: { prisma, events: createThreadEvents(prisma), jobs },
     };
   }
+
+  async function completeWorker(f: Awaited<ReturnType<typeof fixture>>, text: string) {
+    const attempt = await prisma.attempt.create({
+      data: { runId: f.workerRun.id, fence: 1, status: "running" },
+    });
+    return finalizeRun(prisma, {
+      spaceId,
+      threadId: f.workerThread.id,
+      botId: f.worker.id,
+      runId: f.workerRun.id,
+      taskId: f.workerRun.taskId,
+      attemptId: attempt.id,
+      leaseOwner: "fixture-worker",
+      leaseFence: 1,
+      outcome: "completed",
+      blocks: [{ kind: "text", text }],
+    });
+  }
+
+  it("commits a long worker result and wakes once from its bounded receipt", async () => {
+    const f = await fixture();
+    expect(await completeWorker(f, "x".repeat(16_000))).not.toBe(false);
+    const run = await prisma.run.findUniqueOrThrow({ where: { id: f.workerRun.id } });
+    const delegation = await prisma.delegation.findUniqueOrThrow({
+      where: { id: f.parent.delegationId! },
+    });
+    expect(run.status).toBe("completed");
+    expect(delegation.result).toHaveLength(2_000);
+    const delivery = await prisma.botMessageDelivery.findFirstOrThrow({
+      where: { idempotencyKey: `auto-result:${delegation.id}` },
+    });
+    const wake = await prisma.botMessageWake.findFirstOrThrow({
+      where: { deliveryIds: { has: delivery.id } },
+    });
+    expect(wake.promptCharacters).toBeLessThan(16_000);
+    await wakeGoalAfterDelegation(f.deps, delegation.id);
+    await wakeGoalAfterDelegation(f.deps, delegation.id);
+    expect(
+      await prisma.run.count({
+        where: { goalId: f.goal.id, clientNonce: { startsWith: "peer-wake:" } },
+      }),
+    ).toBe(1);
+  });
+
+  it("defers a full inbox without rolling back the worker result", async () => {
+    const f = await fixture();
+    const extraIds = Array.from({ length: 20 }, () => randomUUID());
+    await prisma.botMessageDelivery.createMany({
+      data: extraIds.map((id) => ({
+        id,
+        spaceId,
+        userId,
+        goalId: f.goal.id,
+        rootTaskId: f.rootTask.id,
+        conversationId: id,
+        senderBotId: f.worker.id,
+        recipientBotId: f.coordinator.id,
+        senderThreadId: f.workerThread.id,
+        recipientThreadId: f.room.id,
+        sourceRunId: f.workerRun.id,
+        intent: "fyi",
+        outboundMessageId: f.parent.inboundMessageId!,
+        inboundMessageId: f.parent.outboundMessageId,
+        state: "delivered",
+        hop: 2,
+        authorityFingerprint: "fixture",
+        requestFingerprint: id,
+        idempotencyKey: `full-${id}`,
+        expiresAt: f.goal.untilAt,
+      })),
+    });
+    expect(await completeWorker(f, "Finished the work")).not.toBe(false);
+    expect((await prisma.run.findUniqueOrThrow({ where: { id: f.workerRun.id } })).status).toBe(
+      "completed",
+    );
+    const delivery = await prisma.botMessageDelivery.findFirstOrThrow({
+      where: { idempotencyKey: `auto-result:${f.parent.delegationId}` },
+    });
+    const wake = await prisma.botMessageWake.findFirstOrThrow({
+      where: { deliveryIds: { has: delivery.id } },
+    });
+    expect(delivery.failureCode).toBe("inbox-full");
+    expect(wake.state).toBe("pending");
+    expect(wake.nextAttemptAt!.getTime()).toBeGreaterThan(Date.now());
+    await prisma.botMessageDelivery.updateMany({
+      where: { id: { in: extraIds } },
+      data: { outcome: "consumed" },
+    });
+    await prisma.botMessageWake.update({
+      where: { id: wake.id },
+      data: { nextAttemptAt: new Date(0) },
+    });
+    const runId = await dispatchBotMessageWake(prisma, wake.id);
+    expect(runId).toBeTruthy();
+    expect(
+      (await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id: delivery.id } }))
+        .failureCode,
+    ).toBeNull();
+  });
+
+  it.each(["archived", "replaced"] as const)(
+    "settles an automatic wake when the group coordinator is %s",
+    async (change) => {
+      const f = await fixture();
+      if (change === "archived")
+        await prisma.chatGroup.update({
+          where: { id: f.goal.groupId },
+          data: { archivedAt: new Date() },
+        });
+      else {
+        const replacement = await prisma.bot.create({
+          data: { spaceId, userId, name: "Replacement", color: "ink" },
+        });
+        await prisma.chatGroup.update({
+          where: { id: f.goal.groupId },
+          data: { coordinatorBotId: replacement.id },
+        });
+      }
+      expect(await completeWorker(f, "Finished the work")).not.toBe(false);
+      const delivery = await prisma.botMessageDelivery.findFirstOrThrow({
+        where: { idempotencyKey: `auto-result:${f.parent.delegationId}` },
+      });
+      const wake = await prisma.botMessageWake.findFirstOrThrow({
+        where: { deliveryIds: { has: delivery.id } },
+      });
+      expect(await dispatchBotMessageWake(prisma, wake.id)).toBeNull();
+      expect(
+        await prisma.botMessageWake.findUniqueOrThrow({ where: { id: wake.id } }),
+      ).toMatchObject({ state: "cancelled" });
+      expect(
+        await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id: delivery.id } }),
+      ).toMatchObject({ state: "failed", failureCode: "group-unavailable" });
+      expect(
+        await prisma.run.count({
+          where: { goalId: f.goal.id, clientNonce: { startsWith: "peer-wake:" } },
+        }),
+      ).toBe(0);
+    },
+  );
+
+  it("cancels a bound coordinator run if the group is archived before execution", async () => {
+    const f = await fixture();
+    expect(await completeWorker(f, "Finished the work")).not.toBe(false);
+    const delivery = await prisma.botMessageDelivery.findFirstOrThrow({
+      where: { idempotencyKey: `auto-result:${f.parent.delegationId}` },
+    });
+    const wake = await prisma.botMessageWake.findFirstOrThrow({
+      where: { deliveryIds: { has: delivery.id } },
+    });
+    const runId = await dispatchBotMessageWake(prisma, wake.id);
+    expect(runId).toBeTruthy();
+    await prisma.run.update({
+      where: { id: runId! },
+      data: { status: "leased", leaseOwner: "fixture-claim", leaseFence: 1 },
+    });
+    await prisma.chatGroup.update({
+      where: { id: f.goal.groupId },
+      data: { archivedAt: new Date() },
+    });
+    expect(
+      await refreshBoundBotMessageWakeRun(prisma, {
+        runId: runId!,
+        leaseOwner: "fixture-claim",
+        leaseFence: 1,
+      }),
+    ).toBe(false);
+    expect((await prisma.run.findUniqueOrThrow({ where: { id: runId! } })).status).toBe(
+      "cancelled",
+    );
+    expect(
+      (await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id: delivery.id } }))
+        .failureCode,
+    ).toBe("group-unavailable");
+  });
+
+  it("backfills one wake for a pre-upgrade automatic delivery without a wake", async () => {
+    const f = await fixture();
+    expect(await completeWorker(f, "Finished the work")).not.toBe(false);
+    const delivery = await prisma.botMessageDelivery.findFirstOrThrow({
+      where: { idempotencyKey: `auto-result:${f.parent.delegationId}` },
+    });
+    await prisma.botMessageWake.deleteMany({ where: { deliveryIds: { has: delivery.id } } });
+    await prisma.delegation.update({
+      where: { id: f.parent.delegationId! },
+      data: { coordinatorWokenAt: null },
+    });
+    await wakeGoalAfterDelegation(f.deps, f.parent.delegationId);
+    await wakeGoalAfterDelegation(f.deps, f.parent.delegationId);
+    expect(
+      await prisma.botMessageWake.count({ where: { deliveryIds: { has: delivery.id } } }),
+    ).toBe(1);
+    expect(
+      await prisma.run.count({
+        where: { goalId: f.goal.id, clientNonce: { startsWith: "peer-wake:" } },
+      }),
+    ).toBe(1);
+    expect(
+      (await prisma.delegation.findUniqueOrThrow({ where: { id: f.parent.delegationId! } }))
+        .coordinatorWokenAt,
+    ).not.toBeNull();
+  });
+
+  it("replays a quiet delivery after an interrupted fenced claim", async () => {
+    const f = await fixture("compatible");
+    const id = randomUUID();
+    await prisma.botMessageDelivery.create({
+      data: {
+        id,
+        spaceId,
+        userId,
+        goalId: f.goal.id,
+        rootTaskId: f.rootTask.id,
+        conversationId: id,
+        senderBotId: f.worker.id,
+        recipientBotId: f.coordinator.id,
+        senderThreadId: f.workerThread.id,
+        recipientThreadId: f.room.id,
+        sourceRunId: f.workerRun.id,
+        intent: "fyi",
+        outboundMessageId: f.parent.inboundMessageId!,
+        inboundMessageId: f.parent.outboundMessageId,
+        state: "delivered",
+        hop: 2,
+        authorityFingerprint: "fixture",
+        requestFingerprint: id,
+        idempotencyKey: `quiet-claim-${id}`,
+        expiresAt: f.goal.untilAt,
+      },
+    });
+    await claimQuietBotMessages(prisma, {
+      runId: f.coordinatorRun.id,
+      leaseOwner: "fixture-active",
+      leaseFence: 1,
+      deliveryIds: [id],
+    });
+    expect(await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id } })).toMatchObject({
+      outcome: null,
+      quietClaimRunId: f.coordinatorRun.id,
+      quietClaimLeaseFence: 1,
+    });
+    await prisma.run.update({
+      where: { id: f.coordinatorRun.id },
+      data: { status: "queued", leaseOwner: null, leaseFence: 2 },
+    });
+    await reconcileQuietBotMessageClaims(prisma);
+    expect(
+      (await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id } })).quietClaimRunId,
+    ).toBeNull();
+    await prisma.run.update({
+      where: { id: f.coordinatorRun.id },
+      data: { status: "running", leaseOwner: "fixture-retry" },
+    });
+    await claimQuietBotMessages(prisma, {
+      runId: f.coordinatorRun.id,
+      leaseOwner: "fixture-retry",
+      leaseFence: 2,
+      deliveryIds: [id],
+    });
+    const attempt = await prisma.attempt.create({
+      data: { runId: f.coordinatorRun.id, fence: 2, status: "running" },
+    });
+    expect(
+      await finalizeRun(prisma, {
+        spaceId,
+        threadId: f.room.id,
+        botId: f.coordinator.id,
+        runId: f.coordinatorRun.id,
+        taskId: f.coordinatorRun.taskId,
+        attemptId: attempt.id,
+        leaseOwner: "fixture-retry",
+        leaseFence: 2,
+        outcome: "completed",
+        blocks: [{ kind: "text", text: "Done" }],
+      }),
+    ).not.toBe(false);
+    expect(await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id } })).toMatchObject({
+      outcome: "consumed",
+      quietClaimRunId: null,
+    });
+  });
 
   it("stores one linked result and one idle wake across concurrent retries", async () => {
     const f = await fixture();

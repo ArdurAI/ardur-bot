@@ -2165,6 +2165,8 @@ model BotMessageDelivery {
   repliedAt DateTime?
   outcome String?
   failureCode String?
+  quietClaimRunId String?
+  quietClaimLeaseFence Int?
   usageRunIds String[] @default([])
   tokens Int?
   cost Float?
@@ -2176,6 +2178,7 @@ model BotMessageDelivery {
   @@index([conversationId, createdAt])
   @@index([spaceId, userId, senderBotId, recipientBotId, createdAt])
   @@index([inReplyToDeliveryId])
+  @@index([quietClaimRunId, quietClaimLeaseFence])
   @@map("bot_message_deliveries")
 }
 
