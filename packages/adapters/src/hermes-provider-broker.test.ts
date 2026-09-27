@@ -89,6 +89,80 @@ function fixture(patch: Partial<BrokerOptions> = {}) {
 }
 
 describe("worker provider broker", () => {
+  it("owns a grant before the first asynchronous active check", async () => {
+    let release!: (value: boolean) => void;
+    const active = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<boolean>((resolve) => {
+            release = resolve;
+          }),
+      )
+      .mockResolvedValue(true);
+    const f = fixture({ active });
+    const first = f.broker.open(f.request());
+    await expect(f.broker.open(f.request())).rejects.toThrow();
+    release(true);
+    await first;
+    expect(f.fetch).toHaveBeenCalledOnce();
+    expect(f.records.filter((row) => row.request?.counter.sequence === 0)).toHaveLength(1);
+  });
+
+  it("refuses a grant revoked during its first active check", async () => {
+    let release!: (value: boolean) => void;
+    const active = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<boolean>((resolve) => {
+            release = resolve;
+          }),
+      )
+      .mockResolvedValue(true);
+    const f = fixture({ active });
+    const pending = f.broker.open(f.request());
+    f.broker.revoke();
+    release(true);
+    await expect(pending).rejects.toThrow();
+    expect(f.fetch).not.toHaveBeenCalled();
+  });
+
+  it("keeps a complete SSE usage event when a later read fails", async () => {
+    let reads = 0;
+    const stream = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        if (reads++ === 0)
+          controller.enqueue(
+            new TextEncoder().encode(
+              'data: {"model":"fixture-model","usage":{"prompt_tokens":17,"completion_tokens":4}}\n\n',
+            ),
+          );
+        else controller.error(new Error("reset"));
+      },
+    });
+    const f = fixture({
+      fetch: vi.fn(
+        async () => new Response(stream, { headers: { "content-type": "text/event-stream" } }),
+      ),
+    });
+    await expect(f.broker.open(f.request({ body: { ...f.body, stream: true } }))).rejects.toThrow();
+    expect(f.records.at(-1)?.request).toMatchObject({
+      categories: { logicalInput: 17, output: 4 },
+      collection: { outcome: "failed" },
+    });
+  });
+
+  it("cancels an unsupported response body before finishing", async () => {
+    const cancelled = vi.fn();
+    const stream = new ReadableStream<Uint8Array>({ cancel: cancelled });
+    const f = fixture({
+      fetch: vi.fn(async () => new Response(stream, { headers: { "content-type": "text/plain" } })),
+    });
+    await expect(f.broker.open(f.request())).rejects.toThrow();
+    expect(cancelled).toHaveBeenCalledOnce();
+    expect(f.records.at(-1)?.request?.collection?.outcome).toBe("failed");
+  });
   it("forwards canonical Ardur tools and exact model/effort, preserving measured zero", async () => {
     const f = fixture();
     const result = await f.broker.open(f.request());

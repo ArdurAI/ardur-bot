@@ -398,28 +398,6 @@ export class HermesProviderBroker {
 
   async open(request: BrokerRequest): Promise<Response> {
     this.checkGrant(request);
-    const { connection } = this.options;
-    const body = admittedBody(request.body, connection, this.options.pinnedEffort, this.allowed);
-    const encoded = JSON.stringify(body);
-    if (Buffer.byteLength(encoded) > MAX_REQUEST_BYTES) denied();
-    if (!(await this.options.active())) denied();
-    const reservedTokens = connection.contextWindow + connection.maxOutputTokens;
-    if (!bounded(reservedTokens, MAX_TOKEN)) denied();
-    const collector = new RequestUsageCollector({
-      provider: connection.provider,
-      model: connection.modelId,
-      requestId: randomUUID(),
-      attemptId: "0",
-      purpose: this.options.purpose ?? "unknown",
-      mappingVersion: "broker-chat-completions-v1",
-      inputSemantics: "total-with-cache-subsets",
-      admission: {
-        kind: "worker-provider-broker",
-        reservedTokens,
-        maxRequests: this.options.maxRequests,
-        maxReservedTokens: this.options.maxReservedTokens,
-      },
-    });
     this.busy = true;
     const controller = new AbortController();
     this.controller = controller;
@@ -427,142 +405,192 @@ export class HermesProviderBroker {
     request.signal?.addEventListener("abort", abort, { once: true });
     if (request.signal?.aborted) controller.abort();
     const expiry = setTimeout(abort, Math.max(0, this.grant.expiresAt - Date.now()));
-    let finished = false;
-    const finish = async (
-      outcome: "success" | "failed" | "cancelled" | "timed-out" | "unknown",
-    ) => {
-      if (finished) return;
-      finished = true;
-      try {
-        await this.options.record(collector.finish(outcome));
-      } finally {
-        clearTimeout(expiry);
-        this.busy = false;
-        this.controller = null;
-        request.signal?.removeEventListener("abort", abort);
+    const live = () => {
+      if (this.revoked || controller.signal.aborted || Date.now() >= this.grant.expiresAt) denied();
+    };
+    const active = async () => {
+      live();
+      if (!(await this.options.active())) {
+        controller.abort();
+        denied();
       }
+      live();
     };
     try {
-      await this.options.record(collector.start());
-    } catch {
-      this.busy = false;
-      this.controller = null;
+      const { connection } = this.options;
+      const body = admittedBody(request.body, connection, this.options.pinnedEffort, this.allowed);
+      const encoded = JSON.stringify(body);
+      if (Buffer.byteLength(encoded) > MAX_REQUEST_BYTES) denied();
+      await active();
+      const reservedTokens = connection.contextWindow + connection.maxOutputTokens;
+      if (!bounded(reservedTokens, MAX_TOKEN)) denied();
+      const collector = new RequestUsageCollector({
+        provider: connection.provider,
+        model: connection.modelId,
+        requestId: randomUUID(),
+        attemptId: "0",
+        purpose: this.options.purpose ?? "unknown",
+        mappingVersion: "broker-chat-completions-v1",
+        inputSemantics: "total-with-cache-subsets",
+        admission: {
+          kind: "worker-provider-broker",
+          reservedTokens,
+          maxRequests: this.options.maxRequests,
+          maxReservedTokens: this.options.maxReservedTokens,
+        },
+      });
+      let finished = false;
+      const finish = async (
+        outcome: "success" | "failed" | "cancelled" | "timed-out" | "unknown",
+      ) => {
+        if (finished) return;
+        finished = true;
+        await this.options.record(collector.finish(outcome));
+      };
+      try {
+        await this.options.record(collector.start());
+      } catch {
+        throw new Error("Provider request could not be admitted.");
+      }
+      let responseBody: ReadableStream<Uint8Array> | null = null;
+      let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+      try {
+        await active();
+        const url = `${assertAllowedOpenAiCompatibleUrl(connection.baseUrl).toString().replace(/\/$/, "")}/chat/completions`;
+        live();
+        const response = await this.transport(url, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            ...(connection.apiKey ? { authorization: `Bearer ${connection.apiKey}` } : {}),
+          },
+          body: encoded,
+          signal: controller.signal,
+        });
+        responseBody = response.body;
+        await active();
+        const mime = response.headers.get("content-type") ?? "";
+        if (!mime.includes("application/json") && !mime.includes("text/event-stream")) {
+          controller.abort();
+          void response.body?.cancel().catch(() => undefined);
+          await finish("failed");
+          throw new Error("Provider response format is unsupported.");
+        }
+        if (response.ok && Boolean(body.stream) !== mime.includes("text/event-stream")) {
+          controller.abort();
+          void response.body?.cancel().catch(() => undefined);
+          await finish("failed");
+          throw new Error("Provider stream format did not match the request.");
+        }
+        const chunks: Uint8Array[] = [];
+        let size = 0;
+        let observedModel = false;
+        const capture = async (payload: unknown) => {
+          const value = object(payload);
+          if (!value) return;
+          const counts = chatCompletionsUsage(payload);
+          if (counts) await this.options.record(collector.snapshot(counts));
+          await active();
+          if (value.model !== undefined && value.model !== connection.modelId) {
+            await finish("failed");
+            throw new Error("Provider reported a different model.");
+          }
+          if (value.model === connection.modelId) observedModel = true;
+        };
+        const sse = mime.includes("text/event-stream");
+        const decoder = new TextDecoder();
+        let pendingLine = "";
+        const parseLines = async (text: string, flush = false) => {
+          pendingLine += text;
+          let index = pendingLine.indexOf("\n");
+          while (index >= 0) {
+            const line = pendingLine.slice(0, index).replace(/\r$/, "");
+            pendingLine = pendingLine.slice(index + 1);
+            index = pendingLine.indexOf("\n");
+            if (Buffer.byteLength(line) > MAX_EVENT_BYTES)
+              throw new Error("Provider event exceeded the broker limit.");
+            if (!line.startsWith("data:")) continue;
+            const data = line.slice(5).trim();
+            if (!data || data === "[DONE]") continue;
+            try {
+              await capture(JSON.parse(data));
+            } catch (error) {
+              if (!(error instanceof SyntaxError)) throw error;
+            }
+          }
+          if (Buffer.byteLength(pendingLine) > MAX_EVENT_BYTES)
+            throw new Error("Provider event exceeded the broker limit.");
+          if (flush && pendingLine) await parseLines("\n");
+        };
+        reader = responseBody?.getReader();
+        if (reader) {
+          while (true) {
+            const next = await reader.read();
+            await active();
+            if (next.done) break;
+            size += next.value.byteLength;
+            if (sse) {
+              const available = Math.max(0, MAX_RESPONSE_BYTES - (size - next.value.byteLength));
+              await parseLines(decoder.decode(next.value.subarray(0, available), { stream: true }));
+              await active();
+            }
+            if (size > MAX_RESPONSE_BYTES) {
+              await reader.cancel();
+              throw new Error("Provider response exceeded the broker limit.");
+            }
+            chunks.push(next.value);
+          }
+        }
+        if (sse) await parseLines(decoder.decode(), true);
+        const bytes = new Uint8Array(size);
+        let offset = 0;
+        for (const chunk of chunks) {
+          bytes.set(chunk, offset);
+          offset += chunk.byteLength;
+        }
+        if (!sse) {
+          try {
+            await capture(JSON.parse(new TextDecoder().decode(bytes)));
+          } catch (error) {
+            if (!(error instanceof SyntaxError)) throw error;
+            await finish("failed");
+            throw new Error("Provider returned invalid JSON.");
+          }
+        }
+        if (connection.reportedModel === "required" && !observedModel) {
+          await finish("failed");
+          throw new Error("Provider model identity is unavailable.");
+        }
+        if (controller.signal.aborted || this.revoked || Date.now() >= this.grant.expiresAt) {
+          await finish(Date.now() >= this.grant.expiresAt ? "timed-out" : "cancelled");
+          throw new Error("Provider request was cancelled.");
+        }
+        await finish(response.ok ? "success" : "failed");
+        return new Response(response.ok ? bytes : "Provider request failed.", {
+          status: response.status,
+          headers: { "content-type": response.ok ? mime : "text/plain" },
+        });
+      } catch {
+        const outcome = controller.signal.aborted
+          ? Date.now() >= this.grant.expiresAt
+            ? "timed-out"
+            : "cancelled"
+          : "failed";
+        controller.abort();
+        if (reader) void reader.cancel().catch(() => undefined);
+        else void responseBody?.cancel().catch(() => undefined);
+        try {
+          await finish(outcome);
+        } catch {
+          // The started reservation remains durable when a terminal write fails.
+        }
+        throw new Error("Provider request failed.");
+      }
+    } finally {
       clearTimeout(expiry);
       request.signal?.removeEventListener("abort", abort);
-      throw new Error("Provider request could not be admitted.");
-    }
-    try {
-      if (
-        !(await this.options.active()) ||
-        controller.signal.aborted ||
-        Date.now() >= this.grant.expiresAt
-      ) {
-        await finish("cancelled");
-        throw new Error("Provider request is no longer active.");
-      }
-      const url = `${assertAllowedOpenAiCompatibleUrl(connection.baseUrl).toString().replace(/\/$/, "")}/chat/completions`;
-      const response = await this.transport(url, {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          ...(connection.apiKey ? { authorization: `Bearer ${connection.apiKey}` } : {}),
-        },
-        body: encoded,
-        signal: controller.signal,
-      });
-      const mime = response.headers.get("content-type") ?? "";
-      if (!mime.includes("application/json") && !mime.includes("text/event-stream")) {
-        await finish("failed");
-        throw new Error("Provider response format is unsupported.");
-      }
-      if (response.ok && Boolean(body.stream) !== mime.includes("text/event-stream")) {
-        await finish("failed");
-        throw new Error("Provider stream format did not match the request.");
-      }
-      const chunks: Uint8Array[] = [];
-      let size = 0;
-      const reader = response.body?.getReader();
-      if (reader) {
-        while (true) {
-          const next = await reader.read();
-          if (next.done) break;
-          size += next.value.byteLength;
-          if (size > MAX_RESPONSE_BYTES) {
-            await reader.cancel();
-            throw new Error("Provider response exceeded the broker limit.");
-          }
-          chunks.push(next.value);
-        }
-      }
-      const bytes = new Uint8Array(size);
-      let offset = 0;
-      for (const chunk of chunks) {
-        bytes.set(chunk, offset);
-        offset += chunk.byteLength;
-      }
-      let observedModel = false;
-      const capture = async (payload: unknown) => {
-        const value = object(payload);
-        if (!value) return;
-        const counts = chatCompletionsUsage(payload);
-        if (counts) await this.options.record(collector.snapshot(counts));
-        if (value.model !== undefined && value.model !== connection.modelId) {
-          await finish("failed");
-          throw new Error("Provider reported a different model.");
-        }
-        if (value.model === connection.modelId) observedModel = true;
-      };
-      if (mime.includes("text/event-stream")) {
-        for (const line of new TextDecoder().decode(bytes).split(/\r?\n/)) {
-          if (line.length > MAX_EVENT_BYTES) {
-            await finish("failed");
-            throw new Error("Provider event exceeded the broker limit.");
-          }
-          if (!line.startsWith("data:")) continue;
-          const data = line.slice(5).trim();
-          if (!data || data === "[DONE]") continue;
-          try {
-            await capture(JSON.parse(data));
-          } catch (error) {
-            if (error instanceof SyntaxError) continue;
-            throw error;
-          }
-        }
-      } else {
-        try {
-          await capture(JSON.parse(new TextDecoder().decode(bytes)));
-        } catch (error) {
-          if (!(error instanceof SyntaxError)) throw error;
-          await finish("failed");
-          throw new Error("Provider returned invalid JSON.");
-        }
-      }
-      if (connection.reportedModel === "required" && !observedModel) {
-        await finish("failed");
-        throw new Error("Provider model identity is unavailable.");
-      }
-      if (controller.signal.aborted || this.revoked || Date.now() >= this.grant.expiresAt) {
-        await finish(Date.now() >= this.grant.expiresAt ? "timed-out" : "cancelled");
-        throw new Error("Provider request was cancelled.");
-      }
-      await finish(response.ok ? "success" : "failed");
-      return new Response(response.ok ? bytes : "Provider request failed.", {
-        status: response.status,
-        headers: { "content-type": response.ok ? mime : "text/plain" },
-      });
-    } catch {
-      try {
-        await finish(
-          controller.signal.aborted
-            ? Date.now() >= this.grant.expiresAt
-              ? "timed-out"
-              : "cancelled"
-            : "failed",
-        );
-      } catch {
-        // The started reservation remains durable when a terminal write fails.
-      }
-      throw new Error("Provider request failed.");
+      this.controller = null;
+      this.busy = false;
     }
   }
 }
