@@ -16,6 +16,7 @@ interface ComposeService {
   restart?: string;
   network_mode?: string;
   networks?: string[];
+  profiles?: string[];
   extra_hosts?: string[];
 }
 
@@ -34,10 +35,17 @@ it("lets packaged API and worker reach host model servers on every Docker platfo
 });
 const publishWorkflow = parse(readFileSync(publishWorkflowFile, "utf8")) as {
   jobs?: {
+    build?: {
+      strategy?: {
+        matrix?: {
+          name?: unknown;
+        };
+      };
+    };
     publish?: {
       strategy?: {
         matrix?: {
-          include?: Array<{ name?: string }>;
+          name?: unknown;
         };
       };
     };
@@ -52,13 +60,32 @@ function firstPartyImageNames(value: unknown): string[] {
   return [...value.matchAll(FIRST_PARTY_IMAGE)].map((match) => match[1] ?? "");
 }
 
+function publishedNames(matrixName: unknown, ref: "dev" | "tag"): string[] {
+  if (typeof matrixName !== "string") throw new Error("Publish matrix name must be an expression");
+  const match = matrixName.match(
+    /^\$\{\{\s*fromJSON\(github\.ref == 'refs\/heads\/dev' && '(\[[^']*\])' \|\| '(\[[^']*\])'\)\s*\}\}$/,
+  );
+  if (!match) throw new Error("Publish matrix must select dev and tag image names");
+  const selected = ref === "dev" ? match[1] : match[2];
+  if (!selected) throw new Error("Publish matrix must contain image names for both refs");
+  const names: unknown = JSON.parse(selected);
+  if (
+    !Array.isArray(names) ||
+    names.length === 0 ||
+    !names.every((name) => typeof name === "string" && name.length > 0)
+  ) {
+    throw new Error("Publish matrix must contain image names");
+  }
+  return names;
+}
+
 /**
  * The images compose file is the no-checkout happy path. It must stay pull-only and self-contained
  * so operators can drop it next to a .env outside any git worktree. Local Docker computers run via
  * an in-stack supervisor (app image + docker.sock) that stays unpublished on the host.
  */
 describe("the images compose file", () => {
-  it("runs postgres, app roles, supervisor, and a published computer image", () => {
+  it("defines postgres, app roles, supervisor, and an inactive published computer image", () => {
     expect(Object.keys(compose.services).sort()).toEqual([
       "api",
       "computer",
@@ -74,6 +101,7 @@ describe("the images compose file", () => {
     }
     expect(compose.services.computer?.image).toContain("ghcr.io/ardurai/ardur-bot/computer");
     expect(compose.services.computer?.image).toContain("ARDURBOT_COMPUTER_IMAGE_TAG");
+    expect(compose.services.computer?.profiles).toEqual(["computer"]);
     expect(compose.services.postgres?.image).toMatch(
       /^\$\{POSTGRES_IMAGE:-postgres:16@sha256:[0-9a-f]{64}\}$/,
     );
@@ -87,11 +115,17 @@ describe("the images compose file", () => {
     expect(firstPartyImageNames("ghcr.io/ardurai/ardur-bot/computer:edge")).toEqual(["computer"]);
   });
 
+  it("builds and publishes only the computer on dev, and all images on tags", () => {
+    for (const job of ["build", "publish"] as const) {
+      const matrixName = publishWorkflow.jobs?.[job]?.strategy?.matrix?.name;
+      expect(publishedNames(matrixName, "dev")).toEqual(["computer"]);
+      expect(publishedNames(matrixName, "tag").sort()).toEqual(["app", "computer", "updater"]);
+    }
+  });
+
   it("only references first-party images that the publish matrix publishes", () => {
     const published = new Set(
-      (publishWorkflow.jobs?.publish?.strategy?.matrix?.include ?? [])
-        .map((entry) => entry.name)
-        .filter((name): name is string => typeof name === "string" && name.length > 0),
+      publishedNames(publishWorkflow.jobs?.publish?.strategy?.matrix?.name, "tag"),
     );
     const referenced = new Set<string>();
     for (const service of Object.values(compose.services)) {

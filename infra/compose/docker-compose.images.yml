@@ -32,6 +32,14 @@ services:
       timeout: 5s
       retries: 20
 
+  # Keep the published image visible to deployment tooling; the supervisor pulls on first use.
+  computer:
+    image: ${ARDURBOT_COMPUTER_IMAGE:-ghcr.io/ardurai/ardur-bot/computer:${ARDURBOT_COMPUTER_IMAGE_TAG:-edge}}
+    profiles: [computer]
+    command: ["true"]
+    network_mode: none
+    restart: "no"
+
   data-init:
     # Optional Hub override; unset keeps busybox:1.
     image: ${BUSYBOX_IMAGE:-busybox:1}
