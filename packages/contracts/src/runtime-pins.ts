@@ -1,5 +1,6 @@
 import * as z from "zod";
 import type { ThinkingLevel } from "./domain.js";
+import { Id } from "./ids.js";
 
 export const RuntimeKindSchema = z.enum(["pi", "claude-code", "codex-app-server", "antigravity"]);
 export type RuntimeKind = z.infer<typeof RuntimeKindSchema>;
@@ -70,6 +71,20 @@ export const RuntimePinSchema = z.object({
   revision: z.number().int().nonnegative(),
 });
 export type RuntimePin = z.infer<typeof RuntimePinSchema>;
+
+export const RuntimePinSourceSchema = z.discriminatedUnion("kind", [
+  z
+    .object({
+      kind: z.literal("group-member"),
+      groupId: Id,
+      memberId: Id,
+      botId: Id,
+    })
+    .strict(),
+  z.object({ kind: z.literal("bot"), botId: Id }).strict(),
+  z.object({ kind: z.literal("space-default"), spaceId: Id, botId: Id }).strict(),
+]);
+export type RuntimePinSource = z.infer<typeof RuntimePinSourceSchema>;
 
 /** Serializable identity of a successfully resolved pin; adapters keep secrets separately. */
 export type ResolvedPin = {

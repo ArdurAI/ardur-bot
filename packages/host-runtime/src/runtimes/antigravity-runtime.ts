@@ -90,7 +90,8 @@ export async function probeAntigravity(
         catalogSource: "captured",
         catalogStale: true,
       };
-    const help = await probeCommand(binary, ["--help"], true, start);
+    // agy writes its usage to stderr with exit code 0.
+    const help = await probeCommand(binary, ["--help"], true, start, true);
     if (
       help.code !== 0 ||
       ![
