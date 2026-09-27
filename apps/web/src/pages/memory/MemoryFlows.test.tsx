@@ -375,6 +375,48 @@ describe("memory page data", () => {
       maxOutputChars: 12000,
     },
   };
+  it("keeps the composer mounted through import, approval, and later refreshes", async () => {
+    api.settings.mockResolvedValue(settings);
+    api.list.mockResolvedValue({ items: [], nextCursor: null });
+    api.inbox
+      .mockResolvedValueOnce({ proposals: [] })
+      .mockResolvedValueOnce({ proposals: [{ ...proposal, status: "applied" }] })
+      .mockResolvedValueOnce({ proposals: [] });
+    api.approve.mockResolvedValue({ proposal: { ...proposal, status: "applied" } });
+    api.revert.mockResolvedValue({ proposal: { ...proposal, status: "reverted" } });
+    const proposeImport = vi.fn().mockResolvedValue([proposal]);
+    await mounted(
+      <MemoryPage proposeImport={proposeImport} proposeEdit={vi.fn()} />,
+      async (container) => {
+        const composer = container.querySelector(
+          'textarea[aria-label="Tell your bot what to change or remove"]',
+        );
+        const send = button(container, "Send");
+        expect(composer).not.toBeNull();
+        await act(async () => button(container, "Start import").click());
+        await act(async () =>
+          input(container.querySelectorAll("textarea")[1]!, "Preferences\n- Be concise."),
+        );
+        await act(async () => button(container, "Review import").click());
+        expect(button(container, "Approve")).toBeDefined();
+        expect(
+          container.querySelector('textarea[aria-label="Tell your bot what to change or remove"]'),
+        ).toBe(composer);
+        await act(async () => button(container, "Approve").click());
+        expect(api.list).toHaveBeenCalledTimes(2);
+        expect(
+          container.querySelector('textarea[aria-label="Tell your bot what to change or remove"]'),
+        ).toBe(composer);
+        expect(button(container, "Send")).toBe(send);
+        await act(async () => button(container, "Undo").click());
+        expect(api.list).toHaveBeenCalledTimes(3);
+        expect(
+          container.querySelector('textarea[aria-label="Tell your bot what to change or remove"]'),
+        ).toBe(composer);
+        expect(button(container, "Send")).toBe(send);
+      },
+    );
+  });
   it("reopens pending memory proposals without approving them", async () => {
     api.settings.mockResolvedValue(settings);
     api.list.mockResolvedValue({ items: [], nextCursor: null });

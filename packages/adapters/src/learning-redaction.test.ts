@@ -1,3 +1,4 @@
+import { containsSecret } from "@ardurbot/core";
 import { expect, it, vi } from "vitest";
 import { learningSecrets } from "./learning-redaction.js";
 
@@ -29,8 +30,8 @@ it("collects stored credential formats without connection metadata", async () =>
         mode: "plain",
         args: ["plain"],
         secret: "mcp-secret",
-        env: { ARBITRARY: "env-456" },
-        headers: { "X-Custom": "header-789" },
+        env: { SERVICE_KEY: "env-456", LOG_LEVEL: "info", ROOT_DIR: "/tmp" },
+        headers: { Authorization: "header-789", "X-Mode": "plain" },
         oauth: { tokens: { access_token: "access-123", refresh_token: "refresh-123" } },
       }),
     },
@@ -98,6 +99,9 @@ it("collects stored credential formats without connection metadata", async () =>
     "https://repo.example.test",
     "oauth",
     "999",
+    "info",
+    "/tmp",
   ])
     expect(collected).not.toContain(metadata);
+  expect(containsSecret("Include useful information.", collected)).toBe(false);
 });

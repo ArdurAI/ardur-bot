@@ -42,9 +42,27 @@ describe("memory intent boundaries", () => {
         "Here is what I remember:\n**Profile**\n- A\n**Preferences:**\n- B\n### **Topics**\n- C",
       ).map(({ kind, content }) => [kind, content]),
     ).toEqual([
-      ["profile", "- A\n"],
+      ["profile", "Here is what I remember:\n- A\n"],
       ["preferences", "- B\n"],
       ["topic", "- C"],
+    ]);
+  });
+  it("recognizes a colon after bold markers and retains unclassified text", () => {
+    expect(
+      importedMemoryDrafts("**Profile**:\n- I study plants.\nPreferences:\n- Be concise.").map(
+        ({ kind, content }) => [kind, content],
+      ),
+    ).toEqual([
+      ["profile", "- I study plants.\n"],
+      ["preferences", "- Be concise."],
+    ]);
+    expect(
+      importedMemoryDrafts("I study plants.\nPreferences:\n- Be concise.").map(
+        ({ kind, content }) => [kind, content],
+      ),
+    ).toEqual([
+      ["topic", "I study plants.\n"],
+      ["preferences", "- Be concise."],
     ]);
   });
   it("treats pasted instructions as proposal content", () => {

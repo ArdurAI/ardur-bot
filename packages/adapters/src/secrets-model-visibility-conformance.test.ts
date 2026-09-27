@@ -68,12 +68,26 @@ describe("secrets model-visibility conformance", () => {
   });
 
   describe("oauth material collection", () => {
+    it("keeps filesystem paths while redacting a short registered credential", () => {
+      const secrets = oauthMaterialSecrets({
+        command: "filesystem-server",
+        args: ["/tmp"],
+        secret: "ab12cd",
+      });
+      expect(secrets).not.toContain("/tmp");
+      expect(redactConnectorPayload({ path: "/tmp/report.txt", value: "ab12cd" }, secrets)).toEqual(
+        {
+          path: "/tmp/report.txt",
+          value: "[redacted]",
+        },
+      );
+    });
     it("redacts Cookie/X-Session and short auth material without corrupting config enums", () => {
       const material: OAuthMaterial = {
         secret: "Bearer static-mcp-token-value",
         env: {
           API_TOKEN: "env-mcp-token-value",
-          API_SECRET: "production",
+          API_SECRET: "secret-value",
           NODE_ENV: "production",
           AUTH_MODE: "oauth",
           SESSION_TIMEOUT: "3600",
@@ -110,6 +124,7 @@ describe("secrets model-visibility conformance", () => {
           "s1",
           "ab12",
           "123456",
+          "secret-value",
           OAUTH_ACCESS,
           OAUTH_REFRESH,
           OAUTH_CLIENT_SECRET,
@@ -164,12 +179,12 @@ describe("secrets model-visibility conformance", () => {
       const secrets = oauthMaterialSecrets({
         env: {
           ACCESS_TOKEN: "123456",
-          API_SECRET: "production",
+          API_SECRET: "secret-value",
           REFRESH_TOKEN_TIMEOUT: "3600",
         },
       });
       expect(secrets).toContain("123456");
-      expect(secrets).not.toContain("production");
+      expect(secrets).toContain("secret-value");
       expect(secrets).not.toContain("3600");
     });
   });

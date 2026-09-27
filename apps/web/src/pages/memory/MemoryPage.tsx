@@ -90,36 +90,34 @@ function MemoryPageContent({
         </div>
       ) : null}
       {!settings && !error ? <Skeleton className="h-24 w-full" /> : null}
-      {settings ? (
-        <>
-          <MemoryGeneration settings={settings} onChange={setSettings} />
-          <MemoryImport propose={proposeImport} onProposals={receive} />
-          <MemoryDocuments
-            documents={documents}
-            onChange={(updated) =>
-              setDocuments((current) =>
-                current.map((item) => (item.id === updated.id ? updated : item)),
-              )
-            }
-          />
-          {cursor ? (
-            <Button variant="ghost" disabled={busy} onClick={() => void more()}>
-              <Trans>More memory</Trans>
-            </Button>
-          ) : null}
-          <MemoryProposals
-            proposals={proposals}
-            onChange={(updated) => {
-              setProposals((current) =>
-                current.map((item) => (item.id === updated.id ? updated : item)),
-              );
-              if (updated.status === "applied" || updated.status === "reverted")
-                void refresh().catch(() => setError(true));
-            }}
-          />
-          <MemoryComposer propose={proposeEdit} onProposals={receive} />
-        </>
-      ) : null}
+      {settings ? <MemoryGeneration settings={settings} onChange={setSettings} /> : null}
+      <div hidden={!settings}>
+        <MemoryImport propose={proposeImport} onProposals={receive} />
+        <MemoryDocuments
+          documents={documents}
+          onChange={(updated) =>
+            setDocuments((current) =>
+              current.map((item) => (item.id === updated.id ? updated : item)),
+            )
+          }
+        />
+        {cursor ? (
+          <Button variant="ghost" disabled={busy} onClick={() => void more()}>
+            <Trans>More memory</Trans>
+          </Button>
+        ) : null}
+        <MemoryProposals
+          proposals={proposals}
+          onChange={(updated) => {
+            setProposals((current) =>
+              current.map((item) => (item.id === updated.id ? updated : item)),
+            );
+            if (updated.status === "applied" || updated.status === "reverted")
+              void refresh().catch(() => setError(true));
+          }}
+        />
+        <MemoryComposer propose={proposeEdit} onProposals={receive} />
+      </div>
     </div>
   );
 }

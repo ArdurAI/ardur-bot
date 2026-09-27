@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@ardurbot/db";
+import { isMcpCredentialField } from "./mcp-credential-fields.js";
 import type { EncryptedSecretStore } from "./secrets.js";
 
 /** Only encrypted credential slots enter the shared exact-match redactor. */
@@ -25,6 +26,11 @@ export async function learningSecrets(
     value && typeof value === "object" && !Array.isArray(value)
       ? (value as Record<string, unknown>)
       : {};
+  const addCredentialFields = (value: unknown, header = false) => {
+    for (const [name, credential] of Object.entries(record(value))) {
+      if (isMcpCredentialField(name, header)) add(credential);
+    }
+  };
   for (const secret of secrets) {
     const plaintext = store.load(secret.ciphertext, secret.id);
     let parsed: unknown;
@@ -45,8 +51,8 @@ export async function learningSecrets(
     const data = record(parsed);
     if (secret.kind === "mcp") {
       add(data.secret);
-      for (const value of Object.values(record(data.env))) add(value);
-      for (const value of Object.values(record(data.headers))) add(value);
+      addCredentialFields(data.env);
+      addCredentialFields(data.headers, true);
       if (Array.isArray(data.redactions)) for (const value of data.redactions) add(value);
       const oauth = record(data.oauth);
       const tokens = record(oauth.tokens);
