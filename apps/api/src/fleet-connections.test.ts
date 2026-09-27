@@ -3,7 +3,7 @@ import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
 import { describe, expect, it, vi } from "vitest";
 import { updateComputerConnection } from "./computer-settings.js";
-import { fleetConnectionDetails, removeFleetTarget } from "./fleet.js";
+import { fleetConnectionDetails, reconcileFleetSecretCleanup, removeFleetTarget } from "./fleet.js";
 import type { RouterDeps } from "./router.js";
 
 const context: AdapterContext = {
@@ -50,11 +50,17 @@ function fixture(pinned: string[] = []) {
     },
     secret: { create: vi.fn(async () => ({})), deleteMany: vi.fn(async () => ({ count: 1 })) },
     fleetAudit: { create: vi.fn(async () => ({})) },
+    fleetSecretCleanup: { create: vi.fn(async () => ({})), delete: vi.fn(async () => ({})) },
   };
   const prisma = {
     connection: { findFirstOrThrow: vi.fn(async () => row) },
     run: { findFirst: vi.fn(async () => null) },
     secret: { findFirst: vi.fn(async () => null) },
+    fleetSecretCleanup: {
+      findMany: vi.fn(async () => []),
+      deleteMany: vi.fn(async () => ({ count: 1 })),
+      updateMany: vi.fn(async () => ({ count: 1 })),
+    },
     $transaction: async (work: (value: typeof tx) => Promise<unknown>) => work(tx),
   } as unknown as PrismaClient;
   const deps = {
@@ -147,6 +153,77 @@ describe("saved fleet connections", () => {
         { op: "computer.remote.secret.delete", secretId },
         context,
       );
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+  it("commits removal and cleanup intent before deleting a host credential", async () => {
+    const { deps, tx } = fixture();
+    const secretId = "afdf5a2e-09f0-42c9-917e-35c45f34db37";
+    tx.connection.findFirstOrThrow.mockResolvedValue({
+      ...row,
+      metadata: { ...metadata, hostSecretId: secretId },
+    });
+    let committed = false;
+    deps.prisma.$transaction = (async (work: (value: typeof tx) => Promise<unknown>) => {
+      const result = await work(tx);
+      committed = true;
+      return result;
+    }) as never;
+    const fleetResult = vi.fn(async () => {
+      expect(committed).toBe(true);
+      throw new Error("host disconnected after deletion");
+    });
+    deps.hostBridge = { fleetResult } as never;
+    vi.stubEnv("ARDURBOT_HOST_BRIDGE", "api");
+    try {
+      await expect(removeFleetTarget(deps, context, "saved")).resolves.toEqual({ ok: true });
+      expect(tx.fleetSecretCleanup.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ hostSecretId: secretId }),
+      });
+      expect(deps.prisma.fleetSecretCleanup.deleteMany).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+  it("does not delete the host credential when the removal transaction rolls back", async () => {
+    const { deps, tx } = fixture();
+    tx.connection.findFirstOrThrow.mockResolvedValue({
+      ...row,
+      metadata: { ...metadata, hostSecretId: "afdf5a2e-09f0-42c9-917e-35c45f34db37" },
+    });
+    deps.prisma.$transaction = (async (work: (value: typeof tx) => Promise<unknown>) => {
+      await work(tx);
+      throw new Error("commit failed");
+    }) as never;
+    const fleetResult = vi.fn(async () => ({ ok: true }));
+    deps.hostBridge = { fleetResult } as never;
+    vi.stubEnv("ARDURBOT_HOST_BRIDGE", "api");
+    try {
+      await expect(removeFleetTarget(deps, context, "saved")).rejects.toThrow("commit failed");
+      expect(fleetResult).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+  it("retries a committed credential cleanup after the host reconnects", async () => {
+    const { deps } = fixture();
+    const hostSecretId = "afdf5a2e-09f0-42c9-917e-35c45f34db37";
+    vi.mocked(deps.prisma.fleetSecretCleanup.findMany).mockResolvedValue([
+      { hostSecretId, spaceId: "space", userId: "owner" },
+    ] as never);
+    const fleetResult = vi.fn(async () => ({ ok: true }));
+    deps.hostBridge = { fleetResult } as never;
+    vi.stubEnv("ARDURBOT_HOST_BRIDGE", "api");
+    try {
+      await reconcileFleetSecretCleanup(deps.prisma, deps.hostBridge);
+      expect(fleetResult).toHaveBeenCalledWith(
+        { op: "computer.remote.secret.delete", secretId: hostSecretId },
+        expect.objectContaining({ spaceId: "space", userId: "owner" }),
+      );
+      expect(deps.prisma.fleetSecretCleanup.deleteMany).toHaveBeenCalledWith({
+        where: { hostSecretId },
+      });
     } finally {
       vi.unstubAllEnvs();
     }

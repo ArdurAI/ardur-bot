@@ -13,6 +13,7 @@ import type { PrismaClient } from "@ardurbot/db";
 import { Prisma } from "@ardurbot/db";
 import { engineFailureReason } from "@ardurbot/host-runtime/fleet/probe";
 import { ORPCError } from "@orpc/server";
+import type { HostBridge } from "./host-bridge.js";
 import type { RouterDeps } from "./router.js";
 
 const catalogs = new WeakMap<PrismaClient, FleetCatalog>();
@@ -85,6 +86,53 @@ export async function importFleetSecret(
   return process.env.ARDURBOT_HOST_BRIDGE === "api" && deps.hostBridge
     ? ((await deps.hostBridge.fleetResult(operation, context)) as { id: string })
     : localFleetService().importSecret(operation, context);
+}
+
+/** Host deletion is idempotent, so a lost response leaves the intent safe to retry. */
+export async function cleanupFleetSecret(
+  prisma: PrismaClient,
+  hostBridge: HostBridge | undefined,
+  context: AdapterContext,
+  hostSecretId: string,
+) {
+  try {
+    const op = { op: "computer.remote.secret.delete" as const, secretId: hostSecretId };
+    if (process.env.ARDURBOT_HOST_BRIDGE === "api" && hostBridge)
+      await hostBridge.fleetResult(op, context);
+    else await localFleetService().deleteSecret(hostSecretId);
+    await prisma.fleetSecretCleanup.deleteMany({ where: { hostSecretId } });
+    return true;
+  } catch {
+    // The intent survives both a disconnected host and an ambiguous deletion response.
+    await prisma.fleetSecretCleanup.updateMany({
+      where: { hostSecretId },
+      data: { attempts: { increment: 1 }, nextAttemptAt: new Date(Date.now() + 30_000) },
+    }).catch(() => undefined);
+    return false;
+  }
+}
+
+/** Startup and periodic sweep, including cleanup intents left by a previous process. */
+export async function reconcileFleetSecretCleanup(prisma: PrismaClient, hostBridge?: HostBridge) {
+  const due = await prisma.fleetSecretCleanup.findMany({
+    where: { nextAttemptAt: { lte: new Date() } },
+    orderBy: { createdAt: "asc" },
+    take: 50,
+  });
+  for (const intent of due) {
+    await cleanupFleetSecret(
+      prisma,
+      hostBridge,
+      {
+        spaceId: intent.spaceId,
+        userId: intent.userId,
+        operationId: `fleet-secret-cleanup:${intent.hostSecretId}`,
+        traceId: `fleet-secret-cleanup:${intent.hostSecretId}`,
+        signal: new AbortController().signal,
+      },
+      intent.hostSecretId,
+    );
+  }
 }
 export async function savePlacement(deps: RouterDeps, context: AdapterContext, input: unknown) {
   const placement = PlacementSettingsSchema.parse(input);
@@ -312,7 +360,7 @@ export async function fleetConnectionDetails(
 }
 
 export async function removeFleetTarget(deps: RouterDeps, context: AdapterContext, id: string) {
-  await deps.prisma.$transaction(
+  const hostSecretId = await deps.prisma.$transaction(
     async (tx) => {
       await tx.$queryRaw`SELECT id FROM connections WHERE id = ${id} AND "spaceId" = ${context.spaceId} AND "userId" = ${context.userId} AND "connectorId" = 'computer' FOR UPDATE`;
       const row = await tx.connection.findFirstOrThrow({
@@ -372,15 +420,15 @@ export async function removeFleetTarget(deps: RouterDeps, context: AdapterContex
         },
       });
       const hostSecretId = ComputerConnectionSettingsSchema.parse(row.metadata).hostSecretId;
-      if (hostSecretId) {
-        const op = { op: "computer.remote.secret.delete" as const, secretId: hostSecretId };
-        if (process.env.ARDURBOT_HOST_BRIDGE === "api" && deps.hostBridge)
-          await deps.hostBridge.fleetResult(op, context);
-        else await localFleetService().deleteSecret(hostSecretId);
-      }
+      if (hostSecretId)
+        await tx.fleetSecretCleanup.create({
+          data: { hostSecretId, spaceId: context.spaceId, userId: context.userId },
+        });
+      return hostSecretId;
     },
     { timeout: 15_000 },
   );
+  if (hostSecretId) await cleanupFleetSecret(deps.prisma, deps.hostBridge, context, hostSecretId);
   fleetCatalog(deps).connections.invalidate(id, context.spaceId);
   fleetCatalog(deps).recordTest(id, {});
   return { ok: true as const };

@@ -1133,6 +1133,19 @@ model FleetAudit {
   @@map("fleet_audits")
 }
 
+/// Durable work for host credentials that must be deleted after a connection transaction commits.
+model FleetSecretCleanup {
+  hostSecretId String   @id
+  spaceId      String
+  userId       String
+  nextAttemptAt DateTime @default(now())
+  attempts     Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  @@index([nextAttemptAt])
+  @@map("fleet_secret_cleanups")
+}
+
 model Artifact {
   id         String     @id @default(cuid())
   spaceId    String
