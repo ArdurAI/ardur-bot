@@ -108,42 +108,47 @@ const MAX_STACK_ENV_BYTES = 64 * 1024;
 // Compose parses inactive profiles for stop as well; this value is never pulled.
 const STOP_COMPOSE_IMAGE_REF = "ghcr.io/ardurai/ardur-bot/computer:dev";
 
-/** Compose dotenv rules needed for deployment settings; never evaluate the file as code. */
-export function deploymentSettingFromStackEnv(
-  contents: string,
-  key: string,
-  env: Record<string, string | undefined> = {},
-): string | undefined {
-  const values: Record<string, string> = {};
-  for (const line of contents.split(/\r?\n/)) {
-    const assignment = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(line);
-    if (!assignment) continue;
-    const name = assignment[1]!;
-    const raw = assignment[2]!;
-    const doubleQuoted = /^"((?:\\.|[^"\\])*)"(?:\s+#.*|\s*)$/.exec(raw);
-    const singleQuoted = /^'((?:\\.|[^'\\])*)'(?:\s+#.*|\s*)$/.exec(raw);
-    let value: string;
-    if (singleQuoted) {
-      value = singleQuoted[1]!.replace(/\\'/g, "'");
-    } else if (doubleQuoted) {
-      value = doubleQuoted[1]!.replace(
-        /\\([nrt"\\])/g,
-        (_match, escaped: string) =>
-          ({ n: "\n", r: "\r", t: "\t", '"': '"', "\\": "\\" })[escaped] ?? escaped,
-      );
-    } else {
-      if (raw.startsWith('"') || raw.startsWith("'")) continue;
-      value = raw.replace(/\s+#.*$/, "").trimEnd();
-    }
-    if (!singleQuoted) {
-      value = value.replace(
-        /\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g,
-        (_match, variable: string) => env[variable] ?? values[variable] ?? "",
-      );
-    }
-    values[name] = value;
+/** Read only non-secret image selection fields from Compose's rendered JSON. */
+export function parseComposeImageSettings(stdout: string): {
+  image: string;
+  channel: string;
+  imageTag: string;
+  appVersion: string;
+  explicitImage: string;
+  explicitRef: string;
+} {
+  let config: unknown;
+  try {
+    config = JSON.parse(stdout);
+  } catch {
+    throw new Error("Docker Compose returned invalid configuration JSON.");
   }
-  return env[key] ?? values[key];
+  const record = (value: unknown): Record<string, unknown> =>
+    value !== null && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  const root = record(config);
+  const selection = record(root["x-ardurbot-image-selection"]);
+  const computer = record(record(root.services).computer);
+  if (
+    typeof computer.image !== "string" ||
+    computer.image.trim() === "" ||
+    typeof selection.channel !== "string" ||
+    typeof selection.image_tag !== "string" ||
+    typeof selection.app_version !== "string" ||
+    typeof selection.explicit_image !== "string" ||
+    typeof selection.explicit_ref !== "string"
+  ) {
+    throw new Error("Docker Compose omitted the computer image settings.");
+  }
+  return {
+    image: computer.image,
+    channel: selection.channel,
+    imageTag: selection.image_tag,
+    appVersion: selection.app_version,
+    explicitImage: selection.explicit_image,
+    explicitRef: selection.explicit_ref,
+  };
 }
 
 function migrateGeneratedComputerImage(contents: string): string {
@@ -556,21 +561,65 @@ export class LocalStackController {
     await prepareMemoryStorage(this.deps.stackDir);
     const template = await readFile(path.join(this.deps.resourceDir, STACK_ENV_TEMPLATE), "utf8");
     await ensureStackEnv(this.deps.stackDir, template, this.deps.randomHex);
-    const settings = await readPrivateFile(
-      path.join(this.deps.stackDir, STACK_ENV_FILE),
-      MAX_STACK_ENV_BYTES,
+    // The required image reference needs a provisional value for the first render.
+    // Compose then resolves the channel; render again with the selected reference.
+    const configArgs = ["config", "--format", "json"];
+    const initialConfig = await this.compose(
+      binary,
+      configArgs,
+      COMPOSE_VERSION_TIMEOUT_MS,
+      signal,
     );
-    if (settings === null) throw new Error("The stack settings could not be checked.");
-    const channel = deploymentSettingFromStackEnv(settings, "ARDURBOT_COMPUTER_CHANNEL", {
-      ...dockerSpawnEnv(this.deps.platform, this.deps.env, binary),
-      ARDURBOT_IMAGE_TAG: this.deps.imageTag,
-    });
-    const computerImageRef = resolveComputerImage({
-      appVersion: this.deps.appVersion,
-      localPresent: false,
-      channel,
-    });
-    this.currentComputerImageRef = computerImageRef;
+    if (interrupted(signal, initialConfig))
+      return this.push({ type: "failed", message: START_INTERRUPTED });
+    if (initialConfig.code !== 0) {
+      this.push({
+        type: "failed",
+        message:
+          "Could not prepare the local stack. Retry. Docker Compose could not render the settings.",
+      });
+      return;
+    }
+    let selection: ReturnType<typeof parseComposeImageSettings>;
+    try {
+      selection = parseComposeImageSettings(initialConfig.stdout);
+      this.currentComputerImageRef =
+        selection.explicitRef ||
+        (selection.explicitImage
+          ? selection.image
+          : resolveComputerImage({
+              appVersion: this.deps.appVersion,
+              localPresent: false,
+              channel: selection.channel,
+            }));
+    } catch {
+      this.push({
+        type: "failed",
+        message: "Could not prepare the local stack. Retry. Check the computer image settings.",
+      });
+      return;
+    }
+    const finalConfig = await this.compose(binary, configArgs, COMPOSE_VERSION_TIMEOUT_MS, signal);
+    if (interrupted(signal, finalConfig))
+      return this.push({ type: "failed", message: START_INTERRUPTED });
+    if (finalConfig.code !== 0) {
+      this.push({
+        type: "failed",
+        message:
+          "Could not prepare the local stack. Retry. Docker Compose could not render the settings.",
+      });
+      return;
+    }
+    try {
+      this.currentComputerImageRef = parseComposeImageSettings(finalConfig.stdout).image;
+    } catch {
+      this.push({
+        type: "failed",
+        message:
+          "Could not prepare the local stack. Retry. Docker Compose omitted the computer image.",
+      });
+      return;
+    }
     const stackToken = await ensureStackToken(this.deps.stackDir, this.deps.randomHex);
     this.currentStackToken = stackToken;
 
@@ -639,6 +688,7 @@ export class LocalStackController {
     timeoutMs: number,
     signal?: AbortSignal,
     computerImageRef?: string,
+    quietOutput = false,
   ) {
     return this.deps.run(binary, args, {
       cwd: this.deps.stackDir,
@@ -647,6 +697,9 @@ export class LocalStackController {
         ...(computerImageRef === undefined
           ? {}
           : { ARDURBOT_COMPUTER_IMAGE_REF: computerImageRef }),
+        ...(args.includes("config") && computerImageRef === undefined
+          ? { ARDURBOT_COMPUTER_IMAGE_REF_BOOTSTRAP: STOP_COMPOSE_IMAGE_REF }
+          : {}),
         // The API never asks where bots run here; Set up makes this computer the default.
         ARDURBOT_DESKTOP_STACK: "1",
         ...(this.currentStackToken === null
@@ -662,7 +715,7 @@ export class LocalStackController {
       }),
       timeoutMs,
       signal,
-      onLine: (line) => this.push({ type: "output", line }),
+      onLine: quietOutput ? undefined : (line) => this.push({ type: "output", line }),
     });
   }
 
@@ -680,11 +733,15 @@ export class LocalStackController {
           : []),
         "--project-name",
         STACK_PROJECT_NAME,
+        ...(args[0] === "config" ? ["--profile", "computer"] : []),
         ...args,
       ],
       timeoutMs,
       signal,
-      this.currentComputerImageRef ?? STOP_COMPOSE_IMAGE_REF,
+      args[0] === "config" && this.currentComputerImageRef === undefined
+        ? undefined
+        : (this.currentComputerImageRef ?? STOP_COMPOSE_IMAGE_REF),
+      args[0] === "config",
     );
   }
 }

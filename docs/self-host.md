@@ -589,8 +589,9 @@ the computer image is pulled on first use. The supervisor runs from the app imag
 published supervisor image, and no host port). Production Compose (`docker-compose.prod.yml`) can
 also pull the same app tags once `ARDURBOT_IMAGE_TAG` is set to a published value.
 
-The installer and desktop launcher pass `ARDURBOT_COMPUTER_IMAGE_REF` to Compose from the app
-version. For a direct `docker compose` invocation, set that variable to the image selected for the
+The installer and desktop launcher render `docker compose config` to resolve the selected computer
+image from the app version and stack settings before startup. For a direct `docker compose`
+invocation, set `ARDURBOT_COMPUTER_IMAGE_REF` to the image selected for the
 running app: `ghcr.io/ardurai/ardur-bot/computer:dev` for a prerelease, or the exact version
 tag (for example, `ghcr.io/ardurai/ardur-bot/computer:1.2.3`) for a release. If you set
 `ARDURBOT_COMPUTER_IMAGE` to an explicit image reference, Compose uses that instead; the optional

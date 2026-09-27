@@ -2,7 +2,7 @@
 # Drop this file and .env into any directory, then:
 #   docker compose --env-file .env -f docker-compose.images.yml up -d
 # Set ARDURBOT_COMPUTER_IMAGE_REF to the app-version image when invoking Compose directly;
-# install-images.sh and the desktop launcher calculate it for their Compose invocations.
+# install-images.sh and the desktop launcher render Compose to select it for their invocations.
 #
 # Tag contract matches docs/self-host.md (manual edge from main; release tags when published).
 # Pin a published app tag; edge is available only after a manual main workflow run.
@@ -10,6 +10,14 @@
 # Default SANDBOX_PROVIDER=docker boots a local computer via the in-stack supervisor (no E2B key).
 # Optional: set e2b / daytona / box plus the matching API key for remote computers.
 name: ardurbot
+
+# Rendered by `compose config` so launchers use Compose's dotenv/interpolation rules.
+x-ardurbot-image-selection:
+  app_version: ${ARDURBOT_APP_VERSION:-}
+  image_tag: ${ARDURBOT_IMAGE_TAG:-}
+  channel: ${ARDURBOT_COMPUTER_CHANNEL:-}
+  explicit_image: ${ARDURBOT_COMPUTER_IMAGE:-}
+  explicit_ref: ${ARDURBOT_COMPUTER_IMAGE_REF:-}
 
 services:
   postgres:
@@ -36,7 +44,7 @@ services:
 
   # Keep the selected image visible to deployment tooling; the supervisor pulls on first use.
   computer:
-    image: ${ARDURBOT_COMPUTER_IMAGE:-${ARDURBOT_COMPUTER_IMAGE_REF:?Set ARDURBOT_COMPUTER_IMAGE_REF for this app version}}${ARDURBOT_COMPUTER_IMAGE:+${ARDURBOT_COMPUTER_IMAGE_TAG:+:${ARDURBOT_COMPUTER_IMAGE_TAG}}}
+    image: ${ARDURBOT_COMPUTER_IMAGE:-${ARDURBOT_COMPUTER_IMAGE_REF:-${ARDURBOT_COMPUTER_IMAGE_REF_BOOTSTRAP:?Set ARDURBOT_COMPUTER_IMAGE_REF for this app version}}}${ARDURBOT_COMPUTER_IMAGE:+${ARDURBOT_COMPUTER_IMAGE_TAG:+:${ARDURBOT_COMPUTER_IMAGE_TAG}}}
     profiles: [computer]
     command: ["true"]
     network_mode: none

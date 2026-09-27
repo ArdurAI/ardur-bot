@@ -244,7 +244,8 @@ create_env() {
 }
 
 validate_required_secrets() {
-  if ! docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" -f - config --environment <<'YAML' | awk '
+  if ! ARDURBOT_COMPUTER_IMAGE_REF_BOOTSTRAP="ghcr.io/ardurai/ardur-bot/computer:dev" \
+    docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" -f - config --environment 2>/dev/null <<'YAML' | awk '
     BEGIN {
       required["POSTGRES_PASSWORD"] = 1
       required["BETTER_AUTH_SECRET"] = 1
@@ -283,133 +284,101 @@ YAML
   fi
 }
 
-# Parse Compose's assignment, quoting, comment and simple ${VAR} interpolation
-# rules without evaluating the env file as shell code.
-parse_deployment_value() {
-  local raw="$1" c next quote="" rest i
-  parsed_value=""
-  interpolate_value=true
-  quote="${raw:0:1}"
-  if [[ "$quote" == '"' || "$quote" == "'" ]]; then
-    [[ "$quote" == "'" ]] && interpolate_value=false
-    for ((i = 1; i < ${#raw}; i++)); do
-      c="${raw:i:1}"
-      if [[ "$quote" == '"' && "$c" == '\' && $((i + 1)) -lt ${#raw} ]]; then
-        i=$((i + 1))
-        next="${raw:i:1}"
-        case "$next" in
-          n) parsed_value+=$'\n' ;;
-          r) parsed_value+=$'\r' ;;
-          t) parsed_value+=$'\t' ;;
-          '"'|'\') parsed_value+="$next" ;;
-          *) parsed_value+="\\$next" ;;
-        esac
-      elif [[ "$quote" == "'" && "$c" == '\' && "${raw:i+1:1}" == "'" ]]; then
-        parsed_value+="'"
-        i=$((i + 1))
-      elif [[ "$c" == "$quote" ]]; then
-        rest="${raw:i+1}"
-        [[ "$rest" =~ ^[[:space:]]*(#.*)?$ ]] || return 1
-        return 0
-      else
-        parsed_value+="$c"
-      fi
-    done
-    return 1
-  fi
-  for ((i = 0; i < ${#raw}; i++)); do
-    c="${raw:i:1}"
-    if [[ "$c" == '#' && $i -gt 0 && "${raw:i-1:1}" =~ [[:space:]] ]]; then
-      break
+# jq is optional. Compose emits indented JSON; the fallback reads only direct
+# string fields in the known service and extension objects. It rejects JSON
+# escapes instead of trying to decode them; jq handles those when available.
+compose_field() {
+  local section="$1" key="$2"
+  if command -v jq >/dev/null 2>&1; then
+    if [[ "$section" == computer ]]; then
+      jq -er --arg key "$key" '.services.computer[$key] | strings' 2>/dev/null
+    else
+      jq -er --arg key "$key" '."x-ardurbot-image-selection"[$key] | strings' 2>/dev/null
     fi
-    parsed_value+="$c"
-  done
-  parsed_value="${parsed_value%"${parsed_value##*[![:space:]]}"}"
+  else
+    awk -v section="$section" -v key="$key" '
+      section == "computer" && /^  "services": \{/ { in_services = 1; next }
+      in_services && /^    "computer": \{/ { in_section = 1; next }
+      section != "computer" && /^  "x-ardurbot-image-selection": \{/ { in_section = 1; next }
+      in_section && ((section == "computer" && /^    }/) || (section != "computer" && /^  }/)) { exit }
+      in_section && index($0, "\"" key "\":") {
+        sub(/^.*: "/, "")
+        sub(/",?$/, "")
+        if (index($0, "\\") || index($0, "\"")) exit 1
+        print
+        found = 1
+        exit
+      }
+      END { if (!found) exit 1 }
+    '
+  fi
 }
 
-# Read only the named setting; earlier assignments can supply interpolation values.
-deployment_setting() {
-  local key="$1" file="${2:-$ENV_FILE}" line name value="" variable replacement rest result i
-  local -a names=() values=()
-  if printenv "$key" >/dev/null 2>&1; then
-    printenv "$key"
-    return
-  fi
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    line="${line%$'\r'}"
-    [[ "$line" =~ ^[[:space:]]*([A-Za-z_][A-Za-z0-9_]*)[[:space:]]*=[[:space:]]*(.*)$ ]] || continue
-    name="${BASH_REMATCH[1]}"
-    parse_deployment_value "${BASH_REMATCH[2]}" || continue
-    if [[ "$interpolate_value" == true ]]; then
-      rest="$parsed_value"
-      result=""
-      while [[ -n "$rest" ]]; do
-        if [[ "$rest" =~ ^\$\{([A-Za-z_][A-Za-z0-9_]*)\} ]]; then
-          variable="${BASH_REMATCH[1]}"
-          i="${#BASH_REMATCH[0]}"
-          replacement=""
-          if replacement=$(printenv "$variable" 2>/dev/null); then
-            :
-          else
-            for ((i = ${#names[@]} - 1; i >= 0; i--)); do
-              if [[ "${names[i]}" == "$variable" ]]; then
-                replacement="${values[i]}"
-                break
-              fi
-            done
-            i="${#BASH_REMATCH[0]}"
-          fi
-          result+="$replacement"
-          rest="${rest:i}"
-        else
-          result+="${rest:0:1}"
-          rest="${rest:1}"
-        fi
-      done
-      parsed_value="$result"
-    fi
-    names+=("$name")
-    values+=("$parsed_value")
-    [[ "$name" == "$key" ]] && value="$parsed_value"
-  done < "$file"
-  printf '%s' "$value"
+render_computer_config() {
+  ARDURBOT_COMPUTER_IMAGE_REF_BOOTSTRAP="ghcr.io/ardurai/ardur-bot/computer:dev" \
+    docker compose --env-file "$ENV_FILE" \
+      -f "$COMPOSE_FILE" --profile computer config --format json 2>/dev/null
+}
+
+render_template_version() {
+  docker compose --env-file "$ENV_EXAMPLE" -f - config --format json 2>/dev/null <<'YAML'
+x-ardurbot-image-selection:
+  app_version: ${ARDURBOT_APP_VERSION:-}
+services:
+  version-reader:
+    image: busybox:1
+YAML
 }
 
 resolve_computer_image_ref() {
-  local explicit image tag channel version
-  explicit=$(deployment_setting ARDURBOT_COMPUTER_IMAGE_REF)
+  local config explicit image tag channel version reference
+  config=$(render_computer_config) || fail "Docker Compose could not render the settings. Check .env."
+  explicit=$(printf '%s\n' "$config" | compose_field selection explicit_ref) \
+    || fail "Docker Compose omitted the computer image settings."
+  image=$(printf '%s\n' "$config" | compose_field selection explicit_image) \
+    || fail "Docker Compose omitted the computer image settings."
   if [[ -n "$explicit" ]]; then
-    export ARDURBOT_COMPUTER_IMAGE_REF="$explicit"
-    return
-  fi
-  image=$(deployment_setting ARDURBOT_COMPUTER_IMAGE)
-  if [[ -n "$image" ]]; then
-    # Compose uses the name plus optional legacy tag instead of this default.
-    export ARDURBOT_COMPUTER_IMAGE_REF="ghcr.io/ardurai/ardur-bot/computer:dev"
-    return
-  fi
-  tag=$(deployment_setting ARDURBOT_IMAGE_TAG)
-  channel=$(deployment_setting ARDURBOT_COMPUTER_CHANNEL)
-  if [[ "$tag" =~ ^v([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)$ ]]; then
-    version="${BASH_REMATCH[1]}"
-  elif [[ "$tag" == "" || "$tag" == "edge" ]]; then
-    version=$(deployment_setting ARDURBOT_APP_VERSION "$ENV_EXAMPLE")
+    reference="$explicit"
+  elif [[ -n "$image" ]]; then
+    reference=$(printf '%s\n' "$config" | compose_field computer image) \
+      || fail "Docker Compose omitted the computer image."
   else
-    fail "set ARDURBOT_COMPUTER_IMAGE_REF for this app image tag."
-  fi
-  [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] \
-    || fail "the app version cannot select a computer image."
-  case "$channel" in
-    ""|dev) tag="dev" ;;
-    release)
+    tag=$(printf '%s\n' "$config" | compose_field selection image_tag) \
+      || fail "Docker Compose omitted the app image tag."
+    channel=$(printf '%s\n' "$config" | compose_field selection channel) \
+      || fail "Docker Compose omitted the computer channel."
+    version=$(printf '%s\n' "$config" | compose_field selection app_version) \
+      || fail "Docker Compose omitted the app version."
+    if [[ "$tag" =~ ^v([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)$ ]]; then
+      version="${BASH_REMATCH[1]}"
+    elif [[ "$tag" != "" && "$tag" != "edge" ]]; then
+      fail "set ARDURBOT_COMPUTER_IMAGE_REF for this app image tag."
+    elif [[ -z "$version" ]]; then
+      config=$(render_template_version) || fail "Docker Compose could not read the app version."
+      version=$(printf '%s\n' "$config" | compose_field selection app_version) \
+        || fail "Docker Compose omitted the app version."
+    fi
+    [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] \
+      || fail "the app version cannot select a computer image."
+    case "$channel" in
+      ""|dev) tag="dev" ;;
+      release) tag="$version" ;;
+      *) fail "ARDURBOT_COMPUTER_CHANNEL must be dev or release." ;;
+    esac
+    if [[ "$channel" == "" && "$version" != *-* ]]; then
       tag="$version"
-      ;;
-    *) fail "ARDURBOT_COMPUTER_CHANNEL must be dev or release." ;;
-  esac
-  if [[ "$channel" == "" && -n "$version" && "$version" != *-* ]]; then
-    tag="$version"
+    fi
+    reference="ghcr.io/ardurai/ardur-bot/computer:$tag"
   fi
-  export ARDURBOT_COMPUTER_IMAGE_REF="ghcr.io/ardurai/ardur-bot/computer:$tag"
+  [[ -n "$reference" && "$reference" != *$'\n'* ]] \
+    || fail "the computer image reference is invalid."
+  export ARDURBOT_COMPUTER_IMAGE_REF="$reference"
+  config=$(render_computer_config) || fail "Docker Compose could not render the settings. Check .env."
+  reference=$(printf '%s\n' "$config" | compose_field computer image) \
+    || fail "Docker Compose omitted the computer image."
+  [[ -n "$reference" && "$reference" != *$'\n'* ]] \
+    || fail "the computer image reference is invalid."
+  export ARDURBOT_COMPUTER_IMAGE_REF="$reference"
 }
 
 download "$COMPOSE_FILE"
@@ -421,8 +390,8 @@ else
   create_env
 fi
 
-resolve_computer_image_ref
 validate_required_secrets
+resolve_computer_image_ref
 
 if [[ "$prepare_only" == true ]]; then
   echo "Ardur files are ready. Edit .env, then run: bash install-images.sh"
