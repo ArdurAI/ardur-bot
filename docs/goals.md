@@ -1,8 +1,8 @@
 # Team goals
 
-A team goal gives a group coordinator a bounded period to organize work in the shared room. The group needs a coordinator and at least two members. The deployment owner starts a goal with an objective, optional completion conditions, a deadline, and a token limit. One active goal is allowed per group.
+A team goal gives a group coordinator a bounded period to organize work in the shared room. The group needs a coordinator and at least two members. The deployment owner starts a goal with an objective, optional completion conditions, a deadline, and a token limit. Starting a goal queues the coordinator's first turn without another chat message. One active goal is allowed per group.
 
-The coordinator can use `assign` to give separate task cards to several seated members during one turn. Each assignment is admitted under the same delegation root. A worker's final reply appears in the room under that worker's name. A completed, failed, or cancelled assignment wakes the coordinator once; if the coordinator is already active, its run receives steering. Other members' replies are labelled by name in each bot's context.
+The coordinator sees the objective, completion conditions, seated members, open assignments, used tokens, deadline, and status in each goal turn. The coordinator can use `assign` to give separate task cards to several seated members during one turn. Each assignment is admitted under the same delegation root. A card's earlier deadline takes precedence over the goal deadline. Repeating an identical assignment in one coordinator turn replays it; a different card for the same member creates another assignment. A worker's final reply appears in the room under that worker's name. A completed, failed, or cancelled assignment wakes the coordinator once; if the coordinator is already active, its run receives steering. Other members' replies are labelled by name in each bot's context.
 
 ## Envelope
 
@@ -16,7 +16,7 @@ The coordinator can use `assign` to give separate task cards to several seated m
 | Depth | 1 | Workers cannot delegate further |
 | Hops | 6 | Shared root hop limit |
 
-The owner may set the total token limit, deadline, per-worker limit, concurrency, and descendant limit at start. The deadline must be in the future and within seven days. Stopping the goal requests cancellation of its root task and marks the goal stopped. Existing cancellation and admission checks enforce the envelope.
+The owner may set the total token limit, deadline, per-worker limit, concurrency, and descendant limit at start. The deadline must be in the future and within seven days. Stopping the goal requests cancellation of its root task and marks the goal stopped. When the root deadline passes, the token limit is reached, or the root is cancelled, the goal becomes **Exhausted**. The room then accepts new messages as ordinary group work, and the owner can start a new goal. Existing cancellation and admission checks enforce the envelope.
 
 ## Owner control and M1 limits
 

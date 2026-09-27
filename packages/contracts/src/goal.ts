@@ -15,6 +15,7 @@ export const GoalStatusSchema = z.enum([
   "paused",
   "blocked",
   "stopped",
+  "exhausted",
   "completed",
   "accepted",
 ]);

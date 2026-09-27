@@ -2712,7 +2712,7 @@ msgstr ""
 msgid "Could not start dictation; check Voice settings."
 msgstr ""
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/GoalForm.tsx
 msgid "Could not start goal. Check the deadline and try again."
 msgstr "목표를 시작할 수 없습니다. 기한을 확인하고 다시 시도하세요."
 
@@ -3302,7 +3302,7 @@ msgstr "완료"
 msgid "Done — waiting for your OK"
 msgstr ""
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/GoalForm.tsx
 msgid "Done when (one per line)"
 msgstr "완료 조건 (한 줄에 하나씩)"
 
@@ -3522,6 +3522,10 @@ msgstr ""
 #: src/pages/PluginsOverlay.tsx
 msgid "Executor token"
 msgstr "Executor 토큰"
+
+#: src/pages/GroupPanel.tsx
+msgid "Exhausted"
+msgstr "소진됨"
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Existing documents keep their scope."
@@ -5439,7 +5443,7 @@ msgstr "OAuth 연결 실패"
 msgid "OAuth expired"
 msgstr ""
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/GoalForm.tsx
 msgid "Objective"
 msgstr "목적"
 
@@ -7323,7 +7327,7 @@ msgstr "보드를 시작할까요?"
 msgid "Start comparison"
 msgstr ""
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/GoalForm.tsx
 msgid "Start goal"
 msgstr "목표 시작"
 
@@ -7344,7 +7348,7 @@ msgid "Starting"
 msgstr "시작 중"
 
 #: src/components/teach/TeachComputerOverlay.tsx
-#: src/pages/GroupPanel.tsx
+#: src/pages/GoalForm.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Starting…"
@@ -7856,7 +7860,7 @@ msgstr ""
 msgid "Token"
 msgstr ""
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/GoalForm.tsx
 msgid "Token limit"
 msgstr "토큰 한도"
 
@@ -8008,7 +8012,7 @@ msgstr "지원하지 않는 파일 형식: {0}"
 msgid "Unsupported: no verified NetworkPolicy controller."
 msgstr ""
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/GoalForm.tsx
 msgid "Until (defaults to eight hours)"
 msgstr "기한 (기본 8시간)"
 

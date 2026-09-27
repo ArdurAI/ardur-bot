@@ -70,6 +70,7 @@ export const ProductEventType = z.enum([
   "goal.assigned",
   "goal.wake",
   "goal.stopped",
+  "goal.exhausted",
 ]);
 export type ProductEventType = z.infer<typeof ProductEventType>;
 

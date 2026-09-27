@@ -2712,7 +2712,7 @@ msgstr "Could not start comparison; review the pins and retry."
 msgid "Could not start dictation; check Voice settings."
 msgstr "Could not start dictation; check Voice settings."
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/GoalForm.tsx
 msgid "Could not start goal. Check the deadline and try again."
 msgstr "Could not start goal. Check the deadline and try again."
 
@@ -3302,7 +3302,7 @@ msgstr "Done"
 msgid "Done — waiting for your OK"
 msgstr "Done — waiting for your OK"
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/GoalForm.tsx
 msgid "Done when (one per line)"
 msgstr "Done when (one per line)"
 
@@ -3522,6 +3522,10 @@ msgstr "Executing"
 #: src/pages/PluginsOverlay.tsx
 msgid "Executor token"
 msgstr "Executor token"
+
+#: src/pages/GroupPanel.tsx
+msgid "Exhausted"
+msgstr "Exhausted"
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Existing documents keep their scope."
@@ -5439,7 +5443,7 @@ msgstr "OAuth connection failed"
 msgid "OAuth expired"
 msgstr "OAuth expired"
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/GoalForm.tsx
 msgid "Objective"
 msgstr "Objective"
 
@@ -7323,7 +7327,7 @@ msgstr "Start board?"
 msgid "Start comparison"
 msgstr "Start comparison"
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/GoalForm.tsx
 msgid "Start goal"
 msgstr "Start goal"
 
@@ -7344,7 +7348,7 @@ msgid "Starting"
 msgstr "Starting"
 
 #: src/components/teach/TeachComputerOverlay.tsx
-#: src/pages/GroupPanel.tsx
+#: src/pages/GoalForm.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Starting…"
@@ -7856,7 +7860,7 @@ msgstr "Today (UTC)"
 msgid "Token"
 msgstr "Token"
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/GoalForm.tsx
 msgid "Token limit"
 msgstr "Token limit"
 
@@ -8008,7 +8012,7 @@ msgstr "Unsupported file type: {0}"
 msgid "Unsupported: no verified NetworkPolicy controller."
 msgstr "Unsupported: no verified NetworkPolicy controller."
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/GoalForm.tsx
 msgid "Until (defaults to eight hours)"
 msgstr "Until (defaults to eight hours)"
 

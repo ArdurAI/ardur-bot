@@ -53,6 +53,50 @@ async function loadGoal(prisma: PrismaClient, where: Prisma.TeamGoalWhereInput) 
   return asGoal({ ...row, usedTokens: root?.usedTokens ?? 0 });
 }
 
+export function goalExhaustionReason(
+  goal: Pick<TeamGoal, "untilAt" | "tokenLimit">,
+  root: {
+    usedTokens: number;
+    tokenLimit?: number;
+    deadlineAt?: Date;
+    cancelRequestedAt: Date | null;
+  } | null,
+  now: Date,
+): "deadline" | "tokens" | "cancelled" | null {
+  if (goal.untilAt <= now || (root?.deadlineAt && root.deadlineAt <= now)) return "deadline";
+  if (root && root.usedTokens >= Math.min(goal.tokenLimit, root.tokenLimit ?? Infinity))
+    return "tokens";
+  if (root?.cancelRequestedAt) return "cancelled";
+  return null;
+}
+
+/** Idempotently closes a running goal whose shared root can no longer execute. */
+export async function reconcileGoalExhaustion(prisma: PrismaClient, goalId: string) {
+  return prisma.$transaction(async (tx) => {
+    const goal = await tx.teamGoal.findUnique({ where: { id: goalId } });
+    if (goal?.status !== "running") return null;
+    const root = await tx.delegationRoot.findUnique({
+      where: { rootTaskId: goal.rootTaskId },
+      select: { usedTokens: true, tokenLimit: true, deadlineAt: true, cancelRequestedAt: true },
+    });
+    const reason = goalExhaustionReason(goal, root, new Date());
+    if (!reason) return null;
+    const changed = await tx.teamGoal.updateMany({
+      where: { id: goal.id, status: "running" },
+      data: { status: "exhausted" },
+    });
+    if (!changed.count) return null;
+    await appendEventInTransaction(tx, {
+      spaceId: goal.spaceId,
+      threadId: goal.threadId,
+      botId: goal.coordinatorBotId,
+      type: "goal.exhausted",
+      payload: { goalId: goal.id, reason },
+    });
+    return reason;
+  });
+}
+
 export async function startGoal(prisma: PrismaClient, actor: Actor, raw: GoalStartInput) {
   if (!actor.isDeploymentOwner) throw new IsolationError();
   const input = GoalStartInputSchema.parse(raw);
@@ -62,6 +106,17 @@ export async function startGoal(prisma: PrismaClient, actor: Actor, raw: GoalSta
     : new Date(now.getTime() + GOAL_DEFAULT_DURATION_MS);
   if (untilAt <= now || untilAt.getTime() > now.getTime() + 7 * 24 * 60 * 60 * 1000)
     throw new Error("Goal deadline must be within the next seven days");
+
+  const previous = await prisma.teamGoal.findFirst({
+    where: {
+      groupId: input.groupId,
+      spaceId: actor.spaceId,
+      userId: actor.userId,
+      status: "running",
+    },
+    select: { id: true },
+  });
+  if (previous) await reconcileGoalExhaustion(prisma, previous.id);
 
   const goalId = await withTransactionRetry(() =>
     prisma.$transaction(async (tx) => {
@@ -130,6 +185,20 @@ export async function startGoal(prisma: PrismaClient, actor: Actor, raw: GoalSta
           deadlineAt: untilAt,
         },
       });
+      await tx.run.create({
+        data: {
+          spaceId: actor.spaceId,
+          userId: actor.userId,
+          botId: group.coordinatorBotId,
+          threadId: group.thread.id,
+          taskId: task.id,
+          status: "queued",
+          trigger: "follow_up",
+          clientNonce: `goal-start:${row.id}`,
+          goalId: row.id,
+          delegationRootTaskId: task.id,
+        },
+      });
       await appendEventInTransaction(tx, {
         spaceId: actor.spaceId,
         threadId: group.thread.id,
@@ -146,11 +215,17 @@ export async function startGoal(prisma: PrismaClient, actor: Actor, raw: GoalSta
 }
 
 export async function getGoal(prisma: PrismaClient, actor: Actor, groupId: string) {
-  return loadGoal(prisma, {
+  const where = {
     groupId,
     spaceId: actor.spaceId,
     userId: actor.userId,
-  });
+  };
+  const goal = await loadGoal(prisma, where);
+  if (goal?.status === "running") {
+    const reason = await reconcileGoalExhaustion(prisma, goal.id);
+    if (reason) return loadGoal(prisma, where);
+  }
+  return goal;
 }
 
 export async function stopGoal(prisma: PrismaClient, actor: Actor, goalId: string) {
@@ -159,11 +234,11 @@ export async function stopGoal(prisma: PrismaClient, actor: Actor, goalId: strin
     where: { id: goalId, spaceId: actor.spaceId, userId: actor.userId },
   });
   if (!goal) throw new IsolationError();
-  if (goal.status !== "stopped") {
+  if (goal.status === "running") {
     await requestCancel(prisma, { spaceId: actor.spaceId, userId: actor.userId }, goal.rootTaskId);
     await prisma.$transaction(async (tx) => {
       const changed = await tx.teamGoal.updateMany({
-        where: { id: goal.id, status: { not: "stopped" } },
+        where: { id: goal.id, status: "running" },
         data: { status: "stopped", stoppedAt: new Date() },
       });
       if (changed.count)
@@ -187,6 +262,12 @@ export async function wakeGoalCoordinatorForDelegation(prisma: PrismaClient, del
     prisma.$transaction(async (tx) => {
       const initial = await tx.delegation.findUnique({ where: { id: delegationId } });
       if (!initial) return null;
+      const candidateGoal = await tx.teamGoal.findUnique({
+        where: { rootTaskId: initial.rootTaskId },
+        select: { threadId: true },
+      });
+      if (!candidateGoal) return null;
+      await tx.$queryRaw`SELECT id FROM threads WHERE id = ${candidateGoal.threadId} FOR UPDATE`;
       await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${initial.rootTaskId} FOR UPDATE`;
       const row = await tx.delegation.findUniqueOrThrow({ where: { id: delegationId } });
       if (
@@ -201,7 +282,7 @@ export async function wakeGoalCoordinatorForDelegation(prisma: PrismaClient, del
         where: { rootTaskId: row.rootTaskId },
       });
       const now = new Date();
-      if (goal.status !== "running" || root.cancelRequestedAt || goal.untilAt <= now) {
+      if (goal.status !== "running" || goalExhaustionReason(goal, root, now)) {
         await tx.delegation.update({ where: { id: row.id }, data: { coordinatorWokenAt: now } });
         return null;
       }
@@ -245,7 +326,7 @@ export async function wakeGoalCoordinatorForDelegation(prisma: PrismaClient, del
             userId: goal.userId,
             botId: goal.coordinatorBotId,
             threadId: goal.threadId,
-            prompt: `Review ${row.actingName}'s ${row.status} assignment and decide the next step for this goal: ${goal.objective}`,
+            prompt: `Review ${row.actingName}'s ${row.status} assignment and decide the next step for this goal.`,
             status: "queued",
           },
         });

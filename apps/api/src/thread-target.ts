@@ -39,6 +39,7 @@ import {
   createRepos,
   createThreadMessageInTransaction,
   expireComputerExecutionLeases,
+  goalExhaustionReason,
   IsolationError,
   lockOwnedGroup,
   type Prisma,
@@ -894,7 +895,7 @@ export async function sendThreadMessage(
       const members = await lockAndLoadGroupMembers(tx, actor, target);
       const memberBotIds = members.map((member) => member.botId);
       const mentionTargets = splitMentionTargets(input.mentions);
-      const [groupRouting, spaceRouting, replyTarget, lastRun, activeGoal] = await Promise.all([
+      const [groupRouting, spaceRouting, replyTarget, lastRun, candidateGoal] = await Promise.all([
         tx.chatGroup.findUnique({
           where: { id: target.groupId },
           select: { coordinatorBotId: true },
@@ -917,9 +918,30 @@ export async function sendThreadMessage(
             userId: actor.userId,
             status: "running",
           },
-          select: { id: true, rootTaskId: true, coordinatorBotId: true },
+          select: {
+            id: true,
+            rootTaskId: true,
+            coordinatorBotId: true,
+            untilAt: true,
+            tokenLimit: true,
+          },
         }),
       ]);
+      const root = candidateGoal
+        ? await tx.delegationRoot.findUnique({
+            where: { rootTaskId: candidateGoal.rootTaskId },
+            select: {
+              usedTokens: true,
+              tokenLimit: true,
+              deadlineAt: true,
+              cancelRequestedAt: true,
+            },
+          })
+        : null;
+      const activeGoal =
+        candidateGoal && root && !goalExhaustionReason(candidateGoal, root, new Date())
+          ? candidateGoal
+          : null;
       const explicit = members.filter(
         (member) =>
           mentionTargets.botMentionIds.includes(member.botId) ||

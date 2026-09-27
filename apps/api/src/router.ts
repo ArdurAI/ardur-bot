@@ -5495,10 +5495,25 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
       board: authed.team.board.handler(({ context }) => teamBoard(deps.prisma, context.actor)),
     },
     goals: {
-      start: authed.goals.start.handler(({ context, input }) => {
+      start: authed.goals.start.handler(async ({ context, input }) => {
         if (!context.actor.isDeploymentOwner || !context.authSessionId)
           throw new ORPCError("FORBIDDEN");
-        return startGoal(deps.prisma, context.actor, input);
+        const goal = await startGoal(deps.prisma, context.actor, input);
+        const first = await deps.prisma.run.findUnique({
+          where: {
+            spaceId_clientNonce: {
+              spaceId: goal.spaceId,
+              clientNonce: `goal-start:${goal.id}`,
+            },
+          },
+          select: { id: true },
+        });
+        if (first)
+          await deps.jobs.enqueue(runContinueJob(first.id)).catch((error) => {
+            // The queued run is durable; reconciliation will retry dispatch.
+            getLogger().error("goal start enqueue", error);
+          });
+        return goal;
       }),
       get: authed.goals.get.handler(({ context, input }) => {
         if (!context.actor.isDeploymentOwner || !context.authSessionId)

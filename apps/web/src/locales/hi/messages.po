@@ -2712,7 +2712,7 @@ msgstr ""
 msgid "Could not start dictation; check Voice settings."
 msgstr ""
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/GoalForm.tsx
 msgid "Could not start goal. Check the deadline and try again."
 msgstr "लक्ष्य शुरू नहीं हो सका। समय सीमा जाँचें और फिर प्रयास करें।"
 
@@ -3302,7 +3302,7 @@ msgstr "पूर्ण"
 msgid "Done — waiting for your OK"
 msgstr ""
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/GoalForm.tsx
 msgid "Done when (one per line)"
 msgstr "पूर्ण होने की शर्तें (प्रति पंक्ति एक)"
 
@@ -3522,6 +3522,10 @@ msgstr ""
 #: src/pages/PluginsOverlay.tsx
 msgid "Executor token"
 msgstr "Executor टोकन"
+
+#: src/pages/GroupPanel.tsx
+msgid "Exhausted"
+msgstr "समाप्त"
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Existing documents keep their scope."
@@ -5439,7 +5443,7 @@ msgstr "OAuth कनेक्शन विफल"
 msgid "OAuth expired"
 msgstr ""
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/GoalForm.tsx
 msgid "Objective"
 msgstr "उद्देश्य"
 
@@ -7323,7 +7327,7 @@ msgstr "बोर्ड शुरू करें?"
 msgid "Start comparison"
 msgstr ""
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/GoalForm.tsx
 msgid "Start goal"
 msgstr "लक्ष्य शुरू करें"
 
@@ -7344,7 +7348,7 @@ msgid "Starting"
 msgstr "शुरू हो रहा है"
 
 #: src/components/teach/TeachComputerOverlay.tsx
-#: src/pages/GroupPanel.tsx
+#: src/pages/GoalForm.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Starting…"
@@ -7856,7 +7860,7 @@ msgstr ""
 msgid "Token"
 msgstr ""
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/GoalForm.tsx
 msgid "Token limit"
 msgstr "टोकन सीमा"
 
@@ -8008,7 +8012,7 @@ msgstr "असमर्थित फ़ाइल प्रकार: {0}"
 msgid "Unsupported: no verified NetworkPolicy controller."
 msgstr ""
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/GoalForm.tsx
 msgid "Until (defaults to eight hours)"
 msgstr "समय सीमा (डिफ़ॉल्ट आठ घंटे)"
 

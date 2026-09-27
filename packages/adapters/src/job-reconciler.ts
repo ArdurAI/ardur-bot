@@ -2,6 +2,7 @@ import type { JobPublisher } from "@ardurbot/adapter-kit";
 import { messagingDeliverJob, routineWakeupJob, runContinueJob } from "@ardurbot/adapter-kit";
 import type { MessageBlock } from "@ardurbot/contracts";
 import type { Pool, PrismaClient, ThreadEvents } from "@ardurbot/db";
+import { goalExhaustionReason, reconcileGoalExhaustion } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 import type { PoolClient } from "pg";
 import { returnBotMessageOutcome } from "./bot-messages.js";
@@ -346,12 +347,30 @@ export function createJobReconciler(
     if (deps.prisma.teamGoal && deps.prisma.delegation) {
       const goals = await deps.prisma.teamGoal.findMany({
         where: { status: "running" },
-        select: { rootTaskId: true },
+        select: { id: true, rootTaskId: true, untilAt: true, tokenLimit: true },
       });
       if (goals.length) {
+        const roots = await deps.prisma.delegationRoot.findMany({
+          where: { rootTaskId: { in: goals.map((goal) => goal.rootTaskId) } },
+          select: {
+            rootTaskId: true,
+            usedTokens: true,
+            tokenLimit: true,
+            deadlineAt: true,
+            cancelRequestedAt: true,
+          },
+        });
+        const byRoot = new Map(roots.map((root) => [root.rootTaskId, root]));
+        for (const goal of goals) {
+          if (!goalExhaustionReason(goal, byRoot.get(goal.rootTaskId) ?? null, now)) continue;
+          await reconcileGoalExhaustion(deps.prisma, goal.id);
+        }
+        const liveRoots = goals
+          .filter((goal) => !goalExhaustionReason(goal, byRoot.get(goal.rootTaskId) ?? null, now))
+          .map((goal) => goal.rootTaskId);
         const terminal = await deps.prisma.delegation.findMany({
           where: {
-            rootTaskId: { in: goals.map((goal) => goal.rootTaskId) },
+            rootTaskId: { in: liveRoots },
             kind: "group-handoff",
             status: { in: ["completed", "failed", "cancelled", "accepted"] },
             coordinatorWokenAt: null,

@@ -2712,7 +2712,7 @@ msgstr ""
 msgid "Could not start dictation; check Voice settings."
 msgstr ""
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/GoalForm.tsx
 msgid "Could not start goal. Check the deadline and try again."
 msgstr "No se pudo iniciar el objetivo. Revisa la fecha límite e inténtalo de nuevo."
 
@@ -3302,7 +3302,7 @@ msgstr "Listo"
 msgid "Done — waiting for your OK"
 msgstr ""
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/GoalForm.tsx
 msgid "Done when (one per line)"
 msgstr "Criterios de finalización (uno por línea)"
 
@@ -3522,6 +3522,10 @@ msgstr ""
 #: src/pages/PluginsOverlay.tsx
 msgid "Executor token"
 msgstr "Token de Executor"
+
+#: src/pages/GroupPanel.tsx
+msgid "Exhausted"
+msgstr "Agotado"
 
 #: src/pages/MemorySettingsOverlay.tsx
 msgid "Existing documents keep their scope."
@@ -5439,7 +5443,7 @@ msgstr "Falló la conexión OAuth"
 msgid "OAuth expired"
 msgstr "OAuth expirado"
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/GoalForm.tsx
 msgid "Objective"
 msgstr "Objetivo"
 
@@ -7323,7 +7327,7 @@ msgstr "¿Iniciar tablero?"
 msgid "Start comparison"
 msgstr ""
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/GoalForm.tsx
 msgid "Start goal"
 msgstr "Iniciar objetivo"
 
@@ -7344,7 +7348,7 @@ msgid "Starting"
 msgstr "Iniciando"
 
 #: src/components/teach/TeachComputerOverlay.tsx
-#: src/pages/GroupPanel.tsx
+#: src/pages/GoalForm.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Starting…"
@@ -7856,7 +7860,7 @@ msgstr ""
 msgid "Token"
 msgstr ""
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/GoalForm.tsx
 msgid "Token limit"
 msgstr "Límite de tokens"
 
@@ -8008,7 +8012,7 @@ msgstr "Tipo de archivo no compatible: {0}"
 msgid "Unsupported: no verified NetworkPolicy controller."
 msgstr ""
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/GoalForm.tsx
 msgid "Until (defaults to eight hours)"
 msgstr "Hasta (ocho horas por defecto)"
 

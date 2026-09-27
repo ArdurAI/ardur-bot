@@ -285,7 +285,9 @@ export function GroupSettings({
       >
         {pending === "save" ? <Trans>Saving…</Trans> : <Trans>Save</Trans>}
       </Button>
-      {canManageGoal && group.coordinatorBotId && (!goal || goal.status === "stopped") ? (
+      {canManageGoal &&
+      group.coordinatorBotId &&
+      (!goal || goal.status === "stopped" || goal.status === "exhausted") ? (
         <Suspense fallback={null}>
           <StartGoalForm groupId={group.id} onStart={onStartGoal} />
         </Suspense>
@@ -323,15 +325,17 @@ export function GroupGoalStrip({ goal, onStop }: { goal: Goal; onStop: () => Pro
       ? t`Working`
       : goal.status === "stopped"
         ? t`Stopped`
-        : goal.status === "completed"
-          ? t`Completed`
-          : goal.status === "accepted"
-            ? t`Accepted`
-            : goal.status === "paused"
-              ? t`Paused`
-              : goal.status === "blocked"
-                ? t`Blocked`
-                : t`Needs you`;
+        : goal.status === "exhausted"
+          ? t`Exhausted`
+          : goal.status === "completed"
+            ? t`Completed`
+            : goal.status === "accepted"
+              ? t`Accepted`
+              : goal.status === "paused"
+                ? t`Paused`
+                : goal.status === "blocked"
+                  ? t`Blocked`
+                  : t`Needs you`;
   return (
     <div className="flex items-center justify-between gap-3 border-b border-border px-3 py-1 text-xs text-muted-foreground md:px-[22px]">
       <span className="truncate">
