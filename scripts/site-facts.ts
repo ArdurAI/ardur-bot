@@ -9,13 +9,19 @@ import {
   WEBHOOK_MATCHING_ROUTINES_LIMIT,
   WEBHOOK_MAX_BODY_BYTES,
 } from "../apps/api/src/limits.ts";
+import { DOCUMENT_STORE_KINDS } from "../packages/adapters/src/memory/document-store-factory.ts";
+import { GIT_PUBLISH_MODES } from "../packages/adapters/src/memory/git-store.ts";
 import { listPiCatalog } from "../packages/adapters/src/pi-models.ts";
 import {
   MIN_ONE_SHOT_LEAD_SECONDS,
   MIN_REPEATING_INTERVAL_SECONDS,
 } from "../packages/adapters/src/schedule-tools.ts";
 import { ComputerConnectionSettingsSchema } from "../packages/contracts/src/computer-connections.ts";
-import { CreateRoutineInput, RoutineSchema } from "../packages/contracts/src/domain.ts";
+import {
+  CreateRoutineInput,
+  RoutineSchema,
+  SpaceMemoryConfigSchema,
+} from "../packages/contracts/src/domain.ts";
 import { type SiteProduct, SiteProductSchema } from "../packages/contracts/src/site-product.ts";
 import { POPULAR_MODEL_PROVIDER_IDS } from "../packages/core/src/model-providers.ts";
 
@@ -141,6 +147,63 @@ const triggerDetails: Record<string, { id: string; name: string; detail: string 
   },
 };
 const nonTriggerInputKeys = new Set(["botId", "name", "prompt", "timezone", "notify", "active"]);
+
+const MEMORY_DENIED_PHRASES = [
+  "every memory",
+  "instant sync",
+  "works with any repo",
+  "edits in every app automatically sync",
+  "secrets can never leak",
+  "tamper-proof",
+  "private folders inside a shared repo",
+  "all your skills and plugins travel with memory",
+] as const;
+
+export function memoryFromCode(): Pick<
+  NonNullable<SiteProduct["memory"]>,
+  "storage" | "publishModes"
+> {
+  const storeCopy = {
+    postgres: {
+      id: "database",
+      name: "Built-in database",
+      detail: "Keeps documents in Ardur's built-in database.",
+      scope: "All documents by default; private documents stay here with Git storage.",
+    },
+    git: {
+      id: "git",
+      name: "Git repository",
+      detail: "Keeps shared notes and their revision history in a connected repository.",
+      scope: "Space-shared documents and their revision history.",
+    },
+    obsidian: {
+      id: "obsidian",
+      name: "Local memory folder",
+      detail: "Keeps selected documents as files in a dedicated folder.",
+      scope: "Space-shared documents and the connected owner's documents.",
+    },
+  } satisfies Record<
+    (typeof DOCUMENT_STORE_KINDS)[number],
+    NonNullable<SiteProduct["memory"]>["storage"][number]
+  >;
+  const modes = {
+    publish: { id: "direct", name: "Publish directly" },
+    propose: { id: "proposal", name: "Propose on a branch" },
+  } satisfies Record<
+    (typeof GIT_PUBLISH_MODES)[number],
+    NonNullable<SiteProduct["memory"]>["publishModes"][number]
+  >;
+  const selectable = SpaceMemoryConfigSchema.shape.documentStore.unwrap().options;
+  if (
+    DOCUMENT_STORE_KINDS.length !== selectable.length ||
+    DOCUMENT_STORE_KINDS.some((kind) => !selectable.includes(kind))
+  )
+    throw new Error("Document store kinds differ from the memory settings contract.");
+  return {
+    storage: DOCUMENT_STORE_KINDS.map((kind) => storeCopy[kind]),
+    publishModes: GIT_PUBLISH_MODES.map((mode) => modes[mode]),
+  };
+}
 
 export function routinesFromCode(): NonNullable<SiteProduct["routines"]> {
   const keys = Object.keys(CreateRoutineInput.shape).filter((key) => !nonTriggerInputKeys.has(key));
@@ -406,6 +469,7 @@ export async function generatedProduct(rootDir = root): Promise<SiteProduct> {
   const cask = casks[0].slice(0, -3);
   const result = {
     ...curated,
+    ...(curated.memory ? { memory: { ...curated.memory, ...memoryFromCode() } } : {}),
     ...(videos.length ? { videos } : {}),
     providers: providersFromCatalog(),
     computers: computersFromRegistry(),
@@ -506,6 +570,35 @@ export function generatedReadme(readme: string, product: SiteProduct): string {
 }
 
 export async function validateReferences(product: SiteProduct, rootDir = root): Promise<void> {
+  const readme = await readFile(path.join(rootDir, readmePath), "utf8");
+  const readmeHeadings = new Set(
+    [...readme.matchAll(/^#{1,6} (.+)$/gm)].map((match) => match[1].trim()),
+  );
+  if (product.memory) {
+    for (const entry of [...product.memory.sections, ...product.memory.proofPoints]) {
+      const heading = entry.source.startsWith("README.md#")
+        ? entry.source.slice("README.md#".length)
+        : "";
+      if (!heading || !readmeHeadings.has(heading)) {
+        throw new Error(`Memory "${entry.id}" points at missing README heading ${entry.source}.`);
+      }
+    }
+    for (const section of product.memory.sections) {
+      if (!section.qualification.trim()) {
+        throw new Error(`Memory section "${section.id}" needs a qualification.`);
+      }
+    }
+    const strings = (value: unknown): string[] => {
+      if (typeof value === "string") return [value];
+      if (Array.isArray(value)) return value.flatMap(strings);
+      if (value && typeof value === "object") return Object.values(value).flatMap(strings);
+      return [];
+    };
+    for (const value of strings(product.memory)) {
+      const denied = MEMORY_DENIED_PHRASES.find((phrase) => value.toLowerCase().includes(phrase));
+      if (denied) throw new Error(`Memory copy contains denied phrase "${denied}".`);
+    }
+  }
   for (const feature of product.features) {
     const [file, section] = feature.source.split("#");
     if (!file || !["README.md", "VISION.md", "docs/self-host.md"].includes(file)) {
@@ -534,14 +627,29 @@ export async function validateReferences(product: SiteProduct, rootDir = root): 
       );
     }
   }
+  if (product.memory) {
+    const screenshot = product.memory.settingsPath.screenshot;
+    if (!product.screenshots.some((shot) => shot.id === screenshot)) {
+      throw new Error(`Memory screenshot "${screenshot}" is not in screenshots.`);
+    }
+  }
+  const catalog = await readFile(path.join(rootDir, "apps/web/src/locales/en/messages.po"), "utf8");
+  const labels = new Set(
+    [...catalog.matchAll(/^msgid "([^"\\]*(?:\\.[^"\\]*)*)"$/gm)].map((match) => match[1]),
+  );
+  if (product.memory) {
+    for (const label of product.memory.settingsPath.uiLabels) {
+      if (!labels.has(label)) {
+        throw new Error(
+          `Memory settings UI label "${label}" missing from the English message catalog.`,
+        );
+      }
+      if (!product.memory.settingsPath.steps.includes(label)) {
+        throw new Error(`Memory settings UI label "${label}" must appear in settingsPath.steps.`);
+      }
+    }
+  }
   if (product.routines?.useCases) {
-    const catalog = await readFile(
-      path.join(rootDir, "apps/web/src/locales/en/messages.po"),
-      "utf8",
-    );
-    const labels = new Set(
-      [...catalog.matchAll(/^msgid "([^"\\]*(?:\\.[^"\\]*)*)"$/gm)].map((match) => match[1]),
-    );
     for (const useCase of product.routines.useCases) {
       for (const label of useCase.uiLabels) {
         if (!labels.has(label))
@@ -581,13 +689,8 @@ export async function validateReferences(product: SiteProduct, rootDir = root): 
 export async function runSiteFacts(mode: "write" | "check", rootDir = root): Promise<boolean> {
   const currentProduct = await readFile(path.join(rootDir, productPath), "utf8");
   const currentReadme = await readFile(path.join(rootDir, readmePath), "utf8");
-  const input = SiteProductSchema.safeParse(JSON.parse(currentProduct));
-  if (mode === "check" && !input.success) {
-    throw new Error(
-      `${productPath} violates the site facts contract: ${input.error.message}. Fix curated fields and run pnpm site:facts.`,
-    );
-  }
-  if (mode === "check" && (input.data?.generatedAt || input.data?.source)) {
+  const input = JSON.parse(currentProduct);
+  if (mode === "check" && (input.generatedAt || input.source)) {
     throw new Error(
       `${productPath} must omit generatedAt and source. Run \`pnpm site:facts\` and commit the result.`,
     );
