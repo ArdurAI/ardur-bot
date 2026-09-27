@@ -98,7 +98,10 @@ const refreshedGroup = {
 
 const refreshedAgainGroup = {
   ...refreshedGroup,
-  members: [...refreshedGroup.members, { botId: "bot-d", memberId: "m-d", name: "Bot D", color: "#444" }],
+  members: [
+    ...refreshedGroup.members,
+    { botId: "bot-d", memberId: "m-d", name: "Bot D", color: "#444" },
+  ],
 } as unknown as MobileGroup;
 
 const bots = [
