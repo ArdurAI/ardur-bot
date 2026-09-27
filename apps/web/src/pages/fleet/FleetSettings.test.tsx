@@ -23,52 +23,28 @@ vi.mock("@lingui/react/macro", () => {
   };
   return { useLingui: () => ({ t }), Trans: ({ children }: { children: ReactNode }) => children };
 });
-vi.mock("@ardurbot/ui-web", () => ({
-  Button: ({ variant: _variant, ...props }: ComponentProps<"button"> & { variant?: string }) => (
-    <button {...props} />
-  ),
-  Checkbox: ({
-    onCheckedChange,
-    ...props
-  }: ComponentProps<"input"> & { onCheckedChange: (checked: boolean) => void }) => (
-    <input type="checkbox" {...props} onChange={(event) => onCheckedChange(event.target.checked)} />
-  ),
-  Input: (props: ComponentProps<"input">) => <input {...props} />,
-  Textarea: (props: ComponentProps<"textarea">) => <textarea {...props} />,
-  NativeSelect: (props: ComponentProps<"select">) => <select {...props} />,
-  NativeSelectOption: (props: ComponentProps<"option">) => <option {...props} />,
-  Dialog: ({
-    open = true,
-    onOpenChange,
-    children,
-  }: {
-    open?: boolean;
-    onOpenChange?: (open: boolean) => void;
-    children?: ReactNode;
-  }) => {
-    useEffect(() => {
-      if (!open || !onOpenChange) return;
-      const onKeyDown = (event: KeyboardEvent) => {
-        if (event.key === "Escape") onOpenChange(false);
-      };
-      window.addEventListener("keydown", onKeyDown);
-      return () => window.removeEventListener("keydown", onKeyDown);
-    }, [open, onOpenChange]);
-    return open ? <div data-slot="dialog">{children}</div> : null;
-  },
-  DialogContent: ({
-    children,
-    showCloseButton: _showCloseButton,
-    ...props
-  }: ComponentProps<"div"> & { showCloseButton?: boolean }) => (
-    <div role="dialog" {...props}>
-      {children}
-    </div>
-  ),
-  DialogHeader: (props: ComponentProps<"div">) => <div {...props} />,
-  DialogTitle: (props: ComponentProps<"h2">) => <h2 {...props} />,
-}));
+vi.mock("@ardurbot/ui-web", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@ardurbot/ui-web")>();
+  return {
+    ...actual,
+    Checkbox: ({
+      onCheckedChange,
+      ...props
+    }: ComponentProps<"input"> & { onCheckedChange: (checked: boolean) => void }) => (
+      <input
+        type="checkbox"
+        {...props}
+        onChange={(event) => onCheckedChange(event.target.checked)}
+      />
+    ),
+    Input: (props: ComponentProps<"input">) => <input {...props} />,
+    Textarea: (props: ComponentProps<"textarea">) => <textarea {...props} />,
+    NativeSelect: (props: ComponentProps<"select">) => <select {...props} />,
+    NativeSelectOption: (props: ComponentProps<"option">) => <option {...props} />,
+  };
+});
 
+import { Dialog, DialogContent } from "@ardurbot/ui-web";
 import { FleetSettings } from "./FleetSettings";
 import { PlacementNotice } from "./PlacementNotice";
 
@@ -209,13 +185,15 @@ it("prefills a Tailscale peer without importing credentials or adding it automat
       (button) => button.textContent === "Add as SSH computer",
     )!;
     await act(async () => add.click());
-    expect(element.querySelector<HTMLInputElement>('[aria-label="Host"]')?.value).toBe(
+    expect(document.body.querySelector<HTMLInputElement>('[aria-label="Host"]')?.value).toBe(
       "peer.example.invalid",
     );
-    expect(element.querySelector<HTMLInputElement>('[aria-label="User"]')?.value).toBe("runner");
+    expect(document.body.querySelector<HTMLInputElement>('[aria-label="User"]')?.value).toBe(
+      "runner",
+    );
     expect(api.connect).not.toHaveBeenCalled();
     await act(async () =>
-      element
+      document.body
         .querySelector("form")!
         .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
     );
@@ -263,7 +241,22 @@ it("shows placement consent in the conversation only while input is pending", as
   }
 });
 
-it("opens Add computer dialog with prefilled engine from discovered target, and closes on cancel or escape", async () => {
+function SettingsWrapper({ children, onClose }: { children: ReactNode; onClose?: () => void }) {
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose?.();
+      }}
+    >
+      <DialogContent aria-label="Settings" data-testid="user-settings">
+        {children}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+it("opens Add computer dialog with prefilled engine from discovered row, and Escape closes only Add dialog with focus restore", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   api.list.mockResolvedValue({
     targets: [],
@@ -282,51 +275,77 @@ it("opens Add computer dialog with prefilled engine from discovered target, and 
       bots: [],
     },
   ] as never);
-  const element = document.createElement("div"),
-    root = createRoot(element);
-  try {
-    await act(async () => root.render(<FleetSettings />));
-    expect(element.querySelector('[role="dialog"]')).toBeNull();
 
-    const add = [...element.querySelectorAll("button")].find(
+  const onSettingsClose = vi.fn();
+  const element = document.createElement("div");
+  document.body.appendChild(element);
+  const root = createRoot(element);
+
+  try {
+    await act(async () =>
+      root.render(
+        <SettingsWrapper onClose={onSettingsClose}>
+          <FleetSettings />
+        </SettingsWrapper>,
+      ),
+    );
+
+    expect(document.body.querySelector('[aria-label="Settings"]')).not.toBeNull();
+    expect(document.body.querySelector('[aria-label="Add computer"]')).toBeNull();
+
+    const add = [...document.body.querySelectorAll("button")].find(
       (button) => button.textContent === "Add",
     )!;
+    add.focus();
+    expect(document.activeElement).toBe(add);
+
     await act(async () => add.click());
 
-    const dialog = element.querySelector<HTMLElement>('[role="dialog"]')!;
+    const dialog = document.body.querySelector<HTMLElement>('[aria-label="Add computer"]')!;
     expect(dialog).not.toBeNull();
-    expect(dialog.getAttribute("aria-label")).toBe("Add computer");
+    expect(dialog.getAttribute("role")).toBe("dialog");
     expect(dialog.querySelector("h2")?.textContent).toBe("Add computer");
     expect(dialog.querySelector("form")).not.toBeNull();
 
-    expect(element.querySelector<HTMLSelectElement>('[aria-label="Connection type"]')?.value).toBe(
-      "docker",
-    );
-    expect(element.querySelector<HTMLInputElement>('[aria-label="Name"]')?.value).toBe(
+    expect(
+      document.body.querySelector<HTMLSelectElement>('[aria-label="Connection type"]')?.value,
+    ).toBe("docker");
+    expect(document.body.querySelector<HTMLInputElement>('[aria-label="Name"]')?.value).toBe(
       "Docker on this Mac",
     );
-    expect(element.querySelector<HTMLInputElement>('[aria-label="Engine endpoint"]')?.value).toBe(
-      "/var/run/docker.sock",
-    );
+    expect(
+      document.body.querySelector<HTMLInputElement>('[aria-label="Engine endpoint"]')?.value,
+    ).toBe("/var/run/docker.sock");
 
-    // Escape closes the dialog
-    await act(async () => window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })));
-    expect(element.querySelector('[role="dialog"]')).toBeNull();
+    // Pressing Escape closes only the nested Add dialog, not Settings, and restores focus
+    await act(async () => {
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+      );
+    });
+    expect(document.body.querySelector('[aria-label="Add computer"]')).toBeNull();
+    expect(document.body.querySelector('[aria-label="Settings"]')).not.toBeNull();
+    expect(onSettingsClose).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(add);
 
-    // Re-open and verify Cancel closes
+    // Re-open and verify Cancel button also closes only Add dialog
     await act(async () => add.click());
-    expect(element.querySelector('[role="dialog"]')).not.toBeNull();
-    const cancel = [...element.querySelectorAll("button")].find(
+    expect(document.body.querySelector('[aria-label="Add computer"]')).not.toBeNull();
+    const cancel = [...document.body.querySelectorAll("button")].find(
       (button) => button.textContent === "Cancel",
     )!;
     await act(async () => cancel.click());
-    expect(element.querySelector('[role="dialog"]')).toBeNull();
+    expect(document.body.querySelector('[aria-label="Add computer"]')).toBeNull();
+    expect(document.body.querySelector('[aria-label="Settings"]')).not.toBeNull();
+    expect(onSettingsClose).not.toHaveBeenCalled();
   } finally {
     await act(async () => root.unmount());
+    element.remove();
+    document.body.innerHTML = "";
   }
 });
 
-it("opens empty Add computer dialog from header button, and save closes and refreshes", async () => {
+it("opens empty Add computer dialog from header, protects pending saves, handles rejected saves, and closes on resolved save", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   api.list.mockResolvedValue({
     targets: [],
@@ -337,51 +356,68 @@ it("opens empty Add computer dialog from header button, and save closes and refr
   const changed = vi.fn();
   window.addEventListener("fleet:changed", changed);
 
-  const element = document.createElement("div"),
-    root = createRoot(element);
+  const onSettingsClose = vi.fn();
+  const element = document.createElement("div");
+  document.body.appendChild(element);
+  const root = createRoot(element);
+
+  const changeInput = (input: HTMLInputElement, value: string) => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  };
+
   try {
-    await act(async () => root.render(<FleetSettings />));
-    const headerAdd = [...element.querySelectorAll("button")].find(
+    await act(async () =>
+      root.render(
+        <SettingsWrapper onClose={onSettingsClose}>
+          <FleetSettings />
+        </SettingsWrapper>,
+      ),
+    );
+
+    const headerAdd = [...document.body.querySelectorAll("button")].find(
       (button) => button.textContent === "Add computer",
     )!;
+    headerAdd.focus();
     await act(async () => headerAdd.click());
 
-    const dialog = element.querySelector<HTMLElement>('[role="dialog"]')!;
+    const dialog = document.body.querySelector<HTMLElement>('[aria-label="Add computer"]')!;
     expect(dialog).not.toBeNull();
-    expect(dialog.getAttribute("aria-label")).toBe("Add computer");
+    expect(dialog.getAttribute("role")).toBe("dialog");
     expect(dialog.querySelector("h2")?.textContent).toBe("Add computer");
-    expect(dialog.querySelector("form")).not.toBeNull();
 
-    expect(element.querySelector<HTMLInputElement>('[aria-label="Name"]')?.value).toBe("");
-    expect(element.querySelector<HTMLSelectElement>('[aria-label="Connection type"]')?.value).toBe(
-      "ssh",
-    );
-    expect(element.querySelector<HTMLInputElement>('[aria-label="Host"]')?.value).toBe("");
-    expect(element.querySelector<HTMLInputElement>('[aria-label="User"]')?.value).toBe("");
+    // Defaults are empty for SSH
+    expect(document.body.querySelector<HTMLInputElement>('[aria-label="Name"]')?.value).toBe("");
+    expect(
+      document.body.querySelector<HTMLSelectElement>('[aria-label="Connection type"]')?.value,
+    ).toBe("ssh");
+    expect(document.body.querySelector<HTMLInputElement>('[aria-label="Host"]')?.value).toBe("");
+    expect(document.body.querySelector<HTMLInputElement>('[aria-label="User"]')?.value).toBe("");
 
-    const changeInput = (input: HTMLInputElement, value: string) => {
-      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(input, value);
-      input.dispatchEvent(new Event("input", { bubbles: true }));
-      input.dispatchEvent(new Event("change", { bubbles: true }));
-    };
-
-    const nameInput = element.querySelector<HTMLInputElement>('[aria-label="Name"]')!;
-    const hostInput = element.querySelector<HTMLInputElement>('[aria-label="Host"]')!;
-    const userInput = element.querySelector<HTMLInputElement>('[aria-label="User"]')!;
+    const nameInput = document.body.querySelector<HTMLInputElement>('[aria-label="Name"]')!;
+    const hostInput = document.body.querySelector<HTMLInputElement>('[aria-label="Host"]')!;
+    const userInput = document.body.querySelector<HTMLInputElement>('[aria-label="User"]')!;
     await act(async () => {
       changeInput(nameInput, "Remote Box");
       changeInput(hostInput, "box.local");
       changeInput(userInput, "admin");
     });
 
-    const initialListCalls = api.list.mock.calls.length;
-    api.connect.mockResolvedValue({ id: "box-1" });
-
-    await act(async () =>
-      element
-        .querySelector("form")!
-        .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    // 1. Deferred save keeps dialog open with Cancel disabled and Escape ignored
+    let rejectConnect!: (error: unknown) => void;
+    api.connect.mockImplementation(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectConnect = reject;
+        }),
     );
+
+    await act(async () => {
+      document.body
+        .querySelector("form")!
+        .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
 
     expect(api.connect).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -392,11 +428,71 @@ it("opens empty Add computer dialog from header button, and save closes and refr
         }),
       }),
     );
-    expect(element.querySelector('[role="dialog"]')).toBeNull();
+
+    const cancel = [...document.body.querySelectorAll("button")].find(
+      (button) => button.textContent === "Cancel",
+    )! as HTMLButtonElement;
+    expect(cancel.disabled).toBe(true);
+
+    // Escape is ignored while save is pending; dialog remains open
+    await act(async () => {
+      document.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+      );
+    });
+    expect(document.body.querySelector('[aria-label="Add computer"]')).not.toBeNull();
+    expect(onSettingsClose).not.toHaveBeenCalled();
+
+    // 2. Rejected save shows error and re-enables Cancel
+    await act(async () => {
+      rejectConnect(new Error("Unable to connect to computer: host unreachable"));
+    });
+
+    expect(document.body.textContent).toContain(
+      "Could not add the computer. Check its settings and try again.",
+    );
+    expect(cancel.disabled).toBe(false);
+
+    // Cancel now successfully closes the dialog
+    await act(async () => cancel.click());
+    expect(document.body.querySelector('[aria-label="Add computer"]')).toBeNull();
+    expect(document.body.querySelector('[aria-label="Settings"]')).not.toBeNull();
+    expect(onSettingsClose).not.toHaveBeenCalled();
+
+    // 3. Resolved save closes dialog, refreshes list, and emits fleet:changed
+    await act(async () => headerAdd.click());
+    expect(document.body.querySelector('[aria-label="Add computer"]')).not.toBeNull();
+
+    await act(async () => {
+      changeInput(
+        document.body.querySelector<HTMLInputElement>('[aria-label="Name"]')!,
+        "Remote Box 2",
+      );
+      changeInput(
+        document.body.querySelector<HTMLInputElement>('[aria-label="Host"]')!,
+        "box2.local",
+      );
+      changeInput(document.body.querySelector<HTMLInputElement>('[aria-label="User"]')!, "admin2");
+    });
+
+    const initialListCalls = api.list.mock.calls.length;
+    api.connect.mockResolvedValueOnce({ id: "box-2" });
+
+    await act(async () => {
+      document.body
+        .querySelector("form")!
+        .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    });
+
+    expect(document.body.querySelector('[aria-label="Add computer"]')).toBeNull();
+    expect(document.body.querySelector('[aria-label="Settings"]')).not.toBeNull();
+    expect(onSettingsClose).not.toHaveBeenCalled();
     expect(api.list.mock.calls.length).toBeGreaterThan(initialListCalls);
     expect(changed).toHaveBeenCalledOnce();
   } finally {
     window.removeEventListener("fleet:changed", changed);
     await act(async () => root.unmount());
+    element.remove();
+    document.body.innerHTML = "";
   }
 });
