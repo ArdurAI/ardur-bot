@@ -8,7 +8,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { aggregateContext, recordContextUsage, resumeContextSnapshot } from "./context/metrics.js";
 import { loadLearningRecords } from "./learning-records.js";
 import type { RecordedContextUsage } from "./run-usage.js";
-import { recordRunUsage } from "./run-usage.js";
+import { recordBrokerRunUsage, recordRunUsage } from "./run-usage.js";
 import { accountRuntimeUsage } from "./runtime-usage.js";
 
 const databaseUrl =
@@ -166,6 +166,76 @@ postgres("request ledger on disposable PostgreSQL", () => {
     expect(rows[0]!.observations).toHaveLength(1);
     expect(rows[0]!.observations[0]!.observation).toEqual(f.request);
     expect(await db.prisma.event.count({ where: { runId: f.id, type: "usage.recorded" } })).toBe(1);
+  });
+  it("serializes broker reservations and survives a new worker grant", async () => {
+    const f = await fixture();
+    await db.prisma.run.update({
+      where: { id: f.run.id },
+      data: { leaseOwner: "worker", leaseFence: 2 },
+    });
+    const fence = { leaseOwner: "worker", leaseFence: 2, runtimePin: f.pin };
+    const admission = {
+      kind: "worker-provider-broker" as const,
+      reservedTokens: 100,
+      maxRequests: 1,
+      maxReservedTokens: 100,
+    };
+    const make = () =>
+      new RequestUsageCollector({
+        provider: "fixture",
+        model: "fixture",
+        requestId: randomUUID(),
+        attemptId: "0",
+        purpose: "unknown",
+        mappingVersion: "broker-chat-completions-v1",
+        inputSemantics: "total-with-cache-subsets",
+        admission,
+      });
+    const record = (usage: AgentUsage, client = db.prisma, candidate = fence) =>
+      recordBrokerRunUsage({ prisma: client, events: f.events }, f.run, usage, candidate);
+    const first = make();
+    const started = first.start();
+    await record(started);
+    expect(await record(started)).toBeNull();
+    await record(first.finish("unknown"));
+    expect((await f.rows())[0]?.observations).toHaveLength(2);
+    await expect(record(make().start(), peer.prisma)).rejects.toThrow("allowance exhausted");
+    expect(await f.rows()).toHaveLength(1);
+    await expect(record(make().start(), peer.prisma, { ...fence, leaseFence: 3 })).rejects.toThrow(
+      "admission is stale",
+    );
+  });
+  it("rejects a broker reservation beyond the persisted root token limit", async () => {
+    const f = await fixture();
+    await db.prisma.run.update({
+      where: { id: f.run.id },
+      data: { leaseOwner: "worker", leaseFence: 2 },
+    });
+    await db.prisma.delegationRoot.update({
+      where: { rootTaskId: f.id },
+      data: { tokenLimit: 99 },
+    });
+    const collector = new RequestUsageCollector({
+      provider: "fixture",
+      model: "fixture",
+      purpose: "unknown",
+      mappingVersion: "broker-chat-completions-v1",
+      inputSemantics: "total-with-cache-subsets",
+      admission: {
+        kind: "worker-provider-broker",
+        reservedTokens: 100,
+        maxRequests: 1,
+        maxReservedTokens: 100,
+      },
+    });
+    await expect(
+      recordBrokerRunUsage({ prisma: db.prisma, events: f.events }, f.run, collector.start(), {
+        leaseOwner: "worker",
+        leaseFence: 2,
+        runtimePin: f.pin,
+      }),
+    ).rejects.toThrow("root task allowance exhausted");
+    expect(await f.rows()).toHaveLength(0);
   });
   it("serializes request usage with worker progress on the coordinator thread", async () => {
     const f = await fixture();

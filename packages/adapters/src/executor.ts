@@ -5290,6 +5290,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   provider: resolved.provider,
                   model: resolved.id,
                   purpose: run.delegationId ? "delegated" : "main",
+                  accounting: runtime.describe().capabilities.usageAccounting,
                   signal: context.signal,
                   record: async (event) => {
                     const recorded = await recordRunUsage(

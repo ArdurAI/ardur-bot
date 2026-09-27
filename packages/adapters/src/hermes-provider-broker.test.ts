@@ -1,0 +1,309 @@
+import type { AgentUsage } from "@ardurbot/adapter-kit";
+import { describe, expect, it, vi } from "vitest";
+import {
+  type BrokerOptions,
+  type BrokerRequest,
+  HermesProviderBroker,
+  hermesToolName,
+} from "./hermes-provider-broker.js";
+
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+
+function fixture(patch: Partial<BrokerOptions> = {}) {
+  const records: AgentUsage[] = [];
+  const fetch = vi.fn<typeof globalThis.fetch>(async () =>
+    json({ model: "fixture-model", usage: { prompt_tokens: 0, completion_tokens: 0 } }),
+  );
+  const scope: BrokerOptions["scope"] = {
+    runId: "run",
+    botId: "bot",
+    userId: "user",
+    spaceId: "space",
+    operationId: "operation",
+    leaseOwner: "worker",
+    leaseFence: 2,
+    hostGeneration: 3,
+    configurationHash: "configuration",
+    pin: {
+      credentialId: "connection",
+      provider: "compatible",
+      modelId: "fixture-model",
+      effort: "high",
+    },
+  };
+  const options: BrokerOptions = {
+    scope,
+    connection: {
+      credentialId: "connection",
+      provider: "compatible",
+      modelId: "fixture-model",
+      baseUrl: "http://127.0.0.1:1/v1",
+      apiKey: "placeholder",
+      route: "openai-completions",
+      contextWindow: 80,
+      maxOutputTokens: 20,
+      acceptsImages: true,
+      supportsDeveloperRole: false,
+      effort: { field: "reasoning_effort", supported: ["off", "high"] },
+      reportedModel: "required",
+    },
+    credentialId: "connection",
+    pinnedEffort: "high",
+    tools: [{ name: "fixture_echo", description: "Echo", parameters: { type: "object" } }],
+    maxRequests: 2,
+    maxReservedTokens: 200,
+    expiresAt: Date.now() + 60_000,
+    active: async () => true,
+    record: async (usage) => {
+      records.push(usage);
+    },
+    fetch,
+    ...patch,
+  };
+  const broker = new HermesProviderBroker(options);
+  const body = {
+    model: "fixture-model",
+    messages: [{ role: "user", content: "hello" }],
+    tools: [
+      {
+        type: "function",
+        function: {
+          name: hermesToolName("fixture_echo"),
+          description: "untrusted",
+          parameters: {},
+        },
+      },
+    ],
+    tool_choice: { type: "function", function: { name: hermesToolName("fixture_echo") } },
+    stream: false,
+  };
+  const request = (override: Partial<BrokerRequest> = {}): BrokerRequest => ({
+    grant: broker.grant,
+    scope,
+    path: "/v1/chat/completions",
+    body,
+    ...override,
+  });
+  return { broker, options, request, fetch, records, body };
+}
+
+describe("worker provider broker", () => {
+  it("forwards canonical Ardur tools and exact model/effort, preserving measured zero", async () => {
+    const f = fixture();
+    const result = await f.broker.open(f.request());
+    expect(result.status).toBe(200);
+    const sent = JSON.parse(String(f.fetch.mock.calls[0]?.[1]?.body));
+    expect(sent.model).toBe("fixture-model");
+    expect(sent.reasoning_effort).toBe("high");
+    expect(sent.max_tokens).toBe(20);
+    expect(sent.tools).toEqual([
+      {
+        type: "function",
+        function: {
+          name: hermesToolName("fixture_echo"),
+          description: "Echo",
+          parameters: { type: "object" },
+        },
+      },
+    ]);
+    expect(f.records.map((row) => row.request?.collection?.outcome)).toEqual([
+      "started",
+      "started",
+      "success",
+    ]);
+    expect(f.records[0]?.request).toMatchObject({
+      purpose: "unknown",
+      admission: { reservedTokens: 100, maxRequests: 2 },
+      categories: { logicalInput: null, output: null },
+    });
+    expect(f.records[1]?.request?.categories).toMatchObject({
+      logicalInput: 0,
+      output: 0,
+      cacheReadInput: null,
+    });
+    expect(JSON.stringify(f.records)).not.toContain("placeholder");
+    expect(JSON.stringify(f.records)).not.toContain(f.broker.grant.token);
+  });
+
+  it("pins the connection and tool schema when the grant is created", async () => {
+    const f = fixture();
+    const savedScope = structuredClone(f.options.scope);
+    const tools = f.options.tools as Array<{ name: string; parameters: Record<string, unknown> }>;
+    tools[0]!.parameters.type = "array";
+    f.options.connection.modelId = "other";
+    f.options.connection.baseUrl = "http://169.254.169.254/v1";
+    f.options.scope.pin.modelId = "other";
+    await f.broker.open(f.request({ scope: savedScope }));
+    const sent = JSON.parse(String(f.fetch.mock.calls[0]?.[1]?.body));
+    expect(sent.model).toBe("fixture-model");
+    expect(sent.tools[0].function.parameters).toEqual({ type: "object" });
+  });
+
+  it("maps bounded SSE usage and leaves omitted categories unknown", async () => {
+    const f = fixture({
+      fetch: vi.fn(
+        async () =>
+          new Response(
+            'data: {"model":"fixture-model","choices":[]}\n\ndata: {"usage":{"prompt_tokens":12,"completion_tokens":3}}\n\ndata: [DONE]\n\n',
+            { headers: { "content-type": "text/event-stream" } },
+          ),
+      ),
+    });
+    await f.broker.open(f.request({ body: { ...f.body, stream: true } }));
+    expect(f.records.at(-1)?.request?.categories).toMatchObject({
+      logicalInput: 12,
+      output: 3,
+      cacheReadInput: null,
+      reasoning: null,
+    });
+    expect(f.records.at(-1)?.request?.collection?.outcome).toBe("success");
+  });
+
+  it("retains numeric usage when the provider reports the wrong model", async () => {
+    const f = fixture({
+      fetch: vi.fn(async () =>
+        json({
+          model: "other",
+          usage: { prompt_tokens: 9, completion_tokens: 2 },
+        }),
+      ),
+    });
+    await expect(f.broker.open(f.request())).rejects.toThrow("Provider request failed");
+    expect(f.records.at(-1)?.request).toMatchObject({
+      categories: { logicalInput: 9, output: 2 },
+      collection: { outcome: "failed" },
+    });
+  });
+
+  it("keeps absent usage unknown on a successful response", async () => {
+    const f = fixture({ fetch: vi.fn(async () => json({ model: "fixture-model" })) });
+    await f.broker.open(f.request());
+    expect(f.records.at(-1)?.request).toMatchObject({
+      categories: { logicalInput: null, output: null },
+      collection: { outcome: "success", availability: "unavailable" },
+    });
+  });
+
+  it.each([
+    [
+      "foreign tool",
+      (f: ReturnType<typeof fixture>) => ({
+        ...f.body,
+        tools: [{ type: "function", function: { name: "terminal" } }],
+      }),
+    ],
+    [
+      "native child",
+      (f: ReturnType<typeof fixture>) => ({
+        ...f.body,
+        tools: [{ type: "function", function: { name: "delegate_task" } }],
+      }),
+    ],
+    ["model", (f: ReturnType<typeof fixture>) => ({ ...f.body, model: "other" })],
+    ["effort", (f: ReturnType<typeof fixture>) => ({ ...f.body, reasoning_effort: "low" })],
+    ["extension", (f: ReturnType<typeof fixture>) => ({ ...f.body, provider_options: {} })],
+    [
+      "tool choice",
+      (f: ReturnType<typeof fixture>) => ({
+        ...f.body,
+        tool_choice: { type: "function", function: { name: "terminal" } },
+      }),
+    ],
+  ] as const)("rejects %s before persistence or provider I/O", async (_, change) => {
+    const f = fixture();
+    await expect(f.broker.open(f.request({ body: change(f) }))).rejects.toThrow();
+    expect(f.fetch).not.toHaveBeenCalled();
+    expect(f.records).toHaveLength(0);
+  });
+
+  it("rejects scope, route, bearer and cancellation before forwarding", async () => {
+    const f = fixture();
+    for (const override of [
+      { path: "/v1/responses" },
+      { scope: { ...f.options.scope, leaseFence: 4 } },
+      { grant: { ...f.broker.grant, token: "invalid" } },
+    ])
+      await expect(f.broker.open(f.request(override))).rejects.toThrow();
+    f.broker.revoke();
+    await expect(f.broker.open(f.request())).rejects.toThrow();
+    expect(f.fetch).not.toHaveBeenCalled();
+  });
+
+  it("rejects sanitized name collisions and blocked destinations", () => {
+    const f = fixture();
+    expect(
+      () =>
+        new HermesProviderBroker({
+          ...f.options,
+          tools: [
+            { name: "a-b", parameters: {} },
+            { name: "a_b", parameters: {} },
+          ],
+        }),
+    ).toThrow();
+    expect(
+      () =>
+        new HermesProviderBroker({
+          ...f.options,
+          connection: { ...f.options.connection, baseUrl: "http://169.254.169.254/v1" },
+        }),
+    ).toThrow();
+    expect(f.fetch).not.toHaveBeenCalled();
+  });
+
+  it("does not forward when started-receipt persistence fails", async () => {
+    const f = fixture({
+      record: async () => {
+        throw new Error("ledger unavailable");
+      },
+    });
+    await expect(f.broker.open(f.request())).rejects.toThrow("could not be admitted");
+    expect(f.fetch).not.toHaveBeenCalled();
+  });
+
+  it("counts admitted attempts across a fresh grant and retains unknown reservations", async () => {
+    const started: AgentUsage[] = [];
+    const record = async (usage: AgentUsage) => {
+      if (
+        usage.request?.collection?.outcome === "started" &&
+        usage.request.counter.sequence === 0
+      ) {
+        const admission = usage.request.admission!;
+        if (
+          started.length >= admission.maxRequests ||
+          started.reduce((sum, row) => sum + row.request!.admission!.reservedTokens, 0) +
+            admission.reservedTokens >
+            admission.maxReservedTokens
+        )
+          throw new Error("exhausted");
+        started.push(usage);
+      }
+    };
+    const first = fixture({ maxRequests: 1, maxReservedTokens: 100, record });
+    await first.broker.open(first.request());
+    const restarted = fixture({ maxRequests: 1, maxReservedTokens: 100, record });
+    await expect(restarted.broker.open(restarted.request())).rejects.toThrow(
+      "could not be admitted",
+    );
+    expect(restarted.fetch).not.toHaveBeenCalled();
+    expect(started).toHaveLength(1);
+  });
+
+  it("records cancellation after a forwarded request", async () => {
+    const pendingFetch = vi.fn<typeof globalThis.fetch>(
+      (_input, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener("abort", () => reject(new Error("aborted")), {
+            once: true,
+          });
+        }),
+    );
+    const f = fixture({ fetch: pendingFetch });
+    const pending = f.broker.open(f.request());
+    await vi.waitFor(() => expect(pendingFetch).toHaveBeenCalledOnce());
+    f.broker.revoke();
+    await expect(pending).rejects.toThrow("Provider request failed");
+    expect(f.records.at(-1)?.request?.collection?.outcome).toBe("cancelled");
+  });
+});

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import type { AgentUsage } from "@ardurbot/adapter-kit";
 import type { PrismaClient, ThreadEvents, UsageRecord } from "@ardurbot/db";
 import {
@@ -23,6 +24,11 @@ type UsageRun = {
 type UsageDependencies = {
   prisma: PrismaClient;
   events: Pick<ThreadEvents, "append"> & Partial<Pick<ThreadEvents, "notify">>;
+};
+export type BrokerRunFence = {
+  leaseOwner: string;
+  leaseFence: number;
+  runtimePin: unknown;
 };
 
 /** Only newly persisted primary-call measurements belong in the run's context metrics. */
@@ -94,6 +100,17 @@ export async function recordRunUsage(
     : { inputTokens: usage.inputTokens, cachedTokens: usage.cachedTokens ?? null };
 }
 
+/** The broker uses this sink for started receipts and every later observation. */
+export function recordBrokerRunUsage(
+  deps: UsageDependencies,
+  run: UsageRun,
+  usage: AgentUsage,
+  fence: BrokerRunFence,
+): Promise<RecordedContextUsage | null> {
+  if (!usage.request?.admission) throw new Error("Broker usage requires admission metadata");
+  return recordRequestUsage(deps, run, usage, fence);
+}
+
 const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(value)).digest("hex");
 
 function storedTotals(row: UsageRecord) {
@@ -111,7 +128,12 @@ function storedTotals(row: UsageRecord) {
   };
 }
 
-async function recordRequestUsage(deps: UsageDependencies, run: UsageRun, usage: AgentUsage) {
+async function recordRequestUsage(
+  deps: UsageDependencies,
+  run: UsageRun,
+  usage: AgentUsage,
+  brokerFence?: BrokerRunFence,
+) {
   const request = parseRequestUsage(usage.request);
   const supplied = usageTokenTotals(request.categories, request.reasoningSemantics);
   if (supplied.inputTokens !== usage.inputTokens || supplied.outputTokens !== usage.outputTokens)
@@ -196,11 +218,99 @@ async function recordRequestUsage(deps: UsageDependencies, run: UsageRun, usage:
             existing.reasoningSemantics !== request.reasoningSemantics
           )
             throw new Error("Usage request attribution changed within an attempt");
+          const first = await tx.requestUsageObservation.findUnique({
+            where: { usageRecordId_sequence: { usageRecordId: existing.id, sequence: 0 } },
+            select: { observation: true },
+          });
+          if (
+            !isDeepStrictEqual(
+              (first?.observation as { admission?: unknown } | null)?.admission,
+              request.admission,
+            )
+          )
+            throw new Error("Broker admission changed within an attempt");
           if (
             request.counter.mode === "cumulative" &&
             request.counter.sequence <= existing.lastSequence!
           )
             throw new Error("Out-of-order cumulative usage observation");
+        }
+        if (request.admission && !existing) {
+          if (
+            !brokerFence ||
+            request.counter.sequence !== 0 ||
+            request.collection?.outcome !== "started" ||
+            currentRun.status !== "running" ||
+            currentRun.leaseOwner !== brokerFence.leaseOwner ||
+            currentRun.leaseFence !== brokerFence.leaseFence ||
+            !isDeepStrictEqual(currentRun.runtimePin, brokerFence.runtimePin)
+          )
+            throw new Error("Broker run admission is stale");
+          const admitted = await tx.usageRecord.findMany({
+            where: { rootTaskId, observations: { some: { sequence: 0 } } },
+            select: {
+              runId: true,
+              delegationId: true,
+              inputTokens: true,
+              outputTokens: true,
+              observations: { where: { sequence: 0 }, select: { observation: true } },
+            },
+          });
+          const reservations = admitted
+            .flatMap((row) =>
+              row.observations.map((item) => ({
+                runId: row.runId,
+                delegationId: row.delegationId,
+                measured: row.inputTokens + row.outputTokens,
+                admission: parseRequestUsage(item.observation).admission,
+              })),
+            )
+            .filter((row) => row.admission?.kind === "worker-provider-broker");
+          const runReservations = reservations.filter((row) => row.runId === run.id);
+          const consumed = runReservations.reduce(
+            (sum, row) => sum + row.admission!.reservedTokens,
+            0,
+          );
+          if (
+            runReservations.some(
+              (row) =>
+                row.admission!.maxRequests !== request.admission!.maxRequests ||
+                row.admission!.maxReservedTokens !== request.admission!.maxReservedTokens,
+            ) ||
+            runReservations.length >= request.admission.maxRequests ||
+            consumed + request.admission.reservedTokens > request.admission.maxReservedTokens
+          )
+            throw new Error("Broker request allowance exhausted");
+          const outstanding = reservations.reduce(
+            (sum, row) => sum + Math.max(0, row.admission!.reservedTokens - row.measured),
+            0,
+          );
+          const rootBudget = await tx.delegationRoot.findUnique({ where: { rootTaskId } });
+          if (
+            rootBudget &&
+            (rootBudget.cancelRequestedAt ||
+              rootBudget.deadlineAt <= new Date() ||
+              rootBudget.usedTokens +
+                rootBudget.reservedTokens +
+                outstanding +
+                request.admission.reservedTokens >
+                rootBudget.tokenLimit)
+          )
+            throw new Error("Broker root task allowance exhausted");
+          if (
+            delegation &&
+            (!["queued", "running"].includes(delegation.status) ||
+              delegation.usedTokens +
+                reservations
+                  .filter((row) => row.delegationId === delegation.id)
+                  .reduce(
+                    (sum, row) => sum + Math.max(0, row.admission!.reservedTokens - row.measured),
+                    0,
+                  ) +
+                request.admission.reservedTokens >
+                delegation.reservedTokens)
+          )
+            throw new Error("Broker delegation allowance exhausted");
         }
         const totals = accumulateRequestUsage(existing ? storedTotals(existing) : null, request);
         const tokens = usageTokenTotals(totals.categories, request.reasoningSemantics);

@@ -1,0 +1,568 @@
+import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
+import type { AgentUsage, UsagePurpose } from "@ardurbot/adapter-kit";
+import { RequestUsageCollector } from "@ardurbot/adapter-kit";
+import { chatCompletionsUsage } from "./openai-chat-usage.js";
+import {
+  assertAllowedOpenAiCompatibleUrl,
+  assertHttpsForKeyedOpenAiCompatibleUrl,
+} from "./openai-compatible-url.js";
+import { createOpenAiCompatibleFetch } from "./pi-openai-compatible-provider.js";
+
+const MAX_REQUEST_BYTES = 256 * 1024;
+const MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
+const MAX_EVENT_BYTES = 512 * 1024;
+const MAX_TOKEN = 2_147_483_647;
+
+type JsonObject = Record<string, unknown>;
+const object = (value: unknown): JsonObject | null =>
+  value !== null && typeof value === "object" && !Array.isArray(value)
+    ? (value as JsonObject)
+    : null;
+const keys = (value: JsonObject, allowed: readonly string[]) =>
+  Object.keys(value).every((key) => allowed.includes(key));
+const bounded = (value: unknown, max: number): value is number =>
+  typeof value === "number" && Number.isSafeInteger(value) && value > 0 && value <= max;
+const denied = (): never => {
+  throw new Error("Provider request is outside this run's grant.");
+};
+
+export type BrokerScope = {
+  runId: string;
+  botId: string;
+  userId: string;
+  spaceId: string;
+  operationId: string;
+  leaseOwner: string;
+  leaseFence: number;
+  hostGeneration: number;
+  configurationHash: string;
+  pin: { credentialId: string; provider: string; modelId: string; effort: string };
+};
+
+export type BrokerConnection = {
+  credentialId: string;
+  provider: string;
+  modelId: string;
+  baseUrl: string;
+  apiKey?: string;
+  route: "openai-completions";
+  contextWindow: number;
+  maxOutputTokens: number;
+  acceptsImages: boolean;
+  supportsDeveloperRole: boolean;
+  effort: {
+    field: "reasoning_effort" | "none";
+    supported: readonly string[];
+  };
+  reportedModel: "required" | "if-present";
+};
+
+export type BrokerTool = {
+  name: string;
+  description?: string;
+  parameters: JsonObject;
+};
+
+export type BrokerGrant = {
+  id: string;
+  token: string;
+  expiresAt: number;
+};
+
+export type BrokerRequest = {
+  grant: BrokerGrant;
+  scope: BrokerScope;
+  path: string;
+  body: unknown;
+  signal?: AbortSignal;
+};
+
+export type BrokerOptions = {
+  scope: BrokerScope;
+  connection: BrokerConnection;
+  credentialId: string;
+  pinnedEffort: string;
+  tools: readonly BrokerTool[];
+  purpose?: UsagePurpose;
+  maxRequests: number;
+  maxReservedTokens: number;
+  expiresAt: number;
+  /** Rechecks cancellation, lease and connection revocation before each invocation. */
+  active: () => Promise<boolean>;
+  /** A started observation must commit before the provider transport is called. */
+  record: (usage: AgentUsage) => Promise<void>;
+  fetch?: typeof globalThis.fetch;
+};
+
+/** Hermes's pinned MCP wire-name transformation. Collisions are fatal. */
+export function hermesToolName(name: string): string {
+  return `mcp__ardur__${name}`.replace(/[^A-Za-z0-9_]/g, "_");
+}
+
+function catalog(tools: readonly BrokerTool[]): Map<string, JsonObject> {
+  const result = new Map<string, JsonObject>();
+  for (const tool of tools) {
+    if (!tool.name || tool.name === "run_subagent") denied();
+    const name = hermesToolName(tool.name);
+    if (result.has(name) || !object(tool.parameters)) denied();
+    result.set(name, {
+      type: "function",
+      function: {
+        name,
+        ...(tool.description ? { description: tool.description } : {}),
+        parameters: tool.parameters,
+      },
+    });
+  }
+  return result;
+}
+
+function validContent(content: unknown, images: boolean): boolean {
+  if (typeof content === "string") return true;
+  if (!Array.isArray(content) || content.length > 64) return false;
+  return content.every((part) => {
+    const value = object(part);
+    if (!value) return false;
+    if (value.type === "text")
+      return keys(value, ["type", "text"]) && typeof value.text === "string";
+    if (value.type !== "image_url" || !images || !keys(value, ["type", "image_url"])) return false;
+    const image = object(value.image_url);
+    return Boolean(
+      image &&
+        keys(image, ["url", "detail"]) &&
+        typeof image.url === "string" &&
+        /^data:image\/(png|jpeg|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(image.url) &&
+        (image.detail === undefined || ["auto", "low", "high"].includes(String(image.detail))),
+    );
+  });
+}
+
+function validMessage(
+  value: unknown,
+  images: boolean,
+  developer: boolean,
+  allowed: ReadonlyMap<string, JsonObject>,
+): boolean {
+  const message = object(value);
+  if (
+    !message ||
+    !["system", "developer", "user", "assistant", "tool"].includes(String(message.role))
+  )
+    return false;
+  if (message.role === "developer" && !developer) return false;
+  if (!keys(message, ["role", "content", "name", "tool_call_id", "tool_calls", "refusal"]))
+    return false;
+  if (
+    !validContent(message.content, images) &&
+    !(message.role === "assistant" && message.content === null && Array.isArray(message.tool_calls))
+  )
+    return false;
+  if (message.name !== undefined && typeof message.name !== "string") return false;
+  if (message.tool_call_id !== undefined && typeof message.tool_call_id !== "string") return false;
+  if (message.refusal !== undefined && typeof message.refusal !== "string") return false;
+  if (message.tool_calls !== undefined) {
+    if (message.role !== "assistant" || !Array.isArray(message.tool_calls)) return false;
+    for (const call of message.tool_calls) {
+      const entry = object(call);
+      const fn = object(entry?.function);
+      if (
+        !entry ||
+        !fn ||
+        !keys(entry, ["id", "type", "function"]) ||
+        entry.type !== "function" ||
+        typeof entry.id !== "string" ||
+        !keys(fn, ["name", "arguments"]) ||
+        typeof fn.name !== "string" ||
+        !allowed.has(fn.name) ||
+        typeof fn.arguments !== "string"
+      )
+        return false;
+    }
+  }
+  return true;
+}
+
+function admittedBody(
+  input: unknown,
+  connection: BrokerConnection,
+  pinnedEffort: string,
+  allowed: ReadonlyMap<string, JsonObject>,
+): JsonObject {
+  const body = object(input);
+  if (!body) return denied();
+  if (
+    !keys(body, [
+      "model",
+      "messages",
+      "tools",
+      "tool_choice",
+      "stream",
+      "stream_options",
+      "max_tokens",
+      "reasoning_effort",
+      "temperature",
+      "top_p",
+      "stop",
+      "parallel_tool_calls",
+    ])
+  )
+    denied();
+  if (
+    body.model !== connection.modelId ||
+    !Array.isArray(body.messages) ||
+    body.messages.length === 0 ||
+    body.messages.length > 256 ||
+    !body.messages.every((message) =>
+      validMessage(message, connection.acceptsImages, connection.supportsDeveloperRole, allowed),
+    )
+  )
+    denied();
+  if (body.stream !== undefined && typeof body.stream !== "boolean") denied();
+  if (body.stream_options !== undefined) {
+    const options = object(body.stream_options);
+    if (
+      !body.stream ||
+      !options ||
+      !keys(options, ["include_usage"]) ||
+      options.include_usage !== true
+    )
+      denied();
+  }
+  if (body.parallel_tool_calls !== undefined && body.parallel_tool_calls !== false) denied();
+  if (
+    body.temperature !== undefined &&
+    (typeof body.temperature !== "number" ||
+      !Number.isFinite(body.temperature) ||
+      body.temperature < 0 ||
+      body.temperature > 2)
+  )
+    denied();
+  if (
+    body.top_p !== undefined &&
+    (typeof body.top_p !== "number" ||
+      !Number.isFinite(body.top_p) ||
+      body.top_p < 0 ||
+      body.top_p > 1)
+  )
+    denied();
+  if (
+    body.stop !== undefined &&
+    !(
+      typeof body.stop === "string" ||
+      (Array.isArray(body.stop) &&
+        body.stop.length <= 4 &&
+        body.stop.every((item) => typeof item === "string"))
+    )
+  )
+    denied();
+  if (body.max_tokens !== undefined && !bounded(body.max_tokens, connection.maxOutputTokens))
+    denied();
+  if (body.tools !== undefined) {
+    if (!Array.isArray(body.tools) || body.tools.length > allowed.size) return denied();
+    const seen = new Set<string>();
+    for (const item of body.tools) {
+      const tool = object(item);
+      const fn = object(tool?.function);
+      if (
+        !tool ||
+        !fn ||
+        !keys(tool, ["type", "function"]) ||
+        tool.type !== "function" ||
+        !keys(fn, ["name", "description", "parameters", "strict"]) ||
+        typeof fn.name !== "string" ||
+        !allowed.has(fn.name) ||
+        seen.has(fn.name)
+      )
+        denied();
+      seen.add(String(fn?.name));
+    }
+  }
+  const choice = body.tool_choice;
+  if (choice !== undefined && !["auto", "none", "required"].includes(String(choice))) {
+    const value = object(choice);
+    const fn = object(value?.function);
+    if (
+      !value ||
+      !fn ||
+      !keys(value, ["type", "function"]) ||
+      value.type !== "function" ||
+      !keys(fn, ["name"]) ||
+      typeof fn.name !== "string" ||
+      !allowed.has(fn.name)
+    )
+      denied();
+  }
+  if (choice === "required" && (!Array.isArray(body.tools) || body.tools.length === 0)) denied();
+  if (!connection.effort.supported.includes(pinnedEffort)) return denied();
+  const wireEffort = pinnedEffort === "off" ? "none" : pinnedEffort;
+  if (connection.effort.field === "none") {
+    if (pinnedEffort !== "off" || body.reasoning_effort !== undefined) denied();
+  } else if (body.reasoning_effort !== undefined && body.reasoning_effort !== wireEffort) denied();
+  const selected = Array.isArray(body.tools)
+    ? body.tools.map((item) => allowed.get(String(object(object(item)?.function)?.name)))
+    : undefined;
+  if (object(choice)?.function) {
+    const selectedName = object(object(choice)?.function)?.name;
+    if (
+      !Array.isArray(body.tools) ||
+      !body.tools.some((item) => object(object(item)?.function)?.name === selectedName)
+    )
+      denied();
+  }
+  return {
+    ...body,
+    tools: selected,
+    max_tokens: body.max_tokens ?? connection.maxOutputTokens,
+    ...(body.stream ? { stream_options: { include_usage: true } } : {}),
+    ...(connection.effort.field === "reasoning_effort" ? { reasoning_effort: wireEffort } : {}),
+  };
+}
+
+/** Dormant worker-only broker. The host relay is composed in a later stream. */
+export class HermesProviderBroker {
+  readonly grant: BrokerGrant;
+  private readonly options: BrokerOptions;
+  private readonly allowed: Map<string, JsonObject>;
+  private readonly transport: typeof globalThis.fetch;
+  private revoked = false;
+  private busy = false;
+  private controller: AbortController | null = null;
+
+  constructor(options: BrokerOptions) {
+    this.options = {
+      ...options,
+      scope: structuredClone(options.scope),
+      connection: {
+        ...options.connection,
+        effort: {
+          ...options.connection.effort,
+          supported: [...options.connection.effort.supported],
+        },
+      },
+      tools: options.tools.map((tool) => ({
+        ...tool,
+        parameters: structuredClone(tool.parameters),
+      })),
+    };
+    const { connection } = this.options;
+    if (
+      connection.route !== "openai-completions" ||
+      connection.credentialId !== options.credentialId ||
+      options.scope.pin.credentialId !== connection.credentialId ||
+      options.scope.pin.provider !== connection.provider ||
+      options.scope.pin.modelId !== connection.modelId ||
+      options.scope.pin.effort !== options.pinnedEffort ||
+      !bounded(connection.contextWindow, MAX_TOKEN) ||
+      !bounded(connection.maxOutputTokens, MAX_TOKEN) ||
+      !bounded(options.maxRequests, 64) ||
+      !bounded(options.maxReservedTokens, MAX_TOKEN) ||
+      !Number.isSafeInteger(options.scope.leaseFence) ||
+      !Number.isSafeInteger(options.scope.hostGeneration) ||
+      !Number.isFinite(options.expiresAt) ||
+      options.expiresAt <= Date.now() ||
+      options.expiresAt > Date.now() + 600_000
+    )
+      denied();
+    const url = assertAllowedOpenAiCompatibleUrl(connection.baseUrl);
+    assertHttpsForKeyedOpenAiCompatibleUrl(url, connection.apiKey);
+    this.allowed = catalog(this.options.tools);
+    this.transport = createOpenAiCompatibleFetch(options.fetch);
+    this.grant = Object.freeze({
+      id: randomUUID(),
+      token: randomBytes(32).toString("base64url"),
+      expiresAt: options.expiresAt,
+    });
+  }
+
+  revoke() {
+    this.revoked = true;
+    this.controller?.abort();
+  }
+
+  private checkGrant(request: BrokerRequest) {
+    const actual = Buffer.from(request.grant.token);
+    const expected = Buffer.from(this.grant.token);
+    if (
+      this.revoked ||
+      Date.now() >= this.grant.expiresAt ||
+      this.busy ||
+      request.grant.id !== this.grant.id ||
+      actual.length !== expected.length ||
+      !timingSafeEqual(actual, expected) ||
+      !isDeepStrictEqual(request.scope, this.options.scope) ||
+      request.path !== "/v1/chat/completions"
+    )
+      denied();
+  }
+
+  async open(request: BrokerRequest): Promise<Response> {
+    this.checkGrant(request);
+    const { connection } = this.options;
+    const body = admittedBody(request.body, connection, this.options.pinnedEffort, this.allowed);
+    const encoded = JSON.stringify(body);
+    if (Buffer.byteLength(encoded) > MAX_REQUEST_BYTES) denied();
+    if (!(await this.options.active())) denied();
+    const reservedTokens = connection.contextWindow + connection.maxOutputTokens;
+    if (!bounded(reservedTokens, MAX_TOKEN)) denied();
+    const collector = new RequestUsageCollector({
+      provider: connection.provider,
+      model: connection.modelId,
+      requestId: randomUUID(),
+      attemptId: "0",
+      purpose: this.options.purpose ?? "unknown",
+      mappingVersion: "broker-chat-completions-v1",
+      inputSemantics: "total-with-cache-subsets",
+      admission: {
+        kind: "worker-provider-broker",
+        reservedTokens,
+        maxRequests: this.options.maxRequests,
+        maxReservedTokens: this.options.maxReservedTokens,
+      },
+    });
+    this.busy = true;
+    const controller = new AbortController();
+    this.controller = controller;
+    const abort = () => controller.abort();
+    request.signal?.addEventListener("abort", abort, { once: true });
+    if (request.signal?.aborted) controller.abort();
+    const expiry = setTimeout(abort, Math.max(0, this.grant.expiresAt - Date.now()));
+    let finished = false;
+    const finish = async (
+      outcome: "success" | "failed" | "cancelled" | "timed-out" | "unknown",
+    ) => {
+      if (finished) return;
+      finished = true;
+      try {
+        await this.options.record(collector.finish(outcome));
+      } finally {
+        clearTimeout(expiry);
+        this.busy = false;
+        this.controller = null;
+        request.signal?.removeEventListener("abort", abort);
+      }
+    };
+    try {
+      await this.options.record(collector.start());
+    } catch {
+      this.busy = false;
+      this.controller = null;
+      clearTimeout(expiry);
+      request.signal?.removeEventListener("abort", abort);
+      throw new Error("Provider request could not be admitted.");
+    }
+    try {
+      if (
+        !(await this.options.active()) ||
+        controller.signal.aborted ||
+        Date.now() >= this.grant.expiresAt
+      ) {
+        await finish("cancelled");
+        throw new Error("Provider request is no longer active.");
+      }
+      const url = `${assertAllowedOpenAiCompatibleUrl(connection.baseUrl).toString().replace(/\/$/, "")}/chat/completions`;
+      const response = await this.transport(url, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(connection.apiKey ? { authorization: `Bearer ${connection.apiKey}` } : {}),
+        },
+        body: encoded,
+        signal: controller.signal,
+      });
+      const mime = response.headers.get("content-type") ?? "";
+      if (!mime.includes("application/json") && !mime.includes("text/event-stream")) {
+        await finish("failed");
+        throw new Error("Provider response format is unsupported.");
+      }
+      if (response.ok && Boolean(body.stream) !== mime.includes("text/event-stream")) {
+        await finish("failed");
+        throw new Error("Provider stream format did not match the request.");
+      }
+      const chunks: Uint8Array[] = [];
+      let size = 0;
+      const reader = response.body?.getReader();
+      if (reader) {
+        while (true) {
+          const next = await reader.read();
+          if (next.done) break;
+          size += next.value.byteLength;
+          if (size > MAX_RESPONSE_BYTES) {
+            await reader.cancel();
+            throw new Error("Provider response exceeded the broker limit.");
+          }
+          chunks.push(next.value);
+        }
+      }
+      const bytes = new Uint8Array(size);
+      let offset = 0;
+      for (const chunk of chunks) {
+        bytes.set(chunk, offset);
+        offset += chunk.byteLength;
+      }
+      let observedModel = false;
+      const capture = async (payload: unknown) => {
+        const value = object(payload);
+        if (!value) return;
+        const counts = chatCompletionsUsage(payload);
+        if (counts) await this.options.record(collector.snapshot(counts));
+        if (value.model !== undefined && value.model !== connection.modelId) {
+          await finish("failed");
+          throw new Error("Provider reported a different model.");
+        }
+        if (value.model === connection.modelId) observedModel = true;
+      };
+      if (mime.includes("text/event-stream")) {
+        for (const line of new TextDecoder().decode(bytes).split(/\r?\n/)) {
+          if (line.length > MAX_EVENT_BYTES) {
+            await finish("failed");
+            throw new Error("Provider event exceeded the broker limit.");
+          }
+          if (!line.startsWith("data:")) continue;
+          const data = line.slice(5).trim();
+          if (!data || data === "[DONE]") continue;
+          try {
+            await capture(JSON.parse(data));
+          } catch (error) {
+            if (error instanceof SyntaxError) continue;
+            throw error;
+          }
+        }
+      } else {
+        try {
+          await capture(JSON.parse(new TextDecoder().decode(bytes)));
+        } catch (error) {
+          if (!(error instanceof SyntaxError)) throw error;
+          await finish("failed");
+          throw new Error("Provider returned invalid JSON.");
+        }
+      }
+      if (connection.reportedModel === "required" && !observedModel) {
+        await finish("failed");
+        throw new Error("Provider model identity is unavailable.");
+      }
+      if (controller.signal.aborted || this.revoked || Date.now() >= this.grant.expiresAt) {
+        await finish(Date.now() >= this.grant.expiresAt ? "timed-out" : "cancelled");
+        throw new Error("Provider request was cancelled.");
+      }
+      await finish(response.ok ? "success" : "failed");
+      return new Response(response.ok ? bytes : "Provider request failed.", {
+        status: response.status,
+        headers: { "content-type": response.ok ? mime : "text/plain" },
+      });
+    } catch {
+      try {
+        await finish(
+          controller.signal.aborted
+            ? Date.now() >= this.grant.expiresAt
+              ? "timed-out"
+              : "cancelled"
+            : "failed",
+        );
+      } catch {
+        // The started reservation remains durable when a terminal write fails.
+      }
+      throw new Error("Provider request failed.");
+    }
+  }
+}
