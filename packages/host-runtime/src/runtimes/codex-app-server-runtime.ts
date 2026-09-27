@@ -132,35 +132,60 @@ export function codexArguments() {
     "features.view_image=false",
   ];
 }
+/** Codex's instruction-discovery settings, as returned by config/read. */
+export type InstructionDiscovery = { rootMarkers?: unknown; fallbackFilenames?: unknown };
+const DEFAULT_ROOT_MARKERS = [".git"];
+const INSTRUCTION_FILENAMES = ["AGENTS.md", "AGENTS.override.md"];
+function plainNames(value: unknown, fallback: string[]): string[] {
+  const names = Array.isArray(value)
+    ? value.filter(
+        (entry): entry is string =>
+          typeof entry === "string" && entry.length > 0 && !/[/\\\0]/.test(entry),
+      )
+    : [];
+  return names.length ? names : fallback;
+}
+
 /**
- * Instruction files Codex loads for a folder: AGENTS.md (and its override) from the folder's git
- * root down to the folder itself, or only the folder's own when no git root is found. The
- * read profile confines the run to its folder, so these files are granted explicitly; otherwise
- * Codex refuses to create the session when an ancestor holds an AGENTS.md it cannot read.
+ * Instruction files Codex loads for a folder: AGENTS.md, its override and any configured
+ * fallback names, from the folder's project root (the nearest ancestor holding a configured root
+ * marker) down to the folder itself, or only the folder's own when no root is found. The read
+ * profile confines the run to its folder, so these files are granted explicitly; otherwise
+ * Codex refuses to create the session when an ancestor holds instructions it cannot read.
  */
-export async function instructionFileReads(cwd: string): Promise<Record<string, "read">> {
+export async function instructionFileReads(
+  cwd: string,
+  discovery: InstructionDiscovery = {},
+): Promise<Record<string, "read">> {
+  const markers = plainNames(discovery.rootMarkers, DEFAULT_ROOT_MARKERS);
+  const filenames = [
+    ...new Set([...INSTRUCTION_FILENAMES, ...plainNames(discovery.fallbackFilenames, [])]),
+  ];
   const chain: string[] = [];
   let directory = path.resolve(cwd);
-  let gitRoot: string | undefined;
-  for (let depth = 0; depth < 64 && !gitRoot; depth++) {
+  let root: string | undefined;
+  for (let depth = 0; depth < 64 && !root; depth++) {
     chain.push(directory);
-    if (
-      await access(path.join(directory, ".git")).then(
-        () => true,
-        () => false,
-      )
-    )
-      gitRoot = directory;
+    for (const marker of markers) {
+      if (
+        await access(path.join(directory, marker)).then(
+          () => true,
+          () => false,
+        )
+      ) {
+        root = directory;
+        break;
+      }
+    }
     const parent = path.dirname(directory);
     if (parent === directory) break;
     directory = parent;
   }
-  const directories = gitRoot ? chain : chain.slice(0, 1);
+  const directories = root ? chain : chain.slice(0, 1);
   return Object.fromEntries(
-    directories.flatMap((entry) => [
-      [path.join(entry, "AGENTS.md"), "read" as const],
-      [path.join(entry, "AGENTS.override.md"), "read" as const],
-    ]),
+    directories.flatMap((entry) =>
+      filenames.map((name) => [path.join(entry, name), "read" as const]),
+    ),
   );
 }
 
@@ -369,6 +394,8 @@ export class CodexAppServerRuntime implements AgentRuntime {
         config: {
           mcp_servers?: Record<string, unknown>;
           permissions?: Record<string, unknown>;
+          project_root_markers?: unknown;
+          project_doc_fallback_filenames?: unknown;
         };
       }>("config/read", { includeLayers: false, cwd: request.nativeCwd });
       if (Object.hasOwn(config.mcp_servers ?? {}, "ardur"))
@@ -445,7 +472,10 @@ export class CodexAppServerRuntime implements AgentRuntime {
                 ...(request.nativeCwd
                   ? {
                       [request.nativeCwd]: "read",
-                      ...(await instructionFileReads(request.nativeCwd)),
+                      ...(await instructionFileReads(request.nativeCwd, {
+                        rootMarkers: config.project_root_markers,
+                        fallbackFilenames: config.project_doc_fallback_filenames,
+                      })),
                     }
                   : {}),
               },

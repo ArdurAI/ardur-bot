@@ -34,3 +34,22 @@ it("grants only the folder's own instruction files when there is no git root", a
     [path.join(folder, "AGENTS.md"), path.join(folder, "AGENTS.override.md")].sort(),
   );
 });
+
+it("honours configured root markers and fallback instruction names", async () => {
+  root = await mkdtemp(path.join(tmpdir(), "codex-reads-"));
+  const project = path.join(root, "project");
+  const folder = path.join(project, "services", "api");
+  await mkdir(path.join(project, ".hg"), { recursive: true });
+  await mkdir(folder, { recursive: true });
+  const reads = await instructionFileReads(folder, {
+    rootMarkers: [".hg"],
+    fallbackFilenames: ["TEAM_GUIDE.md", "../escape.md", 7],
+  });
+  const expected = [project, path.join(project, "services"), folder].flatMap((dir) => [
+    path.join(dir, "AGENTS.md"),
+    path.join(dir, "AGENTS.override.md"),
+    path.join(dir, "TEAM_GUIDE.md"),
+  ]);
+  expect(Object.keys(reads).sort()).toEqual(expected.sort());
+  expect(Object.keys(reads).some((key) => key.includes("escape"))).toBe(false);
+});
