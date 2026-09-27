@@ -3978,6 +3978,7 @@ export function ShellPage({
             onModelEffort={
               contextBot
                 ? () => {
+                    botMenuAnchor.current = null;
                     navigate(`/app/${contextBot.id}`);
                     openBotModelSettings();
                     setBotMenu(null);

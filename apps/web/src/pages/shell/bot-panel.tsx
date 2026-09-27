@@ -247,8 +247,28 @@ export function BotSettings({
   }, [runtimeFocusRequest]);
   useEffect(() => {
     if (!modelFocusRequest) return;
-    modelRef.current?.focus();
-    modelRef.current?.scrollIntoView({ block: "nearest" });
+    const focusTarget = () => {
+      const select =
+        modelRef.current ??
+        document.querySelector<HTMLSelectElement>(
+          '[data-testid="bot-settings"] select[id$="-model"]',
+        );
+      if (select) {
+        select.focus();
+        select.scrollIntoView({ block: "nearest" });
+      }
+    };
+    focusTarget();
+    const frame = requestAnimationFrame(focusTarget);
+    const timer1 = setTimeout(focusTarget, 50);
+    const timer2 = setTimeout(focusTarget, 150);
+    const timer3 = setTimeout(focusTarget, 300);
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+      clearTimeout(timer3);
+    };
   }, [modelFocusRequest]);
   const ids = useId();
   const [name, setName] = useState(bot.name);

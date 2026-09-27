@@ -242,6 +242,7 @@ test("a pin failure opens its provider settings and the bot model control", asyn
   );
   const failedRun = (thread: { botId?: string; threadId: string }) => {
     const pin = {
+      runtimeKind: "pi" as const,
       provider: "xai",
       modelId: "grok-4.6",
       effort: "high",
@@ -369,8 +370,6 @@ test("native runtime settings show unavailable sign-in without replacing the pin
       exact: true,
     }),
   ).toBeVisible();
-  await expect(
-    settings.getByRole("switch", { name: "Experimental", exact: true }),
-  ).not.toBeChecked();
+  await expect(settings.getByRole("switch", { name: /Experimental/ })).not.toBeChecked();
   await captureScreenshot(page, testInfo, "native-runtime-sign-in");
 });

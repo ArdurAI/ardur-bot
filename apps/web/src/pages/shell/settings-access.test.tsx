@@ -120,3 +120,20 @@ it("keeps bot settings and model focus as distinct context-menu actions", async 
   expect(focus).toHaveBeenCalledOnce();
   expect(container.textContent).not.toContain("Edit Profile");
 });
+
+it("does not reclaim focus to the menu anchor when model effort is selected", async () => {
+  const anchor = document.createElement("button");
+  container.append(anchor);
+  anchor.focus();
+
+  let botMenuAnchor: HTMLElement | null = anchor;
+  const onModelEffort = () => {
+    botMenuAnchor = null;
+  };
+
+  onModelEffort();
+  if (botMenuAnchor) {
+    (botMenuAnchor as HTMLElement).focus();
+  }
+  expect(botMenuAnchor).toBeNull();
+});

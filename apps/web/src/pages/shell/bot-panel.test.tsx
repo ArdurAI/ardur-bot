@@ -1086,3 +1086,15 @@ it("keeps a native pin failure's real reason and offers only Change pin", async 
     "Change pin",
   ]);
 });
+
+it("focuses the model select when modelFocusRequest is set", async () => {
+  await act(async () => root.render(settings({}, 1)));
+  expect(document.activeElement).toBe(modelSelect());
+});
+
+it("focuses the model select when modelFocusRequest increments from 0", async () => {
+  await act(async () => root.render(settings({}, 0)));
+  expect(document.activeElement).not.toBe(modelSelect());
+  await act(async () => root.render(settings({}, 1)));
+  expect(document.activeElement).toBe(modelSelect());
+});
