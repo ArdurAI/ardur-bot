@@ -25,7 +25,7 @@ import {
 import type { BoundApprovalRoute } from "./approval-effect.js";
 import { boundDirectApprovalDetails, catalogApprovalDetails } from "./approval-effect.js";
 import { BACKGROUND_WORK_PROBE, cancelComputerRunWorkArgv } from "./computer-idle.js";
-import { integrationApprovalDetailsForCall } from "./integration-access.js";
+import { integrationApprovalDetailsForCall, mcpGrantForBot } from "./integration-access.js";
 
 /** A cancelled model turn is not proof that its background shell or browser stopped. */
 export async function stopRemoteComputerWork(
@@ -211,16 +211,7 @@ export async function validateDeviceApproval(
     if (!decision.allowed) throw new DeviceRequestError(decision.reason);
   }
   if (route.connectorId === "mcp") {
-    const assignment = await tx.botMcpServer.findFirst({
-      where: {
-        botId: run.botId,
-        serverId: route.resourceId,
-        spaceId: run.spaceId,
-        userId: run.userId,
-        server: { enabled: true },
-      },
-      include: { server: true },
-    });
+    const assignment = await mcpGrantForBot(tx as PrismaClient, run, route.resourceId);
     if (!assignment || route.resourceRevision !== assignment.server.revision) throw fail();
     const detail = boundDirectApprovalDetails(effect.request, REMOTE_APPROVAL_MARKER);
     const catalog = catalogApprovalDetails(effect.request, REMOTE_APPROVAL_MARKER);

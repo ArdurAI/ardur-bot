@@ -99,11 +99,13 @@ Manage shows account/workspace when the provider supplies them, scopes, captured
 tools, Allow/Ask/Block controls, bot grants, last use and health, and recent safe
 errors. Block removes the tool from the grant. Allow applies only to read tools;
 write tools and host command execution always require Ask-first. A changed tool
-schema or identity clears previous grants for review. Test preserves grants when
+schema or identity blocks the space tools for review. Test preserves grants when
 the identity and tool definitions are unchanged. `McpToolReview` uses the same Allow/Ask/Block control and saves through
 `mcp.servers.permissions`. The API shares `IntegrationConnections.assign` while
-checking whether the connection belongs to the catalog or MCP. Bot grants remain
-scoped to the chosen server; existing grants for other servers stay intact. Only
+checking whether the connection belongs to the catalog or MCP. Connected tools
+are available to every bot in the space, including future bots. A bot can be
+removed or limited to a subset. These choices stay scoped to the chosen server;
+existing choices for other servers stay intact. Only
 the space owner can change read approvals. Tool changes and permission saves
 invalidate pending approvals and stale tool routes. Managed configuration still
 belongs to Extensions or Plugins.

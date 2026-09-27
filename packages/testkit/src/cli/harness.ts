@@ -53,6 +53,8 @@ async function main() {
   const container = await new PostgreSqlContainer("postgres:16-alpine").start();
   try {
     const databaseUrl = container.getConnectionUri();
+    if (new URL(databaseUrl).port === "5433")
+      throw new Error("The reserved database port cannot be used by integration tests.");
     const apiPort = Number(process.env.API_PORT ?? 3110);
     const webPort = Number(process.env.WEB_PORT ?? 5180);
     const webOrigin = `http://127.0.0.1:${webPort}`;

@@ -79,6 +79,41 @@ for file in routines-demo.mp4 routines-demo.webm; do
     "$output_dir/$file"
 done
 
+if command -v shasum >/dev/null 2>&1; then
+  mp4_sha256=$(shasum -a 256 "$output_dir/routines-demo.mp4" | awk '{print $1}')
+else
+  mp4_sha256=$(openssl dgst -sha256 "$output_dir/routines-demo.mp4" | awk '{print $NF}')
+fi
+echo "routines-demo.mp4 sha256: $mp4_sha256"
+
+sidecar_json=$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height \
+  -show_entries format=duration -of json "$output_dir/routines-demo.mp4")
+node -e '
+  const fs = require("node:fs");
+  const raw = JSON.parse(process.argv[1]);
+  const width = raw.streams?.[0]?.width;
+  const height = raw.streams?.[0]?.height;
+  const durationSeconds = Number(raw.format?.duration);
+  const mp4Sha256 = process.argv[3];
+  if (
+    !Number.isInteger(width) ||
+    !Number.isInteger(height) ||
+    !Number.isFinite(durationSeconds) ||
+    durationSeconds <= 0
+  ) {
+    console.error("Could not parse valid video dimensions or duration.");
+    process.exit(1);
+  }
+  if (!mp4Sha256 || !/^[0-9a-f]{64}$/.test(mp4Sha256)) {
+    console.error("Could not compute valid sha256 digest.");
+    process.exit(1);
+  }
+  fs.writeFileSync(
+    process.argv[2],
+    JSON.stringify({ durationSeconds, width, height, mp4Sha256 }, null, 2) + "\n",
+  );
+' "$sidecar_json" "$output_dir/routines-demo.json" "$mp4_sha256"
+
 if [[ -z "${SITE_VIDEO_OUTPUT_DIR:-}" ]]; then
   (cd "$root" && pnpm site:facts)
 fi

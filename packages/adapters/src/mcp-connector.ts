@@ -20,7 +20,12 @@ import {
   hostIntegrationComputer,
   hostIntegrationTools,
 } from "./host-integration-tools.js";
-import { grantedMcpTools, integrationResourceDenial } from "./integration-access.js";
+import {
+  grantedMcpTools,
+  integrationResourceDenial,
+  mcpGrantForBot,
+  stringTools,
+} from "./integration-access.js";
 import { integrationIdentity, integrationIdentityCall } from "./integration-identity.js";
 import {
   integrationFailure,
@@ -180,15 +185,36 @@ export class McpConnector implements ConnectorProvider {
 
   private async authorizedTools(context: AdapterContext): Promise<ConnectorTool[]> {
     if (!context.botId) return [];
-    const assignments = await this.prisma.botMcpServer.findMany({
+    const bot = await this.prisma.bot.findFirst({
       where: {
-        botId: context.botId,
+        id: context.botId,
         spaceId: context.spaceId,
         userId: context.userId,
-        server: { enabled: true },
+        archivedAt: null,
       },
-      include: { server: true },
+      select: { id: true, computer: { select: { kind: true } } },
     });
+    if (!bot) return [];
+    const servers = await this.prisma.mcpServer.findMany({
+      where: { spaceId: context.spaceId, userId: context.userId, enabled: true },
+      include: {
+        assignments: {
+          where: { botId: context.botId, spaceId: context.spaceId, userId: context.userId },
+        },
+      },
+    });
+    const assignments = servers
+      .filter((server) => server.transport !== "host-cli" || bot.computer?.kind === "desktop")
+      .map((server) => ({
+        ...(server.assignments[0] ?? {
+          serverId: server.id,
+          access: "inherit",
+          allowAllTools: false,
+          needsReview: false,
+          allowedTools: server.spaceAllowedTools,
+        }),
+        server,
+      }));
     const groups = await Promise.all(
       assignments.map(async (assignment): Promise<ConnectorTool[]> => {
         const startedAt = Date.now();
@@ -196,9 +222,11 @@ export class McpConnector implements ConnectorProvider {
           if (
             !grantedMcpTools(
               assignment,
-              Array.isArray(assignment.allowedTools)
-                ? assignment.allowedTools.filter((id): id is string => typeof id === "string")
-                : [],
+              stringTools(
+                assignment.server.catalogId || assignment.server.manifest
+                  ? assignment.server.spaceAllowedTools
+                  : assignment.allowedTools,
+              ),
             ).length
           )
             return [];
@@ -352,16 +380,7 @@ export class McpConnector implements ConnectorProvider {
       yield { type: "error", message: "MCP tools require a bot context" };
       return;
     }
-    const assignment = await this.prisma.botMcpServer.findFirst({
-      where: {
-        botId: context.botId,
-        serverId: call.route.resourceId,
-        spaceId: context.spaceId,
-        userId: context.userId,
-        server: { enabled: true },
-      },
-      include: { server: true },
-    });
+    const assignment = await mcpGrantForBot(this.prisma, context, call.route.resourceId);
     if (
       !assignment ||
       !grantedMcpTools(assignment, [call.route.toolName]).length ||
@@ -409,16 +428,12 @@ export class McpConnector implements ConnectorProvider {
         const denial = integrationResourceDenial(assignment.server, captured, call.args);
         if (denial) throw new Error(denial);
         // Recheck after discovery: revocation must also fence an already-open session.
-        const current = await this.prisma.botMcpServer.findFirst({
-          where: {
-            id: assignment.id,
-            spaceId: context.spaceId,
-            userId: context.userId,
-            server: { enabled: true, revision: assignment.server.revision },
-          },
-          include: { server: true },
-        });
-        if (!current || !grantedMcpTools(current, [call.route.toolName]).length)
+        const current = await mcpGrantForBot(this.prisma, context, call.route.resourceId);
+        if (
+          !current ||
+          current.server.revision !== assignment.server.revision ||
+          !grantedMcpTools(current, [call.route.toolName]).length
+        )
           throw new Error("MCP tool is not assigned to this bot");
       }
       const captured = IntegrationManifestSchema.safeParse(
