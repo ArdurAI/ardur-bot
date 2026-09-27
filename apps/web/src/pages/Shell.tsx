@@ -121,6 +121,7 @@ import {
   useId,
   useLayoutEffect,
   useMemo,
+  useReducer,
   useRef,
   useState,
 } from "react";
@@ -232,6 +233,11 @@ import { BotModelChip } from "./shell/bot-model-chip";
 import { BotSettings, CreateBotForm } from "./shell/bot-panel";
 import { BotCreatePicker } from "./shell/bot-picker";
 import { CommandPalette, isCommandPaletteHotkey } from "./shell/command-palette";
+import {
+  initialComputerErrorState,
+  reduceComputerError,
+  visibleComputerError,
+} from "./shell/computer-error-state";
 import { ComputerScreenError } from "./shell/computer-screen-error";
 import { useComputerTerminal } from "./shell/computer-terminal";
 import {
@@ -615,11 +621,10 @@ export function ShellPage({
     height: number;
     offsetTop: number;
   } | null>(null);
-  const [computerError, setComputerError] = useState<string | null>(null);
-  const [computerErrorCode, setComputerErrorCode] = useState<string | undefined>();
-  // Screen-load failures can sit beside a still-valid embed URL; boot and
-  // takeover failures must stay visible even when a URL remains.
-  const [computerErrorFromScreen, setComputerErrorFromScreen] = useState(false);
+  const [computerErrorState, dispatchComputerError] = useReducer(
+    reduceComputerError,
+    initialComputerErrorState,
+  );
   useEffect(() => {
     if (!computerOpen) {
       setComputerViewport(null);
@@ -970,9 +975,7 @@ export function ShellPage({
         computerVisible.current,
       commit: (screen) => {
         setScreenUrl(screen.url);
-        setComputerError(screen.error);
-        setComputerErrorCode(undefined);
-        setComputerErrorFromScreen(Boolean(screen.error));
+        dispatchComputerError({ type: "screen-result", error: screen.error });
         cacheComputerFor(id, { screenUrl: screen.url });
       },
       fallbackError: t`Could not connect to the computer screen`,
@@ -1197,9 +1200,7 @@ export function ShellPage({
       pinnedAroundRef.current = null;
     }
     screenRequest.current += 1;
-    setComputerError(null);
-    setComputerErrorCode(undefined);
-    setComputerErrorFromScreen(false);
+    dispatchComputerError({ type: "dismiss" });
     const cached = computerCacheRef.current.get(active.id);
     if (cached) {
       // Paint the last-known computer instantly; refreshThread/refreshComputerScreen
@@ -2355,9 +2356,7 @@ export function ShellPage({
     const targetScreen = computer?.botId === targetBotId ? screenUrl : (cached?.screenUrl ?? null);
     const needsBoot = force || targetComputer?.state !== "running" || !targetScreen;
     if (overlay && needsBoot) setBooting(true);
-    setComputerError(null);
-    setComputerErrorCode(undefined);
-    setComputerErrorFromScreen(false);
+    dispatchComputerError({ type: "boot-started" });
     try {
       if (needsBoot) {
         const status = await rpc.computer.boot({ botId: targetBotId });
@@ -2372,9 +2371,11 @@ export function ShellPage({
       await refreshComputerFor(targetBotId);
     } catch (error) {
       if (!stillThisBoot() || !stillThisBot()) return;
-      setComputerError(error instanceof Error ? error.message : t`Could not take control`);
-      setComputerErrorCode(errorDataCode(error));
-      setComputerErrorFromScreen(false);
+      dispatchComputerError({
+        type: "operation-failed",
+        message: error instanceof Error ? error.message : t`Could not take control`,
+        code: errorDataCode(error),
+      });
       throw error;
     } finally {
       if (stillThisBoot()) setBooting(false);
@@ -2432,9 +2433,7 @@ export function ShellPage({
 
   useEffect(() => {
     setComputerOpen(false);
-    setComputerError(null);
-    setComputerErrorCode(undefined);
-    setComputerErrorFromScreen(false);
+    dispatchComputerError({ type: "dismiss" });
     setComputerBotId(active?.id);
   }, [active?.id]);
 
@@ -2448,9 +2447,7 @@ export function ShellPage({
 
   useEffect(() => {
     if (!computer?.busyBotName) {
-      setComputerError(null);
-      setComputerErrorCode(undefined);
-      setComputerErrorFromScreen(false);
+      dispatchComputerError({ type: "screen-dismissed" });
     }
   }, [computer?.busyBotName]);
 
@@ -2563,9 +2560,7 @@ export function ShellPage({
         }
       } catch {
         if (computerBotIdRef.current !== botId && activeBotId.current !== botId) return;
-        setComputerError(t`Could not continue`);
-        setComputerErrorCode(undefined);
-        setComputerErrorFromScreen(false);
+        dispatchComputerError({ type: "operation-failed", message: t`Could not continue` });
       }
     },
     [t],
@@ -2598,26 +2593,28 @@ export function ShellPage({
     onStop: stopRun,
     onOpen: () => setComputerOpen(true),
   });
-  const hideScreenLoadError = computerErrorFromScreen && Boolean(embeddedScreenUrl);
-  const computerScreenError =
-    computerError && !hideScreenLoadError ? (
-      <ComputerScreenError
-        message={computerError}
-        code={computerErrorCode}
-        onRetryProvision={() => {
-          if (!computerBot) return;
-          void bootComputer({
-            botId: computerBot.id,
-            takeControl: false,
-            overlay: true,
-            force: true,
-          }).catch(() => undefined);
-        }}
-        onRetryScreen={() => {
-          if (computerBot) void refreshComputerScreen(computerBot.id);
-        }}
-      />
-    ) : null;
+  const displayedComputerError = visibleComputerError(
+    computerErrorState,
+    Boolean(embeddedScreenUrl),
+  );
+  const computerScreenError = displayedComputerError ? (
+    <ComputerScreenError
+      message={displayedComputerError.message}
+      code={displayedComputerError.code}
+      onRetryProvision={() => {
+        if (!computerBot) return;
+        void bootComputer({
+          botId: computerBot.id,
+          takeControl: false,
+          overlay: true,
+          force: true,
+        }).catch(() => undefined);
+      }}
+      onRetryScreen={() => {
+        if (computerBot) void refreshComputerScreen(computerBot.id);
+      }}
+    />
+  ) : null;
 
   const userName = session.data?.user.name ?? t`You`;
 
