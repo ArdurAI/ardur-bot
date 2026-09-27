@@ -107,6 +107,42 @@ describe("HermesRuntime M0 ACP seam", () => {
     );
   });
 
+  for (const [scenario, name, eventType] of [
+    ["ask-user", "ask_user", "ask"],
+    ["takeover", "request_takeover", "takeover"],
+  ] as const) {
+    it(`delivers one ${eventType} event before the bridge pauses`, async () => {
+      const executeTool = vi.fn(async () => ({ unexpected: true }));
+      const events = await collect(
+        runtime(scenario),
+        request({
+          tools: [{ name, description: name, inputSchema: { type: "object" } }],
+          executeTool,
+        }),
+      );
+      expect(events.filter((event) => event.type === eventType)).toHaveLength(1);
+      expect(events.some((event) => event.type === "done")).toBe(false);
+      expect(executeTool).not.toHaveBeenCalled();
+    });
+  }
+
+  it("propagates a forbidden tool after text in one ACP write", async () => {
+    await expect(collect(runtime("buffered-native"), request())).rejects.toThrow(
+      "Hermes tried to use a tool this bot was not given.",
+    );
+  });
+
+  it("propagates a forbidden tool when the consumer pauses after buffered text", async () => {
+    const events = runtime("buffered-native").run(request())[Symbol.asyncIterator]();
+    expect(await events.next()).toEqual({
+      value: { type: "text", text: "before violation" },
+      done: false,
+    });
+    await expect(events.next()).rejects.toThrow(
+      "Hermes tried to use a tool this bot was not given.",
+    );
+  });
+
   it("selects the offered reject_once option and records the attempt", async () => {
     const attempted = vi.fn();
     const events = await collect(runtime("permission", attempted), request());
@@ -133,6 +169,8 @@ describe("HermesRuntime M0 ACP seam", () => {
     ["malformed", "ACP sent malformed JSON."],
     ["oversize", "ACP line exceeded its size limit."],
     ["exit", "ACP closed before the turn completed."],
+    ["poison-text", "ACP update handler failed."],
+    ["non-object-content", "ACP update handler failed."],
   ] as const) {
     it(`ends cleanly when the agent sends ${scenario}`, async () => {
       await expect(collect(runtime(scenario), request())).rejects.toMatchObject({
@@ -334,4 +372,57 @@ describe("HermesRuntime M0 ACP seam", () => {
     await adapter.abort(run.runId);
     expect(await events.next()).toEqual({ value: undefined, done: true });
   });
+
+  for (const rejects of [false, true]) {
+    it(`awaits signal cancellation teardown when it ${rejects ? "rejects" : "resolves"}`, async () => {
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let teardownEntered!: () => void;
+      const entered = new Promise<void>((resolve) => {
+        teardownEntered = resolve;
+      });
+      const unhandled: unknown[] = [];
+      const onUnhandled = (error: unknown) => unhandled.push(error);
+      process.on("unhandledRejection", onUnhandled);
+      const controller = new AbortController();
+      const adapter = new HermesRuntime({
+        command: process.execPath,
+        args: [fixture, "text"],
+        launch: async (spec) => {
+          const result = await launchUnconfinedProcess(spec);
+          return {
+            ...result,
+            teardown: async () => {
+              teardownEntered();
+              await gate;
+              if (rejects) throw new Error("Fixture teardown failed.");
+              await result.teardown();
+            },
+          };
+        },
+      });
+      let settled = false;
+      try {
+        const collection = (async () => {
+          for await (const event of adapter.run(request(), { signal: controller.signal })) {
+            if (event.type === "text") controller.abort();
+          }
+        })().finally(() => {
+          settled = true;
+        });
+        await entered;
+        expect(settled).toBe(false);
+        release();
+        if (rejects) await expect(collection).rejects.toThrow("Fixture teardown failed.");
+        else await expect(collection).resolves.toBeUndefined();
+        await new Promise((resolve) => setImmediate(resolve));
+        expect(unhandled).toEqual([]);
+      } finally {
+        release();
+        process.off("unhandledRejection", onUnhandled);
+      }
+    });
+  }
 });
