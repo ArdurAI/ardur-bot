@@ -916,6 +916,53 @@ describeJourneys("required product journeys", () => {
     expect(await prisma.message.count({ where: { threadId: thread.id } })).toBeGreaterThan(0);
   });
 
+  it("starts a new chat without sending retained history to the next turn", async () => {
+    const cookie = await signup(app, `restart-j-${stamp}@ardurbot.test`, "Restart Journey");
+    const bot = await rpc<Bot>(app, cookie, "bots/create", {
+      name: "Fresh Start",
+      title: "",
+      description: "",
+      instructions: "",
+      notifyOnFinish: true,
+    });
+    const earlierTurn = "EARLIER_CHAT_BOUNDARY_SENTINEL";
+    const newTurn = "NEW_CHAT_TURN_SENTINEL";
+    await sendAndWait(app, cookie, bot.id, earlierTurn);
+    const thread = await prisma.thread.findUniqueOrThrow({ where: { botId: bot.id } });
+
+    await rpc(app, cookie, "threads/restart", { botId: bot.id });
+
+    const reset = await prisma.thread.findUniqueOrThrow({ where: { id: thread.id } });
+    expect(reset.historyCompactionSummary).toBe(`${RECEIPT_FILTERED_SUMMARY_MARKER}New chat.`);
+    expect(reset.historyCompactedUpToSeq).toBe(reset.nextMessageSeq - 1);
+    const requests = new Map<string, { prompt: string; history: Array<{ content: string }> }>();
+    const originalRun = ScriptedAgentRuntime.prototype.run;
+    const runtimeSpy = vi
+      .spyOn(ScriptedAgentRuntime.prototype, "run")
+      .mockImplementation((request, context) => {
+        requests.set(request.runId, { prompt: request.prompt, history: request.history });
+        return originalRun.call(new ScriptedAgentRuntime(), request, context);
+      });
+    let after: Awaited<ReturnType<typeof sendAndWait>>;
+    try {
+      after = await sendAndWait(app, cookie, bot.id, newTurn);
+    } finally {
+      runtimeSpy.mockRestore();
+    }
+
+    const runtimeRequest = requests.get(after.run.id);
+    expect(runtimeRequest).toBeDefined();
+    expect(runtimeRequest!.history.map((message) => message.content)).toEqual([
+      "<thread_summary>\nNew chat.\n</thread_summary>",
+    ]);
+    expect(runtimeRequest!.prompt).toContain(newTurn);
+    expect(runtimeRequest!.prompt).not.toContain(earlierTurn);
+    expect(await prisma.message.count({ where: { threadId: thread.id } })).toBeGreaterThan(1);
+    const afterThread = await prisma.thread.findUniqueOrThrow({ where: { id: thread.id } });
+    expect(afterThread.historyCompactedUpToSeq).toBe(reset.historyCompactedUpToSeq);
+    expect(afterThread.historyCompactionSummary).toBe(reset.historyCompactionSummary);
+  });
+
   it("2b: two Team bots send at once on distinct screens", async () => {
     const cookie = await signup(app, `parallel-j-${stamp}@ardurbot.test`, "Parallel");
     const writer = await rpc<Bot>(app, cookie, "bots/create", {

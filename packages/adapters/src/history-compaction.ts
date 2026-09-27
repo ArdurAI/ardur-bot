@@ -288,6 +288,9 @@ export async function compactHistory(
       take: range.take,
       select: { seq: true, role: true, blocks: true },
     });
+    // Clearing messages retains their sequence counter. After invalidating a legacy summary,
+    // the first surviving row can therefore start above zero without leaving a coverage gap.
+    if (invalidatedSummary && batch.length > 0) fromSeqExclusive = batch[0]!.seq - 1;
     if (batch.some((message, index) => message.seq !== fromSeqExclusive + index + 1)) {
       getLogger().error(
         `history.compact skipped for thread ${threadId}: message coverage has a gap`,

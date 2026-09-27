@@ -6,6 +6,7 @@ vi.mock("./delegation-approval.js", async (importOriginal) => ({
 }));
 
 import type { RealtimeFanout } from "@ardurbot/adapter-kit";
+import { RECEIPT_FILTERED_SUMMARY_MARKER } from "@ardurbot/core";
 import { describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "./client.js";
 import {
@@ -2151,7 +2152,9 @@ describe("clearThread", () => {
         where: { id: "thread-1" },
         data: {
           historyCompactedUpToSeq: 41,
-          historyCompactionSummary: preserveHistory ? "New chat." : null,
+          historyCompactionSummary: preserveHistory
+            ? `${RECEIPT_FILTERED_SUMMARY_MARKER}New chat.`
+            : null,
           historyCompactionGeneration: { increment: 1 },
         },
       });

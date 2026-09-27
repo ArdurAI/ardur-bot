@@ -15,6 +15,7 @@ import {
   isCommandEvent,
   isSecretAskBlock,
   messagingChannelId,
+  RECEIPT_FILTERED_SUMMARY_MARKER,
   redactTaskValue,
   resolveAskChoice,
   sanitizeJsonValue,
@@ -374,7 +375,9 @@ export async function clearThread(
     }
     // The existing compaction boundary excludes earlier messages. A neutral summary
     // keeps that boundary active while preserving the transcript for the owner.
-    const resetSummary = input.preserveHistory ? "New chat." : null;
+    const resetSummary = input.preserveHistory
+      ? `${RECEIPT_FILTERED_SUMMARY_MARKER}New chat.`
+      : null;
     if (thread.nextMessageSeq > 0) {
       // nextMessageSeq is not reset, so mark every deleted message as already compacted.
       // Leaving the cursor behind would let compaction re-summarize deleted history (or, reset
