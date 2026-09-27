@@ -111,7 +111,7 @@ private final class PinnedRequest: NSObject, URLSessionDataDelegate {
     if data.count + chunk.count > 16 * 1024 * 1024 { dataTask.cancel() } else { data.append(chunk) }
   }
   func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-    if error != nil { promise.reject(changedIdentity ? "HOME_CHANGED" : "HOME_UNREACHABLE", changedIdentity ? "This home's identity changed; pair your phone again." : "Home unreachable — check that Ardur Bot is running") }
+    if error != nil { promise.reject(changedIdentity ? "HOME_CHANGED" : "HOME_UNREACHABLE", changedIdentity ? "This home's identity changed; pair your phone again." : "Home unreachable — check that Ardur is running") }
     else { promise.resolve(["status": status, "body": String(data: data, encoding: .utf8) ?? ""]) }
     session.invalidateAndCancel(); self.session = nil
   }

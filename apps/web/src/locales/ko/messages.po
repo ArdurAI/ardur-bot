@@ -860,11 +860,11 @@ msgid "Ardur (built-in)"
 msgstr ""
 
 #: src/pages/import/LocalImportPage.tsx
-msgid "Ardur Bot reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history."
+msgid "Ardur reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history."
 msgstr ""
 
 #: src/lib/board-close-copy.ts
-msgid "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected."
+msgid "Ardur tried five times. Close it on the Board, or check that this computer is connected."
 msgstr ""
 
 #: src/pages/customize/McpDiagnostics.tsx
@@ -1536,8 +1536,8 @@ msgid "Choose one credential: a token or a header."
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
-msgid "Choose which connected model Ardur Bot uses."
-msgstr "Ardur Bot에서 기본으로 사용할 연결된 모델을 선택하세요."
+msgid "Choose which connected model Ardur uses."
+msgstr "Ardur에서 기본으로 사용할 연결된 모델을 선택하세요."
 
 #. placeholder {0}: browser.name
 #: src/pages/system/SystemPage.tsx
@@ -2849,8 +2849,8 @@ msgid "Create space"
 msgstr "스페이스 만들기"
 
 #: src/pages/Auth.tsx
-msgid "Create your Ardur Bot"
-msgstr "Ardur Bot 계정 만들기"
+msgid "Create your Ardur"
+msgstr "Ardur 계정 만들기"
 
 #: src/components/AskCard.tsx
 #: src/pages/account/AccountTables.tsx
@@ -4157,9 +4157,9 @@ msgid "Integration options"
 msgstr ""
 
 #: src/components/composer/ComposerMenu.tsx
+#: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/settings-sections.ts
-#: src/pages/Shell.tsx
 msgid "Integrations"
 msgstr "앱·도구 연동"
 
@@ -4537,7 +4537,7 @@ msgid "Local Server Settings"
 msgstr ""
 
 #: src/pages/account/AccountSettings.tsx
-#: src/pages/Shell.tsx
+#: src/pages/dashboard/DashboardAccountArea.tsx
 msgid "Log out"
 msgstr "로그아웃"
 
@@ -5500,7 +5500,7 @@ msgid "Open Accessibility settings"
 msgstr ""
 
 #: src/pages/system/QuickComposer.tsx
-msgid "Open Ardur Bot"
+msgid "Open Ardur"
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
@@ -5706,8 +5706,8 @@ msgid "Paste a replacement key"
 msgstr "새 API 키를 붙여넣으세요"
 
 #: src/pages/ModelSettingsOverlay.tsx
-msgid "Paste the OpenAI-compatible address from your server. Ardur Bot adds /v1 if needed."
-msgstr "서버의 OpenAI 호환 주소를 붙여넣으세요. 필요하면 Ardur Bot가 /v1을 추가합니다."
+msgid "Paste the OpenAI-compatible address from your server. Ardur adds /v1 if needed."
+msgstr "서버의 OpenAI 호환 주소를 붙여넣으세요. 필요하면 Ardur가 /v1을 추가합니다."
 
 #: src/pages/memory/MemoryImport.tsx
 msgid "Paste the response"
@@ -6477,8 +6477,8 @@ msgid "Retry screen"
 msgstr ""
 
 #: src/pages/McpOAuthCallback.tsx
-msgid "Return to Ardur Bot"
-msgstr "Ardur Bot로 돌아가기"
+msgid "Return to Ardur"
+msgstr "Ardur로 돌아가기"
 
 #. placeholder {0}: doc.revision
 #: src/pages/KnowledgeSection.tsx
@@ -6994,11 +6994,11 @@ msgstr ""
 msgid "Set up servers"
 msgstr ""
 
+#: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/settings-sections.ts
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
-#: src/pages/shell/sidebar-settings.tsx
 msgid "Settings"
 msgstr "설정"
 
@@ -7089,8 +7089,8 @@ msgid "Sign in again to manage sessions."
 msgstr ""
 
 #: src/pages/Auth.tsx
-msgid "Sign in to Ardur Bot"
-msgstr "Ardur Bot 로그인"
+msgid "Sign in to Ardur"
+msgstr "Ardur 로그인"
 
 #: src/pages/system/QuickComposer.tsx
 msgid "Sign in to use quick access."
@@ -7770,8 +7770,8 @@ msgid "This signs out every other session and keeps this one signed in."
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
-msgid "This subscription sign-in is not available in Ardur Bot yet. Use a deployment credential or choose another provider."
-msgstr "이 구독 로그인 방식은 아직 Ardur Bot에서 지원되지 않습니다. 서버에 설정된 인증 정보를 사용하거나 다른 서비스를 선택하세요."
+msgid "This subscription sign-in is not available in Ardur yet. Use a deployment credential or choose another provider."
+msgstr "이 구독 로그인 방식은 아직 Ardur에서 지원되지 않습니다. 서버에 설정된 인증 정보를 사용하거나 다른 서비스를 선택하세요."
 
 #: src/pages/memory/MemoryProposals.tsx
 msgid "This suggestion cannot be approved here."
@@ -8055,9 +8055,9 @@ msgid "Uploaded files"
 msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/dashboard/panels.ts
 #: src/pages/settings-sections.ts
-#: src/pages/Shell.tsx
 msgid "Usage"
 msgstr "사용량"
 

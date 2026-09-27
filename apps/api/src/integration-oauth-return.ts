@@ -22,7 +22,7 @@ export function integrationOAuthReturn(
     let name: string | undefined;
     let id: string | undefined;
     let replaced = false;
-    let message = "Could not complete sign-in. Return to Ardur Bot and connect again.";
+    let message = "Could not complete sign-in. Return to Ardur and connect again.";
     try {
       const denied = c.req.query("error");
       if (!/^[a-f0-9-]{36}$/i.test(state) || (!code && !denied) || (code?.length ?? 0) > 8192)
@@ -38,7 +38,7 @@ export function integrationOAuthReturn(
       id = server.id;
       if (server.connectionState === "connected") {
         name = server.name;
-        message = `Connected to ${name}. You can close this tab and return to Ardur Bot.`;
+        message = `Connected to ${name}. You can close this tab and return to Ardur.`;
       }
     } catch (error) {
       // Codes, tokens and provider response bodies never enter a page or log.
@@ -60,7 +60,7 @@ export function integrationOAuthReturn(
       ? `ardurbot://integrations/${encodeURIComponent(id)}`
       : "ardurbot://integrations";
     return c.html(
-      `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ardur Bot</title><body><main><p>${escapeHtml(message)}</p><a href="${escapeHtml(destination)}">Open Ardur Bot</a></main><script nonce="${nonce}">history.replaceState(null,"",location.pathname);${name || replaced ? `try { const channel = new BroadcastChannel("ardurbot-mcp-oauth"); channel.postMessage({type:"mcp-oauth-complete",sessionId:${JSON.stringify(state)}${replaced ? ',result:"replaced"' : ""}}); channel.close(); } catch {} window.close();` : ""}</script></body></html>`,
+      `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Ardur</title><body><main><p>${escapeHtml(message)}</p><a href="${escapeHtml(destination)}">Open Ardur</a></main><script nonce="${nonce}">history.replaceState(null,"",location.pathname);${name || replaced ? `try { const channel = new BroadcastChannel("ardurbot-mcp-oauth"); channel.postMessage({type:"mcp-oauth-complete",sessionId:${JSON.stringify(state)}${replaced ? ',result:"replaced"' : ""}}); channel.close(); } catch {} window.close();` : ""}</script></body></html>`,
     );
   });
   return app;

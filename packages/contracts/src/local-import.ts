@@ -26,7 +26,7 @@ export const LOCAL_IMPORT_ITEMS = 4096;
 /** A run reports every failed item in its count and lists at most this many. */
 export const LOCAL_IMPORT_FAILURES = 20;
 export const LOCAL_IMPORT_PRIVACY =
-  "Ardur Bot reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history.";
+  "Ardur reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history.";
 export const LOCAL_IMPORT_EXCLUSIONS =
   "Sign-in files (auth.json, credentials and oauth_creds.json), cookies, tokens, credential backups, session transcripts, chat histories, history.jsonl, telemetry and caches are never read; server lists retain environment variable names only.";
 export const LOCAL_IMPORT_TOOL_NAMES: Record<LocalImportTool, string> = {

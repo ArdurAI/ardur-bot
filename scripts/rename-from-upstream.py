@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Rename Rakazo identifiers to Ardur Bot across the tracked tree.
+"""Rename Rakazo identifiers to Ardur across the tracked tree.
 
-Ardur Bot is a fork of Rakazo (https://github.com/elie222/rakazo, Apache-2.0).
+Ardur is a fork of Rakazo (https://github.com/elie222/rakazo, Apache-2.0).
 Upstream moves fast, so we keep our merges simple: `git merge upstream/main`,
 run this script, review the diff, commit. The script is idempotent; the rules
 are ordered specific-before-generic. Files listed in SKIP_FILES and paths under
@@ -37,7 +37,7 @@ CONTENT_RULES: list[tuple[re.Pattern[str], str]] = [
     (re.compile(r"com/rakazo/notifications"), "ai/ardur/bot/notifications"),
     (re.compile(r"Rakazo\.icon"), "ArdurBot.icon"),
     (re.compile(r"Rakazo(?=[A-Za-z0-9_])"), "ArdurBot"),
-    (re.compile(r"Rakazo"), "Ardur Bot"),
+    (re.compile(r"Rakazo"), "Ardur"),
     (re.compile(r"RAKAZO"), "ARDURBOT"),
     (re.compile(r"rakazo"), "ardurbot"),
 ]

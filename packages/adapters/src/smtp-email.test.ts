@@ -9,7 +9,7 @@ describe("SmtpEmailProvider", () => {
     const provider = new SmtpEmailProvider(
       {
         url: "smtps://user:secret@smtp.example.test:465",
-        from: "Ardur Bot <no-reply@example.test>",
+        from: "Ardur <no-reply@example.test>",
       },
       { transport: { sendMail } as never },
     );
@@ -23,7 +23,7 @@ describe("SmtpEmailProvider", () => {
 
     expect(provider.describe().id).toBe("smtp");
     expect(sendMail).toHaveBeenCalledWith({
-      from: "Ardur Bot <no-reply@example.test>",
+      from: "Ardur <no-reply@example.test>",
       to: "ada@example.test",
       subject: "Reset password",
       text: "Plain text",

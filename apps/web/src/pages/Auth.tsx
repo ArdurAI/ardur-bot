@@ -35,9 +35,9 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
   const title = sent ? (
     <Trans>Check your email</Trans>
   ) : mode === "in" ? (
-    <Trans>Sign in to Ardur Bot</Trans>
+    <Trans>Sign in to Ardur</Trans>
   ) : mode === "up" ? (
-    <Trans>Create your Ardur Bot</Trans>
+    <Trans>Create your Ardur</Trans>
   ) : (
     <Trans>Reset your password</Trans>
   );

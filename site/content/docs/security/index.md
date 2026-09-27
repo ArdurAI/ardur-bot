@@ -26,7 +26,7 @@ unfixed vulnerabilities.
 
 ## Scope
 
-Ardur Bot runs bots that use browsers, terminals and files on computers you control, and
+Ardur runs bots that use browsers, terminals and files on computers you control, and
 connects to model providers with your own subscriptions and keys. Anything that lets a bot,
 a connector, a prompt, or another user escape those boundaries is in scope: authentication,
 secret handling, sandbox isolation, host commands, and integrations.

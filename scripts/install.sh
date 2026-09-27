@@ -59,7 +59,7 @@ fi
 
 # Strip 'v' if present for asset name
 ASSET_VERSION="${TARGET_VERSION#v}"
-ASSET_NAME="ardur-bot-${ASSET_VERSION}-${PLATFORM}-${ASSET_ARCH}.${EXT}"
+ASSET_NAME="ardur-${ASSET_VERSION}-${PLATFORM}-${ASSET_ARCH}.${EXT}"
 DOWNLOAD_URL="https://github.com/ArdurAI/ardur-bot/releases/download/${TARGET_VERSION}/${ASSET_NAME}"
 CHECKSUM_URL="https://github.com/ArdurAI/ardur-bot/releases/download/${TARGET_VERSION}/checksums.txt"
 
@@ -67,7 +67,7 @@ if [[ "$DRY_RUN" -eq 1 ]]; then
   echo "Plan: Download $ASSET_NAME (version $TARGET_VERSION)"
   echo "Plan: Verify checksum against checksums.txt"
   if [[ "$PLATFORM" == "mac" ]]; then
-    echo "Plan: Mount DMG and copy Ardur Bot.app to Applications"
+    echo "Plan: Mount DMG and copy Ardur.app to Applications"
   elif [[ "$EXT" == "deb" ]]; then
     echo "Plan: Install deb via apt"
   else
@@ -133,11 +133,12 @@ if [[ "$PLATFORM" == "mac" ]]; then
     mkdir -p "$APP_DIR"
   fi
   
+  rm -rf "$APP_DIR/Ardur.app"
+  cp -R "$MOUNT_DIR/Ardur.app" "$APP_DIR/"
   rm -rf "$APP_DIR/Ardur Bot.app"
-  cp -R "$MOUNT_DIR/Ardur Bot.app" "$APP_DIR/"
   hdiutil detach "$MOUNT_DIR" -quiet
   
-  echo "Installed to $APP_DIR/Ardur Bot.app."
+  echo "Installed to $APP_DIR/Ardur.app."
   echo "Unsigned preview: Approve the app in Privacy & Security before launching."
 elif [[ "$EXT" == "deb" ]]; then
   echo "Installing deb package using apt (sudo required)..."
@@ -145,20 +146,21 @@ elif [[ "$EXT" == "deb" ]]; then
 else
   BIN_DIR="$HOME/.local/bin"
   mkdir -p "$BIN_DIR"
-  cp "$TMP_DIR/$ASSET_NAME" "$BIN_DIR/ardur-bot.AppImage"
-  chmod +x "$BIN_DIR/ardur-bot.AppImage"
-  echo "Installed to $BIN_DIR/ardur-bot.AppImage."
+  cp "$TMP_DIR/$ASSET_NAME" "$BIN_DIR/ardur.AppImage"
+  chmod +x "$BIN_DIR/ardur.AppImage"
+  echo "Installed to $BIN_DIR/ardur.AppImage."
   
   # Basic .desktop entry
-  DESKTOP_FILE="$HOME/.local/share/applications/ardur-bot.desktop"
+  DESKTOP_FILE="$HOME/.local/share/applications/ardur.desktop"
   mkdir -p "$HOME/.local/share/applications"
   cat << DESK > "$DESKTOP_FILE"
 [Desktop Entry]
-Name=Ardur Bot
-Exec=$BIN_DIR/ardur-bot.AppImage
+Name=Ardur
+Exec=$BIN_DIR/ardur.AppImage
 Type=Application
 Categories=Development;
 DESK
+  rm -f "$BIN_DIR/ardur-bot.AppImage" "$HOME/.local/share/applications/ardur-bot.desktop"
 fi
 
 echo "Installation complete."

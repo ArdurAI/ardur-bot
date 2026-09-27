@@ -9,12 +9,12 @@ echo "Testing install.sh checksum failure"
 TMP_DIR=$(mktemp -d)
 # Create a dummy checksums file and dummy asset
 mkdir -p "$TMP_DIR/mnt"
-echo "badhash  ardur-bot-0.1.0-mac-arm64.dmg" > "$TMP_DIR/checksums.txt"
-echo "badhash  ardur-bot-0.1.0-mac-x64.dmg" >> "$TMP_DIR/checksums.txt"
-echo "badhash  ardur-bot-0.1.0-linux-x64.deb" >> "$TMP_DIR/checksums.txt"
-echo "badhash  ardur-bot-0.1.0-linux-x64.AppImage" >> "$TMP_DIR/checksums.txt"
-echo "badhash  ardur-bot-0.1.0-linux-arm64.deb" >> "$TMP_DIR/checksums.txt"
-echo "badhash  ardur-bot-0.1.0-linux-arm64.AppImage" >> "$TMP_DIR/checksums.txt"
+echo "badhash  ardur-0.1.0-mac-arm64.dmg" > "$TMP_DIR/checksums.txt"
+echo "badhash  ardur-0.1.0-mac-x64.dmg" >> "$TMP_DIR/checksums.txt"
+echo "badhash  ardur-0.1.0-linux-x64.deb" >> "$TMP_DIR/checksums.txt"
+echo "badhash  ardur-0.1.0-linux-x64.AppImage" >> "$TMP_DIR/checksums.txt"
+echo "badhash  ardur-0.1.0-linux-arm64.deb" >> "$TMP_DIR/checksums.txt"
+echo "badhash  ardur-0.1.0-linux-arm64.AppImage" >> "$TMP_DIR/checksums.txt"
 
 export PATH="$TMP_DIR:$PATH"
 cat << 'MOCK' > "$TMP_DIR/curl"
@@ -28,7 +28,7 @@ while [[ $# -gt 0 ]]; do
     *)
       if [[ "$1" == *checksums.txt* ]]; then
         URL="checksums.txt"
-      elif [[ "$1" == *ardur-bot-* ]]; then
+      elif [[ "$1" == *ardur-* ]]; then
         URL="ardur-bot"
       fi
       shift
@@ -86,7 +86,7 @@ while [[ $# -gt 0 ]]; do
     *)
       if [[ "$1" == *checksums.txt* ]]; then
         URL="checksums.txt"
-      elif [[ "$1" == *ardur-bot-* ]]; then
+      elif [[ "$1" == *ardur-* ]]; then
         URL="ardur-bot"
       fi
       shift
@@ -101,8 +101,8 @@ fi
 MOCK
 chmod +x "$BIN_DIR/curl"
 
-echo "badhash  ardur-bot-0.1.0-linux-x64.AppImage" > "$LINUX_DIR/checksums.txt"
-echo "badhash  ardur-bot-0.1.0-linux-x64.deb" >> "$LINUX_DIR/checksums.txt"
+echo "badhash  ardur-0.1.0-linux-x64.AppImage" > "$LINUX_DIR/checksums.txt"
+echo "badhash  ardur-0.1.0-linux-x64.deb" >> "$LINUX_DIR/checksums.txt"
 
 cd "$LINUX_DIR"
 if PATH="$BIN_DIR" "$root/scripts/install.sh" --version v0.1.0 2>/dev/null; then
@@ -111,11 +111,11 @@ if PATH="$BIN_DIR" "$root/scripts/install.sh" --version v0.1.0 2>/dev/null; then
 fi
 
 DUMMY_SHA=$(printf "dummy\n" | "$BIN_DIR/sha256sum" | cut -d ' ' -f 1)
-echo "${DUMMY_SHA}  ardur-bot-0.1.0-linux-x64.AppImage" > "$LINUX_DIR/checksums.txt"
-echo "${DUMMY_SHA}  ardur-bot-0.1.0-linux-x64.deb" >> "$LINUX_DIR/checksums.txt"
+echo "${DUMMY_SHA}  ardur-0.1.0-linux-x64.AppImage" > "$LINUX_DIR/checksums.txt"
+echo "${DUMMY_SHA}  ardur-0.1.0-linux-x64.deb" >> "$LINUX_DIR/checksums.txt"
 
 HOME="$LINUX_DIR/home" PATH="$BIN_DIR" "$root/scripts/install.sh" --version v0.1.0 >/dev/null
-if [[ ! -x "$LINUX_DIR/home/.local/bin/ardur-bot.AppImage" ]]; then
+if [[ ! -x "$LINUX_DIR/home/.local/bin/ardur.AppImage" ]]; then
   echo "Expected AppImage to be installed on Linux without shasum!" >&2
   exit 1
 fi

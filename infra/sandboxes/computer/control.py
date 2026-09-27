@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Token-auth desktop control for the Ardur Bot supervisor."""
+"""Token-auth desktop control for the Ardur supervisor."""
 
 import base64
 import ctypes

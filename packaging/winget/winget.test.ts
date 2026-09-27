@@ -1,6 +1,5 @@
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const require = createRequire(import.meta.url);
@@ -24,7 +23,7 @@ describe("winget manifests", () => {
 
     expect(locale.PackageIdentifier).toBe("ArdurAI.ArdurBot");
     expect(locale.Publisher).toBe("ArdurAI");
-    expect(locale.PackageName).toBe("Ardur Bot");
+    expect(locale.PackageName).toBe("Ardur");
 
     expect(version.PackageIdentifier).toBe("ArdurAI.ArdurBot");
     expect(version.DefaultLocale).toBe("en-US");

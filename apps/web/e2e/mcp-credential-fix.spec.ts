@@ -2,10 +2,10 @@ import type { McpServer } from "@ardurbot/contracts";
 import { mcpSignInDiagnostic } from "@ardurbot/contracts";
 import type { Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
-import { captureScreenshot, completeOnboarding, signup } from "./helpers";
+import { captureScreenshot, completeOnboarding, openUserSettings, signup } from "./helpers";
 
 async function openMcpSettings(page: Page) {
-  await page.getByText("Integrations", { exact: true }).click();
+  await openUserSettings(page, "integrations");
   await page.getByTestId("settings-nav-mcp").click();
   await expect(page.getByRole("heading", { name: "MCP", exact: true })).toBeVisible();
 }

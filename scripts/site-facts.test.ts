@@ -30,12 +30,18 @@ async function fixture() {
   for (const file of [
     "site/data/product.json",
     "README.md",
-    "homebrew/Casks/ardur-bot.rb",
+    "homebrew/Casks/ardur.rb",
     "apps/web/e2e/site-screenshots.spec.ts",
     "apps/web/src/locales/en/messages.po",
   ]) {
     await mkdir(path.dirname(path.join(root, file)), { recursive: true });
-    await writeFile(path.join(root, file), await readFile(path.join(sourceRoot, file)));
+    let content = await readFile(path.join(sourceRoot, file), "utf8");
+    if (file === "site/data/product.json") {
+      const parsed = JSON.parse(content);
+      delete parsed.videos;
+      content = `${JSON.stringify(parsed, null, 2)}\n`;
+    }
+    await writeFile(path.join(root, file), content);
   }
   return root;
 }

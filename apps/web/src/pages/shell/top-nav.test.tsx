@@ -67,7 +67,7 @@ it("orders available registrations, omits unavailable routes, and updates after 
   );
   expect(node.querySelector("[data-order]")?.textContent).toBe("dashboard,bots,board");
   expect(node.textContent).not.toContain("IDE");
-  expect(document.title).toBe("Dashboard — Ardur Bot");
+  expect(document.title).toBe("Dashboard — Ardur");
   await act(async () => {
     cleanup.push(
       registerTopNavItem({
@@ -98,7 +98,7 @@ it("routes shortcuts in available registration order and reflects bot deep links
       </MemoryRouter>,
     ),
   );
-  expect(document.title).toBe("Bots — Ardur Bot");
+  expect(document.title).toBe("Bots — Ardur");
   for (const [key, title, path] of [
     ["1", "Dashboard", "/app"],
     ["2", "Bots", "/app/bots"],
@@ -107,7 +107,7 @@ it("routes shortcuts in available registration order and reflects bot deep links
     const event = new KeyboardEvent("keydown", { key, ctrlKey: true, cancelable: true });
     await act(async () => window.dispatchEvent(event));
     expect(event.defaultPrevented).toBe(true);
-    expect(document.title).toBe(`${title} — Ardur Bot`);
+    expect(document.title).toBe(`${title} — Ardur`);
     expect(node.querySelector("output")?.textContent).toBe(path);
   }
   const unhandled = new KeyboardEvent("keydown", { key: "4", metaKey: true, cancelable: true });
@@ -145,5 +145,5 @@ it("registers IDE as the third destination without a Board tab", async () => {
     window.dispatchEvent(new KeyboardEvent("keydown", { key: "3", ctrlKey: true })),
   );
   expect(node.querySelector("output")?.textContent).toBe("/app/ide");
-  expect(document.title).toBe("IDE — Ardur Bot");
+  expect(document.title).toBe("IDE — Ardur");
 });

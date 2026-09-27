@@ -860,11 +860,11 @@ msgid "Ardur (built-in)"
 msgstr ""
 
 #: src/pages/import/LocalImportPage.tsx
-msgid "Ardur Bot reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history."
+msgid "Ardur reads instructions, memories, skills and server lists from these tools on this computer and never their sign-ins, tokens or chat history."
 msgstr ""
 
 #: src/lib/board-close-copy.ts
-msgid "Ardur Bot tried five times. Close it on the Board, or check that this computer is connected."
+msgid "Ardur tried five times. Close it on the Board, or check that this computer is connected."
 msgstr ""
 
 #: src/pages/customize/McpDiagnostics.tsx
@@ -1536,8 +1536,8 @@ msgid "Choose one credential: a token or a header."
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
-msgid "Choose which connected model Ardur Bot uses."
-msgstr "Ardur Bot'nun hangi bağlı modeli kullanacağını seç."
+msgid "Choose which connected model Ardur uses."
+msgstr "Ardur'nun hangi bağlı modeli kullanacağını seç."
 
 #. placeholder {0}: browser.name
 #: src/pages/system/SystemPage.tsx
@@ -2849,8 +2849,8 @@ msgid "Create space"
 msgstr ""
 
 #: src/pages/Auth.tsx
-msgid "Create your Ardur Bot"
-msgstr "Ardur Bot hesabını oluştur"
+msgid "Create your Ardur"
+msgstr "Ardur hesabını oluştur"
 
 #: src/components/AskCard.tsx
 #: src/pages/account/AccountTables.tsx
@@ -4157,9 +4157,9 @@ msgid "Integration options"
 msgstr ""
 
 #: src/components/composer/ComposerMenu.tsx
+#: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/settings-sections.ts
-#: src/pages/Shell.tsx
 msgid "Integrations"
 msgstr "Entegrasyonlar"
 
@@ -4537,7 +4537,7 @@ msgid "Local Server Settings"
 msgstr ""
 
 #: src/pages/account/AccountSettings.tsx
-#: src/pages/Shell.tsx
+#: src/pages/dashboard/DashboardAccountArea.tsx
 msgid "Log out"
 msgstr "Çıkış yap"
 
@@ -5500,7 +5500,7 @@ msgid "Open Accessibility settings"
 msgstr ""
 
 #: src/pages/system/QuickComposer.tsx
-msgid "Open Ardur Bot"
+msgid "Open Ardur"
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
@@ -5706,8 +5706,8 @@ msgid "Paste a replacement key"
 msgstr "Yeni bir anahtar yapıştır"
 
 #: src/pages/ModelSettingsOverlay.tsx
-msgid "Paste the OpenAI-compatible address from your server. Ardur Bot adds /v1 if needed."
-msgstr "Sunucundaki OpenAI uyumlu adresi yapıştır. Gerekirse Ardur Bot /v1 ekler."
+msgid "Paste the OpenAI-compatible address from your server. Ardur adds /v1 if needed."
+msgstr "Sunucundaki OpenAI uyumlu adresi yapıştır. Gerekirse Ardur /v1 ekler."
 
 #: src/pages/memory/MemoryImport.tsx
 msgid "Paste the response"
@@ -6477,8 +6477,8 @@ msgid "Retry screen"
 msgstr ""
 
 #: src/pages/McpOAuthCallback.tsx
-msgid "Return to Ardur Bot"
-msgstr "Ardur Bot'ya dön"
+msgid "Return to Ardur"
+msgstr "Ardur'ya dön"
 
 #. placeholder {0}: doc.revision
 #: src/pages/KnowledgeSection.tsx
@@ -6994,11 +6994,11 @@ msgstr ""
 msgid "Set up servers"
 msgstr ""
 
+#: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/settings-sections.ts
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
-#: src/pages/shell/sidebar-settings.tsx
 msgid "Settings"
 msgstr "Ayarlar"
 
@@ -7089,8 +7089,8 @@ msgid "Sign in again to manage sessions."
 msgstr ""
 
 #: src/pages/Auth.tsx
-msgid "Sign in to Ardur Bot"
-msgstr "Ardur Bot'da oturum aç"
+msgid "Sign in to Ardur"
+msgstr "Ardur'da oturum aç"
 
 #: src/pages/system/QuickComposer.tsx
 msgid "Sign in to use quick access."
@@ -7770,8 +7770,8 @@ msgid "This signs out every other session and keeps this one signed in."
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
-msgid "This subscription sign-in is not available in Ardur Bot yet. Use a deployment credential or choose another provider."
-msgstr "Bu abonelik girişi Ardur Bot'da henüz kullanılamıyor. Bir dağıtım kimlik bilgisi kullan veya başka bir sağlayıcı seç."
+msgid "This subscription sign-in is not available in Ardur yet. Use a deployment credential or choose another provider."
+msgstr "Bu abonelik girişi Ardur'da henüz kullanılamıyor. Bir dağıtım kimlik bilgisi kullan veya başka bir sağlayıcı seç."
 
 #: src/pages/memory/MemoryProposals.tsx
 msgid "This suggestion cannot be approved here."
@@ -8055,9 +8055,9 @@ msgid "Uploaded files"
 msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/dashboard/panels.ts
 #: src/pages/settings-sections.ts
-#: src/pages/Shell.tsx
 msgid "Usage"
 msgstr "Kullanım"
 

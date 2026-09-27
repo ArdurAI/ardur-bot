@@ -33,8 +33,8 @@ describe("agent content negotiation", () => {
   });
 
   it("maps canonical and trailing-slash page paths to Markdown documents", () => {
-    expect(getMarkdownDocument("/")).toContain("# Ardur Bot");
-    expect(getMarkdownDocument("/about/")).toContain("# About Ardur Bot");
+    expect(getMarkdownDocument("/")).toContain("# Ardur");
+    expect(getMarkdownDocument("/about/")).toContain("# About Ardur");
     expect(getMarkdownAlternate("/")).toBe("/index.md");
     expect(getMarkdownAlternate("/support/")).toBe("/support.md");
     expect(getMarkdownDocument("/missing")).toBeUndefined();
@@ -46,13 +46,13 @@ describe("agent content negotiation", () => {
     expect(HOME_MARKDOWN).toContain("open source Grok Bot alternative");
     expect(ABOUT_MARKDOWN).toContain("open source Grok Bot alternative");
     expect(AGENT_INSTRUCTIONS).toContain("open source Grok Bot alternative");
-    expect(AGENT_INSTRUCTIONS).toContain("## When to use Ardur Bot");
-    expect(AGENT_INSTRUCTIONS).toContain("## How an agent should use Ardur Bot");
+    expect(AGENT_INSTRUCTIONS).toContain("## When to use Ardur");
+    expect(AGENT_INSTRUCTIONS).toContain("## How an agent should use Ardur");
     expect(AGENT_INSTRUCTIONS).toContain("Self-hosting is available now");
   });
 
   it("returns cache-safe Markdown responses and omits bodies for HEAD", async () => {
-    const response = markdownResponse("# Ardur Bot\n");
+    const response = markdownResponse("# Ardur\n");
     expect(response.headers.get("content-type")).toBe(
       "text/markdown; charset=utf-8",
     );
@@ -60,9 +60,9 @@ describe("agent content negotiation", () => {
       '</llms.txt>; rel="describedby"; type="text/plain"',
     );
     expect(response.headers.get("vary")).toBe("Accept, Accept-Encoding");
-    await expect(response.text()).resolves.toBe("# Ardur Bot\n");
+    await expect(response.text()).resolves.toBe("# Ardur\n");
 
-    const headResponse = markdownResponse("# Ardur Bot\n", "HEAD", 404);
+    const headResponse = markdownResponse("# Ardur\n", "HEAD", 404);
     expect(headResponse.status).toBe(404);
     await expect(headResponse.text()).resolves.toBe("");
   });

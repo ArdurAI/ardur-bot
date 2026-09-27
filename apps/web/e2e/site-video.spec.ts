@@ -1,6 +1,7 @@
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
+import { listPiCatalog } from "../../../packages/adapters/src/pi-models";
 import { dashboardFixture } from "./dashboard-fixture";
 
 const outputDir = process.env.SITE_VIDEO_DIR;
@@ -66,7 +67,43 @@ test("records the Routines walkthrough", async ({ browser }) => {
     spaces: Record<string, unknown>[];
     thread: Record<string, unknown>;
   };
-  const bot = { ...base.bots[0], name: "Briefing", status: "idle", preview: "", unread: false };
+  const catalog = listPiCatalog();
+  const choice = {
+    modelProvider: "openai-codex",
+    modelId: "gpt-6-sol",
+    thinkingLevel: "medium" as const,
+  };
+  if (
+    !catalog.some((entry) => entry.provider === choice.modelProvider && entry.id === choice.modelId)
+  ) {
+    throw new Error(`Missing bundled model ${choice.modelProvider}/${choice.modelId}`);
+  }
+  const credential = {
+    id: "showcase-model-0",
+    provider: choice.modelProvider,
+    label: "Briefing connection",
+    hasKey: true,
+    isDefault: true,
+    modelId: choice.modelId,
+  };
+  const credentials = [credential];
+  const configuredModels = catalog.filter((entry) =>
+    credentials.some((item) => item.provider === entry.provider && item.modelId === entry.id),
+  );
+  const me = {
+    ...base.me,
+    defaultProvider: choice.modelProvider,
+    defaultModel: choice.modelId,
+  };
+  const bot = {
+    ...base.bots[0],
+    name: "Briefing",
+    status: "idle",
+    preview: "",
+    unread: false,
+    ...choice,
+    modelCredentialId: credential.id,
+  };
   const space = { ...base.spaces[0], bots: [bot], groups: [] };
   const startedAt = Date.now();
   let routine: Record<string, unknown> | null = null;
@@ -119,12 +156,22 @@ test("records the Routines walkthrough", async ({ browser }) => {
       case "bootstrap":
         result = {
           ...base,
+          me,
           bots: [bot],
           groups: [],
           spaces: [space],
           routines: routine ? [routine] : [],
           thread: snapshot(),
         };
+        break;
+      case "me":
+        result = me;
+        break;
+      case "models/list":
+        result = configuredModels;
+        break;
+      case "models/credentials":
+        result = credentials;
         break;
       case "spaces/list":
         result = { current: space, spaces: [space] };

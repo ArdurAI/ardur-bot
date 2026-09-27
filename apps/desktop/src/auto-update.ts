@@ -76,7 +76,7 @@ export function classifyUpdaterFailure(error: unknown): UpdaterFailure {
   if (SIGNATURE.some((needle) => text.includes(needle))) {
     return {
       kind: "signature",
-      message: "This update could not be verified. Reinstall Ardur Bot from a trusted download.",
+      message: "This update could not be verified. Reinstall Ardur from a trusted download.",
     };
   }
   return {
