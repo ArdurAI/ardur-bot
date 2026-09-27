@@ -66,6 +66,23 @@ export default function GroupSettingsScreen() {
       });
   }, []);
 
+  function onGroupSaved(refreshed: MobileGroup) {
+    if (group) {
+      if (name === group.name) {
+        setName(refreshed.name);
+      }
+      const prevMemberIds = group.members.map((member) => member.botId).join(",");
+      if (selected.join(",") === prevMemberIds) {
+        setSelected(refreshed.members.map((member) => member.botId));
+      }
+      const prevCoordinator = group.coordinatorBotId ?? null;
+      if (coordinator === prevCoordinator) {
+        setCoordinator(refreshed.coordinatorBotId ?? null);
+      }
+    }
+    setGroup(refreshed);
+  }
+
   async function save() {
     if (!groupId || !group || pending) return;
     setPending(true);
@@ -152,7 +169,7 @@ export default function GroupSettingsScreen() {
               member={member}
               catalog={catalog}
               credentials={credentials}
-              onSaved={setGroup}
+              onSaved={onGroupSaved}
               onError={setError}
             />
           ))}
