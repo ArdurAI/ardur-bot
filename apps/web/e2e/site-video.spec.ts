@@ -21,6 +21,31 @@ const shotDurations = [5, 6, 9, 9, 5, 6, 9, 7] as const;
 test("records the Routines walkthrough", async ({ browser }) => {
   if (!outputDir) throw new Error("SITE_VIDEO_DIR is required.");
   await mkdir(outputDir, { recursive: true });
+
+  const fixture = dashboardFixture();
+  const warmupContext = await browser.newContext({
+    viewport: { width: 1920, height: 1080 },
+    locale: "en-US",
+    timezoneId: "UTC",
+  });
+  const warmupPage = await warmupContext.newPage();
+  await warmupPage.route("**/api/auth/get-session*", (route) =>
+    route.fulfill({ json: fixture.session }),
+  );
+  await warmupPage.route("**/rpc/**", (route) => {
+    const procedure = new URL(route.request().url()).pathname.slice("/rpc/".length);
+    if (procedure === "threads/subscribe")
+      return route.fulfill({ contentType: "text/event-stream", body: "" });
+    const input = route.request().postDataJSON()?.json as Record<string, unknown> | undefined;
+    return route.fulfill({ json: { json: fixture.rpc(procedure, input) } });
+  });
+  try {
+    await warmupPage.goto("/app/bot");
+    await expect(warmupPage.getByText("Briefing").first()).toBeVisible();
+  } finally {
+    await warmupContext.close();
+  }
+
   const context = await browser.newContext({
     viewport: { width: 1920, height: 1080 },
     screen: { width: 1920, height: 1080 },
@@ -33,7 +58,6 @@ test("records the Routines walkthrough", async ({ browser }) => {
   });
   const page = await context.newPage();
   const video = page.video();
-  const fixture = dashboardFixture();
   const base = fixture.rpc("bootstrap") as {
     me: Record<string, unknown>;
     bots: (Record<string, unknown> & { id: string; threadId: string })[];
@@ -45,7 +69,7 @@ test("records the Routines walkthrough", async ({ browser }) => {
   const startedAt = Date.now();
   let routine: Record<string, unknown> | null = null;
   let runStartedAt: number | null = null;
-  const shots: { id: number; startMs: number; endMs: number }[] = [];
+  const shots: { id: number; startMs: number; endMs: number; actionEndMs: number }[] = [];
   const offset = () => Date.now() - startedAt;
   const completed = () => runStartedAt !== null && Date.now() - runStartedAt >= 10_000;
   const snapshot = () => ({
@@ -163,9 +187,16 @@ test("records the Routines walkthrough", async ({ browser }) => {
   async function shot(id: number, action: () => Promise<void>) {
     const startMs = offset();
     await action();
-    const elapsed = offset() - startMs;
-    await page.waitForTimeout(Math.max(0, shotDurations[id - 1]! * 1_000 + 300 - elapsed));
-    shots.push({ id, startMs, endMs: offset() });
+    const actionEndMs = offset();
+    const elapsed = actionEndMs - startMs;
+    const budgetMs = shotDurations[id - 1]! * 1_000;
+    if (elapsed > budgetMs * 2) {
+      throw new Error(
+        `Action for shot ${id} took ${elapsed}ms, exceeding 2x budget of ${budgetMs}ms.`,
+      );
+    }
+    await page.waitForTimeout(Math.max(0, budgetMs + 300 - elapsed));
+    shots.push({ id, startMs, endMs: offset(), actionEndMs });
   }
 
   let processingCut: { startMs: number; endMs: number } | null = null;
@@ -240,8 +271,21 @@ test("records the Routines walkthrough", async ({ browser }) => {
     await panel.getByText("Run history").scrollIntoViewIfNeeded();
     await expect(panel.getByText("Done", { exact: true })).toBeVisible();
     await expect(panel.locator("time")).toHaveCount(1);
+    const seventhActionEndMs = offset();
+    const seventhElapsed = seventhActionEndMs - processingCut.endMs;
+    const seventhBudgetMs = shotDurations[6]! * 1_000;
+    if (seventhElapsed > seventhBudgetMs * 2) {
+      throw new Error(
+        `Action for shot 7 took ${seventhElapsed}ms, exceeding 2x budget of ${seventhBudgetMs}ms.`,
+      );
+    }
     await page.waitForTimeout(Math.max(0, 9_300 - (offset() - processingCut.endMs)));
-    shots.push({ id: 7, startMs: seventhStartMs, endMs: offset() });
+    shots.push({
+      id: 7,
+      startMs: seventhStartMs,
+      endMs: offset(),
+      actionEndMs: seventhActionEndMs,
+    });
     await shot(8, async () => {
       const panel = page.getByTestId("side-panel");
       await expect(panel.getByPlaceholder("Name this routine")).toHaveValue("Morning checklist");

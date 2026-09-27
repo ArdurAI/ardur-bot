@@ -54,6 +54,7 @@ if [[ "$encoded" != true ]]; then
 fi
 
 duration=$(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$work/routines-demo.mp4")
+echo "Measured total duration: ${duration}s"
 poster_time=$(node -e 'const value = Number(process.argv[1]); if (!Number.isFinite(value) || value < 7) process.exit(1); console.log(value - 2)' "$duration")
 ffmpeg -hide_banner -loglevel error -y -ss "$poster_time" -i "$work/routines-demo.mp4" \
   -frames:v 1 -q:v 3 "$work/routines-demo.jpg"

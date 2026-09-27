@@ -2,7 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-type Shot = { id: number; startMs: number; endMs: number };
+type Shot = { id: number; startMs: number; endMs: number; actionEndMs?: number };
 type Sidecar = {
   recordingStartEpochMs: number;
   shots: Shot[];
@@ -34,6 +34,7 @@ export function buildTimeline(sidecar: Sidecar) {
     throw new Error("Recording sidecar must contain eight shots and a recording start time.");
   const cut = sidecar.processingCut;
   const segments: { startMs: number; durationMs: number }[] = [];
+  const shotDurationsMs: number[] = [];
   let previousEnd = -1;
   for (const [index, shot] of sidecar.shots.entries()) {
     const wantedMs = durations[index]! * 1_000;
@@ -57,27 +58,42 @@ export function buildTimeline(sidecar: Sidecar) {
         throw new Error("Shot 7 needs a processing cut within its offsets.");
       const beforeMs = cut.startMs - shot.startMs;
       const afterMs = wantedMs - beforeMs;
-      if (beforeMs > wantedMs || shot.endMs - cut.endMs < afterMs)
+      const recordedAfterMs = shot.endMs - cut.endMs;
+      if (beforeMs > wantedMs || recordedAfterMs < afterMs)
         throw new Error("Shot 7 has too little footage around the processing cut.");
       if (beforeMs > 0) segments.push({ startMs: shot.startMs, durationMs: beforeMs });
-      segments.push({ startMs: cut.endMs, durationMs: afterMs });
+      const afterOverBudget =
+        shot.actionEndMs !== undefined
+          ? shot.actionEndMs > cut.endMs + afterMs
+          : recordedAfterMs > afterMs;
+      const afterDurationMs = afterOverBudget ? recordedAfterMs : afterMs;
+      segments.push({ startMs: cut.endMs, durationMs: afterDurationMs });
+      shotDurationsMs.push((beforeMs > 0 ? beforeMs : 0) + afterDurationMs);
     } else {
-      if (shot.endMs - shot.startMs < wantedMs)
+      const recordedMs = shot.endMs - shot.startMs;
+      if (recordedMs < wantedMs)
         throw new Error(`Shot ${shot.id} is shorter than ${durations[index]} seconds.`);
-      segments.push({ startMs: shot.startMs, durationMs: wantedMs });
+      const overBudget =
+        shot.actionEndMs !== undefined
+          ? shot.actionEndMs > shot.startMs + wantedMs
+          : recordedMs > wantedMs;
+      const durationMs = overBudget ? recordedMs : wantedMs;
+      segments.push({ startMs: shot.startMs, durationMs });
+      shotDurationsMs.push(durationMs);
     }
   }
   let cueStart = 0;
   const vtt = [
     "WEBVTT",
     "",
-    ...durations.flatMap((seconds, index) => {
+    ...shotDurationsMs.flatMap((durationMs, index) => {
       const start = cueStart;
-      cueStart += seconds * 1_000;
+      cueStart += durationMs;
       return [`${vttTime(start)} --> ${vttTime(cueStart)}`, captions[index]!, ""];
     }),
   ].join("\n");
-  return { segments, vtt, durationSeconds: cueStart / 1_000 };
+  const durationSeconds = cueStart / 1_000;
+  return { segments, vtt, durationSeconds };
 }
 
 export function filterGraph(
@@ -112,6 +128,11 @@ async function main() {
   console.log(
     `Timeline: ${timeline.durationSeconds} seconds, ${timeline.segments.length} segments.`,
   );
+  timeline.segments.forEach((segment, index) => {
+    console.log(
+      `  Segment ${index + 1}: ${(segment.durationMs / 1_000).toFixed(3)}s (${(segment.startMs / 1_000).toFixed(3)}s -> ${((segment.startMs + segment.durationMs) / 1_000).toFixed(3)}s)`,
+    );
+  });
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
