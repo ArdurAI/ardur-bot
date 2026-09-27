@@ -836,7 +836,9 @@ it.each([false, true, undefined])(
       runtimeInfo: { runtimeKind: native.runtimeKind, effortAttested },
     };
     await act(async () =>
-      root.render(<BotModelChip bot={native} run={run} settings={null} onClick={vi.fn()} />),
+      root.render(
+        <BotModelChip bot={native} run={run} settings={null} onClick={vi.fn()} display="using" />,
+      ),
     );
     expect(container.textContent).toBe(
       `Claude Code · claude-opus-5 · high${effortAttested ? "" : " · requested"}`,
@@ -848,6 +850,7 @@ it.each([false, true, undefined])(
           run={run}
           settings={null}
           onClick={vi.fn()}
+          display="using"
         />,
       ),
     );

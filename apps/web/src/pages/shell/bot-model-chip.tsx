@@ -84,7 +84,7 @@ export function BotModelChip({
   display?: "change" | "using";
 }) {
   const { t } = useLingui();
-  const requested = run?.runtimePin ?? pin;
+  const requested = display === "using" ? (run?.runtimePin ?? pin) : pin;
   const displayBot = requested
     ? {
         ...bot,
@@ -99,7 +99,7 @@ export function BotModelChip({
   if (!model) return null;
   const effort =
     displayBot.runtimeKind === "claude-code"
-      ? botEffortLabel(displayBot, run, t`requested`)
+      ? botEffortLabel(displayBot, display === "using" ? run : null, t`requested`)
       : (model.effortLabel ?? model.thinkingLevel);
   const label = `${displayBot.runtimeKind && displayBot.runtimeKind !== "pi" ? "" : "Ardur · "}${model.providerLabel} · ${model.label}${effort ? ` · ${effort}` : ""}${model.unavailable ? t` · not available` : ""}`;
   const currentId = requested?.modelId ?? displayBot.modelId ?? model.label;

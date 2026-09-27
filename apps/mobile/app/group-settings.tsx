@@ -4,7 +4,14 @@ import { useEffect, useState } from "react";
 import { Alert, Pressable, ScrollView, Text, TextInput } from "react-native";
 import { BotMemberPicker } from "../components/bot-member-picker";
 import { ContextSection } from "../components/context-section";
-import { type MobileBot, type MobileGroup, rpc } from "../lib/api";
+import { GroupMemberModelControl } from "../components/group-member-model-control";
+import {
+  type MobileBot,
+  type MobileGroup,
+  type MobileModel,
+  type MobileModelCredential,
+  rpc,
+} from "../lib/api";
 import { useI18n } from "../lib/i18n";
 import { presentMessageActionSheet } from "../lib/message-action-sheet";
 import { useMobileTokens, useResolvedAppearance } from "../lib/native";
@@ -17,6 +24,8 @@ export default function GroupSettingsScreen() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
   const [group, setGroup] = useState<MobileGroup | null>(null);
   const [bots, setBots] = useState<MobileBot[]>([]);
+  const [catalog, setCatalog] = useState<MobileModel[]>([]);
+  const [credentials, setCredentials] = useState<MobileModelCredential[]>([]);
   const [name, setName] = useState("");
   const [coordinator, setCoordinator] = useState<string | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
@@ -41,6 +50,21 @@ export default function GroupSettingsScreen() {
       })
       .catch((err) => setError(err instanceof Error ? err.message : t("Could not load group")));
   }, [groupId]);
+
+  useEffect(() => {
+    void Promise.all([
+      rpc<MobileModel[]>("models/list"),
+      rpc<MobileModelCredential[]>("models/credentials"),
+    ])
+      .then(([nextCatalog, nextCredentials]) => {
+        setCatalog(nextCatalog);
+        setCredentials(nextCredentials);
+      })
+      .catch(() => {
+        setCatalog([]);
+        setCredentials([]);
+      });
+  }, []);
 
   async function save() {
     if (!groupId || !group || pending) return;
@@ -119,6 +143,19 @@ export default function GroupSettingsScreen() {
           onChange={setSelected}
           disabled={pending}
         />
+        {group?.members
+          .filter((member) => selected.includes(member.botId))
+          .map((member) => (
+            <GroupMemberModelControl
+              key={member.botId}
+              groupId={group.id}
+              member={member}
+              catalog={catalog}
+              credentials={credentials}
+              onSaved={setGroup}
+              onError={setError}
+            />
+          ))}
         <Pressable
           accessibilityRole="button"
           onPress={() =>

@@ -10,6 +10,7 @@ import { RunTriggerSchema } from "@ardurbot/contracts";
 import { describe, expect, it } from "vitest";
 import {
   activeThreadRuns,
+  admittedMemberRun,
   applyThreadSendReceipt,
   clearActiveThreadRuns,
   computerPanelAutoBoot,
@@ -27,6 +28,43 @@ import {
 } from "./thread-events.js";
 
 describe("thread event reduction", () => {
+  it.each(["queued", "leased", "running", "waiting_input", "waiting_takeover"] as const)(
+    "keeps the admitted member pin visible while %s",
+    (status) => {
+      const run = {
+        ...threadRun("admitted", "member"),
+        status,
+        runtimePin: {
+          runtimeKind: "pi" as const,
+          provider: "fixture",
+          modelId: "original",
+          effort: "off",
+          credentialId: "credential",
+          revision: 1,
+        },
+      };
+      expect(admittedMemberRun([run], "member")).toBe(run);
+      expect(admittedMemberRun([run], "other")).toBeNull();
+    },
+  );
+  it.each(["completed", "failed", "cancelled"] as const)(
+    "does not display a terminal %s pin as the current member choice",
+    (status) => {
+      const run = {
+        ...threadRun("old", "member"),
+        status,
+        runtimePin: {
+          runtimeKind: "pi" as const,
+          provider: "fixture",
+          modelId: "old",
+          effort: "off",
+          credentialId: "credential",
+          revision: 1,
+        },
+      };
+      expect(admittedMemberRun([run], "member")).toBeNull();
+    },
+  );
   it("admits live context through the subscription filter and updates the matching run", () => {
     const run = threadRun("run-1");
     const initial = { ...snapshot([]), run, activeRuns: [run, threadRun("peer")] };

@@ -187,6 +187,7 @@ import type {} from "../lib/scoreboard-trace";
 import { sharedInflight } from "../lib/shared-inflight";
 import {
   activeThreadRuns,
+  admittedMemberRun,
   applyThreadSendReceipt,
   clearActiveThreadRuns,
   computerPanelAutoBoot,
@@ -3347,10 +3348,7 @@ export function ShellPage({
                 {activeGroup.members.map((member) => {
                   const participant = bots.find((bot) => bot.id === member.botId);
                   if (!participant) return null;
-                  const running = currentRuns.find(
-                    (run) =>
-                      run.botId === member.botId && run.status === "running" && run.runtimePin,
-                  );
+                  const admitted = admittedMemberRun(currentRuns, member.botId);
                   return (
                     <div key={member.botId} className="flex shrink-0 items-center gap-1">
                       <span className="text-xs text-muted-foreground">{member.name}</span>
@@ -3359,7 +3357,7 @@ export function ShellPage({
                         settings={modelSettings}
                         pin={member.effectiveRuntimePin}
                         nextPin={member.effectiveRuntimePin}
-                        run={running}
+                        run={admitted}
                         display="using"
                       />
                     </div>

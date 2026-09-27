@@ -1387,13 +1387,18 @@ function Thread() {
   }
 
   const answerableAskMessageId = latestAnswerableAskMessageId(snap);
+  const pinRecovery = snap?.run?.runtimeProblem
+    ? runtimePinRecovery(snap.run.runtimeProblem, snap.run.botId ?? botId ?? "")
+    : null;
   const runError =
     snap?.run?.status === "failed"
       ? snap.run.runtimeProblem
-        ? snap.run.runtimeProblem.pin.runtimeKind !== "pi" ||
-          snap.run.runtimeProblem.code !== "pin-credential-missing"
-          ? snap.run.runtimeProblem.reason
-          : runtimePinMessage(snap.run.runtimeProblem.pin)
+        ? pinRecovery?.message
+          ? t(pinRecovery.message)
+          : snap.run.runtimeProblem.pin.runtimeKind !== "pi" ||
+              snap.run.runtimeProblem.code !== "pin-credential-missing"
+            ? snap.run.runtimeProblem.reason
+            : runtimePinMessage(snap.run.runtimeProblem.pin)
         : (snap.run.error ?? null)
       : null;
   const liveMessages = useMemo(() => [...visibleMessages].reverse(), [visibleMessages]);
@@ -1706,12 +1711,7 @@ function Thread() {
                 <Text
                   accessibilityRole="button"
                   style={{ color: tokens.destructive }}
-                  onPress={() =>
-                    router.push(
-                      runtimePinRecovery(snap.run!.runtimeProblem!, snap.run?.botId ?? botId ?? "")
-                        .connect,
-                    )
-                  }
+                  onPress={() => pinRecovery && router.push(pinRecovery.connect)}
                 >
                   {t("Connect")}
                 </Text>
@@ -1719,14 +1719,13 @@ function Thread() {
               <Text
                 accessibilityRole="button"
                 style={{ color: tokens.destructive }}
-                onPress={() =>
-                  router.push(
-                    runtimePinRecovery(snap.run!.runtimeProblem!, snap.run?.botId ?? botId ?? "")
-                      .changePin,
-                  )
-                }
+                onPress={() => pinRecovery && router.push(pinRecovery.changePin)}
               >
-                {t("Change pin")}
+                {t(
+                  snap.run.runtimeProblem.source?.kind === "group-member"
+                    ? "Group settings"
+                    : "Change pin",
+                )}
               </Text>
             </View>
           ) : null}

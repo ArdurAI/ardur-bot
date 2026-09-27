@@ -1,4 +1,9 @@
 export const ZH_MESSAGES: Record<string, string> = {
+  "This bot uses a model chosen for this group. Change it in Group settings.":
+    "此 Bot 使用为该群组选择的模型。请在群组设置中更改。",
+  "Model in this group": "此群组中的模型",
+  "Same as bot": "与 Bot 相同",
+  "Could not save group model.": "无法保存群组模型。",
   "Sign-in timed out.": "登录已超时。",
   "Needs sign-in": "需要登录",
   "Not available": "不可用",

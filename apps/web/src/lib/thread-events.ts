@@ -66,6 +66,10 @@ export function activeThreadRuns(
   return snapshot?.activeRuns ?? (snapshot?.run ? [snapshot.run] : []);
 }
 
+export function admittedMemberRun(runs: readonly Run[], botId: string): Run | null {
+  return runs.find((run) => run.botId === botId && isActive(run.status) && run.runtimePin) ?? null;
+}
+
 /**
  * Reflect a committed direct-message send before its follow-up snapshot arrives.
  *

@@ -279,6 +279,30 @@ describe("lingui catalogs", () => {
     }
   });
 
+  it("translates every group model control and status in each supported catalog", () => {
+    const messages = [
+      "Could not save group model.",
+      "Model in this group",
+      "Next run",
+      "Same as bot",
+      "Save model",
+      "Using {currentId}",
+      "{0, plural, one {Also set differently in # group} other {Also set differently in # groups}}",
+    ];
+    for (const locale of ["de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"]) {
+      const catalog = readFileSync(
+        fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url)),
+        "utf8",
+      );
+      for (const message of messages) {
+        const escaped = message.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        expect(catalog, `${locale}: ${message}`).toMatch(
+          new RegExp(`msgid "${escaped}"\\nmsgstr "[^"]+"`),
+        );
+      }
+    }
+  });
+
   it("extracts the fleet move sentences the code asks for into every catalog", () => {
     const sentences = [
       "Default computer",

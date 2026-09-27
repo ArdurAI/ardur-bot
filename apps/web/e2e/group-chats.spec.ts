@@ -1,4 +1,6 @@
+import { modelPinOptionKey } from "@ardurbot/core";
 import { expect, type Page, test } from "@playwright/test";
+import { listPiCatalog } from "../../../packages/adapters/src/pi-models";
 import {
   captureScreenshot,
   completeOnboarding,
@@ -18,7 +20,14 @@ test("a group member choice appears in the room and on its captured run", async 
   await signup(page, `group-choice-${Date.now()}@ardurbot.test`, "password12", "Group choice");
   await completeOnboarding(page);
   await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
-  await rpc(page, "models/connect", { provider: "scripted", apiKey: "fake-scripted-key" });
+  const catalogChoice = listPiCatalog().find(
+    (entry) => entry.provider === "openai" && !entry.placeholder,
+  );
+  expect(catalogChoice).toBeDefined();
+  const credential = await rpc<{ id: string }>(page, "models/connect", {
+    provider: catalogChoice!.provider,
+    apiKey: "fixture-key",
+  });
   await page.reload();
   const first = await createBot(page, "Room first");
   await createBot(page, "Room second");
@@ -36,14 +45,21 @@ test("a group member choice appears in the room and on its captured run", async 
   await expect
     .poll(async () => select.locator("option[value]:not([value=''])").count())
     .toBeGreaterThan(0);
-  const option = select.locator("option[value]:not([value=''])").first();
-  await select.selectOption((await option.getAttribute("value"))!);
+  await select.selectOption(
+    modelPinOptionKey(catalogChoice!.provider, catalogChoice!.id, credential.id),
+  );
+  const saved = page.waitForResponse(
+    (response) =>
+      response.url().includes("/rpc/groups/setMemberModelPin") &&
+      response.request().method() === "POST",
+  );
   await control.getByRole("button", { name: "Save model" }).click();
+  expect((await saved).ok()).toBe(true);
   const group = await rpc<{
     members: Array<{ botId: string; runtimePin: { modelId: string } | null }>;
   }>(page, "groups/get", { groupId });
   const modelId = group.members.find((member) => member.botId === first)?.runtimePin?.modelId;
-  expect(modelId).toBeTruthy();
+  expect(modelId).toBe(catalogChoice!.id);
   await expect(
     page.getByTestId("group-participant-models").getByLabel(`Using ${modelId}`),
   ).toBeVisible();

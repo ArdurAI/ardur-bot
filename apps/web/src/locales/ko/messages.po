@@ -46,7 +46,7 @@ msgstr ""
 #. placeholder {0}: bot.groupModelOverrideCount ?? 0
 #: src/pages/shell/bot-panel.tsx
 msgid "{0, plural, one {Also set differently in # group} other {Also set differently in # groups}}"
-msgstr ""
+msgstr "{0, plural, one {#개 그룹에서 다르게 설정됨} other {#개 그룹에서 다르게 설정됨}}"
 
 #. placeholder {0}: preset.n
 #: src/pages/RoutineSchedule.tsx
@@ -2638,7 +2638,7 @@ msgstr "그룹을 저장하지 못했습니다."
 
 #: src/pages/group-model-control.tsx
 msgid "Could not save group model."
-msgstr ""
+msgstr "그룹 모델을 저장할 수 없습니다."
 
 #: src/components/composer/composer-actions.ts
 msgid "Could not save memory"
@@ -4908,7 +4908,7 @@ msgstr "모델 ID"
 
 #: src/pages/group-model-control.tsx
 msgid "Model in this group"
-msgstr ""
+msgstr "이 그룹의 모델"
 
 #: src/components/OllamaSettings.tsx
 msgid "Model name"
@@ -5149,7 +5149,7 @@ msgstr ""
 
 #: src/pages/shell/bot-model-chip.tsx
 msgid "Next run"
-msgstr ""
+msgstr "다음 실행"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "No agent connections yet."
@@ -6745,7 +6745,7 @@ msgstr ""
 #: src/pages/group-model-control.tsx
 #: src/pages/shell/bot-model-chip.tsx
 msgid "Same as bot"
-msgstr ""
+msgstr "봇과 동일"
 
 #. placeholder {0}: row.participants.length
 #: src/pages/ComparePanel.tsx
@@ -6796,7 +6796,7 @@ msgstr ""
 
 #: src/pages/group-model-control.tsx
 msgid "Save model"
-msgstr ""
+msgstr "모델 저장"
 
 #: src/components/AskCard.tsx
 #: src/components/teach/SkillDraftCard.tsx
@@ -8223,7 +8223,7 @@ msgstr ""
 
 #: src/pages/shell/bot-model-chip.tsx
 msgid "Using {currentId}"
-msgstr ""
+msgstr "{currentId} 사용 중"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"

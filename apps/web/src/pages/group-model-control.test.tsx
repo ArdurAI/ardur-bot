@@ -200,4 +200,19 @@ describe("group model control", () => {
     expect(container.textContent).toContain("Next run");
     expect(container.textContent).toContain("model-a");
   });
+
+  it("keeps the change chip on the saved bot choice after an older run fails", async () => {
+    await act(async () =>
+      root.render(
+        <BotModelChip
+          bot={{ ...bot, modelId: "model-b" }}
+          settings={settings}
+          run={{ runtimePin: { ...pin, modelId: "model-a" } }}
+          onClick={vi.fn()}
+        />,
+      ),
+    );
+    expect(container.querySelector("button")?.getAttribute("aria-label")).toContain("model-b");
+    expect(container.querySelector("button")?.getAttribute("aria-label")).not.toContain("model-a");
+  });
 });

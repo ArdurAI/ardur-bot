@@ -46,7 +46,7 @@ msgstr ""
 #. placeholder {0}: bot.groupModelOverrideCount ?? 0
 #: src/pages/shell/bot-panel.tsx
 msgid "{0, plural, one {Also set differently in # group} other {Also set differently in # groups}}"
-msgstr ""
+msgstr "{0, plural, one {Auch in # Gruppe anders eingestellt} other {Auch in # Gruppen anders eingestellt}}"
 
 #. placeholder {0}: preset.n
 #: src/pages/RoutineSchedule.tsx
@@ -2638,7 +2638,7 @@ msgstr "Gruppe konnte nicht gespeichert werden"
 
 #: src/pages/group-model-control.tsx
 msgid "Could not save group model."
-msgstr ""
+msgstr "Gruppenmodell konnte nicht gespeichert werden."
 
 #: src/components/composer/composer-actions.ts
 msgid "Could not save memory"
@@ -4908,7 +4908,7 @@ msgstr "Modell-ID"
 
 #: src/pages/group-model-control.tsx
 msgid "Model in this group"
-msgstr ""
+msgstr "Modell in dieser Gruppe"
 
 #: src/components/OllamaSettings.tsx
 msgid "Model name"
@@ -5149,7 +5149,7 @@ msgstr ""
 
 #: src/pages/shell/bot-model-chip.tsx
 msgid "Next run"
-msgstr ""
+msgstr "Nächster Lauf"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "No agent connections yet."
@@ -6745,7 +6745,7 @@ msgstr ""
 #: src/pages/group-model-control.tsx
 #: src/pages/shell/bot-model-chip.tsx
 msgid "Same as bot"
-msgstr ""
+msgstr "Wie beim Bot"
 
 #. placeholder {0}: row.participants.length
 #: src/pages/ComparePanel.tsx
@@ -6796,7 +6796,7 @@ msgstr ""
 
 #: src/pages/group-model-control.tsx
 msgid "Save model"
-msgstr ""
+msgstr "Modell speichern"
 
 #: src/components/AskCard.tsx
 #: src/components/teach/SkillDraftCard.tsx
@@ -8223,7 +8223,7 @@ msgstr ""
 
 #: src/pages/shell/bot-model-chip.tsx
 msgid "Using {currentId}"
-msgstr ""
+msgstr "Verwendet {currentId}"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"

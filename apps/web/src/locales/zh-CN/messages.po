@@ -46,7 +46,7 @@ msgstr "{0, plural, other {由于扫描限制，有 # 个项目未被扫描。}}
 #. placeholder {0}: bot.groupModelOverrideCount ?? 0
 #: src/pages/shell/bot-panel.tsx
 msgid "{0, plural, one {Also set differently in # group} other {Also set differently in # groups}}"
-msgstr ""
+msgstr "{0, plural, one {另有 # 个群组设置了不同模型} other {另有 # 个群组设置了不同模型}}"
 
 #. placeholder {0}: preset.n
 #: src/pages/RoutineSchedule.tsx
@@ -2638,7 +2638,7 @@ msgstr "无法保存群组"
 
 #: src/pages/group-model-control.tsx
 msgid "Could not save group model."
-msgstr ""
+msgstr "无法保存群组模型。"
 
 #: src/components/composer/composer-actions.ts
 msgid "Could not save memory"
@@ -4908,7 +4908,7 @@ msgstr "模型 ID"
 
 #: src/pages/group-model-control.tsx
 msgid "Model in this group"
-msgstr ""
+msgstr "此群组中的模型"
 
 #: src/components/OllamaSettings.tsx
 msgid "Model name"
@@ -5149,7 +5149,7 @@ msgstr ""
 
 #: src/pages/shell/bot-model-chip.tsx
 msgid "Next run"
-msgstr ""
+msgstr "下次运行"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "No agent connections yet."
@@ -6745,7 +6745,7 @@ msgstr ""
 #: src/pages/group-model-control.tsx
 #: src/pages/shell/bot-model-chip.tsx
 msgid "Same as bot"
-msgstr ""
+msgstr "与 Bot 相同"
 
 #. placeholder {0}: row.participants.length
 #: src/pages/ComparePanel.tsx
@@ -6796,7 +6796,7 @@ msgstr ""
 
 #: src/pages/group-model-control.tsx
 msgid "Save model"
-msgstr ""
+msgstr "保存模型"
 
 #: src/components/AskCard.tsx
 #: src/components/teach/SkillDraftCard.tsx
@@ -8223,7 +8223,7 @@ msgstr ""
 
 #: src/pages/shell/bot-model-chip.tsx
 msgid "Using {currentId}"
-msgstr ""
+msgstr "正在使用 {currentId}"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"
