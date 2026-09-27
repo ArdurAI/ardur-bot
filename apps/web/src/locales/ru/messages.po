@@ -2847,9 +2847,10 @@ msgstr ""
 msgid "Could not update this computer. Try again."
 msgstr ""
 
+#: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Could not update this field. Retry."
-msgstr ""
+msgstr "Не удалось обновить это поле. Повторите попытку."
 
 #: src/pages/board/Board.tsx
 #: src/pages/board/ItemForm.tsx
@@ -2953,9 +2954,9 @@ msgstr "Создание…"
 msgid "Credential"
 msgstr "Учётные данные"
 
-#: src/pages/McpServersOverlay.tsx
+#: src/components/integrations/McpCredentialFields.tsx
 msgid "Credential fields"
-msgstr ""
+msgstr "Поля учетных данных"
 
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
@@ -6988,13 +6989,13 @@ msgstr ""
 msgid "Searching…"
 msgstr "Поиск…"
 
-#: src/pages/McpServersOverlay.tsx
+#: src/components/integrations/McpCredentialFields.tsx
 msgid "Secret"
-msgstr ""
+msgstr "Секрет"
 
-#: src/pages/McpServersOverlay.tsx
+#: src/components/integrations/McpCredentialFields.tsx
 msgid "Secret for {key}"
-msgstr ""
+msgstr "Секрет для {key}"
 
 #: src/pages/account/AccountProfile.tsx
 msgid "Select"

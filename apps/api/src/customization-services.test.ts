@@ -3,9 +3,11 @@ import { randomUUID } from "node:crypto";
 import { mkdtemp, readdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { EncryptedSecretStore } from "@ardurbot/adapters";
+import { EncryptedSecretStore, oauthMaterialSecrets } from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
 import { ManagedServerInputSchema } from "@ardurbot/contracts";
+import { redactMcpText } from "@ardurbot/host-runtime/mcp-diagnostics";
+import { assertMemorySafe } from "@ardurbot/memory";
 import { memoryServiceFixture } from "@ardurbot/testkit/memory-fakes";
 import { RPCHandler } from "@orpc/server/fetch";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -470,6 +472,53 @@ describe("customization service boundaries", () => {
     expect(f.tables.mcpServer).toHaveLength(0);
     expect(f.tables.secret).toHaveLength(0);
   });
+  it("keeps a managed server's owner classification when its registration refreshes", async () => {
+    const f = await fixture();
+    const input = ManagedServerInputSchema.parse({
+      managedId: "fixture",
+      managedBy: "plugin",
+      name: "Fixture",
+      description: "",
+      placement: "worker",
+      command: "node",
+      args: ["server.js"],
+      env: { ROOT_DIR: "/workspace" },
+      secretValues: ["/workspace"],
+      cwd: "/fixture",
+    });
+    await f.mcp.register(actor, input);
+    const row = f.tables.mcpServer![0]!;
+    const original = f.tables.secret![0]!;
+    const material = JSON.parse(
+      f.deps.secrets.load(String(original.ciphertext), String(original.id)),
+    );
+    const corrected = await f.deps.secrets.put(
+      JSON.stringify({
+        ...material,
+        redactions: [],
+        credentialFlags: { env: { ROOT_DIR: false }, headers: {} },
+      }),
+      {
+        spaceId: actor.spaceId,
+        userId: actor.userId,
+        operationId: "fixture",
+        traceId: "fixture",
+        signal: AbortSignal.timeout(10_000),
+      },
+    );
+    Object.assign(original, corrected);
+    row.secretId = corrected.id;
+    await f.mcp.register(actor, { ...input, description: "Updated" });
+    const encrypted = f.tables.secret!.find((entry) => entry.id === row.secretId)!;
+    const saved = JSON.parse(
+      f.deps.secrets.load(String(encrypted.ciphertext), String(encrypted.id)),
+    );
+    expect(saved.credentialFlags.env.ROOT_DIR).toBe(false);
+    expect(saved.redactions).not.toContain("/workspace");
+    const protectedValues = oauthMaterialSecrets(saved);
+    expect(redactMcpText("/workspace/report.txt", protectedValues)).toBe("/workspace/report.txt");
+    expect(() => assertMemorySafe("/workspace/report.txt", protectedValues)).not.toThrow();
+  });
   it("validates and previews config without leaking secrets, and fences stale applies", async () => {
     const f = await fixture();
     const initial = await f.mcp.config(actor);
@@ -509,6 +558,33 @@ describe("customization service boundaries", () => {
     expect(() => parseServerConfig('{"mcpServers":{"../bad":{"command":"node"}}}')).toThrow();
     const before = parseServerConfig(json);
     expect(configDiff(before, before)).toEqual([]);
+  });
+  it("does not persist an ordinary environment value as a redaction after a config edit", async () => {
+    const f = await fixture();
+    const initial = await f.mcp.config(actor);
+    const created = await f.mcp.preview(actor, {
+      revision: initial.revision,
+      json: JSON.stringify({
+        mcpServers: { fixture: { name: "Fixture", command: "node", env: { LOG_LEVEL: "info" } } },
+      }),
+    });
+    await f.mcp.apply(actor, created.id);
+    const current = await f.mcp.config(actor);
+    const edited = await f.mcp.preview(actor, {
+      revision: current.revision,
+      json: current.json.replace('"Fixture"', '"Updated"'),
+    });
+    await f.mcp.apply(actor, edited.id);
+    const row = f.tables.mcpServer![0]!;
+    const encrypted = f.tables.secret!.find((entry) => entry.id === row.secretId)!;
+    const material = JSON.parse(
+      f.deps.secrets.load(String(encrypted.ciphertext), String(encrypted.id)),
+    );
+    expect(material.credentialFlags.env.LOG_LEVEL).toBe(false);
+    expect(material.redactions).not.toContain("info");
+    const protectedValues = oauthMaterialSecrets(material);
+    expect(redactMcpText("information", protectedValues)).toBe("information");
+    expect(() => assertMemorySafe("information", protectedValues)).not.toThrow();
   });
   it("imports file skills and lists file, taught and learned kinds with runtime enablement", async () => {
     const f = await fixture();

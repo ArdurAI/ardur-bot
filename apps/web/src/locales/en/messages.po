@@ -2847,6 +2847,7 @@ msgstr "Could not update the computer. Check the connection and try again."
 msgid "Could not update this computer. Try again."
 msgstr "Could not update this computer. Try again."
 
+#: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Could not update this field. Retry."
 msgstr "Could not update this field. Retry."
@@ -2953,7 +2954,7 @@ msgstr "Creating…"
 msgid "Credential"
 msgstr "Credential"
 
-#: src/pages/McpServersOverlay.tsx
+#: src/components/integrations/McpCredentialFields.tsx
 msgid "Credential fields"
 msgstr "Credential fields"
 
@@ -6988,11 +6989,11 @@ msgstr "Search skills and plugins"
 msgid "Searching…"
 msgstr "Searching…"
 
-#: src/pages/McpServersOverlay.tsx
+#: src/components/integrations/McpCredentialFields.tsx
 msgid "Secret"
 msgstr "Secret"
 
-#: src/pages/McpServersOverlay.tsx
+#: src/components/integrations/McpCredentialFields.tsx
 msgid "Secret for {key}"
 msgstr "Secret for {key}"
 

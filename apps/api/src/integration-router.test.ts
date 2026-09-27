@@ -1,6 +1,8 @@
 import { randomBytes } from "node:crypto";
-import { EncryptedSecretStore, McpOAuthBroker } from "@ardurbot/adapters";
+import { EncryptedSecretStore, McpOAuthBroker, oauthMaterialSecrets } from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
+import { redactMcpText } from "@ardurbot/host-runtime/mcp-diagnostics";
+import { assertMemorySafe } from "@ardurbot/memory";
 import { RPCHandler } from "@orpc/server/fetch";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { IntegrationConnections } from "./integration-connections.js";
@@ -569,85 +571,113 @@ describe("integration RPC boundaries", () => {
       (await f.request("mcp/servers/update", { id: "server", secret: "synthetic-token" }))?.status,
     ).toBe(400);
   });
-  it("updates only encrypted entry flags while retaining legacy credential values", async () => {
-    const store = new EncryptedSecretStore(randomBytes(32).toString("hex"));
-    const old = await store.put(
-      JSON.stringify({
-        env: { LOG_LEVEL: "info", PGPASSWORD: "bluebird-42" },
-        headers: { "X-Auth": "header-789" },
-      }),
-      {
+  it.each([
+    ["custom", null, null],
+    ["extension", "extension", null],
+    ["plugin", "plugin", null],
+    ["catalog", null, "catalog"],
+  ])(
+    "updates %s entry flags without editing the server definition",
+    async (_, managedBy, catalogId) => {
+      const store = new EncryptedSecretStore(randomBytes(32).toString("hex"));
+      const old = await store.put(
+        JSON.stringify({
+          env: { LOG_LEVEL: "info", PGPASSWORD: "bluebird-42", ROOT_DIR: "/workspace" },
+          headers: { "X-Auth": "header-789" },
+          redactions: ["info", "/workspace", "extra-private-value"],
+        }),
+        {
+          spaceId: actor.spaceId,
+          userId: actor.userId,
+          operationId: "fixture",
+          traceId: "fixture",
+          signal: AbortSignal.timeout(10_000),
+        },
+      );
+      const row = {
+        id: "server",
         spaceId: actor.spaceId,
         userId: actor.userId,
-        operationId: "fixture",
-        traceId: "fixture",
-        signal: AbortSignal.timeout(10_000),
-      },
-    );
-    const row = {
-      id: "server",
-      spaceId: actor.spaceId,
-      userId: actor.userId,
-      catalogId: null,
-      managedBy: null,
-      imported: null,
-      slug: "server",
-      name: "Server",
-      description: "",
-      transport: "stdio",
-      endpoint: null,
-      command: "node",
-      args: [],
-      env: { LOG_LEVEL: true, PGPASSWORD: true },
-      headers: { "X-Auth": true },
-      secretId: old.id,
-      enabled: true,
-      revision: 1,
-      createdAt: new Date(0),
-      updatedAt: new Date(0),
-    };
-    const secrets = new Map([[old.id, { id: old.id, ciphertext: old.ciphertext }]]);
-    const prisma = {
-      spaceMember: { findUnique: vi.fn(async () => ({ role: "owner" })) },
-      mcpServer: {
-        findFirst: vi.fn(async () => ({ ...row })),
-        findFirstOrThrow: vi.fn(async () => ({ ...row })),
-        updateMany: vi.fn(async ({ data }: { data: { secretId: string } }) => {
-          row.secretId = data.secretId;
-          row.revision++;
-          return { count: 1 };
-        }),
-      },
-      secret: {
-        findFirst: vi.fn(async ({ where }: { where: { id: string } }) => secrets.get(where.id)),
-        create: vi.fn(async ({ data }: { data: { id: string; ciphertext: string } }) => {
-          secrets.set(data.id, data);
-        }),
-        deleteMany: vi.fn(async ({ where }: { where: { id: string } }) => {
-          secrets.delete(where.id);
-        }),
-      },
-      $executeRaw: vi.fn(async () => 1),
-      $transaction: vi.fn(),
-    };
-    prisma.$transaction.mockImplementation(async (callback) => callback(prisma));
-    const f = fixture({ prisma, secrets: store } as never);
-    const credentialFlags = {
-      env: { LOG_LEVEL: false, PGPASSWORD: true },
-      headers: { "X-Auth": true },
-    };
-    expect((await f.request("mcp/servers/update", { id: row.id, credentialFlags }))?.status).toBe(
-      200,
-    );
-    const saved = secrets.get(row.secretId)!;
-    expect(JSON.parse(store.load(saved.ciphertext, saved.id))).toEqual({
-      env: { LOG_LEVEL: "info", PGPASSWORD: "bluebird-42" },
-      headers: { "X-Auth": "header-789" },
-      credentialFlags,
-    });
-    expect(secrets.has(old.id)).toBe(false);
-    expect(row.revision).toBe(2);
-  });
+        catalogId,
+        managedBy,
+        imported: null,
+        slug: "server",
+        name: "Server",
+        description: "",
+        transport: "stdio",
+        endpoint: null,
+        command: "node",
+        args: [],
+        env: { LOG_LEVEL: true, PGPASSWORD: true, ROOT_DIR: true },
+        headers: { "X-Auth": true },
+        secretId: old.id,
+        enabled: true,
+        revision: 1,
+        createdAt: new Date(0),
+        updatedAt: new Date(0),
+      };
+      const secrets = new Map([[old.id, { id: old.id, ciphertext: old.ciphertext }]]);
+      const prisma = {
+        spaceMember: { findUnique: vi.fn(async () => ({ role: "owner" })) },
+        mcpServer: {
+          findFirst: vi.fn(async () => ({ ...row })),
+          findFirstOrThrow: vi.fn(async () => ({ ...row })),
+          updateMany: vi.fn(async ({ data }: { data: { secretId: string } }) => {
+            row.secretId = data.secretId;
+            row.revision++;
+            return { count: 1 };
+          }),
+        },
+        secret: {
+          findFirst: vi.fn(async ({ where }: { where: { id: string } }) => secrets.get(where.id)),
+          create: vi.fn(async ({ data }: { data: { id: string; ciphertext: string } }) => {
+            expect(Object.keys(data).sort()).toEqual([
+              "ciphertext",
+              "id",
+              "kind",
+              "spaceId",
+              "userId",
+            ]);
+            expect(data).toMatchObject({
+              kind: "mcp",
+              spaceId: actor.spaceId,
+              userId: actor.userId,
+            });
+            secrets.set(data.id, data);
+          }),
+          deleteMany: vi.fn(async ({ where }: { where: { id: string } }) => {
+            secrets.delete(where.id);
+          }),
+        },
+        $executeRaw: vi.fn(async () => 1),
+        $transaction: vi.fn(),
+      };
+      prisma.$transaction.mockImplementation(async (callback) => callback(prisma));
+      const f = fixture({ prisma, secrets: store } as never);
+      const credentialFlags = {
+        env: { LOG_LEVEL: false, PGPASSWORD: true, ROOT_DIR: false },
+        headers: { "X-Auth": true },
+      };
+      expect((await f.request("mcp/servers/update", { id: row.id, credentialFlags }))?.status).toBe(
+        200,
+      );
+      const saved = secrets.get(row.secretId)!;
+      const material = JSON.parse(store.load(saved.ciphertext, saved.id));
+      expect(material).toEqual({
+        env: { LOG_LEVEL: "info", PGPASSWORD: "bluebird-42", ROOT_DIR: "/workspace" },
+        headers: { "X-Auth": "header-789" },
+        redactions: ["extra-private-value"],
+        credentialFlags,
+      });
+      const protectedValues = oauthMaterialSecrets(material);
+      expect(redactMcpText("information", protectedValues)).toBe("information");
+      expect(() => assertMemorySafe("information", protectedValues)).not.toThrow();
+      expect(redactMcpText("/workspace/report.txt", protectedValues)).toBe("/workspace/report.txt");
+      expect(() => assertMemorySafe("/workspace/report.txt", protectedValues)).not.toThrow();
+      expect(secrets.has(old.id)).toBe(false);
+      expect(row.revision).toBe(2);
+    },
+  );
   it("refuses to drop a token that would leave no credential behind", async () => {
     const store = new EncryptedSecretStore(randomBytes(32).toString("hex"));
     const old = await store.put(JSON.stringify({ secret: "only-token" }), {

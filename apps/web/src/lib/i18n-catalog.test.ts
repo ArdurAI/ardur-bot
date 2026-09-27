@@ -289,6 +289,27 @@ describe("lingui catalogs", () => {
     );
   });
 
+  it.each(["de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
+    "translates credential classification controls in %s",
+    async (locale) => {
+      const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));
+      const catalog = await formatter().parse(readFileSync(filename, "utf8"), {
+        locale,
+        sourceLocale: "en",
+        filename,
+      });
+      for (const message of [
+        "Credential fields",
+        "Secret",
+        "Secret for {key}",
+        "Could not update this field. Retry.",
+      ]) {
+        const entry = Object.values(catalog).find((value) => value.message === message);
+        expect(entry?.translation, `${locale}: ${message}`).toBeTruthy();
+      }
+    },
+  );
+
   it("catalogs each failed board close sentence once, from its one shared definition", () => {
     const sentences = [
       "A board item filed by a bot could not be closed.",

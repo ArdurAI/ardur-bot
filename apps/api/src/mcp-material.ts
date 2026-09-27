@@ -5,6 +5,7 @@ import { redactMcpArguments } from "@ardurbot/host-runtime/mcp-diagnostics";
 /** Shape of the encrypted MCP credential blob. `oauth` holds SDK OAuth state
  * (tokens, client registration, PKCE verifier) managed by McpOAuthBroker. */
 export type McpSecretMaterial = {
+  redactions?: string[];
   args?: string[];
   command?: string;
   cwd?: string;
@@ -14,6 +15,20 @@ export type McpSecretMaterial = {
   credentialFlags?: McpCredentialFlags;
   oauth?: Record<string, unknown>;
 };
+
+/** Named entries are classified by their flags, so a separate redaction must not
+ * override an owner's choice for an environment or header value. */
+export function independentMcpRedactions(material: {
+  redactions?: string[];
+  env?: Record<string, string>;
+  headers?: Record<string, string>;
+}): string[] {
+  const namedValues = new Set([
+    ...Object.values(material.env ?? {}),
+    ...Object.values(material.headers ?? {}),
+  ]);
+  return (material.redactions ?? []).filter((value) => !namedValues.has(value));
+}
 
 export type McpMaterialUpdate =
   | { action: "keep" }

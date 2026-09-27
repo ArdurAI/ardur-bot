@@ -232,7 +232,11 @@ import { createLearningService } from "./learning.js";
 import { saveImportedServerCredentials } from "./local-import-credentials.js";
 import type { LocalImportRequests } from "./local-import-requests.js";
 import type { McpSecretMaterial } from "./mcp-material.js";
-import { buildMcpUpdateMaterial, visibleMcpCredentialFlags } from "./mcp-material.js";
+import {
+  buildMcpUpdateMaterial,
+  independentMcpRedactions,
+  visibleMcpCredentialFlags,
+} from "./mcp-material.js";
 import { mcpServerDto } from "./mcp-server-dto.js";
 import { changeGitMemoryLocation } from "./memory-git-location.js";
 import { changeMemoryLocation } from "./memory-location.js";
@@ -3739,11 +3743,11 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
               },
             });
             if (!existing) throw new IsolationError();
-            if (existing.managedBy)
+            if (existing.managedBy && !("credentialFlags" in input))
               throw new ORPCError("BAD_REQUEST", {
                 message: "Manage this server in Extensions or Plugins.",
               });
-            if (existing.catalogId)
+            if (existing.catalogId && !("credentialFlags" in input))
               throw new ORPCError("BAD_REQUEST", {
                 message: "Manage this connection in Integrations.",
               });
@@ -3814,10 +3818,26 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
                   });
               }
               const stored = await deps.secrets.put(
-                JSON.stringify({ ...existingMaterial, credentialFlags: input.credentialFlags }),
+                JSON.stringify({
+                  ...existingMaterial,
+                  ...(Array.isArray(existingMaterial.redactions)
+                    ? {
+                        redactions: independentMcpRedactions(existingMaterial as McpSecretMaterial),
+                      }
+                    : {}),
+                  credentialFlags: input.credentialFlags,
+                }),
                 computerContext(context.actor, "mcp", "mcp.flags"),
               );
-              await tx.secret.create({ data: { ...stored, ...context.actor, kind: "mcp" } });
+              await tx.secret.create({
+                data: {
+                  id: stored.id,
+                  userId: context.actor.userId,
+                  spaceId: context.actor.spaceId,
+                  kind: "mcp",
+                  ciphertext: stored.ciphertext,
+                },
+              });
               await bumpMcpServerRevision(tx, existing.id, context.actor, { secretId: stored.id });
               await tx.secret.deleteMany({
                 where: {
