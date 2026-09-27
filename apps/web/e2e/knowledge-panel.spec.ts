@@ -1,4 +1,4 @@
-import type { MemoryDocument } from "@ardurbot/contracts";
+import type { MemoryPage } from "@ardurbot/contracts";
 import { expect, test } from "@playwright/test";
 import {
   activeBotId,
@@ -62,10 +62,12 @@ test("memory and skills are readable and editable in the app", async ({ page }, 
   await botMemory.getByRole("button", { name: "Save", exact: true }).click();
   await expect(botMemory.getByText("rev 2")).toBeVisible();
   expect(
-    await rpc<MemoryDocument[]>(page, "memory/list", {
-      botId: activeBotId(page),
-      scope: "bot",
-    }),
+    (
+      await rpc<MemoryPage>(page, "memory/list", {
+        botId: activeBotId(page),
+        scope: "bot",
+      })
+    ).items,
   ).toContainEqual(expect.objectContaining({ content: `# Chief\n\n${botMarker}\n`, revision: 2 }));
   await botMemoryRow.click();
   await expect(botDocEditor).toHaveValue(new RegExp(botMarker));
@@ -94,9 +96,7 @@ test("memory and skills are readable and editable in the app", async ({ page }, 
   await captureScreenshot(page, testInfo, "82-knowledge-skill-listed");
   const composer = page.getByRole("combobox", { name: /^Message/ });
   await composer.fill("/");
-  await expect(
-    page.getByRole("button", { name: "Skill greet-politely", exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole("option", { name: /\/greet-politely/ })).toBeVisible();
   await composer.fill("");
 
   // A provider-owned skill uses the same viewer without mutation controls.
@@ -155,9 +155,7 @@ test("memory and skills are readable and editable in the app", async ({ page }, 
   await knowledge.getByRole("button", { name: "Confirm delete", exact: true }).click();
   await expect(skillRow).toBeHidden();
   await composer.fill("/");
-  await expect(page.getByRole("button", { name: "Skill greet-politely", exact: true })).toHaveCount(
-    0,
-  );
+  await expect(page.getByRole("option", { name: /\/greet-politely/ })).toHaveCount(0);
   expect(await rpc<Array<{ name: string }>>(page, "agentSkills/list", {})).not.toContainEqual(
     expect.objectContaining({ name: "greet-politely" }),
   );
