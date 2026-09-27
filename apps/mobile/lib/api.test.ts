@@ -2352,6 +2352,44 @@ describe("mobile clipboard text", () => {
       }),
     ).toBe("Hello\nSMS · Sender: Reply");
   });
+  it("copies the full peer answer from a completed receipt", async () => {
+    const { copyableMobileMessageText } = await import("./api");
+    const answer = "The external request is completed, awaiting acceptance by its owner.";
+    expect(
+      copyableMobileMessageText({
+        id: "result",
+        role: "bot",
+        blocks: [
+          {
+            kind: "bot_message_received",
+            fromBotId: "worker",
+            fromBotName: "Worker",
+            text: answer,
+            intent: "result",
+          },
+        ],
+      }),
+    ).toBe(answer);
+  });
+  it("includes the shortened reply marker when copying a bounded receipt", async () => {
+    const { copyableMobileMessageText } = await import("./api");
+    expect(
+      copyableMobileMessageText({
+        id: "result",
+        role: "bot",
+        blocks: [
+          {
+            kind: "bot_message_received",
+            fromBotId: "worker",
+            fromBotName: "Worker",
+            text: "preview",
+            truncated: true,
+            fullLength: 2100,
+          },
+        ],
+      }),
+    ).toBe("preview\nReply shortened — open the conversation with Worker for the full text");
+  });
 });
 
 it("uses the device grant path without session headers for a paired phone", async () => {

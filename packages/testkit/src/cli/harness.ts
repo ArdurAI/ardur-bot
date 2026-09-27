@@ -17,6 +17,7 @@ const grepArg = process.argv.find((arg) => arg.startsWith("--grep="));
 const runtimeArg = process.argv.find((arg) => arg.startsWith("--runtime="));
 const workersArg = process.argv.find((arg) => arg.startsWith("--workers="));
 const shardArg = process.argv.find((arg) => arg.startsWith("--shard="));
+const repeatEachArg = process.argv.find((arg) => arg.startsWith("--repeat-each="));
 const sandboxProvider = sandboxArg?.slice("--sandbox=".length) ?? "fake";
 const e2eSpec = specArg?.slice("--spec=".length);
 const e2eGrep = grepArg?.slice("--grep=".length);
@@ -53,6 +54,8 @@ async function main() {
   const container = await new PostgreSqlContainer("postgres:16-alpine").start();
   try {
     const databaseUrl = container.getConnectionUri();
+    if (new URL(databaseUrl).port === "5433")
+      throw new Error("The reserved database port cannot be used by integration tests.");
     const apiPort = Number(process.env.API_PORT ?? 3110);
     const webPort = Number(process.env.WEB_PORT ?? 5180);
     const webOrigin = `http://127.0.0.1:${webPort}`;
@@ -225,6 +228,7 @@ async function main() {
             ...(e2eGrep ? ["--grep", e2eGrep] : []),
             ...(e2eWorkers ? ["--workers", e2eWorkers] : []),
             ...(e2eShard ? ["--shard", e2eShard] : []),
+            ...(repeatEachArg ? [repeatEachArg] : []),
           ],
           {
             ...process.env,

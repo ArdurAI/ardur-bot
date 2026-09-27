@@ -75,6 +75,8 @@ it("blocks a recipient connector its requester lacks after route resolution", as
         id: "run",
         taskId: "task",
         delegationId: "handoff",
+        spaceId: "space",
+        userId: "owner",
       })),
     },
     delegationRoot: { findUnique: vi.fn(async () => null) },
@@ -89,6 +91,7 @@ it("blocks a recipient connector its requester lacks after route resolution", as
     delegation: {
       findUniqueOrThrow: vi.fn(async () => ({
         status: "running",
+        requesterBotId: "requester",
         deadlineAt: new Date(Date.now() + 10000),
         usedTokens: 0,
         reservedTokens: 100,

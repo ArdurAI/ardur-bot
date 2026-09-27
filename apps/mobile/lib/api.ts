@@ -920,7 +920,16 @@ export function copyableMobileMessageText(message: MobileMessage): string {
       if (block.kind === "channel_message") {
         return `${messagingProviderLabel(block.provider, block.transport)} · ${block.fromLabel}: ${block.text}`;
       }
-      if (block.kind === "text" || block.kind === "progress" || block.kind === "ask")
+      if (block.kind === "bot_message_received" && block.truncated) {
+        return `${block.text}\n${t("Reply shortened — open the conversation with {peer} for the full text", { peer: block.fromBotName })}`;
+      }
+      if (
+        block.kind === "text" ||
+        block.kind === "progress" ||
+        block.kind === "ask" ||
+        block.kind === "bot_message_sent" ||
+        block.kind === "bot_message_received"
+      )
         return block.text;
       return "";
     })

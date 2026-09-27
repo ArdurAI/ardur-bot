@@ -45,4 +45,21 @@ describe("peer conversations", () => {
   it("finds nothing in a thread with no peer traffic", () => {
     expect(peerConversations([plainText])).toEqual([]);
   });
+
+  it("preserves the shortened reply flag for the conversation reader", () => {
+    const bounded = message("m_4", "2026-08-25T10:03:00.000Z", [
+      {
+        kind: "bot_message_received",
+        fromBotId: "b_2",
+        fromBotName: "Analyst",
+        text: "preview",
+        truncated: true,
+        fullLength: 2100,
+      },
+    ]);
+    expect(peerConversations([bounded])[0]?.messages[0]).toMatchObject({
+      text: "preview",
+      truncated: true,
+    });
+  });
 });

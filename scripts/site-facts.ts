@@ -1,3 +1,5 @@
+import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -237,9 +239,163 @@ export function computersFromRegistry(): SiteProduct["computers"] {
   ];
 }
 
+type Video = NonNullable<SiteProduct["videos"]>[number];
+type Probe = (file: string) => string;
+
+const sidecarPlainError =
+  "Generate site/media/routines-demo.json or install ffprobe to measure routines-demo.mp4.";
+
+function ffprobe(file: string): string {
+  try {
+    return execFileSync(
+      "ffprobe",
+      [
+        "-v",
+        "error",
+        "-select_streams",
+        "v:0",
+        "-show_entries",
+        "stream=width,height",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "json",
+        file,
+      ],
+      { encoding: "utf8" },
+    );
+  } catch (error) {
+    if (
+      (error as NodeJS.ErrnoException).code === "ENOENT" ||
+      (error instanceof Error && error.message.includes("ENOENT"))
+    ) {
+      throw new Error(sidecarPlainError);
+    }
+    throw error;
+  }
+}
+
+export async function videosFromMedia(rootDir = root, probe: Probe = ffprobe): Promise<Video[]> {
+  const files: Video["files"] = {
+    mp4: "media/routines-demo.mp4",
+    webm: "media/routines-demo.webm",
+    poster: "media/routines-demo.jpg",
+    captions: "media/routines-demo.en.vtt",
+  };
+  const missing = await Promise.all(
+    Object.values(files).map(async (file) => {
+      const info = await stat(path.join(rootDir, "site", file)).catch(() => null);
+      return info?.isFile() ? null : file;
+    }),
+  );
+  if (missing.some(Boolean)) {
+    console.log(`Skipping routines-demo video: missing ${missing.filter(Boolean).join(", ")}.`);
+    return [];
+  }
+  const sidecarPath = path.join(rootDir, "site/media/routines-demo.json");
+  let sidecarContent: string | null = null;
+  try {
+    sidecarContent = await readFile(sidecarPath, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
+  }
+
+  let width: number | undefined;
+  let height: number | undefined;
+  let durationSeconds: number | undefined;
+
+  if (sidecarContent !== null) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(sidecarContent);
+    } catch {
+      throw new Error("site/media/routines-demo.json is not valid JSON.");
+    }
+    const sidecar = (parsed ?? {}) as {
+      durationSeconds?: unknown;
+      width?: unknown;
+      height?: unknown;
+      mp4Sha256?: unknown;
+    };
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      Array.isArray(parsed) ||
+      !Number.isInteger(sidecar.width) ||
+      (sidecar.width as number) <= 0 ||
+      !Number.isInteger(sidecar.height) ||
+      (sidecar.height as number) <= 0 ||
+      typeof sidecar.durationSeconds !== "number" ||
+      !Number.isFinite(sidecar.durationSeconds) ||
+      sidecar.durationSeconds <= 0
+    ) {
+      throw new Error(
+        "site/media/routines-demo.json must contain positive integer width and height and finite positive durationSeconds.",
+      );
+    }
+    const mp4Bytes = await readFile(path.join(rootDir, "site", files.mp4));
+    const mp4Sha256 = createHash("sha256").update(mp4Bytes).digest("hex");
+    if (typeof sidecar.mp4Sha256 !== "string" || sidecar.mp4Sha256 !== mp4Sha256) {
+      throw new Error(
+        "site/media/routines-demo.json describes a different routines-demo.mp4; re-run the export.",
+      );
+    }
+    width = sidecar.width as number;
+    height = sidecar.height as number;
+    durationSeconds = sidecar.durationSeconds;
+  } else {
+    let probeOutput: string;
+    try {
+      probeOutput = probe(path.join(rootDir, "site", files.mp4));
+    } catch (error) {
+      if (
+        (error as NodeJS.ErrnoException).code === "ENOENT" ||
+        (error instanceof Error && error.message.includes("ENOENT"))
+      ) {
+        throw new Error(sidecarPlainError);
+      }
+      throw error;
+    }
+    const measured = JSON.parse(probeOutput) as {
+      streams?: { width?: number; height?: number }[];
+      format?: { duration?: string };
+    };
+    const probeWidth = measured.streams?.[0]?.width;
+    const probeHeight = measured.streams?.[0]?.height;
+    const probeDuration = Number(measured.format?.duration);
+    if (
+      !Number.isInteger(probeWidth) ||
+      !Number.isInteger(probeHeight) ||
+      !Number.isFinite(probeDuration) ||
+      probeDuration <= 0
+    ) {
+      throw new Error("ffprobe could not measure routines-demo.mp4 duration and dimensions.");
+    }
+    width = probeWidth;
+    height = probeHeight;
+    durationSeconds = probeDuration;
+  }
+
+  return [
+    {
+      id: "routines-demo",
+      title: "A routine from setup to result",
+      description:
+        "A Briefing bot creates a Morning checklist routine from sample notes, schedules it for weekdays at 8:00 AM UTC, saves it, runs it once, and shows three checklist bullets and a completed Run history entry.",
+      durationSeconds,
+      width,
+      height,
+      files,
+    },
+  ];
+}
+
 export async function generatedProduct(rootDir = root): Promise<SiteProduct> {
   const input = JSON.parse(await readFile(path.join(rootDir, productPath), "utf8"));
-  const { generatedAt: _generatedAt, source: _source, ...curated } = input;
+  const { generatedAt: _generatedAt, source: _source, videos: _videos, ...curated } = input;
+  const videos = await videosFromMedia(rootDir);
   const casks = (await readdir(path.join(rootDir, "homebrew/Casks"))).filter((name) =>
     name.endsWith(".rb"),
   );
@@ -250,6 +406,7 @@ export async function generatedProduct(rootDir = root): Promise<SiteProduct> {
   const cask = casks[0].slice(0, -3);
   const result = {
     ...curated,
+    ...(videos.length ? { videos } : {}),
     providers: providersFromCatalog(),
     computers: computersFromRegistry(),
     routines: {

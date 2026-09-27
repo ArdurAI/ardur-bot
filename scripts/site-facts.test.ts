@@ -1,8 +1,9 @@
+import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   GITHUB_MATCHING_ROUTINES_LIMIT,
   ROUTINE_HISTORY_LIMIT,
@@ -24,6 +25,7 @@ import {
   routinesFromCode,
   runSiteFacts,
   validateReferences,
+  videosFromMedia,
 } from "./site-facts";
 
 const sourceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -44,7 +46,13 @@ async function fixture() {
     "apps/web/src/locales/en/messages.po",
   ]) {
     await mkdir(path.dirname(path.join(root, file)), { recursive: true });
-    await writeFile(path.join(root, file), await readFile(path.join(sourceRoot, file)));
+    let content = await readFile(path.join(sourceRoot, file), "utf8");
+    if (file === "site/data/product.json") {
+      const parsed = JSON.parse(content);
+      delete parsed.videos;
+      content = `${JSON.stringify(parsed, null, 2)}\n`;
+    }
+    await writeFile(path.join(root, file), content);
   }
   return root;
 }
@@ -208,6 +216,333 @@ describe("site facts", () => {
     await rm(path.join(media, "routines-demo.mp4"));
     await expect(validateReferences(product, root)).rejects.toThrow(
       "is missing site/media/routines-demo.mp4",
+    );
+  });
+
+  it("publishes measured video facts only when all media files exist", async () => {
+    const root = await fixture();
+    const missing = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      expect(
+        await videosFromMedia(root, () => {
+          throw new Error("ffprobe should not run");
+        }),
+      ).toEqual([]);
+      expect(missing).toHaveBeenCalledWith(
+        expect.stringContaining("missing media/routines-demo.mp4"),
+      );
+    } finally {
+      missing.mockRestore();
+    }
+    const media = path.join(root, "site/media");
+    await mkdir(media, { recursive: true });
+    for (const name of [
+      "routines-demo.mp4",
+      "routines-demo.webm",
+      "routines-demo.jpg",
+      "routines-demo.en.vtt",
+    ])
+      await writeFile(path.join(media, name), name.endsWith(".vtt") ? "WEBVTT\n\n" : "fixture");
+    const probe = vi.fn(() =>
+      JSON.stringify({
+        streams: [{ width: 1920, height: 1080 }],
+        format: { duration: "56.040000" },
+      }),
+    );
+    const [video] = await videosFromMedia(root, probe);
+    expect(probe).toHaveBeenCalledOnce();
+    expect(video).toMatchObject({
+      id: "routines-demo",
+      durationSeconds: 56.04,
+      width: 1920,
+      height: 1080,
+      files: { captions: "media/routines-demo.en.vtt" },
+    });
+    expect(video?.description).toContain("completed Run history entry");
+  });
+
+  it("builds the video entry from the sidecar without calling the probe when present", async () => {
+    const root = await fixture();
+    const media = path.join(root, "site/media");
+    await mkdir(media, { recursive: true });
+    for (const name of [
+      "routines-demo.mp4",
+      "routines-demo.webm",
+      "routines-demo.jpg",
+      "routines-demo.en.vtt",
+    ])
+      await writeFile(path.join(media, name), name.endsWith(".vtt") ? "WEBVTT\n\n" : "fixture");
+    const mp4Sha256 = createHash("sha256").update("fixture").digest("hex");
+    await writeFile(
+      path.join(media, "routines-demo.json"),
+      JSON.stringify({ durationSeconds: 56, width: 1920, height: 1080, mp4Sha256 }),
+    );
+    const probe = vi.fn(() => {
+      throw new Error("probe should not be called when sidecar is present");
+    });
+    const [video] = await videosFromMedia(root, probe);
+    expect(probe).not.toHaveBeenCalled();
+    expect(video).toMatchObject({
+      id: "routines-demo",
+      durationSeconds: 56,
+      width: 1920,
+      height: 1080,
+      files: { captions: "media/routines-demo.en.vtt" },
+    });
+  });
+
+  it("fails with a plain error when the video content changes but the sidecar is not updated, without calling probe", async () => {
+    const root = await fixture();
+    const media = path.join(root, "site/media");
+    await mkdir(media, { recursive: true });
+    for (const name of [
+      "routines-demo.mp4",
+      "routines-demo.webm",
+      "routines-demo.jpg",
+      "routines-demo.en.vtt",
+    ])
+      await writeFile(
+        path.join(media, name),
+        name.endsWith(".vtt") ? "WEBVTT\n\n" : "changed fixture",
+      );
+    await writeFile(
+      path.join(media, "routines-demo.json"),
+      JSON.stringify({
+        durationSeconds: 56,
+        width: 1920,
+        height: 1080,
+        mp4Sha256: "0000000000000000000000000000000000000000000000000000000000000000",
+      }),
+    );
+    const probe = vi.fn(() => {
+      throw new Error("probe should not be called when sidecar is present");
+    });
+    await expect(videosFromMedia(root, probe)).rejects.toThrow(
+      "site/media/routines-demo.json describes a different routines-demo.mp4; re-run the export.",
+    );
+    expect(probe).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      name: "malformed JSON",
+      sidecar: "{ invalid json",
+      expectedError: "site/media/routines-demo.json is not valid JSON.",
+    },
+    {
+      name: "null",
+      sidecar: "null",
+      expectedError:
+        "site/media/routines-demo.json must contain positive integer width and height and finite positive durationSeconds.",
+    },
+    {
+      name: "non-object string",
+      sidecar: '"not an object"',
+      expectedError:
+        "site/media/routines-demo.json must contain positive integer width and height and finite positive durationSeconds.",
+    },
+    {
+      name: "non-object number",
+      sidecar: "42",
+      expectedError:
+        "site/media/routines-demo.json must contain positive integer width and height and finite positive durationSeconds.",
+    },
+    {
+      name: "non-object array",
+      sidecar: "[1, 2, 3]",
+      expectedError:
+        "site/media/routines-demo.json must contain positive integer width and height and finite positive durationSeconds.",
+    },
+    {
+      name: "missing width",
+      sidecar: JSON.stringify({
+        height: 1080,
+        durationSeconds: 56,
+        mp4Sha256: "f16d05ec6b29248d2c61adb1e9263f78e4f7bace1b955014a2d17872cfe4064d",
+      }),
+      expectedError:
+        "site/media/routines-demo.json must contain positive integer width and height and finite positive durationSeconds.",
+    },
+    {
+      name: "missing height",
+      sidecar: JSON.stringify({
+        width: 1920,
+        durationSeconds: 56,
+        mp4Sha256: "f16d05ec6b29248d2c61adb1e9263f78e4f7bace1b955014a2d17872cfe4064d",
+      }),
+      expectedError:
+        "site/media/routines-demo.json must contain positive integer width and height and finite positive durationSeconds.",
+    },
+    {
+      name: "missing durationSeconds",
+      sidecar: JSON.stringify({
+        width: 1920,
+        height: 1080,
+        mp4Sha256: "f16d05ec6b29248d2c61adb1e9263f78e4f7bace1b955014a2d17872cfe4064d",
+      }),
+      expectedError:
+        "site/media/routines-demo.json must contain positive integer width and height and finite positive durationSeconds.",
+    },
+    {
+      name: "zero width",
+      sidecar: JSON.stringify({
+        width: 0,
+        height: 1080,
+        durationSeconds: 56,
+        mp4Sha256: "f16d05ec6b29248d2c61adb1e9263f78e4f7bace1b955014a2d17872cfe4064d",
+      }),
+      expectedError:
+        "site/media/routines-demo.json must contain positive integer width and height and finite positive durationSeconds.",
+    },
+    {
+      name: "negative width",
+      sidecar: JSON.stringify({
+        width: -1920,
+        height: 1080,
+        durationSeconds: 56,
+        mp4Sha256: "f16d05ec6b29248d2c61adb1e9263f78e4f7bace1b955014a2d17872cfe4064d",
+      }),
+      expectedError:
+        "site/media/routines-demo.json must contain positive integer width and height and finite positive durationSeconds.",
+    },
+    {
+      name: "fractional width",
+      sidecar: JSON.stringify({
+        width: 1920.5,
+        height: 1080,
+        durationSeconds: 56,
+        mp4Sha256: "f16d05ec6b29248d2c61adb1e9263f78e4f7bace1b955014a2d17872cfe4064d",
+      }),
+      expectedError:
+        "site/media/routines-demo.json must contain positive integer width and height and finite positive durationSeconds.",
+    },
+    {
+      name: "zero height",
+      sidecar: JSON.stringify({
+        width: 1920,
+        height: 0,
+        durationSeconds: 56,
+        mp4Sha256: "f16d05ec6b29248d2c61adb1e9263f78e4f7bace1b955014a2d17872cfe4064d",
+      }),
+      expectedError:
+        "site/media/routines-demo.json must contain positive integer width and height and finite positive durationSeconds.",
+    },
+    {
+      name: "negative height",
+      sidecar: JSON.stringify({
+        width: 1920,
+        height: -1080,
+        durationSeconds: 56,
+        mp4Sha256: "f16d05ec6b29248d2c61adb1e9263f78e4f7bace1b955014a2d17872cfe4064d",
+      }),
+      expectedError:
+        "site/media/routines-demo.json must contain positive integer width and height and finite positive durationSeconds.",
+    },
+    {
+      name: "fractional height",
+      sidecar: JSON.stringify({
+        width: 1920,
+        height: 1080.5,
+        durationSeconds: 56,
+        mp4Sha256: "f16d05ec6b29248d2c61adb1e9263f78e4f7bace1b955014a2d17872cfe4064d",
+      }),
+      expectedError:
+        "site/media/routines-demo.json must contain positive integer width and height and finite positive durationSeconds.",
+    },
+    {
+      name: "non-finite duration",
+      sidecar: JSON.stringify({
+        width: 1920,
+        height: 1080,
+        durationSeconds: "invalid",
+        mp4Sha256: "f16d05ec6b29248d2c61adb1e9263f78e4f7bace1b955014a2d17872cfe4064d",
+      }),
+      expectedError:
+        "site/media/routines-demo.json must contain positive integer width and height and finite positive durationSeconds.",
+    },
+    {
+      name: "zero duration",
+      sidecar: JSON.stringify({
+        width: 1920,
+        height: 1080,
+        durationSeconds: 0,
+        mp4Sha256: "f16d05ec6b29248d2c61adb1e9263f78e4f7bace1b955014a2d17872cfe4064d",
+      }),
+      expectedError:
+        "site/media/routines-demo.json must contain positive integer width and height and finite positive durationSeconds.",
+    },
+    {
+      name: "negative duration",
+      sidecar: JSON.stringify({
+        width: 1920,
+        height: 1080,
+        durationSeconds: -56,
+        mp4Sha256: "f16d05ec6b29248d2c61adb1e9263f78e4f7bace1b955014a2d17872cfe4064d",
+      }),
+      expectedError:
+        "site/media/routines-demo.json must contain positive integer width and height and finite positive durationSeconds.",
+    },
+    {
+      name: "missing digest",
+      sidecar: JSON.stringify({
+        width: 1920,
+        height: 1080,
+        durationSeconds: 56,
+      }),
+      expectedError:
+        "site/media/routines-demo.json describes a different routines-demo.mp4; re-run the export.",
+    },
+    {
+      name: "wrong digest",
+      sidecar: JSON.stringify({
+        width: 1920,
+        height: 1080,
+        durationSeconds: 56,
+        mp4Sha256: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+      }),
+      expectedError:
+        "site/media/routines-demo.json describes a different routines-demo.mp4; re-run the export.",
+    },
+  ])(
+    "rejects invalid sidecar ($name) without calling probe",
+    async ({ sidecar, expectedError }) => {
+      const root = await fixture();
+      const media = path.join(root, "site/media");
+      await mkdir(media, { recursive: true });
+      for (const name of [
+        "routines-demo.mp4",
+        "routines-demo.webm",
+        "routines-demo.jpg",
+        "routines-demo.en.vtt",
+      ])
+        await writeFile(path.join(media, name), name.endsWith(".vtt") ? "WEBVTT\n\n" : "fixture");
+      await writeFile(path.join(media, "routines-demo.json"), sidecar);
+      const probe = vi.fn(() => {
+        throw new Error("probe should not be called when sidecar is present");
+      });
+      await expect(videosFromMedia(root, probe)).rejects.toThrow(expectedError);
+      expect(probe).not.toHaveBeenCalled();
+    },
+  );
+
+  it("fails with a plain error naming the sidecar when the sidecar is missing and probe is unavailable", async () => {
+    const root = await fixture();
+    const media = path.join(root, "site/media");
+    await mkdir(media, { recursive: true });
+    for (const name of [
+      "routines-demo.mp4",
+      "routines-demo.webm",
+      "routines-demo.jpg",
+      "routines-demo.en.vtt",
+    ])
+      await writeFile(path.join(media, name), name.endsWith(".vtt") ? "WEBVTT\n\n" : "fixture");
+    const probe = vi.fn(() => {
+      const error = new Error("spawnSync ffprobe ENOENT") as NodeJS.ErrnoException;
+      error.code = "ENOENT";
+      throw error;
+    });
+    await expect(videosFromMedia(root, probe)).rejects.toThrow(
+      "Generate site/media/routines-demo.json or install ffprobe to measure routines-demo.mp4.",
     );
   });
 

@@ -13,6 +13,7 @@ import {
   isCommandEvent,
   isSecretAskBlock,
   messagingChannelId,
+  redactTaskValue,
   resolveAskChoice,
   sanitizeJsonValue,
 } from "@ardurbot/core";
@@ -1343,19 +1344,16 @@ async function finalizeRunOnce(
     if (task.count !== 1) throw new Error("Run task was not available to finalize");
 
     let finalMessageId: string | null = null;
-    const goalRoomAssignment =
+    const delegation =
       writableRun?.delegationId && writableRun.delegationRootTaskId
+        ? await tx.delegation.findFirst({
+            where: { id: writableRun.delegationId, rootTaskId: writableRun.delegationRootTaskId },
+            select: { kind: true, admissionKey: true },
+          })
+        : null;
+    const goalRoomAssignment =
+      delegation?.kind === "group-handoff" && writableRun?.delegationRootTaskId
         ? Boolean(
-            await tx.delegation.findFirst({
-              where: {
-                id: writableRun.delegationId,
-                rootTaskId: writableRun.delegationRootTaskId,
-                kind: "group-handoff",
-              },
-              select: { id: true },
-            }),
-          ) &&
-          Boolean(
             await tx.teamGoal.findFirst({
               where: {
                 rootTaskId: writableRun.delegationRootTaskId,
@@ -1365,33 +1363,24 @@ async function finalizeRunOnce(
             }),
           )
         : false;
-    const goalDeskMessage =
-      writableRun?.delegationId && writableRun.delegationRootTaskId
-        ? Boolean(
-            await tx.delegation.findFirst({
-              where: {
-                id: writableRun.delegationId,
-                rootTaskId: writableRun.delegationRootTaskId,
-                kind: "message",
-              },
-              select: { id: true },
-            }),
-          ) &&
-          Boolean(
-            await tx.teamGoal.findFirst({
-              where: {
-                rootTaskId: writableRun.delegationRootTaskId,
-                threadId: { not: input.threadId },
-              },
-              select: { id: true },
-            }),
-          )
-        : false;
+    const peerMessageAssignment =
+      delegation?.kind === "message" &&
+      (delegation.admissionKey.startsWith("bot-message:") ||
+        delegation.admissionKey.startsWith("message:"));
     if (
       input.outcome === "completed" &&
-      (!writableRun?.delegationId || goalRoomAssignment || goalDeskMessage)
+      (!writableRun?.delegationId || goalRoomAssignment || peerMessageAssignment)
     ) {
-      const completedBlocks = completedRunBlocks(input.blocks, writableRun?.startedAt ?? null, now);
+      const peerReply = peerMessageAssignment
+        ? redactTaskValue(
+            input.blocks.flatMap((block) => ("text" in block ? [block.text] : [])).join("\n"),
+          )
+        : null;
+      const completedBlocks = peerMessageAssignment
+        ? peerReply?.trim()
+          ? [{ kind: "text" as const, text: peerReply }]
+          : []
+        : completedRunBlocks(input.blocks, writableRun?.startedAt ?? null, now);
       if (completedBlocks.length > 0) {
         const message = await createThreadMessageInTransaction(tx, {
           threadId: input.threadId,

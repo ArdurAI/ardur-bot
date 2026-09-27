@@ -127,6 +127,18 @@ export function fixture() {
     },
     space: { findUniqueOrThrow: vi.fn(async () => ({ allowedModelDestinations: null })) },
     connection: { findMany: vi.fn(async () => []) },
+    mcpServer: {
+      findMany: vi.fn(async () =>
+        ["shared", "private"].map((id) => ({
+          id,
+          enabled: true,
+          catalogId: null,
+          manifest: null,
+          spaceAllowedTools: [],
+          needsReview: false,
+        })),
+      ),
+    },
     capabilityInstall: { findMany: vi.fn(async () => []) },
     remoteAuthorityPolicy: { findMany: vi.fn(async () => policies) },
     botMcpServer: {
@@ -205,14 +217,20 @@ export function fixture() {
     },
     thread: { update: vi.fn(async () => ({ nextMessageSeq: 1, nextEventSeq: 1 })) },
     message: {
-      create: vi.fn(async ({ data }) => ({ id: "summary", ...data })),
-      findUniqueOrThrow: vi.fn(async () => ({
-        id: "summary",
-        blocks: [
-          { kind: "text", text: "Coordinator → Worker: completed, awaiting acceptance.\nReviewed" },
-        ],
-      })),
-      update: vi.fn(async ({ data }) => ({ id: "summary", ...data })),
+      create: vi.fn(async ({ data }) => {
+        const message = { id: "summary", ...data };
+        state.messages.push(message);
+        return message;
+      }),
+      findUniqueOrThrow: vi.fn(async ({ where }) =>
+        state.messages.find((message) => message.id === where.id),
+      ),
+      update: vi.fn(async ({ where, data }) =>
+        apply(
+          state.messages.find((message) => message.id === where.id),
+          data,
+        ),
+      ),
     },
     event: { create: vi.fn(async ({ data }) => data) },
   };

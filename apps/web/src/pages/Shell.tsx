@@ -4331,6 +4331,10 @@ export function ShellPage({
               resolveTranscriptBot(peerConversation.peerBotId)?.color ?? FALLBACK_BOT_COLOR
             }
             onClose={() => setPeerConversation(null)}
+            onOpenPeerThread={() => {
+              setPeerConversation(null);
+              openBot(peerConversation.peerBotId);
+            }}
           />
         ) : null}
         {callOpen && active ? (

@@ -590,9 +590,20 @@ msgstr "Agentes:"
 msgid "All bots"
 msgstr ""
 
+#: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/components/integrations/catalog/McpToolReview.tsx
+#: src/pages/McpServersOverlay.tsx
+msgid "All bots have access (bots you create later too)."
+msgstr "Todos los bots tienen acceso (también los que crees más adelante)."
+
 #: src/pages/customize/CustomizeControls.tsx
 msgid "All categories"
 msgstr ""
+
+#: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/components/integrations/catalog/McpToolReview.tsx
+msgid "All desktop bots have access (including ones you create later)."
+msgstr "Todos los bots de escritorio tienen acceso (también los que crees más adelante)."
 
 #: src/components/integrations/catalog/ToolPicker.tsx
 #: src/components/integrations/manage/ToolPermissions.tsx
@@ -1515,10 +1526,6 @@ msgstr "Elige una contraseña nueva"
 
 #: src/components/composer/command-description.ts
 msgid "Choose a taught skill"
-msgstr ""
-
-#: src/components/integrations/catalog/IntegrationManage.tsx
-msgid "Choose bots and the tools they can use."
 msgstr ""
 
 #: src/pages/shell/runtime-settings.tsx
@@ -4188,6 +4195,7 @@ msgid "Integration options"
 msgstr ""
 
 #: src/components/composer/ComposerMenu.tsx
+#: src/components/Context.tsx
 #: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/settings-sections.ts
@@ -4428,6 +4436,11 @@ msgstr ""
 #: src/pages/settings/GeneralSettings.tsx
 msgid "Light"
 msgstr "Claro"
+
+#: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/components/integrations/catalog/McpToolReview.tsx
+msgid "Limit tools"
+msgstr "Limitar herramientas"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Linear issue"
@@ -5311,6 +5324,10 @@ msgstr ""
 #: src/pages/GroupPanel.tsx
 msgid "None"
 msgstr "Ninguno"
+
+#: src/components/Context.tsx
+msgid "None available"
+msgstr "Ninguna disponible"
 
 #: src/pages/HostComputerSettings.tsx
 msgid "None detected"
@@ -6275,6 +6292,11 @@ msgstr "Quitar habilidad {0}"
 msgid "Remove webhook"
 msgstr "Quitar webhook"
 
+#: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/components/integrations/catalog/McpToolReview.tsx
+msgid "Removed"
+msgstr "Eliminado"
+
 #. placeholder {0}: LOCAL_IMPORT_TOOL_NAMES[entry.importedFrom]
 #: src/pages/LearningTimeline.tsx
 msgid "Removed import from {0}"
@@ -6321,6 +6343,10 @@ msgstr "Reemplazar clave"
 #: src/pages/Shell.tsx
 msgid "Reply"
 msgstr "Responder"
+
+#: src/pages/PeerMessagesOverlay.tsx
+msgid "Reply shortened — open the conversation with {peerBotName} for the full text"
+msgstr "Respuesta abreviada — abre la conversación con {peerBotName} para ver el texto completo"
 
 #: src/pages/Shell.tsx
 msgid "Replying to {replyName}"
@@ -8127,6 +8153,15 @@ msgstr "Usar un modelo encontrado"
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Use a token"
 msgstr ""
+
+#: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/components/integrations/catalog/McpToolReview.tsx
+msgid "Use all selected tools"
+msgstr "Usar todas las herramientas seleccionadas"
+
+#: src/components/integrations/catalog/IntegrationManage.tsx
+msgid "Use all selected tools, or choose a subset for this bot."
+msgstr "Usa todas las herramientas seleccionadas o elige algunas para este bot."
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Use default guidance"

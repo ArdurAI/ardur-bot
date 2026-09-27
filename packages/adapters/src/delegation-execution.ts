@@ -3,7 +3,7 @@ import { DelegationAuthoritySchema, TaskCardSchema } from "@ardurbot/contracts";
 import { classifyRemoteTool, remotePermissionExpansion } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import { reconcileGoalExhaustion, requestCancel, updateWorkerTask } from "@ardurbot/db";
-import { grantedMcpTools } from "./integration-access.js";
+import { grantedMcpTools, mcpGrantForBot } from "./integration-access.js";
 import { peerReadOnlyRuntimeSupported, peerReadOnlyToolAllowed } from "./peer-policy.js";
 
 /** The recorded ceiling also applies to connector routes resolved after catalog lookup. */
@@ -96,15 +96,15 @@ export async function checkDelegationExecution(
   )
     return "This connector is outside the requester's grant; ask the owner to review access.";
   if (route?.connectorId === "mcp" && route.resourceId) {
-    const assignment = await prisma.botMcpServer.findFirst({
-      where: {
+    const assignment = await mcpGrantForBot(
+      prisma,
+      {
         botId: row.requesterBotId,
-        serverId: route.resourceId,
         spaceId: run.spaceId,
         userId: run.userId,
       },
-      include: { server: true },
-    });
+      route.resourceId,
+    );
     if (
       !authority.connectors.includes(`mcp:${route.resourceId}:${route.toolName}`) ||
       !assignment ||

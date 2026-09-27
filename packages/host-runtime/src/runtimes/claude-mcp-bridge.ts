@@ -12,6 +12,7 @@ export function createArdurToolBridge(
   emit: (event: AgentRuntimeEvent) => void,
   pause: () => void,
   ready: () => boolean = () => true,
+  beforePauseInteraction?: () => void,
 ) {
   const tools = request.tools === "none" ? [] : request.tools;
   let stopped = false;
@@ -49,13 +50,16 @@ export function createArdurToolBridge(
               new Set(options).size !== options.length
             )
               throw new Error("Choose two to four distinct options.");
+            beforePauseInteraction?.();
             emit({
               type: "ask",
               text: String(args.question ?? "What should I use?"),
               actions: options.map((label, index) => ({ id: `choice-${index + 1}`, label })),
             });
-          } else
+          } else {
+            beforePauseInteraction?.();
             emit({ type: "takeover", reason: String(args.reason ?? "I need you on the screen.") });
+          }
           stopped = true;
           paused = true;
           pause();
@@ -63,6 +67,9 @@ export function createArdurToolBridge(
         }
         result = authorization ?? (await request.executeTool(name, args, executionId, tool.route));
         paused = isToolPauseResult(result);
+        // Only pauses flush held text. An ordinary tool event may precede a held tail;
+        // flushing here could expose a secret completed by the next text chunk.
+        if (paused) beforePauseInteraction?.();
         emit({ type: "tool", name, args, executionId });
         if (paused) {
           stopped = true;

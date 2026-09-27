@@ -12,6 +12,19 @@ export function effectiveTools(
   return [...new Set(vendorTools)].filter((id) => space.has(id) && bot.has(id));
 }
 
+/** Apply one space ceiling to inherited and custom MCP grants. */
+export function effectiveMcpGrantTools(
+  offered: readonly string[],
+  spaceAllowed: readonly string[],
+  botAllowed: readonly string[],
+  access: string | undefined,
+  capturedManifest: boolean,
+): string[] {
+  const bot = access === "inherit" ? spaceAllowed : botAllowed;
+  // Uncaptured legacy servers have no reviewed space tool set to enforce.
+  return effectiveTools(offered, capturedManifest ? spaceAllowed : bot, bot);
+}
+
 const WRITE =
   /comment|post|create|merge|deploy|delete|update|transition|trigger|cancel|write|remove|send|execute|mutat|publish|archive|approve|assign|edit|patch|upload|push|commit|revoke|grant/i;
 

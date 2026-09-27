@@ -78,7 +78,11 @@ export * from "./home.js";
 export * from "./host-aware-sandbox.js";
 export { hostIntegrationTools } from "./host-integration-tools.js";
 export * from "./installed-connectors.js";
-export { grantedMcpTools, integrationResourceDenial } from "./integration-access.js";
+export {
+  grantedMcpTools,
+  integrationResourceDenial,
+  mcpGrantForBot,
+} from "./integration-access.js";
 export * from "./integration-catalog.js";
 export * from "./integration-lifecycle.js";
 export * from "./integration-manifest.js";

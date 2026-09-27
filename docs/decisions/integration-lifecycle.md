@@ -38,7 +38,7 @@ stay on the computer.
   replayed after an uncertain result. Network failures preserve connected state
   and credentials. A connect, Test or scheduled check captures `tools/list` and
   an optional schema-compatible identity tool. Every minute the API checks up to
-  fifty granted connections whose last check is at least thirty minutes old.
+  fifty connected connections whose last check is at least thirty minutes old.
   Checks do not overlap within a process. Multiple API replicas can duplicate a
   health read; token refresh remains serialized across processes.
 - Health records check time, successful call time, last use, captured tool count
@@ -47,8 +47,13 @@ stay on the computer.
   Identity and workspace are shown only when a supported response provides them;
   absence is shown as unavailable, not inferred from a successful handshake.
 - Allow maps read tools to the existing `allow` policy. Ask maps to `ask-first`.
-  Block removes a tool from the space/bot grant. Writes always ask, preserving the
-  existing approval boundary. Bot grants remain a subset of enabled space tools.
+  Block removes a tool from the space grant. Writes always ask. Every bot in the
+  same space inherits enabled space tools, including bots created later. An
+  explicit bot override can narrow the set or remove the connection entirely.
+  A removed bot stays removed through saves, reconnects, revision changes and
+  tool review. Changed tools block inherited access at the server until the
+  space reviews them.
+
 - `host-cli` records contain account identity and workspace, never tokens. Only
   the deployment owner can connect them or use them through a desktop computer.
   The host rechecks identity before a command, applies a fixed executable and
@@ -59,6 +64,17 @@ stay on the computer.
   provider-specific model environment variable was added. The built-in Anthropic
   runtime still uses an API key; Claude subscriptions use the existing Claude
   Code runtime.
+
+### 2026-09-27: connected access by default
+
+The owner chose connected access for every bot in the space, now and in the
+future, unless a bot is explicitly removed. We chose inheritance: no bot row
+means the bot receives the space's enabled tools; an existing row remains an
+explicit subset; a `none` row records removal. This adds one state to existing
+rows and a server review flag. It avoids creating a grant row whenever a bot is
+created. Space ownership, connection state, captured tool definitions, review,
+computer placement and approval policy are still checked when a tool is listed
+or called. Existing explicit rows keep their meaning after migration.
 
 ```mermaid
 sequenceDiagram

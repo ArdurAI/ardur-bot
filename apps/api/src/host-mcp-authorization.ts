@@ -1,4 +1,4 @@
-import { grantedMcpTools, integrationResourceDenial } from "@ardurbot/adapters";
+import { grantedMcpTools, integrationResourceDenial, mcpGrantForBot } from "@ardurbot/adapters";
 import { IntegrationManifestSchema } from "@ardurbot/contracts";
 import type { HostRequest } from "@ardurbot/contracts/host-bridge";
 import type { PrismaClient } from "@ardurbot/db";
@@ -39,16 +39,15 @@ export async function authorizeHostMcp(
     },
   });
   if (!run) return false;
-  const assignment = await prisma.botMcpServer.findFirst({
-    where: {
-      botId: request.scope.botId,
-      serverId: server.id,
-      spaceId: request.scope.spaceId,
-      userId: request.scope.userId,
-    },
-  });
-  if (!assignment || assignment.needsReview || assignment.allowAllTools) return false;
-  if (operation.op === "mcp.tools") return true;
+  const assignment = await mcpGrantForBot(prisma, request.scope, server.id);
+  if (!assignment) return false;
+  if (operation.op === "mcp.tools")
+    return (
+      !server.needsReview &&
+      !assignment.needsReview &&
+      assignment.access !== "none" &&
+      !assignment.allowAllTools
+    );
   if (
     operation.op !== "mcp.call" ||
     !grantedMcpTools({ ...assignment, server }, [operation.name]).includes(operation.name)

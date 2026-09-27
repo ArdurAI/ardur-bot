@@ -4,6 +4,7 @@ import type {
   DelegationProblem,
   DelegationRecord,
   DelegationSnapshot,
+  MessageBlock,
 } from "@ardurbot/contracts";
 import {
   ALL_DEVICE_SCOPES,
@@ -11,12 +12,14 @@ import {
   DelegationAuthoritySchema,
   DelegationSnapshotSchema,
   delegationProblem,
+  IntegrationManifestSchema,
   LocalityPolicySchema,
   TaskCardSchema,
 } from "@ardurbot/contracts";
 import {
   allowsModelDestination,
   delegationDifferences,
+  effectiveMcpGrantTools,
   effectiveRemoteAuthority,
   intersectDelegationAuthority,
   redactTaskValue,
@@ -40,6 +43,7 @@ const refuse = (code: DelegationProblem["code"]): never => {
   throw new DelegationAdmissionError(delegationProblem(code));
 };
 export const ACTIVE_DELEGATIONS = ["queued", "running", "cancel-requested"];
+const PEER_RECEIPT_MAX_LENGTH = 2000;
 type Scope = Pick<Actor, "spaceId" | "userId">;
 
 export async function lockDelegationRootForRun(tx: Prisma.TransactionClient, runId: string) {
@@ -150,6 +154,7 @@ export async function admitDelegation(
           userId: input.userId,
           archivedAt: null,
         },
+        include: { computer: true },
       });
   const space = await tx.space.findUniqueOrThrow({ where: { id: input.spaceId } });
   const now = new Date();
@@ -245,21 +250,56 @@ export async function admitDelegation(
       .map((row) => `${row.connectorId}:${row.provider}`),
     ...installs.map((row) => `installed:${row.id}`),
   ];
-  const connectors = async (botId: string) =>
-    (
-      await tx.botMcpServer.findMany({
-        where: { botId, spaceId: input.spaceId, userId: input.userId, server: { enabled: true } },
-      })
-    ).flatMap((row) => [
-      `mcp:${row.serverId}`,
-      ...(!row.needsReview && !row.allowAllTools && Array.isArray(row.allowedTools)
-        ? row.allowedTools
-            .filter((tool): tool is string => typeof tool === "string")
-            .map((tool) => `mcp:${row.serverId}:${tool}`)
-        : []),
-    ]);
-  const requesterConnectors = [...sharedConnectors, ...(await connectors(parent.botId))];
-  const recipientConnectors = [...sharedConnectors, ...(await connectors(recipient.id))];
+  const servers = await tx.mcpServer.findMany({
+    where: { spaceId: input.spaceId, userId: input.userId, enabled: true },
+  });
+  const connectors = async (botId: string, desktop: boolean) => {
+    const rows = await tx.botMcpServer.findMany({
+      where: { botId, spaceId: input.spaceId, userId: input.userId },
+    });
+    const overrides = new Map(rows.map((row) => [row.serverId, row]));
+    return servers.flatMap((server) => {
+      if (server.transport === "host-cli" && !desktop) return [];
+      const row = overrides.get(server.id);
+      if (
+        server.needsReview ||
+        row?.needsReview ||
+        row?.allowAllTools ||
+        row?.access === "none" ||
+        (row?.access !== undefined && !["inherit", "custom"].includes(row.access))
+      )
+        return [];
+      const manifest = IntegrationManifestSchema.safeParse(server.manifest);
+      if (server.manifest && !manifest.success) return [];
+      if (server.catalogId && (server.connectionState !== "connected" || !manifest.success))
+        return [];
+      const allowed = Array.isArray(row?.allowedTools)
+        ? row.allowedTools.filter((tool): tool is string => typeof tool === "string")
+        : [];
+      const space = Array.isArray(server.spaceAllowedTools)
+        ? server.spaceAllowedTools.filter((tool): tool is string => typeof tool === "string")
+        : [];
+      const offered = manifest.success ? manifest.data.tools.map((tool) => tool.id) : allowed;
+      const tools = effectiveMcpGrantTools(
+        offered,
+        space,
+        allowed,
+        row?.access ?? (row ? "custom" : "inherit"),
+        manifest.success,
+      );
+      return tools.length
+        ? [`mcp:${server.id}`, ...tools.map((tool) => `mcp:${server.id}:${tool}`)]
+        : [];
+    });
+  };
+  const requesterConnectors = [
+    ...sharedConnectors,
+    ...(await connectors(parent.botId, requester.computer?.kind === "desktop")),
+  ];
+  const recipientConnectors = [
+    ...sharedConnectors,
+    ...(await connectors(recipient.id, recipient.computer?.kind === "desktop")),
+  ];
   const layers = [
     { scopes: scopes("bot", parent.botId), connectors: requesterConnectors },
     { scopes: scopes("bot", recipient.id), connectors: recipientConnectors },
@@ -405,11 +445,12 @@ export async function finishDelegation(
   row = await tx.delegation.findUniqueOrThrow({ where: { id } });
   if (expectedRunId !== undefined && row.runId !== expectedRunId) return;
   if (row.status === "cancel-requested" && status !== "cancelled") return;
+  const redactedText = redactTaskValue(text);
   const changed = await tx.delegation.updateMany({
     where: { id, status: { in: ACTIVE_DELEGATIONS } },
     data: {
       status,
-      result: redactTaskValue(text).slice(0, 2000),
+      result: redactedText.slice(0, PEER_RECEIPT_MAX_LENGTH),
       completedAt: new Date(),
       ...(status === "cancelled" ? { cancelConfirmedAt: new Date() } : {}),
     },
@@ -430,14 +471,31 @@ export async function finishDelegation(
       where: { rootTaskId: row.rootTaskId, threadId: root.coordinatorThreadId },
       select: { id: true },
     }));
-  const blocks = [
-    {
-      kind: "text" as const,
-      text: goalRoomAssignment
-        ? `${row.actingName}: ${status === "completed" ? "completed, awaiting acceptance" : status}.`
-        : `${row.requesterName} → ${row.actingName}: ${status === "completed" ? "completed, awaiting acceptance" : status}.\n${redactTaskValue(text).slice(0, 2000)}${row.card && TaskCardSchema.parse(row.card).doneWhen.length ? `\n${taskCardChecklist(TaskCardSchema.parse(row.card))}` : ""}`,
-    },
-  ];
+  // Comparison delegations also use kind "message"; only message_bot keys are peer receipts.
+  const peerMessageResult =
+    row.kind === "message" &&
+    (row.admissionKey.startsWith("bot-message:") || row.admissionKey.startsWith("message:"));
+  const blocks: MessageBlock[] =
+    peerMessageResult && status === "completed" && text.trim().length > 0
+      ? [
+          {
+            kind: "bot_message_received",
+            fromBotId: row.actingBotId,
+            fromBotName: row.actingName,
+            text: redactedText.slice(0, PEER_RECEIPT_MAX_LENGTH),
+            intent: "result",
+            truncated: redactedText.length > PEER_RECEIPT_MAX_LENGTH,
+            fullLength: redactedText.length,
+          },
+        ]
+      : [
+          {
+            kind: "text",
+            text: goalRoomAssignment
+              ? `${row.actingName}: ${status === "completed" ? "completed, awaiting acceptance" : status}.`
+              : `${row.requesterName} → ${row.actingName}: ${status === "completed" ? "completed, awaiting acceptance" : status}.\n${redactedText.slice(0, 2000)}${row.card && TaskCardSchema.parse(row.card).doneWhen.length ? `\n${taskCardChecklist(TaskCardSchema.parse(row.card))}` : ""}`,
+          },
+        ];
   const message = row.summaryMessageId
     ? await tx.message.update({ where: { id: row.summaryMessageId }, data: { blocks } })
     : await createThreadMessageInTransaction(tx, {
@@ -481,7 +539,8 @@ export async function acceptDelegation(
       text?: string;
     }>;
     for (const block of blocks)
-      if (block.text) block.text = block.text.replace("completed, awaiting acceptance", "accepted");
+      if (block.kind === "text" && block.text)
+        block.text = block.text.replace("completed, awaiting acceptance", "accepted");
     await tx.message.update({ where: { id: message.id }, data: { blocks } });
     await appendEventInTransaction(tx, {
       spaceId: row.spaceId,
