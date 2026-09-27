@@ -35,3 +35,26 @@ export function formatCommandTime(
     return null;
   }
 }
+
+export function formatAbsoluteCommandTime(
+  iso: string | null | undefined,
+  locale?: string,
+): string | undefined {
+  if (!iso || typeof iso !== "string" || iso.trim() === "") {
+    return undefined;
+  }
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) {
+    return undefined;
+  }
+
+  try {
+    const targetLocale = locale && locale.trim() !== "" ? locale : undefined;
+    return new Intl.DateTimeFormat(targetLocale, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(date);
+  } catch {
+    return undefined;
+  }
+}
