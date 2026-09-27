@@ -89,7 +89,9 @@ test("Korean messaging settings show linked chat apps, channels, and connections
   await settings.getByTestId("ui-locale-select").click();
   await settings.getByRole("option", { name: "한국어", exact: true }).click();
   await settings.getByTestId("settings-nav-account").click();
-  await expect(settings.getByRole("heading", { name: "계정", exact: true })).toBeVisible();
+  await expect(
+    settings.getByRole("heading", { level: 2, name: "계정", exact: true }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "메시징 설정 관리" }).click();
 
   const messagingSettings = page.getByTestId("messaging-settings");
@@ -211,7 +213,9 @@ test("team conversation settings open from messaging overlay", async ({ page }, 
   await page.locator("header.app-drag").getByRole("button", { name: "Settings" }).click();
   const settings = page.getByTestId("user-settings");
   await settings.getByTestId("settings-nav-account").click();
-  await expect(settings.getByRole("heading", { name: "Account", exact: true })).toBeVisible();
+  await expect(
+    settings.getByRole("heading", { level: 2, name: "Account", exact: true }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Manage messaging settings" }).click();
 
   const messagingSettings = page.getByTestId("messaging-settings");
