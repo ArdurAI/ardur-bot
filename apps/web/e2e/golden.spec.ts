@@ -3,6 +3,7 @@ import {
   activeBotId,
   captureScreenshot,
   completeOnboarding,
+  openUserSettings,
   realSandboxTimeout,
   rpc,
   signup,
@@ -136,12 +137,7 @@ test("takeover, routine, integrations, and export are reachable", async ({ page 
   await expect(page.getByText("Monday briefing")).toBeVisible();
   await captureScreenshot(page, testInfo, "10-routine-created");
 
-  await page
-    .locator("aside")
-    .first()
-    .getByRole("button", { name: "Integrations", exact: true })
-    .click();
-  const userSettings = page.getByTestId("user-settings");
+  const userSettings = await openUserSettings(page, "integrations");
   await expect(userSettings).toHaveAttribute("data-settings-section", "integrations");
   await expect(userSettings.getByTestId("integration-github")).toBeVisible();
   await expect(page.getByPlaceholder("Search apps")).toHaveCount(0);

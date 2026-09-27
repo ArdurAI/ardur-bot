@@ -5,6 +5,7 @@ import { Trans } from "@lingui/react/macro";
 import type { ErrorInfo, ReactNode } from "react";
 import { Component, lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
+import { DashboardAccountArea } from "./DashboardAccountArea";
 import type { DashboardPanel, PanelActions } from "./panels";
 import { useDashboardPanels } from "./panels";
 
@@ -22,10 +23,12 @@ const Board = lazy(() => import("../board/Board").then((module) => ({ default: m
 export function DashboardPage({
   scope,
   spaceId,
+  account,
   ...actions
 }: {
   scope: string;
   spaceId?: string;
+  account: { name: string; onUsage: () => void; onSignOut: () => void };
 } & Pick<PanelActions, "openSettings">) {
   const [learningOpen, setLearningOpen] = useState(false);
   const panels = useDashboardPanels();
@@ -75,24 +78,33 @@ export function DashboardPage({
           )}
         </Suspense>
       ) : (
-        <div className="mx-auto grid max-w-6xl grid-cols-1 gap-4 lg:grid-cols-2">
-          {panels.map((panel) =>
-            spaceId ? (
-              <DashboardPanelView
-                key={`${scope}:${panel.id}`}
-                panel={panel}
-                scope={scope}
-                spaceId={spaceId}
-                {...actions}
-                openLearning={() => setLearningOpen(true)}
-              />
-            ) : (
-              <DashboardPanelFrame key={panel.id} panel={panel}>
-                <PanelSkeleton />
-              </DashboardPanelFrame>
-            ),
-          )}
-        </div>
+        <>
+          <DashboardAccountArea
+            name={account.name}
+            onSettings={() => actions.openSettings("general")}
+            onIntegrations={() => actions.openSettings("integrations")}
+            onUsage={account.onUsage}
+            onSignOut={account.onSignOut}
+          />
+          <div className="mx-auto grid max-w-6xl grid-cols-1 gap-4 lg:grid-cols-2">
+            {panels.map((panel) =>
+              spaceId ? (
+                <DashboardPanelView
+                  key={`${scope}:${panel.id}`}
+                  panel={panel}
+                  scope={scope}
+                  spaceId={spaceId}
+                  {...actions}
+                  openLearning={() => setLearningOpen(true)}
+                />
+              ) : (
+                <DashboardPanelFrame key={panel.id} panel={panel}>
+                  <PanelSkeleton />
+                </DashboardPanelFrame>
+              ),
+            )}
+          </div>
+        </>
       )}
       {learningOpen ? (
         <Suspense fallback={null}>

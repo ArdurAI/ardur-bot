@@ -4157,9 +4157,9 @@ msgid "Integration options"
 msgstr "Параметры интеграции"
 
 #: src/components/composer/ComposerMenu.tsx
+#: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/settings-sections.ts
-#: src/pages/Shell.tsx
 msgid "Integrations"
 msgstr "Интеграции"
 
@@ -4537,7 +4537,7 @@ msgid "Local Server Settings"
 msgstr "Настройки локального сервера"
 
 #: src/pages/account/AccountSettings.tsx
-#: src/pages/Shell.tsx
+#: src/pages/dashboard/DashboardAccountArea.tsx
 msgid "Log out"
 msgstr "Выйти"
 
@@ -6994,11 +6994,11 @@ msgstr "Настроить поиск по памяти"
 msgid "Set up servers"
 msgstr ""
 
+#: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/settings-sections.ts
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
-#: src/pages/shell/sidebar-settings.tsx
 msgid "Settings"
 msgstr "Настройки"
 
@@ -8055,9 +8055,9 @@ msgid "Uploaded files"
 msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/dashboard/panels.ts
 #: src/pages/settings-sections.ts
-#: src/pages/Shell.tsx
 msgid "Usage"
 msgstr "Использование"
 

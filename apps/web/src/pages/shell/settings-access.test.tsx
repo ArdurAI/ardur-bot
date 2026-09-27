@@ -14,6 +14,14 @@ vi.mock("@lingui/react/macro", () => ({
 vi.mock("@ardurbot/ui-web", () => {
   const Container = ({ children }: { children?: ReactNode }) => <div>{children}</div>;
   return {
+    Button: ({ variant: _variant, ...props }: ComponentProps<"button"> & { variant?: string }) => (
+      <button {...props} />
+    ),
+    Popover: Container,
+    PopoverContent: Container,
+    PopoverTrigger: ({ children, ...props }: ComponentProps<"button">) => (
+      <button {...props}>{children}</button>
+    ),
     DropdownMenu: Container,
     DropdownMenuContent: Container,
     DropdownMenuSub: Container,
@@ -30,8 +38,8 @@ vi.mock("@ardurbot/ui-web", () => {
 
 import { useSettingsShortcut } from "../../lib/use-settings-shortcut";
 import { BotContextMenu } from "../BotContextMenu";
+import { DashboardAccountArea } from "../dashboard/DashboardAccountArea";
 import { SettingsSupportLinks } from "../settings-support-links";
-import { SidebarSettings } from "./sidebar-settings";
 
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
@@ -51,11 +59,22 @@ it("opens Settings from its persistent entry or either platform shortcut and cle
   const open = vi.fn();
   function Access() {
     useSettingsShortcut(open);
-    return <SidebarSettings onClick={open} />;
+    return (
+      <DashboardAccountArea
+        name="Test Owner"
+        onSettings={open}
+        onIntegrations={() => undefined}
+        onUsage={() => undefined}
+        onSignOut={() => undefined}
+      />
+    );
   }
   await act(async () => root.render(<Access />));
-  expect(container.querySelector("button")?.textContent).toBe("Settings");
-  await act(async () => container.querySelector("button")?.click());
+  const settings = [...container.querySelectorAll("button")].find(
+    (button) => button.textContent === "Settings",
+  );
+  expect(settings).toBeDefined();
+  await act(async () => settings?.click());
   for (const modifier of ["metaKey", "ctrlKey"]) {
     const event = new KeyboardEvent("keydown", { key: ",", [modifier]: true, cancelable: true });
     window.dispatchEvent(event);

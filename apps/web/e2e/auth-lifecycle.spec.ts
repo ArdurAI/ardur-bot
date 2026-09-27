@@ -50,9 +50,12 @@ test("logout protects bot deep links and sign-in restores the session", async ({
   const protectedBotPath = new URL(page.url()).pathname;
   await expect(page.getByPlaceholder("Message Chief")).toBeVisible();
 
-  await page.getByRole("button", { name: new RegExp(userName, "i") }).click();
+  await page.goto("/app?view=dashboard");
+  await page.getByTestId("user-menu-trigger").click();
   await expect(
-    page.getByTestId("bots-sidebar").getByRole("button", { name: "Settings", exact: true }),
+    page
+      .locator('[data-slot="popover-content"]')
+      .getByRole("button", { name: "Settings", exact: true }),
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "Usage", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Log out" })).toBeVisible();
@@ -116,7 +119,9 @@ test("logout protects bot deep links and sign-in restores the session", async ({
   await expect(composer).toHaveAttribute("name", "chat-message");
   await expect(composer).toHaveAttribute("autocomplete", "off");
   await expect(composer).toHaveAttribute("aria-label", "Message Chief");
-  await expect(page.getByRole("button", { name: new RegExp(userName, "i") })).toBeVisible();
+  await expect(
+    page.locator("header.app-drag").getByRole("button", { name: "Settings" }),
+  ).toBeVisible();
 
   await composer.fill("line one");
   const heightBeforeNewline = await composer.evaluate((el) => el.getBoundingClientRect().height);
@@ -154,11 +159,7 @@ test("changes and recovers an email password", async ({ page }, testInfo) => {
   await completeOnboarding(page);
   await page.waitForURL(/\/app\/[^/]+$/);
 
-  await page.getByTestId("user-menu-trigger").click();
-  await page
-    .locator('[data-slot="popover-content"]')
-    .getByRole("button", { name: "Settings", exact: true })
-    .click();
+  await page.locator("header.app-drag").getByRole("button", { name: "Settings" }).click();
   const settings = page.getByTestId("user-settings");
   await settings.getByTestId("settings-nav-account").click();
   await expect(settings).toBeVisible();
@@ -192,7 +193,8 @@ test("changes and recovers an email password", async ({ page }, testInfo) => {
   await captureScreenshot(page, testInfo, "41-password-changed");
   await settings.getByRole("button", { name: "Close user settings" }).click();
 
-  await page.getByRole("button", { name: new RegExp(userName, "i") }).click();
+  await page.goto("/app?view=dashboard");
+  await page.getByTestId("user-menu-trigger").click();
   await page.getByRole("button", { name: "Log out" }).click();
   await expect(page.getByRole("link", { name: "Forgot password?" })).toBeVisible();
   await page.getByRole("link", { name: "Forgot password?" }).click();

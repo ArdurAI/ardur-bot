@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { captureScreenshot, completeOnboarding, signup } from "./helpers";
+import { captureScreenshot, completeOnboarding, openUserSettings, signup } from "./helpers";
 
 test("offers Manage and says to enable a server first when its sign-in card is authorized while disabled", async ({
   page,
@@ -17,7 +17,7 @@ test("offers Manage and says to enable a server first when its sign-in card is a
   });
   await expect(card).toBeVisible({ timeout: 20_000 });
 
-  await page.getByText("Integrations", { exact: true }).click();
+  await openUserSettings(page, "integrations");
   await page.getByTestId("settings-nav-mcp").click();
   await expect(page.getByRole("heading", { name: "MCP", exact: true })).toBeVisible();
   const serverCard = page.locator('[id^="mcp-server-"]', { hasText: "Disabled Reports Server" });

@@ -4157,9 +4157,9 @@ msgid "Integration options"
 msgstr ""
 
 #: src/components/composer/ComposerMenu.tsx
+#: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/settings-sections.ts
-#: src/pages/Shell.tsx
 msgid "Integrations"
 msgstr "集成"
 
@@ -4537,7 +4537,7 @@ msgid "Local Server Settings"
 msgstr ""
 
 #: src/pages/account/AccountSettings.tsx
-#: src/pages/Shell.tsx
+#: src/pages/dashboard/DashboardAccountArea.tsx
 msgid "Log out"
 msgstr "退出登录"
 
@@ -6994,11 +6994,11 @@ msgstr "设置记忆搜索"
 msgid "Set up servers"
 msgstr ""
 
+#: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/settings-sections.ts
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
-#: src/pages/shell/sidebar-settings.tsx
 msgid "Settings"
 msgstr "设置"
 
@@ -8055,9 +8055,9 @@ msgid "Uploaded files"
 msgstr ""
 
 #: src/pages/AccountSettingsOverlay.tsx
+#: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/dashboard/panels.ts
 #: src/pages/settings-sections.ts
-#: src/pages/Shell.tsx
 msgid "Usage"
 msgstr "用量"
 

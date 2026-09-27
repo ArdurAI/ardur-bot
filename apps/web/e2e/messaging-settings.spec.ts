@@ -84,11 +84,7 @@ test("Korean messaging settings show linked chat apps, channels, and connections
   await signup(page, `messaging-${stamp}@ardurbot.test`, "password12", userName);
   await completeOnboarding(page);
 
-  await page.getByRole("button", { name: new RegExp(userName) }).click();
-  await page
-    .locator('[data-slot="popover-content"]')
-    .getByRole("button", { name: "Settings", exact: true })
-    .click();
+  await page.locator("header.app-drag").getByRole("button", { name: "Settings" }).click();
   const settings = page.getByTestId("user-settings");
   await settings.getByTestId("ui-locale-select").click();
   await settings.getByRole("option", { name: "한국어", exact: true }).click();
@@ -212,11 +208,7 @@ test("team conversation settings open from messaging overlay", async ({ page }, 
   await signup(page, `team-chat-${stamp}@ardurbot.test`, "password12", userName);
   await completeOnboarding(page);
 
-  await page.getByRole("button", { name: new RegExp(userName) }).click();
-  await page
-    .locator('[data-slot="popover-content"]')
-    .getByRole("button", { name: "Settings", exact: true })
-    .click();
+  await page.locator("header.app-drag").getByRole("button", { name: "Settings" }).click();
   const settings = page.getByTestId("user-settings");
   await settings.getByTestId("settings-nav-account").click();
   await expect(settings.getByRole("heading", { name: "Account", exact: true })).toBeVisible();
