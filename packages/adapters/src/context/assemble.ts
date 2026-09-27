@@ -48,6 +48,7 @@ export async function assembleTurnContext(run: {
   brief?: string | null;
   summary?: string | null;
   history: Message[];
+  requiredContext?: Message;
   message: string;
   query?: string;
   sourceMessageId?: string | null;
@@ -96,6 +97,7 @@ export async function assembleTurnContext(run: {
     ...(brief ? [{ role: "user" as const, content: brief }] : []),
     ...(summary ? [{ role: "user" as const, content: summary }] : []),
     ...messages,
+    ...(run.requiredContext && !run.peerReadOnly ? [run.requiredContext] : []),
     ...(recall ? [{ role: "user" as const, content: recall }] : []),
   ];
   const snapshot: ContextSnapshot = {
@@ -103,7 +105,9 @@ export async function assembleTurnContext(run: {
       stable: stableCharacters,
       brief: brief.length,
       summary: summary.length,
-      messages: messages.reduce((size, message) => size + message.content.length, 0),
+      messages:
+        messages.reduce((size, message) => size + message.content.length, 0) +
+        (run.peerReadOnly ? 0 : (run.requiredContext?.content.length ?? 0)),
       recall: recall.length,
       message: run.message.length,
     },

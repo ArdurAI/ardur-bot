@@ -70,6 +70,16 @@ import { ObservedUsageTotals } from "./runtime-usage.js";
 import { textContentArg } from "./tool-text.js";
 
 const running = new Map<string, { controller: AbortController; work: Promise<void> }>();
+
+export function promptWithInitialSteering(
+  prompt: string,
+  steering: AgentSteeringMessage[],
+): string {
+  return steering.length
+    ? `${prompt}\n\nAdditional user context:\n${steering.map((item) => item.text).join("\n")}`
+    : prompt;
+}
+
 interface ToolCallBudget {
   count: number;
   exceeded: boolean;
@@ -282,11 +292,7 @@ export class PiAgentRuntime implements AgentRuntime {
           request.prompt,
           request.sourceMessageId,
         );
-        const initialPrompt = initialSteering.length
-          ? `${request.prompt}\n\nAdditional user context:\n${initialSteering
-              .map((item) => item.text)
-              .join("\n")}`
-          : request.prompt;
+        const initialPrompt = promptWithInitialSteering(request.prompt, initialSteering);
         const systemPrompt =
           request.instructions ||
           (toolDefs.some((tool) => tool.name === "computer_observe")
@@ -814,7 +820,7 @@ function stableToolNameHash(name: string): string {
   return (hash >>> 0).toString(36);
 }
 
-function toHistory(
+export function toHistory(
   history: AgentRunRequest["history"],
   prompt: string,
   sourceMessageId?: string | null,

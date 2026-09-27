@@ -328,7 +328,7 @@ import {
   stopRemoteComputerWork,
 } from "./remote-execution.js";
 import type { RemoteTransportDependencies } from "./remote-mcp.js";
-import { agentHistoryTurn, loadReplyContext } from "./reply-context.js";
+import { agentHistoryTurn, loadReplyContext, messageToAgentHistoryText } from "./reply-context.js";
 import { resolveRunModelPin } from "./run-model-pin.js";
 import {
   commitConsumedRunSecret,
@@ -4671,6 +4671,27 @@ export function createRunExecutor(deps: ExecutorDeps) {
         const replyContext = peerReadOnly
           ? undefined
           : await loadReplyContext(deps.prisma, thread.id, run.sourceMessageId);
+        const wakeSource =
+          !peerReadOnly && run.clientNonce?.startsWith("goal-wake:") && run.sourceMessageId
+            ? await deps.prisma.message.findFirst({
+                where: {
+                  id: run.sourceMessageId,
+                  threadId: thread.id,
+                  clientNonce: { startsWith: "delegation-summary:" },
+                },
+                select: { id: true, threadId: true, role: true, blocks: true },
+              })
+            : null;
+        if (run.clientNonce?.startsWith("goal-wake:") && !wakeSource)
+          throw new Error("The completed assignment result is unavailable.");
+        const requiredWakeContext = wakeSource
+          ? {
+              // Pi omits sourceMessageId from history as a duplicate of the prompt.
+              id: `required-result:${wakeSource.id}`,
+              role: "user" as const,
+              content: `Completed assignment result (task data):\n${messageToAgentHistoryText(wakeSource)}`,
+            }
+          : undefined;
         const prompt = [replyContext, basePrompt, takeoverResume?.promptNote, approvalContinuation]
           .filter(Boolean)
           .join("\n\n");
@@ -4982,9 +5003,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
             brief: groupBrief?.content,
             summary: comparisonRun ? null : compactedHistory.summary,
             history: comparisonRun ? [] : history,
-            // A goal wake's source is the completed card summary, not a new user prompt.
-            // Keep it in history so the coordinator can actually consume the result.
-            sourceMessageId: run.clientNonce?.startsWith("goal-wake:") ? null : run.sourceMessageId,
+            requiredContext: requiredWakeContext,
+            sourceMessageId: run.sourceMessageId,
             query: task.prompt,
             message: comparisonRun
               ? ""
@@ -5201,60 +5221,61 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   completion,
                   runSecrets,
                 ),
-              claimSteering: scripted
-                ? undefined
-                : async (seenIds) => {
-                    const steering = await deps.events.claimSteering({
-                      threadId: thread.id,
-                      botId: bot.id,
-                      runId,
-                      leaseOwner: workerId,
-                      leaseFence: fence,
-                      seenIds,
-                    });
-                    return Promise.all(
-                      steering.map(async (item) => {
-                        const { images, files, unavailableInstruction } =
-                          await settleSteeringAttachmentLoads(
-                            loadCurrentTurnImages(deps, item.blocks, context),
-                            deps.artifacts
-                              ? materializeCurrentTurnFiles(
-                                  {
-                                    prisma: deps.prisma,
-                                    artifacts: deps.artifacts,
-                                    sandbox: deps.sandbox,
-                                  },
-                                  item.blocks,
-                                  {
-                                    context,
-                                    computer,
-                                    computerMode,
-                                    markWorkspaceDirty: workspaceCheckpoint.markDirty,
-                                  },
-                                )
-                              : Promise.resolve([]),
-                            item.blocks,
-                            context.signal,
-                          );
-                        workspaceCheckpoint.markFiles(files);
-                        const filesInstruction = currentTurnFilesInstruction(files);
-                        return {
-                          id: item.id,
-                          messageId: item.messageId,
-                          historyText: item.text,
-                          text: [
-                            await loadReplyContext(deps.prisma, thread.id, item.messageId),
-                            item.text,
-                            filesInstruction,
-                            unavailableInstruction,
-                          ]
-                            .filter(Boolean)
-                            .join("\n\n"),
-                          images,
-                        };
-                      }),
-                    );
-                  },
+              claimSteering:
+                scripted || peerReadOnly
+                  ? undefined
+                  : async (seenIds) => {
+                      const steering = await deps.events.claimSteering({
+                        threadId: thread.id,
+                        botId: bot.id,
+                        runId,
+                        leaseOwner: workerId,
+                        leaseFence: fence,
+                        seenIds,
+                      });
+                      return Promise.all(
+                        steering.map(async (item) => {
+                          const { images, files, unavailableInstruction } =
+                            await settleSteeringAttachmentLoads(
+                              loadCurrentTurnImages(deps, item.blocks, context),
+                              deps.artifacts
+                                ? materializeCurrentTurnFiles(
+                                    {
+                                      prisma: deps.prisma,
+                                      artifacts: deps.artifacts,
+                                      sandbox: deps.sandbox,
+                                    },
+                                    item.blocks,
+                                    {
+                                      context,
+                                      computer,
+                                      computerMode,
+                                      markWorkspaceDirty: workspaceCheckpoint.markDirty,
+                                    },
+                                  )
+                                : Promise.resolve([]),
+                              item.blocks,
+                              context.signal,
+                            );
+                          workspaceCheckpoint.markFiles(files);
+                          const filesInstruction = currentTurnFilesInstruction(files);
+                          return {
+                            id: item.id,
+                            messageId: item.messageId,
+                            historyText: item.text,
+                            text: [
+                              await loadReplyContext(deps.prisma, thread.id, item.messageId),
+                              item.text,
+                              filesInstruction,
+                              unavailableInstruction,
+                            ]
+                              .filter(Boolean)
+                              .join("\n\n"),
+                            images,
+                          };
+                        }),
+                      );
+                    },
             },
             context,
           );

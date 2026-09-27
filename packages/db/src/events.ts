@@ -468,7 +468,7 @@ export async function sendUserMessage(
         clientNonce: input.clientNonce,
       });
       const createRun = input.createRun !== false;
-      const busy =
+      const firstBusy =
         createRun && !input.allowParallelRun
           ? await tx.run.findFirst({
               where: {
@@ -478,9 +478,34 @@ export async function sendUserMessage(
                   in: ["running", "queued", "leased", "waiting_input", "waiting_takeover"],
                 },
               },
-              select: { id: true, taskId: true },
+              select: {
+                id: true,
+                taskId: true,
+                delegationId: true,
+              },
             })
           : null;
+      let busy = firstBusy;
+      if (firstBusy && (await isReadOnlyPeerRun(tx, firstBusy))) {
+        busy = null;
+        const candidates = await tx.run.findMany({
+          where: {
+            threadId: input.threadId,
+            botId: input.botId,
+            status: {
+              in: ["running", "queued", "leased", "waiting_input", "waiting_takeover"],
+            },
+          },
+          select: { id: true, taskId: true, delegationId: true },
+          orderBy: { createdAt: "asc" },
+        });
+        for (const candidate of candidates) {
+          if (!(await isReadOnlyPeerRun(tx, candidate))) {
+            busy = candidate;
+            break;
+          }
+        }
+      }
       let task = null;
       let run = null;
       if (createRun && !busy) {
@@ -600,10 +625,11 @@ export async function claimSteering(
         id: true,
         spaceId: true,
         trigger: true,
+        delegationId: true,
         sourceMessage: { select: { blocks: true } },
       },
     });
-    if (!run) return [];
+    if (!run || (await isReadOnlyPeerRun(tx, run))) return [];
     const channelId =
       run.trigger === "messaging"
         ? messagingChannelId(run.sourceMessage?.blocks as MessageBlock[] | undefined)
@@ -1455,15 +1481,18 @@ async function createSteeringContinuation(
   tx: Prisma.TransactionClient,
   input: FinalizeRunBase,
 ): Promise<string | null> {
-  const active = await tx.run.findFirst({
+  const active = await tx.run.findMany({
     where: {
       threadId: input.threadId,
       botId: input.botId,
       status: { in: ["queued", "leased", "running", "waiting_input", "waiting_takeover"] },
     },
-    select: { id: true },
+    select: { id: true, delegationId: true },
   });
-  if (active) return null;
+  // A queued desk peer cannot consume private steering and must not suppress its reply.
+  for (const run of active) {
+    if (!(await isReadOnlyPeerRun(tx, run))) return null;
+  }
   const pending = await tx.steeringMessage.findMany({
     where: {
       botId: input.botId,
@@ -1504,6 +1533,25 @@ async function createSteeringContinuation(
     data: { runId: run.id, claimedAt: null },
   });
   return run.id;
+}
+
+async function isReadOnlyPeerRun(
+  tx: Prisma.TransactionClient,
+  run: { delegationId: string | null },
+) {
+  if (!run.delegationId) return false;
+  const delegation = await tx.delegation.findUnique({
+    where: { id: run.delegationId },
+    select: { kind: true, card: true },
+  });
+  return Boolean(
+    delegation?.kind === "message" &&
+      delegation.card &&
+      typeof delegation.card === "object" &&
+      !Array.isArray(delegation.card) &&
+      "peerMode" in delegation.card &&
+      delegation.card.peerMode === "read-only",
+  );
 }
 
 export async function appendEventInTransaction(

@@ -349,9 +349,9 @@ export async function messageBot(
       deps.prisma.$transaction(async (tx) => {
         if (goal) {
           await tx.$queryRaw`SELECT id FROM chat_groups WHERE id = ${goal.groupId} AND "spaceId" = ${run.spaceId} AND "userId" = ${run.userId} FOR UPDATE`;
-          // Run claiming and archive take the recipient bot before its thread.
-          await tx.$queryRaw`SELECT id FROM bots WHERE id = ${target.id} AND "spaceId" = ${run.spaceId} AND "userId" = ${run.userId} FOR UPDATE`;
         }
+        // Owner sends, run claiming, and archive take the recipient bot before its thread.
+        await tx.$queryRaw`SELECT id FROM bots WHERE id = ${target.id} AND "spaceId" = ${run.spaceId} AND "userId" = ${run.userId} FOR UPDATE`;
         const rootTaskId = goal?.rootTaskId ?? parentRun?.delegationRootTaskId ?? parentRun?.taskId;
         const root = rootTaskId
           ? await tx.delegationRoot.findUnique({

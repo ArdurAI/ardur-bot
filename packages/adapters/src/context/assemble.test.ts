@@ -22,6 +22,24 @@ describe("turn context", () => {
     expect(JSON.stringify(context)).not.toMatch(/PRIVATE_(BRIEF|SUMMARY|HISTORY|RECALL)_SENTINEL/);
     expect(recall).not.toHaveBeenCalled();
   });
+  it("keeps a required completion after newer history fills the rolling budget", async () => {
+    const result = "DISTINCT_WORKER_RESULT";
+    const context = await assembleTurnContext({
+      instructions: "Review completed work.",
+      history: [
+        { id: "summary", role: "user", content: result },
+        { id: "newer", role: "user", content: "n".repeat(12_001) },
+      ],
+      requiredContext: { id: "required-result:summary", role: "user", content: result },
+      sourceMessageId: "summary",
+      message: "Review the completed assignment.",
+    });
+    expect(context.history.filter((message) => message.id === "required-result:summary")).toEqual([
+      { id: "required-result:summary", role: "user", content: result },
+    ]);
+    expect(context.history.at(-1)?.content).toBe(result);
+    expect(context.snapshot.layers.messages).toBe(12_000 + result.length);
+  });
   it("orders bounded layers and keeps the stable prefix byte-identical", async () => {
     const recall = vi.fn(async () => "[ardur-memory:document:3] " + "fact ".repeat(4000));
     const run = {
