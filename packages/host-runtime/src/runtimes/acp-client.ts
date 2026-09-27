@@ -80,7 +80,13 @@ export class AcpClient {
           this.fail("ACP sent an invalid message.");
           return;
         }
-        this.dispatch(value as JsonObject);
+        try {
+          this.dispatch(value as JsonObject);
+        } catch {
+          // A callback must never throw from the child stdout listener.
+          this.fail("ACP update handler failed.");
+          return;
+        }
         if (this.closed) return;
       }
       newline = this.buffer.indexOf(10);

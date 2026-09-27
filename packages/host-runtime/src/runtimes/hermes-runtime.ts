@@ -148,13 +148,18 @@ function contextDocument(request: AgentRunRequest) {
 
 function textFromUpdate(update: Record<string, unknown>) {
   const content = update.content;
-  return content && typeof content === "object" && "type" in content && content.type === "text"
-    ? String((content as { text?: unknown }).text ?? "")
-    : "";
+  if (!content || typeof content !== "object" || Array.isArray(content) || !("type" in content))
+    throw new AcpClientError("ACP sent an invalid content block.");
+  if (content.type !== "text") return "";
+  if (!("text" in content) || typeof content.text !== "string")
+    throw new AcpClientError("ACP sent an invalid text update.");
+  return content.text;
 }
 
 interface ActiveTurn {
   active: boolean;
+  stopReason?: "cancel" | "pause" | "failure";
+  cleanup?: Promise<void>;
   child?: ChildProcessWithoutNullStreams;
   client?: AcpClient;
   sessionId?: string;
@@ -186,25 +191,40 @@ export class HermesRuntime implements AgentRuntime {
     };
   }
 
-  async abort(runId: string) {
+  private async stopTurn(runId: string, reason: "cancel" | "pause" | "failure") {
     const turn = this.running.get(runId);
-    if (!turn?.active) return;
-    turn.active = false;
-    turn.queue.end();
-    if (turn.sessionId && turn.client) {
-      try {
-        turn.client.notify("session/cancel", { sessionId: turn.sessionId });
-      } catch {
-        // A dead ACP process is already cancelled.
-      }
+    if (!turn) return;
+    if (
+      reason === "failure" ||
+      (reason === "cancel" && turn.stopReason !== "failure") ||
+      !turn.stopReason
+    )
+      turn.stopReason = reason;
+    if (!turn.cleanup) {
+      turn.active = false;
+      turn.queue.end();
+      turn.cleanup = (async () => {
+        if (turn.sessionId && turn.client) {
+          try {
+            turn.client.notify("session/cancel", { sessionId: turn.sessionId });
+          } catch {
+            // A dead ACP process is already cancelled.
+          }
+        }
+        if (!turn.child) return;
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        try {
+          await turn.teardown?.();
+        } finally {
+          await stopNative(turn.child);
+        }
+      })();
     }
-    if (!turn.child) return;
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    try {
-      await turn.teardown?.();
-    } finally {
-      await stopNative(turn.child);
-    }
+    await turn.cleanup;
+  }
+
+  async abort(runId: string) {
+    await this.stopTurn(runId, "cancel");
   }
 
   async *run(
@@ -216,7 +236,10 @@ export class HermesRuntime implements AgentRuntime {
     const queue = new RuntimeQueue<AgentRuntimeEvent>();
     const turn: ActiveTurn = { active: true, queue };
     this.running.set(request.runId, turn);
-    const stopOnSignal = () => void this.abort(request.runId);
+    const stopOnSignal = () => {
+      // The generator finalizer awaits the same cleanup promise and surfaces a failure.
+      void this.abort(request.runId).catch(() => {});
+    };
     context?.signal?.addEventListener("abort", stopOnSignal, { once: true });
     if (context?.signal?.aborted) stopOnSignal();
     let home: string | undefined;
@@ -242,7 +265,9 @@ export class HermesRuntime implements AgentRuntime {
         },
         () => {
           fenced = true;
-          if (turn?.active) void this.abort(request.runId);
+          if (turn.active) {
+            void this.stopTurn(request.runId, "pause").catch(() => {});
+          }
         },
         () => !fenced && !!turn?.active && !context?.signal?.aborted,
       );
@@ -297,8 +322,11 @@ export class HermesRuntime implements AgentRuntime {
       turn.child = result.child;
       turn.teardown = result.teardown;
       if (!turn.active || context?.signal?.aborted) {
-        await result.teardown();
-        await stopNative(result.child);
+        try {
+          await result.teardown();
+        } finally {
+          await stopNative(result.child);
+        }
         return;
       }
       const child = result.child;
@@ -327,7 +355,7 @@ export class HermesRuntime implements AgentRuntime {
             if (!allowedToolTitles.has(title)) {
               fenced = true;
               queue.end(new Error("Hermes tried to use a tool this bot was not given."));
-              void this.abort(request.runId);
+              void this.stopTurn(request.runId, "failure").catch(() => {});
               return;
             }
             queue.push({ type: "progress", text: redactMcpText(title, secrets), activity: true });
@@ -428,20 +456,27 @@ export class HermesRuntime implements AgentRuntime {
       const protocol = runProtocol();
       try {
         for await (const event of queue) {
-          if (!turn.active || context?.signal?.aborted) break;
+          if (turn.stopReason === "cancel") break;
           yield event;
         }
       } finally {
-        await this.abort(request.runId);
-        await protocol;
+        try {
+          await this.abort(request.runId);
+        } finally {
+          await protocol;
+        }
       }
     } finally {
       this.running.delete(request.runId);
       context?.signal?.removeEventListener("abort", stopOnSignal);
       try {
-        await mcp?.close();
+        await turn.cleanup;
       } finally {
-        if (home) await rm(home, { recursive: true, force: true });
+        try {
+          await mcp?.close();
+        } finally {
+          if (home) await rm(home, { recursive: true, force: true });
+        }
       }
     }
   }
