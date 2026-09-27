@@ -1,5 +1,9 @@
 type OwnerSession = { userId: string; sessionId: string };
 
+// The 360 s bot-comms spec renews every 60 s; a silent holder expires after 180 s.
+export const DEPLOYMENT_OWNER_LEASE_MS = 180_000;
+export const DEPLOYMENT_OWNER_RENEW_MS = 60_000;
+
 export function createDeploymentOwnerFixture(options: {
   authenticate: (request: Request) => Promise<OwnerSession | null>;
   setOwner: (userId: string) => Promise<void>;
@@ -7,7 +11,7 @@ export function createDeploymentOwnerFixture(options: {
   leaseMs?: number;
 }) {
   const waitMs = options.waitMs ?? 120_000;
-  const leaseMs = options.leaseMs ?? 180_000;
+  const leaseMs = options.leaseMs ?? DEPLOYMENT_OWNER_LEASE_MS;
   let lease: { sessionId: string; expiresAt: number } | undefined;
   const waiters = new Set<() => void>();
   const wakeWaiters = () => {
@@ -30,6 +34,7 @@ export function createDeploymentOwnerFixture(options: {
 
     const deadline = Date.now() + waitMs;
     for (;;) {
+      if (request.signal.aborted) throw new DOMException("Ownership claim aborted", "AbortError");
       const now = Date.now();
       if (lease && lease.expiresAt <= now) {
         lease = undefined;
@@ -41,6 +46,9 @@ export function createDeploymentOwnerFixture(options: {
         lease = claimedLease;
         try {
           await options.setOwner(session.userId);
+          if (request.signal.aborted) {
+            throw new DOMException("Ownership claim aborted", "AbortError");
+          }
         } catch (error) {
           if (lease === claimedLease) {
             lease = previous;
@@ -52,14 +60,24 @@ export function createDeploymentOwnerFixture(options: {
       }
       const remaining = Math.min(deadline - now, lease.expiresAt - now);
       if (remaining <= 0) return new Response(null, { status: 423 });
-      await new Promise<void>((resolve) => {
-        const wake = () => {
+      await new Promise<void>((resolve, reject) => {
+        const cleanup = () => {
           clearTimeout(timer);
           waiters.delete(wake);
+          request.signal.removeEventListener("abort", abort);
+        };
+        const wake = () => {
+          cleanup();
           resolve();
+        };
+        const abort = () => {
+          cleanup();
+          reject(new DOMException("Ownership claim aborted", "AbortError"));
         };
         const timer = setTimeout(wake, remaining);
         waiters.add(wake);
+        request.signal.addEventListener("abort", abort, { once: true });
+        if (request.signal.aborted) abort();
       });
     }
   };
