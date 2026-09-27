@@ -1,9 +1,19 @@
-import { type Bot, GROUP_MEMBER_MAX, GROUP_MEMBER_MIN, type Group } from "@ardurbot/contracts";
+import {
+  type Bot,
+  type Goal,
+  GROUP_MEMBER_MAX,
+  GROUP_MEMBER_MIN,
+  type Group,
+} from "@ardurbot/contracts";
 import { BotAvatar, Button, Input, NativeSelect, NativeSelectOption } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { Check, X } from "lucide-react";
-import { useId, useMemo, useState } from "react";
+import { lazy, Suspense, useId, useMemo, useState } from "react";
 import { BotContext } from "../components/ContextEntry";
+
+const StartGoalForm = lazy(() =>
+  import("./GoalForm").then((module) => ({ default: module.StartGoalForm })),
+);
 
 function validSelection(name: string, selected: readonly string[]) {
   return (
@@ -151,11 +161,23 @@ export function CreateGroupForm({
 export function GroupSettings({
   group,
   bots,
+  goal,
+  canManageGoal,
+  onStartGoal,
   onSave,
   onRemove,
 }: {
   group: Group;
   bots: Bot[];
+  goal: Goal | null;
+  canManageGoal: boolean;
+  onStartGoal: (input: {
+    groupId: string;
+    objective: string;
+    doneWhen: string[];
+    untilAt?: string;
+    tokenLimit: number;
+  }) => Promise<void>;
   onSave: (input: {
     name?: string;
     botIds?: string[];
@@ -263,6 +285,11 @@ export function GroupSettings({
       >
         {pending === "save" ? <Trans>Saving…</Trans> : <Trans>Save</Trans>}
       </Button>
+      {canManageGoal && group.coordinatorBotId && (!goal || goal.status === "stopped") ? (
+        <Suspense fallback={null}>
+          <StartGoalForm groupId={group.id} onStart={onStartGoal} />
+        </Suspense>
+      ) : null}
       <div className="mt-4 text-sm text-muted-foreground">
         <Trans>Context</Trans>
       </div>
@@ -283,6 +310,56 @@ export function GroupSettings({
       >
         {pending === "remove" ? <Trans>Deleting…</Trans> : <Trans>Delete group</Trans>}
       </Button>
+    </div>
+  );
+}
+
+export function GroupGoalStrip({ goal, onStop }: { goal: Goal; onStop: () => Promise<void> }) {
+  const { t } = useLingui();
+  const [stopping, setStopping] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const status =
+    goal.status === "running"
+      ? t`Working`
+      : goal.status === "stopped"
+        ? t`Stopped`
+        : goal.status === "completed"
+          ? t`Completed`
+          : goal.status === "accepted"
+            ? t`Accepted`
+            : goal.status === "paused"
+              ? t`Paused`
+              : goal.status === "blocked"
+                ? t`Blocked`
+                : t`Needs you`;
+  return (
+    <div className="flex items-center justify-between gap-3 border-b border-border px-3 py-1 text-xs text-muted-foreground md:px-[22px]">
+      <span className="truncate">
+        <Trans>Goal</Trans>: {status} · {goal.usedTokens.toLocaleString()} /{" "}
+        {goal.tokenLimit.toLocaleString()} <Trans>tokens</Trans> ·{" "}
+        {new Date(goal.untilAt).toLocaleString()}
+      </span>
+      {goal.status === "running" ? (
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={stopping}
+          onClick={() => {
+            setStopping(true);
+            setError(null);
+            void onStop()
+              .catch(() => setError(t`Could not stop goal. Try again.`))
+              .finally(() => setStopping(false));
+          }}
+        >
+          <Trans>Stop</Trans>
+        </Button>
+      ) : null}
+      {error ? (
+        <span role="alert" className="text-destructive">
+          {error}
+        </span>
+      ) : null}
     </div>
   );
 }

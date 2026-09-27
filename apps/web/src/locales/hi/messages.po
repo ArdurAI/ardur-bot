@@ -333,9 +333,10 @@ msgid "Acceptance criteria"
 msgstr ""
 
 #: src/pages/DelegationLines.tsx
+#: src/pages/GroupPanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Accepted"
-msgstr ""
+msgstr "स्वीकृत"
 
 #: src/components/integrations/DirectMcpSearch.tsx
 #: src/components/integrations/IntegrationSetup.tsx
@@ -1117,8 +1118,9 @@ msgstr ""
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardColumns.tsx
 #: src/pages/dashboard/WorkPanel.tsx
+#: src/pages/GroupPanel.tsx
 msgid "Blocked"
-msgstr ""
+msgstr "अवरुद्ध"
 
 #. placeholder {0}: row.reason
 #: src/pages/TeamBoard.tsx
@@ -1749,8 +1751,9 @@ msgstr "पूर्ण"
 #: src/pages/ComparePanel.tsx
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/GroupPanel.tsx
 msgid "Completed"
-msgstr ""
+msgstr "पूर्ण"
 
 #: src/components/ThreadCommandBlock.tsx
 msgid "Completion not recorded"
@@ -2709,6 +2712,10 @@ msgstr ""
 msgid "Could not start dictation; check Voice settings."
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
+msgid "Could not start goal. Check the deadline and try again."
+msgstr "लक्ष्य शुरू नहीं हो सका। समय सीमा जाँचें और फिर प्रयास करें।"
+
 #: src/pages/McpServersOverlay.tsx
 msgid "Could not start OAuth"
 msgstr "OAuth शुरू नहीं हो सका"
@@ -2716,6 +2723,10 @@ msgstr "OAuth शुरू नहीं हो सका"
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Could not start teaching"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Could not stop goal. Try again."
+msgstr "लक्ष्य रोका नहीं जा सका। फिर प्रयास करें।"
 
 #: src/pages/DelegationLines.tsx
 msgid "Could not stop this task; try again."
@@ -3291,6 +3302,10 @@ msgstr "पूर्ण"
 msgid "Done — waiting for your OK"
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
+msgid "Done when (one per line)"
+msgstr "पूर्ण होने की शर्तें (प्रति पंक्ति एक)"
+
 #. placeholder {0}: props.name
 #: src/components/ArtifactFileCard.tsx
 msgid "Download {0}"
@@ -3794,6 +3809,10 @@ msgstr ""
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "GitLab host"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Goal"
+msgstr "लक्ष्य"
 
 #: src/pages/dashboard/panels.ts
 msgid "Governance"
@@ -5023,9 +5042,10 @@ msgstr ""
 msgid "Needs takeover"
 msgstr "नियंत्रण लेना ज़रूरी"
 
+#: src/pages/GroupPanel.tsx
 #: src/pages/Shell.tsx
 msgid "Needs you"
-msgstr ""
+msgstr "आपकी ज़रूरत है"
 
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Network access lets a bot install packages and reach the internet. This comes with security risks."
@@ -5419,6 +5439,10 @@ msgstr "OAuth कनेक्शन विफल"
 msgid "OAuth expired"
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
+msgid "Objective"
+msgstr "उद्देश्य"
+
 #: src/pages/MemoryHistory.tsx
 msgid "Observations"
 msgstr ""
@@ -5717,9 +5741,10 @@ msgstr ""
 msgid "Paste your API key"
 msgstr "अपनी API कुंजी पेस्ट करें"
 
+#: src/pages/GroupPanel.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Paused"
-msgstr ""
+msgstr "रुका हुआ"
 
 #. placeholder {0}: tool.id
 #: src/components/integrations/manage/ToolPermissions.tsx
@@ -7298,6 +7323,10 @@ msgstr "बोर्ड शुरू करें?"
 msgid "Start comparison"
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
+msgid "Start goal"
+msgstr "लक्ष्य शुरू करें"
+
 #: src/pages/memory/MemoryImport.tsx
 msgid "Start import"
 msgstr ""
@@ -7315,6 +7344,7 @@ msgid "Starting"
 msgstr "शुरू हो रहा है"
 
 #: src/components/teach/TeachComputerOverlay.tsx
+#: src/pages/GroupPanel.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
 msgid "Starting…"
@@ -7334,6 +7364,7 @@ msgid "Steps"
 msgstr "चरण"
 
 #: src/pages/DelegationLines.tsx
+#: src/pages/GroupPanel.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/TeamBoard.tsx
@@ -7354,8 +7385,9 @@ msgstr ""
 
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
+#: src/pages/GroupPanel.tsx
 msgid "Stopped"
-msgstr ""
+msgstr "बंद"
 
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/DelegationLines.tsx
@@ -7824,13 +7856,18 @@ msgstr ""
 msgid "Token"
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
+msgid "Token limit"
+msgstr "टोकन सीमा"
+
 #: src/pages/CompareStart.tsx
 msgid "Token reservation"
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
 #: src/pages/LearningCurator.tsx
 msgid "tokens"
-msgstr ""
+msgstr "टोकन"
 
 #: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx
@@ -7970,6 +8007,10 @@ msgstr "असमर्थित फ़ाइल प्रकार: {0}"
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Unsupported: no verified NetworkPolicy controller."
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Until (defaults to eight hours)"
+msgstr "समय सीमा (डिफ़ॉल्ट आठ घंटे)"
 
 #: src/pages/Shell.tsx
 msgid "Up to 4 files, 10 MB each"
@@ -8283,9 +8324,10 @@ msgid "Work items"
 msgstr "कार्य आइटम"
 
 #: src/pages/dashboard/NowPanel.tsx
+#: src/pages/GroupPanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Working"
-msgstr ""
+msgstr "काम जारी है"
 
 #: src/pages/GitMemorySettings.tsx
 msgid "Working from the last copy"

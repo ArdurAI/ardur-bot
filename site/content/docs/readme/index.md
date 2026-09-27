@@ -91,6 +91,7 @@ Only approve a download you trust from the official release page.
 **This computer** starts the app's own database and services. Docker is not required for that
 first launch. You can still connect the client to an existing server. See
 [what commands can do on this computer](/docs/self-host-guide/#what-commands-can-do-on-this-computer).
+For bounded coordinator work in a group, see [team goals](/docs/goals/).
 Docker remains available later as an added computer, and Compose remains the way
 to run a server. Unsigned previews use manual downloads for updates on every OS.
 
