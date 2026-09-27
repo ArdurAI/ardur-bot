@@ -260,6 +260,56 @@ describe("site facts", () => {
     expect(video?.description).toContain("completed Run history entry");
   });
 
+  it("builds the video entry from the sidecar without calling the probe when present", async () => {
+    const root = await fixture();
+    const media = path.join(root, "site/media");
+    await mkdir(media, { recursive: true });
+    for (const name of [
+      "routines-demo.mp4",
+      "routines-demo.webm",
+      "routines-demo.jpg",
+      "routines-demo.en.vtt",
+    ])
+      await writeFile(path.join(media, name), name.endsWith(".vtt") ? "WEBVTT\n\n" : "fixture");
+    await writeFile(
+      path.join(media, "routines-demo.json"),
+      JSON.stringify({ durationSeconds: 56, width: 1920, height: 1080 }),
+    );
+    const probe = vi.fn(() => {
+      throw new Error("probe should not be called when sidecar is present");
+    });
+    const [video] = await videosFromMedia(root, probe);
+    expect(probe).not.toHaveBeenCalled();
+    expect(video).toMatchObject({
+      id: "routines-demo",
+      durationSeconds: 56,
+      width: 1920,
+      height: 1080,
+      files: { captions: "media/routines-demo.en.vtt" },
+    });
+  });
+
+  it("fails with a plain error naming the sidecar when the sidecar is missing and probe is unavailable", async () => {
+    const root = await fixture();
+    const media = path.join(root, "site/media");
+    await mkdir(media, { recursive: true });
+    for (const name of [
+      "routines-demo.mp4",
+      "routines-demo.webm",
+      "routines-demo.jpg",
+      "routines-demo.en.vtt",
+    ])
+      await writeFile(path.join(media, name), name.endsWith(".vtt") ? "WEBVTT\n\n" : "fixture");
+    const probe = vi.fn(() => {
+      const error = new Error("spawnSync ffprobe ENOENT") as NodeJS.ErrnoException;
+      error.code = "ENOENT";
+      throw error;
+    });
+    await expect(videosFromMedia(root, probe)).rejects.toThrow(
+      "Generate site/media/routines-demo.json or install ffprobe to measure routines-demo.mp4.",
+    );
+  });
+
   it("is idempotent and regenerates changed README blocks", async () => {
     const root = await fixture();
     expect(await runSiteFacts("write", root)).toBe(false);

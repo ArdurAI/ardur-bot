@@ -79,6 +79,29 @@ for file in routines-demo.mp4 routines-demo.webm; do
     "$output_dir/$file"
 done
 
+sidecar_json=$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height \
+  -show_entries format=duration -of json "$output_dir/routines-demo.mp4")
+node -e '
+  const fs = require("node:fs");
+  const raw = JSON.parse(process.argv[1]);
+  const width = raw.streams?.[0]?.width;
+  const height = raw.streams?.[0]?.height;
+  const durationSeconds = Number(raw.format?.duration);
+  if (
+    !Number.isInteger(width) ||
+    !Number.isInteger(height) ||
+    !Number.isFinite(durationSeconds) ||
+    durationSeconds <= 0
+  ) {
+    console.error("Could not parse valid video dimensions or duration.");
+    process.exit(1);
+  }
+  fs.writeFileSync(
+    process.argv[2],
+    JSON.stringify({ durationSeconds, width, height }, null, 2) + "\n",
+  );
+' "$sidecar_json" "$output_dir/routines-demo.json"
+
 if [[ -z "${SITE_VIDEO_OUTPUT_DIR:-}" ]]; then
   (cd "$root" && pnpm site:facts)
 fi

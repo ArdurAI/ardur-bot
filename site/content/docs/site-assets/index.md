@@ -27,6 +27,7 @@ site/scripts/render-routines-video.sh <dir>/routines-demo.webm <dir>/routines-de
 ```
 
 The export cuts processing time using the recorded shot offsets, writes a verbatim WebVTT caption
-track for both silent videos and a poster from the final hold, checks
-the 8 MB limit, and updates the generated `videos` field. Run `pnpm site:facts:check` before
-publishing. Inspect the resulting frame and captions before committing any media.
+track for both silent videos, a poster from the final hold, and the `site/media/routines-demo.json`
+sidecar with measured duration and dimensions, checks the 8 MB limit, and updates the generated
+`videos` field. Run `pnpm site:facts:check` before publishing. Inspect the resulting frame,
+captions, and sidecar before committing any media.

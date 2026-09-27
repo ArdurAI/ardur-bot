@@ -241,24 +241,37 @@ export function computersFromRegistry(): SiteProduct["computers"] {
 type Video = NonNullable<SiteProduct["videos"]>[number];
 type Probe = (file: string) => string;
 
+const sidecarPlainError =
+  "Generate site/media/routines-demo.json or install ffprobe to measure routines-demo.mp4.";
+
 function ffprobe(file: string): string {
-  return execFileSync(
-    "ffprobe",
-    [
-      "-v",
-      "error",
-      "-select_streams",
-      "v:0",
-      "-show_entries",
-      "stream=width,height",
-      "-show_entries",
-      "format=duration",
-      "-of",
-      "json",
-      file,
-    ],
-    { encoding: "utf8" },
-  );
+  try {
+    return execFileSync(
+      "ffprobe",
+      [
+        "-v",
+        "error",
+        "-select_streams",
+        "v:0",
+        "-show_entries",
+        "stream=width,height",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "json",
+        file,
+      ],
+      { encoding: "utf8" },
+    );
+  } catch (error) {
+    if (
+      (error as NodeJS.ErrnoException).code === "ENOENT" ||
+      (error instanceof Error && error.message.includes("ENOENT"))
+    ) {
+      throw new Error(sidecarPlainError);
+    }
+    throw error;
+  }
 }
 
 export async function videosFromMedia(rootDir = root, probe: Probe = ffprobe): Promise<Video[]> {
@@ -278,21 +291,81 @@ export async function videosFromMedia(rootDir = root, probe: Probe = ffprobe): P
     console.log(`Skipping routines-demo video: missing ${missing.filter(Boolean).join(", ")}.`);
     return [];
   }
-  const measured = JSON.parse(probe(path.join(rootDir, "site", files.mp4))) as {
-    streams?: { width?: number; height?: number }[];
-    format?: { duration?: string };
-  };
-  const width = measured.streams?.[0]?.width;
-  const height = measured.streams?.[0]?.height;
-  const durationSeconds = Number(measured.format?.duration);
-  if (
-    !Number.isInteger(width) ||
-    !Number.isInteger(height) ||
-    !Number.isFinite(durationSeconds) ||
-    durationSeconds <= 0
-  ) {
-    throw new Error("ffprobe could not measure routines-demo.mp4 duration and dimensions.");
+  const sidecarPath = path.join(rootDir, "site/media/routines-demo.json");
+  let sidecarContent: string | null = null;
+  try {
+    sidecarContent = await readFile(sidecarPath, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
   }
+
+  let width: number | undefined;
+  let height: number | undefined;
+  let durationSeconds: number | undefined;
+
+  if (sidecarContent !== null) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(sidecarContent);
+    } catch {
+      throw new Error("site/media/routines-demo.json is not valid JSON.");
+    }
+    const sidecar = (parsed ?? {}) as {
+      durationSeconds?: unknown;
+      width?: unknown;
+      height?: unknown;
+    };
+    if (
+      !Number.isInteger(sidecar.width) ||
+      (sidecar.width as number) <= 0 ||
+      !Number.isInteger(sidecar.height) ||
+      (sidecar.height as number) <= 0 ||
+      typeof sidecar.durationSeconds !== "number" ||
+      !Number.isFinite(sidecar.durationSeconds) ||
+      sidecar.durationSeconds <= 0
+    ) {
+      throw new Error(
+        "site/media/routines-demo.json must contain positive integer width and height and finite positive durationSeconds.",
+      );
+    }
+    width = sidecar.width as number;
+    height = sidecar.height as number;
+    durationSeconds = sidecar.durationSeconds;
+  } else {
+    let probeOutput: string;
+    try {
+      probeOutput = probe(path.join(rootDir, "site", files.mp4));
+    } catch (error) {
+      if (
+        (error as NodeJS.ErrnoException).code === "ENOENT" ||
+        (error instanceof Error && error.message.includes("ENOENT"))
+      ) {
+        throw new Error(sidecarPlainError);
+      }
+      throw error;
+    }
+    const measured = JSON.parse(probeOutput) as {
+      streams?: { width?: number; height?: number }[];
+      format?: { duration?: string };
+    };
+    const probeWidth = measured.streams?.[0]?.width;
+    const probeHeight = measured.streams?.[0]?.height;
+    const probeDuration = Number(measured.format?.duration);
+    if (
+      !Number.isInteger(probeWidth) ||
+      !Number.isInteger(probeHeight) ||
+      !Number.isFinite(probeDuration) ||
+      probeDuration <= 0
+    ) {
+      throw new Error("ffprobe could not measure routines-demo.mp4 duration and dimensions.");
+    }
+    width = probeWidth;
+    height = probeHeight;
+    durationSeconds = probeDuration;
+  }
+
   return [
     {
       id: "routines-demo",
@@ -300,8 +373,8 @@ export async function videosFromMedia(rootDir = root, probe: Probe = ffprobe): P
       description:
         "A Briefing bot creates a Morning checklist routine from sample notes, schedules it for weekdays at 8:00 AM UTC, saves it, runs it once, and shows three checklist bullets and a completed Run history entry.",
       durationSeconds,
-      width: width!,
-      height: height!,
+      width,
+      height,
       files,
     },
   ];
