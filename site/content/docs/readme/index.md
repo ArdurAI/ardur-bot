@@ -38,7 +38,8 @@ Inherited from Rakazo and working:
 <!-- site-facts:providers:end -->
 - Computers: the computer Ardur is installed on, plus Docker, Podman, Kubernetes or SSH
   machines you add, and E2B, Daytona or Box on a server, with a browser, terminal, files and a
-  graphical desktop ([where bots run](/docs/self-host-guide/#where-bots-run))
+  graphical desktop. Test, edit, and remove saved computer connections in Settings
+  ([where bots run](/docs/self-host-guide/#where-bots-run)).
 - Connectors: MCP servers, OpenAPI documents, Composio, Pipedream Connect
 - Approvals before consequential actions, voice mode, and web, Electron desktop and Expo
   mobile clients of the same API
