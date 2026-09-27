@@ -1,6 +1,8 @@
 # Pull-based self-host: published GHCR images + Postgres + local Docker computers.
 # Drop this file and .env into any directory, then:
 #   docker compose --env-file .env -f docker-compose.images.yml up -d
+# Set ARDURBOT_COMPUTER_IMAGE_REF to the app-version image when invoking Compose directly;
+# install-images.sh and the desktop launcher calculate it for their Compose invocations.
 #
 # Tag contract matches docs/self-host.md (manual edge from main; release tags when published).
 # Pin a published app tag; edge is available only after a manual main workflow run.
@@ -32,9 +34,9 @@ services:
       timeout: 5s
       retries: 20
 
-  # Keep the published image visible to deployment tooling; the supervisor pulls on first use.
+  # Keep the selected image visible to deployment tooling; the supervisor pulls on first use.
   computer:
-    image: ${ARDURBOT_COMPUTER_IMAGE:-ghcr.io/ardurai/ardur-bot/computer:${ARDURBOT_COMPUTER_IMAGE_TAG:-edge}}
+    image: ${ARDURBOT_COMPUTER_IMAGE:-${ARDURBOT_COMPUTER_IMAGE_REF:?Set ARDURBOT_COMPUTER_IMAGE_REF for this app version}}${ARDURBOT_COMPUTER_IMAGE:+${ARDURBOT_COMPUTER_IMAGE_TAG:+:${ARDURBOT_COMPUTER_IMAGE_TAG}}}
     profiles: [computer]
     command: ["true"]
     network_mode: none

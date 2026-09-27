@@ -1,34 +1,13 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
+import { LOCAL_COMPUTER_IMAGE } from "@ardurbot/contracts/computer-image";
 import { MAX_DESKTOP_DISPLAY, screenPorts } from "@ardurbot/core/node/desktop-runtime";
 import type Docker from "dockerode";
 import type { ContainerEngine } from "./container-engine.js";
 import { engineHostConfig } from "./container-engine.js";
 
-export const LOCAL_COMPUTER_IMAGE = "ardurbot/computer:local";
+export { LOCAL_COMPUTER_IMAGE, resolveComputerImage } from "@ardurbot/contracts/computer-image";
 export const COMPUTER_IMAGE = process.env.ARDURBOT_COMPUTER_IMAGE?.trim() || LOCAL_COMPUTER_IMAGE;
-const PUBLISHED_COMPUTER_IMAGE = "ghcr.io/ardurai/ardur-bot/computer";
-
-export function resolveComputerImage(input: {
-  override?: string;
-  localPresent: boolean;
-  appVersion: string;
-  channel?: string;
-}): string {
-  const override = input.override?.trim();
-  if (override) return override;
-  if (input.localPresent) return LOCAL_COMPUTER_IMAGE;
-  const selectedChannel = input.channel?.trim() || undefined;
-  if (selectedChannel && selectedChannel !== "dev" && selectedChannel !== "release") {
-    throw new Error("ARDURBOT_COMPUTER_CHANNEL must be dev or release");
-  }
-  const version = input.appVersion;
-  if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version)) {
-    throw new Error("The application version cannot select a computer image");
-  }
-  const channel = selectedChannel ?? (version.includes("-") ? "dev" : "release");
-  return `${PUBLISHED_COMPUTER_IMAGE}:${channel === "dev" ? "dev" : version}`;
-}
 export const COMPUTER_UID = 1000;
 export const COMPUTER_GID = 1000;
 export const COMPUTER_USER = `${COMPUTER_UID}:${COMPUTER_GID}`;

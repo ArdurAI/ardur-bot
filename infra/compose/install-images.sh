@@ -283,6 +283,62 @@ YAML
   fi
 }
 
+# Read only the named setting without evaluating the env file as shell code.
+deployment_setting() {
+  local key="$1" file="${2:-$ENV_FILE}" line value=""
+  if [[ "$file" == "$ENV_FILE" ]] && printenv "$key" >/dev/null 2>&1; then
+    printenv "$key"
+    return
+  fi
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" == "$key="* ]]; then
+      value="${line#*=}"
+      value="${value%$'\r'}"
+    fi
+  done < "$file"
+  if [[ "$value" == \"*\" || "$value" == \'*\' ]]; then
+    value="${value:1:${#value}-2}"
+  fi
+  printf '%s' "$value"
+}
+
+resolve_computer_image_ref() {
+  local explicit image tag channel version
+  explicit=$(deployment_setting ARDURBOT_COMPUTER_IMAGE_REF)
+  if [[ -n "$explicit" ]]; then
+    export ARDURBOT_COMPUTER_IMAGE_REF="$explicit"
+    return
+  fi
+  image=$(deployment_setting ARDURBOT_COMPUTER_IMAGE)
+  if [[ -n "$image" ]]; then
+    # Compose uses the name plus optional legacy tag instead of this default.
+    export ARDURBOT_COMPUTER_IMAGE_REF="ghcr.io/ardurai/ardur-bot/computer:dev"
+    return
+  fi
+  tag=$(deployment_setting ARDURBOT_IMAGE_TAG)
+  channel=$(deployment_setting ARDURBOT_COMPUTER_CHANNEL)
+  if [[ "$tag" =~ ^v([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)$ ]]; then
+    version="${BASH_REMATCH[1]}"
+  elif [[ "$tag" == "" || "$tag" == "edge" ]]; then
+    version=$(deployment_setting ARDURBOT_APP_VERSION "$ENV_EXAMPLE")
+  else
+    fail "set ARDURBOT_COMPUTER_IMAGE_REF for this app image tag."
+  fi
+  [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] \
+    || fail "the app version cannot select a computer image."
+  case "$channel" in
+    ""|dev) tag="dev" ;;
+    release)
+      tag="$version"
+      ;;
+    *) fail "ARDURBOT_COMPUTER_CHANNEL must be dev or release." ;;
+  esac
+  if [[ "$channel" == "" && -n "$version" && "$version" != *-* ]]; then
+    tag="$version"
+  fi
+  export ARDURBOT_COMPUTER_IMAGE_REF="ghcr.io/ardurai/ardur-bot/computer:$tag"
+}
+
 download "$COMPOSE_FILE"
 download "$ENV_EXAMPLE"
 
@@ -292,6 +348,7 @@ else
   create_env
 fi
 
+resolve_computer_image_ref
 validate_required_secrets
 
 if [[ "$prepare_only" == true ]]; then

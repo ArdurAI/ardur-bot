@@ -2,6 +2,7 @@ import { copyFile, lstat, mkdir, readFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import path from "node:path";
 import type { DesktopLocalStackState } from "@ardurbot/contracts";
+import { resolveComputerImage } from "@ardurbot/contracts/computer-image";
 import {
   classifyDockerFailure,
   composeSupportsWaitTimeout,
@@ -101,9 +102,23 @@ const GENERATED_SECRETS: Record<string, number> = {
   SCREEN_PROXY_SECRET: 32,
   SANDBOX_SUPERVISOR_TOKEN: 32,
 };
-const LAUNCH_SUPPLIED = ["ARDURBOT_IMAGE_TAG"];
+const LAUNCH_SUPPLIED = ["ARDURBOT_IMAGE_TAG", "ARDURBOT_COMPUTER_IMAGE_REF"];
 const PREVIOUS_GENERATED_COMPUTER_IMAGE = "ghcr.io/ardurai/ardur-bot/computer";
 const MAX_STACK_ENV_BYTES = 64 * 1024;
+
+function computerChannelFromStackEnv(contents: string): string | undefined {
+  let channel: string | undefined;
+  for (const line of contents.split(/\r?\n/)) {
+    if (!line.startsWith("ARDURBOT_COMPUTER_CHANNEL=")) continue;
+    const value = line.slice("ARDURBOT_COMPUTER_CHANNEL=".length).trim();
+    channel =
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+        ? value.slice(1, -1)
+        : value;
+  }
+  return channel;
+}
 
 function migrateGeneratedComputerImage(contents: string): string {
   const lines = contents.split("\n");
@@ -308,6 +323,7 @@ export interface LocalStackDeps {
   localWebUrl: string;
   allocatePort?: () => Promise<number>;
   imageTag: string;
+  appVersion: string;
   /** Returns the authenticated running image tag, or null for any other listener. */
   probe: (url: string, signal: AbortSignal, token: string) => Promise<string | null>;
   randomHex: (bytes: number) => string;
@@ -338,6 +354,7 @@ export class LocalStackController {
   private current: DesktopLocalStackState;
   private currentWebUrl: string;
   private currentStackToken: string | null = null;
+  private currentComputerChannel: string | undefined;
   private running: Promise<DesktopLocalStackState> | null = null;
   private stopping: Promise<DesktopLocalStackState> | null = null;
   private inFlight: AbortController | null = null;
@@ -512,6 +529,12 @@ export class LocalStackController {
     await prepareMemoryStorage(this.deps.stackDir);
     const template = await readFile(path.join(this.deps.resourceDir, STACK_ENV_TEMPLATE), "utf8");
     await ensureStackEnv(this.deps.stackDir, template, this.deps.randomHex);
+    const settings = await readPrivateFile(
+      path.join(this.deps.stackDir, STACK_ENV_FILE),
+      MAX_STACK_ENV_BYTES,
+    );
+    if (settings === null) throw new Error("The stack settings could not be checked.");
+    this.currentComputerChannel = computerChannelFromStackEnv(settings);
     const stackToken = await ensureStackToken(this.deps.stackDir, this.deps.randomHex);
     this.currentStackToken = stackToken;
 
@@ -579,6 +602,11 @@ export class LocalStackController {
       cwd: this.deps.stackDir,
       env: dockerSpawnEnv(this.deps.platform, this.deps.env, binary, {
         ARDURBOT_IMAGE_TAG: this.deps.imageTag,
+        ARDURBOT_COMPUTER_IMAGE_REF: resolveComputerImage({
+          appVersion: this.deps.appVersion,
+          localPresent: false,
+          channel: this.currentComputerChannel,
+        }),
         // The API never asks where bots run here; Set up makes this computer the default.
         ARDURBOT_DESKTOP_STACK: "1",
         ...(this.currentStackToken === null

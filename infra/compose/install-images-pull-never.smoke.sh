@@ -63,6 +63,7 @@ for a in "$@"; do
 done
 
 echo "VERB=${verb:-none}" >> "$log"
+echo "COMPUTER_REF=${ARDURBOT_COMPUTER_IMAGE_REF:-}" >> "$log"
 
 if [[ "$verb" == config ]]; then
   cat >/dev/null || true
@@ -128,7 +129,11 @@ for a in "$@"; do
   prev="$a"
 done
 if [[ -n "$out" ]]; then
-  printf 'stub-download\n' > "$out"
+  if [[ " $* " == *".env.images.example"* ]]; then
+    printf 'ARDURBOT_APP_VERSION=0.1.0-alpha.1\n' > "$out"
+  else
+    printf 'stub-download\n' > "$out"
+  fi
   exit 0
 fi
 exit 1
@@ -141,7 +146,7 @@ setup_work() {
   mkdir -p "$work/cwd"
   write_stubs "$work/bin"
   : > "$work/cwd/docker-compose.images.yml"
-  : > "$work/cwd/.env.images.example"
+  printf 'ARDURBOT_APP_VERSION=0.1.0-alpha.1\n' > "$work/cwd/.env.images.example"
   cat > "$work/cwd/.env" <<'EOF'
 POSTGRES_PASSWORD=test-postgres
 BETTER_AUTH_SECRET=test-auth-secret
@@ -157,6 +162,7 @@ run_install() {
   local work="$1"
   shift
   (
+    unset ARDURBOT_IMAGE_TAG ARDURBOT_COMPUTER_IMAGE ARDURBOT_COMPUTER_IMAGE_TAG ARDURBOT_COMPUTER_CHANNEL ARDURBOT_COMPUTER_IMAGE_REF
     export STUB_DOCKER_LOG="$work/docker.log"
     export STUB_CURL_LOG="$work/curl.log"
     export PATH="$work/bin:$PATH"
@@ -189,6 +195,20 @@ set -e
 [[ ! -s "$tmp/offline/curl.log" ]] || fail "--offline should not curl when files are local: $(cat "$tmp/offline/curl.log")"
 has_compose_pull "$tmp/offline" && fail "--offline should not run compose pull"
 has_up_pull_never "$tmp/offline" || fail "--offline should pass --pull never to compose up: $(cat "$tmp/offline/docker.log")"
+grep -Fx 'COMPUTER_REF=ghcr.io/ardurai/ardur-bot/computer:dev' "$tmp/offline/docker.log" >/dev/null \
+  || fail "the default computer reference did not use the prerelease channel"
+
+setup_work "$tmp/release"
+printf 'ARDURBOT_APP_VERSION=1.2.3\n' > "$tmp/release/cwd/.env.images.example"
+run_install "$tmp/release" --offline >/dev/null
+grep -Fx 'COMPUTER_REF=ghcr.io/ardurai/ardur-bot/computer:1.2.3' "$tmp/release/docker.log" >/dev/null \
+  || fail "the release computer reference did not use the exact app version"
+
+setup_work "$tmp/pinned-release"
+printf 'ARDURBOT_IMAGE_TAG=v1.2.3\n' >> "$tmp/pinned-release/cwd/.env"
+run_install "$tmp/pinned-release" --offline >/dev/null
+grep -Fx 'COMPUTER_REF=ghcr.io/ardurai/ardur-bot/computer:1.2.3' "$tmp/pinned-release/docker.log" >/dev/null \
+  || fail "the pinned release computer reference did not use the exact app version"
 
 # --pull-never is accepted and skips pull (may still download Compose files).
 setup_work "$tmp/pull-never"

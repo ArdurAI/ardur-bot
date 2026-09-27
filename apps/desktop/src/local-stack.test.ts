@@ -369,6 +369,7 @@ describe("LocalStackController", () => {
       resourceDir: COMPOSE_DIR,
       localWebUrl: "http://127.0.0.1:5173",
       imageTag: "v1.2.3",
+      appVersion: "1.2.3",
       randomHex: fakeHex,
       sleep: async () => undefined,
       healthTimeoutMs: 50,
@@ -470,6 +471,7 @@ describe("LocalStackController", () => {
       expect(call.cwd).toBe(stackPath);
       expect(call.env).toMatchObject({
         ARDURBOT_IMAGE_TAG: "v1.2.3",
+        ARDURBOT_COMPUTER_IMAGE_REF: "ghcr.io/ardurai/ardur-bot/computer:1.2.3",
         COMPOSE_PROGRESS: "plain",
         // Tells the API that this stack runs on the owner's own computer.
         ARDURBOT_DESKTOP_STACK: "1",
@@ -489,6 +491,16 @@ describe("LocalStackController", () => {
       expect((await stat(path.join(stackPath, STACK_ENV_FILE))).mode & 0o777).toBe(0o600);
       expect((await stat(stackPath)).mode & 0o777).toBe(0o700);
     }
+  });
+
+  it("passes the selected channel's version-derived computer reference to Compose", async () => {
+    const dir = path.join(root, "stack");
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, STACK_ENV_FILE), "ARDURBOT_COMPUTER_CHANNEL=release\n");
+    await controller({ appVersion: "0.1.0-alpha.1" }).start();
+    expect(calls.at(-1)?.env.ARDURBOT_COMPUTER_IMAGE_REF).toBe(
+      "ghcr.io/ardurai/ardur-bot/computer:0.1.0-alpha.1",
+    );
   });
 
   it("keeps lifecycle commands off the standalone project despite environment overrides", async () => {

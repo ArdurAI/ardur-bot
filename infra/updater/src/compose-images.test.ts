@@ -1,5 +1,7 @@
+import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { resolveComputerImage } from "@ardurbot/contracts/computer-image";
 import { describe, expect, it } from "vitest";
 import { parse } from "yaml";
 
@@ -26,6 +28,11 @@ const publishWorkflowFile = path.resolve(repoRoot, ".github/workflows/publish-se
 const compose = parse(readFileSync(composeFile, "utf8")) as {
   services: Record<string, ComposeService>;
 };
+const appVersion = (
+  JSON.parse(readFileSync(path.join(repoRoot, "package.json"), "utf8")) as {
+    version: string;
+  }
+).version;
 
 it("lets packaged API and worker reach host model servers on every Docker platform", () => {
   for (const service of ["api", "worker"]) {
@@ -79,12 +86,51 @@ function publishedNames(matrixName: unknown, ref: "dev" | "tag"): string[] {
   return names;
 }
 
+function renderedComputerImage(env: Record<string, string>) {
+  const result = spawnSync(
+    "docker",
+    [
+      "compose",
+      "--env-file",
+      "/dev/null",
+      "-f",
+      composeFile,
+      "--profile",
+      "computer",
+      "config",
+      "--format",
+      "json",
+      "--no-env-resolution",
+    ],
+    {
+      encoding: "utf8",
+      env: {
+        PATH: process.env.PATH,
+        POSTGRES_PASSWORD: "placeholder",
+        SANDBOX_SUPERVISOR_TOKEN: "placeholder",
+        SCREEN_PROXY_SECRET: "placeholder",
+        ...env,
+      },
+    },
+  );
+  if (result.status !== 0) throw new Error(`Compose config failed: ${result.stderr}`);
+  const rendered = JSON.parse(result.stdout) as {
+    services: Record<string, { image?: string; environment?: Record<string, string> }>;
+  };
+  return rendered.services;
+}
+
 /**
  * The images compose file is the no-checkout happy path. It must stay pull-only and self-contained
  * so operators can drop it next to a .env outside any git worktree. Local Docker computers run via
  * an in-stack supervisor (app image + docker.sock) that stays unpublished on the host.
  */
 describe("the images compose file", () => {
+  it("ships the app version used by the standalone installer", () => {
+    const template = readFileSync(path.join(repoRoot, "infra/compose/.env.images.example"), "utf8");
+    expect(template.match(/^ARDURBOT_APP_VERSION=(.+)$/m)?.[1]).toBe(appVersion);
+  });
+
   it("defines postgres, app roles, supervisor, and an inactive published computer image", () => {
     expect(Object.keys(compose.services).sort()).toEqual([
       "api",
@@ -99,7 +145,7 @@ describe("the images compose file", () => {
       expect(compose.services[service]?.image).toContain("ghcr.io/ardurai/ardur-bot/app");
       expect(compose.services[service]?.image).toContain("ARDURBOT_IMAGE_TAG");
     }
-    expect(compose.services.computer?.image).toContain("ghcr.io/ardurai/ardur-bot/computer");
+    expect(compose.services.computer?.image).toContain("ARDURBOT_COMPUTER_IMAGE_REF");
     expect(compose.services.computer?.image).toContain("ARDURBOT_COMPUTER_IMAGE_TAG");
     expect(compose.services.computer?.profiles).toEqual(["computer"]);
     expect(compose.services.postgres?.image).toMatch(
@@ -107,6 +153,48 @@ describe("the images compose file", () => {
     );
     expect(compose.services["data-init"]?.image).toMatch(/^\$\{BUSYBOX_IMAGE:-busybox:1\}$/);
   });
+
+  it.each([
+    ["prerelease default", "0.1.0-alpha.1", {}, undefined],
+    ["release default", "1.2.3", {}, undefined],
+    [
+      "image-only override",
+      "0.1.0-alpha.1",
+      { ARDURBOT_COMPUTER_IMAGE: "registry.example.com/computer:chosen" },
+      "registry.example.com/computer:chosen",
+    ],
+    [
+      "image and tag override",
+      "0.1.0-alpha.1",
+      {
+        ARDURBOT_COMPUTER_IMAGE: "registry.example.com/mirror/ardurbot/computer",
+        ARDURBOT_COMPUTER_IMAGE_TAG: "edge",
+      },
+      "registry.example.com/mirror/ardurbot/computer:edge",
+    ],
+    [
+      "legacy untagged name",
+      "1.2.3",
+      { ARDURBOT_COMPUTER_IMAGE: "registry.example.com/computer" },
+      "registry.example.com/computer",
+    ],
+  ] as const)(
+    "renders the %s computer image selected by the supervisor",
+    (_name, appVersion, env, override) => {
+      const defaultRef = resolveComputerImage({ appVersion, localPresent: false });
+      const services = renderedComputerImage(
+        override ? env : { ARDURBOT_COMPUTER_IMAGE_REF: defaultRef, ...env },
+      );
+      expect(services.computer?.image).toBe(
+        resolveComputerImage({ appVersion, localPresent: false, override }),
+      );
+      if (override) {
+        expect(services.supervisor?.environment?.ARDURBOT_COMPUTER_IMAGE).toBe(override);
+      } else {
+        expect(services.supervisor?.environment?.ARDURBOT_COMPUTER_IMAGE).toBe("");
+      }
+    },
+  );
 
   it("skips non-string Compose environment scalars when collecting image names", () => {
     expect(firstPartyImageNames(null)).toEqual([]);
@@ -128,6 +216,10 @@ describe("the images compose file", () => {
       publishedNames(publishWorkflow.jobs?.publish?.strategy?.matrix?.name, "tag"),
     );
     const referenced = new Set<string>();
+    // The computer service's published default is supplied as a resolved ref by the launcher.
+    if (compose.services.computer?.image?.includes("ARDURBOT_COMPUTER_IMAGE_REF")) {
+      referenced.add("computer");
+    }
     for (const service of Object.values(compose.services)) {
       for (const name of firstPartyImageNames(service.image)) {
         referenced.add(name);
