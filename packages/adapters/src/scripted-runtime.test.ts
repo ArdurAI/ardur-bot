@@ -97,6 +97,16 @@ describe("goal result transport", () => {
         ?.assistant,
     ).toContain("Results show oldest first; sort results by createdAt ascending.");
   });
+
+  it("uses a fixed completion cue with the delivered result as data", () => {
+    const cue = "Review the completed assignment and decide the next step for this goal.";
+    expect(inferScript(cue, undefined, false, workerResult)[0]?.toolCalls?.[0]?.name).toBe(
+      "message_bot",
+    );
+    expect(inferScript(cue, undefined, false, reviewerResult)[0]?.assistant).toContain(
+      "Results show oldest first",
+    );
+  });
 });
 
 describe("inferScript quote markdown fixture", () => {

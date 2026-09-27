@@ -8,9 +8,11 @@ import {
   createThreadEvents,
   createThreadMessage,
   dispatchBotMessageWake,
+  expireQuietBotMessages,
   finalizeRun,
   goalBotAuthorityFingerprint,
   type PrismaClient,
+  refreshBoundBotMessageWakeRun,
 } from "@ardurbot/db";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { replyToBotDelivery } from "./bot-comms.js";
@@ -99,6 +101,7 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
         coordinatorBotId: coordinator.id,
         coordinatorThreadId: room.id,
         deadlineAt: untilAt,
+        activeDescendants: 1,
       },
     });
     const goal = await prisma.teamGoal.create({
@@ -415,11 +418,19 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
     });
     expect(finalized).not.toBe(false);
     if (!finalized) throw new Error("Finalization lost its lease.");
-    expect(finalized.continuationRunId).toBeTruthy();
+    expect(finalized.continuationRunId).toBeNull();
     const wake = await prisma.botMessageWake.findFirstOrThrow({
       where: { rootTaskId: f.rootTask.id },
     });
-    expect(wake).toMatchObject({ state: "bound", runId: finalized.continuationRunId });
+    expect(wake).toMatchObject({ state: "retry_wait", runId: null, attempts: 1 });
+    expect(wake.nextAttemptAt!.getTime()).toBeGreaterThan(Date.now());
+    expect(await dispatchBotMessageWake(prisma, wake.id)).toBeNull();
+    await prisma.botMessageWake.update({
+      where: { id: wake.id },
+      data: { nextAttemptAt: new Date(0) },
+    });
+    const rebound = await dispatchBotMessageWake(prisma, wake.id);
+    expect(rebound).toBeTruthy();
     expect(
       await prisma.run.count({
         where: { goalId: f.goal.id, clientNonce: { startsWith: "peer-wake:" } },
@@ -431,6 +442,30 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
         where: { goalId: f.goal.id, clientNonce: { startsWith: "peer-wake:" } },
       }),
     ).toBe(1);
+    const retryRun = await prisma.run.update({
+      where: { id: rebound! },
+      data: { status: "running", leaseOwner: "fixture-retry", leaseFence: 1 },
+    });
+    const retryAttempt = await prisma.attempt.create({
+      data: { runId: retryRun.id, fence: 1, status: "running" },
+    });
+    expect(
+      await finalizeRun(prisma, {
+        spaceId,
+        threadId: f.room.id,
+        botId: f.coordinator.id,
+        runId: retryRun.id,
+        taskId: retryRun.taskId,
+        attemptId: retryAttempt.id,
+        leaseOwner: "fixture-retry",
+        leaseFence: 1,
+        outcome: "completed",
+        blocks: [],
+      }),
+    ).not.toBe(false);
+    expect(await prisma.botMessageWake.findUniqueOrThrow({ where: { id: wake.id } })).toMatchObject(
+      { state: "consumed", attempts: 1 },
+    );
   });
 
   it("replays claimed steering after a failed turn without a read receipt", async () => {
@@ -471,25 +506,24 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
     const wake = await prisma.botMessageWake.findFirstOrThrow({
       where: { rootTaskId: f.rootTask.id },
     });
-    expect(wake).toMatchObject({
-      state: "bound",
-      runId: finalized.continuationRunId,
-      generation: 2,
-    });
+    expect(wake).toMatchObject({ state: "retry_wait", runId: null, generation: 2, attempts: 1 });
     expect(
       await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id: reply.deliveryId } }),
     ).toMatchObject({
       state: "delivered",
       failureCode: "read-unconfirmed",
     });
+    expect(finalized.continuationRunId).toBeNull();
+    await prisma.botMessageWake.update({
+      where: { id: wake.id },
+      data: { nextAttemptAt: new Date(0) },
+    });
+    const rebound = await dispatchBotMessageWake(prisma, wake.id);
+    expect(rebound).toBeTruthy();
     expect(
       (
         await prisma.task.findUniqueOrThrow({
-          where: {
-            id: (
-              await prisma.run.findUniqueOrThrow({ where: { id: finalized.continuationRunId! } })
-            ).taskId,
-          },
+          where: { id: (await prisma.run.findUniqueOrThrow({ where: { id: rebound! } })).taskId },
         })
       ).prompt,
     ).toContain("The fixture is complete.");
@@ -609,8 +643,8 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
     });
   });
 
-  it("seals eight bodies and puts a later message in the next generation", async () => {
-    const f = await fixture("owner");
+  it.each(["owner", "held"] as const)("seals eight bodies behind a %s turn", async (mode) => {
+    const f = await fixture(mode);
     const fingerprint = await prisma.$transaction((tx) =>
       goalBotAuthorityFingerprint(tx, {
         spaceId,
@@ -684,15 +718,19 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
       orderBy: { generation: "asc" },
     });
     expect(wakes.map((wake) => [wake.generation, wake.deliveryIds.length, wake.state])).toEqual([
-      [1, 8, "bound"],
+      [1, 8, "sealed"],
       [2, 1, "pending"],
     ]);
     expect(
       await prisma.run.count({
         where: { goalId: f.goal.id, clientNonce: wakes[0]!.clientNonce },
       }),
-    ).toBe(1);
-    const boundRun = await prisma.run.findUniqueOrThrow({ where: { id: wakes[0]!.runId! } });
+    ).toBe(0);
+    expect(await dispatchBotMessageWake(prisma, wakes[0]!.id)).toBeNull();
+    await prisma.run.update({ where: { id: f.activeRun!.id }, data: { status: "completed" } });
+    const rebound = await dispatchBotMessageWake(prisma, wakes[0]!.id);
+    expect(rebound).toBeTruthy();
+    const boundRun = await prisma.run.findUniqueOrThrow({ where: { id: rebound! } });
     const boundTask = await prisma.task.findUniqueOrThrow({ where: { id: boundRun.taskId } });
     expect(wakes[0]!.promptCharacters).toBe(boundTask.prompt.length);
     expect(wakes[1]!.promptCharacters).toBe(
@@ -806,5 +844,458 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
         where: { goalId: f.goal.id, clientNonce: { startsWith: "peer-wake:" } },
       }),
     ).toBe(1);
+  });
+
+  it("settles an archived recipient and still reconciles unrelated queued work", async () => {
+    const f = await fixture("owner");
+    const reply = await replyToBotDelivery(f.deps, f.workerRun, f.worker, {
+      inReplyToDeliveryId: f.parent.id,
+      message: "A pending answer",
+      intent: "result",
+      deliveryKey: `archived-${f.parent.id}`,
+    });
+    if (!reply.ok) throw new Error(reply.error);
+    const wake = await prisma.botMessageWake.findFirstOrThrow({
+      where: { rootTaskId: f.rootTask.id },
+    });
+    const other = await fixture();
+    const queued = await prisma.run.create({
+      data: {
+        spaceId,
+        userId,
+        botId: other.coordinator.id,
+        threadId: other.room.id,
+        taskId: other.rootTask.id,
+        status: "queued",
+        trigger: "follow_up",
+      },
+    });
+    await prisma.bot.update({ where: { id: f.coordinator.id }, data: { archivedAt: new Date() } });
+    const reconciler = createJobReconciler({ prisma, jobs: f.jobs }, { batchSize: 100 });
+    await reconciler.reconcileOnce();
+    expect(await prisma.botMessageWake.findUniqueOrThrow({ where: { id: wake.id } })).toMatchObject(
+      { state: "cancelled" },
+    );
+    expect(
+      await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id: reply.deliveryId } }),
+    ).toMatchObject({ state: "failed", failureCode: "recipient-unavailable" });
+    expect(f.enqueued).toContain(queued.id);
+    await reconciler.reconcileOnce();
+    expect(
+      await prisma.message.count({
+        where: { threadId: f.room.id, clientNonce: `peer-wake-failure:${wake.id}` },
+      }),
+    ).toBe(1);
+  });
+
+  it("makes a permanent runtime problem terminal without another run", async () => {
+    const f = await fixture();
+    const reply = await replyToBotDelivery(f.deps, f.workerRun, f.worker, {
+      inReplyToDeliveryId: f.parent.id,
+      message: "A final answer",
+      intent: "result",
+      deliveryKey: `permanent-${f.parent.id}`,
+    });
+    if (!reply.ok) throw new Error(reply.error);
+    const wake = await prisma.botMessageWake.findFirstOrThrow({
+      where: { rootTaskId: f.rootTask.id },
+    });
+    const run = await prisma.run.update({
+      where: { id: wake.runId! },
+      data: { status: "running", leaseOwner: "fixture-wake", leaseFence: 1 },
+    });
+    const attempt = await prisma.attempt.create({
+      data: { runId: run.id, fence: 1, status: "running" },
+    });
+    const finalized = await finalizeRun(prisma, {
+      spaceId,
+      threadId: f.room.id,
+      botId: f.coordinator.id,
+      runId: run.id,
+      taskId: run.taskId,
+      attemptId: attempt.id,
+      leaseOwner: "fixture-wake",
+      leaseFence: 1,
+      outcome: "failed",
+      error: "Connection unavailable",
+      runtimeProblem: {
+        kind: "problem",
+        code: "runtime-unavailable",
+        pin: {
+          runtimeKind: "pi",
+          provider: null,
+          modelId: null,
+          effort: null,
+          credentialId: null,
+          revision: 0,
+        },
+        reason: "Connection unavailable",
+        actions: [],
+      },
+    });
+    if (!finalized) throw new Error("Finalization lost its lease.");
+    expect(finalized.continuationRunId).toBeNull();
+    expect(await prisma.botMessageWake.findUniqueOrThrow({ where: { id: wake.id } })).toMatchObject(
+      { state: "failed" },
+    );
+    expect(
+      await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id: reply.deliveryId } }),
+    ).toMatchObject({ state: "failed", failureCode: "runtime-unavailable" });
+    expect(
+      await prisma.run.count({ where: { clientNonce: { startsWith: `peer-wake:${wake.id}:` } } }),
+    ).toBe(1);
+    expect(
+      await prisma.message.count({
+        where: { threadId: f.room.id, clientNonce: `peer-wake-failure:${wake.id}` },
+      }),
+    ).toBe(1);
+  });
+
+  it("bounds interrupted wake retries to three delayed rebinds", async () => {
+    const f = await fixture();
+    const reply = await replyToBotDelivery(f.deps, f.workerRun, f.worker, {
+      inReplyToDeliveryId: f.parent.id,
+      message: "Retry this answer",
+      intent: "result",
+      deliveryKey: `bounded-${f.parent.id}`,
+    });
+    if (!reply.ok) throw new Error(reply.error);
+    const wake = await prisma.botMessageWake.findFirstOrThrow({
+      where: { deliveryIds: { has: reply.deliveryId } },
+    });
+    let runId = wake.runId!;
+    for (const [index, delay] of [30_000, 120_000, 300_000, 0].entries()) {
+      const run = await prisma.run.update({
+        where: { id: runId },
+        data: { status: "running", leaseOwner: "fixture-interrupted", leaseFence: 1 },
+      });
+      const attempt = await prisma.attempt.create({
+        data: { runId, fence: 1, status: "running" },
+      });
+      expect(
+        await finalizeRun(prisma, {
+          spaceId,
+          threadId: f.room.id,
+          botId: f.coordinator.id,
+          runId,
+          taskId: run.taskId,
+          attemptId: attempt.id,
+          leaseOwner: "fixture-interrupted",
+          leaseFence: 1,
+          outcome: "failed",
+          error: "Interrupted before input acceptance",
+        }),
+      ).not.toBe(false);
+      const updated = await prisma.botMessageWake.findUniqueOrThrow({ where: { id: wake.id } });
+      if (index === 3) {
+        expect(updated).toMatchObject({ state: "failed", attempts: 3 });
+        break;
+      }
+      expect(updated).toMatchObject({ state: "retry_wait", attempts: index + 1 });
+      expect(updated.nextAttemptAt!.getTime() - Date.now()).toBeGreaterThan(delay - 5_000);
+      expect(await dispatchBotMessageWake(prisma, wake.id)).toBeNull();
+      await prisma.botMessageWake.update({
+        where: { id: wake.id },
+        data: { nextAttemptAt: new Date(0) },
+      });
+      runId = (await dispatchBotMessageWake(prisma, wake.id))!;
+      expect(runId).toBeTruthy();
+    }
+    expect(
+      await prisma.run.count({ where: { clientNonce: { startsWith: `peer-wake:${wake.id}:` } } }),
+    ).toBe(4);
+    expect(
+      await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id: reply.deliveryId } }),
+    ).toMatchObject({ state: "failed", failureCode: "retry-exhausted" });
+    expect(
+      await prisma.message.count({
+        where: { threadId: f.room.id, clientNonce: `peer-wake-failure:${wake.id}` },
+      }),
+    ).toBe(1);
+  });
+
+  it("keeps a clarification separate from the final result slot", async () => {
+    const f = await fixture("owner");
+    const question = await replyToBotDelivery(f.deps, f.workerRun, f.worker, {
+      inReplyToDeliveryId: f.parent.id,
+      message: "Which format?",
+      intent: "question",
+      deliveryKey: `question-${f.parent.id}`,
+    });
+    if (!question.ok) throw new Error(question.error);
+    expect(
+      await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id: f.parent.id } }),
+    ).toMatchObject({ state: "delivered", replyDeliveryId: null });
+    expect(
+      (await prisma.delegation.findUniqueOrThrow({ where: { id: f.parent.delegationId! } }))
+        .coordinatorWokenAt,
+    ).toBeNull();
+    const questionWake = await prisma.botMessageWake.findFirstOrThrow({
+      where: { deliveryIds: { has: question.deliveryId } },
+    });
+    await prisma.run.update({ where: { id: f.activeRun!.id }, data: { status: "completed" } });
+    const questionRunId = await dispatchBotMessageWake(prisma, questionWake.id);
+    expect(questionRunId).toBeTruthy();
+    const questionRun = await prisma.run.update({
+      where: { id: questionRunId! },
+      data: { status: "running", leaseOwner: "fixture-question", leaseFence: 1 },
+    });
+    const questionAttempt = await prisma.attempt.create({
+      data: { runId: questionRun.id, fence: 1, status: "running" },
+    });
+    expect(
+      await finalizeRun(prisma, {
+        spaceId,
+        threadId: f.room.id,
+        botId: f.coordinator.id,
+        runId: questionRun.id,
+        taskId: questionRun.taskId,
+        attemptId: questionAttempt.id,
+        leaseOwner: "fixture-question",
+        leaseFence: 1,
+        outcome: "completed",
+        blocks: [{ kind: "text", text: "Use the short format" }],
+      }),
+    ).not.toBe(false);
+    const result = await replyToBotDelivery(f.deps, f.workerRun, f.worker, {
+      inReplyToDeliveryId: f.parent.id,
+      message: "Final format ready",
+      intent: "result",
+      deliveryKey: `result-${f.parent.id}`,
+    });
+    if (!result.ok) throw new Error(result.error);
+    expect(
+      await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id: f.parent.id } }),
+    ).toMatchObject({ state: "replied", replyDeliveryId: result.deliveryId });
+    const wakes = await prisma.botMessageWake.findMany({ where: { rootTaskId: f.rootTask.id } });
+    expect(wakes).toHaveLength(2);
+    expect(wakes.find((wake) => wake.id === questionWake.id)).toMatchObject({ state: "consumed" });
+    expect(wakes.find((wake) => wake.deliveryIds.includes(result.deliveryId))).toMatchObject({
+      state: "bound",
+    });
+  });
+
+  it("creates the automatic result after a clarification", async () => {
+    const f = await fixture("owner");
+    const question = await replyToBotDelivery(f.deps, f.workerRun, f.worker, {
+      inReplyToDeliveryId: f.parent.id,
+      message: "Which format?",
+      intent: "question",
+      deliveryKey: `question-auto-${f.parent.id}`,
+    });
+    if (!question.ok) throw new Error(question.error);
+    const attempt = await prisma.attempt.create({
+      data: { runId: f.workerRun.id, fence: 1, status: "running" },
+    });
+    expect(
+      await finalizeRun(prisma, {
+        spaceId,
+        threadId: f.workerThread.id,
+        botId: f.worker.id,
+        runId: f.workerRun.id,
+        taskId: f.workerRun.taskId,
+        attemptId: attempt.id,
+        leaseOwner: "fixture-worker",
+        leaseFence: 1,
+        outcome: "completed",
+        blocks: [{ kind: "text", text: "The completed answer" }],
+      }),
+    ).not.toBe(false);
+    const parent = await prisma.botMessageDelivery.findUniqueOrThrow({
+      where: { id: f.parent.id },
+    });
+    const automatic = await prisma.botMessageDelivery.findUniqueOrThrow({
+      where: { id: parent.replyDeliveryId! },
+    });
+    expect(automatic).toMatchObject({ intent: "result", inReplyToDeliveryId: f.parent.id });
+    const wake = await prisma.botMessageWake.findFirstOrThrow({
+      where: { deliveryIds: { has: automatic.id } },
+    });
+    expect(wake.deliveryIds).toEqual([question.deliveryId, automatic.id]);
+  });
+
+  it("holds automatic completion behind an owner turn", async () => {
+    const f = await fixture("owner");
+    const attempt = await prisma.attempt.create({
+      data: { runId: f.workerRun.id, fence: 1, status: "running" },
+    });
+    expect(
+      await finalizeRun(prisma, {
+        spaceId,
+        threadId: f.workerThread.id,
+        botId: f.worker.id,
+        runId: f.workerRun.id,
+        taskId: f.workerRun.taskId,
+        attemptId: attempt.id,
+        leaseOwner: "fixture-worker",
+        leaseFence: 1,
+        outcome: "completed",
+        blocks: [{ kind: "text", text: "Completed the task" }],
+      }),
+    ).not.toBe(false);
+    const result = await prisma.botMessageDelivery.findFirstOrThrow({
+      where: { idempotencyKey: `auto-result:${f.parent.delegationId}` },
+    });
+    expect(result.inReplyToDeliveryId).toBe(f.parent.id);
+    const wake = await prisma.botMessageWake.findFirstOrThrow({
+      where: { deliveryIds: { has: result.id } },
+    });
+    expect(wake.state).toBe("pending");
+    expect(await prisma.steeringMessage.count({ where: { runId: f.activeRun!.id } })).toBe(0);
+    expect(
+      (await prisma.delegation.findUniqueOrThrow({ where: { id: f.parent.delegationId! } }))
+        .coordinatorWokenAt,
+    ).not.toBeNull();
+    await prisma.run.update({ where: { id: f.activeRun!.id }, data: { status: "completed" } });
+    expect(await dispatchBotMessageWake(prisma, wake.id)).toBeTruthy();
+  });
+
+  it("expires a pending result before it can execute and projects Expired", async () => {
+    const f = await fixture("owner");
+    const reply = await replyToBotDelivery(f.deps, f.workerRun, f.worker, {
+      inReplyToDeliveryId: f.parent.id,
+      message: "Too late",
+      intent: "result",
+      deliveryKey: `expires-${f.parent.id}`,
+    });
+    if (!reply.ok) throw new Error(reply.error);
+    const wake = await prisma.botMessageWake.findFirstOrThrow({
+      where: { deliveryIds: { has: reply.deliveryId } },
+    });
+    await prisma.botMessageDelivery.update({
+      where: { id: reply.deliveryId },
+      data: { expiresAt: new Date(0) },
+    });
+    await prisma.run.update({ where: { id: f.activeRun!.id }, data: { status: "completed" } });
+    expect(await dispatchBotMessageWake(prisma, wake.id)).toBeNull();
+    expect(await prisma.botMessageWake.findUniqueOrThrow({ where: { id: wake.id } })).toMatchObject(
+      { state: "cancelled" },
+    );
+    expect(
+      await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id: reply.deliveryId } }),
+    ).toMatchObject({ state: "expired", outcome: "expired" });
+    const outbound = await prisma.message.findUniqueOrThrow({
+      where: {
+        id: (await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id: reply.deliveryId } }))
+          .outboundMessageId,
+      },
+    });
+    expect(outbound.blocks).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ deliveryId: reply.deliveryId, deliveryState: "expired" }),
+      ]),
+    );
+  });
+
+  it("shrinks a pending batch to its unexpired result", async () => {
+    const f = await fixture("owner");
+    const question = await replyToBotDelivery(f.deps, f.workerRun, f.worker, {
+      inReplyToDeliveryId: f.parent.id,
+      message: "An expiring clarification",
+      intent: "question",
+      deliveryKey: `partial-question-${f.parent.id}`,
+    });
+    if (!question.ok) throw new Error(question.error);
+    const result = await replyToBotDelivery(f.deps, f.workerRun, f.worker, {
+      inReplyToDeliveryId: f.parent.id,
+      message: "The durable answer",
+      intent: "result",
+      deliveryKey: `partial-result-${f.parent.id}`,
+    });
+    if (!result.ok) throw new Error(result.error);
+    const wake = await prisma.botMessageWake.findFirstOrThrow({
+      where: { deliveryIds: { has: question.deliveryId } },
+    });
+    await prisma.botMessageDelivery.update({
+      where: { id: question.deliveryId },
+      data: { expiresAt: new Date(0) },
+    });
+    await prisma.run.update({ where: { id: f.activeRun!.id }, data: { status: "completed" } });
+    const runId = await dispatchBotMessageWake(prisma, wake.id);
+    expect(runId).toBeTruthy();
+    expect(await prisma.botMessageWake.findUniqueOrThrow({ where: { id: wake.id } })).toMatchObject(
+      { deliveryIds: [result.deliveryId] },
+    );
+    const run = await prisma.run.findUniqueOrThrow({ where: { id: runId! } });
+    const task = await prisma.task.findUniqueOrThrow({ where: { id: run.taskId } });
+    expect(task.prompt).toContain("The durable answer");
+    expect(task.prompt).not.toContain("An expiring clarification");
+  });
+
+  it("cancels a leased wake when its last delivery expires", async () => {
+    const f = await fixture();
+    const reply = await replyToBotDelivery(f.deps, f.workerRun, f.worker, {
+      inReplyToDeliveryId: f.parent.id,
+      message: "A short lived answer",
+      intent: "result",
+      deliveryKey: `leased-expiry-${f.parent.id}`,
+    });
+    if (!reply.ok) throw new Error(reply.error);
+    const wake = await prisma.botMessageWake.findFirstOrThrow({
+      where: { deliveryIds: { has: reply.deliveryId } },
+    });
+    await prisma.run.update({
+      where: { id: wake.runId! },
+      data: { status: "leased", leaseOwner: "fixture-lease", leaseFence: 1 },
+    });
+    await prisma.botMessageDelivery.update({
+      where: { id: reply.deliveryId },
+      data: { expiresAt: new Date(0) },
+    });
+    expect(
+      await refreshBoundBotMessageWakeRun(prisma, {
+        runId: wake.runId!,
+        leaseOwner: "fixture-lease",
+        leaseFence: 1,
+      }),
+    ).toBe(false);
+    expect(await prisma.run.findUniqueOrThrow({ where: { id: wake.runId! } })).toMatchObject({
+      status: "cancelled",
+    });
+    expect(
+      await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id: reply.deliveryId } }),
+    ).toMatchObject({ state: "expired" });
+  });
+
+  it("excludes expired quiet rows from capacity and expires them in reconciliation", async () => {
+    const f = await fixture();
+    await prisma.botMessageDelivery.createMany({
+      data: Array.from({ length: 20 }, (_, index) => ({
+        id: randomUUID(),
+        spaceId,
+        userId,
+        goalId: f.goal.id,
+        rootTaskId: f.rootTask.id,
+        conversationId: `quiet-${f.parent.id}-${index}`,
+        senderBotId: f.worker.id,
+        recipientBotId: f.coordinator.id,
+        senderThreadId: f.workerThread.id,
+        recipientThreadId: f.room.id,
+        sourceRunId: f.workerRun.id,
+        intent: "fyi",
+        outboundMessageId: f.parent.inboundMessageId!,
+        inboundMessageId: f.parent.outboundMessageId,
+        state: "delivered",
+        hop: 1,
+        authorityFingerprint: "fixture",
+        requestFingerprint: `quiet-${index}`,
+        idempotencyKey: `quiet-${f.parent.id}-${index}`,
+        expiresAt: new Date(0),
+        deliveredAt: new Date(),
+      })),
+    });
+    const result = await replyToBotDelivery(f.deps, f.workerRun, f.worker, {
+      inReplyToDeliveryId: f.parent.id,
+      message: "Still admitted",
+      intent: "result",
+      deliveryKey: `after-quiet-${f.parent.id}`,
+    });
+    expect(result.ok).toBe(true);
+    expect(await expireQuietBotMessages(prisma, new Date(), 100)).toBe(20);
+    expect(
+      await prisma.botMessageDelivery.count({
+        where: { rootTaskId: f.rootTask.id, intent: "fyi", state: "expired" },
+      }),
+    ).toBe(20);
   });
 });

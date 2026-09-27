@@ -4,6 +4,7 @@ import type { MessageBlock } from "@ardurbot/contracts";
 import type { Pool, PrismaClient, ThreadEvents } from "@ardurbot/db";
 import {
   dispatchBotMessageWake,
+  expireQuietBotMessages,
   goalExhaustionReason,
   reconcileGoalExhaustion,
 } from "@ardurbot/db";
@@ -391,17 +392,28 @@ export function createJobReconciler(
       }
     }
 
+    if (deps.prisma.botMessageDelivery)
+      await expireQuietBotMessages(deps.prisma, now, batchSize).catch((error) =>
+        getLogger().error("quiet message expiry", error),
+      );
     const pendingPeerWakes = deps.prisma.botMessageWake
       ? await deps.prisma.botMessageWake.findMany({
-          where: { state: "pending" },
+          where: {
+            state: { in: ["pending", "sealed", "retry_wait"] },
+            OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: now } }],
+          },
           orderBy: [{ createdAt: "asc" }, { id: "asc" }],
           take: batchSize,
           select: { id: true },
         })
       : [];
     for (const wake of pendingPeerWakes) {
-      const runId = await dispatchBotMessageWake(deps.prisma, wake.id);
-      if (runId) await deps.jobs.enqueue(runContinueJob(runId));
+      try {
+        const runId = await dispatchBotMessageWake(deps.prisma, wake.id);
+        if (runId) await deps.jobs.enqueue(runContinueJob(runId));
+      } catch (error) {
+        getLogger().error("peer wake reconciliation", error);
+      }
     }
 
     await Promise.all([

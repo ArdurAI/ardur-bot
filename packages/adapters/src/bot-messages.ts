@@ -585,6 +585,7 @@ export async function messageBot(
               recipientBotId: target.id,
               state: { in: ["queued", "delivered", "read"] },
               outcome: null,
+              expiresAt: { gt: now },
             },
           });
           if (pending >= 20) throw new BotInboxFullError();
@@ -597,6 +598,7 @@ export async function messageBot(
                 intent: { in: ["request", "question"] },
                 replyDeliveryId: null,
                 state: { in: ["queued", "delivered", "read"] },
+                expiresAt: { gt: now },
               },
             });
             if (unresolved >= 4) throw new BotInboxFullError();

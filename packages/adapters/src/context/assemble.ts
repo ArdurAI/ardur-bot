@@ -85,7 +85,7 @@ export async function assembleTurnContext(run: {
     run.peerReadOnly ? "" : (run.summary ?? ""),
     budgets.summary,
   );
-  const required = run.peerReadOnly ? undefined : run.requiredContext;
+  const required = run.requiredContext;
   const requiredAllowance = Math.min(required?.content.length ?? 0, budgets.messages);
   const requiredMessage = required
     ? {

@@ -2196,12 +2196,14 @@ model BotMessageWake {
   runId String?
   steeringMessageId String?
   state String @default("pending")
+  attempts Int @default(0)
+  nextAttemptAt DateTime?
   clientNonce String
   createdAt DateTime @default(now())
   consumedAt DateTime?
 
   @@unique([spaceId, clientNonce])
-  @@index([state, createdAt])
+  @@index([state, nextAttemptAt, createdAt])
   @@index([runId, state])
   @@map("bot_message_wakes")
 }

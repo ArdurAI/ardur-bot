@@ -271,13 +271,11 @@ export async function replyToBotDelivery(
             deliveredAt: now,
           },
         });
-        await tx.botMessageDelivery.update({
-          where: { id: parent.id },
-          data: {
-            replyDeliveryId: delivery.id,
-            ...(input.intent === "result" ? { state: "replied", repliedAt: now } : {}),
-          },
-        });
+        if (input.intent === "result")
+          await tx.botMessageDelivery.update({
+            where: { id: parent.id },
+            data: { replyDeliveryId: delivery.id, state: "replied", repliedAt: now },
+          });
         if (input.intent === "result") {
           for (const messageId of [parent.outboundMessageId, parent.inboundMessageId]) {
             if (!messageId) continue;
@@ -299,7 +297,7 @@ export async function replyToBotDelivery(
           }
         }
         // Completion and an explicit reply claim the same coordinator continuation.
-        if (parent.delegationId)
+        if (parent.delegationId && input.intent === "result")
           await tx.delegation.updateMany({
             where: { id: parent.delegationId, coordinatorWokenAt: null },
             data: { coordinatorWokenAt: now },

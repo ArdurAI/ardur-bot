@@ -2564,10 +2564,10 @@ describeJourneys("required product journeys", () => {
       .spyOn(ScriptedAgentRuntime.prototype, "run")
       .mockImplementation((request, context) => {
         const history = request.history.map((message) => message.content).join("\n");
-        if (request.prompt.includes("Review Worker's completed assignment"))
-          expect(history).toContain(workerResult);
-        if (request.prompt.includes("Review Reviewer's completed assignment"))
-          expect(history).toContain(reviewerResult);
+        if (request.prompt.includes("Review the completed assignment"))
+          expect([workerResult, reviewerResult].some((result) => history.includes(result))).toBe(
+            true,
+          );
         return originalRuntime.call(new ScriptedAgentRuntime(), request, context);
       });
     onTestFinished(() => deliverySpy.mockRestore());
@@ -2603,11 +2603,19 @@ describeJourneys("required product journeys", () => {
     expect(cards.every((card) => card.depth === 1 && card.rootTaskId === goal.rootTaskId)).toBe(
       true,
     );
-    const wakes = await prisma.run.findMany({
-      where: { goalId: goal.id, clientNonce: { startsWith: "goal-wake:" } },
+    const automatic = await prisma.botMessageDelivery.findMany({
+      where: {
+        sourceDelegationId: { in: cards.map((card) => card.id) },
+        idempotencyKey: { startsWith: "auto-result:" },
+      },
     });
-    expect(wakes.map((wake) => wake.clientNonce).sort()).toEqual(
-      cards.map((card) => `goal-wake:${card.id}`).sort(),
+    expect(automatic).toHaveLength(2);
+    const wakes = await prisma.botMessageWake.findMany({
+      where: { rootTaskId: goal.rootTaskId },
+    });
+    expect(wakes).toHaveLength(2);
+    expect(wakes.flatMap((wake) => wake.deliveryIds).sort()).toEqual(
+      automatic.map((delivery) => delivery.id).sort(),
     );
     await waitForDatabase(
       async () =>
@@ -2672,7 +2680,11 @@ describeJourneys("required product journeys", () => {
     const usage = await prisma.usageRecord.findMany({
       where: {
         runId: {
-          in: [startRun.id, ...cards.map((card) => card.runId!), ...wakes.map((wake) => wake.id)],
+          in: [
+            startRun.id,
+            ...cards.map((card) => card.runId!),
+            ...wakes.flatMap((wake) => (wake.runId ? [wake.runId] : [])),
+          ],
         },
       },
       select: { rootTaskId: true },
@@ -2721,11 +2733,15 @@ describeJourneys("required product journeys", () => {
     expect(await wakeGoalCoordinatorForDelegation(prisma, cards[0]!.id)).toBeNull();
     const reconciler = createJobReconciler({ prisma, jobs }, { batchSize: 100 });
     await reconciler.reconcileOnce();
+    const settledWakes = await prisma.botMessageWake.findMany({
+      where: { rootTaskId: goal.rootTaskId },
+    });
+    expect(settledWakes).toHaveLength(2);
     expect(
       await prisma.run.count({
-        where: { goalId: goal.id, clientNonce: { startsWith: "goal-wake:" } },
+        where: { goalId: goal.id, clientNonce: { startsWith: "peer-wake:" } },
       }),
-    ).toBe(2);
+    ).toBe(new Set(settledWakes.flatMap((wake) => (wake.runId ? [wake.runId] : []))).size);
 
     const fixturePin = {
       runtimeKind: "pi" as const,

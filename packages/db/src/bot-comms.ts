@@ -7,7 +7,115 @@ import {
 } from "@ardurbot/contracts";
 import { buildBotMessageWakePrompt } from "@ardurbot/core";
 import type { Prisma, PrismaClient } from "./client.js";
+import { appendEventInTransaction } from "./events.js";
+import { createThreadMessageInTransaction } from "./messages.js";
 import { withTransactionRetry } from "./transaction-retry.js";
+
+const RETRY_DELAYS_MS = [30_000, 120_000, 300_000] as const;
+
+/** Completion orchestration never interpolates the sender's editable display name. */
+export function buildCompletionReviewPrompt(body: string) {
+  return `Review the completed assignment and decide the next step for this goal.\n\n${body}`;
+}
+
+async function projectDeliveryState(
+  tx: Prisma.TransactionClient,
+  deliveryId: string,
+  state: "expired" | "failed",
+) {
+  const delivery = await tx.botMessageDelivery.findUniqueOrThrow({ where: { id: deliveryId } });
+  for (const messageId of [delivery.outboundMessageId, delivery.inboundMessageId]) {
+    if (!messageId) continue;
+    const message = await tx.message.findUnique({ where: { id: messageId } });
+    if (!message) continue;
+    if (
+      !(message.blocks as MessageBlock[]).some(
+        (block) =>
+          (block.kind === "bot_message_sent" || block.kind === "bot_message_received") &&
+          block.deliveryId === deliveryId,
+      )
+    )
+      continue;
+    const blocks = (message.blocks as MessageBlock[]).map((block) =>
+      (block.kind === "bot_message_sent" || block.kind === "bot_message_received") &&
+      block.deliveryId === deliveryId
+        ? { ...block, deliveryState: state, queuedForBusy: false }
+        : block,
+    );
+    await tx.message.update({ where: { id: messageId }, data: { blocks } });
+    await appendEventInTransaction(tx, {
+      spaceId: delivery.spaceId,
+      threadId: message.threadId,
+      botId:
+        message.threadId === delivery.senderThreadId
+          ? delivery.senderBotId
+          : delivery.recipientBotId,
+      type: "thread.message.updated",
+      payload: { messageId, blocks },
+    });
+  }
+}
+
+async function finishWake(
+  tx: Prisma.TransactionClient,
+  wake: {
+    id: string;
+    spaceId: string;
+    userId: string;
+    goalId: string | null;
+    rootTaskId: string;
+    recipientBotId: string;
+    recipientThreadId: string;
+    deliveryIds: string[];
+  },
+  state: "cancelled" | "failed",
+  failureCode: string,
+  notice: boolean,
+) {
+  await tx.botMessageWake.update({ where: { id: wake.id }, data: { state, nextAttemptAt: null } });
+  for (const id of wake.deliveryIds) {
+    const changed = await tx.botMessageDelivery.updateMany({
+      where: { id, state: { in: ["queued", "delivered", "read"] }, outcome: null },
+      data: { state: "failed", failureCode, outcome: "failed" },
+    });
+    if (changed.count) await projectDeliveryState(tx, id, "failed");
+  }
+  if (!notice) return;
+  const root = await tx.delegationRoot.findUnique({
+    where: { rootTaskId: wake.rootTaskId },
+    select: { coordinatorThreadId: true, coordinatorBotId: true },
+  });
+  const threadId = root?.coordinatorThreadId ?? wake.recipientThreadId;
+  const thread = await tx.thread.findUnique({ where: { id: threadId }, select: { id: true } });
+  if (!thread) return;
+  const nonce = `peer-wake-failure:${wake.id}`;
+  const existing = await tx.message.findUnique({
+    where: { threadId_clientNonce: { threadId, clientNonce: nonce } },
+    select: { id: true },
+  });
+  if (existing) return;
+  const blocks: MessageBlock[] = [
+    {
+      kind: "text",
+      text: "A team reply could not be delivered. Review the goal and retry the request if needed.",
+    },
+  ];
+  const message = await createThreadMessageInTransaction(tx, {
+    threadId,
+    role: "bot",
+    botId: root?.coordinatorBotId ?? wake.recipientBotId,
+    blocks,
+    clientNonce: nonce,
+    markUnread: false,
+  });
+  await appendEventInTransaction(tx, {
+    spaceId: wake.spaceId,
+    threadId,
+    botId: root?.coordinatorBotId ?? wake.recipientBotId,
+    type: "thread.message.created",
+    payload: { messageId: message.id, role: "bot", blocks },
+  });
+}
 
 export class BotInboxFullError extends Error {
   constructor() {
@@ -98,8 +206,9 @@ export async function appendBotMessageWakeInTransaction(
       spaceId: delivery.spaceId,
       userId: delivery.userId,
       recipientBotId: delivery.recipientBotId,
-      state: { in: ["queued", "delivered"] },
+      state: { in: ["queued", "delivered", "read"] },
       outcome: null,
+      expiresAt: { gt: new Date() },
     },
   });
   if (outstanding > BOT_MESSAGE_PENDING_MAX) throw new BotInboxFullError();
@@ -115,8 +224,11 @@ export async function appendBotMessageWakeInTransaction(
     open &&
     !canAppendBotMessageToBatch(open.deliveryIds.length, open.promptCharacters, promptCharacters)
   ) {
-    const runId = await bindBotMessageWakeInTransaction(tx, open.id, true);
+    const runId = await bindBotMessageWakeInTransaction(tx, open.id);
     if (runId) queuedRunIds.push(runId);
+    const sealed = await tx.botMessageWake.findUniqueOrThrow({ where: { id: open.id } });
+    if (sealed.state === "pending")
+      await tx.botMessageWake.update({ where: { id: open.id }, data: { state: "sealed" } });
     open = null;
   }
   if (open) {
@@ -152,15 +264,29 @@ export async function appendBotMessageWakeInTransaction(
   return queuedRunIds;
 }
 
-async function wakePrompt(tx: Prisma.TransactionClient, deliveryIds: string[]) {
+async function wakePrompt(tx: Prisma.TransactionClient, deliveryIds: string[], now: Date) {
   const deliveries = await tx.botMessageDelivery.findMany({
     where: { id: { in: deliveryIds } },
   });
   const byId = new Map(deliveries.map((row) => [row.id, row]));
   const prompts: string[] = [];
+  const liveIds: string[] = [];
   let lastMessageId: string | null = null;
   for (const id of deliveryIds) {
     const delivery = byId.get(id);
+    if (
+      delivery &&
+      (delivery.expiresAt <= now || !["queued", "delivered", "read"].includes(delivery.state))
+    ) {
+      if (delivery.expiresAt <= now && ["queued", "delivered", "read"].includes(delivery.state)) {
+        await tx.botMessageDelivery.update({
+          where: { id },
+          data: { state: "expired", outcome: "expired" },
+        });
+        await projectDeliveryState(tx, id, "expired");
+      }
+      continue;
+    }
     if (!delivery?.inboundMessageId) throw new Error("Wake has no delivered message.");
     const inbound = await tx.message.findUniqueOrThrow({
       where: { id: delivery.inboundMessageId },
@@ -172,25 +298,30 @@ async function wakePrompt(tx: Prisma.TransactionClient, deliveryIds: string[]) {
       (candidate) => candidate.kind === "bot_message_received" && candidate.deliveryId === id,
     );
     if (block?.kind !== "bot_message_received") throw new Error("Wake message has no receipt.");
+    const body = buildBotMessageWakePrompt({
+      from: { id: delivery.senderBotId, name: block.fromBotName },
+      text: block.text,
+      intent: block.intent,
+    });
     prompts.push(
-      buildBotMessageWakePrompt({
-        from: { id: delivery.senderBotId, name: block.fromBotName },
-        text: block.text,
-        intent: block.intent,
-      }),
+      delivery.idempotencyKey.startsWith("auto-result:") ? buildCompletionReviewPrompt(body) : body,
     );
+    liveIds.push(id);
     lastMessageId = delivery.inboundMessageId;
   }
-  return { prompt: prompts.join("\n\n"), lastMessageId };
+  return { prompt: prompts.join("\n\n"), lastMessageId, liveIds };
 }
 
 async function bindBotMessageWakeInTransaction(
   tx: Prisma.TransactionClient,
   wakeId: string,
-  forceQueue = false,
 ): Promise<string | null> {
-  const wake = await tx.botMessageWake.findUniqueOrThrow({ where: { id: wakeId } });
-  if (wake.state !== "pending") return null;
+  let wake = await tx.botMessageWake.findUniqueOrThrow({ where: { id: wakeId } });
+  if (
+    !["pending", "sealed", "retry_wait"].includes(wake.state) ||
+    (wake.nextAttemptAt && wake.nextAttemptAt > new Date())
+  )
+    return null;
   const goal = wake.goalId
     ? await tx.teamGoal.findFirst({
         where: {
@@ -212,11 +343,28 @@ async function bindBotMessageWakeInTransaction(
     root.cancelRequestedAt ||
     root.usedTokens >= Math.min(goal.tokenLimit, root.tokenLimit)
   ) {
-    await tx.botMessageWake.update({ where: { id: wake.id }, data: { state: "cancelled" } });
-    await tx.botMessageDelivery.updateMany({
-      where: { id: { in: wake.deliveryIds }, state: { in: ["queued", "delivered"] } },
-      data: { state: "expired", failureCode: "goal-unavailable" },
-    });
+    await finishWake(tx, wake, "cancelled", "goal-unavailable", true);
+    return null;
+  }
+  const thread = await tx.thread.findUnique({
+    where: { id: wake.recipientThreadId },
+    select: { id: true, botId: true, groupId: true },
+  });
+  if (!thread || (thread.botId !== wake.recipientBotId && thread.groupId !== goal.groupId)) {
+    await finishWake(tx, wake, "cancelled", "thread-unavailable", true);
+    return null;
+  }
+  const recipient = await tx.bot.findFirst({
+    where: {
+      id: wake.recipientBotId,
+      spaceId: wake.spaceId,
+      userId: wake.userId,
+      archivedAt: null,
+    },
+    select: { id: true },
+  });
+  if (!recipient) {
+    await finishWake(tx, wake, "cancelled", "recipient-unavailable", true);
     return null;
   }
   const authorityFingerprint = await goalBotAuthorityFingerprint(tx, {
@@ -227,12 +375,22 @@ async function bindBotMessageWakeInTransaction(
     botId: wake.recipientBotId,
   });
   if (authorityFingerprint !== wake.authorityFingerprint) {
-    await tx.botMessageWake.update({ where: { id: wake.id }, data: { state: "cancelled" } });
-    await tx.botMessageDelivery.updateMany({
-      where: { id: { in: wake.deliveryIds }, state: { in: ["queued", "delivered"] } },
-      data: { state: "failed", failureCode: "authority-changed" },
-    });
+    await finishWake(tx, wake, "cancelled", "authority-changed", true);
     return null;
+  }
+  const prepared = await wakePrompt(tx, wake.deliveryIds, now);
+  if (prepared.liveIds.length !== wake.deliveryIds.length) {
+    if (prepared.liveIds.length === 0) {
+      await tx.botMessageWake.update({
+        where: { id: wake.id },
+        data: { state: "cancelled", deliveryIds: [], promptCharacters: 0 },
+      });
+      return null;
+    }
+    wake = await tx.botMessageWake.update({
+      where: { id: wake.id },
+      data: { deliveryIds: prepared.liveIds, promptCharacters: prepared.prompt.length },
+    });
   }
   const active = await tx.run.findFirst({
     where: {
@@ -244,13 +402,12 @@ async function bindBotMessageWakeInTransaction(
     },
     orderBy: { createdAt: "asc" },
   });
-  const incoming =
-    active && !forceQueue
-      ? await tx.botMessageDelivery.findMany({
-          where: { id: { in: wake.deliveryIds } },
-          select: { inReplyToDeliveryId: true },
-        })
-      : [];
+  const incoming = active
+    ? await tx.botMessageDelivery.findMany({
+        where: { id: { in: wake.deliveryIds } },
+        select: { inReplyToDeliveryId: true },
+      })
+    : [];
   const parents =
     incoming.length === wake.deliveryIds.length && incoming.every((row) => row.inReplyToDeliveryId)
       ? await tx.botMessageDelivery.findMany({
@@ -264,7 +421,6 @@ async function bindBotMessageWakeInTransaction(
       parents.every((parent) => parent.sourceRunId === active.id),
   );
   const compatible =
-    !forceQueue &&
     active?.status === "running" &&
     active.goalId === goal.id &&
     active.delegationRootTaskId === root.rootTaskId &&
@@ -276,7 +432,7 @@ async function bindBotMessageWakeInTransaction(
     active.trigger !== "user" &&
     sameCard &&
     active.peerAuthorityFingerprint === wake.authorityFingerprint;
-  if (active && !compatible && !forceQueue) return null;
+  if (active && !compatible) return null;
   if (
     compatible &&
     (await tx.botMessageWake.findFirst({
@@ -331,7 +487,19 @@ async function createWakeRunInTransaction(
     clientNonce: string;
   },
 ) {
-  const { prompt, lastMessageId } = await wakePrompt(tx, wake.deliveryIds);
+  const { prompt, lastMessageId, liveIds } = await wakePrompt(tx, wake.deliveryIds, new Date());
+  if (liveIds.length === 0) {
+    await tx.botMessageWake.update({
+      where: { id: wake.id },
+      data: { state: "cancelled", deliveryIds: [], promptCharacters: 0 },
+    });
+    return null;
+  }
+  if (liveIds.length !== wake.deliveryIds.length)
+    await tx.botMessageWake.update({
+      where: { id: wake.id },
+      data: { deliveryIds: liveIds, promptCharacters: prompt.length },
+    });
   const task = await tx.task.create({
     data: {
       spaceId: wake.spaceId,
@@ -361,7 +529,7 @@ async function createWakeRunInTransaction(
     where: { id: wake.id },
     data: { state: "bound", runId: run.id },
   });
-  for (const deliveryId of wake.deliveryIds) {
+  for (const deliveryId of liveIds) {
     const delivery = await tx.botMessageDelivery.findUniqueOrThrow({
       where: { id: deliveryId },
       select: { usageRunIds: true },
@@ -380,12 +548,16 @@ export async function dispatchBotMessageWake(prisma: PrismaClient, wakeId: strin
   return withTransactionRetry(() =>
     prisma.$transaction(async (tx) => {
       const candidate = await tx.botMessageWake.findUnique({ where: { id: wakeId } });
-      if (candidate?.state !== "pending") return null;
+      if (!candidate || !["pending", "sealed", "retry_wait"].includes(candidate.state)) return null;
+      if (candidate.nextAttemptAt && candidate.nextAttemptAt > new Date()) return null;
       const root = await tx.delegationRoot.findUnique({
         where: { rootTaskId: candidate.rootTaskId },
         select: { coordinatorThreadId: true },
       });
-      if (!root) return null;
+      if (!root) {
+        await finishWake(tx, candidate, "cancelled", "goal-unavailable", true);
+        return null;
+      }
       for (const threadId of [
         root.coordinatorThreadId,
         ...[candidate.recipientThreadId].filter((id) => id !== root.coordinatorThreadId).sort(),
@@ -397,14 +569,125 @@ export async function dispatchBotMessageWake(prisma: PrismaClient, wakeId: strin
   );
 }
 
+/** Quiet receipts do not have a wake; expiry must still release inbox capacity. */
+export async function expireQuietBotMessages(prisma: PrismaClient, now = new Date(), limit = 100) {
+  const stale = await prisma.botMessageDelivery.findMany({
+    where: {
+      state: { in: ["queued", "delivered", "read"] },
+      outcome: null,
+      expiresAt: { lte: now },
+      OR: [{ intent: { in: ["status", "fyi"] } }, { intent: "result", inReplyToDeliveryId: null }],
+    },
+    orderBy: [{ expiresAt: "asc" }, { id: "asc" }],
+    take: limit,
+    select: { id: true },
+  });
+  for (const row of stale)
+    await prisma.$transaction(async (tx) => {
+      const changed = await tx.botMessageDelivery.updateMany({
+        where: {
+          id: row.id,
+          state: { in: ["queued", "delivered", "read"] },
+          outcome: null,
+          expiresAt: { lte: now },
+        },
+        data: { state: "expired", outcome: "expired" },
+      });
+      if (changed.count) await projectDeliveryState(tx, row.id, "expired");
+    });
+  return stale.length;
+}
+
+/** Recheck a leased wake before any runtime input is assembled or executed. */
+export async function refreshBoundBotMessageWakeRun(
+  prisma: PrismaClient,
+  input: { runId: string; leaseOwner: string; leaseFence: number },
+) {
+  return withTransactionRetry(() =>
+    prisma.$transaction(async (tx) => {
+      const candidate = await tx.botMessageWake.findFirst({
+        where: { runId: input.runId, state: "bound" },
+      });
+      if (!candidate) return true;
+      const root = await tx.delegationRoot.findUnique({
+        where: { rootTaskId: candidate.rootTaskId },
+        select: { coordinatorThreadId: true },
+      });
+      if (!root) {
+        const run = await tx.run.findFirst({
+          where: {
+            id: input.runId,
+            leaseOwner: input.leaseOwner,
+            leaseFence: input.leaseFence,
+            status: "leased",
+          },
+          select: { id: true, taskId: true },
+        });
+        if (run) {
+          await finishWake(tx, candidate, "cancelled", "goal-unavailable", true);
+          await tx.run.update({
+            where: { id: run.id },
+            data: { status: "cancelled", leaseOwner: null, leaseExpiresAt: null },
+          });
+          await tx.task.update({ where: { id: run.taskId }, data: { status: "cancelled" } });
+        }
+        return false;
+      }
+      for (const threadId of [
+        root.coordinatorThreadId,
+        ...[candidate.recipientThreadId].filter((id) => id !== root.coordinatorThreadId).sort(),
+      ])
+        await tx.$queryRaw`SELECT id FROM threads WHERE id = ${threadId} FOR UPDATE`;
+      await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${candidate.rootTaskId} FOR UPDATE`;
+      const run = await tx.run.findFirst({
+        where: {
+          id: input.runId,
+          leaseOwner: input.leaseOwner,
+          leaseFence: input.leaseFence,
+          status: "leased",
+        },
+        select: { id: true, taskId: true },
+      });
+      if (!run) return false;
+      const wake = await tx.botMessageWake.findUniqueOrThrow({ where: { id: candidate.id } });
+      if (wake.state !== "bound" || wake.runId !== run.id) return false;
+      const prepared = await wakePrompt(tx, wake.deliveryIds, new Date());
+      if (prepared.liveIds.length === wake.deliveryIds.length) return true;
+      if (prepared.liveIds.length === 0) {
+        await tx.botMessageWake.update({
+          where: { id: wake.id },
+          data: { state: "cancelled", deliveryIds: [], promptCharacters: 0 },
+        });
+        await tx.run.update({
+          where: { id: run.id },
+          data: { status: "cancelled", leaseOwner: null, leaseExpiresAt: null },
+        });
+        await tx.task.update({ where: { id: run.taskId }, data: { status: "cancelled" } });
+        return false;
+      }
+      await tx.botMessageWake.update({
+        where: { id: wake.id },
+        data: { deliveryIds: prepared.liveIds, promptCharacters: prepared.prompt.length },
+      });
+      await tx.task.update({ where: { id: run.taskId }, data: { prompt: prepared.prompt } });
+      await tx.run.update({
+        where: { id: run.id },
+        data: { sourceMessageId: prepared.lastMessageId },
+      });
+      return true;
+    }),
+  );
+}
+
 /** Finalization calls this while it already holds the thread and root locks. */
 export async function settleBotMessageWakesInTransaction(
   tx: Prisma.TransactionClient,
   runId: string,
   completed: boolean,
+  runtimeProblemCode?: string,
 ): Promise<string | null> {
   const wakes = await tx.botMessageWake.findMany({ where: { runId, state: "bound" } });
-  let continuationRunId: string | null = null;
+  let interrupted = false;
   for (const wake of wakes) {
     const claimed = wake.steeringMessageId
       ? await tx.steeringMessage.findUnique({
@@ -423,6 +706,7 @@ export async function settleBotMessageWakesInTransaction(
       });
       continue;
     }
+    interrupted = true;
     if (wake.steeringMessageId)
       await tx.steeringMessage.deleteMany({
         where: {
@@ -437,44 +721,50 @@ export async function settleBotMessageWakesInTransaction(
           runId,
         },
       });
+    if (runtimeProblemCode) {
+      await finishWake(tx, wake, "failed", runtimeProblemCode, true);
+      continue;
+    }
+    if (wake.attempts >= RETRY_DELAYS_MS.length) {
+      await finishWake(tx, wake, "failed", "retry-exhausted", true);
+      continue;
+    }
     await tx.botMessageDelivery.updateMany({
       where: { id: { in: wake.deliveryIds }, state: "delivered" },
       data: { failureCode: "read-unconfirmed" },
     });
-    // A newer pending generation may already exist. In that case the sealed
-    // batch stays bound while it moves to the new continuation, preserving the
-    // one-pending-batch constraint and the newer messages' generation.
-    const newerPending = await tx.botMessageWake.findFirst({
-      where: {
-        rootTaskId: wake.rootTaskId,
-        recipientBotId: wake.recipientBotId,
-        recipientThreadId: wake.recipientThreadId,
-        authorityFingerprint: wake.authorityFingerprint,
-        state: "pending",
-      },
-      select: { id: true },
-    });
-    if (!newerPending)
-      await tx.botMessageWake.update({
-        where: { id: wake.id },
-        data: { state: "pending", runId: null, steeringMessageId: null },
-      });
-    const nextGeneration = wake.generation + 1;
-    const retry = {
-      ...wake,
-      clientNonce: `peer-wake:${wake.id}:${nextGeneration}`,
-    };
-    const nextRunId = await createWakeRunInTransaction(tx, retry);
+    const nextAttempt = wake.attempts + 1;
     await tx.botMessageWake.update({
       where: { id: wake.id },
       data: {
-        generation: nextGeneration,
-        clientNonce: retry.clientNonce,
-        runId: nextRunId,
+        state: "retry_wait",
+        attempts: nextAttempt,
+        nextAttemptAt: new Date(Date.now() + RETRY_DELAYS_MS[nextAttempt - 1]!),
+        generation: wake.generation + 1,
+        clientNonce: `peer-wake:${wake.id}:${wake.generation + 1}`,
+        runId: null,
         steeringMessageId: null,
       },
     });
-    continuationRunId ??= nextRunId;
   }
-  return continuationRunId;
+  if (completed && !interrupted) {
+    const run = await tx.run.findUnique({
+      where: { id: runId },
+      select: { botId: true, threadId: true, delegationRootTaskId: true },
+    });
+    if (run?.delegationRootTaskId) {
+      const pending = await tx.botMessageWake.findFirst({
+        where: {
+          rootTaskId: run.delegationRootTaskId,
+          recipientBotId: run.botId,
+          recipientThreadId: run.threadId,
+          state: { in: ["pending", "sealed"] },
+        },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        select: { id: true },
+      });
+      if (pending) return bindBotMessageWakeInTransaction(tx, pending.id);
+    }
+  }
+  return null;
 }

@@ -49,7 +49,9 @@ export class ScriptedAgentRuntime implements AgentRuntime {
         yield { type: "done", text: "stopped" };
         return;
       }
-      const goalWake = /review (?:worker's|reviewer's) completed assignment/i.test(request.prompt);
+      const goalWake = /review (?:worker's|reviewer's|the) completed assignment/i.test(
+        request.prompt,
+      );
       const script = goalWake
         ? inferScript(
             request.prompt,
@@ -201,7 +203,11 @@ export function inferScript(
         complete: true,
       },
     ];
-  if (lower.includes("review worker's completed assignment")) {
+  if (
+    lower.includes("review worker's completed assignment") ||
+    (lower.includes("review the completed assignment") &&
+      !deliveredHistory.includes("Independent check:"))
+  ) {
     const workerResult =
       /The sort is ascending, so the corrected wording is: (Results show [^\n]+\.)/.exec(
         deliveredHistory,
@@ -252,7 +258,11 @@ export function inferScript(
       },
     ];
   }
-  if (lower.includes("review reviewer's completed assignment")) {
+  if (
+    lower.includes("review reviewer's completed assignment") ||
+    (lower.includes("review the completed assignment") &&
+      deliveredHistory.includes("Independent check:"))
+  ) {
     const reviewed =
       /Independent check: (Results show [^\n]+\.) The original wording contradicts the ascending sort\./.exec(
         deliveredHistory,

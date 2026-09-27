@@ -10,6 +10,7 @@ import {
 } from "@ardurbot/contracts";
 import {
   blocksToAgentHistoryText,
+  buildBotMessageWakePrompt,
   isApprovalAskBlock,
   isCommandEvent,
   isSecretAskBlock,
@@ -19,7 +20,12 @@ import {
   sanitizeJsonValue,
 } from "@ardurbot/core";
 import { getLogger } from "@ardurbot/logging";
-import { settleBotMessageWakesInTransaction } from "./bot-comms.js";
+import {
+  appendBotMessageWakeInTransaction,
+  buildCompletionReviewPrompt,
+  goalBotAuthorityFingerprint,
+  settleBotMessageWakesInTransaction,
+} from "./bot-comms.js";
 import { cancelRunsInTransaction } from "./cancel-runs.js";
 import type { Prisma, PrismaClient } from "./client.js";
 import { materializeCommandEvent } from "./command-blocks.js";
@@ -1444,7 +1450,29 @@ async function finalizeRunOnce(
             const text = redactTaskValue(
               input.blocks.flatMap((block) => ("text" in block ? [block.text] : [])).join("\n"),
             );
-            await tx.botMessageDelivery.create({
+            const recipientAvailable = await tx.bot.findFirst({
+              where: {
+                id: parent.senderBotId,
+                spaceId: parent.spaceId,
+                userId: parent.userId,
+                archivedAt: null,
+              },
+              select: { id: true },
+            });
+            const authorityFingerprint = recipientAvailable
+              ? await goalBotAuthorityFingerprint(tx, {
+                  spaceId: parent.spaceId,
+                  userId: parent.userId,
+                  goalId: goal.id,
+                  rootTaskId: parent.rootTaskId,
+                  botId: parent.senderBotId,
+                })
+              : "recipient-unavailable";
+            const senderName = await tx.bot.findUnique({
+              where: { id: input.botId },
+              select: { name: true },
+            });
+            const automaticReply = await tx.botMessageDelivery.create({
               data: {
                 id: replyId,
                 spaceId: parent.spaceId,
@@ -1466,14 +1494,11 @@ async function finalizeRunOnce(
                 inboundMessageId: result.summaryMessageId!,
                 state: "delivered",
                 hop: parent.hop + 1,
-                authorityFingerprint: createHash("sha256")
-                  .update(JSON.stringify([goal.id, parent.rootTaskId, parent.senderBotId]))
-                  .digest("hex"),
+                authorityFingerprint,
                 requestFingerprint: createHash("sha256").update(text).digest("hex"),
                 idempotencyKey: `auto-result:${writableRun.delegationId}`,
                 expiresAt: new Date(Math.min(goal.untilAt.getTime(), now.getTime() + 3_600_000)),
                 deliveredAt: now,
-                outcome: "completion",
               },
             });
             await tx.botMessageDelivery.update({
@@ -1494,6 +1519,20 @@ async function finalizeRunOnce(
                 : block,
             );
             await tx.message.update({ where: { id: receipt.id }, data: { blocks } });
+            const automaticPrompt = buildBotMessageWakePrompt({
+              from: { id: input.botId, name: senderName?.name ?? "Worker" },
+              text,
+              intent: "result",
+            });
+            await appendBotMessageWakeInTransaction(
+              tx,
+              automaticReply,
+              buildCompletionReviewPrompt(automaticPrompt).length,
+            );
+            await tx.delegation.updateMany({
+              where: { id: writableRun.delegationId, coordinatorWokenAt: null },
+              data: { coordinatorWokenAt: now },
+            });
             summary = await appendEventInTransaction(tx, {
               spaceId: parent.spaceId,
               threadId: receipt.threadId,
@@ -1573,6 +1612,7 @@ async function finalizeRunOnce(
       tx,
       input.runId,
       input.outcome === "completed",
+      input.outcome === "failed" ? input.runtimeProblem?.code : undefined,
     );
     if (input.outcome === "completed") {
       await tx.steeringMessage.deleteMany({
