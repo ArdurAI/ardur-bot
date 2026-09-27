@@ -9,7 +9,7 @@ export function runtimeEffortLabel(
   if (!pin.effort) return null;
   const unattested =
     info?.effortAttested === false ||
-    (pin.runtimeKind === "claude-code" && info?.effortAttested !== true);
+    (["claude-code", "antigravity"].includes(pin.runtimeKind) && info?.effortAttested !== true);
   return unattested ? `${pin.effort} · ${requested}` : pin.effort;
 }
 

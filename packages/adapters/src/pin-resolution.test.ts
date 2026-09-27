@@ -48,6 +48,40 @@ describe("runtime pin selection", () => {
     expect(RuntimePinSchema.parse(legacy).runtimeKind).toBe("pi");
     expect(RuntimePinSchema.safeParse({ ...pin, runtimeKind: "missing" }).success).toBe(false);
   });
+  it("lets a signed-out Antigravity pin attempt immediate recovery when its catalogue is live", async () => {
+    const runtime = {} as AgentRuntime;
+    const agyPin: RuntimePin = {
+      runtimeKind: "antigravity",
+      provider: "antigravity",
+      modelId: "gemini-3.8-flash-low",
+      effort: "low",
+      credentialId: "native:antigravity",
+      revision: 1,
+    };
+    const availability = {
+      runtimeKind: "antigravity" as const,
+      available: false,
+      signInStatus: "signed-out" as const,
+      catalogStale: false,
+      models: [{ id: agyPin.modelId!, label: agyPin.modelId!, efforts: ["low"] }],
+      reason: "Sign in to Antigravity on this computer, then check again.",
+      reasonId: "signed-out",
+    };
+    const registry = new RuntimeRegistry({
+      antigravity: { factory: () => runtime, probe: async () => availability },
+    });
+    expect(await registry.resolve(agyPin, "desktop", true)).toMatchObject({ runtime });
+    const stale = new RuntimeRegistry({
+      antigravity: {
+        factory: () => runtime,
+        probe: async () => ({ ...availability, catalogStale: true }),
+      },
+    });
+    expect(await stale.resolve(agyPin, "desktop", true)).toMatchObject({
+      code: "runtime-unavailable",
+      reasonId: "signed-out",
+    });
+  });
   it("selects only the factory bound to the saved kind", async () => {
     const runtime = {} as AgentRuntime;
     const pi = vi.fn();

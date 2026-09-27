@@ -273,15 +273,15 @@ function Usage({ data }: { data: UsageSummary }) {
         <View key={provider.provider} style={styles.lines}>
           <Line>{provider.provider}</Line>
           <Line>{t("Today (UTC)")}</Line>
-          <Period value={provider.today} />
+          <Period value={provider.today} provider={provider.provider} />
           <Line>{t("This week (UTC)")}</Line>
-          <Period value={provider.week} />
+          <Period value={provider.week} provider={provider.provider} />
         </View>
       ))}
     </View>
   );
 }
-function Period({ value }: { value: UsagePeriod }) {
+function Period({ value, provider }: { value: UsagePeriod; provider: string }) {
   const { t } = useI18n();
   return (
     <Line>
@@ -289,7 +289,9 @@ function Period({ value }: { value: UsagePeriod }) {
       {" · "}
       {t("{tokens} tokens", { tokens: value.inputTokens + value.outputTokens })}
       {value.cost === null
-        ? null
+        ? provider === "antigravity"
+          ? ` · ${t("Cost unavailable")}`
+          : null
         : ` · ${t("Cost")}: ${value.cost.toLocaleString(undefined, { maximumFractionDigits: 6 })}`}
     </Line>
   );

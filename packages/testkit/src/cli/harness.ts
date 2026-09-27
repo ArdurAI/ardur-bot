@@ -114,6 +114,7 @@ async function main() {
         "packages/testkit/src/connections.test.ts",
         "packages/testkit/src/bot-secrets.test.ts",
         "packages/db/src/space-membership.postgres.test.ts",
+        "packages/db/src/group-model-pins.postgres.test.ts",
         "packages/db/src/messaging.postgres.test.ts",
         "packages/db/src/learning.postgres.test.ts",
         "packages/adapters/src/learning-insights.postgres.test.ts",

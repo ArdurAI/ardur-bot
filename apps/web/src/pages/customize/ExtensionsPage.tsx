@@ -3,7 +3,16 @@ import type {
   ExtensionPreview,
   IntegrationDescriptor,
 } from "@ardurbot/contracts";
-import { Badge, Button, Dialog, DialogContent, DialogHeader, DialogTitle } from "@ardurbot/ui-web";
+import {
+  Badge,
+  Button,
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Skeleton,
+} from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
 import { Blocks, Plus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -24,6 +33,9 @@ export default function ExtensionsPage({
   const [preview, setPreview] = useState<ExtensionPreview | null>(null);
   const [configuring, setConfiguring] = useState<DesktopExtension | null>(null);
   const [catalog, setCatalog] = useState<IntegrationDescriptor[] | null>(null);
+  const [catalogOpen, setCatalogOpen] = useState(false);
+  const [catalogError, setCatalogError] = useState(false);
+  const [catalogBusy, setCatalogBusy] = useState(false);
   const [failed, setFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -55,6 +67,32 @@ export default function ExtensionsPage({
       setBusy(false);
     }
   }
+  const openAdd = useCallback(() => {
+    if (!bridge) return;
+    void action(async () => setPreview(await bridge.prepare(selectedSpaceId())));
+  }, [bridge]);
+  const loadCatalog = useCallback(async () => {
+    setCatalogBusy(true);
+    setCatalogError(false);
+    try {
+      const result = await rpc.integrations.list();
+      setCatalog(result.catalog.filter((item) => item.transport === "stdio"));
+    } catch {
+      setCatalog(null);
+      setCatalogError(true);
+    } finally {
+      setCatalogBusy(false);
+    }
+  }, []);
+  const openBrowse = useCallback(() => {
+    setCatalogOpen(true);
+    void loadCatalog();
+  }, [loadCatalog]);
+  const closeBrowse = useCallback(() => {
+    setCatalogOpen(false);
+    setCatalogError(false);
+    setCatalog(null);
+  }, []);
   if (!bridge)
     return (
       <p className="text-sm text-muted-foreground">{t`Open the desktop app to manage extensions.`}</p>
@@ -66,24 +104,10 @@ export default function ExtensionsPage({
         <div className="flex gap-2">
           <Button
             variant="outline"
-            disabled={busy}
-            onClick={() =>
-              void action(async () =>
-                setCatalog(
-                  (await rpc.integrations.list()).catalog.filter(
-                    (item) => item.transport === "stdio",
-                  ),
-                ),
-              )
-            }
+            disabled={busy || catalogBusy}
+            onClick={openBrowse}
           >{t`Browse extensions`}</Button>
-          <Button
-            variant="outline"
-            disabled={busy}
-            onClick={() =>
-              void action(async () => setPreview(await bridge.prepare(selectedSpaceId())))
-            }
-          >
+          <Button variant="outline" disabled={busy} onClick={openAdd}>
             <Plus />
             {t`Add`}
           </Button>
@@ -186,20 +210,42 @@ export default function ExtensionsPage({
           }
         />
       ) : null}
-      {catalog ? (
+      {catalogOpen ? (
         <Dialog
           open
           onOpenChange={(open) => {
-            if (!open) setCatalog(null);
+            if (!open) closeBrowse();
           }}
         >
           <DialogContent>
             <DialogHeader>
               <DialogTitle>{t`Browse extensions`}</DialogTitle>
             </DialogHeader>
-            <div className="space-y-3">
-              {catalog.length ? (
-                catalog.map((item) => (
+            {catalogBusy ? (
+              <div className="space-y-4">
+                <p role="status" className="text-sm text-muted-foreground">
+                  {t`Loading the extension catalogue…`}
+                </p>
+                <div className="space-y-3" aria-hidden="true">
+                  <Skeleton className="h-14 w-full" />
+                  <Skeleton className="h-14 w-full" />
+                </div>
+              </div>
+            ) : catalogError ? (
+              <div role="alert" className="space-y-4">
+                <p className="text-sm text-destructive">{t`Could not load the extension catalogue. Check the connection and try again.`}</p>
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={closeBrowse}>{t`Close`}</Button>
+                  <Button
+                    type="button"
+                    disabled={catalogBusy}
+                    onClick={() => void loadCatalog()}
+                  >{t`Retry`}</Button>
+                </DialogFooter>
+              </div>
+            ) : catalog && catalog.length > 0 ? (
+              <div className="space-y-3">
+                {catalog.map((item) => (
                   <div
                     key={item.id}
                     className="flex items-center gap-3 rounded-lg border border-border p-3"
@@ -215,16 +261,31 @@ export default function ExtensionsPage({
                       size="sm"
                       disabled={!item.available}
                       onClick={() => {
-                        setCatalog(null);
+                        closeBrowse();
                         navigate?.("integrations");
                       }}
-                    >{t`Open`}</Button>
+                    >{t`Install`}</Button>
                   </div>
-                ))
-              ) : (
-                <EmptyList />
-              )}
-            </div>
+                ))}
+              </div>
+            ) : catalog && catalog.length === 0 ? (
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  {t`No extensions are in the built-in catalogue yet. Use Add to install an extension bundle (.mcpb or .dxt file) from this computer.`}
+                </p>
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={closeBrowse}>{t`Close`}</Button>
+                  <Button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => {
+                      closeBrowse();
+                      openAdd();
+                    }}
+                  >{t`Add`}</Button>
+                </DialogFooter>
+              </div>
+            ) : null}
           </DialogContent>
         </Dialog>
       ) : null}

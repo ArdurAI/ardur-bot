@@ -667,6 +667,18 @@ it("labels aggregate usage as records rather than provider requests", async () =
   expect(node.querySelector('[data-panel="usage"]')?.textContent).not.toContain("requests");
 });
 
+it("shows Antigravity's reported tokens with unavailable cost", async () => {
+  api.usage.mockResolvedValue({
+    ...summary,
+    providers: [{ provider: "antigravity", today: period, week: period, daily: [] }],
+  });
+  await renderPage();
+  const text = node.querySelector('[data-panel="usage"]')?.textContent;
+  expect(text).toContain("40 tokens");
+  expect(text).toContain("Cost unavailable");
+  expect(text).not.toContain("$0");
+});
+
 it("shows ready work when filing outcomes fail", async () => {
   api.work.mockResolvedValue({
     workspace: { id: "planning", name: "Planning" },

@@ -285,5 +285,15 @@ it("identifies totals-only usage as records on mobile", async () => {
   expect(node.textContent).not.toContain("requests");
 });
 
+it("shows unavailable cost for Antigravity usage", async () => {
+  const period = { records: 1, inputTokens: 20, outputTokens: 5, cost: null };
+  vi.mocked(loadOverviewUsage).mockResolvedValue({
+    ...usage,
+    providers: [{ provider: "antigravity", today: period, week: period, daily: [] }],
+  });
+  await act(async () => root.render(createElement(OverviewScreen)));
+  expect(node.textContent).toContain("25 tokens · Cost unavailable");
+});
+
 import type { IntegrationCatalogList } from "@ardurbot/contracts";
 import { connectionOverview } from "@ardurbot/core";
