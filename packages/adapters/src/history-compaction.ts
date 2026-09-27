@@ -22,6 +22,8 @@ import { accountRuntimeUsage } from "./runtime-usage.js";
  * -1 is what includes a thread's very first message in the first compaction batch.
  */
 const NOTHING_COMPACTED = -1;
+/** Durable state left while an unmarked summary is rebuilt from retained rows. */
+const PENDING_SUMMARY_REBUILD = "[pending-summary-rebuild:v1]";
 
 export function shouldEnqueueCompaction(
   nextMessageSeq: number,
@@ -207,7 +209,8 @@ export async function compactHistory(
   const previousGeneration = thread.historyCompactionGeneration;
   const storedSummary = thread.historyCompactionSummary;
   let previousSummary = receiptFilteredSummary(storedSummary);
-  const invalidatedSummary = Boolean(storedSummary && !previousSummary);
+  const pendingRebuild = storedSummary === PENDING_SUMMARY_REBUILD && previousCursor === null;
+  const invalidatedSummary = Boolean(storedSummary && !previousSummary && !pendingRebuild);
   if (invalidatedSummary) {
     // Discard pre-filtering summaries before they can seed another summary. Rebuild
     // from raw rows; a concurrent compactor wins through the cursor CAS below.
@@ -218,7 +221,10 @@ export async function compactHistory(
         historyCompactionGeneration: previousGeneration,
         historyCompactionSummary: storedSummary,
       },
-      data: { historyCompactedUpToSeq: null, historyCompactionSummary: null },
+      data: {
+        historyCompactedUpToSeq: null,
+        historyCompactionSummary: PENDING_SUMMARY_REBUILD,
+      },
     });
     if (!cleared.count) return;
     previousCursor = null;
@@ -290,7 +296,8 @@ export async function compactHistory(
     });
     // Clearing messages retains their sequence counter. After invalidating a legacy summary,
     // the first surviving row can therefore start above zero without leaving a coverage gap.
-    if (invalidatedSummary && batch.length > 0) fromSeqExclusive = batch[0]!.seq - 1;
+    if ((invalidatedSummary || pendingRebuild) && batch.length > 0)
+      fromSeqExclusive = batch[0]!.seq - 1;
     if (batch.some((message, index) => message.seq !== fromSeqExclusive + index + 1)) {
       getLogger().error(
         `history.compact skipped for thread ${threadId}: message coverage has a gap`,

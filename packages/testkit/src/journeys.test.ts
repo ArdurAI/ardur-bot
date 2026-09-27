@@ -23,6 +23,7 @@ import {
 import type { DelegationSnapshot, MemoryPage, TaughtSkill } from "@ardurbot/contracts";
 import {
   ACTIVE_RUN_STATUSES,
+  LEGACY_RESTART_SUMMARY,
   ONCE_ROUTINE_CRON,
   RECEIPT_FILTERED_SUMMARY_MARKER,
 } from "@ardurbot/core";
@@ -935,6 +936,14 @@ describeJourneys("required product journeys", () => {
     const reset = await prisma.thread.findUniqueOrThrow({ where: { id: thread.id } });
     expect(reset.historyCompactionSummary).toBe(`${RECEIPT_FILTERED_SUMMARY_MARKER}New chat.`);
     expect(reset.historyCompactedUpToSeq).toBe(reset.nextMessageSeq - 1);
+    // Recreate the committed state left by a restart before summaries gained a marker.
+    await prisma.thread.update({
+      where: { id: thread.id },
+      data: {
+        historyCompactedUpToSeq: reset.historyCompactedUpToSeq,
+        historyCompactionSummary: LEGACY_RESTART_SUMMARY,
+      },
+    });
     const requests = new Map<string, { prompt: string; history: Array<{ content: string }> }>();
     const originalRun = ScriptedAgentRuntime.prototype.run;
     const runtimeSpy = vi
@@ -960,7 +969,7 @@ describeJourneys("required product journeys", () => {
     expect(await prisma.message.count({ where: { threadId: thread.id } })).toBeGreaterThan(1);
     const afterThread = await prisma.thread.findUniqueOrThrow({ where: { id: thread.id } });
     expect(afterThread.historyCompactedUpToSeq).toBe(reset.historyCompactedUpToSeq);
-    expect(afterThread.historyCompactionSummary).toBe(reset.historyCompactionSummary);
+    expect(afterThread.historyCompactionSummary).toBe(LEGACY_RESTART_SUMMARY);
   });
 
   it("2b: two Team bots send at once on distinct screens", async () => {
