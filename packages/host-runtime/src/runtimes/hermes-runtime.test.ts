@@ -247,6 +247,166 @@ describe("HermesRuntime M0 ACP seam", () => {
     }
   });
 
+  it("fences a pending authorization as soon as successful completion is queued", async () => {
+    let authorizationEntered!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      authorizationEntered = resolve;
+    });
+    let releaseAuthorization!: () => void;
+    const heldAuthorization = new Promise<void>((resolve) => {
+      releaseAuthorization = resolve;
+    });
+    let responseSeen!: () => void;
+    const responded = new Promise<void>((resolve) => {
+      responseSeen = resolve;
+    });
+    let child!: Awaited<ReturnType<typeof launchUnconfinedProcess>>["child"];
+    const executeTool = vi.fn(async () => ({ unexpected: true }));
+    const adapter = new HermesRuntime({
+      command: process.execPath,
+      args: [fixture, "pending-tool-malformed"],
+      launch: async (spec) => {
+        const result = await launchUnconfinedProcess(spec);
+        child = result.child;
+        child.stdout.on("data", (chunk: Buffer) => {
+          if (chunk.toString("utf8").includes('"stopReason":"end_turn"')) responseSeen();
+        });
+        return result;
+      },
+    });
+    const run = request({
+      tools: [{ name: "fixture_echo", description: "Echo", inputSchema: {} }],
+      authorizeTool: async () => {
+        authorizationEntered();
+        await heldAuthorization;
+        return undefined;
+      },
+      executeTool,
+    });
+    const events = adapter.run(run)[Symbol.asyncIterator]();
+    try {
+      expect(await events.next()).toEqual({
+        value: { type: "text", text: "before protocol failure." },
+        done: false,
+      });
+      await entered;
+      child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", method: "fixture/finish-now" })}\n`);
+      await responded;
+      await new Promise((resolve) => setImmediate(resolve));
+      releaseAuthorization();
+      const remaining: AgentRuntimeEvent[] = [];
+      for await (const event of { [Symbol.asyncIterator]: () => events }) remaining.push(event);
+      expect(remaining.at(-1)).toEqual({ type: "done" });
+      expect(executeTool).not.toHaveBeenCalled();
+    } finally {
+      releaseAuthorization();
+      await events.return?.();
+    }
+  });
+
+  for (const transition of [
+    "end_turn",
+    "bridge pause",
+    "forbidden tool",
+    "protocol failure",
+    "queue overflow",
+    "abort",
+    "signal",
+  ] as const) {
+    it(`keeps the bridge fenced after ${transition}`, async () => {
+      let authorizationEntered!: () => void;
+      const entered = new Promise<void>((resolve) => {
+        authorizationEntered = resolve;
+      });
+      let releaseAuthorization!: () => void;
+      const heldAuthorization = new Promise<void>((resolve) => {
+        releaseAuthorization = resolve;
+      });
+      let terminalSeen!: () => void;
+      const observed = new Promise<void>((resolve) => {
+        terminalSeen = resolve;
+      });
+      const marker =
+        transition === "end_turn"
+          ? '"stopReason":"end_turn"'
+          : transition === "forbidden tool"
+            ? "terminal: unavailable"
+            : transition === "protocol failure"
+              ? "{broken\n"
+              : transition === "queue overflow"
+                ? "overflow-complete"
+                : undefined;
+      let child!: Awaited<ReturnType<typeof launchUnconfinedProcess>>["child"];
+      const executeTool = vi.fn(async () => ({ unexpected: true }));
+      const adapter = new HermesRuntime({
+        command: process.execPath,
+        args: [fixture, "pending-tool-malformed"],
+        launch: async (spec) => {
+          const result = await launchUnconfinedProcess(spec);
+          child = result.child;
+          const output = transition === "queue overflow" ? child.stderr : child.stdout;
+          let observedOutput = "";
+          output.on("data", (chunk: Buffer) => {
+            observedOutput += chunk.toString("utf8");
+            if (marker && observedOutput.includes(marker)) terminalSeen();
+          });
+          return result;
+        },
+      });
+      const controller = new AbortController();
+      const run = request({
+        tools: [{ name: "fixture_echo", description: "Echo", inputSchema: {} }],
+        authorizeTool: async () => {
+          authorizationEntered();
+          await heldAuthorization;
+          return undefined;
+        },
+        executeTool,
+      });
+      const events = adapter.run(run, { signal: controller.signal })[Symbol.asyncIterator]();
+      try {
+        expect((await events.next()).value).toEqual({
+          type: "text",
+          text: "before protocol failure.",
+        });
+        await entered;
+        if (transition === "abort") await adapter.abort(run.runId);
+        else if (transition === "signal") {
+          controller.abort();
+          await new Promise((resolve) => setImmediate(resolve));
+        } else if (transition === "bridge pause") {
+          // The serialized bridge cannot begin a second call while authorization is held.
+          // Its pause callback enters the same private terminal transition tested here.
+          await (
+            adapter as unknown as { finishTurn: (id: string, reason: "pause") => Promise<void> }
+          ).finishTurn(run.runId, "pause");
+        } else {
+          const method = {
+            end_turn: "fixture/finish-now",
+            "forbidden tool": "fixture/forbidden-now",
+            "protocol failure": "fixture/fail-now",
+            "queue overflow": "fixture/overflow-now",
+          }[transition];
+          child.stdin.write(`${JSON.stringify({ jsonrpc: "2.0", method })}\n`);
+          await observed;
+          await new Promise((resolve) => setImmediate(resolve));
+        }
+        releaseAuthorization();
+        try {
+          while (!(await events.next()).done) {
+            // Drain any events that preceded the terminal transition.
+          }
+        } catch {
+          // Failure transitions carry their queue error to the consumer.
+        }
+        expect(executeTool).not.toHaveBeenCalled();
+      } finally {
+        releaseAuthorization();
+        await events.return?.();
+      }
+    });
+  }
+
   it("fences a pending tool when a paused consumer overflows its queue", async () => {
     let authorizationEntered!: () => void;
     const entered = new Promise<void>((resolve) => {

@@ -141,13 +141,16 @@ export class RuntimeQueue<T> implements AsyncIterable<T> {
   private ended = false;
   private bytes = 0;
   private failure?: unknown;
-  constructor(private readonly wrapLimitError?: (error: Error) => Error) {}
+  constructor(
+    private readonly wrapLimitError?: (error: Error) => Error,
+    private readonly endOnLimit = true,
+  ) {}
   push(item: T) {
     if (!this.ended) {
       const bytes = Buffer.byteLength(JSON.stringify(item));
       if (this.items.length >= 256 || this.bytes + bytes > 8 * 1024 * 1024) {
         const error = new Error("Runtime output exceeded its limit.");
-        this.end(this.wrapLimitError?.(error) ?? error);
+        if (this.endOnLimit) this.end(this.wrapLimitError?.(error) ?? error);
         return error;
       }
       this.bytes += bytes;

@@ -9,6 +9,7 @@ let sessionId = "fixture-session";
 let nextId = 700;
 const pending = new Map();
 let mcp;
+let pendingPromptId;
 
 function send(value) {
   process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", ...value })}\n`);
@@ -55,6 +56,25 @@ async function handle(value) {
     process.stdout.write("{broken\n");
     return;
   }
+  if (scenario === "pending-tool-malformed" && value.method === "fixture/finish-now") {
+    send({ id: pendingPromptId, result: { stopReason: "end_turn" } });
+    return;
+  }
+  if (scenario === "pending-tool-malformed" && value.method === "fixture/forbidden-now") {
+    update({
+      sessionUpdate: "tool_call",
+      toolCallId: "native-late",
+      title: "terminal: unavailable",
+      status: "pending",
+    });
+    return;
+  }
+  if (scenario === "pending-tool-malformed" && value.method === "fixture/overflow-now") {
+    for (let i = 0; i < 260; i++)
+      update({ sessionUpdate: "plan", entries: [{ content: `step ${i}` }] });
+    process.stderr.write("overflow-complete\n");
+    return;
+  }
   if (scenario === "queue-overflow" && value.method === "fixture/overflow") {
     for (let i = 0; i < 260; i++)
       update({ sessionUpdate: "plan", entries: [{ content: `step ${i}` }] });
@@ -62,6 +82,7 @@ async function handle(value) {
     return;
   }
   if (value.method !== "session/prompt") return;
+  if (scenario === "pending-tool-malformed") pendingPromptId = value.id;
   if (scenario === "malformed") {
     process.stdout.write("{broken\n");
     return;

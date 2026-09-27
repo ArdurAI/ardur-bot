@@ -192,8 +192,9 @@ export function createHermesTextRedactor(secrets: readonly string[], emit: (text
 
 interface ActiveTurn {
   active: boolean;
-  stopReason?: "cancel" | "pause" | "failure";
+  stopReason?: "done" | "cancel" | "pause" | "failure";
   cleanup?: Promise<void>;
+  cleanupChild?: ChildProcessWithoutNullStreams;
   child?: ChildProcessWithoutNullStreams;
   client?: AcpClient;
   sessionId?: string;
@@ -225,40 +226,57 @@ export class HermesRuntime implements AgentRuntime {
     };
   }
 
-  private async stopTurn(runId: string, reason: "cancel" | "pause" | "failure") {
+  private async finishTurn(
+    runId: string,
+    reason: "done" | "pause" | "failure" | "cancel",
+    error?: Error,
+  ) {
     const turn = this.running.get(runId);
     if (!turn) return;
-    if (
-      reason === "failure" ||
-      (reason === "cancel" && turn.stopReason !== "failure") ||
-      !turn.stopReason
-    )
-      turn.stopReason = reason;
-    if (!turn.cleanup) {
+    if (!turn.active && reason === "cancel" && turn.stopReason === "done")
+      turn.stopReason = "cancel";
+    if (turn.active) {
       turn.active = false;
-      turn.queue.end();
+      let finalReason = reason;
+      let finalError = error;
+      if (reason === "done") {
+        const overflow = turn.queue.push({ type: "done" });
+        if (overflow) {
+          finalReason = "failure";
+          finalError = new Error("Hermes could not complete this turn.", { cause: overflow });
+        }
+      }
+      turn.stopReason = finalReason;
+      turn.queue.end(finalError);
+    }
+    if (turn.child && !turn.cleanupChild) {
+      const child = turn.child;
+      const teardown = turn.teardown;
+      turn.cleanupChild = child;
+      const previous = turn.cleanup;
       turn.cleanup = (async () => {
-        if (turn.sessionId && turn.client) {
+        await previous;
+        if (turn.stopReason !== "done" && turn.sessionId && turn.client) {
           try {
             turn.client.notify("session/cancel", { sessionId: turn.sessionId });
           } catch {
             // A dead ACP process is already cancelled.
           }
         }
-        if (!turn.child) return;
         await new Promise((resolve) => setTimeout(resolve, 200));
         try {
-          await turn.teardown?.();
+          await teardown?.();
         } finally {
-          await stopNative(turn.child);
+          await stopNative(child);
         }
       })();
     }
+    turn.cleanup ??= Promise.resolve();
     await turn.cleanup;
   }
 
   async abort(runId: string) {
-    await this.stopTurn(runId, "cancel");
+    await this.finishTurn(runId, "cancel");
   }
 
   async *run(
@@ -267,14 +285,12 @@ export class HermesRuntime implements AgentRuntime {
   ): AsyncIterable<AgentRuntimeEvent> {
     if (this.running.has(request.runId)) throw new Error("This Hermes run is already active.");
     const config = hermesConfig(request);
-    const queue = new RuntimeQueue<AgentRuntimeEvent>(
-      (error) => new Error("Hermes could not complete this turn.", { cause: error }),
-    );
+    const queue = new RuntimeQueue<AgentRuntimeEvent>(undefined, false);
     const turn: ActiveTurn = { active: true, queue };
     this.running.set(request.runId, turn);
     const stopOnSignal = () => {
       // The generator finalizer awaits the same cleanup promise and surfaces a failure.
-      void this.abort(request.runId).catch(() => {});
+      void this.finishTurn(request.runId, "cancel").catch(() => {});
     };
     context?.signal?.addEventListener("abort", stopOnSignal, { once: true });
     if (context?.signal?.aborted) stopOnSignal();
@@ -293,29 +309,28 @@ export class HermesRuntime implements AgentRuntime {
         throw new Error("Hermes context exceeded its size limit.");
       if (contextText) await writeFile(join(home, "SOUL.md"), contextText, { mode: 0o600 });
 
-      let fenced = false;
       const enqueue = (event: AgentRuntimeEvent) => {
+        if (!turn.active) return;
         const failure = queue.push(event);
-        if (failure && !fenced) {
-          fenced = true;
-          void this.stopTurn(request.runId, "failure").catch(() => {});
-        }
+        if (failure)
+          void this.finishTurn(
+            request.runId,
+            "failure",
+            new Error("Hermes could not complete this turn.", { cause: failure }),
+          ).catch(() => {});
       };
       const bridge = createArdurToolBridge(
         request,
         (event) => {
-          if (!fenced && turn?.active) enqueue(event);
+          enqueue(event);
         },
         () => {
-          fenced = true;
-          if (turn.active) {
-            void this.stopTurn(request.runId, "pause").catch(() => {});
-          }
+          void this.finishTurn(request.runId, "pause").catch(() => {});
         },
-        () => !fenced && !!turn?.active && !context?.signal?.aborted,
+        () => turn.active,
       );
       mcp = await startArdurMcpServer(bridge);
-      if (!turn.active || context?.signal?.aborted) return;
+      if (!turn.active) return;
       const relayKey = mcp.config.args.at(-1) ?? "";
       const secrets = [request.model.apiKey!, relayKey];
       const allowedToolTitles = new Set(
@@ -339,12 +354,8 @@ export class HermesRuntime implements AgentRuntime {
       });
       turn.child = result.child;
       turn.teardown = result.teardown;
-      if (!turn.active || context?.signal?.aborted) {
-        try {
-          await result.teardown();
-        } finally {
-          await stopNative(result.child);
-        }
+      if (!turn.active) {
+        await this.finishTurn(request.runId, turn.stopReason ?? "cancel");
         return;
       }
       const child = result.child;
@@ -370,9 +381,11 @@ export class HermesRuntime implements AgentRuntime {
             // The pinned adapter's generic MCP fallback uses the exact tool name as title;
             // rawInput contains arguments and kind is only a coarse category.
             if (!allowedToolTitles.has(title)) {
-              fenced = true;
-              queue.end(new Error("Hermes tried to use a tool this bot was not given."));
-              void this.stopTurn(request.runId, "failure").catch(() => {});
+              void this.finishTurn(
+                request.runId,
+                "failure",
+                new Error("Hermes tried to use a tool this bot was not given."),
+              ).catch(() => {});
               return;
             }
             enqueue({ type: "progress", text: redactMcpText(title, secrets), activity: true });
@@ -395,7 +408,7 @@ export class HermesRuntime implements AgentRuntime {
           });
           if (initialized.protocolVersion !== 1)
             throw new AcpClientError("ACP protocol version changed.");
-          if (!turn.active || context?.signal?.aborted) return;
+          if (!turn.active) return;
           const mcpConfig = result.mcpConfig ?? mcp!.config;
           const created = await client.request("session/new", {
             cwd: result.sessionCwd ?? workspace,
@@ -410,7 +423,7 @@ export class HermesRuntime implements AgentRuntime {
           });
           if (typeof created.sessionId !== "string" || !created.sessionId)
             throw new AcpClientError("ACP did not create a session.");
-          if (!turn.active || context?.signal?.aborted) return;
+          if (!turn.active) return;
           turn.sessionId = created.sessionId;
           await request.onRuntimeInfo?.({
             runtimeKind: "hermes" as RuntimeInfo["runtimeKind"],
@@ -418,7 +431,7 @@ export class HermesRuntime implements AgentRuntime {
             effortAttested: false,
             effortAttestationReason: "ACP does not attest the effort applied to provider requests.",
           });
-          if (!turn.active || context?.signal?.aborted) return;
+          if (!turn.active) return;
           const prompt = [
             { type: "text", text: request.prompt },
             ...(request.currentTurnImages ?? []).map((image) => ({
@@ -435,7 +448,7 @@ export class HermesRuntime implements AgentRuntime {
             },
             180_000,
           );
-          if (!turn.active || context?.signal?.aborted) return;
+          if (!turn.active) return;
           if (response.stopReason !== "end_turn")
             throw new Error("Hermes did not complete the turn.");
           emitText("", true);
@@ -459,17 +472,16 @@ export class HermesRuntime implements AgentRuntime {
                   typeof value.cachedReadTokens === "number" ? value.cachedReadTokens : undefined,
               });
           }
-          enqueue({ type: "done" });
-          queue.end();
+          void this.finishTurn(request.runId, "done").catch(() => {});
         } catch (error) {
           if (turn.active) {
-            fenced = true;
-            queue.end(
+            void this.finishTurn(
+              request.runId,
+              "failure",
               new Error("Hermes could not complete this turn.", {
                 cause: error instanceof AcpClientError ? error : undefined,
               }),
-            );
-            void this.stopTurn(request.runId, "failure").catch(() => {});
+            ).catch(() => {});
           }
         }
       };
@@ -481,7 +493,10 @@ export class HermesRuntime implements AgentRuntime {
         }
       } finally {
         try {
-          await this.abort(request.runId);
+          await this.finishTurn(
+            request.runId,
+            turn.active ? "cancel" : (turn.stopReason ?? "cancel"),
+          );
         } finally {
           await protocol;
         }
