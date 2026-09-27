@@ -4,6 +4,7 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Model in this group": "此群组中的模型",
   "Same as bot": "与 Bot 相同",
   "Could not save group model.": "无法保存群组模型。",
+  "This member's model changed. Reload the group.": "此成员的模型已更改。请重新加载群组。",
   "Sign-in timed out.": "登录已超时。",
   "Needs sign-in": "需要登录",
   "Not available": "不可用",

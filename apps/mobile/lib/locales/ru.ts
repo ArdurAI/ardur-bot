@@ -4,6 +4,8 @@ export const RU_MESSAGES: Record<string, string> = {
   "Model in this group": "Модель в этой группе",
   "Same as bot": "Как у бота",
   "Could not save group model.": "Не удалось сохранить модель группы.",
+  "This member's model changed. Reload the group.":
+    "Модель этого участника изменилась. Перезагрузите группу.",
   "Sign-in timed out.": "Время входа истекло.",
   "Needs sign-in": "Требуется вход",
   "Not available": "Недоступно",
