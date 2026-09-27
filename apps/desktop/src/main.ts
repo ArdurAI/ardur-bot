@@ -158,6 +158,9 @@ const remoteListener = new RemoteListener();
 
 markOnce("rk:main:module-evaluated");
 configureDesktopUserData(app, PERFORMANCE_USER_DATA);
+// Match the installed ardur.desktop entry for Wayland/X11 grouping while
+// retaining the legacy internal name used by encrypted storage.
+if (process.platform === "linux") app.setDesktopName("ardur");
 // Chromium ignores this switch once ready; it must be appended before that.
 capDiskCacheSize(app.commandLine);
 if (!app.requestSingleInstanceLock()) process.exit(0);
@@ -898,6 +901,7 @@ async function showLocalSettings() {
 }
 
 function installApplicationMenu() {
+  if (process.platform === "darwin") app.setAboutPanelOptions({ applicationName: "Ardur" });
   const localSettings: Electron.MenuItemConstructorOptions = {
     id: "local-server-settings",
     label: "Local Server Settings…",
@@ -926,19 +930,19 @@ function installApplicationMenu() {
     process.platform === "darwin"
       ? [
           {
-            label: app.name,
+            label: "Ardur",
             submenu: [
-              { role: "about" },
+              { role: "about", label: "About Ardur" },
               { type: "separator" },
               localSettings,
               changeServer,
               stopStack,
               { type: "separator" },
-              { role: "hide" },
+              { role: "hide", label: "Hide Ardur" },
               { role: "hideOthers" },
               { role: "unhide" },
               { type: "separator" },
-              { role: "quit" },
+              { role: "quit", label: "Quit Ardur" },
             ],
           },
           { role: "editMenu" },

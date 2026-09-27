@@ -96,9 +96,7 @@ export function deviceProxy(target: string, request: typeof fetch = fetch) {
       outgoing.end(body);
     } catch {
       outgoing.writeHead(502, { "content-type": "application/json" });
-      outgoing.end(
-        JSON.stringify({ message: "Home unreachable — check that Ardur is running" }),
-      );
+      outgoing.end(JSON.stringify({ message: "Home unreachable — check that Ardur is running" }));
     }
   };
 }
