@@ -92,7 +92,13 @@ const summary = {
   providers: [],
 };
 const actions = { openSettings: vi.fn(), openLearning: vi.fn() };
-const account = { name: "Test Owner", onUsage: vi.fn(), onSignOut: vi.fn() };
+const account = {
+  name: "Test Owner",
+  menuOpen: false,
+  onMenuOpenChange: vi.fn(),
+  onUsage: vi.fn(),
+  onSignOut: vi.fn(),
+};
 beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.clearAllMocks();

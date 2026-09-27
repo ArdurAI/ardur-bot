@@ -1,22 +1,24 @@
 import { Button, Popover, PopoverContent, PopoverTrigger } from "@ardurbot/ui-web";
 import { Trans } from "@lingui/react/macro";
 import { ChevronDown, Gauge, LayoutGrid, LogOut, Settings } from "lucide-react";
-import { useState } from "react";
 
 export function DashboardAccountArea({
   name,
+  menuOpen,
+  onMenuOpenChange,
   onSettings,
   onIntegrations,
   onUsage,
   onSignOut,
 }: {
   name: string;
+  menuOpen: boolean;
+  onMenuOpenChange: (open: boolean) => void;
   onSettings: () => void;
   onIntegrations: () => void;
   onUsage: () => void;
   onSignOut: () => void;
 }) {
-  const [menuOpen, setMenuOpen] = useState(false);
   const initials = name
     .split(" ")
     .map((part) => part[0])
@@ -29,7 +31,7 @@ export function DashboardAccountArea({
       data-testid="dashboard-account"
       className="mx-auto mb-4 flex max-w-6xl flex-col gap-3 rounded-xl border border-border bg-card p-3 sm:flex-row sm:items-center sm:justify-between"
     >
-      <Popover open={menuOpen} onOpenChange={setMenuOpen}>
+      <Popover open={menuOpen} onOpenChange={onMenuOpenChange}>
         <PopoverTrigger
           data-testid="user-menu-trigger"
           className="flex min-w-0 items-center gap-3 rounded-lg p-1 text-start hover:bg-accent"
@@ -52,7 +54,7 @@ export function DashboardAccountArea({
               variant="ghost"
               className="w-full justify-start font-normal"
               onClick={() => {
-                setMenuOpen(false);
+                onMenuOpenChange(false);
                 onSettings();
               }}
             >
@@ -63,7 +65,7 @@ export function DashboardAccountArea({
               variant="ghost"
               className="w-full justify-start font-normal"
               onClick={() => {
-                setMenuOpen(false);
+                onMenuOpenChange(false);
                 onUsage();
               }}
             >
@@ -74,7 +76,7 @@ export function DashboardAccountArea({
               variant="ghost"
               className="w-full justify-start font-normal"
               onClick={() => {
-                setMenuOpen(false);
+                onMenuOpenChange(false);
                 onSignOut();
               }}
             >

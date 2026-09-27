@@ -28,7 +28,13 @@ export function DashboardPage({
 }: {
   scope: string;
   spaceId?: string;
-  account: { name: string; onUsage: () => void; onSignOut: () => void };
+  account: {
+    name: string;
+    menuOpen: boolean;
+    onMenuOpenChange: (open: boolean) => void;
+    onUsage: () => void;
+    onSignOut: () => void;
+  };
 } & Pick<PanelActions, "openSettings">) {
   const [learningOpen, setLearningOpen] = useState(false);
   const panels = useDashboardPanels();
@@ -81,6 +87,8 @@ export function DashboardPage({
         <>
           <DashboardAccountArea
             name={account.name}
+            menuOpen={account.menuOpen}
+            onMenuOpenChange={account.onMenuOpenChange}
             onSettings={() => actions.openSettings("general")}
             onIntegrations={() => actions.openSettings("integrations")}
             onUsage={account.onUsage}

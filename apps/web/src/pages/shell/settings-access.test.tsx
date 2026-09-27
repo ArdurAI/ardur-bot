@@ -62,6 +62,8 @@ it("opens Settings from its persistent entry or either platform shortcut and cle
     return (
       <DashboardAccountArea
         name="Test Owner"
+        menuOpen={false}
+        onMenuOpenChange={() => undefined}
         onSettings={open}
         onIntegrations={() => undefined}
         onUsage={() => undefined}

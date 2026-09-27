@@ -654,6 +654,8 @@ export function ShellPage({
     outputTokens: number;
     runs: number;
   } | null>(null);
+  // Owned here so the menu survives the DashboardPage remount when bootstrap resolves its space.
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const autoBooted = useRef<string | null>(null);
   const routineSavePending = useRef(false);
   const webhookSecretProvisionRef = useRef(new Map<string, Promise<string>>());
@@ -3195,6 +3197,8 @@ export function ShellPage({
             spaceId={bootstrapMe?.spaceId}
             account={{
               name: userName,
+              menuOpen: accountMenuOpen,
+              onMenuOpenChange: setAccountMenuOpen,
               onUsage: () => {
                 void rpc.usage
                   .summary()
