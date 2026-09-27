@@ -63,14 +63,13 @@ export function IntegrationManage({
           .filter((computer) => computer.status.kind === "desktop")
           .map((computer) => computer.botId),
       );
-      setBots(
-        bots.filter(
-          (bot) =>
-            !bot.archivedAt && (connection.transport !== "host-cli" || localBots.has(bot.id)),
-        ),
+      const editableBots = bots.filter(
+        (bot) => !bot.archivedAt && (connection.transport !== "host-cli" || localBots.has(bot.id)),
       );
+      setBots(editableBots);
       setGrants(grants);
-      setOverrides(grants);
+      const editableBotIds = new Set(editableBots.map((bot) => bot.id));
+      setOverrides(grants.filter((grant) => editableBotIds.has(grant.botId)));
       setSpaceToolPolicies(connection.spaceToolPolicies);
       setToolIds(connection.spaceAllowedTools ?? []);
     } catch {
@@ -108,14 +107,16 @@ export function IntegrationManage({
       setScopeError(false);
       const updated = await rpc.integrations.assign({
         connectionId: connection.id,
-        overrides: overrides.map((override) => ({
-          botId: override.botId,
-          access: override.access,
-          toolIds:
-            override.access === "custom"
-              ? override.toolIds.filter((id) => toolIds.includes(id))
-              : [],
-        })),
+        overrides: overrides
+          .filter((override) => bots.some((bot) => bot.id === override.botId))
+          .map((override) => ({
+            botId: override.botId,
+            access: override.access,
+            toolIds:
+              override.access === "custom"
+                ? override.toolIds.filter((id) => toolIds.includes(id))
+                : [],
+          })),
         toolIds,
         ...(["notion", "atlassian"].includes(descriptor.id) ? { resourceConstraints } : {}),
         ...(JSON.stringify(spaceToolPolicies) === JSON.stringify(connection.spaceToolPolicies)
@@ -123,7 +124,7 @@ export function IntegrationManage({
           : { spaceToolPolicies }),
       });
       setGrants(updated);
-      setOverrides(updated);
+      setOverrides(updated.filter((grant) => bots.some((bot) => bot.id === grant.botId)));
       setSaved(true);
       await onChanged();
     } catch {

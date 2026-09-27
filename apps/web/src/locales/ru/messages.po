@@ -593,7 +593,7 @@ msgstr ""
 #: src/components/integrations/catalog/McpToolReview.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "All bots have access (bots you create later too)."
-msgstr ""
+msgstr "Доступ есть у всех ботов, включая созданных позже."
 
 #: src/pages/customize/CustomizeControls.tsx
 msgid "All categories"
@@ -602,7 +602,7 @@ msgstr ""
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 msgid "All desktop bots have access (including ones you create later)."
-msgstr ""
+msgstr "Доступ есть у всех ботов на компьютере, включая созданных позже."
 
 #: src/components/integrations/catalog/ToolPicker.tsx
 #: src/components/integrations/manage/ToolPermissions.tsx
@@ -4409,7 +4409,7 @@ msgstr "Светлая"
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 msgid "Limit tools"
-msgstr ""
+msgstr "Ограничить инструменты"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Linear issue"
@@ -5295,7 +5295,7 @@ msgstr "Нет"
 
 #: src/components/Context.tsx
 msgid "None available"
-msgstr ""
+msgstr "Нет доступных"
 
 #: src/pages/HostComputerSettings.tsx
 msgid "None detected"
@@ -6257,7 +6257,7 @@ msgstr "Удалить вебхук"
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 msgid "Removed"
-msgstr ""
+msgstr "Удалено"
 
 #. placeholder {0}: LOCAL_IMPORT_TOOL_NAMES[entry.importedFrom]
 #: src/pages/LearningTimeline.tsx
@@ -8099,11 +8099,11 @@ msgstr ""
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 msgid "Use all selected tools"
-msgstr ""
+msgstr "Использовать все выбранные инструменты"
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Use all selected tools, or choose a subset for this bot."
-msgstr ""
+msgstr "Используйте все выбранные инструменты или выберите часть из них для этого бота."
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Use default guidance"

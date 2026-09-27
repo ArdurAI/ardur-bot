@@ -6,7 +6,7 @@ import {
   SpaceToolPoliciesSchema,
 } from "@ardurbot/contracts";
 import type { IntegrationApproval } from "@ardurbot/core";
-import { approvalFor, effectiveTools, integrationToolKind } from "@ardurbot/core";
+import { approvalFor, effectiveMcpGrantTools, integrationToolKind } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import type { IntegrationApprovalAction } from "./approval-ask.js";
 import { prepareHostCommandApproval } from "./host-integration-tools.js";
@@ -45,11 +45,16 @@ export function grantedMcpTools(assignment: McpGrant, offered: readonly string[]
     (assignment.access !== undefined && !["custom", "inherit"].includes(assignment.access))
   )
     return [];
-  const bot =
-    assignment.access === "inherit"
-      ? stringTools(assignment.server.spaceAllowedTools)
-      : stringTools(assignment.allowedTools);
-  if (!assignment.server.catalogId) return effectiveTools(offered, bot, bot);
+  const space = stringTools(assignment.server.spaceAllowedTools);
+  const bot = stringTools(assignment.allowedTools);
+  if (!assignment.server.catalogId)
+    return effectiveMcpGrantTools(
+      offered,
+      space,
+      bot,
+      assignment.access,
+      Boolean(assignment.server.manifest),
+    );
   const descriptor = integrationById(assignment.server.catalogId);
   const manifest = IntegrationManifestSchema.safeParse(assignment.server.manifest);
   if (
@@ -59,7 +64,7 @@ export function grantedMcpTools(assignment: McpGrant, offered: readonly string[]
   )
     return [];
   const captured = new Set(manifest.data.tools.map((tool) => tool.id));
-  return effectiveTools(offered, stringTools(assignment.server.spaceAllowedTools), bot).filter(
+  return effectiveMcpGrantTools(offered, space, bot, assignment.access, true).filter(
     (id) => captured.has(id) && descriptor.toolPolicies[id]?.approval !== "disabled",
   );
 }

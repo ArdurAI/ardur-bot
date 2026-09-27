@@ -14,9 +14,10 @@ import {
   owningSandbox,
   toComputerRef,
 } from "@ardurbot/adapters";
-import type { MemoryPage, TaughtSkill } from "@ardurbot/contracts";
+import type { DelegationSnapshot, MemoryPage, TaughtSkill } from "@ardurbot/contracts";
 import { ACTIVE_RUN_STATUSES, ONCE_ROUTINE_CRON } from "@ardurbot/core";
 import {
+  admitDelegation,
   appendEvent,
   createThreadEvents,
   createThreadMessage,
@@ -24,6 +25,8 @@ import {
 } from "@ardurbot/db";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { createApp } from "../../../apps/api/src/app.ts";
+import { checkDelegationExecution } from "../../adapters/src/delegation-execution.js";
+import { integrationApprovalForCall } from "../../adapters/src/integration-access.js";
 import { sessionCookieHeader } from "./index.js";
 
 type App = { request: (input: string, init?: RequestInit) => Promise<Response> };
@@ -241,6 +244,225 @@ describeJourneys("required product journeys", () => {
       });
       expect((await listed(third.id)).map((entry) => entry.route?.resourceId)).toContain(server.id);
       expect(await listed(outsider.id, await rpc<Me>(app, otherCookie, "me"))).toEqual([]);
+    } finally {
+      await mcp.close();
+    }
+  });
+
+  it("keeps a custom MCP override below the space Block after a partial update", async () => {
+    const cookie = await signup(app, `custom-ceiling-${stamp}@ardurbot.test`, "Workspace");
+    const owner = await rpc<Me>(app, cookie, "me");
+    const bot = await rpc<Bot>(app, cookie, "bots/create", {
+      name: "Worker",
+      title: "Worker",
+      description: "Fixture",
+      instructions: "",
+    });
+    const tools = ["synthetic_read_a", "synthetic_read_b"].map((name) => ({
+      name,
+      description: "Read a fixture",
+      inputSchema: { type: "object" },
+    }));
+    const server = await prisma.mcpServer.create({
+      data: {
+        spaceId: owner.spaceId,
+        userId: owner.userId,
+        slug: `custom-${stamp}`,
+        name: "Fixture connection",
+        transport: "streamable_http",
+        endpoint: "https://example.test/mcp",
+        enabled: true,
+        connectionState: "connected",
+        manifest: captureIntegrationManifest(tools, "fixture"),
+        spaceAllowedTools: tools.map((tool) => tool.name),
+      },
+    });
+    await rpc(app, cookie, "mcp/servers/permissions", {
+      serverId: server.id,
+      toolIds: tools.map((tool) => tool.name),
+      overrides: [{ botId: bot.id, access: "custom", toolIds: tools.map((tool) => tool.name) }],
+    });
+    const mcp = new McpConnector(prisma, {} as never);
+    (
+      mcp as unknown as {
+        sessionFor: () => Promise<{ listTools: () => Promise<{ tools: typeof tools }> }>;
+      }
+    ).sessionFor = async () => ({ listTools: async () => ({ tools }) });
+    const context = {
+      botId: bot.id,
+      spaceId: owner.spaceId,
+      userId: owner.userId,
+      operationId: "fixture",
+      traceId: "fixture",
+      signal: new AbortController().signal,
+    };
+    try {
+      expect((await mcp.discoverTools(context)).map((tool) => tool.route?.toolName)).toContain(
+        tools[1]!.name,
+      );
+      await rpc(app, cookie, "mcp/servers/permissions", {
+        serverId: server.id,
+        toolIds: [tools[0]!.name],
+        overrides: [],
+      });
+      const current = await prisma.mcpServer.findUniqueOrThrow({ where: { id: server.id } });
+      expect(
+        (
+          await prisma.botMcpServer.findFirstOrThrow({
+            where: { botId: bot.id, serverId: server.id },
+          })
+        ).allowedTools,
+      ).toEqual(tools.map((tool) => tool.name));
+      expect((await mcp.discoverTools(context)).map((tool) => tool.route?.toolName)).toEqual([
+        tools[0]!.name,
+      ]);
+      const route = {
+        connectorId: "mcp" as const,
+        resourceId: server.id,
+        resourceRevision: current.revision,
+        toolName: tools[1]!.name,
+      };
+      const events = [];
+      for await (const event of mcp.execute(
+        { tool: `mcp__${server.slug}__${tools[1]!.name}`, args: {}, executionId: "blocked", route },
+        context,
+      ))
+        events.push(event);
+      expect(events).toMatchObject([{ type: "error" }]);
+      expect(await integrationApprovalForCall(prisma, route, context, {})).toBe("disabled");
+    } finally {
+      await mcp.close();
+    }
+  });
+
+  it("admits and executes an inherited integration call through delegation", async () => {
+    const cookie = await signup(app, `inherited-delegation-${stamp}@ardurbot.test`, "Workspace");
+    const owner = await rpc<Me>(app, cookie, "me");
+    const requester = await rpc<Bot>(app, cookie, "bots/create", {
+      name: "Requester",
+      title: "Requester",
+      description: "Fixture",
+      instructions: "",
+    });
+    const worker = await rpc<Bot>(app, cookie, "bots/create", {
+      name: "Worker",
+      title: "Worker",
+      description: "Fixture",
+      instructions: "",
+    });
+    const tool = {
+      name: "synthetic_read",
+      description: "Read a fixture",
+      inputSchema: { type: "object" },
+    };
+    const server = await prisma.mcpServer.create({
+      data: {
+        spaceId: owner.spaceId,
+        userId: owner.userId,
+        slug: `delegation-${stamp}`,
+        name: "Fixture connection",
+        transport: "streamable_http",
+        endpoint: "https://example.test/mcp",
+        catalogId: "github",
+        enabled: true,
+        connectionState: "connected",
+        manifest: captureIntegrationManifest([tool], "fixture"),
+        spaceAllowedTools: [tool.name],
+      },
+    });
+    expect(await prisma.botMcpServer.count({ where: { serverId: server.id } })).toBe(0);
+    const completed = await sendAndWait(app, cookie, requester.id, "Read the fixture");
+    const pin: DelegationSnapshot["pin"] = {
+      runtimeKind: "pi",
+      provider: "fixture",
+      modelId: "fixture",
+      effort: "off",
+      credentialId: "fixture",
+      revision: 1,
+    };
+    const parent = await prisma.run.update({
+      where: { id: completed.run.id },
+      data: { status: "running", runtimePin: pin },
+    });
+    const recipient = await prisma.bot.findUniqueOrThrow({
+      where: { id: worker.id },
+      include: { computer: true },
+    });
+    const snapshot: DelegationSnapshot = {
+      pin,
+      computer: {
+        id: recipient.computerId,
+        mode: recipient.computer?.scope === "dedicated" ? "dedicated" : "team",
+        kind: recipient.computer?.kind ?? null,
+      },
+      destination: { host: null, local: false },
+    };
+    const handoff = await prisma.$transaction((tx) =>
+      admitDelegation(tx, {
+        spaceId: owner.spaceId,
+        userId: owner.userId,
+        parentRunId: parent.id,
+        actingBotId: worker.id,
+        actingName: "Worker",
+        kind: "message",
+        admissionKey: `inherited-${stamp}`,
+        prompt: "Read the fixture",
+        snapshot,
+      }),
+    );
+    expect((handoff.authority as { connectors: string[] }).connectors).toContain(
+      `mcp:${server.id}:${tool.name}`,
+    );
+    await prisma.delegation.update({ where: { id: handoff.id }, data: { status: "running" } });
+    const run = await prisma.run.create({
+      data: {
+        spaceId: owner.spaceId,
+        userId: owner.userId,
+        botId: worker.id,
+        threadId: parent.threadId,
+        taskId: parent.taskId,
+        status: "running",
+        trigger: "delegation",
+        delegationId: handoff.id,
+        delegationRootTaskId: parent.taskId,
+        runtimePin: pin,
+      },
+    });
+    const route = {
+      connectorId: "mcp" as const,
+      resourceId: server.id,
+      resourceRevision: server.revision,
+      toolName: tool.name,
+    };
+    expect(await checkDelegationExecution(prisma, run.id, "read_file", route)).toBeUndefined();
+    const mcp = new McpConnector(prisma, {} as never);
+    (
+      mcp as unknown as {
+        sessionFor: () => Promise<{
+          listTools: () => Promise<{ tools: (typeof tool)[] }>;
+          callTool: () => Promise<{ content: { type: string; text: string }[] }>;
+        }>;
+      }
+    ).sessionFor = async () => ({
+      listTools: async () => ({ tools: [tool] }),
+      callTool: async () => ({ content: [{ type: "text", text: "ok" }] }),
+    });
+    try {
+      const context = {
+        botId: worker.id,
+        spaceId: owner.spaceId,
+        userId: owner.userId,
+        operationId: "fixture",
+        traceId: "fixture",
+        signal: new AbortController().signal,
+      };
+      const events = [];
+      for await (const event of mcp.execute(
+        { tool: `mcp__${server.slug}__${tool.name}`, args: {}, executionId: "delegated", route },
+        context,
+      ))
+        events.push(event);
+      expect(events).toMatchObject([{ type: "result" }]);
     } finally {
       await mcp.close();
     }

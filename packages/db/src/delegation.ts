@@ -11,12 +11,14 @@ import {
   DelegationAuthoritySchema,
   DelegationSnapshotSchema,
   delegationProblem,
+  IntegrationManifestSchema,
   LocalityPolicySchema,
   TaskCardSchema,
 } from "@ardurbot/contracts";
 import {
   allowsModelDestination,
   delegationDifferences,
+  effectiveMcpGrantTools,
   effectiveRemoteAuthority,
   intersectDelegationAuthority,
   redactTaskValue,
@@ -115,6 +117,7 @@ export async function admitDelegation(
           userId: input.userId,
           archivedAt: null,
         },
+        include: { computer: true },
       });
   const space = await tx.space.findUniqueOrThrow({ where: { id: input.spaceId } });
   const now = new Date();
@@ -199,21 +202,56 @@ export async function admitDelegation(
       .map((row) => `${row.connectorId}:${row.provider}`),
     ...installs.map((row) => `installed:${row.id}`),
   ];
-  const connectors = async (botId: string) =>
-    (
-      await tx.botMcpServer.findMany({
-        where: { botId, spaceId: input.spaceId, userId: input.userId, server: { enabled: true } },
-      })
-    ).flatMap((row) => [
-      `mcp:${row.serverId}`,
-      ...(!row.needsReview && !row.allowAllTools && Array.isArray(row.allowedTools)
-        ? row.allowedTools
-            .filter((tool): tool is string => typeof tool === "string")
-            .map((tool) => `mcp:${row.serverId}:${tool}`)
-        : []),
-    ]);
-  const requesterConnectors = [...sharedConnectors, ...(await connectors(parent.botId))];
-  const recipientConnectors = [...sharedConnectors, ...(await connectors(recipient.id))];
+  const servers = await tx.mcpServer.findMany({
+    where: { spaceId: input.spaceId, userId: input.userId, enabled: true },
+  });
+  const connectors = async (botId: string, desktop: boolean) => {
+    const rows = await tx.botMcpServer.findMany({
+      where: { botId, spaceId: input.spaceId, userId: input.userId },
+    });
+    const overrides = new Map(rows.map((row) => [row.serverId, row]));
+    return servers.flatMap((server) => {
+      if (server.transport === "host-cli" && !desktop) return [];
+      const row = overrides.get(server.id);
+      if (
+        server.needsReview ||
+        row?.needsReview ||
+        row?.allowAllTools ||
+        row?.access === "none" ||
+        (row?.access !== undefined && !["inherit", "custom"].includes(row.access))
+      )
+        return [];
+      const manifest = IntegrationManifestSchema.safeParse(server.manifest);
+      if (server.manifest && !manifest.success) return [];
+      if (server.catalogId && (server.connectionState !== "connected" || !manifest.success))
+        return [];
+      const allowed = Array.isArray(row?.allowedTools)
+        ? row.allowedTools.filter((tool): tool is string => typeof tool === "string")
+        : [];
+      const space = Array.isArray(server.spaceAllowedTools)
+        ? server.spaceAllowedTools.filter((tool): tool is string => typeof tool === "string")
+        : [];
+      const offered = manifest.success ? manifest.data.tools.map((tool) => tool.id) : allowed;
+      const tools = effectiveMcpGrantTools(
+        offered,
+        space,
+        allowed,
+        row?.access ?? (row ? "custom" : "inherit"),
+        manifest.success,
+      );
+      return tools.length
+        ? [`mcp:${server.id}`, ...tools.map((tool) => `mcp:${server.id}:${tool}`)]
+        : [];
+    });
+  };
+  const requesterConnectors = [
+    ...sharedConnectors,
+    ...(await connectors(parent.botId, requester.computer?.kind === "desktop")),
+  ];
+  const recipientConnectors = [
+    ...sharedConnectors,
+    ...(await connectors(recipient.id, recipient.computer?.kind === "desktop")),
+  ];
   const layers = [
     { scopes: scopes("bot", parent.botId), connectors: requesterConnectors },
     { scopes: scopes("bot", recipient.id), connectors: recipientConnectors },

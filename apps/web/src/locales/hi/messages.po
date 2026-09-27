@@ -593,7 +593,7 @@ msgstr ""
 #: src/components/integrations/catalog/McpToolReview.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "All bots have access (bots you create later too)."
-msgstr ""
+msgstr "सभी बॉट को पहुँच है (बाद में बनाए गए बॉट को भी)।"
 
 #: src/pages/customize/CustomizeControls.tsx
 msgid "All categories"
@@ -602,7 +602,7 @@ msgstr ""
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 msgid "All desktop bots have access (including ones you create later)."
-msgstr ""
+msgstr "सभी डेस्कटॉप बॉट को पहुँच है (बाद में बनाए गए बॉट को भी)।"
 
 #: src/components/integrations/catalog/ToolPicker.tsx
 #: src/components/integrations/manage/ToolPermissions.tsx
@@ -4409,7 +4409,7 @@ msgstr "लाइट"
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 msgid "Limit tools"
-msgstr ""
+msgstr "टूल सीमित करें"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Linear issue"
@@ -5295,7 +5295,7 @@ msgstr "कोई नहीं"
 
 #: src/components/Context.tsx
 msgid "None available"
-msgstr ""
+msgstr "कोई उपलब्ध नहीं"
 
 #: src/pages/HostComputerSettings.tsx
 msgid "None detected"
@@ -6257,7 +6257,7 @@ msgstr ""
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 msgid "Removed"
-msgstr ""
+msgstr "हटाया गया"
 
 #. placeholder {0}: LOCAL_IMPORT_TOOL_NAMES[entry.importedFrom]
 #: src/pages/LearningTimeline.tsx
@@ -8099,11 +8099,11 @@ msgstr ""
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 msgid "Use all selected tools"
-msgstr ""
+msgstr "सभी चुने हुए टूल इस्तेमाल करें"
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Use all selected tools, or choose a subset for this bot."
-msgstr ""
+msgstr "सभी चुने हुए टूल इस्तेमाल करें या इस बॉट के लिए कुछ टूल चुनें।"
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Use default guidance"

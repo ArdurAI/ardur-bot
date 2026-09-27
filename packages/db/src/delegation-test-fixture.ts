@@ -123,6 +123,18 @@ export function fixture() {
     },
     space: { findUniqueOrThrow: vi.fn(async () => ({ allowedModelDestinations: null })) },
     connection: { findMany: vi.fn(async () => []) },
+    mcpServer: {
+      findMany: vi.fn(async () =>
+        ["shared", "private"].map((id) => ({
+          id,
+          enabled: true,
+          catalogId: null,
+          manifest: null,
+          spaceAllowedTools: [],
+          needsReview: false,
+        })),
+      ),
+    },
     capabilityInstall: { findMany: vi.fn(async () => []) },
     remoteAuthorityPolicy: { findMany: vi.fn(async () => policies) },
     botMcpServer: {

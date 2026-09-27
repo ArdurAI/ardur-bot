@@ -70,6 +70,43 @@ describe("transactional delegation admission", () => {
       problem: { code: "authority-exceeded" },
     });
   });
+  it.each(["absent", "explicit inherit"])(
+    "records %s MCP inheritance in both delegation layers",
+    async (mode) => {
+      const f = fixture();
+      f.tx.mcpServer.findMany.mockResolvedValue([
+        {
+          id: "shared",
+          enabled: true,
+          catalogId: "github",
+          connectionState: "connected",
+          manifest: {
+            capturedAt: new Date().toISOString(),
+            serverVersion: null,
+            account: null,
+            tools: [{ id: "read", description: "Read", inputSchemaDigest: "a".repeat(64) }],
+          },
+          spaceAllowedTools: ["read"],
+          needsReview: false,
+        },
+      ] as never);
+      f.tx.botMcpServer.findMany.mockImplementation(async () =>
+        mode === "absent"
+          ? []
+          : ([
+              {
+                serverId: "shared",
+                access: "inherit",
+                allowedTools: [],
+                allowAllTools: false,
+                needsReview: false,
+              },
+            ] as never),
+      );
+      const row = await f.admit();
+      expect(row.authority).toMatchObject({ connectors: ["mcp:shared", "mcp:shared:read"] });
+    },
+  );
   it.each([
     { host: "api.example.test", local: false },
     { host: null, local: false },

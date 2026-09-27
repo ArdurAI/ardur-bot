@@ -593,7 +593,7 @@ msgstr ""
 #: src/components/integrations/catalog/McpToolReview.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "All bots have access (bots you create later too)."
-msgstr ""
+msgstr "所有机器人均可访问（包括以后创建的机器人）。"
 
 #: src/pages/customize/CustomizeControls.tsx
 msgid "All categories"
@@ -602,7 +602,7 @@ msgstr ""
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 msgid "All desktop bots have access (including ones you create later)."
-msgstr ""
+msgstr "所有桌面机器人均可访问（包括以后创建的机器人）。"
 
 #: src/components/integrations/catalog/ToolPicker.tsx
 #: src/components/integrations/manage/ToolPermissions.tsx
@@ -4409,7 +4409,7 @@ msgstr "浅色"
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 msgid "Limit tools"
-msgstr ""
+msgstr "限制工具"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Linear issue"
@@ -5295,7 +5295,7 @@ msgstr "无"
 
 #: src/components/Context.tsx
 msgid "None available"
-msgstr ""
+msgstr "无可用项"
 
 #: src/pages/HostComputerSettings.tsx
 msgid "None detected"
@@ -6257,7 +6257,7 @@ msgstr "移除 Webhook"
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 msgid "Removed"
-msgstr ""
+msgstr "已移除"
 
 #. placeholder {0}: LOCAL_IMPORT_TOOL_NAMES[entry.importedFrom]
 #: src/pages/LearningTimeline.tsx
@@ -8099,11 +8099,11 @@ msgstr ""
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 msgid "Use all selected tools"
-msgstr ""
+msgstr "使用所有选定工具"
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Use all selected tools, or choose a subset for this bot."
-msgstr ""
+msgstr "使用所有选定工具，或为此机器人选择部分工具。"
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Use default guidance"

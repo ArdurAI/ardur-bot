@@ -1008,6 +1008,22 @@ describe("catalog connection lifecycle", () => {
     });
     expect(await f.service.grants(actor, "connection")).toEqual([]);
   });
+  it("preserves an omitted removal while saving the space tools", async () => {
+    const f = fixture();
+    await f.service.assign(actor, {
+      connectionId: "connection",
+      toolIds: ["synthetic_read"],
+      overrides: [{ botId: "bot", access: "none", toolIds: [] }],
+    });
+    await f.service.assign(actor, {
+      connectionId: "connection",
+      toolIds: [],
+      overrides: [],
+    });
+    expect(await f.service.grants(actor, "connection")).toEqual([
+      { botId: "bot", access: "none", toolIds: [], needsReview: false },
+    ]);
+  });
   it("persists owner read policies, returns them, preserves omitted policies and supports Ask first", async () => {
     const f = fixture();
     const input = { connectionId: "connection", botIds: ["bot"], toolIds: ["synthetic_read"] };

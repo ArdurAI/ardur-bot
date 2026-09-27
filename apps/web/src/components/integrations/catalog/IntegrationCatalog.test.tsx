@@ -497,6 +497,26 @@ describe("Settings integration catalog", () => {
     await click(button("Manage"));
     expect(approval().value).toBe("ask");
   });
+  it("omits an archived bot's hidden removal from Manage saves", async () => {
+    connections = [{ ...connected }];
+    api.bots.mockResolvedValue([
+      { id: "active", name: "Active", archivedAt: null },
+      { id: "archived", name: "Archived", archivedAt: "2026-09-27T00:00:00.000Z" },
+    ]);
+    api.grants.mockResolvedValue([
+      { botId: "active", access: "custom", toolIds: ["synthetic_read"], needsReview: false },
+      { botId: "archived", access: "none", toolIds: [], needsReview: false },
+    ]);
+    api.assign.mockResolvedValue([]);
+    await mount();
+    await click(button("Manage"));
+    await click(button("Save"));
+    expect(api.assign).toHaveBeenCalledWith(
+      expect.objectContaining({
+        overrides: [{ botId: "active", access: "custom", toolIds: ["synthetic_read"] }],
+      }),
+    );
+  });
   it("shows registration help and review state with one primary action", async () => {
     connections = [
       { ...connected, state: "needs-client-registration" },

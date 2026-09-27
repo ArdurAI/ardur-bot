@@ -593,7 +593,7 @@ msgstr ""
 #: src/components/integrations/catalog/McpToolReview.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "All bots have access (bots you create later too)."
-msgstr ""
+msgstr "Alle Bots haben Zugriff (auch Bots, die du später erstellst)."
 
 #: src/pages/customize/CustomizeControls.tsx
 msgid "All categories"
@@ -602,7 +602,7 @@ msgstr ""
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 msgid "All desktop bots have access (including ones you create later)."
-msgstr ""
+msgstr "Alle Desktop-Bots haben Zugriff (auch Bots, die du später erstellst)."
 
 #: src/components/integrations/catalog/ToolPicker.tsx
 #: src/components/integrations/manage/ToolPermissions.tsx
@@ -4409,7 +4409,7 @@ msgstr "Hell"
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 msgid "Limit tools"
-msgstr ""
+msgstr "Tools einschränken"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Linear issue"
@@ -5295,7 +5295,7 @@ msgstr "Keine"
 
 #: src/components/Context.tsx
 msgid "None available"
-msgstr ""
+msgstr "Keine verfügbar"
 
 #: src/pages/HostComputerSettings.tsx
 msgid "None detected"
@@ -6257,7 +6257,7 @@ msgstr ""
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 msgid "Removed"
-msgstr ""
+msgstr "Entfernt"
 
 #. placeholder {0}: LOCAL_IMPORT_TOOL_NAMES[entry.importedFrom]
 #: src/pages/LearningTimeline.tsx
@@ -8099,11 +8099,11 @@ msgstr ""
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
 msgid "Use all selected tools"
-msgstr ""
+msgstr "Alle ausgewählten Tools verwenden"
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 msgid "Use all selected tools, or choose a subset for this bot."
-msgstr ""
+msgstr "Alle ausgewählten Tools verwenden oder eine Auswahl für diesen Bot festlegen."
 
 #: src/pages/ExternalConversationSettings.tsx
 msgid "Use default guidance"

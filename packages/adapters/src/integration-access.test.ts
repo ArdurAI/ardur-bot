@@ -144,6 +144,32 @@ const lazy = (name: string): ConnectorCall => ({
 });
 
 describe("MCP integration authorization", () => {
+  it("caps a persisted custom override after a space Block with no override update", async () => {
+    const f = fixture();
+    const [first, second] = [tools[0]!.name, tools[1]!.name];
+    f.assignment.server.catalogId = null;
+    Object.assign(f.assignment, { access: "custom" });
+    f.assignment.allowedTools = [first, second];
+    f.assignment.server.spaceAllowedTools = [first, second];
+    expect(
+      (await f.connector.discoverTools(context)).map((entry) => entry.route?.toolName),
+    ).toContain(second);
+
+    // The space Block updates the server revision but leaves the custom row intact.
+    f.assignment.server.spaceAllowedTools = [first];
+    f.assignment.server.revision = 2;
+    const blocked = { ...direct(second), route: { ...direct(second).route!, resourceRevision: 2 } };
+    expect(grantedMcpTools(f.assignment, [first, second])).toEqual([first]);
+    expect(
+      (await f.connector.discoverTools(context)).map((entry) => entry.route?.toolName),
+    ).toEqual([first]);
+    expect(await collect(f.connector, blocked)).toMatchObject([{ type: "error" }]);
+    expect(await integrationApprovalForCall(f.db as never, blocked.route, context, {})).toBe(
+      "disabled",
+    );
+    expect(f.calls).toEqual([]);
+    await f.connector.close();
+  });
   it("inherits the space set and preserves custom, removed, and review states", () => {
     const f = fixture();
     const first = tools[0]!.name;
