@@ -322,17 +322,11 @@ export async function wakeGoalCoordinatorForDelegation(prisma: PrismaClient, del
         },
         orderBy: { createdAt: "asc" },
       });
+      // A completion may not steer an unrelated or approval-held turn.
+      // Leave the claim open so reconciliation can dispatch after that turn ends.
+      if (active) return null;
       let runId: string | null = null;
-      if (active) {
-        await tx.steeringMessage.create({
-          data: {
-            messageId: row.summaryMessageId,
-            botId: goal.coordinatorBotId,
-            userId: goal.userId,
-            runId: active.id,
-          },
-        });
-      } else {
+      {
         const task = await tx.task.create({
           data: {
             spaceId: goal.spaceId,
@@ -370,7 +364,7 @@ export async function wakeGoalCoordinatorForDelegation(prisma: PrismaClient, del
           goalId: goal.id,
           delegationId: row.id,
           rule: "completion",
-          ...(runId ? { runId } : { steeringRunId: active?.id }),
+          ...(runId ? { runId } : {}),
         },
       });
       return { runId, threadId: goal.threadId, eventSeq: event.seq };

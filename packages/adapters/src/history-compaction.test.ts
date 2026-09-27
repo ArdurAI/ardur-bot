@@ -6,6 +6,7 @@ import type {
 } from "@ardurbot/adapter-kit";
 import { historyCompactJob } from "@ardurbot/adapter-kit";
 import type { MessageBlock, RuntimeProblem } from "@ardurbot/contracts";
+import { RECEIPT_FILTERED_SUMMARY_MARKER } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -19,6 +20,8 @@ import {
   selectCompactedHistory,
   shouldEnqueueCompaction,
 } from "./history-compaction.js";
+
+const marked = (summary: string) => `${RECEIPT_FILTERED_SUMMARY_MARKER}${summary}`;
 
 describe("shouldEnqueueCompaction", () => {
   it("is false when nothing has aged out of the window yet", () => {
@@ -81,10 +84,20 @@ describe("selectCompactedHistory", () => {
       content: `message ${from + index}`,
     }));
 
+  it("drops a summary written before receipt filtering and keeps the raw window", () => {
+    const visible = messages(20, 69);
+    const selected = selectCompactedHistory({
+      messages: visible,
+      summary: "EXPIRED_RECEIPT_SENTINEL",
+      historyCompactedUpToSeq: 49,
+    });
+    expect(selected).toEqual({ history: visible, summary: null, usedLocalSummary: false });
+  });
+
   it("uses the summary and every contiguous message after its cursor", () => {
     const selected = selectCompactedHistory({
       messages: messages(0, 199),
-      summary: "facts through 149",
+      summary: marked("facts through 149"),
       historyCompactedUpToSeq: 149,
     });
 
@@ -95,11 +108,44 @@ describe("selectCompactedHistory", () => {
     );
   });
 
+  it("keeps marked and exact legacy New chat boundaries when older messages remain visible", () => {
+    for (const summary of [marked("New chat."), "New chat."]) {
+      const selected = selectCompactedHistory({
+        messages: messages(0, 51),
+        summary,
+        historyCompactedUpToSeq: 49,
+      });
+
+      expect(selected).toEqual({
+        history: messages(50, 51),
+        summary: "New chat.",
+        usedLocalSummary: true,
+      });
+    }
+  });
+
+  it("rejects similar unmarked summaries", () => {
+    const visible = messages(0, 51);
+    for (const summary of [
+      "New chat. ",
+      "New chat. Earlier context",
+      "[pending-summary-rebuild:v1]",
+    ]) {
+      expect(
+        selectCompactedHistory({
+          messages: visible,
+          summary,
+          historyCompactedUpToSeq: 49,
+        }),
+      ).toEqual({ history: visible, summary: null, usedLocalSummary: false });
+    }
+  });
+
   it("keeps the full fallback window when the visible history starts after the cursor", () => {
     const visible = messages(100, 299);
     const selected = selectCompactedHistory({
       messages: visible,
-      summary: "facts through 49",
+      summary: marked("facts through 49"),
       historyCompactedUpToSeq: 49,
     });
 
@@ -111,7 +157,7 @@ describe("selectCompactedHistory", () => {
   it("keeps all 200 uncompacted messages instead of blindly shrinking to 50", () => {
     const selected = selectCompactedHistory({
       messages: messages(100, 299),
-      summary: "facts through 99",
+      summary: marked("facts through 99"),
       historyCompactedUpToSeq: 99,
     });
 
@@ -128,7 +174,7 @@ describe("selectCompactedHistory", () => {
         messages(0, 2)[2]!,
         { ...messages(4, 4)[0]! },
       ],
-      summary: "facts through 0",
+      summary: marked("facts through 0"),
       historyCompactedUpToSeq: 0,
     });
 
@@ -225,9 +271,11 @@ function compactionHarness(
     deploymentModelKey?: string;
     settings?: { defaultModelProvider: string | null; defaultModelId: string | null } | null;
     messages?: HarnessMessage[];
+    quietReceiptIds?: string[];
     nextMessageSeq?: number;
     historyCompactedUpToSeq?: number | null;
     historyCompactionSummary?: string | null;
+    legacySummary?: boolean;
     historyCompactionGeneration?: number;
     wasCleared?: boolean;
     resolveModel?: (scope: {
@@ -256,7 +304,11 @@ function compactionHarness(
     nextEventSeq: 0,
     nextMessageSeq: options.nextMessageSeq ?? messages.length,
     historyCompactedUpToSeq: options.historyCompactedUpToSeq ?? (null as number | null),
-    historyCompactionSummary: options.historyCompactionSummary ?? (null as string | null),
+    historyCompactionSummary: options.historyCompactionSummary
+      ? options.legacySummary
+        ? options.historyCompactionSummary
+        : marked(options.historyCompactionSummary)
+      : (null as string | null),
     historyCompactionGeneration: options.historyCompactionGeneration ?? 0,
   };
   const memoryConfig =
@@ -276,12 +328,15 @@ function compactionHarness(
             id: string;
             historyCompactedUpToSeq: number | null;
             historyCompactionGeneration: number;
+            historyCompactionSummary?: string;
           };
-          data: { historyCompactedUpToSeq: number; historyCompactionSummary: string };
+          data: { historyCompactedUpToSeq: number | null; historyCompactionSummary: string | null };
         }) => {
           if (
             thread.historyCompactedUpToSeq !== args.where.historyCompactedUpToSeq ||
-            thread.historyCompactionGeneration !== args.where.historyCompactionGeneration
+            thread.historyCompactionGeneration !== args.where.historyCompactionGeneration ||
+            (args.where.historyCompactionSummary !== undefined &&
+              thread.historyCompactionSummary !== args.where.historyCompactionSummary)
           ) {
             return { count: 0 };
           }
@@ -310,6 +365,9 @@ function compactionHarness(
           return ordered.slice(0, args.take ?? ordered.length);
         },
       ),
+    },
+    botMessageDelivery: {
+      findMany: vi.fn(async () => (options.quietReceiptIds ?? []).map((id) => ({ id }))),
     },
     deploymentSettings: {
       findUnique: vi.fn(async () => options.settings ?? null),
@@ -487,7 +545,7 @@ describe("compactHistory", () => {
       },
       data: {
         historyCompactedUpToSeq: 49,
-        historyCompactionSummary: "Summary of 50 messages.",
+        historyCompactionSummary: marked("Summary of 50 messages."),
       },
     });
   });
@@ -533,6 +591,41 @@ describe("compactHistory", () => {
     expect(request.prompt).toContain("[image: diagram.png]");
   });
 
+  it("omits ineligible quiet receipt text from a compacted transcript", async () => {
+    const messages: HarnessMessage[] = Array.from({ length: 50 }, (_, seq) => ({
+      seq,
+      role: "user",
+      blocks: [{ kind: "text", text: `message ${seq}` }],
+    }));
+    messages[12]!.blocks = [
+      {
+        kind: "bot_message_received",
+        fromBotId: "sender",
+        fromBotName: "Sender",
+        text: "EXPIRED_RECEIPT_SENTINEL",
+        deliveryId: "quiet-12",
+      },
+      { kind: "text", text: "Keep adjacent content" },
+    ];
+    const harness = compactionHarness({
+      deploymentModelKey: "fixture-key",
+      messages,
+      quietReceiptIds: ["quiet-12"],
+    });
+    harness.runtime.run.mockImplementationOnce(async function* (request) {
+      yield { type: "done", text: request.prompt };
+    });
+
+    await compactHistory(harness.deps, "thread-1");
+
+    const [request] = harness.runtime.run.mock.calls[0]!;
+    expect(request.prompt).not.toContain("EXPIRED_RECEIPT_SENTINEL");
+    expect(request.prompt).toContain("Keep adjacent content");
+    expect(harness.thread.historyCompactionSummary).not.toContain("EXPIRED_RECEIPT_SENTINEL");
+    expect(harness.thread.historyCompactionSummary).toContain("Keep adjacent content");
+    expect(harness.thread.historyCompactedUpToSeq).toBe(49);
+  });
+
   it("compacts locally without a semantic memory provider", async () => {
     const harness = compactionHarness({
       deploymentModelKey: "openrouter-key",
@@ -543,7 +636,7 @@ describe("compactHistory", () => {
 
     expect(harness.runtime.run).toHaveBeenCalledOnce();
     expect(harness.saveMemory).not.toHaveBeenCalled();
-    expect(harness.thread.historyCompactionSummary).toBe("Summary of 50 messages.");
+    expect(harness.thread.historyCompactionSummary).toBe(marked("Summary of 50 messages."));
     expect(harness.thread.historyCompactedUpToSeq).toBe(49);
   });
 
@@ -553,7 +646,7 @@ describe("compactHistory", () => {
 
     await compactHistory(harness.deps, "thread-1");
 
-    expect(harness.thread.historyCompactionSummary).toBe("Summary of 50 messages.");
+    expect(harness.thread.historyCompactionSummary).toBe(marked("Summary of 50 messages."));
     expect(harness.thread.historyCompactedUpToSeq).toBe(49);
     expect(harness.saveMemory).not.toHaveBeenCalled();
   });
@@ -601,7 +694,7 @@ describe("compactHistory", () => {
     expect(request.prompt).toContain("message 0");
     expect(request.prompt).toContain("message 99");
     expect(harness.thread.historyCompactedUpToSeq).toBe(99);
-    expect(harness.thread.historyCompactionSummary).toBe("Summary of 50 messages.");
+    expect(harness.thread.historyCompactionSummary).toBe(marked("Summary of 50 messages."));
   });
 
   it("rebuilds post-clear legacy coverage that starts above sequence zero", async () => {
@@ -624,7 +717,7 @@ describe("compactHistory", () => {
     expect(request.prompt).toContain("post-clear message 99");
     expect(request.prompt).not.toContain("post-clear message 100");
     expect(harness.thread.historyCompactedUpToSeq).toBe(99);
-    expect(harness.thread.historyCompactionSummary).toBe("Summary of 50 messages.");
+    expect(harness.thread.historyCompactionSummary).toBe(marked("Summary of 50 messages."));
   });
 
   it("compacts new messages after a cleared thread without bootstrapping deleted history", async () => {
@@ -647,6 +740,55 @@ describe("compactHistory", () => {
     expect(request.prompt).not.toContain("message 0");
     expect(harness.saveMemory).not.toHaveBeenCalled();
     expect(harness.thread.historyCompactedUpToSeq).toBe(99);
+  });
+
+  it("keeps the New chat boundary when compacting a later conversation", async () => {
+    const harness = compactionHarness({
+      deploymentModelKey: "fixture-key",
+      messages: Array.from({ length: 100 }, (_, seq) => ({
+        seq,
+        role: "user",
+        blocks: [{ kind: "text", text: seq < 50 ? `old turn ${seq}` : `new turn ${seq}` }],
+      })),
+      nextMessageSeq: 100,
+      historyCompactedUpToSeq: 49,
+      historyCompactionSummary: "New chat.",
+      historyCompactionGeneration: 1,
+    });
+
+    await compactHistory(harness.deps, "thread-1");
+
+    const [request] = harness.runtime.run.mock.calls[0]!;
+    expect(request.prompt).toContain("New chat.");
+    expect(request.prompt).toContain("new turn 50");
+    expect(request.prompt).not.toContain("old turn");
+    expect(harness.thread.historyCompactedUpToSeq).toBe(99);
+    expect(harness.prisma.thread.updateMany).toHaveBeenCalledOnce();
+  });
+
+  it("keeps an unmarked pre-upgrade New chat boundary when compacting later turns", async () => {
+    const harness = compactionHarness({
+      deploymentModelKey: "fixture-key",
+      messages: Array.from({ length: 100 }, (_, seq) => ({
+        seq,
+        role: "user",
+        blocks: [{ kind: "text", text: seq < 50 ? `old turn ${seq}` : `new turn ${seq}` }],
+      })),
+      nextMessageSeq: 100,
+      historyCompactedUpToSeq: 49,
+      historyCompactionSummary: "New chat.",
+      legacySummary: true,
+      historyCompactionGeneration: 1,
+    });
+
+    await compactHistory(harness.deps, "thread-1");
+
+    const [request] = harness.runtime.run.mock.calls[0]!;
+    expect(request.prompt).toContain("New chat.");
+    expect(request.prompt).toContain("new turn 50");
+    expect(request.prompt).not.toContain("old turn");
+    expect(harness.thread.historyCompactedUpToSeq).toBe(99);
+    expect(harness.prisma.thread.updateMany).toHaveBeenCalledOnce();
   });
 
   it("rolls the previous local summary into the next batch", async () => {
@@ -673,8 +815,130 @@ describe("compactHistory", () => {
     const [secondRequest] = harness.runtime.run.mock.calls[1]!;
     expect(secondRequest.prompt).toContain("Summary through 49.");
     expect(secondRequest.prompt).toContain("message 50");
-    expect(harness.thread.historyCompactionSummary).toBe("Summary through 99.");
+    expect(harness.thread.historyCompactionSummary).toBe(marked("Summary through 99."));
     expect(harness.thread.historyCompactedUpToSeq).toBe(99);
+  });
+
+  it("rebuilds an unmarked contaminated summary from filtered raw messages", async () => {
+    const deliveryId = "expired-receipt";
+    const messages: HarnessMessage[] = Array.from({ length: 100 }, (_, seq) => ({
+      seq,
+      role: "user",
+      blocks:
+        seq === 0
+          ? [
+              {
+                kind: "bot_message_received",
+                deliveryId,
+                fromBotId: "peer",
+                fromBotName: "Peer",
+                text: "EXPIRED_RECEIPT_SENTINEL",
+                intent: "fyi",
+                deliveryState: "expired",
+              },
+            ]
+          : [{ kind: "text", text: `message ${seq}` }],
+    }));
+    const harness = compactionHarness({
+      deploymentModelKey: "fixture-key",
+      messages,
+      nextMessageSeq: 100,
+      historyCompactedUpToSeq: 49,
+      historyCompactionSummary: "EXPIRED_RECEIPT_SENTINEL",
+      legacySummary: true,
+      quietReceiptIds: [deliveryId],
+    });
+
+    await compactHistory(harness.deps, "thread-1");
+
+    const [request] = harness.runtime.run.mock.calls[0]!;
+    expect(request.prompt).not.toContain("EXPIRED_RECEIPT_SENTINEL");
+    expect(request.prompt).toContain("message 1");
+    expect(harness.thread.historyCompactedUpToSeq).toBe(49);
+    expect(harness.thread.historyCompactionSummary).toBe(marked("Summary of 50 messages."));
+    expect(harness.prisma.thread.updateMany).toHaveBeenCalledTimes(2);
+  });
+
+  it("rebuilds an unmarked summary from the first retained nonzero sequence", async () => {
+    const harness = compactionHarness({
+      deploymentModelKey: "fixture-key",
+      messages: Array.from({ length: 100 }, (_, index) => ({
+        seq: index + 100,
+        role: "user",
+        blocks: [{ kind: "text", text: `retained turn ${index + 100}` }],
+      })),
+      nextMessageSeq: 200,
+      historyCompactedUpToSeq: 149,
+      historyCompactionSummary: "legacy summary",
+      legacySummary: true,
+    });
+
+    await compactHistory(harness.deps, "thread-1");
+
+    const [request] = harness.runtime.run.mock.calls[0]!;
+    expect(request.prompt).toContain("retained turn 100");
+    expect(request.prompt).toContain("retained turn 149");
+    expect(request.prompt).not.toContain("legacy summary");
+    expect(harness.thread.historyCompactedUpToSeq).toBe(149);
+    expect(harness.thread.historyCompactionSummary).toBe(marked("Summary of 50 messages."));
+    expect(harness.prisma.thread.updateMany).toHaveBeenCalledTimes(2);
+    expect(
+      selectCompactedHistory({
+        messages: harness.messages.map((message) => ({
+          seq: message.seq,
+          role: "user",
+          content: `retained turn ${message.seq}`,
+        })),
+        summary: harness.thread.historyCompactionSummary,
+        historyCompactedUpToSeq: harness.thread.historyCompactedUpToSeq,
+      }),
+    ).toMatchObject({ usedLocalSummary: true, summary: "Summary of 50 messages." });
+  });
+
+  it("retries a nonzero retained rebuild after the first summarization fails", async () => {
+    const harness = compactionHarness({
+      deploymentModelKey: "fixture-key",
+      messages: Array.from({ length: 100 }, (_, index) => ({
+        seq: index + 100,
+        role: "user",
+        blocks: [{ kind: "text", text: `retained turn ${index + 100}` }],
+      })),
+      nextMessageSeq: 200,
+      historyCompactedUpToSeq: 149,
+      historyCompactionSummary: "legacy summary",
+      legacySummary: true,
+    });
+    harness.runtime.run.mockImplementationOnce(async function* () {
+      yield { type: "text", text: "partial" };
+      throw new Error("summarizer unavailable");
+    });
+
+    await expect(compactHistory(harness.deps, "thread-1")).rejects.toThrow(
+      "summarizer unavailable",
+    );
+    expect(harness.thread.historyCompactedUpToSeq).toBeNull();
+    expect(harness.thread.historyCompactionSummary).toBe("[pending-summary-rebuild:v1]");
+
+    await compactHistory(harness.deps, "thread-1");
+
+    const [retryRequest] = harness.runtime.run.mock.calls[1]!;
+    expect(retryRequest.prompt).toContain("retained turn 100");
+    expect(retryRequest.prompt).toContain("retained turn 149");
+    expect(retryRequest.prompt).not.toContain("legacy summary");
+    expect(harness.thread.historyCompactedUpToSeq).toBe(149);
+    expect(harness.thread.historyCompactionSummary).toBe(marked("Summary of 50 messages."));
+    expect(harness.prisma.thread.updateMany).toHaveBeenCalledTimes(2);
+    expect(
+      selectCompactedHistory({
+        messages: harness.messages.map((message) => ({
+          seq: message.seq,
+          role: "user",
+          content: `retained turn ${message.seq}`,
+        })),
+        summary: harness.thread.historyCompactionSummary,
+        historyCompactedUpToSeq: harness.thread.historyCompactedUpToSeq,
+      }),
+    ).toMatchObject({ usedLocalSummary: true, summary: "Summary of 50 messages." });
   });
 
   it("does not advance across a message coverage gap", async () => {
@@ -747,7 +1011,7 @@ describe("compactHistory", () => {
     await pending;
 
     expect(harness.thread.historyCompactedUpToSeq).toBe(49);
-    expect(harness.thread.historyCompactionSummary).toBe("valid summary");
+    expect(harness.thread.historyCompactionSummary).toBe(marked("valid summary"));
   });
 
   it("never opens a provider write race with history clearing", async () => {
@@ -760,7 +1024,7 @@ describe("compactHistory", () => {
     expect(harness.memoryProviders.resolve).not.toHaveBeenCalled();
     expect(harness.saveMemory).not.toHaveBeenCalled();
     expect(harness.purgeHistory).not.toHaveBeenCalled();
-    expect(harness.thread.historyCompactionSummary).toBe("Summary of 50 messages.");
+    expect(harness.thread.historyCompactionSummary).toBe(marked("Summary of 50 messages."));
     expect(harness.jobs.enqueue).toHaveBeenCalledWith(historyCompactJob("thread-1"));
   });
 
@@ -946,7 +1210,7 @@ describe("compactHistory", () => {
     await compactHistory(harness.deps, "thread-1");
 
     expect(harness.thread.historyCompactedUpToSeq).toBe(49);
-    expect(harness.thread.historyCompactionSummary).toBe("Summary of 50 messages.");
+    expect(harness.thread.historyCompactionSummary).toBe(marked("Summary of 50 messages."));
   });
 
   it("does not advance or re-enqueue if another worker already moved the cursor", async () => {

@@ -94,6 +94,30 @@ export const SiteProductSchema = z
           .optional(),
       })
       .optional(),
+    memory: z
+      .strictObject({
+        headline: text,
+        storage: z.array(z.strictObject({ id, name: text, detail: text, scope: text })).min(1),
+        publishModes: z.array(z.strictObject({ id, name: text })).min(1),
+        sections: z
+          .array(
+            z.strictObject({
+              id,
+              title: text,
+              body: text,
+              qualification: text,
+              source: text,
+            }),
+          )
+          .min(1),
+        proofPoints: z.array(z.strictObject({ id, text, source: text })).min(1),
+        settingsPath: z.strictObject({
+          steps: z.array(text).min(1),
+          uiLabels: z.array(text).min(1),
+          screenshot: id,
+        }),
+      })
+      .optional(),
     videos: z
       .array(
         z.strictObject({
@@ -158,6 +182,14 @@ export const SiteProductSchema = z
       }
       if (new Set(cases.map((item) => item.id)).size !== cases.length)
         context.addIssue({ code: "custom", message: "routines.useCases IDs must be unique" });
+    }
+    if (data.memory) {
+      for (const field of ["storage", "publishModes", "sections", "proofPoints"] as const) {
+        const entries = data.memory[field];
+        if (new Set(entries.map((entry) => entry.id)).size !== entries.length) {
+          context.addIssue({ code: "custom", message: `memory.${field} IDs must be unique` });
+        }
+      }
     }
   });
 

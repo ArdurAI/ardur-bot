@@ -12,6 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import type { ImportedProvenance } from "@ardurbot/contracts";
 import { LifecycleMemoryStore, MemoryService, PostgresDocumentStore } from "@ardurbot/memory";
 import {
   memoryConformance,
@@ -113,6 +114,33 @@ describe("Git document store", () => {
       const third = f.store("space-a", "machine-c");
       await third.importBundle(exported, request().delivery, access);
       expect(await third.exportBundle(access)).toEqual(exported);
+    } finally {
+      await f.dispose();
+    }
+  });
+  it("preserves imported provenance across store restarts and exports", async () => {
+    const f = await fixture();
+    try {
+      const provenance: ImportedProvenance = {
+        tool: "codex",
+        relativePath: "instructions/workflow.md",
+        sourcePathHash: "0".repeat(64),
+        contentHash: "1".repeat(64),
+        modifiedAt: "2026-09-23T12:00:00.000Z",
+        importedAt: "2026-09-23T12:00:00.000Z",
+        kind: "instructions",
+        authorizesIntent: false,
+      };
+      const saved = await f.store().commit({ ...request(), imported: provenance }, access);
+      expect(saved.imported).toEqual(provenance);
+
+      const restarted = f.store();
+      await restarted.startSession(access);
+      const read = await restarted.read(saved.id, access);
+      expect(read?.imported).toEqual(provenance);
+
+      const exported = await restarted.exportBundle(access);
+      expect(exported.documents[0]?.revisions[0]?.imported).toEqual(provenance);
     } finally {
       await f.dispose();
     }

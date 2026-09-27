@@ -924,6 +924,11 @@ export const builtinAgentTools: ConnectorTool[] = [
       properties: {
         card: z.toJSONSchema(TaskCardRequestSchema),
         bot_id: { type: "string", description: "Target bot id from your teammate list." },
+        inReplyToDeliveryId: {
+          type: "string",
+          description:
+            "Delivery id of a goal desk request addressed to you. A reply goes only to its sender.",
+        },
         confirm_name: {
           type: "string",
           description: "Exact name of the target bot when bot_id is omitted.",

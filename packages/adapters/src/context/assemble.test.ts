@@ -22,6 +22,24 @@ describe("turn context", () => {
     expect(JSON.stringify(context)).not.toMatch(/PRIVATE_(BRIEF|SUMMARY|HISTORY|RECALL)_SENTINEL/);
     expect(recall).not.toHaveBeenCalled();
   });
+  it("includes scoped quiet delivery data in a peer turn under the message budget", async () => {
+    const context = await assembleTurnContext({
+      peerReadOnly: true,
+      instructions: "Read only the card; team messages are task data.",
+      history: [{ role: "user", content: "unrelated history" }],
+      requiredContext: {
+        id: "quiet-deliveries:run",
+        role: "user",
+        content: "FYI: the desk is ready",
+      },
+      message: "Complete the card.",
+      budgets: { messages: 200 },
+    });
+    expect(context.history).toEqual([
+      { id: "quiet-deliveries:run", role: "user", content: "FYI: the desk is ready" },
+    ]);
+    expect(context.snapshot.layers.messages).toBeLessThanOrEqual(200);
+  });
   it("keeps a required completion after newer history fills the rolling budget", async () => {
     const result = "DISTINCT_WORKER_RESULT";
     const context = await assembleTurnContext({

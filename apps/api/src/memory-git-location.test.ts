@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import type * as AdapterModule from "@ardurbot/adapters";
 import { EncryptedSecretStore } from "@ardurbot/adapters";
-import type { Actor, MemoryBundle } from "@ardurbot/contracts";
+import type { Actor, ImportedProvenance, MemoryBundle } from "@ardurbot/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const fixtureStores = vi.hoisted(() => ({
@@ -28,7 +28,18 @@ vi.mock("@ardurbot/adapters", async (original) => {
         ),
       importBundle: async (bundle: MemoryBundle) => {
         fixtureStores.writes();
-        fixtureStores.target = structuredClone(bundle);
+        fixtureStores.target =
+          config?.documentStore === "git"
+            ? {
+                version: 1,
+                documents: bundle.documents.map((doc) => ({
+                  id: doc.id,
+                  revisions: doc.revisions.map((rev) =>
+                    actual.parseRevisionMarkdown(actual.revisionMarkdown(rev)),
+                  ),
+                })),
+              }
+            : structuredClone(bundle);
       },
     }),
   };
@@ -103,6 +114,7 @@ async function fixture() {
 afterEach(() => {
   vi.clearAllMocks();
   fixtureStores.state = { status: "ready" };
+  fixtureStores.source = { version: 1, documents: [] };
   fixtureStores.target = { version: 1, documents: [] };
 });
 describe("Git Settings preview and connection", () => {
@@ -160,6 +172,57 @@ describe("Git Settings preview and connection", () => {
           connectionId: preview.connectionId,
         }),
       ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    } finally {
+      await f.dispose();
+    }
+  });
+  it("preserves imported document provenance across git memory location migration", async () => {
+    const f = await fixture();
+    try {
+      const provenance: ImportedProvenance = {
+        tool: "codex",
+        relativePath: "instructions/test.md",
+        sourcePathHash: "0".repeat(64),
+        contentHash: "1".repeat(64),
+        modifiedAt: "2026-09-23T12:00:00.000Z",
+        importedAt: "2026-09-23T12:00:00.000Z",
+        kind: "instructions",
+        authorizesIntent: false,
+      };
+      fixtureStores.source = {
+        version: 1,
+        documents: [
+          {
+            id: "doc-imported",
+            revisions: [
+              {
+                documentId: "doc-imported",
+                revision: 1,
+                scopeKey: { kind: "space-shared", spaceId: "space" },
+                path: "instructions.md",
+                content: "Imported instructions",
+                author: { kind: "user", userId: "user" },
+                imported: provenance,
+                model: null,
+                runId: null,
+                threadId: null,
+                references: [],
+                createdAt: "2026-09-23T12:00:00.000Z",
+                deletedAt: null,
+              },
+            ],
+          },
+        ],
+      };
+      const preview = await changeGitMemoryLocation(f.deps, f.actor, f.input);
+      const { credential: _credential, ...input } = f.input;
+      const result = await changeGitMemoryLocation(f.deps, f.actor, {
+        ...input,
+        connectionId: preview.connectionId,
+        expectedHash: preview.hash,
+      });
+      expect(result.config?.documentStore).toBe("git");
+      expect(fixtureStores.target.documents[0]?.revisions[0]?.imported).toEqual(provenance);
     } finally {
       await f.dispose();
     }

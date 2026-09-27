@@ -45,6 +45,24 @@ Inherited from Rakazo and working:
 
 Experimental Antigravity text conversations can run on a connected host computer with an exact model pin; see [Antigravity runtime](/docs/antigravity-runtime/).
 
+## Memory
+
+### What is stored where
+
+The built-in database is the default document store. Git repository storage holds a space's shared notes and their revision history; personal and bot-private documents stay in the database. A selected local memory folder can hold space-shared documents and the connected owner's documents.
+
+### Connect a repository
+
+Open Settings → Memory → Memory storage → Manage → Git repository. Connect a dedicated empty repository, supply a repository token or deploy key, and choose its branch. Choose Publish directly to push to that branch, or Propose on a branch to send changes to a proposal branch for review. Test the connection and preview the move before using the location.
+
+### Work offline and resolve conflicts
+
+After setup, a shared-note save creates a local Git commit before background synchronization is queued. If the repository is unreachable, the last local copy remains available while Ardur's server and storage are available. The background worker retries synchronization, and a failed sync offers Retry. When shared edits conflict, Ardur keeps both versions and their revision histories.
+
+### Edit a note in GitHub
+
+After synchronization, shared notes are Markdown files in the connected repository, with revisions in its history. Edit an existing note's body in a Git checkout or on GitHub, keep its frontmatter, and commit the change. Ardur incorporates the edit on its next fetch of that branch.
+
 ## Where it is going
 
 - Subscription-honest providers: Claude Pro/Max through your own unmodified `claude` CLI

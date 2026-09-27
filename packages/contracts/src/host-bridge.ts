@@ -337,6 +337,7 @@ export const HostFrameSchema = /* @__PURE__ */ (() =>
         "executeTool",
         "onToolCompleted",
         "onRuntimeInfo",
+        "acknowledgeInput",
         "claimSteering",
         "provider.open",
         "provider.read",

@@ -2523,7 +2523,7 @@ msgstr ""
 
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "Could not load the extension catalogue. Check the connection and try again."
-msgstr ""
+msgstr "无法加载扩展目录。请检查连接后重试。"
 
 #: src/pages/LearningCurator.tsx
 msgid "Could not load the last check."
@@ -3130,11 +3130,11 @@ msgstr "已删除"
 msgid "Deleting…"
 msgstr "正在删除…"
 
-#: src/pages/Shell.tsx
+#: src/components/PeerMessageReceipt.tsx
 msgid "Delivered from {peer}"
 msgstr "已收到 {peer} 的消息"
 
-#: src/pages/Shell.tsx
+#: src/components/PeerMessageReceipt.tsx
 msgid "Delivered to {peer}"
 msgstr "已发送给 {peer}"
 
@@ -3619,10 +3619,11 @@ msgstr "展开 {0}"
 msgid "Experimental"
 msgstr ""
 
+#: src/components/PeerMessageReceipt.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/memory/MemoryProposals.tsx
 msgid "Expired"
-msgstr ""
+msgstr "已过期"
 
 #: src/pages/DevicesSettings.tsx
 msgid "Expires in five minutes."
@@ -3678,6 +3679,7 @@ msgstr ""
 msgid "failed"
 msgstr "失败"
 
+#: src/components/PeerMessageReceipt.tsx
 #: src/lib/run-status-label.ts
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
@@ -3824,6 +3826,10 @@ msgstr "免费"
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Free memory"
 msgstr ""
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "from {peer}"
+msgstr "来自 {peer}"
 
 #: src/pages/customize/PluginsPage.tsx
 #: src/pages/customize/SkillsPage.tsx
@@ -4893,7 +4899,7 @@ msgstr "消息输入框"
 msgid "Message event"
 msgstr ""
 
-#: src/pages/Shell.tsx
+#: src/components/PeerMessageReceipt.tsx
 msgid "Message from {peer}"
 msgstr "来自 {peer} 的消息"
 
@@ -4905,10 +4911,6 @@ msgstr ""
 #: src/pages/system/QuickComposer.tsx
 msgid "Message…"
 msgstr "消息…"
-
-#: src/pages/Shell.tsx
-msgid "Messaged {peer}"
-msgstr "已发给 {peer}"
 
 #: src/pages/account/AccountMore.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -6077,7 +6079,6 @@ msgstr "排队等待"
 #: src/pages/ComparePanel.tsx
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/DelegationLines.tsx
-#: src/pages/Shell.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Queued"
 msgstr "排队中"
@@ -6107,8 +6108,13 @@ msgid "Reactions"
 msgstr "表情回应"
 
 #: src/components/integrations/catalog/ToolPicker.tsx
+#: src/components/PeerMessageReceipt.tsx
 msgid "Read"
-msgstr ""
+msgstr "已读"
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Read by {recipient}"
+msgstr "已由 {recipient} 阅读"
 
 #: src/pages/ide/IdePage.tsx
 msgid "Read only: file is larger than 2 MB"
@@ -6407,6 +6413,10 @@ msgstr "替换 API 密钥"
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Replace key"
 msgstr "替换密钥"
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Replied"
+msgstr "已回复"
 
 #: src/pages/Shell.tsx
 msgid "Reply"
@@ -7049,6 +7059,14 @@ msgstr ""
 #: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
 msgid "Sends memory text to {host}"
 msgstr ""
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Sent"
+msgstr "已发送"
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Sent to {peer}"
+msgstr "已发送给 {peer}"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Sentry alert"
@@ -7954,6 +7972,10 @@ msgstr ""
 msgid "Title"
 msgstr "标题"
 
+#: src/components/PeerMessageReceipt.tsx
+msgid "to {peer}"
+msgstr "发送给 {peer}"
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "To use your Claude subscription, choose Runs on → Claude Code in a bot's settings."
 msgstr ""
@@ -8311,6 +8333,10 @@ msgstr "语音"
 #: src/pages/system/SystemPage.tsx
 msgid "Voice shortcut"
 msgstr ""
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Waiting for a turn"
+msgstr "等待轮次"
 
 #: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx

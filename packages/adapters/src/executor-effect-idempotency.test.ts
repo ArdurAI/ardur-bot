@@ -163,6 +163,7 @@ function fixture(runId = "run-1", memoryDocuments?: MemoryService) {
   };
   const replayRequest = { command: "pnpm test", cwd: "/workspace" };
   const prisma = {
+    botMessageDelivery: { updateMany: vi.fn(async () => ({ count: 0 })) },
     delegationRoot: { findUnique: vi.fn(async () => null) },
     botBrief: { updateMany: vi.fn(async () => ({ count: 0 })) },
     runKnowledgeExposure: { createMany: vi.fn(async () => ({ count: 1 })) },
