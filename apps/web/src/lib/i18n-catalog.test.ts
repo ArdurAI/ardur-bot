@@ -287,6 +287,9 @@ describe("lingui catalogs", () => {
       "Same as bot",
       "Save model",
       "Using {currentId}",
+      "{botName} couldn't use the model set for this group. Reconnect it or change the group model.",
+      "{botName} couldn't use the model set for this group. Change the group model or check this bot's settings.",
+      "This group's model is blocked by the bot or space settings. Change the destination policy or choose another group model.",
       "{0, plural, one {Also set differently in # group} other {Also set differently in # groups}}",
     ];
     for (const locale of ["de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"]) {

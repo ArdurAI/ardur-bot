@@ -49,6 +49,32 @@ const EVENT_BATCH_SIZE = 200;
 const PUSH_CATCH_UP_MS = 30_000;
 const POLL_ONLY_CATCH_UP_MS = 400;
 
+export function groupModelFailureNotice(
+  code: string,
+  name: string | null,
+): Extract<MessageBlock, { kind: "text" }> {
+  const botName = name ?? "This bot";
+  if (code === "locality-denied") {
+    return {
+      kind: "text",
+      text: "This group's model is blocked by the bot or space settings. Change the destination policy or choose another group model.",
+      notice: { id: "group-model-locality-denied", botName },
+    };
+  }
+  if (code === "pin-credential-missing") {
+    return {
+      kind: "text",
+      text: `${botName} couldn't use the model set for this group. Reconnect it or change the group model.`,
+      notice: { id: "group-model-credential-missing", botName },
+    };
+  }
+  return {
+    kind: "text",
+    text: `${botName} couldn't use the model set for this group. Change the group model or check this bot's settings.`,
+    notice: { id: "group-model-unavailable", botName },
+  };
+}
+
 export interface AppendEventInput {
   spaceId: string;
   threadId: string;
@@ -1375,13 +1401,7 @@ async function finalizeRunOnce(
     const failedGroupPin = pinProblem && groupSource?.kind === "group-member";
     if (failedGroupPin) {
       const bot = await tx.bot.findUnique({ where: { id: input.botId }, select: { name: true } });
-      const text =
-        pinProblem.code === "locality-denied"
-          ? "This group's model is blocked by the bot or space settings."
-          : pinProblem.code === "pin-credential-missing"
-            ? `${bot?.name ?? "This bot"} couldn't use the model set for this group. Reconnect it or change the group model.`
-            : `${bot?.name ?? "This bot"} couldn't use the model set for this group. Change the group model or check this bot's settings.`;
-      const blocks = [{ kind: "text" as const, text }];
+      const blocks = [groupModelFailureNotice(pinProblem.code, bot?.name ?? null)];
       const notice = await createThreadMessageInTransaction(tx, {
         threadId: input.threadId,
         role: "system",

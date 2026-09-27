@@ -188,6 +188,14 @@ msgid "{bot}'s last {count} runs on {model} were rate limited."
 msgstr ""
 
 #: src/pages/Shell.tsx
+msgid "{botName} couldn't use the model set for this group. Change the group model or check this bot's settings."
+msgstr "{botName} bu grup için ayarlanan modeli kullanamadı. Grup modelini değiştirin veya bot ayarlarını kontrol edin."
+
+#: src/pages/Shell.tsx
+msgid "{botName} couldn't use the model set for this group. Reconnect it or change the group model."
+msgstr "{botName} bu grup için ayarlanan modeli kullanamadı. Yeniden bağlayın veya grup modelini değiştirin."
+
+#: src/pages/Shell.tsx
 msgid "{botName}’s computer"
 msgstr "{botName} adlı botun bilgisayarı"
 
@@ -7883,6 +7891,10 @@ msgstr ""
 #: src/pages/HostComputerSettings.tsx
 msgid "This folder is not available."
 msgstr ""
+
+#: src/pages/Shell.tsx
+msgid "This group's model is blocked by the bot or space settings. Change the destination policy or choose another group model."
+msgstr "Grup modeli bot veya alan ayarları tarafından engelleniyor. Hedef ilkesini değiştirin veya başka bir grup modeli seçin."
 
 #: src/pages/HostComputerPrompt.tsx
 msgid "this Mac"

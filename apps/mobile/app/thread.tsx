@@ -111,6 +111,7 @@ import { confirmDeleteBot } from "../lib/bot-lifecycle";
 import type { ComposerMenuOption } from "../lib/composer-menu";
 import { COMPOSER_MENU_OPTIONS } from "../lib/composer-menu";
 import { cancelFocusPrompt, focusPromptThreadActive } from "../lib/focus-prompt";
+import { groupModelNoticeText } from "../lib/group-model-notice";
 import { dateLocaleForUi, t, useI18n } from "../lib/i18n";
 import { saveLastBotId } from "../lib/last-bot";
 import {
@@ -2986,7 +2987,8 @@ function MessageTextCard({
 }) {
   const colorScheme = useResolvedAppearance();
   const tokens = mobileTokens();
-  const contentText = blockText(message);
+  useI18n();
+  const contentText = blockText(message, groupModelNoticeText);
   if (!contentText) return null;
   return (
     <Pressable

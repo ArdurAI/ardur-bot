@@ -6397,6 +6397,15 @@ const MessageView = memo(function MessageView({
           );
         }
         if (block.kind === "text") {
+          const botName = block.notice?.botName ?? "";
+          const text =
+            block.notice?.id === "group-model-locality-denied"
+              ? t`This group's model is blocked by the bot or space settings. Change the destination policy or choose another group model.`
+              : block.notice?.id === "group-model-credential-missing"
+                ? t`${botName} couldn't use the model set for this group. Reconnect it or change the group model.`
+                : block.notice?.id === "group-model-unavailable"
+                  ? t`${botName} couldn't use the model set for this group. Change the group model or check this bot's settings.`
+                  : block.text;
           return (
             <div key={i} className="flex w-fit max-w-full justify-start">
               <div
@@ -6405,7 +6414,7 @@ const MessageView = memo(function MessageView({
                 dir="auto"
               >
                 <div data-quote-message-id={quoteMessageId}>
-                  <ChatMarkdown>{block.text}</ChatMarkdown>
+                  <ChatMarkdown>{text}</ChatMarkdown>
                 </div>
                 {voiceReady ? (
                   <button

@@ -188,6 +188,14 @@ msgid "{bot}'s last {count} runs on {model} were rate limited."
 msgstr ""
 
 #: src/pages/Shell.tsx
+msgid "{botName} couldn't use the model set for this group. Change the group model or check this bot's settings."
+msgstr "{botName} konnte das für diese Gruppe festgelegte Modell nicht verwenden. Ändere das Gruppenmodell oder prüfe die Bot-Einstellungen."
+
+#: src/pages/Shell.tsx
+msgid "{botName} couldn't use the model set for this group. Reconnect it or change the group model."
+msgstr "{botName} konnte das für diese Gruppe festgelegte Modell nicht verwenden. Stelle die Verbindung wieder her oder ändere das Gruppenmodell."
+
+#: src/pages/Shell.tsx
 msgid "{botName}’s computer"
 msgstr "Computer von {botName}"
 
@@ -7883,6 +7891,10 @@ msgstr ""
 #: src/pages/HostComputerSettings.tsx
 msgid "This folder is not available."
 msgstr ""
+
+#: src/pages/Shell.tsx
+msgid "This group's model is blocked by the bot or space settings. Change the destination policy or choose another group model."
+msgstr "Das Gruppenmodell wird durch die Bot- oder Bereichseinstellungen blockiert. Ändere die Zielrichtlinie oder wähle ein anderes Gruppenmodell."
 
 #: src/pages/HostComputerPrompt.tsx
 msgid "this Mac"
