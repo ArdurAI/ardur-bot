@@ -1,6 +1,44 @@
 import type { AgentRuntimeEvent } from "@ardurbot/adapter-kit";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { inferScript, ScriptedAgentRuntime } from "./scripted-runtime.js";
+
+it("acknowledges a scripted turn after input acceptance and before output", async () => {
+  const stages: string[] = [];
+  const acknowledgeInput = vi.fn(async () => {
+    stages.push("acknowledged");
+  });
+  const runtime = new ScriptedAgentRuntime({
+    beforeAcknowledge: async () => {
+      stages.push("before");
+    },
+    afterAcknowledge: async () => {
+      stages.push("after");
+    },
+  });
+  const events = runtime.run({
+    botId: "recipient",
+    threadId: "thread",
+    runId: "run",
+    prompt: "Check the fixture",
+    instructions: "",
+    history: [],
+    tools: [],
+    model: { provider: "scripted", id: "scripted" },
+    script: [{ assistant: "Checked.", complete: true }],
+    inputReceipt: { leaseFence: 3, deliveryIds: ["delivery"] },
+    acknowledgeInput,
+  });
+  expect((await events[Symbol.asyncIterator]().next()).value).toMatchObject({ type: "progress" });
+  expect(acknowledgeInput).toHaveBeenCalledOnce();
+  expect(acknowledgeInput).toHaveBeenCalledWith({
+    runId: "run",
+    leaseFence: 3,
+    deliveryIds: ["delivery"],
+    mode: "initial",
+  });
+  expect(stages).toEqual(["before", "acknowledged", "after"]);
+  await events[Symbol.asyncIterator]().return?.();
+});
 
 it("uses a delegated card's goal rather than its envelope metadata for scripted intent", () => {
   const prompt = `This is a delegated task. <task_card>${JSON.stringify({
@@ -96,6 +134,16 @@ describe("goal result transport", () => {
       inferScript("Review Reviewer's completed assignment", undefined, false, reviewerResult)[0]
         ?.assistant,
     ).toContain("Results show oldest first; sort results by createdAt ascending.");
+  });
+
+  it("uses a fixed completion cue with the delivered result as data", () => {
+    const cue = "Review the completed assignment and decide the next step for this goal.";
+    expect(inferScript(cue, undefined, false, workerResult)[0]?.toolCalls?.[0]?.name).toBe(
+      "message_bot",
+    );
+    expect(inferScript(cue, undefined, false, reviewerResult)[0]?.assistant).toContain(
+      "Results show oldest first",
+    );
   });
 });
 

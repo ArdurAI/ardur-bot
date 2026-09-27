@@ -299,6 +299,7 @@ export const HostFrameSchema = /* @__PURE__ */ (() =>
         "executeTool",
         "onToolCompleted",
         "onRuntimeInfo",
+        "acknowledgeInput",
         "claimSteering",
       ]),
       args: z.array(z.unknown()).max(5),

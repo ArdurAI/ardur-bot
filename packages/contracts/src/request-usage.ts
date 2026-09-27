@@ -49,7 +49,15 @@ export const RequestUsageObservationSchema = z.strictObject({
   requestId: identity,
   attemptId: identity,
   parentRequestId: identity.nullable(),
-  purpose: z.enum(["main", "retry", "helper", "summary", "delegated", "detached-learning"]),
+  purpose: z.enum([
+    "main",
+    "unknown",
+    "retry",
+    "helper",
+    "summary",
+    "delegated",
+    "detached-learning",
+  ]),
   counter: z.strictObject({
     mode: z.enum(["delta", "cumulative"]),
     epochId: identity,
@@ -67,4 +75,12 @@ export const RequestUsageObservationSchema = z.strictObject({
     })
     .nullable(),
   collection: UsageCollectionSchema.optional(),
+  admission: z
+    .strictObject({
+      kind: z.literal("worker-provider-broker"),
+      reservedTokens: token.positive(),
+      maxRequests: token.positive(),
+      maxReservedTokens: token.positive(),
+    })
+    .optional(),
 });

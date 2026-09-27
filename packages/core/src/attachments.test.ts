@@ -112,6 +112,30 @@ describe("attachment helpers", () => {
 });
 
 describe("peer message history", () => {
+  it("omits only the selected receipt block while preserving other content", () => {
+    const blocks = [
+      { kind: "text" as const, text: "Keep this note" },
+      {
+        kind: "bot_message_received" as const,
+        fromBotId: "sender",
+        fromBotName: "Sender",
+        text: "Quiet receipt",
+        deliveryId: "quiet-1",
+      },
+      {
+        kind: "bot_message_received" as const,
+        fromBotId: "sender",
+        fromBotName: "Sender",
+        text: "Ordinary reply",
+        deliveryId: "reply-1",
+      },
+    ];
+
+    expect(blocksToAgentHistoryText(blocks, new Set(["quiet-1"]))).toBe(
+      "Keep this note\n[from Sender] Ordinary reply",
+    );
+  });
+
   it("keeps attribution so a later turn knows a bot spoke, not the user", () => {
     expect(
       blocksToAgentHistoryText([

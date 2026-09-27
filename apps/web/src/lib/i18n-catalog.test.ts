@@ -304,10 +304,11 @@ describe("lingui catalogs", () => {
     }
   });
 
-  it("translates the extension catalogue loading and empty-state guidance in every shipped catalog", () => {
+  it("translates the extension catalogue loading, empty-state, and failure guidance in every shipped catalog", () => {
     const sentences = [
       "Loading the extension catalogue…",
       "No extensions are in the built-in catalogue yet. Use Add to install an extension bundle (.mcpb or .dxt file) from this computer.",
+      "Could not load the extension catalogue. Check the connection and try again.",
     ];
     for (const locale of ["en", "de", "ko", "tr", "hi", "pt-BR", "zh-CN", "es", "ru"]) {
       const catalog = readFileSync(

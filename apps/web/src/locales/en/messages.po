@@ -3130,11 +3130,11 @@ msgstr "deleted"
 msgid "Deleting…"
 msgstr "Deleting…"
 
-#: src/pages/Shell.tsx
+#: src/components/PeerMessageReceipt.tsx
 msgid "Delivered from {peer}"
 msgstr "Delivered from {peer}"
 
-#: src/pages/Shell.tsx
+#: src/components/PeerMessageReceipt.tsx
 msgid "Delivered to {peer}"
 msgstr "Delivered to {peer}"
 
@@ -3619,6 +3619,7 @@ msgstr "Expand {0}"
 msgid "Experimental"
 msgstr "Experimental"
 
+#: src/components/PeerMessageReceipt.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/memory/MemoryProposals.tsx
 msgid "Expired"
@@ -3678,6 +3679,7 @@ msgstr "External conversation"
 msgid "failed"
 msgstr "failed"
 
+#: src/components/PeerMessageReceipt.tsx
 #: src/lib/run-status-label.ts
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
@@ -3824,6 +3826,10 @@ msgstr "Free"
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Free memory"
 msgstr "Free memory"
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "from {peer}"
+msgstr "from {peer}"
 
 #: src/pages/customize/PluginsPage.tsx
 #: src/pages/customize/SkillsPage.tsx
@@ -4893,7 +4899,7 @@ msgstr "Message composer"
 msgid "Message event"
 msgstr "Message event"
 
-#: src/pages/Shell.tsx
+#: src/components/PeerMessageReceipt.tsx
 msgid "Message from {peer}"
 msgstr "Message from {peer}"
 
@@ -4905,10 +4911,6 @@ msgstr "Message from anywhere on your desktop."
 #: src/pages/system/QuickComposer.tsx
 msgid "Message…"
 msgstr "Message…"
-
-#: src/pages/Shell.tsx
-msgid "Messaged {peer}"
-msgstr "Messaged {peer}"
 
 #: src/pages/account/AccountMore.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -6077,7 +6079,6 @@ msgstr "Queue wait"
 #: src/pages/ComparePanel.tsx
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/DelegationLines.tsx
-#: src/pages/Shell.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Queued"
 msgstr "Queued"
@@ -6107,8 +6108,13 @@ msgid "Reactions"
 msgstr "Reactions"
 
 #: src/components/integrations/catalog/ToolPicker.tsx
+#: src/components/PeerMessageReceipt.tsx
 msgid "Read"
 msgstr "Read"
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Read by {recipient}"
+msgstr "Read by {recipient}"
 
 #: src/pages/ide/IdePage.tsx
 msgid "Read only: file is larger than 2 MB"
@@ -6407,6 +6413,10 @@ msgstr "Replace API key"
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Replace key"
 msgstr "Replace key"
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Replied"
+msgstr "Replied"
 
 #: src/pages/Shell.tsx
 msgid "Reply"
@@ -7049,6 +7059,14 @@ msgstr "Sends memory text to {0}"
 #: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
 msgid "Sends memory text to {host}"
 msgstr "Sends memory text to {host}"
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Sent"
+msgstr "Sent"
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Sent to {peer}"
+msgstr "Sent to {peer}"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Sentry alert"
@@ -7954,6 +7972,10 @@ msgstr "Timeline"
 msgid "Title"
 msgstr "Title"
 
+#: src/components/PeerMessageReceipt.tsx
+msgid "to {peer}"
+msgstr "to {peer}"
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "To use your Claude subscription, choose Runs on → Claude Code in a bot's settings."
 msgstr "To use your Claude subscription, choose Runs on → Claude Code in a bot's settings."
@@ -8311,6 +8333,10 @@ msgstr "Voice"
 #: src/pages/system/SystemPage.tsx
 msgid "Voice shortcut"
 msgstr "Voice shortcut"
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Waiting for a turn"
+msgstr "Waiting for a turn"
 
 #: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx
