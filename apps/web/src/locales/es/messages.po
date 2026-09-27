@@ -2528,7 +2528,7 @@ msgstr ""
 
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "Could not load the extension catalogue. Check the connection and try again."
-msgstr ""
+msgstr "No se pudo cargar el catálogo de extensiones. Comprueba la conexión e inténtalo de nuevo."
 
 #: src/pages/LearningCurator.tsx
 msgid "Could not load the last check."
@@ -3139,11 +3139,11 @@ msgstr "eliminado"
 msgid "Deleting…"
 msgstr "Eliminando…"
 
-#: src/pages/Shell.tsx
+#: src/components/PeerMessageReceipt.tsx
 msgid "Delivered from {peer}"
 msgstr "Entregado por {peer}"
 
-#: src/pages/Shell.tsx
+#: src/components/PeerMessageReceipt.tsx
 msgid "Delivered to {peer}"
 msgstr "Entregado a {peer}"
 
@@ -3628,10 +3628,11 @@ msgstr "Expandir {0}"
 msgid "Experimental"
 msgstr ""
 
+#: src/components/PeerMessageReceipt.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/memory/MemoryProposals.tsx
 msgid "Expired"
-msgstr ""
+msgstr "Caducado"
 
 #: src/pages/DevicesSettings.tsx
 msgid "Expires in five minutes."
@@ -3687,6 +3688,7 @@ msgstr ""
 msgid "failed"
 msgstr "fallido"
 
+#: src/components/PeerMessageReceipt.tsx
 #: src/lib/run-status-label.ts
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
@@ -3833,6 +3835,10 @@ msgstr "Gratis"
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Free memory"
 msgstr ""
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "from {peer}"
+msgstr "de {peer}"
 
 #: src/pages/customize/PluginsPage.tsx
 #: src/pages/customize/SkillsPage.tsx
@@ -4902,7 +4908,7 @@ msgstr "Redactor de mensajes"
 msgid "Message event"
 msgstr ""
 
-#: src/pages/Shell.tsx
+#: src/components/PeerMessageReceipt.tsx
 msgid "Message from {peer}"
 msgstr "Mensaje de {peer}"
 
@@ -4914,10 +4920,6 @@ msgstr ""
 #: src/pages/system/QuickComposer.tsx
 msgid "Message…"
 msgstr "Mensaje…"
-
-#: src/pages/Shell.tsx
-msgid "Messaged {peer}"
-msgstr "Mensaje enviado a {peer}"
 
 #: src/pages/account/AccountMore.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -6094,7 +6096,6 @@ msgstr "Espera en cola"
 #: src/pages/ComparePanel.tsx
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/DelegationLines.tsx
-#: src/pages/Shell.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Queued"
 msgstr "En cola"
@@ -6124,8 +6125,13 @@ msgid "Reactions"
 msgstr "Reacciones"
 
 #: src/components/integrations/catalog/ToolPicker.tsx
+#: src/components/PeerMessageReceipt.tsx
 msgid "Read"
-msgstr ""
+msgstr "Leído"
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Read by {recipient}"
+msgstr "Leído por {recipient}"
 
 #: src/pages/ide/IdePage.tsx
 msgid "Read only: file is larger than 2 MB"
@@ -6424,6 +6430,10 @@ msgstr "Reemplazar clave de API"
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Replace key"
 msgstr "Reemplazar clave"
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Replied"
+msgstr "Respondido"
 
 #: src/pages/Shell.tsx
 msgid "Reply"
@@ -7077,6 +7087,14 @@ msgstr ""
 #: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
 msgid "Sends memory text to {host}"
 msgstr ""
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Sent"
+msgstr "Enviado"
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Sent to {peer}"
+msgstr "Enviado a {peer}"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Sentry alert"
@@ -7982,6 +8000,10 @@ msgstr ""
 msgid "Title"
 msgstr "Título"
 
+#: src/components/PeerMessageReceipt.tsx
+msgid "to {peer}"
+msgstr "a {peer}"
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "To use your Claude subscription, choose Runs on → Claude Code in a bot's settings."
 msgstr ""
@@ -8343,6 +8365,10 @@ msgstr "Voz"
 #: src/pages/system/SystemPage.tsx
 msgid "Voice shortcut"
 msgstr ""
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Waiting for a turn"
+msgstr "Esperando un turno"
 
 #: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx

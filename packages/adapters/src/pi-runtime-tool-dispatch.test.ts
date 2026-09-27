@@ -41,6 +41,7 @@ vi.mock("@earendil-works/pi-agent-core", () => ({
     private readonly prepareNextTurnWithContext?: (input: {
       context: { messages: unknown[] };
     }) => Promise<{ context?: { messages: unknown[] } } | undefined>;
+    private readonly prepareRequest?: () => Promise<unknown>;
     private aborted = false;
 
     constructor(options: {
@@ -48,9 +49,11 @@ vi.mock("@earendil-works/pi-agent-core", () => ({
       prepareNextTurnWithContext?: (input: {
         context: { messages: unknown[] };
       }) => Promise<{ context?: { messages: unknown[] } } | undefined>;
+      prepareRequest?: () => Promise<unknown>;
     }) {
       this.tools = options.initialState.tools;
       this.prepareNextTurnWithContext = options.prepareNextTurnWithContext;
+      this.prepareRequest = options.prepareRequest;
       fakeAgentState.tools = this.tools;
       fakeAgentState.initialMessages = options.initialState.messages;
     }
@@ -62,10 +65,13 @@ vi.mock("@earendil-works/pi-agent-core", () => ({
     async prompt(prompt: string, images?: unknown[]) {
       fakeAgentState.promptInputs.push(prompt);
       fakeAgentState.promptImages.push(images ?? []);
+      await this.prepareRequest?.();
       if (fakeAgentState.mode === "empty" || fakeAgentState.mode === "two-boundaries") {
         await this.prepareNextTurnWithContext?.({ context: { messages: [] } });
+        await this.prepareRequest?.();
         if (fakeAgentState.mode === "two-boundaries") {
           await this.prepareNextTurnWithContext?.({ context: { messages: [] } });
+          await this.prepareRequest?.();
         }
         fakeAgentState.preparedMessages = [...fakeAgentState.steeredMessages];
         return;
@@ -361,6 +367,36 @@ describe("Pi connector tool dispatch", () => {
     expect(fakeAgentState.preparedMessages).toEqual([
       expect.objectContaining({ role: "user", content: "Use the newer customer totals." }),
       expect.objectContaining({ role: "user", content: "Keep the original date range." }),
+    ]);
+  });
+
+  it("acknowledges initial and steered delivery IDs at their request boundaries", async () => {
+    fakeAgentState.mode = "empty";
+    const acknowledgeInput = vi.fn(async (_input: unknown) => undefined);
+    let claims = 0;
+    const claimSteering = vi.fn(async () =>
+      ++claims === 1
+        ? []
+        : [{ id: "steering", messageId: "message", text: "New task data", deliveryIds: ["next"] }],
+    );
+    for await (const _event of new PiAgentRuntime().run({
+      botId: "recipient",
+      threadId: "thread",
+      runId: "run",
+      prompt: "Check the fixture",
+      instructions: "",
+      history: [],
+      tools: [],
+      model: { provider: "test", id: "dispatch-test-model" },
+      inputReceipt: { leaseFence: 4, deliveryIds: ["first"] },
+      acknowledgeInput,
+      claimSteering,
+    })) {
+      // The fake agent crosses both request boundaries.
+    }
+    expect(acknowledgeInput.mock.calls.map(([input]) => input)).toEqual([
+      { runId: "run", leaseFence: 4, deliveryIds: ["first"], mode: "initial" },
+      { runId: "run", leaseFence: 4, deliveryIds: ["next"], mode: "steering" },
     ]);
   });
 

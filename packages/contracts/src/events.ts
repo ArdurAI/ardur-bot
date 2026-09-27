@@ -285,7 +285,10 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     text: z.string(),
     intent: BotMessageIntent.optional(),
     delegationId: Id.optional(),
-    deliveryState: z.literal("delivered").optional(),
+    deliveryId: Id.optional(),
+    deliveryState: z
+      .enum(["queued", "delivered", "read", "replied", "expired", "failed"])
+      .optional(),
     queuedForBusy: z.boolean().optional(),
   }),
   z.object({
@@ -293,10 +296,14 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     kind: z.literal("bot_message_received"),
     fromBotId: Id,
     fromBotName: z.string(),
+    recipientBotName: z.string().optional(),
     text: z.string(),
     intent: BotMessageIntent.optional(),
     delegationId: Id.optional(),
-    deliveryState: z.literal("delivered").optional(),
+    deliveryId: Id.optional(),
+    deliveryState: z
+      .enum(["queued", "delivered", "read", "replied", "expired", "failed"])
+      .optional(),
     queuedForBusy: z.boolean().optional(),
     /** Completed replies may be bounded in the coordinator receipt. */
     truncated: z.boolean().optional(),

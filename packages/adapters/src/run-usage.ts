@@ -8,6 +8,7 @@ import {
   ensureDelegationRootBudget,
   lockDelegationRootTask,
   Prisma,
+  refreshBotMessageUsageProjectionInTransaction,
   withTransactionRetry,
 } from "@ardurbot/db";
 import type { CategoryCoverage } from "./request-usage.js";
@@ -79,7 +80,9 @@ export async function recordRunUsage(
         await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${rootTaskId} FOR UPDATE`;
         const tokens = usage.inputTokens + usage.outputTokens;
         await updateUsageBudget(tx, rootTaskId, delegation?.id, tokens);
-        return tx.usageRecord.create({ data });
+        const persisted = await tx.usageRecord.create({ data });
+        await refreshBotMessageUsageProjectionInTransaction(tx, run.id);
+        return persisted;
       })
     : await deps.prisma.usageRecord.create({ data });
   await deps.events.append({
@@ -463,6 +466,7 @@ async function recordRequestUsage(
             observation: request as unknown as Prisma.InputJsonValue,
           },
         });
+        await refreshBotMessageUsageProjectionInTransaction(tx, run.id);
         if (request.purpose !== "detached-learning") {
           await updateUsageBudget(
             tx,

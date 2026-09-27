@@ -287,6 +287,8 @@ export class PiAgentRuntime implements AgentRuntime {
         const seenSteeringIds: string[] = [];
         const initialSteering = request.claimSteering ? await request.claimSteering([]) : [];
         seenSteeringIds.push(...initialSteering.map((item) => item.id));
+        let initialInputPending = true;
+        let pendingSteeringDeliveryIds = initialSteering.flatMap((item) => item.deliveryIds ?? []);
         const history = toHistory(
           withoutSteeringMessages(request.history, initialSteering),
           request.prompt,
@@ -360,6 +362,7 @@ export class PiAgentRuntime implements AgentRuntime {
             const steering = await request.claimSteering([...seenSteeringIds]);
             if (steering.length === 0) return undefined;
             seenSteeringIds.push(...steering.map((item) => item.id));
+            pendingSteeringDeliveryIds.push(...steering.flatMap((item) => item.deliveryIds ?? []));
             for (const item of steering) {
               if (
                 model.provider === "ollama" &&
@@ -375,6 +378,29 @@ export class PiAgentRuntime implements AgentRuntime {
               });
             }
             return undefined;
+          },
+          prepareRequest: async () => {
+            if (initialInputPending) {
+              initialInputPending = false;
+              if (request.inputReceipt?.deliveryIds.length)
+                await request.acknowledgeInput?.({
+                  runId: request.runId,
+                  leaseFence: request.inputReceipt.leaseFence,
+                  deliveryIds: request.inputReceipt.deliveryIds,
+                  mode: "initial",
+                });
+            }
+            if (pendingSteeringDeliveryIds.length) {
+              const deliveryIds = [...new Set(pendingSteeringDeliveryIds)];
+              pendingSteeringDeliveryIds = [];
+              if (request.inputReceipt)
+                await request.acknowledgeInput?.({
+                  runId: request.runId,
+                  leaseFence: request.inputReceipt.leaseFence,
+                  deliveryIds,
+                  mode: "steering",
+                });
+            }
           },
           initialState: {
             systemPrompt,

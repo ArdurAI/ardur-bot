@@ -2528,7 +2528,7 @@ msgstr ""
 
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "Could not load the extension catalogue. Check the connection and try again."
-msgstr ""
+msgstr "확장 프로그램 카탈로그를 불러올 수 없습니다. 연결을 확인하고 다시 시도하세요."
 
 #: src/pages/LearningCurator.tsx
 msgid "Could not load the last check."
@@ -3139,11 +3139,11 @@ msgstr "삭제됨"
 msgid "Deleting…"
 msgstr "삭제 중…"
 
-#: src/pages/Shell.tsx
+#: src/components/PeerMessageReceipt.tsx
 msgid "Delivered from {peer}"
 msgstr "{peer}에게서 전달됨"
 
-#: src/pages/Shell.tsx
+#: src/components/PeerMessageReceipt.tsx
 msgid "Delivered to {peer}"
 msgstr "{peer}에게 전달됨"
 
@@ -3628,10 +3628,11 @@ msgstr "{0} 펼치기"
 msgid "Experimental"
 msgstr ""
 
+#: src/components/PeerMessageReceipt.tsx
 #: src/pages/LearningInbox.tsx
 #: src/pages/memory/MemoryProposals.tsx
 msgid "Expired"
-msgstr ""
+msgstr "만료됨"
 
 #: src/pages/DevicesSettings.tsx
 msgid "Expires in five minutes."
@@ -3687,6 +3688,7 @@ msgstr ""
 msgid "failed"
 msgstr "실패"
 
+#: src/components/PeerMessageReceipt.tsx
 #: src/lib/run-status-label.ts
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
@@ -3833,6 +3835,10 @@ msgstr "무료"
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Free memory"
 msgstr ""
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "from {peer}"
+msgstr "{peer}에게서"
 
 #: src/pages/customize/PluginsPage.tsx
 #: src/pages/customize/SkillsPage.tsx
@@ -4902,7 +4908,7 @@ msgstr "메시지 작성기"
 msgid "Message event"
 msgstr ""
 
-#: src/pages/Shell.tsx
+#: src/components/PeerMessageReceipt.tsx
 msgid "Message from {peer}"
 msgstr "{peer}의 메시지"
 
@@ -4914,10 +4920,6 @@ msgstr ""
 #: src/pages/system/QuickComposer.tsx
 msgid "Message…"
 msgstr "메시지를 입력하세요"
-
-#: src/pages/Shell.tsx
-msgid "Messaged {peer}"
-msgstr "{peer}에게 메시지 보냄"
 
 #: src/pages/account/AccountMore.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
@@ -6094,7 +6096,6 @@ msgstr "대기 시간"
 #: src/pages/ComparePanel.tsx
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/DelegationLines.tsx
-#: src/pages/Shell.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Queued"
 msgstr "대기 중"
@@ -6124,8 +6125,13 @@ msgid "Reactions"
 msgstr "반응"
 
 #: src/components/integrations/catalog/ToolPicker.tsx
+#: src/components/PeerMessageReceipt.tsx
 msgid "Read"
-msgstr ""
+msgstr "읽음"
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Read by {recipient}"
+msgstr "{recipient}님이 읽음"
 
 #: src/pages/ide/IdePage.tsx
 msgid "Read only: file is larger than 2 MB"
@@ -6424,6 +6430,10 @@ msgstr "API 키 교체"
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Replace key"
 msgstr "키 교체"
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Replied"
+msgstr "답장 받음"
 
 #: src/pages/Shell.tsx
 msgid "Reply"
@@ -7077,6 +7087,14 @@ msgstr ""
 #: src/pages/memory-providers/ExternalMemorySettingsForm.tsx
 msgid "Sends memory text to {host}"
 msgstr ""
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Sent"
+msgstr "보냄"
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Sent to {peer}"
+msgstr "{peer}에게 보냄"
 
 #: src/pages/RoutineEditor.tsx
 msgid "Sentry alert"
@@ -7982,6 +8000,10 @@ msgstr ""
 msgid "Title"
 msgstr "역할"
 
+#: src/components/PeerMessageReceipt.tsx
+msgid "to {peer}"
+msgstr "{peer}에게"
+
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "To use your Claude subscription, choose Runs on → Claude Code in a bot's settings."
 msgstr ""
@@ -8343,6 +8365,10 @@ msgstr "음성"
 #: src/pages/system/SystemPage.tsx
 msgid "Voice shortcut"
 msgstr ""
+
+#: src/components/PeerMessageReceipt.tsx
+msgid "Waiting for a turn"
+msgstr "차례 기다리는 중"
 
 #: src/pages/ComparePanel.tsx
 #: src/pages/TeamBoard.tsx

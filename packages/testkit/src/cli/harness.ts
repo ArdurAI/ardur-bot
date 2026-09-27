@@ -1,4 +1,5 @@
 import { execSync } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { loadRootEnv } from "@ardurbot/core/node/load-root-env";
@@ -90,12 +91,12 @@ async function main() {
     process.env.SIGNUPS_ENABLED = "true";
     process.env.SIGNUP_ALLOWLIST = "";
     process.env.CI = "1";
+    if (e2e) process.env.TESTKIT_E2E_OWNER_TOKEN = randomUUID();
 
     execSync("pnpm --filter @ardurbot/db generate", { stdio: "inherit", env: process.env });
-    execSync("pnpm --filter @ardurbot/db exec prisma migrate deploy", {
+    execSync("pnpm db:migrate", {
       stdio: "inherit",
       env: process.env,
-      cwd: path.resolve("packages/db"),
     });
 
     if (integration) {
@@ -119,6 +120,7 @@ async function main() {
         "packages/db/src/messaging.postgres.test.ts",
         "packages/db/src/learning.postgres.test.ts",
         "packages/adapters/src/learning-insights.postgres.test.ts",
+        "packages/adapters/src/bot-comms.postgres.test.ts",
         "packages/db/src/command-blocks.postgres.test.ts",
         "packages/adapters/src/board/filing.postgres.test.ts",
         "packages/adapters/src/board/delivery.postgres.test.ts",
@@ -170,7 +172,13 @@ async function main() {
     }
 
     const [
-      { ComposioEmulator, EmailEmulator, PipedreamConnector, ThirdPartyConnectorEmulator },
+      {
+        ComposioEmulator,
+        EmailEmulator,
+        PipedreamConnector,
+        ScriptedAgentRuntime,
+        ThirdPartyConnectorEmulator,
+      },
       { createApp },
     ] = await Promise.all([
       import("@ardurbot/adapters"),
@@ -189,12 +197,34 @@ async function main() {
       { fetch: thirdParties.fetch, resolveHostname: thirdParties.resolveHostname },
     );
     const email = new EmailEmulator();
+    let receiptGate:
+      | {
+          botId: string;
+          before: Promise<void>;
+          after: Promise<void>;
+          accept: () => void;
+          reply: () => void;
+        }
+      | undefined;
     const handles = await createApp({
       databaseUrl,
       prisma: undefined,
       composio: new ComposioEmulator(),
       pipedream,
       email,
+      runtime:
+        e2e && agentRuntime === "scripted"
+          ? new ScriptedAgentRuntime({
+              beforeAcknowledge: async (request) => {
+                const gate = receiptGate;
+                if (gate?.botId === request.botId) await gate.before;
+              },
+              afterAcknowledge: async (request) => {
+                const gate = receiptGate;
+                if (gate?.botId === request.botId) await gate.after;
+              },
+            })
+          : undefined,
       remoteConnectors: {
         fetch: thirdParties.fetch,
         resolveHostname: thirdParties.resolveHostname,
@@ -235,10 +265,59 @@ async function main() {
     });
     const server = serve({
       fetch: async (request) => {
-        if (new URL(request.url).pathname === "/__e2e/emails") {
+        const url = new URL(request.url);
+        if (url.pathname === "/__e2e/emails") {
           return Response.json(email.sent, { headers: { "cache-control": "no-store" } });
         }
-        if (new URL(request.url).pathname === "/__e2e/deployment-owner") {
+        if (e2e && url.pathname === "/__e2e/receipt-gate") {
+          if (
+            request.method !== "POST" ||
+            request.headers.get("x-e2e-owner-token") !== process.env.TESTKIT_E2E_OWNER_TOKEN
+          )
+            return new Response("Forbidden", { status: 403 });
+          const input = (await request.json()) as {
+            action?: "arm" | "accept" | "reply";
+            botId?: string;
+          };
+          if (input.action === "arm" && input.botId && !receiptGate) {
+            let accept!: () => void;
+            let reply!: () => void;
+            const before = new Promise<void>((resolve) => {
+              accept = resolve;
+            });
+            const after = new Promise<void>((resolve) => {
+              reply = resolve;
+            });
+            receiptGate = { botId: input.botId, before, after, accept, reply };
+          } else if (input.action === "accept" && receiptGate) {
+            receiptGate.accept();
+          } else if (input.action === "reply" && receiptGate) {
+            receiptGate.accept();
+            receiptGate.reply();
+            receiptGate = undefined;
+          } else {
+            return new Response("Bad receipt gate request", { status: 400 });
+          }
+          return Response.json({ ok: true });
+        }
+        if (e2e && url.pathname === "/__e2e/receipt-timeline") {
+          if (
+            request.method !== "GET" ||
+            request.headers.get("x-e2e-owner-token") !== process.env.TESTKIT_E2E_OWNER_TOKEN
+          )
+            return new Response("Forbidden", { status: 403 });
+          const outboundMessageId = url.searchParams.get("outboundMessageId");
+          const inboundMessageId = url.searchParams.get("inboundMessageId");
+          if (!outboundMessageId || !inboundMessageId)
+            return new Response("Bad receipt timeline request", { status: 400 });
+          const delivery = await handles.prisma.botMessageDelivery.findFirst({
+            where: { outboundMessageId, inboundMessageId },
+            select: { state: true, readAt: true, repliedAt: true },
+          });
+          if (!delivery) return new Response("Unknown delivery", { status: 404 });
+          return Response.json(delivery, { headers: { "cache-control": "no-store" } });
+        }
+        if (url.pathname === "/__e2e/deployment-owner") {
           return deploymentOwner(request);
         }
         activeRequests += 1;
@@ -297,6 +376,9 @@ async function main() {
         webPort,
       });
     } finally {
+      receiptGate?.accept();
+      receiptGate?.reply();
+      receiptGate = undefined;
       const cleanupErrors: unknown[] = [];
       const computers = await managedComputers(handles).catch((error) => {
         cleanupErrors.push(error);
