@@ -12,7 +12,12 @@ import { PostgresDocumentStore } from "./postgres-store.js";
 memoryConformance("Postgres", async () => {
   const database = memoryDatabaseFake();
   return {
-    store: () => new PostgresDocumentStore(database.tx, () => new Date("2026-09-23T12:00:00.000Z")),
+    store: () =>
+      new PostgresDocumentStore(
+        database.tx,
+        () => new Date("2026-09-23T12:00:00.000Z"),
+        database.selectListIds,
+      ),
     restart: () => undefined,
   };
 });
@@ -28,7 +33,7 @@ it("validates the public manual-verification bundle", () => {
 });
 it("cannot overwrite another space through an imported stable document ID", async () => {
   const database = memoryDatabaseFake();
-  const store = new PostgresDocumentStore(database.tx);
+  const store = new PostgresDocumentStore(database.tx, undefined, database.selectListIds);
   const source = memoryTestAccess();
   const target = memoryTestAccess("space-b");
   const saved = await store.commit(memoryTestCommit(source), source);
@@ -47,7 +52,7 @@ it("makes no outbound calls for a built-in document store", async () => {
   });
   vi.stubGlobal("fetch", fetch);
   const database = memoryDatabaseFake();
-  const store = new PostgresDocumentStore(database.tx);
+  const store = new PostgresDocumentStore(database.tx, undefined, database.selectListIds);
   const access = memoryTestAccess();
   await store.commit(memoryTestCommit(access), access);
   await store.exportBundle(access);

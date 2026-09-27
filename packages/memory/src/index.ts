@@ -163,4 +163,5 @@ export * from "./portable.js";
 export * from "./postgres-store.js";
 export * from "./redaction.js";
 export * from "./scope.js";
+export * from "./scoped-where.js";
 export * from "./service.js";

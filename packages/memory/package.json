@@ -12,7 +12,9 @@
   },
   "scripts": {
     "check": "tsc --noEmit -p tsconfig.json",
-    "test": "vitest run --root ../.. packages/memory/src"
+    "test": "vitest run --root ../.. packages/memory/src",
+    "bench:scoped-reads": "tsx src/scoped-reads.bench.ts",
+    "test:postgres": "tsx src/scoped-reads.pg-runner.ts"
   },
   "dependencies": {
     "@ardurbot/adapter-kit": "workspace:*",
@@ -22,6 +24,8 @@
     "@ardurbot/logging": "workspace:*"
   },
   "devDependencies": {
+    "@testcontainers/postgresql": "12.1.0",
+    "tsx": "4.23.13",
     "typescript": "7.0.2",
     "vitest": "4.1.11"
   }

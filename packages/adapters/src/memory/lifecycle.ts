@@ -6,6 +6,7 @@ import type { MemoryOperationContext } from "@ardurbot/memory";
 import { LifecycleMemoryStore, MemoryService } from "@ardurbot/memory";
 import { SpaceMemoryProviderResolver, selectDocumentStore } from "../memory-provider-factory.js";
 import type { EncryptedSecretStore } from "../secrets.js";
+import type { ListIdSelector } from "./document-store-factory.js";
 
 export async function lockMemorySpace(tx: Prisma.TransactionClient, spaceId: string) {
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`memory:${spaceId}`}, 0))`;
@@ -45,6 +46,8 @@ export interface MemoryLifecycleDependencies {
   secrets: EncryptedSecretStore;
   jobs: JobPublisher;
   dataDir: string;
+  /** Test seam for the relational fake, which cannot run the store's raw id query. */
+  selectListIds?: ListIdSelector;
 }
 export function createMemoryLifecycle(deps: MemoryLifecycleDependencies) {
   const service = new MemoryService({
@@ -84,7 +87,13 @@ export function createMemoryLifecycle(deps: MemoryLifecycleDependencies) {
         return action({
           access,
           beforeWrite: async (documentId) => {
-            const store = await selectDocumentStore(tx, config, deps.dataDir, deps.secrets);
+            const store = await selectDocumentStore(
+              tx,
+              config,
+              deps.dataDir,
+              deps.secrets,
+              deps.selectListIds,
+            );
             const document = await store.read(documentId, access);
             if (document?.path.startsWith("skills/builtin-")) throw new MemoryAccessError();
             if (document?.path.startsWith("preferences/") && !context.learning)
@@ -103,7 +112,13 @@ export function createMemoryLifecycle(deps: MemoryLifecycleDependencies) {
             )
               throw new MemoryAccessError();
           },
-          store: await selectDocumentStore(tx, config, deps.dataDir, deps.secrets),
+          store: await selectDocumentStore(
+            tx,
+            config,
+            deps.dataDir,
+            deps.secrets,
+            deps.selectListIds,
+          ),
           generation: config?.generation ?? 0,
           semantic: semantic?.provider ?? null,
         });

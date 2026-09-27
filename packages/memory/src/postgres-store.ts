@@ -1,10 +1,154 @@
-import type { DocumentScope, MemoryAccess } from "@ardurbot/adapter-kit";
-import { MemoryConflictError } from "@ardurbot/adapter-kit";
+import type {
+  DocumentListInput,
+  DocumentRevision,
+  DocumentScope,
+  MemoryAccess,
+  MemoryDocumentHead,
+} from "@ardurbot/adapter-kit";
+import { MemoryAccessError, MemoryConflictError } from "@ardurbot/adapter-kit";
 import { DocumentRevisionSchema } from "@ardurbot/contracts";
-import type { Prisma } from "@ardurbot/db";
+import { Prisma } from "@ardurbot/db";
 import type { JournalDocument, MemoryJournal } from "./journal.js";
 import { JournalDocumentStore } from "./journal.js";
+import { assertMemorySafe } from "./redaction.js";
 import { scopeKey } from "./scope.js";
+import { authorizedDocumentWhere, documentWhereSql, listedDocumentWhere } from "./scoped-where.js";
+
+const headFields = {
+  kind: true,
+  id: true,
+  spaceId: true,
+  userId: true,
+  botId: true,
+  scope: true,
+  scopeKey: true,
+  path: true,
+  content: true,
+  revision: true,
+  deletedAt: true,
+  deliveryStatus: true,
+  deliveryGeneration: true,
+  deliveryProvider: true,
+  deliveryReceipt: true,
+  deliveryRetryAt: true,
+  updatedAt: true,
+} as const satisfies Prisma.MemoryDocumentSelect;
+const revisionFields = {
+  kind: true,
+  revision: true,
+  content: true,
+  sourceRunId: true,
+  sourceThreadId: true,
+  commitId: true,
+  authorKind: true,
+  learning: true,
+  imported: true,
+  authorUserId: true,
+  authorBotId: true,
+  modelProvider: true,
+  modelId: true,
+  modelEffort: true,
+  references: true,
+  deletedAt: true,
+  createdAt: true,
+} as const satisfies Prisma.MemoryRevisionSelect;
+type DocumentRow = Pick<
+  Prisma.MemoryDocumentGetPayload<Prisma.MemoryDocumentDefaultArgs>,
+  keyof typeof headFields
+>;
+type RevisionRow = Pick<
+  Prisma.MemoryRevisionGetPayload<Prisma.MemoryRevisionDefaultArgs>,
+  keyof typeof revisionFields
+>;
+type ListIds = (
+  where: Prisma.MemoryDocumentWhereInput,
+  limit: number,
+) => Promise<Array<{ id: string }>>;
+
+function rowScope(row: DocumentRow): DocumentScope {
+  if (row.scope === "space-shared") return { kind: "space-shared", spaceId: row.spaceId };
+  if (row.scope === "group")
+    return {
+      kind: "group",
+      spaceId: row.spaceId,
+      userId: row.userId,
+      botId: row.botId!,
+      groupId: row.scopeKey!.slice(row.botId!.length + 1),
+    };
+  if (row.scope === "bot")
+    return { kind: "bot", spaceId: row.spaceId, userId: row.userId, botId: row.botId! };
+  return { kind: "user", spaceId: row.spaceId, userId: row.userId };
+}
+
+function rowRevision(row: DocumentRow, revision: RevisionRow): DocumentRevision {
+  return DocumentRevisionSchema.parse({
+    kind: revision.kind,
+    documentId: row.id,
+    revision: revision.revision,
+    scopeKey: rowScope(row),
+    path: row.path,
+    content: revision.content,
+    author: {
+      kind: revision.authorKind,
+      ...(revision.authorUserId ? { userId: revision.authorUserId } : {}),
+      ...(revision.authorBotId ? { botId: revision.authorBotId } : {}),
+    },
+    model:
+      revision.modelProvider && revision.modelId
+        ? {
+            provider: revision.modelProvider,
+            modelId: revision.modelId,
+            effort: revision.modelEffort,
+          }
+        : null,
+    runId: revision.sourceRunId,
+    threadId: revision.sourceThreadId,
+    references: revision.references,
+    ...(revision.learning ? { learning: revision.learning } : {}),
+    ...(revision.imported ? { imported: revision.imported } : {}),
+    createdAt: revision.createdAt.toISOString(),
+    deletedAt: revision.deletedAt?.toISOString() ?? null,
+    ...(revision.commitId ? { commitId: revision.commitId } : {}),
+  });
+}
+
+function legacyRevision(row: DocumentRow): DocumentRevision {
+  return DocumentRevisionSchema.parse({
+    kind: row.kind,
+    documentId: row.id,
+    revision: row.revision,
+    scopeKey: rowScope(row),
+    path: row.path,
+    content: row.content,
+    author: {
+      kind: "runtime",
+      ...(row.userId ? { userId: row.userId } : {}),
+      ...(row.botId ? { botId: row.botId } : {}),
+    },
+    model: null,
+    runId: null,
+    threadId: null,
+    references: [],
+    createdAt: row.updatedAt.toISOString(),
+    deletedAt: row.deletedAt?.toISOString() ?? null,
+  });
+}
+
+function rowHead(row: DocumentRow, latest?: RevisionRow): MemoryDocumentHead {
+  const revision = latest ? rowRevision(row, latest) : legacyRevision(row);
+  return {
+    ...revision,
+    id: row.id,
+    updatedAt: revision.createdAt,
+    delivery: {
+      status: row.deliveryStatus as MemoryDocumentHead["delivery"]["status"],
+      generation: row.deliveryGeneration,
+      provider: row.deliveryProvider,
+      ...(row.deliveryReceipt ? { receipt: row.deliveryReceipt } : {}),
+      ...(row.deliveryRetryAt ? { retryAt: row.deliveryRetryAt.toISOString() } : {}),
+    },
+  };
+}
 
 /** The caller holds the space advisory lock and owns this SQL transaction. */
 export class PostgresMemoryJournal implements MemoryJournal {
@@ -46,59 +190,11 @@ export class PostgresMemoryJournal implements MemoryJournal {
         createdAt: row.updatedAt,
       });
     }
-    const docs: JournalDocument[] = rows.map((row) => {
-      const scope: DocumentScope =
-        row.scope === "space-shared"
-          ? { kind: "space-shared", spaceId: row.spaceId }
-          : row.scope === "group"
-            ? {
-                kind: "group",
-                spaceId: row.spaceId,
-                userId: row.userId,
-                botId: row.botId!,
-                groupId: row.scopeKey!.slice(row.botId!.length + 1),
-              }
-            : row.scope === "bot"
-              ? { kind: "bot", spaceId: row.spaceId, userId: row.userId, botId: row.botId! }
-              : { kind: "user", spaceId: row.spaceId, userId: row.userId };
-      return {
-        id: row.id,
-        delivery: {
-          status: row.deliveryStatus as JournalDocument["delivery"]["status"],
-          generation: row.deliveryGeneration,
-          provider: row.deliveryProvider,
-          ...(row.deliveryReceipt ? { receipt: row.deliveryReceipt } : {}),
-          ...(row.deliveryRetryAt ? { retryAt: row.deliveryRetryAt.toISOString() } : {}),
-        },
-        revisions: row.revisions.map((r) =>
-          DocumentRevisionSchema.parse({
-            kind: r.kind,
-            documentId: row.id,
-            revision: r.revision,
-            scopeKey: scope,
-            path: row.path,
-            content: r.content,
-            author: {
-              kind: r.authorKind,
-              ...(r.authorUserId ? { userId: r.authorUserId } : {}),
-              ...(r.authorBotId ? { botId: r.authorBotId } : {}),
-            },
-            model:
-              r.modelProvider && r.modelId
-                ? { provider: r.modelProvider, modelId: r.modelId, effort: r.modelEffort }
-                : null,
-            runId: r.sourceRunId,
-            threadId: r.sourceThreadId,
-            references: r.references,
-            ...(r.learning ? { learning: r.learning } : {}),
-            ...(r.imported ? { imported: r.imported } : {}),
-            createdAt: r.createdAt.toISOString(),
-            deletedAt: r.deletedAt?.toISOString() ?? null,
-            ...(r.commitId ? { commitId: r.commitId } : {}),
-          }),
-        ),
-      };
-    });
+    const docs: JournalDocument[] = rows.map((row) => ({
+      id: row.id,
+      delivery: rowHead(row, row.revisions.at(-1)).delivery,
+      revisions: row.revisions.map((revision) => rowRevision(row, revision)),
+    }));
     const before = new Map(docs.map((doc) => [doc.id, JSON.stringify(doc)]));
     const result = await action(docs);
     for (const doc of docs) {
@@ -177,7 +273,103 @@ export class PostgresMemoryJournal implements MemoryJournal {
   }
 }
 export class PostgresDocumentStore extends JournalDocumentStore {
-  constructor(tx: Prisma.TransactionClient, clock?: () => Date) {
+  constructor(
+    private readonly tx: Prisma.TransactionClient,
+    clock?: () => Date,
+    private readonly selectListIds?: ListIds,
+  ) {
     super(new PostgresMemoryJournal(tx), "postgres", clock);
+  }
+
+  private async currentRevisions(rows: DocumentRow[]): Promise<Map<string, RevisionRow>> {
+    if (rows.length === 0) return new Map();
+    const revisions = await this.tx.memoryRevision.findMany({
+      where: { OR: rows.map((row) => ({ documentId: row.id, revision: row.revision })) },
+      select: { documentId: true, ...revisionFields },
+    });
+    return new Map(revisions.map((revision) => [revision.documentId, revision]));
+  }
+
+  override async list(input: DocumentListInput, access: MemoryAccess) {
+    if (input.botId && !access.botIds.includes(input.botId)) throw new MemoryAccessError();
+    const limit = Math.min(100, Math.max(1, input.limit ?? 50));
+    const where = listedDocumentWhere(access, input);
+    const ids = this.selectListIds
+      ? await this.selectListIds(where, limit + 1)
+      : await this.tx.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+          SELECT "id" FROM "memory_documents"
+          WHERE ${documentWhereSql(where)}
+          ORDER BY "id" COLLATE "C" ASC
+          LIMIT ${limit + 1}
+        `);
+    const rows = await this.tx.memoryDocument.findMany({
+      // The bytewise cursor was applied above. Reapplying it through Prisma would
+      // use the database's ICU collation and discard valid IDs on later pages.
+      where: { AND: [authorizedDocumentWhere(access), { id: { in: ids.map((row) => row.id) } }] },
+      take: ids.length,
+      select: headFields,
+    });
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    const ordered = ids.flatMap(({ id }) => (byId.has(id) ? [byId.get(id)!] : []));
+    const latest = await this.currentRevisions(ordered);
+    const page = {
+      items: ordered.slice(0, limit).map((row) => rowHead(row, latest.get(row.id))),
+      nextCursor: ordered.length > limit ? ordered[limit - 1]!.id : null,
+    };
+    assertMemorySafe(page, access.knownSecrets);
+    return page;
+  }
+
+  override async read(id: string, access: MemoryAccess) {
+    const rows = await this.tx.memoryDocument.findMany({
+      where: { AND: [authorizedDocumentWhere(access), { id }] },
+      take: 1,
+      select: headFields,
+    });
+    const latest = await this.currentRevisions(rows);
+    const head = rows[0] ? rowHead(rows[0], latest.get(rows[0].id)) : null;
+    assertMemorySafe(head, access.knownSecrets);
+    return head;
+  }
+
+  override async history(
+    id: string,
+    input: { cursor?: number; limit?: number },
+    access: MemoryAccess,
+  ) {
+    const rows = await this.tx.memoryDocument.findMany({
+      where: { AND: [authorizedDocumentWhere(access), { id }] },
+      take: 1,
+      select: headFields,
+    });
+    const row = rows[0];
+    if (!row) throw new MemoryAccessError();
+    const limit = Math.min(100, Math.max(1, input.limit ?? 50));
+    const revisions = await this.tx.memoryRevision.findMany({
+      where: {
+        documentId: row.id,
+        ...(input.cursor ? { revision: { lt: input.cursor } } : {}),
+      },
+      orderBy: { revision: "desc" },
+      take: limit + 1,
+      select: revisionFields,
+    });
+    // A document predating revision rows has one synthetic historical revision.
+    const legacy =
+      revisions.length === 0
+        ? await this.tx.memoryRevision.findMany({ where: { documentId: row.id }, take: 1 })
+        : [];
+    const items =
+      revisions.length === 0 &&
+      legacy.length === 0 &&
+      (!input.cursor || row.revision < input.cursor)
+        ? [legacyRevision(row)]
+        : revisions.slice(0, limit).map((revision) => rowRevision(row, revision));
+    const page = {
+      items,
+      nextCursor: revisions.length > limit ? revisions[limit - 1]!.revision : null,
+    };
+    assertMemorySafe(page, access.knownSecrets);
+    return page;
   }
 }
