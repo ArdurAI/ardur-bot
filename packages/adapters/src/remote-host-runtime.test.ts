@@ -66,6 +66,28 @@ async function collect(source: ReturnType<RemoteHostRuntime["run"]>) {
   return events;
 }
 describe("worker-owned remote runtime callbacks", () => {
+  it.each(["claude-code", "codex-app-server", "antigravity"] as const)(
+    "keeps the three-argument host request for %s",
+    async (kind) => {
+      const requestHost = vi.fn(async function* () {
+        yield {
+          v: 1,
+          type: "stream",
+          id: "request",
+          seq: 0,
+          channel: "event",
+          data: { type: "done" },
+        } as const;
+      });
+      const remote = new RemoteHostRuntime({ request: requestHost } as unknown as HostClient, kind);
+      expect(await collect(remote.run(request()))).toEqual([{ type: "done" }]);
+      expect(requestHost).toHaveBeenCalledWith(
+        expect.objectContaining({ op: "runtime.turn" }),
+        expect.objectContaining({ botId: "bot", runId: "run" }),
+        expect.any(Function),
+      );
+    },
+  );
   it.each(["with ACP totals", "without ACP totals"])(
     "leaves Hermes provider accounting to the broker %s",
     async (scenario) => {
@@ -223,42 +245,43 @@ describe("worker-owned remote runtime callbacks", () => {
     );
     const broker = { grant, revoke, open } as unknown as HermesProviderBroker;
     let expectedOperationId = "";
+    const requestHost = vi.fn(async function* (
+      operation: HostOperation,
+      _context: unknown,
+      callback: Callback,
+      operationId: string,
+    ) {
+      expect(operation.op).toBe("runtime.turn");
+      if (operation.op !== "runtime.turn") throw new Error("Wrong operation");
+      expect(operationId).toBe(expectedOperationId);
+      expect(operation.request.providerBroker).toMatchObject({
+        protocol: 1,
+        id: grant.id,
+        hostGeneration: generation,
+      });
+      expect(JSON.stringify(operation)).not.toContain("real-provider-key");
+      await expect(callback(frame("provider.read", [0]))).rejects.toThrow("sequence");
+      expect(await callback(frame("provider.open", [{ model: "fixture-model" }]))).toEqual({
+        status: 200,
+        contentType: "application/json",
+      });
+      expect(await callback(frame("provider.read", [0]))).toEqual({
+        seq: 0,
+        chunk: Buffer.from('{"model":"fixture-model"}').toString("base64"),
+        done: true,
+      });
+      yield {
+        v: 1,
+        type: "stream",
+        id: operationId,
+        seq: 0,
+        channel: "event",
+        data: { type: "done" },
+      } as const;
+    });
     const client = {
       health: async () => ({ capabilities: { providerRelay: 1 }, generation }),
-      request: async function* (
-        operation: HostOperation,
-        _context: unknown,
-        callback: Callback,
-        operationId: string,
-      ) {
-        expect(operation.op).toBe("runtime.turn");
-        if (operation.op !== "runtime.turn") throw new Error("Wrong operation");
-        expect(operationId).toBe(expectedOperationId);
-        expect(operation.request.providerBroker).toMatchObject({
-          protocol: 1,
-          id: grant.id,
-          hostGeneration: generation,
-        });
-        expect(JSON.stringify(operation)).not.toContain("real-provider-key");
-        await expect(callback(frame("provider.read", [0]))).rejects.toThrow("sequence");
-        expect(await callback(frame("provider.open", [{ model: "fixture-model" }]))).toEqual({
-          status: 200,
-          contentType: "application/json",
-        });
-        expect(await callback(frame("provider.read", [0]))).toEqual({
-          seq: 0,
-          chunk: Buffer.from('{"model":"fixture-model"}').toString("base64"),
-          done: true,
-        });
-        yield {
-          v: 1,
-          type: "stream",
-          id: operationId,
-          seq: 0,
-          channel: "event",
-          data: { type: "done" },
-        } as const;
-      },
+      request: requestHost,
     } as unknown as HostClient;
     const remote = new RemoteHostRuntime(client, "hermes", async (_request, _context, fence) => {
       expectedOperationId = fence.operationId;
@@ -304,6 +327,12 @@ describe("worker-owned remote runtime callbacks", () => {
     expect(await collect(remote.run(run, { userId: "owner", spaceId: "space" }))).toEqual([
       { type: "done" },
     ]);
+    expect(requestHost).toHaveBeenCalledWith(
+      expect.objectContaining({ op: "runtime.turn" }),
+      expect.objectContaining({ botId: "bot", runId: "run" }),
+      expect.any(Function),
+      expectedOperationId,
+    );
     expect(open).toHaveBeenCalledOnce();
     expect(revoke).toHaveBeenCalledOnce();
   });

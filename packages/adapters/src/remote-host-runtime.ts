@@ -147,6 +147,7 @@ export class RemoteHostRuntime implements AgentRuntime {
     const executions = new Map<string, { name: string; result?: unknown; error?: unknown }>();
     const seenExecutions = new Set<string>();
     const authorizations = new Map<string, unknown>();
+    const requestFence: [] | [typeof operationId] = this.kind === "hermes" ? [operationId] : [];
     try {
       for await (const frame of this.client.request(
         { op: "runtime.turn", homeKey, request: turn },
@@ -264,7 +265,7 @@ export class RemoteHostRuntime implements AgentRuntime {
             throw error;
           }
         },
-        operationId,
+        ...requestFence,
       )) {
         if (frame.channel !== "event") throw new Error("Unexpected runtime frame.");
         yield HostRuntimeEventSchema.parse(frame.data);
