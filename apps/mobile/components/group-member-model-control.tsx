@@ -11,6 +11,16 @@ import { RpcError } from "../lib/rpc-error";
 
 type Choice = { label: string; pin: SetGroupMemberModelPinInput["pin"] };
 
+function effortLabel(level: string, t: (message: string) => string) {
+  if (level === "xhigh") return t("Extra high");
+  if (level === "low") return t("Low");
+  if (level === "medium") return t("Medium");
+  if (level === "high") return t("High");
+  if (level === "minimal") return t("Minimal");
+  if (level === "max") return t("Max");
+  return level.slice(0, 1).toUpperCase() + level.slice(1);
+}
+
 export function GroupMemberModelControl({
   groupId,
   member,
@@ -98,7 +108,7 @@ export function GroupMemberModelControl({
     return result;
   }, [catalog, credentials, activeMember.runtimePin]);
 
-  async function choose(pin: Choice["pin"] | null) {
+  async function choose(pin: Choice["pin"] | null, preserveCurrentEffort = true) {
     if (!activeMember.memberId || activeMember.modelPinRevision == null || pending) return;
     const currentPin = activeMember.runtimePin;
     const resolvedPin =
@@ -106,7 +116,8 @@ export function GroupMemberModelControl({
       currentPin &&
       pin.provider === currentPin.provider &&
       pin.modelId === currentPin.modelId &&
-      pin.credentialId === currentPin.credentialId
+      pin.credentialId === currentPin.credentialId &&
+      preserveCurrentEffort
         ? { ...pin, effort: currentPin.effort }
         : pin;
     setPending(true);
@@ -169,40 +180,110 @@ export function GroupMemberModelControl({
     }
   }
 
-  const label = activeMember.runtimePin
+  const activePin = activeMember.runtimePin;
+  const pinnedChoice =
+    activePin?.provider && activePin.modelId && activePin.credentialId
+      ? {
+          runtimeKind: activePin.runtimeKind,
+          provider: activePin.provider,
+          modelId: activePin.modelId,
+          credentialId: activePin.credentialId,
+        }
+      : null;
+  const credential = credentials.find((item) => item.id === activePin?.credentialId);
+  const entry = catalog.find(
+    (item) => item.provider === activePin?.provider && item.id === activePin?.modelId,
+  );
+  const isOllama = activePin?.provider === "ollama";
+  const supportedEfforts = credential?.thinkingLevels ?? entry?.thinkingLevels ?? [];
+  const availableEfforts = supportedEfforts.filter((level) =>
+    isOllama ? level === "off" || level === "medium" : level !== "off",
+  );
+  const defaultEffort =
+    credential?.thinkingLevel ?? spaceDefaultEffort(undefined, supportedEfforts);
+  const effortChoices = [
+    ...(!isOllama && defaultEffort
+      ? [{ effort: defaultEffort, label: `${t("Default")} (${effortLabel(defaultEffort, t)})` }]
+      : []),
+    ...(activePin?.effort && !availableEfforts.some((level) => level === activePin.effort)
+      ? [{ effort: activePin.effort, label: effortLabel(activePin.effort, t) }]
+      : []),
+    ...availableEfforts.map((effort) => ({
+      effort,
+      label: isOllama ? (effort === "off" ? t("Off") : t("On")) : effortLabel(effort, t),
+    })),
+  ];
+  const selectedEffortLabel = activePin?.effort
+    ? isOllama
+      ? activePin.effort === "off"
+        ? t("Off")
+        : t("On")
+      : effortLabel(activePin.effort, t)
+    : isOllama
+      ? t("Off")
+      : null;
+  const label = activePin
     ? (choices.find(
         (choice) =>
-          choice.pin.provider === activeMember.runtimePin?.provider &&
-          choice.pin.modelId === activeMember.runtimePin?.modelId &&
-          choice.pin.credentialId === activeMember.runtimePin?.credentialId,
-      )?.label ?? activeMember.runtimePin.modelId)
+          choice.pin.provider === activePin.provider &&
+          choice.pin.modelId === activePin.modelId &&
+          choice.pin.credentialId === activePin.credentialId,
+      )?.label ?? activePin.modelId)
     : t("Same as bot");
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${t("Model in this group")} · ${activeMember.name}`}
-      disabled={!activeMember.memberId || activeMember.modelPinRevision == null || pending}
-      onPress={() =>
-        presentMessageActionSheet({
-          title: `${t("Model in this group")} · ${activeMember.name}`,
-          cancel: t("Cancel"),
-          more: t("More"),
-          colorScheme,
-          actions: [
-            { text: t("Same as bot"), onPress: () => void choose(null) },
-            ...choices.map((choice) => ({
-              text: choice.label,
-              onPress: () => void choose(choice.pin),
-            })),
-          ],
-        })
-      }
-      style={{ paddingVertical: 12 }}
-    >
-      <Text style={{ color: tokens.mutedForeground }}>
-        {t("Model in this group")} · {activeMember.name}
-      </Text>
-      <Text style={{ color: tokens.foreground }}>{label}</Text>
-    </Pressable>
+    <>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${t("Model in this group")} · ${activeMember.name}`}
+        disabled={!activeMember.memberId || activeMember.modelPinRevision == null || pending}
+        onPress={() =>
+          presentMessageActionSheet({
+            title: `${t("Model in this group")} · ${activeMember.name}`,
+            cancel: t("Cancel"),
+            more: t("More"),
+            colorScheme,
+            actions: [
+              { text: t("Same as bot"), onPress: () => void choose(null) },
+              ...choices.map((choice) => ({
+                text: choice.label,
+                onPress: () => void choose(choice.pin),
+              })),
+            ],
+          })
+        }
+        style={{ paddingVertical: 12 }}
+      >
+        <Text style={{ color: tokens.mutedForeground }}>
+          {t("Model in this group")} · {activeMember.name}
+        </Text>
+        <Text style={{ color: tokens.foreground }}>
+          {label}
+          {selectedEffortLabel ? ` · ${selectedEffortLabel}` : ""}
+        </Text>
+      </Pressable>
+      {pinnedChoice && activePin?.runtimeKind === "pi" && effortChoices.length ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${t("Thinking")} · ${activeMember.name}`}
+          disabled={!activeMember.memberId || activeMember.modelPinRevision == null || pending}
+          onPress={() =>
+            presentMessageActionSheet({
+              title: t("Thinking"),
+              cancel: t("Cancel"),
+              more: t("More"),
+              colorScheme,
+              actions: effortChoices.map((choice) => ({
+                text: choice.label,
+                onPress: () => void choose({ ...pinnedChoice, effort: choice.effort }, false),
+              })),
+            })
+          }
+          style={{ paddingVertical: 12 }}
+        >
+          <Text style={{ color: tokens.mutedForeground }}>{t("Thinking")}</Text>
+          <Text style={{ color: tokens.foreground }}>{selectedEffortLabel}</Text>
+        </Pressable>
+      ) : null}
+    </>
   );
 }

@@ -42,7 +42,10 @@ const member: GroupMember = {
   color: "#111",
 };
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  vi.mocked(rpc).mockReset();
+});
 
 it("uses the native model sheet to save and clear the selected member pin", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -202,6 +205,72 @@ it("preserves saved effort when reselecting the member's current model", async (
     },
   });
   expect(onSaved).toHaveBeenCalledOnce();
+  await act(async () => root.unmount());
+});
+
+it("changes effort on the same saved model and connection", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const pinnedMember: GroupMember = {
+    ...member,
+    runtimePin: {
+      runtimeKind: "pi",
+      provider: "fixture",
+      modelId: "valid",
+      credentialId: "connection",
+      effort: "high",
+      revision: 2,
+    },
+  };
+  vi.mocked(rpc).mockResolvedValueOnce({
+    id: "room",
+    members: [
+      {
+        ...pinnedMember,
+        modelPinRevision: 3,
+        runtimePin: { ...pinnedMember.runtimePin, effort: "low" },
+      },
+    ],
+  });
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  await act(async () =>
+    root.render(
+      createElement(GroupMemberModelControl, {
+        groupId: "room",
+        member: pinnedMember,
+        catalog: [
+          {
+            provider: "fixture",
+            providerName: "Fixture",
+            id: "valid",
+            label: "Valid",
+            reasoning: true,
+            thinkingLevels: ["low", "high"],
+          },
+        ],
+        credentials: [{ id: "connection", provider: "fixture", label: "Connection" }],
+        onSaved: vi.fn(),
+        onError: vi.fn(),
+      } as never),
+    ),
+  );
+  expect(node.textContent).toContain("High");
+  await act(async () => node.querySelectorAll("button")[1]!.click());
+  const sheet = vi.mocked(presentMessageActionSheet).mock.calls.at(-1)![0];
+  await act(async () => sheet.actions.find((action) => action.text === "Low")!.onPress());
+  expect(rpc).toHaveBeenCalledWith("groups/setMemberModelPin", {
+    groupId: "room",
+    botId: "worker",
+    memberId: "member",
+    expectedRevision: 2,
+    pin: {
+      runtimeKind: "pi",
+      provider: "fixture",
+      modelId: "valid",
+      credentialId: "connection",
+      effort: "low",
+    },
+  });
   await act(async () => root.unmount());
 });
 
