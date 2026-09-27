@@ -1103,7 +1103,9 @@ describe("computer provisioning", () => {
       .mockResolvedValueOnce({ count: 1 })
       .mockResolvedValueOnce({ count: 0 })
       .mockResolvedValueOnce({ count: 0 });
+    const append = vi.fn().mockResolvedValue(undefined);
     const prisma = {
+      thread: { findFirst: vi.fn().mockResolvedValue({ id: "thread-1" }) },
       computer: {
         findUniqueOrThrow: vi.fn().mockResolvedValue({
           id: "computer-1",
@@ -1119,7 +1121,11 @@ describe("computer provisioning", () => {
       },
     } as unknown as PrismaClient;
     const sandbox = {
-      provision: vi.fn().mockResolvedValue(ref),
+      provision: vi.fn(async (_request: unknown, provisionContext: AdapterContext) => {
+        await provisionContext.onComputerImageProgress?.(null);
+        await provisionContext.onComputerImageProgress?.(45);
+        return ref;
+      }),
       prepare: vi.fn().mockResolvedValue(undefined),
       execute: vi.fn(async function* () {
         yield { type: "exit", code: 0 };
@@ -1136,7 +1142,7 @@ describe("computer provisioning", () => {
             sandbox,
             home: {} as AgentHomeStore,
             jobs: {} as JobPublisher,
-            events: {} as ThreadEvents,
+            events: { append } as unknown as ThreadEvents,
             dataDir,
           },
           "computer-1",
@@ -1146,6 +1152,11 @@ describe("computer provisioning", () => {
       expect(sandbox.execute).toHaveBeenCalled();
       expect(releaseScreen).toHaveBeenCalledWith(ref, context);
       expect(stop).toHaveBeenCalledWith(ref, context);
+      expect(append.mock.calls.map(([input]) => input.payload)).toEqual([
+        { status: "booting", imagePulling: true, imagePullPercent: null },
+        { status: "booting", imagePulling: true, imagePullPercent: 45 },
+        { status: "error" },
+      ]);
     } finally {
       await rm(dataDir, { recursive: true, force: true });
     }

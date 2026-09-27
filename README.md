@@ -132,13 +132,15 @@ docker compose --env-file .env \
 pnpm install
 pnpm db:generate
 pnpm db:migrate
-pnpm sandbox:build
 pnpm dev
 ```
 <!-- site-facts:from-source:end -->
 
 Open [http://127.0.0.1:5173](http://127.0.0.1:5173), create an account, connect a model, and
 create your first bot. Local Docker computers are on by default.
+The first Docker bot downloads its computer image when no local build exists. The organization
+owner must make the GHCR computer package public for that download; `pnpm build:computers`
+builds a local fallback.
 
 Postgres stays network-internal in the default Compose file; the `postgres-host` overlay
 publishes loopback `127.0.0.1:5433` for host-side `pnpm` and database tools. `docker compose

@@ -91,6 +91,53 @@ async function readSandboxJson<T>(
   return JSON.parse(new TextDecoder().decode(bytes)) as T;
 }
 
+async function readProvisionStream(
+  res: Response,
+  context: AdapterContext,
+): Promise<{ id: string; resumed?: boolean }> {
+  if (!res.body) throw new Error("Computer provisioning returned no response.");
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let pending = "";
+  let result: { id: string; resumed?: boolean } | undefined;
+  const consume = async (line: string) => {
+    const frame = JSON.parse(line) as {
+      type: "progress" | "result" | "error";
+      percent?: number | null;
+      value?: { id: string; resumed?: boolean };
+      error?: string;
+    };
+    if (frame.type === "progress") {
+      await context.onComputerImageProgress?.(frame.percent ?? null);
+    } else if (frame.type === "error") {
+      throw new Error(frame.error ?? "Computer provisioning failed.");
+    } else if (frame.type === "result") {
+      result = frame.value;
+    }
+  };
+  try {
+    while (true) {
+      context.signal.throwIfAborted();
+      const { done, value } = await reader.read();
+      if (done) break;
+      pending += decoder.decode(value, { stream: true });
+      let newline = pending.indexOf("\n");
+      while (newline !== -1) {
+        const line = pending.slice(0, newline).trim();
+        pending = pending.slice(newline + 1);
+        if (line) await consume(line);
+        newline = pending.indexOf("\n");
+      }
+      if (pending.length > 64 * 1024)
+        throw new Error("Computer provisioning response is too large.");
+    }
+    if (pending.trim() || !result?.id) throw new Error("Computer provisioning ended unexpectedly.");
+    return result;
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 function encodedFileResponseLimit(maxBytes: number | undefined): number {
   if (maxBytes === undefined) return MAX_SANDBOX_SUCCESS_RESPONSE_BYTES;
   // An explicit file limit is already the caller's memory-safety contract.
@@ -210,7 +257,11 @@ export class DockerSandboxProvider implements SandboxProvider {
   ): Promise<ComputerRef> {
     const res = await fetch(this.url("/computers"), {
       method: "POST",
-      headers: { ...this.headers(context, request.botId), "content-type": "application/json" },
+      headers: {
+        ...this.headers(context, request.botId),
+        "content-type": "application/json",
+        accept: "application/x-ndjson",
+      },
       body: JSON.stringify({
         networkEgress: request.networkEgress ?? true,
         imageProfile: request.imageProfile ?? "base",
@@ -229,7 +280,9 @@ export class DockerSandboxProvider implements SandboxProvider {
       }
       throw new Error(`sandbox provision failed: ${res.status} ${detail}`.trim());
     }
-    const body = await readSandboxJson<{ id: string; resumed?: boolean }>(res, context.signal);
+    const body = res.headers.get("content-type")?.includes("application/x-ndjson")
+      ? await readProvisionStream(res, context)
+      : await readSandboxJson<{ id: string; resumed?: boolean }>(res, context.signal);
     return {
       networkEgress: request.networkEgress ?? true,
       imageProfile: request.imageProfile ?? "base",

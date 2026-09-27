@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
     version: vi.fn(),
     info: vi.fn(),
     getImage: vi.fn(),
+    pull: vi.fn(),
     getContainer: vi.fn(),
     listContainers: vi.fn(),
     createContainer: vi.fn(),
@@ -23,6 +24,7 @@ vi.mock("dockerode", () => ({
     version = mocks.docker.version;
     info = mocks.docker.info;
     getImage = mocks.docker.getImage;
+    pull = mocks.docker.pull;
     getContainer = mocks.docker.getContainer;
     listContainers = mocks.docker.listContainers;
     createContainer = mocks.docker.createContainer;
@@ -308,6 +310,99 @@ describe("provisioning network rollback", () => {
       body: JSON.stringify({ botId: "bot", spaceId: "space", homePath }),
     });
   }
+
+  async function provisionNamed(botId: string, progress = false) {
+    const { supervisorApp } = await import("./index.js");
+    return supervisorApp.request("/computers", {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${resolveSupervisorToken(process.env)}`,
+        "content-type": "application/json",
+        ...(progress ? { accept: "application/x-ndjson" } : {}),
+        "x-ardurbot-bot-id": botId,
+        "x-ardurbot-space-id": "space",
+      },
+      body: JSON.stringify({
+        botId,
+        spaceId: "space",
+        homePath: path.join(process.env.DATA_DIR!, "homes", botId),
+      }),
+    });
+  }
+
+  it("pulls once before creating concurrent Docker computers", async () => {
+    fixture();
+    vi.stubEnv("ARDURBOT_COMPUTER_IMAGE", "ghcr.io/ardurai/ardur-bot/computer:dev");
+    let present = false;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    mocks.docker.getImage.mockImplementation(() => ({
+      inspect: vi.fn(async () => {
+        if (!present) throw Object.assign(new Error("missing"), { statusCode: 404 });
+        return { Id: "image" };
+      }),
+    }));
+    mocks.docker.pull.mockImplementation(async () => {
+      await gate;
+      present = true;
+      return Readable.from([
+        '{"id":"layer","progressDetail":{"current":45,"total":100}}\n{"id":"layer","status":"Pull complete"}\n',
+      ]);
+    });
+    const first = provisionNamed("bot-a", true);
+    const second = provisionNamed("bot-b");
+    await vi.waitFor(() => expect(mocks.docker.pull).toHaveBeenCalledOnce());
+    expect(mocks.docker.createContainer).not.toHaveBeenCalled();
+    release();
+    const responses = await Promise.all([first, second]);
+    expect(responses.map((response) => response.status)).toEqual([200, 200]);
+    expect(await responses[0]!.text()).toContain('"type":"progress","percent":45');
+    expect(mocks.docker.createContainer).toHaveBeenCalledTimes(2);
+    expect(mocks.docker.pull).toHaveBeenCalledOnce();
+    expect(mocks.docker.createContainer).toHaveBeenCalledTimes(2);
+  });
+
+  it("surfaces a failed pull and creates no container", async () => {
+    fixture();
+    vi.stubEnv("ARDURBOT_COMPUTER_IMAGE", "ghcr.io/ardurai/ardur-bot/computer:dev");
+    mocks.docker.getImage.mockReturnValue({
+      inspect: vi.fn().mockRejectedValue(Object.assign(new Error("missing"), { statusCode: 404 })),
+    });
+    mocks.docker.pull.mockResolvedValue(Readable.from(['{"error":"manifest unknown"}\n']));
+    const response = await provisionNamed("bot-a");
+    expect(response.status).toBe(500);
+    expect(await response.json()).toEqual({
+      error:
+        "The bot computer image could not be downloaded: not found or private. Check the network, or build it locally with `pnpm build:computers`.",
+    });
+    expect(mocks.docker.createContainer).not.toHaveBeenCalled();
+  });
+
+  it("uses a local build on the next attempt after a download failure", async () => {
+    fixture();
+    vi.stubEnv("ARDURBOT_COMPUTER_IMAGE", "");
+    vi.stubEnv("ARDURBOT_COMPUTER_CHANNEL", "");
+    let localPresent = false;
+    mocks.docker.getImage.mockImplementation((image: string) => ({
+      inspect: vi.fn(async () => {
+        if (image !== "ardurbot/computer:local" || !localPresent)
+          throw Object.assign(new Error("missing"), { statusCode: 404 });
+        return { Id: "image" };
+      }),
+    }));
+    mocks.docker.pull.mockResolvedValue(Readable.from(['{"error":"manifest unknown"}\n']));
+    expect((await provisionNamed("bot-a")).status).toBe(500);
+    expect(mocks.docker.createContainer).not.toHaveBeenCalled();
+
+    localPresent = true;
+    expect((await provisionNamed("bot-a")).status).toBe(200);
+    expect(mocks.docker.pull).toHaveBeenCalledOnce();
+    expect(mocks.docker.createContainer).toHaveBeenCalledWith(
+      expect.objectContaining({ Image: "ardurbot/computer:local" }),
+    );
+  });
 
   it.each(["1.44", "1.45"])(
     "provisions named-volume homes only with subpath support (%s)",

@@ -341,8 +341,31 @@ export async function provisionComputer(
   if (claimed.count !== 1) throw new ComputerBusyError();
   let provisioned: ComputerRef | undefined;
   let bootActivated = false;
+  let imagePullReported = false;
+  let progressThreadId: string | undefined;
+  const reportImageStatus = async (status: "running" | "error") => {
+    if (!imagePullReported || !progressThreadId || !context.botId) return;
+    await deps.events
+      .append({
+        spaceId: context.spaceId,
+        threadId: progressThreadId,
+        botId: context.botId,
+        type: "computer.status",
+        payload: { status },
+      })
+      .catch(() => undefined);
+  };
   try {
     await onProgress?.("recreating");
+    const progressThread =
+      existing.kind === "docker" && context.botId
+        ? await deps.prisma.thread.findFirst({
+            where: { botId: context.botId, userId: context.userId, spaceId: context.spaceId },
+            select: { id: true },
+          })
+        : null;
+    progressThreadId = progressThread?.id;
+    let lastImagePercent: number | null | undefined;
     const ref = await deps.sandbox.provision(
       {
         networkEgress: existing.networkEgress,
@@ -353,7 +376,23 @@ export async function provisionComputer(
         providerRef: existing.providerRef ?? undefined,
         providerKind: existing.kind as ComputerRef["kind"],
       },
-      context,
+      {
+        ...context,
+        onComputerImageProgress: async (percent) => {
+          if (!progressThread || !context.botId || percent === lastImagePercent) return;
+          lastImagePercent = percent;
+          imagePullReported = true;
+          await deps.events
+            .append({
+              spaceId: context.spaceId,
+              threadId: progressThread.id,
+              botId: context.botId,
+              type: "computer.status",
+              payload: { status: "booting", imagePulling: true, imagePullPercent: percent },
+            })
+            .catch(() => undefined);
+        },
+      },
     );
     provisioned = ref;
     await deps.sandbox.prepare(ref, context);
@@ -417,6 +456,7 @@ export async function provisionComputer(
         controlHolder,
       );
     }
+    await reportImageStatus("running");
     return ref;
   } catch (error) {
     // Activation already committed. The failure write below only matches "booting",
@@ -450,6 +490,7 @@ export async function provisionComputer(
         "Computer provisioning failed and its failure could not be recorded",
       );
     }
+    await reportImageStatus(reconnecting ? "running" : "error");
     if (rollbackError) {
       throw new AggregateError(
         [error, rollbackError],

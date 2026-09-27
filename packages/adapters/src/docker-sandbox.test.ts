@@ -25,6 +25,57 @@ describe("Docker sandbox", () => {
     vi.unstubAllGlobals();
   });
 
+  it("forwards streamed image progress before returning the provisioned computer", async () => {
+    const progress = vi.fn();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            new ReadableStream({
+              start(controller) {
+                const encoder = new TextEncoder();
+                controller.enqueue(
+                  encoder.encode(
+                    '{"type":"progress","percent":null}\n{"type":"progress","percent":',
+                  ),
+                );
+                controller.enqueue(
+                  encoder.encode('45}\n{"type":"result","value":{"id":"computer"}}\n'),
+                );
+                controller.close();
+              },
+            }),
+            { headers: { "content-type": "application/x-ndjson" } },
+          ),
+      ),
+    );
+    const provider = new DockerSandboxProvider("http://supervisor.test", "test-token");
+    const computer = await provider.provision(
+      { botId: "bot", homePath: "/tmp/bot" },
+      { ...context, onComputerImageProgress: progress },
+    );
+    expect(progress.mock.calls).toEqual([[null], [45]]);
+    expect(computer.providerRef).toBe("computer");
+  });
+
+  it("surfaces a streamed pull failure without accepting a computer", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            '{"type":"error","error":"The bot computer image could not be downloaded: network error. Check the network, or build it locally with `pnpm build:computers`."}\n',
+            { headers: { "content-type": "application/x-ndjson" } },
+          ),
+      ),
+    );
+    const provider = new DockerSandboxProvider("http://supervisor.test", "test-token");
+    await expect(
+      provider.provision({ botId: "bot", homePath: "/tmp/bot" }, context),
+    ).rejects.toThrow("The bot computer image could not be downloaded: network error");
+  });
+
   it("sends the bounded timeout to the supervisor and preserves its honest result", async () => {
     const fetchMock = vi.fn(async (_input: string | URL | Request, _init?: RequestInit) =>
       Response.json({

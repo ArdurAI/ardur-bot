@@ -84,8 +84,9 @@ describe("renderStackEnv", () => {
     }
     expect(lines.some((line) => line.startsWith("ARDURBOT_IMAGE_TAG="))).toBe(false);
     expect(lines.some((line) => line.startsWith("ARDURBOT_COMPUTER_IMAGE_TAG="))).toBe(false);
-    // Everything else, including the image names and empty optional keys, stays verbatim.
+    // Everything else, including the app image and empty optional keys, stays verbatim.
     expect(lines).toContain("ARDURBOT_IMAGE=ghcr.io/ardurai/ardur-bot/app");
+    expect(lines).toContain("ARDURBOT_COMPUTER_IMAGE=");
     expect(lines).toContain("SANDBOX_PROVIDER=docker");
     expect(lines).toContain("OPENROUTER_API_KEY=");
     expect(rendered.endsWith("\n")).toBe(template.endsWith("\n"));
@@ -302,7 +303,7 @@ const ok: Script = (args) => {
   if (args[0] === "compose" && args[1] === "version") return { stdout: "2.29.0\n" };
   if (args[0] === "info") return { stdout: "27.1.1\n" };
   const subcommand = args[7];
-  if (subcommand === "pull") return { lines: ["app Pulled", "computer Pulled"] };
+  if (subcommand === "pull") return { lines: ["app Pulled"] };
   if (subcommand === "up") return { lines: ["Container ardurbot-web-1 Started"] };
   return {};
 };
@@ -361,7 +362,6 @@ describe("LocalStackController", () => {
       "preparing",
       "pulling",
       "pulling",
-      "pulling",
       "starting",
       "starting",
       "waiting-healthy",
@@ -405,11 +405,7 @@ describe("LocalStackController", () => {
 
     const state = await stack.start();
     expect(state).toMatchObject({ phase: "ready", message: null, imageTag: "v1.2.3" });
-    expect(state.output).toEqual([
-      "app Pulled",
-      "computer Pulled",
-      "Container ardurbot-web-1 Started",
-    ]);
+    expect(state.output).toEqual(["app Pulled", "Container ardurbot-web-1 Started"]);
     expect(phases).toEqual([
       "checking-docker",
       "checking-docker",
@@ -439,7 +435,6 @@ describe("LocalStackController", () => {
       expect(call.cwd).toBe(stackPath);
       expect(call.env).toMatchObject({
         ARDURBOT_IMAGE_TAG: "v1.2.3",
-        ARDURBOT_COMPUTER_IMAGE_TAG: "v1.2.3",
         COMPOSE_PROGRESS: "plain",
         // Tells the API that this stack runs on the owner's own computer.
         ARDURBOT_DESKTOP_STACK: "1",
@@ -666,12 +661,7 @@ describe("LocalStackController", () => {
     const state = await stack.start();
     expect(state.phase).toBe("failed");
     expect(state.message).toContain("did not start");
-    expect(state.output).toEqual([
-      "app Pulled",
-      "computer Pulled",
-      "web Error",
-      "web-1 | EADDRINUSE",
-    ]);
+    expect(state.output).toEqual(["app Pulled", "web Error", "web-1 | EADDRINUSE"]);
     expect(calls.at(-1)?.args.slice(7)).toEqual(["logs", "--tail", "30", "--no-color"]);
   });
 

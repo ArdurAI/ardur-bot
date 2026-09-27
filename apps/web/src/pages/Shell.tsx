@@ -2589,6 +2589,9 @@ export function ShellPage({
     onOpen: () => setComputerOpen(true),
   });
   const hideScreenLoadError = computerErrorFromScreen && Boolean(embeddedScreenUrl);
+  const imagePullFailed = computerError?.startsWith(
+    "The bot computer image could not be downloaded:",
+  );
   const computerScreenError =
     computerError && !hideScreenLoadError ? (
       <div role="alert" className="flex flex-col items-center gap-3 px-6 text-center text-sm">
@@ -2596,9 +2599,21 @@ export function ShellPage({
         <Button
           variant="outline"
           size="sm"
-          onClick={() => computerBot && void refreshComputerScreen(computerBot.id)}
+          onClick={() => {
+            if (!computerBot) return;
+            if (imagePullFailed) {
+              void bootComputer({
+                botId: computerBot.id,
+                takeControl: false,
+                overlay: true,
+                force: true,
+              }).catch(() => undefined);
+            } else {
+              void refreshComputerScreen(computerBot.id);
+            }
+          }}
         >
-          <Trans>Retry screen</Trans>
+          {imagePullFailed ? t`Try again` : t`Retry screen`}
         </Button>
       </div>
     ) : null;
@@ -3604,6 +3619,7 @@ export function ShellPage({
                             computer?.state,
                             booting,
                             computerLabel(computer?.mode, active.name),
+                            computer?.imagePulling ? computer.imagePullPercent : undefined,
                           )
                         ))}
                     </div>
@@ -4353,11 +4369,18 @@ export function ShellPage({
 
       {booting ? (
         <div className="absolute inset-0 z-30 flex flex-col items-center justify-center gap-[22px] bg-background/95">
-          <div className="text-[19px] font-medium text-foreground">
-            <Trans>Booting up {computerBot?.name ?? active?.name}’s computer</Trans>
+          <div className="text-[19px] font-medium text-foreground" role="status">
+            {computer?.imagePulling
+              ? computerPullLabel(computer.imagePullPercent)
+              : t`Booting up ${computerBot?.name ?? active?.name}’s computer`}
           </div>
           <div className="h-[5px] w-[min(420px,70%)] overflow-hidden rounded-full bg-accent">
-            <div className="h-full w-2/3 rounded-full bg-primary" />
+            <div
+              className="h-full rounded-full bg-primary"
+              style={{
+                width: `${computer?.imagePulling && computer.imagePullPercent !== null && computer.imagePullPercent !== undefined ? computer.imagePullPercent : 66}%`,
+              }}
+            />
           </div>
         </div>
       ) : computerOpen && computerBot ? (
@@ -4498,7 +4521,9 @@ export function ShellPage({
                     {computerScreenError ??
                       (computer?.state === "suspended"
                         ? t`Computer is asleep`
-                        : computerLabel(computer?.mode, computerBot.name))}
+                        : computer?.imagePulling
+                          ? computerPullLabel(computer.imagePullPercent)
+                          : computerLabel(computer?.mode, computerBot.name))}
                   </div>
                 ))}
             </div>
@@ -6446,12 +6471,20 @@ function computerPlaceholder(
   state: ComputerStatus["state"] | undefined,
   booting: boolean,
   label: string,
+  imagePullPercent?: number | null,
 ) {
+  if (imagePullPercent !== undefined) return computerPullLabel(imagePullPercent);
   if (state === "booting" || booting) return t`Booting live desktop…`;
   if (state === "running") return label;
   if (state === "suspended") return t`Computer is asleep. Open it to wake.`;
   if (state === "error") return t`Computer failed to boot`;
   return t`Computer is stopped`;
+}
+
+function computerPullLabel(percent: number | null | undefined) {
+  return percent === null || percent === undefined
+    ? t`Preparing the bot computer…`
+    : t`Preparing the bot computer… ${percent}%`;
 }
 
 function computerLabel(mode: ComputerStatus["mode"] | undefined, botName: string) {

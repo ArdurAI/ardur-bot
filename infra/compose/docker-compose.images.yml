@@ -2,8 +2,8 @@
 # Drop this file and .env into any directory, then:
 #   docker compose --env-file .env -f docker-compose.images.yml up -d
 #
-# Tag contract matches docs/self-host.md (edge from main; release tags when published).
-# Default is edge because that tag is published on every main build (linux/amd64 + linux/arm64).
+# Tag contract matches docs/self-host.md (manual edge from main; release tags when published).
+# Pin a published app tag; edge is available only after a manual main workflow run.
 # Pin a published vX.Y.Z tag for a fixed version; `latest` moves to each new stable release.
 # Default SANDBOX_PROVIDER=docker boots a local computer via the in-stack supervisor (no E2B key).
 # Optional: set e2b / daytona / box plus the matching API key for remote computers.
@@ -32,13 +32,6 @@ services:
       timeout: 5s
       retries: 20
 
-  # Pull-only stub so `compose up` fetches the published desktop image without a checkout.
-  computer:
-    image: ${ARDURBOT_COMPUTER_IMAGE:-ghcr.io/ardurai/ardur-bot/computer}:${ARDURBOT_COMPUTER_IMAGE_TAG:-edge}
-    command: ["true"]
-    network_mode: none
-    restart: "no"
-
   data-init:
     # Optional Hub override; unset keeps busybox:1.
     image: ${BUSYBOX_IMAGE:-busybox:1}
@@ -66,7 +59,10 @@ services:
       SUPERVISOR_HOST: "0.0.0.0"
       SUPERVISOR_PORT: "7091"
       DOCKER_SOCKET: /var/run/docker.sock
-      ARDURBOT_COMPUTER_IMAGE: ${ARDURBOT_COMPUTER_IMAGE:-ghcr.io/ardurai/ardur-bot/computer}:${ARDURBOT_COMPUTER_IMAGE_TAG:-edge}
+      # Blank delegates to the supervisor's local → published resolution on first use.
+      # The optional tag suffix keeps older name + tag installations working.
+      ARDURBOT_COMPUTER_IMAGE: ${ARDURBOT_COMPUTER_IMAGE:-}${ARDURBOT_COMPUTER_IMAGE_TAG:+:${ARDURBOT_COMPUTER_IMAGE_TAG}}
+      ARDURBOT_COMPUTER_CHANNEL: ${ARDURBOT_COMPUTER_CHANNEL:-}
       ARDURBOT_COMPUTER_MEMORY: ${ARDURBOT_COMPUTER_MEMORY:-2g}
       ARDURBOT_COMPUTER_CPUS: ${ARDURBOT_COMPUTER_CPUS:-2}
       ARDURBOT_COMPUTER_PIDS_LIMIT: ${ARDURBOT_COMPUTER_PIDS_LIMIT:-2048}
@@ -85,8 +81,6 @@ services:
     networks:
       - app
     depends_on:
-      computer:
-        condition: service_completed_successfully
       data-init:
         condition: service_completed_successfully
     healthcheck:

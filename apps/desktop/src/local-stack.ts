@@ -101,7 +101,7 @@ const GENERATED_SECRETS: Record<string, number> = {
   SCREEN_PROXY_SECRET: 32,
   SANDBOX_SUPERVISOR_TOKEN: 32,
 };
-const LAUNCH_SUPPLIED = ["ARDURBOT_IMAGE_TAG", "ARDURBOT_COMPUTER_IMAGE_TAG"];
+const LAUNCH_SUPPLIED = ["ARDURBOT_IMAGE_TAG"];
 
 /**
  * Port of install-images.sh `create_env`: fills the empty secret lines with random
@@ -558,7 +558,6 @@ export class LocalStackController {
       cwd: this.deps.stackDir,
       env: dockerSpawnEnv(this.deps.platform, this.deps.env, binary, {
         ARDURBOT_IMAGE_TAG: this.deps.imageTag,
-        ARDURBOT_COMPUTER_IMAGE_TAG: this.deps.imageTag,
         // The API never asks where bots run here; Set up makes this computer the default.
         ARDURBOT_DESKTOP_STACK: "1",
         ...(this.currentStackToken === null

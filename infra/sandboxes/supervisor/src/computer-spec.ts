@@ -6,6 +6,27 @@ import type { ContainerEngine } from "./container-engine.js";
 import { engineHostConfig } from "./container-engine.js";
 
 export const COMPUTER_IMAGE = process.env.ARDURBOT_COMPUTER_IMAGE ?? "ardurbot/computer:local";
+export const LOCAL_COMPUTER_IMAGE = "ardurbot/computer:local";
+const PUBLISHED_COMPUTER_IMAGE = "ghcr.io/ardurai/ardur-bot/computer";
+
+export function resolveComputerImage(input: {
+  override?: string;
+  localPresent: boolean;
+  appVersion: string;
+  channel?: string;
+}): string {
+  if (input.override?.trim()) return input.override.trim();
+  if (input.localPresent) return LOCAL_COMPUTER_IMAGE;
+  if (input.channel && input.channel !== "dev" && input.channel !== "release") {
+    throw new Error("ARDURBOT_COMPUTER_CHANNEL must be dev or release");
+  }
+  const version = input.appVersion;
+  if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version)) {
+    throw new Error("The application version cannot select a computer image");
+  }
+  const channel = input.channel ?? (version.includes("-") ? "dev" : "release");
+  return `${PUBLISHED_COMPUTER_IMAGE}:${channel === "dev" ? "dev" : version}`;
+}
 export const COMPUTER_UID = 1000;
 export const COMPUTER_GID = 1000;
 export const COMPUTER_USER = `${COMPUTER_UID}:${COMPUTER_GID}`;

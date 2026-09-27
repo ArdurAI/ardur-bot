@@ -20,6 +20,7 @@
     "db:migrate": "pnpm --filter @ardurbot/db migrate",
     "db:backfill-pins": "tsx apps/api/src/backfill-runtime-pins-cli.ts",
     "sandbox:build": "tsx scripts/build-computers.ts",
+    "build:computers": "tsx scripts/build-computers.ts",
     "test": "vitest run",
     "test:compose-smoke": "bash infra/compose/run-smokes.sh",
     "test:integration": "tsx packages/testkit/src/cli/harness.ts --integration",
