@@ -1,5 +1,6 @@
 import { execFile, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { existsSync } from "node:fs";
 import { chmod, copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
@@ -19,10 +20,17 @@ function evidenceDirectory() {
   return process.env.ARDUR_HERMES_EVIDENCE_DIR ?? tmpdir();
 }
 
-function dockerEnvironment() {
+function dockerEnvironment(socketExists: (path: string) => boolean = existsSync) {
+  const colimaSocket = join(homedir(), ".colima/default/docker.sock");
+  const dockerHost =
+    process.env.DOCKER_HOST !== undefined
+      ? process.env.DOCKER_HOST
+      : socketExists(colimaSocket) && !socketExists("/var/run/docker.sock")
+        ? `unix://${colimaSocket}`
+        : undefined;
   return {
     PATH: process.env.PATH ?? "/usr/bin:/bin",
-    DOCKER_HOST: process.env.DOCKER_HOST || `unix://${homedir()}/.colima/default/docker.sock`,
+    ...(dockerHost === undefined ? {} : { DOCKER_HOST: dockerHost }),
   };
 }
 
@@ -33,12 +41,14 @@ function dockerProviderKey(providerKey: string) {
   };
 }
 
-async function stagingDirectory() {
+async function stagingDirectory(socketExists: (path: string) => boolean = existsSync) {
   // The default Colima VM only mounts HOME; other Docker endpoints can mount writable parents elsewhere.
   const parent = process.env.ARDUR_HERMES_STAGING_PARENT ?? process.cwd();
   const outsideHome = relative(homedir(), parent);
+  const dockerHost = dockerEnvironment(socketExists).DOCKER_HOST;
   if (
-    dockerEnvironment().DOCKER_HOST === `unix://${homedir()}/.colima/default/docker.sock` &&
+    dockerHost?.startsWith(`unix://${join(homedir(), ".colima")}/`) &&
+    dockerHost.endsWith("/docker.sock") &&
     (outsideHome === ".." ||
       outsideHome.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`))
   )
@@ -92,10 +102,53 @@ it("uses portable image lane paths and the selected Docker endpoint", async () =
   }
 });
 
+it("uses the standard Docker endpoint unless only the Colima socket exists", () => {
+  const previousHost = process.env.DOCKER_HOST;
+  try {
+    delete process.env.DOCKER_HOST;
+    expect(dockerEnvironment(() => false).DOCKER_HOST).toBeUndefined();
+    expect(
+      dockerEnvironment((path) => path === join(homedir(), ".colima/default/docker.sock"))
+        .DOCKER_HOST,
+    ).toBe(`unix://${homedir()}/.colima/default/docker.sock`);
+    expect(dockerEnvironment(() => true).DOCKER_HOST).toBeUndefined();
+  } finally {
+    if (previousHost === undefined) delete process.env.DOCKER_HOST;
+    else process.env.DOCKER_HOST = previousHost;
+  }
+});
+
 const temporaryParentIsBelowHome = (() => {
   const path = relative(homedir(), tmpdir());
   return path !== ".." && !path.startsWith(`..${process.platform === "win32" ? "\\" : "/"}`);
 })();
+
+it.skipIf(temporaryParentIsBelowHome)(
+  "allows staging outside HOME with the standard or an explicit non-Colima endpoint (skipped when the temporary directory is below HOME)",
+  async () => {
+    const previousHost = process.env.DOCKER_HOST;
+    const previousStaging = process.env.ARDUR_HERMES_STAGING_PARENT;
+    const stagingParent = await mkdtemp(join(tmpdir(), ".hermes-staging-parent-"));
+    const created: string[] = [];
+    try {
+      process.env.ARDUR_HERMES_STAGING_PARENT = stagingParent;
+      delete process.env.DOCKER_HOST;
+      expect(dockerEnvironment(() => false).DOCKER_HOST).toBeUndefined();
+      created.push(await stagingDirectory(() => false));
+      process.env.DOCKER_HOST = "unix:///fixture/docker.sock";
+      expect(dockerEnvironment(() => false).DOCKER_HOST).toBe("unix:///fixture/docker.sock");
+      created.push(await stagingDirectory(() => false));
+      expect(created.every((path) => dirname(path) === stagingParent)).toBe(true);
+    } finally {
+      if (previousHost === undefined) delete process.env.DOCKER_HOST;
+      else process.env.DOCKER_HOST = previousHost;
+      if (previousStaging === undefined) delete process.env.ARDUR_HERMES_STAGING_PARENT;
+      else process.env.ARDUR_HERMES_STAGING_PARENT = previousStaging;
+      for (const path of created) await rm(path, { recursive: true, force: true });
+      await rm(stagingParent, { recursive: true, force: true });
+    }
+  },
+);
 
 it.skipIf(temporaryParentIsBelowHome)(
   "rejects Colima staging outside HOME (skipped when the temporary directory is below HOME)",
