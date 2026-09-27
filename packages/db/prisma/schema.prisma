@@ -1300,6 +1300,7 @@ model McpServer {
   recentErrors  Json              @default("[]")
   manifest      Json?
   spaceAllowedTools Json          @default("[]")
+  needsReview   Boolean           @default(false)
   spaceToolPolicies Json          @default("{}")
   resourceConstraints Json        @default("{}")
 
@@ -1337,6 +1338,7 @@ model BotMcpServer {
   allowAllTools Boolean   @default(false)
   needsReview   Boolean   @default(false)
   allowedTools  Json      @default("[]")
+  access        String    @default("custom")
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 

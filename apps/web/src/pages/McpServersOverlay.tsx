@@ -16,7 +16,6 @@ import {
   Field,
   FieldGroup,
   FieldLabel,
-  FieldTitle,
   Input,
   Tabs,
   TabsList,
@@ -71,7 +70,6 @@ export function McpServersOverlay({
   const [bots, setBots] = useState<Bot[]>([]);
   const [botAssignments, setBotAssignments] = useState<Record<string, BotMcpServer[]>>({});
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null);
-  const [selectedBotIds, setSelectedBotIds] = useState<string[]>([]);
   const [transport, setTransport] = useState<McpTransport>("streamable_http");
   const [name, setName] = useState("");
   const [endpoint, setEndpoint] = useState("");
@@ -159,12 +157,6 @@ export function McpServersOverlay({
     return () => channel.close();
   }, []);
 
-  function toggleBot(id: string) {
-    setSelectedBotIds((current) =>
-      current.includes(id) ? current.filter((item) => item !== id) : [...current, id],
-    );
-  }
-
   async function addServer() {
     setError(null);
     if (!name.trim()) {
@@ -210,21 +202,6 @@ export function McpServersOverlay({
               secret: secret || undefined,
               enabled: true,
             });
-      // replace() overwrites the bot's whole list, so merge with what it already has.
-      await Promise.all(
-        selectedBotIds.map((botId) => {
-          const existing = (botAssignments[botId] ?? []).filter(
-            (entry) => entry.serverId !== created.id,
-          );
-          return rpc.mcp.assignments.replace({
-            botId,
-            assignments: [
-              ...existing,
-              { serverId: created.id, allowAllTools: false, needsReview: true, allowedTools: [] },
-            ],
-          });
-        }),
-      );
       // A saved credential is checked once, so the server's state says whether it works.
       const checked =
         transport === "stdio" || !(secret.trim() || headerValue.trim())
@@ -240,7 +217,6 @@ export function McpServersOverlay({
       setHeaderValue("");
       setCommand("");
       setArgs("");
-      setSelectedBotIds([]);
       setAdding(false);
       if (!checked)
         setError(
@@ -304,13 +280,21 @@ export function McpServersOverlay({
   async function toggleAssignment(server: McpServer, botId: string) {
     setError(null);
     const current = botAssignments[botId] ?? [];
-    const assigned = current.some((entry) => entry.serverId === server.id);
-    const next = assigned
-      ? current.filter((entry) => entry.serverId !== server.id)
-      : [
-          ...current,
-          { serverId: server.id, allowAllTools: false, needsReview: true, allowedTools: [] },
-        ];
+    const assigned = current.find((entry) => entry.serverId === server.id)?.access !== "none";
+    const next = [
+      ...current.filter((entry) => entry.serverId !== server.id),
+      ...(assigned
+        ? [
+            {
+              serverId: server.id,
+              access: "none" as const,
+              allowAllTools: false,
+              needsReview: false,
+              allowedTools: [],
+            },
+          ]
+        : []),
+    ];
     try {
       const updated = await rpc.mcp.assignments.replace({ botId, assignments: next });
       setBotAssignments((map) => ({ ...map, [botId]: updated }));
@@ -515,32 +499,9 @@ export function McpServersOverlay({
                       ) : null}
                     </div>
                   </details>
-                  {bots.length > 0 ? (
-                    <Field>
-                      <FieldTitle>
-                        <Trans>Agents:</Trans>
-                      </FieldTitle>
-                      <div className="flex flex-wrap gap-1.5">
-                        {bots.map((bot) => {
-                          const selected = selectedBotIds.includes(bot.id);
-                          return (
-                            <Button
-                              key={bot.id}
-                              type="button"
-                              variant={selected ? "default" : "outline"}
-                              size="xs"
-                              className="rounded-full"
-                              aria-pressed={selected}
-                              onClick={() => toggleBot(bot.id)}
-                            >
-                              {selected ? <Check aria-hidden="true" /> : null}
-                              {bot.name}
-                            </Button>
-                          );
-                        })}
-                      </div>
-                    </Field>
-                  ) : null}
+                  <p className="text-sm text-muted-foreground">
+                    <Trans>All bots have access (bots you create later too).</Trans>
+                  </p>
                 </FieldGroup>
                 <Button
                   type="button"
@@ -622,9 +583,10 @@ export function McpServersOverlay({
                             <Trans>Agents:</Trans>
                           </span>
                           {bots.map((bot) => {
-                            const assigned = (botAssignments[bot.id] ?? []).some(
-                              (entry) => entry.serverId === server.id,
-                            );
+                            const assigned =
+                              (botAssignments[bot.id] ?? []).find(
+                                (entry) => entry.serverId === server.id,
+                              )?.access !== "none";
                             return (
                               <Button
                                 key={bot.id}
