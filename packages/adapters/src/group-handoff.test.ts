@@ -78,7 +78,7 @@ function harness(
       ),
     },
     event: {
-      findMany: vi.fn(async () => [{ seq: 1, payload: { botId: "bot-b" } }]),
+      findMany: vi.fn(async () => [{ seq: 1, payload: { botId: "bot-b", deliveryKey: "" } }]),
       create: vi.fn(async () => ({ seq: 1 })),
     },
   };
@@ -203,14 +203,17 @@ it("assigns two members with distinct per-target admission keys", async () => {
       }),
     ).toMatchObject({ ok: true, botId });
   }
-  expect(
-    f.messageFindUnique.mock.calls.map(([input]) => input.where.threadId_clientNonce.clientNonce),
-  ).toEqual(["group-handoff:run-a:bot-b", "group-handoff:run-a:bot-c"]);
+  const keys = f.messageFindUnique.mock.calls.map(
+    ([input]) => input.where.threadId_clientNonce.clientNonce,
+  );
+  expect(keys).toHaveLength(2);
+  expect(keys[0]).toMatch(/^group-handoff:run-a:bot-b:/);
+  expect(keys[1]).toMatch(/^group-handoff:run-a:bot-c:/);
   expect(f.runCreate).toHaveBeenCalledTimes(2);
   expect(prepareDelegation).toHaveBeenLastCalledWith(
     expect.anything(),
     expect.objectContaining({
-      admissionKey: "group-handoff:run-a:bot-c",
+      admissionKey: keys[1],
       tokens: 30_000,
       deadlineAt: new Date("2030-01-01T00:00:00Z"),
     }),
@@ -218,11 +221,82 @@ it("assigns two members with distinct per-target admission keys", async () => {
   );
 });
 
+it("admits different cards for one member but replays the same card", async () => {
+  const f = harness([], undefined, true);
+  f.eventFindMany.mockImplementation(async () => [
+    {
+      seq: 1,
+      payload: {
+        botId: "bot-b",
+        deliveryKey:
+          f.messageFindUnique.mock.lastCall?.[0].where.threadId_clientNonce.clientNonce ?? "",
+      },
+    },
+  ]);
+  const saved = new Map<string, { sourceRuns: { id: string; botId: string }[] }>();
+  f.messageFindUnique.mockImplementation(
+    async ({ where }) => saved.get(where.threadId_clientNonce.clientNonce) ?? null,
+  );
+  const card = (goal: string) => ({ goal, doneWhen: ["Post findings"] });
+  const send = (goal: string) =>
+    handoffToGroupBot(f.deps as never, run, "group-1", {
+      mode: "assign",
+      bot_id: "bot-b",
+      message: goal,
+      card: card(goal),
+    });
+  expect(await send("Review API")).toMatchObject({ ok: true });
+  const firstKey = f.messageFindUnique.mock.calls[0]![0].where.threadId_clientNonce.clientNonce;
+  saved.set(firstKey, { sourceRuns: [{ id: "run-b", botId: "bot-b" }] });
+  expect(await send("Review UI")).toMatchObject({ ok: true });
+  const secondKey = f.messageFindUnique.mock.calls[1]![0].where.threadId_clientNonce.clientNonce;
+  expect(secondKey).not.toBe(firstKey);
+  expect(f.runCreate).toHaveBeenCalledTimes(2);
+  saved.set(secondKey, { sourceRuns: [{ id: "run-b", botId: "bot-b" }] });
+  expect(await send("Review UI")).toMatchObject({ ok: true });
+  expect(f.runCreate).toHaveBeenCalledTimes(2);
+});
+
+it("uses the earlier card deadline, including an already expired deadline", async () => {
+  const f = harness([], undefined, true);
+  const early = "2029-12-31T12:00:00.000Z";
+  await handoffToGroupBot(f.deps as never, run, "group-1", {
+    mode: "assign",
+    bot_id: "bot-b",
+    message: "Review",
+    card: { goal: "Review", deadlineAt: early },
+  });
+  expect(prepareDelegation).toHaveBeenLastCalledWith(
+    expect.anything(),
+    expect.objectContaining({ deadlineAt: new Date(early) }),
+    undefined,
+  );
+  const expired = "2000-01-01T00:00:00.000Z";
+  await handoffToGroupBot(f.deps as never, run, "group-1", {
+    mode: "assign",
+    bot_id: "bot-b",
+    message: "Review old work",
+    card: { goal: "Review old work", deadlineAt: expired },
+  });
+  expect(prepareDelegation).toHaveBeenLastCalledWith(
+    expect.anything(),
+    expect.objectContaining({ deadlineAt: new Date(expired) }),
+    undefined,
+  );
+});
+
 it("replays the event for the assigned target rather than the latest assignment", async () => {
   const f = harness([], { sourceRuns: [{ id: "run-b", botId: "bot-b" }] }, true);
-  f.eventFindMany.mockResolvedValueOnce([
-    { seq: 9, payload: { botId: "bot-c" } },
-    { seq: 7, payload: { botId: "bot-b" } },
+  f.eventFindMany.mockImplementationOnce(async () => [
+    { seq: 9, payload: { botId: "bot-c", deliveryKey: "another assignment" } },
+    {
+      seq: 7,
+      payload: {
+        botId: "bot-b",
+        deliveryKey:
+          f.messageFindUnique.mock.lastCall?.[0].where.threadId_clientNonce.clientNonce ?? "",
+      },
+    },
   ]);
   expect(
     await handoffToGroupBot(f.deps as never, run, "group-1", {

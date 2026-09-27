@@ -166,8 +166,8 @@ export async function admitDelegation(
   const deadlineAt = new Date(
     Math.min(
       root.deadlineAt.getTime(),
-      input.deadlineAt?.getTime() ??
-        (request.deadlineAt ? new Date(request.deadlineAt).getTime() : Infinity),
+      input.deadlineAt?.getTime() ?? Infinity,
+      request.deadlineAt ? new Date(request.deadlineAt).getTime() : Infinity,
     ),
   );
   if (!Number.isFinite(deadlineAt.getTime()) || deadlineAt <= now) refuse("deadline-passed");

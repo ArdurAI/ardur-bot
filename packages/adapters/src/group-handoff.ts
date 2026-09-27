@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { runContinueJob } from "@ardurbot/adapter-kit";
 import { MessageBlock, TaskCardRequestSchema } from "@ardurbot/contracts";
 import {
@@ -120,7 +121,11 @@ export async function handoffToGroupBot(
       const card = input.mode === "assign" ? TaskCardRequestSchema.safeParse(input.card) : null;
       if (card && !card.success) return { error: "assign requires a valid task card" } as const;
       const deliveryKey =
-        input.mode === "assign" ? `group-handoff:${run.id}:${targetId}` : `group-handoff:${run.id}`;
+        input.mode === "assign"
+          ? `group-handoff:${run.id}:${targetId}:${createHash("sha256")
+              .update(JSON.stringify({ card: card?.data, message: input.message.trim() }))
+              .digest("hex")}`
+          : `group-handoff:${run.id}`;
 
       const existing = await tx.message.findUnique({
         where: { threadId_clientNonce: { threadId: run.threadId, clientNonce: deliveryKey } },
@@ -146,7 +151,8 @@ export async function handoffToGroupBot(
         const event =
           input.mode === "assign"
             ? events.find(
-                (candidate) => (candidate.payload as { botId?: string }).botId === targetId,
+                (candidate) =>
+                  (candidate.payload as { deliveryKey?: string }).deliveryKey === deliveryKey,
               )
             : events[0];
         if (!nextRun || !event) return { error: "recorded handoff is incomplete" } as const;
@@ -192,7 +198,16 @@ export async function handoffToGroupBot(
           tokens: goal
             ? Math.min(input.tokens ?? goal.perWorkerTokens, goal.perWorkerTokens)
             : undefined,
-          deadlineAt: goal?.untilAt,
+          deadlineAt: goal
+            ? new Date(
+                Math.min(
+                  goal.untilAt.getTime(),
+                  card?.success && card.data.deadlineAt
+                    ? new Date(card.data.deadlineAt).getTime()
+                    : Infinity,
+                ),
+              )
+            : undefined,
         },
         deps.resolveDelegationPin,
       );
@@ -259,7 +274,12 @@ export async function handoffToGroupBot(
             botId: run.botId,
             type: "goal.assigned",
             runId: run.id,
-            payload: { goalId: goal.id, delegationId: admitted.record.id, botId: targetId },
+            payload: {
+              goalId: goal.id,
+              delegationId: admitted.record.id,
+              botId: targetId,
+              deliveryKey,
+            },
           })
         : null;
       await tx.delegation.update({
