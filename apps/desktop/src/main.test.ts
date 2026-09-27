@@ -124,6 +124,38 @@ describe("first-launch setup dispatch", () => {
   );
 });
 
+describe("guided setup service handoff", () => {
+  it("starts local services only after fresh pilot verification", () => {
+    const source = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
+    const start = source.indexOf('ipcMain.handle("desktop.setup.stack.start"');
+    const end = source.indexOf("// Register before startup awaits", start);
+    expect(start).toBeGreaterThan(0);
+    expect(end).toBeGreaterThan(start);
+    const handlers = new Map<string, (event: unknown) => unknown>();
+    const localStart = vi.fn();
+    const pilot = { ready: false };
+    const context = {
+      ipcMain: {
+        handle: (name: string, handler: (event: unknown) => unknown) => handlers.set(name, handler),
+      },
+      fromSetupWindow: () => true,
+      guidedEngine: { pilotReady: () => pilot.ready },
+      localMode: { start: localStart, state: () => ({ phase: "idle" }) },
+      legacyCompose: false,
+      setupResumesLocal: false,
+    };
+    vm.runInNewContext(source.slice(start, end), context);
+    const handler = handlers.get("desktop.setup.stack.start")!;
+    expect(handler({})).toBeNull();
+    expect(localStart).not.toHaveBeenCalled();
+    expect(context.setupResumesLocal).toBe(false);
+    pilot.ready = true;
+    expect(handler({})).toEqual({ phase: "idle" });
+    expect(localStart).toHaveBeenCalledOnce();
+    expect(context.setupResumesLocal).toBe(true);
+  });
+});
+
 describe("main window host lifecycle", () => {
   it("keeps the reactivated host running when reconnect destroys the previous window", async () => {
     const f = fixture();

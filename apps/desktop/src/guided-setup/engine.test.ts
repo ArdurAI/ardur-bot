@@ -50,6 +50,30 @@ function step(overrides: Partial<SetupStep> = {}): SetupStep {
 const clock = { monotonic: () => 10, wall: () => 100 };
 
 describe("SetupEngine", () => {
+  it("requires fresh checks before handing a saved pilot to local services", async () => {
+    const files = memoryStore();
+    const satisfied = async () => ({
+      kind: "satisfied" as const,
+      checkedAt: 100,
+      evidence: "ready",
+    });
+    const steps = [
+      step({ id: "prerequisites", check: satisfied }),
+      step({ id: "database", requires: ["prerequisites"], check: satisfied }),
+      step({ id: "migrations", requires: ["database"], check: satisfied }),
+      step({ id: "command", requires: ["migrations"], canSkip: true }),
+    ];
+    const first = await SetupEngine.open(files.store, steps, clock);
+    expect(first.pilotReady()).toBe(false);
+    await first.start();
+    expect(first.pilotReady()).toBe(false);
+    await first.skip("command");
+    expect(first.pilotReady()).toBe(true);
+    const reopened = await SetupEngine.open(files.store, steps, clock);
+    expect(reopened.pilotReady()).toBe(false);
+    await reopened.start();
+    expect(reopened.pilotReady()).toBe(true);
+  });
   it("persists active and waiting durations without carrying monotonic time across restart", async () => {
     const files = memoryStore();
     let tick = 1;

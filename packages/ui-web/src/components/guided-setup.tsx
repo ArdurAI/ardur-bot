@@ -9,10 +9,12 @@ import { Button } from "./ui/button.js";
 /** English source strings for the local setup document; a later slice can supply a translated map. */
 export const guidedSetupText = {
   title: "Set up Ardur",
+  brand: "Ardur",
   thisComputer: "This computer",
   connectServer: "Connect to a server",
   setupMode: "Setup mode",
   serverAddress: "Server address",
+  serverPlaceholder: "https://ardurbot.example.com",
   quit: "Quit",
   loadFailed: "Could not load setup. Try again.",
   updateFailed: "Could not update setup. Try again.",

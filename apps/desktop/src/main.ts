@@ -720,7 +720,9 @@ function createSetupWindow() {
     // Closing setup without saving restores a connected session (Change Server cancel).
     restoreAppWindowAfterSetup();
   });
-  void win.loadFile(path.join(import.meta.dirname, "setup.html"));
+  void win.loadFile(
+    path.join(import.meta.dirname, guidedEngine ? "guided-setup.html" : "setup.html"),
+  );
   markOnce("rk:main:setup-window-created");
   return win;
 }
@@ -1754,7 +1756,9 @@ app.whenReady().then(async () => {
   ipcMain.handle("desktop.setup.stack.start", (event) => {
     if (!fromSetupWindow(event)) return null;
     if (guidedEngine) {
-      void guidedEngine.start();
+      if (!guidedEngine.pilotReady()) return null;
+      setupResumesLocal = true;
+      void localMode.start();
       return localMode.state();
     }
     // Respond right away; the setup window polls `stack.state` until a terminal phase.

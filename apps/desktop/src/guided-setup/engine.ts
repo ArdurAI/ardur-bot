@@ -153,6 +153,29 @@ export class SetupEngine {
   running(): boolean {
     return this.inflight !== null || this.cancelFlight !== null;
   }
+  /** A saved row is never enough to authorize the service handoff after a restart. */
+  pilotReady(): boolean {
+    if (
+      this.inflight ||
+      this.cancelFlight ||
+      this.cancelling ||
+      this.newer ||
+      this.cleanupPending()
+    )
+      return false;
+    if (this.journal.snapshot.interrupted) return false;
+    const required = ["prerequisites", "database", "migrations"] as const;
+    if (
+      !required.every((id) => this.row(id).status === "succeeded" && this.freshlyVerified.has(id))
+    )
+      return false;
+    const command = this.row("command");
+    return (
+      command.status === "skipped" ||
+      command.status === "not-applicable" ||
+      (command.status === "succeeded" && this.freshlyVerified.has("command"))
+    );
+  }
   onChange(listener: (snapshot: SetupSnapshot) => void): () => void {
     this.listeners.add(listener);
     return () => {
