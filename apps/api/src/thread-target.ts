@@ -894,7 +894,7 @@ export async function sendThreadMessage(
       const members = await lockAndLoadGroupMembers(tx, actor, target);
       const memberBotIds = members.map((member) => member.botId);
       const mentionTargets = splitMentionTargets(input.mentions);
-      const [groupRouting, spaceRouting, replyTarget, lastRun] = await Promise.all([
+      const [groupRouting, spaceRouting, replyTarget, lastRun, activeGoal] = await Promise.all([
         tx.chatGroup.findUnique({
           where: { id: target.groupId },
           select: { coordinatorBotId: true },
@@ -909,6 +909,15 @@ export async function sendThreadMessage(
         tx.run.findFirst({
           where: { threadId: target.threadId, spaceId: actor.spaceId, userId: actor.userId },
           orderBy: { createdAt: "desc" },
+        }),
+        tx.teamGoal?.findFirst({
+          where: {
+            groupId: target.groupId,
+            spaceId: actor.spaceId,
+            userId: actor.userId,
+            status: "running",
+          },
+          select: { id: true, rootTaskId: true, coordinatorBotId: true },
         }),
       ]);
       const explicit = members.filter(
@@ -1042,6 +1051,11 @@ export async function sendThreadMessage(
             routingRule: routed.rule,
             clientNonce: sendRunClientNonce(input.clientNonce, message.id, botId),
             sourceMessageId: message.id,
+            ...(activeGoal &&
+            activeGoal.coordinatorBotId === botId &&
+            activeGoal.coordinatorBotId === groupRouting?.coordinatorBotId
+              ? { goalId: activeGoal.id, delegationRootTaskId: activeGoal.rootTaskId }
+              : {}),
           },
         });
         runs.push(run);

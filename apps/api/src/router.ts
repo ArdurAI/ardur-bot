@@ -150,6 +150,7 @@ import {
   findModelCredential,
   findSpaceMemoryConfig,
   formatMessagingLinkCode,
+  getGoal,
   getUserPreferences,
   InvalidSpaceNameError,
   IsolationError,
@@ -170,6 +171,8 @@ import {
   SpaceNotFoundError,
   selectSpaceModelPreference,
   selectSpaceVoicePreference,
+  startGoal,
+  stopGoal,
   touchGroupUpdatedAt,
   updateUserPreferences,
 } from "@ardurbot/db";
@@ -5490,6 +5493,23 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
     },
     team: {
       board: authed.team.board.handler(({ context }) => teamBoard(deps.prisma, context.actor)),
+    },
+    goals: {
+      start: authed.goals.start.handler(({ context, input }) => {
+        if (!context.actor.isDeploymentOwner || !context.authSessionId)
+          throw new ORPCError("FORBIDDEN");
+        return startGoal(deps.prisma, context.actor, input);
+      }),
+      get: authed.goals.get.handler(({ context, input }) => {
+        if (!context.actor.isDeploymentOwner || !context.authSessionId)
+          throw new ORPCError("FORBIDDEN");
+        return getGoal(deps.prisma, context.actor, input.groupId);
+      }),
+      stop: authed.goals.stop.handler(({ context, input }) => {
+        if (!context.actor.isDeploymentOwner || !context.authSessionId)
+          throw new ORPCError("FORBIDDEN");
+        return stopGoal(deps.prisma, context.actor, input.goalId);
+      }),
     },
     delegations: {
       accept: authed.delegations.accept.handler(({ context, input }) =>
