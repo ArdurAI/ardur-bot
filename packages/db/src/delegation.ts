@@ -97,6 +97,7 @@ export async function admitDelegation(
     deadlineAt?: Date;
     newChild?: boolean;
     card?: unknown;
+    peerMode?: "read-only";
   },
 ) {
   const { run: parent, rootTaskId } = await lockDelegationRootForRun(tx, input.parentRunId);
@@ -306,6 +307,7 @@ export async function admitDelegation(
   const members = await tx.spaceMember.count({ where: { spaceId: input.spaceId } });
   const card = TaskCardSchema.parse({
     ...request,
+    ...(input.peerMode ? { peerMode: input.peerMode } : {}),
     requesterBotId: parent.botId,
     workerBotId: input.actingBotId,
     ...(members > 1 ? { responsibleUserId: input.userId } : {}),

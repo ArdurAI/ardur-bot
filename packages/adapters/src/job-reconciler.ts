@@ -371,7 +371,7 @@ export function createJobReconciler(
         const terminal = await deps.prisma.delegation.findMany({
           where: {
             rootTaskId: { in: liveRoots },
-            kind: "group-handoff",
+            kind: { in: ["group-handoff", "message"] },
             status: { in: ["completed", "failed", "cancelled", "accepted"] },
             coordinatorWokenAt: null,
           },

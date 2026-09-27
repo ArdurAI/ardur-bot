@@ -114,6 +114,15 @@ describe("filterBuiltinToolsForThread", () => {
     ]);
   });
 
+  it("shows desk messaging only to the active goal coordinator", () => {
+    expect(filterBuiltinToolsForThread(tools, "group-1", true).map((tool) => tool.name)).toContain(
+      "message_bot",
+    );
+    expect(
+      filterBuiltinToolsForThread(tools, "group-1", false).map((tool) => tool.name),
+    ).not.toContain("message_bot");
+  });
+
   it("hides schedule creation from routine runs without removing schedule management", () => {
     expect(filterBuiltinToolsForRun(tools, "routine").map((tool) => tool.name)).toEqual([
       "handoff_to_bot",

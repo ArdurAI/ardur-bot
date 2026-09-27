@@ -3063,6 +3063,14 @@ msgstr "excluído"
 msgid "Deleting…"
 msgstr "Excluindo…"
 
+#: src/pages/Shell.tsx
+msgid "Delivered from {peer}"
+msgstr ""
+
+#: src/pages/Shell.tsx
+msgid "Delivered to {peer}"
+msgstr ""
+
 #: src/pages/LearningObservation.tsx
 msgid "Delta"
 msgstr ""
@@ -5984,6 +5992,7 @@ msgstr "Espera na fila"
 #: src/pages/ComparePanel.tsx
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/Shell.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Queued"
 msgstr "Na fila"

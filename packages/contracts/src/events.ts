@@ -282,6 +282,9 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     toBotName: z.string(),
     text: z.string(),
     intent: BotMessageIntent.optional(),
+    delegationId: Id.optional(),
+    deliveryState: z.literal("delivered").optional(),
+    queuedForBusy: z.boolean().optional(),
   }),
   z.object({
     /** Delivered into the receiving bot's own chat as the prompt that woke it. */
@@ -290,6 +293,9 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     fromBotName: z.string(),
     text: z.string(),
     intent: BotMessageIntent.optional(),
+    delegationId: Id.optional(),
+    deliveryState: z.literal("delivered").optional(),
+    queuedForBusy: z.boolean().optional(),
     /** Sender-thread echo this delivery answers, when applicable. */
     returnToMessageId: Id.optional(),
     /** Links in a bot-started chain; absent when a person started it. */

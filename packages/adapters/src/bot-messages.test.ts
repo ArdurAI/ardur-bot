@@ -55,6 +55,7 @@ function deps(
     );
   const tx = {
     delegation: { update: vi.fn(async () => ({})) },
+    delegationRoot: { findUnique: vi.fn().mockResolvedValue(null) },
     $queryRaw: vi.fn().mockResolvedValue([{ id: "thread" }]),
     run: {
       findFirst: vi
@@ -77,6 +78,7 @@ function deps(
   };
   let transactionAttempts = 0;
   const prisma = {
+    thread: { findUnique: vi.fn().mockResolvedValue({ groupId: null }) },
     bot: {
       findMany: vi
         .fn()

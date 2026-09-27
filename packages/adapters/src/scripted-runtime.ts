@@ -31,6 +31,11 @@ export class ScriptedAgentRuntime implements AgentRuntime {
     const signal = context?.signal ?? controller.signal;
     try {
       if (request.prompt.includes("scripted slow review")) await abortableDelay(2_000, signal);
+      if (
+        request.prompt.includes("Identify the contradiction:") ||
+        request.prompt.includes("Check the correction against the fixture:")
+      )
+        await abortableDelay(250, signal);
       if (shouldFail(request.prompt)) {
         throw new Error("Scripted run failure");
       }
@@ -147,6 +152,79 @@ export function inferScript(
     }
   }
   const lower = prompt.toLowerCase();
+  const firstLoopFixture = "Results show newest first; sort results by createdAt ascending";
+  const correctedFixture = "Results show oldest first; sort results by createdAt ascending.";
+  if (prompt.includes(firstLoopFixture) && lower.includes("you coordinate this goal")) {
+    return [
+      {
+        assistant: "I asked Worker to check the fixture.",
+        toolCalls: [
+          {
+            name: "message_bot",
+            args: {
+              confirm_name: "Worker",
+              message: "Identify the contradiction in the fixture.",
+              intent: "request",
+              card: {
+                goal: `Identify the contradiction: ${firstLoopFixture}`,
+                inputs: [{ type: "text", text: firstLoopFixture }],
+                doneWhen: ["Propose corrected wording"],
+                deadlineAt: null,
+              },
+            },
+          },
+        ],
+        complete: true,
+      },
+    ];
+  }
+  if (lower.includes("identify the contradiction:") && prompt.includes(firstLoopFixture))
+    return [
+      {
+        assistant: `The sort is ascending, so the corrected wording is: ${correctedFixture}`,
+        complete: true,
+      },
+    ];
+  if (lower.includes("review worker's completed assignment"))
+    return [
+      {
+        assistant: "I asked Reviewer for an independent check.",
+        toolCalls: [
+          {
+            name: "message_bot",
+            args: {
+              confirm_name: "Reviewer",
+              message: "Check the proposed wording against the fixture independently.",
+              intent: "request",
+              card: {
+                goal: `Check the correction against the fixture: ${firstLoopFixture}`,
+                inputs: [{ type: "text", text: correctedFixture }],
+                doneWhen: ["Confirm or correct the wording"],
+                deadlineAt: null,
+              },
+            },
+          },
+        ],
+        complete: true,
+      },
+    ];
+  if (
+    lower.includes("check the correction against the fixture:") &&
+    prompt.includes(firstLoopFixture)
+  )
+    return [
+      {
+        assistant: `Independent check: ${correctedFixture} The original wording contradicts the ascending sort.`,
+        complete: true,
+      },
+    ];
+  if (lower.includes("review reviewer's completed assignment"))
+    return [
+      {
+        assistant: `Worker found the contradiction and Reviewer checked it. ${correctedFixture} The fixture does not say how ties are ordered.`,
+        complete: true,
+      },
+    ];
   if (resumeFromCheckpoint === "takeover-skipped") {
     return [
       {

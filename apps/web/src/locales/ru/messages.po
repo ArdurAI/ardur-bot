@@ -3063,6 +3063,14 @@ msgstr "удалено"
 msgid "Deleting…"
 msgstr "Удаление…"
 
+#: src/pages/Shell.tsx
+msgid "Delivered from {peer}"
+msgstr ""
+
+#: src/pages/Shell.tsx
+msgid "Delivered to {peer}"
+msgstr ""
+
 #: src/pages/LearningObservation.tsx
 msgid "Delta"
 msgstr ""
@@ -5984,6 +5992,7 @@ msgstr "Ожидание в очереди"
 #: src/pages/ComparePanel.tsx
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/Shell.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Queued"
 msgstr "В очереди"

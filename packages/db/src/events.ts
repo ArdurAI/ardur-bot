@@ -270,7 +270,13 @@ export async function clearThread(
   realtime?: RealtimeFanout,
 ): Promise<ClearThreadResult> {
   const committed = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-    // Thread row precedes any task row cancelled by clearThread.
+    // Group mutations precede their thread row in goal admission and group handoff.
+    if (input.groupId) {
+      await tx.$queryRaw`SELECT id FROM chat_groups WHERE id = ${input.groupId} AND "spaceId" = ${input.spaceId} FOR UPDATE`;
+    } else {
+      await tx.$queryRaw`SELECT id FROM bots WHERE id = ${input.botId} AND "spaceId" = ${input.spaceId} FOR UPDATE`;
+    }
+    // Bot or group row precedes the thread, which precedes cancelled runs.
     const thread = await tx.thread.update({
       where: {
         id: input.threadId,
@@ -1177,7 +1183,21 @@ async function finalizeRunOnce(
   summary?: { threadId: string; seq: number };
 } | null> {
   return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-    // Canonical order: thread first, then the run task and delegated root task.
+    // Claiming and delivery take the bot before its thread. Completion may also
+    // write the coordinator summary, so acquire the bot before either thread.
+    await tx.$queryRaw`SELECT id FROM bots WHERE id = ${input.botId} AND "spaceId" = ${input.spaceId} FOR UPDATE`;
+    const lineage = await tx.run.findUnique({
+      where: { id: input.runId },
+      select: { delegationRootTaskId: true },
+    });
+    if (lineage?.delegationRootTaskId) {
+      const root = await tx.delegationRoot.findUnique({
+        where: { rootTaskId: lineage.delegationRootTaskId },
+        select: { coordinatorThreadId: true },
+      });
+      if (root && root.coordinatorThreadId !== input.threadId)
+        await tx.$queryRaw`SELECT id FROM threads WHERE id = ${root.coordinatorThreadId} FOR UPDATE`;
+    }
     await tx.$queryRaw`SELECT id FROM threads WHERE id = ${input.threadId} FOR UPDATE`;
     let writableRun:
       | {
@@ -1266,7 +1286,32 @@ async function finalizeRunOnce(
             }),
           )
         : false;
-    if (input.outcome === "completed" && (!writableRun?.delegationId || goalRoomAssignment)) {
+    const goalDeskMessage =
+      writableRun?.delegationId && writableRun.delegationRootTaskId
+        ? Boolean(
+            await tx.delegation.findFirst({
+              where: {
+                id: writableRun.delegationId,
+                rootTaskId: writableRun.delegationRootTaskId,
+                kind: "message",
+              },
+              select: { id: true },
+            }),
+          ) &&
+          Boolean(
+            await tx.teamGoal.findFirst({
+              where: {
+                rootTaskId: writableRun.delegationRootTaskId,
+                threadId: { not: input.threadId },
+              },
+              select: { id: true },
+            }),
+          )
+        : false;
+    if (
+      input.outcome === "completed" &&
+      (!writableRun?.delegationId || goalRoomAssignment || goalDeskMessage)
+    ) {
       const completedBlocks = completedRunBlocks(input.blocks, writableRun?.startedAt ?? null, now);
       if (completedBlocks.length > 0) {
         const message = await createThreadMessageInTransaction(tx, {

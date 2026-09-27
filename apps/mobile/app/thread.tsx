@@ -2488,9 +2488,15 @@ const MessageBubble = memo(function MessageBubble({
     const sent = peerMessage.kind === "bot_message_sent";
     const peer = sent ? peerMessage.toBotName : peerMessage.fromBotName;
     const peerBotId = sent ? peerMessage.toBotId : peerMessage.fromBotId;
-    const label = sent
-      ? t("Messaged {peer}", { peer: peer ?? t("Bot") })
-      : t("Message from {peer}", { peer: peer ?? t("Bot") });
+    const label =
+      peerMessage.deliveryState === "delivered"
+        ? sent
+          ? t("Delivered to {peer}", { peer: peer ?? t("Bot") })
+          : t("Delivered from {peer}", { peer: peer ?? t("Bot") })
+        : sent
+          ? t("Messaged {peer}", { peer: peer ?? t("Bot") })
+          : t("Message from {peer}", { peer: peer ?? t("Bot") });
+    const visibleLabel = peerMessage.queuedForBusy ? `${label} · ${t("Queued")}` : label;
     const peerColor =
       bots.find((bot) => bot.id === peerBotId)?.color ??
       members?.find((member) => member.botId === peerBotId)?.color ??
@@ -2501,7 +2507,7 @@ const MessageBubble = memo(function MessageBubble({
       <Pressable
         {...actionProps}
         accessible
-        accessibilityLabel={label}
+        accessibilityLabel={visibleLabel}
         style={{
           width: "100%",
           paddingVertical: 4,
@@ -2516,7 +2522,7 @@ const MessageBubble = memo(function MessageBubble({
           numberOfLines={1}
           style={{ color: tokens.mutedForeground, fontSize: 13.5, flexShrink: 1 }}
         >
-          {label}
+          {visibleLabel}
         </Text>
       </Pressable>
     );

@@ -1,6 +1,6 @@
 import type * as Database from "@ardurbot/db";
 import type { Prisma, PrismaClient } from "@ardurbot/db";
-import { admitDelegation } from "@ardurbot/db";
+import { admitDelegation, updateWorkerTask } from "@ardurbot/db";
 import { expect, it, vi } from "vitest";
 import { prepareDelegation } from "./delegation.js";
 import { checkDelegationExecution } from "./delegation-execution.js";
@@ -13,6 +13,7 @@ vi.mock("@ardurbot/db", async (importOriginal) => ({
     snapshot: input.snapshot,
     differences: [],
   })),
+  updateWorkerTask: vi.fn(async () => ({ ok: true })),
 }));
 it("inherits the exact resolved snapshot including connection and runtime without calling a resolver", async () => {
   const pin = {
@@ -150,3 +151,59 @@ it.each(["board_ready", "board_show"])(
     expect(await checkDelegationExecution(prisma, "run", "board_update")).toContain("permission");
   },
 );
+
+it("records a blocked card when a peer run forges a hidden tool call", async () => {
+  const card = {
+    peerMode: "read-only",
+    goal: "Check the fixture",
+    inputs: [],
+    doneWhen: [],
+    deadlineAt: null,
+    requesterBotId: "coordinator",
+    workerBotId: "worker",
+    approvalBoundaries: { scopes: ["ordinary"], connectors: [] },
+    snapshot: {
+      pin: {
+        runtimeKind: "pi",
+        provider: "fixture",
+        modelId: "fixture",
+        effort: "off",
+        credentialId: "fixture",
+        revision: 1,
+      },
+      computer: { id: null, mode: "team", kind: null },
+      destination: { host: null, local: true },
+    },
+    budget: { tokens: 100, deadlineAt: new Date(Date.now() + 60_000).toISOString() },
+    artifacts: [],
+    timeline: [],
+    reports: [],
+  };
+  const tx = {};
+  const prisma = {
+    run: {
+      findUniqueOrThrow: vi.fn(async () => ({
+        id: "peer-run",
+        taskId: "root",
+        delegationId: "peer-card",
+        spaceId: "space",
+        userId: "owner",
+        botId: "worker",
+        runtimePin: { runtimeKind: "pi" },
+      })),
+    },
+    delegationRoot: { findUnique: vi.fn(async () => null) },
+    delegation: { findUniqueOrThrow: vi.fn(async () => ({ card })) },
+    $transaction: vi.fn(async (callback) => callback(tx)),
+  } as unknown as PrismaClient;
+  expect(await checkDelegationExecution(prisma, "peer-run", "shell")).toContain("read-only");
+  expect(updateWorkerTask).toHaveBeenCalledWith(
+    tx,
+    expect.objectContaining({
+      runId: "peer-run",
+      executionId: "peer-block:peer-run",
+      tool: "report_progress",
+      args: expect.objectContaining({ state: "blocked" }),
+    }),
+  );
+});

@@ -25,6 +25,7 @@ export async function prepareDelegation(
     prompt: string;
     newChild?: boolean;
     card?: unknown;
+    peerMode?: "read-only";
     tokens?: number;
     deadlineAt?: Date;
   },

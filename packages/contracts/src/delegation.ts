@@ -97,6 +97,8 @@ export const TaskCriterionReportSchema = z
   })
   .strict();
 export const TaskCardSchema = TaskCardRequestSchema.extend({
+  /** Set by admission for restricted goal desk work, never by a caller. */
+  peerMode: z.literal("read-only").optional(),
   requesterBotId: z.string(),
   workerBotId: z.string(),
   responsibleUserId: z.string().optional(),

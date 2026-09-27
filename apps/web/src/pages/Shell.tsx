@@ -6113,14 +6113,22 @@ const MessageView = memo(function MessageView({
           const sent = block.kind === "bot_message_sent";
           const peer = sent ? block.toBotName : block.fromBotName;
           const peerBotId = sent ? block.toBotId : block.fromBotId;
-          const label = sent ? t`Messaged ${peer}` : t`Message from ${peer}`;
+          const label =
+            block.deliveryState === "delivered"
+              ? sent
+                ? t`Delivered to ${peer}`
+                : t`Delivered from ${peer}`
+              : sent
+                ? t`Messaged ${peer}`
+                : t`Message from ${peer}`;
+          const visibleLabel = block.queuedForBusy ? `${label} · ${t`Queued`}` : label;
           return (
             <CollaborationMarker
               key={i}
-              ariaLabel={label}
+              ariaLabel={visibleLabel}
               color={peerBot(peerBotId)?.color ?? FALLBACK_BOT_COLOR}
               identity={peerBotId}
-              label={label}
+              label={visibleLabel}
               onClick={() => onOpenPeerMessages({ peerBotId, peerBotName: peer })}
             />
           );
