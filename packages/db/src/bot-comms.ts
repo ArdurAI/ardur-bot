@@ -867,6 +867,7 @@ export async function expireQuietBotMessages(prisma: PrismaClient, now = new Dat
     where: {
       state: { in: ["queued", "delivered", "read"] },
       outcome: null,
+      quietClaimRunId: null,
       expiresAt: { lte: now },
       OR: [{ intent: { in: ["status", "fyi"] } }, { intent: "result", inReplyToDeliveryId: null }],
     },
@@ -881,6 +882,7 @@ export async function expireQuietBotMessages(prisma: PrismaClient, now = new Dat
           id: row.id,
           state: { in: ["queued", "delivered", "read"] },
           outcome: null,
+          quietClaimRunId: null,
           expiresAt: { lte: now },
         },
         data: { state: "expired", outcome: "expired" },
@@ -890,24 +892,27 @@ export async function expireQuietBotMessages(prisma: PrismaClient, now = new Dat
   return stale.length;
 }
 
-/** Claim assembled quiet context only while this run still owns its lease. */
+/** Return only quiet deliveries claimed by the current run attempt. */
 export async function claimQuietBotMessages(
   prisma: PrismaClient,
   input: { runId: string; leaseOwner: string; leaseFence: number; deliveryIds: string[] },
 ) {
-  if (input.deliveryIds.length === 0) return;
-  await withTransactionRetry(() =>
+  if (input.deliveryIds.length === 0) return [];
+  return withTransactionRetry(() =>
     prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM runs WHERE id = ${input.runId} FOR UPDATE`;
       const run = await tx.run.findFirst({
         where: {
           id: input.runId,
           status: "running",
           leaseOwner: input.leaseOwner,
           leaseFence: input.leaseFence,
+          leaseExpiresAt: { gt: new Date() },
         },
         select: { id: true, spaceId: true, userId: true, botId: true, threadId: true },
       });
       if (!run) throw new Error("Quiet delivery claim lost its run lease.");
+      const claimedIds: string[] = [];
       for (const id of input.deliveryIds) {
         const claimed = await tx.botMessageDelivery.updateMany({
           where: {
@@ -919,12 +924,16 @@ export async function claimQuietBotMessages(
             state: { in: ["delivered", "read"] },
             outcome: null,
             expiresAt: { gt: new Date() },
-            OR: [{ quietClaimRunId: null }, { quietClaimRunId: run.id }],
+            OR: [
+              { quietClaimRunId: null },
+              { quietClaimRunId: run.id, quietClaimLeaseFence: { lte: input.leaseFence } },
+            ],
           },
           data: { quietClaimRunId: run.id, quietClaimLeaseFence: input.leaseFence },
         });
-        if (claimed.count !== 1) throw new Error("Quiet delivery changed before runtime input.");
+        if (claimed.count === 1) claimedIds.push(id);
       }
+      return claimedIds;
     }),
   );
 }
@@ -956,32 +965,41 @@ export async function settleQuietBotMessageClaimsInTransaction(
 }
 
 export async function reconcileQuietBotMessageClaims(prisma: PrismaClient, limit = 100) {
-  const claims = await prisma.botMessageDelivery.findMany({
-    where: { quietClaimRunId: { not: null }, outcome: null },
-    orderBy: { createdAt: "asc" },
-    take: limit,
-    select: { id: true, quietClaimRunId: true, quietClaimLeaseFence: true },
-  });
+  const now = new Date();
+  const claims = await prisma.$queryRaw<
+    { id: string; quietClaimRunId: string; quietClaimLeaseFence: number | null }[]
+  >`SELECT d.id, d."quietClaimRunId", d."quietClaimLeaseFence"
+    FROM bot_message_deliveries d
+    LEFT JOIN runs r ON r.id = d."quietClaimRunId"
+    WHERE d."quietClaimRunId" IS NOT NULL AND d.outcome IS NULL
+      AND (r.id IS NULL OR r.status <> 'running'
+        OR r."leaseFence" IS DISTINCT FROM d."quietClaimLeaseFence"
+        OR r."leaseExpiresAt" IS NULL OR r."leaseExpiresAt" <= ${now})
+    ORDER BY d."createdAt" ASC, d.id ASC
+    LIMIT ${limit}`;
   for (const claim of claims) {
-    const run = await prisma.run.findUnique({
-      where: { id: claim.quietClaimRunId! },
-      select: { status: true, leaseFence: true, leaseExpiresAt: true },
-    });
-    if (
-      run?.status === "running" &&
-      run.leaseFence === claim.quietClaimLeaseFence &&
-      run.leaseExpiresAt &&
-      run.leaseExpiresAt > new Date()
-    )
-      continue;
-    await prisma.botMessageDelivery.updateMany({
-      where: {
-        id: claim.id,
-        quietClaimRunId: claim.quietClaimRunId,
-        quietClaimLeaseFence: claim.quietClaimLeaseFence,
-        outcome: null,
-      },
-      data: { quietClaimRunId: null, quietClaimLeaseFence: null },
+    await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM runs WHERE id = ${claim.quietClaimRunId} FOR UPDATE`;
+      const run = await tx.run.findUnique({
+        where: { id: claim.quietClaimRunId },
+        select: { status: true, leaseFence: true, leaseExpiresAt: true },
+      });
+      if (
+        run?.status === "running" &&
+        run.leaseFence === claim.quietClaimLeaseFence &&
+        run.leaseExpiresAt &&
+        run.leaseExpiresAt > new Date()
+      )
+        return;
+      await tx.botMessageDelivery.updateMany({
+        where: {
+          id: claim.id,
+          quietClaimRunId: claim.quietClaimRunId,
+          quietClaimLeaseFence: claim.quietClaimLeaseFence,
+          outcome: null,
+        },
+        data: { quietClaimRunId: null, quietClaimLeaseFence: null },
+      });
     });
   }
   return claims.length;
