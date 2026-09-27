@@ -204,6 +204,8 @@ test("Executor reconnect saves a replacement token before discovery", async ({ p
   await page.getByLabel("Access token", { exact: true }).fill("fake-new-token");
   await page.getByRole("button", { name: "Connect", exact: true }).click();
   await expect.poll(() => saved).toBe(true);
+  await expect.poll(() => discovered).toBe(server.id);
+  await expect(page.getByRole("button", { name: "Connected", exact: true })).toBeVisible();
   await expect(page.getByRole("alert")).toBeHidden();
 });
 

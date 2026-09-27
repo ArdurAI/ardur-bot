@@ -105,9 +105,11 @@ test("learning inbox separates suggestions from applied changes and shows Undo",
                   ? proposal()
                   : action === "curate"
                     ? { ok: true }
-                    : action === "grants"
-                      ? { grants: [], offers: [] }
-                      : { proposal: proposal() };
+                    : action === "insights"
+                      ? { insights: [] }
+                      : action === "grants"
+                        ? { grants: [], offers: [] }
+                        : { proposal: proposal() };
     await route.fulfill({ contentType: "application/json", body: JSON.stringify({ json }) });
   });
   await openUserSettings(page, "learning");
@@ -204,11 +206,13 @@ test("learning inbox shows board-item suggestions, their outcome, and a close th
           }
         : action === "grants"
           ? { grants: [], offers: [] }
-          : action === "curator"
-            ? { skills: [], reports: [] }
-            : action === "proposal"
-              ? proposals[0]
-              : [];
+          : action === "insights"
+            ? { insights: [] }
+            : action === "curator"
+              ? { skills: [], reports: [] }
+              : action === "proposal"
+                ? proposals[0]
+                : [];
   await page.route("**/api/auth/get-session*", (route) => route.fulfill({ json: fixture.session }));
   await page.route("**/rpc/**", async (route) => {
     const procedure = new URL(route.request().url()).pathname.slice("/rpc/".length);
