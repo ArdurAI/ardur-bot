@@ -16,7 +16,7 @@ interface ScreenRequest {
 interface PendingScreenRetry {
   errorId: number;
   computerId: string;
-  requestIds: number[];
+  requestIds: Set<number>;
 }
 
 export interface ComputerErrorState {
@@ -84,12 +84,16 @@ export function reduceComputerError(
           ? {
               errorId: action.retryErrorId,
               computerId: action.computerId,
-              requestIds: [action.requestId],
+              requestIds:
+                state.pendingRetry?.errorId === action.retryErrorId &&
+                state.pendingRetry.computerId === action.computerId
+                  ? new Set([...state.pendingRetry.requestIds, action.requestId])
+                  : new Set([action.requestId]),
             }
           : state.pendingRetry?.computerId === action.computerId
             ? {
                 ...state.pendingRetry,
-                requestIds: [...state.pendingRetry.requestIds, action.requestId],
+                requestIds: new Set([...state.pendingRetry.requestIds, action.requestId]),
               }
             : null;
       return {
@@ -104,22 +108,21 @@ export function reduceComputerError(
         state.screenRequest.computerId === action.computerId;
       const retry = state.pendingRetry;
       const partOfRetry =
-        retry?.computerId === action.computerId && retry.requestIds.includes(action.requestId);
+        retry?.computerId === action.computerId && retry.requestIds.has(action.requestId);
       const succeeded = Boolean(action.result.url) && !action.result.error;
       const resolvesOperation =
         partOfRetry &&
         succeeded &&
         state.operation?.errorId === retry.errorId &&
         state.operation.code !== COMPUTER_IMAGE_DOWNLOAD_FAILED_CODE;
-      const remainingRequests = partOfRetry
-        ? retry.requestIds.filter((requestId) => requestId !== action.requestId)
-        : [];
+      const remainingRequests = new Set(retry?.requestIds);
+      if (partOfRetry) remainingRequests.delete(action.requestId);
       return {
         ...state,
         operation: resolvesOperation ? null : state.operation,
         screen: current ? action.result.error : state.screen,
         pendingRetry:
-          partOfRetry && !resolvesOperation && remainingRequests.length
+          partOfRetry && !resolvesOperation && remainingRequests.size
             ? { ...retry, requestIds: remainingRequests }
             : partOfRetry
               ? null

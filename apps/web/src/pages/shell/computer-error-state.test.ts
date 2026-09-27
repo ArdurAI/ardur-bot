@@ -78,6 +78,32 @@ const cases: Array<{
     screen: null,
   },
   {
+    name: "earlier retry success resolves its error after a later retry fails and refresh succeeds",
+    actions: [
+      { type: "operation-failed", message: "Refresh failed" },
+      { type: "screen-requested", requestId: 1, computerId: "computer", retryErrorId: 1 },
+      { type: "screen-requested", requestId: 2, computerId: "computer", retryErrorId: 1 },
+      { type: "screen-result", requestId: 2, computerId: "computer", result: screenFailure },
+      { type: "screen-requested", requestId: 3, computerId: "computer" },
+      { type: "screen-result", requestId: 1, computerId: "computer", result: success },
+      { type: "screen-result", requestId: 3, computerId: "computer", result: success },
+    ],
+    operation: null,
+    screen: null,
+  },
+  {
+    name: "later retry success resolves its error after the earlier retry fails",
+    actions: [
+      { type: "operation-failed", message: "Refresh failed" },
+      { type: "screen-requested", requestId: 1, computerId: "computer", retryErrorId: 1 },
+      { type: "screen-requested", requestId: 2, computerId: "computer", retryErrorId: 1 },
+      { type: "screen-result", requestId: 1, computerId: "computer", result: screenFailure },
+      { type: "screen-result", requestId: 2, computerId: "computer", result: success },
+    ],
+    operation: null,
+    screen: null,
+  },
+  {
     name: "newer Release failure survives an earlier retry success",
     actions: [
       { type: "operation-failed", message: "Refresh failed" },
@@ -164,7 +190,7 @@ it("carries retry intent onto a superseding request before the explicit one retu
     requestId: 2,
     computerId: "computer",
   });
-  expect(superseded.pendingRetry?.requestIds).toEqual([1, 2]);
+  expect(superseded.pendingRetry?.requestIds).toEqual(new Set([1, 2]));
   const recovered = reduceComputerError(superseded, {
     type: "screen-result",
     requestId: 2,
@@ -173,4 +199,31 @@ it("carries retry intent onto a superseding request before the explicit one retu
   });
   expect(recovered.operation).toBeNull();
   expect(recovered.pendingRetry).toBeNull();
+});
+
+it("keeps an earlier retry pending when a later retry fails", () => {
+  const failed = reduceComputerError(initialComputerErrorState, {
+    type: "operation-failed",
+    message: "Refresh failed",
+  });
+  const first = reduceComputerError(failed, {
+    type: "screen-requested",
+    requestId: 1,
+    computerId: "computer",
+    retryErrorId: failed.operation?.errorId,
+  });
+  const second = reduceComputerError(first, {
+    type: "screen-requested",
+    requestId: 2,
+    computerId: "computer",
+    retryErrorId: failed.operation?.errorId,
+  });
+  expect(second.pendingRetry?.requestIds).toEqual(new Set([1, 2]));
+  const laterFailed = reduceComputerError(second, {
+    type: "screen-result",
+    requestId: 2,
+    computerId: "computer",
+    result: screenFailure,
+  });
+  expect(laterFailed.pendingRetry?.requestIds).toEqual(new Set([1]));
 });
