@@ -3,7 +3,7 @@ import type { AgentUsage, RequestUsageObservation } from "@ardurbot/adapter-kit"
 import { RequestUsageCollector, usageEvent } from "@ardurbot/adapter-kit";
 import { type ContextSnapshot, TaskCardSchema } from "@ardurbot/contracts";
 import type { Prisma, PrismaClient } from "@ardurbot/db";
-import { createDb, updateWorkerTask } from "@ardurbot/db";
+import { admitDelegation, createDb, finishDelegation, updateWorkerTask } from "@ardurbot/db";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { aggregateContext, recordContextUsage, resumeContextSnapshot } from "./context/metrics.js";
 import { loadLearningRecords } from "./learning-records.js";
@@ -74,7 +74,7 @@ postgres("request ledger on disposable PostgreSQL", () => {
       effort: "high",
       credentialId: "fixture",
       revision: 1,
-    };
+    } as const;
     const run = await prisma.run.create({
       data: {
         id,
@@ -199,6 +199,7 @@ postgres("request ledger on disposable PostgreSQL", () => {
     expect(await record(started)).toBeNull();
     await record(first.finish("unknown"));
     expect((await f.rows())[0]?.observations).toHaveLength(2);
+    expect(await f.root()).toMatchObject({ reservedTokens: 100, usedTokens: 0 });
     await expect(record(make().start(), peer.prisma)).rejects.toThrow("allowance exhausted");
     expect(await f.rows()).toHaveLength(1);
     await expect(record(make().start(), peer.prisma, { ...fence, leaseFence: 3 })).rejects.toThrow(
@@ -235,6 +236,268 @@ postgres("request ledger on disposable PostgreSQL", () => {
         runtimePin: f.pin,
       }),
     ).rejects.toThrow("root task allowance exhausted");
+    expect(await f.rows()).toHaveLength(0);
+  });
+  it("shares a coordinator broker reservation with delegation admission and settlement", async () => {
+    const f = await fixture();
+    await db.prisma.run.update({
+      where: { id: f.id },
+      data: { leaseOwner: "worker", leaseFence: 2 },
+    });
+    await db.prisma.delegationRoot.update({
+      where: { rootTaskId: f.id },
+      data: { tokenLimit: 1000 },
+    });
+    const collector = new RequestUsageCollector({
+      provider: "fixture",
+      model: "fixture",
+      purpose: "unknown",
+      mappingVersion: "broker-chat-completions-v1",
+      inputSemantics: "total-with-cache-subsets",
+      admission: {
+        kind: "worker-provider-broker",
+        reservedTokens: 700,
+        maxRequests: 2,
+        maxReservedTokens: 1400,
+      },
+    });
+    const record = (usage: AgentUsage) =>
+      recordBrokerRunUsage({ prisma: db.prisma, events: f.events }, f.run, usage, {
+        leaseOwner: "worker",
+        leaseFence: 2,
+        runtimePin: f.pin,
+      });
+    const delegate = (key: string) =>
+      db.prisma.$transaction((tx) =>
+        admitDelegation(tx, {
+          spaceId: f.id,
+          userId: f.run.userId,
+          parentRunId: f.id,
+          actingBotId: f.id,
+          actingName: "Fixture",
+          kind: "helper",
+          admissionKey: key,
+          prompt: "Synthetic helper",
+          tokens: 600,
+          snapshot: {
+            pin: f.pin,
+            computer: { id: null, mode: "team", kind: null },
+            destination: { host: null, local: true },
+          },
+        }),
+      );
+    await record(collector.start());
+    expect(await f.root()).toMatchObject({ reservedTokens: 700, usedTokens: 0 });
+    await expect(delegate(`${f.id}-blocked`)).rejects.toMatchObject({
+      problem: { code: "budget-exhausted" },
+    });
+    await record(collector.snapshot({ input: 150, output: 50 }));
+    await record(collector.finish("success"));
+    expect(await f.root()).toMatchObject({ reservedTokens: 0, usedTokens: 200 });
+    await expect(delegate(`${f.id}-accepted`)).resolves.toMatchObject({ reservedTokens: 600 });
+  });
+
+  it("creates the shared root budget before the first broker receipt", async () => {
+    const f = await fixture(false);
+    await db.prisma.run.update({
+      where: { id: f.id },
+      data: { leaseOwner: "worker", leaseFence: 2 },
+    });
+    const collector = new RequestUsageCollector({
+      provider: "fixture",
+      model: "fixture",
+      purpose: "unknown",
+      mappingVersion: "broker-chat-completions-v1",
+      inputSemantics: "total-with-cache-subsets",
+      admission: {
+        kind: "worker-provider-broker",
+        reservedTokens: 700,
+        maxRequests: 1,
+        maxReservedTokens: 700,
+      },
+    });
+    await recordBrokerRunUsage({ prisma: db.prisma, events: f.events }, f.run, collector.start(), {
+      leaseOwner: "worker",
+      leaseFence: 2,
+      runtimePin: f.pin,
+    });
+    expect(await f.root()).toMatchObject({ reservedTokens: 700, usedTokens: 0 });
+  });
+
+  it("holds detached broker uncertainty without charging measured detached usage to the task", async () => {
+    const f = await fixture();
+    await db.prisma.run.update({
+      where: { id: f.id },
+      data: { leaseOwner: "worker", leaseFence: 2 },
+    });
+    const collector = new RequestUsageCollector({
+      provider: "fixture",
+      model: "fixture",
+      purpose: "detached-learning",
+      mappingVersion: "broker-chat-completions-v1",
+      inputSemantics: "total-with-cache-subsets",
+      admission: {
+        kind: "worker-provider-broker",
+        reservedTokens: 700,
+        maxRequests: 1,
+        maxReservedTokens: 700,
+      },
+    });
+    const record = (usage: AgentUsage) =>
+      recordBrokerRunUsage({ prisma: db.prisma, events: f.events }, f.run, usage, {
+        leaseOwner: "worker",
+        leaseFence: 2,
+        runtimePin: f.pin,
+      });
+    await record(collector.start());
+    expect(await f.root()).toMatchObject({ reservedTokens: 700, usedTokens: 0 });
+    await record(collector.snapshot({ input: 150, output: 50 }));
+    await record(collector.finish("success"));
+    expect(await f.root()).toMatchObject({ reservedTokens: 0, usedTokens: 0 });
+  });
+
+  it("charges broker starts inside a child allowance only once at the root", async () => {
+    const f = await fixture();
+    await db.prisma.run.update({
+      where: { id: f.id },
+      data: { leaseOwner: "worker", leaseFence: 2 },
+    });
+    await db.prisma.delegationRoot.update({
+      where: { rootTaskId: f.id },
+      data: { tokenLimit: 1000, reservedTokens: 1000, activeDescendants: 1 },
+    });
+    const snapshot = {
+      pin: f.pin,
+      computer: { id: null, mode: "team" as const, kind: null },
+      destination: { host: null, local: true },
+    };
+    const authority = { scopes: [], connectors: [] };
+    const delegation = await db.prisma.delegation.create({
+      data: {
+        rootTaskId: f.id,
+        parentRunId: f.id,
+        runId: f.id,
+        spaceId: f.id,
+        userId: f.run.userId,
+        requesterBotId: f.id,
+        actingBotId: f.id,
+        requesterName: "Fixture",
+        actingName: "Fixture",
+        kind: "helper",
+        depth: 1,
+        hop: 1,
+        status: "running",
+        snapshot,
+        authority,
+        ancestorBotIds: [],
+        reservedTokens: 1000,
+        deadlineAt: new Date("2030-01-01"),
+        admissionKey: f.id,
+        fingerprint: "fixture",
+        card: TaskCardSchema.parse({
+          goal: "Synthetic helper",
+          requesterBotId: f.id,
+          workerBotId: f.id,
+          approvalBoundaries: authority,
+          snapshot,
+          budget: { tokens: 1000, deadlineAt: "2030-01-01T00:00:00.000Z" },
+          artifacts: [],
+          timeline: [],
+        }),
+      },
+    });
+    await db.prisma.run.update({ where: { id: f.id }, data: { delegationId: delegation.id } });
+    const make = (tokens: number) =>
+      new RequestUsageCollector({
+        provider: "fixture",
+        model: "fixture",
+        purpose: "unknown",
+        mappingVersion: "broker-chat-completions-v1",
+        inputSemantics: "total-with-cache-subsets",
+        admission: {
+          kind: "worker-provider-broker",
+          reservedTokens: tokens,
+          maxRequests: 2,
+          maxReservedTokens: 2000,
+        },
+      });
+    const record = (usage: AgentUsage) =>
+      recordBrokerRunUsage({ prisma: db.prisma, events: f.events }, f.run, usage, {
+        leaseOwner: "worker",
+        leaseFence: 2,
+        runtimePin: f.pin,
+      });
+    const first = make(100);
+    await record(first.start());
+    expect(await f.root()).toMatchObject({ reservedTokens: 1000, usedTokens: 0 });
+    await expect(record(make(950).start())).rejects.toThrow("delegation allowance exhausted");
+    await db.prisma.$transaction((tx) =>
+      finishDelegation(tx, delegation.id, "completed", "Synthetic result", f.id),
+    );
+    expect(await f.root()).toMatchObject({ reservedTokens: 100, usedTokens: 0 });
+    await record(first.finish("unknown"));
+    expect(await f.root()).toMatchObject({ reservedTokens: 100, usedTokens: 0 });
+    await record(first.snapshot({ input: 15, output: 5 }));
+    expect(await f.root()).toMatchObject({ reservedTokens: 80, usedTokens: 20 });
+    await record(first.finish("success"));
+    expect(await f.root()).toMatchObject({ reservedTokens: 0, usedTokens: 20 });
+  });
+
+  it("rechecks the broker lease after waiting for the root lock", async () => {
+    const f = await fixture();
+    await db.prisma.run.update({
+      where: { id: f.id },
+      data: { leaseOwner: "worker", leaseFence: 2 },
+    });
+    const collector = new RequestUsageCollector({
+      provider: "fixture",
+      model: "fixture",
+      purpose: "unknown",
+      mappingVersion: "broker-chat-completions-v1",
+      inputSemantics: "total-with-cache-subsets",
+      admission: {
+        kind: "worker-provider-broker",
+        reservedTokens: 100,
+        maxRequests: 1,
+        maxReservedTokens: 100,
+      },
+    });
+    let changed = false;
+    const client = new Proxy(peer.prisma, {
+      get(target, property, receiver) {
+        if (property !== "$transaction") return Reflect.get(target, property, receiver);
+        return (callback: (tx: Prisma.TransactionClient) => Promise<unknown>, options: unknown) =>
+          peer.prisma.$transaction(
+            (tx) =>
+              callback(
+                new Proxy(tx, {
+                  get(inner, key, innerReceiver) {
+                    if (key !== "$queryRaw") return Reflect.get(inner, key, innerReceiver);
+                    return async (...args: Parameters<typeof tx.$queryRaw>) => {
+                      if (!changed) {
+                        changed = true;
+                        await db.prisma.run.update({
+                          where: { id: f.id },
+                          data: { leaseFence: 3 },
+                        });
+                      }
+                      return tx.$queryRaw(...args);
+                    };
+                  },
+                }),
+              ),
+            options as never,
+          );
+      },
+    }) as PrismaClient;
+    await expect(
+      recordBrokerRunUsage({ prisma: client, events: f.events }, f.run, collector.start(), {
+        leaseOwner: "worker",
+        leaseFence: 2,
+        runtimePin: f.pin,
+      }),
+    ).rejects.toThrow("admission is stale");
+    expect(changed).toBe(true);
     expect(await f.rows()).toHaveLength(0);
   });
   it("serializes request usage with worker progress on the coordinator thread", async () => {

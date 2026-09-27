@@ -14,6 +14,7 @@ import {
   delegationProblem,
   IntegrationManifestSchema,
   LocalityPolicySchema,
+  RequestUsageObservationSchema,
   TaskCardSchema,
 } from "@ardurbot/contracts";
 import {
@@ -46,12 +47,82 @@ export const ACTIVE_DELEGATIONS = ["queued", "running", "cancel-requested"];
 const PEER_RECEIPT_MAX_LENGTH = 2000;
 type Scope = Pick<Actor, "spaceId" | "userId">;
 
+async function unresolvedBrokerTokens(tx: Prisma.TransactionClient, delegationId: string) {
+  const rows = await tx.usageRecord.findMany({
+    where: { delegationId, observations: { some: { sequence: 0 } } },
+    select: {
+      inputTokens: true,
+      outputTokens: true,
+      categoryCoverage: true,
+      observations: { orderBy: { sequence: "asc" }, select: { observation: true } },
+    },
+  });
+  return rows.reduce((total, row) => {
+    const first = RequestUsageObservationSchema.parse(row.observations[0]?.observation);
+    const admission = first.admission;
+    if (!admission) return total;
+    const latest = RequestUsageObservationSchema.parse(row.observations.at(-1)?.observation);
+    const coverage = row.categoryCoverage as { logicalInput?: string; output?: string } | null;
+    if (
+      latest.collection?.outcome !== undefined &&
+      latest.collection.outcome !== "started" &&
+      latest.collection.outcome !== "unknown" &&
+      coverage?.logicalInput === "complete" &&
+      coverage.output === "complete"
+    )
+      return total;
+    return total + Math.max(0, admission.reservedTokens - row.inputTokens - row.outputTokens);
+  }, 0);
+}
+
 export async function lockDelegationRootForRun(tx: Prisma.TransactionClient, runId: string) {
   const run = await tx.run.findUniqueOrThrow({ where: { id: runId } });
   const rootTaskId = run.delegationRootTaskId ?? run.taskId;
   // The first admission creates its root after locking; its parent run supplies the thread.
   await lockDelegationRootTask(tx, rootTaskId, run.threadId);
   return { run: await tx.run.findUniqueOrThrow({ where: { id: runId } }), rootTaskId };
+}
+
+/** Called under the coordinator thread/root task lock by delegation and provider admission. */
+export async function ensureDelegationRootBudget(
+  tx: Prisma.TransactionClient,
+  input: {
+    rootTaskId: string;
+    spaceId: string;
+    userId: string;
+    coordinatorBotId: string;
+    coordinatorThreadId: string;
+    runCreatedAt: Date;
+  },
+) {
+  const spent = await tx.usageRecord.aggregate({
+    where: { rootTaskId: input.rootTaskId, purpose: { not: "detached-learning" } },
+    _sum: { inputTokens: true, outputTokens: true },
+  });
+  const goal = await tx.teamGoal.findUnique({ where: { rootTaskId: input.rootTaskId } });
+  return tx.delegationRoot.upsert({
+    where: { rootTaskId: input.rootTaskId },
+    update: {},
+    create: {
+      rootTaskId: input.rootTaskId,
+      spaceId: input.spaceId,
+      userId: input.userId,
+      coordinatorBotId: goal?.coordinatorBotId ?? input.coordinatorBotId,
+      coordinatorThreadId: goal?.threadId ?? input.coordinatorThreadId,
+      usedTokens: (spent._sum.inputTokens ?? 0) + (spent._sum.outputTokens ?? 0),
+      deadlineAt:
+        goal?.untilAt ?? new Date(input.runCreatedAt.getTime() + DELEGATION_LIMITS.durationMs),
+      ...(goal
+        ? {
+            maxDepth: goal.maxDepth,
+            maxConcurrent: goal.maxConcurrent,
+            maxHops: goal.maxHops,
+            maxDescendants: goal.maxDescendants,
+            tokenLimit: goal.tokenLimit,
+          }
+        : {}),
+    },
+  });
 }
 
 /** Canonical order: bot/group, coordinator thread, recipient thread, then root task.
@@ -158,33 +229,13 @@ export async function admitDelegation(
       });
   const space = await tx.space.findUniqueOrThrow({ where: { id: input.spaceId } });
   const now = new Date();
-  const spent = await tx.usageRecord.aggregate({
-    where: { rootTaskId, purpose: { not: "detached-learning" } },
-    _sum: { inputTokens: true, outputTokens: true },
-  });
-  const goal = await tx.teamGoal.findUnique({ where: { rootTaskId } });
-  const root = await tx.delegationRoot.upsert({
-    where: { rootTaskId },
-    update: {},
-    create: {
-      rootTaskId,
-      spaceId: input.spaceId,
-      userId: input.userId,
-      coordinatorBotId: goal?.coordinatorBotId ?? parent.botId,
-      coordinatorThreadId: goal?.threadId ?? parent.threadId,
-      usedTokens: (spent._sum.inputTokens ?? 0) + (spent._sum.outputTokens ?? 0),
-      deadlineAt:
-        goal?.untilAt ?? new Date(parent.createdAt.getTime() + DELEGATION_LIMITS.durationMs),
-      ...(goal
-        ? {
-            maxDepth: goal.maxDepth,
-            maxConcurrent: goal.maxConcurrent,
-            maxHops: goal.maxHops,
-            maxDescendants: goal.maxDescendants,
-            tokenLimit: goal.tokenLimit,
-          }
-        : {}),
-    },
+  const root = await ensureDelegationRootBudget(tx, {
+    rootTaskId,
+    spaceId: input.spaceId,
+    userId: input.userId,
+    coordinatorBotId: parent.botId,
+    coordinatorThreadId: parent.threadId,
+    runCreatedAt: parent.createdAt,
   });
   if (root.cancelRequestedAt || root.deadlineAt <= now) refuse("deadline-passed");
   const ancestorBotIds = ancestor ? [...ancestor.ancestorBotIds, parent.botId] : [parent.botId];
@@ -457,11 +508,14 @@ export async function finishDelegation(
   });
   if (!changed.count) return;
   await appendTaskEvent(tx, row, status, text);
+  const brokerHeld = await unresolvedBrokerTokens(tx, row.id);
   await tx.delegationRoot.update({
     where: { rootTaskId: row.rootTaskId },
     data: {
       activeDescendants: { decrement: 1 },
-      reservedTokens: { decrement: Math.max(0, row.reservedTokens - row.usedTokens) },
+      reservedTokens: {
+        decrement: Math.max(0, row.reservedTokens - row.usedTokens - brokerHeld),
+      },
     },
   });
   const root = await tx.delegationRoot.findUniqueOrThrow({ where: { rootTaskId: row.rootTaskId } });

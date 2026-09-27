@@ -4,6 +4,7 @@ import type { AgentUsage } from "@ardurbot/adapter-kit";
 import type { PrismaClient, ThreadEvents, UsageRecord } from "@ardurbot/db";
 import {
   appendEventInTransaction,
+  ensureDelegationRootBudget,
   lockDelegationRootTask,
   Prisma,
   withTransactionRetry,
@@ -128,6 +129,21 @@ function storedTotals(row: UsageRecord) {
   };
 }
 
+function brokerHeld(
+  reserved: number,
+  measured: number,
+  coverage: CategoryCoverage,
+  outcome: string | undefined,
+) {
+  const measuredTerminal =
+    outcome !== undefined &&
+    outcome !== "started" &&
+    outcome !== "unknown" &&
+    coverage.logicalInput === "complete" &&
+    coverage.output === "complete";
+  return measuredTerminal ? 0 : Math.max(0, reserved - measured);
+}
+
 async function recordRequestUsage(
   deps: UsageDependencies,
   run: UsageRun,
@@ -151,7 +167,7 @@ async function recordRequestUsage(
         )
           throw new Error("Usage run scope mismatch");
         const delegationId = run.delegationId ?? currentRun.delegationId;
-        const delegation = delegationId
+        let delegation = delegationId
           ? await tx.delegation.findUniqueOrThrow({ where: { id: delegationId } })
           : null;
         if (
@@ -175,6 +191,19 @@ async function recordRequestUsage(
         });
         if (!rootTask) throw new Error("Usage root task is unavailable");
         await tx.$queryRaw`SELECT id FROM runs WHERE id = ${run.id} FOR NO KEY UPDATE`;
+        const lockedRun = await tx.run.findUniqueOrThrow({ where: { id: run.id } });
+        if (
+          lockedRun.spaceId !== run.spaceId ||
+          lockedRun.userId !== run.userId ||
+          lockedRun.botId !== run.botId ||
+          lockedRun.threadId !== run.threadId ||
+          lockedRun.taskId !== currentRun.taskId ||
+          lockedRun.delegationRootTaskId !== currentRun.delegationRootTaskId ||
+          lockedRun.delegationId !== currentRun.delegationId
+        )
+          throw new Error("Usage run changed while locking");
+        if (delegation)
+          delegation = await tx.delegation.findUniqueOrThrow({ where: { id: delegation.id } });
         const identity = {
           delegationId: delegation?.id ?? null,
           rootTaskId,
@@ -240,10 +269,10 @@ async function recordRequestUsage(
             !brokerFence ||
             request.counter.sequence !== 0 ||
             request.collection?.outcome !== "started" ||
-            currentRun.status !== "running" ||
-            currentRun.leaseOwner !== brokerFence.leaseOwner ||
-            currentRun.leaseFence !== brokerFence.leaseFence ||
-            !isDeepStrictEqual(currentRun.runtimePin, brokerFence.runtimePin)
+            lockedRun.status !== "running" ||
+            lockedRun.leaseOwner !== brokerFence.leaseOwner ||
+            lockedRun.leaseFence !== brokerFence.leaseFence ||
+            !isDeepStrictEqual(lockedRun.runtimePin, brokerFence.runtimePin)
           )
             throw new Error("Broker run admission is stale");
           const admitted = await tx.usageRecord.findMany({
@@ -253,16 +282,23 @@ async function recordRequestUsage(
               delegationId: true,
               inputTokens: true,
               outputTokens: true,
-              observations: { where: { sequence: 0 }, select: { observation: true } },
+              categoryCoverage: true,
+              observations: { orderBy: { sequence: "asc" }, select: { observation: true } },
             },
           });
           const reservations = admitted
             .flatMap((row) =>
-              row.observations.map((item) => ({
+              row.observations.slice(0, 1).map((item) => ({
                 runId: row.runId,
                 delegationId: row.delegationId,
                 measured: row.inputTokens + row.outputTokens,
                 admission: parseRequestUsage(item.observation).admission,
+                held: brokerHeld(
+                  parseRequestUsage(item.observation).admission?.reservedTokens ?? 0,
+                  row.inputTokens + row.outputTokens,
+                  row.categoryCoverage as CategoryCoverage,
+                  parseRequestUsage(row.observations.at(-1)?.observation).collection?.outcome,
+                ),
               })),
             )
             .filter((row) => row.admission?.kind === "worker-provider-broker");
@@ -281,20 +317,21 @@ async function recordRequestUsage(
             consumed + request.admission.reservedTokens > request.admission.maxReservedTokens
           )
             throw new Error("Broker request allowance exhausted");
-          const outstanding = reservations.reduce(
-            (sum, row) => sum + Math.max(0, row.admission!.reservedTokens - row.measured),
-            0,
-          );
-          const rootBudget = await tx.delegationRoot.findUnique({ where: { rootTaskId } });
+          const rootBudget = await ensureDelegationRootBudget(tx, {
+            rootTaskId,
+            spaceId: run.spaceId,
+            userId: run.userId,
+            coordinatorBotId: lockedRun.botId,
+            coordinatorThreadId: lockedRun.threadId,
+            runCreatedAt: lockedRun.createdAt,
+          });
           if (
-            rootBudget &&
-            (rootBudget.cancelRequestedAt ||
-              rootBudget.deadlineAt <= new Date() ||
-              rootBudget.usedTokens +
-                rootBudget.reservedTokens +
-                outstanding +
-                request.admission.reservedTokens >
-                rootBudget.tokenLimit)
+            rootBudget.cancelRequestedAt ||
+            rootBudget.deadlineAt <= new Date() ||
+            rootBudget.usedTokens +
+              rootBudget.reservedTokens +
+              (delegation ? 0 : request.admission.reservedTokens) >
+              rootBudget.tokenLimit
           )
             throw new Error("Broker root task allowance exhausted");
           if (
@@ -303,10 +340,7 @@ async function recordRequestUsage(
               delegation.usedTokens +
                 reservations
                   .filter((row) => row.delegationId === delegation.id)
-                  .reduce(
-                    (sum, row) => sum + Math.max(0, row.admission!.reservedTokens - row.measured),
-                    0,
-                  ) +
+                  .reduce((sum, row) => sum + row.held, 0) +
                 request.admission.reservedTokens >
                 delegation.reservedTokens)
           )
@@ -316,6 +350,33 @@ async function recordRequestUsage(
         const tokens = usageTokenTotals(totals.categories, request.reasoningSemantics);
         const inputDelta = tokens.inputTokens - (existing?.inputTokens ?? 0);
         const outputDelta = tokens.outputTokens - (existing?.outputTokens ?? 0);
+        const previousReceipt = existing
+          ? await tx.requestUsageObservation.findUnique({
+              where: {
+                usageRecordId_sequence: {
+                  usageRecordId: existing.id,
+                  sequence: existing.lastSequence ?? 0,
+                },
+              },
+            })
+          : null;
+        const previousHeld =
+          request.admission && existing
+            ? brokerHeld(
+                request.admission.reservedTokens,
+                existing.inputTokens + existing.outputTokens,
+                existing.categoryCoverage as CategoryCoverage,
+                parseRequestUsage(previousReceipt?.observation).collection?.outcome,
+              )
+            : 0;
+        const nextHeld = request.admission
+          ? brokerHeld(
+              request.admission.reservedTokens,
+              tokens.inputTokens + tokens.outputTokens,
+              totals.categoryCoverage,
+              request.collection?.outcome,
+            )
+          : 0;
         const { categories } = totals;
         const data = {
           ...tokens,
@@ -371,6 +432,15 @@ async function recordRequestUsage(
         });
         if (request.purpose !== "detached-learning") {
           await updateUsageBudget(tx, rootTaskId, delegation?.id, inputDelta + outputDelta);
+        }
+        if (
+          request.admission &&
+          (!delegation || !["queued", "running", "cancel-requested"].includes(delegation.status))
+        ) {
+          await tx.delegationRoot.updateMany({
+            where: { rootTaskId },
+            data: { reservedTokens: { increment: nextHeld - previousHeld } },
+          });
         }
         // Cancelled runs still incurred spend; the existing history fence forbids new thread events.
         const latestRun = await tx.run.findUniqueOrThrow({ where: { id: run.id } });
