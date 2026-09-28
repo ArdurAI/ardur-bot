@@ -10,6 +10,7 @@ import { Button } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useId, useState } from "react";
 import { ShowAllModels } from "../components/ShowAllModels";
+import { actionMessage } from "../lib/orpc-action-message";
 import type { ModelSettings } from "../lib/use-model-settings";
 import { ModelEffortSelect, ModelPinSelect } from "./shell/model-pin-select";
 import { RuntimeSettings } from "./shell/runtime-settings";
@@ -116,21 +117,22 @@ export function GroupModelControl({
       const conflict =
         typeof cause === "object" && cause !== null && "code" in cause && cause.code === "CONFLICT";
       const reloaded = conflict ? await onReload?.(activeMember).catch(() => undefined) : undefined;
-      if (reloaded) setActiveMember(reloaded);
-      const restored = reloaded ? (reloaded.runtimePin ?? null) : confirmed;
-      setInherit(!restored);
-      setKind(restored?.runtimeKind ?? "pi");
-      setKey(
-        restored?.provider && restored.modelId
-          ? modelPinOptionKey(restored.provider, restored.modelId, restored.credentialId)
-          : "",
-      );
-      setEffort(restored?.effort ?? "");
-      setError(
-        conflict && reloaded
-          ? t`The group model choice was reloaded. Pick again.`
-          : t`Could not save group model.`,
-      );
+      if (reloaded) {
+        setActiveMember(reloaded);
+        const restored = reloaded.runtimePin ?? null;
+        setInherit(!restored);
+        setKind(restored?.runtimeKind ?? "pi");
+        setKey(
+          restored?.provider && restored.modelId
+            ? modelPinOptionKey(restored.provider, restored.modelId, restored.credentialId)
+            : "",
+        );
+        setEffort(restored?.effort ?? "");
+        setError(t`The group model choice was reloaded. Pick again.`);
+        return;
+      }
+      // Keep the unsaved choice selected so it can be retried, and say why the server refused it.
+      setError(actionMessage(cause, t`Could not save group model.`));
     } finally {
       setSaving(false);
     }

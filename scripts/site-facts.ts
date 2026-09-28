@@ -494,7 +494,7 @@ export async function generatedProduct(rootDir = root, docsRoot = rootDir): Prom
       homebrew: {
         ...curated.install.homebrew,
         caskPath: `Casks/${casks[0]}`,
-        command: `brew install --cask ardurai/tap/${cask}`,
+        command: `brew tap ArdurAI/tap && brew trust --cask ArdurAI/tap/${cask} && brew install --cask ArdurAI/tap/${cask}`,
       },
     },
   };
