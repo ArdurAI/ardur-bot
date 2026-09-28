@@ -12,7 +12,12 @@ import {
   withTransactionRetry,
 } from "@ardurbot/db";
 import type { CategoryCoverage } from "./request-usage.js";
-import { accumulateRequestUsage, parseRequestUsage, usageTokenTotals } from "./request-usage.js";
+import {
+  accumulateRequestUsage,
+  parseRequestUsage,
+  REQUEST_USAGE_CATEGORIES,
+  usageTokenTotals,
+} from "./request-usage.js";
 
 type UsageRun = {
   id: string;
@@ -91,6 +96,17 @@ export async function recordRunUsage(
     outputTokens: usage.outputTokens,
     purpose: "legacy",
     coverage: "partial",
+    // An explicit "not reported" marker never reads as a measured zero: the
+    // denormalized totals are schema-required, so the categories say the truth.
+    ...(usage.reported === false
+      ? {
+          categoryCoverage: Object.fromEntries(
+            REQUEST_USAGE_CATEGORIES.map((key) => [key, "unknown"]),
+          ) as CategoryCoverage,
+          inputSemantics: "unknown",
+          reasoningSemantics: "unknown",
+        }
+      : {}),
     ...identity,
     cost: null,
   };

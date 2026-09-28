@@ -36,6 +36,38 @@ it("attributes the usage record and its event to the same run", async () => {
   );
 });
 
+it("marks unreported legacy totals as unknown instead of a measured zero", async () => {
+  const create = vi.fn(async () => ({ id: "usage" }));
+  await recordRunUsage(
+    {
+      prisma: { usageRecord: { create } } as unknown as PrismaClient,
+      events: { append: vi.fn() },
+    },
+    { id: "run", spaceId: "space", userId: "user", botId: "bot", threadId: "thread" },
+    {
+      provider: "fixture",
+      model: "fixture",
+      inputTokens: 0,
+      outputTokens: 0,
+      reported: false,
+    },
+  );
+  expect(create).toHaveBeenCalledWith({
+    data: expect.objectContaining({
+      inputTokens: 0,
+      outputTokens: 0,
+      categoryCoverage: {
+        logicalInput: "unknown",
+        uncachedInput: "unknown",
+        cacheReadInput: "unknown",
+        cacheWriteInput: "unknown",
+        output: "unknown",
+        reasoning: "unknown",
+      },
+    }),
+  });
+});
+
 it.each(["running", "completed"])(
   "attributes helper usage and releases only live reservations (%s)",
   async (status) => {
