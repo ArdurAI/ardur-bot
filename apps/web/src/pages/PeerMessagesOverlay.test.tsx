@@ -22,26 +22,33 @@ vi.mock("@lingui/react/macro", () => ({
   Trans: ({ children }: { children: ReactNode }) => children,
   useLingui: () => ({ t: (parts: TemplateStringsArray) => parts.join("") }),
 }));
-vi.mock("../lib/rpc", () => ({ rpc: { threads: { messages: vi.fn(async () => ({
-  messages: [
-      {
-        id: "reply",
-        threadId: "thread",
-        role: "bot",
-        createdAt: "2026-08-25T10:01:00.000Z",
-        blocks: [
+vi.mock("../lib/rpc", () => ({
+  rpc: {
+    threads: {
+      messages: vi.fn(async () => ({
+        messages: [
           {
-            kind: "bot_message_received",
-            fromBotId: "worker",
-            fromBotName: "Worker",
-            text: "preview",
-            truncated: true,
-            fullLength: 2100,
+            id: "reply",
+            threadId: "thread",
+            role: "bot",
+            createdAt: "2026-08-25T10:01:00.000Z",
+            blocks: [
+              {
+                kind: "bot_message_received",
+                fromBotId: "worker",
+                fromBotName: "Worker",
+                text: "preview",
+                truncated: true,
+                fullLength: 2100,
+              },
+            ],
           },
         ],
-      },
-  ], olderCursor: null,
-})) } } }));
+        olderCursor: null,
+      })),
+    },
+  },
+}));
 
 it("shows a link to the peer thread for a shortened reply", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -80,17 +87,21 @@ it("loads the coordinator's latest peer exchange from its group thread", async (
   const node = document.createElement("div");
   const root = createRoot(node);
   try {
-    await act(async () => root.render(createElement(PeerMessagesOverlay, {
-      botId: "coordinator",
-      groupId: "goal-room",
-      botName: "Coordinator",
-      botColor: "gray",
-      peerBotId: "worker",
-      peerBotName: "Worker",
-      peerBotColor: "gray",
-      onClose: vi.fn(),
-      onOpenPeerThread: vi.fn(),
-    })));
+    await act(async () =>
+      root.render(
+        createElement(PeerMessagesOverlay, {
+          botId: "coordinator",
+          groupId: "goal-room",
+          botName: "Coordinator",
+          botColor: "gray",
+          peerBotId: "worker",
+          peerBotName: "Worker",
+          peerBotColor: "gray",
+          onClose: vi.fn(),
+          onOpenPeerThread: vi.fn(),
+        }),
+      ),
+    );
     expect(rpc.threads.messages).toHaveBeenCalledWith(
       expect.objectContaining({ groupId: "goal-room", includePeerRuns: true }),
       expect.anything(),

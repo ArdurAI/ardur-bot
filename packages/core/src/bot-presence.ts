@@ -131,9 +131,11 @@ export function projectBotPresence(input: {
   // A personal desk thread has no room and cannot grant another bot access.
   const runTaskVisible = (run: Run | undefined) => {
     if (!input.callerBotId || input.callerBotId === bot.id)
-      return !input.visibleGroupId ||
+      return (
+        !input.visibleGroupId ||
         !run?.thread?.groupId ||
-        run.thread.groupId === input.visibleGroupId;
+        run.thread.groupId === input.visibleGroupId
+      );
     const roomId = run?.thread?.groupId;
     return Boolean(
       roomId &&
@@ -150,9 +152,10 @@ export function projectBotPresence(input: {
     .filter((date): date is Date => date instanceof Date)
     .sort((a, b) => b.getTime() - a.getTime())[0];
   const canMessage = Boolean(bot.thread && bot.id !== input.callerBotId && input.canSend !== false);
-  const latestDeliveryGroupId = input.latestDelivery?.senderBotId === bot.id
-    ? input.latestDelivery.sourceGroupId
-    : input.latestDelivery?.targetGroupId;
+  const latestDeliveryGroupId =
+    input.latestDelivery?.senderBotId === bot.id
+      ? input.latestDelivery.sourceGroupId
+      : input.latestDelivery?.targetGroupId;
   return {
     botId: bot.id,
     name: bot.name,

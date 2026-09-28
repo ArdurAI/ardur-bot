@@ -35,10 +35,12 @@ export default function NowPanel({
   const runs = data.runs;
   const presenceUnavailable = (botId: string) => {
     const row = data.rows.find((item) => item.botId === botId);
-    return !row?.observedAt ||
+    return (
+      !row?.observedAt ||
       presenceFreshness(row.observedAt) === "unavailable" ||
       row.availability === "unknown" ||
-      row.availability === "unavailable";
+      row.availability === "unavailable"
+    );
   };
   return (
     <div className="space-y-3 text-sm">
@@ -60,13 +62,21 @@ export default function NowPanel({
         const label = (
           <>
             <span className="font-medium">{run.botName}</span>
-            <span className="min-w-0 flex-1 truncate">
-              {run.promptSnippet}
-            </span>
-            {run.status === "queued" ? <span><Trans>Queued</Trans></span> : null}
-            {run.status === "waiting_takeover" ? <span><Trans>Needs takeover</Trans></span> : null}
+            <span className="min-w-0 flex-1 truncate">{run.promptSnippet}</span>
+            {run.status === "queued" ? (
+              <span>
+                <Trans>Queued</Trans>
+              </span>
+            ) : null}
+            {run.status === "waiting_takeover" ? (
+              <span>
+                <Trans>Needs takeover</Trans>
+              </span>
+            ) : null}
             {presenceUnavailable(run.botId) ? (
-              <span className="text-muted-foreground"><Trans>Status unavailable</Trans></span>
+              <span className="text-muted-foreground">
+                <Trans>Status unavailable</Trans>
+              </span>
             ) : null}
             {seconds !== null ? (
               <span className="tabular-nums text-muted-foreground">{t`${seconds}s`}</span>
@@ -139,7 +149,10 @@ export default function NowPanel({
                 : t`Working`}
           </span>
           {presenceUnavailable(delegation.actingBotId) ? (
-            <span className="text-muted-foreground"> · <Trans>Status unavailable</Trans></span>
+            <span className="text-muted-foreground">
+              {" "}
+              · <Trans>Status unavailable</Trans>
+            </span>
           ) : null}
         </Link>
       ))}

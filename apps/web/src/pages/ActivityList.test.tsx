@@ -10,17 +10,25 @@ const calls = vi.hoisted(() => ({
   list: vi.fn(),
   board: vi.fn(),
 }));
-vi.mock("../lib/rpc", () => ({ rpc: { runs: { list: calls.list }, team: { board: calls.board } } }));
+vi.mock("../lib/rpc", () => ({
+  rpc: { runs: { list: calls.list }, team: { board: calls.board } },
+}));
 vi.mock("../lib/run-status-label", () => ({ statusLabel: (status: string) => status }));
 vi.mock("@lingui/core/macro", () => ({ t: (parts: TemplateStringsArray) => parts.join("") }));
 vi.mock("@lingui/core", () => ({ i18n: { locale: "en" } }));
 vi.mock("@lingui/react/macro", () => ({
   Trans: ({ children }: { children: ReactNode }) => children,
-  useLingui: () => ({ t: (parts: TemplateStringsArray | { id: string }) =>
-    "id" in parts ? parts.id : parts.join("") }),
+  useLingui: () => ({
+    t: (parts: TemplateStringsArray | { id: string }) =>
+      "id" in parts ? parts.id : parts.join(""),
+  }),
 }));
 
-const makeRun = (runId: string, status: RunActivityRow["status"], promptSnippet: string): RunActivityRow => ({
+const makeRun = (
+  runId: string,
+  status: RunActivityRow["status"],
+  promptSnippet: string,
+): RunActivityRow => ({
   runId,
   botId: "worker",
   botName: "Worker",
@@ -37,17 +45,22 @@ const makeRun = (runId: string, status: RunActivityRow["status"], promptSnippet:
 it("keeps each run's task and completed outcome when the bot starts new work", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   calls.list.mockImplementation(async ({ filter }: { filter: string }) => ({
-    runs: filter === "active"
-      ? [makeRun("current", "running", "Draft documentation")]
-      : [makeRun("earlier", "completed", "Review release")],
+    runs:
+      filter === "active"
+        ? [makeRun("current", "running", "Draft documentation")]
+        : [makeRun("earlier", "completed", "Review release")],
   }));
-  calls.board.mockResolvedValue({ rows: [{
-    botId: "worker",
-    currentTaskTitle: "Draft documentation",
-    availability: "unavailable",
-    observedAt: "2026-09-28T11:00:00.000Z",
-    latestDeliveryState: "read",
-  } as TeamRow] });
+  calls.board.mockResolvedValue({
+    rows: [
+      {
+        botId: "worker",
+        currentTaskTitle: "Draft documentation",
+        availability: "unavailable",
+        observedAt: "2026-09-28T11:00:00.000Z",
+        latestDeliveryState: "read",
+      } as TeamRow,
+    ],
+  });
   const node = document.createElement("div");
   const root = createRoot(node);
   try {

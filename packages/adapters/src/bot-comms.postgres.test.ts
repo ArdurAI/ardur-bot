@@ -510,12 +510,16 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
         leaseExpiresAt: new Date(Date.now() + 60_000),
       },
     });
-    const result = await loadBotPresence(prisma, { spaceId, userId }, {
-      callerBotId: f.worker.id,
-      visibleGroupId: "__desk__",
-      canSend: true,
-      limit: 50,
-    });
+    const result = await loadBotPresence(
+      prisma,
+      { spaceId, userId },
+      {
+        callerBotId: f.worker.id,
+        visibleGroupId: "__desk__",
+        canSend: true,
+        limit: 50,
+      },
+    );
     const row = result.bots.find((bot) => bot.botId === unrelated.id);
     expect(row).toMatchObject({ availability: "busy", activeRunCount: 1, activeRunIds: [] });
     expect(row?.currentTaskTitle).toBeUndefined();
@@ -528,10 +532,12 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
   it("projects a coordinator's latest peer conversation to its group thread", async () => {
     const f = await fixture();
     const result = await loadBotPresence(prisma, { spaceId, userId });
-    expect(result.bots.find((bot) => bot.botId === f.coordinator.id)?.latestDeliveryGroupId)
-      .toBe(f.room.groupId);
-    expect(result.bots.find((bot) => bot.botId === f.worker.id)?.latestDeliveryGroupId)
-      .toBeUndefined();
+    expect(result.bots.find((bot) => bot.botId === f.coordinator.id)?.latestDeliveryGroupId).toBe(
+      f.room.groupId,
+    );
+    expect(
+      result.bots.find((bot) => bot.botId === f.worker.id)?.latestDeliveryGroupId,
+    ).toBeUndefined();
   });
 
   it("commits a long worker result and wakes once from its bounded receipt", async () => {

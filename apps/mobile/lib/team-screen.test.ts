@@ -113,6 +113,7 @@ it("routes the advertised peer conversation with its participant and room", asyn
         latestDeliveryGroupId: "room",
       },
     ] as TeamRow[],
+    hostLabel: undefined,
   });
   const node = document.createElement("div");
   const root = createRoot(node);
