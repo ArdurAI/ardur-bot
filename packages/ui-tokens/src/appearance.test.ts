@@ -17,24 +17,21 @@ import {
 
 describe("appearance preference", () => {
   it("meets WCAG AA contrast for foreground/background pairs", () => {
-    function getL(c) {
-      if (!c.startsWith("#") || c.length !== 7) return 0;
-      let rgb = [
-        parseInt(c.slice(1, 3), 16),
-        parseInt(c.slice(3, 5), 16),
-        parseInt(c.slice(5, 7), 16),
-      ];
-      rgb = rgb.map((x) => x / 255);
-      rgb = rgb.map((x) => (x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4));
-      return 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
+    function luminance(colour: string): number {
+      if (!/^#[0-9a-fA-F]{6}$/.test(colour)) throw new Error(`Unsupported colour ${colour}`);
+      const [r, g, b] = [1, 3, 5].map((start) => {
+        const channel = Number.parseInt(colour.slice(start, start + 2), 16) / 255;
+        return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+      }) as [number, number, number];
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b;
     }
-    function contrast(c1, c2) {
-      const l1 = getL(c1);
-      const l2 = getL(c2);
-      return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+    function contrast(first: string, second: string): number {
+      const a = luminance(first);
+      const b = luminance(second);
+      return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
     }
-    const checkPairs = (tokens) => {
-      const pairs = [
+    const checkPairs = (tokens: Readonly<Record<string, string>>) => {
+      const pairs: ReadonlyArray<readonly [string, string]> = [
         ["foreground", "background"],
         ["mutedForeground", "muted"],
         ["mutedForeground", "background"],
@@ -48,15 +45,18 @@ describe("appearance preference", () => {
         ["sidebarAccentForeground", "sidebarAccent"],
       ];
       for (const [fg, bg] of pairs) {
-        const ratio = contrast(tokens[fg], tokens[bg]);
+        const foreground = tokens[fg];
+        const background = tokens[bg];
+        if (!foreground || !background) throw new Error(`Missing token pair ${fg} on ${bg}`);
+        const ratio = contrast(foreground, background);
         expect(
           ratio,
-          `${fg} on ${bg} (${tokens[fg]} on ${tokens[bg]}) ratio ${ratio}`,
+          `${fg} on ${bg} (${foreground} on ${background}) ratio ${ratio}`,
         ).toBeGreaterThanOrEqual(4.5);
       }
     };
-    checkPairs(lightTokens);
-    checkPairs(darkTokens);
+    checkPairs(lightTokens as unknown as Record<string, string>);
+    checkPairs(darkTokens as unknown as Record<string, string>);
   });
 
   it("defaults unknown values to system", () => {
