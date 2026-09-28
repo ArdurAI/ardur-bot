@@ -78,7 +78,7 @@ export class RemoteHostRuntime implements AgentRuntime {
             effectiveRuntimeConfigHash?: unknown;
           })
         | undefined;
-      const executionEnvelope =
+      let executionEnvelope =
         this.kind === "hermes" &&
         (capturedPin?.runtimeConfig as { version?: number } | undefined)?.version === 2
           ? validateHermesExecutionEnvelope({
@@ -89,6 +89,39 @@ export class RemoteHostRuntime implements AgentRuntime {
               effectiveRuntimeConfigHash: capturedPin?.effectiveRuntimeConfigHash,
             })
           : undefined;
+      const operationHash =
+        this.kind === "hermes" &&
+        request.providerPurpose === "summary" &&
+        request.providerSourceRunId &&
+        request.providerSourceRunId !== request.runId
+          ? summaryOperationHash(
+              summaryOperationManifest(
+                capturedPin!,
+                request.providerRunMaxOutputTokens ?? request.model.maxTokens ?? 4_096,
+              ),
+            )
+          : undefined;
+      if (executionEnvelope && operationHash) {
+        const { compileHermesRuntimeConfig } = await import(
+          "@ardurbot/host-runtime/runtimes/hermes-config"
+        );
+        const { effectiveRuntimeConfigHash } = await import(
+          "@ardurbot/core/node/runtime-config-hash"
+        );
+        const compiled = compileHermesRuntimeConfig(executionEnvelope.runtimeConfig, {
+          id: request.model.id,
+          contextWindow: request.model.contextWindow ?? 32_768,
+          maxTokens: request.providerRunMaxOutputTokens ?? request.model.maxTokens ?? 4_096,
+          reasoning: request.model.reasoning ?? false,
+          acceptsImages: request.model.acceptsImages ?? false,
+          thinkingLevel: request.model.thinkingLevel ?? "off",
+        });
+        executionEnvelope = validateHermesExecutionEnvelope({
+          ...executionEnvelope,
+          effectiveRuntimeConfig: compiled.manifest,
+          effectiveRuntimeConfigHash: effectiveRuntimeConfigHash(compiled.manifest),
+        });
+      }
       if (
         this.kind === "hermes" &&
         !executionEnvelope &&
@@ -103,18 +136,6 @@ export class RemoteHostRuntime implements AgentRuntime {
           health?.capabilities?.hermesLauncherGeneration !== 1)
       )
         throw new Error("Update the connected host to use these runtime settings.");
-      const operationHash =
-        this.kind === "hermes" &&
-        request.providerPurpose === "summary" &&
-        request.providerSourceRunId &&
-        request.providerSourceRunId !== request.runId
-          ? summaryOperationHash(
-              summaryOperationManifest(
-                capturedPin!,
-                request.providerRunMaxOutputTokens ?? request.model.maxTokens ?? 4_096,
-              ),
-            )
-          : undefined;
       const operationId = randomUUID();
       brokerSession =
         this.kind === "hermes"
