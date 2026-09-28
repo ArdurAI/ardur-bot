@@ -13,6 +13,7 @@ import { IDE_FILE_BYTES } from "./ide.js";
 import { LocalImportRootsSchema } from "./local-import.js";
 import { McpCredentialFlagsSchema } from "./mcp.js";
 import { RequestUsageObservationSchema } from "./request-usage.js";
+import { HermesExecutionEnvelopeSchema } from "./runtime-config.js";
 import {
   HERMES_HOST_MAX_OUTPUT_TOKENS,
   RuntimeAvailabilitySchema,
@@ -131,6 +132,7 @@ const tool = z.strictObject({
 });
 export const HostTurnSchema = z.strictObject({
   providerBroker: HostProviderGrantSchema.optional(),
+  executionEnvelope: HermesExecutionEnvelopeSchema.optional(),
   controlledComparison: z.boolean().optional(),
   botId: id,
   runId: id,
@@ -291,7 +293,13 @@ export const HostRequestSchema = /* @__PURE__ */ (() =>
 export type HostRequest = z.infer<typeof HostRequestSchema>;
 export const HostHealthSchema = z.strictObject({
   generation: z.uuid().optional(),
-  capabilities: z.strictObject({ providerRelay: z.literal(1) }).optional(),
+  capabilities: z
+    .strictObject({
+      providerRelay: z.literal(1),
+      hermesConfigurationProfile: z.literal("hermes-ardur-v2").optional(),
+      hermesLauncherGeneration: z.literal(1).optional(),
+    })
+    .optional(),
   capacity: CapacitySnapshotSchema.optional(),
   name: z.string().trim().min(1).max(80).optional(),
   platform: z.enum(["darwin", "linux", "win32"]),
