@@ -1,5 +1,6 @@
 import { oc } from "@orpc/contract";
 import * as z from "zod";
+import { BotAvailabilitySchema } from "./bot-presence.js";
 import { DelegationRecordSchema, DelegationSnapshotSchema } from "./delegation.js";
 import { HostLabelSchema } from "./fleet.js";
 import { RuntimeInfoSchema } from "./runtime-pins.js";
@@ -15,6 +16,23 @@ export const TeamStateSchema = z.enum([
 export const TeamRowSchema = z.object({
   botId: z.string(),
   botName: z.string(),
+  botColor: z.string().optional(),
+  availability: BotAvailabilitySchema.optional(),
+  observedAt: z.string().datetime().optional(),
+  lastActiveAt: z.string().datetime().optional(),
+  currentTaskTitle: z.string().optional(),
+  activeRunCount: z.number().int().nonnegative().optional(),
+  activeRunIds: z.array(z.string()).optional(),
+  pendingPeerCount: z.number().int().nonnegative().optional(),
+  waitingForBotId: z.string().optional(),
+  latestDeliveryId: z.string().optional(),
+  latestDeliveryState: z.string().optional(),
+  latestPeerBotId: z.string().optional(),
+  latestPeerBotName: z.string().optional(),
+  latestPeerBotColor: z.string().optional(),
+  goalId: z.string().optional(),
+  reviewState: z.string().optional(),
+  trafficPaused: z.boolean().optional(),
   computerName: z.string().nullable().optional(),
   /** A built-in computer, named by clients in their own language instead of computerName. */
   computerBuiltin: z.enum(["host", "local-docker"]).nullable().optional(),

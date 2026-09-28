@@ -1,5 +1,6 @@
 import type { TeamRow } from "@ardurbot/contracts";
-export const TEAM_REFRESH_MS = 5000;
+import { presenceFreshness } from "./bot-presence.js";
+export const TEAM_REFRESH_MS = 15000;
 const priority: Record<TeamRow["state"], number> = {
   "waiting-approval": 0,
   blocked: 1,
@@ -17,15 +18,25 @@ export function sortTeamRows(rows: TeamRow[]) {
       a.botId.localeCompare(b.botId),
   );
 }
-export function teamRowText(row: TeamRow, t: (text: string) => string = (text) => text): string {
+export function teamRowText(
+  row: TeamRow,
+  t: (text: string) => string = (text) => text,
+  now = Date.now(),
+): string {
+  if (
+    row.availability === "unknown" ||
+    (row.observedAt && presenceFreshness(row.observedAt, now) === "unavailable")
+  )
+    return t("Status unavailable");
+  const title = row.currentTaskTitle ?? row.sentence;
   switch (row.state) {
     case "idle":
       return t("Idle");
     case "queued":
       return t("Queued");
     case "working":
-      return row.sentence
-        ? `${t("Working on")} ${row.sentence}${row.requesterName ? ` ${t("for")} ${row.requesterName}` : ""}`
+      return title
+        ? `${t("Working on")} ${title}${(row.activeRunCount ?? 0) > 1 ? ` · ${row.activeRunCount} ${t("active tasks")}` : ""}`
         : t("Working");
     case "waiting-approval":
       return t("Waiting for approval");
@@ -35,5 +46,28 @@ export function teamRowText(row: TeamRow, t: (text: string) => string = (text) =
       return t("Done — waiting for your OK");
     case "accepted":
       return t("Accepted");
+  }
+}
+
+export function teamDeliveryText(state: string, t: (text: string) => string = (text) => text) {
+  switch (state) {
+    case "queued":
+      return t("Waiting for a turn");
+    case "delivered":
+      return t("Delivered");
+    case "read":
+      return t("Read");
+    case "replied":
+      return t("Replied");
+    case "denied":
+      return t("Not approved");
+    case "expired":
+      return t("Expired");
+    case "cancelled":
+      return t("Cancelled");
+    case "failed":
+      return t("Failed");
+    default:
+      return t("Status unavailable");
   }
 }

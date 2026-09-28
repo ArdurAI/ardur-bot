@@ -13,6 +13,7 @@ import {
   expireQuietBotMessages,
   finalizeRun,
   goalBotAuthorityFingerprint,
+  loadBotPresence,
   noteBotMessageReadUnconfirmed,
   type PrismaClient,
   reconcileQuietBotMessageClaims,
@@ -382,6 +383,72 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
       blocks: [{ kind: "text", text }],
     });
   }
+
+  it("scopes a two-room directory and rechecks a send after membership changes", async () => {
+    const f = await fixture("compatible");
+    await prisma.run.update({
+      where: { id: f.workerRun.id },
+      data: { leaseExpiresAt: new Date(Date.now() + 60_000) },
+    });
+    const second = await prisma.chatGroup.create({
+      data: { spaceId, userId, name: "Second room" },
+    });
+    const secondThread = await prisma.thread.create({
+      data: { spaceId, userId, groupId: second.id },
+    });
+    await prisma.chatGroupMember.create({ data: { groupId: second.id, botId: f.worker.id } });
+    const secondTask = await prisma.task.create({
+      data: {
+        spaceId,
+        userId,
+        botId: f.worker.id,
+        threadId: secondThread.id,
+        prompt: "Second room work",
+        status: "running",
+      },
+    });
+    await prisma.run.create({
+      data: {
+        spaceId,
+        userId,
+        botId: f.worker.id,
+        threadId: secondThread.id,
+        taskId: secondTask.id,
+        status: "running",
+        trigger: "follow_up",
+        leaseExpiresAt: new Date(Date.now() + 60_000),
+      },
+    });
+    const visible = await loadBotPresence(
+      prisma,
+      { spaceId, userId },
+      { groupId: f.room.groupId!, limit: 1 },
+    );
+    expect(visible.bots).toHaveLength(1);
+    expect(visible.nextCursor).toBeTruthy();
+    const next = await loadBotPresence(
+      prisma,
+      { spaceId, userId },
+      { groupId: f.room.groupId!, cursor: visible.nextCursor, limit: 1 },
+    );
+    const worker = [...visible.bots, ...next.bots].find((bot) => bot.botId === f.worker.id);
+    expect(worker).toMatchObject({ availability: "busy", activeRunCount: 2 });
+    expect(worker?.groupIds).toEqual(expect.arrayContaining([f.room.groupId, second.id]));
+    expect((await loadBotPresence(prisma, { spaceId, userId: "other-owner" })).bots).toEqual([]);
+    const before = await prisma.botMessageDelivery.count({ where: { spaceId, userId } });
+    await prisma.chatGroupMember.delete({
+      where: { groupId_botId: { groupId: f.room.groupId!, botId: f.worker.id } },
+    });
+    const refused = await messageBot(f.deps, f.coordinatorRun, f.coordinator, {
+      bot_id: f.worker.id,
+      message: "Check this task",
+      intent: "request",
+      card: { goal: "Check this task", inputs: [], doneWhen: [], deadlineAt: null },
+      deliveryKey: `directory-stale-${f.parent.id}`,
+    });
+    expect(refused.ok).toBe(false);
+    expect(await prisma.botMessageDelivery.count({ where: { spaceId, userId } })).toBe(before);
+  });
 
   it("commits a long worker result and wakes once from its bounded receipt", async () => {
     const f = await fixture();

@@ -151,6 +151,20 @@ describe("turn context", () => {
     expect(result.snapshot.recallRan).toBe(false);
     expect(result.snapshot.layers.recall).toBe(0);
   });
+  it("refreshes teammate metadata in bounded history without changing stable instructions", async () => {
+    const base = {
+      instructions: "Follow the current task.",
+      history: [{ role: "user" as const, content: "Older request" }],
+      message: "Continue",
+      budgets: { messages: 600 },
+    };
+    const first = await assembleTurnContext({ ...base, teammates: "Worker: busy" });
+    const next = await assembleTurnContext({ ...base, teammates: "Worker: idle" });
+    expect(first.stablePrefix).toBe(next.stablePrefix);
+    expect(first.history[0]?.content).toContain("Worker: busy");
+    expect(next.history[0]?.content).toContain("Worker: idle");
+    expect(first.snapshot.layers.messages).toBeLessThanOrEqual(600);
+  });
   it("refuses to silently truncate instructions or the new request", async () => {
     await expect(
       assembleTurnContext({ instructions: "x".repeat(64001), history: [], message: "Hello" }),

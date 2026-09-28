@@ -24,6 +24,7 @@ export * from "./bot-avatar-colors.js";
 export * from "./bot-avatar-shapes.js";
 export * from "./bot-message-receipt.js";
 export * from "./bot-messages.js";
+export * from "./bot-presence.js";
 export * from "./bot-sections.js";
 export * from "./capability-settings.js";
 export * from "./cloud-agent.js";

@@ -9,7 +9,7 @@ import {
 import { ENGINE_LABELS } from "@ardurbot/contracts/fleet";
 import { redactTaskValue } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
-import { acceptDelegation, delegationView } from "@ardurbot/db";
+import { acceptDelegation, delegationView, loadBotPresence } from "@ardurbot/db";
 import { ORPCError } from "@orpc/server";
 
 async function requireMember(prisma: PrismaClient, actor: Actor) {
@@ -62,7 +62,7 @@ export async function teamBoard(
 ): Promise<{ rows: TeamRow[]; hostLabel: HostLabel }> {
   await requireMember(prisma, actor);
   const scope = { spaceId: actor.spaceId, userId: actor.userId };
-  const [bots, activeRuns, latestRuns, openCards, latestCards] = await Promise.all([
+  const [bots, activeRuns, latestRuns, openCards, latestCards, directory] = await Promise.all([
     prisma.bot.findMany({
       where: { ...scope, archivedAt: null },
       include: { thread: true, computer: true },
@@ -88,7 +88,9 @@ export async function teamBoard(
       distinct: ["actingBotId"],
       orderBy: { createdAt: "desc" },
     }),
+    loadBotPresence(prisma, scope),
   ]);
+  const presenceByBot = new Map(directory.bots.map((item) => [item.botId, item]));
   const runs = [...new Map([...activeRuns, ...latestRuns].map((run) => [run.id, run])).values()];
   const delegations = [
     ...new Map([...openCards, ...latestCards].map((row) => [row.id, row])).values(),
@@ -134,6 +136,7 @@ export async function teamBoard(
     ? await deploymentHostLabel(prisma)
     : "This computer";
   const rows = bots.map((bot): TeamRow => {
+    const presence = presenceByBot.get(bot.id);
     const ownRuns = runs.filter((run) => run.botId === bot.id);
     const run = ownRuns.find((run) => active.includes(run.status)) ?? ownRuns[0];
     const own = delegations.filter((row) => row.actingBotId === bot.id);
@@ -185,6 +188,22 @@ export async function teamBoard(
     return {
       botId: bot.id,
       botName: bot.name,
+      botColor: bot.color,
+      availability: presence?.availability ?? "unknown",
+      observedAt: presence?.observedAt ?? directory.observedAt,
+      lastActiveAt: presence?.lastActiveAt,
+      currentTaskTitle: presence?.currentTaskTitle,
+      activeRunCount: presence?.activeRunCount ?? 0,
+      activeRunIds: presence?.activeRunIds ?? [],
+      pendingPeerCount: presence?.pendingPeerCount ?? 0,
+      waitingForBotId: presence?.waitingForBotId,
+      latestDeliveryId: presence?.latestDeliveryId,
+      latestDeliveryState: presence?.latestDeliveryState,
+      latestPeerBotId: presence?.latestPeerBotId,
+      latestPeerBotName: bots.find((peer) => peer.id === presence?.latestPeerBotId)?.name,
+      latestPeerBotColor: bots.find((peer) => peer.id === presence?.latestPeerBotId)?.color,
+      goalId: presence?.goalId,
+      reviewState: presence?.reviewState,
       computerName: bot.computer?.connectionId
         ? (computers.find((connection) => connection.id === bot.computer?.connectionId)
             ?.displayName ?? null)
