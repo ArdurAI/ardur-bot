@@ -6,7 +6,7 @@
     },
     {
       "id": "docs-sign-in-error",
-      "sha256": "b2784707df94cb770959ff74f2e884341ebd792f56440e51906de06c48a762cc"
+      "sha256": "00fb0cc63104bb17d9a129aa9a128267266aff6e067eae1e8f364633df7a947f"
     },
     {
       "id": "docs-sign-in-recovery",
@@ -14,47 +14,47 @@
     },
     {
       "id": "docs-onboarding-open",
-      "sha256": "c47b58f885c2f84613a8aacddf1be1cd54a187b3a802ecd09fb99a0a866ef779"
+      "sha256": "64ca732d3147fe013bcb916ff13ed278547280e03821bcc5ff58f809d364ffca"
     },
     {
       "id": "docs-onboarding-connect",
-      "sha256": "d9b4c053d8e09618165153db508b1ab9a2a2430a3ab4e7a4b92b1348cf129b69"
+      "sha256": "43ea21d26cb30d22b0c01f35996e96d1437fbaa50d2520356ca678ce379eb326"
     },
     {
       "id": "docs-bots-create-open",
-      "sha256": "d316f6628d8080efde164c6fd79d30810ae539b893463e9bba921dfc0f62973c"
+      "sha256": "5c38ad26ddfb3ec80d82b081b3144dd97c11a2a943a97dd1347e316c848dbf34"
     },
     {
       "id": "docs-bots-create-form",
-      "sha256": "e9d533ff7cf0d2cb659691b5b8b7854c8646994942743a2a8ec3fdddf9ae9f65"
+      "sha256": "c350cb4bb7f05d4bf6c39c71a7e19c5673db950ea3211f734e284591f823ac87"
     },
     {
       "id": "docs-bots-create-private",
-      "sha256": "d527cc518160a925dc133495b987213f91b0e242df4286190f8e4c5ed015bd41"
+      "sha256": "2a5808a7af1d3888759e4c4c3258b824a647778e4346b5138606ce566a16f0e1"
     },
     {
       "id": "docs-bots-create-ready",
-      "sha256": "9cfa686d4e62124cb6bb7ce0c8eed6fabd54b13ae76e9c63325f40a037a27993"
+      "sha256": "956fc26c9d07fdd51aaa23fbd7cc0738539f73d0250836a74f5ba592dc1af20c"
     },
     {
       "id": "docs-chat-approvals-pending",
-      "sha256": "3b868ce3223ea29fcad1cdb6cf1b460d76e009a998d69efaed167f0382cb12ac"
+      "sha256": "972b5f22e76a54d2bdb8417aa491443d9c1a8338c7bcbc80809f990f7605abfb"
     },
     {
       "id": "docs-chat-approvals-denied",
-      "sha256": "9dabf1c072f4cbf7496104c8054cdcfe3fca473c43e762d5bcd89bda281da7e9"
+      "sha256": "98527629ae356d53b3902709e73883d0a70ca78de772f54e44a1d783d66a1b25"
     },
     {
       "id": "docs-models-open",
-      "sha256": "1dfcc3f6c2e0ecc4482d61404c0b4e383e3d794179d07a0e60e7ecc4a0f341cf"
+      "sha256": "e384a94eb8666c0a5e2daa63ed07c49074b88e4160febeb76af6a6409919bad6"
     },
     {
       "id": "docs-models-default",
-      "sha256": "8495639cf1b228e69013c16e5507cea6508f8e13734cde72e3063857c5d81430"
+      "sha256": "eabc9570296c46e99747c74469a865573c2264e81a90e86711b33ea89f2d02b7"
     },
     {
       "id": "docs-models-add",
-      "sha256": "5db77d13821518153bd2a235ae27baeff636b523960f95752c5c82873c7903a1"
+      "sha256": "253f47a9113b8fb2a0642d24912e0fc86c11b439ec2250eab38e78e4602dce30"
     }
   ],
   "features": [
