@@ -1,4 +1,3 @@
-import { CheckIcon } from "lucide-react";
 import type { Me, ThinkingLevel } from "@ardurbot/contracts";
 import {
   DEFAULT_MODEL_CONTEXT_WINDOW,
@@ -32,7 +31,7 @@ import {
 } from "@ardurbot/ui-web";
 import { selectableRowClasses } from "@ardurbot/ui-web/lib/state-classes";
 import { Plural, Trans, useLingui } from "@lingui/react/macro";
-import { ChevronDown, X } from "lucide-react";
+import { CheckIcon, ChevronDown, X } from "lucide-react";
 import type { KeyboardEvent as ReactKeyboardEvent, RefObject } from "react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { OllamaSettings } from "../components/OllamaSettings";

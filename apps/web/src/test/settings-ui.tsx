@@ -34,14 +34,14 @@ vi.mock("@ardurbot/ui-web", () => {
     Select: ({ value, onValueChange, children }: any) => {
       const React = require("react");
       return React.createElement(
-        "div", 
-        { "data-value": value, "data-testid": "mock-select" }, 
+        "div",
+        { "data-value": value, "data-testid": "mock-select" },
         React.Children.map(children, (child: any) => {
-           if (React.isValidElement(child)) {
-             return React.cloneElement(child, { _mockOnValueChange: onValueChange } as any);
-           }
-           return child;
-        })
+          if (React.isValidElement(child)) {
+            return React.cloneElement(child, { _mockOnValueChange: onValueChange } as any);
+          }
+          return child;
+        }),
       );
     },
     SelectTrigger: ({ children, ...props }: any) => {
@@ -55,19 +55,28 @@ vi.mock("@ardurbot/ui-web", () => {
     SelectContent: ({ children, _mockOnValueChange, ...props }: any) => {
       const React = require("react");
       return React.createElement(
-        "div", 
-        { role: "listbox", ...props }, 
+        "div",
+        { role: "listbox", ...props },
         React.Children.map(children, (child: any) => {
-           if (React.isValidElement(child)) {
-             return React.cloneElement(child, { _mockOnValueChange } as any);
-           }
-           return child;
-        })
+          if (React.isValidElement(child)) {
+            return React.cloneElement(child, { _mockOnValueChange } as any);
+          }
+          return child;
+        }),
       );
     },
     SelectItem: ({ value, children, _mockOnValueChange, ...props }: any) => {
       const React = require("react");
-      return React.createElement("button", { role: "option", "data-value": value, onClick: () => _mockOnValueChange?.(value), ...props }, children);
+      return React.createElement(
+        "button",
+        {
+          role: "option",
+          "data-value": value,
+          onClick: () => _mockOnValueChange?.(value),
+          ...props,
+        },
+        children,
+      );
     },
     SelectGroup: Container,
     SelectLabel: Container,
