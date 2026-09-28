@@ -383,6 +383,15 @@ export const appContract = {
   },
   health: oc.output(z.object({ ok: z.literal(true), version: z.string() })),
   me: oc.output(MeSchema),
+  guidedSetup: {
+    status: oc.output(
+      z.object({
+        scope: z.string().regex(/^[a-f0-9]{64}$/),
+        model: z.enum(["missing", "saved", "checked"]),
+        firstBot: z.boolean(),
+      }),
+    ),
+  },
   preferences: {
     get: oc.output(UserPreferencesSchema),
     update: oc
