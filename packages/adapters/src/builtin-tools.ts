@@ -2,6 +2,7 @@ import type { ConnectorTool } from "@ardurbot/adapter-kit";
 import {
   BotSecretDestination,
   BotSecretName,
+  ListBotsInputSchema,
   SecretAskPurpose,
   SecretHttpRequest,
   TaskArtifactSchema,
@@ -28,6 +29,13 @@ export const DELEGATION_TOOL_NAMES = new Set([
 
 export const builtinAgentTools: ConnectorTool[] = [
   ...boardTools,
+  {
+    name: "list_bots",
+    description:
+      "Read the current scoped teammate directory. Availability is advisory; sending rechecks authorization and capacity.",
+    readOnly: true,
+    inputSchema: z.toJSONSchema(ListBotsInputSchema),
+  },
   {
     name: "search_connectors",
     description:
@@ -923,6 +931,34 @@ export const builtinAgentTools: ConnectorTool[] = [
       type: "object",
       properties: {
         card: z.toJSONSchema(TaskCardRequestSchema),
+        requested_effects: {
+          type: "array",
+          maxItems: 10,
+          items: {
+            type: "object",
+            properties: {
+              kind: {
+                type: "string",
+                enum: [
+                  "connector-write",
+                  "mcp-write",
+                  "host-command",
+                  "secret-use",
+                  "spend",
+                  "delete",
+                  "archive",
+                  "publish",
+                  "standing-instructions",
+                  "unknown",
+                ],
+              },
+              toolName: { type: "string" },
+              resourceRef: { type: "string" },
+              argsDigest: { type: "string" },
+            },
+            required: ["kind"],
+          },
+        },
         bot_id: { type: "string", description: "Target bot id from your teammate list." },
         inReplyToDeliveryId: {
           type: "string",

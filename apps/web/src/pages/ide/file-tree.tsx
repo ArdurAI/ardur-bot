@@ -1,4 +1,5 @@
 import type { IdeEntry } from "@ardurbot/contracts";
+import { Trans } from "@lingui/react/macro";
 import { ChevronDown, ChevronRight, File, Folder } from "lucide-react";
 import { useEffect, useState } from "react";
 import { basename } from "./model";
@@ -8,18 +9,25 @@ export function FileTree({
   onOpen,
   onError,
   selected,
+  label = "IDE",
 }: {
   list(path: string): Promise<IdeEntry[]>;
   onOpen(path: string): void;
   onError(error: unknown): void;
   selected?: string;
+  label?: string;
 }) {
   const [entries, setEntries] = useState<IdeEntry[]>([]);
+  const [loaded, setLoaded] = useState(false);
   useEffect(() => {
     let live = true;
+    setLoaded(false);
     void list("")
       .then((rows) => {
-        if (live) setEntries(rows);
+        if (live) {
+          setEntries(rows);
+          setLoaded(true);
+        }
       })
       .catch((error) => {
         if (live) onError(error);
@@ -29,7 +37,12 @@ export function FileTree({
     };
   }, [list, onError]);
   return (
-    <div role="tree" aria-label="IDE" className="min-h-0 flex-1 overflow-auto py-2 text-sm">
+    <div role="tree" aria-label={label} className="min-h-0 flex-1 overflow-auto py-2 text-sm">
+      {loaded && entries.length === 0 ? (
+        <p className="px-2 py-1 text-muted-foreground">
+          <Trans>This folder is empty.</Trans>
+        </p>
+      ) : null}
       {entries.map((entry) => (
         <TreeEntry
           key={`${entry.kind}:${entry.path}`}

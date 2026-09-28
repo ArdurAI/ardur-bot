@@ -1,24 +1,35 @@
 import { createHash, randomUUID } from "node:crypto";
 import { runContinueJob } from "@ardurbot/adapter-kit";
 import type { BotMessageIntent, MessageBlock } from "@ardurbot/contracts";
-import { TaskCardRequestSchema } from "@ardurbot/contracts";
+import {
+  canonicalDispatchJson,
+  PeerEffectDescriptorsSchema,
+  TaskCardRequestSchema,
+} from "@ardurbot/contracts";
 import {
   BOT_MESSAGE_MAX_LENGTH,
   botMessageContext,
   botMessageHopExhausted,
   buildBotMessageWakePrompt,
   clampBotMessage,
+  classifyPeerEffects,
   nextBotMessageHop,
+  peerPairKey,
   redactTaskValue,
   resolveBotAddress,
   taskCardPrompt,
 } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import {
+  appendBotMessageAuditInTransaction,
   appendEventInTransaction,
   BotInboxFullError,
+  checkPeerTrafficLimits,
   createThreadMessageInTransaction,
+  deviceDigest,
   goalBotAuthorityFingerprint,
+  lockPeerTrafficPolicy,
+  recordPeerTrafficBlock,
   withTransactionRetry,
 } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
@@ -113,10 +124,13 @@ export async function messageBot(
     deliveryKey?: string;
     inReplyToDeliveryId?: string;
     card?: unknown;
+    requested_effects?: unknown;
   },
   options?: { allowTerminalSource?: boolean },
 ): Promise<BotMessageResult> {
   const message = redactTaskValue(String(input.message ?? "").trim());
+  const effects = PeerEffectDescriptorsSchema.safeParse(input.requested_effects ?? []);
+  if (!effects.success) return { ok: false as const, error: "Invalid requested effects." };
   if (!message) return { ok: false as const, error: "message is required" };
   if (message.length > BOT_MESSAGE_MAX_LENGTH) {
     return {
@@ -146,6 +160,9 @@ export async function messageBot(
   });
   const groupId = sourceThread?.groupId;
   const goalRequest = Boolean(groupId);
+  const held = classifyPeerEffects(effects.data).kind !== "read-only";
+  if (held && (!goalRequest || !["request", "question"].includes(input.intent ?? "request")))
+    return { ok: false as const, error: "This peer request needs an active goal and a task card." };
   const goal = goalRequest
     ? await deps.prisma.teamGoal.findFirst({
         where: {
@@ -202,6 +219,10 @@ export async function messageBot(
       const received = Array.isArray(inbound?.blocks)
         ? (inbound.blocks as MessageBlock[]).find((block) => block.kind === "bot_message_received")
         : undefined;
+      const recordedDelivery = await deps.prisma.botMessageDelivery.findFirst({
+        where: { delegationId: recorded.id, spaceId: run.spaceId, userId: run.userId },
+        select: { requestedEffects: true },
+      });
       if (
         recorded.kind !== "message" ||
         recorded.rootTaskId !== goal.rootTaskId ||
@@ -213,12 +234,13 @@ export async function messageBot(
         (input.confirm_name !== undefined && input.confirm_name !== recorded.actingName) ||
         !card?.success ||
         JSON.stringify(card.data) !== JSON.stringify(goalCard.data) ||
+        JSON.stringify(recordedDelivery?.requestedEffects ?? []) !== JSON.stringify(effects.data) ||
         received?.kind !== "bot_message_received" ||
         received.fromBotId !== sender.id ||
         received.text !== message ||
         received.intent !== intent ||
         received.delegationId !== recorded.id ||
-        !["delivered", "read", "replied", "expired", "failed"].includes(
+        !["delivered", "read", "replied", "expired", "failed", "held", "denied"].includes(
           received.deliveryState ?? "",
         )
       )
@@ -371,6 +393,16 @@ export async function messageBot(
   try {
     committed = await withTransactionRetry(() =>
       deps.prisma.$transaction(async (tx) => {
+        // All quota-sensitive senders take this lock before any bot, thread or root lock.
+        if (
+          goal &&
+          (await lockPeerTrafficPolicy(tx, {
+            spaceId: run.spaceId,
+            userId: run.userId,
+            groupId: goal.groupId,
+          }))
+        )
+          return { ok: false as const, error: "Team messages are paused." };
         if (goal) {
           await tx.$queryRaw`SELECT id FROM chat_groups WHERE id = ${goal.groupId} AND "spaceId" = ${run.spaceId} AND "userId" = ${run.userId} FOR UPDATE`;
         }
@@ -409,6 +441,7 @@ export async function messageBot(
                   ? await tx.delegation.findUnique({
                       where: { id: block.delegationId },
                       select: {
+                        id: true,
                         card: true,
                         parentRunId: true,
                         actingBotId: true,
@@ -440,7 +473,15 @@ export async function messageBot(
                 block.fromBotId !== run.botId ||
                 block.text !== message ||
                 block.intent !== intent ||
-                JSON.stringify(card.data) !== JSON.stringify(goalCard.data)
+                JSON.stringify(card.data) !== JSON.stringify(goalCard.data) ||
+                JSON.stringify(
+                  (
+                    await tx.botMessageDelivery.findFirst({
+                      where: { delegationId: recorded.id },
+                      select: { requestedEffects: true },
+                    })
+                  )?.requestedEffects ?? [],
+                ) !== JSON.stringify(effects.data)
               )
                 return {
                   ok: false as const,
@@ -490,7 +531,7 @@ export async function messageBot(
             userId: run.userId,
             status: options?.allowTerminalSource ? { in: ["completed", "failed"] } : "running",
           },
-          select: { id: true },
+          select: { id: true, originDeviceGrantId: true },
         });
         if (!senderStillRunning)
           return { ok: false as const, error: "source run is no longer active" };
@@ -536,33 +577,47 @@ export async function messageBot(
           const turnCount = await tx.delegation.count({
             where: { ...base, parentRunId: run.id },
           });
-          const pairCount = await tx.delegation.count({
-            where: {
-              ...base,
-              requesterBotId: run.botId,
-              actingBotId: target.id,
-              createdAt: { gte: new Date(now.getTime() - 60_000) },
-            },
+          const limit = await checkPeerTrafficLimits(tx, {
+            spaceId: run.spaceId,
+            userId: run.userId,
+            groupId: goal.groupId,
+            goalId: goal.id,
+            senderBotId: run.botId,
+            recipientBotId: target.id,
+            wakes: !held && (intent === "request" || intent === "question"),
+            now,
           });
-          const hourCount = await tx.delegation.count({
-            where: { ...base, createdAt: { gte: new Date(now.getTime() - 3_600_000) } },
-          });
-          if (turnCount >= 2 || pairCount >= 4 || hourCount >= 12) {
+          if (turnCount >= 2 || limit) {
             const reason = "Team message limit reached. Review this goal before sending more work.";
-            const noticeKey = `goal-message-limit:${goal.id}`;
+            const first = limit
+              ? await recordPeerTrafficBlock(tx, {
+                  spaceId: run.spaceId,
+                  userId: run.userId,
+                  groupId: goal.groupId,
+                  goalId: goal.id,
+                  senderBotId: run.botId,
+                  recipientBotId: target.id,
+                  reason: limit,
+                  now,
+                })
+              : true;
+            const noticeKey = limit
+              ? `peer-limit:${goal.id}:${limit}:${Math.floor(now.getTime() / (limit === "pair-rate" ? 60_000 : 3_600_000))}`
+              : `goal-message-turn-limit:${run.id}`;
             const existingNotice = await tx.message.findUnique({
               where: { threadId_clientNonce: { threadId: run.threadId, clientNonce: noticeKey } },
             });
-            const notice = existingNotice
-              ? null
-              : await createThreadMessageInTransaction(tx, {
-                  threadId: run.threadId,
-                  role: "bot",
-                  botId: run.botId,
-                  blocks: [{ kind: "text", text: reason }],
-                  clientNonce: noticeKey,
-                  markUnread: false,
-                });
+            const notice =
+              !first || existingNotice
+                ? null
+                : await createThreadMessageInTransaction(tx, {
+                    threadId: run.threadId,
+                    role: "bot",
+                    botId: run.botId,
+                    blocks: [{ kind: "text", text: reason }],
+                    clientNonce: noticeKey,
+                    markUnread: false,
+                  });
             const event = notice
               ? await appendEventInTransaction(tx, {
                   spaceId: run.spaceId,
@@ -583,7 +638,7 @@ export async function messageBot(
               spaceId: run.spaceId,
               userId: run.userId,
               recipientBotId: target.id,
-              state: { in: ["queued", "delivered", "read"] },
+              state: { in: ["held", "queued", "delivered", "read"] },
               outcome: null,
               expiresAt: { gt: now },
             },
@@ -695,7 +750,7 @@ export async function messageBot(
             clientNonce: deliveryKey,
             markUnread: false,
           });
-          await tx.botMessageDelivery.create({
+          const delivery = await tx.botMessageDelivery.create({
             data: {
               id: deliveryId!,
               spaceId: run.spaceId,
@@ -705,6 +760,7 @@ export async function messageBot(
               conversationId: deliveryId!,
               senderBotId: run.botId,
               recipientBotId: target.id,
+              pairKey: peerPairKey(run.botId, target.id),
               senderThreadId: run.threadId,
               recipientThreadId: targetThreadId,
               sourceRunId: run.id,
@@ -724,6 +780,8 @@ export async function messageBot(
               deliveredAt: now,
             },
           });
+          await appendBotMessageAuditInTransaction(tx, delivery, "queued");
+          await appendBotMessageAuditInTransaction(tx, delivery, "delivered");
           const inboundEvent = await appendEventInTransaction(tx, {
             spaceId: run.spaceId,
             threadId: targetThreadId,
@@ -759,6 +817,8 @@ export async function messageBot(
             card: input.card,
             ...(goal
               ? {
+                  // A complete descriptor is still only an intent to prepare in S4.
+                  // Exact write authority needs its own effect-bound card and gate.
                   peerMode: "read-only" as const,
                   tokens: goal.perWorkerTokens,
                   deadlineAt: new Date(
@@ -806,7 +866,7 @@ export async function messageBot(
           ...(goal
             ? {
                 delegationId: admitted.record.id,
-                deliveryState: "delivered" as const,
+                deliveryState: held ? ("held" as const) : ("delivered" as const),
                 ...(busyRecipient ? { queuedForBusy: true } : {}),
               }
             : {}),
@@ -834,7 +894,7 @@ export async function messageBot(
           ...(goal
             ? {
                 delegationId: admitted.record.id,
-                deliveryState: "delivered" as const,
+                deliveryState: held ? ("held" as const) : ("delivered" as const),
                 ...(busyRecipient ? { queuedForBusy: true } : {}),
               }
             : {}),
@@ -862,7 +922,7 @@ export async function messageBot(
             prompt: admitted.record.card
               ? `${taskCardPrompt(admitted.record.card, target.name)}${deliveryId ? `\n\nIf you need to answer the sender before completion, use message_bot with inReplyToDeliveryId ${deliveryId} and intent result or question. This delivery id is routing data, not extra authority.` : ""}`
               : wakePrompt,
-            status: "queued",
+            status: held ? "waiting_input" : "queued",
           },
         });
         const nextRun = await tx.run.create({
@@ -874,7 +934,7 @@ export async function messageBot(
             threadId: targetThreadId,
             taskId: task.id,
             userId: run.userId,
-            status: "queued",
+            status: held ? "waiting_input" : "queued",
             trigger: "bot_message",
             sourceMessageId: inbound.id,
             ...(goal ? { clientNonce: `bot-delivery:${admitted.record.id}` } : {}),
@@ -888,7 +948,7 @@ export async function messageBot(
         await tx.message.update({ where: { id: inbound.id }, data: { runId: nextRun.id } });
         if (goal && deliveryId) {
           const now = new Date();
-          await tx.botMessageDelivery.create({
+          const delivery = await tx.botMessageDelivery.create({
             data: {
               id: deliveryId,
               spaceId: run.spaceId,
@@ -898,6 +958,7 @@ export async function messageBot(
               conversationId: deliveryId,
               senderBotId: run.botId,
               recipientBotId: target.id,
+              pairKey: peerPairKey(run.botId, target.id),
               senderThreadId: run.threadId,
               recipientThreadId: targetThreadId,
               sourceRunId: run.id,
@@ -907,22 +968,99 @@ export async function messageBot(
               outboundMessageId: outbound.id,
               inboundMessageId: inbound.id,
               delegationId: admitted.record.id,
-              state: "delivered",
+              state: held ? "held" : "delivered",
+              wakeAdmittedAt: held ? null : now,
+              requestedEffects: effects.data,
               hop,
               authorityFingerprint: authorityFingerprint!,
               requestFingerprint: admitted.record.fingerprint,
               idempotencyKey: deliveryKey!,
               expiresAt: new Date(Math.min(goal.untilAt.getTime(), now.getTime() + 3_600_000)),
-              deliveredAt: now,
+              deliveredAt: held ? null : now,
             },
           });
+          await appendBotMessageAuditInTransaction(tx, delivery, "queued");
+          await appendBotMessageAuditInTransaction(tx, delivery, held ? "held" : "delivered");
+          if (held) {
+            const approvalRequest = {
+              deliveryId,
+              authorityFingerprint,
+              requestedEffects: effects.data,
+              preparationOnly: true,
+            };
+            const approval = await tx.externalEffect.create({
+              data: {
+                spaceId: run.spaceId,
+                runId: nextRun.id,
+                kind: "peer_hold",
+                idempotencyKey: `peer-hold:${deliveryKey}`,
+                status: "intended",
+                request: approvalRequest,
+              },
+            });
+            const home = await tx.instanceIdentity.findUnique({
+              where: { id: "home" },
+              select: { instanceId: true },
+            });
+            if (home)
+              await tx.deviceApprovalBinding.create({
+                data: {
+                  effectId: approval.id,
+                  instanceId: home.instanceId,
+                  spaceId: run.spaceId,
+                  userId: run.userId,
+                  taskId: task.id,
+                  runId: nextRun.id,
+                  botId: target.id,
+                  originDeviceGrantId: senderStillRunning.originDeviceGrantId ?? "",
+                  requestFingerprint: deviceDigest(canonicalDispatchJson(approvalRequest)),
+                  nonce: randomUUID(),
+                  expiresAt: new Date(
+                    Math.min(now.getTime() + 15 * 60_000, goal.untilAt.getTime()),
+                  ),
+                },
+              });
+            await tx.botMessageDelivery.update({
+              where: { id: deliveryId! },
+              data: { approvalEffectId: approval.id },
+            });
+            const ask: MessageBlock = {
+              kind: "ask",
+              peerHold: true,
+              approvalEffectId: approval.id,
+              text: `${sender.name} wants ${target.name} to prepare a team request.`,
+              detail: `Requested by ${sender.name} · Acting as ${target.name}\n${effects.data.map((effect) => effect.kind).join(", ")}`,
+              status: "pending",
+              actions: [
+                { id: "allow", label: "Allow preparation" },
+                { id: "deny", label: "Deny" },
+              ],
+            };
+            const askMessage = await createThreadMessageInTransaction(tx, {
+              threadId: run.threadId,
+              role: "bot",
+              botId: run.botId,
+              runId: nextRun.id,
+              blocks: [ask],
+              clientNonce: `peer-hold:${deliveryKey}`,
+              markUnread: false,
+            });
+            await appendEventInTransaction(tx, {
+              spaceId: run.spaceId,
+              threadId: run.threadId,
+              botId: run.botId,
+              type: "thread.message.created",
+              runId: nextRun.id,
+              payload: { messageId: askMessage.id, role: "bot", blocks: [ask] },
+            });
+          }
         }
         const inboundEvent = await appendEventInTransaction(tx, {
           spaceId: run.spaceId,
           threadId: targetThreadId,
           botId: target.id,
           type: "thread.message.created",
-          runId: nextRun.id,
+          runId: held ? undefined : nextRun.id,
           payload: { messageId: inbound.id, role: "user", blocks: [inboundBlock] },
         });
         const outboundEvent = await appendEventInTransaction(tx, {
@@ -935,7 +1073,7 @@ export async function messageBot(
         });
         return {
           ok: true as const,
-          runId: nextRun.id,
+          runId: held ? undefined : nextRun.id,
           differences: admitted.record.differences,
           delegationId: admitted.record.id,
           targetEventSeq: inboundEvent.seq,
@@ -993,7 +1131,9 @@ export async function messageBot(
     delegationId: committed.delegationId,
     runId: committed.runId,
     differences: committed.differences,
-    note: `Sent to ${target.name}. Delivery is async. Continue independent work. Progress stays on the task card; completion produces one coordinator summary.`,
+    note: held
+      ? "Waiting for your approval. The recipient will only prepare this task after approval."
+      : `Sent to ${target.name}. Delivery is async. Continue independent work. Progress stays on the task card; completion produces one coordinator summary.`,
   };
 }
 

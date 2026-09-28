@@ -480,7 +480,17 @@ export async function requestCancelInTransaction(
     where: {
       ...scope,
       OR: [{ taskId: rootTaskId }, { delegationRootTaskId: rootTaskId }],
-      status: { in: ["queued", "leased", "running", "waiting_input", "waiting_takeover"] },
+      status: {
+        in: [
+          "queued",
+          "peer_paused",
+          "peer_ready",
+          "leased",
+          "running",
+          "waiting_input",
+          "waiting_takeover",
+        ],
+      },
     },
     data: { cancelRequestedAt: now },
   });

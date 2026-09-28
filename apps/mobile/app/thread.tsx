@@ -155,12 +155,15 @@ function formatApprovalAnswer(
   answer: string | undefined,
   actions: AskAction[] | undefined,
   approval: boolean,
+  peerHold?: boolean,
 ): string {
   if (!answer) return t("Answered");
   const selectedAction = actions?.find((action) => action.id === answer);
   const outcome = selectedAction?.outcome;
   if (approval && outcome === "created") return t("Created");
   if (approval && outcome === "cancelled") return t("Cancelled");
+  if (peerHold && answer === "expired") return t("Request expired");
+  if (peerHold && answer === "allow") return t("Preparation allowed");
   if (approval && answer === "allow") return t("Allowed once");
   if (approval && answer === "always") return t("Always allowed");
   if (approval && answer === "deny") return t("Denied");
@@ -659,6 +662,14 @@ function Thread() {
   }
 
   const botActions = [
+    {
+      text: t("Tasks"),
+      onPress: () => router.push({ pathname: "/workspace-tasks", params: { botId: botId ?? "" } }),
+    },
+    {
+      text: t("Files"),
+      onPress: () => router.push({ pathname: "/ide", params: { botId: botId ?? "" } }),
+    },
     {
       text: t("Chat settings"),
       onPress: () =>
@@ -1584,7 +1595,12 @@ function Thread() {
               replyPreview={
                 message.replyToMessageId ? messagesById.get(message.replyToMessageId) : undefined
               }
-              canAnswer={message.id === answerableAskMessageId}
+              canAnswer={
+                message.id === answerableAskMessageId ||
+                message.blocks.some(
+                  (block) => block.kind === "ask" && block.peerHold && block.status === "pending",
+                )
+              }
               onAnswer={answerMessage}
               onOpenBot={openBot}
               onPreviewMarkdown={setMarkdownPreview}
@@ -2503,6 +2519,8 @@ const MessageBubble = memo(function MessageBubble({
         recipientName={groupId ? undefined : botName}
         actionProps={actionProps}
         onOpenPeer={onOpenBot}
+        botId={cardBotId}
+        groupId={groupId ?? undefined}
       />
     );
   }
@@ -2766,11 +2784,13 @@ const MessageBubble = memo(function MessageBubble({
                 askBlock.answer,
                 askBlock.actions,
                 isApprovalAskBlock(askBlock),
+                askBlock.peerHold,
               )}
             </Text>
           ) : canAnswer && onAnswer ? (
             <AskActions
               actions={askBlock.actions}
+              peerHold={askBlock.peerHold}
               accessibilityActions={actionProps.accessibilityActions}
               onAccessibilityAction={actionProps.onAccessibilityAction}
               onAnswer={(answer) => onAnswer(message, answer)}

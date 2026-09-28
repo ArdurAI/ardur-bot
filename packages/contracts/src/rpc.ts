@@ -4,6 +4,7 @@ import { accountContract } from "./account.js";
 import { AiConsentQuerySchema, AiConsentStatusSchema } from "./ai-consent.js";
 import { ATTACHMENT_MAX_BASE64_LENGTH, ATTACHMENT_MAX_COUNT } from "./attachments.js";
 import { boardContract } from "./board.js";
+import { botCommsContract } from "./bot-comms.js";
 import {
   CapabilityPreferencesPatchSchema,
   CapabilityPreferencesSchema,
@@ -185,6 +186,12 @@ import { HermesRuntimeConfigPreviewSchema, RuntimeConfigIssueSchema } from "./ru
 import { RuntimeAvailabilitySchema, RuntimeKindSchema, RuntimePinSchema } from "./runtime-pins.js";
 import { SearchQueryOutputSchema } from "./search.js";
 import { teamContract } from "./team.js";
+import {
+  WorkspaceContextSchema,
+  WorkspaceFileSchema,
+  WorkspaceFilesSchema,
+  WorkspaceTasksSchema,
+} from "./workspace.js";
 
 const botId = z.object({ botId: Id });
 const groupId = z.object({ groupId: Id });
@@ -662,6 +669,30 @@ export const appContract = {
     markUnread: oc.input(threadTarget).output(z.object({ ok: z.literal(true) })),
   },
   ide: ideContract,
+  workspace: {
+    describe: oc.input(botId).output(WorkspaceContextSchema),
+    list: oc
+      .input(
+        z.object({
+          botId: Id,
+          computerId: Id,
+          generation: z.number().int().nonnegative(),
+          path: IdePathSchema,
+        }),
+      )
+      .output(WorkspaceFilesSchema),
+    read: oc
+      .input(
+        z.object({
+          botId: Id,
+          computerId: Id,
+          generation: z.number().int().nonnegative(),
+          path: IdePathSchema.min(1),
+        }),
+      )
+      .output(WorkspaceFileSchema),
+    tasks: oc.input(botId).output(WorkspaceTasksSchema),
+  },
   terminal: {
     close: oc
       .input(z.object({ botId: Id, computerId: Id, sessionId: Id }))
@@ -1442,6 +1473,7 @@ export const appContract = {
   },
   delegations: delegationsContract,
   goals: goalsContract,
+  botComms: botCommsContract,
   team: teamContract,
   comparisons: comparisonsContract,
   runs: {

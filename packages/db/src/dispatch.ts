@@ -7,6 +7,7 @@ import {
 } from "@ardurbot/contracts";
 import type { RemoteAuthority } from "@ardurbot/core";
 import { checkRemoteTool, effectiveRemoteAuthority } from "@ardurbot/core";
+import { settleBotMessageWakesInTransaction } from "./bot-comms.js";
 import type { DeviceGrant, Prisma, PrismaClient } from "./client.js";
 import { finishDelegation } from "./delegation.js";
 import {
@@ -481,6 +482,8 @@ export async function confirmDispatchStop(
       type: "run.cancelled",
       payload: {},
     });
+    if (run.delegationId)
+      await finishDelegation(tx, run.delegationId, "cancelled", "Worker stopped.");
     const stopped = await tx.run.updateMany({
       where: { id: runId, cancelRequestedAt: { not: null }, status: { in: ACTIVE } },
       data: {
@@ -497,8 +500,7 @@ export async function confirmDispatchStop(
       where: { runId, status: "running" },
       data: { status: "cancelled", finishedAt: now },
     });
-    if (run.delegationId)
-      await finishDelegation(tx, run.delegationId, "cancelled", "Worker stopped.");
+    await settleBotMessageWakesInTransaction(tx, runId, false);
     const helpers = await tx.delegation.findMany({
       where: {
         parentRunId: runId,

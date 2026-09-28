@@ -44,12 +44,16 @@ export function CommandPalette({
   bots,
   onSelectBot,
   onOpenTerminal,
+  workspaceTabs = [],
+  onOpenWorkspaceTab,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   bots: Bot[];
   onSelectBot: (botId: string) => void;
   onOpenTerminal?: () => void;
+  workspaceTabs?: Array<{ id: string; label: string }>;
+  onOpenWorkspaceTab?: (id: string) => void;
 }) {
   const [search, setSearch] = useState("");
   const [modKey, setModKey] = useState("⌘");
@@ -110,6 +114,20 @@ export function CommandPalette({
             <Trans>No bots</Trans>
           </CommandEmpty>
           <CommandGroup>
+            {workspaceTabs
+              .filter((tab) => tab.label.toLowerCase().includes(search.trim().toLowerCase()))
+              .map((tab) => (
+                <CommandItem
+                  key={tab.id}
+                  value={`workspace-${tab.id}`}
+                  onSelect={() => {
+                    onOpenWorkspaceTab?.(tab.id);
+                    onOpenChange(false);
+                  }}
+                >
+                  {tab.label}
+                </CommandItem>
+              ))}
             {onOpenTerminal &&
             t`Open terminal`.toLowerCase().includes(search.trim().toLowerCase()) ? (
               <CommandItem
@@ -172,5 +190,3 @@ export function CommandPalette({
     </CommandDialog>
   );
 }
-
-export { isCommandPaletteHotkey } from "./command-palette-hotkey";

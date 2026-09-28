@@ -1,12 +1,11 @@
-import { ChatMarkdown } from "@ardurbot/chat-ui/native";
 import type { MessageBlock } from "@ardurbot/contracts";
 import { botMessageReceiptKind } from "@ardurbot/core";
 import { useState } from "react";
-import { Pressable, Text, type TextProps, View } from "react-native";
+import { Button, Modal, Pressable, Text, type TextProps, View } from "react-native";
 import { mobileTokens } from "../lib/appearance";
 import { useI18n } from "../lib/i18n";
-import { useResolvedAppearance } from "../lib/native";
 import { BotAvatar } from "./bot-avatar";
+import { PeerConversation } from "./peer-conversation";
 
 type PeerMessageBlock = Extract<
   MessageBlock,
@@ -19,15 +18,18 @@ export function PeerMessageReceipt({
   recipientName,
   actionProps,
   onOpenPeer,
+  botId,
+  groupId,
 }: {
   block: PeerMessageBlock;
   color: string;
   recipientName?: string;
   actionProps: Pick<TextProps, "onLongPress" | "accessibilityActions" | "onAccessibilityAction">;
   onOpenPeer: (botId: string, name: string) => void;
+  botId?: string;
+  groupId?: string;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  const colorScheme = useResolvedAppearance();
+  const [open, setOpen] = useState(false);
   const tokens = mobileTokens();
   const { t } = useI18n();
   const sent = block.kind === "bot_message_sent";
@@ -36,23 +38,29 @@ export function PeerMessageReceipt({
   const receipt = botMessageReceiptKind(block);
   const recipient = sent ? peer : (block.recipientBotName ?? recipientName);
   const label =
-    receipt === "waiting"
-      ? t("Waiting for a turn")
-      : receipt === "read"
-        ? recipient
-          ? t("Read by {recipient}", { recipient })
-          : t("Read")
-        : receipt === "replied"
-          ? t("Replied")
-          : receipt === "expired"
-            ? t("Expired")
-            : receipt === "failed"
-              ? t("Failed")
-              : receipt === "delivered"
-                ? sent
-                  ? t("Delivered to {peer}", { peer })
-                  : t("Delivered from {peer}", { peer })
-                : t("Sent");
+    receipt === "held"
+      ? t("Waiting for your approval")
+      : receipt === "denied"
+        ? t("Not approved")
+        : receipt === "cancelled"
+          ? t("Cancelled")
+          : receipt === "waiting"
+            ? t("Waiting for a turn")
+            : receipt === "read"
+              ? recipient
+                ? t("Read by {recipient}", { recipient })
+                : t("Read")
+              : receipt === "replied"
+                ? t("Replied")
+                : receipt === "expired"
+                  ? t("Expired")
+                  : receipt === "failed"
+                    ? t("Failed")
+                    : receipt === "delivered"
+                      ? sent
+                        ? t("Delivered to {peer}", { peer })
+                        : t("Delivered from {peer}", { peer })
+                      : t("Sent");
   const accessibleLabel =
     receipt === "sent"
       ? sent
@@ -61,21 +69,14 @@ export function PeerMessageReceipt({
       : receipt === "delivered"
         ? label
         : `${label} · ${sent ? t("to {peer}", { peer }) : t("from {peer}", { peer })}`;
-  const canShowReply = !sent && block.text.trim().length > 0;
-
   return (
     <View style={{ width: "100%", alignItems: "center", gap: 6 }}>
       <Pressable
         {...actionProps}
         accessible
-        accessibilityRole={canShowReply ? "button" : undefined}
-        accessibilityLabel={
-          canShowReply
-            ? `${accessibleLabel}. ${expanded ? t("Hide reply") : t("Show reply")}`
-            : accessibleLabel
-        }
-        accessibilityState={canShowReply ? { expanded } : undefined}
-        onPress={canShowReply ? () => setExpanded((value) => !value) : undefined}
+        accessibilityRole="button"
+        accessibilityLabel={`${accessibleLabel}. ${t("Open conversation")}`}
+        onPress={() => setOpen(true)}
         style={{
           width: "100%",
           paddingVertical: 4,
@@ -92,48 +93,31 @@ export function PeerMessageReceipt({
         >
           {label}
         </Text>
-        {canShowReply ? (
-          <Text style={{ color: tokens.foreground, fontSize: 13.5 }}>
-            {expanded ? t("Hide reply") : t("Show reply")}
-          </Text>
-        ) : null}
       </Pressable>
-      {canShowReply && expanded ? (
-        <View
-          style={{
-            width: "100%",
-            borderRadius: 14,
-            borderWidth: 1,
-            borderColor: tokens.border,
-            backgroundColor: tokens.card,
-            paddingHorizontal: 14,
-            paddingVertical: 10,
-          }}
-        >
-          <ChatMarkdown palette={tokens} colorScheme={colorScheme}>
-            {block.text}
-          </ChatMarkdown>
-          {block.kind === "bot_message_received" && block.truncated ? (
-            <Pressable
-              accessibilityRole="link"
-              onPress={() => onOpenPeer(peerBotId, peer)}
-              style={{ marginTop: 8 }}
-            >
-              <Text
-                style={{
-                  color: tokens.foreground,
-                  fontSize: 13.5,
-                  textDecorationLine: "underline",
-                }}
-              >
-                {t("Reply shortened — open the conversation with {peer} for the full text", {
-                  peer,
-                })}
-              </Text>
-            </Pressable>
-          ) : null}
-        </View>
-      ) : null}
+      <Modal
+        visible={open}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setOpen(false)}
+      >
+        {open ? (
+          <View style={{ flex: 1, backgroundColor: tokens.background }}>
+            <Button title={t("Close")} onPress={() => setOpen(false)} />
+            <PeerConversation
+              botId={botId}
+              groupId={groupId}
+              peerBotId={peerBotId}
+              peerName={peer}
+              botName={recipientName ?? t("Bot")}
+              fallbackBlock={block}
+              onOpenPeer={(id, name) => {
+                setOpen(false);
+                onOpenPeer(id, name);
+              }}
+            />
+          </View>
+        ) : null}
+      </Modal>
     </View>
   );
 }

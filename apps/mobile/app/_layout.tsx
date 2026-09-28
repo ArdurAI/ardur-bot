@@ -148,8 +148,13 @@ export default function Layout() {
                 <Stack.Screen name="group-settings" options={{ title: t("Group settings") }} />
                 <Stack.Screen name="bot-settings" options={{ title: t("Chat settings") }} />
                 <Stack.Screen name="thread" options={{ title: t("Thread") }} />
+                <Stack.Screen
+                  name="peer-conversation"
+                  options={{ title: t("Conversation"), presentation: "modal" }}
+                />
                 <Stack.Screen name="routine" options={{ title: t("Routine") }} />
                 <Stack.Screen name="computer" options={{ title: t("Computer") }} />
+                <Stack.Screen name="workspace-tasks" options={{ title: t("Tasks") }} />
               </Stack>
               <ComputerUpdateProgress />
             </ThemeProvider>

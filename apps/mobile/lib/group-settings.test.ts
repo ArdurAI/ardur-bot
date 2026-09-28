@@ -16,6 +16,7 @@ vi.mock("./native", () => ({
   useResolvedAppearance: () => "light",
 }));
 vi.mock("./message-action-sheet", () => ({ presentMessageActionSheet: vi.fn() }));
+vi.mock("./dispatch", () => ({ hasPairedDevice: vi.fn(async () => false) }));
 vi.mock("expo-router", () => ({
   Stack: { Screen: () => null },
   useRouter: () => ({ back: vi.fn(), replace: vi.fn() }),

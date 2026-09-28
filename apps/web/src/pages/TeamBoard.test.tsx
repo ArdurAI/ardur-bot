@@ -12,6 +12,15 @@ vi.mock("./CompareStart", () => ({
   CompareStart: () => <button type="button">Run on other bots</button>,
 }));
 vi.mock("./ComparePanel", () => ({ ComparisonList: () => null }));
+vi.mock("./PeerMessagesOverlay", () => ({
+  PeerMessagesOverlay: ({ onClose, groupId }: { onClose: () => void; groupId?: string }) => (
+    <div data-testid="peer-sheet" data-group-id={groupId}>
+      <button type="button" onClick={onClose}>
+        Close conversation
+      </button>
+    </div>
+  ),
+}));
 const calls = vi.hoisted(() => ({
   cancel: vi.fn(async () => ({ cancelRequested: true })),
   accept: vi.fn(async () => ({ accepted: true })),
@@ -19,8 +28,12 @@ const calls = vi.hoisted(() => ({
 vi.mock("../lib/rpc", () => ({ rpc: { delegations: calls } }));
 vi.mock("@lingui/react/macro", () => ({
   Trans: ({ children }: { children: ReactNode }) => children,
-  useLingui: () => ({ t: (parts: TemplateStringsArray) => parts.join("") }),
+  useLingui: () => ({
+    t: (parts: TemplateStringsArray | { id: string }) =>
+      "id" in parts ? parts.id : parts.join(""),
+  }),
 }));
+vi.mock("@lingui/core/macro", () => ({ t: (parts: TemplateStringsArray) => parts.join("") }));
 vi.mock("@ardurbot/ui-web", () => ({
   Button: ({
     variant: _v,
@@ -137,4 +150,79 @@ it("renders a board row with expansion, quiet completion and distinct native act
   expect(refresh).toHaveBeenCalledTimes(2);
   await act(async () => root.unmount());
   node.remove();
+});
+
+it("shows unknown and stale presence honestly, and returns from a peer conversation", async () => {
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  const current = Date.now();
+  await act(async () =>
+    root.render(
+      <MemoryRouter>
+        <TeamBoardRow
+          row={{
+            ...row,
+            state: "idle",
+            availability: "unknown",
+            observedAt: new Date(current).toISOString(),
+            latestPeerBotId: "peer",
+            latestPeerBotName: "Worker",
+            latestDeliveryState: "read",
+            latestDeliveryGroupId: "goal-room",
+          }}
+          now={current}
+          refresh={async () => {}}
+        />
+      </MemoryRouter>,
+    ),
+  );
+  expect(node.textContent).toContain("Status unavailable");
+  const open = [...node.querySelectorAll("button")].find((button) =>
+    button.textContent?.includes("Conversation with"),
+  );
+  await act(async () => open!.click());
+  expect(node.querySelector('[data-testid="peer-sheet"]')).toBeTruthy();
+  expect(node.querySelector('[data-testid="peer-sheet"]')?.getAttribute("data-group-id")).toBe(
+    "goal-room",
+  );
+  await act(async () =>
+    node.querySelector<HTMLButtonElement>('[data-testid="peer-sheet"] button')!.click(),
+  );
+  expect(node.querySelector('[data-testid="peer-sheet"]')).toBeNull();
+  await act(async () =>
+    root.render(
+      <MemoryRouter>
+        <TeamBoardRow
+          row={{
+            ...row,
+            state: "idle",
+            availability: "idle",
+            observedAt: new Date(current - 61_000).toISOString(),
+          }}
+          now={current}
+          refresh={async () => {}}
+        />
+      </MemoryRouter>,
+    ),
+  );
+  expect(node.textContent).toContain("Status unavailable");
+  await act(async () =>
+    root.render(
+      <MemoryRouter>
+        <TeamBoardRow
+          row={{
+            ...row,
+            state: "idle",
+            availability: "unavailable",
+            observedAt: new Date(current).toISOString(),
+          }}
+          now={current}
+          refresh={async () => {}}
+        />
+      </MemoryRouter>,
+    ),
+  );
+  expect(node.textContent).toContain("Status unavailable");
+  expect(node.textContent).not.toContain("Idle");
+  await act(async () => root.unmount());
 });

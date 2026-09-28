@@ -75,6 +75,16 @@ export const ProductEventType = z.enum([
   "goal.wake",
   "goal.stopped",
   "goal.exhausted",
+  "bot.message.queued",
+  "bot.message.delivered",
+  "bot.message.read",
+  "bot.message.replied",
+  "bot.message.held",
+  "bot.message.denied",
+  "bot.message.expired",
+  "bot.traffic.paused",
+  "bot.traffic.resumed",
+  "bot.traffic.limited",
 ]);
 export type ProductEventType = z.infer<typeof ProductEventType>;
 
@@ -142,6 +152,7 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     kind: z.literal("ask"),
     text: z.string(),
     approvalEffectId: Id.optional(),
+    peerHold: z.boolean().optional(),
     detail: z.string().optional(),
     /** Exact approval text: render verbatim, with expandable full contents. */
     preformatted: z.boolean().optional(),
@@ -303,7 +314,17 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     delegationId: Id.optional(),
     deliveryId: Id.optional(),
     deliveryState: z
-      .enum(["queued", "delivered", "read", "replied", "expired", "failed"])
+      .enum([
+        "held",
+        "queued",
+        "delivered",
+        "read",
+        "replied",
+        "denied",
+        "expired",
+        "cancelled",
+        "failed",
+      ])
       .optional(),
     queuedForBusy: z.boolean().optional(),
   }),
@@ -318,7 +339,17 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     delegationId: Id.optional(),
     deliveryId: Id.optional(),
     deliveryState: z
-      .enum(["queued", "delivered", "read", "replied", "expired", "failed"])
+      .enum([
+        "held",
+        "queued",
+        "delivered",
+        "read",
+        "replied",
+        "denied",
+        "expired",
+        "cancelled",
+        "failed",
+      ])
       .optional(),
     queuedForBusy: z.boolean().optional(),
     /** Completed replies may be bounded in the coordinator receipt. */

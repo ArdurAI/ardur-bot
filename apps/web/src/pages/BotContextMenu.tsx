@@ -28,6 +28,10 @@ export type ContextMenuPosition = { x: number; y: number };
 
 type ChatMenuTarget = Pick<Bot, "name" | "pinned" | "sectionId" | "unread">;
 
+const preloadDialogs = () => {
+  void import("./shell/dialogs");
+};
+
 export function BotContextMenu({
   bot,
   position,
@@ -114,12 +118,22 @@ export function BotContextMenu({
               {bot.sectionId === null ? <Check className="ms-auto" /> : null}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={onCreateSection}>
+            <DropdownMenuItem
+              onClick={onCreateSection}
+              onPointerEnter={preloadDialogs}
+              onFocus={preloadDialogs}
+              onPointerDown={preloadDialogs}
+            >
               <FolderPlus />
               {t`New section`}
             </DropdownMenuItem>
             {bot.sectionId && onRenameSection ? (
-              <DropdownMenuItem onClick={() => onRenameSection(bot.sectionId!)}>
+              <DropdownMenuItem
+                onClick={() => onRenameSection(bot.sectionId!)}
+                onPointerEnter={preloadDialogs}
+                onFocus={preloadDialogs}
+                onPointerDown={preloadDialogs}
+              >
                 <Pencil />
                 {t`Rename section`}
               </DropdownMenuItem>
@@ -146,7 +160,12 @@ export function BotContextMenu({
           {t`Duplicate`}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={onClear}>
+        <DropdownMenuItem
+          onClick={onClear}
+          onPointerEnter={preloadDialogs}
+          onFocus={preloadDialogs}
+          onPointerDown={preloadDialogs}
+        >
           <Eraser />
           {t`Clear conversation`}
         </DropdownMenuItem>
@@ -154,7 +173,13 @@ export function BotContextMenu({
           <Archive />
           {t`Archive`}
         </DropdownMenuItem>
-        <DropdownMenuItem variant="destructive" onClick={onDelete}>
+        <DropdownMenuItem
+          variant="destructive"
+          onClick={onDelete}
+          onPointerEnter={preloadDialogs}
+          onFocus={preloadDialogs}
+          onPointerDown={preloadDialogs}
+        >
           <Trash2 />
           {t`Delete`}
         </DropdownMenuItem>

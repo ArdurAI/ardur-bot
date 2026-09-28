@@ -172,7 +172,7 @@ export async function validateDeviceApproval(
   ]);
   if (grant) await requireDispatchEnabled(tx, grant.spaceId);
   const route = approvalRequestRoute(effect.request);
-  if (!binding || !route)
+  if (!binding || (!route && effect.kind !== "peer_hold"))
     throw new DeviceRequestError("This older approval must be answered at home.");
   if (
     !grant ||
@@ -197,36 +197,48 @@ export async function validateDeviceApproval(
     !effectiveRemoteAuthority(await loadRemoteAuthority(tx, grant, run.botId)).includes("approve")
   )
     throw new DeviceRequestError("Answer this approval at home.");
-  if (
-    grant.kind === "channel" &&
-    (classifyRemoteTool(route.toolName) !== "ordinary" || remotePermissionExpansion(route.toolName))
-  )
-    throw new DeviceRequestError("Approve this on your Mac or phone.");
-  if (input.decision !== "deny") {
-    const decision = await evaluateRemoteExecution(
-      tx as PrismaClient,
-      { ...run, originDeviceGrantId: grant.id },
-      route.toolName,
-    );
-    if (!decision.allowed) throw new DeviceRequestError(decision.reason);
-  }
-  if (route.connectorId === "mcp") {
-    const assignment = await mcpGrantForBot(tx as PrismaClient, run, route.resourceId);
-    if (!assignment || route.resourceRevision !== assignment.server.revision) throw fail();
-    const detail = boundDirectApprovalDetails(effect.request, REMOTE_APPROVAL_MARKER);
-    const catalog = catalogApprovalDetails(effect.request, REMOTE_APPROVAL_MARKER);
-    const args = detail?.args ?? (catalog?.args.arguments as Record<string, unknown> | undefined);
-    if (
-      !args ||
-      (await integrationApprovalDetailsForCall(tx as PrismaClient, route, run, args))?.approval ===
-        "disabled"
-    )
-      throw fail();
-  } else if (route.connectorId === "builtin") {
-    if (route.resourceId !== run.botId || route.resourceRevision !== 1) throw fail();
+  if (effect.kind === "peer_hold") {
+    const owner = await tx.deploymentSettings.findUnique({
+      where: { id: "default" },
+      select: { ownerUserId: true },
+    });
+    if (grant.kind === "channel" || owner?.ownerUserId !== grant.userId)
+      throw new DeviceRequestError("Answer this approval at home.");
+  } else if (!route) {
+    throw fail();
   } else {
-    // Connector adapters without a revocable resource/revision contract need a home review.
-    throw new DeviceRequestError("Review this connector approval at home.");
+    if (
+      grant.kind === "channel" &&
+      (classifyRemoteTool(route.toolName) !== "ordinary" ||
+        remotePermissionExpansion(route.toolName))
+    )
+      throw new DeviceRequestError("Approve this on your Mac or phone.");
+    if (input.decision !== "deny") {
+      const decision = await evaluateRemoteExecution(
+        tx as PrismaClient,
+        { ...run, originDeviceGrantId: grant.id },
+        route.toolName,
+      );
+      if (!decision.allowed) throw new DeviceRequestError(decision.reason);
+    }
+    if (route.connectorId === "mcp") {
+      const assignment = await mcpGrantForBot(tx as PrismaClient, run, route.resourceId);
+      if (!assignment || route.resourceRevision !== assignment.server.revision) throw fail();
+      const detail = boundDirectApprovalDetails(effect.request, REMOTE_APPROVAL_MARKER);
+      const catalog = catalogApprovalDetails(effect.request, REMOTE_APPROVAL_MARKER);
+      const args = detail?.args ?? (catalog?.args.arguments as Record<string, unknown> | undefined);
+      if (
+        !args ||
+        (await integrationApprovalDetailsForCall(tx as PrismaClient, route, run, args))
+          ?.approval === "disabled"
+      )
+        throw fail();
+    } else if (route.connectorId === "builtin") {
+      if (route.resourceId !== run.botId || route.resourceRevision !== 1) throw fail();
+    } else {
+      // Connector adapters without a revocable resource/revision contract need a home review.
+      throw new DeviceRequestError("Review this connector approval at home.");
+    }
   }
   const used = await tx.deviceApprovalBinding.updateMany({
     where: {

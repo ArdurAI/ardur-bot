@@ -72,7 +72,7 @@ postgres("Hermes Bot configuration migration on disposable PostgreSQL", () => {
 });
 
 const v2Migration = readFileSync(
-  new URL("../prisma/migrations/20260927200000_runtime_config_v2/migration.sql", import.meta.url),
+  new URL("../prisma/migrations/20260928093000_runtime_config_v2/migration.sql", import.meta.url),
   "utf8",
 );
 

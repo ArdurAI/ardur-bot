@@ -161,12 +161,10 @@ test("create group from + and see two bots in one transcript", async ({ page }, 
     .locator(".ardurbot-group-avatar");
   await expect(groupAvatar).toBeVisible();
   await expect(groupAvatar.locator(".ardurbot-bot-avatar")).toHaveCount(2);
-  const workingAvatar = groupAvatar.locator('[data-working="true"]');
-  await expect(workingAvatar).toHaveCount(1);
-  await expect(workingAvatar.locator(".ardurbot-bot-avatar-ring")).toHaveCSS(
-    "animation-name",
-    "ardurbot-avatar-spin",
+  const workingAvatar = groupAvatar.locator(
+    ".ardurbot-bot-avatar[data-status='running'], .ardurbot-organic-avatar[data-status='running']",
   );
+  await expect(workingAvatar).toHaveCount(1);
   await captureScreenshot(page, testInfo, "group-avatar-active");
   await page.unroute("**/rpc/groups/list");
   await page.unroute("**/rpc/threads/get");
