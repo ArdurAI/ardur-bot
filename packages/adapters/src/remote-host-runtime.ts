@@ -54,7 +54,7 @@ export class RemoteHostRuntime implements AgentRuntime {
     request: AgentRunRequest,
     context: Partial<AdapterContext> = {},
   ): AsyncIterable<AgentRuntimeEvent> {
-    if (request.model.apiKey || request.model.oauth)
+    if (this.kind !== "hermes" && (request.model.apiKey || request.model.oauth))
       throw new Error("Native host runtimes use their own sign-in.");
     const abort = new AbortController();
     const stop = () => abort.abort();
@@ -96,7 +96,9 @@ export class RemoteHostRuntime implements AgentRuntime {
           scope.pin.credentialId !== pin?.credentialId ||
           scope.pin.provider !== request.model.provider ||
           scope.pin.modelId !== request.model.id ||
-          scope.pin.effort !== request.model.thinkingLevel
+          scope.pin.effort !== request.model.thinkingLevel ||
+          (pin?.runtimeConfigHash !== undefined &&
+            scope.configurationHash !== pin.runtimeConfigHash)
         ) {
           brokerSession.broker.revoke();
           throw new Error("Provider broker scope does not match this host turn.");
@@ -118,6 +120,9 @@ export class RemoteHostRuntime implements AgentRuntime {
         botId: request.botId,
         threadId: request.threadId,
         runId: request.runId,
+        providerSourceRunId: request.providerSourceRunId,
+        providerPurpose: request.providerPurpose === "summary" ? "summary" : undefined,
+        providerBriefAttemptedAt: brokerSession?.scope.briefAttemptedAt,
         prompt: request.prompt,
         instructions: request.instructions,
         history: request.history,
@@ -129,8 +134,12 @@ export class RemoteHostRuntime implements AgentRuntime {
           runtimePin: request.model.runtimePin,
           provider: request.model.provider,
           id: request.model.id,
-          maxTokens: request.model.maxTokens,
-          contextWindow: request.model.contextWindow,
+          maxTokens:
+            this.kind === "hermes" ? (request.model.maxTokens ?? 4_096) : request.model.maxTokens,
+          contextWindow:
+            this.kind === "hermes"
+              ? (request.model.contextWindow ?? 32_768)
+              : request.model.contextWindow,
           acceptsImages: request.model.acceptsImages,
           reasoning: request.model.reasoning,
           thinkingLevel: request.model.thinkingLevel,

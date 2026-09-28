@@ -1,4 +1,5 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import type {
   AdapterContext,
   AgentHomeStore,
@@ -111,6 +112,7 @@ import type { Auth } from "@ardurbot/auth";
 import type { Actor, ComputerStatus, Me, SpaceNavigation } from "@ardurbot/contracts";
 import {
   ENGINE_MISSING_CODE,
+  HermesRuntimeConfigSchema,
   HOST_MOVE_UNAVAILABLE_CODE,
   HostMoveUnavailableError,
   IntegrationManifestSchema,
@@ -1028,6 +1030,57 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
     },
     runtimes: {
       availability: authed.runtimes.availability.handler(async ({ context, input }) => {
+        if (input.runtimeKind === "hermes") {
+          const bot = input.botId ? await repos.getBot(context.actor, input.botId) : null;
+          const host = await deps.hostBridge?.status(context.actor.userId);
+          const health = host?.health;
+          const owner = await nativeHostOwner(deps.prisma, context.actor.userId);
+          const preferences = await deps.prisma.spaceModelPreference.findMany({
+            where: {
+              spaceId: context.actor.spaceId,
+              userId: context.actor.userId,
+              credential: { provider: { in: ["openai-compatible", "ollama"] } },
+            },
+            select: {
+              modelId: true,
+              credential: { select: { id: true, provider: true } },
+            },
+          });
+          const models = preferences
+            .filter((entry) => Boolean(entry.modelId))
+            .map((entry) => ({
+              id: entry.modelId!,
+              label: entry.modelId!,
+              credentialId: entry.credential.id,
+              provider: entry.credential.provider,
+              efforts:
+                bot?.modelCredentialId === entry.credential.id && bot.thinkingLevel
+                  ? [bot.thinkingLevel]
+                  : [],
+            }));
+          const available = Boolean(
+            owner &&
+              (!bot || bot.computer?.kind === "desktop") &&
+              health?.capabilities?.providerRelay === 1 &&
+              health.hermes?.available,
+          );
+          return {
+            runtimeKind: "hermes" as const,
+            available,
+            models,
+            ...(!available
+              ? {
+                  reason: !owner
+                    ? NATIVE_HOST_OWNER_MESSAGE
+                    : bot && bot.computer?.kind !== "desktop"
+                      ? "Choose a host computer for Hermes."
+                      : health?.capabilities?.providerRelay !== 1
+                        ? "Update Ardur on the connected computer for the provider relay."
+                        : (health?.hermes?.reason ?? "Hermes is not installed on this computer."),
+                }
+              : {}),
+          };
+        }
         if (process.env.ARDURBOT_HOST_BRIDGE === "api" && input.runtimeKind !== "pi") {
           const host = await deps.hostBridge?.status(context.actor.userId);
           const health =
@@ -1373,6 +1426,10 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
             modelCredentialId: source.modelCredentialId,
             modelPinRevision: source.modelPinRevision,
             runtimeKind: source.runtimeKind,
+            runtimeConfig:
+              source.runtimeConfig == null
+                ? null
+                : HermesRuntimeConfigSchema.parse(source.runtimeConfig),
             runtimeExperimental: source.runtimeExperimental,
           })
           .catch((error: unknown) => {
@@ -1419,6 +1476,17 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           if (!section) throw new IsolationError();
         }
         const modelPinUpdate = await botModelPinUpdate(deps, context.actor, existing, input);
+        const configChanged =
+          input.runtimeConfig !== undefined &&
+          !isDeepStrictEqual(input.runtimeConfig, existing.runtimeConfig ?? null);
+        if (
+          configChanged &&
+          input.runtimeConfig &&
+          (input.runtimeKind ?? existing.runtimeKind) !== "hermes"
+        )
+          throw new ORPCError("BAD_REQUEST", {
+            message: "Hermes limits require the Hermes runtime.",
+          });
         if (!existing.thread) throw new IsolationError();
         await commitBotUpdate({
           prisma: deps.prisma,
@@ -1426,6 +1494,10 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           spaceId: context.actor.spaceId,
           threadId: existing.thread.id,
           botId: input.botId,
+          expectedModelPinRevision:
+            configChanged || "modelPinRevision" in modelPinUpdate
+              ? existing.modelPinRevision
+              : undefined,
           emitBotUpdated: botProfileLabelsChanged(input),
           data: {
             name: input.name,
@@ -1441,6 +1513,14 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
             voiceId: input.voiceId,
             autoSpeak: input.autoSpeak,
             ...modelPinUpdate,
+            ...(configChanged
+              ? {
+                  runtimeConfig: input.runtimeConfig ?? Prisma.DbNull,
+                  ...(!("modelPinRevision" in modelPinUpdate)
+                    ? { modelPinRevision: { increment: 1 } }
+                    : {}),
+                }
+              : {}),
             runtimeExperimental: input.runtimeExperimental,
             ...(input.teamChatAmbientEnabled !== undefined
               ? { teamChatAmbientEnabled: input.teamChatAmbientEnabled }

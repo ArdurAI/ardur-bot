@@ -131,6 +131,9 @@ export const HostTurnSchema = z.strictObject({
   controlledComparison: z.boolean().optional(),
   botId: id,
   runId: id,
+  providerSourceRunId: id.optional(),
+  providerPurpose: z.literal("summary").optional(),
+  providerBriefAttemptedAt: z.iso.datetime().optional(),
   threadId: id,
   prompt: text,
   instructions: text,
@@ -162,7 +165,7 @@ export const HostTurnSchema = z.strictObject({
     provider: z.string().max(160),
     id: z.string().max(256),
     maxTokens: z.number().int().min(1).max(65_536).optional(),
-    contextWindow: z.number().int().min(64_000).max(2_000_000).optional(),
+    contextWindow: z.number().int().min(1).max(2_000_000).optional(),
     acceptsImages: z.boolean().optional(),
     reasoning: z.boolean().optional(),
     thinkingLevel: z
@@ -292,6 +295,7 @@ export const HostHealthSchema = z.strictObject({
   claude: RuntimeAvailabilitySchema,
   codex: RuntimeAvailabilitySchema,
   antigravity: RuntimeAvailabilitySchema.optional(),
+  hermes: RuntimeAvailabilitySchema.optional(),
   environment: HostEnvironmentSchema.optional(),
   integrations: z.array(HostIntegrationSchema).max(16).optional(),
 });

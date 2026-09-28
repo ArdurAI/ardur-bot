@@ -283,7 +283,7 @@ describe("worker-owned remote runtime callbacks", () => {
         brokerForTurn,
       );
       const base = request();
-      const run = {
+      const run: AgentRunRequest = {
         ...base,
         model: {
           ...base.model,

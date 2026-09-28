@@ -23,6 +23,7 @@ import {
   HostRequestSchema,
   HostRuntimeEventSchema,
 } from "@ardurbot/contracts/host-bridge";
+import type { RuntimeAvailability } from "@ardurbot/contracts/runtime-pins";
 import { RuntimePinError } from "@ardurbot/contracts/runtime-pins";
 import { BoardRunner } from "./board/runner.js";
 import type { HostWire } from "./bridge-wire.js";
@@ -42,6 +43,7 @@ import { AntigravityRuntime, probeAntigravity } from "./runtimes/antigravity-run
 import { ClaudeCodeRuntime, probeClaude } from "./runtimes/claude-code-runtime.js";
 import { CodexAppServerRuntime, probeCodex } from "./runtimes/codex-app-server-runtime.js";
 import {
+  HERMES_SOURCE_PIN,
   pinnedHermesLaunch,
   probeHermesInstall,
   resolveHermesLauncherAsset,
@@ -115,6 +117,28 @@ export class HostAgent {
       inspectHostEnvironment(getHostEnvironment(), false),
       inspectHostIntegrations(),
     ]);
+    let hermes: RuntimeAvailability = {
+      runtimeKind: "hermes",
+      available: false,
+      models: [],
+      reason:
+        process.platform === "win32"
+          ? "Hermes is unavailable on Windows."
+          : "Hermes is not installed on this computer.",
+      reasonId: process.platform === "win32" ? "platform-unsupported" : "install-missing",
+    };
+    if (process.platform !== "win32" && process.env.ARDUR_HERMES_INSTALL) {
+      try {
+        probeHermesInstall(process.env.ARDUR_HERMES_INSTALL);
+        hermes = { runtimeKind: "hermes", available: true, version: HERMES_SOURCE_PIN, models: [] };
+      } catch {
+        hermes = {
+          ...hermes,
+          reason: "Hermes install did not pass its pinned check.",
+          reasonId: "install-invalid",
+        };
+      }
+    }
     return {
       capabilities: { providerRelay: 1 },
       platform: process.platform as HostHealth["platform"],
@@ -124,6 +148,7 @@ export class HostAgent {
       claude,
       codex,
       antigravity,
+      hermes,
       environment,
       capacity: await hostCapacity(),
       integrations,

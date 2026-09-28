@@ -35,6 +35,7 @@ function fixture() {
       })),
     },
     run: { findFirst: vi.fn(async () => null) },
+    botBrief: { findUnique: vi.fn(async () => null) },
     mcpServer: {
       findFirst: vi.fn(async () => ({ id: "server", enabled: true, catalogId: null })),
     },
@@ -227,6 +228,98 @@ describe("host pairing and grants", () => {
     bridge.hub.attach(host, "owner", "revoked-generation");
     await bridge.hub.request({ ...request, id: "revoked" }, worker);
     expect(sent).toEqual([request]);
+    bridge.hub.detach();
+  });
+  it("authorizes a Hermes summary only for its source run and current brief lease", async () => {
+    const { bridge, prisma } = fixture();
+    await bridge.pair("owner");
+    const registration = await prisma.hostRegistration.findUnique();
+    const attemptedAt = new Date("2026-01-01T00:00:00.000Z");
+    const pin = {
+      runtimeKind: "hermes" as const,
+      provider: "openai-compatible",
+      modelId: "fixture",
+      effort: "off",
+      revision: 1,
+      credentialId: "connection",
+    };
+    prisma.run.findFirst.mockResolvedValue({
+      id: "source",
+      botId: "bot",
+      threadId: "thread",
+      runtimePin: pin,
+      bot: { spaceId: "space", computer: { kind: "desktop", homeKey: "computer" } },
+    } as never);
+    prisma.botBrief.findUnique.mockResolvedValue({
+      pendingRunId: "source",
+      attemptedAt,
+      leaseExpiresAt: new Date(Date.now() + 60_000),
+      spaceId: "space",
+      userId: "owner",
+    } as never);
+    const request: HostRequest = {
+      v: 1,
+      type: "request",
+      id: "summary-request",
+      scope: { userId: "owner", spaceId: "space", botId: "bot", runId: "brief-source" },
+      operation: {
+        op: "runtime.turn",
+        homeKey: "computer",
+        request: {
+          botId: "bot",
+          runId: "brief-source",
+          threadId: "thread",
+          providerSourceRunId: "source",
+          providerPurpose: "summary",
+          providerBriefAttemptedAt: attemptedAt.toISOString(),
+          providerBroker: {
+            protocol: 1,
+            id: "00000000-0000-4000-8000-000000000001",
+            token: "a".repeat(43),
+            expiresAt: Date.now() + 60_000,
+            hostGeneration: registration!.generation,
+          },
+          prompt: "fixture",
+          instructions: "",
+          history: [],
+          tools: "none",
+          model: { runtimePin: pin, provider: pin.provider, id: pin.modelId },
+        },
+      },
+    };
+    const host = { send: vi.fn(async (_frame: HostFrame) => undefined), close: vi.fn() };
+    const worker = { send: vi.fn(async (_frame: HostFrame) => undefined), close: vi.fn() };
+    bridge.hub.attach(host, "owner", registration!.generation);
+    await bridge.hub.fromHost(host, {
+      v: 1,
+      type: "health",
+      health: {
+        platform: "linux",
+        roots: [],
+        load: 0,
+        claude: { runtimeKind: "claude-code", available: false, models: [] },
+        codex: { runtimeKind: "codex-app-server", available: false, models: [] },
+        capabilities: { providerRelay: 1 },
+      },
+    });
+    if (request.operation.op !== "runtime.turn" || !request.operation.request.providerBroker)
+      throw new Error("Expected brokered summary turn");
+    request.operation.request.providerBroker.hostGeneration = (await bridge.status("owner")).health!
+      .generation!;
+    await bridge.hub.request(request, worker);
+    expect(host.send).toHaveBeenCalledWith(request);
+    expect(prisma.run.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ id: "source" }) }),
+    );
+    await bridge.hub.fromHost(host, { v: 1, type: "end", id: request.id });
+    const stale = { ...request, id: "stale-summary" };
+    if (stale.operation.op !== "runtime.turn") throw new Error("Expected summary turn");
+    stale.operation = {
+      ...stale.operation,
+      request: { ...stale.operation.request, providerBriefAttemptedAt: new Date(0).toISOString() },
+    };
+    await bridge.hub.request(stale, worker);
+    expect(host.send).toHaveBeenCalledTimes(1);
     bridge.hub.detach();
   });
 });

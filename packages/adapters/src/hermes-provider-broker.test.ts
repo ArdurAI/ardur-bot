@@ -89,6 +89,17 @@ function fixture(patch: Partial<BrokerOptions> = {}) {
 }
 
 describe("worker provider broker", () => {
+  it("refuses a provider request that dropped required Ardur context", async () => {
+    const f = fixture({ requiredContext: "Required Ardur instruction" });
+    await expect(f.broker.open(f.request())).rejects.toThrow();
+    expect(f.fetch).not.toHaveBeenCalled();
+    expect(f.records).toHaveLength(0);
+    const delivered = {
+      ...f.body,
+      messages: [{ role: "system", content: "Required Ardur instruction" }, ...f.body.messages],
+    };
+    expect((await f.broker.open(f.request({ body: delivered }))).ok).toBe(true);
+  });
   it("accepts the raw response boundary and rejects the next byte before recording success", async () => {
     const prefix = JSON.stringify({ model: "fixture-model", padding: "" });
     const body = (bytes: number) =>

@@ -68,6 +68,38 @@ function turnFinishSignal(runId: string) {
 }
 
 describe("HermesRuntime M0 ACP seam", () => {
+  it("passes snapshot limits to the pinned launcher through a synthetic turn", async () => {
+    let env: Record<string, string> | undefined;
+    const adapter = new HermesRuntime({
+      command: process.execPath,
+      args: [fixture, "text"],
+      pinned: true,
+      launch: async (spec) => {
+        env = spec.env;
+        return launchUnconfinedProcess(spec);
+      },
+    });
+    const base = request();
+    const run = request({
+      model: {
+        ...base.model,
+        maxTokens: 1_024,
+        contextWindow: 32_768,
+        runtimePin: {
+          runtimeKind: "hermes",
+          provider: "openai-compatible",
+          modelId: "fixture-model",
+          effort: "high",
+          credentialId: "fixture-connection",
+          revision: 2,
+          runtimeConfig: { version: 1, maxProviderRequests: 7, timeoutMs: 42_000 },
+        },
+      },
+    });
+    expect((await collect(adapter, run)).at(-1)).toEqual({ type: "done" });
+    expect(env?.ARDUR_HERMES_MAX_ITERATIONS).toBe("7");
+    expect(env?.ARDUR_HERMES_RUN_BUDGET_SECONDS).toBe("42");
+  });
   it("requires an explicit launcher at construction", () => {
     expect(
       () =>

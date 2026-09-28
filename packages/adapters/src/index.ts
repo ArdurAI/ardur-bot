@@ -74,6 +74,7 @@ export * from "./fleet/service.js";
 export * from "./github-webhook-emulator.js";
 export * from "./graphql-connectors.js";
 export * from "./group-handoff.js";
+export * from "./hermes-compatibility.js";
 export * from "./home.js";
 export * from "./host-aware-sandbox.js";
 export { hostIntegrationTools } from "./host-integration-tools.js";

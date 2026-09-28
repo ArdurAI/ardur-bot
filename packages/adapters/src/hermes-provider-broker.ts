@@ -39,6 +39,7 @@ export type BrokerScope = {
   leaseFence: number;
   hostGeneration: number;
   configurationHash: string;
+  briefAttemptedAt?: string;
   pin: { credentialId: string; provider: string; modelId: string; effort: string };
 };
 
@@ -94,6 +95,8 @@ export type BrokerOptions = {
   active: () => Promise<boolean>;
   /** A started observation must commit before the provider transport is called. */
   record: (usage: AgentUsage) => Promise<void>;
+  observed?: (model: string, effort: string | undefined) => Promise<void>;
+  requiredContext?: string;
   fetch?: typeof globalThis.fetch;
 };
 
@@ -429,6 +432,22 @@ export class HermesProviderBroker {
     try {
       const { connection } = this.options;
       const body = admittedBody(request.body, connection, this.options.pinnedEffort, this.allowed);
+      if (this.options.requiredContext) {
+        const text = (body.messages as Array<{ content?: unknown }>)
+          .map((message) =>
+            typeof message.content === "string"
+              ? message.content
+              : Array.isArray(message.content)
+                ? message.content
+                    .map((part: { text?: unknown }) =>
+                      typeof part.text === "string" ? part.text : "",
+                    )
+                    .join("\n")
+                : "",
+          )
+          .join("\n");
+        if (!text.includes(this.options.requiredContext)) denied();
+      }
       const encoded = JSON.stringify(body);
       if (Buffer.byteLength(encoded) > MAX_REQUEST_BYTES) denied();
       await active();
@@ -468,6 +487,10 @@ export class HermesProviderBroker {
         await active();
         const url = `${assertAllowedOpenAiCompatibleUrl(connection.baseUrl).toString().replace(/\/$/, "")}/chat/completions`;
         live();
+        await this.options.observed?.(
+          String(body.model),
+          typeof body.reasoning_effort === "string" ? body.reasoning_effort : undefined,
+        );
         const response = await this.transport(url, {
           method: "POST",
           headers: {

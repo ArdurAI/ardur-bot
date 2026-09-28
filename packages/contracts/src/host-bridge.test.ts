@@ -11,7 +11,7 @@ import {
 import { RuntimeKindSchema } from "./runtime-pins.js";
 
 describe("host protocol", () => {
-  it("round-trips a Hermes terminal problem without adding a product runtime kind", () => {
+  it("round-trips a Hermes terminal problem with its product runtime kind", () => {
     const frame = {
       v: 1 as const,
       type: "end" as const,
@@ -32,7 +32,7 @@ describe("host protocol", () => {
       },
     };
     expect(decodeHostFrame(encodeHostFrame(frame))).toEqual(frame);
-    expect(RuntimeKindSchema.safeParse("hermes").success).toBe(false);
+    expect(RuntimeKindSchema.safeParse("hermes").success).toBe(true);
   });
   it("carries numeric usage receipts across the strict host boundary and rejects raw payloads", () => {
     const event = {

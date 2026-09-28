@@ -435,14 +435,47 @@ export class HostBridge {
       this.fleetRequests.has(request.id)
     )
       return this.authorizeRemote(request, ownerId, generation);
+    const turn = request.operation.op === "runtime.turn" ? request.operation.request : null;
+    const sourceRunId =
+      turn?.providerPurpose === "summary" &&
+      turn.providerSourceRunId &&
+      turn.runId === request.scope.runId &&
+      turn.runId === `brief-${turn.providerSourceRunId}` &&
+      turn.providerBriefAttemptedAt &&
+      turn.providerBroker
+        ? turn.providerSourceRunId
+        : null;
+    const brief = sourceRunId
+      ? await this.prisma.botBrief.findUnique({
+          where: {
+            botId_threadId: { botId: request.scope.botId, threadId: turn!.threadId },
+          },
+        })
+      : null;
+    if (
+      sourceRunId &&
+      (brief?.pendingRunId !== sourceRunId ||
+        brief.attemptedAt?.toISOString() !== turn!.providerBriefAttemptedAt ||
+        !brief.leaseExpiresAt ||
+        brief.leaseExpiresAt <= new Date() ||
+        brief.spaceId !== request.scope.spaceId ||
+        brief.userId !== ownerId)
+    )
+      return false;
+    if (turn?.providerPurpose === "summary" && !sourceRunId) return false;
     const run = await this.prisma.run.findFirst({
       where: {
-        id: request.scope.runId,
+        id: sourceRunId ?? request.scope.runId,
         botId: request.scope.botId,
         spaceId: request.scope.spaceId,
         userId: ownerId,
-        status: "running",
-        cancelRequestedAt: null,
+        ...(sourceRunId
+          ? {
+              status: {
+                in: ["completed", "failed", "cancelled", "waiting_input", "waiting_takeover"],
+              },
+            }
+          : { status: "running", cancelRequestedAt: null }),
       },
       include: { bot: { include: { computer: true } } },
     });
@@ -454,7 +487,8 @@ export class HostBridge {
       const turn = request.operation.request;
       const grant = turn.providerBroker;
       if (
-        turn.runId !== run.id ||
+        turn.runId !== request.scope.runId ||
+        (sourceRunId !== null && turn.providerSourceRunId !== run.id) ||
         turn.botId !== run.botId ||
         turn.threadId !== run.threadId ||
         (turn.model.runtimePin.runtimeKind === "hermes") !== Boolean(grant) ||

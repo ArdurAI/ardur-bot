@@ -212,6 +212,72 @@ postgres("request ledger on disposable PostgreSQL", () => {
       "admission is stale",
     );
   });
+  it("accounts a summary against its finished source run only under the brief lease", async () => {
+    const f = await fixture();
+    await db.prisma.run.update({ where: { id: f.id }, data: { status: "completed" } });
+    const attemptedAt = new Date();
+    await db.prisma.botBrief.create({
+      data: {
+        spaceId: f.id,
+        userId: "fixture-user",
+        botId: f.id,
+        threadId: f.id,
+        groupKey: "direct",
+        pendingRunId: f.id,
+        attemptedAt,
+        leaseExpiresAt: new Date(attemptedAt.getTime() + 60_000),
+      },
+    });
+    const collector = new RequestUsageCollector({
+      provider: "fixture",
+      model: "fixture",
+      purpose: "summary",
+      mappingVersion: "broker-chat-completions-v1",
+      inputSemantics: "total-with-cache-subsets",
+      admission: {
+        kind: "worker-provider-broker",
+        reservedTokens: 500,
+        maxRequests: 2,
+        maxReservedTokens: 1_000,
+      },
+    });
+    const fence = {
+      leaseOwner: "brief",
+      leaseFence: 0,
+      runtimePin: f.pin,
+      briefAttemptedAt: attemptedAt,
+    };
+    const record = (usage: AgentUsage, candidate = fence) =>
+      recordBrokerRunUsage({ prisma: db.prisma, events: f.events }, f.run, usage, candidate);
+    await record(collector.start());
+    await record(collector.snapshot({ input: 90, output: 10 }));
+    await record(collector.finish("success"));
+    expect((await f.rows())[0]).toMatchObject({
+      purpose: "summary",
+      runId: f.id,
+      inputTokens: 90,
+      outputTokens: 10,
+    });
+    expect(await f.root()).toMatchObject({ usedTokens: 100, reservedTokens: 0 });
+    const next = new RequestUsageCollector({
+      provider: "fixture",
+      model: "fixture",
+      purpose: "summary",
+      mappingVersion: "broker-chat-completions-v1",
+      inputSemantics: "total-with-cache-subsets",
+      admission: {
+        kind: "worker-provider-broker",
+        reservedTokens: 100,
+        maxRequests: 2,
+        maxReservedTokens: 1_000,
+      },
+    });
+    await db.prisma.botBrief.update({
+      where: { botId_threadId: { botId: f.id, threadId: f.id } },
+      data: { leaseExpiresAt: null },
+    });
+    await expect(record(next.start())).rejects.toThrow("admission is stale");
+  });
   it("rejects a broker reservation beyond the persisted root token limit", async () => {
     const f = await fixture();
     await db.prisma.run.update({

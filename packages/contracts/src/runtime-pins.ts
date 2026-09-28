@@ -2,19 +2,27 @@ import * as z from "zod";
 import type { ThinkingLevel } from "./domain.js";
 import { Id } from "./ids.js";
 
-export const RuntimeKindSchema = z.enum(["pi", "claude-code", "codex-app-server", "antigravity"]);
+export const RuntimeKindSchema = z.enum([
+  "pi",
+  "claude-code",
+  "codex-app-server",
+  "antigravity",
+  "hermes",
+]);
 export type RuntimeKind = z.infer<typeof RuntimeKindSchema>;
 export const runtimeNames: Record<RuntimeKind, string> = {
   pi: "Ardur",
   "claude-code": "Claude Code",
   "codex-app-server": "Codex",
   antigravity: "Antigravity",
+  hermes: "Hermes",
 };
 export const runtimeLabels: Record<RuntimeKind, string> = {
   pi: "Ardur (built-in)",
   "claude-code": "Claude Code (your claude sign-in)",
   "codex-app-server": "Codex (your ChatGPT sign-in)",
   antigravity: "Antigravity",
+  hermes: "Hermes",
 };
 export const nativeRuntimeProviders = {
   "claude-code": "anthropic",
@@ -25,7 +33,20 @@ export const nativeRuntimeHealthKeys = {
   "claude-code": "claude",
   "codex-app-server": "codex",
   antigravity: "antigravity",
+  hermes: "hermes",
 } as const;
+
+export const HermesRuntimeConfigSchema = z.strictObject({
+  version: z.literal(1),
+  maxProviderRequests: z.number().int().min(1).max(64),
+  timeoutMs: z.number().int().min(1_000).max(600_000).multipleOf(1_000),
+});
+export type HermesRuntimeConfig = z.infer<typeof HermesRuntimeConfigSchema>;
+export const HERMES_RUNTIME_DEFAULTS: HermesRuntimeConfig = {
+  version: 1,
+  maxProviderRequests: 16,
+  timeoutMs: 180_000,
+};
 
 export const RuntimeAvailabilitySchema = z.object({
   runtimeKind: RuntimeKindSchema,
@@ -41,6 +62,8 @@ export const RuntimeAvailabilitySchema = z.object({
   models: z.array(
     z.object({
       id: z.string(),
+      credentialId: z.string().optional(),
+      provider: z.string().optional(),
       label: z.string(),
       efforts: z.array(z.string()),
       effortMode: z.enum(["selectable", "model-suffix", "none"]).optional(),
@@ -58,6 +81,12 @@ export const RuntimeInfoSchema = z.object({
   version: z.string().optional(),
   sessionId: z.string().optional(),
   binding: z.string().optional(),
+  historyMode: z.literal("quoted-system-context").optional(),
+  launcherHash: z.string().optional(),
+  configurationHash: z.string().optional(),
+  requestedEffort: z.string().optional(),
+  wireEffort: z.string().optional(),
+  effortMappingVersion: z.string().optional(),
 });
 export type RuntimeInfo = z.infer<typeof RuntimeInfoSchema>;
 
@@ -69,6 +98,11 @@ export const RuntimePinSchema = z.object({
   effort: z.string().nullable(),
   credentialId: z.string().nullable(),
   revision: z.number().int().nonnegative(),
+  runtimeConfig: HermesRuntimeConfigSchema.optional(),
+  runtimeConfigHash: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .optional(),
 });
 export type RuntimePin = z.infer<typeof RuntimePinSchema>;
 
@@ -108,6 +142,8 @@ export const RuntimeProblemSchema = z.object({
     "locality-denied",
     "runtime-unavailable",
     "runtime-unsupported-computer",
+    "runtime-unsupported-protocol",
+    "runtime-configuration-invalid",
     // The host's own local-import scan is stale, or one item is not importable; neither is
     // a lost host, so the transport must not treat them as one.
     "local-import-rescan",

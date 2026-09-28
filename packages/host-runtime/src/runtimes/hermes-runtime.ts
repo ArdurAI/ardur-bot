@@ -10,6 +10,10 @@ import type {
   AgentRuntimeEvent,
 } from "@ardurbot/adapter-kit";
 import type { RuntimeInfo } from "@ardurbot/contracts/runtime-pins";
+import {
+  HERMES_RUNTIME_DEFAULTS,
+  HermesRuntimeConfigSchema,
+} from "@ardurbot/contracts/runtime-pins";
 import { redactMcpText } from "../mcp-diagnostics.js";
 import { AcpClient, AcpClientError } from "./acp-client.js";
 import { startArdurMcpServer } from "./ardur-mcp-server.js";
@@ -138,7 +142,7 @@ export function hermesConfig(request: AgentRunRequest, pinned = false) {
   };
 }
 
-function contextDocument(request: AgentRunRequest) {
+export function hermesContextDocument(request: AgentRunRequest) {
   const instructions = request.instructions.trim();
   const history = request.history.map(({ role, content }) => ({ role, content }));
   return [
@@ -208,7 +212,7 @@ interface ActiveTurn {
   teardown?: () => Promise<void>;
 }
 
-/** M0 only: caller constructs this directly; the runtime registry has no Hermes kind yet. */
+/** One ephemeral ACP session per host turn; pinned launch is selected by the host agent. */
 export class HermesRuntime implements AgentRuntime {
   private readonly running = new Map<string, ActiveTurn>();
 
@@ -311,6 +315,9 @@ export class HermesRuntime implements AgentRuntime {
     context?: Partial<AdapterContext>,
   ): AsyncIterable<AgentRuntimeEvent> {
     if (this.running.has(request.runId)) throw new Error("This Hermes run is already active.");
+    const limits = this.options.pinned
+      ? HermesRuntimeConfigSchema.parse(request.model.runtimePin?.runtimeConfig)
+      : HERMES_RUNTIME_DEFAULTS;
     const config = hermesConfig(request, this.options.pinned);
     const queue = new RuntimeQueue<AgentRuntimeEvent>(undefined, false);
     const turn: ActiveTurn = { active: true, queue };
@@ -331,8 +338,8 @@ export class HermesRuntime implements AgentRuntime {
       await writeFile(join(home, "config.yaml"), `${JSON.stringify(config, null, 2)}\n`, {
         mode: 0o600,
       });
-      const contextText = contextDocument(request);
-      if (Buffer.byteLength(contextText) > 1024 * 1024)
+      const contextText = hermesContextDocument(request);
+      if (Buffer.byteLength(contextText) > 16 * 1024)
         throw new Error("Hermes context exceeded its size limit.");
       if (contextText) await writeFile(join(home, "SOUL.md"), contextText, { mode: 0o600 });
 
@@ -406,6 +413,8 @@ export class HermesRuntime implements AgentRuntime {
                 ARDUR_HERMES_RELAY_URL: request.model.baseUrl!,
                 ARDUR_HERMES_MODEL: request.model.id,
                 ARDUR_HERMES_MAX_TOKENS: String(request.model.maxTokens),
+                ARDUR_HERMES_MAX_ITERATIONS: String(limits.maxProviderRequests),
+                ARDUR_HERMES_RUN_BUDGET_SECONDS: String(limits.timeoutMs / 1_000),
               }
             : {}),
         },

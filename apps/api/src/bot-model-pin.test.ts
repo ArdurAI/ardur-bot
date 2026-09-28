@@ -23,6 +23,8 @@ function fixture() {
     provider: "xai",
     label: "xai",
     secretId: "secret",
+    defaultModel: "grok-4.6",
+    isDefault: false,
   };
   const findFirst = vi.fn(async () => credential);
   const deps = {
@@ -45,6 +47,80 @@ function fixture() {
   return { deps, findFirst, credential };
 }
 describe("bot pin editing", () => {
+  it("preserves the exact connected model when switching between Pi and Hermes", async () => {
+    const { deps, findFirst } = fixture();
+    vi.mocked(deps.prisma.spaceModelPreference.findFirst).mockResolvedValue({
+      modelId: "same-model",
+      isDefault: false,
+    } as never);
+    findFirst.mockResolvedValue({
+      id: "selected",
+      userId: "user",
+      provider: "openai-compatible",
+      label: "local",
+      secretId: "secret",
+      defaultModel: "same-model",
+      isDefault: false,
+    });
+    const pinned = {
+      ...existing,
+      runtimeKind: "pi",
+      modelProvider: "openai-compatible",
+      modelId: "same-model",
+      thinkingLevel: "off",
+      modelCredentialId: "selected",
+    };
+    expect(
+      await botModelPinUpdate(deps, actor, pinned, { botId: "bot", runtimeKind: "hermes" }),
+    ).toMatchObject({
+      runtimeKind: "hermes",
+      modelCredentialId: "selected",
+      modelId: "same-model",
+      thinkingLevel: "off",
+      modelPinRevision: { increment: 1 },
+    });
+    expect(findFirst).toHaveBeenCalledWith({
+      where: { id: "selected", userId: "user", provider: "openai-compatible" },
+    });
+    expect(
+      await botModelPinUpdate(
+        deps,
+        actor,
+        { ...pinned, runtimeKind: "hermes" },
+        { botId: "bot", runtimeKind: "pi" },
+      ),
+    ).toMatchObject({ runtimeKind: "pi", modelCredentialId: "selected" });
+  });
+
+  it("does not replace a removed Hermes connection with another matching model id", async () => {
+    const { deps, findFirst } = fixture();
+    findFirst.mockResolvedValue(null!);
+    await expect(
+      botModelPinUpdate(deps, actor, existing, {
+        botId: "bot",
+        runtimeKind: "hermes",
+        modelProvider: "openai-compatible",
+        modelId: "same-model",
+        modelCredentialId: "removed",
+        thinkingLevel: "off",
+      }),
+    ).rejects.toThrow("Connect that model provider first");
+    expect(deps.prisma.spaceModelPreference.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("rejects an unsupported API route for Hermes even with a real credential", async () => {
+    const { deps } = fixture();
+    await expect(
+      botModelPinUpdate(deps, actor, existing, {
+        botId: "bot",
+        runtimeKind: "hermes",
+        modelProvider: "xai",
+        modelId: "grok-4.6",
+        modelCredentialId: "selected",
+        thinkingLevel: "medium",
+      }),
+    ).rejects.toThrow("Chat Completions");
+  });
   it("saves a no-effort Antigravity model with explicit null", async () => {
     const { deps, findFirst } = fixture();
     vi.mocked(nativeRuntimeAvailability).mockResolvedValue({

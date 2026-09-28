@@ -491,6 +491,15 @@ export interface AgentRunRequest {
   botId: string;
   threadId: string;
   runId: string;
+  /** Worker-only accounting scope for auxiliary turns. Never sent to the host. */
+  providerSourceRunId?: string;
+  providerPurpose?: UsagePurpose;
+  onBrokerRuntimeInfo?: (
+    info: Pick<
+      RuntimeInfo,
+      "reportedModel" | "requestedEffort" | "wireEffort" | "effortMappingVersion"
+    >,
+  ) => Promise<void>;
   /** Lease-fenced receipt candidates already assembled into the initial input. */
   inputReceipt?: { leaseFence: number; deliveryIds: string[] };
   /** Called only after a supported runtime accepts those IDs into a valid turn. */

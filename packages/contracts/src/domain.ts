@@ -18,6 +18,7 @@ import {
 } from "./mcp.js";
 import { ProviderErrorKindSchema } from "./provider-errors.js";
 import {
+  HermesRuntimeConfigSchema,
   RuntimeInfoSchema,
   RuntimeKindSchema,
   RuntimePinSchema,
@@ -97,6 +98,7 @@ export const BotSchema = z.object({
   thinkingLevel: ThinkingLevelSchema.nullable(),
   modelCredentialId: z.string().nullable().optional(),
   runtimeKind: RuntimeKindSchema.default("pi"),
+  runtimeConfig: HermesRuntimeConfigSchema.nullable().optional(),
   runtimeExperimental: z.boolean().optional(),
   modelPinRevision: z.number().int().nonnegative().optional(),
   teamChatAmbientEnabled: z.boolean(),
@@ -361,6 +363,7 @@ export const UpdateBotInput = z
     thinkingLevel: ThinkingLevelSchema.nullable().optional(),
     modelCredentialId: z.string().min(1).nullable().optional(),
     runtimeKind: RuntimeKindSchema.optional(),
+    runtimeConfig: HermesRuntimeConfigSchema.nullable().optional(),
     runtimeExperimental: z.boolean().optional(),
     teamChatAmbientEnabled: z.boolean().optional(),
     teamChatRules: z.string().max(TEAM_CHAT_RULES_MAX_LENGTH).optional(),

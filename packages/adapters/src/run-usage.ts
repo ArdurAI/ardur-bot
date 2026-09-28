@@ -32,6 +32,7 @@ export type BrokerRunFence = {
   leaseOwner: string;
   leaseFence: number;
   runtimePin: unknown;
+  briefAttemptedAt?: Date;
 };
 
 /** Only newly persisted primary-call measurements belong in the run's context metrics. */
@@ -225,6 +226,21 @@ async function recordRequestUsage(
           throw new Error("Usage run changed while locking");
         if (delegation)
           delegation = await tx.delegation.findUniqueOrThrow({ where: { id: delegation.id } });
+        let briefLeaseValid = false;
+        if (brokerFence?.briefAttemptedAt && request.purpose === "summary") {
+          await tx.$queryRaw`SELECT id FROM bot_briefs WHERE "botId" = ${run.botId} AND "threadId" = ${run.threadId} FOR NO KEY UPDATE`;
+          const brief = await tx.botBrief.findUnique({
+            where: { botId_threadId: { botId: run.botId, threadId: run.threadId } },
+          });
+          briefLeaseValid = Boolean(
+            brief?.spaceId === run.spaceId &&
+              brief.userId === run.userId &&
+              brief.pendingRunId === run.id &&
+              brief.attemptedAt?.getTime() === brokerFence.briefAttemptedAt.getTime() &&
+              brief.leaseExpiresAt &&
+              brief.leaseExpiresAt > new Date(),
+          );
+        }
         const identity = {
           delegationId: delegation?.id ?? null,
           rootTaskId,
@@ -290,9 +306,14 @@ async function recordRequestUsage(
             !brokerFence ||
             request.counter.sequence !== 0 ||
             request.collection?.outcome !== "started" ||
-            lockedRun.status !== "running" ||
-            lockedRun.leaseOwner !== brokerFence.leaseOwner ||
-            lockedRun.leaseFence !== brokerFence.leaseFence ||
+            !(brokerFence.briefAttemptedAt
+              ? briefLeaseValid &&
+                ["completed", "failed", "cancelled", "waiting_input", "waiting_takeover"].includes(
+                  lockedRun.status,
+                )
+              : lockedRun.status === "running" &&
+                lockedRun.leaseOwner === brokerFence.leaseOwner &&
+                lockedRun.leaseFence === brokerFence.leaseFence) ||
             !isDeepStrictEqual(lockedRun.runtimePin, brokerFence.runtimePin)
           )
             throw new Error("Broker run admission is stale");
