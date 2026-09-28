@@ -1,4 +1,9 @@
-<svg viewBox="0 0 400 400" width="20" height="20" aria-hidden="true" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <path stroke="#1C1A17" stroke-width="32" stroke-linecap="round" d="M 322 100 A 150 150 0 1 0 334 296"></path>
-  <rect x="324" y="118" width="36" height="232" rx="18" fill="#1C1A17"></rect>
+<svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1024" height="1024" rx="230" fill="#9A3B1E" />
+  <g transform="translate(141, 141) scale(1.855)">
+    <!-- 1024 * 0.725 = 742; 742 / 400 = 1.855 -->
+    <!-- (1024 - 742) / 2 = 141 -->
+    <path fill="none" stroke="#F6F3EC" stroke-width="34" stroke-linecap="round" d="M 322 100 A 150 150 0 1 0 334 296"></path>
+    <rect x="322" y="118" width="38" height="232" rx="19" fill="#F6F3EC"></rect>
+  </g>
 </svg>
