@@ -78,8 +78,6 @@
 :root {
   --chat-font-sans: "Instrument Sans Variable", ui-sans-serif, system-ui, sans-serif;
   --chat-font-serif: "Instrument Serif", ui-serif, Georgia, Cambria, "Times New Roman", serif;
-  --chat-font-mono:
-    "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
-    "Courier New", monospace;
+  --chat-font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   --chat-font-system: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
