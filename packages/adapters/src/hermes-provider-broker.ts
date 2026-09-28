@@ -10,7 +10,9 @@ import {
 import { createOpenAiCompatibleFetch } from "./pi-openai-compatible-provider.js";
 
 const MAX_REQUEST_BYTES = 256 * 1024;
-const MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
+// Four raw MiB encode below the hub's six MiB provider-frame allowance.
+// The remainder covers frame overhead and bounded non-provider callbacks.
+const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
 const MAX_EVENT_BYTES = 512 * 1024;
 const MAX_TOKEN = 2_147_483_647;
 
@@ -328,6 +330,7 @@ function admittedBody(
 
 /** Dormant worker-only broker. The host relay is composed in a later stream. */
 export class HermesProviderBroker {
+  private deliveredBytes = 0;
   readonly grant: BrokerGrant;
   private readonly options: BrokerOptions;
   private readonly allowed: Map<string, JsonObject>;
@@ -569,11 +572,16 @@ export class HermesProviderBroker {
           await finish("failed");
           throw new Error("Provider model identity is unavailable.");
         }
+        if (this.deliveredBytes + size > MAX_RESPONSE_BYTES) {
+          await finish("failed");
+          throw new Error("Provider response exceeded the turn limit.");
+        }
         if (controller.signal.aborted || this.revoked || Date.now() >= this.grant.expiresAt) {
           await finish(Date.now() >= this.grant.expiresAt ? "timed-out" : "cancelled");
           throw new Error("Provider request was cancelled.");
         }
         await finish(response.ok ? "success" : "failed");
+        if (response.ok) this.deliveredBytes += size;
         return new Response(response.ok ? bytes : "Provider request failed.", {
           status: response.status,
           headers: { "content-type": response.ok ? mime : "text/plain" },

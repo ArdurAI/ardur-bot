@@ -89,6 +89,32 @@ function fixture(patch: Partial<BrokerOptions> = {}) {
 }
 
 describe("worker provider broker", () => {
+  it("accepts the raw response boundary and rejects the next byte before recording success", async () => {
+    const prefix = JSON.stringify({ model: "fixture-model", padding: "" });
+    const body = (bytes: number) =>
+      json({ model: "fixture-model", padding: "x".repeat(bytes - Buffer.byteLength(prefix)) });
+    const f = fixture({ maxRequests: 2, maxReservedTokens: 200 });
+    f.fetch.mockResolvedValueOnce(body(4 * 1024 * 1024));
+    expect((await f.broker.open(f.request())).ok).toBe(true);
+    f.fetch.mockResolvedValueOnce(body(100));
+    await expect(f.broker.open(f.request())).rejects.toThrow("Provider request failed");
+    expect(f.records.filter((row) => row.request?.collection?.outcome === "success")).toHaveLength(
+      1,
+    );
+  });
+
+  it("applies the response allowance across provider calls in one turn", async () => {
+    const f = fixture();
+    const body = (padding: number) =>
+      json({ model: "fixture-model", padding: "x".repeat(padding) });
+    f.fetch.mockResolvedValueOnce(body(2 * 1024 * 1024));
+    f.fetch.mockResolvedValueOnce(body(2 * 1024 * 1024));
+    expect((await f.broker.open(f.request())).ok).toBe(true);
+    await expect(f.broker.open(f.request())).rejects.toThrow("Provider request failed");
+    expect(f.records.filter((row) => row.request?.collection?.outcome === "success")).toHaveLength(
+      1,
+    );
+  });
   it("owns a grant before the first asynchronous active check", async () => {
     let release!: (value: boolean) => void;
     const active = vi
