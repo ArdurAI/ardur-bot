@@ -106,7 +106,7 @@ Only approve a download you trust from the official release page.
 
   ```sh
   chmod +x ./ardur-*.AppImage
-  ./ardur-0.1.0-alpha.1-linux-x86_64.AppImage
+  ./ardur-0.1.0-alpha.2-linux-x86_64.AppImage
   ```
 
   Substitute your downloaded version and architecture. Linux commonly requires the executable
