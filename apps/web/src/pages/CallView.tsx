@@ -51,12 +51,12 @@ export function CallView({
   function hangUp() {
     closing.current = true;
     dictation.stop("cancel");
-    withSpeaker((speaker) => speaker.stop());
+    void withSpeaker((speaker) => speaker.stop());
     onClose();
   }
 
   function interrupt() {
-    if (phaseRef.current === "speaking") withSpeaker((speaker) => speaker.stop());
+    if (phaseRef.current === "speaking") void withSpeaker((speaker) => speaker.stop());
     else dictation.stop("cancel");
     void listen();
   }
@@ -70,7 +70,7 @@ export function CallView({
       return;
     }
     setCallPhase("listening");
-    withSpeaker((speaker) => speaker.stop());
+    void withSpeaker((speaker) => speaker.stop());
     setHeard("");
     try {
       await dictation.listen({
@@ -122,7 +122,7 @@ export function CallView({
     let unsubSpeech: (() => void) | undefined;
     let cancelled = false;
     // A call needs voice immediately, so the speaker module loads here on first use.
-    withSpeaker(
+    void withSpeaker(
       (speaker) => {
         if (cancelled) return;
         unsubSpeech = speaker.subscribe((state) => {
@@ -138,7 +138,8 @@ export function CallView({
       },
       (error) => {
         if (cancelled) return;
-        setError(error instanceof Error ? error.message : String(error));
+        console.error(error);
+        setError(t`Voice failed`);
       },
     );
     const unsubDictation = dictation.subscribe((state) => {
@@ -153,7 +154,7 @@ export function CallView({
       unsubSpeech?.();
       unsubDictation();
       dictation.stop("cancel");
-      withSpeaker((speaker) => speaker.stop());
+      void withSpeaker((speaker) => speaker.stop());
     };
   }, [botId]);
 
@@ -185,7 +186,7 @@ export function CallView({
       if (text) {
         spokenMessage.current = lastBot.id;
         dictation.stop("cancel");
-        withSpeaker(
+        void withSpeaker(
           (speaker) =>
             speaker.speak(
               secretAsk
@@ -199,7 +200,8 @@ export function CallView({
               },
             ),
           (error) => {
-            setError(error instanceof Error ? error.message : String(error));
+            console.error(error);
+            setError(t`Voice failed`);
             setCaption("");
             void listen();
           },
@@ -233,11 +235,12 @@ export function CallView({
         }
       }
       if (phrases.length) {
-        withSpeaker(
+        void withSpeaker(
           (speaker) =>
             speaker.speak(phrases.join(". "), { botId, messageId: `narrate:${lastKey}` }),
           (error) => {
-            setError(error instanceof Error ? error.message : String(error));
+            console.error(error);
+            setError(t`Voice failed`);
             setCaption("");
             void listen();
           },

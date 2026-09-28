@@ -12,6 +12,10 @@ import { Trans, useLingui } from "@lingui/react/macro";
 import { Info, Lock, Plus, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 
+const preloadDialogs = () => {
+  void import("./dialogs");
+};
+
 export function BotCreatePicker({
   bots,
   onCreateBot,
@@ -104,10 +108,10 @@ export function BotCreatePicker({
                 data-testid="picker-info-group"
                 aria-label={t`About groups`}
                 title={t`About groups`}
-                onPointerEnter={() => void import("./dialogs")}
-                onFocus={() => void import("./dialogs")}
+                onPointerEnter={preloadDialogs}
+                onFocus={preloadDialogs}
                 onPointerDown={(event) => {
-                  void import("./dialogs");
+                  preloadDialogs();
                   event.stopPropagation();
                 }}
                 onMouseDown={(event) => event.stopPropagation()}
@@ -126,9 +130,9 @@ export function BotCreatePicker({
               value="create-space"
               data-testid="create-new-space"
               onSelect={() => onCreateSpace()}
-              onPointerEnter={() => void import("./dialogs")}
-              onFocus={() => void import("./dialogs")}
-              onPointerDown={() => void import("./dialogs")}
+              onPointerEnter={preloadDialogs}
+              onFocus={preloadDialogs}
+              onPointerDown={preloadDialogs}
               className="gap-2"
             >
               <Lock size={14} strokeWidth={1.8} aria-hidden="true" />
@@ -140,10 +144,10 @@ export function BotCreatePicker({
                 data-testid="picker-info-space"
                 aria-label={t`About spaces`}
                 title={t`About spaces`}
-                onPointerEnter={() => void import("./dialogs")}
-                onFocus={() => void import("./dialogs")}
+                onPointerEnter={preloadDialogs}
+                onFocus={preloadDialogs}
                 onPointerDown={(event) => {
-                  void import("./dialogs");
+                  preloadDialogs();
                   event.stopPropagation();
                 }}
                 onMouseDown={(event) => event.stopPropagation()}

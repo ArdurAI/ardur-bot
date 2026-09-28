@@ -61,6 +61,7 @@ describe("CallView", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.spyOn(console, "error").mockImplementation(() => {});
     vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
     container = document.createElement("div");
     document.body.append(container);
@@ -159,7 +160,10 @@ describe("CallView", () => {
     expect(container.textContent).toContain("Listening…");
     expect(fakeDictation.listen).toHaveBeenCalledOnce();
 
-    // It must report the failure the way CallView already reports speech errors.
-    expect(container.textContent).toContain("Failed to load chunk for voice playback");
+    // It must report the failure with a plain sentence instead of raw error details.
+    expect(container.textContent).toContain("Voice failed");
+    expect(console.error).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "Failed to load chunk for voice playback" }),
+    );
   });
 });

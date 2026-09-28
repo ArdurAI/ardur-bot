@@ -28,6 +28,10 @@ export type ContextMenuPosition = { x: number; y: number };
 
 type ChatMenuTarget = Pick<Bot, "name" | "pinned" | "sectionId" | "unread">;
 
+const preloadDialogs = () => {
+  void import("./shell/dialogs");
+};
+
 export function BotContextMenu({
   bot,
   position,
@@ -116,9 +120,9 @@ export function BotContextMenu({
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onClick={onCreateSection}
-              onPointerEnter={() => void import("./shell/dialogs")}
-              onFocus={() => void import("./shell/dialogs")}
-              onPointerDown={() => void import("./shell/dialogs")}
+              onPointerEnter={preloadDialogs}
+              onFocus={preloadDialogs}
+              onPointerDown={preloadDialogs}
             >
               <FolderPlus />
               {t`New section`}
@@ -126,9 +130,9 @@ export function BotContextMenu({
             {bot.sectionId && onRenameSection ? (
               <DropdownMenuItem
                 onClick={() => onRenameSection(bot.sectionId!)}
-                onPointerEnter={() => void import("./shell/dialogs")}
-                onFocus={() => void import("./shell/dialogs")}
-                onPointerDown={() => void import("./shell/dialogs")}
+                onPointerEnter={preloadDialogs}
+                onFocus={preloadDialogs}
+                onPointerDown={preloadDialogs}
               >
                 <Pencil />
                 {t`Rename section`}
@@ -158,9 +162,9 @@ export function BotContextMenu({
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onClick={onClear}
-          onPointerEnter={() => void import("./shell/dialogs")}
-          onFocus={() => void import("./shell/dialogs")}
-          onPointerDown={() => void import("./shell/dialogs")}
+          onPointerEnter={preloadDialogs}
+          onFocus={preloadDialogs}
+          onPointerDown={preloadDialogs}
         >
           <Eraser />
           {t`Clear conversation`}
@@ -172,9 +176,9 @@ export function BotContextMenu({
         <DropdownMenuItem
           variant="destructive"
           onClick={onDelete}
-          onPointerEnter={() => void import("./shell/dialogs")}
-          onFocus={() => void import("./shell/dialogs")}
-          onPointerDown={() => void import("./shell/dialogs")}
+          onPointerEnter={preloadDialogs}
+          onFocus={preloadDialogs}
+          onPointerDown={preloadDialogs}
         >
           <Trash2 />
           {t`Delete`}
