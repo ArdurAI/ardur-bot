@@ -254,6 +254,7 @@ import {
   McpApprovalCard,
 } from "./shell/message-cards";
 import { ProviderErrorMessage } from "./shell/provider-error-message";
+import { handleWorkspaceOpenRun } from "./shell/workspace-run";
 import { SystemDictation } from "./system/SystemDictation";
 import { WindowChrome } from "./WindowChrome";
 
@@ -421,7 +422,7 @@ export function ShellPage({
   const [attachmentNotice, setAttachmentNotice] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [panel, setPanel] = useState<Panel>(null);
-  const [workspaceTab, setWorkspaceTab] = useState("");
+  const [workspaceTab, setWorkspaceTab] = useState("tasks");
   const [workspaceExpanded, setWorkspaceExpanded] = useState(false);
   const paneReturnFocus = useRef<HTMLElement | null>(null);
   useEffect(() => {
@@ -3683,7 +3684,11 @@ export function ShellPage({
                   tab={workspaceTab}
                   onTabChange={setWorkspaceTab}
                   onOpenRun={(run) =>
-                    navigate(run.groupId ? `/app/g/${run.groupId}` : `/app/${run.botId}`)
+                    handleWorkspaceOpenRun({
+                      run,
+                      navigate,
+                      closePanel: () => setPanel(null),
+                    })
                   }
                   screen={{
                     computer,

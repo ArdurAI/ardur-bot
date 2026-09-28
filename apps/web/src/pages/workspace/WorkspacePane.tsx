@@ -62,9 +62,7 @@ export function WorkspacePane({
     (tab === "files" && filesAvailable) ||
     (tab === "screen" && computer?.capabilities?.graphical === true)
       ? tab
-      : computer?.capabilities?.graphical === true
-        ? "screen"
-        : "tasks";
+      : "tasks";
   const tabs = [
     {
       id: "tasks",
