@@ -6,7 +6,7 @@
     },
     {
       "id": "docs-sign-in-error",
-      "sha256": "7461fda47d9a734faf3768be9cd8edf5be2d2a32636a036971a7203ebe33333d"
+      "sha256": "00fb0cc63104bb17d9a129aa9a128267266aff6e067eae1e8f364633df7a947f"
     },
     {
       "id": "docs-sign-in-recovery",
@@ -58,7 +58,7 @@
     },
     {
       "id": "docs-group-goals-ready",
-      "sha256": "285a28e614933b5d077b9edaec9ea2e51a230a28db0c7a81d97a7ff700649426"
+      "sha256": "d45b49997236a002756bdf12413d3f21855c0330e233a4d807f719613319051a"
     },
     {
       "id": "docs-group-goals-form",
@@ -98,11 +98,11 @@
     },
     {
       "id": "docs-memory-documents-history",
-      "sha256": "03450ba8510eafa1bb4c92452b4ed1677a80dcaba632eb6cafb571be6863bcea"
+      "sha256": "38acd5ba563eb03bed6589da6fb00e7363cd36676e025b88883e327b1afb348c"
     },
     {
       "id": "docs-memory-documents-change",
-      "sha256": "44af1abb57c08a8a5952b675fd81d6d248592fce0fb31b0d4a3a0459bcebdd94"
+      "sha256": "b06b588896421ddca7e82338f5c3ac304c094d0d59f188a091acc3fd8c97935e"
     },
     {
       "id": "docs-computers-open",
@@ -118,7 +118,7 @@
     },
     {
       "id": "docs-computers-tested",
-      "sha256": "c849371bc88e80c6fc47f11cfc077c1ac4457af46f4f01d74a1e41344746f4e3"
+      "sha256": "87aa2b7958b3fc81d9e8f57c8ed2db5ee2450b99c966d712721f04b58ea4c870"
     },
     {
       "id": "docs-integrations-open",
