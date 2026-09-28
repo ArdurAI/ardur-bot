@@ -1,10 +1,15 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
+import { existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { fileURLToPath } from "node:url";
 import type { AgentRunRequest, AgentRuntimeEvent } from "@ardurbot/adapter-kit";
+import { HermesExecutionEnvelopeSchema } from "@ardurbot/contracts/runtime-config";
 import { describe, expect, it, vi } from "vitest";
+import profileFixture from "../../python/tests/valid_profile.json" with { type: "json" };
 import { createArdurToolBridge } from "./claude-mcp-bridge.js";
 import {
   createHermesTextRedactor,
@@ -72,6 +77,130 @@ function turnFinishSignal(runId: string) {
 }
 
 describe("HermesRuntime M0 ACP seam", () => {
+  const profile = HermesExecutionEnvelopeSchema.parse(profileFixture);
+  const profileRequest = () => {
+    const base = request();
+    return request({
+      model: {
+        ...base.model,
+        maxTokens: 1_024,
+        contextWindow: 32_768,
+        reasoning: true,
+        acceptsImages: false,
+        runtimePin: {
+          runtimeKind: "hermes",
+          provider: "fixture",
+          modelId: "fixture-model",
+          effort: "high",
+          credentialId: "fixture-connection",
+          revision: 1,
+        },
+      },
+    });
+  };
+  it("stages the compiled policy and waits for a matching session acknowledgment", async () => {
+    let staged: Record<string, unknown> | undefined;
+    let environment: Record<string, string> | undefined;
+    const adapter = new HermesRuntime({
+      command: process.execPath,
+      args: [fixture, "profile-ack"],
+      pinned: true,
+      executionEnvelope: profile,
+      launch: async (spec) => {
+        environment = spec.env;
+        staged = JSON.parse(await readFile(join(spec.env.HERMES_HOME!, "config.yaml"), "utf8"));
+        return launchUnconfinedProcess(spec);
+      },
+    });
+    expect((await collect(adapter, profileRequest())).at(-1)).toEqual({ type: "done" });
+    expect(staged).toEqual(profile.effectiveRuntimeConfig.generatedConfig);
+    expect(environment).toMatchObject({
+      ARDUR_HERMES_PROFILE: "hermes-ardur-v2",
+      ARDUR_HERMES_MAX_ITERATIONS: "16",
+      ARDUR_HERMES_RUN_BUDGET_SECONDS: "180",
+      HERMES_DISABLE_LAZY_INSTALLS: "1",
+      PATH: "/usr/bin:/bin",
+    });
+  });
+  it("excludes native child requests from the acknowledged Ardur catalog", async () => {
+    const run = profileRequest();
+    run.tools = [
+      { name: "run_subagent", description: "Child", inputSchema: { type: "object" } },
+      { name: "fixture_echo", description: "Echo", inputSchema: { type: "object" } },
+    ];
+    let catalog: string[] = [];
+    const adapter = new HermesRuntime({
+      command: process.execPath,
+      args: [fixture, "profile-ack"],
+      pinned: true,
+      executionEnvelope: profile,
+      launch: async (spec) => {
+        catalog = JSON.parse(spec.env.ARDUR_HERMES_ALLOWED_TOOLS!);
+        return launchUnconfinedProcess(spec);
+      },
+    });
+    expect((await collect(adapter, run)).at(-1)).toEqual({ type: "done" });
+    expect(catalog).toEqual(["mcp__ardur__fixture_echo"]);
+  });
+  it.each(["text", "profile-stale"])(
+    "refuses a %s acknowledgment before prompting and removes staging",
+    async (scenario) => {
+      let home = "";
+      const adapter = new HermesRuntime({
+        command: process.execPath,
+        args: [fixture, scenario],
+        pinned: true,
+        executionEnvelope: profile,
+        launch: async (spec) => {
+          home = spec.env.HERMES_HOME!;
+          return launchUnconfinedProcess(spec);
+        },
+      });
+      await expect(collect(adapter, profileRequest())).rejects.toThrow();
+      expect(existsSync(home)).toBe(false);
+    },
+  );
+  it("denies tool effects attempted during construction before acknowledgment", async () => {
+    const executeTool = vi.fn(async () => ({ text: "should not run" }));
+    const run = profileRequest();
+    run.tools = [{ name: "fixture_echo", description: "Echo", inputSchema: { type: "object" } }];
+    run.executeTool = executeTool;
+    let constructionResult: { isError: boolean } | undefined;
+    const adapter = new HermesRuntime({
+      command: process.execPath,
+      args: [fixture, "profile-construction-tool"],
+      pinned: true,
+      executionEnvelope: profile,
+      launch: async (spec) => {
+        const launched = await launchUnconfinedProcess(spec);
+        return {
+          ...launched,
+          teardown: async () => {
+            constructionResult = JSON.parse(
+              await readFile(join(spec.env.HERMES_HOME!, "construction-result.json"), "utf8"),
+            );
+            await launched.teardown();
+          },
+        };
+      },
+    });
+    await expect(collect(adapter, run)).rejects.toThrow();
+    expect(constructionResult).toEqual({ isError: true });
+    expect(executeTool).not.toHaveBeenCalled();
+  });
+  it("refuses a forged profile before any child launch", async () => {
+    const forged = structuredClone(profile);
+    forged.effectiveRuntimeConfig.generatedConfig.compression = { enabled: true };
+    const launch = vi.fn(launchUnconfinedProcess);
+    const adapter = new HermesRuntime({
+      command: process.execPath,
+      pinned: true,
+      executionEnvelope: forged,
+      launch,
+    });
+    await expect(collect(adapter, profileRequest())).rejects.toThrow();
+    expect(launch).not.toHaveBeenCalled();
+  });
   it("uses a 600-second pinned ACP prompt deadline with bounded teardown grace", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     let promptStarted!: () => void;
@@ -166,6 +295,19 @@ describe("HermesRuntime M0 ACP seam", () => {
     expect(() =>
       hermesContextDocument(request({ instructions: "x".repeat(16 * 1024 + 1) })),
     ).toThrow("Hermes instructions exceed the context limit. Shorten the bot instructions.");
+  });
+  it("honors the selected byte ceiling and stop policy without splitting Unicode", () => {
+    const run = request({
+      instructions: "Required instruction",
+      history: [{ role: "user", content: "🙂".repeat(4_000) }],
+    });
+    expect(() => hermesContextDocument(run, { maxInputBytes: 4_096, overflow: "stop" })).toThrow(
+      "Context exceeds the selected limit.",
+    );
+    const result = hermesContextDocument(run, { maxInputBytes: 4_096, overflow: "trim" });
+    expect(Buffer.byteLength(result)).toBeLessThanOrEqual(4_096);
+    expect(result).toContain("Required instruction");
+    expect(result).not.toContain("�");
   });
   it("refuses a pinned turn without validated limits before launch", async () => {
     const launch = vi.fn(launchUnconfinedProcess);

@@ -132,10 +132,6 @@ import { AskCard } from "../components/AskCard";
 import { ActiveBotGlyph } from "../components/ai/CollaborationMarker";
 import { CloudAgentCard } from "../components/CloudAgentCard";
 import { ComputerMaintenanceActions } from "../components/ComputerMaintenanceActions";
-import {
-  ComputersUnavailableHint,
-  computersAreUnavailable,
-} from "../components/ComputersUnavailableHint";
 import { ComputerUpdateProgress } from "../components/ComputerUpdateProgress";
 import { RunContext } from "../components/ContextEntry";
 import type { PendingAttachment } from "../components/composer/attachments";
@@ -193,8 +189,6 @@ import {
   activeThreadRuns,
   applyThreadSendReceipt,
   clearActiveThreadRuns,
-  computerPanelAutoBoot,
-  computerPanelAutoUsesBoot,
   computerPanelNeedsMaintenance,
   computerTakeoverBlocked,
   isComputerStatusEvent,
@@ -212,7 +206,7 @@ import {
   transcriptIsNearEnd,
   transcriptMovedDown,
 } from "../lib/transcript-scroll";
-import { speaker } from "../lib/tts";
+import { whenSpeakerReady, withSpeaker } from "../lib/tts-lazy";
 import { useModelSettings } from "../lib/use-model-settings";
 import { useNotifications } from "../lib/use-notifications";
 import { useSettingsShortcut } from "../lib/use-settings-shortcut";
@@ -234,8 +228,7 @@ import type { SettingsSection } from "./SettingsOverlay";
 import { SpaceSearchResults } from "./SpaceSearch";
 import { BotModelChip } from "./shell/bot-model-chip";
 import { BotSettings, CreateBotForm } from "./shell/bot-panel";
-import { BotCreatePicker } from "./shell/bot-picker";
-import { CommandPalette, isCommandPaletteHotkey } from "./shell/command-palette";
+import { isCommandPaletteHotkey } from "./shell/command-palette-hotkey";
 import {
   initialComputerErrorState,
   reduceComputerError,
@@ -244,15 +237,6 @@ import {
 import { ComputerScreenError } from "./shell/computer-screen-error";
 import { useComputerTerminal } from "./shell/computer-terminal";
 import {
-  ClearConversationDialog,
-  DeleteBotDialog,
-  DeleteItemDialog,
-  NewBotSectionDialog,
-  NewSpaceDialog,
-  PickerInfoDialog,
-  RenameBotSectionDialog,
-} from "./shell/dialogs";
-import {
   AppConnectCard,
   ArtifactImage,
   ChartBlockView,
@@ -260,6 +244,7 @@ import {
   McpApprovalCard,
 } from "./shell/message-cards";
 import { ProviderErrorMessage } from "./shell/provider-error-message";
+import { handleWorkspaceOpenRun } from "./shell/workspace-run";
 import { SystemDictation } from "./system/SystemDictation";
 import { WindowChrome } from "./WindowChrome";
 
@@ -291,6 +276,46 @@ const PeerMessagesOverlay = lazy(() =>
   import("./PeerMessagesOverlay").then((module) => ({ default: module.PeerMessagesOverlay })),
 );
 const CallView = lazy(() => import("./CallView").then((module) => ({ default: module.CallView })));
+// Both pickers sit behind a click and pull the command-menu dependency, so they
+// load on demand; the hotkey listener stays local to keep the palette shortcut instant.
+const loadBotCreatePicker = () => import("./shell/bot-picker");
+const BotCreatePicker = lazy(() =>
+  loadBotCreatePicker().then((module) => ({ default: module.BotCreatePicker })),
+);
+const preloadBotCreatePicker = () => {
+  void loadBotCreatePicker();
+};
+const CommandPalette = lazy(() =>
+  import("./shell/command-palette").then((module) => ({ default: module.CommandPalette })),
+);
+// Every dialog opens from a click, so the shared dialog module loads on demand.
+const loadDialogs = () => import("./shell/dialogs");
+const preloadDialogs = () => {
+  void loadDialogs();
+};
+const ClearConversationDialog = lazy(() =>
+  loadDialogs().then((module) => ({
+    default: module.ClearConversationDialog,
+  })),
+);
+const DeleteBotDialog = lazy(() =>
+  loadDialogs().then((module) => ({ default: module.DeleteBotDialog })),
+);
+const DeleteItemDialog = lazy(() =>
+  loadDialogs().then((module) => ({ default: module.DeleteItemDialog })),
+);
+const NewBotSectionDialog = lazy(() =>
+  loadDialogs().then((module) => ({ default: module.NewBotSectionDialog })),
+);
+const NewSpaceDialog = lazy(() =>
+  loadDialogs().then((module) => ({ default: module.NewSpaceDialog })),
+);
+const PickerInfoDialog = lazy(() =>
+  loadDialogs().then((module) => ({ default: module.PickerInfoDialog })),
+);
+const RenameBotSectionDialog = lazy(() =>
+  loadDialogs().then((module) => ({ default: module.RenameBotSectionDialog })),
+);
 
 type Panel =
   | "computer"
@@ -303,6 +328,9 @@ type Panel =
   | null;
 
 const RoutinesPanel = lazy(() => import("../components/composer/RoutinesPanel"));
+const WorkspacePane = lazy(() =>
+  import("./workspace/WorkspacePane").then((module) => ({ default: module.WorkspacePane })),
+);
 const SlashPicker = lazy(() => import("../components/composer/SlashPicker"));
 
 const ATTACHMENT_ACCEPT = ATTACHMENT_ALLOWED_MIME_TYPES.join(",");
@@ -424,6 +452,57 @@ export function ShellPage({
   const [attachmentNotice, setAttachmentNotice] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [panel, setPanel] = useState<Panel>(null);
+  const [workspaceTab, setWorkspaceTab] = useState("tasks");
+  const [workspaceExpanded, setWorkspaceExpanded] = useState(false);
+  const paneReturnFocus = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (
+        event.key === "Escape" &&
+        panel === "computer" &&
+        event.target instanceof Element &&
+        event.target.closest("[data-workspace-chrome]")
+      ) {
+        event.preventDefault();
+        setPanel(null);
+        paneReturnFocus.current?.focus();
+        return;
+      }
+      if (
+        !(event.metaKey || event.ctrlKey) ||
+        !event.shiftKey ||
+        event.altKey ||
+        event.repeat ||
+        event.isComposing ||
+        event.code !== "KeyE"
+      )
+        return;
+      if (
+        event.target instanceof Element &&
+        event.target.closest('[role="dialog"], [data-terminal-root]')
+      )
+        return;
+      if (!activeBotId.current) return;
+      event.preventDefault();
+      if (panel === "computer") {
+        setPanel(null);
+        paneReturnFocus.current?.focus();
+      } else {
+        paneReturnFocus.current =
+          document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        setPanel("computer");
+        requestAnimationFrame(() =>
+          document
+            .querySelector<HTMLElement>(
+              '[data-panel="computer"] [role="tab"][aria-selected="true"]',
+            )
+            ?.focus(),
+        );
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [panel]);
   const [modelFocusRequest, setModelFocusRequest] = useState(0);
   const [runtimeFocusRequest, setRuntimeFocusRequest] = useState(0);
   useEffect(() => {
@@ -531,6 +610,14 @@ export function ShellPage({
   const [newSpaceOpen, setNewSpaceOpen] = useState(false);
   const [pickerInfoTopic, setPickerInfoTopic] = useState<"group" | "space" | null>(null);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  // The palette mounts on first use so its command-menu code stays out of startup.
+  const [commandPaletteUsed, setCommandPaletteUsed] = useState(false);
+  const commandPaletteOpenRef = useRef(false);
+  const setCommandPaletteState = useCallback((open: boolean) => {
+    commandPaletteOpenRef.current = open;
+    setCommandPaletteOpen(open);
+    if (open) setCommandPaletteUsed(true);
+  }, []);
 
   useEffect(() => {
     if (dashboard) setMobileSidebarOpen(false);
@@ -669,7 +756,6 @@ export function ShellPage({
   } | null>(null);
   // Owned here so the menu survives the DashboardPage remount when bootstrap resolves its space.
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
-  const autoBooted = useRef<string | null>(null);
   const routineSavePending = useRef(false);
   const webhookSecretProvisionRef = useRef(new Map<string, Promise<string>>());
   const ensureWebhookSecret = (botId: string) =>
@@ -701,7 +787,7 @@ export function ShellPage({
   const readVisibleGroups = useRef(new Set<string>());
   useNotifications();
   const computerVisible = useRef(false);
-  computerVisible.current = panel === "computer" || computerOpen;
+  computerVisible.current = computerOpen;
   const autoSpoken = useRef<string | null>(null);
   const autoSpokenBotId = useRef<string | null>(null);
 
@@ -1157,12 +1243,12 @@ export function ShellPage({
       .status()
       .then(setVoiceStatus)
       .catch(() => undefined);
-    const unsubSpeech = speaker.subscribe((state) => {
-      setSpeakingMessageId(state.status === "idle" ? null : (state.messageId ?? null));
-    });
-    return () => {
-      unsubSpeech();
-    };
+    // Mirrors playback state for message rows without loading the speaker module.
+    return whenSpeakerReady((speaker) =>
+      speaker.subscribe((state) => {
+        setSpeakingMessageId(state.status === "idle" ? null : (state.messageId ?? null));
+      }),
+    );
   }, []);
 
   useEffect(() => {
@@ -1182,7 +1268,7 @@ export function ShellPage({
     const text = speechFromBlocks(lastBot.blocks);
     if (!text) return;
     autoSpoken.current = lastBot.id;
-    void speaker.speak(text, { botId: active.id, messageId: lastBot.id });
+    withSpeaker((speaker) => speaker.speak(text, { botId: active.id, messageId: lastBot.id }));
   }, [
     snapshot?.messages,
     snapshot?.run?.status,
@@ -2219,12 +2305,13 @@ export function ShellPage({
   speakingMessageIdRef.current = speakingMessageId;
   const speakMessage = useCallback((message: ThreadMessage) => {
     if (speakingMessageIdRef.current === message.id) {
-      speaker.stop();
+      withSpeaker((speaker) => speaker.stop());
       return;
     }
     const text = speechFromBlocks(message.blocks);
     const id = message.botId ?? activeBotId.current;
-    if (text && id) void speaker.speak(text, { botId: id, messageId: message.id });
+    if (text && id)
+      withSpeaker((speaker) => speaker.speak(text, { botId: id, messageId: message.id }));
   }, []);
 
   async function createGroup(input: { name: string; botIds: string[] }) {
@@ -2414,42 +2501,6 @@ export function ShellPage({
   }
 
   useEffect(() => {
-    if (panel !== "computer") {
-      autoBooted.current = null;
-      return;
-    }
-    if (!active) return;
-    const botId = active.id;
-    let cancelled = false;
-    void (async () => {
-      // Refresh from the server first. A stale SSE "booting" snapshot used to
-      // skip this effect, so an RPC takeover never showed "You have control".
-      const snap = await refreshThread(botId).catch(() => null);
-      if (cancelled || activeBotId.current !== botId) return;
-      const state = snap?.computer?.state;
-      const screen = state === "running" ? await refreshComputerScreen(botId) : null;
-      if (cancelled || activeBotId.current !== botId) return;
-      const action = computerPanelAutoBoot(state, screen);
-      if (action === "wait") {
-        if (state === "running") autoBooted.current = botId;
-        return;
-      }
-      if (action === "boot" && autoBooted.current === botId) return;
-      autoBooted.current = botId;
-      if (!computerPanelAutoUsesBoot(action)) return;
-      await bootComputer({
-        botId,
-        takeControl: false,
-        overlay: action === "boot",
-        force: true,
-      }).catch(() => undefined);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [panel, active?.id]);
-
-  useEffect(() => {
     setComputerOpen(false);
     dispatchComputerError({ type: "dismiss" });
     setComputerBotId(active?.id);
@@ -2511,16 +2562,15 @@ export function ShellPage({
     function onKey(event: KeyboardEvent) {
       if (!isCommandPaletteHotkey(event)) return;
       event.preventDefault();
-      setCommandPaletteOpen((open) => !open);
+      setCommandPaletteState(!commandPaletteOpenRef.current);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [setCommandPaletteState]);
 
   useEffect(() => {
     const heartbeatBotId = computerBot?.id ?? active?.id;
-    if ((panel !== "computer" && !computerOpen) || !heartbeatBotId || computer?.state !== "running")
-      return;
+    if (!computerOpen || !heartbeatBotId || computer?.state !== "running") return;
     const ping = () =>
       void rpc.computer.heartbeat({ botId: heartbeatBotId }).catch(() => undefined);
     ping();
@@ -2528,7 +2578,7 @@ export function ShellPage({
     return () => window.clearInterval(timer);
   }, [panel, computerOpen, computerBot?.id, active?.id, computer?.state]);
 
-  async function openComputer(botId?: string) {
+  async function openComputer(botId?: string, viewOnly = false) {
     const id = botId ?? active?.id;
     if (!id) return;
     const bot = botsRef.current.find((candidate) => candidate.id === id);
@@ -2549,7 +2599,7 @@ export function ShellPage({
     try {
       await bootComputer({
         botId: id,
-        takeControl: needsTakeover && !blocked,
+        takeControl: !viewOnly && needsTakeover && !blocked,
         overlay: (needsTakeover && !blocked) || targetComputer?.state !== "running",
         force: targetComputer?.state !== "running",
       });
@@ -2770,6 +2820,10 @@ export function ShellPage({
                 className="app-no-drag text-[21px] text-muted-foreground/70 hover:text-foreground/75"
                 title={t`Create`}
                 data-testid="create-menu-trigger"
+                onPointerEnter={preloadBotCreatePicker}
+                onFocus={preloadBotCreatePicker}
+                onPointerDown={preloadBotCreatePicker}
+                onClick={preloadBotCreatePicker}
               >
                 +
               </PopoverTrigger>
@@ -2779,39 +2833,41 @@ export function ShellPage({
                   align="end"
                   className="app-no-drag w-auto gap-0 overflow-hidden p-0 data-closed:animate-none"
                 >
-                  <BotCreatePicker
-                    bots={bots}
-                    onCreateBot={() => {
-                      setCreateMenuOpen(false);
-                      setMobileSidebarOpen(false);
-                      setPanel("create");
-                    }}
-                    onOpenBot={(id) => {
-                      setCreateMenuOpen(false);
-                      setMobileSidebarOpen(false);
-                      navigate(`/app/${id}`);
-                    }}
-                    onCreateGroup={() => {
-                      setCreateMenuOpen(false);
-                      setMobileSidebarOpen(false);
-                      setPanel("create-group");
-                    }}
-                    onCreateSpace={() => {
-                      setCreateMenuOpen(false);
-                      setMobileSidebarOpen(false);
-                      setNewSpaceOpen(true);
-                    }}
-                    onShowGroupInfo={() => {
-                      setCreateMenuOpen(false);
-                      setMobileSidebarOpen(false);
-                      setPickerInfoTopic("group");
-                    }}
-                    onShowSpaceInfo={() => {
-                      setCreateMenuOpen(false);
-                      setMobileSidebarOpen(false);
-                      setPickerInfoTopic("space");
-                    }}
-                  />
+                  <Suspense fallback={null}>
+                    <BotCreatePicker
+                      bots={bots}
+                      onCreateBot={() => {
+                        setCreateMenuOpen(false);
+                        setMobileSidebarOpen(false);
+                        setPanel("create");
+                      }}
+                      onOpenBot={(id) => {
+                        setCreateMenuOpen(false);
+                        setMobileSidebarOpen(false);
+                        navigate(`/app/${id}`);
+                      }}
+                      onCreateGroup={() => {
+                        setCreateMenuOpen(false);
+                        setMobileSidebarOpen(false);
+                        setPanel("create-group");
+                      }}
+                      onCreateSpace={() => {
+                        setCreateMenuOpen(false);
+                        setMobileSidebarOpen(false);
+                        setNewSpaceOpen(true);
+                      }}
+                      onShowGroupInfo={() => {
+                        setCreateMenuOpen(false);
+                        setMobileSidebarOpen(false);
+                        setPickerInfoTopic("group");
+                      }}
+                      onShowSpaceInfo={() => {
+                        setCreateMenuOpen(false);
+                        setMobileSidebarOpen(false);
+                        setPickerInfoTopic("space");
+                      }}
+                    />
+                  </Suspense>
                 </PopoverContent>
               ) : null}
             </Popover>
@@ -3154,6 +3210,9 @@ export function ShellPage({
                         size="xs"
                         className="text-destructive hover:text-destructive"
                         aria-label={t`Delete ${bot.name}`}
+                        onPointerEnter={preloadDialogs}
+                        onFocus={preloadDialogs}
+                        onPointerDown={preloadDialogs}
                         onClick={() => setDeleteTarget(bot)}
                       >
                         <Trans>Delete</Trans>
@@ -3185,6 +3244,9 @@ export function ShellPage({
                         size="xs"
                         className="text-destructive hover:text-destructive"
                         aria-label={t`Delete ${group.name}`}
+                        onPointerEnter={preloadDialogs}
+                        onFocus={preloadDialogs}
+                        onPointerDown={preloadDialogs}
                         onClick={() => setDeleteGroupTarget(group)}
                       >
                         <Trans>Delete</Trans>
@@ -3585,17 +3647,30 @@ export function ShellPage({
       <SlidingPanel
         open={Boolean(panel && (active || activeGroup || panel === "create"))}
         panel={panel ?? "closed"}
+        workspace={panel === "computer"}
+        expanded={panel === "computer" && workspaceExpanded}
       >
         {panel && (active || activeGroup || panel === "create") ? (
-          <div className="rk-scroll h-full w-full overflow-y-auto px-5 py-[17px] md:w-[384px]">
+          <div
+            className={
+              panel === "computer"
+                ? "flex h-full min-h-0 w-full flex-col overflow-hidden px-3 py-3"
+                : "rk-scroll h-full w-full overflow-y-auto px-5 py-[17px] md:w-[384px]"
+            }
+          >
             {panel !== "routine" &&
             panel !== "create" &&
             panel !== "create-group" &&
             panel !== "group-settings" ? (
-              <div className="mb-4 flex items-center justify-between">
+              <div
+                data-workspace-chrome={panel === "computer" ? "" : undefined}
+                className="mb-4 flex shrink-0 items-center justify-between"
+              >
                 <span className="text-[13.5px] text-muted-foreground">
                   {panel === "settings" ? (
                     <Trans>Settings</Trans>
+                  ) : panel === "computer" ? (
+                    <Trans>Workspace</Trans>
                   ) : active ? (
                     (computer?.state ?? active.status)
                   ) : (
@@ -3603,6 +3678,18 @@ export function ShellPage({
                   )}
                 </span>
                 <div className="flex gap-1">
+                  {panel === "computer" ? (
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={
+                        workspaceExpanded ? t`Return to conversation` : t`Expand workspace`
+                      }
+                      onClick={() => setWorkspaceExpanded((value) => !value)}
+                    >
+                      {workspaceExpanded ? <X size={16} /> : <Maximize2 size={16} />}
+                    </Button>
+                  ) : null}
                   {active &&
                   panel === "computer" &&
                   !computerOpen &&
@@ -3630,7 +3717,10 @@ export function ShellPage({
                     variant="ghost"
                     size="icon-sm"
                     aria-label={t`Close panel`}
-                    onClick={() => setPanel(null)}
+                    onClick={() => {
+                      setPanel(null);
+                      setWorkspaceExpanded(false);
+                    }}
                   >
                     <X size={16} strokeWidth={1.8} />
                   </Button>
@@ -3638,90 +3728,58 @@ export function ShellPage({
               </div>
             ) : null}
             {panel === "computer" && active ? (
-              <div>
-                <div
-                  data-testid="computer-preview"
-                  className="group relative aspect-[16/10] overflow-hidden rounded-[14px] bg-background"
-                >
-                  {computerOpen ? (
-                    <div className="grid h-full place-items-center text-sm text-muted-foreground/80">
-                      <Trans>Open in full window</Trans>
-                    </div>
-                  ) : computer?.capabilities?.graphical === false ? (
-                    <p className="p-4 text-muted-foreground">{t`Not available on this computer`}</p>
-                  ) : computer?.kind === "desktop" ? (
-                    <DesktopKindEmptyState className="grid h-full place-items-center px-6 text-center text-sm text-muted-foreground/80" />
-                  ) : computer?.state === "running" && embeddedScreenUrl && !computerScreenError ? (
-                    <iframe
-                      title={t`Bot screen preview`}
-                      src={embeddedScreenUrl}
-                      sandbox={screenIframeSandbox(embeddedScreenUrl)}
-                      className="h-full w-full border-0 bg-black"
-                      allow="clipboard-read; clipboard-write"
-                      style={{ pointerEvents: "none" }}
-                    />
-                  ) : (
-                    <div className="grid h-full place-items-center px-6 text-center text-sm text-muted-foreground/80">
-                      {computerScreenError ??
-                        (computersAreUnavailable(bootstrapMe?.sandboxProvider) ? (
-                          <ComputersUnavailableHint />
-                        ) : (
-                          computerPlaceholder(
-                            computer?.state,
-                            booting,
-                            computerLabel(computer?.mode, active.name),
-                            computer?.imagePulling ? computer.imagePullPercent : undefined,
-                          )
-                        ))}
-                    </div>
-                  )}
-                  {!computerScreenError ? (
-                    <button
-                      type="button"
-                      data-testid="computer-preview-open"
-                      className="absolute inset-0 flex cursor-pointer items-center justify-center bg-overlay/40 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
-                      aria-label={t`Open`}
-                      onClick={() => void openComputer()}
-                    >
-                      <span className="inline-flex items-center gap-2 rounded-full bg-overlay px-3.5 py-2 text-[14px] text-foreground shadow-md">
-                        <Maximize2 size={15} strokeWidth={1.9} aria-hidden />
-                        <Trans>Open</Trans>
-                      </span>
-                    </button>
-                  ) : null}
-                </div>
-                <p className="mt-2 truncate text-[13.5px] text-muted-foreground" dir="auto">
-                  {t`${active.name}'s screen`}
-                </p>
-                <RoutineListHeader
-                  onCreate={() => {
-                    setRoutineDraft(emptyRoutineDraft());
-                    setRoutineWebhookSecret(null);
-                    setEditingRoutine(null);
-                    setRoutineError(null);
-                    setPanel("routine");
+              <Suspense fallback={null}>
+                <WorkspacePane
+                  bot={active}
+                  computer={computer}
+                  tab={workspaceTab}
+                  onTabChange={setWorkspaceTab}
+                  onOpenRun={(run) =>
+                    handleWorkspaceOpenRun({
+                      run,
+                      navigate,
+                      closePanel: () => setPanel(null),
+                    })
+                  }
+                  screen={{
+                    computer,
+                    open: computerOpen,
+                    url: embeddedScreenUrl,
+                    error: computerScreenError,
+                    onOpen: () => void openComputer(undefined, true),
                   }}
+                  routines={
+                    <div>
+                      <RoutineListHeader
+                        onCreate={() => {
+                          setRoutineDraft(emptyRoutineDraft());
+                          setRoutineWebhookSecret(null);
+                          setEditingRoutine(null);
+                          setRoutineError(null);
+                          setPanel("routine");
+                        }}
+                      />
+                      {activeRoutines.map((routine) => (
+                        <RoutineListRow
+                          key={routine.id}
+                          routine={routine}
+                          running={
+                            snapshot?.run?.routineId === routine.id && isActive(snapshot.run.status)
+                          }
+                          onOpen={() => {
+                            setRoutineDraft(draftFromRoutine(routine));
+                            setRoutineWebhookSecret(null);
+                            setEditingRoutine(routine);
+                            setRoutineError(null);
+                            setPanel("routine");
+                          }}
+                          onStop={() => void stopRun()}
+                        />
+                      ))}
+                    </div>
+                  }
                 />
-                {activeRoutines.map((routine) => {
-                  const routineRunning =
-                    snapshot?.run?.routineId === routine.id && isActive(snapshot.run.status);
-                  return (
-                    <RoutineListRow
-                      key={routine.id}
-                      routine={routine}
-                      running={routineRunning}
-                      onOpen={() => {
-                        setRoutineDraft(draftFromRoutine(routine));
-                        setRoutineWebhookSecret(null);
-                        setEditingRoutine(routine);
-                        setRoutineError(null);
-                        setPanel("routine");
-                      }}
-                      onStop={() => void stopRun()}
-                    />
-                  );
-                })}
-              </div>
+              </Suspense>
             ) : null}
             {panel === "create-group" ? (
               <CreateGroupForm
@@ -4151,6 +4209,9 @@ export function ShellPage({
             >
               <DropdownMenuItem
                 variant="destructive"
+                onPointerEnter={preloadDialogs}
+                onFocus={preloadDialogs}
+                onPointerDown={preloadDialogs}
                 onClick={() => {
                   const target = spaces.find((space) => space.id === spaceMenu.id);
                   if (target) setDeleteSpaceTarget(target);
@@ -4165,90 +4226,100 @@ export function ShellPage({
         ) : null}
 
         {deleteTarget ? (
-          <DeleteBotDialog
-            bot={deleteTarget}
-            onCancel={() => setDeleteTarget(null)}
-            onConfirm={async (deleteMemories) => {
-              await rpc.bots.remove({ botId: deleteTarget.id, deleteMemories });
-              setDeleteTarget(null);
-              setPanel(null);
-              await refreshBots(true);
-            }}
-          />
+          <Suspense fallback={null}>
+            <DeleteBotDialog
+              bot={deleteTarget}
+              onCancel={() => setDeleteTarget(null)}
+              onConfirm={async (deleteMemories) => {
+                await rpc.bots.remove({ botId: deleteTarget.id, deleteMemories });
+                setDeleteTarget(null);
+                setPanel(null);
+                await refreshBots(true);
+              }}
+            />
+          </Suspense>
         ) : null}
 
         {deleteGroupTarget ? (
-          <DeleteItemDialog
-            item={deleteGroupTarget}
-            noun="group"
-            onCancel={() => setDeleteGroupTarget(null)}
-            onConfirm={async () => {
-              await rpc.groups.remove({ groupId: deleteGroupTarget.id });
-              setDeleteGroupTarget(null);
-              setPanel(null);
-              await refreshBots(true);
-            }}
-          />
+          <Suspense fallback={null}>
+            <DeleteItemDialog
+              item={deleteGroupTarget}
+              noun="group"
+              onCancel={() => setDeleteGroupTarget(null)}
+              onConfirm={async () => {
+                await rpc.groups.remove({ groupId: deleteGroupTarget.id });
+                setDeleteGroupTarget(null);
+                setPanel(null);
+                await refreshBots(true);
+              }}
+            />
+          </Suspense>
         ) : null}
 
         {deleteSpaceTarget ? (
-          <DeleteItemDialog
-            item={deleteSpaceTarget}
-            noun="space"
-            description={
-              <Trans>Only empty spaces can be deleted. Delete its bots and groups first.</Trans>
-            }
-            onCancel={() => setDeleteSpaceTarget(null)}
-            onConfirm={async () => {
-              const targetId = deleteSpaceTarget.id;
-              const result = await rpc.spaces.remove({ spaceId: targetId });
-              setDeleteSpaceTarget(null);
-              setPanel(null);
-              const effectiveSpaceId = selectedSpaceId() ?? bootstrapMe?.spaceId;
-              if (effectiveSpaceId === targetId) {
-                // The auth boundary changed, so reload like a space switch.
-                if (selectSpace(result.activeSpaceId)) {
-                  window.location.assign("/app/bots");
-                  return;
-                }
+          <Suspense fallback={null}>
+            <DeleteItemDialog
+              item={deleteSpaceTarget}
+              noun="space"
+              description={
+                <Trans>Only empty spaces can be deleted. Delete its bots and groups first.</Trans>
               }
-              await refreshBots(true);
-            }}
-          />
+              onCancel={() => setDeleteSpaceTarget(null)}
+              onConfirm={async () => {
+                const targetId = deleteSpaceTarget.id;
+                const result = await rpc.spaces.remove({ spaceId: targetId });
+                setDeleteSpaceTarget(null);
+                setPanel(null);
+                const effectiveSpaceId = selectedSpaceId() ?? bootstrapMe?.spaceId;
+                if (effectiveSpaceId === targetId) {
+                  // The auth boundary changed, so reload like a space switch.
+                  if (selectSpace(result.activeSpaceId)) {
+                    window.location.assign("/app/bots");
+                    return;
+                  }
+                }
+                await refreshBots(true);
+              }}
+            />
+          </Suspense>
         ) : null}
 
         {newSectionTarget ? (
-          <NewBotSectionDialog
-            bot={newSectionTarget.chat}
-            onCancel={() => setNewSectionTarget(null)}
-            onConfirm={async (name) => {
-              await rpc.botSections.create(
-                newSectionTarget.kind === "bot"
-                  ? { botId: newSectionTarget.chat.id, name }
-                  : { groupId: newSectionTarget.chat.id, name },
-              );
-              setNewSectionTarget(null);
-              await refreshBots();
-            }}
-          />
+          <Suspense fallback={null}>
+            <NewBotSectionDialog
+              bot={newSectionTarget.chat}
+              onCancel={() => setNewSectionTarget(null)}
+              onConfirm={async (name) => {
+                await rpc.botSections.create(
+                  newSectionTarget.kind === "bot"
+                    ? { botId: newSectionTarget.chat.id, name }
+                    : { groupId: newSectionTarget.chat.id, name },
+                );
+                setNewSectionTarget(null);
+                await refreshBots();
+              }}
+            />
+          </Suspense>
         ) : null}
 
         {renameSectionTarget ? (
-          <RenameBotSectionDialog
-            section={renameSectionTarget.section}
-            onCancel={() => setRenameSectionTarget(null)}
-            onConfirm={async (name) => {
-              await rpc.botSections.update(
-                {
-                  sectionId: renameSectionTarget.section.id,
-                  name,
-                },
-                { context: { spaceId: renameSectionTarget.spaceId } },
-              );
-              setRenameSectionTarget(null);
-              await refreshBots();
-            }}
-          />
+          <Suspense fallback={null}>
+            <RenameBotSectionDialog
+              section={renameSectionTarget.section}
+              onCancel={() => setRenameSectionTarget(null)}
+              onConfirm={async (name) => {
+                await rpc.botSections.update(
+                  {
+                    sectionId: renameSectionTarget.section.id,
+                    name,
+                  },
+                  { context: { spaceId: renameSectionTarget.spaceId } },
+                );
+                setRenameSectionTarget(null);
+                await refreshBots();
+              }}
+            />
+          </Suspense>
         ) : null}
 
         {sectionMenu ? (
@@ -4276,6 +4347,9 @@ export function ShellPage({
               className="w-[220px]"
             >
               <DropdownMenuItem
+                onPointerEnter={preloadDialogs}
+                onFocus={preloadDialogs}
+                onPointerDown={preloadDialogs}
                 onClick={() => {
                   setRenameSectionTarget({
                     section: sectionMenu.section,
@@ -4291,78 +4365,112 @@ export function ShellPage({
           </DropdownMenu>
         ) : null}
 
-        <CommandPalette
-          open={commandPaletteOpen}
-          onOpenChange={setCommandPaletteOpen}
-          bots={bots}
-          onOpenTerminal={terminalSurface.open}
-          onSelectBot={(id) => {
-            setMobileSidebarOpen(false);
-            navigate(`/app/${id}`);
-          }}
-        />
+        {commandPaletteUsed ? (
+          <Suspense fallback={null}>
+            <CommandPalette
+              open={commandPaletteOpen}
+              onOpenChange={setCommandPaletteState}
+              bots={bots}
+              onOpenTerminal={terminalSurface.open}
+              workspaceTabs={
+                active
+                  ? [
+                      { id: "tasks", label: t`Tasks` },
+                      ...(computer?.computerId &&
+                      computer.kind !== "fake" &&
+                      computer.kind !== "desktop" &&
+                      (computer.state === "running" ||
+                        (computer.homeRevision && computer.homeRevision !== "empty"))
+                        ? [{ id: "files", label: t`Files` }]
+                        : []),
+                      { id: "routines", label: t`Routines` },
+                      ...(computer?.capabilities?.graphical === true
+                        ? [{ id: "screen", label: t`Screen` }]
+                        : []),
+                    ]
+                  : []
+              }
+              onOpenWorkspaceTab={(tab) => {
+                setWorkspaceTab(tab);
+                setPanel("computer");
+              }}
+              onSelectBot={(id) => {
+                setMobileSidebarOpen(false);
+                navigate(`/app/${id}`);
+              }}
+            />
+          </Suspense>
+        ) : null}
 
         {newSpaceOpen ? (
-          <NewSpaceDialog
-            onCancel={() => setNewSpaceOpen(false)}
-            onConfirm={async (name) => {
-              const space = await rpc.spaces.create({ name });
-              if (!selectSpace(space.id)) {
-                setNewSpaceOpen(false);
-                await refreshBots();
-                return;
-              }
-              window.location.assign("/onboarding");
-            }}
-          />
+          <Suspense fallback={null}>
+            <NewSpaceDialog
+              onCancel={() => setNewSpaceOpen(false)}
+              onConfirm={async (name) => {
+                const space = await rpc.spaces.create({ name });
+                if (!selectSpace(space.id)) {
+                  setNewSpaceOpen(false);
+                  await refreshBots();
+                  return;
+                }
+                window.location.assign("/onboarding");
+              }}
+            />
+          </Suspense>
         ) : null}
 
         {pickerInfoTopic ? (
-          <PickerInfoDialog topic={pickerInfoTopic} onClose={() => setPickerInfoTopic(null)} />
+          <Suspense fallback={null}>
+            <PickerInfoDialog topic={pickerInfoTopic} onClose={() => setPickerInfoTopic(null)} />
+          </Suspense>
         ) : null}
 
         {clearTarget ? (
-          <ClearConversationDialog
-            bot={clearTarget.chat}
-            onCancel={() => setClearTarget(null)}
-            onConfirm={async () => {
-              await rpc.threads.clear(
-                clearTarget.kind === "bot"
-                  ? { botId: clearTarget.chat.id }
-                  : { groupId: clearTarget.chat.id },
-              );
-              if (
-                (clearTarget.kind === "bot" && active?.id === clearTarget.chat.id) ||
-                (clearTarget.kind === "group" && activeGroup?.id === clearTarget.chat.id)
-              ) {
-                expandedHistoryThread.current = null;
-                pinnedAroundRef.current = null;
-                historyEpoch.current += 1;
-                updateSnapshot((current) =>
-                  current ? { ...current, messages: [], olderCursor: null, run: null } : current,
+          <Suspense fallback={null}>
+            <ClearConversationDialog
+              bot={clearTarget.chat}
+              onCancel={() => setClearTarget(null)}
+              onConfirm={async () => {
+                await rpc.threads.clear(
+                  clearTarget.kind === "bot"
+                    ? { botId: clearTarget.chat.id }
+                    : { groupId: clearTarget.chat.id },
                 );
-              }
-              setClearTarget(null);
-              await refreshBots();
-            }}
-          />
+                if (
+                  (clearTarget.kind === "bot" && active?.id === clearTarget.chat.id) ||
+                  (clearTarget.kind === "group" && activeGroup?.id === clearTarget.chat.id)
+                ) {
+                  expandedHistoryThread.current = null;
+                  pinnedAroundRef.current = null;
+                  historyEpoch.current += 1;
+                  updateSnapshot((current) =>
+                    current ? { ...current, messages: [], olderCursor: null, run: null } : current,
+                  );
+                }
+                setClearTarget(null);
+                await refreshBots();
+              }}
+            />
+          </Suspense>
         ) : null}
 
         {deleteRoutineTarget ? (
-          <DeleteItemDialog
-            item={deleteRoutineTarget}
-            noun="routine"
-            onCancel={() => setDeleteRoutineTarget(null)}
-            onConfirm={async () => {
-              const target = deleteRoutineTarget;
-              await rpc.routines.remove({ routineId: target.id });
-              setDeleteRoutineTarget(null);
-              setEditingRoutine((current) => (current?.id === target.id ? null : current));
-              if (activeBotId.current !== target.botId) return;
-              await refreshThread(target.botId);
-              if (activeBotId.current === target.botId) setPanel("computer");
-            }}
-          />
+          <Suspense fallback={null}>
+            <DeleteItemDialog
+              item={deleteRoutineTarget}
+              noun="routine"
+              onCancel={() => setDeleteRoutineTarget(null)}
+              onConfirm={async () => {
+                const target = deleteRoutineTarget;
+                await rpc.routines.remove({ routineId: target.id });
+                setDeleteRoutineTarget(null);
+                setEditingRoutine((current) => (current?.id === target.id ? null : current));
+                if (activeBotId.current !== target.botId) return;
+                await refreshThread(target.botId);
+                if (activeBotId.current === target.botId) setPanel("computer");
+              }}
+            />
+          </Suspense>
         ) : null}
 
         {messagingSettingsOpen ? (
@@ -4628,7 +4736,7 @@ export function ShellPage({
             size="icon"
             className="app-no-drag"
             aria-label={t`Search`}
-            onClick={() => setCommandPaletteOpen(true)}
+            onClick={() => setCommandPaletteState(true)}
           >
             <Search size={17} />
           </Button>
@@ -5044,7 +5152,7 @@ const Transcript = memo(function Transcript({
         aria-hidden={atEnd}
         tabIndex={atEnd ? -1 : 0}
         onClick={jumpToLatest}
-        className={`absolute bottom-4 left-1/2 z-20 grid h-9 w-9 -translate-x-1/2 place-items-center rounded-full border border-border bg-muted/95 text-foreground/75 shadow-md backdrop-blur transition-[opacity,transform,background-color] duration-200 ease-[cubic-bezier(.22,1,.36,1)] hover:bg-border motion-reduce:transition-none ${
+        className={`absolute bottom-4 left-1/2 z-20 grid h-9 w-9 -translate-x-1/2 place-items-center rounded-full border border-border bg-muted/95 text-foreground/75 shadow-md backdrop-blur transition-[opacity,transform,background-color] duration-[240ms] ease-[cubic-bezier(0.2,0.7,0.2,1)] hover:bg-border motion-reduce:transition-none ${
           atEnd ? "pointer-events-none translate-y-2 opacity-0" : "translate-y-0 opacity-100"
         }`}
       >
@@ -6554,20 +6662,6 @@ function DesktopKindEmptyState({ className }: { className?: string }) {
       </Trans>
     </div>
   );
-}
-
-function computerPlaceholder(
-  state: ComputerStatus["state"] | undefined,
-  booting: boolean,
-  label: string,
-  imagePullPercent?: number | null,
-) {
-  if (imagePullPercent !== undefined) return computerPullLabel(imagePullPercent);
-  if (state === "booting" || booting) return t`Booting live desktop…`;
-  if (state === "running") return label;
-  if (state === "suspended") return t`Computer is asleep. Open it to wake.`;
-  if (state === "error") return t`Computer failed to boot`;
-  return t`Computer is stopped`;
 }
 
 function computerPullLabel(percent: number | null | undefined) {

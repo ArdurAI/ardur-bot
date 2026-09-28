@@ -1,6 +1,6 @@
-import type { IdeEntry, IdeFile, IdeRoot } from "@ardurbot/contracts";
-import { Stack } from "expo-router";
-import { useEffect, useState } from "react";
+import type { IdeEntry, IdeRoot, WorkspaceContext } from "@ardurbot/contracts";
+import { Stack, useLocalSearchParams } from "expo-router";
+import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Button, ScrollView, Text, View } from "react-native";
 import { rpc } from "../lib/api";
 import { hasPairedDevice } from "../lib/dispatch";
@@ -9,25 +9,48 @@ import { useMobileTokens } from "../lib/native";
 
 /** Native file browsing uses the same registered-root authorization as the IDE. */
 export default function FilesScreen() {
+  const { botId } = useLocalSearchParams<{ botId?: string }>();
   const { t } = useI18n();
   const tokens = useMobileTokens();
   const [roots, setRoots] = useState<IdeRoot[]>([]);
   const [rootId, setRootId] = useState("");
   const [path, setPath] = useState("");
   const [entries, setEntries] = useState<IdeEntry[]>([]);
-  const [file, setFile] = useState<IdeFile | null>(null);
+  const [file, setFile] = useState<{ content: string; binary: boolean } | null>(null);
   const [error, setError] = useState(false);
   const [busy, setBusy] = useState(false);
   const [retry, setRetry] = useState(0);
   const [paired, setPaired] = useState<boolean | null>(null);
   const [rootsReady, setRootsReady] = useState(false);
+  const [workspace, setWorkspace] = useState<WorkspaceContext | null>(null);
+  const currentBot = useRef(botId);
+  currentBot.current = botId;
+  const scopedWorkspace = workspace?.botId === botId ? workspace : null;
   useEffect(() => {
     const abort = new AbortController();
+    setFile(null);
+    setPath("");
+    setEntries([]);
+    setWorkspace(null);
+    setRootsReady(false);
     void hasPairedDevice()
       .then(async (paired) => {
         if (abort.signal.aborted) return;
         setPaired(paired);
         if (paired) return;
+        if (botId) {
+          const context = await rpc<WorkspaceContext>(
+            "workspace/describe",
+            { botId },
+            { signal: abort.signal },
+          );
+          if (!abort.signal.aborted) {
+            setWorkspace(context);
+            setRootsReady(true);
+            setError(false);
+          }
+          return;
+        }
         const rows = await rpc<IdeRoot[]>("ide/roots", {}, { signal: abort.signal });
         return rows;
       })
@@ -43,13 +66,33 @@ export default function FilesScreen() {
         if (!abort.signal.aborted) setError(true);
       });
     return () => abort.abort();
-  }, [retry]);
+  }, [botId, retry]);
   useEffect(() => {
-    if (!rootId) return;
+    if (
+      botId
+        ? !scopedWorkspace?.computerId ||
+          scopedWorkspace.generation === null ||
+          scopedWorkspace.files === "unavailable"
+        : !rootId
+    )
+      return;
     const abort = new AbortController();
     setBusy(true);
     setError(false);
-    void rpc<{ entries: IdeEntry[] }>("ide/list", { rootId, path }, { signal: abort.signal })
+    const request =
+      botId && scopedWorkspace?.computerId && scopedWorkspace.generation !== null
+        ? rpc<{ entries: IdeEntry[] }>(
+            "workspace/list",
+            {
+              botId,
+              computerId: scopedWorkspace.computerId,
+              generation: scopedWorkspace.generation,
+              path,
+            },
+            { signal: abort.signal },
+          )
+        : rpc<{ entries: IdeEntry[] }>("ide/list", { rootId, path }, { signal: abort.signal });
+    void request
       .then((result) => {
         if (!abort.signal.aborted) setEntries(result.entries);
       })
@@ -60,7 +103,7 @@ export default function FilesScreen() {
         if (!abort.signal.aborted) setBusy(false);
       });
     return () => abort.abort();
-  }, [rootId, path, retry]);
+  }, [botId, scopedWorkspace, rootId, path, retry]);
   async function open(entry: IdeEntry) {
     if (entry.kind === "dir") {
       setPath(entry.path);
@@ -69,7 +112,21 @@ export default function FilesScreen() {
     setBusy(true);
     setError(false);
     try {
-      setFile(await rpc<IdeFile>("ide/read", { rootId, path: entry.path }));
+      if (botId && scopedWorkspace?.computerId && scopedWorkspace.generation !== null) {
+        const result = await rpc<{ path: string; content: string }>("workspace/read", {
+          botId,
+          computerId: scopedWorkspace.computerId,
+          generation: scopedWorkspace.generation,
+          path: entry.path,
+        });
+        if (currentBot.current === botId) setFile({ content: result.content, binary: false });
+      } else {
+        const result = await rpc<{ content: string; binary: boolean }>("ide/read", {
+          rootId,
+          path: entry.path,
+        });
+        if (currentBot.current === botId) setFile(result);
+      }
     } catch {
       setError(true);
     } finally {
@@ -98,6 +155,16 @@ export default function FilesScreen() {
           <Button title={t("Retry")} onPress={() => setRetry((n) => n + 1)} />
         </View>
       ) : null}
+      {botId && scopedWorkspace?.files === "unavailable" ? (
+        <Text style={{ color: tokens.mutedForeground }}>
+          {t("Files are unavailable on this computer.")}
+        </Text>
+      ) : null}
+      {botId && scopedWorkspace && scopedWorkspace.files !== "unavailable" ? (
+        <Text style={{ color: tokens.mutedForeground }}>
+          {scopedWorkspace.files === "live" ? t("Live files") : t("Saved files")}
+        </Text>
+      ) : null}
       {file ? (
         <>
           <Button title={t("Back")} onPress={() => setFile(null)} />
@@ -110,24 +177,25 @@ export default function FilesScreen() {
         </>
       ) : (
         <>
-          {roots.map((root) => (
-            <Button
-              key={root.id}
-              title={root.name}
-              disabled={busy || rootId === root.id}
-              onPress={() => {
-                setRootId(root.id);
-                setPath("");
-              }}
-            />
-          ))}
+          {!botId &&
+            roots.map((root) => (
+              <Button
+                key={root.id}
+                title={root.name}
+                disabled={busy || rootId === root.id}
+                onPress={() => {
+                  setRootId(root.id);
+                  setPath("");
+                }}
+              />
+            ))}
           {path ? (
             <Button
               title={t("Back")}
               onPress={() => setPath(path.split("/").slice(0, -1).join("/"))}
             />
           ) : null}
-          {rootsReady && !roots.length && !error ? (
+          {!botId && rootsReady && !roots.length && !error ? (
             <Text style={{ color: tokens.foreground }}>{t("No registered folders")}</Text>
           ) : null}
           {entries.map((entry) => (

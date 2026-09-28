@@ -37,7 +37,7 @@ export function SpaceSearchResults({
             <span className="truncate text-[15px] font-medium text-foreground" dir="auto">
               {hit.title}
             </span>
-            <span className="shrink-0 text-[12px] uppercase tracking-wide text-muted-foreground/80">
+            <span className="shrink-0 font-mono text-[12px] tracking-wide text-muted-foreground/80">
               {hit.kind}
             </span>
           </div>

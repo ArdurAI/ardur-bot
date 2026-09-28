@@ -16,6 +16,7 @@ export function effectiveHermesConfig(value: unknown): HermesRuntimeConfig {
 }
 
 export function hermesConfigHash(config: HermesRuntimeConfig): string {
+  // Historical pins retain the exact B11 ordered-array identity.
   return createHash("sha256")
     .update(JSON.stringify([config.version, config.maxProviderRequests, config.timeoutMs]))
     .digest("hex");

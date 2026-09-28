@@ -293,6 +293,8 @@ export function dashboardFixture(botCount = 1) {
         },
         "messaging/status": { enabled: false, providers: [], identities: [], openSignup: false },
         "voice/status": { transcribe: false, synthesize: false },
+        "integrations/list": { catalog: [], connections: [] },
+        "mcp/servers/list": [],
         "memory/config": null,
         "memory/providerConfig": {
           generation: 0,

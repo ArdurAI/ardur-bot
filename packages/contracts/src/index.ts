@@ -58,3 +58,4 @@ export * from "./scoreboard-trace.js";
 export * from "./search.js";
 export * from "./team.js";
 export * from "./terminal.js";
+export * from "./workspace.js";

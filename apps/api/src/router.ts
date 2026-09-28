@@ -316,6 +316,8 @@ import {
   toVoiceStatus,
   voiceContext,
 } from "./voice.js";
+import { createWorkspaceFiles } from "./workspace-files.js";
+import { workspaceTasks } from "./workspace-tasks.js";
 
 const MAX_COMPUTER_TEXT_FILE_BYTES = 2 * 1024 * 1024;
 const THREAD_MESSAGE_PAGE_SIZE = 100;
@@ -639,6 +641,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
   const systemSettings = createSystemSettings(deps.prisma);
   const commands = createCommandRoutes(deps);
   const ide = createIdeFiles(deps);
+  const workspaceFiles = createWorkspaceFiles(deps);
   const ideChanges = createIdeChanges(deps, ide);
   return os.router({
     ...createCustomizationRoutes(deps),
@@ -705,6 +708,20 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         ide.save(context.actor, input, context.signal),
       ),
       changes: authed.ide.changes.handler(({ context, input }) => ideChanges(context.actor, input)),
+    },
+    workspace: {
+      describe: authed.workspace.describe.handler(({ context, input }) =>
+        workspaceFiles.describe(context.actor, input.botId),
+      ),
+      list: authed.workspace.list.handler(({ context, input }) =>
+        workspaceFiles.list(context.actor, input),
+      ),
+      read: authed.workspace.read.handler(({ context, input }) =>
+        workspaceFiles.read(context.actor, input),
+      ),
+      tasks: authed.workspace.tasks.handler(({ context, input }) =>
+        workspaceTasks(deps.prisma, context.actor, input.botId),
+      ),
     },
     terminal: {
       close: authed.terminal.close.handler(

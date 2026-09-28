@@ -353,7 +353,7 @@ test("memory-documents: inspect history and approve a reviewed change", async ({
   await capture(page, "docs-memory-documents-open");
   await memory.getByRole("button", { name: /Preferences.*Updated/ }).click();
   const document = memory.getByRole("region", { name: "Memory document" });
-  await expect(document.getByText("Use concise answers.", { exact: true })).toBeVisible();
+  await expect(document.getByText("Use concise answers.", { exact: true }).first()).toBeVisible();
   await capture(page, "docs-memory-documents-detail");
   await document.getByText("History", { exact: true }).click();
   const firstRevision = document

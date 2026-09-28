@@ -2,9 +2,15 @@
 
 The builder can inspect, edit and hand off code without leaving the app. The operator can inspect a reachable computer and use its existing terminal. Researchers can inspect scripts and recorded file changes. The page runs in the web UI that Electron hosts; mobile navigation is unchanged.
 
-Open `/app/ide` in the authenticated app. The computer picker offers the deployment owner's registered host folders and the current space's accessible sandbox computer homes. Without a paired host service, a source checkout offers the home folder. The installed app's local mode instead sets `ARDURBOT_HOST_ROOTS_FILE` to its own list, which **Add folder** under Settings, Computers edits: those are the same folders commands may use, there are none until a folder is added, and folders paired with another server never appear. A tree expansion lists one directory. Quick open searches file names by walking directories on demand. It stops when the dialog closes. Change notifications use the existing thread event streams; there is no filesystem polling.
+Open `/app/ide` in the authenticated app. The computer picker offers the deployment owner's registered host folders and the current space's accessible sandbox computer homes. Without a paired host service, a source checkout offers the home folder. The installed app's local mode instead sets `ARDURBOT_HOST_ROOTS_FILE` to its own list, which **Add folder** under Settings, Computers edits: those are the same folders commands may use, there are none until a folder is added, and folders paired with another server never appear. A tree expansion lists one directory. Quick open searches file names by walking directories on demand. It stops when the dialog closes. The IDE refreshes visible file listings periodically.
 
-The top navigation registry is absent in this branch. When `apps/web/src/pages/shell/top-nav.ts` arrives, register `IDE` with `registerTopNavItem` at order 40. This change deliberately adds only the route until that registry exists.
+The top navigation registry keeps IDE at order 30. The route remains the full-window editor and registered-root picker.
+
+## Workspace pane
+
+On web and Electron, the bot conversation has a resizable right-hand Workspace pane. Tasks lists authorized running, queued, recent and delegated work for the selected bot, plus a Routines tab. Open conversation follows the recorded thread target; stopping a conversation uses the thread-wide stop action, while stopping delegated work cancels the task tree. Scheduled routines remain in Routines rather than appearing as queued work.
+
+Files reads the selected bot's workspace with a lazy tree, quick open and the same CodeMirror text viewer used by IDE. It labels live provider files versus saved computer-home files. The pane is read only while server-side write admission is not available; use the existing IDE route for authorized editing. A host bot has no implicit registered folder, and missing saved homes report Files unavailable. Binary and large previews do not open in the editor. Selecting a file never boots a computer. The Screen tab appears only when the current computer status reports graphical support; opening it is explicit. Mobile keeps its native registered-root Files screen and adds bot-scoped Files and Tasks from bot actions. External-thread review remains on web and desktop.
 
 ## Editor and dependencies
 

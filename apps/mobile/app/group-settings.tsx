@@ -230,18 +230,23 @@ export default function GroupSettingsScreen() {
         />
         {group?.members
           .filter((member) => selected.includes(member.botId))
-          .map((member) => (
-            <GroupMemberModelControl
-              key={member.botId}
-              groupId={group.id}
-              member={member}
-              catalog={catalog}
-              credentials={credentials}
-              experimental={bots.find((bot) => bot.id === member.botId)?.runtimeExperimental}
-              onSaved={onGroupSaved}
-              onError={setError}
-            />
-          ))}
+          .map((member) => {
+            const bot = bots.find((item) => item.id === member.botId);
+            return (
+              <GroupMemberModelControl
+                key={member.botId}
+                groupId={group.id}
+                member={member}
+                catalog={catalog}
+                credentials={credentials}
+                bot={bot}
+                botRuntimeKind={bot?.runtimeKind}
+                experimental={bot?.runtimeExperimental}
+                onSaved={onGroupSaved}
+                onError={setError}
+              />
+            );
+          })}
         <Pressable
           accessibilityRole="button"
           onPress={() =>

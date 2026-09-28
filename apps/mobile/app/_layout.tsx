@@ -154,6 +154,7 @@ export default function Layout() {
                 />
                 <Stack.Screen name="routine" options={{ title: t("Routine") }} />
                 <Stack.Screen name="computer" options={{ title: t("Computer") }} />
+                <Stack.Screen name="workspace-tasks" options={{ title: t("Tasks") }} />
               </Stack>
               <ComputerUpdateProgress />
             </ThemeProvider>

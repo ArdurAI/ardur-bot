@@ -1,6 +1,6 @@
 import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { spawn } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type {
@@ -9,15 +9,18 @@ import type {
   AgentRuntime,
   AgentRuntimeEvent,
 } from "@ardurbot/adapter-kit";
+import type { HermesExecutionEnvelopeSchema } from "@ardurbot/contracts/runtime-config";
 import type { RuntimeInfo } from "@ardurbot/contracts/runtime-pins";
 import {
   HERMES_RUNTIME_DEFAULTS,
   HermesRuntimeConfigSchema,
 } from "@ardurbot/contracts/runtime-pins";
+import type * as z from "zod";
 import { redactMcpText } from "../mcp-diagnostics.js";
 import { AcpClient, AcpClientError } from "./acp-client.js";
 import { startArdurMcpServer } from "./ardur-mcp-server.js";
 import { createArdurToolBridge } from "./claude-mcp-bridge.js";
+import { validateCompiledHermesProfile } from "./hermes-config.js";
 import { RuntimeQueue, stopNative } from "./native-process.js";
 
 export interface HermesLaunchSpec {
@@ -143,10 +146,13 @@ export function hermesConfig(request: AgentRunRequest, pinned = false) {
   };
 }
 
-export function hermesContextDocument(request: AgentRunRequest) {
+export function hermesContextDocument(
+  request: AgentRunRequest,
+  context?: { maxInputBytes: number; overflow: "trim" | "stop" },
+) {
   const instructions = request.instructions.trim();
-  // The pinned prompt builder loads SOUL.md as one context file with a 16 KiB budget.
-  const limit = 16 * 1024;
+  // A byte limit no greater than Hermes's character limit keeps the complete document intact.
+  const limit = context?.maxInputBytes ?? 16 * 1024;
   if (Buffer.byteLength(instructions) > limit)
     throw new Error("Hermes instructions exceed the context limit. Shorten the bot instructions.");
   const header =
@@ -159,19 +165,21 @@ export function hermesContextDocument(request: AgentRunRequest) {
       : instructions;
   let trimmed = false;
   while (history.length && Buffer.byteLength(document(trimmed)) > limit) {
+    if (context?.overflow === "stop")
+      throw new Error("Context exceeds the selected limit. Increase it or allow trimming.");
     trimmed = true;
     if (history.length === 1) {
-      const content = history[0]!.content;
+      const content = Array.from(history[0]!.content);
       let low = 0;
       let high = content.length;
       while (low < high) {
         const size = Math.ceil((low + high) / 2);
-        history[0]!.content = content.slice(-size);
+        history[0]!.content = content.slice(-size).join("");
         if (Buffer.byteLength(document(true)) <= limit) low = size;
         else high = size - 1;
       }
       if (low) {
-        history[0]!.content = content.slice(-low);
+        history[0]!.content = content.slice(-low).join("");
         break;
       }
       history.pop();
@@ -263,6 +271,8 @@ export class HermesRuntime implements AgentRuntime {
       /** The owned launcher supplies provider configuration directly to AIAgent. */
       pinned?: boolean;
       stagingParent?: string;
+      executionEnvelope?: z.infer<typeof HermesExecutionEnvelopeSchema>;
+      onProfileAcknowledged?: () => void;
       /** Test and observability hook, called once after the turn is fenced and its queue has ended. */
       onTurnFinished?: (runId: string, reason: "done" | "pause" | "failure" | "cancel") => void;
     },
@@ -353,15 +363,36 @@ export class HermesRuntime implements AgentRuntime {
     context?: Partial<AdapterContext>,
   ): AsyncIterable<AgentRuntimeEvent> {
     if (this.running.has(request.runId)) throw new Error("This Hermes run is already active.");
-    const parsedLimits = this.options.pinned
-      ? HermesRuntimeConfigSchema.safeParse(request.model.runtimePin?.runtimeConfig)
-      : null;
+    const profile = this.options.executionEnvelope
+      ? validateCompiledHermesProfile(this.options.executionEnvelope, {
+          id: request.model.id,
+          contextWindow: request.model.contextWindow ?? 0,
+          maxTokens: request.model.maxTokens ?? 0,
+          reasoning: request.model.reasoning === true,
+          acceptsImages: request.model.acceptsImages === true,
+          thinkingLevel: request.model.thinkingLevel ?? "off",
+        })
+      : undefined;
+    const parsedLimits =
+      this.options.pinned && !profile
+        ? HermesRuntimeConfigSchema.safeParse(request.model.runtimePin?.runtimeConfig)
+        : null;
     if (parsedLimits && !parsedLimits.success)
       throw new Error("The recorded Hermes limits are missing or invalid. Change the pin.");
-    const limits = parsedLimits?.data ?? HERMES_RUNTIME_DEFAULTS;
-    const config = hermesConfig(request, this.options.pinned);
+    if (
+      !profile &&
+      (request.model.runtimePin?.runtimeConfig as { version?: number } | undefined)?.version === 2
+    )
+      throw new Error("A compiled Hermes configuration is required.");
+    if (profile && !this.options.pinned) throw new Error("A pinned launcher is required.");
+    const limits =
+      profile?.envelope.runtimeConfig.limits ?? parsedLimits?.data ?? HERMES_RUNTIME_DEFAULTS;
+    const config =
+      profile?.compiled.manifest.generatedConfig ?? hermesConfig(request, this.options.pinned);
+    if (profile) hermesConfig(request, true);
     const queue = new RuntimeQueue<AgentRuntimeEvent>(undefined, false);
     const turn: ActiveTurn = { active: true, queue };
+    let profileAcknowledged = !profile;
     this.running.set(request.runId, turn);
     const stopOnSignal = () => {
       // The generator finalizer awaits the same cleanup promise and surfaces a failure.
@@ -376,10 +407,23 @@ export class HermesRuntime implements AgentRuntime {
       home = await mkdtemp(join(this.options.stagingParent ?? tmpdir(), "ardur-hermes-"));
       const workspace = join(home, "workspace");
       await mkdir(workspace, { mode: 0o700 });
-      await writeFile(join(home, "config.yaml"), `${JSON.stringify(config, null, 2)}\n`, {
-        mode: 0o600,
-      });
-      const contextText = hermesContextDocument(request);
+      await writeFile(
+        join(home, "config.yaml"),
+        profile?.compiled.configYaml ?? `${JSON.stringify(config, null, 2)}\n`,
+        {
+          mode: 0o600,
+        },
+      );
+      if (profile)
+        await writeFile(
+          join(home, "runtime-manifest.json"),
+          `${JSON.stringify(profile.envelope)}\n`,
+          {
+            mode: 0o600,
+            flag: "wx",
+          },
+        );
+      const contextText = hermesContextDocument(request, profile?.envelope.runtimeConfig.context);
       if (contextText) await writeFile(join(home, "SOUL.md"), contextText, { mode: 0o600 });
 
       let pendingText = "";
@@ -413,7 +457,7 @@ export class HermesRuntime implements AgentRuntime {
         () => {
           void this.finishTurn(request.runId, "pause").catch(() => {});
         },
-        () => turn.active,
+        () => turn.active && profileAcknowledged,
         () => turn.flushText?.(),
       );
       mcp = await startArdurMcpServer(bridge);
@@ -421,7 +465,11 @@ export class HermesRuntime implements AgentRuntime {
       const relayKey = mcp.config.args.at(-1) ?? "";
       const secrets = [request.model.apiKey!, relayKey];
       const allowedToolTitles = new Set(
-        Array.isArray(request.tools) ? request.tools.map((tool) => `mcp__ardur__${tool.name}`) : [],
+        Array.isArray(request.tools)
+          ? request.tools
+              .filter((tool) => tool.name !== "run_subagent")
+              .map((tool) => `mcp__ardur__${tool.name}`)
+          : [],
       );
       const emitText = createHermesTextRedactor(secrets, (safe) => {
         if (!turn.active) return;
@@ -447,6 +495,20 @@ export class HermesRuntime implements AgentRuntime {
           HERMES_ACP_SKIP_CONFIGURED_MCP: "1",
           HERMES_DISABLE_LAZY_INSTALLS: "1",
           ARDUR_HERMES_PROVIDER_KEY: request.model.apiKey!,
+          ...(profile
+            ? {
+                ARDUR_HERMES_PROFILE: "hermes-ardur-v2",
+                ARDUR_HERMES_EXPECTED_HASH: profile.envelope.effectiveRuntimeConfigHash,
+                ARDUR_HERMES_ALLOWED_TOOLS: JSON.stringify(
+                  request.tools === "none"
+                    ? []
+                    : request.tools
+                        .filter((tool) => tool.name !== "run_subagent")
+                        .map((tool) => `mcp__ardur__${tool.name}`)
+                        .sort(),
+                ),
+              }
+            : {}),
           ...(this.options.pinned
             ? {
                 ARDUR_HERMES_RELAY_URL: request.model.baseUrl!,
@@ -531,9 +593,31 @@ export class HermesRuntime implements AgentRuntime {
             throw new AcpClientError("ACP did not create a session.");
           if (!turn.active) return;
           turn.sessionId = created.sessionId;
+          if (profile) {
+            const ackPath = join(home!, "runtime-ack.json");
+            const stat = await lstat(ackPath);
+            if (
+              !stat.isFile() ||
+              stat.isSymbolicLink() ||
+              (stat.mode & 0o077) !== 0 ||
+              stat.size > 512
+            )
+              throw new Error("Hermes configuration acknowledgment is invalid.");
+            const ack = JSON.parse(await readFile(ackPath, "utf8")) as Record<string, unknown>;
+            if (
+              Object.keys(ack).sort().join(",") !== "configurationHash,profile,sessionId" ||
+              ack.configurationHash !== profile.envelope.effectiveRuntimeConfigHash ||
+              ack.profile !== "hermes-ardur-v2" ||
+              ack.sessionId !== created.sessionId
+            )
+              throw new Error("Hermes configuration acknowledgment does not match.");
+            profileAcknowledged = true;
+            this.options.onProfileAcknowledged?.();
+          }
           await request.onRuntimeInfo?.({
             runtimeKind: "hermes" as RuntimeInfo["runtimeKind"],
             sessionId: created.sessionId,
+            configurationHash: profile?.envelope.effectiveRuntimeConfigHash,
             effortAttested: false,
             effortAttestationReason: "ACP does not attest the effort applied to provider requests.",
           });
