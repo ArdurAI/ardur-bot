@@ -139,6 +139,17 @@ describe("site facts", () => {
     expect(SiteProductSchema.safeParse(ninth).success).toBe(false);
   });
 
+  it("rejects an accidental unpublish in check mode", async () => {
+    const root = await fixture();
+    const file = path.join(root, "site/data/feature-docs.json");
+    const manifest = JSON.parse(await readFile(file, "utf8"));
+    for (const feature of manifest.features) feature.status = "draft";
+    await writeFile(file, `${JSON.stringify(manifest, null, 2)}\n`);
+    await expect(runSiteFacts("check", root)).rejects.toThrow(
+      "Feature documentation needs at least one published page.",
+    );
+  });
+
   it("derives memory storage and publication choices from shipped code", async () => {
     const root = await fixture();
     await runSiteFacts("write", root);

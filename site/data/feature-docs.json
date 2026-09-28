@@ -49,8 +49,10 @@
       },
       "steps": [
         {
-          "id": "open",
-          "aliases": [],
+          "id": "open-sign-in",
+          "aliases": [
+            "open"
+          ],
           "text": "Open the sign-in page and find the email form.",
           "uiLabels": [
             "Sign in to Ardur",
@@ -62,8 +64,10 @@
           "availableSince": "0.1.0-alpha.1"
         },
         {
-          "id": "error",
-          "aliases": [],
+          "id": "show-connection-error",
+          "aliases": [
+            "error"
+          ],
           "text": "Submit the email form while the server cannot be reached.",
           "uiLabels": [
             "Email",
@@ -76,8 +80,10 @@
           "availableSince": "0.1.0-alpha.1"
         },
         {
-          "id": "recovery",
-          "aliases": [],
+          "id": "open-password-recovery",
+          "aliases": [
+            "recovery"
+          ],
           "text": "Choose password recovery from the sign-in page.",
           "uiLabels": [
             "Forgot password?",
@@ -140,8 +146,10 @@
       },
       "steps": [
         {
-          "id": "open",
-          "aliases": [],
+          "id": "open-model-connection",
+          "aliases": [
+            "open"
+          ],
           "text": "Open the required model connection form.",
           "uiLabels": [
             "Connect a model",
@@ -153,8 +161,10 @@
           "availableSince": "0.1.0-alpha.1"
         },
         {
-          "id": "connect",
-          "aliases": [],
+          "id": "enter-connection-key",
+          "aliases": [
+            "connect"
+          ],
           "text": "Enter a key for the selected connection.",
           "uiLabels": [
             "API key",
@@ -510,8 +520,10 @@
       },
       "steps": [
         {
-          "id": "open",
-          "aliases": [],
+          "id": "open-new-bot-menu",
+          "aliases": [
+            "open"
+          ],
           "text": "Open the bot creation picker.",
           "uiLabels": [
             "Create",
@@ -522,8 +534,10 @@
           "availableSince": "0.1.0-alpha.1"
         },
         {
-          "id": "form",
-          "aliases": [],
+          "id": "open-new-bot-form",
+          "aliases": [
+            "form"
+          ],
           "text": "Open the new bot form.",
           "uiLabels": [
             "New bot",
@@ -535,8 +549,10 @@
           "availableSince": "0.1.0-alpha.1"
         },
         {
-          "id": "private",
-          "aliases": [],
+          "id": "choose-private-computer",
+          "aliases": [
+            "private"
+          ],
           "text": "Name the bot and choose Private computer mode.",
           "uiLabels": [
             "Name",
@@ -547,8 +563,10 @@
           "availableSince": "0.1.0-alpha.1"
         },
         {
-          "id": "ready",
-          "aliases": [],
+          "id": "open-created-bot",
+          "aliases": [
+            "ready"
+          ],
           "text": "Choose Create to open the new bot conversation.",
           "uiLabels": [
             "Create"
@@ -849,8 +867,10 @@
       "settingsPath": {},
       "steps": [
         {
-          "id": "pending",
-          "aliases": [],
+          "id": "review-pending-action",
+          "aliases": [
+            "pending"
+          ],
           "text": "Inspect the pending approval card.",
           "uiLabels": [
             "Allow once",
@@ -861,8 +881,10 @@
           "availableSince": "0.1.0-alpha.1"
         },
         {
-          "id": "denied",
-          "aliases": [],
+          "id": "see-denied-action",
+          "aliases": [
+            "denied"
+          ],
           "text": "Choose Deny for the request.",
           "uiLabels": [
             "Deny"
@@ -1183,7 +1205,7 @@
     {
       "id": "comparisons",
       "aliases": [],
-      "title": "Compare with…",
+      "title": "Compare with\u2026",
       "summary": "Create a comparison from selected bots and shared inputs; preview its setup.",
       "area": "team-work",
       "order": 50,
@@ -1986,8 +2008,10 @@
       },
       "steps": [
         {
-          "id": "open",
-          "aliases": [],
+          "id": "open-model-settings",
+          "aliases": [
+            "open"
+          ],
           "text": "Open Settings and select Models.",
           "uiLabels": [
             "Settings",
@@ -1999,20 +2023,24 @@
           "availableSince": "0.1.0-alpha.1"
         },
         {
-          "id": "default",
-          "aliases": [],
+          "id": "choose-default-model",
+          "aliases": [
+            "default"
+          ],
           "text": "Choose another model on the connected provider to reveal the default control.",
           "uiLabels": [
             "Model",
             "Use this model"
           ],
           "screenshotId": "docs-models-default",
-          "expected": "Use this model is available for the selected model.",
+          "expected": "The Use this model button appears for the selected model.",
           "availableSince": "0.1.0-alpha.1"
         },
         {
-          "id": "add",
-          "aliases": [],
+          "id": "open-connection-form",
+          "aliases": [
+            "add"
+          ],
           "text": "Select an unconnected provider to open its key form.",
           "uiLabels": [
             "API key",
@@ -3453,7 +3481,7 @@
       "locale": "en",
       "theme": "light",
       "feature": "sign-in",
-      "step": "open"
+      "step": "open-sign-in"
     },
     {
       "id": "docs-sign-in-error",
@@ -3471,7 +3499,7 @@
       "locale": "en",
       "theme": "light",
       "feature": "sign-in",
-      "step": "error"
+      "step": "show-connection-error"
     },
     {
       "id": "docs-sign-in-recovery",
@@ -3489,7 +3517,7 @@
       "locale": "en",
       "theme": "light",
       "feature": "sign-in",
-      "step": "recovery"
+      "step": "open-password-recovery"
     },
     {
       "id": "docs-onboarding-open",
@@ -3507,7 +3535,7 @@
       "locale": "en",
       "theme": "light",
       "feature": "onboarding",
-      "step": "open"
+      "step": "open-model-connection"
     },
     {
       "id": "docs-onboarding-connect",
@@ -3525,7 +3553,7 @@
       "locale": "en",
       "theme": "light",
       "feature": "onboarding",
-      "step": "connect"
+      "step": "enter-connection-key"
     },
     {
       "id": "docs-bots-create-open",
@@ -3543,7 +3571,7 @@
       "locale": "en",
       "theme": "light",
       "feature": "bots-create",
-      "step": "open"
+      "step": "open-new-bot-menu"
     },
     {
       "id": "docs-bots-create-form",
@@ -3561,7 +3589,7 @@
       "locale": "en",
       "theme": "light",
       "feature": "bots-create",
-      "step": "form"
+      "step": "open-new-bot-form"
     },
     {
       "id": "docs-bots-create-private",
@@ -3579,7 +3607,7 @@
       "locale": "en",
       "theme": "light",
       "feature": "bots-create",
-      "step": "private"
+      "step": "choose-private-computer"
     },
     {
       "id": "docs-bots-create-ready",
@@ -3597,7 +3625,7 @@
       "locale": "en",
       "theme": "light",
       "feature": "bots-create",
-      "step": "ready"
+      "step": "open-created-bot"
     },
     {
       "id": "docs-chat-approvals-pending",
@@ -3615,7 +3643,7 @@
       "locale": "en",
       "theme": "light",
       "feature": "chat-approvals",
-      "step": "pending"
+      "step": "review-pending-action"
     },
     {
       "id": "docs-chat-approvals-denied",
@@ -3633,7 +3661,7 @@
       "locale": "en",
       "theme": "light",
       "feature": "chat-approvals",
-      "step": "denied"
+      "step": "see-denied-action"
     },
     {
       "id": "docs-models-open",
@@ -3651,7 +3679,7 @@
       "locale": "en",
       "theme": "light",
       "feature": "models",
-      "step": "open"
+      "step": "open-model-settings"
     },
     {
       "id": "docs-models-default",
@@ -3669,7 +3697,7 @@
       "locale": "en",
       "theme": "light",
       "feature": "models",
-      "step": "default"
+      "step": "choose-default-model"
     },
     {
       "id": "docs-models-add",
@@ -3687,7 +3715,7 @@
       "locale": "en",
       "theme": "light",
       "feature": "models",
-      "step": "add"
+      "step": "open-connection-form"
     }
   ]
 }
