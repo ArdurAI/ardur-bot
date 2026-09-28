@@ -92,9 +92,23 @@ describe("derived bot presence", () => {
       pendingPeerCount: 0,
       observedAt: now,
     };
-    const result = projectBotPresence({ ...input, visibleGroupId: "room" });
+    const result = projectBotPresence({
+      ...input,
+      visibleGroupId: "room",
+      callerBotId: "colleague",
+      latestDelivery: {
+        id: "other-room-delivery",
+        state: "delivered",
+        senderBotId: "worker",
+        recipientBotId: "peer",
+      },
+    });
     expect(result.availability).toBe("busy");
     expect(result.currentTaskTitle).toBeUndefined();
+    expect(result.goalId).toBeUndefined();
+    expect(result.activeRunIds).toEqual([]);
+    expect(result.activeRunCount).toBe(1);
+    expect(result.latestDeliveryId).toBeUndefined();
     expect(projectBotPresence(input).currentTaskTitle).toBe("Other-room task");
   });
 });

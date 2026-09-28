@@ -138,9 +138,16 @@ export function projectBotPresence(input: {
     roleSummary:
       presenceText(redactTaskValue(bot.title || bot.description), PRESENCE_ROLE_MAX) ?? "",
     groupIds: input.groupIds,
-    ...(selectedRun?.goalId ? { goalId: selectedRun.goalId } : {}),
+    ...(taskVisible && selectedRun?.goalId ? { goalId: selectedRun.goalId } : {}),
     availability,
-    activeRunIds: live.map((run) => run.id),
+    activeRunIds: live
+      .filter(
+        (run) =>
+          !input.visibleGroupId ||
+          !run.thread?.groupId ||
+          run.thread.groupId === input.visibleGroupId,
+      )
+      .map((run) => run.id),
     activeRunCount: live.length,
     concurrentLimit: Math.max(1, bot.concurrentRuns ?? 1),
     ...(taskVisible
@@ -168,7 +175,7 @@ export function projectBotPresence(input: {
       ? { cannotMessageReason: "This conversation is unavailable from the current task" }
       : {}),
     pendingPeerCount: input.pendingPeerCount,
-    ...(input.latestDelivery
+    ...(!input.callerBotId && input.latestDelivery
       ? {
           latestDeliveryId: input.latestDelivery.id,
           latestDeliveryState: input.latestDelivery.state,
