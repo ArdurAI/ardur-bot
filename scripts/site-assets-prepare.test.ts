@@ -1,4 +1,5 @@
 import { Buffer } from "node:buffer";
+import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -107,6 +108,7 @@ describe("site asset publication", () => {
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL/nwAAAABJRU5ErkJggg==",
       "base64",
     );
+    const hashes = new Map([[shot.id, createHash("sha256").update(png).digest("hex")]]);
     const files = new Map(
       expectedAssetFiles(withDocs)
         .filter((file) => file !== "product.json")
@@ -125,15 +127,20 @@ describe("site asset publication", () => {
     try {
       await mkdir(path.join(siteRoot, "docs"));
       await writeFile(path.join(siteRoot, shot.file), png);
-      await expect(loadDocumentationAssets(withDocs, siteRoot)).resolves.toEqual(
+      await expect(loadDocumentationAssets(withDocs, siteRoot, hashes)).resolves.toEqual(
         new Map([[shot.file, png]]),
       );
+      await expect(
+        loadDocumentationAssets(withDocs, siteRoot, new Map([[shot.id, "0".repeat(64)]])),
+      ).rejects.toThrow("evidence SHA-256");
       await writeFile(path.join(siteRoot, "docs/unused.png"), png);
-      await expect(loadDocumentationAssets(withDocs, siteRoot)).rejects.toThrow("unreferenced");
+      await expect(loadDocumentationAssets(withDocs, siteRoot, hashes)).rejects.toThrow(
+        "unreferenced",
+      );
       await rm(path.join(siteRoot, "docs/unused.png"));
       await rm(path.join(siteRoot, shot.file));
       await symlink(path.join(root, "README.md"), path.join(siteRoot, shot.file));
-      await expect(loadDocumentationAssets(withDocs, siteRoot)).rejects.toThrow(
+      await expect(loadDocumentationAssets(withDocs, siteRoot, hashes)).rejects.toThrow(
         "outside site/docs",
       );
     } finally {

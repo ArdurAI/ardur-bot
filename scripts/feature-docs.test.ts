@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -208,6 +209,10 @@ describe("feature documentation inventory", () => {
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL/nwAAAABJRU5ErkJggg==",
       "base64",
     );
+    evidence.screenshots.push({
+      id: "docs-general-open",
+      sha256: createHash("sha256").update(png).digest("hex"),
+    });
     await expect(
       validateFeatureDocs(manifest, evidence, root, async () => png),
     ).resolves.toBeDefined();
@@ -243,6 +248,11 @@ describe("feature documentation inventory", () => {
     await expect(
       validateFeatureDocs(manifest, evidence, root, async () => png),
     ).resolves.toBeDefined();
+    evidence.screenshots[0]!.sha256 = "0".repeat(64);
+    await expect(validateFeatureDocs(manifest, evidence, root, async () => png)).rejects.toThrow(
+      "evidence SHA-256",
+    );
+    evidence.screenshots[0]!.sha256 = createHash("sha256").update(png).digest("hex");
     await expect(
       validateFeatureDocs(manifest, evidence, root, async () => Buffer.alloc(250_001)),
     ).rejects.toThrow("250 KB");

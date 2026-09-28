@@ -3,8 +3,13 @@ import { createHash } from "node:crypto";
 import { appendFile, mkdir, readdir, readFile, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { FeatureDocumentationEvidenceSchema } from "../packages/contracts/src/feature-documentation.ts";
 import { type SiteProduct, SiteProductSchema } from "../packages/contracts/src/site-product.ts";
-import { assertDocumentationPng } from "./feature-docs.ts";
+import {
+  assertDocumentationPng,
+  loadValidatedFeatureDocs,
+  publishedDocumentation,
+} from "./feature-docs.ts";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -48,6 +53,7 @@ export function validateAssetSnapshot(
 export async function loadDocumentationAssets(
   product: SiteProduct,
   siteRoot: string,
+  hashes: ReadonlyMap<string, string>,
 ): Promise<Map<string, Buffer>> {
   const docsDir = path.join(siteRoot, "docs");
   const listed = await readdir(docsDir).catch((error: NodeJS.ErrnoException) => {
@@ -69,6 +75,8 @@ export async function loadDocumentationAssets(
       throw new Error(`${shot.file} resolves outside site/docs.`);
     const bytes = await readFile(resolved);
     assertDocumentationPng(bytes, shot.width, shot.height, shot.file);
+    if (createHash("sha256").update(bytes).digest("hex") !== hashes.get(shot.id))
+      throw new Error(`${shot.file} does not match its evidence SHA-256.`);
     docs.set(shot.file, bytes);
   }
   return docs;
@@ -151,6 +159,13 @@ async function prepare(): Promise<void> {
   const product = SiteProductSchema.parse(
     JSON.parse(await readFile(path.join(root, "site/data/product.json"), "utf8")),
   );
+  const manifest = await loadValidatedFeatureDocs(root);
+  if (JSON.stringify(product.documentation) !== JSON.stringify(publishedDocumentation(manifest)))
+    throw new Error("Product documentation is stale; run pnpm site:facts.");
+  const evidence = FeatureDocumentationEvidenceSchema.parse(
+    JSON.parse(await readFile(path.join(root, "site/data/feature-docs-evidence.json"), "utf8")),
+  );
+  const hashes = new Map(evidence.screenshots.map((shot) => [shot.id, shot.sha256]));
   const screenshots = new Map<string, Buffer>();
   const media = new Map<string, Buffer>();
   for (const shot of product.screenshots) {
@@ -170,7 +185,7 @@ async function prepare(): Promise<void> {
   for (const video of product.videos ?? [])
     for (const file of Object.values(video.files))
       media.set(file, await readFile(path.join(root, "site", file)));
-  const docs = await loadDocumentationAssets(product, path.join(root, "site"));
+  const docs = await loadDocumentationAssets(product, path.join(root, "site"), hashes);
   validateAssetSnapshot(product, new Map([...screenshots, ...media, ...docs]));
   const digest = contentDigest(product, screenshots, media, docs);
   const old = await existingAssets();

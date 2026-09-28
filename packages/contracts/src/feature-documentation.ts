@@ -96,6 +96,12 @@ export type FeatureDocumentationScreenshot = FeatureDocumentationManifest["scree
 
 /** Source and registry bindings stay out of published page copy. */
 export const FeatureDocumentationEvidenceSchema = z.strictObject({
+  screenshots: z.array(
+    z.strictObject({
+      id: slug,
+      sha256: z.string().regex(/^[a-f0-9]{64}$/),
+    }),
+  ),
   features: z.array(
     z.strictObject({
       id: slug,

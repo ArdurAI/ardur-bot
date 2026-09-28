@@ -33,7 +33,8 @@ in `site/data/feature-docs-evidence.json`. Run `pnpm feature-docs:report` to see
 then `pnpm site:facts` to generate the public `documentation` block. A page graduates when its
 labels and error sentences match cited UI sources, each step has a real PNG under `site/docs/`
 with matching metadata and a 250 KB maximum, and related pages are published or explicitly
-deferred. `pnpm site:facts:check` verifies those bindings. CI stages only referenced docs PNGs
+deferred. Record each capture's SHA-256 in the private evidence file. `pnpm site:facts:check`
+verifies those bindings. CI stages only referenced docs PNGs
 with `product.json` in one orphan commit; a docs image change changes the content digest.
 `pnpm feature-docs:complete` remains red while any verified user-facing page is draft. Keep
 `product.docsUrl` at its existing destination until the website serves feature pages.

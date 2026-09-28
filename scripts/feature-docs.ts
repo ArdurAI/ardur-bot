@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -276,6 +277,13 @@ export async function validateFeatureDocs(
     manifest.screenshots.map((shot) => shot.id),
     "Screenshot IDs",
   );
+  assertUnique(
+    evidence.screenshots.map((shot) => shot.id),
+    "Screenshot evidence IDs",
+  );
+  const screenshotHashes = new Map(evidence.screenshots.map((shot) => [shot.id, shot.sha256]));
+  for (const id of screenshotHashes.keys())
+    if (!screenshots.has(id)) throw new Error(`Screenshot evidence has unknown capture "${id}".`);
   const usedScreenshots = new Set<string>();
   for (const feature of manifest.features) {
     const context = `Feature "${feature.id}"`;
@@ -458,12 +466,11 @@ export async function validateFeatureDocs(
       throw new Error(`Screenshot "${shot.id}" has an invalid file name.`);
     if (shot.crop.x + shot.crop.width > shot.width || shot.crop.y + shot.crop.height > shot.height)
       throw new Error(`Screenshot "${shot.id}" crop is outside its dimensions.`);
-    assertDocumentationPng(
-      await readCapture(`site/${shot.file}`, `Screenshot "${shot.id}"`),
-      shot.width,
-      shot.height,
-      shot.file,
-    );
+    const bytes = await readCapture(`site/${shot.file}`, `Screenshot "${shot.id}"`);
+    assertDocumentationPng(bytes, shot.width, shot.height, shot.file);
+    const expectedHash = screenshotHashes.get(shot.id);
+    if (!expectedHash || createHash("sha256").update(bytes).digest("hex") !== expectedHash)
+      throw new Error(`Screenshot "${shot.id}" does not match its evidence SHA-256.`);
   }
   const publicBlock = publishedDocumentation(manifest);
   const strings = (value: unknown): string[] => {
