@@ -869,3 +869,39 @@ it("setReviewer checks expectedRevision atomically", async () => {
   });
   expect(queryRaw).toHaveBeenCalled();
 });
+
+it("configure enabling for the first time runs validateModelPin", async () => {
+  const actor = { spaceId: "space", userId: "owner" } as Actor;
+  const configRow = {
+    spaceId: "space",
+    enabled: false,
+    reviewerPin: null,
+  };
+  const upsert = vi.fn(async () => ({}));
+  const prisma = {
+    spaceMember: { findUnique: vi.fn(async () => ({ role: "owner" })) },
+    spaceLearningConfig: {
+      findUnique: vi.fn(async () => configRow),
+      upsert,
+    },
+    modelCredential: { findFirst: vi.fn(async () => ({ provider: "p1", defaultModel: "m1", id: "c1" })) }
+  };
+  const validateModelPin = vi.fn(async (pin: any) => ({ ...pin, effort: "high" }));
+  const service = createLearningService({
+    prisma: {
+      ...prisma,
+      $transaction: async (fn: any) => fn(prisma),
+      $queryRaw: vi.fn(),
+    } as never,
+    jobs: {} as never,
+  });
+  await service.configure(
+    actor,
+    {
+      enabled: true,
+      reviewerPin: { runtimeKind: "pi", provider: "p2", modelId: "m2", credentialId: "c2", effort: null, revision: 1 },
+    },
+    validateModelPin
+  );
+  expect(validateModelPin).toHaveBeenCalled();
+});

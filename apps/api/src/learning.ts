@@ -357,9 +357,9 @@ export function createLearningService(deps: {
           ? await reviewerDestination(deps.prisma, actor, config.reviewerPin)
           : config.reviewerPin;
 
-        if (pin && previous?.reviewerPin) {
-          const storedPin = RuntimePinSchema.parse(previous.reviewerPin);
-          if (pin.revision <= storedPin.revision) {
+        if (pin) {
+          const storedPin = previous?.reviewerPin ? RuntimePinSchema.parse(previous.reviewerPin) : null;
+          if (storedPin && pin.revision <= storedPin.revision) {
             pin = storedPin;
           } else if (validateModelPin) {
             const validated = await validateModelPin(pin);
