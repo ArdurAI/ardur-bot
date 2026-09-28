@@ -8,14 +8,70 @@ export interface GrokColorDef {
 }
 
 export const GROK_COLOR_LIST: GrokColorDef[] = [
-  { id: "bengara", name: "Bengara", hex: "#9A3B1E", light: "#9A3B1E", dark: "#9A3B1E", eyeColor: "#F6F3EC" },
-  { id: "indigo", name: "Indigo", hex: "#2F4A7A", light: "#2F4A7A", dark: "#2F4A7A", eyeColor: "#F6F3EC" },
-  { id: "moss", name: "Moss", hex: "#4E6B2F", light: "#4E6B2F", dark: "#4E6B2F", eyeColor: "#F6F3EC" },
-  { id: "persimmon", name: "Persimmon", hex: "#A84A22", light: "#A84A22", dark: "#A84A22", eyeColor: "#F6F3EC" },
-  { id: "plum", name: "Plum", hex: "#7A3F6A", light: "#7A3F6A", dark: "#7A3F6A", eyeColor: "#F6F3EC" },
-  { id: "teal", name: "Teal", hex: "#2E6B6B", light: "#2E6B6B", dark: "#2E6B6B", eyeColor: "#F6F3EC" },
-  { id: "ochre", name: "Ochre", hex: "#7F621B", light: "#7F621B", dark: "#7F621B", eyeColor: "#F6F3EC" },
-  { id: "slate", name: "Slate", hex: "#5A5F66", light: "#5A5F66", dark: "#5A5F66", eyeColor: "#F6F3EC" },
+  {
+    id: "bengara",
+    name: "Bengara",
+    hex: "#9A3B1E",
+    light: "#9A3B1E",
+    dark: "#9A3B1E",
+    eyeColor: "#F6F3EC",
+  },
+  {
+    id: "indigo",
+    name: "Indigo",
+    hex: "#2F4A7A",
+    light: "#2F4A7A",
+    dark: "#2F4A7A",
+    eyeColor: "#F6F3EC",
+  },
+  {
+    id: "moss",
+    name: "Moss",
+    hex: "#4E6B2F",
+    light: "#4E6B2F",
+    dark: "#4E6B2F",
+    eyeColor: "#F6F3EC",
+  },
+  {
+    id: "persimmon",
+    name: "Persimmon",
+    hex: "#A84A22",
+    light: "#A84A22",
+    dark: "#A84A22",
+    eyeColor: "#F6F3EC",
+  },
+  {
+    id: "plum",
+    name: "Plum",
+    hex: "#7A3F6A",
+    light: "#7A3F6A",
+    dark: "#7A3F6A",
+    eyeColor: "#F6F3EC",
+  },
+  {
+    id: "teal",
+    name: "Teal",
+    hex: "#2E6B6B",
+    light: "#2E6B6B",
+    dark: "#2E6B6B",
+    eyeColor: "#F6F3EC",
+  },
+  {
+    id: "ochre",
+    name: "Ochre",
+    hex: "#7F621B",
+    light: "#7F621B",
+    dark: "#7F621B",
+    eyeColor: "#F6F3EC",
+  },
+  {
+    id: "slate",
+    name: "Slate",
+    hex: "#5A5F66",
+    light: "#5A5F66",
+    dark: "#5A5F66",
+    eyeColor: "#F6F3EC",
+  },
 ];
 
 export const GROK_BOT_COLORS = GROK_COLOR_LIST.map((c) => c.hex);

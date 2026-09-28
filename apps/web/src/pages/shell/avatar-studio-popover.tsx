@@ -199,8 +199,15 @@ export function AvatarStudioPopover({
                       key={shapeIndex}
                       shapeIndex={shapeIndex}
                       color={currentColor}
-                      selected={!parsed.isImage && (shapeIndex === -1 ? currentShape === undefined : currentShape === shapeIndex)}
-                      onClick={() => shapeIndex === -1 ? onChange(currentColor) : selectShape(shapeIndex)}
+                      selected={
+                        !parsed.isImage &&
+                        (shapeIndex === -1
+                          ? currentShape === undefined
+                          : currentShape === shapeIndex)
+                      }
+                      onClick={() =>
+                        shapeIndex === -1 ? onChange(currentColor) : selectShape(shapeIndex)
+                      }
                       identity={identity}
                     />
                   ))}
