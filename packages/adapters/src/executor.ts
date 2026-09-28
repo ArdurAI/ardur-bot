@@ -357,7 +357,7 @@ import {
   secretPausedToolResult,
   tryCompleteConnectionWithCode,
 } from "./run-secret.js";
-import { recordBrokerRunUsage, recordRunUsage } from "./run-usage.js";
+import { brokerRunAllowance, recordBrokerRunUsage, recordRunUsage } from "./run-usage.js";
 import type { RuntimeRegistry } from "./runtime-registry.js";
 import { createRuntimeRegistry } from "./runtime-registry.js";
 import { reportRuntimeWaits, withRuntimeCleanup } from "./runtime-stream.js";
@@ -1124,6 +1124,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
       const runOutputTokens = request.providerRunMaxOutputTokens ?? maxOutputTokens;
       if (!Number.isSafeInteger(runOutputTokens) || runOutputTokens < maxOutputTokens)
         throw new Error("The Hermes run model limits are invalid.");
+      const sourceAllowance = await brokerRunAllowance(deps.prisma, sourceRunId);
       const broker = new HermesProviderBroker({
         scope,
         credentialId: pin.credentialId!,
@@ -1157,10 +1158,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 })),
         purpose: request.providerPurpose ?? "unknown",
         maxRequests: config.maxProviderRequests,
-        maxReservedTokens: Math.min(
-          2_147_483_647,
-          config.maxProviderRequests * (contextWindow + runOutputTokens),
-        ),
+        maxReservedTokens:
+          sourceAllowance ??
+          Math.min(2_147_483_647, config.maxProviderRequests * (contextWindow + runOutputTokens)),
         expiresAt: Date.now() + config.timeoutMs,
         active,
         record: async (usage) => {

@@ -38,6 +38,25 @@ export type BrokerRunFence = {
 /** Only newly persisted primary-call measurements belong in the run's context metrics. */
 export type RecordedContextUsage = { inputTokens: number; cachedTokens: number | null };
 
+/** The first durable broker admission fixes this source run's allowance across later turns. */
+export async function brokerRunAllowance(
+  prisma: Pick<PrismaClient, "usageRecord">,
+  runId: string,
+): Promise<number | null> {
+  const rows = await prisma.usageRecord.findMany({
+    where: { runId, observations: { some: { sequence: 0 } } },
+    orderBy: { createdAt: "asc" },
+    select: {
+      observations: { where: { sequence: 0 }, take: 1, select: { observation: true } },
+    },
+  });
+  return (
+    rows
+      .map((row) => parseRequestUsage(row.observations[0]?.observation).admission)
+      .find((admission) => admission?.kind === "worker-provider-broker")?.maxReservedTokens ?? null
+  );
+}
+
 export async function recordRunUsage(
   deps: UsageDependencies,
   run: UsageRun,

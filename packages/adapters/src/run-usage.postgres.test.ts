@@ -14,7 +14,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { aggregateContext, recordContextUsage, resumeContextSnapshot } from "./context/metrics.js";
 import { loadLearningRecords } from "./learning-records.js";
 import type { RecordedContextUsage } from "./run-usage.js";
-import { recordBrokerRunUsage, recordRunUsage } from "./run-usage.js";
+import { brokerRunAllowance, recordBrokerRunUsage, recordRunUsage } from "./run-usage.js";
 import { accountRuntimeUsage } from "./runtime-usage.js";
 
 const databaseUrl =
@@ -311,6 +311,7 @@ postgres("request ledger on disposable PostgreSQL", () => {
     await record(main.start());
     await record(main.snapshot({ input: 100, output: 20 }));
     await record(main.finish("success"));
+    expect(await brokerRunAllowance(db.prisma, f.id)).toBe(4 * (32_768 + 4_096));
     await db.prisma.run.update({ where: { id: f.id }, data: { status: "completed" } });
     const attemptedAt = new Date();
     await db.prisma.botBrief.create({
@@ -329,6 +330,7 @@ postgres("request ledger on disposable PostgreSQL", () => {
     await record(summary.start(), attemptedAt);
     await record(summary.snapshot({ input: 80, output: 10 }), attemptedAt);
     await record(summary.finish("success"), attemptedAt);
+    expect(await brokerRunAllowance(db.prisma, f.id)).toBe(4 * (32_768 + 4_096));
     expect(await f.rows()).toHaveLength(2);
     expect(await f.root()).toMatchObject({ usedTokens: 210, reservedTokens: 0 });
   });
