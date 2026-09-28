@@ -4,12 +4,16 @@ import {
   GROUP_MEMBER_MAX,
   GROUP_MEMBER_MIN,
   type Group,
+  type GroupMember,
+  type SetGroupMemberModelPinInput,
 } from "@ardurbot/contracts";
 import { BotAvatar, Button, Input, NativeSelect, NativeSelectOption } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { Check, X } from "lucide-react";
-import { lazy, Suspense, useId, useMemo, useState } from "react";
+import { lazy, Suspense, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { BotContext } from "../components/ContextEntry";
+import type { ModelSettings } from "../lib/use-model-settings";
+import { GroupModelControl } from "./group-model-control";
 
 const StartGoalForm = lazy(() =>
   import("./GoalForm").then((module) => ({ default: module.StartGoalForm })),
@@ -165,6 +169,9 @@ export function GroupSettings({
   canManageGoal,
   onStartGoal,
   onSave,
+  onModelPin,
+  onReloadMember,
+  modelSettings,
   onRemove,
 }: {
   group: Group;
@@ -183,6 +190,12 @@ export function GroupSettings({
     botIds?: string[];
     coordinatorBotId?: string | null;
   }) => Promise<void>;
+  onModelPin: (
+    member: GroupMember,
+    pin: SetGroupMemberModelPinInput["pin"] | null,
+  ) => Promise<void>;
+  onReloadMember?: (member: GroupMember) => Promise<GroupMember | undefined>;
+  modelSettings: ModelSettings | null;
   onRemove: () => Promise<void>;
 }) {
   const { t } = useLingui();
@@ -191,8 +204,33 @@ export function GroupSettings({
   const [name, setName] = useState(group.name);
   const [coordinator, setCoordinator] = useState(group.coordinatorBotId ?? "");
   const [selected, setSelected] = useState(group.members.map((member) => member.botId));
+  const baseline = useRef(group);
   const [pending, setPending] = useState<"save" | "remove" | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useLayoutEffect(() => {
+    const previous = baseline.current;
+    if (previous === group) return;
+    baseline.current = group;
+    if (previous.id !== group.id) {
+      setName(group.name);
+      setCoordinator(group.coordinatorBotId ?? "");
+      setSelected(group.members.map((member) => member.botId));
+      return;
+    }
+    setName((current) => (current === previous.name ? group.name : current));
+    setCoordinator((current) =>
+      current === (previous.coordinatorBotId ?? "") ? (group.coordinatorBotId ?? "") : current,
+    );
+    setSelected((current) =>
+      sameMembers(
+        current,
+        previous.members.map((member) => member.botId),
+      )
+        ? group.members.map((member) => member.botId)
+        : current,
+    );
+  }, [group]);
 
   async function mutate(kind: "save" | "remove", action: () => Promise<void>) {
     if (pending) return;
@@ -258,6 +296,20 @@ export function GroupSettings({
         onChange={setSelected}
         maxHeight="max-h-[240px]"
       />
+      {selected.map((botId) => {
+        const bot = bots.find((entry) => entry.id === botId);
+        if (!bot) return null;
+        return (
+          <GroupModelControl
+            key={botId}
+            member={group.members.find((entry) => entry.botId === botId)}
+            bot={bot}
+            settings={modelSettings}
+            onSave={onModelPin}
+            onReload={onReloadMember}
+          />
+        );
+      })}
       <label htmlFor={coordinatorId} className="mt-4 block text-sm text-muted-foreground">
         <Trans>Coordinator</Trans>
         <NativeSelect

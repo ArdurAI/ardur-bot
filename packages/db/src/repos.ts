@@ -8,7 +8,7 @@ import {
   type SpaceBot,
 } from "@ardurbot/contracts";
 import { sandboxKindForBot, userVisibleMessages } from "@ardurbot/core";
-import type { Prisma, PrismaClient } from "./client.js";
+import { Prisma, type PrismaClient } from "./client.js";
 import { type ComputerMode, ensureComputerRecord, parseComputerMode } from "./computers.js";
 import { createThreadMessageInTransaction } from "./messages.js";
 import { BotSectionNameConflictError, IsolationError } from "./scope.js";
@@ -67,6 +67,7 @@ function mapBot(
   },
   preview = "",
   status = "idle",
+  groupModelOverrideCount = 0,
 ): Bot {
   if (!bot.thread) {
     throw new IsolationError("Bot is missing its thread");
@@ -100,6 +101,7 @@ function mapBot(
     thinkingLevel: (bot.thinkingLevel as Bot["thinkingLevel"]) ?? null,
     modelCredentialId: bot.modelCredentialId ?? null,
     modelPinRevision: bot.modelPinRevision ?? 0,
+    ...(groupModelOverrideCount > 0 ? { groupModelOverrideCount } : {}),
     runtimeKind: RuntimeKindSchema.parse(bot.runtimeKind ?? "pi"),
     runtimeExperimental: bot.runtimeExperimental ?? false,
     teamChatAmbientEnabled: bot.teamChatAmbientEnabled ?? false,
@@ -326,6 +328,19 @@ export function createRepos(prisma: PrismaClient) {
           })
         : [];
       const peerRunIds = new Set(peerRuns.map((run) => run.id));
+      const groupedOverrides =
+        bots.length && prisma.chatGroupMember?.groupBy
+          ? await prisma.chatGroupMember.groupBy({
+              by: ["botId"],
+              where: {
+                botId: { in: bots.map((bot) => bot.id) },
+                runtimePin: { not: Prisma.DbNull },
+                group: { userId: actor.userId, spaceId: actor.spaceId, archivedAt: null },
+              },
+              _count: { _all: true },
+            })
+          : [];
+      const overrideCounts = new Map(groupedOverrides.map((row) => [row.botId, row._count._all]));
       // Cache negative results too; ordinary runs were already checked in the batch above.
       const checkedRunIds = new Set(candidateRunIds);
       return Promise.all(
@@ -363,7 +378,12 @@ export function createRepos(prisma: PrismaClient) {
             });
             if (messages.length === 0) break;
           }
-          return mapBot(bot, preview, bot.runs[0]?.status ?? "idle");
+          return mapBot(
+            bot,
+            preview,
+            bot.runs[0]?.status ?? "idle",
+            overrideCounts.get(bot.id) ?? 0,
+          );
         }),
       );
     },

@@ -122,7 +122,7 @@ describe("memory proposal entry points", () => {
           input(container.querySelectorAll("textarea")[1]!, "  - Use concise replies.  "),
         );
         await act(async () => button(container, "Review import").click());
-        expect(propose).toHaveBeenCalledExactlyOnceWith("- Use concise replies.");
+        expect(propose).toHaveBeenCalledExactlyOnceWith("  - Use concise replies.  ");
         expect(onProposals).toHaveBeenCalledWith([proposal]);
         expect(api.memoryWrite).not.toHaveBeenCalled();
         expect(api.createGrant).not.toHaveBeenCalled();
@@ -143,6 +143,29 @@ describe("memory proposal entry points", () => {
         "Could not prepare the import. Try again.",
       );
       expect(container.textContent).not.toContain("internal fixture");
+    });
+  });
+
+  it("shows a masked line and the section-limit instruction during import", async () => {
+    const propose = vi
+      .fn()
+      .mockRejectedValueOnce({
+        data: { code: "MEMORY_CREDENTIAL_LINE", lineNumber: 2, maskedLine: "- [redacted]" },
+      })
+      .mockRejectedValueOnce({ data: { code: "MEMORY_IMPORT_SECTION_LIMIT" } });
+    await mounted(<MemoryImport propose={propose} onProposals={vi.fn()} />, async (container) => {
+      await act(async () => button(container, "Start import").click());
+      await act(async () => input(container.querySelectorAll("textarea")[1]!, "Profile\n- ab12cd"));
+      await act(async () => button(container, "Review import").click());
+      expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+        "Line 2: - [redacted] Edit or remove this line.",
+      );
+      expect(container.querySelector('[role="alert"]')?.textContent).not.toContain("ab12cd");
+      expect(container.querySelectorAll("textarea")[1]?.value).toBe("Profile\n- ab12cd");
+      await act(async () => button(container, "Review import").click());
+      expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+        "Split this import into at most three sections.",
+      );
     });
   });
 
@@ -278,6 +301,30 @@ describe("inline memory suggestions", () => {
     );
   });
 
+  it("shows a masked credential line only on the rejected proposal", async () => {
+    api.approve.mockRejectedValue({
+      data: {
+        code: "MEMORY_CREDENTIAL_LINE",
+        proposalId: "proposal",
+        lineNumber: 2,
+        maskedLine: "- Key: [redacted]",
+      },
+    });
+    await mounted(
+      <MemoryProposals proposals={[proposal, { ...proposal, id: "other" }]} onChange={vi.fn()} />,
+      async (container) => {
+        await act(async () => button(container, "Approve").click());
+        expect(container.querySelectorAll('[role="alert"]')).toHaveLength(1);
+        expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+          "Line 2: - Key: [redacted] Edit or reject this line.",
+        );
+        expect(
+          container.querySelectorAll("article")[1]?.querySelector('[role="alert"]'),
+        ).toBeNull();
+      },
+    );
+  });
+
   it("routes Undo through the existing revert service and surfaces conflicts without writes", async () => {
     api.revert.mockResolvedValue({
       proposal,
@@ -328,6 +375,48 @@ describe("memory page data", () => {
       maxOutputChars: 12000,
     },
   };
+  it("keeps the composer mounted through import, approval, and later refreshes", async () => {
+    api.settings.mockResolvedValue(settings);
+    api.list.mockResolvedValue({ items: [], nextCursor: null });
+    api.inbox
+      .mockResolvedValueOnce({ proposals: [] })
+      .mockResolvedValueOnce({ proposals: [{ ...proposal, status: "applied" }] })
+      .mockResolvedValueOnce({ proposals: [] });
+    api.approve.mockResolvedValue({ proposal: { ...proposal, status: "applied" } });
+    api.revert.mockResolvedValue({ proposal: { ...proposal, status: "reverted" } });
+    const proposeImport = vi.fn().mockResolvedValue([proposal]);
+    await mounted(
+      <MemoryPage proposeImport={proposeImport} proposeEdit={vi.fn()} />,
+      async (container) => {
+        const composer = container.querySelector(
+          'textarea[aria-label="Tell your bot what to change or remove"]',
+        );
+        const send = button(container, "Send");
+        expect(composer).not.toBeNull();
+        await act(async () => button(container, "Start import").click());
+        await act(async () =>
+          input(container.querySelectorAll("textarea")[1]!, "Preferences\n- Be concise."),
+        );
+        await act(async () => button(container, "Review import").click());
+        expect(button(container, "Approve")).toBeDefined();
+        expect(
+          container.querySelector('textarea[aria-label="Tell your bot what to change or remove"]'),
+        ).toBe(composer);
+        await act(async () => button(container, "Approve").click());
+        expect(api.list).toHaveBeenCalledTimes(2);
+        expect(
+          container.querySelector('textarea[aria-label="Tell your bot what to change or remove"]'),
+        ).toBe(composer);
+        expect(button(container, "Send")).toBe(send);
+        await act(async () => button(container, "Undo").click());
+        expect(api.list).toHaveBeenCalledTimes(3);
+        expect(
+          container.querySelector('textarea[aria-label="Tell your bot what to change or remove"]'),
+        ).toBe(composer);
+        expect(button(container, "Send")).toBe(send);
+      },
+    );
+  });
   it("reopens pending memory proposals without approving them", async () => {
     api.settings.mockResolvedValue(settings);
     api.list.mockResolvedValue({ items: [], nextCursor: null });

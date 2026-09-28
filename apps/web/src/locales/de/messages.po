@@ -13,7 +13,7 @@ msgstr ""
 "Language-Team: \n"
 "Plural-Forms: \n"
 
-#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/model-pin-select.tsx
 msgid " — May not be available on your plan"
 msgstr ""
 
@@ -25,7 +25,7 @@ msgstr ""
 msgid " · not available"
 msgstr ""
 
-#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/model-pin-select.tsx
 msgid " (not available on your account)"
 msgstr ""
 
@@ -42,6 +42,11 @@ msgstr "{0, plural, one {# Modell} other {# Modelle}}"
 #: src/pages/import/LocalImportPage.tsx
 msgid "{0, plural, one {1 item was not scanned because of the scan limits.} other {# items were not scanned because of the scan limits.}}"
 msgstr ""
+
+#. placeholder {0}: bot.groupModelOverrideCount ?? 0
+#: src/pages/shell/bot-panel.tsx
+msgid "{0, plural, one {Also set differently in # group} other {Also set differently in # groups}}"
+msgstr "{0, plural, one {Auch in # Gruppe anders eingestellt} other {Auch in # Gruppen anders eingestellt}}"
 
 #. placeholder {0}: preset.n
 #: src/pages/RoutineSchedule.tsx
@@ -181,6 +186,14 @@ msgstr ""
 #: src/pages/LearningInsights.tsx
 msgid "{bot}'s last {count} runs on {model} were rate limited."
 msgstr ""
+
+#: src/pages/Shell.tsx
+msgid "{botName} couldn't use the model set for this group. Change the group model or check this bot's settings."
+msgstr "{botName} konnte das für diese Gruppe festgelegte Modell nicht verwenden. Ändere das Gruppenmodell oder prüfe die Bot-Einstellungen."
+
+#: src/pages/Shell.tsx
+msgid "{botName} couldn't use the model set for this group. Reconnect it or change the group model."
+msgstr "{botName} konnte das für diese Gruppe festgelegte Modell nicht verwenden. Stelle die Verbindung wieder her oder ändere das Gruppenmodell."
 
 #: src/pages/Shell.tsx
 msgid "{botName}’s computer"
@@ -2731,6 +2744,10 @@ msgstr ""
 msgid "Could not save group"
 msgstr "Gruppe konnte nicht gespeichert werden"
 
+#: src/pages/group-model-control.tsx
+msgid "Could not save group model."
+msgstr "Gruppenmodell konnte nicht gespeichert werden."
+
 #: src/components/composer/composer-actions.ts
 msgid "Could not save memory"
 msgstr ""
@@ -2896,6 +2913,11 @@ msgstr ""
 msgid "Could not update this computer. Try again."
 msgstr ""
 
+#: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/pages/McpServersOverlay.tsx
+msgid "Could not update this field. Retry."
+msgstr "Dieses Feld konnte nicht aktualisiert werden. Erneut versuchen."
+
 #: src/pages/board/Board.tsx
 #: src/pages/board/ItemForm.tsx
 msgid "Could not update this item."
@@ -2998,6 +3020,10 @@ msgstr "Wird erstellt…"
 msgid "Credential"
 msgstr "Zugangsdaten"
 
+#: src/components/integrations/McpCredentialFields.tsx
+msgid "Credential fields"
+msgstr "Zugangsdatenfelder"
+
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "credential saved"
@@ -3097,8 +3123,8 @@ msgstr ""
 msgid "Default"
 msgstr "Standard"
 
-#. placeholder {0}: thinkingLevelDescription(defaultThinkingLevel)
-#: src/pages/shell/bot-panel.tsx
+#. placeholder {0}: thinkingLevelDescription(defaultLevel)
+#: src/pages/shell/model-pin-select.tsx
 msgid "Default ({0})"
 msgstr "Standard ({0})"
 
@@ -3522,7 +3548,7 @@ msgstr ""
 msgid "Effort"
 msgstr ""
 
-#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/model-pin-select.tsx
 msgid "Effort: not applicable"
 msgstr ""
 
@@ -4091,7 +4117,7 @@ msgstr ""
 msgid "Host service:"
 msgstr ""
 
-#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/model-pin-select.tsx
 msgid "Hosted providers"
 msgstr ""
 
@@ -4591,6 +4617,18 @@ msgstr "Hell"
 msgid "Limit tools"
 msgstr "Tools einschränken"
 
+#. placeholder {0}: data.lineNumber
+#. placeholder {1}: data.maskedLine
+#: src/pages/memory/MemoryProposals.tsx
+msgid "Line {0}: {1} Edit or reject this line."
+msgstr "Zeile {0}: {1} Diese Zeile bearbeiten oder ablehnen."
+
+#. placeholder {0}: data.lineNumber
+#. placeholder {1}: data.maskedLine
+#: src/pages/memory/MemoryImport.tsx
+msgid "Line {0}: {1} Edit or remove this line."
+msgstr "Zeile {0}: {1} Diese Zeile bearbeiten oder entfernen."
+
 #: src/pages/RoutineEditor.tsx
 msgid "Linear issue"
 msgstr ""
@@ -4703,7 +4741,7 @@ msgid "Loading…"
 msgstr "Wird geladen…"
 
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
-#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/model-pin-select.tsx
 msgid "Local"
 msgstr "Lokal"
 
@@ -5046,6 +5084,10 @@ msgstr ""
 msgid "Model id"
 msgstr "Modell-ID"
 
+#: src/pages/group-model-control.tsx
+msgid "Model in this group"
+msgstr "Modell in dieser Gruppe"
+
 #: src/components/OllamaSettings.tsx
 msgid "Model name"
 msgstr ""
@@ -5287,6 +5329,10 @@ msgstr ""
 #: src/pages/shell/terminal-session.tsx
 msgid "Next"
 msgstr ""
+
+#: src/pages/shell/bot-model-chip.tsx
+msgid "Next run"
+msgstr "Nächster Lauf"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "No agent connections yet."
@@ -5646,7 +5692,7 @@ msgstr ""
 msgid "Obsidian vault"
 msgstr ""
 
-#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/model-pin-select.tsx
 #: src/pages/system/SystemPage.tsx
 msgid "Off"
 msgstr ""
@@ -5659,7 +5705,7 @@ msgstr ""
 msgid "Ollama server URL"
 msgstr ""
 
-#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/model-pin-select.tsx
 msgid "On"
 msgstr ""
 
@@ -6029,6 +6075,14 @@ msgstr ""
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Preferred computer"
 msgstr ""
+
+#: src/pages/Shell.tsx
+msgid "Preparing the bot computer…"
+msgstr "Bot-Computer wird vorbereitet…"
+
+#: src/pages/Shell.tsx
+msgid "Preparing the bot computer… {percent}%"
+msgstr "Bot-Computer wird vorbereitet… {percent}%"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Prevent idle sleep while routines are enabled; your display can turn off, and closing the lid still puts the computer to sleep."
@@ -6711,6 +6765,7 @@ msgstr ""
 #: src/pages/LearningObservation.tsx
 #: src/pages/LearningTimeline.tsx
 #: src/pages/memory/MemoryPage.tsx
+#: src/pages/MemoryHistory.tsx
 #: src/pages/RoutineHistory.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/UploadedFiles.tsx
@@ -6728,7 +6783,7 @@ msgstr ""
 msgid "Retry now"
 msgstr "Jetzt erneut versuchen"
 
-#: src/pages/Shell.tsx
+#: src/pages/shell/computer-screen-error.tsx
 msgid "Retry screen"
 msgstr ""
 
@@ -6909,6 +6964,7 @@ msgstr ""
 msgid "Runs when this bot receives a verified message from this provider."
 msgstr ""
 
+#: src/pages/group-model-control.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Runtime"
 msgstr ""
@@ -6920,6 +6976,11 @@ msgstr ""
 #: src/pages/LearningObservation.tsx
 msgid "safety"
 msgstr ""
+
+#: src/pages/group-model-control.tsx
+#: src/pages/shell/bot-model-chip.tsx
+msgid "Same as bot"
+msgstr "Wie beim Bot"
 
 #. placeholder {0}: row.participants.length
 #: src/pages/ComparePanel.tsx
@@ -6973,6 +7034,10 @@ msgstr "Trotzdem speichern"
 msgid "Save credentials"
 msgstr ""
 
+#: src/pages/group-model-control.tsx
+msgid "Save model"
+msgstr "Modell speichern"
+
 #: src/components/AskCard.tsx
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/account/AccountProfile.tsx
@@ -7025,6 +7090,7 @@ msgstr ""
 
 #: src/components/AskCard.tsx
 #: src/components/teach/SkillDraftCard.tsx
+#: src/pages/group-model-control.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
@@ -7113,6 +7179,14 @@ msgstr ""
 #: src/pages/SpaceSearch.tsx
 msgid "Searching…"
 msgstr "Suche…"
+
+#: src/components/integrations/McpCredentialFields.tsx
+msgid "Secret"
+msgstr "Geheim"
+
+#: src/components/integrations/McpCredentialFields.tsx
+msgid "Secret for {key}"
+msgstr "Geheim für {key}"
 
 #: src/pages/account/AccountProfile.tsx
 msgid "Select"
@@ -7554,6 +7628,10 @@ msgstr "Diese Antwort vorlesen"
 msgid "Speaking…"
 msgstr "Spricht…"
 
+#: src/pages/memory/MemoryImport.tsx
+msgid "Split this import into at most three sections."
+msgstr "Teile diesen Import in höchstens drei Abschnitte auf."
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "SSH agent"
 msgstr ""
@@ -7856,6 +7934,10 @@ msgstr ""
 msgid "The connection was cancelled."
 msgstr ""
 
+#: src/pages/group-model-control.tsx
+msgid "The group model choice was reloaded. Pick again."
+msgstr "Die Modellauswahl der Gruppe wurde neu geladen. Bitte erneut auswählen."
+
 #: src/pages/memory/MemoryProposals.tsx
 msgid "The memory changed since this suggestion. Open History before trying again."
 msgstr ""
@@ -7877,7 +7959,7 @@ msgstr ""
 msgid "Theme"
 msgstr ""
 
-#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/model-pin-select.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Thinking"
 msgstr "Denkmodus"
@@ -7986,6 +8068,10 @@ msgstr ""
 #: src/pages/HostComputerSettings.tsx
 msgid "This folder is not available."
 msgstr ""
+
+#: src/pages/Shell.tsx
+msgid "This group's model is blocked by the bot or space settings. Change the destination policy or choose another group model."
+msgstr "Das Gruppenmodell wird durch die Bot- oder Bereichseinstellungen blockiert. Ändere die Zielrichtlinie oder wähle ein anderes Gruppenmodell."
 
 #: src/pages/HostComputerPrompt.tsx
 msgid "this Mac"
@@ -8202,6 +8288,7 @@ msgstr ""
 #: src/pages/customize/CustomizeControls.tsx
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/shell/computer-screen-error.tsx
 msgid "Try again"
 msgstr "Erneut versuchen"
 
@@ -8432,6 +8519,10 @@ msgstr "Dieses Modell verwenden"
 #: src/pages/fleet/FleetSettings.tsx
 msgid "User"
 msgstr ""
+
+#: src/pages/shell/bot-model-chip.tsx
+msgid "Using {currentId}"
+msgstr "Verwendet {currentId}"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"

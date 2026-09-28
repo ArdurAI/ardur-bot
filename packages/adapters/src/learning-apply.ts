@@ -26,6 +26,7 @@ import {
   proposalScope,
 } from "./learning-grants.js";
 import { inverseLearningChange } from "./learning-inverse.js";
+import { assertSafeMemoryContent } from "./learning-memory-safety.js";
 import { proposalDiff, proposalFingerprint } from "./learning-proposal.js";
 import { learningSecrets } from "./learning-redaction.js";
 import { lockMemorySpace } from "./memory/lifecycle.js";
@@ -236,7 +237,12 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
       proposal.typedDelta = input.typedDelta;
     } else {
       if (input.proposedContent === undefined) throw new Error("Provide document content.");
-      proposal.proposedContent = redactLearningText(input.proposedContent, context.knownSecrets);
+      if (proposal.operation === "memory-import")
+        assertSafeMemoryContent(input.proposedContent, context.knownSecrets ?? [], proposal.id);
+      proposal.proposedContent =
+        proposal.operation === "memory-import"
+          ? input.proposedContent
+          : redactLearningText(input.proposedContent, context.knownSecrets);
     }
     validateContent(proposal);
     proposal.diff = proposalDiff(
@@ -699,7 +705,7 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
         await editContent(tx, proposal, context, edits, head);
         await audit("edit");
       }
-      if (proposal.proposedContent !== undefined)
+      if (proposal.proposedContent !== undefined && proposal.operation !== "memory-import")
         proposal.proposedContent = redactLearningText(
           proposal.proposedContent,
           context.knownSecrets,
@@ -723,6 +729,9 @@ export function createLearningApplyService(deps: LearningApplyDependencies) {
       }
       await attribution(tx, proposal, context, head?.revision ?? 0, "apply", grantId);
       const content = proposal.proposedContent ?? JSON.stringify(proposal.typedDelta);
+      if (proposal.type === "memory" && proposal.memoryAction !== "delete") {
+        assertSafeMemoryContent(content, context.knownSecrets ?? [], proposal.id);
+      }
       proposal.diff = proposalDiff(
         redactLearningText(head?.content ?? "", context.knownSecrets),
         content,

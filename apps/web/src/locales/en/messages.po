@@ -13,7 +13,7 @@ msgstr ""
 "Language-Team: \n"
 "Plural-Forms: \n"
 
-#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/model-pin-select.tsx
 msgid " — May not be available on your plan"
 msgstr " — May not be available on your plan"
 
@@ -25,7 +25,7 @@ msgstr " — not available on your account"
 msgid " · not available"
 msgstr " · not available"
 
-#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/model-pin-select.tsx
 msgid " (not available on your account)"
 msgstr " (not available on your account)"
 
@@ -42,6 +42,11 @@ msgstr "{0, plural, one {# model} other {# models}}"
 #: src/pages/import/LocalImportPage.tsx
 msgid "{0, plural, one {1 item was not scanned because of the scan limits.} other {# items were not scanned because of the scan limits.}}"
 msgstr "{0, plural, one {1 item was not scanned because of the scan limits.} other {# items were not scanned because of the scan limits.}}"
+
+#. placeholder {0}: bot.groupModelOverrideCount ?? 0
+#: src/pages/shell/bot-panel.tsx
+msgid "{0, plural, one {Also set differently in # group} other {Also set differently in # groups}}"
+msgstr "{0, plural, one {Also set differently in # group} other {Also set differently in # groups}}"
 
 #. placeholder {0}: preset.n
 #: src/pages/RoutineSchedule.tsx
@@ -181,6 +186,14 @@ msgstr "{bot}'s last {count} runs on {model} were rate limited; {suggested}, on 
 #: src/pages/LearningInsights.tsx
 msgid "{bot}'s last {count} runs on {model} were rate limited."
 msgstr "{bot}'s last {count} runs on {model} were rate limited."
+
+#: src/pages/Shell.tsx
+msgid "{botName} couldn't use the model set for this group. Change the group model or check this bot's settings."
+msgstr "{botName} couldn't use the model set for this group. Change the group model or check this bot's settings."
+
+#: src/pages/Shell.tsx
+msgid "{botName} couldn't use the model set for this group. Reconnect it or change the group model."
+msgstr "{botName} couldn't use the model set for this group. Reconnect it or change the group model."
 
 #: src/pages/Shell.tsx
 msgid "{botName}’s computer"
@@ -2731,6 +2744,10 @@ msgstr "Could not save destinations; try again."
 msgid "Could not save group"
 msgstr "Could not save group"
 
+#: src/pages/group-model-control.tsx
+msgid "Could not save group model."
+msgstr "Could not save group model."
+
 #: src/components/composer/composer-actions.ts
 msgid "Could not save memory"
 msgstr "Could not save memory"
@@ -2896,6 +2913,11 @@ msgstr "Could not update the computer. Check the connection and try again."
 msgid "Could not update this computer. Try again."
 msgstr "Could not update this computer. Try again."
 
+#: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/pages/McpServersOverlay.tsx
+msgid "Could not update this field. Retry."
+msgstr "Could not update this field. Retry."
+
 #: src/pages/board/Board.tsx
 #: src/pages/board/ItemForm.tsx
 msgid "Could not update this item."
@@ -2998,6 +3020,10 @@ msgstr "Creating…"
 msgid "Credential"
 msgstr "Credential"
 
+#: src/components/integrations/McpCredentialFields.tsx
+msgid "Credential fields"
+msgstr "Credential fields"
+
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
 msgid "credential saved"
@@ -3097,8 +3123,8 @@ msgstr "default"
 msgid "Default"
 msgstr "Default"
 
-#. placeholder {0}: thinkingLevelDescription(defaultThinkingLevel)
-#: src/pages/shell/bot-panel.tsx
+#. placeholder {0}: thinkingLevelDescription(defaultLevel)
+#: src/pages/shell/model-pin-select.tsx
 msgid "Default ({0})"
 msgstr "Default ({0})"
 
@@ -3522,7 +3548,7 @@ msgstr "Education"
 msgid "Effort"
 msgstr "Effort"
 
-#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/model-pin-select.tsx
 msgid "Effort: not applicable"
 msgstr "Effort: not applicable"
 
@@ -4091,7 +4117,7 @@ msgstr "Host"
 msgid "Host service:"
 msgstr "Host service:"
 
-#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/model-pin-select.tsx
 msgid "Hosted providers"
 msgstr "Hosted providers"
 
@@ -4591,6 +4617,18 @@ msgstr "Light"
 msgid "Limit tools"
 msgstr "Limit tools"
 
+#. placeholder {0}: data.lineNumber
+#. placeholder {1}: data.maskedLine
+#: src/pages/memory/MemoryProposals.tsx
+msgid "Line {0}: {1} Edit or reject this line."
+msgstr "Line {0}: {1} Edit or reject this line."
+
+#. placeholder {0}: data.lineNumber
+#. placeholder {1}: data.maskedLine
+#: src/pages/memory/MemoryImport.tsx
+msgid "Line {0}: {1} Edit or remove this line."
+msgstr "Line {0}: {1} Edit or remove this line."
+
 #: src/pages/RoutineEditor.tsx
 msgid "Linear issue"
 msgstr "Linear issue"
@@ -4703,7 +4741,7 @@ msgid "Loading…"
 msgstr "Loading…"
 
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
-#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/model-pin-select.tsx
 msgid "Local"
 msgstr "Local"
 
@@ -5046,6 +5084,10 @@ msgstr "model estimate"
 msgid "Model id"
 msgstr "Model id"
 
+#: src/pages/group-model-control.tsx
+msgid "Model in this group"
+msgstr "Model in this group"
+
 #: src/components/OllamaSettings.tsx
 msgid "Model name"
 msgstr "Model name"
@@ -5287,6 +5329,10 @@ msgstr "New space"
 #: src/pages/shell/terminal-session.tsx
 msgid "Next"
 msgstr "Next"
+
+#: src/pages/shell/bot-model-chip.tsx
+msgid "Next run"
+msgstr "Next run"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "No agent connections yet."
@@ -5646,7 +5692,7 @@ msgstr "Obsidian Sync may copy this folder to your other devices"
 msgid "Obsidian vault"
 msgstr "Obsidian vault"
 
-#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/model-pin-select.tsx
 #: src/pages/system/SystemPage.tsx
 msgid "Off"
 msgstr "Off"
@@ -5659,7 +5705,7 @@ msgstr "off — no extra thinking"
 msgid "Ollama server URL"
 msgstr "Ollama server URL"
 
-#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/model-pin-select.tsx
 msgid "On"
 msgstr "On"
 
@@ -6029,6 +6075,14 @@ msgstr "Preferences"
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Preferred computer"
 msgstr "Preferred computer"
+
+#: src/pages/Shell.tsx
+msgid "Preparing the bot computer…"
+msgstr "Preparing the bot computer…"
+
+#: src/pages/Shell.tsx
+msgid "Preparing the bot computer… {percent}%"
+msgstr "Preparing the bot computer… {percent}%"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Prevent idle sleep while routines are enabled; your display can turn off, and closing the lid still puts the computer to sleep."
@@ -6711,6 +6765,7 @@ msgstr "Restricted"
 #: src/pages/LearningObservation.tsx
 #: src/pages/LearningTimeline.tsx
 #: src/pages/memory/MemoryPage.tsx
+#: src/pages/MemoryHistory.tsx
 #: src/pages/RoutineHistory.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/UploadedFiles.tsx
@@ -6728,7 +6783,7 @@ msgstr "Retry {0}"
 msgid "Retry now"
 msgstr "Retry now"
 
-#: src/pages/Shell.tsx
+#: src/pages/shell/computer-screen-error.tsx
 msgid "Retry screen"
 msgstr "Retry screen"
 
@@ -6909,6 +6964,7 @@ msgstr "Runs on"
 msgid "Runs when this bot receives a verified message from this provider."
 msgstr "Runs when this bot receives a verified message from this provider."
 
+#: src/pages/group-model-control.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Runtime"
 msgstr "Runtime"
@@ -6920,6 +6976,11 @@ msgstr "Runtime availability could not be checked."
 #: src/pages/LearningObservation.tsx
 msgid "safety"
 msgstr "safety"
+
+#: src/pages/group-model-control.tsx
+#: src/pages/shell/bot-model-chip.tsx
+msgid "Same as bot"
+msgstr "Same as bot"
 
 #. placeholder {0}: row.participants.length
 #: src/pages/ComparePanel.tsx
@@ -6973,6 +7034,10 @@ msgstr "Save anyway"
 msgid "Save credentials"
 msgstr "Save credentials"
 
+#: src/pages/group-model-control.tsx
+msgid "Save model"
+msgstr "Save model"
+
 #: src/components/AskCard.tsx
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/account/AccountProfile.tsx
@@ -7025,6 +7090,7 @@ msgstr "Saving..."
 
 #: src/components/AskCard.tsx
 #: src/components/teach/SkillDraftCard.tsx
+#: src/pages/group-model-control.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
@@ -7113,6 +7179,14 @@ msgstr "Search skills and plugins"
 #: src/pages/SpaceSearch.tsx
 msgid "Searching…"
 msgstr "Searching…"
+
+#: src/components/integrations/McpCredentialFields.tsx
+msgid "Secret"
+msgstr "Secret"
+
+#: src/components/integrations/McpCredentialFields.tsx
+msgid "Secret for {key}"
+msgstr "Secret for {key}"
 
 #: src/pages/account/AccountProfile.tsx
 msgid "Select"
@@ -7554,6 +7628,10 @@ msgstr "Speak this reply"
 msgid "Speaking…"
 msgstr "Speaking…"
 
+#: src/pages/memory/MemoryImport.tsx
+msgid "Split this import into at most three sections."
+msgstr "Split this import into at most three sections."
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "SSH agent"
 msgstr "SSH agent"
@@ -7856,6 +7934,10 @@ msgstr "The bot is working — wait or stop it"
 msgid "The connection was cancelled."
 msgstr "The connection was cancelled."
 
+#: src/pages/group-model-control.tsx
+msgid "The group model choice was reloaded. Pick again."
+msgstr "The group model choice was reloaded. Pick again."
+
 #: src/pages/memory/MemoryProposals.tsx
 msgid "The memory changed since this suggestion. Open History before trying again."
 msgstr "The memory changed since this suggestion. Open History before trying again."
@@ -7877,7 +7959,7 @@ msgstr "The service may use its own embedding providers. Check its settings befo
 msgid "Theme"
 msgstr "Theme"
 
-#: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/model-pin-select.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Thinking"
 msgstr "Thinking"
@@ -7986,6 +8068,10 @@ msgstr "This folder is managed by the server."
 #: src/pages/HostComputerSettings.tsx
 msgid "This folder is not available."
 msgstr "This folder is not available."
+
+#: src/pages/Shell.tsx
+msgid "This group's model is blocked by the bot or space settings. Change the destination policy or choose another group model."
+msgstr "This group's model is blocked by the bot or space settings. Change the destination policy or choose another group model."
 
 #: src/pages/HostComputerPrompt.tsx
 msgid "this Mac"
@@ -8202,6 +8288,7 @@ msgstr "Trusted folders"
 #: src/pages/customize/CustomizeControls.tsx
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/shell/computer-screen-error.tsx
 msgid "Try again"
 msgstr "Try again"
 
@@ -8432,6 +8519,10 @@ msgstr "Use this model"
 #: src/pages/fleet/FleetSettings.tsx
 msgid "User"
 msgstr "User"
+
+#: src/pages/shell/bot-model-chip.tsx
+msgid "Using {currentId}"
+msgstr "Using {currentId}"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Verify and add"

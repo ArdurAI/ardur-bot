@@ -9,6 +9,7 @@ import type {
 import { RunTriggerSchema } from "@ardurbot/contracts";
 import { describe, expect, it } from "vitest";
 import {
+  activeMemberRun,
   activeThreadRuns,
   applyThreadSendReceipt,
   clearActiveThreadRuns,
@@ -16,6 +17,7 @@ import {
   computerPanelAutoUsesBoot,
   computerPanelNeedsMaintenance,
   computerTakeoverBlocked,
+  isGroupMemberModelPinEvent,
   isThreadSnapshotEvent,
   mergeThreadSnapshot,
   prependThreadMessagePage,
@@ -27,6 +29,112 @@ import {
 } from "./thread-events.js";
 
 describe("thread event reduction", () => {
+  it("recognizes either member pin event for a group refresh", () => {
+    expect(isGroupMemberModelPinEvent(event({ type: "group.memberModelPin.set" }))).toBe(true);
+    expect(isGroupMemberModelPinEvent(event({ type: "group.memberModelPin.cleared" }))).toBe(true);
+    expect(isGroupMemberModelPinEvent(event({ type: "run.started" }))).toBe(false);
+  });
+  it.each(["queued", "leased", "running", "waiting_input", "waiting_takeover"] as const)(
+    "keeps the admitted member pin visible while %s",
+    (status) => {
+      const run = {
+        ...threadRun("admitted", "member"),
+        status,
+        runtimePin: {
+          runtimeKind: "pi" as const,
+          provider: "fixture",
+          modelId: "original",
+          effort: "off",
+          credentialId: "credential",
+          revision: 1,
+        },
+      };
+      expect(activeMemberRun([run], "member")).toBe(run);
+      expect(activeMemberRun([run], "other")).toBeNull();
+    },
+  );
+  it("prefers the admitted run over a newer queued run for the same member", () => {
+    const admitted = {
+      ...threadRun("running", "member"),
+      status: "running" as const,
+      runtimePin: {
+        runtimeKind: "pi" as const,
+        provider: "fixture",
+        modelId: "original",
+        effort: "off",
+        credentialId: "credential",
+        revision: 1,
+      },
+    };
+    const queued = {
+      ...threadRun("queued", "member"),
+      status: "queued" as const,
+      runtimePin: null,
+    };
+    expect(activeMemberRun([queued, admitted], "member")).toBe(admitted);
+    expect(activeMemberRun([queued], "member")).toBe(queued);
+    // A queued handoff already carries a pin; the waiting run still wins.
+    const waiting = { ...admitted, id: "waiting", status: "waiting_input" as const };
+    const queuedHandoff = {
+      ...queued,
+      id: "handoff",
+      runtimePin: { ...admitted.runtimePin, modelId: "next", revision: 2 },
+    };
+    expect(activeMemberRun([queuedHandoff, waiting], "member")).toBe(waiting);
+    expect(activeMemberRun([queuedHandoff, queued], "member")).toBe(queuedHandoff);
+  });
+  it.each(["completed", "failed", "cancelled"] as const)(
+    "does not display a terminal %s pin as the current member choice",
+    (status) => {
+      const run = {
+        ...threadRun("old", "member"),
+        status,
+        runtimePin: {
+          runtimeKind: "pi" as const,
+          provider: "fixture",
+          modelId: "old",
+          effort: "off",
+          credentialId: "credential",
+          revision: 1,
+        },
+      };
+      expect(activeMemberRun([run], "member")).toBeNull();
+    },
+  );
+  it("preserves a previous pin and accepts the admitted pin from a live start", () => {
+    const originalPin = {
+      runtimeKind: "pi" as const,
+      provider: "fixture",
+      modelId: "original",
+      effort: "high",
+      credentialId: "connection",
+      revision: 1,
+    };
+    const run = { ...threadRun("live", "member"), runtimePin: originalPin };
+    const initial = { ...snapshot([]), groupId: "group", run, activeRuns: [run] };
+    const started = reduceThreadSnapshot(
+      initial,
+      event({ type: "run.started", botId: "member", runId: "live" }),
+    );
+    expect(started?.activeRuns?.[0]?.runtimePin).toEqual(originalPin);
+
+    const newPin = { ...originalPin, modelId: "admitted", revision: 2 };
+    const admitted = reduceThreadSnapshot(
+      initial,
+      event({
+        type: "run.started",
+        botId: "member",
+        runId: "new",
+        payload: { runtimePin: newPin },
+      }),
+    );
+    expect(admitted?.activeRuns?.find((item) => item.id === "new")?.runtimePin).toEqual(newPin);
+    const unknown = reduceThreadSnapshot(
+      { ...initial, run: null, activeRuns: [] },
+      event({ type: "run.started", botId: "member", runId: "unknown" }),
+    );
+    expect(activeMemberRun(unknown?.activeRuns ?? [], "member")?.id).toBe("unknown");
+  });
   it("admits live context through the subscription filter and updates the matching run", () => {
     const run = threadRun("run-1");
     const initial = { ...snapshot([]), run, activeRuns: [run, threadRun("peer")] };
@@ -1489,6 +1597,31 @@ describe("computer event reduction", () => {
         }),
       ),
     ).toBe(prev);
+  });
+
+  it("updates one computer progress line and clears it after boot", () => {
+    const initial = computer({ state: "booting" });
+    const preparing = reduceComputerStatus(
+      initial,
+      event({
+        type: "computer.status",
+        payload: { status: "booting", imagePulling: true, imagePullPercent: null },
+      }),
+    );
+    const downloading = reduceComputerStatus(
+      preparing,
+      event({
+        type: "computer.status",
+        payload: { status: "booting", imagePulling: true, imagePullPercent: 45 },
+      }),
+    );
+    expect(downloading).toMatchObject({ imagePulling: true, imagePullPercent: 45 });
+    expect(
+      reduceComputerStatus(
+        downloading,
+        event({ type: "computer.status", payload: { status: "running" } }),
+      ),
+    ).toMatchObject({ imagePulling: false, state: "running" });
   });
 
   it("marks takeover requested and clears control unless the lease was retained", () => {

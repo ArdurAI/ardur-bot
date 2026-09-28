@@ -1,7 +1,42 @@
 import { describe, expect, it } from "vitest";
-import { buildMcpUpdateMaterial } from "./mcp-material.js";
+import { buildMcpUpdateMaterial, visibleMcpCredentialFlags } from "./mcp-material.js";
+
+it("shows legacy entries as secret until their owner changes the flag", () => {
+  expect(
+    visibleMcpCredentialFlags({
+      env: { LOG_LEVEL: "info", PGPASSWORD: "bluebird-42" },
+      headers: { "X-Auth": "header-789" },
+    }),
+  ).toEqual({
+    env: { LOG_LEVEL: true, PGPASSWORD: true },
+    headers: { "X-Auth": true },
+  });
+});
 
 describe("buildMcpUpdateMaterial", () => {
+  it("defaults new plain names off while keeping legacy entries secret", () => {
+    const result = buildMcpUpdateMaterial(
+      { env: { PGPASSWORD: "bluebird-42" } },
+      {
+        transport: "stdio",
+        slug: "x",
+        name: "x",
+        command: "/bin/mcp",
+        env: {
+          PGPASSWORD: "bluebird-42",
+          LOG_LEVEL: "info",
+          DEBUG: "1",
+        },
+      },
+    );
+    expect(result).toMatchObject({
+      action: "store",
+      material: {
+        credentialFlags: { env: { PGPASSWORD: true, LOG_LEVEL: false, DEBUG: false }, headers: {} },
+      },
+    });
+  });
+
   it("keeps the stored blob untouched when the update carries no credential data", () => {
     expect(
       buildMcpUpdateMaterial(
@@ -44,7 +79,13 @@ describe("buildMcpUpdateMaterial", () => {
         env: { API_KEY: "k" },
       },
     );
-    expect(result).toEqual({ action: "store", material: { env: { API_KEY: "k" } } });
+    expect(result).toEqual({
+      action: "store",
+      material: {
+        env: { API_KEY: "k" },
+        credentialFlags: { env: { API_KEY: true }, headers: {} },
+      },
+    });
   });
 
   it("clearing removes static credentials but keeps OAuth state", () => {
@@ -124,7 +165,11 @@ describe("buildMcpUpdateMaterial", () => {
     );
     expect(result).toEqual({
       action: "store",
-      material: { env: { OLD: "x" }, headers: { Authorization: "b" } },
+      material: {
+        env: { OLD: "x" },
+        headers: { Authorization: "b" },
+        credentialFlags: { env: { OLD: true }, headers: { Authorization: true } },
+      },
     });
   });
 
@@ -141,7 +186,11 @@ describe("buildMcpUpdateMaterial", () => {
     );
     expect(result).toEqual({
       action: "store",
-      material: { headers: { "x-api-key": "new-key" }, oauth: { tokens: { access_token: "t" } } },
+      material: {
+        headers: { "x-api-key": "new-key" },
+        credentialFlags: { env: {}, headers: { "x-api-key": true } },
+        oauth: { tokens: { access_token: "t" } },
+      },
     });
     expect(result.action === "store" && result.material).not.toHaveProperty("secret");
   });

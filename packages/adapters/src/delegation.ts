@@ -1,4 +1,9 @@
-import type { DelegationKind, DelegationSnapshot, RuntimeProblem } from "@ardurbot/contracts";
+import type {
+  DelegationKind,
+  DelegationSnapshot,
+  RuntimePinSource,
+  RuntimeProblem,
+} from "@ardurbot/contracts";
 import { DelegationSnapshotSchema, RuntimePinSchema, runtimePinProblem } from "@ardurbot/contracts";
 import type { Bot, Prisma, PrismaClient, ThreadEvents } from "@ardurbot/db";
 import {
@@ -10,7 +15,17 @@ import {
 import { destinationForModel } from "./model-locality.js";
 import type { ResolvedRunPin } from "./run-model-pin.js";
 
-export type DelegationResolver = (bot: Bot) => Promise<ResolvedRunPin | RuntimeProblem>;
+export type DelegationResolver = (
+  bot: Bot,
+  context?: {
+    tx: Prisma.TransactionClient;
+    targetThreadId: string;
+    userId: string;
+    spaceId: string;
+  },
+) => Promise<
+  (ResolvedRunPin & { pinSource?: RuntimePinSource; usageGroupId?: string | null }) | RuntimeProblem
+>;
 export async function prepareDelegation(
   tx: Prisma.TransactionClient,
   input: {
@@ -28,6 +43,7 @@ export async function prepareDelegation(
     peerMode?: "read-only";
     tokens?: number;
     deadlineAt?: Date;
+    targetThreadId?: string;
   },
   resolve?: DelegationResolver,
 ) {
@@ -42,6 +58,7 @@ export async function prepareDelegation(
     include: { computer: true },
   });
   let snapshot: DelegationSnapshot;
+  let admissionUsageGroupId: string | null = null;
   if (inherited && parent.delegationId) {
     const row = await tx.delegation.findUniqueOrThrow({ where: { id: parent.delegationId } });
     snapshot = DelegationSnapshotSchema.parse(row.snapshot);
@@ -49,7 +66,20 @@ export async function prepareDelegation(
     const pin = RuntimePinSchema.safeParse(parent.runtimePin);
     if (inherited && !pin.success)
       throw new Error("The parent's resolved pin is unavailable; restart the task.");
-    const selected = inherited ? undefined : await resolve?.(bot);
+    const selected = inherited
+      ? undefined
+      : await resolve?.(
+          bot,
+          input.targetThreadId
+            ? {
+                tx,
+                targetThreadId: input.targetThreadId,
+                userId: input.userId,
+                spaceId: input.spaceId,
+              }
+            : undefined,
+        );
+    admissionUsageGroupId = selected?.kind === "resolved" ? (selected.usageGroupId ?? null) : null;
     if (!inherited && (!selected || selected.kind === "problem")) {
       const problem =
         selected ??
@@ -69,8 +99,14 @@ export async function prepareDelegation(
         );
       return { ok: false as const, error: problem.reason, problem };
     }
+    const pinSource = inherited
+      ? (parent.runtimePinSource as RuntimePinSource | null)
+      : selected!.kind === "resolved"
+        ? selected!.pinSource
+        : null;
     snapshot = {
       pin: inherited ? pin.data! : selected!.pin,
+      ...(pinSource ? { pinSource } : {}),
       computer:
         inherited && parent.runtimeComputer
           ? DelegationSnapshotSchema.shape.computer.parse(parent.runtimeComputer)
@@ -99,6 +135,8 @@ export async function prepareDelegation(
       delegationRootTaskId: record.rootTaskId,
       goalId: parent.goalId,
       runtimePin: admittedSnapshot.pin,
+      runtimePinSource: admittedSnapshot.pinSource,
+      usageGroupId: inherited ? parent.usageGroupId : admissionUsageGroupId,
       runtimeDestination: admittedSnapshot.destination,
       runtimeComputer: admittedSnapshot.computer,
     },

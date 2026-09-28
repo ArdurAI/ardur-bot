@@ -20,24 +20,32 @@ export function MemoryHistory({
   const [selected, setSelected] = useState<MemoryHistoryRevision | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [retry, setRetry] = useState(0);
   useEffect(() => {
     let active = true;
-    void rpc.memory
-      .history({ documentId: document.id })
-      .then((page) => {
+    setLoadFailed(false);
+    void (async () => {
+      try {
+        const page = await rpc.memory.history({ documentId: document.id });
         if (active) {
           setItems(page.items);
           setCursor(page.nextCursor);
           setSelected(page.items[0] ?? null);
         }
-      })
-      .catch(() => {
-        if (active) setError(t`Could not load history. Retry.`);
-      });
+      } catch {
+        if (active) {
+          setItems([]);
+          setSelected(null);
+          setCursor(null);
+          setLoadFailed(true);
+        }
+      }
+    })();
     return () => {
       active = false;
     };
-  }, [document.id, document.revision, document.gitSync?.status, t]);
+  }, [document.id, document.revision, document.gitSync?.status, retry]);
   async function more() {
     if (!cursor || busy) return;
     setBusy(true);
@@ -72,6 +80,17 @@ export function MemoryHistory({
   const before = selected
     ? items.find((revision) => revision.revision === selected.revision - 1)
     : undefined;
+  if (loadFailed)
+    return (
+      <div data-testid="memory-history" className="h-80">
+        <p role="alert">
+          <Trans>Could not load history. Retry.</Trans>
+        </p>
+        <Button variant="outline" onClick={() => setRetry((current) => current + 1)}>
+          <Trans>Retry</Trans>
+        </Button>
+      </div>
+    );
   return (
     <div
       className="h-80 overflow-auto motion-safe:animate-in motion-safe:fade-in duration-100 motion-reduce:animate-none"

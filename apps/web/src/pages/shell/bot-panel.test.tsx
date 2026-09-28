@@ -40,6 +40,8 @@ vi.mock("@lingui/react/macro", () => ({
       parts.reduce((text, part, index) => text + part + (values[index] ?? ""), ""),
   }),
   Trans: ({ children }: { children: ReactNode }) => children,
+  Plural: ({ value, one, other }: { value: number; one: string; other: string }) =>
+    (value === 1 ? one : other).replace("#", String(value)),
 }));
 vi.mock("@ardurbot/ui-web", () => ({
   Button: ({
@@ -139,7 +141,12 @@ afterEach(async () => {
 });
 
 const onSave = vi.fn(async () => undefined);
-function settings(overrides: Partial<Bot> = {}, modelFocusRequest = 0) {
+function settings(
+  overrides: Partial<Bot> = {},
+  modelFocusRequest = 0,
+  overrideGroups: Parameters<typeof BotSettings>[0]["overrideGroups"] = [],
+  onOpenGroup?: (groupId: string) => void,
+) {
   return (
     <BotSettings
       bot={{ ...bot, ...overrides }}
@@ -149,6 +156,8 @@ function settings(overrides: Partial<Bot> = {}, modelFocusRequest = 0) {
       onSave={onSave}
       onExport={async () => undefined}
       onClear={() => undefined}
+      overrideGroups={overrideGroups}
+      onOpenGroup={onOpenGroup}
     />
   );
 }
@@ -166,6 +175,28 @@ async function save() {
 }
 
 describe("bot model settings", () => {
+  it("pluralizes group choices and links to each group", async () => {
+    const onOpenGroup = vi.fn();
+    const group = {
+      id: "group",
+      name: "Review room",
+      members: [{ botId: bot.id, runtimePin: { runtimeKind: "pi" } }],
+    } as never;
+    await act(async () =>
+      root.render(settings({ groupModelOverrideCount: 1 }, 0, [group], onOpenGroup)),
+    );
+    expect(container.textContent).toContain("Also set differently in 1 group");
+    await act(async () =>
+      root.render(settings({ groupModelOverrideCount: 2 }, 0, [group], onOpenGroup)),
+    );
+    expect(container.textContent).toContain("Also set differently in 2 groups");
+    const link = [...container.querySelectorAll("button")].find(
+      (button) => button.textContent === "Review room",
+    );
+    await act(async () => link?.click());
+    expect(onOpenGroup).toHaveBeenCalledWith("group");
+  });
+
   it.each([0, 2])(
     "asks for a connection with %i available and never preselects one",
     async (count) => {
@@ -845,7 +876,9 @@ it.each([false, true, undefined])(
       runtimeInfo: { runtimeKind: native.runtimeKind, effortAttested },
     };
     await act(async () =>
-      root.render(<BotModelChip bot={native} run={run} settings={null} onClick={vi.fn()} />),
+      root.render(
+        <BotModelChip bot={native} run={run} settings={null} onClick={vi.fn()} display="using" />,
+      ),
     );
     expect(container.textContent).toBe(
       `Claude Code · claude-opus-5 · high${effortAttested ? "" : " · requested"}`,
@@ -857,6 +890,7 @@ it.each([false, true, undefined])(
           run={run}
           settings={null}
           onClick={vi.fn()}
+          display="using"
         />,
       ),
     );

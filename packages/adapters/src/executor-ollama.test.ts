@@ -1,5 +1,6 @@
 import type { AgentRunModel } from "@ardurbot/adapter-kit";
 import type { RuntimePin } from "@ardurbot/contracts";
+import { RuntimePinError } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { resolveModelKey } from "./executor.js";
@@ -10,9 +11,12 @@ const http = vi.hoisted(() => ({ fetch: vi.fn<typeof fetch>() }));
 vi.mock("./undici-fetch.js", () => ({ dispatcherFetch: http.fetch }));
 afterEach(() => vi.resetAllMocks());
 
-function fixture(reasoning = true) {
+function fixture(reasoning = true, supportsThinkingOff = true) {
   let installed = true;
+  let available = true;
+  let secretPresent = true;
   http.fetch.mockImplementation(async (url) => {
+    if (!available) throw new Error("fetch failed");
     const path = new URL(String(url)).pathname;
     if (path === "/api/tags")
       return Response.json({ models: installed ? [{ name: "qwen3:8b" }] : [] });
@@ -20,6 +24,7 @@ function fixture(reasoning = true) {
       return Response.json({
         capabilities: reasoning ? ["thinking", "completion"] : ["completion"],
         model_info: { "qwen3.context_length": 40960 },
+        ...(supportsThinkingOff ? {} : { thinking: { values: [true] } }),
       });
     throw new Error("Inference must not run during pin resolution");
   });
@@ -34,7 +39,11 @@ function fixture(reasoning = true) {
     spaceModelPreference: {
       findFirst: vi.fn(async () => ({ credential, modelId: "qwen3:8b", isDefault: true })),
     },
-    secret: { findFirst: vi.fn(async () => ({ id: "secret", ciphertext: "encrypted" })) },
+    secret: {
+      findFirst: vi.fn(async () =>
+        secretPresent ? { id: "secret", ciphertext: "encrypted" } : null,
+      ),
+    },
     space: { findUnique: vi.fn(async () => ({ allowedModelDestinations: { mode: "local" } })) },
   } as unknown as PrismaClient;
   const deps = {
@@ -55,6 +64,12 @@ function fixture(reasoning = true) {
     pin,
     remove: () => {
       installed = false;
+    },
+    stop: () => {
+      available = false;
+    },
+    removeSecret: () => {
+      secretPresent = false;
     },
     prisma,
     input: {
@@ -144,6 +159,54 @@ describe("Ollama run pins", () => {
       thinkingLevel: "off",
     });
   });
+  it("rejects thinking off when the selected reasoning model cannot disable it", async () => {
+    const f = fixture(true, false);
+    expect(
+      await resolveRunModelPin({ ...f.input, snapshot: undefined, bot: { thinkingLevel: "off" } }),
+    ).toMatchObject({ kind: "problem", code: "pin-effort-unsupported" });
+  });
+  it.each(["discovery", "missing secret"] as const)(
+    "preserves the requested explicit-off pin after %s fails before a snapshot",
+    async (failure) => {
+      const f = fixture();
+      const bot = {
+        modelProvider: f.pin.provider,
+        modelId: f.pin.modelId,
+        modelCredentialId: f.pin.credentialId,
+        thinkingLevel: "off",
+        modelPinRevision: 7,
+      };
+      if (failure === "discovery") f.stop();
+      else f.removeSecret();
+      const result = await resolveRunModelPin({ ...f.input, snapshot: undefined, bot });
+      expect(result.kind).toBe("problem");
+      if (result.kind !== "problem") return;
+      expect(result.pin).toEqual(requestedBotPin(bot));
+      const message = new RuntimePinError(result).message;
+      if (failure === "missing secret") expect(message).toContain("thinking off");
+      expect(message).not.toContain("effort not applicable");
+    },
+  );
+  it.each(["inherited", "explicit"] as const)(
+    "admits a non-reasoning %s choice with thinking off",
+    async (selection) => {
+      const f = fixture(false);
+      const bot =
+        selection === "explicit"
+          ? {
+              modelProvider: "ollama",
+              modelId: f.pin.modelId,
+              modelCredentialId: f.pin.credentialId,
+              thinkingLevel: "off",
+            }
+          : { thinkingLevel: "off" };
+      expect(await resolveRunModelPin({ ...f.input, snapshot: undefined, bot })).toMatchObject({
+        kind: "resolved",
+        pin: { provider: "ollama", effort: null },
+        thinkingLevel: "off",
+      });
+    },
+  );
   it("snapshots the existing off storage value as Ollama none", () => {
     expect(
       requestedBotPin({ modelProvider: "ollama", modelId: "qwen3:8b", thinkingLevel: "off" })

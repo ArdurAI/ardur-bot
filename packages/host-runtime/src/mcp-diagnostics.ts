@@ -13,14 +13,20 @@ export function argumentSecrets(args: readonly string[]): string[] {
   return values.filter(Boolean);
 }
 
+function secretSpellings(secret: string): Set<string> {
+  return new Set([secret, encodeURIComponent(secret), JSON.stringify(secret).slice(1, -1)]);
+}
+
+export function mcpTextContainsSecret(value: string, secret: string): boolean {
+  return (
+    Boolean(secret) && [...secretSpellings(secret)].some((spelling) => value.includes(spelling))
+  );
+}
+
 export function redactMcpText(value: string, secrets: readonly string[] = []): string {
   let result = value;
   for (const secret of [...new Set(secrets)].filter(Boolean).sort((a, b) => b.length - a.length)) {
-    for (const spelling of new Set([
-      secret,
-      encodeURIComponent(secret),
-      JSON.stringify(secret).slice(1, -1),
-    ]))
+    for (const spelling of secretSpellings(secret))
       result = result.split(spelling).join("[redacted]");
   }
   return result

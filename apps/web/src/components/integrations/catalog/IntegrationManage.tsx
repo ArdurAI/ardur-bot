@@ -4,6 +4,8 @@ import type {
   IntegrationDescriptor,
   IntegrationGrant,
   IntegrationResourceConstraints,
+  McpCredentialFlags,
+  McpServer,
   SpaceToolPolicies,
 } from "@ardurbot/contracts";
 import { IntegrationResourceConstraintsSchema, notionResourceId } from "@ardurbot/contracts";
@@ -11,6 +13,7 @@ import { Button, Checkbox, Input } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
 import { useEffect, useId, useState } from "react";
 import { rpc } from "../../../lib/rpc";
+import { changedMcpCredentialFlags, McpCredentialFields } from "../McpCredentialFields";
 import { ToolPermissions as ToolPicker } from "../manage/ToolPermissions";
 import { ResourcePicker } from "./ResourcePicker";
 
@@ -45,6 +48,9 @@ export function IntegrationManage({
     connection.resourceConstraints?.confluenceSpaces?.join(", ") ?? "",
   );
   const [scopeError, setScopeError] = useState(false);
+  const [credentialServer, setCredentialServer] = useState<McpServer | null>(null);
+  const [credentialBusy, setCredentialBusy] = useState(false);
+  const [credentialError, setCredentialError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
@@ -53,11 +59,13 @@ export function IntegrationManage({
     setError(false);
     setLoading(true);
     try {
-      const [bots, grants, computers] = await Promise.all([
+      const [bots, grants, computers, servers] = await Promise.all([
         rpc.bots.list(),
         rpc.integrations.grants({ connectionId: connection.id }),
         connection.transport === "host-cli" ? rpc.computer.list() : Promise.resolve([]),
+        rpc.mcp.servers.list().catch(() => []),
       ]);
+      setCredentialServer(servers.find((server) => server.id === connection.id) ?? null);
       const localBots = new Set(
         computers
           .filter((computer) => computer.status.kind === "desktop")
@@ -81,6 +89,28 @@ export function IntegrationManage({
   useEffect(() => {
     void load();
   }, [connection.id]);
+
+  async function setEntrySecret(
+    server: McpServer,
+    kind: keyof McpCredentialFlags,
+    key: string,
+    secret: boolean,
+  ) {
+    setCredentialError(false);
+    setCredentialBusy(true);
+    try {
+      await rpc.mcp.servers.update({
+        id: server.id,
+        credentialFlags: changedMcpCredentialFlags(server, kind, key, secret),
+      });
+      const servers = await rpc.mcp.servers.list();
+      setCredentialServer(servers.find((entry) => entry.id === server.id) ?? null);
+    } catch {
+      setCredentialError(true);
+    } finally {
+      setCredentialBusy(false);
+    }
+  }
 
   async function save() {
     setBusy(true);
@@ -164,6 +194,18 @@ export function IntegrationManage({
         rel="noreferrer"
         className="text-sm underline underline-offset-4"
       >{t`Documentation`}</a>
+      {credentialServer ? (
+        <McpCredentialFields
+          server={credentialServer}
+          disabled={credentialBusy}
+          onChange={(kind, key, secret) => void setEntrySecret(credentialServer, kind, key, secret)}
+        />
+      ) : null}
+      {credentialError ? (
+        <p role="alert" className="text-sm text-destructive">
+          {t`Could not update this field. Retry.`}
+        </p>
+      ) : null}
       {error ? (
         <div role="alert" className="space-y-2">
           <p className="text-sm text-destructive">{t`Could not save or load access.`}</p>

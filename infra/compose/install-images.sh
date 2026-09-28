@@ -244,7 +244,8 @@ create_env() {
 }
 
 validate_required_secrets() {
-  if ! docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" -f - config --environment <<'YAML' | awk '
+  if ! ARDURBOT_COMPUTER_IMAGE_REF_BOOTSTRAP="ghcr.io/ardurai/ardur-bot/computer:dev" \
+    docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" -f - config --environment 2>/dev/null <<'YAML' | awk '
     BEGIN {
       required["POSTGRES_PASSWORD"] = 1
       required["BETTER_AUTH_SECRET"] = 1
@@ -283,6 +284,110 @@ YAML
   fi
 }
 
+# jq is optional. Compose emits indented JSON; the fallback reads only direct
+# string fields in the known service and extension objects. It rejects JSON
+# escapes instead of trying to decode them; jq handles those when available.
+compose_field() {
+  local section="$1" key="$2"
+  if command -v jq >/dev/null 2>&1; then
+    if [[ "$section" == computer ]]; then
+      jq -er --arg key "$key" '.services.computer[$key] | strings' 2>/dev/null
+    else
+      jq -er --arg key "$key" '."x-ardurbot-image-selection"[$key] | strings' 2>/dev/null
+    fi
+  else
+    awk -v section="$section" -v key="$key" '
+      section == "computer" && /^  "services": \{/ { in_services = 1; next }
+      in_services && /^    "computer": \{/ { in_section = 1; next }
+      section != "computer" && /^  "x-ardurbot-image-selection": \{/ { in_section = 1; next }
+      in_section && ((section == "computer" && /^    }/) || (section != "computer" && /^  }/)) {
+        in_section = 0
+        in_services = 0
+        next
+      }
+      !found && in_section && index($0, "\"" key "\":") {
+        sub(/^.*: "/, "")
+        sub(/",?$/, "")
+        if (index($0, "\\") || index($0, "\"")) { invalid = 1; next }
+        val = $0
+        found = 1
+        next
+      }
+      END {
+        if (invalid || !found) exit 1
+        print val
+      }
+    '
+  fi
+}
+
+render_computer_config() {
+  ARDURBOT_COMPUTER_IMAGE_REF_BOOTSTRAP="ghcr.io/ardurai/ardur-bot/computer:dev" \
+    docker compose --env-file "$ENV_FILE" \
+      -f "$COMPOSE_FILE" --profile computer config --format json 2>/dev/null
+}
+
+render_template_version() {
+  docker compose --env-file "$ENV_EXAMPLE" -f - config --format json 2>/dev/null <<'YAML'
+x-ardurbot-image-selection:
+  app_version: ${ARDURBOT_APP_VERSION:-}
+services:
+  version-reader:
+    image: busybox:1
+YAML
+}
+
+resolve_computer_image_ref() {
+  local config explicit image tag channel version reference
+  config=$(render_computer_config) || fail "Docker Compose could not render the settings. Check .env."
+  explicit=$(printf '%s\n' "$config" | compose_field selection explicit_ref) \
+    || fail "Docker Compose omitted the computer image settings."
+  image=$(printf '%s\n' "$config" | compose_field selection explicit_image) \
+    || fail "Docker Compose omitted the computer image settings."
+  if [[ -n "$explicit" ]]; then
+    reference="$explicit"
+  elif [[ -n "$image" ]]; then
+    reference=$(printf '%s\n' "$config" | compose_field computer image) \
+      || fail "Docker Compose omitted the computer image."
+  else
+    tag=$(printf '%s\n' "$config" | compose_field selection image_tag) \
+      || fail "Docker Compose omitted the app image tag."
+    channel=$(printf '%s\n' "$config" | compose_field selection channel) \
+      || fail "Docker Compose omitted the computer channel."
+    version=$(printf '%s\n' "$config" | compose_field selection app_version) \
+      || fail "Docker Compose omitted the app version."
+    if [[ "$tag" =~ ^v([0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?)$ ]]; then
+      version="${BASH_REMATCH[1]}"
+    elif [[ "$tag" != "" && "$tag" != "edge" ]]; then
+      fail "set ARDURBOT_COMPUTER_IMAGE_REF for this app image tag."
+    elif [[ -z "$version" ]]; then
+      config=$(render_template_version) || fail "Docker Compose could not read the app version."
+      version=$(printf '%s\n' "$config" | compose_field selection app_version) \
+        || fail "Docker Compose omitted the app version."
+    fi
+    [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] \
+      || fail "the app version cannot select a computer image."
+    case "$channel" in
+      ""|dev) tag="dev" ;;
+      release) tag="$version" ;;
+      *) fail "ARDURBOT_COMPUTER_CHANNEL must be dev or release." ;;
+    esac
+    if [[ "$channel" == "" && "$version" != *-* ]]; then
+      tag="$version"
+    fi
+    reference="ghcr.io/ardurai/ardur-bot/computer:$tag"
+  fi
+  [[ -n "$reference" && "$reference" != *$'\n'* ]] \
+    || fail "the computer image reference is invalid."
+  export ARDURBOT_COMPUTER_IMAGE_REF="$reference"
+  config=$(render_computer_config) || fail "Docker Compose could not render the settings. Check .env."
+  reference=$(printf '%s\n' "$config" | compose_field computer image) \
+    || fail "Docker Compose omitted the computer image."
+  [[ -n "$reference" && "$reference" != *$'\n'* ]] \
+    || fail "the computer image reference is invalid."
+  export ARDURBOT_COMPUTER_IMAGE_REF="$reference"
+}
+
 download "$COMPOSE_FILE"
 download "$ENV_EXAMPLE"
 
@@ -293,6 +398,7 @@ else
 fi
 
 validate_required_secrets
+resolve_computer_image_ref
 
 if [[ "$prepare_only" == true ]]; then
   echo "Ardur files are ready. Edit .env, then run: bash install-images.sh"

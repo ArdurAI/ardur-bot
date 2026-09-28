@@ -82,6 +82,8 @@ export async function rejectDelegation(
       delegationId: row.id,
       delegationRootTaskId: row.rootTaskId,
       runtimePin: card.snapshot.pin,
+      ...(card.snapshot.pinSource ? { runtimePinSource: card.snapshot.pinSource } : {}),
+      usageGroupId: old.usageGroupId,
       runtimeComputer: card.snapshot.computer,
       runtimeDestination: card.snapshot.destination,
     },

@@ -3143,6 +3143,7 @@
       "id": "self-host",
       "aliases": [],
       "title": "Self-hosting",
+      "titleSource": "guide",
       "summary": "Set up a server and connect supported clients.",
       "area": "ide-and-operations",
       "order": 40,

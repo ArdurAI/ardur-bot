@@ -24,7 +24,7 @@ import {
 } from "../packages/contracts/src/domain.ts";
 import { type SiteProduct, SiteProductSchema } from "../packages/contracts/src/site-product.ts";
 import { POPULAR_MODEL_PROVIDER_IDS } from "../packages/core/src/model-providers.ts";
-import { runFeatureDocs } from "./feature-docs";
+import { loadValidatedFeatureDocs, publishedDocumentation } from "./feature-docs";
 
 type Provider = SiteProduct["providers"][number];
 type ProviderMetadata = Pick<Provider, "name" | "access" | "status" | "accountHint">;
@@ -456,9 +456,16 @@ export async function videosFromMedia(rootDir = root, probe: Probe = ffprobe): P
   ];
 }
 
-export async function generatedProduct(rootDir = root): Promise<SiteProduct> {
+export async function generatedProduct(rootDir = root, docsRoot = rootDir): Promise<SiteProduct> {
   const input = JSON.parse(await readFile(path.join(rootDir, productPath), "utf8"));
-  const { generatedAt: _generatedAt, source: _source, videos: _videos, ...curated } = input;
+  const {
+    generatedAt: _generatedAt,
+    source: _source,
+    videos: _videos,
+    documentation: _documentation,
+    ...curated
+  } = input;
+  const documentation = publishedDocumentation(await loadValidatedFeatureDocs(docsRoot));
   const videos = await videosFromMedia(rootDir);
   const casks = (await readdir(path.join(rootDir, "homebrew/Casks"))).filter((name) =>
     name.endsWith(".rb"),
@@ -470,6 +477,8 @@ export async function generatedProduct(rootDir = root): Promise<SiteProduct> {
   const cask = casks[0].slice(0, -3);
   const result = {
     ...curated,
+    // Omit the block entirely until a page is published; the website treats an empty block as invalid.
+    ...(documentation ? { documentation } : {}),
     ...(curated.memory ? { memory: { ...curated.memory, ...memoryFromCode() } } : {}),
     ...(videos.length ? { videos } : {}),
     providers: providersFromCatalog(),
@@ -687,7 +696,11 @@ export async function validateReferences(product: SiteProduct, rootDir = root): 
   }
 }
 
-export async function runSiteFacts(mode: "write" | "check", rootDir = root): Promise<boolean> {
+export async function runSiteFacts(
+  mode: "write" | "check",
+  rootDir = root,
+  docsRoot = rootDir,
+): Promise<boolean> {
   const currentProduct = await readFile(path.join(rootDir, productPath), "utf8");
   const currentReadme = await readFile(path.join(rootDir, readmePath), "utf8");
   const input = JSON.parse(currentProduct);
@@ -696,7 +709,7 @@ export async function runSiteFacts(mode: "write" | "check", rootDir = root): Pro
       `${productPath} must omit generatedAt and source. Run \`pnpm site:facts\` and commit the result.`,
     );
   }
-  const product = await generatedProduct(rootDir);
+  const product = await generatedProduct(rootDir, docsRoot);
   await validateReferences(product, rootDir);
   const expectedProduct = `${JSON.stringify(product, null, 2)}\n`;
   const expectedReadme = generatedReadme(currentReadme, product);
@@ -710,7 +723,6 @@ export async function runSiteFacts(mode: "write" | "check", rootDir = root): Pro
       throw new Error(
         "README.md site facts blocks are stale. Run `pnpm site:facts` and commit the result. Curated text lives in site/data/product.json.",
       );
-    await runFeatureDocs(rootDir);
   } else if (stale) {
     if (currentProduct !== expectedProduct)
       await writeFile(path.join(rootDir, productPath), expectedProduct);

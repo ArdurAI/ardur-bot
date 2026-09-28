@@ -27,6 +27,7 @@ import {
   parseMemoryBytes,
   publishedLoopbackControlHostPort,
   resolveComputerControlEndpoint,
+  resolveComputerImage,
   resolveScreenNetworkMode,
   resolveScreenPublishTarget,
   resolveSpaceComputerLimit,
@@ -36,6 +37,52 @@ import {
   screenUrlWithToken,
   xdotoolCommand,
 } from "./computer-spec.js";
+
+describe("computer image resolution", () => {
+  it.each([
+    [
+      {
+        override: "registry.example/computer:chosen",
+        localPresent: true,
+        appVersion: "0.1.0-alpha.1",
+      },
+      "registry.example/computer:chosen",
+    ],
+    [{ localPresent: true, appVersion: "0.1.0" }, "ardurbot/computer:local"],
+    [{ localPresent: false, appVersion: "0.1.0" }, "ghcr.io/ardurai/ardur-bot/computer:0.1.0"],
+    [
+      { localPresent: false, appVersion: "0.1.0-alpha.1" },
+      "ghcr.io/ardurai/ardur-bot/computer:dev",
+    ],
+    [
+      { override: "", channel: "", localPresent: false, appVersion: "0.1.0-alpha.1" },
+      "ghcr.io/ardurai/ardur-bot/computer:dev",
+    ],
+    [
+      { override: "  ", channel: "  ", localPresent: false, appVersion: "0.1.0" },
+      "ghcr.io/ardurai/ardur-bot/computer:0.1.0",
+    ],
+    [
+      { localPresent: false, appVersion: "0.1.0", channel: "dev" },
+      "ghcr.io/ardurai/ardur-bot/computer:dev",
+    ],
+    [
+      { localPresent: false, appVersion: "0.1.0-alpha.1", channel: "release" },
+      "ghcr.io/ardurai/ardur-bot/computer:0.1.0-alpha.1",
+    ],
+  ] as const)("resolves %j to %s", (input, expected) => {
+    expect(resolveComputerImage(input)).toBe(expected);
+  });
+
+  it("rejects an unsupported channel or version", () => {
+    expect(() =>
+      resolveComputerImage({ localPresent: false, appVersion: "0.1.0", channel: "edge" }),
+    ).toThrow("ARDURBOT_COMPUTER_CHANNEL");
+    expect(() => resolveComputerImage({ localPresent: false, appVersion: "unknown" })).toThrow(
+      "application version",
+    );
+  });
+});
 
 describe("graphical computer spec", () => {
   it("binds the embed WebSocket path to the current screen capability", () => {

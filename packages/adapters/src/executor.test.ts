@@ -1851,6 +1851,7 @@ it("resolves a native Codex bot without the space's inherited hosted OAuth crede
     },
     userModelCredential: { findFirst: lookup },
     spaceModelPreference: { findFirst: lookup },
+    space: { findUnique: vi.fn(async () => ({ allowedModelDestinations: null })) },
     secret: { findFirst: load },
   } as unknown as PrismaClient;
   const executor = createRunExecutor({ prisma, secretStore: { load } } as unknown as Parameters<

@@ -1,4 +1,10 @@
 export const ZH_MESSAGES: Record<string, string> = {
+  "This group's model is blocked by the bot or space settings. Change the destination policy or choose another group model.":
+    "群组模型被 Bot 或空间设置阻止。请更改目标位置策略，或选择其他群组模型。",
+  "{botName} couldn't use the model set for this group. Reconnect it or change the group model.":
+    "{botName} 无法使用为此群组设置的模型。请重新连接，或更改群组模型。",
+  "{botName} couldn't use the model set for this group. Change the group model or check this bot's settings.":
+    "{botName} 无法使用为此群组设置的模型。请更改群组模型，或检查 Bot 设置。",
   Antigravity: "Antigravity",
   "Antigravity did not finish in time. Try again.": "Antigravity 未能按时完成。请重试。",
   "Antigravity's live model list could not be checked. Check again.":
@@ -879,6 +885,9 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Review proposals": "审核提案",
   "Tell your bot what to change or remove": "告诉 Bot 要更改或移除什么",
   "Could not prepare memory changes. Try again.": "无法准备记忆更改。请重试。",
+  "Line {lineNumber}: {maskedLine} Edit or remove this line.":
+    "第 {lineNumber} 行：{maskedLine} 请编辑或删除此行。",
+  "Split this import into at most three sections.": "请将此次导入拆分为不超过三个部分。",
   "Memory review is not available with Claude Code or Codex yet; import memory or edit a document directly.":
     "暂不支持使用 Claude Code 或 Codex 审核记忆；请导入记忆或直接编辑文档。",
   "Summarize what you remember about me as plain bullet points. Group them under Profile, Preferences, and Topics. Include only information I shared or explicitly asked you to remember. Leave out passwords, API keys, private account details, and guesses. Do not include instructions to perform actions or change permissions.":
@@ -1145,4 +1154,10 @@ export const ZH_MESSAGES: Record<string, string> = {
     "基于最近 {days} 天内 {approvals} 次批准且没有拒绝。",
   "Based on {count} requests in the last {days} days.": "基于最近 {days} 天内的 {count} 次请求。",
   "Allow {tool} for {bot} without asking?": "允许 {bot} 使用 {tool} 而不再询问？",
+  "This bot uses a model chosen for this group. Change it in Group settings.":
+    "此 Bot 使用为该群组选择的模型。请在群组设置中更改。",
+  "Model in this group": "此群组中的模型",
+  "Same as bot": "与 Bot 相同",
+  "Could not save group model.": "无法保存群组模型。",
+  "This member's model changed. Reload the group.": "此成员的模型已更改。请重新加载群组。",
 };

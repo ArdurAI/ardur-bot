@@ -43,6 +43,7 @@ import {
   BotSchema,
   BotSectionSchema,
   CapabilityInstallSchema,
+  ClearGroupMemberModelPinInput,
   ComputerModeSchema,
   ComputerReleaseReasonSchema,
   ComputerStatusSchema,
@@ -80,6 +81,7 @@ import {
   ServerUpdateRequestSchema,
   ServerUpdateRunSchema,
   ServerUpdateStatusSchema,
+  SetGroupMemberModelPinInput,
   SkillPlaybookSchema,
   SpaceMemoryConfigSchema,
   SpaceNavigationSchema,
@@ -157,7 +159,7 @@ import {
   LocalImportSelectionSchema,
   LocalImportStatusSchema,
 } from "./local-import.js";
-import { McpHeadersSchema } from "./mcp.js";
+import { McpCredentialFlagsSchema, McpHeadersSchema } from "./mcp.js";
 import {
   MemoryBundleSchema,
   MemoryDocumentHeadSchema,
@@ -549,6 +551,8 @@ export const appContract = {
     get: oc.input(groupId).output(GroupDetailSchema),
     duplicate: oc.input(groupId).output(GroupSchema),
     update: oc.input(UpdateGroupInput).output(GroupSchema),
+    setMemberModelPin: oc.input(SetGroupMemberModelPinInput).output(GroupSchema),
+    clearMemberModelPin: oc.input(ClearGroupMemberModelPinInput).output(GroupSchema),
     archive: oc.input(groupId).output(z.object({ ok: z.literal(true) })),
     restore: oc.input(groupId).output(z.object({ ok: z.literal(true) })),
     remove: oc.input(groupId).output(z.object({ ok: z.literal(true) })),
@@ -1189,6 +1193,7 @@ export const appContract = {
             // header's value can never be shown back for a person to retype.
             z.object({ id: Id, secret: z.string().min(1).max(16384).nullable() }),
             z.object({ id: Id, headers: McpHeadersSchema }),
+            z.object({ id: Id, credentialFlags: McpCredentialFlagsSchema }),
             z.object({ id: Id, enabled: z.boolean() }),
           ]),
         )
