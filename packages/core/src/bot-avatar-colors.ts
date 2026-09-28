@@ -158,7 +158,7 @@ function hexToRgb(hex: string) {
 function colorDistance(hex1: string, hex2: string) {
   const c1 = hexToRgb(hex1);
   const c2 = hexToRgb(hex2);
-  return (c1.r - c2.r) ** 2 + (c1.g - c2.g) ** 2 + (c1.b - c2.b) ** 2;
+  return Math.pow(c1.r - c2.r, 2) + Math.pow(c1.g - c2.g, 2) + Math.pow(c1.b - c2.b, 2);
 }
 
 function getNearestPigment(hex: string): GrokColorDef {
