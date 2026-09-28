@@ -179,8 +179,8 @@ Each release updates the cask through a reviewed pull request. In a checkout of
 `ArdurAI/homebrew-tap`:
 
 ```sh
-gh release download v0.1.0-alpha.1 --repo ArdurAI/ardur-bot --pattern ardur.rb
-git checkout -b ardur-0.1.0-alpha.1
+gh release download v0.1.0-alpha.2 --repo ArdurAI/ardur-bot --pattern ardur.rb
+git checkout -b ardur-0.1.0-alpha.2
 cp ardur.rb Casks/ardur.rb
 ```
 
