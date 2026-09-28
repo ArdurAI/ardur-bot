@@ -34,6 +34,6 @@ describe("collaboration transcript markers", () => {
 
     expect(html).toContain('role="status"');
     expect(html).toContain("circle");
-    expect(html).toContain("animate-spin");
+    expect(html).toContain('data-status="running"');
   });
 });

@@ -61,12 +61,22 @@ export const GroupAvatar = memo(function GroupAvatar({
           key={member.botId ?? index}
           style={{
             marginLeft: index === 0 ? 0 : -overlap,
-            borderRadius: size / 2,
-            borderWidth: 2,
-            borderColor: tokens.background,
-            overflow: "hidden", // in case ring needs clipping
+            zIndex: index + 1,
+            width: size,
+            height: size,
           }}
         >
+          <View
+            style={{
+              position: "absolute",
+              top: -2,
+              left: -2,
+              width: size + 4,
+              height: size + 4,
+              borderRadius: (size + 4) / 2,
+              backgroundColor: tokens.background,
+            }}
+          />
           <BotAvatar
             color={member.color}
             identity={member.botId ?? member.name}
@@ -81,19 +91,35 @@ export const GroupAvatar = memo(function GroupAvatar({
             marginLeft: -overlap,
             width: size,
             height: size,
-            borderRadius: size / 2,
-            borderWidth: 2,
-            borderColor: tokens.background,
-            backgroundColor: native.fillPressed,
-            alignItems: "center",
-            justifyContent: "center",
+            zIndex: members.length + 1,
           }}
         >
-          <Text
-            style={{ color: native.label, fontSize: Math.round(size * 0.3), fontWeight: "600" }}
+          <View
+            style={{
+              position: "absolute",
+              top: -2,
+              left: -2,
+              width: size + 4,
+              height: size + 4,
+              borderRadius: (size + 4) / 2,
+              backgroundColor: tokens.background,
+            }}
+          />
+          <View
+            style={{
+              flex: 1,
+              borderRadius: size / 2,
+              backgroundColor: native.fillPressed,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
           >
-            +{members.length - 2}
-          </Text>
+            <Text
+              style={{ color: native.label, fontSize: Math.round(size * 0.3), fontWeight: "600" }}
+            >
+              +{members.length - 2}
+            </Text>
+          </View>
         </View>
       ) : null}
     </View>

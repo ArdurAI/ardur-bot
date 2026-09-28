@@ -79,9 +79,8 @@ export const GroupAvatar = memo(function GroupAvatar({
             width: size,
             height: size,
             borderRadius: "50%",
-            border: "2px solid var(--background)",
+            boxShadow: "0 0 0 2px var(--background)",
             zIndex: index + 1,
-            // overflow hidden removed because we don't want to clip hand-cut edges or rings
           }}
         >
           <BotAvatar
@@ -100,7 +99,7 @@ export const GroupAvatar = memo(function GroupAvatar({
             width: size,
             height: size,
             borderRadius: "50%",
-            border: "2px solid var(--background)",
+            boxShadow: "0 0 0 2px var(--background)",
             fontSize: Math.round(size * 0.3),
             zIndex: members.length + 1,
           }}

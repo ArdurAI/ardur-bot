@@ -19,7 +19,16 @@ import Animated, {
   withRepeat,
   withTiming,
 } from "react-native-reanimated";
-import Svg, { Circle, Ellipse, G, Path, Rect } from "react-native-svg";
+import Svg, {
+  Circle,
+  ClipPath,
+  Defs,
+  Ellipse,
+  G,
+  Path,
+  Rect,
+  Image as SvgImage,
+} from "react-native-svg";
 import { mobileTokens } from "../lib/appearance";
 import { workingAvatarDuration, workingAvatarFrame } from "../lib/avatar-motion";
 import { mobileBotAvatarPresentation } from "../lib/bot-avatar";
@@ -29,6 +38,40 @@ import { NativeSymbol } from "./native-symbol";
 
 const AnimatedRect = Animated.createAnimatedComponent(Rect);
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+
+/**
+ * Generate an SVG path matching the hand-cut seal edge.
+ * CSS: border-radius: 50% 48% 52% 50% / 49% 51% 49% 51%
+ * Below 28 px the edge is a true circle, per the design canvas.
+ */
+function sealEdgePath(s: number): string {
+  if (s < 28) {
+    const r = s / 2;
+    return `M${r},0A${r},${r},0,1,1,${r},${s}A${r},${r},0,1,1,${r},0Z`;
+  }
+  // Horizontal radii: TL=50%, TR=48%, BR=52%, BL=50%
+  // Vertical radii:   TL=49%, TR=51%, BR=49%, BL=51%
+  const hTL = s * 0.5;
+  const vTL = s * 0.49;
+  const hTR = s * 0.48;
+  const vTR = s * 0.51;
+  const hBR = s * 0.52;
+  const vBR = s * 0.49;
+  const hBL = s * 0.5;
+  const vBL = s * 0.51;
+  return [
+    `M${hTL},0`,
+    `L${s - hTR},0`,
+    `A${hTR},${vTR},0,0,1,${s},${vTR}`,
+    `L${s},${s - vBR}`,
+    `A${hBR},${vBR},0,0,1,${s - hBR},${s}`,
+    `L${hBL},${s}`,
+    `A${hBL},${vBL},0,0,1,0,${s - vBL}`,
+    `L0,${vTL}`,
+    `A${hTL},${vTL},0,0,1,${hTL},0`,
+    "Z",
+  ].join("");
+}
 
 export const BotAvatar = memo(function BotAvatar({
   color,
@@ -52,6 +95,7 @@ export const BotAvatar = memo(function BotAvatar({
   const isRunning = status === "running" || status === "queued" || status === "leased";
   const isWaiting = status === "waiting_input";
   const isPaused = status === "waiting_takeover";
+  const avatarStatus = isRunning ? "running" : isWaiting ? "waiting" : isPaused ? "paused" : "idle";
 
   const { avatarStyle } = useAvatarStyle();
   const parsed = mobileBotAvatarPresentation(color);
@@ -105,7 +149,7 @@ export const BotAvatar = memo(function BotAvatar({
           stroke={tokens.foreground}
           strokeWidth="2"
           strokeLinecap="round"
-          strokeDasharray={reducedMotion ? "none" : "122 41"}
+          strokeDasharray="122 41"
         />
       </Svg>
     </Animated.View>
@@ -127,54 +171,66 @@ export const BotAvatar = memo(function BotAvatar({
     />
   ) : null;
 
+  const sealPath = sealEdgePath(size);
+  const runningSealSize = Math.round(size * 0.8);
+  const runningSealPath = sealEdgePath(runningSealSize);
+  const clipId = `seal-clip-${size}`;
+
   const picture =
     parsed.kind === "image" && parsed.imageUrl ? (
-      <View
-        style={{
-          width: size,
-          height: size,
-          borderRadius: size / 2,
-          borderWidth: 2,
-          borderColor: colorDef.hex,
-          borderStyle: isPaused ? "dashed" : "solid",
-          overflow: "hidden",
-        }}
-      >
-        <Image source={{ uri: parsed.imageUrl }} style={{ width: size, height: size }} />
-      </View>
+      <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        <Defs>
+          <ClipPath id={clipId}>
+            <Path d={sealPath} />
+          </ClipPath>
+        </Defs>
+        <SvgImage
+          x="0"
+          y="0"
+          width="100%"
+          height="100%"
+          preserveAspectRatio="xMidYMid slice"
+          href={parsed.imageUrl}
+          clipPath={`url(#${clipId})`}
+        />
+        <Path
+          d={sealPath}
+          stroke={colorDef.hex}
+          strokeWidth={2}
+          strokeDasharray={isPaused ? "4 3" : undefined}
+          fill="none"
+        />
+      </Svg>
     ) : parsed.kind === "shape" ? (
-      <View
-        style={{
-          width: size,
-          height: size,
-          borderRadius: size / 2,
-          borderWidth: 2,
-          borderColor: colorDef.hex,
-          borderStyle: isPaused ? "dashed" : "solid",
-          backgroundColor: tokens.card,
-          alignItems: "center",
-          justifyContent: "center",
-          overflow: "hidden",
-        }}
-      >
-        <Svg width={size * 0.8} height={size * 0.8} viewBox={SHIPPED_BOT_AVATAR_VIEWBOX}>
-          <Path d={parsed.shapePath} fill={colorDef.hex} />
-          <G fill={colorDef.eyeColor}>
-            <Ellipse
-              cx={SHIPPED_BOT_AVATAR_CENTER - 29}
-              cy={SHIPPED_BOT_AVATAR_CENTER - 8}
-              rx={10}
-              ry={7}
-            />
-            <Ellipse
-              cx={SHIPPED_BOT_AVATAR_CENTER + 29}
-              cy={SHIPPED_BOT_AVATAR_CENTER - 8}
-              rx={10}
-              ry={7}
-            />
-          </G>
-        </Svg>
-      </View>
+      <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        <Path d={sealPath} fill={tokens.card} />
+        <Path
+          d={sealPath}
+          stroke={colorDef.hex}
+          strokeWidth={2}
+          strokeDasharray={isPaused ? "4 3" : undefined}
+          fill="none"
+        />
+        <G transform={`translate(${size * 0.1},${size * 0.1}) scale(0.8)`}>
+          <Svg viewBox={SHIPPED_BOT_AVATAR_VIEWBOX}>
+            <Path d={parsed.shapePath} fill={colorDef.hex} />
+            <G fill={colorDef.eyeColor}>
+              <Ellipse
+                cx={SHIPPED_BOT_AVATAR_CENTER - 29}
+                cy={SHIPPED_BOT_AVATAR_CENTER - 8}
+                rx={10}
+                ry={7}
+              />
+              <Ellipse
+                cx={SHIPPED_BOT_AVATAR_CENTER + 29}
+                cy={SHIPPED_BOT_AVATAR_CENTER - 8}
+                rx={10}
+                ry={7}
+              />
+            </G>
+          </Svg>
+        </G>
+      </Svg>
     ) : (variant ?? avatarStyle) === "organic" ? (
       <OrganicAvatar
         color={colorDef.hex}
@@ -185,24 +241,33 @@ export const BotAvatar = memo(function BotAvatar({
     ) : (
       <View
         style={{
-          width: isRunning ? size * 0.8 : size,
-          height: isRunning ? size * 0.8 : size,
+          width: isRunning ? runningSealSize : size,
+          height: isRunning ? runningSealSize : size,
           margin: isRunning ? size * 0.1 : 0,
-          borderRadius: size / 2,
-          backgroundColor: colorDef.hex,
-          borderWidth: isPaused ? 2 : 0,
-          borderStyle: isPaused ? "dashed" : "solid",
-          borderColor: isPaused ? tokens.background : "transparent",
           alignItems: "center",
           justifyContent: "center",
         }}
       >
+        <Svg
+          width={isRunning ? runningSealSize : size}
+          height={isRunning ? runningSealSize : size}
+          viewBox={`0 0 ${isRunning ? runningSealSize : size} ${isRunning ? runningSealSize : size}`}
+          style={{ position: "absolute", top: 0, left: 0 }}
+        >
+          <Path
+            d={isRunning ? runningSealPath : sealPath}
+            fill={colorDef.hex}
+            stroke={isPaused ? tokens.background : undefined}
+            strokeWidth={isPaused ? 2 : undefined}
+            strokeDasharray={isPaused ? "4 3" : undefined}
+          />
+        </Svg>
         <Text
           style={{
             color: colorDef.eyeColor,
-            fontFamily: "Georgia", // 'Instrument Serif' may not be available on mobile, using serif fallback
+            fontFamily: "Georgia",
             fontStyle: "italic",
-            fontSize: Math.round((isRunning ? size * 0.8 : size) * 0.6),
+            fontSize: Math.round((isRunning ? runningSealSize : size) * 0.6),
             includeFontPadding: false,
           }}
         >
@@ -212,7 +277,10 @@ export const BotAvatar = memo(function BotAvatar({
     );
 
   return (
-    <View style={{ width: size, height: size, justifyContent: "center", alignItems: "center" }}>
+    <View
+      testID={`bot-avatar-${avatarStatus}`}
+      style={{ width: size, height: size, justifyContent: "center", alignItems: "center" }}
+    >
       {runningRing}
       {picture}
       {warningDot}

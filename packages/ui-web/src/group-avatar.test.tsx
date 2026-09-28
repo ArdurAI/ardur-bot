@@ -75,4 +75,32 @@ describe("GroupAvatar", () => {
     const count = (html.match(/ardurbot-bot-avatar/g) || []).length;
     expect(count).toBe(2);
   });
+
+  it("uses box-shadow (not border) for seal separation so children do not paint over the ring", () => {
+    const html = renderToString(
+      <GroupAvatar
+        members={[
+          { name: "A", color: "#F59E0B" },
+          { name: "B", color: "#3B82F6" },
+        ]}
+        size={40}
+      />,
+    );
+    expect(html).toContain("box-shadow");
+    expect(html).not.toContain("border:2px solid");
+    expect(html).not.toContain("border-width:2px");
+  });
+
+  it("exposes data-status on group member avatars", () => {
+    const html = renderToString(
+      <GroupAvatar
+        members={[
+          { name: "R", color: "#9A3B1E", status: "running" },
+          { name: "I", color: "#2F4A7A" },
+        ]}
+      />,
+    );
+    expect(html).toContain('data-status="running"');
+    expect(html).toContain('data-status="idle"');
+  });
 });

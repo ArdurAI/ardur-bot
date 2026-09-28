@@ -88,6 +88,14 @@ describe("BotAvatar", () => {
     expect(GROK_BOT_COLORS.length).toBeGreaterThan(0);
   });
 
+  it("resolves a legacy custom hex to the nearest pigment without mutating the input", () => {
+    const legacyHex = "#FF5733";
+    const result = resolvePersonaColorDef("bot", legacyHex);
+    expect(GROK_BOT_COLORS).toContain(result.hex);
+    expect(legacyHex).toBe("#FF5733"); // Stored value untouched
+    expect(resolvePersonaColorDef("bot", legacyHex).hex).toBe(result.hex); // Deterministic
+  });
+
   it("falls back to the identity palette for invalid custom hex", () => {
     expect(resolvePersonaColorDef("bot", "#zzzzzz")).toEqual(resolvePersonaColorDef("bot"));
     expect(resolvePersonaColorDef("bot", "#ggg")).toEqual(resolvePersonaColorDef("bot"));
@@ -113,11 +121,12 @@ describe("BotAvatar", () => {
     expect(html).not.toContain("evil.example");
   });
 
-  it("honors reduced-motion by making the ring complete and still", () => {
+  it("honors reduced-motion by keeping the arc still (not a closed circle)", () => {
     const html = renderToString(
       <BotAvatar color="#8B5CF6" identity="maya" size={32} status="running" />,
     );
-    expect(html).toContain("animate-spin");
+    expect(html).toContain('data-status="running"');
+    expect(html).toContain("122 41");
     expect(html).not.toContain("animate-pulse");
   });
 
@@ -182,5 +191,37 @@ describe("BotAvatar", () => {
     expect(html).toContain("ardurbot-organic-avatar");
     expect(html).toContain(`fill="${fallback.hex}"`);
     expect(html).not.toContain("#zzzzzz");
+  });
+
+  it.each([
+    ["running", "running"],
+    ["queued", "running"],
+    ["leased", "running"],
+    ["waiting_input", "waiting"],
+    ["waiting_takeover", "paused"],
+    ["idle", "idle"],
+    [undefined, "idle"],
+  ] as const)("exposes data-status=%s as %s", (raw, expected) => {
+    const html = renderToString(
+      <BotAvatar color="#9A3B1E" identity="test" status={raw as string} />,
+    );
+    expect(html).toContain(`data-status="${expected}"`);
+  });
+
+  it("never uses strokeDasharray=none on the running ring (arc is always 122 41)", () => {
+    const html = renderToString(
+      <BotAvatar color="#2F4A7A" identity="arc-test" size={40} status="running" />,
+    );
+    expect(html).toContain("122 41");
+    expect(html).not.toContain('stroke-dasharray="none"');
+    expect(html).not.toContain("strokeDasharray:none");
+  });
+
+  it("applies the hand-cut seal edge at 28 px and above", () => {
+    const large = renderToString(<BotAvatar color="#4E6B2F" identity="edge" size={40} />);
+    expect(large).toContain("50% 48% 52% 50%");
+
+    const small = renderToString(<BotAvatar color="#4E6B2F" identity="edge" size={20} />);
+    expect(small).toContain("border-radius:50%");
   });
 });

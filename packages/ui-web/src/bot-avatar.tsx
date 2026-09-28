@@ -96,6 +96,7 @@ export const BotAvatar = memo(function BotAvatar({
   const isRunning = status === "running" || status === "queued" || status === "leased";
   const isWaiting = status === "waiting_input";
   const isPaused = status === "waiting_takeover";
+  const avatarStatus = isRunning ? "running" : isWaiting ? "waiting" : isPaused ? "paused" : "idle";
 
   const preferredVariant = useAvatarStyle();
 
@@ -132,6 +133,7 @@ export const BotAvatar = memo(function BotAvatar({
           "ardurbot-bot-avatar relative flex shrink-0 select-none items-center justify-center bg-secondary",
           className,
         )}
+        data-status={avatarStatus}
         style={{
           width: size,
           height: size,
@@ -156,7 +158,7 @@ export const BotAvatar = memo(function BotAvatar({
               stroke="var(--foreground)"
               strokeWidth="2"
               strokeLinecap="round"
-              strokeDasharray={reducedMotion ? "none" : "122 41"}
+              strokeDasharray="122 41"
               transform="rotate(-60 28 28)"
             />
           </svg>
@@ -191,6 +193,7 @@ export const BotAvatar = memo(function BotAvatar({
         identity={effectiveId}
         size={size}
         isWorking={isRunning || isWaiting || isPaused}
+        avatarStatus={avatarStatus}
         className={className}
       />
     );
@@ -204,6 +207,7 @@ export const BotAvatar = memo(function BotAvatar({
           "ardurbot-bot-avatar relative flex shrink-0 select-none items-center justify-center bg-card",
           className,
         )}
+        data-status={avatarStatus}
         style={{
           width: size,
           height: size,
@@ -228,7 +232,7 @@ export const BotAvatar = memo(function BotAvatar({
               stroke="var(--foreground)"
               strokeWidth="2"
               strokeLinecap="round"
-              strokeDasharray={reducedMotion ? "none" : "122 41"}
+              strokeDasharray="122 41"
               transform="rotate(-60 28 28)"
             />
           </svg>
@@ -269,6 +273,7 @@ export const BotAvatar = memo(function BotAvatar({
         "ardurbot-bot-avatar relative flex shrink-0 select-none items-center justify-center",
         className,
       )}
+      data-status={avatarStatus}
       style={{
         width: isRunning ? size * 0.8 : size,
         height: isRunning ? size * 0.8 : size,
@@ -298,7 +303,7 @@ export const BotAvatar = memo(function BotAvatar({
             stroke="var(--foreground)"
             strokeWidth="2"
             strokeLinecap="round"
-            strokeDasharray={reducedMotion ? "none" : "122 41"}
+            strokeDasharray="122 41"
             transform="rotate(-60 28 28)"
           />
         </svg>
@@ -327,12 +332,14 @@ function OrganicAvatar({
   identity,
   size,
   isWorking,
+  avatarStatus,
   className,
 }: {
   color: string;
   identity?: string;
   size: number;
   isWorking: boolean;
+  avatarStatus: string;
   className?: string;
 }) {
   const reducedMotion = useSyncExternalStore(
@@ -350,6 +357,7 @@ function OrganicAvatar({
       viewBox="-60 -60 120 120"
       aria-hidden="true"
       className={cn("ardurbot-organic-avatar overflow-visible select-none", className)}
+      data-status={avatarStatus}
       data-working={isWorking}
       data-shape-family={seed % 10}
       data-eye-pattern={seed % 4}
