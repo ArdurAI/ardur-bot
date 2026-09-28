@@ -1,8 +1,14 @@
-import type { AgentRunRequest, AgentRuntime, AgentUsage, BackgroundJobPayloads } from "@ardurbot/adapter-kit";
-import { CodexUsageCollector } from "@ardurbot/host-runtime/runtimes/codex-usage";
+import type {
+  AgentRunRequest,
+  AgentRuntime,
+  AgentUsage,
+  BackgroundJobPayloads,
+} from "@ardurbot/adapter-kit";
 import type { LearningCandidate, RuntimePin } from "@ardurbot/contracts";
 import { runtimePinProblem } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
+import { AntigravityStreamParser } from "@ardurbot/host-runtime/runtimes/antigravity-stream";
+import { CodexUsageCollector } from "@ardurbot/host-runtime/runtimes/codex-usage";
 import { memoryServiceFixture, serialMemoryLock } from "@ardurbot/testkit/memory-fakes";
 import { describe, expect, it, vi } from "vitest";
 import { LEARNING_POLICY_VERSION, loadLearningRecords } from "./learning-records.js";
@@ -526,6 +532,106 @@ describe("reviewer runtime resolution", () => {
     });
     expect(recordUsage).not.toHaveBeenCalled();
     expect(f.records.usage).toEqual([]);
+  });
+  const agyPin: RuntimePin = {
+    runtimeKind: "antigravity",
+    provider: "antigravity",
+    modelId: "gemini-3.8-flash-low",
+    effort: "low",
+    credentialId: "native:antigravity",
+    revision: 1,
+  };
+  function agyReviewFixture(withUsage: boolean) {
+    const f = fixture();
+    f.config.reviewerPin = agyPin;
+    f.deps.resolvePin = vi.fn(async () => ({
+      kind: "resolved" as const,
+      pin: agyPin,
+      runtimePin: agyPin,
+      provider: agyPin.provider!,
+      id: agyPin.modelId!,
+      thinkingLevel: "low" as const,
+    }));
+    const nativeRun = vi.fn(async function* (_request: AgentRunRequest) {
+      const parser = new AntigravityStreamParser(agyPin);
+      yield parser.startUsage();
+      for (const event of parser.parse({ event: "init", init: { model: agyPin.modelId } }))
+        yield event;
+      for (const event of parser.parse({
+        event: "step_update",
+        step_update: { step_type: "agent_response", text_delta: '{"proposals":[]}' },
+      }))
+        yield event;
+      for (const event of parser.parse({
+        event: "result",
+        result: {
+          status: "SUCCESS",
+          response: '{"proposals":[]}',
+          ...(withUsage
+            ? {
+                usage: {
+                  input_tokens: 10,
+                  output_tokens: 2,
+                  thinking_tokens: 1,
+                  cache_read_tokens: 3,
+                },
+              }
+            : {}),
+        },
+      }))
+        yield event;
+      yield* parser.finishUsage("success");
+      yield { type: "done", text: '{"proposals":[]}' };
+    });
+    const nativeRuntime = {
+      run: nativeRun,
+      describe: () => ({ capabilities: { scripted: false } }),
+    } as unknown as AgentRuntime;
+    const resolveRuntime = vi.fn(async () => ({ runtime: nativeRuntime }));
+    return { f, resolveRuntime, nativeRun };
+  }
+  it("records real tokens when an antigravity review reports usage", async () => {
+    const { f, resolveRuntime, nativeRun } = agyReviewFixture(true);
+    const recorded: AgentUsage[] = [];
+    const recordUsage = vi.fn(async (_sourceRunId: string, usage: AgentUsage) => {
+      recorded.push(usage);
+    });
+    await reviewLearning({ ...f.deps, resolveRuntime, recordUsage }, await f.payload());
+    expect(nativeRun).toHaveBeenCalledOnce();
+    expect(f.runtimeRun).not.toHaveBeenCalled();
+    const final = recorded.at(-1)!;
+    expect(final.request?.purpose).toBe("detached-learning");
+    expect(final.request?.categories).toMatchObject({
+      logicalInput: 10,
+      output: 2,
+      cacheReadInput: 3,
+      reasoning: 1,
+    });
+    expect(f.records.reviews[0]).toMatchObject({ status: "no-change", tokens: 12 });
+  });
+  it("records an explicit limitation, not zeros, when antigravity reports no usage", async () => {
+    const { f, resolveRuntime } = agyReviewFixture(false);
+    const recorded: AgentUsage[] = [];
+    const recordUsage = vi.fn(async (_sourceRunId: string, usage: AgentUsage) => {
+      recorded.push(usage);
+    });
+    await reviewLearning({ ...f.deps, resolveRuntime, recordUsage }, await f.payload());
+    const final = recorded.at(-1)!;
+    expect(final.request?.categories).toEqual({
+      logicalInput: null,
+      uncachedInput: null,
+      cacheReadInput: null,
+      cacheWriteInput: null,
+      output: null,
+      reasoning: null,
+    });
+    expect(final.request?.collection).toMatchObject({
+      availability: "unavailable",
+      limitations: expect.arrayContaining(["provider-omitted"]),
+    });
+    // The review budget treats "not reported" as unknown: no token total is written.
+    expect(f.records.reviews[0]?.status).toBe("no-change");
+    expect(f.records.reviews[0]).not.toHaveProperty("tokens");
   });
 });
 
