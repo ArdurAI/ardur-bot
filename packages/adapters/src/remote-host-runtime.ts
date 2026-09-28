@@ -95,10 +95,7 @@ export class RemoteHostRuntime implements AgentRuntime {
         request.providerSourceRunId &&
         request.providerSourceRunId !== request.runId
           ? summaryOperationHash(
-              summaryOperationManifest(
-                capturedPin!,
-                request.providerRunMaxOutputTokens ?? request.model.maxTokens ?? 4_096,
-              ),
+              summaryOperationManifest(capturedPin!, request.model.maxTokens ?? 4_096),
             )
           : undefined;
       if (executionEnvelope && operationHash) {
@@ -111,7 +108,7 @@ export class RemoteHostRuntime implements AgentRuntime {
         const compiled = compileHermesRuntimeConfig(executionEnvelope.runtimeConfig, {
           id: request.model.id,
           contextWindow: request.model.contextWindow ?? 32_768,
-          maxTokens: request.providerRunMaxOutputTokens ?? request.model.maxTokens ?? 4_096,
+          maxTokens: request.model.maxTokens ?? 4_096,
           reasoning: request.model.reasoning ?? false,
           acceptsImages: request.model.acceptsImages ?? false,
           thinkingLevel: request.model.thinkingLevel ?? "off",
@@ -209,10 +206,18 @@ export class RemoteHostRuntime implements AgentRuntime {
           provider: request.model.provider,
           id: request.model.id,
           maxTokens:
-            this.kind === "hermes" ? (request.model.maxTokens ?? 4_096) : request.model.maxTokens,
+            this.kind === "hermes"
+              ? operationHash
+                ? (request.model.maxTokens ?? 4_096)
+                : (executionEnvelope?.effectiveRuntimeConfig.model.maxTokens ??
+                  request.model.maxTokens ??
+                  4_096)
+              : request.model.maxTokens,
           contextWindow:
             this.kind === "hermes"
-              ? (request.model.contextWindow ?? 32_768)
+              ? (executionEnvelope?.effectiveRuntimeConfig.model.contextWindow ??
+                request.model.contextWindow ??
+                32_768)
               : request.model.contextWindow,
           acceptsImages: request.model.acceptsImages,
           reasoning: request.model.reasoning,

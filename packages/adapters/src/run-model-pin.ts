@@ -49,6 +49,8 @@ export async function resolveRunModelPin(input: {
   scripted: boolean;
   /** True only before the run pin is first captured, including explicit group choices. */
   newAdmission?: boolean;
+  /** Output allowance fixed when a delegated Hermes pin is admitted. */
+  maxOutputTokens?: number;
   loadKey: (
     credential: Credential,
     pin: RuntimePin,
@@ -226,7 +228,17 @@ export async function resolveRunModelPin(input: {
       pin.effort = inheritedOllamaEffort(bot.thinkingLevel, discovered.reasoning);
     }
     const model = loadedModel ?? (await input.loadKey(credential, pin));
-    const resolved = { ...model, runtimePin: pin, thinkingLevel: selected.thinkingLevel };
+    const resolved = {
+      ...model,
+      ...(pin.runtimeKind === "hermes"
+        ? {
+            contextWindow: model.contextWindow ?? 32_768,
+            maxTokens: Math.min(model.maxTokens ?? 4_096, input.maxOutputTokens ?? 65_536),
+          }
+        : {}),
+      runtimePin: pin,
+      thinkingLevel: selected.thinkingLevel,
+    };
     const space = await input.prisma.space.findUnique({ where: { id: input.scope.spaceId } });
     if (
       !modelLocalityAllowed(
@@ -248,8 +260,8 @@ export async function resolveRunModelPin(input: {
       const document = pin.runtimeConfig;
       const compiled = compileHermesRuntimeConfig(document, {
         id: resolved.id,
-        contextWindow: resolved.contextWindow ?? 8192,
-        maxTokens: resolved.maxTokens ?? 4096,
+        contextWindow: resolved.contextWindow!,
+        maxTokens: resolved.maxTokens!,
         reasoning: resolved.reasoning ?? false,
         acceptsImages: resolved.acceptsImages ?? false,
         thinkingLevel: ThinkingLevelSchema.parse(resolved.thinkingLevel ?? "off"),
@@ -258,6 +270,20 @@ export async function resolveRunModelPin(input: {
       pin.effectiveRuntimeConfigHash = effectiveRuntimeConfigHash(compiled.manifest);
     }
     if (pin.runtimeKind === "hermes" && pin.effectiveRuntimeConfig) {
+      const captured = pin.effectiveRuntimeConfig.model;
+      if (
+        captured.id !== resolved.id ||
+        captured.contextWindow !== resolved.contextWindow ||
+        captured.maxTokens !== resolved.maxTokens ||
+        captured.reasoning !== (resolved.reasoning ?? false) ||
+        captured.acceptsImages !== (resolved.acceptsImages ?? false) ||
+        captured.thinkingLevel !== ThinkingLevelSchema.parse(resolved.thinkingLevel ?? "off")
+      )
+        return runtimePinProblem(
+          pin,
+          "runtime-configuration-invalid",
+          "The connection's model capabilities changed. Start a new run.",
+        );
       validateHermesExecutionEnvelope({
         runtimeKind: "hermes",
         runtimeConfig: pin.runtimeConfig,

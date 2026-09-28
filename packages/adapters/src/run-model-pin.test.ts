@@ -144,6 +144,99 @@ describe("run pin snapshots", () => {
     expect(admitted.pin.effectiveRuntimeConfigHash).toMatch(/^[a-f0-9]{64}$/);
     expect(snapshot.runtimeConfig.version).toBe(1);
   });
+  it.each(["primary", "group", "delegated", "comparison"])(
+    "captures a dispatchable Hermes manifest for %s admission",
+    async (path) => {
+      const f = fixture();
+      f.findCredential.mockResolvedValue({ ...credential, provider: "openai-compatible" });
+      f.loadKey.mockResolvedValue({
+        provider: "openai-compatible",
+        id: "same-model",
+        baseUrl: "http://127.0.0.1:8080/v1",
+        thinkingLevel: "off",
+        maxTokens: 16_384,
+      });
+      const config = effectiveHermesConfig(null);
+      const choice = {
+        ...pin,
+        runtimeKind: "hermes" as const,
+        provider: "openai-compatible",
+        modelId: "same-model",
+        effort: "off",
+        runtimeConfig: config,
+        runtimeConfigHash: hermesConfigHash(config),
+      };
+      const result = await resolveRunModelPin({
+        ...f,
+        bot:
+          path === "group"
+            ? {}
+            : {
+                runtimeKind: "hermes",
+                modelProvider: choice.provider,
+                modelId: choice.modelId,
+                thinkingLevel: choice.effort,
+                modelCredentialId: choice.credentialId,
+                modelPinRevision: choice.revision,
+                runtimeConfig: config,
+              },
+        ...(path === "group" ? { snapshot: choice } : {}),
+        newAdmission: true,
+        ...(path === "delegated" ? { maxOutputTokens: 10_000 } : {}),
+      });
+      expect(result.kind).toBe("resolved");
+      if (result.kind !== "resolved") return;
+      expect(result.contextWindow).toBe(32_768);
+      expect(result.maxTokens).toBe(path === "delegated" ? 10_000 : 16_384);
+      expect(result.pin.effectiveRuntimeConfig?.model).toMatchObject({
+        contextWindow: result.contextWindow,
+        maxTokens: result.maxTokens,
+      });
+      expect(result.pin.effectiveRuntimeConfigHash).toMatch(/^[a-f0-9]{64}$/);
+    },
+  );
+  it("rejects a resumed Hermes pin when the connection capabilities changed", async () => {
+    const f = fixture();
+    f.findCredential.mockResolvedValue({ ...credential, provider: "openai-compatible" });
+    f.loadKey.mockResolvedValue({
+      provider: "openai-compatible",
+      id: "same-model",
+      baseUrl: "http://127.0.0.1:8080/v1",
+      thinkingLevel: "off",
+      contextWindow: 32_768,
+      maxTokens: 4_096,
+    });
+    const config = effectiveHermesConfig(null);
+    const choice = {
+      ...pin,
+      runtimeKind: "hermes" as const,
+      provider: "openai-compatible",
+      modelId: "same-model",
+      effort: "off",
+      runtimeConfig: config,
+      runtimeConfigHash: hermesConfigHash(config),
+    };
+    const captured = await resolveRunModelPin({
+      ...f,
+      bot: {},
+      snapshot: choice,
+      newAdmission: true,
+    });
+    expect(captured.kind).toBe("resolved");
+    if (captured.kind !== "resolved") return;
+    f.loadKey.mockResolvedValue({
+      provider: "openai-compatible",
+      id: "same-model",
+      baseUrl: "http://127.0.0.1:8080/v1",
+      thinkingLevel: "off",
+      contextWindow: 16_384,
+      maxTokens: 4_096,
+    });
+    expect(await resolveRunModelPin({ ...f, bot: {}, snapshot: captured.pin })).toMatchObject({
+      kind: "problem",
+      code: "runtime-configuration-invalid",
+    });
+  });
   it("keeps an Anthropic pin and returns a reconnect action for legacy OAuth", async () => {
     const f = fixture();
     f.findCredential.mockResolvedValue({ ...credential, provider: "anthropic" });

@@ -559,7 +559,7 @@ export async function createApp(
   const router = createRouter({
     runtime,
     resolveComparisonPin: (bot) =>
-      executor.resolveModel({ spaceId: bot.spaceId, userId: bot.userId, botId: bot.id }),
+      executor.resolveModel({ spaceId: bot.spaceId, userId: bot.userId, botId: bot.id }, true),
     terminals,
     hostBridge,
     localImportRequests,
