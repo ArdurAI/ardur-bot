@@ -1,9 +1,11 @@
 import path from "node:path";
 import process from "node:process";
 import {
+  HOST_HEALTH_ACCEPT_HEADER,
   HOST_WRITE_FRAME_BYTES,
   HostMcpRegistrationSchema,
   hostSocketUrl,
+  negotiateHostHealth,
 } from "@ardurbot/contracts/host-bridge";
 import { receiveFrames, wsWire } from "@ardurbot/host-runtime/bridge-wire";
 import { installWin32NativeApi } from "@ardurbot/host-runtime/desktop-sandbox-win32-path";
@@ -72,6 +74,11 @@ async function connect() {
     const wire = wsWire(current);
     sendWire = wire;
     const host = agent;
+    let acceptedHealth: string | undefined;
+    current.once("upgrade", (response) => {
+      const header = response.headers[HOST_HEALTH_ACCEPT_HEADER];
+      acceptedHealth = typeof header === "string" ? header : undefined;
+    });
     let authenticatedAt = Date.now();
     let healthBusy = false;
     let mcpRefresh: Promise<void> | undefined;
@@ -98,7 +105,11 @@ async function connect() {
       if (healthBusy) return;
       healthBusy = true;
       try {
-        await wire.send({ v: 1, type: "health", health: await host.health() });
+        await wire.send({
+          v: 1,
+          type: "health",
+          health: negotiateHostHealth(await host.health(), acceptedHealth),
+        });
       } catch {
         current.close();
       } finally {

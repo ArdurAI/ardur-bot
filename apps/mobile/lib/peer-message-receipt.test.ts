@@ -1,12 +1,12 @@
 // @vitest-environment jsdom
-
-import type { MessageBlock } from "@ardurbot/contracts";
 import type { ReactNode } from "react";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
 import { expect, it, vi } from "vitest";
 import { PeerMessageReceipt } from "../components/peer-message-receipt";
+import { rpc } from "./api";
 
+vi.mock("./api", () => ({ rpc: vi.fn() }));
 vi.mock("@ardurbot/chat-ui/native", () => ({
   ChatMarkdown: ({ children }: { children: ReactNode }) => createElement("article", null, children),
 }));
@@ -17,44 +17,44 @@ vi.mock("./appearance", () => ({
     foreground: "black",
     border: "gray",
     card: "white",
+    background: "white",
+    destructive: "red",
   }),
 }));
 vi.mock("./native", () => ({ useResolvedAppearance: () => "light" }));
 vi.mock("./i18n", () => ({
   useI18n: () => ({
-    t: (value: string, args?: Record<string, string>) =>
-      value.replace(/\{(\w+)\}/g, (_, key: string) => args?.[key] ?? ""),
+    t: (text: string, args?: Record<string, string>) =>
+      text.replace(/\{(\w+)\}/g, (_, key: string) => args?.[key] ?? ""),
   }),
 }));
 vi.mock("react-native", () => ({
   View: ({ children }: { children: ReactNode }) => createElement("div", null, children),
   Text: ({ children }: { children: ReactNode }) => createElement("span", null, children),
+  ScrollView: ({ children }: { children: ReactNode }) => createElement("section", null, children),
+  Modal: ({ children, visible }: { children: ReactNode; visible: boolean }) =>
+    visible ? createElement("dialog", { open: true }, children) : null,
+  ActivityIndicator: () => null,
+  Button: ({ title, onPress }: { title: string; onPress: () => void }) =>
+    createElement("button", { type: "button", onClick: onPress }, title),
   Pressable: ({
     children,
     onPress,
-    accessibilityState,
     accessibilityLabel,
   }: {
     children: ReactNode;
     onPress?: () => void;
-    accessibilityState?: { expanded?: boolean };
     accessibilityLabel?: string;
   }) =>
     createElement(
       "button",
-      {
-        type: "button",
-        onClick: onPress,
-        "aria-expanded": accessibilityState?.expanded,
-        "aria-label": accessibilityLabel,
-      },
+      { type: "button", onClick: onPress, "aria-label": accessibilityLabel },
       children,
     ),
 }));
 
-it("shows a completed peer receipt and expands the full answer", async () => {
+it("opens a view-only native sheet with the peer's receipt and closes it", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  const answer = "The external request is completed, awaiting acceptance by its owner.";
   const node = document.createElement("div");
   const root = createRoot(node);
   try {
@@ -65,8 +65,8 @@ it("shows a completed peer receipt and expands the full answer", async () => {
             kind: "bot_message_received",
             fromBotId: "worker",
             fromBotName: "Worker",
-            text: answer,
-            intent: "result",
+            text: "Review complete.",
+            deliveryState: "read",
           },
           color: "gray",
           actionProps: {},
@@ -74,24 +74,24 @@ it("shows a completed peer receipt and expands the full answer", async () => {
         }),
       ),
     );
-    expect(node.textContent).toContain("Sent");
-    expect(node.querySelector("button")?.getAttribute("aria-label")).toBe(
-      "Message from Worker. Show reply",
+    expect(node.querySelector("dialog")).toBeNull();
+    expect(node.querySelector("button")?.getAttribute("aria-label")).toContain("Open conversation");
+    await act(async () => node.querySelector("button")!.click());
+    expect(node.querySelector("dialog")?.textContent).toContain("Review complete.");
+    expect(node.querySelector("dialog")?.textContent).toContain("This chat is view-only");
+    await act(async () =>
+      [...node.querySelectorAll("button")]
+        .find((button) => button.textContent === "Close")!
+        .click(),
     );
-    expect(node.textContent).toContain("Show reply");
-    expect(node.querySelector("article")).toBeNull();
-    await act(async () => node.querySelector("button")!.click());
-    expect(node.querySelector("article")?.textContent).toBe(answer);
-    expect(node.querySelector("button")?.getAttribute("aria-expanded")).toBe("true");
-    await act(async () => node.querySelector("button")!.click());
-    expect(node.querySelector("article")).toBeNull();
+    expect(node.querySelector("dialog")).toBeNull();
   } finally {
     await act(async () => root.unmount());
     vi.unstubAllGlobals();
   }
 });
 
-it("keeps delivered and queued labels while offering the reply reader", async () => {
+it("keeps the queued receipt label while offering the conversation", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const node = document.createElement("div");
   const root = createRoot(node);
@@ -100,10 +100,10 @@ it("keeps delivered and queued labels while offering the reply reader", async ()
       root.render(
         createElement(PeerMessageReceipt, {
           block: {
-            kind: "bot_message_received",
-            fromBotId: "worker",
-            fromBotName: "Worker",
-            text: "Checked the fixture.",
+            kind: "bot_message_sent",
+            toBotId: "worker",
+            toBotName: "Worker",
+            text: "Please check.",
             deliveryState: "delivered",
             queuedForBusy: true,
           },
@@ -114,62 +114,45 @@ it("keeps delivered and queued labels while offering the reply reader", async ()
       ),
     );
     expect(node.textContent).toContain("Waiting for a turn");
-    expect(node.querySelector("button")?.getAttribute("aria-label")).toBe(
-      "Waiting for a turn · from Worker. Show reply",
-    );
-    expect(node.textContent).toContain("Show reply");
     await act(async () => node.querySelector("button")!.click());
-    expect(node.querySelector("article")?.textContent).toBe("Checked the fixture.");
+    expect(node.querySelector("dialog")?.textContent).toContain("Please check.");
   } finally {
     await act(async () => root.unmount());
     vi.unstubAllGlobals();
   }
 });
 
-it.each([
-  [undefined, false, "Sent", "Sent to Worker"],
-  ["delivered", false, "Delivered to Worker", "Delivered to Worker"],
-  ["delivered", true, "Waiting for a turn", "Waiting for a turn · to Worker"],
-  ["read", false, "Read by Worker", "Read by Worker · to Worker"],
-  ["replied", false, "Replied", "Replied · to Worker"],
-  ["expired", false, "Expired", "Expired · to Worker"],
-  ["failed", false, "Failed", "Failed · to Worker"],
-] as const)(
-  "renders %s / busy %s as one %s chip",
-  async (state, queuedForBusy, label, accessible) => {
-    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-    const node = document.createElement("div");
-    const root = createRoot(node);
-    try {
-      await act(async () =>
-        root.render(
-          createElement(PeerMessageReceipt, {
-            block: {
-              kind: "bot_message_sent",
-              toBotId: "worker",
-              toBotName: "Worker",
-              text: "Check the fixture",
-              ...(state ? { deliveryState: state } : {}),
-              queuedForBusy,
-            },
-            color: "gray",
-            actionProps: {},
-            onOpenPeer: vi.fn(),
-          }),
-        ),
-      );
-      expect(node.textContent).toBe(label);
-      expect(node.querySelector("button")?.getAttribute("aria-label")).toBe(accessible);
-      expect(node.querySelectorAll("button")).toHaveLength(1);
-    } finally {
-      await act(async () => root.unmount());
-      vi.unstubAllGlobals();
-    }
-  },
-);
-
-it("names the recipient when an incoming delivery is read", async () => {
+it("loads a full peer conversation from the owning thread without allowing edits", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  vi.mocked(rpc).mockResolvedValue({
+    messages: [
+      {
+        id: "sent",
+        role: "bot",
+        blocks: [
+          {
+            kind: "bot_message_sent",
+            toBotId: "worker",
+            toBotName: "Worker",
+            text: "Please review.",
+          },
+        ],
+      },
+      {
+        id: "received",
+        role: "user",
+        blocks: [
+          {
+            kind: "bot_message_received",
+            fromBotId: "worker",
+            fromBotName: "Worker",
+            text: "Reviewed.",
+          },
+        ],
+      },
+    ],
+    olderCursor: null,
+  });
   const node = document.createElement("div");
   const root = createRoot(node);
   try {
@@ -177,109 +160,31 @@ it("names the recipient when an incoming delivery is read", async () => {
       root.render(
         createElement(PeerMessageReceipt, {
           block: {
-            kind: "bot_message_received",
-            fromBotId: "chief",
-            fromBotName: "Chief",
-            recipientBotName: "Worker",
-            text: "Check the fixture",
-            deliveryState: "read",
+            kind: "bot_message_sent",
+            toBotId: "worker",
+            toBotName: "Worker",
+            text: "Please review.",
+            deliveryState: "replied",
           },
+          botId: "owner-bot",
           color: "gray",
           actionProps: {},
           onOpenPeer: vi.fn(),
-        }),
-      ),
-    );
-    expect(node.textContent).toContain("Read by Worker");
-    expect(node.querySelector("button")?.getAttribute("aria-label")).toBe(
-      "Read by Worker · from Chief. Show reply",
-    );
-    expect(node.textContent).toContain("Show reply");
-  } finally {
-    await act(async () => root.unmount());
-    vi.unstubAllGlobals();
-  }
-});
-
-it("identifies the sender of a failed incoming delivery", async () => {
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  const node = document.createElement("div");
-  const root = createRoot(node);
-  try {
-    await act(async () =>
-      root.render(
-        createElement(PeerMessageReceipt, {
-          block: {
-            kind: "bot_message_received",
-            fromBotId: "chief",
-            fromBotName: "Chief",
-            text: "",
-            deliveryState: "failed",
-          },
-          color: "gray",
-          actionProps: {},
-          onOpenPeer: vi.fn(),
-        }),
-      ),
-    );
-    expect(node.querySelector("button")?.getAttribute("aria-label")).toBe("Failed · from Chief");
-  } finally {
-    await act(async () => root.unmount());
-    vi.unstubAllGlobals();
-  }
-});
-
-it("marks and links a shortened reply in the reader", async () => {
-  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
-  const { fixture } = await vi.importActual<{
-    fixture: () => {
-      admit: (input: { admissionKey: string }) => Promise<{ id: string }>;
-      worker: () => {
-        $transaction: (run: (tx: unknown) => Promise<unknown>) => Promise<unknown>;
-      };
-      state: () => { messages: Array<{ blocks: MessageBlock[] }> };
-    };
-  }>("../../../packages/db/src/delegation-test-fixture");
-  const { finishDelegation } = await vi.importActual<{
-    finishDelegation: (
-      tx: unknown,
-      id: string,
-      status: "completed",
-      text: string,
-    ) => Promise<unknown>;
-  }>("../../../packages/db/src/delegation");
-  const f = fixture();
-  const row = await f.admit({ admissionKey: "bot-message:parent:message_bot:0" });
-  const answer = "x".repeat(2100);
-  await f.worker().$transaction((tx) => finishDelegation(tx, row.id, "completed", answer));
-  const block = f.state().messages[0]!.blocks[0] as Extract<
-    MessageBlock,
-    { kind: "bot_message_received" }
-  >;
-  expect(block).toMatchObject({ truncated: true, fullLength: 2100 });
-  const onOpenPeer = vi.fn();
-  const node = document.createElement("div");
-  const root = createRoot(node);
-  try {
-    await act(async () =>
-      root.render(
-        createElement(PeerMessageReceipt, {
-          block,
-          color: "gray",
-          actionProps: {},
-          onOpenPeer,
         }),
       ),
     );
     await act(async () => node.querySelector("button")!.click());
-    expect(node.querySelector("article")?.textContent).toBe(answer.slice(0, 2000));
-    expect(node.textContent).toContain(
-      "Reply shortened — open the conversation with Worker for the full text",
-    );
-    await act(async () => node.querySelectorAll("button")[1]!.click());
-    expect(onOpenPeer).toHaveBeenCalledWith("worker", "Worker");
+    expect(vi.mocked(rpc)).toHaveBeenCalledWith("threads/messages", {
+      botId: "owner-bot",
+      before: undefined,
+      includePeerRuns: true,
+    });
+    expect(node.querySelector("dialog")?.textContent).toContain("Please review.");
+    expect(node.querySelector("dialog")?.textContent).toContain("Reviewed.");
+    expect(node.querySelector("dialog input, dialog textarea")).toBeNull();
   } finally {
     await act(async () => root.unmount());
+    vi.mocked(rpc).mockReset();
     vi.unstubAllGlobals();
   }
 });

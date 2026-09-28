@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import sourceHashes from "../../python/hermes_sources.json" with { type: "json" };
 import type { HermesLaunch, HermesLaunchSpec } from "./hermes-runtime.js";
 import { stopNative } from "./native-process.js";
 
@@ -16,15 +17,6 @@ export function hermesInstallCandidate(
   const managed = path.join(path.dirname(hostRoot), "runtimes", "hermes-agent");
   return existsSync(managed) ? managed : null;
 }
-const sourceHashes = {
-  "acp_adapter/session.py": "423f9b8b065600607dced5185ce58cd60d2fe450844caf6ce6229c3b7ceeb835",
-  "acp_adapter/server.py": "5ebbbda6511a692faeaf8f57e0ad88182bf22c2d818d16c94f1e95516bb7375d",
-  "acp_adapter/entry.py": "b70e7b189e36644d60576bc1acdc929ae4bd16c80022d5e2b7a8dec97b24d383",
-  "run_agent.py": "5b2e7083680e6c728f2306adc73e5f814c444aaa9ff3e3b840206142c67a7149",
-  "pyproject.toml": "c70c8b52f6cc08a4e65f0fc1713c26814fd4f19811bc7e01de645009b2a76600",
-  "uv.lock": "383cd8f98ec23dc3fe4cf63759ec73be5a869cc953f068b4e79ec4e8ed00287d",
-} as const;
-
 /** Only the trusted explicit or managed install can qualify. Never probe a personal home or PATH. */
 export function probeHermesInstall(root: string): { python: string; root: string } {
   if (process.platform === "win32" || !path.isAbsolute(root))
@@ -55,15 +47,19 @@ export function resolveHermesLauncherAsset(
   bundleFile: string,
   moduleUrl: string | undefined,
 ): string {
+  const complete = (launcher: string) =>
+    ["hermes_profile.py", "hermes_sources.json", "runtime_config_profile.json"].every((name) =>
+      existsSync(path.join(path.dirname(launcher), name)),
+    );
   const bundled = hermesLauncherAsset(bundleFile);
-  if (existsSync(bundled)) return bundled;
+  if (existsSync(bundled) && complete(bundled)) return bundled;
   try {
     if (moduleUrl) {
       const source = path.resolve(
         path.dirname(fileURLToPath(moduleUrl)),
         "../python/hermes_launcher.py",
       );
-      if (existsSync(source)) return source;
+      if (existsSync(source) && complete(source)) return source;
     }
   } catch {
     // Bundled builds may have no module URL. A missing asset always fails closed.

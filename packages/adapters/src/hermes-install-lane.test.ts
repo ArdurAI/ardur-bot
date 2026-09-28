@@ -2,7 +2,12 @@ import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import type { AgentRunRequest, AgentRuntimeEvent } from "@ardurbot/adapter-kit";
-import { HermesRuntimeConfigSchema } from "@ardurbot/contracts/runtime-pins";
+import { HERMES_RUNTIME_V2_DEFAULTS } from "@ardurbot/contracts/runtime-config";
+import {
+  effectiveRuntimeConfigHash,
+  runtimeConfigV2Hash,
+} from "@ardurbot/core/node/runtime-config-hash";
+import { compileHermesRuntimeConfig } from "@ardurbot/host-runtime/runtimes/hermes-config";
 import {
   hermesLauncherAsset,
   pinnedHermesLaunch,
@@ -51,6 +56,25 @@ if (!qualified) {
   const trusted = qualified;
   const runInstallLane = async (modelId: string) => {
     const before = status(trusted.root);
+    const settings = {
+      ...HERMES_RUNTIME_V2_DEFAULTS,
+      limits: { maxProviderRequests: 4, timeoutMs: 90_000 },
+    };
+    const compiled = compileHermesRuntimeConfig(settings, {
+      id: modelId,
+      contextWindow: 65_536,
+      maxTokens: 1_024,
+      reasoning: true,
+      acceptsImages: true,
+      thinkingLevel: "high",
+    });
+    const executionEnvelope = {
+      runtimeKind: "hermes" as const,
+      runtimeConfig: settings,
+      runtimeConfigHash: runtimeConfigV2Hash(settings),
+      effectiveRuntimeConfig: compiled.manifest,
+      effectiveRuntimeConfigHash: effectiveRuntimeConfigHash(compiled.manifest),
+    };
     const scope: BrokerScope = {
       runId: crypto.randomUUID(),
       botId: "fixture-bot",
@@ -60,7 +84,7 @@ if (!qualified) {
       leaseOwner: "fixture-worker",
       leaseFence: 1,
       hostGeneration: 1,
-      configurationHash: "fixture-config",
+      configurationHash: executionEnvelope.effectiveRuntimeConfigHash,
       pin: {
         credentialId: "fixture-connection",
         provider: "fixture",
@@ -176,6 +200,7 @@ if (!qualified) {
       command: trusted.python,
       args: [launcher],
       pinned: true,
+      executionEnvelope,
       launch: async (spec) => {
         home = spec.env.HERMES_HOME ?? "";
         launchEnv = spec.env;
@@ -235,12 +260,11 @@ if (!qualified) {
           effort: "high",
           credentialId: "fixture-connection",
           revision: 1,
-          runtimeConfig: HermesRuntimeConfigSchema.parse({
-            version: 1,
-            maxProviderRequests: 4,
-            timeoutMs: 90_000,
-          }),
-        },
+          runtimeConfig: settings,
+          runtimeConfigHash: executionEnvelope.runtimeConfigHash,
+          effectiveRuntimeConfig: compiled.manifest,
+          effectiveRuntimeConfigHash: executionEnvelope.effectiveRuntimeConfigHash,
+        } as unknown as AgentRunRequest["model"]["runtimePin"],
       },
       executeTool: async (name) => {
         called.push(name);
@@ -262,6 +286,10 @@ if (!qualified) {
       }
       expect(launchEnv?.ARDUR_HERMES_MAX_ITERATIONS).toBe("4");
       expect(launchEnv?.ARDUR_HERMES_RUN_BUDGET_SECONDS).toBe("90");
+      expect(launchEnv?.ARDUR_HERMES_PROFILE).toBe("hermes-ardur-v2");
+      expect(launchEnv?.ARDUR_HERMES_EXPECTED_HASH).toBe(
+        executionEnvelope.effectiveRuntimeConfigHash,
+      );
       expect(events.at(-1)).toEqual({ type: "done" });
       expect(requests, `${JSON.stringify(events)}; broker: ${brokerError}`).toHaveLength(2);
       expect(requests.map((body) => body.tools)).toEqual([

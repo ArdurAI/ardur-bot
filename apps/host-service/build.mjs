@@ -87,14 +87,18 @@ export async function bundleHostService(
   )
     throw new Error("Host bundle includes a server or native-addon dependency.");
   const native = await stageWindowsNativeAddons(path.dirname(outfile));
-  const launcher = path.join(path.dirname(outfile), "python", "hermes_launcher.py");
-  await mkdir(path.dirname(launcher), { recursive: true });
-  await copyFile(
-    fileURLToPath(
-      new URL("../../packages/host-runtime/python/hermes_launcher.py", import.meta.url),
-    ),
-    launcher,
-  );
+  const python = path.join(path.dirname(outfile), "python");
+  await mkdir(python, { recursive: true });
+  for (const name of [
+    "hermes_launcher.py",
+    "hermes_profile.py",
+    "hermes_sources.json",
+    "runtime_config_profile.json",
+  ])
+    await copyFile(
+      fileURLToPath(new URL(`../../packages/host-runtime/python/${name}`, import.meta.url)),
+      path.join(python, name),
+    );
   return { ...result.metafile, native };
 }
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

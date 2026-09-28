@@ -323,6 +323,7 @@ export async function loadGroupContext(
   prisma: PrismaClient,
   groupId: string,
   self: { id: string; name: string },
+  includeRoster = true,
 ): Promise<string | undefined> {
   const group = await prisma.chatGroup.findUnique({
     where: { id: groupId },
@@ -341,5 +342,6 @@ export async function loadGroupContext(
     group.name,
     group.members.map((member) => member.bot),
     self,
+    includeRoster,
   );
 }

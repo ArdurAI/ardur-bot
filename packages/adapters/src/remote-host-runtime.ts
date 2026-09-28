@@ -12,6 +12,7 @@ import {
   HostTurnSchema,
 } from "@ardurbot/contracts/host-bridge";
 import type { RuntimeInfoSchema } from "@ardurbot/contracts/runtime-pins";
+import { validateHermesExecutionEnvelope } from "@ardurbot/core/node/runtime-config-hash";
 import type { HostClient } from "@ardurbot/host-runtime/host-client";
 import * as z from "zod";
 import type { BrokerScope, HermesProviderBroker } from "./hermes-provider-broker.js";
@@ -70,6 +71,37 @@ export class RemoteHostRuntime implements AgentRuntime {
         if (!this.brokerForTurn || health?.capabilities?.providerRelay !== 1 || !health.generation)
           throw new Error("This host cannot run the pinned provider relay.");
       }
+      const capturedPin = request.model.runtimePin as
+        | (NonNullable<AgentRunRequest["model"]["runtimePin"]> & {
+            effectiveRuntimeConfig?: unknown;
+            effectiveRuntimeConfigHash?: unknown;
+          })
+        | undefined;
+      const executionEnvelope =
+        this.kind === "hermes" &&
+        (capturedPin?.runtimeConfig as { version?: number } | undefined)?.version === 2
+          ? validateHermesExecutionEnvelope({
+              runtimeKind: "hermes",
+              runtimeConfig: capturedPin?.runtimeConfig,
+              runtimeConfigHash: capturedPin?.runtimeConfigHash,
+              effectiveRuntimeConfig: capturedPin?.effectiveRuntimeConfig,
+              effectiveRuntimeConfigHash: capturedPin?.effectiveRuntimeConfigHash,
+            })
+          : undefined;
+      if (
+        this.kind === "hermes" &&
+        !executionEnvelope &&
+        (capturedPin?.effectiveRuntimeConfig !== undefined ||
+          capturedPin?.effectiveRuntimeConfigHash !== undefined)
+      )
+        throw new Error("The captured Hermes configuration is incomplete.");
+      if (
+        executionEnvelope &&
+        (health?.capabilities?.hermesConfigurationProfile !==
+          executionEnvelope.effectiveRuntimeConfig.profile.profile ||
+          health?.capabilities?.hermesLauncherGeneration !== 1)
+      )
+        throw new Error("Update the connected host to use these runtime settings.");
       const operationId = randomUUID();
       brokerSession =
         this.kind === "hermes"
@@ -97,8 +129,10 @@ export class RemoteHostRuntime implements AgentRuntime {
           scope.pin.provider !== request.model.provider ||
           scope.pin.modelId !== request.model.id ||
           scope.pin.effort !== request.model.thinkingLevel ||
-          (pin?.runtimeConfigHash !== undefined &&
-            scope.configurationHash !== pin.runtimeConfigHash)
+          ((executionEnvelope?.effectiveRuntimeConfigHash ?? pin?.runtimeConfigHash) !==
+            undefined &&
+            scope.configurationHash !==
+              (executionEnvelope?.effectiveRuntimeConfigHash ?? pin?.runtimeConfigHash))
         ) {
           brokerSession.broker.revoke();
           throw new Error("Provider broker scope does not match this host turn.");
@@ -113,6 +147,7 @@ export class RemoteHostRuntime implements AgentRuntime {
         ? request.nativeCwd.slice(5)
         : request.botId;
       const turn = HostTurnSchema.parse({
+        executionEnvelope,
         providerBroker: brokerSession
           ? { protocol: 1, ...brokerSession.broker.grant, hostGeneration: health!.generation }
           : undefined,
@@ -131,7 +166,9 @@ export class RemoteHostRuntime implements AgentRuntime {
         sourceMessageId: request.sourceMessageId,
         tools: advertisedHostTools(request.tools),
         model: {
-          runtimePin: request.model.runtimePin,
+          runtimePin: executionEnvelope
+            ? { ...request.model.runtimePin, runtimeConfig: undefined }
+            : request.model.runtimePin,
           provider: request.model.provider,
           id: request.model.id,
           maxTokens:

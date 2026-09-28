@@ -4,10 +4,18 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import type { AgentRuntime, AgentRuntimeEvent } from "@ardurbot/adapter-kit";
 import type { HostFrame, HostOperation, HostRequest } from "@ardurbot/contracts/host-bridge";
-import { decodeHostFrame, encodeHostFrame, HOST_WINDOW } from "@ardurbot/contracts/host-bridge";
+import {
+  decodeHostFrame,
+  encodeHostFrame,
+  HOST_WINDOW,
+  HostHealthSchema,
+  negotiateHostHealth,
+} from "@ardurbot/contracts/host-bridge";
+import { HermesExecutionEnvelopeSchema } from "@ardurbot/contracts/runtime-config";
 import { RuntimePinError, runtimePinProblem } from "@ardurbot/contracts/runtime-pins";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type WebSocket from "ws";
+import profileFixture from "../python/tests/valid_profile.json" with { type: "json" };
 import { BoardRunner } from "./board/runner.js";
 import type { HostWire } from "./bridge-wire.js";
 import { wsWire } from "./bridge-wire.js";
@@ -119,6 +127,29 @@ it("streams board JSON from the owner's runner without provisioning a bot comput
   ).toBe(stdout);
   expect(frames).toContainEqual(expect.objectContaining({ channel: "result", data: { ok: true } }));
 });
+it("keeps ordinary host operations available to a server with the pre-relay strict health schema", async () => {
+  const { agent, frames, completed } = await fixture();
+  const oldStrictHealth = HostHealthSchema.omit({
+    generation: true,
+    capabilities: true,
+    hermes: true,
+  });
+  const health = negotiateHostHealth(await agent.health(), undefined);
+  const sentHealth = JSON.parse(JSON.stringify(health));
+  expect(oldStrictHealth.parse(sentHealth)).toEqual(sentHealth);
+  const runner = vi.spyOn(BoardRunner.prototype, "run").mockResolvedValue({
+    ok: true,
+    stdout: "ready",
+  });
+  const board: HostOperation = {
+    op: "board.run",
+    request: { action: "command", actor: "Owner", workspace: { kind: "space" }, argv: ["ready"] },
+  };
+  await agent.receive(request(board));
+  await completed("req");
+  expect(runner).toHaveBeenCalledOnce();
+  expect(frames).toContainEqual(expect.objectContaining({ channel: "result", data: { ok: true } }));
+});
 const request = (operation: HostOperation): HostRequest => ({
   v: 1,
   type: "request",
@@ -198,6 +229,46 @@ function fakeRuntime(events: number): AgentRuntime {
   };
 }
 describe("host process operations", () => {
+  it("rejects a forged B12 manifest before any provider or tool callback", async () => {
+    const { agent, frames, completed } = await fixture();
+    const envelope = HermesExecutionEnvelopeSchema.parse(profileFixture);
+    const operation: HostOperation = {
+      ...turn,
+      request: {
+        ...turn.request,
+        executionEnvelope: { ...envelope, effectiveRuntimeConfigHash: "0".repeat(64) },
+        providerBroker: {
+          protocol: 1,
+          id: crypto.randomUUID(),
+          token: "a".repeat(43),
+          expiresAt: Date.now() + 60_000,
+          hostGeneration: crypto.randomUUID(),
+        },
+        model: {
+          provider: "fixture",
+          id: "fixture-model",
+          contextWindow: 32_768,
+          maxTokens: 1_024,
+          reasoning: true,
+          acceptsImages: false,
+          thinkingLevel: "high",
+          runtimePin: {
+            runtimeKind: "hermes",
+            provider: "fixture",
+            modelId: "fixture-model",
+            effort: "high",
+            credentialId: "fixture-connection",
+            revision: 1,
+            runtimeConfigHash: envelope.runtimeConfigHash,
+          },
+        },
+      },
+    };
+    await agent.receive(request(operation));
+    await completed("req");
+    expect(frames.at(-1)).toMatchObject({ type: "end", problem: expect.any(Object) });
+    expect(frames.filter((frame) => frame.type === "callback")).toHaveLength(0);
+  });
   it("sends a Hermes failure on the real wire and keeps the host available for another operation", async () => {
     const frames: HostFrame[] = [];
     const socket = Object.assign(new EventEmitter(), {

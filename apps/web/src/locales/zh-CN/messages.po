@@ -53,6 +53,11 @@ msgstr "{0, plural, one {另有 # 个群组设置了不同模型} other {另有 
 msgid "{0} {unitLabel}"
 msgstr "{0} {unitLabel}"
 
+#. placeholder {0}: row.activeRunCount
+#: src/pages/TeamBoard.tsx
+msgid "{0} active tasks"
+msgstr "{0} 项进行中的任务"
+
 #. placeholder {0}: file.size
 #: src/pages/settings/UploadedFiles.tsx
 msgid "{0} bytes"
@@ -116,6 +121,11 @@ msgstr "{0} KB"
 #: src/components/ArtifactFileCard.tsx
 msgid "{0} MB"
 msgstr "{0} MB"
+
+#. placeholder {0}: row.pendingPeerCount
+#: src/pages/TeamBoard.tsx
+msgid "{0} peer messages waiting"
+msgstr "{0} 条待处理的 Bot 消息"
 
 #. placeholder {0}: grant.limits.maxPerDay
 #: src/pages/LearningInbox.tsx
@@ -1431,6 +1441,7 @@ msgstr "已取消"
 
 #: src/components/AskCard.tsx
 #: src/lib/run-status-label.ts
+#: src/lib/team-delivery-text.ts
 #: src/pages/ComparePanel.tsx
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
@@ -2162,6 +2173,11 @@ msgstr ""
 #: src/pages/LearningInsights.tsx
 msgid "conversation"
 msgstr "对话"
+
+#. placeholder {0}: row.latestPeerBotName ?? "Bot"
+#: src/pages/TeamBoard.tsx
+msgid "Conversation with {0}"
+msgstr "与 {0} 的对话"
 
 #: src/pages/GroupPanel.tsx
 msgid "Coordinator"
@@ -3215,6 +3231,10 @@ msgstr "已删除"
 msgid "Deleting…"
 msgstr "正在删除…"
 
+#: src/lib/team-delivery-text.ts
+msgid "Delivered"
+msgstr "已送达"
+
 #: src/components/PeerMessageReceipt.tsx
 msgid "Delivered from {peer}"
 msgstr "已收到 {peer} 的消息"
@@ -3734,6 +3754,7 @@ msgid "Experimental"
 msgstr ""
 
 #: src/components/PeerMessageReceipt.tsx
+#: src/lib/team-delivery-text.ts
 #: src/pages/LearningInbox.tsx
 #: src/pages/memory/MemoryProposals.tsx
 msgid "Expired"
@@ -3795,6 +3816,7 @@ msgstr "失败"
 
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/run-status-label.ts
+#: src/lib/team-delivery-text.ts
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
 msgid "Failed"
@@ -4587,6 +4609,10 @@ msgstr ""
 msgid "Later edits overlap this change. Review both versions in History."
 msgstr ""
 
+#: src/pages/TeamBoard.tsx
+msgid "Latest message"
+msgstr "最新消息"
+
 #: src/components/FeatureDocsLink.tsx
 msgid "Learn more"
 msgstr "了解更多"
@@ -5323,6 +5349,7 @@ msgid "Needs sign-in on this computer"
 msgstr ""
 
 #: src/lib/run-status-label.ts
+#: src/pages/dashboard/NowPanel.tsx
 msgid "Needs takeover"
 msgstr "需要接管"
 
@@ -5603,6 +5630,10 @@ msgstr ""
 #: src/pages/ScratchpadSection.tsx
 msgid "None yet"
 msgstr "暂无"
+
+#: src/lib/team-delivery-text.ts
+msgid "Not approved"
+msgstr "未获批准"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "not available"
@@ -6333,6 +6364,7 @@ msgstr "表情回应"
 
 #: src/components/integrations/catalog/ToolPicker.tsx
 #: src/components/PeerMessageReceipt.tsx
+#: src/lib/team-delivery-text.ts
 msgid "Read"
 msgstr "已读"
 
@@ -6649,6 +6681,7 @@ msgid "Replace key"
 msgstr "替换密钥"
 
 #: src/components/PeerMessageReceipt.tsx
+#: src/lib/team-delivery-text.ts
 msgid "Replied"
 msgstr "已回复"
 
@@ -7776,6 +7809,13 @@ msgstr "正在开始…"
 msgid "Status"
 msgstr ""
 
+#: src/lib/team-delivery-text.ts
+#: src/pages/ActivityList.tsx
+#: src/pages/dashboard/NowPanel.tsx
+#: src/pages/TeamBoard.tsx
+msgid "Status unavailable"
+msgstr "状态不可用"
+
 #: src/pages/LearningObservation.tsx
 msgid "Steering corrections"
 msgstr ""
@@ -8510,6 +8550,10 @@ msgstr ""
 msgid "Updated"
 msgstr "已更新"
 
+#: src/pages/TeamBoard.tsx
+msgid "Updated 1m ago"
+msgstr "1 分钟前更新"
+
 #: src/pages/settings-sections.ts
 msgid "Updates"
 msgstr "更新"
@@ -8649,6 +8693,7 @@ msgid "Voice shortcut"
 msgstr ""
 
 #: src/components/PeerMessageReceipt.tsx
+#: src/lib/team-delivery-text.ts
 msgid "Waiting for a turn"
 msgstr "等待轮次"
 
@@ -8804,7 +8849,7 @@ msgstr "进行中"
 msgid "Working from the last copy"
 msgstr ""
 
-#. placeholder {0}: row.sentence
+#. placeholder {0}: row.currentTaskTitle ?? row.sentence
 #. placeholder {1}: row.requesterName
 #: src/pages/TeamBoard.tsx
 msgid "Working on {0} for {1}"

@@ -53,6 +53,11 @@ msgstr "{0, plural, one {Также настроено иначе в # груп�
 msgid "{0} {unitLabel}"
 msgstr "{0} {unitLabel}"
 
+#. placeholder {0}: row.activeRunCount
+#: src/pages/TeamBoard.tsx
+msgid "{0} active tasks"
+msgstr "{0} активных задач"
+
 #. placeholder {0}: file.size
 #: src/pages/settings/UploadedFiles.tsx
 msgid "{0} bytes"
@@ -116,6 +121,11 @@ msgstr "{0} КБ"
 #: src/components/ArtifactFileCard.tsx
 msgid "{0} MB"
 msgstr "{0} МБ"
+
+#. placeholder {0}: row.pendingPeerCount
+#: src/pages/TeamBoard.tsx
+msgid "{0} peer messages waiting"
+msgstr "{0} сообщений от ботов ожидают"
 
 #. placeholder {0}: grant.limits.maxPerDay
 #: src/pages/LearningInbox.tsx
@@ -1431,6 +1441,7 @@ msgstr "отменен"
 
 #: src/components/AskCard.tsx
 #: src/lib/run-status-label.ts
+#: src/lib/team-delivery-text.ts
 #: src/pages/ComparePanel.tsx
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
@@ -2162,6 +2173,11 @@ msgstr ""
 #: src/pages/LearningInsights.tsx
 msgid "conversation"
 msgstr "разговоров"
+
+#. placeholder {0}: row.latestPeerBotName ?? "Bot"
+#: src/pages/TeamBoard.tsx
+msgid "Conversation with {0}"
+msgstr "Диалог с {0}"
 
 #: src/pages/GroupPanel.tsx
 msgid "Coordinator"
@@ -3215,6 +3231,10 @@ msgstr "удалено"
 msgid "Deleting…"
 msgstr "Удаление…"
 
+#: src/lib/team-delivery-text.ts
+msgid "Delivered"
+msgstr "Доставлено"
+
 #: src/components/PeerMessageReceipt.tsx
 msgid "Delivered from {peer}"
 msgstr "Получено от {peer}"
@@ -3734,6 +3754,7 @@ msgid "Experimental"
 msgstr ""
 
 #: src/components/PeerMessageReceipt.tsx
+#: src/lib/team-delivery-text.ts
 #: src/pages/LearningInbox.tsx
 #: src/pages/memory/MemoryProposals.tsx
 msgid "Expired"
@@ -3795,6 +3816,7 @@ msgstr "неуспешный"
 
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/run-status-label.ts
+#: src/lib/team-delivery-text.ts
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
 msgid "Failed"
@@ -4587,6 +4609,10 @@ msgstr "Позже"
 msgid "Later edits overlap this change. Review both versions in History."
 msgstr ""
 
+#: src/pages/TeamBoard.tsx
+msgid "Latest message"
+msgstr "Последнее сообщение"
+
 #: src/components/FeatureDocsLink.tsx
 msgid "Learn more"
 msgstr "Подробнее"
@@ -5323,6 +5349,7 @@ msgid "Needs sign-in on this computer"
 msgstr ""
 
 #: src/lib/run-status-label.ts
+#: src/pages/dashboard/NowPanel.tsx
 msgid "Needs takeover"
 msgstr "Требуется передача управления"
 
@@ -5603,6 +5630,10 @@ msgstr ""
 #: src/pages/ScratchpadSection.tsx
 msgid "None yet"
 msgstr "Пока нет"
+
+#: src/lib/team-delivery-text.ts
+msgid "Not approved"
+msgstr "Не одобрено"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "not available"
@@ -6333,6 +6364,7 @@ msgstr ""
 
 #: src/components/integrations/catalog/ToolPicker.tsx
 #: src/components/PeerMessageReceipt.tsx
+#: src/lib/team-delivery-text.ts
 msgid "Read"
 msgstr "Прочитано"
 
@@ -6649,6 +6681,7 @@ msgid "Replace key"
 msgstr "Заменить ключ"
 
 #: src/components/PeerMessageReceipt.tsx
+#: src/lib/team-delivery-text.ts
 msgid "Replied"
 msgstr "Получен ответ"
 
@@ -7776,6 +7809,13 @@ msgstr "Запуск…"
 msgid "Status"
 msgstr ""
 
+#: src/lib/team-delivery-text.ts
+#: src/pages/ActivityList.tsx
+#: src/pages/dashboard/NowPanel.tsx
+#: src/pages/TeamBoard.tsx
+msgid "Status unavailable"
+msgstr "Статус недоступен"
+
 #: src/pages/LearningObservation.tsx
 msgid "Steering corrections"
 msgstr ""
@@ -8510,6 +8550,10 @@ msgstr "Ход обновления"
 msgid "Updated"
 msgstr "Обновлено"
 
+#: src/pages/TeamBoard.tsx
+msgid "Updated 1m ago"
+msgstr "Обновлено минуту назад"
+
 #: src/pages/settings-sections.ts
 msgid "Updates"
 msgstr "Обновления"
@@ -8649,6 +8693,7 @@ msgid "Voice shortcut"
 msgstr ""
 
 #: src/components/PeerMessageReceipt.tsx
+#: src/lib/team-delivery-text.ts
 msgid "Waiting for a turn"
 msgstr "Ожидает очереди"
 
@@ -8804,7 +8849,7 @@ msgstr "В работе"
 msgid "Working from the last copy"
 msgstr ""
 
-#. placeholder {0}: row.sentence
+#. placeholder {0}: row.currentTaskTitle ?? row.sentence
 #. placeholder {1}: row.requesterName
 #: src/pages/TeamBoard.tsx
 msgid "Working on {0} for {1}"

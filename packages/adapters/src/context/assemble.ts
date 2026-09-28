@@ -49,6 +49,7 @@ export async function assembleTurnContext(run: {
   tools?: AgentRunRequest["tools"];
   brief?: string | null;
   summary?: string | null;
+  teammates?: string;
   history: Message[];
   requiredContext?: Message;
   message: string;
@@ -87,6 +88,14 @@ export async function assembleTurnContext(run: {
   );
   const required = run.requiredContext;
   const requiredAllowance = Math.min(required?.content.length ?? 0, budgets.messages);
+  const teammateAllowance = Math.min(
+    8_000,
+    Math.floor(Math.max(0, budgets.messages - requiredAllowance) / 3),
+  );
+  const teammates =
+    teammateAllowance >= 64
+      ? frame("teammate_directory", run.teammates ?? "", teammateAllowance)
+      : "";
   const requiredMessage = required
     ? {
         ...required,
@@ -100,13 +109,14 @@ export async function assembleTurnContext(run: {
     (run.peerReadOnly ? [] : run.history).filter(
       (message) => !run.sourceMessageId || message.id !== run.sourceMessageId,
     ),
-    budgets.messages - requiredAllowance,
+    budgets.messages - requiredAllowance - teammates.length,
   );
   const recallRan = Boolean(
     !run.peerReadOnly && run.recall && needsRecall(run.query ?? run.message, run.brief ?? ""),
   );
   const recall = frame("recalled_memory", recallRan ? await run.recall!() : "", budgets.recall);
   const history: Message[] = [
+    ...(teammates ? [{ role: "user" as const, content: teammates }] : []),
     ...(brief ? [{ role: "user" as const, content: brief }] : []),
     ...(summary ? [{ role: "user" as const, content: summary }] : []),
     ...messages,
@@ -119,6 +129,7 @@ export async function assembleTurnContext(run: {
       brief: brief.length,
       summary: summary.length,
       messages:
+        teammates.length +
         messages.reduce((size, message) => size + message.content.length, 0) +
         (requiredMessage?.content.length ?? 0),
       recall: recall.length,

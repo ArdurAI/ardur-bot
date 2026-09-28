@@ -19,9 +19,20 @@ it("builds one relocatable JavaScript file without server modules or workspace i
         ? ["host-service.cjs", "native", "python"]
         : ["host-service.cjs", "python"],
     );
-    expect(
-      (await readFile(path.join(directory, "python", "hermes_launcher.py"))).length,
-    ).toBeGreaterThan(0);
+    const desktop = JSON.parse(
+      await readFile(new URL("../../desktop/package.json", import.meta.url), "utf8"),
+    ) as { build: { extraResources: { to: string }[] } };
+    for (const name of [
+      "hermes_launcher.py",
+      "hermes_profile.py",
+      "hermes_sources.json",
+      "runtime_config_profile.json",
+    ]) {
+      expect((await readFile(path.join(directory, "python", name))).length).toBeGreaterThan(0);
+      expect(desktop.build.extraResources.map((resource) => resource.to)).toContain(
+        `host-service/python/${name}`,
+      );
+    }
     if (metadata.native.files.length) {
       expect(await readdir(path.join(directory, "native"), { recursive: true })).toEqual(
         expect.arrayContaining(
