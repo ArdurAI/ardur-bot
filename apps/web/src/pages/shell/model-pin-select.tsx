@@ -25,7 +25,7 @@ export function ModelPinSelect({
   showAll: boolean;
   value: string;
   onChange: (value: string) => void;
-  defaultLabel: string;
+  defaultLabel?: string;
   id: string;
   disabled?: boolean;
   inputRef?: Ref<HTMLSelectElement>;
@@ -92,7 +92,13 @@ export function ModelPinSelect({
       disabled={disabled}
       onChange={(event) => onChange(event.target.value)}
     >
-      <NativeSelectOption value="">{defaultLabel}</NativeSelectOption>
+      {defaultLabel !== undefined ? (
+        <NativeSelectOption value="">{defaultLabel}</NativeSelectOption>
+      ) : !value ? (
+        <NativeSelectOption value="" disabled hidden>
+          {t`Choose a model`}
+        </NativeSelectOption>
+      ) : null}
       {value && !options.some((option) => option.key === value) ? (
         <NativeSelectOption
           value={value}
@@ -133,6 +139,8 @@ export function ModelEffortSelect({
   defaultLevel,
   disabled,
   notApplicable = false,
+  allowDefault = true,
+  hideLabel = false,
 }: {
   id: string;
   value: string;
@@ -142,6 +150,8 @@ export function ModelEffortSelect({
   defaultLevel: ThinkingLevel;
   disabled?: boolean;
   notApplicable?: boolean;
+  allowDefault?: boolean;
+  hideLabel?: boolean;
 }) {
   const { t } = useLingui();
   const options = supported.filter((level) =>
@@ -156,7 +166,7 @@ export function ModelEffortSelect({
   if (!options.length && !value) return null;
   return (
     <label htmlFor={id} className="mt-4 block text-[14px] text-muted-foreground">
-      <Trans>Thinking</Trans>
+      {!hideLabel ? <Trans>Thinking</Trans> : <span className="sr-only"><Trans>Thinking</Trans></span>}
       <NativeSelect
         id={id}
         className="mt-2 w-full"
@@ -164,7 +174,7 @@ export function ModelEffortSelect({
         onChange={(event) => onChange(event.target.value)}
         disabled={disabled}
       >
-        {!isOllama ? (
+        {!isOllama && allowDefault ? (
           <NativeSelectOption value="">
             {t`Default (${thinkingLevelDescription(defaultLevel)})`}
           </NativeSelectOption>

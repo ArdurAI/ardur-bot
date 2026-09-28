@@ -12,6 +12,11 @@ import {
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useState } from "react";
 import { SettingsRow } from "../../components/SettingsRow";
+import type { ModelSettings } from "../../lib/use-model-settings";
+import { ModelPinSelect, ModelEffortSelect } from "../shell/model-pin-select";
+import { SuccessPop } from "@ardurbot/ui-web";
+import { spaceDefaultEffort } from "@ardurbot/core";
+import { ORPCError } from "@orpc/client";
 import { actionMessage } from "../../lib/orpc-action-message";
 import { rpc, selectedSpaceId } from "../../lib/rpc";
 import type { SettingsPageProps } from "../settings-types";
@@ -32,20 +37,26 @@ export default function BoardsSettings({ onBusyChange, navigate }: SettingsPageP
   const [confirm, setConfirm] = useState<"start" | "archive" | null>(null);
   const [upkeep, setUpkeep] = useState(true);
   const [learning, setLearning] = useState<SpaceLearningConfig | null>(null);
+  const [modelSettings, setModelSettings] = useState<ModelSettings | null>(null);
+  const [savedPop, setSavedPop] = useState(false);
   const board = boards.find((row) => row.id === id) ?? boards[0];
   const reviewer = learning?.destination?.modelId ?? learning?.reviewerPin?.modelId ?? null;
   async function load() {
-    const [result, bots, upkeepResult, learningResult] = await Promise.all([
+    const [result, bots, upkeepResult, learningResult, me, catalog, credentials] = await Promise.all([
       rpc.board.workspaces({}),
       rpc.bots.list(),
       rpc.board.upkeep({}),
       rpc.learning.settings(),
+      rpc.me(),
+      rpc.models.list(),
+      rpc.models.credentials(),
     ]);
     setBoards(result.workspaces);
     setProblem(result.problem);
     setBots(bots);
     setUpkeep(upkeepResult.enabled);
     setLearning(learningResult);
+    setModelSettings({ me, catalog, credentials });
     setLoaded(true);
   }
   useEffect(() => {
@@ -139,55 +150,150 @@ export default function BoardsSettings({ onBusyChange, navigate }: SettingsPageP
         />
       </SettingsRow>
       {learning ? (
-        <SettingsRow
-          label={t`Learning review`}
-          content={
-            <div className="space-y-2 py-2">
-              <p className="text-sm text-muted-foreground">
-                {reviewer ? (
-                  <Trans>Reviewer: {reviewer}</Trans>
-                ) : (
-                  <Trans>No reviewer model yet.</Trans>
-                )}
-              </p>
-              {actionError?.target === "learning" ? (
-                <p role="alert">{actionError.message}</p>
-              ) : null}
-            </div>
-          }
-        >
-          <span>
-            {learning.enabled ? (
-              <Trans>Learning review is on</Trans>
+        <>
+          <SettingsRow label={t`Learning review`}>
+            {modelSettings?.credentials.length === 0 ? (
+              <Button
+                variant="outline"
+                disabled={busy || !learning.canConfigure}
+                onClick={() => navigate("models")}
+              >
+                <Trans>Connect a model</Trans>
+              </Button>
             ) : (
-              <Trans>Learning review is off</Trans>
-            )}
-          </span>
-          {!learning.enabled ? (
-            <Button
-              variant="outline"
-              disabled={busy || !learning.canConfigure || !learning.destination}
-              onClick={() =>
-                void work(async () => {
-                  const spaceId = selectedSpaceId();
-                  setLearning(
-                    await rpc.learning.configure(
-                      {
-                        enabled: true,
-                        reviewerPin: learning.reviewerPin ?? learning.destination,
+              <Switch
+                aria-label={t`Learning review`}
+                checked={learning.enabled}
+                disabled={busy || !learning.canConfigure}
+                onCheckedChange={(enabled) =>
+                  void work(async () => {
+                    setLearning(
+                      await rpc.learning.configure({
+                        enabled,
+                        reviewerPin: learning.reviewerPin,
                         consolidationEnabled: learning.consolidationEnabled,
                         budgets: learning.budgets,
-                      },
-                      spaceId ? { context: { spaceId } } : undefined,
-                    ),
-                  );
-                }, "learning")
-              }
-            >
-              <Trans>Enable</Trans>
-            </Button>
-          ) : null}
-        </SettingsRow>
+                      })
+                    );
+                  }, "learning")
+                }
+              />
+            )}
+          </SettingsRow>
+          <SettingsRow
+            label={t`Learning reviewer`}
+            content={
+              <div className="space-y-2 py-2">
+                <p className="text-sm text-muted-foreground">
+                  <Trans>Reviews use this connection and may incur model charges.</Trans>
+                </p>
+                {actionError?.target === "learning" ? (
+                  <p role="alert" className="text-sm text-destructive">{actionError.message}</p>
+                ) : null}
+              </div>
+            }
+          >
+            <div className="w-full">
+              {learning.canConfigure ? (
+                <>
+                  <ModelPinSelect
+                    id="learning-reviewer"
+                    settings={modelSettings}
+                    showAll={false}
+                    disabled={busy || modelSettings?.credentials.length === 0}
+                    value={
+                      learning.reviewerPin
+                        ? `${learning.reviewerPin.provider}:${learning.reviewerPin.modelId}:${learning.reviewerPin.credentialId}`
+                        : learning.destination
+                          ? `${learning.destination.provider}:${learning.destination.modelId}:${learning.destination.credentialId}`
+                          : ""
+                    }
+                    onChange={(value) => {
+                      if (!value) return;
+                      const [provider, modelId, credentialId] = value.split(":");
+                      if (!provider || !modelId || !credentialId) return;
+                      const entry = modelSettings?.catalog.find(e => e.provider === provider && e.id === modelId);
+                      const effortLevels = entry?.thinkingLevels ?? [];
+                      
+                      void work(async () => {
+                        const nextPin = {
+                          runtimeKind: "pi" as const,
+                          provider,
+                          modelId,
+                          credentialId,
+                          effort: learning.reviewerPin?.effort && effortLevels.includes(learning.reviewerPin.effort as any)
+                            ? learning.reviewerPin.effort
+                            : spaceDefaultEffort(undefined, effortLevels)
+                        };
+                        try {
+                          setLearning(
+                            await rpc.learning.setReviewer({
+                              expectedRevision: learning.reviewerPin?.revision ?? 0,
+                              pin: nextPin,
+                            })
+                          );
+                          setSavedPop(true);
+                          setTimeout(() => setSavedPop(false), 2000);
+                        } catch (e) {
+                          if (e instanceof ORPCError && e.code === "CONFLICT") {
+                            await load();
+                            throw new Error(t`The reviewer was changed in another window.`);
+                          }
+                          throw e;
+                        }
+                      }, "learning");
+                    }}
+                  />
+                  {(() => {
+                    const pin = learning.reviewerPin ?? learning.destination;
+                    if (!pin) return null;
+                    const entry = modelSettings?.catalog.find(e => e.provider === pin.provider && e.id === pin.modelId);
+                    const effortLevels = entry?.thinkingLevels ?? [];
+                    if (effortLevels.length === 0) return null;
+                    return (
+                      <ModelEffortSelect
+                        id="learning-reviewer-effort"
+                        supported={effortLevels}
+                        isOllama={pin.provider === "ollama" || pin.provider === "local"}
+                        defaultLevel="medium"
+                        value={pin.effort ?? ""}
+                        disabled={busy}
+                        allowDefault={false}
+                        hideLabel={true}
+                        onChange={(effort) => {
+                          void work(async () => {
+                            setLearning(
+                              await rpc.learning.setReviewer({
+                                expectedRevision: learning.reviewerPin?.revision ?? 0,
+                                pin: {
+                                  runtimeKind: "pi" as const,
+                                  provider: pin.provider!,
+                                  modelId: pin.modelId!,
+                                  credentialId: pin.credentialId!,
+                                  effort,
+                                }
+                              })
+                            );
+                            setSavedPop(true);
+                            setTimeout(() => setSavedPop(false), 2000);
+                          }, "learning");
+                        }}
+                      />
+                    );
+                  })()}
+                  <SuccessPop open={savedPop} onOpenChange={setSavedPop}>
+                    <Trans>Saved</Trans>
+                  </SuccessPop>
+                </>
+              ) : (
+                <div className="mt-2 text-sm">
+                  {learning.reviewerPin?.modelId ?? learning.destination?.modelId ?? t`No reviewer model yet.`}
+                  {learning.reviewerPin?.effort ? ` (${learning.reviewerPin.effort})` : ""}
+                </div>
+              )}
+            </div>
+          </SettingsRow>
+        </>
       ) : null}
       <SettingsRow
         label={t`Beads`}

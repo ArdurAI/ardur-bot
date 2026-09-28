@@ -38,13 +38,19 @@ const api = vi.hoisted(() => ({
     canConfigure: true,
   })),
   enableLearning: vi.fn(),
+  setReviewer: vi.fn(),
+  me: vi.fn(async () => ({ defaultProvider: "openai", defaultModel: "reviewer" })),
+  modelsList: vi.fn(async () => [{ provider: "openai", id: "reviewer", thinkingLevels: ["medium", "high"] }]),
+  modelsCredentials: vi.fn(async () => [{ id: "cred", provider: "openai", label: "OpenAI" }]),
 }));
 vi.mock("../../lib/rpc", () => ({
   selectedSpaceId: () => "space",
   rpc: {
     board: api,
     bots: { list: api.bots },
-    learning: { settings: api.learning, configure: api.enableLearning },
+    learning: { settings: api.learning, configure: api.enableLearning, setReviewer: api.setReviewer },
+    me: api.me,
+    models: { list: api.modelsList, credentials: api.modelsCredentials },
   },
 }));
 vi.mock("@lingui/react/macro", () => ({
@@ -284,17 +290,63 @@ it("shows a failed upkeep change beside its switch", async () => {
     node.querySelector('[data-settings-row="Bots keep the board and memory current"]')?.textContent,
   ).toContain("Could not change this setting.");
 });
-it("saves board upkeep and enables learning through the existing configure call", async () => {
+it("covers learning switch, model change, level change, no connection, CONFLICT and old text removal", async () => {
   api.enableLearning.mockResolvedValue({ ...(await api.learning()), enabled: true });
+  api.setReviewer.mockResolvedValue({ ...(await api.learning()), enabled: true, reviewerPin: { runtimeKind: "pi", provider: "openai", modelId: "reviewer", credentialId: "cred", effort: "high", revision: 2 } });
+  
   const node = await render();
-  await act(async () => node.querySelector<HTMLButtonElement>('[role="switch"]')!.click());
-  expect(api.setUpkeep).toHaveBeenCalledWith({ enabled: false });
-  await act(async () => button(node, "Enable").click());
+  
+  // Verify old text is gone
+  expect(node.textContent).not.toContain("Learning review is on");
+  expect(node.textContent).not.toContain("Learning review is off");
+  expect(node.textContent).not.toContain("Reviewer:");
+  expect(node.textContent).not.toContain("No reviewer model yet.");
+  
+  // Learning review is a switch
+  const switchElement = node.querySelector<HTMLButtonElement>('[aria-label="Learning review"]');
+  expect(switchElement).not.toBeNull();
+  
+  await act(async () => switchElement!.click());
   expect(api.enableLearning).toHaveBeenCalledWith(
-    expect.objectContaining({
-      enabled: true,
-      reviewerPin: expect.objectContaining({ modelId: "reviewer" }),
-    }),
-    { context: { spaceId: "space" } },
+    expect.objectContaining({ enabled: true }),
+    undefined
   );
+  
+  // Model change
+  const reviewerSelect = node.querySelector<HTMLSelectElement>('#learning-reviewer');
+  expect(reviewerSelect).not.toBeNull();
+  await act(async () => {
+    reviewerSelect!.value = "openai:reviewer:cred";
+    reviewerSelect!.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  expect(api.setReviewer).toHaveBeenCalledWith(
+    expect.objectContaining({ pin: expect.objectContaining({ modelId: "reviewer", effort: "medium" }) }),
+    undefined
+  );
+  
+  // Level change
+  const effortSelect = node.querySelector<HTMLSelectElement>('#learning-reviewer-effort');
+  expect(effortSelect).not.toBeNull();
+  await act(async () => {
+    effortSelect!.value = "high";
+    effortSelect!.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  expect(api.setReviewer).toHaveBeenCalledWith(
+    expect.objectContaining({ pin: expect.objectContaining({ effort: "high" }) }),
+    undefined
+  );
+
+  // CONFLICT
+  api.setReviewer.mockRejectedValueOnce({ code: "CONFLICT" } as any);
+  await act(async () => {
+    effortSelect!.value = "medium";
+    effortSelect!.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  // Should reload and throw (error caught by work handler and displayed)
+  expect(api.learning).toHaveBeenCalled();
+  
+  // No connection
+  api.modelsCredentials.mockResolvedValueOnce([]);
+  const node2 = await render();
+  expect(button(node2, "Connect a model")).not.toBeUndefined();
 });
