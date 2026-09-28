@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { ReactNode } from "react";
-import { act } from "react";
+import { act, StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -132,6 +132,24 @@ it("renders guided controls through the translation mechanism", async () => {
   expect(node.textContent).toContain("Volver a la configuración");
   expect(node.textContent).toContain("Crea tu primer bot");
   expect(node.textContent).toContain("Crear bot");
+});
+
+it("requests account status after StrictMode replays the guided page effects", async () => {
+  await act(async () => {
+    root.render(
+      <StrictMode>
+        <MemoryRouter initialEntries={["/guided-onboarding?step=bot"]}>
+          <GuidedOnboardingPage />
+        </MemoryRouter>
+      </StrictMode>,
+    );
+  });
+  const button = [...node.querySelectorAll("button")].find(
+    (entry) => entry.textContent === "Create bot",
+  );
+  expect(button?.disabled).toBe(false);
+  await act(async () => button?.click());
+  expect(api.status).toHaveBeenCalledOnce();
 });
 
 it("stops scheduling greeting calls after cancel during bot creation", async () => {

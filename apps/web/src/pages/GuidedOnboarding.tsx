@@ -54,13 +54,13 @@ export function GuidedOnboardingPage() {
     return unsubscribe;
   }, [bridge, navigate]);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    stopped.current = false;
+    return () => {
       stopped.current = true;
       createStatus.current?.abort();
-    },
-    [],
-  );
+    };
+  }, []);
 
   useEffect(() => {
     if (step !== "finish") return;
