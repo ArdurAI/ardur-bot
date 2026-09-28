@@ -99,7 +99,7 @@ test("focus choice follows Simplified Chinese UI locale", async ({ page }, testI
   const settings = await openUserSettings(page);
   const picker = settings.getByTestId("ui-locale-select");
   await picker.click();
-  await settings.getByRole("option", { name: "简体中文", exact: true }).click();
+  await page.getByRole("option", { name: "简体中文", exact: true }).click();
   await expect(settings.getByRole("group", { name: "语言", exact: true })).toBeVisible();
   await settings.getByRole("button", { name: "关闭用户设置" }).click();
   await expect(settings).toHaveCount(0);

@@ -18,7 +18,8 @@ vi.mock("@lingui/react/macro", () => ({
 vi.mock("@lingui/core/macro", () => ({
   msg: (parts: TemplateStringsArray) => ({ id: parts.join(""), message: parts.join("") }),
 }));
-vi.mock("@ardurbot/ui-web", () => {
+vi.mock("@ardurbot/ui-web", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@ardurbot/ui-web")>();
   const Container = ({ children }: { children?: ReactNode }) => <div>{children}</div>;
   const Button = ({
     variant: _variant,
@@ -29,58 +30,11 @@ vi.mock("@ardurbot/ui-web", () => {
     <button {...props} />
   );
   return {
+    ...actual,
+    // Select stays real: the language picker test opens it, selects, dismisses
+    // and checks focus restoration through the portalled Base UI component.
     Button,
     Skeleton: (props: ComponentProps<"div">) => <div {...props} />,
-    Select: ({ value, onValueChange, children }: any) => {
-      const React = require("react");
-      return React.createElement(
-        "div",
-        { "data-value": value, "data-testid": "mock-select" },
-        React.Children.map(children, (child: any) => {
-          if (React.isValidElement(child)) {
-            return React.cloneElement(child, { _mockOnValueChange: onValueChange } as any);
-          }
-          return child;
-        }),
-      );
-    },
-    SelectTrigger: ({ children, ...props }: any) => {
-      const React = require("react");
-      return React.createElement("button", { role: "combobox", ...props }, children);
-    },
-    SelectValue: ({ children, ...props }: any) => {
-      const React = require("react");
-      return React.createElement("span", props, children);
-    },
-    SelectContent: ({ children, _mockOnValueChange, ...props }: any) => {
-      const React = require("react");
-      return React.createElement(
-        "div",
-        { role: "listbox", ...props },
-        React.Children.map(children, (child: any) => {
-          if (React.isValidElement(child)) {
-            return React.cloneElement(child, { _mockOnValueChange } as any);
-          }
-          return child;
-        }),
-      );
-    },
-    SelectItem: ({ value, children, _mockOnValueChange, ...props }: any) => {
-      const React = require("react");
-      return React.createElement(
-        "button",
-        {
-          role: "option",
-          "data-value": value,
-          onClick: () => _mockOnValueChange?.(value),
-          ...props,
-        },
-        children,
-      );
-    },
-    SelectGroup: Container,
-    SelectLabel: Container,
-    SelectSeparator: Container,
     AlertDialog: ({ open, children }: { open: boolean; children: ReactNode }) =>
       open ? <div role="alertdialog">{children}</div> : null,
     AlertDialogAction: Button,

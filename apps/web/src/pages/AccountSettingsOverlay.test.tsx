@@ -14,14 +14,34 @@ import { AccountSignIn } from "./account/AccountSignIn";
 it("preserves the language picker and applies its selection", async () => {
   fake.setUiLocale.mockResolvedValue("ru");
   const { container } = await renderSettings(<AccountLanguage />);
-  await act(async () => container.querySelector<HTMLButtonElement>('[role="combobox"]')!.click());
-  await act(async () =>
-    [...container.querySelectorAll<HTMLButtonElement>('[role="option"]')]
-      .find((button) => button.textContent === "Русский")!
-      .click(),
-  );
+  const trigger = container.querySelector<HTMLButtonElement>('[role="combobox"]')!;
+  expect(trigger).toBeTruthy();
+  await act(async () => trigger.click());
+  // The portalled listbox renders outside the settings container.
+  const options = () => [...document.querySelectorAll<HTMLElement>('[role="option"]')];
+  expect(options().length).toBeGreaterThan(0);
+  const russian = options().find((option) => option.textContent === "Русский")!;
+  expect(russian).toBeTruthy();
+  await act(async () => russian.click());
   expect(fake.setUiLocale).toHaveBeenCalledWith("ru");
-  expect(container.querySelector('[role="combobox"]')?.textContent).toContain("Русский");
+  expect(trigger.textContent).toContain("Русский");
+});
+it("opens the language picker over the portalled Select, dismisses it and restores focus", async () => {
+  fake.setUiLocale.mockResolvedValue("en");
+  const { container } = await renderSettings(<AccountLanguage />);
+  const trigger = container.querySelector<HTMLButtonElement>('[role="combobox"]')!;
+  await act(async () => trigger.click());
+  const listbox = document.querySelector('[role="listbox"]');
+  expect(listbox).toBeTruthy();
+  // Dismiss with Escape and confirm focus returns to the trigger.
+  await act(async () => {
+    trigger.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
+    );
+  });
+  await act(async () => Promise.resolve());
+  expect(document.querySelector('[role="listbox"]')).toBeNull();
+  expect(document.activeElement).toBe(trigger);
 });
 
 it("preserves password-manager fields, keeps the shell busy and refreshes sessions after a password change", async () => {
