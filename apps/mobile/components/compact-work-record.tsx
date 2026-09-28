@@ -9,13 +9,7 @@ import { useResolvedAppearance } from "../lib/native";
 import { NativeCommandBlock } from "./command-block";
 import { NativeSymbol } from "./native-symbol";
 
-export function CompactWorkRecord({
-  blocks,
-  renderBlock,
-}: {
-  blocks: MessageBlock[];
-  renderBlock?: (block: MessageBlock, i: number) => React.ReactNode;
-}) {
+export function CompactWorkRecord({ blocks }: { blocks: MessageBlock[] }) {
   const tokens = mobileTokens();
   const colorScheme = useResolvedAppearance();
   const { t } = useI18n();
@@ -54,12 +48,10 @@ export function CompactWorkRecord({
   const active = entries.filter((m) => m.evidence.outcome === "pending");
   const isDone = active.length === 0;
   const currentState = active.length > 0 ? active[active.length - 1] : entries[entries.length - 1];
-  // Reasoning summaries render only as full expanded rows; the collapsed
-  // status line falls back to the generic label rather than a clipped copy.
-  const headerTitle =
-    currentState && currentState.evidence.label !== "reasoning"
-      ? currentState.evidence.title
-      : undefined;
+  // Collapsed, the status line previews the current activity (a streaming
+  // reasoning summary included). Expanded, it steps back to the generic label
+  // so the full row below is the single copy of that text.
+  const headerTitle = expanded ? undefined : currentState?.evidence.title;
 
   return (
     <View style={{ marginVertical: 8, width: "100%" }}>
@@ -147,10 +139,6 @@ export function CompactWorkRecord({
           }}
         >
           {entries.map((m, i) => {
-            const customRender = renderBlock?.(m.block, i);
-            if (customRender) {
-              return <View key={i}>{customRender}</View>;
-            }
             if (m.block.kind === "command") {
               return (
                 <View key={i} style={{ marginTop: 4 }}>

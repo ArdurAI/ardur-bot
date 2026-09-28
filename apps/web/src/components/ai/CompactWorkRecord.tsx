@@ -6,13 +6,7 @@ import { Check, ChevronDown, ChevronRight } from "lucide-react";
 import { useMemo, useState } from "react";
 import { ThreadCommandBlock } from "../ThreadCommandBlock";
 
-export function CompactWorkRecord({
-  blocks,
-  renderBlock,
-}: {
-  blocks: MessageBlock[];
-  renderBlock?: (block: MessageBlock, i: number) => React.ReactNode;
-}) {
+export function CompactWorkRecord({ blocks }: { blocks: MessageBlock[] }) {
   const [expanded, setExpanded] = useState(false);
 
   const entries = useMemo(() => workRecordEntries(blocks), [blocks]);
@@ -22,12 +16,10 @@ export function CompactWorkRecord({
   const active = entries.filter((m) => m.evidence.outcome === "pending");
   const isDone = active.length === 0;
   const currentState = active.length > 0 ? active[active.length - 1] : entries[entries.length - 1];
-  // Reasoning summaries render only as full expanded rows; the collapsed
-  // status line falls back to the generic label rather than a clipped copy.
-  const headerTitle =
-    currentState && currentState.evidence.label !== "reasoning"
-      ? currentState.evidence.title
-      : undefined;
+  // Collapsed, the status line previews the current activity (a streaming
+  // reasoning summary included). Expanded, it steps back to the generic label
+  // so the full row below is the single copy of that text.
+  const headerTitle = expanded ? undefined : currentState?.evidence.title;
 
   return (
     <div className="flex flex-col gap-2 my-2 w-full max-w-full">
@@ -60,10 +52,6 @@ export function CompactWorkRecord({
       {expanded && (
         <div className="flex flex-col gap-3 pl-4 border-l-2 border-border mt-2">
           {entries.map((m, i) => {
-            const customRender = renderBlock?.(m.block, i);
-            if (customRender) {
-              return <div key={i}>{customRender}</div>;
-            }
             if (m.block.kind === "command") {
               return <ThreadCommandBlock key={i} block={m.block.command} />;
             }

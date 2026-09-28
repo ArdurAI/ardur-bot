@@ -2476,6 +2476,45 @@ const MessageBubble = memo(function MessageBubble({
     );
   }
 
+  const handoff = message.blocks.find((block) => block.kind === "handoff");
+  if (handoff) {
+    const from = memberName(members, handoff.fromBotId) ?? t("bot");
+    const to = memberName(members, handoff.toBotId) ?? t("bot");
+    return (
+      <AgentEventLabel
+        actionProps={actionProps}
+        label={t("{from} messaged {to}", { from, to })}
+        detail={handoff.text}
+        expanded={peerExpanded}
+        onToggle={() => setPeerExpanded((expanded) => !expanded)}
+      />
+    );
+  }
+  const peerMessage = message.blocks.find(
+    (
+      block,
+    ): block is Extract<MessageBlock, { kind: "bot_message_sent" | "bot_message_received" }> =>
+      block.kind === "bot_message_sent" || block.kind === "bot_message_received",
+  );
+  if (peerMessage) {
+    const sent = peerMessage.kind === "bot_message_sent";
+    const peerBotId = sent ? peerMessage.toBotId : peerMessage.fromBotId;
+    const peerColor =
+      bots.find((bot) => bot.id === peerBotId)?.color ??
+      members?.find((member) => member.botId === peerBotId)?.color ??
+      tokens.mutedForeground;
+    return (
+      <PeerMessageReceipt
+        block={peerMessage}
+        color={peerColor}
+        recipientName={groupId ? undefined : botName}
+        actionProps={actionProps}
+        onOpenPeer={onOpenBot}
+        botId={cardBotId}
+        groupId={groupId ?? undefined}
+      />
+    );
+  }
   const channelMessage = message.blocks.find(
     (block): block is Extract<MessageBlock, { kind: "channel_message" }> =>
       block.kind === "channel_message",
@@ -2498,6 +2537,62 @@ const MessageBubble = memo(function MessageBubble({
       block.kind === "subagent" || block.kind === "child_bot" || block.kind === "cloud_agent",
   );
 
+  if (special?.kind === "subagent") {
+    const running = special.status === "running";
+    const failed = special.status === "failed";
+    return (
+      <Pressable
+        {...actionProps}
+        style={{
+          width: "90%",
+          borderRadius: 18,
+          borderWidth: 1,
+          borderColor: tokens.border,
+          backgroundColor: tokens.card,
+          paddingHorizontal: 16,
+          paddingVertical: 14,
+        }}
+      >
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "space-between",
+            gap: 8,
+          }}
+        >
+          <Text style={{ color: tokens.foreground, fontSize: 15, fontWeight: "600" }}>
+            {special.name || t("subagent")}
+          </Text>
+          <Text
+            style={{
+              color: failed ? tokens.destructive : running ? tokens.warning : tokens.success,
+              fontSize: 13,
+            }}
+          >
+            {running
+              ? t("Running")
+              : special.status === "failed"
+                ? t("Failed")
+                : special.status === "completed"
+                  ? t("Completed")
+                  : special.status}
+          </Text>
+        </View>
+        {special.task ? (
+          <Text style={{ color: tokens.mutedForeground, marginTop: 8, fontSize: 13.5 }}>
+            {special.task}
+          </Text>
+        ) : null}
+        {special.result || special.progress ? (
+          <View style={{ marginTop: 8 }}>
+            <ChatMarkdown palette={tokens} colorScheme={colorScheme} streaming={running}>
+              {special.result || special.progress || ""}
+            </ChatMarkdown>
+          </View>
+        ) : null}
+      </Pressable>
+    );
+  }
   if (special?.kind === "cloud_agent") {
     const title = special.title || t("Cloud agent");
     const statusLabel =
@@ -2869,107 +2964,7 @@ const MessageBubble = memo(function MessageBubble({
   const firstContent = segments.findIndex((segment) => segment.kind === "content");
   return (
     <View style={{ gap: 8, width: "100%" }}>
-      <CompactWorkRecord
-        blocks={message.blocks}
-        renderBlock={(block, i) => {
-          if (block.kind === "handoff") {
-            const from = memberName(members, block.fromBotId) ?? t("bot");
-            const to = memberName(members, block.toBotId) ?? t("bot");
-            return (
-              <AgentEventLabel
-                key={i}
-                actionProps={actionProps}
-                label={t("{from} messaged {to}", { from, to })}
-                detail={block.text}
-                expanded={peerExpanded}
-                onToggle={() => setPeerExpanded((expanded) => !expanded)}
-              />
-            );
-          }
-          if (block.kind === "bot_message_sent" || block.kind === "bot_message_received") {
-            const sent = block.kind === "bot_message_sent";
-            const peerBotId = sent ? block.toBotId : block.fromBotId;
-            const peerColor =
-              bots.find((bot) => bot.id === peerBotId)?.color ??
-              members?.find((member) => member.botId === peerBotId)?.color ??
-              tokens.mutedForeground;
-            return (
-              <PeerMessageReceipt
-                key={i}
-                block={block}
-                color={peerColor}
-                recipientName={groupId ? undefined : botName}
-                actionProps={actionProps}
-                onOpenPeer={onOpenBot}
-                botId={cardBotId}
-                groupId={groupId ?? undefined}
-              />
-            );
-          }
-          if (block.kind === "subagent") {
-            const running = block.status === "running";
-            const failed = block.status === "failed";
-            return (
-              <Pressable
-                key={i}
-                {...actionProps}
-                style={{
-                  width: "90%",
-                  borderRadius: 18,
-                  borderWidth: 1,
-                  borderColor: tokens.border,
-                  backgroundColor: tokens.card,
-                  paddingHorizontal: 16,
-                  paddingVertical: 14,
-                }}
-              >
-                <View
-                  style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                    gap: 8,
-                  }}
-                >
-                  <Text style={{ color: tokens.foreground, fontSize: 15, fontWeight: "600" }}>
-                    {block.name || t("subagent")}
-                  </Text>
-                  <Text
-                    style={{
-                      color: failed
-                        ? tokens.destructive
-                        : running
-                          ? tokens.warning
-                          : tokens.success,
-                      fontSize: 13,
-                    }}
-                  >
-                    {running
-                      ? t("Running")
-                      : block.status === "failed"
-                        ? t("Failed")
-                        : block.status === "completed"
-                          ? t("Completed")
-                          : block.status}
-                  </Text>
-                </View>
-                {block.task ? (
-                  <Text style={{ color: tokens.mutedForeground, marginTop: 8, fontSize: 13.5 }}>
-                    {block.task}
-                  </Text>
-                ) : null}
-                {block.result || block.progress ? (
-                  <View style={{ marginTop: 8 }}>
-                    <ChatMarkdown palette={tokens} colorScheme={colorScheme} streaming={running}>
-                      {block.result || block.progress || ""}
-                    </ChatMarkdown>
-                  </View>
-                ) : null}
-              </Pressable>
-            );
-          }
-          return null;
-        }}
-      />
+      <CompactWorkRecord blocks={message.blocks} />
       {segments.map((segment, index) => (
         <MessageTextCard
           key={`${message.id}-content-${index}`}

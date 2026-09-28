@@ -84,15 +84,16 @@ export interface WorkRecordEntry {
 }
 
 /**
- * Blocks that belong in the compact work record, in order. Narration (reply
- * text) and unavailable blocks stay out; reasoning summaries stay in and are
- * rendered in full by the record, never by the reply bubble.
+ * Blocks that belong in the compact work record, in order: tool activity and
+ * reasoning summaries. Reply text (narration) stays in the bubble; peer
+ * deliveries, delegations, and unavailable blocks render inline as their own
+ * cards, so they stay out of the record too.
  */
 export function workRecordEntries(blocks: readonly MessageBlock[]): WorkRecordEntry[] {
   return blocks
     .map((block) => ({ block, evidence: mapMessageBlockToActivity(block) }))
     .filter(
-      (entry) => entry.evidence.label !== "narration" && entry.evidence.label !== "unavailable",
+      (entry) => entry.evidence.label === "tool-activity" || entry.evidence.label === "reasoning",
     );
 }
 

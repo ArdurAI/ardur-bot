@@ -39,16 +39,18 @@ describe("CompactWorkRecord", () => {
       root.render(<CompactWorkRecord blocks={blocks} />);
     });
 
-    // Collapsed: the status line falls back to the generic label instead of a
-    // clipped copy of the summary.
-    expect(container.textContent).not.toContain(summary);
-    expect(container.textContent).toContain("Working");
+    // Collapsed: the status line previews the streaming summary, exactly once,
+    // with no row rendered yet.
+    expect(container.textContent).toContain(summary);
+    expect(container.textContent?.split(summary).length).toBe(2);
+    expect(container.querySelectorAll('[data-testid="work-record-reasoning"]')).toHaveLength(0);
 
     act(() => {
       container.querySelector("button")?.click();
     });
 
-    // Expanded: the summary appears exactly once, with its complete text.
+    // Expanded: the header steps back to the generic label and the full
+    // Markdown row is the single copy of the summary.
     expect(container.querySelectorAll('[data-testid="work-record-reasoning"]')).toHaveLength(1);
     expect(container.textContent).toContain(summary);
     expect(container.textContent?.split(summary).length).toBe(2);

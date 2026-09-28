@@ -14,20 +14,23 @@
       import "../../src/styles.css";
 
       const live = new URLSearchParams(location.search).get("live") === "1";
-      const blocks = [
-        {
-          kind: "progress",
-          text: live ? "Checking calendar..." : "Checking calendar...",
-          activity: true,
-        },
-        ...(live ? [] : [
-          {
-            kind: "steps",
-            steps: [{ label: "Google Calendar", count: 1 }],
-            durationMs: 400
-          }
-        ])
-      ];
+      // Live: an in-flight activity beat. Complete: only the finished step
+      // summary remains — a real completed run carries no pending progress.
+      const blocks = live
+        ? [
+            {
+              kind: "progress",
+              text: "Checking calendar...",
+              activity: true,
+            },
+          ]
+        : [
+            {
+              kind: "steps",
+              steps: [{ label: "Google Calendar", count: 1 }],
+              durationMs: 400,
+            },
+          ];
 
       const record = h(CompactWorkRecord, { blocks });
       const response = h(

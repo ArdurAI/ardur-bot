@@ -154,7 +154,6 @@ import type { FeedbackEdit } from "../components/MessageFeedback";
 import { MessageFeedback } from "../components/MessageFeedback";
 import { MessageHoverMetadata } from "../components/MessageHoverMetadata";
 import { PeerMessageReceipt } from "../components/PeerMessageReceipt";
-import { ThreadCommandBlock } from "../components/ThreadCommandBlock";
 import { SkillDraftCard } from "../components/teach/SkillDraftCard";
 import { TeachCaptureOverlay } from "../components/teach/TeachCaptureOverlay";
 import { TeachComputerOverlayControl } from "../components/teach/TeachComputerOverlay";
@@ -6349,81 +6348,7 @@ const MessageView = memo(function MessageView({
     return (
       <>
         {messageContext}
-        <CompactWorkRecord
-          blocks={message.blocks}
-          renderBlock={(block, i) => {
-            if (block.kind === "command") {
-              return <ThreadCommandBlock key={block.command.commandId} block={block.command} />;
-            }
-            if (block.kind === "handoff") {
-              const from = memberName?.(block.fromBotId) ?? t`bot`;
-              const to = memberName?.(block.toBotId) ?? t`bot`;
-              return (
-                <div
-                  key={i}
-                  className="flex items-center justify-center gap-2 py-1 text-[13.5px] text-muted-foreground"
-                >
-                  <span>
-                    ↪ {to} ← {from}
-                  </span>
-                  <span>{block.text}</span>
-                </div>
-              );
-            }
-            if (block.kind === "bot_message_sent" || block.kind === "bot_message_received") {
-              return (
-                <PeerMessageReceipt
-                  key={i}
-                  block={block}
-                  color={
-                    peerBot(block.kind === "bot_message_sent" ? block.toBotId : block.fromBotId)
-                      ?.color ?? FALLBACK_BOT_COLOR
-                  }
-                  onOpen={onOpenPeerMessages}
-                />
-              );
-            }
-            if (block.kind === "subagent") {
-              const running = block.status === "running";
-              const failed = block.status === "failed";
-              return (
-                <div
-                  key={i}
-                  className="w-[min(420px,90%)] rounded-[18px] border border-border bg-muted px-[18px] py-4"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-[15px] font-medium text-foreground" dir="auto">
-                      {block.name}
-                    </span>
-                    <span
-                      className={`rounded-full px-[11px] py-1 text-[13px] ${
-                        failed
-                          ? "bg-destructive/15 text-destructive"
-                          : running
-                            ? "bg-warning/15 text-warning"
-                            : "bg-success/15 text-success"
-                      }`}
-                      style={{
-                        animation: running ? "rkPulse 1.2s ease-in-out infinite" : undefined,
-                      }}
-                    >
-                      {running ? <Trans>subagent</Trans> : block.status}
-                    </span>
-                  </div>
-                  <div className="mt-2 text-[13.5px] text-muted-foreground">{block.task}</div>
-                  {block.progress || block.result ? (
-                    <div className="mt-2.5 text-[14.5px] leading-[1.5] text-foreground/75">
-                      <ChatMarkdown streaming={running}>
-                        {block.result || block.progress || ""}
-                      </ChatMarkdown>
-                    </div>
-                  ) : null}
-                </div>
-              );
-            }
-            return null;
-          }}
-        />
+        <CompactWorkRecord blocks={message.blocks} />
         {visibleNarrationBlocks.length > 0 ? (
           <div className="flex w-fit max-w-full justify-start">
             <div
@@ -6460,92 +6385,42 @@ const MessageView = memo(function MessageView({
   return (
     <>
       {messageContext}
-      <CompactWorkRecord
-        blocks={message.blocks}
-        renderBlock={(block, i) => {
-          if (block.kind === "command") {
-            return <ThreadCommandBlock key={block.command.commandId} block={block.command} />;
-          }
-          if (block.kind === "handoff") {
-            const from = memberName?.(block.fromBotId) ?? t`bot`;
-            const to = memberName?.(block.toBotId) ?? t`bot`;
-            return (
-              <div
-                key={i}
-                className="flex items-center justify-center gap-2 py-1 text-[13.5px] text-muted-foreground"
-              >
-                <span>
-                  ↪ {to} ← {from}
-                </span>
-                <span>{block.text}</span>
-              </div>
-            );
-          }
-          if (block.kind === "bot_message_sent" || block.kind === "bot_message_received") {
-            return (
-              <PeerMessageReceipt
-                key={i}
-                block={block}
-                color={
-                  peerBot(block.kind === "bot_message_sent" ? block.toBotId : block.fromBotId)
-                    ?.color ?? FALLBACK_BOT_COLOR
-                }
-                onOpen={onOpenPeerMessages}
-              />
-            );
-          }
-          if (block.kind === "subagent") {
-            const running = block.status === "running";
-            const failed = block.status === "failed";
-            return (
-              <div
-                key={i}
-                className="w-[min(420px,90%)] rounded-[18px] border border-border bg-muted px-[18px] py-4"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-[15px] font-medium text-foreground" dir="auto">
-                    {block.name}
-                  </span>
-                  <span
-                    className={`rounded-full px-[11px] py-1 text-[13px] ${
-                      failed
-                        ? "bg-destructive/15 text-destructive"
-                        : running
-                          ? "bg-warning/15 text-warning"
-                          : "bg-success/15 text-success"
-                    }`}
-                    style={{
-                      animation: running ? "rkPulse 1.2s ease-in-out infinite" : undefined,
-                    }}
-                  >
-                    {running ? <Trans>subagent</Trans> : block.status}
-                  </span>
-                </div>
-                <div className="mt-2 text-[13.5px] text-muted-foreground">{block.task}</div>
-                {block.progress || block.result ? (
-                  <div className="mt-2.5 text-[14.5px] leading-[1.5] text-foreground/75">
-                    <ChatMarkdown streaming={running}>
-                      {block.result || block.progress || ""}
-                    </ChatMarkdown>
-                  </div>
-                ) : null}
-              </div>
-            );
-          }
-          return null;
-        }}
-      />
+      <CompactWorkRecord blocks={message.blocks} />
       {message.blocks.map((block, i) => {
         if (
           block.kind === "command" ||
           isToolActivityBlock(block) ||
-          isReasoningSummaryBlock(block) ||
-          block.kind === "handoff" ||
-          block.kind === "subagent" ||
-          block.kind === "bot_message_sent" ||
-          block.kind === "bot_message_received"
+          isReasoningSummaryBlock(block)
         ) {
           return null;
+        }
+        if (block.kind === "handoff") {
+          const from = memberName?.(block.fromBotId) ?? t`bot`;
+          const to = memberName?.(block.toBotId) ?? t`bot`;
+          return (
+            <div
+              key={i}
+              className="flex items-center justify-center gap-2 py-1 text-[13.5px] text-muted-foreground"
+            >
+              <span>
+                ↪ {to} ← {from}
+              </span>
+              <span>{block.text}</span>
+            </div>
+          );
+        }
+        if (block.kind === "bot_message_sent" || block.kind === "bot_message_received") {
+          return (
+            <PeerMessageReceipt
+              key={i}
+              block={block}
+              color={
+                peerBot(block.kind === "bot_message_sent" ? block.toBotId : block.fromBotId)
+                  ?.color ?? FALLBACK_BOT_COLOR
+              }
+              onOpen={onOpenPeerMessages}
+            />
+          );
         }
         if (block.kind === "channel_message") {
           return (
@@ -6568,6 +6443,44 @@ const MessageView = memo(function MessageView({
             >
               <span className="text-warning">◷</span>
               <span>{block.text}</span>
+            </div>
+          );
+        }
+        if (block.kind === "subagent") {
+          const running = block.status === "running";
+          const failed = block.status === "failed";
+          return (
+            <div
+              key={i}
+              className="w-[min(420px,90%)] rounded-[18px] border border-border bg-muted px-[18px] py-4"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[15px] font-medium text-foreground" dir="auto">
+                  {block.name}
+                </span>
+                <span
+                  className={`rounded-full px-[11px] py-1 text-[13px] ${
+                    failed
+                      ? "bg-destructive/15 text-destructive"
+                      : running
+                        ? "bg-warning/15 text-warning"
+                        : "bg-success/15 text-success"
+                  }`}
+                  style={{
+                    animation: running ? "rkPulse 1.2s ease-in-out infinite" : undefined,
+                  }}
+                >
+                  {running ? <Trans>subagent</Trans> : block.status}
+                </span>
+              </div>
+              <div className="mt-2 text-[13.5px] text-muted-foreground">{block.task}</div>
+              {block.progress || block.result ? (
+                <div className="mt-2.5 text-[14.5px] leading-[1.5] text-foreground/75">
+                  <ChatMarkdown streaming={running}>
+                    {block.result || block.progress || ""}
+                  </ChatMarkdown>
+                </div>
+              ) : null}
             </div>
           );
         }
