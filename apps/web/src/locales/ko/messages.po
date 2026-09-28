@@ -9008,11 +9008,14 @@ msgstr "진행 중"
 msgid "Working from the last copy"
 msgstr ""
 
-#. placeholder {0}: row.currentTaskTitle ?? row.sentence
-#. placeholder {1}: row.requesterName
 #: src/pages/TeamBoard.tsx
-msgid "Working on {0} for {1}"
-msgstr ""
+msgid "Working on {task}"
+msgstr "{task} 작업 중"
+
+#. placeholder {0}: row.requesterName
+#: src/pages/TeamBoard.tsx
+msgid "Working on {task} for {0}"
+msgstr "{0}님을 위해 {task} 작업 중"
 
 #: src/pages/Auth.tsx
 #: src/pages/CallView.tsx

@@ -460,6 +460,21 @@ describe("lingui catalogs", () => {
     }
   });
 
+  it("ships the Team board working labels in every catalog", () => {
+    // Production strips source text, so a label missing from the catalog renders as its message id.
+    const sentences = ["Working on {task}", "Working on {task} for {0}"];
+    for (const locale of ["en", "de", "ko", "tr", "hi", "pt-BR", "zh-CN", "es", "ru"]) {
+      const catalog = readFileSync(
+        fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url)),
+        "utf8",
+      );
+      for (const sentence of sentences) {
+        expect(catalog).toContain(`#: src/pages/TeamBoard.tsx\nmsgid ${JSON.stringify(sentence)}`);
+        expect(catalog).not.toContain(`msgid ${JSON.stringify(sentence)}\nmsgstr ""`);
+      }
+    }
+  });
+
   it("ships both computer preparation messages in every catalog", () => {
     const sentences = ["Preparing the bot computer…", "Preparing the bot computer… {percent}%"];
     for (const locale of ["en", "de", "ko", "tr", "hi", "pt-BR", "zh-CN", "es", "ru"]) {

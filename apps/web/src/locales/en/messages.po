@@ -9008,11 +9008,14 @@ msgstr "Working"
 msgid "Working from the last copy"
 msgstr "Working from the last copy"
 
-#. placeholder {0}: row.currentTaskTitle ?? row.sentence
-#. placeholder {1}: row.requesterName
 #: src/pages/TeamBoard.tsx
-msgid "Working on {0} for {1}"
-msgstr "Working on {0} for {1}"
+msgid "Working on {task}"
+msgstr "Working on {task}"
+
+#. placeholder {0}: row.requesterName
+#: src/pages/TeamBoard.tsx
+msgid "Working on {task} for {0}"
+msgstr "Working on {task} for {0}"
 
 #: src/pages/Auth.tsx
 #: src/pages/CallView.tsx
