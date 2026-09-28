@@ -212,7 +212,7 @@ import {
   transcriptIsNearEnd,
   transcriptMovedDown,
 } from "../lib/transcript-scroll";
-import { speaker } from "../lib/tts";
+import { whenSpeakerReady, withSpeaker } from "../lib/tts-lazy";
 import { useModelSettings } from "../lib/use-model-settings";
 import { useNotifications } from "../lib/use-notifications";
 import { useSettingsShortcut } from "../lib/use-settings-shortcut";
@@ -234,8 +234,7 @@ import type { SettingsSection } from "./SettingsOverlay";
 import { SpaceSearchResults } from "./SpaceSearch";
 import { BotModelChip } from "./shell/bot-model-chip";
 import { BotSettings, CreateBotForm } from "./shell/bot-panel";
-import { BotCreatePicker } from "./shell/bot-picker";
-import { CommandPalette, isCommandPaletteHotkey } from "./shell/command-palette";
+import { isCommandPaletteHotkey } from "./shell/command-palette-hotkey";
 import {
   initialComputerErrorState,
   reduceComputerError,
@@ -243,15 +242,6 @@ import {
 } from "./shell/computer-error-state";
 import { ComputerScreenError } from "./shell/computer-screen-error";
 import { useComputerTerminal } from "./shell/computer-terminal";
-import {
-  ClearConversationDialog,
-  DeleteBotDialog,
-  DeleteItemDialog,
-  NewBotSectionDialog,
-  NewSpaceDialog,
-  PickerInfoDialog,
-  RenameBotSectionDialog,
-} from "./shell/dialogs";
 import {
   AppConnectCard,
   ArtifactImage,
@@ -291,6 +281,38 @@ const PeerMessagesOverlay = lazy(() =>
   import("./PeerMessagesOverlay").then((module) => ({ default: module.PeerMessagesOverlay })),
 );
 const CallView = lazy(() => import("./CallView").then((module) => ({ default: module.CallView })));
+// Both pickers sit behind a click and pull the command-menu dependency, so they
+// load on demand; the hotkey listener stays local to keep the palette shortcut instant.
+const BotCreatePicker = lazy(() =>
+  import("./shell/bot-picker").then((module) => ({ default: module.BotCreatePicker })),
+);
+const CommandPalette = lazy(() =>
+  import("./shell/command-palette").then((module) => ({ default: module.CommandPalette })),
+);
+// Every dialog opens from a click, so the shared dialog module loads on demand.
+const ClearConversationDialog = lazy(() =>
+  import("./shell/dialogs").then((module) => ({
+    default: module.ClearConversationDialog,
+  })),
+);
+const DeleteBotDialog = lazy(() =>
+  import("./shell/dialogs").then((module) => ({ default: module.DeleteBotDialog })),
+);
+const DeleteItemDialog = lazy(() =>
+  import("./shell/dialogs").then((module) => ({ default: module.DeleteItemDialog })),
+);
+const NewBotSectionDialog = lazy(() =>
+  import("./shell/dialogs").then((module) => ({ default: module.NewBotSectionDialog })),
+);
+const NewSpaceDialog = lazy(() =>
+  import("./shell/dialogs").then((module) => ({ default: module.NewSpaceDialog })),
+);
+const PickerInfoDialog = lazy(() =>
+  import("./shell/dialogs").then((module) => ({ default: module.PickerInfoDialog })),
+);
+const RenameBotSectionDialog = lazy(() =>
+  import("./shell/dialogs").then((module) => ({ default: module.RenameBotSectionDialog })),
+);
 
 type Panel =
   | "computer"
@@ -531,6 +553,14 @@ export function ShellPage({
   const [newSpaceOpen, setNewSpaceOpen] = useState(false);
   const [pickerInfoTopic, setPickerInfoTopic] = useState<"group" | "space" | null>(null);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  // The palette mounts on first use so its command-menu code stays out of startup.
+  const [commandPaletteUsed, setCommandPaletteUsed] = useState(false);
+  const commandPaletteOpenRef = useRef(false);
+  const setCommandPaletteState = useCallback((open: boolean) => {
+    commandPaletteOpenRef.current = open;
+    setCommandPaletteOpen(open);
+    if (open) setCommandPaletteUsed(true);
+  }, []);
 
   useEffect(() => {
     if (dashboard) setMobileSidebarOpen(false);
@@ -1157,12 +1187,12 @@ export function ShellPage({
       .status()
       .then(setVoiceStatus)
       .catch(() => undefined);
-    const unsubSpeech = speaker.subscribe((state) => {
-      setSpeakingMessageId(state.status === "idle" ? null : (state.messageId ?? null));
-    });
-    return () => {
-      unsubSpeech();
-    };
+    // Mirrors playback state for message rows without loading the speaker module.
+    return whenSpeakerReady((speaker) =>
+      speaker.subscribe((state) => {
+        setSpeakingMessageId(state.status === "idle" ? null : (state.messageId ?? null));
+      }),
+    );
   }, []);
 
   useEffect(() => {
@@ -1182,7 +1212,7 @@ export function ShellPage({
     const text = speechFromBlocks(lastBot.blocks);
     if (!text) return;
     autoSpoken.current = lastBot.id;
-    void speaker.speak(text, { botId: active.id, messageId: lastBot.id });
+    withSpeaker((speaker) => speaker.speak(text, { botId: active.id, messageId: lastBot.id }));
   }, [
     snapshot?.messages,
     snapshot?.run?.status,
@@ -2219,12 +2249,13 @@ export function ShellPage({
   speakingMessageIdRef.current = speakingMessageId;
   const speakMessage = useCallback((message: ThreadMessage) => {
     if (speakingMessageIdRef.current === message.id) {
-      speaker.stop();
+      withSpeaker((speaker) => speaker.stop());
       return;
     }
     const text = speechFromBlocks(message.blocks);
     const id = message.botId ?? activeBotId.current;
-    if (text && id) void speaker.speak(text, { botId: id, messageId: message.id });
+    if (text && id)
+      withSpeaker((speaker) => speaker.speak(text, { botId: id, messageId: message.id }));
   }, []);
 
   async function createGroup(input: { name: string; botIds: string[] }) {
@@ -2511,11 +2542,11 @@ export function ShellPage({
     function onKey(event: KeyboardEvent) {
       if (!isCommandPaletteHotkey(event)) return;
       event.preventDefault();
-      setCommandPaletteOpen((open) => !open);
+      setCommandPaletteState(!commandPaletteOpenRef.current);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [setCommandPaletteState]);
 
   useEffect(() => {
     const heartbeatBotId = computerBot?.id ?? active?.id;
@@ -2779,39 +2810,41 @@ export function ShellPage({
                   align="end"
                   className="app-no-drag w-auto gap-0 overflow-hidden p-0 data-closed:animate-none"
                 >
-                  <BotCreatePicker
-                    bots={bots}
-                    onCreateBot={() => {
-                      setCreateMenuOpen(false);
-                      setMobileSidebarOpen(false);
-                      setPanel("create");
-                    }}
-                    onOpenBot={(id) => {
-                      setCreateMenuOpen(false);
-                      setMobileSidebarOpen(false);
-                      navigate(`/app/${id}`);
-                    }}
-                    onCreateGroup={() => {
-                      setCreateMenuOpen(false);
-                      setMobileSidebarOpen(false);
-                      setPanel("create-group");
-                    }}
-                    onCreateSpace={() => {
-                      setCreateMenuOpen(false);
-                      setMobileSidebarOpen(false);
-                      setNewSpaceOpen(true);
-                    }}
-                    onShowGroupInfo={() => {
-                      setCreateMenuOpen(false);
-                      setMobileSidebarOpen(false);
-                      setPickerInfoTopic("group");
-                    }}
-                    onShowSpaceInfo={() => {
-                      setCreateMenuOpen(false);
-                      setMobileSidebarOpen(false);
-                      setPickerInfoTopic("space");
-                    }}
-                  />
+                  <Suspense fallback={null}>
+                    <BotCreatePicker
+                      bots={bots}
+                      onCreateBot={() => {
+                        setCreateMenuOpen(false);
+                        setMobileSidebarOpen(false);
+                        setPanel("create");
+                      }}
+                      onOpenBot={(id) => {
+                        setCreateMenuOpen(false);
+                        setMobileSidebarOpen(false);
+                        navigate(`/app/${id}`);
+                      }}
+                      onCreateGroup={() => {
+                        setCreateMenuOpen(false);
+                        setMobileSidebarOpen(false);
+                        setPanel("create-group");
+                      }}
+                      onCreateSpace={() => {
+                        setCreateMenuOpen(false);
+                        setMobileSidebarOpen(false);
+                        setNewSpaceOpen(true);
+                      }}
+                      onShowGroupInfo={() => {
+                        setCreateMenuOpen(false);
+                        setMobileSidebarOpen(false);
+                        setPickerInfoTopic("group");
+                      }}
+                      onShowSpaceInfo={() => {
+                        setCreateMenuOpen(false);
+                        setMobileSidebarOpen(false);
+                        setPickerInfoTopic("space");
+                      }}
+                    />
+                  </Suspense>
                 </PopoverContent>
               ) : null}
             </Popover>
@@ -4291,16 +4324,20 @@ export function ShellPage({
           </DropdownMenu>
         ) : null}
 
-        <CommandPalette
-          open={commandPaletteOpen}
-          onOpenChange={setCommandPaletteOpen}
-          bots={bots}
-          onOpenTerminal={terminalSurface.open}
-          onSelectBot={(id) => {
-            setMobileSidebarOpen(false);
-            navigate(`/app/${id}`);
-          }}
-        />
+        {commandPaletteUsed ? (
+          <Suspense fallback={null}>
+            <CommandPalette
+              open={commandPaletteOpen}
+              onOpenChange={setCommandPaletteState}
+              bots={bots}
+              onOpenTerminal={terminalSurface.open}
+              onSelectBot={(id) => {
+                setMobileSidebarOpen(false);
+                navigate(`/app/${id}`);
+              }}
+            />
+          </Suspense>
+        ) : null}
 
         {newSpaceOpen ? (
           <NewSpaceDialog
@@ -4628,7 +4665,7 @@ export function ShellPage({
             size="icon"
             className="app-no-drag"
             aria-label={t`Search`}
-            onClick={() => setCommandPaletteOpen(true)}
+            onClick={() => setCommandPaletteState(true)}
           >
             <Search size={17} />
           </Button>
