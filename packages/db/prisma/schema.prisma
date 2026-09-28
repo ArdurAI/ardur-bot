@@ -2174,6 +2174,7 @@ model BotMessageDelivery {
   inReplyToDeliveryId String?
   senderBotId String
   recipientBotId String
+  pairKey String?
   senderThreadId String
   recipientThreadId String
   sourceRunId String
@@ -2212,9 +2213,45 @@ model BotMessageDelivery {
   @@index([rootTaskId, createdAt])
   @@index([conversationId, createdAt])
   @@index([spaceId, userId, senderBotId, recipientBotId, createdAt])
+  @@index([spaceId, userId, pairKey, createdAt])
+  @@index([spaceId, userId, createdAt])
+  @@index([goalId, createdAt])
   @@index([inReplyToDeliveryId])
   @@index([quietClaimRunId, quietClaimLeaseFence])
   @@map("bot_message_deliveries")
+}
+
+model BotCommunicationPolicy {
+  id String @id @default(cuid())
+  spaceId String
+  userId String
+  scopeKey String
+  groupId String?
+  enabled Boolean @default(true)
+  paused Boolean @default(false)
+  revision Int @default(1)
+  pausedAt DateTime?
+  pausedByUserId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([spaceId, userId, scopeKey])
+  @@index([spaceId, userId, paused])
+  @@map("bot_communication_policies")
+}
+
+model PeerTrafficBlock {
+  id String @id @default(cuid())
+  spaceId String
+  userId String
+  scopeKey String
+  reason String
+  windowKey String
+  refusedAttempts Int @default(1)
+  createdAt DateTime @default(now())
+
+  @@unique([spaceId, userId, scopeKey, reason, windowKey])
+  @@map("peer_traffic_blocks")
 }
 
 model BotMessageWake {

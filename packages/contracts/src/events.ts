@@ -140,6 +140,7 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     kind: z.literal("ask"),
     text: z.string(),
     approvalEffectId: Id.optional(),
+    peerHold: z.boolean().optional(),
     detail: z.string().optional(),
     /** Exact approval text: render verbatim, with expandable full contents. */
     preformatted: z.boolean().optional(),
@@ -301,7 +302,17 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     delegationId: Id.optional(),
     deliveryId: Id.optional(),
     deliveryState: z
-      .enum(["queued", "delivered", "read", "replied", "expired", "failed"])
+      .enum([
+        "held",
+        "queued",
+        "delivered",
+        "read",
+        "replied",
+        "denied",
+        "expired",
+        "cancelled",
+        "failed",
+      ])
       .optional(),
     queuedForBusy: z.boolean().optional(),
   }),
@@ -316,7 +327,17 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     delegationId: Id.optional(),
     deliveryId: Id.optional(),
     deliveryState: z
-      .enum(["queued", "delivered", "read", "replied", "expired", "failed"])
+      .enum([
+        "held",
+        "queued",
+        "delivered",
+        "read",
+        "replied",
+        "denied",
+        "expired",
+        "cancelled",
+        "failed",
+      ])
       .optional(),
     queuedForBusy: z.boolean().optional(),
     /** Completed replies may be bounded in the coordinator receipt. */

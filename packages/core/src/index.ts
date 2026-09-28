@@ -22,6 +22,7 @@ export * from "./avatar-motion.js";
 export * from "./avatar-shape.js";
 export * from "./bot-avatar-colors.js";
 export * from "./bot-avatar-shapes.js";
+export * from "./bot-comms-policy.js";
 export * from "./bot-message-receipt.js";
 export * from "./bot-messages.js";
 export * from "./bot-presence.js";

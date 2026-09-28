@@ -52,6 +52,8 @@ export function teamRowText(
 
 export function teamDeliveryText(state: string, t: (text: string) => string = (text) => text) {
   switch (state) {
+    case "held":
+      return t("Waiting for your approval");
     case "queued":
       return t("Waiting for a turn");
     case "delivered":

@@ -5,6 +5,9 @@ type PeerBlock = Extract<MessageBlock, { kind: "bot_message_sent" | "bot_message
 /** Only persisted delivery projections can advance a receipt. */
 export function botMessageReceiptKind(block: PeerBlock) {
   if (block.deliveryState === "replied") return "replied";
+  if (block.deliveryState === "held") return "held";
+  if (block.deliveryState === "denied") return "denied";
+  if (block.deliveryState === "cancelled") return "cancelled";
   if (block.deliveryState === "expired") return "expired";
   if (block.deliveryState === "failed") return "failed";
   if (block.queuedForBusy) return "waiting";
