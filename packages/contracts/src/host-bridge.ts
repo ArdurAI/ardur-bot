@@ -13,6 +13,7 @@ import { IDE_FILE_BYTES } from "./ide.js";
 import { LocalImportRootsSchema } from "./local-import.js";
 import { McpCredentialFlagsSchema } from "./mcp.js";
 import { RequestUsageObservationSchema } from "./request-usage.js";
+import { HermesExecutionEnvelopeSchema } from "./runtime-config.js";
 import {
   HERMES_HOST_MAX_OUTPUT_TOKENS,
   RuntimeAvailabilitySchema,
@@ -131,6 +132,7 @@ const tool = z.strictObject({
 });
 export const HostTurnSchema = z.strictObject({
   providerBroker: HostProviderGrantSchema.optional(),
+  executionEnvelope: HermesExecutionEnvelopeSchema.optional(),
   controlledComparison: z.boolean().optional(),
   botId: id,
   runId: id,
@@ -291,7 +293,13 @@ export const HostRequestSchema = /* @__PURE__ */ (() =>
 export type HostRequest = z.infer<typeof HostRequestSchema>;
 export const HostHealthSchema = z.strictObject({
   generation: z.uuid().optional(),
-  capabilities: z.strictObject({ providerRelay: z.literal(1) }).optional(),
+  capabilities: z
+    .strictObject({
+      providerRelay: z.literal(1),
+      hermesConfigurationProfile: z.literal("hermes-ardur-v2").optional(),
+      hermesLauncherGeneration: z.literal(1).optional(),
+    })
+    .optional(),
   capacity: CapacitySnapshotSchema.optional(),
   name: z.string().trim().min(1).max(80).optional(),
   platform: z.enum(["darwin", "linux", "win32"]),
@@ -305,6 +313,39 @@ export const HostHealthSchema = z.strictObject({
   integrations: z.array(HostIntegrationSchema).max(16).optional(),
 });
 export type HostHealth = z.infer<typeof HostHealthSchema>;
+export const HOST_HEALTH_ACCEPT_HEADER = "x-ardur-host-health-accept";
+export const HOST_HEALTH_ACCEPTED =
+  "providerRelay,hermes,hermesConfigurationProfile,hermesLauncherGeneration";
+
+/** A missing upgrade advertisement means the peer may use the original strict health schema. */
+export function negotiateHostHealth(health: HostHealth, advertisement?: string): HostHealth {
+  const accepted = new Set(
+    (advertisement && advertisement.length <= 256 ? advertisement : "")
+      .split(",")
+      .map((value) => value.trim()),
+  );
+  const { capabilities, hermes, ...legacy } = health;
+  return {
+    ...legacy,
+    ...(accepted.has("hermes") && hermes ? { hermes } : {}),
+    ...(accepted.has("providerRelay") && capabilities
+      ? {
+          capabilities: {
+            providerRelay: capabilities.providerRelay,
+            ...(accepted.has("hermesConfigurationProfile") &&
+            accepted.has("hermesLauncherGeneration") &&
+            capabilities.hermesConfigurationProfile &&
+            capabilities.hermesLauncherGeneration
+              ? {
+                  hermesConfigurationProfile: capabilities.hermesConfigurationProfile,
+                  hermesLauncherGeneration: capabilities.hermesLauncherGeneration,
+                }
+              : {}),
+          },
+        }
+      : {}),
+  };
+}
 export const HostStatusSchema = z.strictObject({
   roots: z.array(path).max(32).default([]),
   configured: z.boolean(),

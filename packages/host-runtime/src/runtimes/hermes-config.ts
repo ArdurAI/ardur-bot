@@ -1,4 +1,7 @@
-import type { HermesRuntimeConfigV2 } from "@ardurbot/contracts/runtime-config";
+import type {
+  HermesRuntimeConfigV2,
+  RuntimeConfigExecutionManifest,
+} from "@ardurbot/contracts/runtime-config";
 import {
   HERMES_CONFIG_ARTIFACT_VERSION,
   HERMES_MANAGED_PROFILE,
@@ -6,6 +9,8 @@ import {
   HermesRuntimeConfigV2Schema,
   RuntimeConfigManagedProfileSchema,
 } from "@ardurbot/contracts/runtime-config";
+import { validateHermesExecutionEnvelope } from "@ardurbot/core/node/runtime-config-hash";
+import { canonicalRuntimeJson } from "@ardurbot/core/runtime-config";
 
 const NATIVE_TOOLSETS = [
   "web",
@@ -162,4 +167,16 @@ export function compileHermesRuntimeConfig(
       },
     },
   };
+}
+
+/** Recompilation checks policy as well as hashes; no supplied native key is trusted. */
+export function validateCompiledHermesProfile(value: unknown, model: HermesConfigModel) {
+  const envelope = validateHermesExecutionEnvelope(value);
+  const expected = compileHermesRuntimeConfig(envelope.runtimeConfig, model);
+  if (
+    canonicalRuntimeJson(envelope.effectiveRuntimeConfig) !==
+    canonicalRuntimeJson(expected.manifest as RuntimeConfigExecutionManifest)
+  )
+    throw new Error("Hermes configuration does not match the selected model and managed profile.");
+  return { envelope, compiled: expected };
 }
