@@ -60,3 +60,41 @@ it("hides the open button when an error is present", async () => {
   root.unmount();
   container.remove();
 });
+
+it("disconnects the preview iframe when not visible", async () => {
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  await act(async () => {
+    root.render(
+      <WorkspaceScreen
+        computer={{ state: "running" } as any}
+        open={false}
+        url="http://example.com"
+        error={null}
+        visible={false}
+        onOpen={() => {}}
+      />,
+    );
+  });
+
+  expect(container.querySelector("iframe")).toBeNull();
+
+  await act(async () => {
+    root.render(
+      <WorkspaceScreen
+        computer={{ state: "running" } as any}
+        open={false}
+        url="http://example.com"
+        error={null}
+        visible={true}
+        onOpen={() => {}}
+      />,
+    );
+  });
+
+  expect(container.querySelector("iframe")).not.toBeNull();
+
+  root.unmount();
+  container.remove();
+});

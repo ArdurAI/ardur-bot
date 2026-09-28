@@ -103,7 +103,7 @@ export function WorkspacePane({
             label: t`Screen`,
             content: (
               <Suspense fallback={null}>
-                <WorkspaceScreen {...screen} />
+                <WorkspaceScreen {...screen} visible={selected === "screen"} />
               </Suspense>
             ),
           },
@@ -114,7 +114,7 @@ export function WorkspacePane({
             label: t`Computer`,
             content: (
               <Suspense fallback={null}>
-                <WorkspaceScreen {...screen} />
+                <WorkspaceScreen {...screen} visible={selected === "computer"} />
               </Suspense>
             ),
           },
