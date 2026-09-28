@@ -25,7 +25,7 @@ it("defaults to disabled, captures medium effort, and only lets a space owner co
     },
   };
   const service = createLearningService({
-    prisma: prisma as unknown as PrismaClient,
+    prisma: { ...prisma, $transaction: async (fn: any) => fn(prisma), $queryRaw: vi.fn() } as unknown as PrismaClient,
     jobs: {} as never,
   });
   const initial = await service.settings(actor);
@@ -102,7 +102,7 @@ it("lists scoped proposals with separate counts and opens only linked, surviving
     },
   };
   const service = createLearningService({
-    prisma: prisma as unknown as PrismaClient,
+    prisma: { ...prisma, $transaction: async (fn: any) => fn(prisma), $queryRaw: vi.fn() } as unknown as PrismaClient,
     jobs: {} as never,
   });
   const list = await service.list(actor, "bot");
@@ -504,7 +504,7 @@ it("keeps the insight switch unless it is sent, and lets only the owner change i
     spaceModelPreference: { findFirst: vi.fn(async () => null) },
   };
   const service = createLearningService({
-    prisma: prisma as unknown as PrismaClient,
+    prisma: { ...prisma, $transaction: async (fn: any) => fn(prisma), $queryRaw: vi.fn() } as unknown as PrismaClient,
     jobs: { enqueue } as never,
   });
   expect(await service.configure(actor, { enabled: true })).toMatchObject({
@@ -588,7 +588,7 @@ it("setReviewer saves revision + 1 and sets configuredBy", async () => {
       upsert,
     },
   };
-  const service = createLearningService({ prisma: prisma as never, jobs: {} as never });
+  const service = createLearningService({ prisma: { ...prisma, $transaction: async (fn: any) => fn(prisma), $queryRaw: vi.fn() } as never, jobs: {} as never });
   await service.setReviewer(actor, {
     expectedRevision: 1,
     pin: { runtimeKind: "pi", provider: "p2", modelId: "m2", credentialId: "c2", effort: "high" },
@@ -617,7 +617,7 @@ it("setReviewer an unchanged choice causes no upsert", async () => {
       upsert,
     },
   };
-  const service = createLearningService({ prisma: prisma as never, jobs: {} as never });
+  const service = createLearningService({ prisma: { ...prisma, $transaction: async (fn: any) => fn(prisma), $queryRaw: vi.fn() } as never, jobs: {} as never });
   await service.setReviewer(actor, {
     expectedRevision: 1,
     pin: { runtimeKind: "pi", provider: "p1", modelId: "m1", credentialId: "c1", effort: null },
@@ -637,7 +637,7 @@ it("setReviewer a stale revision returns CONFLICT", async () => {
       findUnique: vi.fn(async () => configRow),
     },
   };
-  const service = createLearningService({ prisma: prisma as never, jobs: {} as never });
+  const service = createLearningService({ prisma: { ...prisma, $transaction: async (fn: any) => fn(prisma), $queryRaw: vi.fn() } as never, jobs: {} as never });
   await expect(
     service.setReviewer(actor, {
       expectedRevision: 1,
@@ -661,7 +661,14 @@ it("configure keeps the stored pin when given a lower or equal revision", async 
       upsert,
     },
   };
-  const service = createLearningService({ prisma: prisma as never, jobs: {} as never });
+  const service = createLearningService({
+    prisma: {
+      ...prisma,
+      $transaction: async (fn: any) => fn(prisma),
+      $queryRaw: vi.fn(),
+    } as never,
+    jobs: {} as never,
+  });
   await service.configure(actor, {
     enabled: true,
     reviewerPin: { runtimeKind: "pi", provider: "p2", modelId: "m2", credentialId: "c2", effort: null, revision: 2 },
@@ -694,7 +701,7 @@ it("configure a higher revision is validated and saved", async () => {
     const { revision, ...rest } = pin;
     return rest;
   });
-  const service = createLearningService({ prisma: prisma as never, jobs: {} as never });
+  const service = createLearningService({ prisma: { ...prisma, $transaction: async (fn: any) => fn(prisma), $queryRaw: vi.fn() } as never, jobs: {} as never });
   await service.configure(
     actor,
     {
@@ -723,7 +730,7 @@ it("configure enabling with an incomplete pin is refused", async () => {
     },
     modelCredential: { findFirst: vi.fn(async () => null) }
   };
-  const service = createLearningService({ prisma: prisma as never, jobs: {} as never });
+  const service = createLearningService({ prisma: { ...prisma, $transaction: async (fn: any) => fn(prisma), $queryRaw: vi.fn() } as never, jobs: {} as never });
   await expect(
     service.configure(actor, {
       enabled: true,
@@ -754,10 +761,111 @@ it("configure an unchanged configure writes nothing", async () => {
       upsert,
     },
   };
-  const service = createLearningService({ prisma: prisma as never, jobs: {} as never });
+  const service = createLearningService({ prisma: { ...prisma, $transaction: async (fn: any) => fn(prisma), $queryRaw: vi.fn() } as never, jobs: {} as never });
   await service.configure(actor, {
     enabled: false,
     reviewerPin: { runtimeKind: "pi", provider: "p1", modelId: "m1", credentialId: "c1", effort: null, revision: 1 },
   });
   expect(upsert).not.toHaveBeenCalled();
+});
+
+it("configure preserves the stored pin when given null reviewerPin", async () => {
+  const actor = { spaceId: "space", userId: "owner" } as Actor;
+  const configRow = {
+    spaceId: "space",
+    enabled: false,
+    reviewerPin: { runtimeKind: "pi", provider: "p1", modelId: "m1", credentialId: "c1", effort: null, revision: 3 },
+  };
+  const upsert = vi.fn(async () => ({}));
+  const prisma = {
+    spaceMember: { findUnique: vi.fn(async () => ({ role: "owner" })) },
+    spaceLearningConfig: {
+      findUnique: vi.fn(async () => configRow),
+      upsert,
+    },
+  };
+  const service = createLearningService({
+    prisma: {
+      ...prisma,
+      $transaction: async (fn: any) => fn(prisma),
+      $queryRaw: vi.fn(),
+    } as never,
+    jobs: {} as never,
+  });
+  await service.configure(actor, {
+    enabled: false,
+    reviewerPin: null,
+  });
+  expect(upsert).toHaveBeenCalledWith(
+    expect.objectContaining({
+      update: expect.objectContaining({
+        reviewerPin: expect.objectContaining({ provider: "p1", revision: 3 }),
+      }),
+    })
+  );
+});
+
+it("setReviewer saves hermes config and hash", async () => {
+  const actor = { spaceId: "space", userId: "owner" } as Actor;
+  const configRow = {
+    spaceId: "space",
+    reviewerPin: null,
+  };
+  const upsert = vi.fn(async () => ({}));
+  const prisma = {
+    spaceMember: { findUnique: vi.fn(async () => ({ role: "owner" })) },
+    spaceLearningConfig: {
+      findUnique: vi.fn(async () => configRow),
+      upsert,
+    },
+  };
+  const service = createLearningService({
+    prisma: {
+      ...prisma,
+      $transaction: async (fn: any) => fn(prisma),
+      $queryRaw: vi.fn(),
+    } as never,
+    jobs: {} as never,
+  });
+  await service.setReviewer(actor, {
+    expectedRevision: 0,
+    pin: { runtimeKind: "hermes", provider: "p1", modelId: "m1", credentialId: "c1", effort: null },
+  });
+  expect(upsert).toHaveBeenCalledWith(
+    expect.objectContaining({
+      update: expect.objectContaining({
+        reviewerPin: expect.objectContaining({ runtimeConfig: expect.anything(), runtimeConfigHash: expect.any(String) }),
+      }),
+    })
+  );
+});
+
+it("setReviewer checks expectedRevision atomically", async () => {
+  const actor = { spaceId: "space", userId: "owner" } as Actor;
+  const configRow = {
+    spaceId: "space",
+    reviewerPin: null,
+  };
+  const upsert = vi.fn(async () => ({}));
+  const queryRaw = vi.fn(async () => []);
+  const prisma = {
+    spaceMember: { findUnique: vi.fn(async () => ({ role: "owner" })) },
+    spaceLearningConfig: {
+      findUnique: vi.fn(async () => configRow),
+      upsert,
+    },
+  };
+  const service = createLearningService({
+    prisma: {
+      ...prisma,
+      $transaction: async (fn: any) => fn(prisma),
+      $queryRaw: queryRaw,
+    } as never,
+    jobs: {} as never,
+  });
+  await service.setReviewer(actor, {
+    expectedRevision: 0,
+    pin: { runtimeKind: "pi", provider: "p1", modelId: "m1", credentialId: "c1", effort: null },
+  });
+  expect(queryRaw).toHaveBeenCalled();
 });

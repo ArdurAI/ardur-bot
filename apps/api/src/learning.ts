@@ -14,6 +14,8 @@ import {
   reviewerDestination,
   settleLearningInsight,
   skillDocumentContext,
+  effectiveHermesConfig,
+  hermesConfigHash,
 } from "@ardurbot/adapters";
 import type { Actor, SpaceLearningConfig } from "@ardurbot/contracts";
 import {
@@ -299,52 +301,44 @@ export function createLearningService(deps: {
     },
     async setReviewer(actor: Actor, target: SetLearningReviewerInput) {
       await requireSpaceOwner(deps.prisma, actor);
-      const config = await deps.prisma.spaceLearningConfig.findUnique({
-        where: { spaceId: actor.spaceId },
-      });
-      const storedPin = config?.reviewerPin ? RuntimePinSchema.parse(config.reviewerPin) : null;
-      const savedRevision = storedPin?.revision ?? 0;
-
-      const sameChoice = (a: RuntimePin | null, b: typeof target.pin) =>
-        a?.provider === b.provider &&
-        a?.modelId === b.modelId &&
-        a?.credentialId === b.credentialId &&
-        a?.effort === b.effort &&
-        a?.runtimeKind === b.runtimeKind;
-
-      if (sameChoice(storedPin, target.pin)) {
-        return settings(actor);
-      }
-
-      if (savedRevision !== target.expectedRevision) {
-        throw new ORPCError("CONFLICT", {
-          message: "The reviewer was changed in another window.",
+      return deps.prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM "Space" WHERE id = ${actor.spaceId} FOR UPDATE`;
+        const config = await tx.spaceLearningConfig.findUnique({
+          where: { spaceId: actor.spaceId },
         });
-      }
+        const storedPin = config?.reviewerPin ? RuntimePinSchema.parse(config.reviewerPin) : null;
+        const savedRevision = storedPin?.revision ?? 0;
 
-      if (savedRevision >= 2_147_483_647) {
-        throw new ORPCError("CONFLICT", { message: "This member's model revision cannot advance." });
-      }
+        const sameChoice = (a: RuntimePin | null, b: typeof target.pin) =>
+          a?.provider === b.provider &&
+          a?.modelId === b.modelId &&
+          a?.credentialId === b.credentialId &&
+          a?.effort === b.effort &&
+          a?.runtimeKind === b.runtimeKind &&
+          a?.runtimeConfigHash === (b as any)?.runtimeConfigHash;
 
-      const revision = savedRevision + 1;
-      const nextPin = RuntimePinSchema.parse({ ...target.pin, revision });
+        if (sameChoice(storedPin, target.pin)) {
+          return settings(actor);
+        }
 
-      const data = {
-        enabled: config?.enabled ?? false,
-        consolidationEnabled: config?.consolidationEnabled ?? false,
-        insightsEnabled: config?.insightsEnabled ?? true,
-        reviewerPin: nextPin,
-        configuredBy: actor.userId,
-      };
+        if (savedRevision !== target.expectedRevision) {
+          throw new ORPCError("CONFLICT", {
+            message: "The reviewer was changed in another window.",
+          });
+        }
 
-      await deps.prisma.spaceLearningConfig.upsert({
-        where: { spaceId: actor.spaceId },
-        create: { spaceId: actor.spaceId, ...data },
-        update: data,
-      });
+        if (savedRevision >= 2_147_483_647) {
+          throw new ORPCError("CONFLICT", { message: "This member's model revision cannot advance." });
+        }
 
-      return settings(actor);
-    },
+        const revision = savedRevision + 1;
+        const configToHash = target.pin.runtimeKind === "hermes" ? effectiveHermesConfig(null) : null;
+        const nextPin = RuntimePinSchema.parse({
+          ...target.pin,
+          revision,
+          ...(configToHash ? { runtimeConfig: configToHash, runtimeConfigHash: hermesConfigHash(configToHash) } : {}),
+        });
+
     async configure(
       actor: Actor,
       input: unknown,
@@ -352,73 +346,77 @@ export function createLearningService(deps: {
     ) {
       await requireSpaceOwner(deps.prisma, actor);
       const config = SpaceLearningConfigInput.parse(input);
-      const previous = await deps.prisma.spaceLearningConfig.findUnique({
-        where: { spaceId: actor.spaceId },
-      });
-
-      let pin = config.enabled
-        ? await reviewerDestination(deps.prisma, actor, config.reviewerPin)
-        : config.reviewerPin;
-
-      if (pin && previous?.reviewerPin) {
-        const storedPin = RuntimePinSchema.parse(previous.reviewerPin);
-        if (pin.revision <= storedPin.revision) {
-          pin = storedPin;
-        } else if (validateModelPin) {
-          const validated = await validateModelPin(pin);
-          pin = RuntimePinSchema.parse({ ...validated, revision: pin.revision });
-        }
-      }
-
-      if (config.enabled && !previous?.enabled && pin) {
-        if (!pin.provider || !pin.modelId || !pin.credentialId) {
-          throw new ORPCError("BAD_REQUEST", {
-            message: "Connect a model, then choose it as the reviewer.",
-          });
-        }
-      }
-
-      const insights =
-        config.insightsEnabled === undefined ? previous?.insightsEnabled ?? true : config.insightsEnabled;
-
-      const data = {
-        enabled: config.enabled,
-        consolidationEnabled: config.consolidationEnabled,
-        insightsEnabled: insights,
-        ...(pin ? { reviewerPin: pin } : { reviewerPin: Prisma.DbNull }),
-        configuredBy: actor.userId,
-        ...config.budgets,
-      };
-
-      const same = previous &&
-        previous.enabled === data.enabled &&
-        previous.consolidationEnabled === data.consolidationEnabled &&
-        previous.insightsEnabled === data.insightsEnabled &&
-        JSON.stringify(previous.reviewerPin) === JSON.stringify(pin) &&
-        previous.botDailyTokens === data.botDailyTokens &&
-        previous.spaceDailyTokens === data.spaceDailyTokens &&
-        previous.maxProposals === data.maxProposals &&
-        previous.timeoutMs === data.timeoutMs &&
-        previous.maxOutputTokens === data.maxOutputTokens &&
-        previous.maxOutputChars === data.maxOutputChars;
-
-      if (same) {
-        return settings(actor);
-      }
-
-      await deps.prisma.spaceLearningConfig.upsert({
-        where: { spaceId: actor.spaceId },
-        create: { spaceId: actor.spaceId, ...data },
-        update: data,
-      });
-
-      if (config.insightsEnabled && previous?.insightsEnabled === false)
-        await deps.jobs.enqueue({
-          name: "learning.insights",
-          payload: { spaceId: actor.spaceId },
-          replaceKey: `learning.insights:${actor.spaceId}`,
+      
+      return deps.prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT id FROM "Space" WHERE id = ${actor.spaceId} FOR UPDATE`;
+        const previous = await tx.spaceLearningConfig.findUnique({
+          where: { spaceId: actor.spaceId },
         });
-      return settings(actor);
+
+        let pin = config.enabled
+          ? await reviewerDestination(deps.prisma, actor, config.reviewerPin)
+          : config.reviewerPin;
+
+        if (pin && previous?.reviewerPin) {
+          const storedPin = RuntimePinSchema.parse(previous.reviewerPin);
+          if (pin.revision <= storedPin.revision) {
+            pin = storedPin;
+          } else if (validateModelPin) {
+            const validated = await validateModelPin(pin);
+            pin = RuntimePinSchema.parse({ ...validated, revision: pin.revision });
+          }
+        }
+
+        if (config.enabled && !previous?.enabled && pin) {
+          if (!pin.provider || !pin.modelId || !pin.credentialId) {
+            throw new ORPCError("BAD_REQUEST", {
+              message: "Connect a model, then choose it as the reviewer.",
+            });
+          }
+        }
+
+        const insights =
+          config.insightsEnabled === undefined ? previous?.insightsEnabled ?? true : config.insightsEnabled;
+
+        const data = {
+          enabled: config.enabled,
+          consolidationEnabled: config.consolidationEnabled,
+          insightsEnabled: insights,
+          ...(pin !== undefined ? { reviewerPin: pin ? pin : Prisma.DbNull } : {}),
+          configuredBy: actor.userId,
+          ...config.budgets,
+        };
+
+        const same = previous &&
+          previous.enabled === data.enabled &&
+          previous.consolidationEnabled === data.consolidationEnabled &&
+          previous.insightsEnabled === data.insightsEnabled &&
+          (data.reviewerPin === undefined || JSON.stringify(previous.reviewerPin) === JSON.stringify(data.reviewerPin === Prisma.DbNull ? null : data.reviewerPin)) &&
+          previous.botDailyTokens === data.botDailyTokens &&
+          previous.spaceDailyTokens === data.spaceDailyTokens &&
+          previous.maxProposals === data.maxProposals &&
+          previous.timeoutMs === data.timeoutMs &&
+          previous.maxOutputTokens === data.maxOutputTokens &&
+          previous.maxOutputChars === data.maxOutputChars;
+
+        if (same) {
+          return settings(actor);
+        }
+
+        await tx.spaceLearningConfig.upsert({
+          where: { spaceId: actor.spaceId },
+          create: { spaceId: actor.spaceId, ...data },
+          update: data,
+        });
+
+        if (config.insightsEnabled && previous?.insightsEnabled === false)
+          await deps.jobs.enqueue({
+            name: "learning.insights",
+            payload: { spaceId: actor.spaceId },
+            replaceKey: `learning.insights:${actor.spaceId}`,
+          });
+        return settings(actor);
+      });
     },
     async list(actor: Actor, botId?: string) {
       await learningMember(deps.prisma, { spaceId: actor.spaceId, userId: actor.userId }, botId);
