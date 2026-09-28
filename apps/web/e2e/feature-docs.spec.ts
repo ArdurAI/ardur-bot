@@ -461,11 +461,9 @@ test("group-goals: start a goal in a room and stop it", async ({ page }) => {
   await panel.getByRole("button", { name: "Start goal" }).click();
   await expect.poll(() => state.goal?.status, { timeout: 3_000 }).toBe("running");
   await expect(page.getByText("Goal: Working", { exact: false })).toBeVisible();
-  await panel.getByRole("button", { name: "Close panel" }).click();
+  // The desktop layout has no panel close control; the room's goal bar carries progress and Stop.
   await capture(page, "docs-group-goals-progress");
-  await page.getByTestId("bot-settings-trigger").click();
-  await expect(panel).toHaveAttribute("data-panel", "group-settings");
-  await panel.getByRole("button", { name: "Stop", exact: true }).click();
+  await page.getByRole("button", { name: "Stop", exact: true }).click();
   await expect.poll(() => state.goal?.status, { timeout: 3_000 }).toBe("stopped");
   await expect(page.getByText("Goal: Stopped", { exact: false })).toBeVisible();
   await capture(page, "docs-group-goals-stopped");
