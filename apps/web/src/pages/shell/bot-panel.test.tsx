@@ -1218,6 +1218,69 @@ it("blocks saving and shows a validation error for fractional Hermes limits", as
   expect(onSave).not.toHaveBeenCalled();
 });
 
+it("retains the validation error when editing another valid limit", async () => {
+  api.availability.mockResolvedValue({ runtimeKind: "hermes", available: true, models: [] });
+  await act(async () =>
+    root.render(settings({ runtimeKind: "hermes", runtimeExperimental: true })),
+  );
+  await vi.waitFor(() =>
+    expect(
+      container.querySelector<HTMLInputElement>('input[type="number"][max="64"]'),
+    ).not.toBeNull(),
+  );
+  const calls = container.querySelector<HTMLInputElement>('input[type="number"][max="64"]')!;
+  const time = container.querySelector<HTMLInputElement>('input[type="number"][max="600"]')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(calls, "1.5");
+    calls.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  expect(container.textContent).toContain("Enter a whole number between 1 and 64");
+  const button = [...container.querySelectorAll("button")].find(
+    (element) => element.textContent === "Save",
+  ) as HTMLButtonElement;
+  expect(button.disabled).toBe(true);
+
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(time, "60");
+    time.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  expect(container.textContent).toContain("Enter a whole number between 1 and 64");
+  expect(button.disabled).toBe(true);
+});
+
+it("does not block saving another runtime when Hermes limits had an error", async () => {
+  api.availability.mockResolvedValue({ runtimeKind: "hermes", available: true, models: [] });
+  await act(async () =>
+    root.render(settings({ runtimeKind: "hermes", runtimeExperimental: true })),
+  );
+  await vi.waitFor(() =>
+    expect(
+      container.querySelector<HTMLInputElement>('input[type="number"][max="64"]'),
+    ).not.toBeNull(),
+  );
+  const calls = container.querySelector<HTMLInputElement>('input[type="number"][max="64"]')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(calls, "1.5");
+    calls.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  const button = [...container.querySelectorAll("button")].find(
+    (element) => element.textContent === "Save",
+  ) as HTMLButtonElement;
+  expect(button.disabled).toBe(true);
+
+  // Switch runtime to "pi"
+  const runtimeSelect = container.querySelector<HTMLSelectElement>('select[id$="-runtime"]')!;
+  await act(async () => {
+    runtimeSelect.value = "pi";
+    runtimeSelect.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+
+  expect(button.disabled).toBe(false);
+  await act(async () => button.click());
+  expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ runtimeKind: "pi" }));
+});
+
+
 it("shows the incompatible Hermes connection only while it is selected", async () => {
   api.availability.mockResolvedValue({ runtimeKind: "hermes", available: true, models: [] });
   await act(async () =>

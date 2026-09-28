@@ -3684,11 +3684,11 @@ msgstr ""
 
 #: src/pages/shell/hermes-limits.tsx
 msgid "Enter a whole number between 1 and 600 for the time limit."
-msgstr ""
+msgstr "Zaman sınırı için 1 ile 600 arasında bir tam sayı girin."
 
 #: src/pages/shell/hermes-limits.tsx
 msgid "Enter a whole number between 1 and 64 for model calls per turn."
-msgstr ""
+msgstr "Tur başına model çağrısı için 1 ile 64 arasında bir tam sayı girin."
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx

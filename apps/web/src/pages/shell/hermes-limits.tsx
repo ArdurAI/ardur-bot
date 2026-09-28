@@ -22,6 +22,8 @@ export function HermesLimits({
 
   const [calls, setCalls] = useState(String(settings.limits.maxProviderRequests));
   const [time, setTime] = useState(String(settings.limits.timeoutMs / 1_000));
+  const [callsError, setCallsError] = useState<string | null>(null);
+  const [timeError, setTimeError] = useState<string | null>(null);
 
   useEffect(() => {
     setCalls(String(settings.limits.maxProviderRequests));
@@ -30,6 +32,12 @@ export function HermesLimits({
   useEffect(() => {
     setTime(String(settings.limits.timeoutMs / 1_000));
   }, [settings.limits.timeoutMs]);
+
+  const updateError = (nextCallsErr: string | null, nextTimeErr: string | null) => {
+    setCallsError(nextCallsErr);
+    setTimeError(nextTimeErr);
+    onError?.(nextCallsErr || nextTimeErr || null);
+  };
 
   return (
     <div className="mt-3 grid grid-cols-2 gap-3">
@@ -48,9 +56,12 @@ export function HermesLimits({
             const num = Number(val);
             if (Number.isInteger(num) && num >= 1 && num <= 64) {
               onChange({ ...settings, limits: { ...settings.limits, maxProviderRequests: num } });
-              onError?.(null);
+              updateError(null, timeError);
             } else {
-              onError?.(t`Enter a whole number between 1 and 64 for model calls per turn.`);
+              updateError(
+                t`Enter a whole number between 1 and 64 for model calls per turn.`,
+                timeError,
+              );
             }
           }}
         />
@@ -70,9 +81,12 @@ export function HermesLimits({
             const num = Number(val);
             if (Number.isInteger(num) && num >= 1 && num <= 600) {
               onChange({ ...settings, limits: { ...settings.limits, timeoutMs: num * 1_000 } });
-              onError?.(null);
+              updateError(callsError, null);
             } else {
-              onError?.(t`Enter a whole number between 1 and 600 for the time limit.`);
+              updateError(
+                callsError,
+                t`Enter a whole number between 1 and 600 for the time limit.`,
+              );
             }
           }}
         />

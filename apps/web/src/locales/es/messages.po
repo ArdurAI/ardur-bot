@@ -3684,11 +3684,11 @@ msgstr ""
 
 #: src/pages/shell/hermes-limits.tsx
 msgid "Enter a whole number between 1 and 600 for the time limit."
-msgstr ""
+msgstr "Introduce un número entero entre 1 y 600 para el límite de tiempo."
 
 #: src/pages/shell/hermes-limits.tsx
 msgid "Enter a whole number between 1 and 64 for model calls per turn."
-msgstr ""
+msgstr "Introduce un número entero entre 1 y 64 para las llamadas al modelo por turno."
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx

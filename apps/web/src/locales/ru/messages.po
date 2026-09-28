@@ -3684,11 +3684,11 @@ msgstr "Введите действительный токен."
 
 #: src/pages/shell/hermes-limits.tsx
 msgid "Enter a whole number between 1 and 600 for the time limit."
-msgstr ""
+msgstr "Введите целое число от 1 до 600 для ограничения времени."
 
 #: src/pages/shell/hermes-limits.tsx
 msgid "Enter a whole number between 1 and 64 for model calls per turn."
-msgstr ""
+msgstr "Введите целое число от 1 до 64 для вызовов модели за ход."
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx

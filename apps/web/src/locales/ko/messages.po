@@ -3684,11 +3684,11 @@ msgstr ""
 
 #: src/pages/shell/hermes-limits.tsx
 msgid "Enter a whole number between 1 and 600 for the time limit."
-msgstr ""
+msgstr "시간 제한은 1에서 600 사이의 정수로 입력하세요."
 
 #: src/pages/shell/hermes-limits.tsx
 msgid "Enter a whole number between 1 and 64 for model calls per turn."
-msgstr ""
+msgstr "턴당 모델 호출 횟수는 1에서 64 사이의 정수로 입력하세요."
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx

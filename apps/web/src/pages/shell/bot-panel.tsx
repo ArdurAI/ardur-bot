@@ -422,6 +422,8 @@ export function BotSettings({
     (modelMetaReady &&
       modelUnavailable({ catalog, credentials }, selectedModel?.provider, selectedModel?.modelId));
 
+  const activeValidationError = runtimeKind === "hermes" ? validationError : null;
+
   async function executeSave(patchOverrides?: {
     name?: string;
     title?: string;
@@ -429,7 +431,7 @@ export function BotSettings({
     color?: string;
     notifyOnFinish?: boolean;
   }) {
-    if (validationError) return;
+    if (activeValidationError) return;
     const selected = modelKey ? parseModelOptionKey(modelKey) : null;
     const nextName = (patchOverrides?.name !== undefined ? patchOverrides.name : name).trim();
     const nextTitle = (patchOverrides?.title !== undefined ? patchOverrides.title : title).trim();
@@ -784,8 +786,8 @@ export function BotSettings({
           </label>
         ) : null}
       </details>
-      {validationError ? (
-        <p className="mt-2 text-[13px] text-destructive">{validationError}</p>
+      {activeValidationError ? (
+        <p className="mt-2 text-[13px] text-destructive">{activeValidationError}</p>
       ) : error ? (
         <p className="mt-2 text-[13px] text-destructive">{error}</p>
       ) : null}
@@ -796,7 +798,7 @@ export function BotSettings({
       ) : null}
       <div className="mt-5 flex flex-col items-start gap-3">
         <Button
-          disabled={saving || !!validationError}
+          disabled={saving || Boolean(activeValidationError)}
           onClick={() => {
             void enqueueSave({
               name,

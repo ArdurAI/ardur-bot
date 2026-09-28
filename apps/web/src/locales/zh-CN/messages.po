@@ -3684,11 +3684,11 @@ msgstr "请输入有效的令牌。"
 
 #: src/pages/shell/hermes-limits.tsx
 msgid "Enter a whole number between 1 and 600 for the time limit."
-msgstr ""
+msgstr "请输入 1 到 600 之间的整数作为时间限制。"
 
 #: src/pages/shell/hermes-limits.tsx
 msgid "Enter a whole number between 1 and 64 for model calls per turn."
-msgstr ""
+msgstr "请输入 1 到 64 之间的整数作为每轮模型调用次数。"
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
