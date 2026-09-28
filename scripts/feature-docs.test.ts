@@ -193,7 +193,22 @@ describe("feature documentation inventory", () => {
     const originalPlatforms = feature.platforms;
     feature.platforms = { ...feature.platforms, mobile: "editable" as "configure" };
     await expect(validateFixtureDocs(manifest, evidence)).rejects.toThrow();
+    feature.platforms = { ...originalPlatforms, mobile: "read-only" };
+    feature.settingsPath = {
+      ...feature.settingsPath,
+      mobile: { uiLabels: [], entry: { kind: "route", route: "/memory" } },
+    };
+    await expect(validateFixtureDocs(manifest, evidence)).rejects.toThrow(
+      "has a mobile path but is not configurable there",
+    );
+    feature.settingsPath = { ...feature.settingsPath, mobile: undefined };
     feature.platforms = originalPlatforms;
+    const originalArea = feature.area;
+    feature.area = "everything-else";
+    await expect(validateFixtureDocs(manifest, evidence)).rejects.toThrow(
+      "is not one of the website's areas",
+    );
+    feature.area = originalArea;
     feature.related = ["missing-feature"];
     await expect(validateFixtureDocs(manifest, evidence)).rejects.toThrow(
       'invalid related feature "missing-feature"',

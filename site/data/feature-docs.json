@@ -1302,17 +1302,7 @@
         "desktop": "configure",
         "mobile": "read-only"
       },
-      "settingsPath": {
-        "mobile": {
-          "uiLabels": [
-            "Routine"
-          ],
-          "entry": {
-            "kind": "route",
-            "route": "/routine"
-          }
-        }
-      },
+      "settingsPath": {},
       "steps": [
         {
           "id": "open-scheduled-routines",
@@ -1543,15 +1533,6 @@
           "entry": {
             "kind": "settings",
             "sectionId": "memory"
-          }
-        },
-        "mobile": {
-          "uiLabels": [
-            "Memory"
-          ],
-          "entry": {
-            "kind": "route",
-            "route": "/memory"
           }
         }
       },
@@ -3583,17 +3564,7 @@
         "desktop": "unavailable",
         "mobile": "read-only"
       },
-      "settingsPath": {
-        "mobile": {
-          "uiLabels": [
-            "Files"
-          ],
-          "entry": {
-            "kind": "route",
-            "route": "/ide"
-          }
-        }
-      },
+      "settingsPath": {},
       "steps": [],
       "boundaries": [],
       "troubleshooting": [],
@@ -3615,17 +3586,7 @@
         "desktop": "unavailable",
         "mobile": "read-only"
       },
-      "settingsPath": {
-        "mobile": {
-          "uiLabels": [
-            "Overview"
-          ],
-          "entry": {
-            "kind": "route",
-            "route": "/overview"
-          }
-        }
-      },
+      "settingsPath": {},
       "steps": [],
       "boundaries": [],
       "troubleshooting": [],

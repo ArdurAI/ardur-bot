@@ -20,6 +20,18 @@ const settingsFile = "apps/web/src/pages/settings-sections.ts";
 const webRoutesFile = "apps/web/src/App.tsx";
 const mobileLayoutFile = "apps/mobile/app/_layout.tsx";
 const slug = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+/** The website's documentation areas, in its display order; any other area drops the whole block. */
+const websiteAreas = new Set([
+  "getting-started",
+  "bots-and-conversations",
+  "team-work",
+  "routines-and-boards",
+  "memory-and-learning",
+  "connections-and-computers",
+  "desktop",
+  "mobile",
+  "ide-and-operations",
+]);
 const allowedExemptions = {
   webRoutes: new Set(["/mcp/oauth/callback", "*"]),
   mobileEntries: new Set(["board", "connectors"]),
@@ -332,6 +344,8 @@ export async function validateFeatureDocs(
   const usedScreenshots = new Set<string>();
   for (const feature of manifest.features) {
     const context = `Feature "${feature.id}"`;
+    if (!websiteAreas.has(feature.area))
+      throw new Error(`${context} area "${feature.area}" is not one of the website's areas.`);
     const binding = evidenceById.get(feature.id);
     if (!binding) throw new Error(`${context} has no evidence binding.`);
     const nativeSources = binding.sources.filter((file) => file.startsWith("apps/mobile/"));
@@ -427,8 +441,9 @@ export async function validateFeatureDocs(
     }
     for (const [platform, entry] of Object.entries(feature.settingsPath)) {
       if (!entry) continue;
-      if (feature.platforms[platform as keyof typeof feature.platforms] === "unavailable")
-        throw new Error(`${context} has a ${platform} path but marks it unavailable.`);
+      // The website accepts a path only where the platform is configurable; a read-only screen has none.
+      if (feature.platforms[platform as keyof typeof feature.platforms] !== "configure")
+        throw new Error(`${context} has a ${platform} path but is not configurable there.`);
       if (entry.entry.kind === "settings" && !settings.has(entry.entry.sectionId))
         throw new Error(
           `${context} references unknown settings section "${entry.entry.sectionId}".`,

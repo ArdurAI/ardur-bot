@@ -1470,9 +1470,6 @@
           "desktop": [
             "Settings",
             "Memory"
-          ],
-          "mobile": [
-            "Memory"
           ]
         },
         "steps": [
@@ -1555,11 +1552,7 @@
           "desktop": "configure",
           "mobile": "read-only"
         },
-        "settingsPath": {
-          "mobile": [
-            "Routine"
-          ]
-        },
+        "settingsPath": {},
         "steps": [
           {
             "id": "open-scheduled-routines",
