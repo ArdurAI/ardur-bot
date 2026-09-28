@@ -6,6 +6,13 @@ export const ZH_MESSAGES: Record<string, string> = {
   "{botName} couldn't use the model set for this group. Change the group model or check this bot's settings.":
     "{botName} 无法使用为此群组设置的模型。请更改群组模型，或检查 Bot 设置。",
   Antigravity: "Antigravity",
+  Hermes: "Hermes",
+  "Model calls per turn": "每轮模型调用次数",
+  "Time limit": "时间限制",
+  "Hermes is not installed on this computer.": "此计算机上未安装 Hermes。",
+  "Hermes does not yet support Anthropic connections.": "Hermes 尚不支持 Anthropic 连接。",
+  "Hermes does not yet support this connection.": "Hermes 尚不支持此连接。",
+  "Hermes runs with this computer's access.": "Hermes 使用此计算机的访问权限运行。",
   "Antigravity did not finish in time. Try again.": "Antigravity 未能按时完成。请重试。",
   "Antigravity's live model list could not be checked. Check again.":
     "无法检查 Antigravity 的实时模型列表。请重新检查。",

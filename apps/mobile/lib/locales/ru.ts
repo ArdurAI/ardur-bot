@@ -6,6 +6,14 @@ export const RU_MESSAGES: Record<string, string> = {
   "{botName} couldn't use the model set for this group. Change the group model or check this bot's settings.":
     "{botName} не смог использовать модель, выбранную для этой группы. Измените модель группы или проверьте настройки бота.",
   Antigravity: "Antigravity",
+  Hermes: "Hermes",
+  "Model calls per turn": "Вызовы модели за ход",
+  "Time limit": "Ограничение времени",
+  "Hermes is not installed on this computer.": "Hermes не установлен на этом компьютере.",
+  "Hermes does not yet support Anthropic connections.":
+    "Hermes пока не поддерживает подключения Anthropic.",
+  "Hermes does not yet support this connection.": "Hermes пока не поддерживает это подключение.",
+  "Hermes runs with this computer's access.": "Hermes работает с правами доступа этого компьютера.",
   "Antigravity did not finish in time. Try again.":
     "Antigravity не завершил запрос вовремя. Повторите попытку.",
   "Antigravity's live model list could not be checked. Check again.":

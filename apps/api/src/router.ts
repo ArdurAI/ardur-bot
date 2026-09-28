@@ -231,6 +231,7 @@ import {
   testFleetTarget,
 } from "./fleet.js";
 import { updateGroupMemberModelPin } from "./group-model-pin.js";
+import { hermesAvailabilityConnectionSupported } from "./hermes-availability.js";
 import type { HostBridge } from "./host-bridge.js";
 import { sourceHostStatus } from "./host-status.js";
 import { createIdeChanges } from "./ide-changes.js";
@@ -1056,21 +1057,51 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
             },
             select: {
               modelId: true,
-              credential: { select: { id: true, provider: true } },
+              credential: { select: { id: true, provider: true, label: true, secretId: true } },
             },
           });
-          const models = preferences
-            .filter((entry) => Boolean(entry.modelId))
-            .map((entry) => ({
-              id: entry.modelId!,
-              label: entry.modelId!,
-              credentialId: entry.credential.id,
-              provider: entry.credential.provider,
-              efforts:
-                bot?.modelCredentialId === entry.credential.id && bot.thinkingLevel
-                  ? [bot.thinkingLevel]
-                  : [],
-            }));
+          const secrets = preferences.length
+            ? await deps.prisma.secret.findMany({
+                where: {
+                  id: { in: preferences.map((entry) => entry.credential.secretId) },
+                  userId: context.actor.userId,
+                  spaceId: null,
+                },
+                select: { id: true, ciphertext: true },
+              })
+            : [];
+          const ciphertextById = new Map(secrets.map((secret) => [secret.id, secret.ciphertext]));
+          const models = preferences.flatMap((entry) => {
+            if (!entry.modelId) return [];
+            const ciphertext = ciphertextById.get(entry.credential.secretId);
+            if (!ciphertext) return [];
+            try {
+              const connection = modelCredentialDto(
+                { ...entry.credential, isDefault: false, defaultModel: entry.modelId },
+                deps.secrets.load(ciphertext, entry.credential.secretId),
+              );
+              if (
+                !connection.hasKey ||
+                !connection.baseUrl ||
+                !hermesAvailabilityConnectionSupported(connection)
+              )
+                return [];
+            } catch {
+              return [];
+            }
+            return [
+              {
+                id: entry.modelId,
+                label: entry.modelId,
+                credentialId: entry.credential.id,
+                provider: entry.credential.provider,
+                efforts:
+                  bot?.modelCredentialId === entry.credential.id && bot.thinkingLevel
+                    ? [bot.thinkingLevel]
+                    : [],
+              },
+            ];
+          });
           const available = Boolean(
             owner &&
               (!bot || bot.computer?.kind === "desktop") &&

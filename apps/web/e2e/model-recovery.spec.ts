@@ -373,3 +373,81 @@ test("native runtime settings show unavailable sign-in without replacing the pin
   await expect(settings.getByRole("switch", { name: /Experimental/ })).not.toBeChecked();
   await captureScreenshot(page, testInfo, "native-runtime-sign-in");
 });
+
+test("Hermes picker keeps the Ardur connection and shows only its limits", async ({
+  page,
+}, testInfo) => {
+  await signup(page, `hermes-picker-${Date.now()}@ardurbot.test`, "password12", "Runtime Test");
+  await completeOnboarding(page);
+  await patchBotNavigation(page, {
+    runtimeKind: "pi",
+    modelProvider: "openai-compatible",
+    modelId: "fixture-model",
+    modelCredentialId: "fixture-connection",
+    thinkingLevel: "off",
+  });
+  await page.route("**/rpc/models/list", (route) =>
+    route.fulfill({
+      json: {
+        json: [
+          {
+            provider: "openai-compatible",
+            providerName: "Compatible endpoint",
+            id: "fixture-model",
+            label: "Fixture model",
+            auth: "api-key",
+            billing: "",
+            reasoning: false,
+            thinkingLevels: ["off"],
+          },
+        ],
+      },
+    }),
+  );
+  await page.route("**/rpc/models/credentials", (route) =>
+    route.fulfill({
+      json: {
+        json: [
+          {
+            id: "fixture-connection",
+            provider: "openai-compatible",
+            label: "Fixture connection",
+            hasKey: true,
+            isDefault: true,
+            modelId: "fixture-model",
+          },
+        ],
+      },
+    }),
+  );
+  await page.route("**/rpc/runtimes/availability", (route) =>
+    route.fulfill({
+      json: {
+        json: {
+          runtimeKind: "hermes",
+          available: false,
+          reason: "Hermes is not installed on this computer.",
+          models: [],
+        },
+      },
+    }),
+  );
+  await page.reload();
+  await page
+    .locator("aside")
+    .first()
+    .getByRole("button", { name: /Chief/ })
+    .first()
+    .click({ button: "right" });
+  await page.getByRole("menuitem", { name: "Model & effort", exact: true }).click();
+  const settings = page.getByTestId("bot-settings");
+  const model = settings.getByRole("combobox", { name: "Model", exact: true });
+  const original = await model.inputValue();
+  await settings.getByRole("combobox", { name: "Runs on", exact: true }).selectOption("hermes");
+  await expect(model).toHaveValue(original);
+  await expect(settings.getByText("Hermes is not installed on this computer.")).toBeVisible();
+  await expect(settings.getByLabel("Model calls per turn")).toHaveValue("16");
+  await expect(settings.getByLabel("Time limit")).toHaveValue("180");
+  await expect(settings.getByText("Connect Hermes")).toHaveCount(0);
+  await captureScreenshot(page, testInfo, "hermes-runtime-picker");
+});

@@ -1586,6 +1586,7 @@ msgstr "Bot 선택…"
 msgid "Choose a folder inside your home folder."
 msgstr ""
 
+#: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Choose a model"
 msgstr ""
@@ -4075,6 +4076,26 @@ msgstr "헤더 값"
 msgid "Hear a sample"
 msgstr "샘플 듣기"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Hermes"
+msgstr "Hermes"
+
+#: src/pages/shell/bot-panel.tsx
+msgid "Hermes does not yet support Anthropic connections."
+msgstr "Hermes는 아직 Anthropic 연결을 지원하지 않습니다."
+
+#: src/pages/shell/bot-panel.tsx
+msgid "Hermes does not yet support this connection."
+msgstr "Hermes는 아직 이 연결을 지원하지 않습니다."
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Hermes is not installed on this computer."
+msgstr "이 컴퓨터에 Hermes가 설치되어 있지 않습니다."
+
+#: src/pages/shell/bot-panel.tsx
+msgid "Hermes runs with this computer's access."
+msgstr "Hermes는 이 컴퓨터의 접근 권한으로 실행됩니다."
+
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Hi, this is how I'll sound when I read replies out loud."
 msgstr "안녕하세요. 답변을 소리 내어 읽을 때 이런 목소리로 들립니다."
@@ -5078,6 +5099,10 @@ msgstr "모델"
 #: src/pages/BotContextMenu.tsx
 msgid "Model & effort"
 msgstr ""
+
+#: src/pages/shell/hermes-limits.tsx
+msgid "Model calls per turn"
+msgstr "턴당 모델 호출 수"
 
 #: src/pages/LearningInbox.tsx
 msgid "model estimate"
@@ -8177,6 +8202,10 @@ msgstr ""
 #: src/pages/LearningInsights.tsx
 msgid "Thumbs"
 msgstr ""
+
+#: src/pages/shell/hermes-limits.tsx
+msgid "Time limit"
+msgstr "시간 제한"
 
 #: src/pages/RoutineSchedule.tsx
 msgid "Time of day"

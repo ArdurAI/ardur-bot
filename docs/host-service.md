@@ -37,7 +37,10 @@ sequenceDiagram
 - Desktop stores the encrypted configuration under its application data directory.
   Linux `basic_text` storage is refused. Only the app's active main frame can invoke
   pairing or open the native folder picker. The renderer receives no host token.
-- The host opens no network listener. The native MCP relay uses a private local
+- The host opens no externally reachable network listener. Hermes alone opens an
+  ephemeral `127.0.0.1` HTTP listener for its per-turn provider relay; the worker
+  grants one bounded, revocable token and keeps the model connection credential.
+  The native MCP relay uses a private local
   socket on macOS/Linux and an authenticated named pipe on Windows. The fixed relay
   sets `ELECTRON_RUN_AS_NODE=1`, including when launched by a vendor CLI.
 - Host sockets require WSS outside loopback. Worker authentication is a

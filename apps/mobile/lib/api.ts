@@ -774,6 +774,7 @@ export type MobileBot = Pick<
   | "modelCredentialId"
   | "modelPinRevision"
   | "runtimeKind"
+  | "runtimeConfig"
   | "runtimeExperimental"
   | "modelProvider"
   | "modelId"

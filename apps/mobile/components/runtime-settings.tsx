@@ -10,6 +10,7 @@ import { useMobileTokens, useResolvedAppearance } from "../lib/native";
 
 export function RuntimeSettings({
   kind,
+  botId,
   onKind,
   modelKey,
   onModel,
@@ -21,6 +22,7 @@ export function RuntimeSettings({
   experimental: boolean;
   onExperimental: (enabled: boolean) => void;
   kind: RuntimeKind;
+  botId?: string;
   onKind: (kind: RuntimeKind) => void;
   modelKey: string;
   onModel: (key: string) => void;
@@ -42,6 +44,7 @@ export function RuntimeSettings({
     let active = true;
     void rpc<RuntimeAvailability>("runtimes/availability", {
       runtimeKind: kind,
+      botId,
       refresh: refresh > 0,
     })
       .then((value) => {
@@ -53,7 +56,7 @@ export function RuntimeSettings({
     return () => {
       active = false;
     };
-  }, [kind, refresh]);
+  }, [kind, botId, refresh]);
   useEffect(() => {
     if (!login) return;
     const timer = setInterval(() => {
@@ -95,19 +98,19 @@ export function RuntimeSettings({
           presentMessageActionSheet({
             ...sheet,
             title: t("Runs on"),
-            actions: (Object.keys(runtimeLabels) as RuntimeKind[])
-              .filter((value) => value !== "hermes")
-              .map((value) => ({
-                text: t(runtimeLabels[value]),
-                onPress: () => {
-                  onKind(value);
-                  onExperimental(false);
+            actions: (Object.keys(runtimeLabels) as RuntimeKind[]).map((value) => ({
+              text: t(runtimeLabels[value]),
+              onPress: () => {
+                onKind(value);
+                onExperimental(value === "hermes");
+                if (!["pi", "hermes"].includes(kind) || !["pi", "hermes"].includes(value)) {
                   onModel("");
                   onEffort("");
-                  setLogin(null);
-                  setError(null);
-                },
-              })),
+                }
+                setLogin(null);
+                setError(null);
+              },
+            })),
           })
         }
       >
@@ -123,7 +126,7 @@ export function RuntimeSettings({
               onValueChange={onExperimental}
             />
           </View>
-          {availability ? (
+          {availability && kind !== "hermes" ? (
             <Text style={{ color: tokens.mutedForeground }}>
               {[
                 kind === "antigravity" && availability.version
@@ -153,9 +156,11 @@ export function RuntimeSettings({
                 ? t(
                     "Antigravity is not installed on this computer. Install it and sign in there, then check again.",
                   )
-                : kind === "antigravity" && availability.signInStatus === "signed-out"
-                  ? t("Sign in to Antigravity on this computer, then check again.")
-                  : availability.reason}
+                : kind === "hermes" && availability.reason.includes("not installed")
+                  ? t("Hermes is not installed on this computer.")
+                  : kind === "antigravity" && availability.signInStatus === "signed-out"
+                    ? t("Sign in to Antigravity on this computer, then check again.")
+                    : availability.reason}
             </Text>
           ) : null}
           {error ? (
@@ -187,52 +192,56 @@ export function RuntimeSettings({
               <Text style={{ color: tokens.foreground }}>{t("Continue with ChatGPT")}</Text>
             </Pressable>
           ) : null}
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={t("Model")}
-            style={button}
-            onPress={() =>
-              presentMessageActionSheet({
-                ...sheet,
-                title: t("Model"),
-                actions: (availability?.models ?? []).map((entry) => ({
-                  text: entry.label,
-                  onPress: () => {
-                    onModel(
-                      modelPinOptionKey(
-                        nativeRuntimeProviders[kind as keyof typeof nativeRuntimeProviders],
-                        entry.id,
-                        `native:${kind}`,
-                      ),
-                    );
-                    onEffort(kind === "antigravity" ? (entry.efforts[0] ?? "") : "");
-                  },
-                })),
-              })
-            }
-          >
-            <Text style={{ color: tokens.foreground }}>
-              {model?.label ?? parseModelPinOptionKey(modelKey)?.modelId ?? t("Choose a model")}
-            </Text>
-          </Pressable>
-          {kind !== "antigravity" ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t("Thinking")}
-              style={button}
-              onPress={() =>
-                presentMessageActionSheet({
-                  ...sheet,
-                  title: t("Thinking"),
-                  actions: (model?.efforts ?? []).map((value) => ({
-                    text: value,
-                    onPress: () => onEffort(value),
-                  })),
-                })
-              }
-            >
-              <Text style={{ color: tokens.foreground }}>{effort || t("Choose effort")}</Text>
-            </Pressable>
+          {kind !== "hermes" ? (
+            <>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t("Model")}
+                style={button}
+                onPress={() =>
+                  presentMessageActionSheet({
+                    ...sheet,
+                    title: t("Model"),
+                    actions: (availability?.models ?? []).map((entry) => ({
+                      text: entry.label,
+                      onPress: () => {
+                        onModel(
+                          modelPinOptionKey(
+                            nativeRuntimeProviders[kind as keyof typeof nativeRuntimeProviders],
+                            entry.id,
+                            `native:${kind}`,
+                          ),
+                        );
+                        onEffort(kind === "antigravity" ? (entry.efforts[0] ?? "") : "");
+                      },
+                    })),
+                  })
+                }
+              >
+                <Text style={{ color: tokens.foreground }}>
+                  {model?.label ?? parseModelPinOptionKey(modelKey)?.modelId ?? t("Choose a model")}
+                </Text>
+              </Pressable>
+              {kind !== "antigravity" ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t("Thinking")}
+                  style={button}
+                  onPress={() =>
+                    presentMessageActionSheet({
+                      ...sheet,
+                      title: t("Thinking"),
+                      actions: (model?.efforts ?? []).map((value) => ({
+                        text: value,
+                        onPress: () => onEffort(value),
+                      })),
+                    })
+                  }
+                >
+                  <Text style={{ color: tokens.foreground }}>{effort || t("Choose effort")}</Text>
+                </Pressable>
+              ) : null}
+            </>
           ) : null}
         </>
       ) : null}

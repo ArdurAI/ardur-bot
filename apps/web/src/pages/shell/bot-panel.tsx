@@ -3,6 +3,7 @@ import type {
   Bot,
   ComputerMode,
   Group,
+  HermesRuntimeConfig,
   ModelCatalogEntry,
   RuntimeKind,
   ThinkingLevel,
@@ -12,6 +13,7 @@ import {
   BOT_DESCRIPTION_MAX_LENGTH,
   BOT_NAME_MAX_LENGTH,
   BOT_TITLE_MAX_LENGTH,
+  HERMES_RUNTIME_DEFAULTS,
 } from "@ardurbot/contracts";
 import {
   modelPinOptionKey as modelOptionKey,
@@ -48,6 +50,10 @@ const ScratchpadSection = lazy(() =>
 
 const KnowledgeSection = lazy(() =>
   import("../KnowledgeSection").then((module) => ({ default: module.KnowledgeSection })),
+);
+
+const HermesLimits = lazy(() =>
+  import("./hermes-limits").then((module) => ({ default: module.HermesLimits })),
 );
 
 const fieldLabelClass = "mt-4 block text-[14px] text-muted-foreground";
@@ -233,6 +239,7 @@ export function BotSettings({
     modelId?: string | null;
     modelCredentialId?: string | null;
     runtimeKind?: RuntimeKind;
+    runtimeConfig?: HermesRuntimeConfig;
     runtimeExperimental?: boolean;
     thinkingLevel?: ThinkingLevel | null;
   }) => Promise<void>;
@@ -286,6 +293,9 @@ export function BotSettings({
   const [voices, setVoices] = useState<VoiceInfo[]>([]);
   const [runtimeExperimental, setRuntimeExperimental] = useState(bot.runtimeExperimental ?? false);
   const [runtimeKind, setRuntimeKind] = useState<RuntimeKind>(bot.runtimeKind ?? "pi");
+  const [runtimeConfig, setRuntimeConfig] = useState<HermesRuntimeConfig>(
+    bot.runtimeConfig ?? HERMES_RUNTIME_DEFAULTS,
+  );
   const [modelKey, setModelKey] = useState(
     bot.modelProvider && bot.modelId
       ? modelOptionKey(bot.modelProvider, bot.modelId, bot.modelCredentialId)
@@ -385,6 +395,7 @@ export function BotSettings({
         autoSpeak,
         voiceId: voiceId || null,
         runtimeKind,
+        ...(runtimeKind === "hermes" ? { runtimeConfig } : {}),
         runtimeExperimental,
         modelProvider: selected?.provider ?? null,
         modelId: selected?.modelId ?? null,
@@ -499,6 +510,7 @@ export function BotSettings({
       <ModelDestinations botId={bot.id} />
       <div ref={runtimeRef}>
         <RuntimeSettings
+          botId={bot.id}
           experimental={runtimeExperimental}
           onExperimental={setRuntimeExperimental}
           kind={runtimeKind}
@@ -509,7 +521,12 @@ export function BotSettings({
           onEffort={setThinkingLevel}
         />
       </div>
-      {runtimeKind === "pi" ? (
+      {runtimeKind === "hermes" ? (
+        <p className="mt-2 text-sm text-muted-foreground">
+          <Trans>Hermes runs with this computer's access.</Trans>
+        </p>
+      ) : null}
+      {runtimeKind === "pi" || runtimeKind === "hermes" ? (
         <>
           <label htmlFor={`${ids}-model`} className={fieldLabelClass}>
             <Trans>Model</Trans>
@@ -525,11 +542,15 @@ export function BotSettings({
                 setModelKey(value);
                 setThinkingLevel("");
               }}
-              defaultLabel={`${t`Space default`}${
-                me?.defaultModel
-                  ? ` (${catalogLabel(catalog, me.defaultProvider, me.defaultModel) ?? me.defaultModel}${unavailableDefault ? t` — not available on your account` : ""})`
-                  : ""
-              }`}
+              defaultLabel={
+                runtimeKind === "hermes"
+                  ? t`Choose a model`
+                  : `${t`Space default`}${
+                      me?.defaultModel
+                        ? ` (${catalogLabel(catalog, me.defaultProvider, me.defaultModel) ?? me.defaultModel}${unavailableDefault ? t` — not available on your account` : ""})`
+                        : ""
+                    }`
+              }
             />
           </label>
           {catalog.some(
@@ -539,7 +560,8 @@ export function BotSettings({
           ) ? (
             <ShowAllModels checked={showAllModels} onChange={setShowAllModels} />
           ) : null}
-          {!needsConnection && (modelKey ? unavailableSelection : unavailableDefault) ? (
+          {!needsConnection &&
+          (modelKey ? unavailableSelection : runtimeKind === "pi" && unavailableDefault) ? (
             <p className="mt-2 text-[12px] text-muted-foreground">
               <Trans>This model is not available on your account. Choose another model.</Trans>
             </p>
@@ -553,6 +575,21 @@ export function BotSettings({
             defaultLevel={defaultThinkingLevel}
             notApplicable={isOllama && effectiveEntry?.reasoning === false}
           />
+          {runtimeKind === "hermes" ? (
+            <>
+              {selectedModel?.provider &&
+              !["openai-compatible", "ollama"].includes(selectedModel.provider) ? (
+                <p role="status" className="mt-2 text-sm text-muted-foreground">
+                  {selectedModel.provider === "anthropic"
+                    ? t`Hermes does not yet support Anthropic connections.`
+                    : t`Hermes does not yet support this connection.`}
+                </p>
+              ) : null}
+              <Suspense fallback={null}>
+                <HermesLimits value={runtimeConfig} onChange={setRuntimeConfig} />
+              </Suspense>
+            </>
+          ) : null}
         </>
       ) : null}
       {(bot.groupModelOverrideCount ?? 0) > 0 ? (

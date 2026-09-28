@@ -1586,6 +1586,7 @@ msgstr ""
 msgid "Choose a folder inside your home folder."
 msgstr ""
 
+#: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Choose a model"
 msgstr ""
@@ -4075,6 +4076,26 @@ msgstr "हेडर मान"
 msgid "Hear a sample"
 msgstr "एक नमूना सुनें"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Hermes"
+msgstr "Hermes"
+
+#: src/pages/shell/bot-panel.tsx
+msgid "Hermes does not yet support Anthropic connections."
+msgstr "Hermes अभी Anthropic कनेक्शन का समर्थन नहीं करता।"
+
+#: src/pages/shell/bot-panel.tsx
+msgid "Hermes does not yet support this connection."
+msgstr "Hermes अभी इस कनेक्शन का समर्थन नहीं करता।"
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Hermes is not installed on this computer."
+msgstr "इस कंप्यूटर पर Hermes इंस्टॉल नहीं है।"
+
+#: src/pages/shell/bot-panel.tsx
+msgid "Hermes runs with this computer's access."
+msgstr "Hermes इस कंप्यूटर की पहुँच के साथ चलता है।"
+
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Hi, this is how I'll sound when I read replies out loud."
 msgstr "नमस्ते, उत्तर पढ़कर सुनाते समय मेरी आवाज़ ऐसी होगी।"
@@ -5078,6 +5099,10 @@ msgstr "मॉडल"
 #: src/pages/BotContextMenu.tsx
 msgid "Model & effort"
 msgstr ""
+
+#: src/pages/shell/hermes-limits.tsx
+msgid "Model calls per turn"
+msgstr "प्रति टर्न मॉडल कॉल"
 
 #: src/pages/LearningInbox.tsx
 msgid "model estimate"
@@ -8177,6 +8202,10 @@ msgstr ""
 #: src/pages/LearningInsights.tsx
 msgid "Thumbs"
 msgstr ""
+
+#: src/pages/shell/hermes-limits.tsx
+msgid "Time limit"
+msgstr "समय सीमा"
 
 #: src/pages/RoutineSchedule.tsx
 msgid "Time of day"

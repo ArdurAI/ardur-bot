@@ -1099,6 +1099,99 @@ it("shows a fresh native probe's version, sign-in and models after Check again",
     [...container.querySelectorAll("button")].some((button) => button.textContent === "Connect"),
   ).toBe(false);
 });
+
+it("shows Hermes beside other runtimes while keeping the shared connection on Pi switching", async () => {
+  api.availability.mockResolvedValue({ runtimeKind: "pi", available: true, models: [] });
+  const onKind = vi.fn();
+  const onModel = vi.fn();
+  const onEffort = vi.fn();
+  await act(async () =>
+    root.render(
+      <RuntimeSettings
+        kind="pi"
+        onKind={onKind}
+        modelKey={modelPinOptionKey("ollama", "llama3.2:1b", "connection")}
+        onModel={onModel}
+        effort="off"
+        onEffort={onEffort}
+        experimental={false}
+        onExperimental={vi.fn()}
+      />,
+    ),
+  );
+  const runtime = container.querySelector<HTMLSelectElement>('select[id$="-runtime"]')!;
+  expect([...runtime.options].some((option) => option.value === "hermes")).toBe(true);
+  await act(async () => {
+    runtime.value = "hermes";
+    runtime.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  expect(onKind).toHaveBeenCalledWith("hermes");
+  expect(onModel).not.toHaveBeenCalled();
+  expect(onEffort).not.toHaveBeenCalled();
+  expect(container.textContent).not.toContain("Connect Hermes");
+});
+
+it("reads and saves only Hermes limits with the existing model pin", async () => {
+  api.availability.mockResolvedValue({
+    runtimeKind: "hermes",
+    available: false,
+    reason: "Hermes is not installed on this computer.",
+    models: [],
+  });
+  await act(async () =>
+    root.render(
+      settings({
+        runtimeKind: "hermes",
+        runtimeExperimental: true,
+        runtimeConfig: { version: 1, maxProviderRequests: 7, timeoutMs: 42_000 },
+        modelProvider: "ollama",
+        modelId: "llama3.2:1b",
+        modelCredentialId: "connection",
+        thinkingLevel: null,
+      }),
+    ),
+  );
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  });
+  expect(container.textContent).toContain("Hermes is not installed on this computer.");
+  expect(container.textContent).toContain("Hermes runs with this computer's access.");
+  expect(container.querySelector<HTMLInputElement>('input[type="number"][max="64"]')?.value).toBe(
+    "7",
+  );
+  expect(container.querySelector<HTMLInputElement>('input[type="number"][max="600"]')?.value).toBe(
+    "42",
+  );
+  expect(container.textContent).not.toContain("Connect Hermes");
+  await save();
+  expect(onSave).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      runtimeKind: "hermes",
+      modelProvider: "ollama",
+      modelId: "llama3.2:1b",
+      modelCredentialId: "connection",
+      runtimeConfig: { version: 1, maxProviderRequests: 7, timeoutMs: 42_000 },
+    }),
+  );
+});
+
+it("shows the incompatible Hermes connection only while it is selected", async () => {
+  api.availability.mockResolvedValue({ runtimeKind: "hermes", available: true, models: [] });
+  await act(async () =>
+    root.render(
+      settings({
+        runtimeKind: "hermes",
+        runtimeExperimental: true,
+        modelProvider: "anthropic",
+        modelId: "claude-opus-5",
+        modelCredentialId: "anthropic-connection",
+        thinkingLevel: "high",
+      }),
+    ),
+  );
+  expect(container.textContent).toContain("Hermes does not yet support Anthropic connections.");
+  expect(container.textContent).not.toContain("Connect Hermes");
+});
 it.each([
   { available: false, reason: "Codex is not installed.", models: [] },
   {

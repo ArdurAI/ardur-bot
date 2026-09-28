@@ -4,6 +4,7 @@ import type { HermesRuntimeConfig, RuntimePin, RuntimeProblem } from "@ardurbot/
 import {
   DEFAULT_MODEL_CONTEXT_WINDOW,
   DEFAULT_MODEL_MAX_TOKENS,
+  HERMES_HOST_MAX_OUTPUT_TOKENS,
   HERMES_RUNTIME_DEFAULTS,
   HermesRuntimeConfigSchema,
   normalizedThinkingLevel,
@@ -68,7 +69,7 @@ export function hermesCompatibility(
     !Number.isSafeInteger(model.maxTokens ?? DEFAULT_MODEL_MAX_TOKENS) ||
     (model.contextWindow ?? DEFAULT_MODEL_CONTEXT_WINDOW) <= 0 ||
     (model.maxTokens ?? DEFAULT_MODEL_MAX_TOKENS) <= 0 ||
-    (model.maxTokens ?? DEFAULT_MODEL_MAX_TOKENS) > 65_536
+    (model.maxTokens ?? DEFAULT_MODEL_MAX_TOKENS) > HERMES_HOST_MAX_OUTPUT_TOKENS
   )
     return runtimePinProblem(
       pin,

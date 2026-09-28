@@ -8,6 +8,7 @@ import { rpc } from "../../lib/rpc";
 
 export function RuntimeSettings({
   kind,
+  botId,
   onKind,
   modelKey,
   onModel,
@@ -21,6 +22,7 @@ export function RuntimeSettings({
   onExperimental: (enabled: boolean) => void;
   experimentalReadOnly?: boolean;
   kind: RuntimeKind;
+  botId?: string;
   onKind: (kind: RuntimeKind) => void;
   modelKey: string;
   onModel: (value: string) => void;
@@ -39,7 +41,7 @@ export function RuntimeSettings({
     if (kind === "pi") return;
     let active = true;
     void rpc.runtimes
-      .availability({ runtimeKind: kind, refresh: refresh > 0 })
+      .availability({ runtimeKind: kind, botId, refresh: refresh > 0 })
       .then((value) => {
         if (active) setAvailability(value);
       })
@@ -49,7 +51,7 @@ export function RuntimeSettings({
     return () => {
       active = false;
     };
-  }, [kind, refresh]);
+  }, [kind, botId, refresh]);
   useEffect(() => {
     if (!login) return;
     const timer = setInterval(() => {
@@ -86,10 +88,13 @@ export function RuntimeSettings({
         id={`${id}-runtime`}
         value={kind}
         onChange={(event) => {
-          onKind(event.target.value as RuntimeKind);
-          if (!experimentalReadOnly) onExperimental(false);
-          onModel("");
-          onEffort("");
+          const next = event.target.value as RuntimeKind;
+          onKind(next);
+          if (!experimentalReadOnly) onExperimental(next === "hermes");
+          if (!["pi", "hermes"].includes(kind) || !["pi", "hermes"].includes(next)) {
+            onModel("");
+            onEffort("");
+          }
           setError(null);
           setLogin(null);
         }}
@@ -98,6 +103,7 @@ export function RuntimeSettings({
         <NativeSelectOption value="claude-code">{t`Claude Code (your claude sign-in)`}</NativeSelectOption>
         <NativeSelectOption value="codex-app-server">{t`Codex (your ChatGPT sign-in)`}</NativeSelectOption>
         <NativeSelectOption value="antigravity">{t`Antigravity`}</NativeSelectOption>
+        <NativeSelectOption value="hermes">{t`Hermes`}</NativeSelectOption>
       </NativeSelect>
       {kind !== "pi" ? (
         <>
@@ -112,7 +118,7 @@ export function RuntimeSettings({
               <Trans>Experimental</Trans>
             </label>
           ) : null}
-          {availability ? (
+          {availability && kind !== "hermes" ? (
             <p role="status" className="text-sm text-muted-foreground">
               {[
                 kind === "antigravity" && availability.version
@@ -138,9 +144,11 @@ export function RuntimeSettings({
               {kind === "antigravity" &&
               availability.reason.startsWith("Antigravity is not installed")
                 ? t`Antigravity is not installed on this computer. Install it and sign in there, then check again.`
-                : kind === "antigravity" && availability.signInStatus === "signed-out"
-                  ? t`Sign in to Antigravity on this computer, then check again.`
-                  : availability.reason}
+                : kind === "hermes" && availability.reason.includes("not installed")
+                  ? t`Hermes is not installed on this computer.`
+                  : kind === "antigravity" && availability.signInStatus === "signed-out"
+                    ? t`Sign in to Antigravity on this computer, then check again.`
+                    : availability.reason}
             </p>
           ) : null}
           {error ? (
@@ -177,69 +185,75 @@ export function RuntimeSettings({
               </a>
             </div>
           ) : null}
-          <label htmlFor={`${id}-model`} className="block text-sm">
-            <Trans>Model</Trans>
-          </label>
-          <NativeSelect
-            id={`${id}-model`}
-            value={selected?.modelId ?? ""}
-            onChange={(event) => {
-              const next = availability?.models.find((entry) => entry.id === event.target.value);
-              onModel(
-                next
-                  ? modelPinOptionKey(
-                      nativeRuntimeProviders[kind as keyof typeof nativeRuntimeProviders],
-                      next.id,
-                      `native:${kind}`,
-                    )
-                  : "",
-              );
-              onEffort(kind === "antigravity" ? (next?.efforts[0] ?? "") : "");
-            }}
-          >
-            <NativeSelectOption value="">{t`Choose a model`}</NativeSelectOption>
-            {selected?.modelId && !model ? (
-              <NativeSelectOption value={selected.modelId}>
-                {selected.modelId} — {t`not available`}
-              </NativeSelectOption>
-            ) : null}
-            {availability?.models.map((entry) => (
-              <NativeSelectOption key={entry.id} value={entry.id}>
-                {entry.label}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
-          {kind !== "antigravity" ? (
+          {kind !== "hermes" ? (
             <>
-              <label htmlFor={`${id}-effort`} className="block text-sm">
-                <Trans>Thinking</Trans>
+              <label htmlFor={`${id}-model`} className="block text-sm">
+                <Trans>Model</Trans>
               </label>
               <NativeSelect
-                id={`${id}-effort`}
-                value={effort}
-                onChange={(event) => onEffort(event.target.value)}
+                id={`${id}-model`}
+                value={selected?.modelId ?? ""}
+                onChange={(event) => {
+                  const next = availability?.models.find(
+                    (entry) => entry.id === event.target.value,
+                  );
+                  onModel(
+                    next
+                      ? modelPinOptionKey(
+                          nativeRuntimeProviders[kind as keyof typeof nativeRuntimeProviders],
+                          next.id,
+                          `native:${kind}`,
+                        )
+                      : "",
+                  );
+                  onEffort(kind === "antigravity" ? (next?.efforts[0] ?? "") : "");
+                }}
               >
-                <NativeSelectOption value="">{t`Choose effort`}</NativeSelectOption>
-                {effort && !model?.efforts.includes(effort) ? (
-                  <NativeSelectOption value={effort}>
-                    {effort} — {t`not available`}
+                <NativeSelectOption value="">{t`Choose a model`}</NativeSelectOption>
+                {selected?.modelId && !model ? (
+                  <NativeSelectOption value={selected.modelId}>
+                    {selected.modelId} — {t`not available`}
                   </NativeSelectOption>
                 ) : null}
-                {model?.efforts.map((value) => (
-                  <NativeSelectOption key={value} value={value}>
-                    {value}
+                {availability?.models.map((entry) => (
+                  <NativeSelectOption key={entry.id} value={entry.id}>
+                    {entry.label}
                   </NativeSelectOption>
                 ))}
               </NativeSelect>
+              {kind !== "antigravity" ? (
+                <>
+                  <label htmlFor={`${id}-effort`} className="block text-sm">
+                    <Trans>Thinking</Trans>
+                  </label>
+                  <NativeSelect
+                    id={`${id}-effort`}
+                    value={effort}
+                    onChange={(event) => onEffort(event.target.value)}
+                  >
+                    <NativeSelectOption value="">{t`Choose effort`}</NativeSelectOption>
+                    {effort && !model?.efforts.includes(effort) ? (
+                      <NativeSelectOption value={effort}>
+                        {effort} — {t`not available`}
+                      </NativeSelectOption>
+                    ) : null}
+                    {model?.efforts.map((value) => (
+                      <NativeSelectOption key={value} value={value}>
+                        {value}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+                </>
+              ) : null}
+              <p className="text-sm text-muted-foreground">
+                {kind === "antigravity"
+                  ? t`Antigravity runs on a connected host computer.`
+                  : kind === "claude-code"
+                    ? t`Claude Code runs on host computers for now — change the bot's computer or its runtime.`
+                    : t`Codex runs on host computers for now — change the bot's computer or its runtime.`}
+              </p>
             </>
           ) : null}
-          <p className="text-sm text-muted-foreground">
-            {kind === "antigravity"
-              ? t`Antigravity runs on a connected host computer.`
-              : kind === "claude-code"
-                ? t`Claude Code runs on host computers for now — change the bot's computer or its runtime.`
-                : t`Codex runs on host computers for now — change the bot's computer or its runtime.`}
-          </p>
         </>
       ) : null}
     </div>

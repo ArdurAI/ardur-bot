@@ -7,6 +7,11 @@ no product controls or copy. The scoreboard contract remains
 [metric manifest](../packages/testkit/src/scoreboard/manifest.ts) and
 [calibrated verdicts](performance.md#paired-verdicts-and-policy-calibration).
 
+Hermes turns use the same run and lease trace identity as built-in turns. The broker's
+provider request IDs identify admitted Chat Completions attempts, while the ACP
+aggregate is not a second billable request. An absent provider usage observation is
+unknown, including after Stop or host loss; traces do not fill it with zero.
+
 ## Enable and consume
 
 In a benchmark composition root, use the new

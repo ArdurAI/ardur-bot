@@ -34,4 +34,10 @@ Calling `request_secret` again with the same name and configuration returns the 
 
 The model has no tool for reading these values, and the backend removes direct and common encoded echoes from API responses. The approved service still receives the credential: redaction cannot defend against a malicious service deliberately transforming it. Choose a service you trust and use appropriately scoped credentials.
 
+Hermes bots use the same backend `request_secret`, `list_secrets` and `secret_request`
+tools through Ardur's assigned tool bridge. The reusable bot-secret value is injected
+by the backend into an approved HTTP request; it is not copied into Hermes's home,
+configuration, model prompt or process environment. The selected model connection
+is a separate credential held by the worker's provider broker.
+
 This boundary supports authenticated HTTP requests. Injecting credentials into arbitrary AI-controlled shell commands, files or environment variables would let those commands read them, so those paths are not exposed. APIs needing request signing, OAuth refresh, multiple credentials or custom protocols should use a connector adapter. Existing `request_secret` calls with a `connectionId` retain their one-use connector-code flow; website sign-in uses `request_takeover`.
