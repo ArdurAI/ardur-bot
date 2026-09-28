@@ -49,9 +49,11 @@ export type BrokerScope = {
 
 /** A maintenance operation keeps the source pin but has its own bounded admission identity. */
 export function summaryOperationManifest(pin: RuntimePin, maxOutputTokens: number) {
+  const hash = pin.effectiveRuntimeConfigHash ?? pin.runtimeConfigHash;
   if (
     pin.runtimeKind !== "hermes" ||
-    !pin.effectiveRuntimeConfigHash ||
+    !hash ||
+    (pin.runtimeConfig?.version === 2 && !pin.effectiveRuntimeConfigHash) ||
     !Number.isSafeInteger(maxOutputTokens) ||
     maxOutputTokens < 1 ||
     maxOutputTokens > 65_536
@@ -60,7 +62,7 @@ export function summaryOperationManifest(pin: RuntimePin, maxOutputTokens: numbe
   return RuntimeConfigOperationManifestSchema.parse({
     format: 1 as const,
     purpose: "summary" as const,
-    sourceEffectiveRuntimeConfigHash: pin.effectiveRuntimeConfigHash,
+    sourceEffectiveRuntimeConfigHash: hash,
     maxOutputTokens,
     tools: "none" as const,
     modelId: pin.modelId,
