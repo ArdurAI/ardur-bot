@@ -1264,6 +1264,10 @@ msgstr "Boards"
 msgid "Booting"
 msgstr "Booting"
 
+#: src/pages/Shell.tsx
+msgid "Booting live desktop…"
+msgstr "Booting live desktop…"
+
 #. placeholder {0}: computerBot?.name ?? active?.name
 #: src/pages/Shell.tsx
 msgid "Booting up {0}’s computer"
@@ -1901,6 +1905,7 @@ msgstr "computer"
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/TeamBoard.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Computer"
 msgstr "Computer"
 
@@ -1916,6 +1921,10 @@ msgstr "Computer change pending."
 msgid "Computer engine is unavailable."
 msgstr "Computer engine is unavailable."
 
+#: src/pages/Shell.tsx
+msgid "Computer failed to boot"
+msgstr "Computer failed to boot"
+
 #: src/pages/storage/StorageSettings.tsx
 msgid "Computer homes"
 msgstr "Computer homes"
@@ -1923,6 +1932,10 @@ msgstr "Computer homes"
 #: src/pages/Shell.tsx
 msgid "Computer is asleep"
 msgstr "Computer is asleep"
+
+#: src/pages/Shell.tsx
+msgid "Computer is asleep. Open it to wake."
+msgstr "Computer is asleep. Open it to wake."
 
 #: src/pages/system/SystemPage.tsx
 msgid "Computer use"
@@ -8073,6 +8086,7 @@ msgid "System"
 msgstr "System"
 
 #: src/pages/ide/terminal.tsx
+#: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 msgid "Take control"
 msgstr "Take control"

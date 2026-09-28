@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { Bot, ComputerStatus, RunActivityRow } from "@ardurbot/contracts";
+import type { Bot, ComputerStatus } from "@ardurbot/contracts";
 import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -219,6 +219,35 @@ describe("WorkspacePane tab selection and content rendering", () => {
     const activeTab = container.querySelector('[role="tab"][data-active]');
     expect(activeTab?.textContent).toBe("Tasks");
     expect(container.querySelector('[role="tablist"]')?.textContent).not.toContain("Screen");
+    expect(container.querySelector('[role="tablist"]')?.textContent).toContain("Computer");
+  });
+
+  it("activates Computer tab when Computer is chosen on non-graphical computers", async () => {
+    const nonGraphical = {
+      ...graphicalComputer,
+      capabilities: { graphical: false, interactiveTerminal: false },
+    };
+    await act(async () =>
+      root.render(
+        <WorkspacePane
+          bot={bot}
+          computer={nonGraphical}
+          tab="computer"
+          onTabChange={vi.fn()}
+          onOpenRun={vi.fn()}
+          routines={<div>Routines content</div>}
+          screen={{
+            computer: nonGraphical,
+            open: false,
+            url: null,
+            error: null,
+            onOpen: vi.fn(),
+          }}
+        />,
+      ),
+    );
+    const activeTab = container.querySelector('[role="tab"][data-active]');
+    expect(activeTab?.textContent).toBe("Computer");
   });
 
   it("activates Files tab when files are available and tab is files", async () => {
