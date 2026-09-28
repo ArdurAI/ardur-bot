@@ -17,6 +17,12 @@ describe("avatarInitial", () => {
     expect(avatarInitial("")).toBe("A");
     expect(avatarInitial("   ")).toBe("A");
   });
+
+  it("uppercases dotted i according to the runtime locale", () => {
+    // Turkish i -> İ; most locales i -> I. toLocaleUpperCase() without an
+    // explicit locale follows the runtime, so accept either deterministic form.
+    expect(["I", "İ"]).toContain(avatarInitial("istanbul"));
+  });
 });
 
 describe("organic avatar geometry", () => {
