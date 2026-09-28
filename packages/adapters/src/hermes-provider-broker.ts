@@ -3,12 +3,12 @@ import { isDeepStrictEqual } from "node:util";
 import type { AgentUsage, UsagePurpose } from "@ardurbot/adapter-kit";
 import { RequestUsageCollector } from "@ardurbot/adapter-kit";
 import { chatCompletionsUsage } from "./openai-chat-usage.js";
-import { requestReservationTokens } from "./request-usage.js";
 import {
   assertAllowedOpenAiCompatibleUrl,
   assertHttpsForKeyedOpenAiCompatibleUrl,
 } from "./openai-compatible-url.js";
 import { createOpenAiCompatibleFetch } from "./pi-openai-compatible-provider.js";
+import { requestReservationTokens } from "./request-usage.js";
 
 const MAX_REQUEST_BYTES = 256 * 1024;
 // Four raw MiB encode below the hub's six MiB provider-frame allowance.

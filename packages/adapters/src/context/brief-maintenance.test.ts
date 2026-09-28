@@ -166,13 +166,21 @@ it("marks a changed group pending and rewrites after the turn with the selected 
 it("carries the shared desktop home in the maintenance request", async () => {
   const f = fixture();
   f.tx.bot.findUniqueOrThrow.mockResolvedValue({
-    id: "chief", concurrentRuns: 3, space: { concurrentRuns: 3 },
-    computer: { kind: "desktop", scope: "team", homeKey: "team-space",
-      providerRef: "host:team-space" },
-  });
+    id: "chief",
+    concurrentRuns: 3,
+    space: { concurrentRuns: 3 },
+    computer: {
+      kind: "desktop",
+      scope: "team",
+      homeKey: "team-space",
+      providerRef: "host:team-space",
+    },
+  } as never);
   await refreshRunBrief(f.deps, "run");
   expect(f.requests[0]).toMatchObject({
-    botId: "chief", runId: "brief-run", nativeCwd: "host:team-space",
+    botId: "chief",
+    runId: "brief-run",
+    nativeCwd: "host:team-space",
   });
 });
 it.each([false, true])(
@@ -184,13 +192,27 @@ it.each([false, true])(
       runtime: {
         ...f.runtime,
         describe: () => ({
-          id: "hermes", contractVersion: "1", adapterVersion: "1",
-          capabilities: { scripted: false, streaming: true, compaction: false, tools: false,
-            usageAccounting: "external" as const },
+          id: "hermes",
+          contractVersion: "1",
+          adapterVersion: "1",
+          capabilities: {
+            scripted: false,
+            streaming: true,
+            compaction: false,
+            tools: false,
+            usageAccounting: "external" as const,
+          },
         }),
         async *run() {
-          if (reported) yield { type: "usage" as const, provider: "fixture", model: "pinned",
-            inputTokens: 10, outputTokens: 2, reported: true };
+          if (reported)
+            yield {
+              type: "usage" as const,
+              provider: "fixture",
+              model: "pinned",
+              inputTokens: 10,
+              outputTokens: 2,
+              reported: true,
+            };
           yield { type: "done" as const, text: "## Goal\nCoordinate" };
         },
       },

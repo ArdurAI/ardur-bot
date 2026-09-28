@@ -96,8 +96,10 @@ describe("worker provider broker", () => {
       connection: { ...base.options.connection, contextWindow: 32_768, maxOutputTokens: 4_096 },
       maxReservedTokens: 2 * (32_768 + 4_096),
       record: async (usage) => {
-        if (usage.request?.collection?.outcome === "started" &&
-          (usage.request.admission?.reservedTokens ?? 0) > 10_000)
+        if (
+          usage.request?.collection?.outcome === "started" &&
+          (usage.request.admission?.reservedTokens ?? 0) > 10_000
+        )
           throw new Error("Broker delegation allowance exhausted");
         records.push(usage);
       },
@@ -108,8 +110,9 @@ describe("worker provider broker", () => {
     expect(f.fetch).toHaveBeenCalledOnce();
 
     const oversized = { ...f.body, messages: [{ role: "user", content: "x".repeat(12_000) }] };
-    await expect(f.broker.open(f.request({ body: oversized })))
-      .rejects.toThrow("Provider request could not be admitted.");
+    await expect(f.broker.open(f.request({ body: oversized }))).rejects.toThrow(
+      "Provider request could not be admitted.",
+    );
     expect(f.fetch).toHaveBeenCalledOnce();
 
     const main = fixture({
@@ -139,10 +142,17 @@ describe("worker provider broker", () => {
       observed,
       fetch: vi.fn(async () => json({ model: "different-model" })),
     });
-    await expect(substituted.broker.open(substituted.request())).rejects.toThrow("Provider request failed.");
+    await expect(substituted.broker.open(substituted.request())).rejects.toThrow(
+      "Provider request failed.",
+    );
     expect(observed).not.toHaveBeenCalled();
 
-    const failed = fixture({ observed, fetch: vi.fn(async () => { throw new Error("offline"); }) });
+    const failed = fixture({
+      observed,
+      fetch: vi.fn(async () => {
+        throw new Error("offline");
+      }),
+    });
     await expect(failed.broker.open(failed.request())).rejects.toThrow();
     expect(observed).not.toHaveBeenCalled();
   });

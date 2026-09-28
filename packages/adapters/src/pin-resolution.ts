@@ -7,7 +7,12 @@ import type {
   RuntimeProblem,
   ThinkingLevel,
 } from "@ardurbot/contracts";
-import { normalizedThinkingLevel, runtimePinProblem, ThinkingLevelSchema, usableModelId } from "@ardurbot/contracts";
+import {
+  normalizedThinkingLevel,
+  runtimePinProblem,
+  ThinkingLevelSchema,
+  usableModelId,
+} from "@ardurbot/contracts";
 import type { findDefaultModelCredential, PrismaClient } from "@ardurbot/db";
 import { findBoundModelCredential } from "@ardurbot/db";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
@@ -60,9 +65,7 @@ export function selectConfiguredModel(input: {
     );
   }
   const effort = ThinkingLevelSchema.safeParse(
-    pin.provider === "ollama"
-      ? normalizedThinkingLevel(pin.effort)
-      : pin.effort,
+    pin.provider === "ollama" ? normalizedThinkingLevel(pin.effort) : pin.effort,
   );
   const supported = scripted
     ? ["off"]

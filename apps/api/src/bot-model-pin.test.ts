@@ -55,17 +55,28 @@ describe("bot pin editing", () => {
   ] as const)("saves an Ollama no-thinking choice: %j", async ({ reasoning, selected, saved }) => {
     const { deps, findFirst } = fixture();
     findFirst.mockResolvedValue({
-      id: "selected", userId: "user", provider: "ollama", label: "local",
-      secretId: "secret", defaultModel: "fixture-model", isDefault: false,
+      id: "selected",
+      userId: "user",
+      provider: "ollama",
+      label: "local",
+      secretId: "secret",
+      defaultModel: "fixture-model",
+      isDefault: false,
     });
     vi.mocked(listOllamaModels).mockResolvedValue([{ name: "fixture-model" }]);
     vi.mocked(showOllamaModel).mockResolvedValue({
-      id: "fixture-model", acceptsImages: false, reasoning,
-      supportsThinkingOff: true, contextWindow: 32_768,
+      id: "fixture-model",
+      acceptsImages: false,
+      reasoning,
+      supportsThinkingOff: true,
+      contextWindow: 32_768,
     });
     const update = await botModelPinUpdate(deps, actor, existing, {
-      botId: "bot", runtimeKind: "hermes", modelProvider: "ollama",
-      modelId: "fixture-model", modelCredentialId: "selected",
+      botId: "bot",
+      runtimeKind: "hermes",
+      modelProvider: "ollama",
+      modelId: "fixture-model",
+      modelCredentialId: "selected",
       ...(selected ? { thinkingLevel: selected } : {}),
     });
     expect(update).toMatchObject({ runtimeKind: "hermes", thinkingLevel: saved });
@@ -73,20 +84,37 @@ describe("bot pin editing", () => {
   it("keeps an OpenAI-compatible reasoning effort on the Hermes pin", async () => {
     const { deps, findFirst } = fixture();
     vi.mocked(deps.prisma.spaceModelPreference.findFirst).mockResolvedValue({
-      modelId: "fixture-model", isDefault: false,
+      modelId: "fixture-model",
+      isDefault: false,
     } as never);
     findFirst.mockResolvedValue({
-      id: "selected", userId: "user", provider: "openai-compatible", label: "local",
-      secretId: "secret", defaultModel: "fixture-model", isDefault: false,
+      id: "selected",
+      userId: "user",
+      provider: "openai-compatible",
+      label: "local",
+      secretId: "secret",
+      defaultModel: "fixture-model",
+      isDefault: false,
     });
-    vi.spyOn(deps.secrets, "load").mockReturnValue(JSON.stringify({
-      kind: "openai_compatible", baseUrl: "http://localhost:8080/v1",
-      reasoning: true, contextWindow: 32_768, maxTokens: 4_096,
-    }));
-    await expect(botModelPinUpdate(deps, actor, existing, {
-      botId: "bot", runtimeKind: "hermes", modelProvider: "openai-compatible",
-      modelId: "fixture-model", modelCredentialId: "selected", thinkingLevel: "high",
-    })).resolves.toMatchObject({ runtimeKind: "hermes", thinkingLevel: "high" });
+    vi.spyOn(deps.secrets, "load").mockReturnValue(
+      JSON.stringify({
+        kind: "openai_compatible",
+        baseUrl: "http://localhost:8080/v1",
+        reasoning: true,
+        contextWindow: 32_768,
+        maxTokens: 4_096,
+      }),
+    );
+    await expect(
+      botModelPinUpdate(deps, actor, existing, {
+        botId: "bot",
+        runtimeKind: "hermes",
+        modelProvider: "openai-compatible",
+        modelId: "fixture-model",
+        modelCredentialId: "selected",
+        thinkingLevel: "high",
+      }),
+    ).resolves.toMatchObject({ runtimeKind: "hermes", thinkingLevel: "high" });
   });
   it("preserves the exact connected model when switching between Pi and Hermes", async () => {
     const { deps, findFirst } = fixture();
