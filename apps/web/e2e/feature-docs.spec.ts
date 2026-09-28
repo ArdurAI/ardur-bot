@@ -31,13 +31,34 @@ async function capture(page: Page, id: string): Promise<void> {
   ).toBeLessThanOrEqual(250_000);
 }
 
+/** Every app capture must show a usable model; a warning header is never documentation. */
+async function expectModelReady(page: Page) {
+  const chip = page.getByRole("button", { name: /^Change model: / }).first();
+  await expect(chip).toBeVisible();
+  await expect(chip).not.toContainText("not available");
+}
+
 async function useDashboard(page: Page) {
   const fixture = dashboardFixture();
   const base = fixture.rpc("bootstrap") as Record<string, unknown>;
   const catalog = listPiCatalog();
-  const connected = catalog.find(
-    (entry) => entry.provider === "openrouter" && entry.auth !== "oauth",
-  );
+  // A current model that supports the bot's medium thinking level, so the header never reads
+  // "not available" in a published capture.
+  const preferred = ["openai/gpt-5.2", "openai/gpt-5.1", "google/gemini-2.5-flash"];
+  const connected =
+    preferred
+      .map((id) =>
+        catalog.find(
+          (entry) => entry.provider === "openrouter" && entry.id === id && entry.auth !== "oauth",
+        ),
+      )
+      .find(Boolean) ??
+    catalog.find(
+      (entry) =>
+        entry.provider === "openrouter" &&
+        entry.auth !== "oauth" &&
+        entry.thinkingLevels.includes("medium"),
+    );
   const unconnected = catalog.find(
     (entry) => entry.provider !== connected?.provider && entry.auth === "api-key",
   );
@@ -159,6 +180,7 @@ test("onboarding: prepare a required connection", async ({ page }) => {
 test("bots-create: select a computer mode before creating", async ({ page }) => {
   await useDashboard(page);
   await page.goto("/app/bot");
+  await expectModelReady(page);
   const create = page.getByTestId("create-menu-trigger");
   await expect(create).toBeVisible();
   await create.click();
@@ -181,12 +203,14 @@ test("bots-create: select a computer mode before creating", async ({ page }) => 
   await expect(page).toHaveURL(/\/app\/new-bot$/);
   await expect(page.getByPlaceholder("Message Planner")).toBeVisible();
   await expect(form).toBeHidden();
+  await expectModelReady(page);
   await capture(page, "docs-bots-create-ready");
 });
 
 test("models: inspect a connection, default control, and connection form", async ({ page }) => {
   const { connected, unconnected } = await useDashboard(page);
   await page.goto("/app/bot");
+  await expectModelReady(page);
   const settings = page
     .locator("header.app-drag")
     .getByRole("button", { name: "Settings", exact: true });
@@ -224,6 +248,7 @@ test("models: inspect a connection, default control, and connection form", async
 test("chat-approvals: inspect and deny a pending action", async ({ page }) => {
   const state = await useDashboard(page);
   await page.goto("/app/bot");
+  await expectModelReady(page);
   const deny = page.getByRole("button", { name: "Deny", exact: true });
   await expect(page.getByRole("button", { name: "Allow once", exact: true })).toBeVisible();
   await expect(deny).toBeVisible();

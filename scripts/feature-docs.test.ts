@@ -50,11 +50,11 @@ async function validateFixtureDocs(
     shot.width = 1;
     shot.height = 1;
     shot.crop = { x: 0, y: 0, width: 1, height: 1 };
-    let binding = evidence.screenshots.find((item) => item.id === shot.id);
-    if (!binding) {
-      binding = { id: shot.id, sha256: createHash("sha256").update(png).digest("hex") };
-      evidence.screenshots.push(binding);
-    }
+    // The fixture serves its own bytes, so the binding must hash them even after real captures land.
+    const digest = createHash("sha256").update(png).digest("hex");
+    const binding = evidence.screenshots.find((item) => item.id === shot.id);
+    if (binding) binding.sha256 = digest;
+    else evidence.screenshots.push({ id: shot.id, sha256: digest });
   }
   return validateFeatureDocs(manifest, evidence, root, readCapture);
 }
