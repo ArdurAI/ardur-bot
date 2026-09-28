@@ -307,6 +307,24 @@ test("routines: edit a scheduled routine and inspect its result", async ({ page 
   await page
     .locator("label:has-text('Instruction') textarea")
     .fill("Summarize the revised sample plan.");
+  const routineHelp = panel.getByRole("link", { name: "Learn more about Routines" });
+  await expect(routineHelp).toHaveAttribute(
+    "href",
+    "https://ardur.ai/docs/features/routines/#step-edit-routine-instruction",
+  );
+  await expect(routineHelp).toHaveAttribute("target", "_blank");
+  await page.context().route("https://ardur.ai/docs/features/**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "text/html",
+      body: "<title>Documentation</title>",
+    }),
+  );
+  const [docsTab] = await Promise.all([page.waitForEvent("popup"), routineHelp.click()]);
+  await docsTab.close();
+  await expect(page.locator("label:has-text('Instruction') textarea")).toHaveValue(
+    "Summarize the revised sample plan.",
+  );
   await capture(page, "docs-routines-edit");
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect.poll(() => state.current.prompt).toBe("Summarize the revised sample plan.");
