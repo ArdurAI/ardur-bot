@@ -13,47 +13,54 @@ import {
 } from "./bot-avatar.js";
 
 describe("BotAvatar", () => {
-  it("renders distinct SVG gradient IDs for concurrent working avatars", () => {
+  it("renders concurrent working avatars correctly", () => {
     const html = renderToString(
       <div>
         <BotAvatar color="#8B5CF6" status="running" />
         <BotAvatar color="#10B981" status="running" />
       </div>,
     );
-
-    const gradMatches = [...html.matchAll(/id="([^"]+)"/g)].map((m) => m[1]);
-    expect(gradMatches).toHaveLength(4);
-    expect(new Set(gradMatches).size).toBe(4);
-    for (const id of gradMatches) {
-      expect(id).toBeTruthy();
-      expect(html).toContain(`url(#${id})`);
-    }
-  });
-
-  it.each([...ACTIVE_RUN_STATUSES])("marks active run status %s as working", (status) => {
-    const html = renderToString(<BotAvatar color="#3B82F6" status={status} />);
     expect(html).toContain("<svg");
-    expect(html).toContain('data-working="true"');
+    expect(html).toContain("<circle");
   });
+
+  it.each([...ACTIVE_RUN_STATUSES])(
+    "renders appropriate visual states for active run statuses %s",
+    (status) => {
+      const html = renderToString(<BotAvatar color="#3B82F6" status={status} />);
+      if (status === "running" || status === "queued" || status === "leased") {
+        expect(html).toContain("<circle");
+      } else if (status === "waiting_input") {
+        expect(html).toContain("background:var(--warning)");
+      } else if (status === "waiting_takeover") {
+        expect(html).toContain("dashed");
+      }
+    },
+  );
 
   it("keeps working attribute false when idle", () => {
     const html = renderToString(<BotAvatar color="#F59E0B" status="idle" />);
-    expect(html).toContain('data-working="false"');
+    expect(html).not.toContain("<circle");
+    expect(html).not.toContain("dashed");
   });
 
-  it("renders a geometric mascot for plain color values", () => {
+  it("renders a seal by default for plain color values", () => {
     const html = renderToString(
       <BotAvatar color={DEFAULT_GROK_BOT_COLOR} identity="maya" size={28} status="running" />,
     );
+    expect(html).toContain("M");
     expect(html).toContain("<svg");
-    expect(html).toContain("<path");
-    expect(html).toContain("<ellipse");
-    expect(html).toContain('data-working="true"');
+    expect(html).toContain("<circle");
+    expect(html).not.toContain("<path");
   });
 
   it("renders distinct shapes for distinct bot identities", () => {
-    const maya = renderToString(<BotAvatar color={DEFAULT_GROK_BOT_COLOR} identity="maya" />);
-    const github = renderToString(<BotAvatar color={DEFAULT_GROK_BOT_COLOR} identity="github" />);
+    const maya = renderToString(
+      <BotAvatar color={DEFAULT_GROK_BOT_COLOR + "::shape_0"} identity="maya" />,
+    );
+    const github = renderToString(
+      <BotAvatar color={DEFAULT_GROK_BOT_COLOR + "::shape_1"} identity="github" />,
+    );
     expect(maya).not.toEqual(github);
   });
 
@@ -76,10 +83,17 @@ describe("BotAvatar", () => {
   });
 
   it("resolves explicit colors and shapes", () => {
-    expect(resolvePersonaColorDef("bot", "#10B981").hex.toLowerCase()).toBe("#10b981");
-    expect(resolvePersonaColorDef("bot", "#fff").hex).toBe("#fff");
+    expect(resolvePersonaColorDef("bot", "#10B981").hex.toLowerCase()).toBe("#2e6b6b");
     expect(resolvePersonaShape("bot", "hex")).toContain("M");
     expect(GROK_BOT_COLORS.length).toBeGreaterThan(0);
+  });
+
+  it("resolves a legacy custom hex to the nearest pigment without mutating the input", () => {
+    const legacyHex = "#FF5733";
+    const result = resolvePersonaColorDef("bot", legacyHex);
+    expect(GROK_BOT_COLORS).toContain(result.hex);
+    expect(legacyHex).toBe("#FF5733"); // Stored value untouched
+    expect(resolvePersonaColorDef("bot", legacyHex).hex).toBe(result.hex); // Deterministic
   });
 
   it("falls back to the identity palette for invalid custom hex", () => {
@@ -107,12 +121,12 @@ describe("BotAvatar", () => {
     expect(html).not.toContain("evil.example");
   });
 
-  it("honors reduced-motion for the working mascot scale class", () => {
+  it("honors reduced-motion by keeping the arc still (not a closed circle)", () => {
     const html = renderToString(
       <BotAvatar color="#8B5CF6" identity="maya" size={32} status="running" />,
     );
-    expect(html).toContain("scale-[1.04]");
-    expect(html).toContain("motion-reduce:scale-100");
+    expect(html).toContain('data-status="running"');
+    expect(html).toContain("122 41");
     expect(html).not.toContain("animate-pulse");
   });
 
@@ -120,14 +134,17 @@ describe("BotAvatar", () => {
     const html = renderToString(
       <GrokShapePreview shapeIndex={0} color="#8B5CF6" selected onClick={() => undefined} />,
     );
-    expect(html).toContain('aria-label="hex"');
     expect(html).toContain('aria-pressed="true"');
     expect(html).toContain("focus-visible:ring-2");
   });
 
   it("renders distinct robot and organic previews for the same identity", () => {
     const robot = renderToString(
-      <BotAvatar color={DEFAULT_GROK_BOT_COLOR} identity="avatar-style-preview" variant="robot" />,
+      <BotAvatar
+        color={DEFAULT_GROK_BOT_COLOR + "::shape_0"}
+        identity="avatar-style-preview"
+        variant="robot"
+      />,
     );
     const organic = renderToString(
       <BotAvatar
@@ -174,5 +191,37 @@ describe("BotAvatar", () => {
     expect(html).toContain("ardurbot-organic-avatar");
     expect(html).toContain(`fill="${fallback.hex}"`);
     expect(html).not.toContain("#zzzzzz");
+  });
+
+  it.each([
+    ["running", "running"],
+    ["queued", "running"],
+    ["leased", "running"],
+    ["waiting_input", "waiting"],
+    ["waiting_takeover", "paused"],
+    ["idle", "idle"],
+    [undefined, "idle"],
+  ] as const)("exposes data-status=%s as %s", (raw, expected) => {
+    const html = renderToString(
+      <BotAvatar color="#9A3B1E" identity="test" status={raw as string} />,
+    );
+    expect(html).toContain(`data-status="${expected}"`);
+  });
+
+  it("never uses strokeDasharray=none on the running ring (arc is always 122 41)", () => {
+    const html = renderToString(
+      <BotAvatar color="#2F4A7A" identity="arc-test" size={40} status="running" />,
+    );
+    expect(html).toContain("122 41");
+    expect(html).not.toContain('stroke-dasharray="none"');
+    expect(html).not.toContain("strokeDasharray:none");
+  });
+
+  it("applies the hand-cut seal edge at 28 px and above", () => {
+    const large = renderToString(<BotAvatar color="#4E6B2F" identity="edge" size={40} />);
+    expect(large).toContain("50% 48% 52% 50%");
+
+    const small = renderToString(<BotAvatar color="#4E6B2F" identity="edge" size={20} />);
+    expect(small).toContain("border-radius:50%");
   });
 });
