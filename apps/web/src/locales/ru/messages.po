@@ -7306,6 +7306,10 @@ msgstr ""
 msgid "Saved locally. Sync pending."
 msgstr ""
 
+#: src/pages/account/AccountProfile.tsx
+msgid "Saved, but not applied everywhere."
+msgstr "Сохранено, но применено не везде."
+
 #: src/pages/ScratchpadSection.tsx
 msgid "Saved, but list refresh failed"
 msgstr "Сохранено, но обновить список не удалось."

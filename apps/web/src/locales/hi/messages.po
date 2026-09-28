@@ -7306,6 +7306,10 @@ msgstr ""
 msgid "Saved locally. Sync pending."
 msgstr ""
 
+#: src/pages/account/AccountProfile.tsx
+msgid "Saved, but not applied everywhere."
+msgstr "सहेजा गया, लेकिन हर जगह लागू नहीं हुआ।"
+
 #: src/pages/ScratchpadSection.tsx
 msgid "Saved, but list refresh failed"
 msgstr "सहेजा गया, लेकिन सूची रिफ़्रेश विफल रही"

@@ -307,3 +307,118 @@ it("advances the save baseline so editing back stays savable", async () => {
     "editing instructions back to the original text must stay savable",
   ).toBe(false);
 });
+
+it("adopts a refreshed account into a clean form and saves the refreshed values", async () => {
+  const saveProfile = () =>
+    [...container.querySelectorAll("button")].find((node) => node.textContent === "Save")!;
+  const saveInstructions = () =>
+    [...container.querySelectorAll("button")].find(
+      (node) => node.textContent === "Save instructions",
+    )!;
+  async function type(node: HTMLInputElement | HTMLTextAreaElement, value: string) {
+    await act(async () => {
+      const proto =
+        node instanceof HTMLInputElement
+          ? HTMLInputElement.prototype
+          : HTMLTextAreaElement.prototype;
+      Object.getOwnPropertyDescriptor(proto, "value")!.set!.call(node, value);
+      node.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  }
+  await act(async () => root.render(<AccountSettings />));
+  api.get.mockResolvedValue({
+    ...accountFixture,
+    name: "Renamed by another session",
+    instructions: "Be terse.",
+    instructionsRevision: 4,
+  });
+  // Disconnecting a device refetches the account while this profile stays mounted.
+  await click("Disconnect");
+  expect(container.querySelector<HTMLInputElement>("input#account-full-name")!.value).toBe(
+    "Renamed by another session",
+  );
+  expect(container.querySelector<HTMLTextAreaElement>("textarea#account-instructions")!.value).toBe(
+    "Be terse.",
+  );
+  expect(saveProfile().disabled, "a clean form stays clean after the refresh").toBe(true);
+  expect(saveInstructions().disabled).toBe(true);
+  // Saving after a clean refresh submits the refreshed full name, not the stale one.
+  await type(container.querySelector<HTMLInputElement>("input#account-display-name")!, "Chief");
+  await act(async () => saveProfile().click());
+  expect(api.updateProfile).toHaveBeenCalledWith({
+    name: "Renamed by another session",
+    displayName: "Chief",
+    workType: "research",
+    avatarStyle: "robot",
+  });
+  // The instruction revision advances on refresh.
+  api.updateInstructions.mockClear();
+  await type(
+    container.querySelector<HTMLTextAreaElement>("textarea#account-instructions")!,
+    "Be very terse.",
+  );
+  await act(async () => saveInstructions().click());
+  expect(api.updateInstructions).toHaveBeenCalledWith({
+    instructions: "Be very terse.",
+    revision: 4,
+  });
+});
+
+it("keeps a dirty field across a refresh and never resubmits the stale value", async () => {
+  const saveProfile = () =>
+    [...container.querySelectorAll("button")].find((node) => node.textContent === "Save")!;
+  async function type(node: HTMLInputElement, value: string) {
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(node, value);
+      node.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  }
+  await act(async () => root.render(<AccountSettings />));
+  await type(container.querySelector<HTMLInputElement>("input#account-display-name")!, "Chief");
+  api.get.mockResolvedValue({
+    ...accountFixture,
+    name: "Renamed by another session",
+    displayName: "Captain",
+  });
+  await click("Disconnect");
+  expect(container.querySelector<HTMLInputElement>("input#account-display-name")!.value).toBe(
+    "Chief",
+  );
+  expect(saveProfile().disabled, "the dirty field stays dirty").toBe(false);
+  await act(async () => saveProfile().click());
+  expect(api.updateProfile).toHaveBeenCalledWith({
+    name: "Renamed by another session",
+    displayName: "Chief",
+    workType: "research",
+    avatarStyle: "robot",
+  });
+});
+
+it("shows a follow-up failure with a Retry that reruns only the follow-up", async () => {
+  const onAvatarStyleChange = vi.fn<(style: "robot" | "organic") => Promise<void>>();
+  const saveProfile = () =>
+    [...container.querySelectorAll("button")].find((node) => node.textContent === "Save")!;
+  async function type(node: HTMLInputElement, value: string) {
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(node, value);
+      node.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  }
+  await act(async () => root.render(<AccountSettings onAvatarStyleChange={onAvatarStyleChange} />));
+  await type(container.querySelector<HTMLInputElement>("input#account-display-name")!, "Chief");
+  onAvatarStyleChange.mockRejectedValueOnce(new Error("preferences offline"));
+  await act(async () => saveProfile().click());
+  expect(api.updateProfile).toHaveBeenCalledTimes(1);
+  expect(onAvatarStyleChange).toHaveBeenCalledWith("robot");
+  const alert = container.querySelector('[role="alert"]')!;
+  expect(alert.textContent).toContain("Saved, but not applied everywhere.");
+  const retry = [...alert.querySelectorAll("button")].find((node) => node.textContent === "Retry")!;
+  expect(retry).toBeDefined();
+  expect(saveProfile().disabled, "Save is disabled because the profile itself saved").toBe(true);
+  // Retry re-invokes only the follow-up; the profile is not re-submitted.
+  onAvatarStyleChange.mockResolvedValueOnce(undefined);
+  await act(async () => retry.click());
+  expect(onAvatarStyleChange).toHaveBeenCalledTimes(2);
+  expect(api.updateProfile).toHaveBeenCalledTimes(1);
+  expect(container.querySelector('[role="alert"]')).toBeNull();
+});

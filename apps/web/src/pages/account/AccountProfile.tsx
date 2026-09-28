@@ -39,10 +39,37 @@ export function AccountProfile({
   const [saved, setSaved] = useState("");
   const [error, setError] = useState("");
   const [conflict, setConflict] = useState(false);
+  const [unsyncedProfile, setUnsyncedProfile] = useState<AccountProfileInput | null>(null);
   useEffect(() => {
     onBusyChange?.(busy);
     return () => onBusyChange?.(false);
   }, [busy, onBusyChange]);
+  // The parent refreshes `account` after password changes, retries and device
+  // disconnects while keeping this instance mounted. Adopt the refreshed values
+  // as the save baseline, and into each field the user has not edited locally,
+  // so a clean form follows the server and a save never resubmits stale fields.
+  useEffect(() => {
+    setProfile((draft) => ({
+      name: draft.name === savedProfile.name ? account.name : draft.name,
+      displayName:
+        draft.displayName === savedProfile.displayName ? account.displayName : draft.displayName,
+      workType: draft.workType === savedProfile.workType ? account.workType : draft.workType,
+      avatarStyle:
+        draft.avatarStyle === savedProfile.avatarStyle ? account.avatarStyle : draft.avatarStyle,
+    }));
+    setSavedProfile({
+      name: account.name,
+      displayName: account.displayName,
+      workType: account.workType,
+      avatarStyle: account.avatarStyle,
+    });
+    if (instructions === savedInstructions) {
+      setInstructions(account.instructions);
+      setSavedInstructions(account.instructions);
+      setRevision(account.instructionsRevision);
+    }
+    // Reads the draft states only to detect local edits; refreshed values drive it.
+  }, [account]);
   const workOptions = [
     ["", t`Select`],
     ["engineering", t`Engineering`],
@@ -59,18 +86,24 @@ export function AccountProfile({
     setError("");
     setConflict(false);
     setSaved("");
+    setUnsyncedProfile(null);
     try {
       if (section === "profile") {
         const result = await rpc.account.updateProfile(profile);
         setProfile(result);
         setSavedProfile(result);
-        await onSaved?.(result);
+        try {
+          await onSaved?.(result);
+          setSaved(section);
+        } catch {
+          setUnsyncedProfile(result);
+        }
       } else {
         const result = await rpc.account.updateInstructions({ instructions, revision });
         setRevision(result.revision);
         setSavedInstructions(instructions);
+        setSaved(section);
       }
-      setSaved(section);
     } catch (cause) {
       setConflict(
         !!cause && typeof cause === "object" && "code" in cause && cause.code === "CONFLICT",
@@ -80,6 +113,21 @@ export function AccountProfile({
           ? t`Instructions changed. Reload before saving.`
           : t`Could not save changes. Try again.`,
       );
+    } finally {
+      setBusy(false);
+    }
+  }
+  // The profile itself was saved; only the shell follow-up failed. Retry it
+  // alone instead of asking for another edit and a full resubmission.
+  async function retryUnsynced() {
+    if (busy || !unsyncedProfile) return;
+    setBusy(true);
+    try {
+      await onSaved?.(unsyncedProfile);
+      setUnsyncedProfile(null);
+      setSaved("profile");
+    } catch {
+      // Keep the alert; Retry stays available.
     } finally {
       setBusy(false);
     }
@@ -239,6 +287,14 @@ export function AccountProfile({
               }}
             >{t`Reload`}</Button>
           ) : null}
+        </div>
+      ) : null}
+      {unsyncedProfile ? (
+        <div role="alert" className="text-sm text-destructive">
+          {t`Saved, but not applied everywhere.`}{" "}
+          <Button variant="ghost" disabled={busy} onClick={() => void retryUnsynced()}>
+            {t`Retry`}
+          </Button>
         </div>
       ) : null}
     </div>
