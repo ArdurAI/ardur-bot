@@ -660,6 +660,14 @@ function Thread() {
 
   const botActions = [
     {
+      text: t("Tasks"),
+      onPress: () => router.push({ pathname: "/workspace-tasks", params: { botId: botId ?? "" } }),
+    },
+    {
+      text: t("Files"),
+      onPress: () => router.push({ pathname: "/ide", params: { botId: botId ?? "" } }),
+    },
+    {
       text: t("Chat settings"),
       onPress: () =>
         router.push({

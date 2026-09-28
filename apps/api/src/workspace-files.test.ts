@@ -61,6 +61,26 @@ describe("bot workspace files", () => {
     f.computer.state = "running";
     expect(await f.files.describe(actor, "bot")).toMatchObject({ files: "unavailable" });
     expect(workspaceFileSource(null)).toBe("unavailable");
+    for (const kind of ["ssh", "remote-docker", "docker", "kubernetes", "e2b", "daytona", "box"]) {
+      expect(
+        workspaceFileSource({
+          kind,
+          state: "running",
+          providerRef: "connected",
+          homeRevision: "empty",
+          maintenanceId: null,
+        }),
+      ).toBe("live");
+    }
+    expect(
+      workspaceFileSource({
+        kind: "fake",
+        state: "running",
+        providerRef: "simulated",
+        homeRevision: "saved",
+        maintenanceId: null,
+      }),
+    ).toBe("unavailable");
   });
 
   it("rejects another actor and a replaced computer before any file read", async () => {

@@ -1421,6 +1421,7 @@
       "group-settings": "groups",
       "bot-settings": "bot-profile",
       "thread": "chat-compose",
+      "workspace-tasks": "delegation-tasks",
       "routine": "routines",
       "computer": "chat-computer",
       "pair": "mobile-pairing",
