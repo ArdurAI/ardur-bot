@@ -4643,7 +4643,22 @@ export function ShellPage({
                     takeoverRequested={Boolean(computer?.takeoverRequested)}
                     onRelease={releaseComputer}
                   />
-                ) : null}
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    aria-label={t`Take control`}
+                    onClick={async () => {
+                      if (computerBotIdRef.current) {
+                        await rpc.computer.takeover({ botId: computerBotIdRef.current });
+                        await refreshComputerFor(computerBotIdRef.current);
+                      }
+                    }}
+                  >
+                    <Trans>Take control</Trans>
+                  </Button>
+                )}
                 {computerBot && !recordingSkill ? (
                   <TeachComputerOverlayControl
                     key={computerBot.id}
