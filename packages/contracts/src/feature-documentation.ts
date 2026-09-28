@@ -111,7 +111,14 @@ export const FeatureDocumentationEvidenceSchema = z.strictObject({
       tests: z.array(z.string().min(1)),
       titleSource: z.string().min(1).optional(),
       errors: z
-        .array(z.strictObject({ id: slug, text: plainText, source: z.string().min(1) }))
+        .array(
+          z.strictObject({
+            id: slug,
+            text: plainText,
+            source: z.string().min(1),
+            catalog: z.string().min(1).optional(),
+          }),
+        )
         .optional(),
     }),
   ),

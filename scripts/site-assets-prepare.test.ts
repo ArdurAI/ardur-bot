@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { FeatureDocumentationManifestSchema } from "../packages/contracts/src/feature-documentation";
 import { SiteProductSchema } from "../packages/contracts/src/site-product";
+import { publishedDocumentation } from "./feature-docs";
 import {
   contentDigest,
   expectedAssetFiles,
@@ -18,6 +19,31 @@ import {
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 describe("site asset publication", () => {
+  it("stages only the fourteen referenced captures for the first five pages", async () => {
+    const product = SiteProductSchema.parse(
+      JSON.parse(await readFile(path.join(root, "site/data/product.json"), "utf8")),
+    );
+    const manifest = FeatureDocumentationManifestSchema.parse(
+      JSON.parse(await readFile(path.join(root, "site/data/feature-docs.json"), "utf8")),
+    );
+    const docs = publishedDocumentation(manifest)!;
+    expect(docs.features).toHaveLength(5);
+    const withDocs = SiteProductSchema.parse({ ...product, documentation: docs });
+    const staged = expectedAssetFiles(withDocs).filter((file) => file.startsWith("docs/"));
+    expect(staged).toEqual(manifest.screenshots.map((shot) => shot.file).sort());
+    expect(staged).toHaveLength(14);
+    expect(docs.screenshots.every((shot) => shot.crop != null)).toBe(true);
+    expect(
+      SiteProductSchema.safeParse({
+        ...withDocs,
+        documentation: {
+          ...docs,
+          screenshots: [{ ...docs.screenshots[0], crop: null }, ...docs.screenshots.slice(1)],
+        },
+      }).success,
+    ).toBe(false);
+  });
+
   it("ignores publication metadata in the content hash but detects changed captures", async () => {
     const source = SiteProductSchema.parse(
       JSON.parse(await readFile(path.join(root, "site/data/product.json"), "utf8")),
@@ -99,6 +125,7 @@ describe("site asset publication", () => {
     const manifest = FeatureDocumentationManifestSchema.parse(
       JSON.parse(await readFile(path.join(root, "site/data/feature-docs.json"), "utf8")),
     );
+    manifest.screenshots = [];
     manifest.screenshots.push({ ...shot, locale: "en" });
     expect(
       SiteProductSchema.safeParse({

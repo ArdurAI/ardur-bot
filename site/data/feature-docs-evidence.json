@@ -1,4 +1,62 @@
 {
+  "screenshots": [
+    {
+      "id": "docs-sign-in-open",
+      "sha256": "35c8d4dd1cb24c4d641606da72b90e854ee6fc4dff5aee1e3ab5fde2225c3c13"
+    },
+    {
+      "id": "docs-sign-in-error",
+      "sha256": "00fb0cc63104bb17d9a129aa9a128267266aff6e067eae1e8f364633df7a947f"
+    },
+    {
+      "id": "docs-sign-in-recovery",
+      "sha256": "e1f71afe6d165c2d0625aad4db1866c483b5b614213396140494fb468ea3678c"
+    },
+    {
+      "id": "docs-onboarding-open",
+      "sha256": "64ca732d3147fe013bcb916ff13ed278547280e03821bcc5ff58f809d364ffca"
+    },
+    {
+      "id": "docs-onboarding-connect",
+      "sha256": "43ea21d26cb30d22b0c01f35996e96d1437fbaa50d2520356ca678ce379eb326"
+    },
+    {
+      "id": "docs-bots-create-open",
+      "sha256": "5c38ad26ddfb3ec80d82b081b3144dd97c11a2a943a97dd1347e316c848dbf34"
+    },
+    {
+      "id": "docs-bots-create-form",
+      "sha256": "c350cb4bb7f05d4bf6c39c71a7e19c5673db950ea3211f734e284591f823ac87"
+    },
+    {
+      "id": "docs-bots-create-private",
+      "sha256": "2a5808a7af1d3888759e4c4c3258b824a647778e4346b5138606ce566a16f0e1"
+    },
+    {
+      "id": "docs-bots-create-ready",
+      "sha256": "956fc26c9d07fdd51aaa23fbd7cc0738539f73d0250836a74f5ba592dc1af20c"
+    },
+    {
+      "id": "docs-chat-approvals-pending",
+      "sha256": "972b5f22e76a54d2bdb8417aa491443d9c1a8338c7bcbc80809f990f7605abfb"
+    },
+    {
+      "id": "docs-chat-approvals-denied",
+      "sha256": "98527629ae356d53b3902709e73883d0a70ca78de772f54e44a1d783d66a1b25"
+    },
+    {
+      "id": "docs-models-open",
+      "sha256": "e384a94eb8666c0a5e2daa63ed07c49074b88e4160febeb76af6a6409919bad6"
+    },
+    {
+      "id": "docs-models-default",
+      "sha256": "eabc9570296c46e99747c74469a865573c2264e81a90e86711b33ea89f2d02b7"
+    },
+    {
+      "id": "docs-models-add",
+      "sha256": "253f47a9113b8fb2a0642d24912e0fc86c11b439ec2250eab38e78e4602dce30"
+    }
+  ],
   "features": [
     {
       "id": "sign-in",
@@ -11,7 +69,17 @@
         "docs/self-host.md"
       ],
       "tests": [
-        "packages/auth/src/index.test.ts"
+        "packages/auth/src/index.test.ts",
+        "apps/web/e2e/auth-lifecycle.spec.ts",
+        "apps/web/e2e/feature-docs.spec.ts"
+      ],
+      "errors": [
+        {
+          "id": "auth-unreachable",
+          "text": "Could not reach the server",
+          "source": "apps/web/src/pages/Auth.tsx",
+          "catalog": "apps/web/src/locales/en/messages.po"
+        }
       ]
     },
     {
@@ -23,7 +91,17 @@
         "README.md"
       ],
       "tests": [
-        "apps/api/src/onboarding.test.ts"
+        "apps/api/src/onboarding.test.ts",
+        "apps/web/e2e/onboarding-model-required.spec.ts",
+        "apps/web/e2e/feature-docs.spec.ts"
+      ],
+      "errors": [
+        {
+          "id": "onboarding-save",
+          "text": "Could not save model",
+          "source": "apps/web/src/pages/Onboarding.tsx",
+          "catalog": "apps/web/src/locales/en/messages.po"
+        }
       ]
     },
     {
@@ -140,7 +218,17 @@
         "README.md"
       ],
       "tests": [
-        "apps/api/src/bot-update.test.ts"
+        "apps/api/src/bot-update.test.ts",
+        "apps/web/e2e/new-bot-ux.spec.ts",
+        "apps/web/e2e/feature-docs.spec.ts"
+      ],
+      "errors": [
+        {
+          "id": "bot-create",
+          "text": "Could not create bot",
+          "source": "apps/web/src/pages/shell/bot-panel.tsx",
+          "catalog": "apps/web/src/locales/en/messages.po"
+        }
       ]
     },
     {
@@ -277,10 +365,20 @@
         "apps/mobile/app/thread.tsx",
         "packages/contracts/src/rpc.ts",
         "packages/core/src/action-approval.ts",
-        "docs/governance.md"
+        "docs/governance.md",
+        "apps/web/src/pages/TeamBoard.tsx"
       ],
       "tests": [
-        "packages/core/src/action-approval.test.ts"
+        "packages/core/src/action-approval.test.ts",
+        "apps/web/e2e/feature-docs.spec.ts"
+      ],
+      "errors": [
+        {
+          "id": "approval-submit",
+          "text": "Could not submit this answer",
+          "source": "apps/web/src/components/AskCard.tsx",
+          "catalog": "apps/web/src/locales/en/messages.po"
+        }
       ]
     },
     {
@@ -640,10 +738,27 @@
         "apps/web/src/pages/ModelSettingsOverlay.tsx",
         "apps/mobile/app/models.tsx",
         "packages/contracts/src/rpc.ts",
-        "README.md"
+        "README.md",
+        "packages/adapters/src/pi-models.ts"
       ],
       "tests": [
-        "packages/core/src/model-providers.test.ts"
+        "packages/core/src/model-providers.test.ts",
+        "apps/web/e2e/model-settings.spec.ts",
+        "apps/web/e2e/feature-docs.spec.ts"
+      ],
+      "errors": [
+        {
+          "id": "models-load",
+          "text": "Could not load model settings",
+          "source": "apps/web/src/pages/ModelSettingsOverlay.tsx",
+          "catalog": "apps/web/src/locales/en/messages.po"
+        },
+        {
+          "id": "models-catalog-unavailable",
+          "text": "No model catalog is available.",
+          "source": "apps/web/src/pages/ModelSettingsOverlay.tsx",
+          "catalog": "apps/web/src/locales/en/messages.po"
+        }
       ]
     },
     {
@@ -1070,7 +1185,6 @@
     },
     {
       "id": "self-host",
-      "titleSource": "docs/self-host.md",
       "sources": [
         "README.md",
         "docs/self-host.md",
@@ -1080,7 +1194,8 @@
         "docs/self-host-sandbox-providers.md",
         "docs/self-host-restricted-network.md"
       ],
-      "tests": []
+      "tests": [],
+      "titleSource": "docs/self-host.md"
     },
     {
       "id": "admin-recovery",
@@ -1102,7 +1217,6 @@
       "tests": []
     }
   ],
-  "screenshots": [],
   "coverage": {
     "settings": {
       "general": "general",

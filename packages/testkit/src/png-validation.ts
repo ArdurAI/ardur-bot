@@ -1,5 +1,12 @@
 import { PNG } from "pngjs";
 
+/** Small, fully decoded image for documentation fixture tests. */
+export function flatPngScreenshot(width: number, height: number): Buffer {
+  const png = new PNG({ width, height });
+  png.data.fill(255);
+  return PNG.sync.write(png);
+}
+
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 export const MAX_PNG_SCREENSHOT_BYTES = 15 * 1024 * 1024;
 const MAX_SCREENSHOT_DIMENSION = 10_000;

@@ -1,8 +1,7 @@
 import { createHash } from "node:crypto";
-import { readdir, readFile, realpath, stat } from "node:fs/promises";
+import { mkdir, readdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { inflateSync } from "node:zlib";
 import type {
   FeatureDocumentationEvidence,
   FeatureDocumentationManifest,
@@ -12,10 +11,12 @@ import {
   FeatureDocumentationManifestSchema,
 } from "../packages/contracts/src/feature-documentation";
 import { SiteDocumentationSchema } from "../packages/contracts/src/site-product";
+import { validatePngScreenshot } from "../packages/testkit/src/png-validation";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const manifestFile = "site/data/feature-docs.json";
 const evidenceFile = "site/data/feature-docs-evidence.json";
+const firstFive = new Set(["sign-in", "onboarding", "bots-create", "models", "chat-approvals"]);
 const settingsFile = "apps/web/src/pages/settings-sections.ts";
 const webRoutesFile = "apps/web/src/App.tsx";
 const mobileLayoutFile = "apps/mobile/app/_layout.tsx";
@@ -76,6 +77,47 @@ function catalogLabels(po: string): Set<string> {
   return labels;
 }
 
+function catalogOwners(po: string, sentence: string): Set<string> {
+  const owners = new Set<string>();
+  const lines = po.split(/\r?\n/);
+  let references: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    if (line.startsWith("#: ")) {
+      references.push(...line.slice(3).split(/\s+/));
+      continue;
+    }
+    if (line.startsWith('msgid "')) {
+      let value = JSON.parse(line.slice(6)) as string;
+      while (lines[i + 1]?.startsWith('"')) value += JSON.parse(lines[++i]!) as string;
+      if (value === sentence)
+        for (const reference of references) owners.add(`apps/web/${reference}`);
+      references = [];
+    } else if (!line.startsWith("#") && line.trim()) {
+      references = [];
+    }
+  }
+  return owners;
+}
+
+export function assertCitedErrorSentence(
+  sentence: string,
+  sourcePath: string,
+  source: string,
+  catalogPath: string | undefined,
+  englishCatalog: string,
+  context: string,
+): void {
+  if (!source.includes(sentence))
+    throw new Error(`${context} is not verbatim in its cited source.`);
+  if (catalogPath) {
+    if (catalogPath !== "apps/web/src/locales/en/messages.po")
+      throw new Error(`${context} cites an unsupported catalog.`);
+    if (!catalogOwners(englishCatalog, sentence).has(sourcePath))
+      throw new Error(`${context} is not owned by its cited source in the catalog.`);
+  }
+}
+
 function sourceSet(source: string, pattern: RegExp): Set<string> {
   return new Set([...source.matchAll(pattern)].map((match) => match[1]!));
 }
@@ -134,36 +176,6 @@ async function existingRelativeFile(
   return (await existingRelativeBytes(rootDir, file, context)).toString("utf8");
 }
 
-function pngCrc(bytes: Buffer): number {
-  let crc = 0xffffffff;
-  for (const byte of bytes) {
-    crc ^= byte;
-    for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
-  }
-  return (crc ^ 0xffffffff) >>> 0;
-}
-
-function pngRows(width: number, height: number, bitsPerPixel: number, interlace: number) {
-  const passes = interlace
-    ? [
-        [0, 0, 8, 8],
-        [4, 0, 8, 8],
-        [0, 4, 4, 8],
-        [2, 0, 4, 4],
-        [0, 2, 2, 4],
-        [1, 0, 2, 2],
-        [0, 1, 1, 2],
-      ]
-    : [[0, 0, 1, 1]];
-  return passes.flatMap(([x, y, dx, dy]) => {
-    const columns = Math.max(0, Math.ceil((width - x!) / dx!));
-    const rows = Math.max(0, Math.ceil((height - y!) / dy!));
-    return columns && rows
-      ? [{ size: 1 + Math.ceil((columns * bitsPerPixel) / 8), count: rows }]
-      : [];
-  });
-}
-
 export function assertDocumentationPng(
   bytes: Buffer,
   width: number,
@@ -173,89 +185,10 @@ export function assertDocumentationPng(
   const invalid = () => {
     throw new Error(`${file} must be a ${width}x${height} PNG no larger than 250 KB.`);
   };
-  if (
-    bytes.length < 45 ||
-    bytes.length > 250_000 ||
-    bytes.subarray(0, 8).toString("hex") !== "89504e470d0a1a0a"
-  )
-    invalid();
-  let offset = 8;
-  let bitDepth = 0;
-  let colorType = 0;
-  let interlace = 0;
-  let seenHeader = false;
-  let seenData = false;
-  let dataEnded = false;
-  let seenEnd = false;
-  let seenPalette = false;
-  const idat: Buffer[] = [];
-  while (offset < bytes.length) {
-    if (offset + 12 > bytes.length) invalid();
-    const length = bytes.readUInt32BE(offset);
-    const end = offset + 12 + length;
-    if (end > bytes.length) invalid();
-    const type = bytes.toString("ascii", offset + 4, offset + 8);
-    const chunk = bytes.subarray(offset + 4, offset + 8 + length);
-    if (pngCrc(chunk) !== bytes.readUInt32BE(end - 4)) invalid();
-    const payload = bytes.subarray(offset + 8, end - 4);
-    if (!seenHeader && (type !== "IHDR" || length !== 13)) invalid();
-    if (type === "IHDR") {
-      if (seenHeader || length !== 13) invalid();
-      seenHeader = true;
-      if (
-        payload.readUInt32BE(0) !== width ||
-        payload.readUInt32BE(4) !== height ||
-        !width ||
-        !height
-      )
-        invalid();
-      bitDepth = payload[8]!;
-      colorType = payload[9]!;
-      interlace = payload[12]!;
-      const allowedDepths: Record<number, number[]> = {
-        0: [1, 2, 4, 8, 16],
-        2: [8, 16],
-        3: [1, 2, 4, 8],
-        4: [8, 16],
-        6: [8, 16],
-      };
-      if (
-        !allowedDepths[colorType]?.includes(bitDepth) ||
-        payload[10] !== 0 ||
-        payload[11] !== 0 ||
-        interlace > 1
-      )
-        invalid();
-    } else if (type === "PLTE") {
-      if (seenData || seenPalette || !length || length % 3 || length > 768) invalid();
-      seenPalette = true;
-    } else if (type === "IDAT") {
-      if (dataEnded || (colorType === 3 && !seenPalette) || !length) invalid();
-      seenData = true;
-      idat.push(payload);
-    } else if (type === "IEND") {
-      if (length !== 0 || !seenData || end !== bytes.length) invalid();
-      seenEnd = true;
-    } else if (type.charCodeAt(0) >= 65 && type.charCodeAt(0) <= 90) {
-      invalid();
-    }
-    if (seenData && type !== "IDAT") dataEnded = true;
-    offset = end;
-  }
-  if (!seenEnd) invalid();
-  const channels = colorType === 2 ? 3 : colorType === 4 ? 2 : colorType === 6 ? 4 : 1;
-  const rows = pngRows(width, height, bitDepth * channels, interlace);
-  const expectedLength = rows.reduce((sum, row) => sum + row.size * row.count, 0);
-  if (expectedLength > 50_000_000) invalid();
+  if (bytes.length > 250_000) invalid();
   try {
-    const pixels = inflateSync(Buffer.concat(idat), { maxOutputLength: expectedLength + 1 });
-    if (pixels.length !== expectedLength) invalid();
-    let rowStart = 0;
-    for (const row of rows)
-      for (let index = 0; index < row.count; index++) {
-        if (pixels[rowStart]! > 4) invalid();
-        rowStart += row.size;
-      }
+    validatePngScreenshot(bytes, file);
+    if (bytes.readUInt32BE(16) !== width || bytes.readUInt32BE(20) !== height) invalid();
   } catch {
     invalid();
   }
@@ -341,9 +274,12 @@ export async function validateFeatureDocs(
   );
   const allNames = new Set(ids);
   const areas = new Map<string, Set<number>>();
-  const labels = catalogLabels(
-    await existingRelativeFile(rootDir, "apps/web/src/locales/en/messages.po", "English catalog"),
+  const englishCatalog = await existingRelativeFile(
+    rootDir,
+    "apps/web/src/locales/en/messages.po",
+    "English catalog",
   );
+  const labels = catalogLabels(englishCatalog);
   const mobileLayout = await existingRelativeFile(rootDir, mobileLayoutFile, "Mobile layout");
   const settingsSource = await existingRelativeFile(rootDir, settingsFile, "Settings registry");
   const webSource = await existingRelativeFile(rootDir, webRoutesFile, "Web routes");
@@ -564,8 +500,16 @@ export async function validateFeatureDocs(
         throw new Error(`${context} error "${item.errorId}" differs from its cited sentence.`);
       assertPlain(error.text, `${context} error sentence`);
       const source = await existingRelativeFile(rootDir, error.source, `${context} error source`);
-      if (!labels.has(error.text) && !source.includes(JSON.stringify(error.text)))
-        throw new Error(`${context} error "${item.errorId}" is not verbatim in its cited source.`);
+      if (labels.has(error.text) && error.source.startsWith("apps/web/") && !error.catalog)
+        throw new Error(`${context} error "${item.errorId}" needs its English catalog binding.`);
+      assertCitedErrorSentence(
+        error.text,
+        error.source,
+        source,
+        error.catalog,
+        englishCatalog,
+        `${context} error "${item.errorId}"`,
+      );
     }
   }
   // Related links are directed recommendations; a cycle would make a tree loop forever.
@@ -651,14 +595,102 @@ export async function loadValidatedFeatureDocs(
   rootDir = root,
 ): Promise<FeatureDocumentationManifest> {
   const manifest = JSON.parse(await readFile(path.join(rootDir, manifestFile), "utf8")) as unknown;
+  const parsed = FeatureDocumentationManifestSchema.parse(manifest);
+  const missing = [];
+  for (const shot of parsed.screenshots) {
+    if (!(await stat(path.join(rootDir, "site", shot.file)).catch(() => null))?.isFile())
+      missing.push(shot.file);
+  }
+  if (missing.length)
+    throw new Error(
+      `Documentation captures are missing: ${missing.join(", ")}. Run pnpm feature-docs:import-captures <dir> after capturing the pages.`,
+    );
   const evidence = FeatureDocumentationEvidenceSchema.parse(
     JSON.parse(await readFile(path.join(rootDir, evidenceFile), "utf8")),
   );
-  return validateFeatureDocs(manifest, evidence, rootDir);
+  return validateFeatureDocs(parsed, evidence, rootDir);
+}
+
+export async function prepareFeatureDocCaptureImport(
+  inputManifest: unknown,
+  inputEvidence: unknown,
+  directory: string,
+) {
+  const manifest = FeatureDocumentationManifestSchema.parse(inputManifest);
+  const evidence = FeatureDocumentationEvidenceSchema.parse(inputEvidence);
+  const shots = manifest.screenshots.filter((shot) => firstFive.has(shot.feature));
+  const expected = new Set(shots.map((shot) => `${shot.id}.png`));
+  const docsDir = path.join(directory, "docs");
+  const entries = await readdir(docsDir, { withFileTypes: true });
+  for (const entry of entries)
+    if (!expected.has(entry.name) || !entry.isFile())
+      throw new Error(`Unexpected documentation capture: ${entry.name}.`);
+  const captures = new Map<string, Buffer>();
+  for (const shot of shots) {
+    const name = `${shot.id}.png`;
+    if (!entries.some((entry) => entry.name === name))
+      throw new Error(`Missing documentation capture: docs/${name}.`);
+    if (shot.file !== `docs/${name}`) throw new Error(`Invalid manifest file for ${shot.id}.`);
+    const bytes = await readFile(path.join(docsDir, name));
+    assertDocumentationPng(bytes, shot.width, shot.height, shot.file);
+    const width = bytes.readUInt32BE(16);
+    const height = bytes.readUInt32BE(20);
+    shot.width = width;
+    shot.height = height;
+    shot.crop = { x: 0, y: 0, width, height };
+    captures.set(shot.id, bytes);
+    const digest = createHash("sha256").update(bytes).digest("hex");
+    const existing = evidence.screenshots.find((item) => item.id === shot.id);
+    if (existing) existing.sha256 = digest;
+    else evidence.screenshots.push({ id: shot.id, sha256: digest });
+  }
+  return { manifest, evidence, captures };
+}
+
+async function writeIfChanged(file: string, bytes: Buffer | string): Promise<void> {
+  const next = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
+  if ((await readFile(file).catch(() => null))?.equals(next)) return;
+  await writeFile(file, next);
+}
+
+export async function importFeatureDocCaptures(directory: string, rootDir = root): Promise<void> {
+  const inputManifest = JSON.parse(await readFile(path.join(rootDir, manifestFile), "utf8"));
+  const inputEvidence = JSON.parse(await readFile(path.join(rootDir, evidenceFile), "utf8"));
+  const { manifest, evidence, captures } = await prepareFeatureDocCaptureImport(
+    inputManifest,
+    inputEvidence,
+    directory,
+  );
+  await validateFeatureDocs(manifest, evidence, rootDir, (file, context) => {
+    const id = path.basename(file, ".png");
+    return captures.get(id) ?? existingRelativeBytes(rootDir, file, context);
+  });
+  await writeFeatureDocCaptureImport(rootDir, { manifest, evidence, captures });
+}
+
+export async function writeFeatureDocCaptureImport(
+  rootDir: string,
+  prepared: Awaited<ReturnType<typeof prepareFeatureDocCaptureImport>>,
+): Promise<void> {
+  const { manifest, evidence, captures } = prepared;
+  await mkdir(path.join(rootDir, "site/docs"), { recursive: true });
+  for (const [id, bytes] of captures)
+    await writeIfChanged(path.join(rootDir, "site/docs", `${id}.png`), bytes);
+  await writeIfChanged(path.join(rootDir, manifestFile), `${JSON.stringify(manifest, null, 2)}\n`);
+  await writeIfChanged(path.join(rootDir, evidenceFile), `${JSON.stringify(evidence, null, 2)}\n`);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  loadValidatedFeatureDocs()
+  const command = process.argv[2];
+  const operation =
+    command === "--import-captures"
+      ? (async () => {
+          if (!process.argv[3]) throw new Error("Usage: pnpm feature-docs:import-captures <dir>");
+          await importFeatureDocCaptures(process.argv[3]);
+          return loadValidatedFeatureDocs();
+        })()
+      : loadValidatedFeatureDocs();
+  operation
     .then((manifest) => {
       console.log(featureDocsReport(manifest));
       if (process.argv.includes("--complete")) assertFeatureDocsComplete(manifest);
