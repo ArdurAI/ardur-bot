@@ -247,7 +247,7 @@ export function BotSettings({
     expectedModelPinRevision?: number;
     runtimeExperimental?: boolean;
     thinkingLevel?: ThinkingLevel | null;
-  }) => Promise<void>;
+  }) => Promise<{ modelPinRevision?: number } | Bot | void>;
   onExport: () => Promise<void>;
   onClear: () => void;
   overrideGroups?: Group[];
@@ -447,7 +447,7 @@ export function BotSettings({
     try {
       setSaving(true);
       setError(null);
-      await onSave({
+      const saved = await onSave({
         name: nextName || bot.name,
         title: nextTitle,
         description: nextDescription,
@@ -476,6 +476,19 @@ export function BotSettings({
             }
           : {}),
       });
+      if (
+        saved &&
+        typeof saved === "object" &&
+        "modelPinRevision" in saved &&
+        typeof saved.modelPinRevision === "number"
+      ) {
+        setDraftPinRevision(saved.modelPinRevision);
+        setSeededBot((prev) => ({
+          ...prev,
+          ...(saved as Partial<Bot>),
+          modelPinRevision: saved.modelPinRevision,
+        }));
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : t`Could not save`);
     } finally {

@@ -1469,3 +1469,43 @@ it("saving after re-seed uses the new revision", async () => {
     expect.objectContaining({ expectedModelPinRevision: 5, title: "changed 2" }),
   );
 });
+
+it("advances draft revision from the save response", async () => {
+  onSave.mockResolvedValueOnce({ modelPinRevision: 5 });
+  await act(async () =>
+    root.render(
+      settings({
+        modelPinRevision: 4,
+        runtimeKind: "pi",
+        modelId: "gpt-5.3-codex-spark",
+        modelProvider: "openai-codex",
+      }),
+    ),
+  );
+
+  const titleInput = container.querySelector<HTMLInputElement>('input[id$="-title"]')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+      titleInput,
+      "first edit",
+    );
+    titleInput.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await save();
+  expect(onSave).toHaveBeenLastCalledWith(
+    expect.objectContaining({ expectedModelPinRevision: 4, title: "first edit" }),
+  );
+
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+      titleInput,
+      "second edit",
+    );
+    titleInput.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await save();
+  expect(onSave).toHaveBeenLastCalledWith(
+    expect.objectContaining({ expectedModelPinRevision: 5, title: "second edit" }),
+  );
+});
+

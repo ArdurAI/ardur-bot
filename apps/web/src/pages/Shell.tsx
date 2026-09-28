@@ -3932,8 +3932,9 @@ export function ShellPage({
                         mode: computerMode,
                       });
                     }
-                    await rpc.bots.update({ botId: active.id, ...patch });
+                    const updated = await rpc.bots.update({ botId: active.id, ...patch });
                     await refreshBots();
+                    return updated;
                   }}
                   onExport={async () => {
                     const { path } = await rpc.export.bot({ botId: active.id });
