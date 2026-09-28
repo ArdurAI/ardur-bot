@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { FeatureDocumentationManifestSchema } from "../packages/contracts/src/feature-documentation";
 import type { FeatureEvidence } from "./feature-docs";
 import {
+  assertCitedErrorSentence,
   assertDocumentationPng,
   assertFeatureDocsComplete,
   featureDocsReport,
@@ -174,6 +175,60 @@ describe("feature documentation inventory", () => {
     );
   });
 
+  it("binds a catalog error to its actual owning implementation and current sentence", async () => {
+    const { manifest, evidence } = await data();
+    const feature = manifest.features.find((item) => item.id === "general")!;
+    const binding = evidence.features.find((item) => item.id === "general")!;
+    feature.troubleshooting = [
+      {
+        errorId: "settings-save",
+        message: "Could not save settings. Try again.",
+        action: "Check the setting and retry.",
+      },
+    ];
+    binding.errors = [
+      {
+        id: "settings-save",
+        text: "Could not save settings. Try again.",
+        source: "apps/web/src/pages/Auth.tsx",
+        catalog: "apps/web/src/locales/en/messages.po",
+      },
+    ];
+    await expect(validateFeatureDocs(manifest, evidence, root)).rejects.toThrow(
+      'error "settings-save" is not verbatim in its cited source',
+    );
+    binding.errors[0]!.source = "apps/web/src/pages/settings/GeneralSettings.tsx";
+    await expect(validateFeatureDocs(manifest, evidence, root)).resolves.toBeDefined();
+    delete binding.errors[0]!.catalog;
+    await expect(validateFeatureDocs(manifest, evidence, root)).rejects.toThrow(
+      'error "settings-save" needs its English catalog binding',
+    );
+    binding.errors[0]!.catalog = "apps/web/src/locales/en/messages.po";
+    // Simulate deleting the string from its real owner while leaving the catalog untouched.
+    const source = await readFile(path.join(root, binding.errors[0]!.source), "utf8");
+    const catalog = await readFile(path.join(root, binding.errors[0]!.catalog!), "utf8");
+    expect(() =>
+      assertCitedErrorSentence(
+        feature.troubleshooting[0]!.message,
+        binding.errors![0]!.source,
+        source.replace("Could not save settings. Try again.", "A changed error."),
+        binding.errors![0]!.catalog,
+        catalog,
+        'Feature "general" error "settings-save"',
+      ),
+    ).toThrow('error "settings-save" is not verbatim in its cited source');
+    expect(() =>
+      assertCitedErrorSentence(
+        feature.troubleshooting[0]!.message,
+        "apps/web/src/pages/Auth.tsx",
+        source,
+        binding.errors![0]!.catalog,
+        catalog,
+        'Feature "general" error "settings-save"',
+      ),
+    ).toThrow('error "settings-save" is not owned by its cited source in the catalog');
+  });
+
   it("publishes a guide title only when it matches its cited heading", async () => {
     const { manifest, evidence } = await data();
     const feature = manifest.features.find((item) => item.id === "self-host")!;
@@ -323,14 +378,15 @@ describe("feature documentation inventory", () => {
     evidence.features.find((item) => item.id === "general")!.errors = [
       {
         id: "general-error",
-        text: "Settings",
-        source: "apps/web/src/locales/en/messages.po",
+        text: "Could not save settings. Try again.",
+        source: "apps/web/src/pages/settings/GeneralSettings.tsx",
+        catalog: "apps/web/src/locales/en/messages.po",
       },
     ];
     await expect(validateFeatureDocs(manifest, evidence, root, async () => png)).rejects.toThrow(
       'error "general-error" differs from its cited sentence',
     );
-    feature.troubleshooting[0]!.message = "Settings";
+    feature.troubleshooting[0]!.message = "Could not save settings. Try again.";
     await expect(
       validateFeatureDocs(manifest, evidence, root, async () => png),
     ).resolves.toBeDefined();

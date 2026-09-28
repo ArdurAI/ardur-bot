@@ -76,6 +76,47 @@ function catalogLabels(po: string): Set<string> {
   return labels;
 }
 
+function catalogOwners(po: string, sentence: string): Set<string> {
+  const owners = new Set<string>();
+  const lines = po.split(/\r?\n/);
+  let references: string[] = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    if (line.startsWith("#: ")) {
+      references.push(...line.slice(3).split(/\s+/));
+      continue;
+    }
+    if (line.startsWith('msgid "')) {
+      let value = JSON.parse(line.slice(6)) as string;
+      while (lines[i + 1]?.startsWith('"')) value += JSON.parse(lines[++i]!) as string;
+      if (value === sentence)
+        for (const reference of references) owners.add(`apps/web/${reference}`);
+      references = [];
+    } else if (!line.startsWith("#") && line.trim()) {
+      references = [];
+    }
+  }
+  return owners;
+}
+
+export function assertCitedErrorSentence(
+  sentence: string,
+  sourcePath: string,
+  source: string,
+  catalogPath: string | undefined,
+  englishCatalog: string,
+  context: string,
+): void {
+  if (!source.includes(sentence))
+    throw new Error(`${context} is not verbatim in its cited source.`);
+  if (catalogPath) {
+    if (catalogPath !== "apps/web/src/locales/en/messages.po")
+      throw new Error(`${context} cites an unsupported catalog.`);
+    if (!catalogOwners(englishCatalog, sentence).has(sourcePath))
+      throw new Error(`${context} is not owned by its cited source in the catalog.`);
+  }
+}
+
 function sourceSet(source: string, pattern: RegExp): Set<string> {
   return new Set([...source.matchAll(pattern)].map((match) => match[1]!));
 }
@@ -341,9 +382,12 @@ export async function validateFeatureDocs(
   );
   const allNames = new Set(ids);
   const areas = new Map<string, Set<number>>();
-  const labels = catalogLabels(
-    await existingRelativeFile(rootDir, "apps/web/src/locales/en/messages.po", "English catalog"),
+  const englishCatalog = await existingRelativeFile(
+    rootDir,
+    "apps/web/src/locales/en/messages.po",
+    "English catalog",
   );
+  const labels = catalogLabels(englishCatalog);
   const mobileLayout = await existingRelativeFile(rootDir, mobileLayoutFile, "Mobile layout");
   const settingsSource = await existingRelativeFile(rootDir, settingsFile, "Settings registry");
   const webSource = await existingRelativeFile(rootDir, webRoutesFile, "Web routes");
@@ -564,8 +608,16 @@ export async function validateFeatureDocs(
         throw new Error(`${context} error "${item.errorId}" differs from its cited sentence.`);
       assertPlain(error.text, `${context} error sentence`);
       const source = await existingRelativeFile(rootDir, error.source, `${context} error source`);
-      if (!labels.has(error.text) && !source.includes(JSON.stringify(error.text)))
-        throw new Error(`${context} error "${item.errorId}" is not verbatim in its cited source.`);
+      if (labels.has(error.text) && error.source.startsWith("apps/web/") && !error.catalog)
+        throw new Error(`${context} error "${item.errorId}" needs its English catalog binding.`);
+      assertCitedErrorSentence(
+        error.text,
+        error.source,
+        source,
+        error.catalog,
+        englishCatalog,
+        `${context} error "${item.errorId}"`,
+      );
     }
   }
   // Related links are directed recommendations; a cycle would make a tree loop forever.
