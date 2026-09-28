@@ -179,31 +179,37 @@ export function AccountProfile({
             void save("instructions");
           }}
         >
-          <div className="py-4">
-            <Textarea
-              id="account-instructions"
-              aria-label={t`Instructions for all bots`}
-              rows={5}
-              maxLength={4000}
-              disabled={busy || !account.canEditInstructions}
-              value={instructions}
-              onChange={(event) => {
-                setInstructions(event.target.value);
-                setSaved("");
-              }}
-            />
-            {account.canEditInstructions ? (
-              <div className="mt-4 flex items-center justify-start gap-3">
-                <Button
-                  type="submit"
-                  disabled={busy || !instructionsChanged}
-                >{t`Save instructions`}</Button>
-                {saved === "instructions" ? <SuccessPop label={t`Saved`} /> : null}
-              </div>
-            ) : (
-              <p className="mt-4 text-sm text-muted-foreground">{t`Only space owners and admins can edit these instructions.`}</p>
-            )}
-          </div>
+          <SettingsRow
+            label={t`Instructions for all bots`}
+            content={
+              <>
+                <Textarea
+                  id="account-instructions"
+                  aria-label={t`Instructions for all bots`}
+                  rows={5}
+                  maxLength={4000}
+                  disabled={busy || !account.canEditInstructions}
+                  value={instructions}
+                  onChange={(event) => {
+                    setInstructions(event.target.value);
+                    setSaved("");
+                  }}
+                />
+                {account.canEditInstructions ? (
+                  <div className="mt-4 flex items-center justify-start gap-3">
+                    <Button type="submit" disabled={busy || !instructionsChanged}>
+                      {t`Save instructions`}
+                    </Button>
+                    {saved === "instructions" ? <SuccessPop label={t`Saved`} /> : null}
+                  </div>
+                ) : (
+                  <p className="mt-4 text-sm text-muted-foreground">{t`Only space owners and admins can edit these instructions.`}</p>
+                )}
+              </>
+            }
+          >
+            {null}
+          </SettingsRow>
         </form>
       </SettingsGroup>
       {error ? (

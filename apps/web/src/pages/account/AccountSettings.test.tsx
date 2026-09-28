@@ -1,4 +1,7 @@
 // @vitest-environment jsdom
+
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import type { ComponentProps, ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -237,4 +240,23 @@ it("saves bounded profile and instructions through separate actions", async () =
     revision: 1,
   });
   expect(container.querySelector("textarea")!.maxLength).toBe(4000);
+});
+it("keeps the instructions card visible under the real search stylesheet rule", async () => {
+  const style = document.createElement("style");
+  style.textContent = readFileSync(resolve("apps/web/src/styles.css"), "utf8");
+  document.head.append(style);
+  try {
+    await act(async () => root.render(<AccountSettings />));
+    const group = [...container.querySelectorAll("[data-settings-group]")].find((node) =>
+      node.textContent?.includes("Instructions for all bots"),
+    );
+    expect(group).toBeDefined();
+    const row = group!.querySelector("[data-settings-row]");
+    expect(row?.hidden ?? false).toBe(false);
+    // The real rule in styles.css hides a group without a visible row; the
+    // instructions card must keep a registered row so it stays on screen.
+    expect(getComputedStyle(group!).display, "instructions card is display:none").not.toBe("none");
+  } finally {
+    style.remove();
+  }
 });
