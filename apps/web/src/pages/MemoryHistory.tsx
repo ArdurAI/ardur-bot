@@ -1,7 +1,9 @@
 import type { MemoryDocumentHead, MemoryHistoryRevision } from "@ardurbot/contracts";
 import { LOCAL_IMPORT_TOOL_NAMES } from "@ardurbot/contracts/local-import";
 import { Button } from "@ardurbot/ui-web";
+import { selectableRowClasses } from "@ardurbot/ui-web/lib/state-classes";
 import { Trans, useLingui } from "@lingui/react/macro";
+import { CheckIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { rpc } from "../lib/rpc";
 import { LearningObservations } from "./LearningObservation";
@@ -102,20 +104,27 @@ export function MemoryHistory({
         </p>
       ) : null}
       <div className="flex flex-wrap gap-1">
-        {items.map((revision) => (
-          <Button
-            key={revision.revision}
-            variant="ghost"
-            size="sm"
-            onClick={() => setSelected(revision)}
-            aria-pressed={selected?.revision === revision.revision}
-          >
-            <Trans>Revision {revision.revision}</Trans>
-            {revision.commitId ? (
-              <span className="font-mono text-xs">{revision.commitId.slice(0, 8)}</span>
-            ) : null}
-          </Button>
-        ))}
+        {items.map((revision) => {
+          const isSelected = selected?.revision === revision.revision;
+          return (
+            <button
+              key={revision.revision}
+              type="button"
+              className={selectableRowClasses(
+                isSelected,
+                "inline-flex items-center h-7 gap-1 rounded-[min(var(--radius-md),12px)] px-2.5 text-[0.8rem]",
+              )}
+              onClick={() => setSelected(revision)}
+              aria-pressed={isSelected}
+            >
+              <Trans>Revision {revision.revision}</Trans>
+              {revision.commitId ? (
+                <span className="font-mono text-xs">{revision.commitId.slice(0, 8)}</span>
+              ) : null}
+              {isSelected ? <CheckIcon className="size-3.5 shrink-0 text-foreground" /> : null}
+            </button>
+          );
+        })}
       </div>
       {cursor ? (
         <Button disabled={busy} variant="ghost" onClick={() => void more()}>

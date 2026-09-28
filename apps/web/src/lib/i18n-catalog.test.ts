@@ -18,6 +18,27 @@ describe("lingui catalogs", () => {
   });
 
   it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
+    "catalogs the rebuilt Account card headings and actions in %s",
+    async (locale) => {
+      const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));
+      const catalog = await formatter().parse(readFileSync(filename, "utf8"), {
+        locale,
+        sourceLocale: "en",
+        filename,
+      });
+      for (const message of [
+        "Sign-in and security",
+        "Devices and sessions",
+        "Save instructions",
+        "Saved, but not applied everywhere.",
+      ]) {
+        const entry = Object.values(catalog).find((value) => value.message === message);
+        expect(entry?.translation, `${locale}: ${message}`).toBeTruthy();
+      }
+    },
+  );
+
+  it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
     "catalogs the authenticated guided account controls in %s",
     async (locale) => {
       const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));

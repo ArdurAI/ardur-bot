@@ -22,6 +22,7 @@ msgid " — not available on your account"
 msgstr ""
 
 #: src/pages/shell/bot-model-chip.tsx
+#: src/pages/shell/group-participants.tsx
 msgid " · not available"
 msgstr ""
 
@@ -391,7 +392,6 @@ msgid "Accessibility"
 msgstr ""
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
-#: src/pages/account/AccountSettings.tsx
 #: src/pages/settings-sections.ts
 msgid "Account"
 msgstr "계정"
@@ -3399,6 +3399,10 @@ msgstr ""
 msgid "Devices"
 msgstr ""
 
+#: src/pages/account/AccountSettings.tsx
+msgid "Devices and sessions"
+msgstr "기기 및 세션"
+
 #: src/pages/DevicesSettings.tsx
 msgid "Devices are unavailable; reconnect to your home."
 msgstr ""
@@ -3633,7 +3637,6 @@ msgid "Effort: not applicable"
 msgstr ""
 
 #: src/pages/Auth.tsx
-#: src/pages/settings-sections.ts
 msgid "Email"
 msgstr "이메일"
 
@@ -5501,6 +5504,7 @@ msgid "Next"
 msgstr ""
 
 #: src/pages/shell/bot-model-chip.tsx
+#: src/pages/shell/group-participants.tsx
 msgid "Next run"
 msgstr "다음 실행"
 
@@ -6864,6 +6868,7 @@ msgstr "요청이 만료됨"
 
 #: src/pages/ComparePanel.tsx
 #: src/pages/shell/bot-model-chip.tsx
+#: src/pages/shell/group-participants.tsx
 #: src/pages/TeamBoard.tsx
 msgid "requested"
 msgstr "요청됨"
@@ -6988,6 +6993,7 @@ msgstr "팀 메시지 다시 시작"
 
 #: src/components/Context.tsx
 #: src/components/integrations/DirectMcpSearch.tsx
+#: src/pages/account/AccountProfile.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -7288,6 +7294,10 @@ msgstr "그래도 저장"
 msgid "Save credentials"
 msgstr ""
 
+#: src/pages/account/AccountProfile.tsx
+msgid "Save instructions"
+msgstr "지침 저장"
+
 #: src/pages/group-model-control.tsx
 msgid "Save model"
 msgstr "모델 저장"
@@ -7329,6 +7339,10 @@ msgstr ""
 #: src/pages/ScratchpadSection.tsx
 msgid "Saved, but list refresh failed"
 msgstr "저장했지만 목록을 새로고침하지 못했습니다."
+
+#: src/pages/account/AccountProfile.tsx
+msgid "Saved, but not applied everywhere."
+msgstr "저장했지만 모든 곳에 적용되지 않았습니다."
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Saved."
@@ -7721,6 +7735,10 @@ msgstr ""
 #: src/pages/Welcome.tsx
 msgid "Sign up"
 msgstr "가입하기"
+
+#: src/pages/account/AccountSettings.tsx
+msgid "Sign-in and security"
+msgstr "로그인 및 보안"
 
 #: src/lib/mcp-sign-in.ts
 msgid "Sign-in did not finish. Try again."
@@ -8833,6 +8851,7 @@ msgid "User"
 msgstr ""
 
 #: src/pages/shell/bot-model-chip.tsx
+#: src/pages/shell/group-participants.tsx
 msgid "Using {currentId}"
 msgstr "{currentId} 사용 중"
 

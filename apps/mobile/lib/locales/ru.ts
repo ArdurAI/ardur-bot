@@ -109,6 +109,9 @@ export const RU_MESSAGES: Record<string, string> = {
   "What should your bots call you?": "Как ботам к вам обращаться?",
   "What best describes your work?": "Как лучше всего описать вашу работу?",
   "Instructions for all bots": "Инструкции для всех ботов",
+  "Save instructions": "Сохранить инструкции",
+  "Sign-in and security": "Вход и безопасность",
+  "Devices and sessions": "Устройства и сессии",
   "Space ID": "ID пространства",
   "Log out of all devices": "Выйти на всех устройствах",
   "This signs out every other session and keeps this one signed in.":

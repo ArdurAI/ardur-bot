@@ -22,6 +22,7 @@ msgid " — not available on your account"
 msgstr ""
 
 #: src/pages/shell/bot-model-chip.tsx
+#: src/pages/shell/group-participants.tsx
 msgid " · not available"
 msgstr ""
 
@@ -391,7 +392,6 @@ msgid "Accessibility"
 msgstr ""
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
-#: src/pages/account/AccountSettings.tsx
 #: src/pages/settings-sections.ts
 msgid "Account"
 msgstr "Hesap"
@@ -3399,6 +3399,10 @@ msgstr ""
 msgid "Devices"
 msgstr ""
 
+#: src/pages/account/AccountSettings.tsx
+msgid "Devices and sessions"
+msgstr "Cihazlar ve oturumlar"
+
 #: src/pages/DevicesSettings.tsx
 msgid "Devices are unavailable; reconnect to your home."
 msgstr ""
@@ -3633,7 +3637,6 @@ msgid "Effort: not applicable"
 msgstr ""
 
 #: src/pages/Auth.tsx
-#: src/pages/settings-sections.ts
 msgid "Email"
 msgstr "E-posta"
 
@@ -5501,6 +5504,7 @@ msgid "Next"
 msgstr ""
 
 #: src/pages/shell/bot-model-chip.tsx
+#: src/pages/shell/group-participants.tsx
 msgid "Next run"
 msgstr "Sonraki çalıştırma"
 
@@ -6864,6 +6868,7 @@ msgstr "İsteğin süresi doldu"
 
 #: src/pages/ComparePanel.tsx
 #: src/pages/shell/bot-model-chip.tsx
+#: src/pages/shell/group-participants.tsx
 #: src/pages/TeamBoard.tsx
 msgid "requested"
 msgstr "istenen"
@@ -6988,6 +6993,7 @@ msgstr "Ekip mesajlarını sürdür"
 
 #: src/components/Context.tsx
 #: src/components/integrations/DirectMcpSearch.tsx
+#: src/pages/account/AccountProfile.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -7288,6 +7294,10 @@ msgstr "Yine de kaydet"
 msgid "Save credentials"
 msgstr ""
 
+#: src/pages/account/AccountProfile.tsx
+msgid "Save instructions"
+msgstr "Talimatları kaydet"
+
 #: src/pages/group-model-control.tsx
 msgid "Save model"
 msgstr "Modeli kaydet"
@@ -7329,6 +7339,10 @@ msgstr ""
 #: src/pages/ScratchpadSection.tsx
 msgid "Saved, but list refresh failed"
 msgstr "Kaydedildi ama liste yenilenemedi"
+
+#: src/pages/account/AccountProfile.tsx
+msgid "Saved, but not applied everywhere."
+msgstr "Kaydedildi ama her yerde uygulanmadı."
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Saved."
@@ -7721,6 +7735,10 @@ msgstr ""
 #: src/pages/Welcome.tsx
 msgid "Sign up"
 msgstr "Kaydol"
+
+#: src/pages/account/AccountSettings.tsx
+msgid "Sign-in and security"
+msgstr "Giriş ve güvenlik"
 
 #: src/lib/mcp-sign-in.ts
 msgid "Sign-in did not finish. Try again."
@@ -8833,6 +8851,7 @@ msgid "User"
 msgstr ""
 
 #: src/pages/shell/bot-model-chip.tsx
+#: src/pages/shell/group-participants.tsx
 msgid "Using {currentId}"
 msgstr "{currentId} kullanılıyor"
 

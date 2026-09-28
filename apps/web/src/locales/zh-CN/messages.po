@@ -22,6 +22,7 @@ msgid " — not available on your account"
 msgstr ""
 
 #: src/pages/shell/bot-model-chip.tsx
+#: src/pages/shell/group-participants.tsx
 msgid " · not available"
 msgstr ""
 
@@ -391,7 +392,6 @@ msgid "Accessibility"
 msgstr ""
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
-#: src/pages/account/AccountSettings.tsx
 #: src/pages/settings-sections.ts
 msgid "Account"
 msgstr "账户"
@@ -3399,6 +3399,10 @@ msgstr ""
 msgid "Devices"
 msgstr ""
 
+#: src/pages/account/AccountSettings.tsx
+msgid "Devices and sessions"
+msgstr "设备与会话"
+
 #: src/pages/DevicesSettings.tsx
 msgid "Devices are unavailable; reconnect to your home."
 msgstr ""
@@ -3633,7 +3637,6 @@ msgid "Effort: not applicable"
 msgstr ""
 
 #: src/pages/Auth.tsx
-#: src/pages/settings-sections.ts
 msgid "Email"
 msgstr "邮箱"
 
@@ -5501,6 +5504,7 @@ msgid "Next"
 msgstr ""
 
 #: src/pages/shell/bot-model-chip.tsx
+#: src/pages/shell/group-participants.tsx
 msgid "Next run"
 msgstr "下次运行"
 
@@ -6864,6 +6868,7 @@ msgstr "请求已过期"
 
 #: src/pages/ComparePanel.tsx
 #: src/pages/shell/bot-model-chip.tsx
+#: src/pages/shell/group-participants.tsx
 #: src/pages/TeamBoard.tsx
 msgid "requested"
 msgstr "已请求"
@@ -6988,6 +6993,7 @@ msgstr "恢复团队消息"
 
 #: src/components/Context.tsx
 #: src/components/integrations/DirectMcpSearch.tsx
+#: src/pages/account/AccountProfile.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -7288,6 +7294,10 @@ msgstr "仍要保存"
 msgid "Save credentials"
 msgstr ""
 
+#: src/pages/account/AccountProfile.tsx
+msgid "Save instructions"
+msgstr "保存指令"
+
 #: src/pages/group-model-control.tsx
 msgid "Save model"
 msgstr "保存模型"
@@ -7329,6 +7339,10 @@ msgstr ""
 #: src/pages/ScratchpadSection.tsx
 msgid "Saved, but list refresh failed"
 msgstr "已保存，但列表刷新失败"
+
+#: src/pages/account/AccountProfile.tsx
+msgid "Saved, but not applied everywhere."
+msgstr "已保存，但未在所有位置应用。"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Saved."
@@ -7721,6 +7735,10 @@ msgstr ""
 #: src/pages/Welcome.tsx
 msgid "Sign up"
 msgstr "注册"
+
+#: src/pages/account/AccountSettings.tsx
+msgid "Sign-in and security"
+msgstr "登录与安全"
 
 #: src/lib/mcp-sign-in.ts
 msgid "Sign-in did not finish. Try again."
@@ -8833,6 +8851,7 @@ msgid "User"
 msgstr ""
 
 #: src/pages/shell/bot-model-chip.tsx
+#: src/pages/shell/group-participants.tsx
 msgid "Using {currentId}"
 msgstr "正在使用 {currentId}"
 

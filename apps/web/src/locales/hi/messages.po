@@ -22,6 +22,7 @@ msgid " — not available on your account"
 msgstr ""
 
 #: src/pages/shell/bot-model-chip.tsx
+#: src/pages/shell/group-participants.tsx
 msgid " · not available"
 msgstr ""
 
@@ -391,7 +392,6 @@ msgid "Accessibility"
 msgstr ""
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
-#: src/pages/account/AccountSettings.tsx
 #: src/pages/settings-sections.ts
 msgid "Account"
 msgstr "खाता"
@@ -3399,6 +3399,10 @@ msgstr ""
 msgid "Devices"
 msgstr ""
 
+#: src/pages/account/AccountSettings.tsx
+msgid "Devices and sessions"
+msgstr "डिवाइस और सेशन"
+
 #: src/pages/DevicesSettings.tsx
 msgid "Devices are unavailable; reconnect to your home."
 msgstr ""
@@ -3633,7 +3637,6 @@ msgid "Effort: not applicable"
 msgstr ""
 
 #: src/pages/Auth.tsx
-#: src/pages/settings-sections.ts
 msgid "Email"
 msgstr "ईमेल"
 
@@ -5501,6 +5504,7 @@ msgid "Next"
 msgstr ""
 
 #: src/pages/shell/bot-model-chip.tsx
+#: src/pages/shell/group-participants.tsx
 msgid "Next run"
 msgstr "अगला रन"
 
@@ -6864,6 +6868,7 @@ msgstr "अनुरोध की समय-सीमा समाप्त ह�
 
 #: src/pages/ComparePanel.tsx
 #: src/pages/shell/bot-model-chip.tsx
+#: src/pages/shell/group-participants.tsx
 #: src/pages/TeamBoard.tsx
 msgid "requested"
 msgstr "अनुरोधित"
@@ -6988,6 +6993,7 @@ msgstr "टीम संदेश फिर शुरू करें"
 
 #: src/components/Context.tsx
 #: src/components/integrations/DirectMcpSearch.tsx
+#: src/pages/account/AccountProfile.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -7288,6 +7294,10 @@ msgstr "फिर भी सहेजें"
 msgid "Save credentials"
 msgstr ""
 
+#: src/pages/account/AccountProfile.tsx
+msgid "Save instructions"
+msgstr "निर्देश सहेजें"
+
 #: src/pages/group-model-control.tsx
 msgid "Save model"
 msgstr "मॉडल सहेजें"
@@ -7329,6 +7339,10 @@ msgstr ""
 #: src/pages/ScratchpadSection.tsx
 msgid "Saved, but list refresh failed"
 msgstr "सहेजा गया, लेकिन सूची रिफ़्रेश विफल रही"
+
+#: src/pages/account/AccountProfile.tsx
+msgid "Saved, but not applied everywhere."
+msgstr "सहेजा गया, लेकिन हर जगह लागू नहीं हुआ।"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Saved."
@@ -7721,6 +7735,10 @@ msgstr ""
 #: src/pages/Welcome.tsx
 msgid "Sign up"
 msgstr "साइन अप करें"
+
+#: src/pages/account/AccountSettings.tsx
+msgid "Sign-in and security"
+msgstr "साइन-इन और सुरक्षा"
 
 #: src/lib/mcp-sign-in.ts
 msgid "Sign-in did not finish. Try again."
@@ -8833,6 +8851,7 @@ msgid "User"
 msgstr ""
 
 #: src/pages/shell/bot-model-chip.tsx
+#: src/pages/shell/group-participants.tsx
 msgid "Using {currentId}"
 msgstr "{currentId} का उपयोग हो रहा है"
 
