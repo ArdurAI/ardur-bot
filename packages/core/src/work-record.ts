@@ -1,8 +1,7 @@
-import type { MessageBlock, CommandBlock } from "@ardurbot/contracts";
+import type { CommandBlock, MessageBlock } from "@ardurbot/contracts";
 
 export type ActivityLabel =
   | "narration"
-  | "reasoning"
   | "tool-activity"
   | "peer-delivery"
   | "delegation"
@@ -22,20 +21,20 @@ export function mapMessageBlockToActivity(block: MessageBlock): ActivityEvidence
   if (block.kind === "text") {
     return { label: "narration", title: block.text, outcome: "success" };
   }
-  
+
   if (block.kind === "progress") {
     if (block.activity) {
-      return { 
-        label: "tool-activity", 
-        title: block.text, 
-        outcome: "pending" 
+      return {
+        label: "tool-activity",
+        title: block.text,
+        outcome: "pending",
       };
     }
-    return { label: "reasoning", title: block.text, outcome: "pending" };
+    return { label: "narration", title: block.text, outcome: "pending" };
   }
 
   if (block.kind === "steps") {
-    const title = block.steps.map(s => `${s.label} (${s.count})`).join(", ") || "Steps";
+    const title = block.steps.map((s) => `${s.label} (${s.count})`).join(", ") || "Steps";
     return {
       label: "tool-activity",
       title,
@@ -62,7 +61,12 @@ export function mapMessageBlockToActivity(block: MessageBlock): ActivityEvidence
     return {
       label: "delegation",
       title: block.task,
-      outcome: block.status === "completed" ? "success" : block.status === "failed" ? "failure" : "pending"
+      outcome:
+        block.status === "completed"
+          ? "success"
+          : block.status === "failed"
+            ? "failure"
+            : "pending",
     };
   }
 

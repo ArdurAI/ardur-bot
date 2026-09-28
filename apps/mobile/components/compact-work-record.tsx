@@ -1,13 +1,19 @@
 import type { MessageBlock } from "@ardurbot/contracts";
 import { mapMessageBlockToActivity } from "@ardurbot/core";
-import { useMemo, useState, useEffect, useRef } from "react";
-import { Pressable, Text, View, Animated, AccessibilityInfo } from "react-native";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { AccessibilityInfo, Animated, Pressable, Text, View } from "react-native";
 import { mobileTokens } from "../lib/appearance";
 import { useI18n } from "../lib/i18n";
 import { NativeCommandBlock } from "./command-block";
 import { NativeSymbol } from "./native-symbol";
 
-export function CompactWorkRecord({ blocks, renderBlock }: { blocks: MessageBlock[], renderBlock?: (block: MessageBlock, i: number) => React.ReactNode }) {
+export function CompactWorkRecord({
+  blocks,
+  renderBlock,
+}: {
+  blocks: MessageBlock[];
+  renderBlock?: (block: MessageBlock, i: number) => React.ReactNode;
+}) {
   const tokens = mobileTokens();
   const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
@@ -29,7 +35,7 @@ export function CompactWorkRecord({ blocks, renderBlock }: { blocks: MessageBloc
             duration: 600,
             useNativeDriver: true,
           }),
-        ])
+        ]),
       ).start();
     });
     return () => {
@@ -70,7 +76,14 @@ export function CompactWorkRecord({ blocks, renderBlock }: { blocks: MessageBloc
             <View
               style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1, maxWidth: 150 }}
             >
-              <Animated.View style={{ height: 2, backgroundColor: tokens.foreground, flex: 1, opacity: pulseAnim }} />
+              <Animated.View
+                style={{
+                  height: 2,
+                  backgroundColor: tokens.foreground,
+                  flex: 1,
+                  opacity: pulseAnim,
+                }}
+              />
               <View
                 style={{
                   height: 2,

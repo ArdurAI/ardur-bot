@@ -30,13 +30,31 @@ describe("CompactWorkRecord", () => {
     container.remove();
   });
 
+  it("keeps reasoning summaries out of the record", () => {
+    // Reasoning narration is rendered once, in full, by the message bubble;
+    // the compact record must not repeat it as a truncated line.
+    const blocks: MessageBlock[] = [
+      {
+        kind: "progress",
+        text: "Thinking through the options before answering",
+      },
+    ];
+
+    act(() => {
+      root.render(<CompactWorkRecord blocks={blocks} />);
+    });
+
+    expect(container.textContent).toBe("");
+    expect(container.querySelector("button")).toBeNull();
+  });
+
   it("shows current state and expands/collapses", () => {
     const blocks: MessageBlock[] = [
       {
         kind: "progress",
         text: "Checking status",
-        activity: true
-      }
+        activity: true,
+      },
     ];
 
     act(() => {
@@ -66,8 +84,8 @@ describe("CompactWorkRecord", () => {
       {
         kind: "progress",
         text: "Checking status",
-        activity: true
-      }
+        activity: true,
+      },
     ];
 
     act(() => {
@@ -93,8 +111,8 @@ describe("CompactWorkRecord", () => {
       {
         kind: "progress",
         text: "Checking status",
-        activity: true
-      }
+        activity: true,
+      },
     ];
 
     act(() => {
