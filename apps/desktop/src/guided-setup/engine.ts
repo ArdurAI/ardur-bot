@@ -249,7 +249,7 @@ export class SetupEngine {
     this.transition(stepId, "skipped", "user-skipped");
     if (this.journal.pending?.stepId === stepId) this.journal.pending = null;
     await this.persist();
-    return this.snapshot();
+    return this.schedule(index + 1, false);
   }
 
   cancel(): Promise<SetupSnapshot> {

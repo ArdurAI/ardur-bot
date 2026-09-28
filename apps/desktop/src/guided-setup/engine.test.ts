@@ -148,6 +148,26 @@ describe("SetupEngine", () => {
     await reopened.start();
     expect(reopened.pilotReady()).toBe(true);
   });
+  it("offers the services choice immediately after skipping the command", async () => {
+    const ready = async () => ({ kind: "satisfied" as const, checkedAt: 100, evidence: "ready" });
+    const engine = await SetupEngine.open(
+      memoryStore().store,
+      [
+        step({ check: ready }),
+        step({ id: "database", requires: ["prerequisites"], check: ready }),
+        step({ id: "migrations", requires: ["database"], check: ready }),
+        step({ id: "command", requires: ["migrations"], canSkip: true }),
+        step({ id: "services", requires: ["migrations"], waitForInput: true }),
+        step({ id: "engines", requires: ["services"], canSkip: true }),
+      ],
+      clock,
+    );
+    expect((await engine.start()).steps[3]?.status).toBe("waiting-input");
+    const next = await engine.skip("command");
+    expect(next.steps[3]?.status).toBe("skipped");
+    expect(next.currentStep).toBe("services");
+    expect(next.steps[4]?.status).toBe("waiting-input");
+  });
   it("persists active and waiting durations without carrying monotonic time across restart", async () => {
     const files = memoryStore();
     let tick = 1;
