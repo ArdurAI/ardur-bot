@@ -60,7 +60,7 @@ export function WorkspacePane({
     tab === "tasks" ||
     tab === "routines" ||
     (tab === "files" && filesAvailable) ||
-    (tab === "screen" && computer?.capabilities?.graphical === true)
+    tab === "screen"
       ? tab
       : "tasks";
   const tabs = [

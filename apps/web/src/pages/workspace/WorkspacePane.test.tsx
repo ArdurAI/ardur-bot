@@ -192,7 +192,7 @@ describe("WorkspacePane tab selection and content rendering", () => {
     expect(activeTab?.textContent).toBe("Screen");
   });
 
-  it("falls back to Tasks tab when Screen is chosen on non-graphical computers", async () => {
+  it("activates Screen tab when Screen is chosen on non-graphical computers", async () => {
     const nonGraphical = {
       ...graphicalComputer,
       capabilities: { graphical: false, interactiveTerminal: false },
@@ -217,8 +217,7 @@ describe("WorkspacePane tab selection and content rendering", () => {
       ),
     );
     const activeTab = container.querySelector('[role="tab"][data-active]');
-    expect(activeTab?.textContent).toBe("Tasks");
-    expect(container.querySelector('[role="tablist"]')?.textContent).not.toContain("Screen");
+    expect(activeTab?.textContent).toBe("Screen");
   });
 
   it("activates Files tab when files are available and tab is files", async () => {
