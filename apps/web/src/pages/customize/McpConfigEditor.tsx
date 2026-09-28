@@ -93,7 +93,7 @@ export function McpConfigEditor({ onClose, onApplied }: { onClose(): void; onApp
         ) : (
           <Textarea
             aria-label={t`Server configuration JSON`}
-            className="min-h-72 font-mono text-xs"
+            className="min-h-72 font-mono text-[13px] normal-case"
             value={config.json}
             onChange={(event) => setConfig({ ...config, json: event.target.value })}
             spellCheck={false}

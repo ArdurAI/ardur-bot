@@ -1,4 +1,6 @@
 export const RU_MESSAGES: Record<string, string> = {
+  "Learn more about {title}": "Подробнее: {title}",
+  "Could not open help. Try again.": "Не удалось открыть справку. Попробуйте ещё раз.",
   "This group's model is blocked by the bot or space settings. Change the destination policy or choose another group model.":
     "Модель группы заблокирована настройками бота или пространства. Измените правила для места назначения или выберите другую модель группы.",
   "{botName} couldn't use the model set for this group. Reconnect it or change the group model.":

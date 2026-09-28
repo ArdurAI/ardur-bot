@@ -11,8 +11,8 @@ TMP_DIR=$(mktemp -d)
 mkdir -p "$TMP_DIR/mnt"
 echo "badhash  ardur-0.1.0-mac-arm64.dmg" > "$TMP_DIR/checksums.txt"
 echo "badhash  ardur-0.1.0-mac-x64.dmg" >> "$TMP_DIR/checksums.txt"
-echo "badhash  ardur-0.1.0-linux-x64.deb" >> "$TMP_DIR/checksums.txt"
-echo "badhash  ardur-0.1.0-linux-x64.AppImage" >> "$TMP_DIR/checksums.txt"
+echo "badhash  ardur-0.1.0-linux-amd64.deb" >> "$TMP_DIR/checksums.txt"
+echo "badhash  ardur-0.1.0-linux-x86_64.AppImage" >> "$TMP_DIR/checksums.txt"
 echo "badhash  ardur-0.1.0-linux-arm64.deb" >> "$TMP_DIR/checksums.txt"
 echo "badhash  ardur-0.1.0-linux-arm64.AppImage" >> "$TMP_DIR/checksums.txt"
 
@@ -101,8 +101,8 @@ fi
 MOCK
 chmod +x "$BIN_DIR/curl"
 
-echo "badhash  ardur-0.1.0-linux-x64.AppImage" > "$LINUX_DIR/checksums.txt"
-echo "badhash  ardur-0.1.0-linux-x64.deb" >> "$LINUX_DIR/checksums.txt"
+echo "badhash  ardur-0.1.0-linux-x86_64.AppImage" > "$LINUX_DIR/checksums.txt"
+echo "badhash  ardur-0.1.0-linux-amd64.deb" >> "$LINUX_DIR/checksums.txt"
 
 cd "$LINUX_DIR"
 if PATH="$BIN_DIR" "$root/scripts/install.sh" --version v0.1.0 2>/dev/null; then
@@ -111,8 +111,8 @@ if PATH="$BIN_DIR" "$root/scripts/install.sh" --version v0.1.0 2>/dev/null; then
 fi
 
 DUMMY_SHA=$(printf "dummy\n" | "$BIN_DIR/sha256sum" | cut -d ' ' -f 1)
-echo "${DUMMY_SHA}  ardur-0.1.0-linux-x64.AppImage" > "$LINUX_DIR/checksums.txt"
-echo "${DUMMY_SHA}  ardur-0.1.0-linux-x64.deb" >> "$LINUX_DIR/checksums.txt"
+echo "${DUMMY_SHA}  ardur-0.1.0-linux-x86_64.AppImage" > "$LINUX_DIR/checksums.txt"
+echo "${DUMMY_SHA}  ardur-0.1.0-linux-amd64.deb" >> "$LINUX_DIR/checksums.txt"
 
 HOME="$LINUX_DIR/home" PATH="$BIN_DIR" "$root/scripts/install.sh" --version v0.1.0 >/dev/null
 if [[ ! -x "$LINUX_DIR/home/.local/bin/ardur.AppImage" ]]; then

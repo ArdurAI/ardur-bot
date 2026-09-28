@@ -196,6 +196,9 @@ describe("remote-content isolation", () => {
 
   it("opens only web URLs outside Electron", () => {
     expect(safeExternalUrl("https://example.com/docs")).toBe("https://example.com/docs");
+    expect(safeExternalUrl("https://ardur.ai/docs/features/memory-documents/")).toBe(
+      "https://ardur.ai/docs/features/memory-documents/",
+    );
     expect(safeExternalUrl("mailto:person@example.com")).toBeNull();
     expect(safeExternalUrl("file:///etc/passwd")).toBeNull();
   });

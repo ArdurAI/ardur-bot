@@ -41,6 +41,7 @@ export * from "./cron.js";
 export * from "./dashboard.js";
 export * from "./delegation-policy.js";
 export * from "./events.js";
+export * from "./feature-docs-links.js";
 export * from "./featured-connectors.js";
 export * from "./goal-context.js";
 export * from "./group-mentions.js";

@@ -1499,7 +1499,7 @@ describe("release publication gate", () => {
       const flatFiles = [
         { name: `ardur-${version}-mac-arm64.dmg`, target: "desktop-darwin-arm64" },
         { name: `ardur-${version}-mac-x64.dmg`, target: "desktop-darwin-x64" },
-        { name: `ardur-${version}-linux-x64.AppImage`, target: "desktop-linux-x64" },
+        { name: `ardur-${version}-linux-x86_64.AppImage`, target: "desktop-linux-x64" },
         { name: `ardur-${version}-win-x64.exe`, target: "desktop-win32-x64" },
       ] as const;
       const files: { target: string; name: string; sha256: string; bytes: number }[] = [];
