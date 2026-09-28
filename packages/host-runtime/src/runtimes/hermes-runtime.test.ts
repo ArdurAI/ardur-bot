@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createArdurToolBridge } from "./claude-mcp-bridge.js";
 import {
   createHermesTextRedactor,
+  hermesContextDocument,
   HermesRuntime,
   launchUnconfinedProcess,
 } from "./hermes-runtime.js";
@@ -68,6 +69,25 @@ function turnFinishSignal(runId: string) {
 }
 
 describe("HermesRuntime M0 ACP seam", () => {
+  it("keeps instructions and the newest quoted history within the pinned context budget", () => {
+    const history = Array.from({ length: 18 }, (_, index) => ({
+      role: "user" as const,
+      content: `turn-${index} ${"x".repeat(2_000)}`,
+    }));
+    const document = hermesContextDocument(request({
+      instructions: "Required owner instruction",
+      history,
+    }));
+    expect(Buffer.byteLength(document)).toBeLessThanOrEqual(16 * 1024);
+    expect(document).toContain("Required owner instruction");
+    expect(document).toContain("turn-17");
+    expect(document).not.toContain("turn-0");
+    expect(document).toContain("[truncated]");
+  });
+  it("refuses required instructions alone above the pinned context budget", () => {
+    expect(() => hermesContextDocument(request({ instructions: "x".repeat(16 * 1024 + 1) })))
+      .toThrow("Hermes instructions exceed the context limit. Shorten the bot instructions.");
+  });
   it("refuses a pinned turn without validated limits before launch", async () => {
     const launch = vi.fn(launchUnconfinedProcess);
     const adapter = new HermesRuntime({ command: process.execPath, pinned: true, launch });
