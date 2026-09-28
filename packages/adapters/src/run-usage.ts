@@ -79,8 +79,8 @@ export async function recordRunUsage(
     ? await deps.prisma.$transaction(async (tx) => {
         await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${rootTaskId} FOR UPDATE`;
         const tokens = usage.inputTokens + usage.outputTokens;
-        await updateUsageBudget(tx, rootTaskId, delegation?.id, tokens);
         const persisted = await tx.usageRecord.create({ data });
+        await updateUsageBudget(tx, rootTaskId, delegation?.id, run.id, tokens);
         await refreshBotMessageUsageProjectionInTransaction(tx, run.id);
         return persisted;
       })
@@ -472,6 +472,7 @@ async function recordRequestUsage(
             tx,
             rootTaskId,
             delegation?.id,
+            run.id,
             inputDelta + outputDelta,
             Boolean(historicalBrokerReceipt),
           );
@@ -547,6 +548,7 @@ async function updateUsageBudget(
   tx: Prisma.TransactionClient,
   rootTaskId: string,
   delegationId: string | undefined,
+  runId: string,
   tokens: number,
   retainedPriorAttempt = false,
 ) {
@@ -559,7 +561,27 @@ async function updateUsageBudget(
   }
   const current = await tx.delegation.findUniqueOrThrow({ where: { id: delegationId } });
   const active =
-    !retainedPriorAttempt && ["queued", "running", "cancel-requested"].includes(current.status);
+    !retainedPriorAttempt &&
+    current.runId === runId &&
+    ["queued", "running", "cancel-requested"].includes(current.status);
+  const attemptSpent =
+    active && current.hop > 1
+      ? await tx.usageRecord.aggregate({
+          where: {
+            delegationId: current.id,
+            runId,
+            purpose: { not: "detached-learning" },
+          },
+          _sum: { inputTokens: true, outputTokens: true },
+        })
+      : null;
+  // The current observation is already stored; subtract its delta to get the
+  // attempt-local balance immediately before this settlement.
+  const priorAttemptTokens = attemptSpent
+    ? (attemptSpent._sum.inputTokens ?? 0) + (attemptSpent._sum.outputTokens ?? 0) - tokens
+    : current.usedTokens;
+  const attemptLimit =
+    current.hop > 1 ? DELEGATION_LIMITS.reservationTokens : current.reservedTokens;
   await tx.delegation.update({
     where: { id: current.id },
     data: { usedTokens: { increment: tokens } },
@@ -569,9 +591,7 @@ async function updateUsageBudget(
     data: {
       usedTokens: { increment: tokens },
       reservedTokens: {
-        decrement: active
-          ? Math.min(tokens, Math.max(0, current.reservedTokens - current.usedTokens))
-          : 0,
+        decrement: active ? Math.min(tokens, Math.max(0, attemptLimit - priorAttemptTokens)) : 0,
       },
     },
   });

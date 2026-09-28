@@ -44,6 +44,7 @@ it.each(["running", "completed"])(
       actingBotId: "worker",
       depth: 1,
       status,
+      runId: "run",
       reservedTokens: 100,
       usedTokens: 80,
     };

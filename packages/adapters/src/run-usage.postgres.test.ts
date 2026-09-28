@@ -558,12 +558,13 @@ postgres("request ledger on disposable PostgreSQL", () => {
       });
     const fourthRequest = make(9990, 20_000);
     await fourthRecord(fourthRequest.start());
-    await fourthRecord(fourthRequest.snapshot({ input: 0, output: 0 }));
+    await fourthRecord(fourthRequest.snapshot({ input: 9980, output: 0 }));
     await fourthRecord(fourthRequest.finish("success"));
+    expect(await f.root()).toMatchObject({ reservedTokens: 20, usedTokens: 10_020 });
     await db.prisma.$transaction((tx) =>
       finishDelegation(tx, delegation.id, "completed", "Final result", fourth.runId),
     );
-    expect(await f.root()).toMatchObject({ reservedTokens: 0, usedTokens: 40 });
+    expect(await f.root()).toMatchObject({ reservedTokens: 0, usedTokens: 10_020 });
   });
 
   it("rechecks the broker lease after waiting for the root lock", async () => {
