@@ -82,22 +82,19 @@ describe("site facts", () => {
     ]);
   });
 
-  it("accepts a generated empty documentation block while retaining the eight-slot homepage bound", async () => {
+  it("omits the documentation block while no page is published and rejects an empty one", async () => {
     const product = await generatedProduct(sourceRoot);
     expect(product.schemaVersion).toBe(1);
-    expect(product.documentation).toEqual({
-      manifestVersion: 1,
-      locale: "en",
-      features: [],
-      screenshots: [],
-    });
+    expect(product.documentation).toBeUndefined();
     expect(SiteProductSchema.safeParse(product).success).toBe(true);
-    const { documentation: _documentation, ...oldSnapshot } = product;
-    expect(SiteProductSchema.safeParse(oldSnapshot).success).toBe(true);
+    const emptyBlock = { manifestVersion: 1, locale: "en", features: [], screenshots: [] };
+    expect(SiteProductSchema.safeParse({ ...product, documentation: emptyBlock }).success).toBe(
+      false,
+    );
     expect(
       SiteProductSchema.safeParse({
         ...product,
-        documentation: { ...product.documentation, manifestVersion: 2 },
+        documentation: { ...emptyBlock, manifestVersion: 2 },
       }).success,
     ).toBe(false);
     const ninth = { ...product, screenshots: [...product.screenshots, product.screenshots[0]] };

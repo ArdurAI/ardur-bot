@@ -158,6 +158,8 @@ export function publishedDocumentation(manifest: FeatureDocumentationManifest) {
   const published = manifest.features
     .filter((feature) => feature.status === "published" && !feature.internal)
     .sort((a, b) => compareSlug(a.area, b.area) || a.order - b.order || compareSlug(a.id, b.id));
+  // Nothing published means no block at all: the website rejects an empty one.
+  if (published.length === 0) return undefined;
   const features = published.map((feature) => ({
     id: feature.id,
     aliases: feature.aliases,
@@ -473,15 +475,17 @@ export async function validateFeatureDocs(
       throw new Error(`Screenshot "${shot.id}" does not match its evidence SHA-256.`);
   }
   const publicBlock = publishedDocumentation(manifest);
-  const strings = (value: unknown): string[] => {
-    if (typeof value === "string") return [value];
-    if (Array.isArray(value)) return value.flatMap(strings);
-    if (value && typeof value === "object") return Object.values(value).flatMap(strings);
-    return [];
-  };
-  const renderedText = strings(publicBlock);
-  for (const value of [...renderedText, renderedText.join(" ")])
-    assertPlain(value, "Published documentation");
+  if (publicBlock) {
+    const strings = (value: unknown): string[] => {
+      if (typeof value === "string") return [value];
+      if (Array.isArray(value)) return value.flatMap(strings);
+      if (value && typeof value === "object") return Object.values(value).flatMap(strings);
+      return [];
+    };
+    const renderedText = strings(publicBlock);
+    for (const value of [...renderedText, renderedText.join(" ")])
+      assertPlain(value, "Published documentation");
+  }
   return manifest;
 }
 

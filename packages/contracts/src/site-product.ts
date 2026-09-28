@@ -29,32 +29,35 @@ export const SiteDocumentationSchema = z
   .strictObject({
     manifestVersion: z.literal(1),
     locale: z.literal("en"),
-    features: z.array(
-      z.strictObject({
-        id,
-        aliases: z.array(id),
-        title: text,
-        summary: text,
-        area: id,
-        order: z.number().int().nonnegative(),
-        status: z.literal("published"),
-        availableSince: text.nullable(),
-        platforms: z.strictObject({
-          web: z.enum(["configure", "read-only", "unavailable"]),
-          desktop: z.enum(["configure", "read-only", "unavailable"]),
-          mobile: z.enum(["configure", "read-only", "unavailable"]),
+    // The website rejects an empty block; a product without published pages omits it.
+    features: z
+      .array(
+        z.strictObject({
+          id,
+          aliases: z.array(id),
+          title: text,
+          summary: text,
+          area: id,
+          order: z.number().int().nonnegative(),
+          status: z.literal("published"),
+          availableSince: text.nullable(),
+          platforms: z.strictObject({
+            web: z.enum(["configure", "read-only", "unavailable"]),
+            desktop: z.enum(["configure", "read-only", "unavailable"]),
+            mobile: z.enum(["configure", "read-only", "unavailable"]),
+          }),
+          settingsPath: z.strictObject({
+            web: z.array(text).min(1).optional(),
+            desktop: z.array(text).min(1).optional(),
+            mobile: z.array(text).min(1).optional(),
+          }),
+          steps: z.array(documentationStep).min(1),
+          boundaries: z.array(text),
+          troubleshooting: z.array(z.strictObject({ errorId: id, message: text, action: text })),
+          related: z.array(id),
         }),
-        settingsPath: z.strictObject({
-          web: z.array(text).min(1).optional(),
-          desktop: z.array(text).min(1).optional(),
-          mobile: z.array(text).min(1).optional(),
-        }),
-        steps: z.array(documentationStep).min(1),
-        boundaries: z.array(text),
-        troubleshooting: z.array(z.strictObject({ errorId: id, message: text, action: text })),
-        related: z.array(id),
-      }),
-    ),
+      )
+      .min(1),
     screenshots: z.array(
       z.strictObject({
         id,

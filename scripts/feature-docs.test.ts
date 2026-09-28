@@ -216,7 +216,7 @@ describe("feature documentation inventory", () => {
     await expect(
       validateFeatureDocs(manifest, evidence, root, async () => png),
     ).resolves.toBeDefined();
-    const docs = publishedDocumentation(manifest);
+    const docs = publishedDocumentation(manifest)!;
     expect(docs.features).toHaveLength(1);
     expect(docs.features[0]?.availableSince).toBeNull();
     expect(docs.features[0]?.settingsPath.web).toEqual(feature.settingsPath.web?.uiLabels);
@@ -230,7 +230,7 @@ describe("feature documentation inventory", () => {
       'related feature "privacy" must publish or be deferred',
     );
     feature.deferredRelated = ["privacy"];
-    expect(publishedDocumentation(manifest).features[0]?.related).toEqual([]);
+    expect(publishedDocumentation(manifest)?.features[0]?.related).toEqual([]);
     feature.troubleshooting = [
       { errorId: "general-error", message: "Wrong sentence.", action: "Open Settings." },
     ];

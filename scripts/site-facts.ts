@@ -477,7 +477,8 @@ export async function generatedProduct(rootDir = root, docsRoot = rootDir): Prom
   const cask = casks[0].slice(0, -3);
   const result = {
     ...curated,
-    documentation,
+    // Omit the block entirely until a page is published; the website treats an empty block as invalid.
+    ...(documentation ? { documentation } : {}),
     ...(curated.memory ? { memory: { ...curated.memory, ...memoryFromCode() } } : {}),
     ...(videos.length ? { videos } : {}),
     providers: providersFromCatalog(),
