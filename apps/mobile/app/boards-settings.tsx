@@ -33,6 +33,8 @@ export default function BoardsSettings() {
   const [owner, setOwner] = useState(false);
   const [upkeep, setUpkeep] = useState(true);
   const [learning, setLearning] = useState<SpaceLearningConfig | null>(null);
+  const [catalog, setCatalog] = useState<ModelCatalogEntry[]>([]);
+  const [credentials, setCredentials] = useState<ModelCredential[]>([]);
   const board = boards.find((row) => row.id === selected) ?? boards[0];
   useEffect(() => setName(board?.name ?? ""), [board?.id, board?.name]);
   async function load() {
@@ -138,27 +140,75 @@ export default function BoardsSettings() {
               })
             }
           />
-          <Text style={foreground}>
-            {learning?.enabled ? t("Learning review is on") : t("Learning review is off")}
-          </Text>
-          <Text style={foreground}>
-            {learning?.destination?.modelId
-              ? t("Reviewer: {model}", { model: learning.destination.modelId })
-              : t("No reviewer model yet.")}
-          </Text>
-          {!learning?.enabled ? (
-            <Button
-              title={t("Enable")}
-              disabled={busy || !learning?.canConfigure || !learning.destination}
-              onPress={() =>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginVertical: 8 }}>
+            <Text style={foreground}>{t("Learning review")}</Text>
+            <Switch
+              accessibilityLabel={t("Learning review")}
+              value={learning?.enabled ?? false}
+              disabled={busy || !learning?.canConfigure}
+              onValueChange={(enabled) =>
                 learning
                   ? void work(async () => {
-                      setLearning(await enableLearningReview(learning));
+                      setLearning(
+                        await rpc<SpaceLearningConfig>("learning/configure", {
+                          enabled,
+                          reviewerPin: learning.reviewerPin,
+                          consolidationEnabled: learning.consolidationEnabled,
+                          budgets: learning.budgets,
+                        })
+                      );
                     })
                   : undefined
               }
             />
-          ) : null}
+          </View>
+          <Button
+            title={
+              learning?.reviewerPin?.modelId
+                ? t("Reviewer: {model}", { model: learning.reviewerPin.modelId })
+                : learning?.destination?.modelId
+                  ? t("Reviewer: {model}", { model: learning.destination.modelId })
+                  : t("Connect a model")
+            }
+            disabled={busy || !learning?.canConfigure}
+            onPress={() => {
+              presentMessageActionSheet({
+                title: t("Learning reviewer"),
+                message: t("Reviews use this connection and may incur model charges."),
+                options: reviewerMenuOptions(catalog, credentials, t, (pin) => {
+                  void work(async () => {
+                    const expectedRevision = learning?.reviewerPin?.revision ?? 0;
+                    const nextPin = { ...pin, effort: learning?.reviewerPin?.effort ?? spaceDefaultEffort(undefined, catalog.find(e => e.provider === pin.provider && e.id === pin.modelId)?.thinkingLevels ?? []) };
+                    setLearning(await setReviewerPin(expectedRevision, nextPin));
+                  });
+                }),
+              });
+            }}
+          />
+          {(() => {
+            const pin = learning?.reviewerPin ?? learning?.destination;
+            if (!pin) return null;
+            const entry = catalog.find((e) => e.provider === pin.provider && e.id === pin.modelId);
+            const effortLevels = entry?.thinkingLevels ?? [];
+            if (effortLevels.length === 0) return null;
+            return (
+              <Button
+                title={t("Thinking: {level}", { level: pin.effort ?? "medium" })}
+                disabled={busy || !learning?.canConfigure}
+                onPress={() => {
+                  presentMessageActionSheet({
+                    title: t("Thinking"),
+                    options: thinkingMenuOptions(effortLevels, pin.provider === "ollama" || pin.provider === "local", t, (effort) => {
+                      void work(async () => {
+                        const expectedRevision = learning?.reviewerPin?.revision ?? 0;
+                        setLearning(await setReviewerPin(expectedRevision, { ...pin, effort } as any));
+                      });
+                    }),
+                  });
+                }}
+              />
+            );
+          })()}
           <Text style={[styles.heading, foreground]}>{t("Beads")}</Text>
           <Text style={foreground}>
             {problem?.code === "not_installed"

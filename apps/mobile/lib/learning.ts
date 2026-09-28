@@ -61,3 +61,55 @@ export function learningBeforeAfter(diff: string) {
       .join("\n"),
   };
 }
+import { connectedModelOptions } from "@ardurbot/core";
+import type { ModelCatalogEntry, ModelCredential, ThinkingLevel, RuntimePin } from "@ardurbot/contracts";
+import type { ActionSheetOption } from "./message-action-sheet";
+
+export function reviewerMenuOptions(
+  catalog: ModelCatalogEntry[],
+  credentials: ModelCredential[],
+  t: (key: string, values?: Record<string, string>) => string,
+  onSelect: (pin: { runtimeKind: "pi", provider: string, modelId: string, credentialId: string }) => void
+): ActionSheetOption[] {
+  const options = connectedModelOptions(catalog, credentials);
+  if (options.length === 0) {
+    return [{ label: t("Connect a model"), onPress: () => {} }];
+  }
+  
+  return options.map((opt) => ({
+    label: opt.label,
+    onPress: () => {
+      onSelect({
+        runtimeKind: "pi",
+        provider: opt.provider,
+        modelId: opt.modelId,
+        credentialId: opt.key.split(":")[2] || "",
+      });
+    }
+  }));
+}
+
+export function thinkingMenuOptions(
+  supported: ThinkingLevel[],
+  isOllama: boolean,
+  t: (key: string, values?: Record<string, string>) => string,
+  onSelect: (effort: ThinkingLevel) => void
+): ActionSheetOption[] {
+  const options = supported.filter((level) =>
+    isOllama ? level === "off" || level === "medium" : level !== "off"
+  );
+  
+  return options.map((level) => ({
+    label: isOllama ? (level === "off" ? t("Off") : t("On")) : level,
+    onPress: () => onSelect(level)
+  }));
+}
+
+export async function setReviewerPin(expectedRevision: number, pin: RuntimePin) {
+  return SpaceLearningConfigSchema.parse(
+    await rpc("learning/setReviewer", {
+      expectedRevision,
+      pin,
+    }),
+  );
+}

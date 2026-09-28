@@ -1086,3 +1086,30 @@ it("only trusts a message the server actually sent, and falls back for a transpo
   expect(actionMessage(new Error("rpc learning/reject failed"), fallback)).toBe(fallback);
   expect(actionMessage("not an error", fallback)).toBe(fallback);
 });
+
+import { reviewerMenuOptions, thinkingMenuOptions, setReviewerPin } from "./learning.js";
+
+it("reviewerMenuOptions returns connect a model if none", () => {
+  const options = reviewerMenuOptions([], [], (k) => k, () => {});
+  expect(options[0].label).toBe("Connect a model");
+});
+
+it("thinkingMenuOptions returns options", () => {
+  const options = thinkingMenuOptions(["low", "medium", "high"] as any, false, (k) => k, () => {});
+  expect(options.length).toBe(3);
+  expect(options[0].label).toBe("low");
+});
+
+it("setReviewerPin calls rpc", async () => {
+  request.mockResolvedValueOnce({
+    enabled: true,
+    consolidationEnabled: false,
+    reviewerPin: null,
+    budgets: {},
+    destination: null,
+    canConfigure: true
+  });
+  
+  await setReviewerPin(1, { runtimeKind: "pi", provider: "p1", modelId: "m1", credentialId: "c1" });
+  expect(request).toHaveBeenCalledWith("learning/setReviewer", expect.any(Object));
+});
