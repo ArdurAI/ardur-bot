@@ -1151,18 +1151,17 @@ it("reads and saves only Hermes limits with the existing model pin", async () =>
       }),
     ),
   );
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 20));
+  await vi.waitFor(() => {
+    expect(container.textContent).toContain("Hermes is not installed on this computer.");
+    expect(container.textContent).toContain("Hermes runs with this computer's access.");
+    expect(container.querySelector<HTMLInputElement>('input[type="number"][max="64"]')?.value).toBe(
+      "7",
+    );
+    expect(
+      container.querySelector<HTMLInputElement>('input[type="number"][max="600"]')?.value,
+    ).toBe("42");
+    expect(container.textContent).not.toContain("Connect Hermes");
   });
-  expect(container.textContent).toContain("Hermes is not installed on this computer.");
-  expect(container.textContent).toContain("Hermes runs with this computer's access.");
-  expect(container.querySelector<HTMLInputElement>('input[type="number"][max="64"]')?.value).toBe(
-    "7",
-  );
-  expect(container.querySelector<HTMLInputElement>('input[type="number"][max="600"]')?.value).toBe(
-    "42",
-  );
-  expect(container.textContent).not.toContain("Connect Hermes");
   await save();
   expect(onSave).toHaveBeenLastCalledWith(
     expect.objectContaining({

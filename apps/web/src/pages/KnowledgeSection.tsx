@@ -101,7 +101,7 @@ export function SpaceMemorySection() {
           </TabsContent>
           <TabsContent
             value="documents"
-            className="motion-safe:animate-in motion-safe:fade-in duration-100 motion-reduce:animate-none"
+            className="motion-safe:animate-in motion-safe:fade-in duration-[240ms] ease-[cubic-bezier(0.2,0.7,0.2,1)] motion-reduce:animate-none"
           >
             <MemoryImportExport onImported={() => setGeneration((value) => value + 1)} />
             <MemoryDocumentList
@@ -113,7 +113,7 @@ export function SpaceMemorySection() {
           </TabsContent>
           <TabsContent
             value="skills"
-            className="motion-safe:animate-in motion-safe:fade-in duration-100 motion-reduce:animate-none"
+            className="motion-safe:animate-in motion-safe:fade-in duration-[240ms] ease-[cubic-bezier(0.2,0.7,0.2,1)] motion-reduce:animate-none"
           >
             <AgentSkills onSkillsChange={() => undefined} />
           </TabsContent>

@@ -1,13 +1,13 @@
 {
   "name": "@ardurbot/desktop",
   "productName": "Ardur",
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.0-alpha.2",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/main.js",
   "scripts": {
     "dev": "pnpm build && electron .",
-    "build": "pnpm --filter @ardurbot/host-service build && node ../../scripts/desktop-version.mjs && tsc -p tsconfig.json && tsc -p tsconfig.guided.json && node scripts/copy-static.mjs && node scripts/build-guided-setup.mjs && node scripts/bundle-services.mjs",
+    "build": "pnpm --filter @ardurbot/host-service build && node ../../scripts/desktop-version.mjs && node --import tsx scripts/generate-window-colors.mjs && tsc -p tsconfig.json && tsc -p tsconfig.guided.json && node scripts/copy-static.mjs && node scripts/build-guided-setup.mjs && node scripts/bundle-services.mjs",
     "pack": "pnpm --filter @ardurbot/web build && pnpm build && electron-builder",
     "pack:dir": "pnpm --filter @ardurbot/web build && pnpm build && electron-builder --dir",
     "check": "tsc --noEmit -p tsconfig.json && tsc -p tsconfig.guided.json",
@@ -58,8 +58,12 @@
         "to": "stack/.env.images.example"
       },
       {
-        "from": "assets/icon.png",
-        "to": "tray.png"
+        "from": "assets/trayTemplate.png",
+        "to": "trayTemplate.png"
+      },
+      {
+        "from": "assets/tray-32.png",
+        "to": "tray-32.png"
       },
       {
         "from": "assets/icon.ico",

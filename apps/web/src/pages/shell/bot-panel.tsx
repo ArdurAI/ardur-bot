@@ -33,6 +33,7 @@ import { Plural, Trans, useLingui } from "@lingui/react/macro";
 import { X } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useId, useRef, useState } from "react";
 import { BotContext } from "../../components/ContextEntry";
+import { FeatureDocsLink } from "../../components/FeatureDocsLink";
 import { ShowAllModels } from "../../components/ShowAllModels";
 import { modelUnavailable, spaceDefaultUnavailable } from "../../lib/model-availability";
 import { unavailableSubscriptionModel } from "../../lib/model-options";
@@ -139,6 +140,7 @@ export function CreateBotForm({
         <span className="text-[13.5px] text-muted-foreground">
           <Trans>New bot</Trans>
         </span>
+        <FeatureDocsLink featureId="bots-create" title={t`New bot`} step="open-new-bot-form" />
         <Button variant="ghost" size="icon-sm" aria-label={t`Cancel new bot`} onClick={onCancel}>
           <X size={16} strokeWidth={1.8} />
         </Button>

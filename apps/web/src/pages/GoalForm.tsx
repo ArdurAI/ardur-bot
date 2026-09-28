@@ -2,6 +2,7 @@ import { GOAL_DEFAULT_TOKEN_LIMIT } from "@ardurbot/contracts";
 import { Button, Input, Textarea } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useId, useState } from "react";
+import { FeatureDocsLink } from "../components/FeatureDocsLink";
 
 export function StartGoalForm({
   groupId,
@@ -52,8 +53,9 @@ export function StartGoalForm({
 
   return (
     <div className="mt-5 space-y-3 border-t border-border pt-4">
-      <div className="text-sm font-medium">
+      <div className="flex items-center justify-between gap-3 text-sm font-medium">
         <Trans>Start goal</Trans>
+        <FeatureDocsLink featureId="group-goals" title={t`Start goal`} step="fill-goal-form" />
       </div>
       {error ? (
         <p role="alert" className="text-sm text-destructive">

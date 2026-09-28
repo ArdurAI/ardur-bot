@@ -1,6 +1,7 @@
 import { Button } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useState } from "react";
+import { FeatureDocsLink } from "../../components/FeatureDocsLink";
 import { SettingsRow } from "../../components/SettingsRow";
 import { MemoryHistory } from "../MemoryHistory";
 import type { CategorizedMemoryDocument } from "./document-groups";
@@ -106,9 +107,16 @@ export function MemoryDocuments({
                   ? t`Preferences`
                   : memoryTopicTitle(selected)}
             </h3>
-            <Button variant="ghost" size="sm" onClick={() => setSelectedId(null)}>
-              <Trans>Close</Trans>
-            </Button>
+            <div className="flex items-center gap-3">
+              <FeatureDocsLink
+                featureId="memory-documents"
+                title={t`Memory`}
+                step="open-document-detail"
+              />
+              <Button variant="ghost" size="sm" onClick={() => setSelectedId(null)}>
+                <Trans>Close</Trans>
+              </Button>
+            </div>
           </div>
           <p className="whitespace-pre-wrap break-words text-sm">{selected.content}</p>
           <details>

@@ -1,6 +1,6 @@
 import { tokensForAppearance } from "@ardurbot/ui-tokens";
 import { useMemo, useSyncExternalStore } from "react";
-import { type ColorValue, Platform, PlatformColor } from "react-native";
+import { type ColorValue, Linking, Platform, PlatformColor } from "react-native";
 import {
   getCachedAppearancePreference,
   mobileTokens,
@@ -60,4 +60,9 @@ export function useThemedStyles<T>(factory: () => T): T {
 /** Subscribe custom surfaces to the same appearance as native navigation. */
 export function useMobileTokens() {
   return tokensForAppearance(useResolvedAppearance());
+}
+
+/** Leave the app and preserve its navigation and form state. */
+export async function openDocumentationUrl(url: string): Promise<void> {
+  await Linking.openURL(url);
 }

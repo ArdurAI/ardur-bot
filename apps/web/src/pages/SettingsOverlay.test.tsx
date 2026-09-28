@@ -326,9 +326,15 @@ it("searches capability rows and opens Skills through the registry", async () =>
 
 it("keeps storage and provider settings reachable from Memory without another dialog", async () => {
   const container = await render();
+  expect(container.querySelector('a[aria-label^="Learn more about"]')).toBeNull();
   await act(async () =>
     container.querySelector<HTMLButtonElement>('[data-testid="settings-nav-memory"]')!.click(),
   );
+  const docs = container.querySelector<HTMLAnchorElement>(
+    'a[aria-label="Learn more about Memory"]',
+  );
+  expect(docs?.href).toBe("https://ardur.ai/docs/features/memory-documents/");
+  expect(docs?.target).toBe("_blank");
   await waitForSettings(() => !!container.querySelector('[data-settings-row="Memory storage"]'));
   await act(async () =>
     container

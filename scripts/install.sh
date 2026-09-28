@@ -34,15 +34,19 @@ if [[ "$OS" == "Darwin" ]]; then
   EXT="dmg"
 elif [[ "$OS" == "Linux" ]]; then
   PLATFORM="linux"
-  if [[ "$ARCH" == "aarch64" ]]; then
-    ASSET_ARCH="arm64"
-  else
-    ASSET_ARCH="x64"
-  fi
   if command -v apt >/dev/null 2>&1; then
     EXT="deb"
   else
     EXT="AppImage"
+  fi
+  # electron-builder names Linux assets per target: AppImage uses x86_64 and deb
+  # uses amd64 on Intel hosts; arm64 keeps one name for both formats.
+  if [[ "$ARCH" == "aarch64" ]]; then
+    ASSET_ARCH="arm64"
+  elif [[ "$EXT" == "deb" ]]; then
+    ASSET_ARCH="amd64"
+  else
+    ASSET_ARCH="x86_64"
   fi
 else
   echo "Unsupported OS: $OS" >&2

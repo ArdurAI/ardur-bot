@@ -117,12 +117,22 @@ test("settings shell is two-pane and deep-links Models Memory Voice Usage", asyn
   await expect(settings).toHaveAttribute("data-settings-section", "models");
   await expect(settings.getByRole("heading", { name: "Models", exact: true })).toBeVisible();
   await expect(settings.getByTestId("model-settings")).toBeVisible();
+  await expect(settings.getByRole("link", { name: "Learn more about Models" })).toHaveAttribute(
+    "href",
+    "https://ardur.ai/docs/features/models/",
+  );
   await captureScreenshot(page, testInfo, "settings-shell-models");
 
   await settings.getByTestId("settings-nav-memory").click();
   await expect(settings).toHaveAttribute("data-settings-section", "memory");
   await expect(settings.getByRole("heading", { name: "Memory", exact: true })).toBeVisible();
   await expect(settings.getByTestId("memory-settings-page")).toBeVisible();
+  const memoryDocs = settings.getByRole("link", { name: "Learn more about Memory" });
+  await expect(memoryDocs).toHaveAttribute(
+    "href",
+    "https://ardur.ai/docs/features/memory-documents/",
+  );
+  await expect(memoryDocs).toHaveAttribute("target", "_blank");
   await captureScreenshot(page, testInfo, "settings-shell-memory");
   await settings
     .getByRole("group", { name: "Memory storage", exact: true })

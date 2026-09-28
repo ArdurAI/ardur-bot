@@ -953,7 +953,8 @@ function targetForPath(relative) {
   if (name.includes("-mac-arm64.")) return "desktop-darwin-arm64";
   if (name.includes("-mac-x64.")) return "desktop-darwin-x64";
   if (name.includes("-linux-arm64.")) return "desktop-linux-arm64";
-  if (name.includes("-linux-x64.")) return "desktop-linux-x64";
+  // electron-builder's x64 Linux artifacts carry target-specific arch labels.
+  if (name.includes("-linux-x86_64.") || name.includes("-linux-amd64.")) return "desktop-linux-x64";
   if (name.includes("-win-x64.")) return "desktop-win32-x64";
   return null;
 }

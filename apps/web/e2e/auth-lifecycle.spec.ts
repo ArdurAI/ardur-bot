@@ -227,7 +227,7 @@ test("changes and recovers an email password", async ({ page }, testInfo) => {
   await page.getByLabel("Confirm password").fill(resetPassword);
   await page.getByRole("button", { name: "Reset password" }).click();
   await expect(page.getByText("Password updated")).toBeVisible();
-  await page.getByRole("link", { name: "Sign in" }).click();
+  await page.getByRole("link", { name: "Sign in", exact: true }).click();
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password", { exact: true }).fill(resetPassword);
   await page.getByRole("button", { name: "Continue with email" }).click();

@@ -125,9 +125,7 @@ export const BotAvatar = memo(function BotAvatar({
         style={{
           width: size,
           height: size,
-          boxShadow: isWorking
-            ? "0 0 0 2px #3B82F6, 0 0 10px rgba(59,130,246,0.6)"
-            : "0 2px 5px rgba(0,0,0,0.5)",
+          boxShadow: isWorking ? "0 0 0 2px var(--ring)" : "0 2px 5px rgba(0,0,0,0.5)",
         }}
       >
         {isWorking ? (
@@ -146,7 +144,7 @@ export const BotAvatar = memo(function BotAvatar({
               cx="24"
               cy="24"
               r="22"
-              stroke="#3B82F6"
+              stroke="var(--ring)"
               strokeWidth="3.2"
               strokeLinecap="round"
               strokeDasharray="45 80"
@@ -188,7 +186,7 @@ export const BotAvatar = memo(function BotAvatar({
           inset: -4,
           width: size + 8,
           height: size + 8,
-          filter: `drop-shadow(0 0 6px ${colorDef.light}) drop-shadow(0 0 10px #ffffff)`,
+          /* no glow */
         }}
         viewBox="0 0 48 48"
         fill="none"
@@ -218,15 +216,13 @@ export const BotAvatar = memo(function BotAvatar({
         height={size}
         aria-hidden="true"
         className={cn(
-          "overflow-visible transition-transform duration-300",
+          "overflow-visible transition-transform duration-[150ms] ease-out",
           isWorking
-            ? "animate-pulse scale-[1.04] motion-reduce:animate-none"
+            ? "scale-[1.04] motion-reduce:scale-100"
             : "hover:scale-[1.03] motion-reduce:hover:scale-100",
         )}
         style={{
-          filter: isWorking
-            ? `drop-shadow(0 0 8px ${colorDef.light}) drop-shadow(0 0 2px #ffffff)`
-            : "drop-shadow(0 2px 4px rgba(0,0,0,0.45))",
+          filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.45))",
         }}
       >
         <defs>
@@ -379,12 +375,23 @@ export function GrokShapePreview({
 
 export function Wordmark({ className }: { className?: string }) {
   return (
-    <div className={cn("flex items-center gap-3", className)}>
-      <div className="flex h-11 w-11 items-center justify-center gap-1.5 rounded-full bg-card">
-        <span className="h-4 w-[7px] rounded-full bg-primary" />
-        <span className="h-4 w-[7px] rounded-full bg-primary" />
-      </div>
-      <span className="font-[Aeonik,ui-sans-serif] text-[28px] tracking-tight text-foreground">
+    <div className={cn("flex items-center gap-[34px]", className)}>
+      <svg
+        viewBox="0 0 400 400"
+        className="size-[34px] text-foreground"
+        aria-hidden="true"
+        fill="none"
+      >
+        <path
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="36"
+          strokeLinecap="round"
+          d="M 322 100 A 150 150 0 1 0 334 296"
+        />
+        <rect x="322" y="118" width="40" height="232" rx="20" fill="currentColor" />
+      </svg>
+      <span className="font-serif text-[34px] leading-none tracking-[-0.02em] text-foreground">
         Ardur
       </span>
     </div>

@@ -1,0 +1,123 @@
+{
+  "format": 1,
+  "profile": "hermes-ardur-v2",
+  "artifactVersion": 1,
+  "sourceRevision": "29112bef099274229cadff79cdff7bf7b99c4b77",
+  "maxTextBytes": 16384,
+  "maxDepth": 8,
+  "maxMembers": 128,
+  "fields": {
+    "limits.maxProviderRequests": {
+      "min": 1,
+      "max": 64,
+      "step": 1,
+      "default": 16
+    },
+    "limits.timeoutMs": {
+      "min": 1000,
+      "max": 600000,
+      "step": 1000,
+      "default": 180000
+    },
+    "context.maxInputBytes": {
+      "min": 4096,
+      "max": 65536,
+      "step": 1024,
+      "default": 16384
+    },
+    "context.overflow": {
+      "values": ["trim", "stop"],
+      "default": "trim"
+    },
+    "harness.agent.api_max_retries": {
+      "min": 1,
+      "max": 3,
+      "step": 1,
+      "default": 1
+    }
+  },
+  "defaults": {
+    "version": 2,
+    "runtimeKind": "hermes",
+    "limits": {
+      "maxProviderRequests": 16,
+      "timeoutMs": 180000
+    },
+    "context": {
+      "maxInputBytes": 16384,
+      "overflow": "trim"
+    },
+    "harness": {
+      "agent": {
+        "api_max_retries": 1
+      }
+    }
+  },
+  "strictObjects": true,
+  "jsonSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "type": "object",
+    "properties": {
+      "version": {
+        "type": "number",
+        "const": 2
+      },
+      "runtimeKind": {
+        "type": "string",
+        "const": "hermes"
+      },
+      "limits": {
+        "type": "object",
+        "properties": {
+          "maxProviderRequests": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 64
+          },
+          "timeoutMs": {
+            "type": "integer",
+            "minimum": 1000,
+            "maximum": 600000,
+            "multipleOf": 1000
+          }
+        },
+        "additionalProperties": false
+      },
+      "context": {
+        "type": "object",
+        "properties": {
+          "maxInputBytes": {
+            "type": "integer",
+            "minimum": 4096,
+            "maximum": 65536,
+            "multipleOf": 1024
+          },
+          "overflow": {
+            "type": "string",
+            "enum": ["trim", "stop"]
+          }
+        },
+        "additionalProperties": false
+      },
+      "harness": {
+        "type": "object",
+        "properties": {
+          "agent": {
+            "type": "object",
+            "properties": {
+              "api_max_retries": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 3
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "required": ["version", "runtimeKind"],
+    "additionalProperties": false
+  }
+}
