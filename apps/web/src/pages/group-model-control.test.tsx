@@ -130,6 +130,77 @@ async function change(select: HTMLSelectElement, value: string) {
 }
 
 describe("group model control", () => {
+  it.each([
+    { reasoning: true, effort: "high" },
+    { reasoning: false, effort: "off" },
+  ])(
+    "saves and reads back a Hermes group model with $effort effort",
+    async ({ reasoning, effort }) => {
+      const compatibleSettings = {
+        ...settings!,
+        catalog: [
+          {
+            ...settings!.catalog[0]!,
+            provider: "openai-compatible",
+            id: "fixture-model",
+            reasoning,
+            thinkingLevels: reasoning ? ["off", "low", "medium", "high"] : ["off"],
+          },
+        ],
+        credentials: [
+          {
+            ...settings!.credentials[0]!,
+            provider: "openai-compatible",
+            modelId: "fixture-model",
+            thinkingLevel: effort,
+            reasoning,
+            thinkingLevels: reasoning ? ["off", "low", "medium", "high"] : ["off"],
+          },
+        ],
+      } as Parameters<typeof GroupModelControl>[0]["settings"];
+      const save = vi.fn(async (_member: GroupMember, choice: GroupMember["runtimePin"]) => {
+        await act(async () =>
+          root.render(
+            <GroupModelControl
+              member={{ ...member, modelPinRevision: 1, runtimePin: { ...choice!, revision: 1 } }}
+              bot={{ ...bot, runtimeExperimental: true }}
+              settings={compatibleSettings}
+              onSave={save as never}
+            />,
+          ),
+        );
+      });
+      await act(async () =>
+        root.render(
+          <GroupModelControl
+            member={member}
+            bot={{ ...bot, runtimeExperimental: true }}
+            settings={compatibleSettings}
+            onSave={save as never}
+          />,
+        ),
+      );
+      await change(container.querySelector('select[id$="-runtime"]')!, "hermes");
+      await change(
+        container.querySelector('select[id$="-model"]')!,
+        modelPinOptionKey("openai-compatible", "fixture-model", "credential"),
+      );
+      await act(async () =>
+        [...container.querySelectorAll("button")]
+          .find((button) => button.textContent === "Save model")!
+          .click(),
+      );
+      expect(save).toHaveBeenCalledWith(
+        member,
+        expect.objectContaining({ runtimeKind: "hermes", effort }),
+      );
+      expect(container.querySelector('[role="alert"]')).toBeNull();
+      expect((container.querySelector('select[id$="-model"]') as HTMLSelectElement).value).toBe(
+        modelPinOptionKey("openai-compatible", "fixture-model", "credential"),
+      );
+    },
+  );
+
   it("saves a native model without an effort through RuntimeSettings", async () => {
     const save = await render(
       member,

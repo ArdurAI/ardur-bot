@@ -86,18 +86,17 @@ export function GroupModelControl({
       (item) => item.provider === selected?.provider && item.id === selected.modelId,
     );
     const nextEffort =
-      kind === "pi" &&
-      selected?.provider === "ollama" &&
-      (credential?.reasoning ?? catalogEntry?.reasoning) === false
-        ? null
-        : effort ||
-          (kind === "pi"
-            ? (credential?.thinkingLevel ??
+      kind === "pi" || kind === "hermes"
+        ? selected?.provider === "ollama" &&
+          (credential?.reasoning ?? catalogEntry?.reasoning) === false
+          ? null
+          : effort ||
+            (credential?.thinkingLevel ??
               spaceDefaultEffort(
                 credential?.reasoning ?? catalogEntry?.reasoning,
                 credential?.thinkingLevels ?? catalogEntry?.thinkingLevels,
               ))
-            : null);
+        : effort || null;
     setSaving(true);
     setError(null);
     try {
