@@ -3,40 +3,44 @@ import { describe, expect, it } from "vitest";
 import { GroupAvatar } from "./group-avatar.js";
 
 describe("GroupAvatar", () => {
-  it("renders fallback squad icon when no members provided", () => {
+  it("renders a placeholder for empty members", () => {
     const html = renderToString(<GroupAvatar members={[]} />);
-    expect(html).toContain("<svg");
+    expect(html).toContain("svg");
+    expect(html).not.toContain("ardurbot-bot-avatar");
   });
 
-  it("renders single BotAvatar when 1 member", () => {
-    const html = renderToString(<GroupAvatar members={[{ name: "Harry", color: "#8B5CF6" }]} />);
+  it("renders a single bot avatar for 1 member", () => {
+    const html = renderToString(
+      <GroupAvatar members={[{ name: "A", color: "#F59E0B" }]} size={32} />,
+    );
     expect(html).toContain("ardurbot-bot-avatar");
+    expect(html).not.toContain("z-index");
   });
 
   it("renders 2 overlapping bot avatars for 2 members", () => {
     const html = renderToString(
       <GroupAvatar
         members={[
-          { name: "Sherlock", color: "#8B5CF6" },
-          { name: "Elon", color: "#06B6D4" },
+          { name: "A", color: "#F59E0B" },
+          { name: "B", color: "#3B82F6" },
         ]}
+        size={40}
       />,
     );
-    const count = (html.match(/data-working=/g) || []).length;
+    const count = (html.match(/ardurbot-bot-avatar/g) || []).length;
     expect(count).toBe(2);
-    expect(html).toContain('data-working="false"');
   });
 
   it("renders a working member inside a group avatar", () => {
     const html = renderToString(
       <GroupAvatar
         members={[
-          { name: "Sherlock", color: "#8B5CF6", status: "running" },
-          { name: "Elon", color: "#06B6D4", status: "idle" },
+          { name: "S", color: "#7A3F6A", status: "running" },
+          { name: "E", color: "#2E6B6B" },
         ]}
       />,
     );
-    expect(html).toContain('data-working="true"');
+    expect(html).toContain("<circle"); // Running status has a ring
     expect(html).toContain("ardurbot-bot-avatar");
   });
 
@@ -44,27 +48,31 @@ describe("GroupAvatar", () => {
     const html = renderToString(
       <GroupAvatar
         members={[
-          { name: "Sherlock", color: "#8B5CF6" },
-          { name: "Elon", color: "#06B6D4" },
-          { name: "Penny", color: "#EC4899" },
+          { name: "A", color: "#F59E0B" },
+          { name: "B", color: "#3B82F6" },
+          { name: "C", color: "#10B981" },
         ]}
       />,
     );
-    const count = (html.match(/data-working=/g) || []).length;
+    const count = (html.match(/ardurbot-bot-avatar/g) || []).length;
     expect(count).toBe(3);
   });
 
-  it("renders 2 mini avatars + overflow count for 4+ members", () => {
+  it("renders a count badge for 4+ members", () => {
     const html = renderToString(
       <GroupAvatar
         members={[
-          { name: "Sherlock", color: "#8B5CF6" },
-          { name: "Elon", color: "#06B6D4" },
-          { name: "Penny", color: "#EC4899" },
-          { name: "Harry", color: "#10B981" },
+          { name: "A", color: "#F59E0B" },
+          { name: "B", color: "#3B82F6" },
+          { name: "C", color: "#10B981" },
+          { name: "D", color: "#8B5CF6" },
+          { name: "E", color: "#EC4899" },
         ]}
       />,
     );
-    expect(html).toContain("+2");
+    expect(html).toContain("+3");
+    // Should show 2 members plus the badge
+    const count = (html.match(/ardurbot-bot-avatar/g) || []).length;
+    expect(count).toBe(2);
   });
 });

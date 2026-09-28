@@ -44,6 +44,14 @@ export type ColorTokens = {
   overlay: string;
   scrollbar: string;
   scrollbarHover: string;
+  bengara: string;
+  indigo: string;
+  moss: string;
+  persimmon: string;
+  plum: string;
+  teal: string;
+  ochre: string;
+  slate: string;
 };
 
 export const darkTokens = {
@@ -79,6 +87,14 @@ export const darkTokens = {
   overlay: "rgba(14, 13, 12, 0.72)",
   scrollbar: "#24211E",
   scrollbarHover: "#433D38",
+  bengara: "#9A3B1E",
+  indigo: "#2F4A7A",
+  moss: "#4E6B2F",
+  persimmon: "#A84A22",
+  plum: "#7A3F6A",
+  teal: "#2E6B6B",
+  ochre: "#7F621B",
+  slate: "#5A5F66",
 } as const satisfies ColorTokens;
 
 export const lightTokens = {
@@ -114,6 +130,14 @@ export const lightTokens = {
   overlay: "rgba(28, 26, 23, 0.45)",
   scrollbar: "#E3DED3",
   scrollbarHover: "#C4BFAF",
+  bengara: "#9A3B1E",
+  indigo: "#2F4A7A",
+  moss: "#4E6B2F",
+  persimmon: "#A84A22",
+  plum: "#7A3F6A",
+  teal: "#2E6B6B",
+  ochre: "#7F621B",
+  slate: "#5A5F66",
 } as const satisfies ColorTokens;
 
 /** Dark palette. Prefer `tokensForAppearance` when theme-aware. */
@@ -128,13 +152,14 @@ export const fontStacks = {
 } as const;
 
 export const botColors = [
-  "#3EC5A8",
-  "#F5A03C",
-  "#6A6BF5",
-  "#9B5CF6",
-  "#3B82F6",
-  "#F2622A",
-  "#D9508A",
+  "#9A3B1E", // bengara
+  "#2F4A7A", // indigo
+  "#4E6B2F", // moss
+  "#A84A22", // persimmon
+  "#7A3F6A", // plum
+  "#2E6B6B", // teal
+  "#7F621B", // ochre
+  "#5A5F66", // slate
 ] as const;
 
 export function isAppearancePreference(

@@ -59,8 +59,6 @@ export function parseBotAvatar(
   imageUrl?: string;
 } {
   if (!rawColor) return { color: "#F97316", isImage: false };
-  // Only data: image URLs are rendered. Arbitrary http(s)/blob values in `color`
-  // must not become <img src> (SSRF / tracking when other members view the bot).
   if (rawColor.startsWith("data:image/")) {
     return { color: "#F97316", isImage: true, imageUrl: rawColor };
   }
@@ -95,8 +93,10 @@ export const BotAvatar = memo(function BotAvatar({
   className,
   variant,
 }: BotAvatarProps) {
-  const id = useId().replace(/[^a-zA-Z0-9-_]/g, "");
-  const isWorking = ACTIVE_RUN_STATUSES.some((s) => s === status);
+  const isRunning = status === "running" || status === "queued" || status === "leased";
+  const isWaiting = status === "waiting_input";
+  const isPaused = status === "waiting_takeover";
+
   const preferredVariant = useAvatarStyle();
 
   const parsed = useMemo(() => parseBotAvatar(color, identity), [color, identity]);
@@ -114,131 +114,210 @@ export const BotAvatar = memo(function BotAvatar({
     return resolvePersonaShape(effectiveId);
   }, [parsed.shapeIndex, effectiveId]);
 
+  const initial = (effectiveId || "A")[0]!.toUpperCase();
+
+  const reducedMotion = useSyncExternalStore(
+    subscribeToReducedMotion,
+    reducedMotionSnapshot,
+    () => false,
+  );
+
+  // Determine standard seal styles
+  const sealRadius = size < 28 ? "50%" : "50% 48% 52% 50% / 49% 51% 49% 51%";
+
   if (parsed.isImage && parsed.imageUrl) {
     return (
       <div
         className={cn(
-          "ardurbot-bot-avatar relative overflow-hidden rounded-full flex items-center justify-center select-none bg-secondary shrink-0 border border-border",
+          "ardurbot-bot-avatar relative flex shrink-0 select-none items-center justify-center bg-secondary",
           className,
         )}
-        data-working={isWorking}
         style={{
           width: size,
           height: size,
-          boxShadow: isWorking ? "0 0 0 2px var(--ring)" : "0 2px 5px rgba(0,0,0,0.5)",
+          borderRadius: sealRadius,
+          borderColor: colorDef.hex,
+          borderWidth: 2,
+          borderStyle: "solid",
         }}
       >
-        {isWorking ? (
+        {isRunning ? (
           <svg
-            className="ardurbot-bot-avatar-ring absolute pointer-events-none"
-            style={{
-              inset: -4,
-              width: size + 8,
-              height: size + 8,
-            }}
-            viewBox="0 0 48 48"
+            className={cn("absolute pointer-events-none", !reducedMotion && "animate-spin")}
+            style={{ width: size + 8, height: size + 8, inset: -6, animationDuration: "3s" }}
+            viewBox="0 0 56 56"
             fill="none"
             aria-hidden="true"
           >
             <circle
-              cx="24"
-              cy="24"
-              r="22"
-              stroke="var(--ring)"
-              strokeWidth="3.2"
+              cx="28"
+              cy="28"
+              r="26"
+              stroke="var(--foreground)"
+              strokeWidth="2"
               strokeLinecap="round"
-              strokeDasharray="45 80"
+              strokeDasharray={reducedMotion ? "none" : "122 41"}
+              transform="rotate(-60 28 28)"
             />
           </svg>
         ) : null}
-        <img src={parsed.imageUrl} alt="" className="h-full w-full object-cover" />
+        {isWaiting && (
+          <div
+            className="absolute top-0 right-0 rounded-full"
+            style={{
+              width: Math.max(8, size * 0.3),
+              height: Math.max(8, size * 0.3),
+              background: "var(--warning)",
+              border: "3px solid var(--background)",
+              transform: "translate(20%, -20%)",
+            }}
+          />
+        )}
+        <img
+          src={parsed.imageUrl}
+          alt=""
+          className="h-full w-full object-cover"
+          style={{ borderRadius: sealRadius }}
+        />
       </div>
     );
   }
 
+  // Active Organic variant
   if (parsed.shapeIndex === undefined && (variant ?? preferredVariant) === "organic") {
     return (
       <OrganicAvatar
         color={colorDef.hex}
         identity={effectiveId}
         size={size}
-        isWorking={isWorking}
+        isWorking={isRunning || isWaiting || isPaused}
         className={className}
       />
     );
   }
 
-  return (
-    <div
-      className={cn(
-        "ardurbot-bot-avatar grok-avatar-container relative inline-flex items-center justify-center shrink-0 select-none",
-        className,
-      )}
-      style={{
-        width: size,
-        height: size,
-      }}
-      data-working={isWorking}
-    >
-      <svg
-        className="ardurbot-bot-avatar-ring absolute pointer-events-none"
-        style={{
-          inset: -4,
-          width: size + 8,
-          height: size + 8,
-          /* no glow */
-        }}
-        viewBox="0 0 48 48"
-        fill="none"
-        aria-hidden="true"
-      >
-        <circle
-          cx="24"
-          cy="24"
-          r="22"
-          stroke={`url(#${id}-ring)`}
-          strokeWidth="3.2"
-          strokeLinecap="round"
-          strokeDasharray="45 80"
-        />
-        <circle cx="43" cy="24" r="2.8" fill="#ffffff" />
-        <defs>
-          <linearGradient id={`${id}-ring`} x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="#ffffff" stopOpacity="1" />
-            <stop offset="60%" stopColor={colorDef.light} stopOpacity="0.9" />
-            <stop offset="100%" stopColor={colorDef.light} stopOpacity="0" />
-          </linearGradient>
-        </defs>
-      </svg>
-      <svg
-        viewBox={VIEWBOX}
-        width={size}
-        height={size}
-        aria-hidden="true"
+  // Mascot Silhouette variant
+  if (parsed.shapeIndex !== undefined) {
+    return (
+      <div
         className={cn(
-          "overflow-visible transition-transform duration-[150ms] ease-out",
-          isWorking
-            ? "scale-[1.04] motion-reduce:scale-100"
-            : "hover:scale-[1.03] motion-reduce:hover:scale-100",
+          "ardurbot-bot-avatar relative flex shrink-0 select-none items-center justify-center bg-card",
+          className,
         )}
         style={{
-          filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.45))",
+          width: size,
+          height: size,
+          borderRadius: sealRadius,
+          borderColor: colorDef.hex,
+          borderWidth: 2,
+          borderStyle: "solid",
         }}
       >
-        <defs>
-          <linearGradient id={`grok-ink-${id}`} x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor={colorDef.light} />
-            <stop offset="100%" stopColor={colorDef.dark} />
-          </linearGradient>
-        </defs>
-        <g>
-          <path d={shapePath} fill={`url(#grok-ink-${id})`} />
+        {isRunning ? (
+          <svg
+            className={cn("absolute pointer-events-none", !reducedMotion && "animate-spin")}
+            style={{ width: size + 8, height: size + 8, inset: -6, animationDuration: "3s" }}
+            viewBox="0 0 56 56"
+            fill="none"
+            aria-hidden="true"
+          >
+            <circle
+              cx="28"
+              cy="28"
+              r="26"
+              stroke="var(--foreground)"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeDasharray={reducedMotion ? "none" : "122 41"}
+              transform="rotate(-60 28 28)"
+            />
+          </svg>
+        ) : null}
+        {isWaiting && (
+          <div
+            className="absolute top-0 right-0 rounded-full"
+            style={{
+              width: Math.max(8, size * 0.3),
+              height: Math.max(8, size * 0.3),
+              background: "var(--warning)",
+              border: "3px solid var(--background)",
+              transform: "translate(20%, -20%)",
+            }}
+          />
+        )}
+        <svg
+          viewBox={VIEWBOX}
+          width={size * 0.8}
+          height={size * 0.8}
+          aria-hidden="true"
+          className="overflow-visible"
+        >
+          <path d={shapePath} fill={colorDef.hex} />
           <g fill={colorDef.eyeColor} className="grok-character-eyes">
             <ellipse cx={CENTER - 29} cy={CENTER - 8} rx={10} ry={7} />
             <ellipse cx={CENTER + 29} cy={CENTER - 8} rx={10} ry={7} />
           </g>
-        </g>
-      </svg>
+        </svg>
+      </div>
+    );
+  }
+
+  // Default Seal with Initial
+  return (
+    <div
+      className={cn(
+        "ardurbot-bot-avatar relative flex shrink-0 select-none items-center justify-center",
+        className,
+      )}
+      style={{
+        width: isRunning ? size * 0.8 : size,
+        height: isRunning ? size * 0.8 : size,
+        borderRadius: sealRadius,
+        background: isPaused ? "transparent" : colorDef.hex,
+        border: isPaused ? `2px dashed ${colorDef.hex}` : "none",
+        color: isPaused ? "var(--muted-foreground)" : colorDef.eyeColor,
+        fontFamily: "'Instrument Serif', Georgia, serif",
+        fontStyle: "italic",
+        fontSize: Math.round((isRunning ? size * 0.8 : size) * 0.6),
+        boxSizing: "border-box",
+        margin: isRunning ? size * 0.1 : 0,
+      }}
+    >
+      {isRunning ? (
+        <svg
+          className={cn("absolute pointer-events-none", !reducedMotion && "animate-spin")}
+          style={{ width: size + 8, height: size + 8, animationDuration: "3s" }}
+          viewBox="0 0 56 56"
+          fill="none"
+          aria-hidden="true"
+        >
+          <circle
+            cx="28"
+            cy="28"
+            r="26"
+            stroke="var(--foreground)"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeDasharray={reducedMotion ? "none" : "122 41"}
+            transform="rotate(-60 28 28)"
+          />
+        </svg>
+      ) : null}
+
+      {initial}
+
+      {isWaiting && (
+        <div
+          className="absolute top-0 right-0 rounded-full"
+          style={{
+            width: Math.max(8, size * 0.3),
+            height: Math.max(8, size * 0.3),
+            background: "var(--warning)",
+            border: "3px solid var(--background)",
+            transform: "translate(20%, -20%)",
+          }}
+        />
+      )}
     </div>
   );
 });
@@ -362,13 +441,25 @@ export function GrokShapePreview({
           : "hover:bg-white/5",
       )}
     >
-      <svg viewBox={VIEWBOX} className="size-8 overflow-visible" aria-hidden="true">
-        <path d={path} fill={colorDef.light} />
-        <g fill={colorDef.eyeColor}>
-          <ellipse cx={CENTER - 29} cy={CENTER - 8} rx={10} ry={7} />
-          <ellipse cx={CENTER + 29} cy={CENTER - 8} rx={10} ry={7} />
-        </g>
-      </svg>
+      <div
+        className="flex items-center justify-center bg-card"
+        style={{
+          width: 32,
+          height: 32,
+          borderRadius: "50% 48% 52% 50% / 49% 51% 49% 51%",
+          borderColor: colorDef.hex,
+          borderWidth: 2,
+          borderStyle: "solid",
+        }}
+      >
+        <svg viewBox={VIEWBOX} className="size-6 overflow-visible" aria-hidden="true">
+          <path d={path} fill={colorDef.hex} />
+          <g fill={colorDef.eyeColor}>
+            <ellipse cx={CENTER - 29} cy={CENTER - 8} rx={10} ry={7} />
+            <ellipse cx={CENTER + 29} cy={CENTER - 8} rx={10} ry={7} />
+          </g>
+        </svg>
+      </div>
     </button>
   );
 }

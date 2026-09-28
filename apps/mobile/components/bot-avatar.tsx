@@ -3,11 +3,12 @@ import {
   ACTIVE_RUN_STATUSES,
   avatarIdentitySeed,
   organicAvatarPath,
+  resolvePersonaColorDef,
   SHIPPED_BOT_AVATAR_CENTER,
   SHIPPED_BOT_AVATAR_VIEWBOX,
 } from "@ardurbot/core";
 import { memo, useEffect } from "react";
-import { Image, View } from "react-native";
+import { Image, Text, useColorScheme, View } from "react-native";
 import Animated, {
   cancelAnimation,
   Easing,
@@ -18,7 +19,8 @@ import Animated, {
   withRepeat,
   withTiming,
 } from "react-native-reanimated";
-import Svg, { Ellipse, G, Path, Rect } from "react-native-svg";
+import Svg, { Circle, Ellipse, G, Path, Rect } from "react-native-svg";
+import { mobileTokens } from "../lib/appearance";
 import { workingAvatarDuration, workingAvatarFrame } from "../lib/avatar-motion";
 import { mobileBotAvatarPresentation } from "../lib/bot-avatar";
 import { useI18n } from "../lib/i18n";
@@ -26,6 +28,7 @@ import { useAvatarStyle } from "./avatar-style";
 import { NativeSymbol } from "./native-symbol";
 
 const AnimatedRect = Animated.createAnimatedComponent(Rect);
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 
 export const BotAvatar = memo(function BotAvatar({
   color,
@@ -43,15 +46,89 @@ export const BotAvatar = memo(function BotAvatar({
   muted?: boolean;
 }) {
   const { t } = useI18n();
-  const isWorking = ACTIVE_RUN_STATUSES.some((activeStatus) => activeStatus === status);
+  const scheme = useColorScheme();
+  const tokens = mobileTokens("system", scheme);
+
+  const isRunning = status === "running" || status === "queued" || status === "leased";
+  const isWaiting = status === "waiting_input";
+  const isPaused = status === "waiting_takeover";
+
   const { avatarStyle } = useAvatarStyle();
   const parsed = mobileBotAvatarPresentation(color);
-  const fillColor = parsed.kind === "shape" || parsed.kind === "color" ? parsed.color : color;
-  const visorW = Math.round(size * 0.68);
-  const visorH = Math.round(size * 0.44);
-  const eyeW = Math.max(3, Math.round(size * 0.11));
-  const eyeH = Math.max(4, Math.round(size * 0.17));
-  const gap = Math.max(3, Math.round(size * 0.11));
+
+  const effectiveId =
+    identity ||
+    (parsed.kind === "shape" || parsed.kind === "color" ? parsed.color : color) ||
+    "agent";
+  const colorDef = resolvePersonaColorDef(
+    effectiveId,
+    parsed.kind === "shape" || parsed.kind === "color" ? parsed.color : color,
+  );
+  const initial = (effectiveId || "A")[0]!.toUpperCase();
+
+  const sealRadius = size < 28 ? size / 2 : size * 0.45; // React Native doesn't support complex squircle border radii natively easily. Let's just use 50% for all for now, or just `borderRadius: size / 2` because complex border-radius strings like "50% 48%..." don't work in React Native StyleSheet.
+
+  const reducedMotion = useReducedMotion();
+  const progress = useSharedValue(0);
+
+  useEffect(() => {
+    cancelAnimation(progress);
+    progress.value = 0;
+    if (isRunning && !reducedMotion) {
+      progress.value = withRepeat(
+        withTiming(1, {
+          duration: 3000,
+          easing: Easing.linear,
+        }),
+        -1,
+      );
+    }
+    return () => cancelAnimation(progress);
+  }, [isRunning, progress, reducedMotion]);
+
+  const ringStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ rotate: `${progress.value * 360 - 60}deg` }],
+    };
+  });
+
+  const runningRing = isRunning ? (
+    <Animated.View
+      style={[
+        { position: "absolute", top: -4, left: -4, width: size + 8, height: size + 8 },
+        ringStyle,
+      ]}
+    >
+      <Svg width={size + 8} height={size + 8} viewBox="0 0 56 56">
+        <AnimatedCircle
+          cx="28"
+          cy="28"
+          r="26"
+          stroke={tokens.foreground}
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeDasharray={reducedMotion ? "none" : "122 41"}
+        />
+      </Svg>
+    </Animated.View>
+  ) : null;
+
+  const warningDot = isWaiting ? (
+    <View
+      style={{
+        position: "absolute",
+        top: -size * 0.1,
+        right: -size * 0.1,
+        width: Math.max(8, size * 0.3),
+        height: Math.max(8, size * 0.3),
+        borderRadius: size,
+        backgroundColor: tokens.warning,
+        borderWidth: 3,
+        borderColor: tokens.background,
+      }}
+    />
+  ) : null;
+
   const picture =
     parsed.kind === "image" && parsed.imageUrl ? (
       <View
@@ -59,75 +136,86 @@ export const BotAvatar = memo(function BotAvatar({
           width: size,
           height: size,
           borderRadius: size / 2,
+          borderWidth: 2,
+          borderColor: colorDef.hex,
           overflow: "hidden",
         }}
       >
         <Image source={{ uri: parsed.imageUrl }} style={{ width: size, height: size }} />
       </View>
     ) : parsed.kind === "shape" ? (
-      <ShippedShapeAvatar
-        color={parsed.color}
-        eyeColor={parsed.eyeColor}
-        shapePath={parsed.shapePath}
-        size={size}
-      />
-    ) : (variant ?? avatarStyle) === "organic" ? (
-      <OrganicAvatar color={fillColor} identity={identity} size={size} isWorking={isWorking} />
-    ) : (
       <View
         style={{
           width: size,
           height: size,
           borderRadius: size / 2,
-          backgroundColor: fillColor,
+          borderWidth: 2,
+          borderColor: colorDef.hex,
+          backgroundColor: tokens.card,
+          alignItems: "center",
+          justifyContent: "center",
+          overflow: "hidden",
+        }}
+      >
+        <Svg width={size * 0.8} height={size * 0.8} viewBox={SHIPPED_BOT_AVATAR_VIEWBOX}>
+          <Path d={parsed.shapePath} fill={colorDef.hex} />
+          <G fill={colorDef.eyeColor}>
+            <Ellipse
+              cx={SHIPPED_BOT_AVATAR_CENTER - 29}
+              cy={SHIPPED_BOT_AVATAR_CENTER - 8}
+              rx={10}
+              ry={7}
+            />
+            <Ellipse
+              cx={SHIPPED_BOT_AVATAR_CENTER + 29}
+              cy={SHIPPED_BOT_AVATAR_CENTER - 8}
+              rx={10}
+              ry={7}
+            />
+          </G>
+        </Svg>
+      </View>
+    ) : (variant ?? avatarStyle) === "organic" ? (
+      <OrganicAvatar
+        color={colorDef.hex}
+        identity={identity}
+        size={size}
+        isWorking={isRunning || isWaiting || isPaused}
+      />
+    ) : (
+      <View
+        style={{
+          width: isRunning ? size * 0.8 : size,
+          height: isRunning ? size * 0.8 : size,
+          margin: isRunning ? size * 0.1 : 0,
+          borderRadius: size / 2,
+          backgroundColor: isPaused ? "transparent" : colorDef.hex,
+          borderWidth: isPaused ? 2 : 0,
+          borderStyle: isPaused ? "dashed" : "solid",
+          borderColor: isPaused ? colorDef.hex : "transparent",
           alignItems: "center",
           justifyContent: "center",
         }}
       >
-        <View
+        <Text
           style={{
-            width: visorW,
-            height: visorH,
-            borderRadius: Math.round(visorH * 0.52),
-            backgroundColor: "#0C0C0E",
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "center",
-            gap,
+            color: isPaused ? tokens.mutedForeground : colorDef.eyeColor,
+            fontFamily: "Georgia", // 'Instrument Serif' may not be available on mobile, using serif fallback
+            fontStyle: "italic",
+            fontSize: Math.round((isRunning ? size * 0.8 : size) * 0.6),
+            includeFontPadding: false,
           }}
         >
-          {[0, 1].map((eye) => (
-            <View
-              key={eye}
-              style={{
-                width: eyeW,
-                height: eyeH,
-                borderRadius: Math.max(2, Math.round(eyeW * 0.6)),
-                backgroundColor: "#fff",
-              }}
-            />
-          ))}
-        </View>
+          {initial}
+        </Text>
       </View>
     );
+
   return (
-    <View style={{ width: size, height: size }}>
+    <View style={{ width: size, height: size, justifyContent: "center", alignItems: "center" }}>
+      {runningRing}
       {picture}
-      {isWorking ? (
-        <View
-          accessibilityLabel={t("Working")}
-          style={{
-            position: "absolute",
-            right: muted ? undefined : 0,
-            left: muted ? 0 : undefined,
-            bottom: 0,
-            width: Math.max(6, Math.round(size * 0.18)),
-            height: Math.max(6, Math.round(size * 0.18)),
-            borderRadius: size,
-            backgroundColor: "#F5A03C",
-          }}
-        />
-      ) : null}
+      {warningDot}
       {muted ? (
         <View
           accessible
@@ -140,8 +228,8 @@ export const BotAvatar = memo(function BotAvatar({
             height: Math.max(14, Math.round(size * 0.34)),
             borderRadius: size,
             borderWidth: 2,
-            borderColor: "#000",
-            backgroundColor: "#242428",
+            borderColor: tokens.background,
+            backgroundColor: tokens.muted,
             alignItems: "center",
             justifyContent: "center",
           }}
@@ -150,36 +238,13 @@ export const BotAvatar = memo(function BotAvatar({
             ios="bell.slash.fill"
             android="notifications-off"
             size={Math.max(8, Math.round(size * 0.17))}
-            color="#ECECEE"
+            color={tokens.mutedForeground}
           />
         </View>
       ) : null}
     </View>
   );
 });
-
-function ShippedShapeAvatar({
-  color,
-  eyeColor,
-  shapePath,
-  size,
-}: {
-  color: string;
-  eyeColor: string;
-  shapePath: string;
-  size: number;
-}) {
-  const center = SHIPPED_BOT_AVATAR_CENTER;
-  return (
-    <Svg width={size} height={size} viewBox={SHIPPED_BOT_AVATAR_VIEWBOX}>
-      <Path d={shapePath} fill={color} />
-      <G fill={eyeColor}>
-        <Ellipse cx={center - 29} cy={center - 8} rx={10} ry={7} />
-        <Ellipse cx={center + 29} cy={center - 8} rx={10} ry={7} />
-      </G>
-    </Svg>
-  );
-}
 
 function OrganicAvatar({
   color,
@@ -195,6 +260,8 @@ function OrganicAvatar({
   const seed = avatarIdentitySeed(identity || color || "#8B5CF6");
   const progress = useSharedValue(0);
   const reducedMotion = useReducedMotion();
+  const scheme = useColorScheme();
+  const tokens = mobileTokens("system", scheme);
 
   useEffect(() => {
     cancelAnimation(progress);
@@ -243,14 +310,14 @@ function OrganicAvatar({
               width={7}
               height={24}
               rx={3.5}
-              fill="#101014"
+              fill={tokens.background}
             />
             <AnimatedRect
               animatedProps={rightEyeProps}
               width={7}
               height={24}
               rx={3.5}
-              fill="#101014"
+              fill={tokens.background}
             />
           </G>
         </Svg>

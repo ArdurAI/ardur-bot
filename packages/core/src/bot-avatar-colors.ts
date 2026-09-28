@@ -8,100 +8,19 @@ export interface GrokColorDef {
 }
 
 export const GROK_COLOR_LIST: GrokColorDef[] = [
-  {
-    id: "white",
-    name: "Staff White",
-    light: "#FFFFFF",
-    dark: "#CBD5E1",
-    eyeColor: "#141414",
-    hex: "#FFFFFF",
-  },
-  {
-    id: "violet",
-    name: "Executive Violet",
-    light: "#A97EFE",
-    dark: "#7C3AED",
-    eyeColor: "#FFFFFF",
-    hex: "#8B5CF6",
-  },
-  {
-    id: "green",
-    name: "Emerald",
-    light: "#00C972",
-    dark: "#059669",
-    eyeColor: "#FFFFFF",
-    hex: "#10B981",
-  },
-  {
-    id: "orange",
-    name: "Forge Orange",
-    light: "#FF781C",
-    dark: "#EA580C",
-    eyeColor: "#FFFFFF",
-    hex: "#F97316",
-  },
-  {
-    id: "cyan",
-    name: "Cyber Cyan",
-    light: "#1CC3B0",
-    dark: "#0284C7",
-    eyeColor: "#FFFFFF",
-    hex: "#06B6D4",
-  },
-  {
-    id: "blue",
-    name: "Cobalt Blue",
-    light: "#2A92FE",
-    dark: "#1D4ED8",
-    eyeColor: "#FFFFFF",
-    hex: "#3B82F6",
-  },
-  {
-    id: "yellow",
-    name: "Amber Gold",
-    light: "#FFAF38",
-    dark: "#D97706",
-    eyeColor: "#141414",
-    hex: "#EAB308",
-  },
-  {
-    id: "brown",
-    name: "Caramel Bronze",
-    light: "#A27952",
-    dark: "#78350F",
-    eyeColor: "#FFFFFF",
-    hex: "#8D6E63",
-  },
-  {
-    id: "red",
-    name: "Crimson Red",
-    light: "#FF3E51",
-    dark: "#BE123C",
-    eyeColor: "#FFFFFF",
-    hex: "#EF4444",
-  },
-  {
-    id: "magenta",
-    name: "Neon Pink",
-    light: "#FF5EB1",
-    dark: "#BE185D",
-    eyeColor: "#FFFFFF",
-    hex: "#EC4899",
-  },
-  {
-    id: "gray",
-    name: "Slate Silver",
-    light: "#94A3B8",
-    dark: "#475569",
-    eyeColor: "#FFFFFF",
-    hex: "#64748B",
-  },
+  { id: "bengara", name: "Bengara", hex: "#9A3B1E", light: "#9A3B1E", dark: "#9A3B1E", eyeColor: "#F6F3EC" },
+  { id: "indigo", name: "Indigo", hex: "#2F4A7A", light: "#2F4A7A", dark: "#2F4A7A", eyeColor: "#F6F3EC" },
+  { id: "moss", name: "Moss", hex: "#4E6B2F", light: "#4E6B2F", dark: "#4E6B2F", eyeColor: "#F6F3EC" },
+  { id: "persimmon", name: "Persimmon", hex: "#A84A22", light: "#A84A22", dark: "#A84A22", eyeColor: "#F6F3EC" },
+  { id: "plum", name: "Plum", hex: "#7A3F6A", light: "#7A3F6A", dark: "#7A3F6A", eyeColor: "#F6F3EC" },
+  { id: "teal", name: "Teal", hex: "#2E6B6B", light: "#2E6B6B", dark: "#2E6B6B", eyeColor: "#F6F3EC" },
+  { id: "ochre", name: "Ochre", hex: "#7F621B", light: "#7F621B", dark: "#7F621B", eyeColor: "#F6F3EC" },
+  { id: "slate", name: "Slate", hex: "#5A5F66", light: "#5A5F66", dark: "#5A5F66", eyeColor: "#F6F3EC" },
 ];
 
 export const GROK_BOT_COLORS = GROK_COLOR_LIST.map((c) => c.hex);
 
-/** Shared identity color for Avatar Studio reset/fallback (Executive Violet). */
-export const DEFAULT_GROK_BOT_COLOR = GROK_COLOR_LIST.find((color) => color.id === "violet")!.hex;
+export const DEFAULT_GROK_BOT_COLOR = GROK_COLOR_LIST.find((color) => color.id === "indigo")!.hex;
 
 export function shippedHash(value: string): number {
   let hash = 2166136261;
@@ -121,6 +40,20 @@ export function shippedRandom(seed: number): () => number {
   };
 }
 
+const OLD_COLOR_MAP: Record<string, string> = {
+  white: "#FFFFFF",
+  violet: "#8B5CF6",
+  green: "#10B981",
+  orange: "#F97316",
+  cyan: "#06B6D4",
+  blue: "#3B82F6",
+  yellow: "#EAB308",
+  brown: "#8D6E63",
+  red: "#EF4444",
+  magenta: "#EC4899",
+  gray: "#64748B",
+};
+
 export function resolvePersonaColorDef(
   identity: string,
   explicitColor?: string | null,
@@ -131,17 +64,14 @@ export function resolvePersonaColorDef(
     if (foundById) return foundById;
     const foundByHex = GROK_COLOR_LIST.find((c) => c.hex.toLowerCase() === clean);
     if (foundByHex) return foundByHex;
-    // If custom hex, synthesize gradient
-    if (/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(explicitColor)) {
-      const isBright = isColorBright(explicitColor);
-      return {
-        id: "custom",
-        name: "Custom",
-        light: explicitColor,
-        dark: darkenHex(explicitColor, 20),
-        eyeColor: isBright ? "#141414" : "#FFFFFF",
-        hex: explicitColor,
-      };
+
+    let hexToMatch = clean;
+    if (OLD_COLOR_MAP[clean]) {
+      hexToMatch = OLD_COLOR_MAP[clean]!;
+    }
+
+    if (/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(hexToMatch)) {
+      return getNearestPigment(hexToMatch);
     }
   }
   const seed = (shippedHash(identity) ^ Math.imul(1, 2654435769)) >>> 0;
@@ -160,20 +90,30 @@ function expandHex(hex: string): string {
   return c;
 }
 
-function isColorBright(hex: string): boolean {
+function hexToRgb(hex: string) {
   const c = expandHex(hex);
-  const r = Number.parseInt(c.substring(0, 2), 16) || 0;
-  const g = Number.parseInt(c.substring(2, 4), 16) || 0;
-  const b = Number.parseInt(c.substring(4, 6), 16) || 0;
-  const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-  return brightness > 180;
+  return {
+    r: Number.parseInt(c.substring(0, 2), 16) || 0,
+    g: Number.parseInt(c.substring(2, 4), 16) || 0,
+    b: Number.parseInt(c.substring(4, 6), 16) || 0,
+  };
 }
 
-function darkenHex(hex: string, percent: number): string {
-  const num = Number.parseInt(expandHex(hex), 16);
-  const factor = 1 - percent / 100;
-  const r = Math.max(0, Math.floor(((num >> 16) & 255) * factor));
-  const g = Math.max(0, Math.floor(((num >> 8) & 255) * factor));
-  const b = Math.max(0, Math.floor((num & 255) * factor));
-  return `#${((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1)}`;
+function colorDistance(hex1: string, hex2: string) {
+  const c1 = hexToRgb(hex1);
+  const c2 = hexToRgb(hex2);
+  return Math.pow(c1.r - c2.r, 2) + Math.pow(c1.g - c2.g, 2) + Math.pow(c1.b - c2.b, 2);
+}
+
+function getNearestPigment(hex: string): GrokColorDef {
+  let best = GROK_COLOR_LIST[0]!;
+  let minDist = Infinity;
+  for (const pigment of GROK_COLOR_LIST) {
+    const dist = colorDistance(hex, pigment.hex);
+    if (dist < minDist) {
+      minDist = dist;
+      best = pigment;
+    }
+  }
+  return best;
 }

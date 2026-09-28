@@ -1,5 +1,6 @@
 import { memo } from "react";
-import { StyleSheet, Text, View, type ViewStyle } from "react-native";
+import { StyleSheet, Text, useColorScheme, View } from "react-native";
+import { mobileTokens } from "../lib/appearance";
 import { native, useThemedStyles } from "../lib/native";
 import { BotAvatar } from "./bot-avatar";
 
@@ -18,6 +19,9 @@ export const GroupAvatar = memo(function GroupAvatar({
   size?: number;
 }) {
   const styles = useThemedStyles(createGroupAvatarStyles);
+  const scheme = useColorScheme();
+  const tokens = mobileTokens("system", scheme);
+
   const firstMember = members[0];
   if (!firstMember) {
     return (
@@ -47,35 +51,26 @@ export const GroupAvatar = memo(function GroupAvatar({
     );
   }
 
-  const pair = members.length === 2;
-  const miniSize = Math.round(size * (pair ? 0.65 : 0.54));
-  const positions: ViewStyle[] = pair
-    ? [
-        { top: 0, left: 0 },
-        { right: 0, bottom: 0 },
-      ]
-    : [
-        { top: 0, left: (size - miniSize) / 2 },
-        { bottom: 0, left: 0 },
-        { right: 0, bottom: 0 },
-      ];
-  const visibleMembers = members.slice(0, pair || members.length === 3 ? members.length : 2);
+  const overlap = Math.round(size / 3);
+  const visibleMembers = members.slice(0, 3);
 
   return (
-    <View style={{ width: size, height: size, position: "relative" }}>
+    <View style={{ height: size, flexDirection: "row", alignItems: "center" }}>
       {visibleMembers.map((member, index) => (
         <View
           key={member.botId ?? index}
           style={{
-            position: "absolute",
-            ...positions[index],
-            zIndex: index + 1,
+            marginLeft: index === 0 ? 0 : -overlap,
+            borderRadius: size / 2,
+            borderWidth: 2,
+            borderColor: tokens.background,
+            overflow: "hidden", // in case ring needs clipping
           }}
         >
           <BotAvatar
             color={member.color}
             identity={member.botId ?? member.name}
-            size={miniSize}
+            size={size}
             status={member.status}
           />
         </View>
@@ -83,19 +78,20 @@ export const GroupAvatar = memo(function GroupAvatar({
       {members.length > 3 ? (
         <View
           style={{
-            position: "absolute",
-            right: 0,
-            bottom: 0,
-            zIndex: 3,
-            width: miniSize,
-            height: miniSize,
-            borderRadius: miniSize / 2,
+            marginLeft: -overlap,
+            width: size,
+            height: size,
+            borderRadius: size / 2,
+            borderWidth: 2,
+            borderColor: tokens.background,
             backgroundColor: native.fillPressed,
             alignItems: "center",
             justifyContent: "center",
           }}
         >
-          <Text style={{ color: native.label, fontSize: 10, fontWeight: "600" }}>
+          <Text
+            style={{ color: native.label, fontSize: Math.round(size * 0.3), fontWeight: "600" }}
+          >
             +{members.length - 2}
           </Text>
         </View>
