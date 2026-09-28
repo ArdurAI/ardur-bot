@@ -294,3 +294,85 @@ it("preserves identity-free legacy deltas as standalone rows without a zero clai
     }),
   });
 });
+
+it("stores the usage pin, not the source run's pin, when a reviewer pin is supplied", async () => {
+  const create = vi.fn(async () => ({ id: "usage" }));
+  const runRow = {
+    id: "run",
+    spaceId: "space",
+    userId: "user",
+    botId: "bot",
+    threadId: "thread",
+    taskId: "root",
+    delegationRootTaskId: null,
+    delegationId: null,
+    status: "completed",
+    runtimePin: { runtimeKind: "pi", provider: "anthropic", modelId: "claude-opus" },
+    createdAt: new Date(),
+  };
+  const tx = {
+    $queryRaw: vi.fn(async () => []),
+    run: {
+      findUniqueOrThrow: vi.fn(async () => structuredClone(runRow)),
+      findUnique: vi.fn(async () => structuredClone(runRow)),
+    },
+    delegation: { findUniqueOrThrow: vi.fn() },
+    usageRecord: {
+      findUnique: vi.fn(async () => null),
+      findFirst: vi.fn(async () => null),
+      create,
+    },
+    requestUsageObservation: {
+      findUnique: vi.fn(async () => null),
+      create: vi.fn(async () => ({ id: "receipt" })),
+    },
+    task: { findFirst: vi.fn(async () => ({ id: "root" })) },
+    delegationRoot: {
+      findUnique: vi.fn(async () => null),
+      updateMany: vi.fn(async () => ({ count: 1 })),
+    },
+    botMessageDelivery: { findMany: vi.fn(async () => []), update: vi.fn() },
+    thread: { update: vi.fn(async () => ({ nextEventSeq: 2 })) },
+    event: { findFirst: vi.fn(async () => null), create: vi.fn(async () => ({ id: "event" })) },
+  };
+  const prisma = {
+    ...tx,
+    $transaction: (fn: (tx: Prisma.TransactionClient) => Promise<unknown>) =>
+      fn(tx as unknown as Prisma.TransactionClient),
+  } as unknown as PrismaClient;
+  const reviewerPin = {
+    runtimeKind: "codex-app-server" as const,
+    provider: "openai-codex",
+    modelId: "gpt-6-astra",
+    effort: "high",
+    credentialId: "native:codex-app-server",
+    revision: 1,
+  };
+  const collector = new RequestUsageCollector({
+    provider: "openai-codex",
+    model: "gpt-6-astra",
+    inputSemantics: "total-with-cache-subsets",
+    mappingVersion: "fixture-v1",
+  });
+  await recordRunUsage(
+    { prisma, events: { append: vi.fn() } },
+    {
+      id: "run",
+      spaceId: "space",
+      userId: "user",
+      botId: "bot",
+      threadId: "thread",
+      taskId: "root",
+    },
+    collector.snapshot({ input: 100, output: 30 }),
+    reviewerPin,
+  );
+  expect(create).toHaveBeenCalledWith({
+    data: expect.objectContaining({
+      provider: "openai-codex",
+      model: "gpt-6-astra",
+      runtimePin: reviewerPin,
+      runId: "run",
+    }),
+  });
+});

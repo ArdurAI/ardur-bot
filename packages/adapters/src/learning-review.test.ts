@@ -255,6 +255,7 @@ describe("proposal-only learning review", () => {
         outputTokens: 30,
         request: expect.objectContaining({ purpose: "detached-learning" }),
       }),
+      pin,
     );
     expect(f.runtimeRun.mock.calls[0]?.[0]).toMatchObject({
       model: { provider: pin.provider, id: pin.modelId },
@@ -277,6 +278,7 @@ describe("proposal-only learning review", () => {
           collection: expect.objectContaining({ outcome: "failed", availability: "unavailable" }),
         }),
       }),
+      pin,
     );
     expect(f.records.proposals).toHaveLength(0);
   });
@@ -632,6 +634,40 @@ describe("reviewer runtime resolution", () => {
     // The review budget treats "not reported" as unknown: no token total is written.
     expect(f.records.reviews[0]?.status).toBe("no-change");
     expect(f.records.reviews[0]).not.toHaveProperty("tokens");
+  });
+  it("passes the resolved working directory to a native reviewer runtime", async () => {
+    const { f } = agyReviewFixture(true);
+    const nativeRun = vi.fn(async function* (request: AgentRunRequest) {
+      expect(request.nativeCwd).toBe("/host/bot-1");
+      yield {
+        type: "usage" as const,
+        inputTokens: 20,
+        outputTokens: 30,
+        provider: "antigravity",
+        model: agyPin.modelId!,
+      };
+      yield { type: "done", text: '{"proposals":[]}' };
+    });
+    const nativeRuntime = {
+      run: nativeRun,
+      describe: () => ({ capabilities: { scripted: false } }),
+    } as unknown as AgentRuntime;
+    const resolveRuntime = vi.fn(async () => ({
+      runtime: nativeRuntime,
+      nativeCwd: "/host/bot-1",
+    }));
+    await reviewLearning({ ...f.deps, resolveRuntime }, await f.payload());
+    expect(nativeRun).toHaveBeenCalledOnce();
+  });
+  it("forwards the reviewer pin with recorded review usage", async () => {
+    const { f } = agyReviewFixture(true);
+    const recorded: Array<{ pin?: unknown }> = [];
+    const recordUsage = vi.fn(async (_sourceRunId: string, _usage: AgentUsage, pin?: unknown) => {
+      recorded.push({ pin });
+    });
+    await reviewLearning({ ...f.deps, recordUsage }, await f.payload());
+    expect(recordUsage).toHaveBeenCalled();
+    expect(recorded.at(-1)?.pin).toEqual(agyPin);
   });
 });
 

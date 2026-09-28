@@ -8,6 +8,8 @@ import type {
   SandboxProvider,
 } from "@ardurbot/adapter-kit";
 import { messagingDeliverJob } from "@ardurbot/adapter-kit";
+import type { RuntimePin, RuntimeProblem } from "@ardurbot/contracts";
+import { runtimePinProblem } from "@ardurbot/contracts";
 import type { Pool, PrismaClient, ThreadEvents } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 import type { MemoryService } from "@ardurbot/memory";
@@ -29,10 +31,35 @@ import type { LocalImportJobOptions } from "./local-import-jobs.js";
 import { createLocalImportJobs } from "./local-import-jobs.js";
 import type { MemoryProviderResolver } from "./memory-provider-factory.js";
 import { deliverMessagingOutbound, mirrorMessagingOutbound } from "./messaging-delivery.js";
+import { usesHostBridge } from "./remote-host-sandbox.js";
 import { recordRunUsage } from "./run-usage.js";
 import { createRuntimeRegistry } from "./runtime-registry.js";
 import type { EncryptedSecretStore } from "./secrets.js";
 import { expireTaughtSkillTeaching } from "./teaching-session.js";
+
+/**
+ * Refusals a reviewer pin can hit before any review budget is reserved. Hermes
+ * has no broker on this path, and in host-bridge mode the connected host only
+ * authorizes persisted runs, so a native reviewer would fail after reservation.
+ */
+export function reviewRuntimeGate(input: {
+  pin: RuntimePin;
+  hostBridge: boolean;
+}): RuntimeProblem | null {
+  if (input.pin.runtimeKind === "hermes")
+    return runtimePinProblem(
+      input.pin,
+      "runtime-unavailable",
+      "A Hermes reviewer cannot run learning reviews yet — change the reviewer pin.",
+    );
+  if (input.hostBridge && input.pin.runtimeKind !== "pi")
+    return runtimePinProblem(
+      input.pin,
+      "runtime-unavailable",
+      "This reviewer runs on a connected host, which cannot run detached reviews yet — change the reviewer pin.",
+    );
+  return null;
+}
 
 /** A finished run is new evidence for its person's insights; the pass itself is debounced. */
 async function enqueueFinishedRunInsights(
@@ -67,9 +94,9 @@ export function createBackgroundJobHandlers(deps: {
   /** Filing locks only. Never the shared Prisma pool. */
   lockPool?: Pick<Pool, "connect">;
 }): BackgroundJobHandlers {
-  const recordUsage = async (sourceRunId: string, usage: AgentUsage) => {
+  const recordUsage = async (sourceRunId: string, usage: AgentUsage, reviewerPin?: RuntimePin) => {
     const run = await deps.prisma.run.findUniqueOrThrow({ where: { id: sourceRunId } });
-    await recordRunUsage(deps, run, usage);
+    await recordRunUsage(deps, run, usage, reviewerPin);
   };
   // The reviewer pin may name a native runtime; resolve the same registry the
   // executor uses so the review runs on the runtime the pin promises.
@@ -113,16 +140,21 @@ export function createBackgroundJobHandlers(deps: {
           memoryDocuments: deps.memoryDocuments,
           recordUsage,
           resolveRuntime: async (pin) => {
+            const refused = reviewRuntimeGate({ pin, hostBridge: usesHostBridge() });
+            if (refused) return refused;
             const source = await deps.prisma.run.findUnique({
               where: { id: payload.runId },
               select: {
                 bot: {
-                  select: { computer: { select: { kind: true } }, runtimeExperimental: true },
+                  select: {
+                    computer: { select: { kind: true, providerRef: true } },
+                    runtimeExperimental: true,
+                  },
                 },
               },
             });
             const bot = source?.bot;
-            return runtimeRegistry.resolve(
+            const selection = await runtimeRegistry.resolve(
               pin,
               bot?.computer?.kind,
               bot?.runtimeExperimental,
@@ -135,6 +167,14 @@ export function createBackgroundJobHandlers(deps: {
                   }
                 : undefined,
             );
+            if ("kind" in selection) return selection;
+            // Native in-process runtimes run in the bot's host folder, like the
+            // executor's own runs; Antigravity refuses to start without it.
+            return {
+              runtime: selection.runtime,
+              nativeCwd:
+                bot?.computer?.kind === "desktop" ? (bot.computer.providerRef ?? undefined) : undefined,
+            };
           },
           boardService: new BoardService({
             prisma: deps.prisma,

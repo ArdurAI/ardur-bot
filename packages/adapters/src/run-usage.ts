@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import type { AgentUsage, UsagePurpose } from "@ardurbot/adapter-kit";
+import type { RuntimePin } from "@ardurbot/contracts";
 import { DELEGATION_LIMITS } from "@ardurbot/contracts";
 import type { PrismaClient, ThreadEvents, UsageRecord } from "@ardurbot/db";
 import {
@@ -66,8 +67,10 @@ export async function recordRunUsage(
   deps: UsageDependencies,
   run: UsageRun,
   usage: AgentUsage,
+  /** Pin of the request that ran (e.g. a detached reviewer), when not the run's own. */
+  usagePin?: RuntimePin,
 ): Promise<RecordedContextUsage | null> {
-  if (usage.request) return recordRequestUsage(deps, run, usage);
+  if (usage.request) return recordRequestUsage(deps, run, usage, undefined, usagePin);
   // Legacy callers lack stable observation identity. Preserve totals without claiming deduplication.
   if (
     ![usage.inputTokens, usage.outputTokens].every(
@@ -338,6 +341,7 @@ async function recordRequestUsage(
   run: UsageRun,
   usage: AgentUsage,
   brokerFence?: BrokerRunFence,
+  usagePin?: RuntimePin,
 ) {
   const request = parseRequestUsage(usage.request);
   const supplied = usageTokenTotals(request.categories, request.reasoningSemantics);
@@ -658,9 +662,11 @@ async function recordRequestUsage(
                 inputSemantics: request.inputSemantics,
                 reasoningSemantics: request.reasoningSemantics,
                 runtimePin:
-                  (delegation?.snapshot as { pin?: Prisma.InputJsonValue } | null)?.pin ??
-                  currentRun.runtimePin ??
-                  Prisma.JsonNull,
+                  usagePin !== undefined
+                    ? (usagePin as Prisma.InputJsonValue)
+                    : ((delegation?.snapshot as { pin?: Prisma.InputJsonValue } | null)?.pin ??
+                      currentRun.runtimePin ??
+                      Prisma.JsonNull),
               },
             });
         const receipt = await tx.requestUsageObservation.create({

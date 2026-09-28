@@ -53,11 +53,13 @@ Skill content must be SKILL.md with name and description frontmatter. Do not inc
 Do not propose changes to protected or imported documents. Return no other text.`;
 
 export interface LearningReviewDependencies {
-  recordUsage?: (sourceRunId: string, usage: AgentUsage) => Promise<void>;
+  recordUsage?: (sourceRunId: string, usage: AgentUsage, reviewerPin?: RuntimePin) => Promise<void>;
   prisma: PrismaClient;
   runtime: AgentRuntime;
   /** Resolve the runtime that can run the reviewer pin; defaults to deps.runtime. */
-  resolveRuntime?: (pin: RuntimePin) => Promise<{ runtime: AgentRuntime } | RuntimeProblem>;
+  resolveRuntime?: (
+    pin: RuntimePin,
+  ) => Promise<{ runtime: AgentRuntime; nativeCwd?: string } | RuntimeProblem>;
   memoryDocuments?: MemoryService;
   secretStore: EncryptedSecretStore;
   resolvePin?: typeof resolveReviewerPin;
@@ -445,6 +447,7 @@ export async function reviewLearning(
       prompt,
       history: [],
       tools: "none",
+      ...(selection.nativeCwd ? { nativeCwd: selection.nativeCwd } : {}),
       model: {
         ...resolved,
         maxTokens: Math.min(resolved.maxTokens ?? config.maxOutputTokens, config.maxOutputTokens),
@@ -475,7 +478,7 @@ export async function reviewLearning(
               purpose: "detached-learning",
               signal: controller.signal,
               record: async (usage) => {
-                await deps.recordUsage?.(run.id, usage);
+                await deps.recordUsage?.(run.id, usage, pin);
                 usageTotals.observe(usage);
                 usageSeen = usageTotals.reported;
                 tokens = usageTotals.tokens;
