@@ -232,6 +232,7 @@ import type { SettingsSection } from "./SettingsOverlay";
 import { SpaceSearchResults } from "./SpaceSearch";
 import { isComputerVisible } from "./shell/computer-visibility";
 import { useTakeControl } from "./shell/use-take-control";
+import { useComputerTerminalOpen } from "./shell/use-computer-terminal-open";
 import { BotModelChip } from "./shell/bot-model-chip";
 import { BotSettings, CreateBotForm } from "./shell/bot-panel";
 import { isCommandPaletteHotkey } from "./shell/command-palette-hotkey";
@@ -2671,7 +2672,7 @@ export function ShellPage({
       }
     },
     onStop: stopRun,
-    onOpen: () => setComputerOpen(true),
+    onOpen: useComputerTerminalOpen(setComputerOpen, setWorkspaceExpanded),
   });
   const displayedComputerError = visibleComputerError(
     computerErrorState,
