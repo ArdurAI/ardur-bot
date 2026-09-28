@@ -12,6 +12,7 @@ export function installGuidedSetupIpc(input: {
   window: () => BrowserWindow | null;
   engine: SetupEngine;
   startup: { supported(): boolean; enabled(): boolean; set(enabled: boolean): void };
+  openAccount?: (step: "model" | "first-bot" | "finish") => Promise<void>;
 }): () => void {
   let startupBefore: boolean | null = null;
   const allowed = (event: IpcMainInvokeEvent) => {
@@ -110,6 +111,23 @@ export function installGuidedSetupIpc(input: {
     SetupNoInputSchema.parse(args);
     return SetupSnapshotSchema.parse(await input.engine.resume());
   });
+  input.ipc.handle(GUIDED_SETUP_CHANNELS.openModels, async (event, ...args: unknown[]) => {
+    guard(event);
+    SetupNoInputSchema.parse(args);
+    await input.openAccount?.("model");
+  });
+  input.ipc.handle(GUIDED_SETUP_CHANNELS.createBot, async (event, ...args: unknown[]) => {
+    guard(event);
+    SetupNoInputSchema.parse(args);
+    await input.openAccount?.("first-bot");
+  });
+  input.ipc.handle(GUIDED_SETUP_CHANNELS.openApp, async (event, ...args: unknown[]) => {
+    guard(event);
+    SetupNoInputSchema.parse(args);
+    if (input.engine.snapshot().steps[8]?.status !== "succeeded")
+      throw new Error("Finish setup first.");
+    await input.openAccount?.("finish");
+  });
   const unsubscribe = input.engine.onChange((snapshot) => {
     if (snapshot.steps.find((row) => row.id === "services")?.status === "succeeded")
       startupBefore = null;
@@ -121,7 +139,12 @@ export function installGuidedSetupIpc(input: {
   return () => {
     unsubscribe();
     for (const channel of Object.values(GUIDED_SETUP_CHANNELS)) {
-      if (channel !== GUIDED_SETUP_CHANNELS.changed && channel !== GUIDED_SETUP_CHANNELS.openAgain)
+      if (
+        channel !== GUIDED_SETUP_CHANNELS.changed &&
+        channel !== GUIDED_SETUP_CHANNELS.openAgain &&
+        channel !== GUIDED_SETUP_CHANNELS.returnToSetup &&
+        channel !== GUIDED_SETUP_CHANNELS.refreshAccount
+      )
         input.ipc.removeHandler(channel);
     }
   };

@@ -58,6 +58,9 @@ function mount() {
     onCancel: vi.fn(),
     onResume: vi.fn(),
     onCopyDetails: vi.fn(async () => true),
+    onOpenModels: vi.fn(),
+    onCreateBot: vi.fn(),
+    onContinue: vi.fn(),
   };
   return {
     host,
@@ -208,6 +211,62 @@ describe("GuidedSetupView", () => {
       expect(start).toBeDefined();
       await act(async () => start?.click());
       expect(view.actions.onStart).toHaveBeenCalledOnce();
+    } finally {
+      await view.cleanup();
+    }
+  });
+
+  it("offers footer recovery after a cancellation journal write fails", async () => {
+    const view = mount();
+    try {
+      const snapshot = fixture("failed");
+      snapshot.blocked = true;
+      snapshot.steps[1]!.reasonCode = "journal-write-failed";
+      await view.render(snapshot);
+      const footer = view.host.querySelector(".guided-actions");
+      const retry = [...(footer?.querySelectorAll("button") ?? [])].find(
+        (button) => button.textContent === "Retry",
+      );
+      expect(retry).toBeDefined();
+      await act(async () => retry?.click());
+      expect(view.actions.onRetry).toHaveBeenCalledWith("database");
+    } finally {
+      await view.cleanup();
+    }
+  });
+
+  it("shows account handoff actions and an honest deferred finish summary", async () => {
+    const view = mount();
+    try {
+      const snapshot = fixture("pending");
+      for (const row of snapshot.steps) row.available = true;
+      snapshot.currentStep = "model";
+      snapshot.machineReady = true;
+      snapshot.steps[6]!.status = "waiting-input";
+      snapshot.steps[6]!.reasonCode = "model-not-saved";
+      await view.render(snapshot);
+      const model = view.host.querySelectorAll(".guided-step")[6]!;
+      const open = [...model.querySelectorAll("button")].find(
+        (button) => button.textContent === "Open Models",
+      );
+      expect(open).toBeDefined();
+      await act(async () => open?.click());
+      expect(view.actions.onOpenModels).toHaveBeenCalledOnce();
+      snapshot.steps[6]!.status = "skipped";
+      snapshot.steps[7]!.status = "skipped";
+      snapshot.steps[8]!.status = "succeeded";
+      snapshot.currentStep = "finish";
+      await view.render({ ...snapshot, sequence: 2 });
+      expect(view.host.textContent).toContain("Ardur is ready");
+      expect(view.host.textContent).toContain("Model setup is incomplete");
+      expect(view.host.textContent).toContain("First bot not created");
+      expect(view.host.textContent).not.toContain("Setup complete");
+      snapshot.steps[6]!.status = "succeeded";
+      snapshot.steps[7]!.status = "succeeded";
+      snapshot.accountReady = true;
+      snapshot.complete = true;
+      await view.render({ ...snapshot, sequence: 3 });
+      expect(view.host.textContent).toContain("Setup complete");
     } finally {
       await view.cleanup();
     }

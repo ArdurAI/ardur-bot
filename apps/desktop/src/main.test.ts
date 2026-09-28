@@ -128,6 +128,40 @@ describe("first-launch setup dispatch", () => {
 });
 
 describe("guided setup service handoff", () => {
+  it("leaves the guided form when opening an already complete account", async () => {
+    const source = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
+    const start = source.indexOf("openAccount: async (step) => {");
+    const end = source.indexOf("\n      },", start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const loadURL = vi.fn(async () => undefined);
+    const mainWindow = {
+      webContents: { getURL: () => "http://127.0.0.1:3333/guided-onboarding?step=model" },
+      loadURL,
+      isDestroyed: () => false,
+      show: vi.fn(),
+      focus: vi.fn(),
+    };
+    const context = {
+      guidedEngine: { snapshot: () => ({ accountReady: true }) },
+      setupWindow: { hide: vi.fn() },
+      mainWindow,
+      currentTargetUrl: "http://127.0.0.1:3333",
+      openGuidedAccount: vi.fn(),
+      waitForMountedAppDocument: vi.fn(async () => undefined),
+      URL,
+    };
+    vm.runInNewContext(
+      `this.openAccount = async (step) => {${source.slice(start + "openAccount: async (step) => {".length, end)}\n}`,
+      context,
+    );
+    await (
+      context as typeof context & { openAccount: (step: string) => Promise<void> }
+    ).openAccount("finish");
+    expect(loadURL).toHaveBeenCalledWith("http://127.0.0.1:3333/app");
+    expect(mainWindow.show).toHaveBeenCalledOnce();
+    expect(context.openGuidedAccount).not.toHaveBeenCalled();
+  });
   it.each([
     { resume: true, document: "setup.html" },
     { resume: false, document: "guided-setup.html" },
@@ -318,7 +352,7 @@ describe("main window host lifecycle", () => {
 describe("local mode failures in the main process", () => {
   const source = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
 
-  function serviceFailure(state: { setupOpen: boolean; response: number }) {
+  function serviceFailure(state: { setupOpen: boolean; setupVisible?: boolean; response: number }) {
     const start = source.indexOf("function showServiceFailure(");
     expect(start).toBeGreaterThan(-1);
     const end = source.slice(start + 1).search(/\n(?:async )?function /u) + start + 1;
@@ -332,6 +366,7 @@ describe("local mode failures in the main process", () => {
       localMode: { start: vi.fn(async () => undefined) },
       resetLocalDataAndStart: vi.fn(async () => true),
     };
+    if (context.setupWindow) context.setupWindow.isVisible = () => state.setupVisible ?? true;
     vm.runInNewContext(
       `${stripTypeScriptTypes(source.slice(start, end))}\nthis.showServiceFailure = showServiceFailure;`,
       context,
@@ -362,6 +397,39 @@ describe("local mode failures in the main process", () => {
     closed.showServiceFailure("The API stopped.");
     await vi.waitFor(() => expect(closed.serviceFailurePrompt).toBe(false));
     expect(closed.localMode.start).not.toHaveBeenCalled();
+  });
+
+  it("offers recovery when a completed checklist is retained but hidden", async () => {
+    const f = serviceFailure({ setupOpen: true, setupVisible: false, response: 0 });
+    f.showServiceFailure("The API stopped.", true);
+    expect(f.dialog.showMessageBox).toHaveBeenCalledWith(
+      f.mainWindow,
+      expect.objectContaining({ buttons: ["Retry", "Reset local data", "Close"] }),
+    );
+  });
+
+  it("reactivates the app when the retained checklist is hidden", () => {
+    const start = source.indexOf('  app.on("activate", () => {');
+    const end = source.indexOf("\n  });", start) + "\n  });".length;
+    const setupWindow = new WindowFake();
+    setupWindow.isVisible = () => false;
+    const mainWindow = new WindowFake();
+    let activate: (() => void) | undefined;
+    const context = {
+      app: {
+        on: (_event: string, handler: () => void) => {
+          activate = handler;
+        },
+      },
+      setupWindow,
+      mainWindow,
+      clearTimeout: vi.fn(),
+      warmWindowTimer: undefined,
+    };
+    vm.runInNewContext(source.slice(start, end), context);
+    activate?.();
+    expect(mainWindow.show).toHaveBeenCalledOnce();
+    expect(setupWindow.show).not.toHaveBeenCalled();
   });
 
   it("offers Reset local data when only a reset clears the failure", async () => {

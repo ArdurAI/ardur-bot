@@ -48,6 +48,7 @@ export function ModelSettingsOverlay({
   localOwner = false,
   initialProvider,
   onOpenBotRuntime,
+  onSavePendingChange,
 }: {
   onClose: () => void;
   /** Render panel body only for the shared Settings shell. */
@@ -55,6 +56,7 @@ export function ModelSettingsOverlay({
   localOwner?: boolean;
   initialProvider?: string;
   onOpenBotRuntime?: () => void;
+  onSavePendingChange?: (pending: boolean) => void;
 }) {
   const { t } = useLingui();
   const [catalog, setCatalog] = useState<ModelCatalogEntry[]>([]);
@@ -77,12 +79,18 @@ export function ModelSettingsOverlay({
   const resetOpenAiCompatibleProbe = modelProbe.reset;
   const [loading, setLoading] = useState(true);
   const [pending, setPending] = useState<"connect" | "default" | null>(null);
+  const [oauthSaving, setOauthSaving] = useState(false);
+  const [ollamaSaving, setOllamaSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const detailScrollRef = useRef<HTMLDivElement>(null);
   const refreshRevisionRef = useRef(0);
   const selectionRevisionRef = useRef(0);
   const selectedLabelRef = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    onSavePendingChange?.(pending !== null || oauthSaving || ollamaSaving);
+  }, [onSavePendingChange, pending, oauthSaving, ollamaSaving]);
 
   const {
     oauth,
@@ -93,6 +101,7 @@ export function ModelSettingsOverlay({
     startSubscriptionSignIn,
     submitOAuthCode,
   } = useModelOAuthSignIn({
+    onPersistenceChange: setOauthSaving,
     onClearError: () => setError(null),
     onError: setError,
     onFinished: async (controller) => {
@@ -488,7 +497,7 @@ export function ModelSettingsOverlay({
             <ShowAllModels checked={showAllModels} onChange={setShowAllModels} />
           ) : null}
           {provider === "ollama" ? (
-            <OllamaSettings onChanged={refresh} />
+            <OllamaSettings onChanged={refresh} onSavePendingChange={setOllamaSaving} />
           ) : selected ? (
             <>
               <div className="block text-[13.5px] text-muted-foreground">

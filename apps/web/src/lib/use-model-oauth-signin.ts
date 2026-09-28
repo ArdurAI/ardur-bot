@@ -20,8 +20,9 @@ export function useModelOAuthSignIn(options: {
   onFinished: (controller: AbortController) => void | Promise<void>;
   onError: (message: string) => void;
   onClearError?: () => void;
+  onPersistenceChange?: (pending: boolean) => void;
 }) {
-  const { onFinished, onError, onClearError } = options;
+  const { onFinished, onError, onClearError, onPersistenceChange } = options;
   const [oauth, setOauth] = useState<ModelOAuthBegin | null>(null);
   const [pasteCode, setPasteCode] = useState("");
   const [oauthPending, setOauthPending] = useState(false);
@@ -29,12 +30,15 @@ export function useModelOAuthSignIn(options: {
   const oauthLoginIdRef = useRef<string | null>(null);
   const oauthCodeSubmittingRef = useRef(false);
   const oauthCaptureRef = useRef<(() => void) | null>(null);
+  const persistenceCountRef = useRef(0);
   const onFinishedRef = useRef(onFinished);
   const onErrorRef = useRef(onError);
   const onClearErrorRef = useRef(onClearError);
+  const onPersistenceChangeRef = useRef(onPersistenceChange);
   onFinishedRef.current = onFinished;
   onErrorRef.current = onError;
   onClearErrorRef.current = onClearError;
+  onPersistenceChangeRef.current = onPersistenceChange;
 
   function releaseOAuthCapture(expected?: (() => void) | null) {
     if (expected !== undefined && oauthCaptureRef.current !== expected) return;
@@ -59,17 +63,23 @@ export function useModelOAuthSignIn(options: {
   async function finishSubscriptionSignIn(loginId: string, controller: AbortController) {
     await waitForModelOAuth(loginId, controller.signal);
     if (controller.signal.aborted) return;
-    await rpc.models.finishOAuth({ loginId }, { signal: controller.signal });
-    if (controller.signal.aborted) return;
-    oauthLoginIdRef.current = null;
-    setOauth(null);
-    // Keep post-connect UI work outside the OAuth try/catch so a refresh failure
-    // is not reported as a failed sign-in (finishOAuth already persisted).
+    persistenceCountRef.current += 1;
+    onPersistenceChangeRef.current?.(true);
     try {
-      await onFinishedRef.current(controller);
-    } catch (err) {
+      await rpc.models.finishOAuth({ loginId }, { signal: controller.signal });
       if (controller.signal.aborted) return;
-      onErrorRef.current(err instanceof Error ? err.message : "Connected, but could not refresh");
+      oauthLoginIdRef.current = null;
+      setOauth(null);
+      // A refresh failure is not a failed sign-in: finishOAuth already persisted.
+      try {
+        await onFinishedRef.current(controller);
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        onErrorRef.current(err instanceof Error ? err.message : "Connected, but could not refresh");
+      }
+    } finally {
+      persistenceCountRef.current -= 1;
+      if (persistenceCountRef.current === 0) onPersistenceChangeRef.current?.(false);
     }
   }
 

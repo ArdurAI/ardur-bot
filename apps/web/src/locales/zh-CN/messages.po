@@ -2006,6 +2006,7 @@ msgstr ""
 msgid "Connect a desktop app to approve new devices."
 msgstr ""
 
+#: src/pages/GuidedOnboarding.tsx
 #: src/pages/Onboarding.tsx
 msgid "Connect a model"
 msgstr "连接模型"
@@ -2972,6 +2973,10 @@ msgstr "创建分组并把 {0} 移入。"
 msgid "Create account"
 msgstr "创建账户"
 
+#: src/pages/GuidedOnboarding.tsx
+msgid "Create bot"
+msgstr "创建机器人"
+
 #: src/pages/GroupPanel.tsx
 msgid "Create group"
 msgstr "创建群组"
@@ -3001,6 +3006,10 @@ msgstr "创建工作区"
 #: src/pages/Auth.tsx
 msgid "Create your Ardur"
 msgstr "创建你的 Ardur"
+
+#: src/pages/GuidedOnboarding.tsx
+msgid "Create your first bot"
+msgstr "创建你的第一个机器人"
 
 #: src/components/AskCard.tsx
 #: src/pages/account/AccountTables.tsx
@@ -3854,6 +3863,10 @@ msgstr "正在查找…"
 msgid "Fine-grained token"
 msgstr ""
 
+#: src/pages/GuidedOnboarding.tsx
+msgid "Finish setup"
+msgstr "完成设置"
+
 #. placeholder {0}: new URL(oauth.verificationUri).hostname
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -3875,6 +3888,10 @@ msgstr "完成"
 #: src/pages/McpOAuthCallback.tsx
 msgid "Finishing MCP connection…"
 msgstr "正在完成 MCP 连接…"
+
+#: src/pages/GuidedOnboarding.tsx
+msgid "First bot not created"
+msgstr "尚未创建第一个机器人"
 
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Flag unexpected actions"
@@ -5132,6 +5149,10 @@ msgstr "模型选项"
 msgid "Model or memory unavailable"
 msgstr "模型或记忆不可用"
 
+#: src/pages/GuidedOnboarding.tsx
+msgid "Model setup is incomplete"
+msgstr "模型设置尚未完成"
+
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Model spend uses your provider keys."
 msgstr "模型费用使用你的提供方密钥。"
@@ -5822,6 +5843,10 @@ msgstr ""
 #: src/pages/LocalSettings.tsx
 msgid "Open local settings from the desktop app on the server’s computer."
 msgstr ""
+
+#: src/pages/GuidedOnboarding.tsx
+msgid "Open Models"
+msgstr "打开模型"
 
 #: src/pages/Shell.tsx
 msgid "Open navigation"
@@ -6822,6 +6847,10 @@ msgstr ""
 #: src/pages/McpOAuthCallback.tsx
 msgid "Return to Ardur"
 msgstr "返回 Ardur"
+
+#: src/pages/GuidedOnboarding.tsx
+msgid "Return to setup"
+msgstr "返回设置"
 
 #. placeholder {0}: doc.revision
 #: src/pages/KnowledgeSection.tsx
@@ -7969,6 +7998,10 @@ msgstr ""
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "The connection was cancelled."
 msgstr ""
+
+#: src/pages/GuidedOnboarding.tsx
+msgid "The first bot could not be created. Try again."
+msgstr "无法创建第一个机器人。请重试。"
 
 #: src/pages/group-model-control.tsx
 msgid "The group model choice was reloaded. Pick again."

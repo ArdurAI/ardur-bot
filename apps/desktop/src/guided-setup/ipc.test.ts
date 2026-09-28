@@ -121,10 +121,12 @@ describe("guided setup IPC", () => {
     const send = vi.fn();
     const webContents = { mainFrame: frame, send };
     const window = { isDestroyed: () => false, webContents } as unknown as BrowserWindow;
+    const openAccount = vi.fn(async () => undefined);
     const cleanup = installGuidedSetupIpc({
       ipc,
       window: () => window,
       engine,
+      openAccount,
       startup: { supported: () => true, enabled: () => false, set: vi.fn() },
     });
     const call = (
@@ -139,6 +141,12 @@ describe("guided setup IPC", () => {
     await expect(
       call(GUIDED_SETUP_CHANNELS.retry, webContents, frame, "arbitrary-command"),
     ).rejects.toThrow();
+    await expect(
+      call(GUIDED_SETUP_CHANNELS.openModels, webContents, { url: "https://outside.test/" }),
+    ).rejects.toThrow("not active");
+    await expect(call(GUIDED_SETUP_CHANNELS.createBot, {}, frame)).rejects.toThrow("not active");
+    await call(GUIDED_SETUP_CHANNELS.openModels);
+    expect(openAccount).toHaveBeenCalledWith("model");
     const before = call(GUIDED_SETUP_CHANNELS.snapshot) as ReturnType<typeof engine.snapshot>;
     await call(GUIDED_SETUP_CHANNELS.start);
     const after = call(GUIDED_SETUP_CHANNELS.snapshot) as ReturnType<typeof engine.snapshot>;

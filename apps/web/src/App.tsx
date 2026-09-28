@@ -35,6 +35,9 @@ const PasswordResetPage = lazy(() =>
 const OnboardingPage = lazy(() =>
   import("./pages/Onboarding").then((module) => ({ default: module.OnboardingPage })),
 );
+const GuidedOnboardingPage = lazy(() =>
+  import("./pages/GuidedOnboarding").then((module) => ({ default: module.GuidedOnboardingPage })),
+);
 const WelcomePage = lazy(() =>
   import("./pages/Welcome").then((module) => ({ default: module.WelcomePage })),
 );
@@ -101,7 +104,16 @@ function SessionApp() {
           />
           <Route
             path="/sign-up"
-            element={user ? <Navigate to="/onboarding" replace /> : <AuthPage key="up" mode="up" />}
+            element={
+              user ? (
+                <Navigate
+                  to={searchParams.has("next") ? signInDestination : "/onboarding"}
+                  replace
+                />
+              ) : (
+                <AuthPage key="up" mode="up" />
+              )
+            }
           />
           <Route
             path="/forgot-password"
@@ -115,6 +127,18 @@ function SessionApp() {
             element={
               <RequireAuth user={user}>
                 <OnboardingPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/guided-onboarding"
+            element={
+              <RequireAuth user={user}>
+                {window.ardurbotDesktop?.guidedSetup ? (
+                  <GuidedOnboardingPage />
+                ) : (
+                  <Navigate to="/onboarding" replace />
+                )}
               </RequireAuth>
             }
           />

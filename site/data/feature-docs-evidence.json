@@ -1390,6 +1390,7 @@
       "/forgot-password": "sign-in",
       "/reset-password": "sign-in",
       "/onboarding": "onboarding",
+      "/guided-onboarding": "onboarding",
       "/integrations/setup": "integration-setup",
       "/app/board": "boards",
       "/app/ide": "ide",

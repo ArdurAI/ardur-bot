@@ -22,10 +22,12 @@ import {
 import { installDevices } from "./devices-ipc.js";
 import { DOCKER_INSTALL_LINKS, isDesktopSetupLink, runDocker } from "./docker-cli.js";
 import { installCustomizationIpc } from "./extensions/ipc.js";
+import { accountGuidedSteps } from "./guided-setup/account.js";
 import { ArdurCommandInstaller, realCommandBoundary } from "./guided-setup/command.js";
 import { SetupEngine } from "./guided-setup/engine.js";
 import { enginesGuidedStep } from "./guided-setup/engines.js";
 import { installGuidedSetupIpc } from "./guided-setup/ipc.js";
+import { readGuidedAccountStatus, targetProof } from "./guided-setup/readback.js";
 import { serviceGuidedStep } from "./guided-setup/services.js";
 import { firstGuidedSteps, systemPrerequisites } from "./guided-setup/steps.js";
 import { SetupJournalStore } from "./guided-setup/store.js";
@@ -345,7 +347,7 @@ function createWindow(url: string, partition: string | null) {
     ...(icon ? { icon } : {}),
     webPreferences: {
       preload: path.join(import.meta.dirname, "preload.cjs"),
-      ...(GUIDED_SETUP_ENABLED && !legacyCompose
+      ...(GUIDED_SETUP_ENABLED && !legacyCompose && localModeOwns(url)
         ? { additionalArguments: ["--ardurbot-guided-setup"] }
         : {}),
       nodeIntegration: false,
@@ -616,7 +618,7 @@ async function waitForMountedAppDocument(contents: Electron.WebContents) {
           ) ||
           document.querySelector(
             '[aria-label="Model"], [aria-label="Model id"], [aria-label="Models from server"]',
-          ),
+          ) || document.querySelector('[data-ardurbot-surface="guided-onboarding"]'),
       );
       const surfaceReady = shellBootstrapped || authOrWelcomeSurface;
       const sessionReady =
@@ -768,7 +770,7 @@ function showSetupWindow(error: string | null = null, options: { resume?: boolea
  * same sentence and its own buttons.
  */
 function showServiceFailure(message: string, offerReset = false) {
-  if (setupWindow !== null && !setupWindow.isDestroyed()) return;
+  if (setupWindow !== null && !setupWindow.isDestroyed() && setupWindow.isVisible()) return;
   const win = mainWindow;
   if (win === null || win.isDestroyed() || serviceFailurePrompt) return;
   serviceFailurePrompt = true;
@@ -812,7 +814,7 @@ async function confirmLocalReset(parent: BrowserWindow): Promise<boolean> {
  * clears this sentence.
  */
 function showResetFailure(message: string, parent: BrowserWindow) {
-  if (setupWindow !== null && !setupWindow.isDestroyed()) return;
+  if (setupWindow !== null && !setupWindow.isDestroyed() && setupWindow.isVisible()) return;
   if (parent.isDestroyed() || serviceFailurePrompt) return;
   serviceFailurePrompt = true;
   void dialog
@@ -1211,6 +1213,25 @@ function destroySetupWindow() {
   if (setup !== null && !setup.isDestroyed()) setup.destroy();
 }
 
+async function openGuidedAccount(step: "model" | "first-bot" | "finish") {
+  const window = mainWindow;
+  const target = currentSetup?.mode === "new" ? currentSetup.serverUrl : null;
+  if (
+    !window ||
+    window.isDestroyed() ||
+    !target ||
+    !currentTargetUrl ||
+    safeOrigin(window.webContents.getURL()) !== safeOrigin(target)
+  )
+    throw new Error("Open Ardur before continuing account setup.");
+  const destination = step === "model" ? "model" : step === "first-bot" ? "bot" : "finish";
+  await window.loadURL(new URL(`/guided-onboarding?step=${destination}`, target).href);
+  await waitForMountedAppDocument(window.webContents);
+  setupWindow?.hide();
+  window.show();
+  window.focus();
+}
+
 /** Best-effort restore of setup.json after a failed save that already wrote disk. */
 async function rollbackSetupFile(userDataDir: string, previousSetup: DesktopSetup | null) {
   try {
@@ -1313,7 +1334,24 @@ async function saveSetup(payload: unknown, userDataDir: string) {
         const message = await recoverFromCrashedSave(userDataDir, previousSetup, previousUrl);
         return { ok: false, error: message };
       }
-      destroySetupWindow();
+      if (guidedEngine && openSetup.mode === "new" && !legacyCompose) {
+        if (setupWindow && !setupWindow.isDestroyed()) {
+          await setupWindow.loadURL(
+            setupWindow.webContents.getURL().replace(/setup\.html$/, "guided-setup.html"),
+          );
+          setupWindow.hide();
+        }
+        const progress = await guidedEngine.start();
+        if (progress.steps[8]?.status === "succeeded" && progress.accountReady) {
+          mainWindow?.show();
+          mainWindow?.focus();
+        } else {
+          const next = progress.steps[6]?.status === "succeeded" ? "first-bot" : "model";
+          await openGuidedAccount(next).catch(() => showSetupWindow());
+        }
+      } else {
+        destroySetupWindow();
+      }
       // Final check after setup closes — a crash in this gap still rolls back.
       if (rendererWatch?.crashed()) {
         const message = await recoverFromCrashedSave(userDataDir, previousSetup, previousUrl);
@@ -1492,6 +1530,30 @@ app.whenReady().then(async () => {
         now: () => Date.now(),
         cancelServices: () => servicesStep.cancel({ runId: "" }, null),
       }),
+      ...accountGuidedSteps({
+        read: () => readGuidedAccountStatus(mainWindow, currentTargetUrl),
+        target: () => (currentSetup?.mode === "new" ? targetProof(currentSetup.serverUrl) : null),
+        persistedTarget: async () => {
+          const saved = await readSetup(userDataDir);
+          return (
+            saved?.mode === "new" && targetProof(saved.serverUrl) === targetProof(currentTargetUrl)
+          );
+        },
+        machineReady: async (signal) =>
+          (await localMode.databaseReady(signal)) &&
+          (await localMode.migrationsReady(signal)) &&
+          (await localMode.servicesReady(signal)),
+        appMounted: async () => {
+          if (!mainWindow || mainWindow.isDestroyed()) return false;
+          try {
+            await waitForMountedAppDocument(mainWindow.webContents);
+            return true;
+          } catch {
+            return false;
+          }
+        },
+        now: () => Date.now(),
+      }),
     ]);
     guidedIpcCleanup = installGuidedSetupIpc({
       ipc: ipcMain,
@@ -1502,6 +1564,34 @@ app.whenReady().then(async () => {
         enabled: () => startupEnabled(process.platform, app),
         set: (enabled) => setStartup(process.platform, app, enabled),
       },
+      openAccount: async (step) => {
+        if (step === "finish" && guidedEngine?.snapshot().accountReady) {
+          if (
+            mainWindow &&
+            !mainWindow.isDestroyed() &&
+            currentTargetUrl &&
+            new URL(mainWindow.webContents.getURL()).pathname === "/guided-onboarding"
+          ) {
+            await mainWindow.loadURL(new URL("/app", currentTargetUrl).href);
+            await waitForMountedAppDocument(mainWindow.webContents);
+          }
+          setupWindow?.hide();
+          mainWindow?.show();
+          mainWindow?.focus();
+          return;
+        }
+        await openGuidedAccount(step);
+      },
+    });
+    guidedEngine.onChange((snapshot) => {
+      if (
+        currentSetup?.mode === "new" &&
+        currentTargetUrl &&
+        localModeOwns(currentTargetUrl) &&
+        mainWindow &&
+        !mainWindow.isDestroyed()
+      )
+        mainWindow.webContents.send(GUIDED_SETUP_CHANNELS.changed, snapshot);
     });
     ipcMain.handle(GUIDED_SETUP_CHANNELS.openAgain, (event, ...args: unknown[]) => {
       if (
@@ -1511,7 +1601,24 @@ app.whenReady().then(async () => {
       )
         throw new Error("Open System settings in the desktop app.");
       showSetupWindow();
-      void guidedEngine?.start();
+      void guidedEngine?.recheckAll();
+    });
+    const guardedAccountAction = (event: Electron.IpcMainInvokeEvent, args: unknown[]) => {
+      if (
+        args.length !== 0 ||
+        !systemSenderAllowed(event, mainWindow, currentTargetUrl) ||
+        currentSetup?.mode !== "new"
+      )
+        throw new Error("Open the authenticated Ardur app to continue setup.");
+    };
+    ipcMain.handle(GUIDED_SETUP_CHANNELS.returnToSetup, async (event, ...args: unknown[]) => {
+      guardedAccountAction(event, args);
+      await guidedEngine?.recheckAccount();
+      showSetupWindow();
+    });
+    ipcMain.handle(GUIDED_SETUP_CHANNELS.refreshAccount, async (event, ...args: unknown[]) => {
+      guardedAccountAction(event, args);
+      await guidedEngine?.recheckAccount();
     });
   }
   currentSetup = await readSetup(userDataDir);
@@ -1819,7 +1926,7 @@ app.whenReady().then(async () => {
 
   // Register before startup awaits so macOS dock clicks during probe/open are handled.
   app.on("activate", () => {
-    if (setupWindow !== null && !setupWindow.isDestroyed()) {
+    if (setupWindow !== null && !setupWindow.isDestroyed() && setupWindow.isVisible()) {
       setupWindow.show();
       setupWindow.focus();
       return;

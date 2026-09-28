@@ -11,18 +11,25 @@ const api = vi.hoisted(() => ({
   credentials: vi.fn(),
   me: vi.fn(),
   signIn: vi.fn(),
+  ollama: vi.fn(),
+  testOllama: vi.fn(),
+  connect: vi.fn(),
+  persistenceChange: null as ((pending: boolean) => void) | null,
 }));
 vi.mock("../lib/rpc", () => ({ rpc: { models: api, me: api.me } }));
 vi.mock("../lib/use-model-oauth-signin", () => ({
-  useModelOAuthSignIn: () => ({
-    oauth: null,
-    pasteCode: "",
-    setPasteCode: vi.fn(),
-    oauthPending: false,
-    cancelOAuthAttempt: vi.fn(),
-    startSubscriptionSignIn: api.signIn,
-    submitOAuthCode: vi.fn(),
-  }),
+  useModelOAuthSignIn: (options: { onPersistenceChange?: (pending: boolean) => void }) => {
+    api.persistenceChange = options.onPersistenceChange ?? null;
+    return {
+      oauth: null,
+      pasteCode: "",
+      setPasteCode: vi.fn(),
+      oauthPending: false,
+      cancelOAuthAttempt: vi.fn(),
+      startSubscriptionSignIn: api.signIn,
+      submitOAuthCode: vi.fn(),
+    };
+  },
 }));
 vi.mock("@lingui/core/macro", () => ({
   t: (parts: TemplateStringsArray, ...values: unknown[]) =>
@@ -105,6 +112,7 @@ beforeEach(() => {
   api.list.mockResolvedValue(catalog);
   api.credentials.mockResolvedValue([]);
   api.me.mockResolvedValue({ defaultProvider: "openai-codex", defaultModel: null });
+  api.persistenceChange = null;
   container = document.createElement("div");
   document.body.append(container);
   root = createRoot(container);
@@ -117,6 +125,69 @@ afterEach(async () => {
 });
 const render = () =>
   act(async () => root.render(<ModelSettingsOverlay embedded onClose={() => undefined} />));
+
+it("reports subscription persistence through the overlay handoff", async () => {
+  const onSavePendingChange = vi.fn();
+  await act(async () =>
+    root.render(
+      <ModelSettingsOverlay
+        embedded
+        onClose={() => undefined}
+        onSavePendingChange={onSavePendingChange}
+      />,
+    ),
+  );
+  onSavePendingChange.mockClear();
+  await act(async () => api.persistenceChange?.(true));
+  expect(onSavePendingChange).toHaveBeenLastCalledWith(true);
+  await act(async () => api.persistenceChange?.(false));
+  expect(onSavePendingChange).toHaveBeenLastCalledWith(false);
+});
+
+it("reports an Ollama connection save through the overlay handoff", async () => {
+  let finish!: (value: { id: string }) => void;
+  api.list.mockResolvedValue([
+    ...catalog,
+    {
+      provider: "ollama",
+      providerName: "Ollama",
+      id: "local",
+      label: "Local",
+      billing: "",
+      auth: "api-key",
+    },
+  ]);
+  api.ollama.mockResolvedValue({ baseUrl: "http://127.0.0.1:11434", models: [], canPull: true });
+  api.testOllama.mockResolvedValue({
+    baseUrl: "http://127.0.0.1:11434",
+    models: [],
+    canPull: true,
+    version: "test",
+  });
+  api.connect.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const onSavePendingChange = vi.fn();
+  await act(async () =>
+    root.render(
+      <ModelSettingsOverlay
+        embedded
+        onClose={() => undefined}
+        onSavePendingChange={onSavePendingChange}
+      />,
+    ),
+  );
+  await act(async () => button("Ollama").click());
+  await act(async () => button("Test").click());
+  onSavePendingChange.mockClear();
+  await act(async () => button("Save").click());
+  expect(onSavePendingChange).toHaveBeenLastCalledWith(true);
+  await act(async () => finish({ id: "connection" }));
+  expect(onSavePendingChange).toHaveBeenLastCalledWith(false);
+});
 
 it.each([false, true])(
   "offers only an API key for Anthropic (reconnect: %s)",

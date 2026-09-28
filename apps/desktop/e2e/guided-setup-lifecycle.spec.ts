@@ -41,6 +41,9 @@ test("cancel settles during services start and re-check preserves the owned rece
       let raw: string | null = null;
       let healthy = false;
       let serviceRuns = 0;
+      let modelSaved = false;
+      let botCreated = false;
+      let botCreates = 0;
       let release: (() => void) | null = null;
       const ready = async () => ({ kind: "satisfied" as const, checkedAt: 1, evidence: "checked" });
       const noMutation = async () => ({ kind: "verified" as const, proof: "checked" });
@@ -139,6 +142,49 @@ test("cancel settles during services start and re-check preserves the owned rece
             verify: ready,
             cancel: noCancel,
           },
+          {
+            id: "model",
+            revision: 1,
+            requires: ["engines"],
+            canSkip: true,
+            waitForInput: true,
+            check: async () =>
+              modelSaved
+                ? {
+                    kind: "satisfied" as const,
+                    checkedAt: 1,
+                    evidence: "account",
+                    details: [{ code: "connection-saved", text: "Connection saved" }],
+                  }
+                : { kind: "needed" as const, reasonCode: "model-not-saved" },
+            run: noMutation,
+            verify: ready,
+            cancel: noCancel,
+          },
+          {
+            id: "first-bot",
+            revision: 1,
+            requires: ["engines"],
+            canSkip: true,
+            waitForInput: true,
+            check: async () =>
+              botCreated
+                ? { kind: "satisfied" as const, checkedAt: 1, evidence: "account" }
+                : { kind: "needed" as const, reasonCode: "first-bot-not-created" },
+            run: noMutation,
+            verify: ready,
+            cancel: noCancel,
+          },
+          {
+            id: "finish",
+            revision: 1,
+            requires: ["services", "engines"],
+            canSkip: false,
+            check: ready,
+            run: noMutation,
+            verify: ready,
+            cancel: noCancel,
+          },
         ],
       );
       for (const channel of requestChannels) ipcMain.removeHandler(channel);
@@ -150,13 +196,22 @@ test("cancel settles during services start and re-check preserves the owned rece
           ) ?? null,
         engine,
         startup: { supported: () => false, enabled: () => false, set: () => undefined },
+        openAccount: async (step: "model" | "first-bot" | "finish") => {
+          if (step === "model") modelSaved = true;
+          if (step === "first-bot" && !botCreated) {
+            botCreated = true;
+            botCreates += 1;
+          }
+          await engine.recheckAccount();
+        },
       });
       (globalThis as typeof globalThis & { guidedLifecycle?: unknown }).guidedLifecycle = {
         release: () => {
           healthy = true;
           release?.();
         },
-        state: () => ({ raw, serviceRuns }),
+        state: () => ({ raw, serviceRuns, botCreates }),
+        recheck: () => engine.recheckAll(),
       };
     }, GUIDED_SETUP_FIXTURE_REQUEST_CHANNELS);
     await setup.reload();
@@ -180,28 +235,43 @@ test("cancel settles during services start and re-check preserves the owned rece
     const engines = setup.locator(".guided-step").filter({ hasText: "Check optional computers" });
     await expect(engines).toHaveAttribute("data-status", "waiting-input");
     await engines.getByRole("button", { name: "Skip" }).click();
+    const model = setup.locator(".guided-step").filter({ hasText: "Connect a model" });
+    const bot = setup.locator(".guided-step").filter({ hasText: "Create your first bot" });
+    const finish = setup.locator(".guided-step").filter({ hasText: "Finish setup" });
+    await expect(model).toHaveAttribute("data-status", "waiting-input");
+    await setup.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(model).toHaveAttribute("data-status", "cancelled");
+    await setup.getByRole("button", { name: "Start setup" }).click();
+    await expect(model).toHaveAttribute("data-status", "waiting-input");
+    await model.getByRole("button", { name: "Open Models" }).click();
+    await expect(model).toContainText("Connection saved");
+    await expect(bot).toHaveAttribute("data-status", "waiting-input");
+    await bot.getByRole("button", { name: "Create bot" }).click();
+    await expect(finish).toContainText("Setup complete");
     const before = await desktop.evaluate(() =>
       (
         globalThis as typeof globalThis & {
-          guidedLifecycle: { state(): { raw: string; serviceRuns: number } };
+          guidedLifecycle: { state(): { raw: string; serviceRuns: number; botCreates: number } };
         }
       ).guidedLifecycle.state(),
     );
-    await setup.evaluate(async () => {
-      const guided = (
-        window as Window & { ardurbotSetup?: { guidedSetup?: { start(): Promise<unknown> } } }
-      ).ardurbotSetup?.guidedSetup;
-      if (!guided) throw new Error("Guided setup bridge is unavailable.");
-      await guided.start();
+    await desktop.evaluate(async () => {
+      const state = (
+        globalThis as typeof globalThis & {
+          guidedLifecycle: { recheck(): Promise<unknown> };
+        }
+      ).guidedLifecycle;
+      await state.recheck();
     });
     const after = await desktop.evaluate(() =>
       (
         globalThis as typeof globalThis & {
-          guidedLifecycle: { state(): { raw: string; serviceRuns: number } };
+          guidedLifecycle: { state(): { raw: string; serviceRuns: number; botCreates: number } };
         }
       ).guidedLifecycle.state(),
     );
     expect(after.serviceRuns).toBe(before.serviceRuns);
+    expect(after.botCreates).toBe(1);
     expect(JSON.parse(after.raw).receipts.services).toEqual(
       JSON.parse(before.raw).receipts.services,
     );

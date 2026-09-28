@@ -17,12 +17,21 @@ const ids = [
   "finish",
 ] as const;
 const fixtureCase = new URLSearchParams(window.location.search).get("case") ?? "services";
+const accountCase = ["model-deferred", "bot-created", "incomplete", "complete"].includes(
+  fixtureCase,
+);
 const currentStep =
-  fixtureCase === "engines" || fixtureCase === "engines-failed"
-    ? "engines"
-    : fixtureCase === "recheck"
-      ? "prerequisites"
-      : "services";
+  fixtureCase === "model-deferred"
+    ? "first-bot"
+    : fixtureCase === "bot-created"
+      ? "first-bot"
+      : fixtureCase === "incomplete" || fixtureCase === "complete"
+        ? "finish"
+        : fixtureCase === "engines" || fixtureCase === "engines-failed"
+          ? "engines"
+          : fixtureCase === "recheck"
+            ? "prerequisites"
+            : "services";
 const snapshot: SetupSnapshot = {
   schemaVersion: 1,
   planVersion: 1,
@@ -30,18 +39,30 @@ const snapshot: SetupSnapshot = {
   sequence: 4,
   mode: "local",
   currentStep,
-  machineReady: false,
-  accountReady: false,
-  complete: false,
+  machineReady: accountCase,
+  accountReady: fixtureCase === "complete",
+  complete: fixtureCase === "complete",
   interrupted: false,
   blocked: false,
   steps: ids.map((id, index) => ({
     id,
-    available: index < 6,
-    revision: index < 6 ? 1 : 0,
-    attempt: index < 6 ? 1 : 0,
-    status:
-      fixtureCase === "recheck"
+    available: accountCase || index < 6,
+    revision: accountCase || index < 6 ? 1 : 0,
+    attempt: accountCase || index < 6 ? 1 : 0,
+    status: accountCase
+      ? index < 6 ||
+        fixtureCase === "complete" ||
+        (fixtureCase === "bot-created" && index <= 7) ||
+        (fixtureCase === "incomplete" && index === 8)
+        ? "succeeded"
+        : fixtureCase === "incomplete" && (index === 6 || index === 7)
+          ? "skipped"
+          : fixtureCase === "model-deferred" && index === 6
+            ? "skipped"
+            : fixtureCase === "model-deferred" && index === 7
+              ? "waiting-input"
+              : "pending"
+      : fixtureCase === "recheck"
         ? index === 0
           ? "checking"
           : index < 6
@@ -68,13 +89,15 @@ const snapshot: SetupSnapshot = {
           ? "discovery-timeout"
           : null,
     details:
-      fixtureCase === "engines" && index === 5
-        ? [
-            { code: "target-discovered", text: "Docker 1" },
-            { code: "target-connected", text: "Podman 1" },
-            { code: "target-unavailable", text: "Kubernetes 1" },
-          ]
-        : [],
+      accountCase && index === 6 && fixtureCase !== "incomplete" && fixtureCase !== "model-deferred"
+        ? [{ code: "connection-saved", text: "Connection saved" }]
+        : fixtureCase === "engines" && index === 5
+          ? [
+              { code: "target-discovered", text: "Docker 1" },
+              { code: "target-connected", text: "Podman 1" },
+              { code: "target-unavailable", text: "Kubernetes 1" },
+            ]
+          : [],
   })),
 };
 
@@ -97,6 +120,9 @@ function Fixture() {
         onCancel={() => undefined}
         onResume={() => undefined}
         onCopyDetails={async () => true}
+        onOpenModels={() => undefined}
+        onCreateBot={() => undefined}
+        onContinue={() => undefined}
       />
     </main>
   );

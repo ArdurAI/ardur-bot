@@ -2006,6 +2006,7 @@ msgstr ""
 msgid "Connect a desktop app to approve new devices."
 msgstr ""
 
+#: src/pages/GuidedOnboarding.tsx
 #: src/pages/Onboarding.tsx
 msgid "Connect a model"
 msgstr "Подключить модель"
@@ -2972,6 +2973,10 @@ msgstr "Создайте раздел и переместите в него {0}.
 msgid "Create account"
 msgstr "Зарегистрироваться"
 
+#: src/pages/GuidedOnboarding.tsx
+msgid "Create bot"
+msgstr "Создать бота"
+
 #: src/pages/GroupPanel.tsx
 msgid "Create group"
 msgstr "Создать группу"
@@ -3001,6 +3006,10 @@ msgstr "Создайте пространство"
 #: src/pages/Auth.tsx
 msgid "Create your Ardur"
 msgstr "Создайте свой Ardur"
+
+#: src/pages/GuidedOnboarding.tsx
+msgid "Create your first bot"
+msgstr "Создайте своего первого бота"
 
 #: src/components/AskCard.tsx
 #: src/pages/account/AccountTables.tsx
@@ -3854,6 +3863,10 @@ msgstr "Поиск…"
 msgid "Fine-grained token"
 msgstr ""
 
+#: src/pages/GuidedOnboarding.tsx
+msgid "Finish setup"
+msgstr "Завершить настройку"
+
 #. placeholder {0}: new URL(oauth.verificationUri).hostname
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -3875,6 +3888,10 @@ msgstr "Завершено"
 #: src/pages/McpOAuthCallback.tsx
 msgid "Finishing MCP connection…"
 msgstr "Завершение подключения MCP…"
+
+#: src/pages/GuidedOnboarding.tsx
+msgid "First bot not created"
+msgstr "Первый бот ещё не создан"
 
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Flag unexpected actions"
@@ -5132,6 +5149,10 @@ msgstr "Варианты модели"
 msgid "Model or memory unavailable"
 msgstr "Модель или память недоступна"
 
+#: src/pages/GuidedOnboarding.tsx
+msgid "Model setup is incomplete"
+msgstr "Настройка модели не завершена"
+
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Model spend uses your provider keys."
 msgstr "Расходы на модель оплачиваются ключами вашего провайдера."
@@ -5822,6 +5843,10 @@ msgstr ""
 #: src/pages/LocalSettings.tsx
 msgid "Open local settings from the desktop app on the server’s computer."
 msgstr ""
+
+#: src/pages/GuidedOnboarding.tsx
+msgid "Open Models"
+msgstr "Открыть модели"
 
 #: src/pages/Shell.tsx
 msgid "Open navigation"
@@ -6822,6 +6847,10 @@ msgstr "Повторить загрузку экрана"
 #: src/pages/McpOAuthCallback.tsx
 msgid "Return to Ardur"
 msgstr "Вернуться в Ardur"
+
+#: src/pages/GuidedOnboarding.tsx
+msgid "Return to setup"
+msgstr "Вернуться к настройке"
 
 #. placeholder {0}: doc.revision
 #: src/pages/KnowledgeSection.tsx
@@ -7969,6 +7998,10 @@ msgstr ""
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "The connection was cancelled."
 msgstr ""
+
+#: src/pages/GuidedOnboarding.tsx
+msgid "The first bot could not be created. Try again."
+msgstr "Не удалось создать первого бота. Повторите попытку."
 
 #: src/pages/group-model-control.tsx
 msgid "The group model choice was reloaded. Pick again."

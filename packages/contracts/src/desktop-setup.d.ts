@@ -86,6 +86,11 @@ export const GUIDED_SETUP_CHANNELS: {
   readonly startup: "desktop.guidedSetup.startup";
   readonly startupState: "desktop.guidedSetup.startupState";
   readonly openAgain: "desktop.guidedSetup.openAgain";
+  readonly openModels: "desktop.guidedSetup.openModels";
+  readonly createBot: "desktop.guidedSetup.createBot";
+  readonly openApp: "desktop.guidedSetup.openApp";
+  readonly returnToSetup: "desktop.guidedSetup.returnToSetup";
+  readonly refreshAccount: "desktop.guidedSetup.refreshAccount";
 };
 
 export interface GuidedSetupBridge {
@@ -97,5 +102,8 @@ export interface GuidedSetupBridge {
   resume(): Promise<SetupSnapshot>;
   setStartup(enabled: boolean): Promise<{ ok: boolean; enabled?: boolean; error?: string }>;
   getStartup(): Promise<{ supported: boolean; enabled: boolean }>;
+  openModels(): Promise<void>;
+  createBot(): Promise<void>;
+  openApp(): Promise<void>;
   onChange(listener: (snapshot: SetupSnapshot) => void): () => void;
 }

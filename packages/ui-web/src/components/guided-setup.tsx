@@ -29,6 +29,14 @@ export const guidedSetupText = {
   retry: "Retry",
   retryStop: "Retry stop",
   skip: "Skip",
+  defer: "Do this later",
+  openModels: "Open Models",
+  createBot: "Create bot",
+  openArdur: "Open Ardur",
+  ardurReady: "Ardur is ready",
+  setupComplete: "Setup complete",
+  modelIncomplete: "Model setup is incomplete",
+  botIncomplete: "First bot not created",
   runOnStartup: "Run on startup",
   foundUnchecked: "Found; connection not checked",
   connected: "Connected",
@@ -118,6 +126,12 @@ function rowState(row: SetupStepSnapshot): string {
     case "waiting-input":
       return guidedSetupText.waiting;
     case "succeeded":
+      if (row.id === "model") {
+        const connection = row.details.find(
+          (detail) => detail.code === "connection-saved" || detail.code === "connection-checked",
+        );
+        if (connection) return connection.text;
+      }
       return row.reasonCode === "already-ready" ? guidedSetupText.ready : guidedSetupText.done;
     case "not-applicable":
       return guidedSetupText.notNeeded;
@@ -155,6 +169,8 @@ export interface GuidedSetupViewProps {
   startupChoice?: boolean;
   startupError?: string;
   onStartupChoice?: (enabled: boolean) => void;
+  onOpenModels?: () => void;
+  onCreateBot?: () => void;
 }
 
 export function pilotReadyFromSnapshot(snapshot: SetupSnapshot): boolean {
@@ -182,6 +198,7 @@ export function GuidedSetupView(props: GuidedSetupViewProps) {
   const active =
     current && ["checking", "running", "verifying", "cancelling"].includes(current.status);
   const stopFailed = snapshot.steps.some((row) => row.reasonCode === "cleanup-incomplete");
+  const failedWrite = snapshot.steps.find((row) => row.reasonCode === "journal-write-failed");
   const newerJournal = snapshot.steps.some((row) => row.reasonCode === "newer-journal");
   const stopping = snapshot.steps.some((row) => row.status === "cancelling");
   const pilotReady = pilotReadyFromSnapshot(snapshot);
@@ -283,6 +300,30 @@ export function GuidedSetupView(props: GuidedSetupViewProps) {
                   {row.status === "waiting-input" && row.reasonCode === "add-folder-to-path" && (
                     <p>{guidedSetupText.path}</p>
                   )}
+                  {row.id === "finish" && row.status === "succeeded" && (
+                    <div className="guided-summary">
+                      <p>
+                        {snapshot.accountReady
+                          ? guidedSetupText.setupComplete
+                          : guidedSetupText.ardurReady}
+                      </p>
+                      {snapshot.steps[6]?.status !== "succeeded" && (
+                        <p>{guidedSetupText.modelIncomplete}</p>
+                      )}
+                      {snapshot.steps[7]?.status !== "succeeded" && (
+                        <p>{guidedSetupText.botIncomplete}</p>
+                      )}
+                      {snapshot.steps[6]?.status !== "succeeded" ? (
+                        <Button type="button" onClick={props.onOpenModels}>
+                          {guidedSetupText.openModels}
+                        </Button>
+                      ) : snapshot.steps[7]?.status !== "succeeded" ? (
+                        <Button type="button" onClick={props.onCreateBot}>
+                          {guidedSetupText.createBot}
+                        </Button>
+                      ) : null}
+                    </div>
+                  )}
                   {row.id === "services" &&
                     row.status === "waiting-input" &&
                     props.startupSupported && (
@@ -341,6 +382,38 @@ export function GuidedSetupView(props: GuidedSetupViewProps) {
                     </div>
                   )}
                   {row.status === "waiting-input" &&
+                    row.id === "model" &&
+                    row.reasonCode !== "account-handoff-needed" && (
+                      <div className="guided-row-actions">
+                        <Button type="button" onClick={props.onOpenModels}>
+                          {guidedSetupText.openModels}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={() => props.onSkip(row.id)}
+                        >
+                          {guidedSetupText.defer}
+                        </Button>
+                      </div>
+                    )}
+                  {row.status === "waiting-input" && row.id === "first-bot" && (
+                    <div className="guided-row-actions">
+                      {snapshot.steps[6]?.status === "succeeded" && (
+                        <Button type="button" onClick={props.onCreateBot}>
+                          {guidedSetupText.createBot}
+                        </Button>
+                      )}
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() => props.onSkip(row.id)}
+                      >
+                        {guidedSetupText.defer}
+                      </Button>
+                    </div>
+                  )}
+                  {row.status === "waiting-input" &&
                     (row.id === "services" || row.id === "engines") && (
                       <div className="guided-row-actions">
                         <Button type="button" onClick={() => props.onRetry(row.id)}>
@@ -363,14 +436,19 @@ export function GuidedSetupView(props: GuidedSetupViewProps) {
                       <Button ref={failureRef} type="button" onClick={() => props.onRetry(row.id)}>
                         {guidedSetupText.retry}
                       </Button>
-                      {(row.id === "command" || row.id === "engines") && (
+                      {(row.id === "command" ||
+                        row.id === "engines" ||
+                        row.id === "model" ||
+                        row.id === "first-bot") && (
                         <Button
                           type="button"
                           variant="secondary"
                           className="guided-secondary"
                           onClick={() => props.onSkip(row.id)}
                         >
-                          {guidedSetupText.skip}
+                          {row.id === "model" || row.id === "first-bot"
+                            ? guidedSetupText.defer
+                            : guidedSetupText.skip}
                         </Button>
                       )}
                     </div>
@@ -418,6 +496,10 @@ export function GuidedSetupView(props: GuidedSetupViewProps) {
           <Button type="button" onClick={props.onCancel}>
             {guidedSetupText.retryStop}
           </Button>
+        ) : failedWrite ? (
+          <Button type="button" onClick={() => props.onRetry(failedWrite.id)}>
+            {guidedSetupText.retry}
+          </Button>
         ) : snapshot.interrupted ? (
           <>
             <Button type="button" onClick={props.onResume}>
@@ -440,7 +522,14 @@ export function GuidedSetupView(props: GuidedSetupViewProps) {
           <Button type="button" onClick={props.onStart}>
             {guidedSetupText.start}
           </Button>
-        ) : pilotReady ? (
+        ) : snapshot.steps[8]?.status === "succeeded" ? (
+          <Button type="button" onClick={props.onContinue}>
+            {guidedSetupText.openArdur}
+          </Button>
+        ) : pilotReady &&
+          (snapshot.steps[6]?.status === "pending" ||
+            snapshot.steps[6]?.reasonCode === "account-handoff-needed" ||
+            !snapshot.steps[6]?.available) ? (
           <Button type="button" onClick={props.onContinue}>
             {guidedSetupText.continue}
           </Button>

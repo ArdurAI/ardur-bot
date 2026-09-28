@@ -35,7 +35,12 @@ export interface SetupStep {
   canSkip: boolean;
   waitForInput?: boolean;
   check(context: SetupContext, signal: AbortSignal): Promise<StepVerification>;
-  recheck?(context: SetupContext, signal: AbortSignal): Promise<StepVerification>;
+  recheck?(
+    context: SetupContext,
+    signal: AbortSignal,
+    receipt: StepReceipt | null,
+  ): Promise<StepVerification>;
+  defer?(context: SetupContext): Promise<StepReceipt>;
   run(context: SetupContext, signal: AbortSignal): Promise<StepReceipt>;
   verify(
     context: SetupContext,
@@ -218,6 +223,20 @@ export class SetupEngine {
     return this.schedule(0, false);
   }
 
+  /** Settings re-run checks saved outcomes against today's machine and account state. */
+  recheckAll(): Promise<SetupSnapshot> {
+    if (this.inflight) return this.inflight;
+    this.freshlyVerified.clear();
+    return this.start();
+  }
+
+  /** Account UI notifications are requests to read persisted state again. */
+  recheckAccount(): Promise<SetupSnapshot> {
+    if (this.inflight) return this.inflight;
+    for (const id of ["model", "first-bot", "finish"] as const) this.freshlyVerified.delete(id);
+    return this.start();
+  }
+
   resume(): Promise<SetupSnapshot> {
     if (this.inflight) return this.inflight;
     if (this.newer || this.cancelling || this.cleanupPending())
@@ -231,8 +250,9 @@ export class SetupEngine {
     if (this.newer || this.cancelling || this.journal.snapshot.interrupted || this.cleanupPending())
       return Promise.resolve(this.snapshot());
     const index = this.steps.findIndex((step) => step.id === stepId);
-    if (index < 0 || this.steps[index]!.requires.some((id) => this.row(id).status !== "succeeded"))
-      return Promise.resolve(this.snapshot());
+    if (index < 0) return Promise.resolve(this.snapshot());
+    if (this.row(stepId).reasonCode === "journal-write-failed")
+      this.journal.snapshot.blocked = false;
     return this.schedule(index, true, this.steps.length, true);
   }
 
@@ -251,6 +271,8 @@ export class SetupEngine {
     if (!(await this.recheckDependencies(step, index))) return this.snapshot();
     const row = this.row(stepId);
     if (row.status === "succeeded") return this.snapshot();
+    const receipt = await step.defer?.({ runId: this.journal.snapshot.runId });
+    if (receipt) this.journal.receipts[stepId] = receipt;
     this.transition(stepId, "skipped", "user-skipped");
     if (this.journal.pending?.stepId === stepId) this.journal.pending = null;
     await this.persist();
@@ -345,6 +367,20 @@ export class SetupEngine {
 
   private async executeRetry(index: number, signal: AbortSignal): Promise<SetupSnapshot> {
     const step = this.steps[index]!;
+    const modelIndex = this.steps.findIndex((item) => item.id === "model");
+    if (modelIndex >= 0 && index > modelIndex) {
+      this.freshlyVerified.delete("model");
+      await this.execute(modelIndex, false, signal, index);
+      if (step.id === "first-bot" && this.row("model").status !== "succeeded")
+        return this.snapshot();
+      if (
+        step.id === "finish" &&
+        ["model", "first-bot"].some(
+          (id) => !["succeeded", "skipped"].includes(this.row(id as SetupStepId).status),
+        )
+      )
+        return this.snapshot();
+    }
     if (!this.dependenciesMet(step)) {
       await this.execute(0, false, signal, index);
       if (
@@ -382,14 +418,17 @@ export class SetupEngine {
         if (!explicit && row.status === "succeeded" && this.freshlyVerified.has(step.id)) continue;
         const savedSuccess = row.status === "succeeded";
         const previouslySkipped = row.status === "skipped" && !explicit;
+        // A skipped machine choice remains the user's choice across Continue and restart.
+        // Account steps still read back saved state so they can become satisfied later.
+        if (previouslySkipped && !step.waitForInput) continue;
         this.journal.snapshot.currentStep = step.id;
         row.attempt += 1;
         this.transition(step.id, "checking", null);
         await this.persist();
         if (signal.aborted || this.cancelling) break;
         const context = { runId: this.journal.snapshot.runId };
-        const checked = await (savedSuccess && step.recheck
-          ? step.recheck(context, signal)
+        const checked = await ((savedSuccess || previouslySkipped) && step.recheck
+          ? step.recheck(context, signal, this.receiptFor(step.id))
           : step.check(context, signal));
         if (signal.aborted || this.cancelling) break;
         if (checked.kind === "satisfied") {
@@ -397,7 +436,8 @@ export class SetupEngine {
           if (this.journal.pending?.stepId === step.id) this.journal.pending = null;
           if (
             !this.journal.receipts[step.id] ||
-            (step.id === "services" && this.journal.receipts[step.id]?.proof !== checked.evidence)
+            (["services", "model", "first-bot"].includes(step.id) &&
+              this.journal.receipts[step.id]?.proof !== checked.evidence)
           )
             this.journal.receipts[step.id] = { kind: "verified", proof: checked.evidence };
           await this.persist();
@@ -410,7 +450,11 @@ export class SetupEngine {
           explicit = false;
           continue;
         }
-        if (previouslySkipped) {
+        if (checked.reasonCode === "account-scope-changed") {
+          if (step.id === "model") this.invalidate(["first-bot", "finish"]);
+          if (step.id === "first-bot") this.invalidate(["finish"]);
+        }
+        if (previouslySkipped && checked.reasonCode !== "account-scope-changed") {
           this.transition(step.id, "skipped", "user-skipped");
           await this.persist();
           continue;
@@ -489,15 +533,25 @@ export class SetupEngine {
       "migrations",
       "services",
     ].every((id) => this.row(id as SetupStepId).status === "succeeded");
+    if (step.id === "finish") {
+      this.journal.snapshot.accountReady =
+        this.row("model").status === "succeeded" && this.row("first-bot").status === "succeeded";
+      this.journal.snapshot.complete =
+        this.journal.snapshot.machineReady && this.journal.snapshot.accountReady;
+    }
   }
   private dependenciesMet(step: SetupStep): boolean {
-    return step.requires.every(
-      (id) => this.row(id).status === "succeeded" && this.freshlyVerified.has(id),
-    );
+    return step.requires.every((id) => this.dependencySatisfied(id));
+  }
+  private dependencySatisfied(id: SetupStepId): boolean {
+    const status = this.row(id).status;
+    if (status === "skipped") return this.steps.find((step) => step.id === id)?.canSkip === true;
+    return status === "succeeded" && this.freshlyVerified.has(id);
   }
   private async recheckDependencies(step: SetupStep, stopBefore: number): Promise<boolean> {
     if (this.dependenciesMet(step)) return true;
-    if (step.requires.some((id) => this.row(id).status !== "succeeded")) return false;
+    if (step.requires.some((id) => !["succeeded", "skipped"].includes(this.row(id).status)))
+      return false;
     await this.schedule(0, false, stopBefore);
     return (
       !this.cancelling &&
@@ -524,7 +578,16 @@ export class SetupEngine {
       row.reasonCode = null;
       row.details = [];
     }
-    this.journal.snapshot.machineReady = false;
+    this.journal.snapshot.machineReady = [
+      "prerequisites",
+      "database",
+      "migrations",
+      "services",
+    ].every(
+      (id) =>
+        this.row(id as SetupStepId).status === "succeeded" &&
+        this.freshlyVerified.has(id as SetupStepId),
+    );
     this.journal.snapshot.complete = false;
   }
   private cleanupPending(): boolean {
@@ -544,6 +607,20 @@ export class SetupEngine {
       else if (row.status === "waiting-input") row.waitingElapsedMs += delta;
     }
     row.status = status;
+    if (id !== "finish" && status !== "succeeded" && this.row("finish").status === "succeeded")
+      this.invalidate(["finish"]);
+    if (
+      ["prerequisites", "database", "migrations", "services"].includes(id) &&
+      status !== "succeeded"
+    ) {
+      this.journal.snapshot.machineReady = false;
+      this.journal.snapshot.complete = false;
+    }
+    if (id === "finish" && status !== "succeeded") this.journal.snapshot.complete = false;
+    if ((id === "model" || id === "first-bot") && status !== "succeeded") {
+      this.journal.snapshot.accountReady = false;
+      this.journal.snapshot.complete = false;
+    }
     row.reasonCode = reasonCode;
     row.details = details?.slice(0, 12) ?? [];
     this.phaseStarted = now;

@@ -119,6 +119,10 @@ export function SetupDocument({ setupBridge = bridge }: { setupBridge?: ArdurBot
     try {
       const checked = await guided.start();
       setSnapshot((old) => (old && old.sequence > checked.sequence ? old : checked));
+      if (checked.steps[8]?.status === "succeeded") {
+        await guided.openApp();
+        return;
+      }
       if (!pilotReadyFromSnapshot(checked)) return;
       const state = await bridge.stack.start();
       if (!state) throw new Error("Setup handoff is unavailable.");
@@ -208,6 +212,12 @@ export function SetupDocument({ setupBridge = bridge }: { setupBridge?: ArdurBot
             onResume={() => void run(() => guided.resume())}
             onClose={() => void bridge?.quit()}
             onContinue={() => void continueSetup()}
+            onOpenModels={() =>
+              void guided.openModels().catch(() => setStatus(guidedSetupText.updateFailed))
+            }
+            onCreateBot={() =>
+              void guided.createBot().catch(() => setStatus(guidedSetupText.updateFailed))
+            }
             onCopyDetails={async (text) => {
               try {
                 await navigator.clipboard.writeText(text);

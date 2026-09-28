@@ -6,6 +6,7 @@ it("preserves authenticated block-link destinations without permitting external 
     "/commands/run-1/command-1?space=space-1",
   );
   expect(authReturnPath("/onboarding")).toBe("/onboarding");
+  expect(authReturnPath("/guided-onboarding?step=finish")).toBe("/guided-onboarding?step=finish");
   expect(authReturnPath("/integrations/setup")).toBe("/integrations/setup");
   expect(authReturnPath("/integrations/setup?mode=mcp")).toBe("/integrations/setup?mode=mcp");
   expect(authReturnPath("/mcp/oauth/callback?code=sample&state=local-state")).toBe(
@@ -46,6 +47,8 @@ it("preserves authenticated block-link destinations without permitting external 
     "/commands/../evil",
     "/commands/%2e%2e/evil",
     "/onboarding/extra",
+    "/guided-onboarding?step=//evil.test",
+    "/guided-onboarding?step=model&next=evil",
     "/integrations/setup/extra",
     "/integrations/setup?mode=//external.test",
     "/mcp/oauth/callback/../evil?code=sample",

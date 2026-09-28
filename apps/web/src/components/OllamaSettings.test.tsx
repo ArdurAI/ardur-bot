@@ -69,6 +69,26 @@ it("tests the detected URL, reports empty tags and saves a keyless connection be
   expect(changed).toHaveBeenCalledOnce();
 });
 
+it("reports an Ollama save until the connection and refresh finish", async () => {
+  let finish!: (value: { id: string }) => void;
+  const onSavePendingChange = vi.fn();
+  api.connect.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  await act(async () =>
+    root.render(<OllamaSettings onChanged={changed} onSavePendingChange={onSavePendingChange} />),
+  );
+  await act(async () => button("Test").click());
+  await act(async () => button("Save").click());
+  expect(onSavePendingChange).toHaveBeenCalledWith(true);
+  expect(onSavePendingChange).not.toHaveBeenCalledWith(false);
+  await act(async () => finish({ id: "connection" }));
+  expect(onSavePendingChange).toHaveBeenLastCalledWith(false);
+});
+
 it("shows plain connection refused copy", async () => {
   api.testOllama.mockResolvedValue({
     ...state,

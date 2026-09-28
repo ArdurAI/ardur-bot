@@ -2006,6 +2006,7 @@ msgstr "Connect a chat bot"
 msgid "Connect a desktop app to approve new devices."
 msgstr "Connect a desktop app to approve new devices."
 
+#: src/pages/GuidedOnboarding.tsx
 #: src/pages/Onboarding.tsx
 msgid "Connect a model"
 msgstr "Connect a model"
@@ -2972,6 +2973,10 @@ msgstr "Create a section and move {0} into it."
 msgid "Create account"
 msgstr "Create account"
 
+#: src/pages/GuidedOnboarding.tsx
+msgid "Create bot"
+msgstr "Create bot"
+
 #: src/pages/GroupPanel.tsx
 msgid "Create group"
 msgstr "Create group"
@@ -3001,6 +3006,10 @@ msgstr "Create space"
 #: src/pages/Auth.tsx
 msgid "Create your Ardur"
 msgstr "Create your Ardur"
+
+#: src/pages/GuidedOnboarding.tsx
+msgid "Create your first bot"
+msgstr "Create your first bot"
 
 #: src/components/AskCard.tsx
 #: src/pages/account/AccountTables.tsx
@@ -3854,6 +3863,10 @@ msgstr "Finding…"
 msgid "Fine-grained token"
 msgstr "Fine-grained token"
 
+#: src/pages/GuidedOnboarding.tsx
+msgid "Finish setup"
+msgstr "Finish setup"
+
 #. placeholder {0}: new URL(oauth.verificationUri).hostname
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -3875,6 +3888,10 @@ msgstr "Finished"
 #: src/pages/McpOAuthCallback.tsx
 msgid "Finishing MCP connection…"
 msgstr "Finishing MCP connection…"
+
+#: src/pages/GuidedOnboarding.tsx
+msgid "First bot not created"
+msgstr "First bot not created"
 
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Flag unexpected actions"
@@ -5132,6 +5149,10 @@ msgstr "Model options"
 msgid "Model or memory unavailable"
 msgstr "Model or memory unavailable"
 
+#: src/pages/GuidedOnboarding.tsx
+msgid "Model setup is incomplete"
+msgstr "Model setup is incomplete"
+
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Model spend uses your provider keys."
 msgstr "Model spend uses your provider keys."
@@ -5822,6 +5843,10 @@ msgstr "Open links in built-in browser"
 #: src/pages/LocalSettings.tsx
 msgid "Open local settings from the desktop app on the server’s computer."
 msgstr "Open local settings from the desktop app on the server’s computer."
+
+#: src/pages/GuidedOnboarding.tsx
+msgid "Open Models"
+msgstr "Open Models"
 
 #: src/pages/Shell.tsx
 msgid "Open navigation"
@@ -6822,6 +6847,10 @@ msgstr "Retry screen"
 #: src/pages/McpOAuthCallback.tsx
 msgid "Return to Ardur"
 msgstr "Return to Ardur"
+
+#: src/pages/GuidedOnboarding.tsx
+msgid "Return to setup"
+msgstr "Return to setup"
 
 #. placeholder {0}: doc.revision
 #: src/pages/KnowledgeSection.tsx
@@ -7969,6 +7998,10 @@ msgstr "The bot is working — wait or stop it"
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "The connection was cancelled."
 msgstr "The connection was cancelled."
+
+#: src/pages/GuidedOnboarding.tsx
+msgid "The first bot could not be created. Try again."
+msgstr "The first bot could not be created. Try again."
 
 #: src/pages/group-model-control.tsx
 msgid "The group model choice was reloaded. Pick again."

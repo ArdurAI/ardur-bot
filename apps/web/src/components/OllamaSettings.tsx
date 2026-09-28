@@ -9,9 +9,11 @@ import { LoadingState } from "./ai/primitives";
 export function OllamaSettings({
   onChanged,
   onReady,
+  onSavePendingChange,
 }: {
   onChanged: () => Promise<void>;
   onReady?: () => void;
+  onSavePendingChange?: (pending: boolean) => void;
 }) {
   const { t } = useLingui();
   const id = useId();
@@ -42,10 +44,11 @@ export function OllamaSettings({
     };
   }, []);
 
-  async function run(action: (signal: AbortSignal) => Promise<void>) {
+  async function run(action: (signal: AbortSignal) => Promise<void>, savesModel = false) {
     operation.current?.abort();
     const controller = new AbortController();
     operation.current = controller;
+    if (savesModel) onSavePendingChange?.(true);
     setBusy(true);
     setError(null);
     try {
@@ -54,6 +57,7 @@ export function OllamaSettings({
       if (!controller.signal.aborted)
         setError(error instanceof Error ? error.message : t`Could not complete the request.`);
     } finally {
+      if (savesModel) onSavePendingChange?.(false);
       if (operation.current === controller) {
         operation.current = null;
         setBusy(false);
@@ -115,7 +119,7 @@ export function OllamaSettings({
               setStatus((state) => (state ? { ...state, credentialId: connection.id } : state));
               await onChanged();
               if (model && !signal.aborted) onReady?.();
-            })
+            }, true)
           }
         >
           <Trans>Save</Trans>
@@ -161,7 +165,7 @@ export function OllamaSettings({
               await rpc.models.setDefault({ provider: "ollama", modelId: model }, { signal });
               await onChanged();
               if (!signal.aborted) onReady?.();
-            })
+            }, true)
           }
         >
           <Trans>Use this model</Trans>
@@ -206,7 +210,7 @@ export function OllamaSettings({
                     "",
                 );
                 await onChanged();
-              })
+              }, true)
             }
           >
             <Trans>Pull</Trans>

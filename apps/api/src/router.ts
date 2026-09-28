@@ -231,6 +231,7 @@ import {
   testFleetTarget,
 } from "./fleet.js";
 import { updateGroupMemberModelPin } from "./group-model-pin.js";
+import { guidedSetupStatus } from "./guided-setup.js";
 import { hermesAvailabilityConnectionSupported } from "./hermes-availability.js";
 import type { HostBridge } from "./host-bridge.js";
 import { sourceHostStatus } from "./host-status.js";
@@ -770,6 +771,15 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
     },
     health: os.health.handler(async () => ({ ok: true as const, version: "0.1.0" })),
     me: authed.me.handler(async ({ context }): Promise<Me> => meDto(deps, context.actor)),
+    guidedSetup: {
+      status: authed.guidedSetup.status.handler(({ context }) =>
+        guidedSetupStatus(deps.prisma, context.actor, async (provider, modelId) => {
+          if (provider !== "ollama") return false;
+          const checked = await ollamaStatus(deps, context.actor, context.signal);
+          return !checked.issue && checked.models.some((entry) => entry.id === modelId);
+        }),
+      ),
+    },
     preferences: {
       get: authed.preferences.get.handler(({ context }) =>
         getUserPreferences(deps.prisma, context.actor.userId),
