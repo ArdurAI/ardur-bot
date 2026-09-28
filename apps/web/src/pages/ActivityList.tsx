@@ -128,9 +128,10 @@ function ActivityRow({
   const { t } = useLingui();
   const title = run.groupName ? `${run.botName} · ${run.groupName}` : run.botName;
   const presenceUnknown =
-    team?.availability === "unknown" ||
-    team?.availability === "unavailable" ||
-    (team?.observedAt && presenceFreshness(team.observedAt, now) === "unavailable");
+    !["completed", "failed", "cancelled"].includes(run.status) &&
+    (team?.availability === "unknown" ||
+      team?.availability === "unavailable" ||
+      (team?.observedAt && presenceFreshness(team.observedAt, now) === "unavailable"));
   const label = presenceUnknown ? t`Status unavailable` : statusLabel(run.status);
   const activityLabel = t`${title}, ${label}`;
   const tone = presenceUnknown ? "text-muted-foreground" : statusTone(run.status);
@@ -154,12 +155,12 @@ function ActivityRow({
             </span>
           </div>
           <div className="mt-0.5 flex items-baseline gap-2">
-            {team?.currentTaskTitle || run.promptSnippet ? (
+            {run.promptSnippet ? (
               <span className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground">
-                {team?.currentTaskTitle ?? run.promptSnippet}
+                {run.promptSnippet}
               </span>
             ) : null}
-            {team?.latestDeliveryState ? (
+            {team?.activeRunIds?.includes(run.runId) && team.latestDeliveryState ? (
               <span className="text-xs text-muted-foreground">
                 {teamDeliveryText(team.latestDeliveryState, (value) => t({ id: value }))}
               </span>

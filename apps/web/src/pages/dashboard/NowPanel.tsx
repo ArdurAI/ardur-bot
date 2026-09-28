@@ -62,7 +62,6 @@ export default function NowPanel({
         </p>
       ) : null}
       {runs.map((run) => {
-        const presence = data.rows.find((row) => row.botId === run.botId);
         const started = run.startedAt ?? run.createdAt;
         const seconds = started
           ? Math.max(0, Math.floor((Date.now() - Date.parse(started)) / 1000))
@@ -71,7 +70,7 @@ export default function NowPanel({
           <>
             <span className="font-medium">{run.botName}</span>
             <span className="min-w-0 flex-1 truncate">
-              {presence?.currentTaskTitle ?? run.promptSnippet}
+              {run.promptSnippet}
             </span>
             {seconds !== null ? (
               <span className="tabular-nums text-muted-foreground">{t`${seconds}s`}</span>
