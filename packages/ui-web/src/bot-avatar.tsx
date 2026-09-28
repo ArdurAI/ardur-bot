@@ -138,13 +138,13 @@ export const BotAvatar = memo(function BotAvatar({
           borderRadius: sealRadius,
           borderColor: colorDef.hex,
           borderWidth: 2,
-          borderStyle: "solid",
+          borderStyle: isPaused ? "dashed" : "solid",
         }}
       >
         {isRunning ? (
           <svg
             className={cn("absolute pointer-events-none", !reducedMotion && "animate-spin")}
-            style={{ width: size + 8, height: size + 8, inset: -6, animationDuration: "3s" }}
+            style={{ width: size + 8, height: size + 8, inset: -6, animationDuration: "1.6s" }}
             viewBox="0 0 56 56"
             fill="none"
             aria-hidden="true"
@@ -210,13 +210,13 @@ export const BotAvatar = memo(function BotAvatar({
           borderRadius: sealRadius,
           borderColor: colorDef.hex,
           borderWidth: 2,
-          borderStyle: "solid",
+          borderStyle: isPaused ? "dashed" : "solid",
         }}
       >
         {isRunning ? (
           <svg
             className={cn("absolute pointer-events-none", !reducedMotion && "animate-spin")}
-            style={{ width: size + 8, height: size + 8, inset: -6, animationDuration: "3s" }}
+            style={{ width: size + 8, height: size + 8, inset: -6, animationDuration: "1.6s" }}
             viewBox="0 0 56 56"
             fill="none"
             aria-hidden="true"
@@ -273,9 +273,9 @@ export const BotAvatar = memo(function BotAvatar({
         width: isRunning ? size * 0.8 : size,
         height: isRunning ? size * 0.8 : size,
         borderRadius: sealRadius,
-        background: isPaused ? "transparent" : colorDef.hex,
-        border: isPaused ? `2px dashed ${colorDef.hex}` : "none",
-        color: isPaused ? "var(--muted-foreground)" : colorDef.eyeColor,
+        background: colorDef.hex,
+        border: isPaused ? `2px dashed var(--background)` : "none",
+        color: colorDef.eyeColor,
         fontFamily: "'Instrument Serif', Georgia, serif",
         fontStyle: "italic",
         fontSize: Math.round((isRunning ? size * 0.8 : size) * 0.6),
@@ -286,7 +286,7 @@ export const BotAvatar = memo(function BotAvatar({
       {isRunning ? (
         <svg
           className={cn("absolute pointer-events-none", !reducedMotion && "animate-spin")}
-          style={{ width: size + 8, height: size + 8, animationDuration: "3s" }}
+          style={{ width: size + 8, height: size + 8, animationDuration: "1.6s" }}
           viewBox="0 0 56 56"
           fill="none"
           aria-hidden="true"
@@ -418,21 +418,27 @@ export function GrokShapePreview({
   color,
   selected,
   onClick,
+  identity,
 }: {
   shapeIndex: number;
   color: string;
   selected?: boolean;
   onClick?: () => void;
+  identity?: string;
 }) {
-  const key = SHIPPED_SHAPE_KEYS[shapeIndex % SHIPPED_SHAPE_KEYS.length] ?? "hex";
-  const path = shippedBotAvatarShapePath(shapeIndex);
   const colorDef = resolvePersonaColorDef("preview", color);
+  const effectiveId = identity || color || "agent";
+  const initial = (effectiveId || "A")[0]!.toUpperCase();
 
   return (
     <button
       type="button"
       onClick={onClick}
-      aria-label={key}
+      aria-label={
+        shapeIndex === -1
+          ? "Initial"
+          : (SHIPPED_SHAPE_KEYS[shapeIndex % SHIPPED_SHAPE_KEYS.length] ?? "hex")
+      }
       aria-pressed={selected ?? false}
       className={cn(
         "relative flex size-11 items-center justify-center rounded-xl transition-transform hover:scale-105 active:scale-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-popover",
@@ -441,25 +447,43 @@ export function GrokShapePreview({
           : "hover:bg-white/5",
       )}
     >
-      <div
-        className="flex items-center justify-center bg-card"
-        style={{
-          width: 32,
-          height: 32,
-          borderRadius: "50% 48% 52% 50% / 49% 51% 49% 51%",
-          borderColor: colorDef.hex,
-          borderWidth: 2,
-          borderStyle: "solid",
-        }}
-      >
-        <svg viewBox={VIEWBOX} className="size-6 overflow-visible" aria-hidden="true">
-          <path d={path} fill={colorDef.hex} />
-          <g fill={colorDef.eyeColor}>
-            <ellipse cx={CENTER - 29} cy={CENTER - 8} rx={10} ry={7} />
-            <ellipse cx={CENTER + 29} cy={CENTER - 8} rx={10} ry={7} />
-          </g>
-        </svg>
-      </div>
+      {shapeIndex === -1 ? (
+        <div
+          className="flex items-center justify-center"
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: "50% 48% 52% 50% / 49% 51% 49% 51%",
+            background: colorDef.hex,
+            color: colorDef.eyeColor,
+            fontFamily: "'Instrument Serif', Georgia, serif",
+            fontStyle: "italic",
+            fontSize: 19,
+          }}
+        >
+          {initial}
+        </div>
+      ) : (
+        <div
+          className="flex items-center justify-center bg-card"
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: "50% 48% 52% 50% / 49% 51% 49% 51%",
+            borderColor: colorDef.hex,
+            borderWidth: 2,
+            borderStyle: "solid",
+          }}
+        >
+          <svg viewBox={VIEWBOX} className="size-6 overflow-visible" aria-hidden="true">
+            <path d={shippedBotAvatarShapePath(shapeIndex)} fill={colorDef.hex} />
+            <g fill={colorDef.eyeColor}>
+              <ellipse cx={CENTER - 29} cy={CENTER - 8} rx={10} ry={7} />
+              <ellipse cx={CENTER + 29} cy={CENTER - 8} rx={10} ry={7} />
+            </g>
+          </svg>
+        </div>
+      )}
     </button>
   );
 }

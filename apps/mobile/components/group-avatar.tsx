@@ -52,7 +52,7 @@ export const GroupAvatar = memo(function GroupAvatar({
   }
 
   const overlap = Math.round(size / 3);
-  const visibleMembers = members.slice(0, 3);
+  const visibleMembers = members.slice(0, members.length > 3 ? 2 : members.length);
 
   return (
     <View style={{ height: size, flexDirection: "row", alignItems: "center" }}>

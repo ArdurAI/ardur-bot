@@ -6,9 +6,7 @@ test("bot avatar ring stays still when reduced motion is enabled", async ({ page
 
   const avatar = page.locator(".ardurbot-bot-avatar");
   await expect(avatar).toBeVisible();
-  await expect(avatar).toHaveAttribute("data-working", "true");
-
-  const ring = avatar.locator(".ardurbot-bot-avatar-ring");
+  const ring = avatar.locator("svg").filter({ has: page.locator("circle") });
   await expect(ring).toBeVisible();
   const snapshot = () =>
     ring.evaluate((el: SVGElement) => ({

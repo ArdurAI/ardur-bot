@@ -66,8 +66,6 @@ export const BotAvatar = memo(function BotAvatar({
   );
   const initial = (effectiveId || "A")[0]!.toUpperCase();
 
-  const sealRadius = size < 28 ? size / 2 : size * 0.45; // React Native doesn't support complex squircle border radii natively easily. Let's just use 50% for all for now, or just `borderRadius: size / 2` because complex border-radius strings like "50% 48%..." don't work in React Native StyleSheet.
-
   const reducedMotion = useReducedMotion();
   const progress = useSharedValue(0);
 
@@ -77,7 +75,7 @@ export const BotAvatar = memo(function BotAvatar({
     if (isRunning && !reducedMotion) {
       progress.value = withRepeat(
         withTiming(1, {
-          duration: 3000,
+          duration: 1600,
           easing: Easing.linear,
         }),
         -1,
@@ -138,6 +136,7 @@ export const BotAvatar = memo(function BotAvatar({
           borderRadius: size / 2,
           borderWidth: 2,
           borderColor: colorDef.hex,
+          borderStyle: isPaused ? "dashed" : "solid",
           overflow: "hidden",
         }}
       >
@@ -151,6 +150,7 @@ export const BotAvatar = memo(function BotAvatar({
           borderRadius: size / 2,
           borderWidth: 2,
           borderColor: colorDef.hex,
+          borderStyle: isPaused ? "dashed" : "solid",
           backgroundColor: tokens.card,
           alignItems: "center",
           justifyContent: "center",
@@ -189,17 +189,17 @@ export const BotAvatar = memo(function BotAvatar({
           height: isRunning ? size * 0.8 : size,
           margin: isRunning ? size * 0.1 : 0,
           borderRadius: size / 2,
-          backgroundColor: isPaused ? "transparent" : colorDef.hex,
+          backgroundColor: colorDef.hex,
           borderWidth: isPaused ? 2 : 0,
           borderStyle: isPaused ? "dashed" : "solid",
-          borderColor: isPaused ? colorDef.hex : "transparent",
+          borderColor: isPaused ? tokens.background : "transparent",
           alignItems: "center",
           justifyContent: "center",
         }}
       >
         <Text
           style={{
-            color: isPaused ? tokens.mutedForeground : colorDef.eyeColor,
+            color: colorDef.eyeColor,
             fontFamily: "Georgia", // 'Instrument Serif' may not be available on mobile, using serif fallback
             fontStyle: "italic",
             fontSize: Math.round((isRunning ? size * 0.8 : size) * 0.6),

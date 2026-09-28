@@ -62,49 +62,47 @@ export const GroupAvatar = memo(function GroupAvatar({
     );
   }
 
-  const pair = members.length === 2;
-  const miniSize = Math.round(size * (pair ? 0.65 : 0.54));
-  const positions: CSSProperties[] = pair
-    ? [
-        { top: 0, left: 0 },
-        { right: 0, bottom: 0 },
-      ]
-    : [
-        { top: 0, left: (size - miniSize) / 2 },
-        { bottom: 0, left: 0 },
-        { right: 0, bottom: 0 },
-      ];
-  const visibleMembers = members.slice(0, pair || members.length === 3 ? members.length : 2);
+  const overlap = Math.round(size / 3);
+  const visibleMembers = members.slice(0, members.length > 3 ? 2 : members.length);
 
   return (
     <div
-      className={cn("ardurbot-group-avatar relative rounded-full select-none", className)}
-      style={{ width: size, height: size, flex: "none" }}
+      className={cn("ardurbot-group-avatar flex flex-row items-center select-none", className)}
+      style={{ height: size, flex: "none" }}
     >
       {visibleMembers.map((member, index) => (
         <div
           key={member.botId ?? index}
-          className="absolute"
+          className="relative"
           style={{
-            ...positions[index],
+            marginLeft: index === 0 ? 0 : -overlap,
+            width: size,
+            height: size,
+            borderRadius: "50%",
+            border: "2px solid var(--background)",
             zIndex: index + 1,
-            filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.6))",
+            // overflow hidden removed because we don't want to clip hand-cut edges or rings
           }}
         >
           <BotAvatar
             color={member.color}
             identity={member.botId ?? member.name}
-            size={miniSize}
+            size={size}
             status={member.status}
           />
         </div>
       ))}
       {members.length > 3 ? (
         <div
-          className="absolute right-0 bottom-0 z-[3] flex items-center justify-center rounded-full bg-secondary border border-border text-[10px] font-semibold text-secondary-foreground shadow-md"
+          className="relative flex items-center justify-center bg-secondary font-semibold text-secondary-foreground"
           style={{
-            width: miniSize,
-            height: miniSize,
+            marginLeft: -overlap,
+            width: size,
+            height: size,
+            borderRadius: "50%",
+            border: "2px solid var(--background)",
+            fontSize: Math.round(size * 0.3),
+            zIndex: members.length + 1,
           }}
         >
           {`+${members.length - 2}`}

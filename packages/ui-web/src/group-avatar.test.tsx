@@ -44,7 +44,7 @@ describe("GroupAvatar", () => {
     expect(html).toContain("ardurbot-bot-avatar");
   });
 
-  it("renders 3 mini bot avatars for 3 members", () => {
+  it("renders 3 overlapping bot avatars for 3 members", () => {
     const html = renderToString(
       <GroupAvatar
         members={[
