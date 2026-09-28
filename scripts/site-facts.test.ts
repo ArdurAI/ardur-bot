@@ -798,4 +798,12 @@ describe("site facts", () => {
       `brew tap ArdurAI/tap && brew trust --cask ArdurAI/tap/${cask} && brew install --cask ArdurAI/tap/${cask}`,
     );
   });
+
+  it("keeps the Homebrew verified mark and accepts only a boolean", async () => {
+    const generated = await generatedProduct(await fixture());
+    expect(generated.install.homebrew.verified).toBe(true);
+    const changed: unknown = structuredClone(generated);
+    (changed as { install: { homebrew: { verified: unknown } } }).install.homebrew.verified = "yes";
+    expect(SiteProductSchema.safeParse(changed).success).toBe(false);
+  });
 });

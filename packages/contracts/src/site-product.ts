@@ -190,6 +190,8 @@ export const SiteProductSchema = z
         tapRepo: text,
         caskPath: z.string().regex(/^Casks\/[a-z0-9-]+\.rb$/),
         command: text,
+        // Set only after the full command installs cleanly; the website hides Homebrew without it.
+        verified: z.boolean().optional(),
       }),
     }),
     personas: z.array(z.strictObject({ name: text, line: text })).min(1),

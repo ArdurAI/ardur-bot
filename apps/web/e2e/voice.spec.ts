@@ -83,6 +83,8 @@ test("voice settings connect a key, speak a reply, and open a call", async ({ pa
     .click();
   await expect(page.getByTestId("call-view")).toBeVisible();
   await expect(page.getByRole("button", { name: "Hang up" })).toBeVisible();
+  await page.getByRole("button", { name: "Interrupt" }).click();
+  await expect(page.getByTestId("call-view")).toContainText("Listening…");
   await page.getByRole("button", { name: "Hang up" }).click();
   await expect(page.getByTestId("call-view")).toHaveCount(0);
 

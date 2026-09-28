@@ -166,4 +166,66 @@ describe("CallView", () => {
       expect.objectContaining({ message: "Failed to load chunk for voice playback" }),
     );
   });
+
+  it("clears an interrupted spoken caption before the next request is working", async () => {
+    let onSpeech: ((state: { status: string; caption?: string }) => void) | undefined;
+    const speaker = {
+      subscribe: vi.fn((callback: typeof onSpeech) => {
+        onSpeech = callback;
+        return () => {};
+      }),
+      stop: vi.fn(() => onSpeech?.({ status: "idle" })),
+    };
+    fakeTtsLazy.withSpeaker.mockImplementation((action: (speaker: any) => void) =>
+      Promise.resolve().then(() => action(speaker)),
+    );
+    await act(async () =>
+      root.render(
+        <CallView
+          botId="bot-1"
+          botName="Test Bot"
+          transcribe={false}
+          snapshot={{ messages: [], run: null } as unknown as ThreadSnapshot}
+          onSend={vi.fn(async () => {})}
+          onFollowUp={vi.fn(async () => {})}
+          onAnswer={vi.fn(async () => {})}
+          onClose={vi.fn()}
+        />,
+      ),
+    );
+    await act(async () => onSpeech?.({ status: "speaking", caption: "Interrupted sentence" }));
+    expect(container.textContent).toContain("Interrupted sentence");
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>("button")!.click();
+    });
+    const latestListen = fakeDictation.listen.mock.calls.at(-1)?.[0];
+    await act(async () => latestListen.onFinal("New request"));
+    expect(container.textContent).toContain("Working…");
+    expect(container.textContent).not.toContain("Interrupted sentence");
+  });
+
+  it("does not restart dictation when a pending request fails after unmount", async () => {
+    let rejectSend: ((error: Error) => void) | undefined;
+    fakeTtsLazy.withSpeaker.mockImplementation(async () => {});
+    await act(async () =>
+      root.render(
+        <CallView
+          botId="bot-1"
+          botName="Test Bot"
+          transcribe={false}
+          snapshot={{ messages: [], run: { status: "running" } } as unknown as ThreadSnapshot}
+          onSend={vi.fn(async () => {})}
+          onFollowUp={vi.fn(() => new Promise<void>((_, reject) => (rejectSend = reject)))}
+          onAnswer={vi.fn(async () => {})}
+          onClose={vi.fn()}
+        />,
+      ),
+    );
+    const firstListen = fakeDictation.listen.mock.calls[0]?.[0];
+    await act(async () => firstListen.onFinal("Follow up"));
+    await act(async () => root.render(null));
+    const countAfterUnmount = fakeDictation.listen.mock.calls.length;
+    await act(async () => rejectSend?.(new Error("Send failed")));
+    expect(fakeDictation.listen).toHaveBeenCalledTimes(countAfterUnmount);
+  });
 });

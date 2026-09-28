@@ -1264,6 +1264,10 @@ msgstr "보드"
 msgid "Booting"
 msgstr ""
 
+#: src/pages/Shell.tsx
+msgid "Booting live desktop…"
+msgstr "라이브 데스크톱 부팅 중…"
+
 #. placeholder {0}: computerBot?.name ?? active?.name
 #: src/pages/Shell.tsx
 msgid "Booting up {0}’s computer"
@@ -1901,6 +1905,7 @@ msgstr ""
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/TeamBoard.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Computer"
 msgstr "컴퓨터"
 
@@ -1916,6 +1921,10 @@ msgstr ""
 msgid "Computer engine is unavailable."
 msgstr ""
 
+#: src/pages/Shell.tsx
+msgid "Computer failed to boot"
+msgstr "컴퓨터 부팅 실패"
+
 #: src/pages/storage/StorageSettings.tsx
 msgid "Computer homes"
 msgstr ""
@@ -1923,6 +1932,10 @@ msgstr ""
 #: src/pages/Shell.tsx
 msgid "Computer is asleep"
 msgstr "컴퓨터가 절전 상태입니다"
+
+#: src/pages/Shell.tsx
+msgid "Computer is asleep. Open it to wake."
+msgstr "컴퓨터가 절전 모드입니다. 깨우려면 여세요."
 
 #: src/pages/system/SystemPage.tsx
 msgid "Computer use"
@@ -3779,7 +3792,7 @@ msgstr "{0} 펼치기"
 
 #: src/pages/Shell.tsx
 msgid "Expand workspace"
-msgstr ""
+msgstr "작업 공간 확장"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Experimental"
@@ -3891,7 +3904,7 @@ msgstr ""
 #: src/pages/workspace/WorkspaceFiles.tsx
 #: src/pages/workspace/WorkspacePane.tsx
 msgid "Files"
-msgstr ""
+msgstr "파일"
 
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Files are unavailable on this computer."
@@ -4845,7 +4858,7 @@ msgstr ""
 
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Loading tasks…"
-msgstr ""
+msgstr "작업 불러오는 중…"
 
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "Loading the extension catalogue…"
@@ -5796,7 +5809,7 @@ msgstr ""
 
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Nothing running or queued"
-msgstr ""
+msgstr "실행 중이거나 대기 중인 작업 없음"
 
 #: src/pages/LearningInbox.tsx
 msgid "Nothing to review."
@@ -5971,7 +5984,7 @@ msgstr ""
 
 #: src/pages/workspace/WorkspaceScreen.tsx
 msgid "Open screen"
-msgstr ""
+msgstr "화면 열기"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Open Screen recording settings"
@@ -5979,7 +5992,7 @@ msgstr ""
 
 #: src/pages/workspace/WorkspaceScreen.tsx
 msgid "Open screen to view this computer."
-msgstr ""
+msgstr "이 컴퓨터를 보려면 화면을 여세요."
 
 #: src/components/composer/command-description.ts
 msgid "Open Settings"
@@ -7006,7 +7019,7 @@ msgstr "Ardur로 돌아가기"
 
 #: src/pages/Shell.tsx
 msgid "Return to conversation"
-msgstr ""
+msgstr "대화로 돌아가기"
 
 #: src/pages/GuidedOnboarding.tsx
 msgid "Return to setup"
@@ -7348,7 +7361,7 @@ msgstr ""
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/workspace/WorkspacePane.tsx
 msgid "Screen"
-msgstr ""
+msgstr "화면"
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Screen and terminal: Not available on this computer"
@@ -8075,9 +8088,10 @@ msgid "System"
 msgstr "시스템"
 
 #: src/pages/ide/terminal.tsx
+#: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 msgid "Take control"
-msgstr ""
+msgstr "제어 가져오기"
 
 #: src/pages/ide/terminal.tsx
 #: src/pages/shell/computer-terminal.tsx
@@ -8100,7 +8114,7 @@ msgstr ""
 #: src/pages/Shell.tsx
 #: src/pages/workspace/WorkspacePane.tsx
 msgid "Tasks"
-msgstr ""
+msgstr "작업"
 
 #: src/pages/customize/SkillsPage.tsx
 msgid "Taught skills"
@@ -9011,11 +9025,14 @@ msgstr "진행 중"
 msgid "Working from the last copy"
 msgstr ""
 
-#. placeholder {0}: row.currentTaskTitle ?? row.sentence
-#. placeholder {1}: row.requesterName
 #: src/pages/TeamBoard.tsx
-msgid "Working on {0} for {1}"
-msgstr ""
+msgid "Working on {task}"
+msgstr "{task} 작업 중"
+
+#. placeholder {0}: row.requesterName
+#: src/pages/TeamBoard.tsx
+msgid "Working on {task} for {0}"
+msgstr "{0}님을 위해 {task} 작업 중"
 
 #: src/pages/Auth.tsx
 #: src/pages/CallView.tsx
@@ -9026,7 +9043,7 @@ msgstr "처리 중…"
 #: src/components/integrations/manage/IntegrationDetails.tsx
 #: src/pages/Shell.tsx
 msgid "Workspace"
-msgstr ""
+msgstr "작업 공간"
 
 #: src/pages/ChannelPairingSettings.tsx
 msgid "Workspace or server ID"

@@ -76,3 +76,28 @@ it("keeps each run's task and completed outcome when the bot starts new work", a
     vi.unstubAllGlobals();
   }
 });
+
+it.each(["waiting_input", "waiting_takeover"] as const)(
+  "keeps %s visible when presence is unavailable",
+  async (status) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    calls.list.mockImplementation(async ({ filter }: { filter: string }) => ({
+      runs: filter === "active" ? [makeRun("waiting", status, "Owner decision")] : [],
+    }));
+    calls.board.mockResolvedValue({
+      rows: [
+        { botId: "worker", availability: "unavailable", observedAt: new Date().toISOString() },
+      ],
+    });
+    const node = document.createElement("div");
+    const root = createRoot(node);
+    try {
+      await act(async () => root.render(createElement(ActivityList, { onOpenRun: vi.fn() })));
+      expect(node.textContent).toContain(status);
+      expect(node.textContent).not.toContain("Status unavailable");
+    } finally {
+      await act(async () => root.unmount());
+      vi.unstubAllGlobals();
+    }
+  },
+);

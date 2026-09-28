@@ -110,6 +110,11 @@ it("retains queued runs, owner-held takeover work, and queued delegations", asyn
     expect(view.node.textContent).toContain("Waiting for computer");
     expect(view.node.textContent).toContain("Queued handoff");
     expect(view.node.textContent).toContain("Status unavailable");
+    expect(view.node.textContent).toContain("Needs takeover");
+    const takeover = [...view.node.querySelectorAll('a[href="/app/worker"]')].find((link) =>
+      link.textContent?.includes("Waiting for computer"),
+    );
+    expect(takeover?.textContent).not.toContain("Status unavailable");
     expect(view.node.textContent).not.toContain("Nothing running");
   } finally {
     await view.close();
