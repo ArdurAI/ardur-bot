@@ -231,8 +231,9 @@ export class SetupEngine {
     if (this.newer || this.cancelling || this.journal.snapshot.interrupted || this.cleanupPending())
       return Promise.resolve(this.snapshot());
     const index = this.steps.findIndex((step) => step.id === stepId);
-    if (index < 0 || this.steps[index]!.requires.some((id) => this.row(id).status !== "succeeded"))
-      return Promise.resolve(this.snapshot());
+    if (index < 0) return Promise.resolve(this.snapshot());
+    if (this.row(stepId).reasonCode === "journal-write-failed")
+      this.journal.snapshot.blocked = false;
     return this.schedule(index, true, this.steps.length, true);
   }
 

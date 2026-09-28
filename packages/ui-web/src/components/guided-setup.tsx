@@ -182,6 +182,7 @@ export function GuidedSetupView(props: GuidedSetupViewProps) {
   const active =
     current && ["checking", "running", "verifying", "cancelling"].includes(current.status);
   const stopFailed = snapshot.steps.some((row) => row.reasonCode === "cleanup-incomplete");
+  const failedWrite = snapshot.steps.find((row) => row.reasonCode === "journal-write-failed");
   const newerJournal = snapshot.steps.some((row) => row.reasonCode === "newer-journal");
   const stopping = snapshot.steps.some((row) => row.status === "cancelling");
   const pilotReady = pilotReadyFromSnapshot(snapshot);
@@ -417,6 +418,10 @@ export function GuidedSetupView(props: GuidedSetupViewProps) {
         {stopFailed ? (
           <Button type="button" onClick={props.onCancel}>
             {guidedSetupText.retryStop}
+          </Button>
+        ) : failedWrite ? (
+          <Button type="button" onClick={() => props.onRetry(failedWrite.id)}>
+            {guidedSetupText.retry}
           </Button>
         ) : snapshot.interrupted ? (
           <>

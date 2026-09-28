@@ -213,6 +213,25 @@ describe("GuidedSetupView", () => {
     }
   });
 
+  it("offers footer recovery after a cancellation journal write fails", async () => {
+    const view = mount();
+    try {
+      const snapshot = fixture("failed");
+      snapshot.blocked = true;
+      snapshot.steps[1]!.reasonCode = "journal-write-failed";
+      await view.render(snapshot);
+      const footer = view.host.querySelector(".guided-actions");
+      const retry = [...(footer?.querySelectorAll("button") ?? [])].find(
+        (button) => button.textContent === "Retry",
+      );
+      expect(retry).toBeDefined();
+      await act(async () => retry?.click());
+      expect(view.actions.onRetry).toHaveBeenCalledWith("database");
+    } finally {
+      await view.cleanup();
+    }
+  });
+
   it.each(["command-collision", "setup-step-failed"])(
     "lets a failed optional command (%s) be skipped without promising a location control",
     async (reasonCode) => {
