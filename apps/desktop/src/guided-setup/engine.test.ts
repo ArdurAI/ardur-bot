@@ -801,9 +801,18 @@ describe("SetupEngine", () => {
       files.store,
       [
         step({ check: ready }),
-        step({ id: "database", requires: ["prerequisites"], check: databaseCheck, run: prepareDatabase }),
+        step({
+          id: "database",
+          requires: ["prerequisites"],
+          check: databaseCheck,
+          run: prepareDatabase,
+        }),
         step({ id: "migrations", requires: ["database"], check: ready }),
-        step({ id: "services", requires: ["migrations"], waitForInput: true, run: serviceRun,
+        step({
+          id: "services",
+          requires: ["migrations"],
+          waitForInput: true,
+          run: serviceRun,
           cancel: async () => {
             databaseReady = false;
             return ["database", "migrations"];
@@ -815,7 +824,10 @@ describe("SetupEngine", () => {
     expect((await engine.start()).steps[4]?.status).toBe("waiting-input");
     files.reject((raw) => JSON.parse(raw).snapshot.steps[4].status === "cancelling");
     const stopped = await engine.cancel();
-    expect(stopped.steps[4]).toMatchObject({ status: "failed", reasonCode: "journal-write-failed" });
+    expect(stopped.steps[4]).toMatchObject({
+      status: "failed",
+      reasonCode: "journal-write-failed",
+    });
     expect(stopped.steps[1]?.status).toBe("pending");
     expect(stopped.steps[2]?.status).toBe("pending");
     files.reject(null);
