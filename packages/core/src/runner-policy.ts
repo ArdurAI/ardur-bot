@@ -35,11 +35,14 @@ export type RunnerAdmissionRefusalCode =
   | "environment-not-found"
   | "environment-unsupported"
   | "environment-unverified"
+  | "environment-revision-stale"
   | "image-identity-mismatch"
   | "image-not-resolved"
   | "engine-mismatch"
   | "probe-stale"
   | "runner-unreachable"
+  | "enforcement-unsupported"
+  | "approval-required"
   | "bad-path"
   | "input-too-large"
   | "too-many-input-files"
@@ -81,6 +84,14 @@ export type RunnerAdmissionView = {
   jobsStartedToday: number;
   /** Runner milliseconds consumed today (UTC window). */
   runnerMillisUsedToday: number;
+  /** Runner milliseconds reserved by unsettled jobs today (UTC window). */
+  runnerMillisReservedToday: number;
+  /**
+   * A trusted owner decision authorizing this exact request: a per-job approval
+   * (ExternalEffect id) or a bounded standing grant. Null when none applies.
+   * A bot's message is data and can never supply this.
+   */
+  approval: { kind: "approval" | "standing-grant"; id: string } | null;
   /** True when the request originates from goal machinery, which R1 rejects. */
   goalOrigin: boolean;
   now: Date;
@@ -93,6 +104,8 @@ export type RunnerAdmissionDecision =
       requestHash: string;
       durationSeconds: number;
       resources: { cpuMillis: number; memoryBytes: number; diskBytes: number };
+      /** Present when the runner required an owner decision; persisted on the job. */
+      approval: { kind: "approval" | "standing-grant"; id: string } | null;
     }
   | {
       /** Retry of the same operation key with the identical canonical request. */
@@ -117,6 +130,10 @@ export function runnerJobRequestHash(request: RunnerJobRequest): string {
  * Admission. Checks run in a fixed order so refusals are deterministic: scope
  * and runner state, sharing, engine identity, environment identity, paths and
  * sizes, time and daily caps, then operation-key replay and the bot slot.
+ * Replay resolves before every mutable-state check: returning an
+ * already-created job allocates no new work, so a lost response retried after
+ * the runner paused, its probe expired or a daily cap filled must still return
+ * that job, not a refusal.
  */
 export function admitRunnerJob(
   request: RunnerJobRequest,
@@ -124,8 +141,26 @@ export function admitRunnerJob(
 ): RunnerAdmissionDecision {
   const { runner, environment, limits } = { ...view, limits: view.runner.limits };
 
+  // Replay first: identity is the request hash and the operation key, checked
+  // after only the scope and runner-state facts that cannot have changed into
+  // a security-relevant answer. A different request under the same key is a
+  // conflict, never a silent second job.
+  if (view.existingJob) {
+    const requestHash = runnerJobRequestHash(request);
+    if (view.existingJob.requestHash === requestHash)
+      return { ok: true, replay: true, requestHash, existingJobId: view.existingJob.id };
+    return refusal(
+      "operation-key-conflict",
+      "This request key was already used for a different job.",
+    );
+  }
+
   if (runner.spaceId !== view.spaceId)
     return refusal("wrong-space", "This runner is not available in this space.");
+  if (runner.id !== request.runnerId)
+    return refusal("runner-not-found", "This runner does not match the request.");
+  if (environment.runnerId !== runner.id || environment.id !== request.environmentId)
+    return refusal("environment-not-found", "Choose an environment for this runner.");
   if (runner.retiredAt !== null) return refusal("runner-retired", "This runner was removed.");
   if (runner.admissionState === "disabled")
     return refusal("runner-disabled", "This runner is disabled.");
@@ -156,11 +191,17 @@ export function admitRunnerJob(
     );
 
   // Environment: must belong to this runner, be in its probed catalog, be
-  // verified, and carry the immutable image identity it was probed with.
-  if (environment.runnerId !== runner.id)
-    return refusal("environment-not-found", "Choose an environment for this runner.");
+  // verified, carry the immutable image identity it was probed with, and be the
+  // exact revision the request selected.
   if (!runner.capabilities.environments.includes(environment.id))
     return refusal("environment-unsupported", "This runner cannot run the selected environment.");
+  if (request.environmentRevision !== undefined) {
+    if (environment.revision !== request.environmentRevision)
+      return refusal(
+        "environment-revision-stale",
+        "This environment changed since the request was prepared.",
+      );
+  }
   if (environment.verifiedAt === null)
     return refusal("environment-unverified", "This environment has not been tested yet.");
   if (environment.kind === "image") {
@@ -184,6 +225,19 @@ export function admitRunnerJob(
     return refusal("probe-stale", "This runner has not been tested yet.");
   if (Date.parse(runner.probeExpiresAt) <= view.now.getTime())
     return refusal("probe-stale", "This runner has not been tested recently.");
+
+  // Enforcement capabilities: the job's mandatory isolation, resource limits
+  // and Stop guarantees must be proven enforceable by the probed report.
+  // `unknown` is never supported: a runner whose probe could not establish a
+  // capability cannot be trusted to enforce the limits admission grants.
+  const capabilities = requiredRunnerCapabilities(environment, request);
+  for (const capability of capabilities) {
+    if (runner.capabilities[capability] !== "supported")
+      return refusal(
+        "enforcement-unsupported",
+        "This runner cannot enforce the guarantees this job requires.",
+      );
+  }
 
   // Input bounds. The request schema rejects bad shapes and per-file ceilings;
   // admission re-checks the aggregate limits from the runner's policy.
@@ -223,26 +277,32 @@ export function admitRunnerJob(
     return refusal("resources-exceed-limits", "This runner cannot enforce the requested limit.");
 
   // Daily caps. Cancellations and failed launches count; retries never reset them.
+  // Time counts consumed time plus unsettled reservations plus this job: a
+  // reservation is money already promised, so 3,599 of 3,600 seconds consumed
+  // still refuses another 300-second job. The same sum is rechecked under the
+  // runner lock at persistence time.
   if (view.jobsStartedToday >= limits.maxJobsPerDay)
     return refusal("daily-job-limit", "This runner reached its daily job limit.");
-  if (view.runnerMillisUsedToday >= limits.maxRunnerSecondsPerDay * 1000)
+  if (
+    view.runnerMillisUsedToday + view.runnerMillisReservedToday + request.timeoutSeconds * 1000 >
+    limits.maxRunnerSecondsPerDay * 1000
+  )
     return refusal("daily-time-limit", "This runner reached its daily runner-time limit.");
-
-  // Operation key: identical canonical request replays its job; a different
-  // request under the same key is a conflict, never a silent second job.
-  if (view.existingJob) {
-    const requestHash = runnerJobRequestHash(request);
-    if (view.existingJob.requestHash === requestHash)
-      return { ok: true, replay: true, requestHash, existingJobId: view.existingJob.id };
-    return refusal(
-      "operation-key-conflict",
-      "This request key was already used for a different job.",
-    );
-  }
 
   // One active job per bot execution slot, regardless of which runner holds it.
   if (view.activeBotSlotJobs > 0)
     return refusal("slot-occupied", "This bot already has a runner job in flight.");
+
+  // Owner decision. Protected runners and metered or unknown-cost runners
+  // require a per-job owner approval or a bounded standing grant before any
+  // allocation; a bot's message can never supply either. The requirement is
+  // represented here so storage can distinguish approved work from work
+  // awaiting an owner decision.
+  if ((runner.protected || limits.spendMode !== "owner-managed") && !view.approval)
+    return refusal(
+      "approval-required",
+      "This runner needs an owner decision before this job can run.",
+    );
 
   return {
     ok: true,
@@ -250,8 +310,36 @@ export function admitRunnerJob(
     requestHash: runnerJobRequestHash(request),
     durationSeconds: request.timeoutSeconds,
     resources: { cpuMillis, memoryBytes, diskBytes },
+    approval: view.approval,
   };
 }
+
+/**
+ * Capabilities a job needs proven enforceable. Everything R1 admits requires
+ * containers and process-tree cancellation (bounded duration and Stop are only
+ * real if the whole tree can be killed); an image environment adds network
+ * isolation and the disk/memory/PID ceilings admission grants are measured
+ * against. Later slices with different environment kinds extend this map.
+ */
+export function requiredRunnerCapabilities(
+  environment: Pick<RunnerEnvironment, "kind">,
+  request: Pick<RunnerJobRequest, "resources">,
+): RunnerCapabilityName[] {
+  const required: RunnerCapabilityName[] = ["containers", "processTreeCancellation"];
+  if (environment.kind === "image") required.push("networkIsolation", "hardDiskLimit");
+  if (request.resources !== undefined) required.push("hardDiskLimit");
+  return required;
+}
+
+export type RunnerCapabilityName =
+  | "containers"
+  | "shell"
+  | "files"
+  | "ports"
+  | "gpu"
+  | "networkIsolation"
+  | "hardDiskLimit"
+  | "processTreeCancellation";
 
 function refusal(code: RunnerAdmissionRefusalCode, message: string): RunnerAdmissionDecision {
   return { ok: false, code, message };
@@ -308,7 +396,12 @@ export type RunnerStopInput = {
   state: RunnerJobState;
   /** Whether the provider confirmed the job's process/container is gone. */
   terminationConfirmed: boolean;
-  /** Whether the job was ever dispatched to a provider. */
+  /**
+   * Whether the job was ever dispatched to a provider. Only a job still in
+   * `queued` can be known not-dispatched: once a worker claimed it, the launch
+   * may exist even when the receipt (`providerRef`/`startedAt`) was never
+   * persisted, so the flag never marks a claimed job trivially cancelled.
+   */
   dispatched: boolean;
 };
 
@@ -323,10 +416,11 @@ export type RunnerStopOutcome = {
 };
 
 /**
- * Stop at every stage. A queued, never-dispatched job cancels immediately.
- * A dispatched job records the request and confirms only when the provider
- * confirms absence; without confirmation the job stays visibly cancelling,
- * never "cancelled" from a dropped client alone.
+ * Stop at every stage. A queued job no worker claimed cancels immediately with
+ * nothing to clean. Any claimed job is treated as possibly running until the
+ * provider confirms termination: without confirmation the job stays visibly
+ * cancelling, never "cancelled" from a dropped client alone, and its slot and
+ * cleanup debt survive.
  */
 export function stopRunnerJob(input: RunnerStopInput): RunnerStopOutcome {
   if (!runnerJobHoldsSlot(input.state))
@@ -337,14 +431,18 @@ export function stopRunnerJob(input: RunnerStopInput): RunnerStopOutcome {
       cancelConfirmed: input.state === "cancelled",
       cleanupState: "pending",
     };
-  if (!input.dispatched || input.state === "queued")
+  // Fail closed: a job that left the queue was claimed and may have launched
+  // even without a persisted receipt; a queued row contradictorily flagged as
+  // dispatched is treated the same way.
+  const possiblyLaunched = input.dispatched || input.state !== "queued";
+  if (!possiblyLaunched)
     return {
       cancelRequested: true,
       state: "cancelled",
       phase: "finished",
       cancelConfirmed: true,
       // Nothing was ever launched, so there is no provider resource to clean.
-      cleanupState: input.dispatched ? "pending" : "clean",
+      cleanupState: "clean",
     };
   if (input.terminationConfirmed)
     return {
@@ -390,8 +488,11 @@ export function runnerJobDeadline(options: { dispatchedAt: Date; durationSeconds
 
 /**
  * Restart reconciliation. An orphaned running/staging/collecting job is not
- * blindly retried: it is marked for cleanup under a new fence. An ambiguous
- * launch never issues a second provider effect.
+ * blindly retried: it is marked for cleanup under a new fence so cleanup can
+ * proceed. A job already marked `cleaning` by a previous reconciliation whose
+ * worker died before completing is re-adopted the same way — the fence bump
+ * invalidates the dead worker's cleanup ownership. An ambiguous launch never
+ * issues a second provider effect.
  */
 export type ReconcileAction = "reattach" | "cleanup" | "none";
 
@@ -403,6 +504,14 @@ export function reconcileRunnerJobOnRestart(input: {
 }): { action: ReconcileAction; state: RunnerJobState; phase: RunnerJobPhase } {
   if (!runnerJobHoldsSlot(input.state) || input.state === "queued")
     return { action: "none", state: input.state, phase: input.phase };
+  if (input.state === "cleaning") {
+    // A cleaning job is mid-cleanup; only an expired lease means its worker is
+    // gone and the work must be re-adopted under a new fence.
+    const leaseExpired =
+      input.leaseExpiresAt === null || input.leaseExpiresAt.getTime() <= input.now.getTime();
+    if (!leaseExpired) return { action: "reattach", state: input.state, phase: input.phase };
+    return { action: "cleanup", state: "cleaning", phase: "reconciling" };
+  }
   const leaseExpired =
     input.leaseExpiresAt === null || input.leaseExpiresAt.getTime() <= input.now.getTime();
   if (!leaseExpired) return { action: "reattach", state: input.state, phase: input.phase };
