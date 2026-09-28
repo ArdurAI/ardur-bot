@@ -9,6 +9,7 @@ export async function loadBotPresence(
     groupId?: string;
     visibleGroupId?: string;
     callerBotId?: string;
+    callerThreadId?: string;
     canSend?: boolean;
     availability?: BotAvailability;
     cursor?: string;
@@ -217,6 +218,7 @@ export async function loadBotPresence(
             {
               ...run,
               thread: {
+                id: run.threadId,
                 groupId:
                   run.thread?.groupId ??
                   goals.find((goal) => goal.id === run.goalId)?.groupId ??
@@ -238,6 +240,7 @@ export async function loadBotPresence(
         ?.displayName,
       observedAt,
       callerBotId: options.callerBotId,
+      callerThreadId: options.callerThreadId,
       canSend:
         options.canSend !== false &&
         (!options.callerBotId ||

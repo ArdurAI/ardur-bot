@@ -22,6 +22,7 @@ import {
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { acknowledgeBotMessageReceipt, replyToBotDelivery } from "./bot-comms.js";
 import { messageBot } from "./bot-messages.js";
+import { loadRunBotDirectory } from "./bot-presence-directory.js";
 import { wakeGoalAfterDelegation } from "./goal-wake.js";
 import { createJobReconciler } from "./job-reconciler.js";
 import { recordRunUsage } from "./run-usage.js";
@@ -480,6 +481,38 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
     expect(await prisma.botMessageDelivery.count({ where: { spaceId, userId } })).toBe(before);
   });
 
+  it("keeps every room member visible beyond the 40-bot desk page", async () => {
+    const f = await fixture();
+    await prisma.bot.createMany({
+      data: Array.from({ length: 41 }, (_, index) => ({
+        id: `a-outsider-${fixtureNumber}-${index}`,
+        spaceId,
+        userId,
+        name: `Outsider ${index}`,
+        color: "ink",
+      })),
+    });
+    const member = await prisma.bot.create({
+      data: {
+        id: `z-member-${fixtureNumber}`,
+        spaceId,
+        userId,
+        name: "Last room member",
+        color: "ink",
+      },
+    });
+    await prisma.chatGroupMember.create({ data: { groupId: f.room.groupId!, botId: member.id } });
+    const directory = await loadRunBotDirectory(
+      prisma,
+      { spaceId, userId },
+      f.coordinator.id,
+      f.room.groupId!,
+      true,
+    );
+    expect(directory).toContain(`Last room member (id: ${member.id})`);
+    expect(directory).toContain(`(id: ${f.worker.id})`);
+  });
+
   it("redacts an unrelated desk task in read-only peer list_bots mode", async () => {
     const f = await fixture();
     const unrelated = await prisma.bot.create({
@@ -527,6 +560,70 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
     expect(row?.delegationId).toBeUndefined();
     expect(JSON.stringify(row)).not.toContain(run.id);
     expect(JSON.stringify(row)).not.toContain(task.prompt);
+  });
+
+  it("redacts a newer private task of the same bot from a restricted worker", async () => {
+    const f = await fixture();
+    await prisma.run.update({
+      where: { id: f.workerRun.id },
+      data: { leaseExpiresAt: new Date(Date.now() + 60_000) },
+    });
+    const conversation = await prisma.externalConversation.create({
+      data: {
+        spaceId,
+        userId,
+        botId: f.worker.id,
+        provider: "fixture",
+        workspaceId: scopeId,
+        externalKey: `private-${fixtureNumber}`,
+        conversationId: `private-${fixtureNumber}`,
+      },
+    });
+    const privateThread = await prisma.thread.create({
+      data: { spaceId, userId, externalConversationId: conversation.id },
+    });
+    const privateTask = await prisma.task.create({
+      data: {
+        spaceId,
+        userId,
+        botId: f.worker.id,
+        threadId: privateThread.id,
+        prompt: "Private message task",
+        status: "running",
+      },
+    });
+    const privateRun = await prisma.run.create({
+      data: {
+        spaceId,
+        userId,
+        botId: f.worker.id,
+        threadId: privateThread.id,
+        taskId: privateTask.id,
+        status: "running",
+        trigger: "follow_up",
+        leaseExpiresAt: new Date(Date.now() + 60_000),
+      },
+    });
+    const result = await loadBotPresence(
+      prisma,
+      { spaceId, userId },
+      {
+        callerBotId: f.worker.id,
+        callerThreadId: f.workerThread.id,
+        visibleGroupId: "__desk__",
+      },
+    );
+    const row = result.bots.find((bot) => bot.botId === f.worker.id);
+    expect(row).toMatchObject({
+      availability: "busy",
+      activeRunCount: 2,
+      activeRunIds: [f.workerRun.id],
+    });
+    expect(row?.currentTaskTitle).toBeUndefined();
+    expect(row?.goalId).toBeUndefined();
+    expect(row?.delegationId).toBeUndefined();
+    expect(JSON.stringify(row)).not.toContain(privateRun.id);
+    expect(JSON.stringify(row)).not.toContain(privateTask.prompt);
   });
 
   it("projects a coordinator's latest peer conversation to its group thread", async () => {

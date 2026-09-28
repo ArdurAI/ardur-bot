@@ -131,6 +131,39 @@ describe("derived bot presence", () => {
     expect(result.delegationId).toBeUndefined();
   });
 
+  it("hides a newer task of the calling bot in a different desk thread", () => {
+    const result = projectBotPresence({
+      bot,
+      groupIds: [],
+      runs: [
+        {
+          ...run("private-run", "running", new Date(now.getTime() + 1_000)),
+          thread: { id: "private-thread", groupId: null },
+        },
+        {
+          ...run("caller-run", "running", new Date(now.getTime() + 1_000)),
+          thread: { id: "desk", groupId: null },
+        },
+      ],
+      cards: [],
+      taskTitle: "Private messaging task",
+      pendingApprovalRunIds: new Set(),
+      pendingPeerCount: 0,
+      observedAt: now,
+      callerBotId: bot.id,
+      callerThreadId: "desk",
+      visibleGroupId: "__desk__",
+    });
+    expect(result).toMatchObject({
+      availability: "busy",
+      activeRunCount: 2,
+      activeRunIds: ["caller-run"],
+    });
+    expect(result.currentTaskTitle).toBeUndefined();
+    expect(result.goalId).toBeUndefined();
+    expect(result.delegationId).toBeUndefined();
+  });
+
   it("carries the group containing an owner's latest peer delivery", () => {
     const result = projectBotPresence({
       bot,

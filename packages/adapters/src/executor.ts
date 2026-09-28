@@ -2858,6 +2858,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 groupId: input.data.group_id,
                 visibleGroupId: thread.groupId ?? peerGoal?.groupId ?? "__desk__",
                 callerBotId: bot.id,
+                callerThreadId: thread.id,
                 canSend: !thread.groupId || Boolean(goalRoom),
                 availability: input.data.availability,
                 cursor: input.data.cursor,
