@@ -219,7 +219,9 @@ describe("GuidedSetupView", () => {
           );
           expect(disclosure).toBeDefined();
           await act(async () => disclosure?.click());
-          expect(view.host.querySelector("#guided-details-command textarea")?.value).toBe(
+          expect(
+            view.host.querySelector<HTMLTextAreaElement>("#guided-details-command textarea")?.value,
+          ).toBe(
             "Another app owns the ardur command. Skip this step, or remove or rename that command and retry.",
           );
         }
@@ -243,7 +245,7 @@ describe("GuidedSetupView", () => {
       snapshot.blocked = true;
       snapshot.steps[1]!.reasonCode = "cleanup-incomplete";
       await view.render(snapshot);
-      const actions = [...view.host.querySelectorAll(".guided-actions button")];
+      const actions = [...view.host.querySelectorAll<HTMLButtonElement>(".guided-actions button")];
       expect(actions.map((button) => button.textContent)).toEqual(["Retry stop"]);
       await act(async () => actions[0]?.click());
       expect(view.actions.onCancel).toHaveBeenCalledOnce();
