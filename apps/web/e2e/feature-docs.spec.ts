@@ -342,7 +342,8 @@ test("memory-documents: inspect history and approve a reviewed change", async ({
     .getByTestId("memory-history")
     .getByRole("button", { name: "Revision 1" });
   await expect(firstRevision).toBeVisible();
-  await firstRevision.scrollIntoViewIfNeeded();
+  // Bring the document card to the top of the settings panel so the revision is readable.
+  await document.evaluate((element) => element.scrollIntoView({ block: "start" }));
   await expect(firstRevision).toBeInViewport();
   await capture(page, "docs-memory-documents-history");
   await memory
