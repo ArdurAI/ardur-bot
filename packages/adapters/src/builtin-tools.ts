@@ -2,6 +2,7 @@ import type { ConnectorTool } from "@ardurbot/adapter-kit";
 import {
   BotSecretDestination,
   BotSecretName,
+  ListBotsInputSchema,
   SecretAskPurpose,
   SecretHttpRequest,
   TaskArtifactSchema,
@@ -28,6 +29,13 @@ export const DELEGATION_TOOL_NAMES = new Set([
 
 export const builtinAgentTools: ConnectorTool[] = [
   ...boardTools,
+  {
+    name: "list_bots",
+    description:
+      "Read the current scoped teammate directory. Availability is advisory; sending rechecks authorization and capacity.",
+    readOnly: true,
+    inputSchema: z.toJSONSchema(ListBotsInputSchema),
+  },
   {
     name: "search_connectors",
     description:

@@ -44,6 +44,7 @@ import {
   DEFAULT_MODEL_MAX_TOKENS,
   DelegationSnapshotSchema,
   isAttachmentImageMimeType,
+  ListBotsInputSchema,
   mcpCredentialConflict,
   OLLAMA_NO_IMAGES,
   OPENAI_COMPATIBLE_PROVIDER_ID,
@@ -88,7 +89,6 @@ import {
   promptInvokesSkill,
   redactSecrets,
   redactTaskValue,
-  renderBotDirectory,
   renderGoalContext,
   resolveActionApprovalDetail,
   runNotificationCategory,
@@ -124,6 +124,7 @@ import {
   InvalidSpaceNameError,
   isTooManyDatabaseConnections,
   listDelegations,
+  loadBotPresence,
   loadRunHistoryMessages,
   type McpServer,
   noteBotMessageReadUnconfirmed,
@@ -199,6 +200,7 @@ import { applyBoardToolAccess, botUpkeepPrompt, resolveBoardAccess } from "./boa
 import { attachedImageArtifactIds, resolveUpdateBotAvatar } from "./bot-avatar.js";
 import { acknowledgeBotMessageReceipt } from "./bot-comms.js";
 import { loadBotMessageContext, messageBot, returnBotMessageOutcome } from "./bot-messages.js";
+import { loadRunBotDirectory } from "./bot-presence-directory.js";
 import {
   findBotSecret,
   forgetBotSecret,
@@ -711,7 +713,6 @@ export function isProtectedComputerLifecycleCommand(command: string): boolean {
 }
 
 /** Cap the roster so a large Space cannot flood the prompt. */
-const BOT_DIRECTORY_LIMIT = 40;
 export interface ExecutorDeps {
   placement?: (runId: string, signal: AbortSignal) => Promise<boolean>;
   prisma: PrismaClient;
@@ -2394,7 +2395,12 @@ export function createRunExecutor(deps: ExecutorDeps) {
           modelAcceptsImageInput(runModelProvider, runModelId, resolved.acceptsImages);
         const groupContext =
           !messagingChannelRun && thread.groupId
-            ? await loadGroupContext(deps.prisma, thread.groupId, { id: bot.id, name: bot.name })
+            ? await loadGroupContext(
+                deps.prisma,
+                thread.groupId,
+                { id: bot.id, name: bot.name },
+                false,
+              )
             : undefined;
         const hasMessagingIdentity = deps.messaging
           ? await deps.messaging.hasIdentity(bot.id)
@@ -2842,6 +2848,24 @@ export function createRunExecutor(deps: ExecutorDeps) {
             return { error: "This tool is unavailable in a controlled comparison." };
           if (!capabilityAllowsTool(capabilities, name))
             return { error: "This capability is disabled in this space." };
+          if (name === "list_bots") {
+            const input = ListBotsInputSchema.safeParse(args);
+            if (!input.success) return { error: "Invalid directory request." };
+            return loadBotPresence(
+              deps.prisma,
+              { spaceId: run.spaceId, userId: run.userId },
+              {
+                groupId: input.data.group_id,
+                visibleGroupId: thread.groupId ?? peerGoal?.groupId ?? "__desk__",
+                callerBotId: bot.id,
+                callerThreadId: thread.id,
+                canSend: !thread.groupId || Boolean(goalRoom),
+                availability: input.data.availability,
+                cursor: input.data.cursor,
+                limit: input.data.limit,
+              },
+            );
+          }
           if (name === "search_connectors") {
             const query = String(args.query ?? "")
               .trim()
@@ -5091,30 +5115,13 @@ export function createRunExecutor(deps: ExecutorDeps) {
         const prompt = [replyContext, basePrompt, takeoverResume?.promptNote, approvalContinuation]
           .filter(Boolean)
           .join("\n\n");
-        // Without a roster a bot only knows the bots it spawned itself.
-        const botDirectory = thread.groupId
-          ? undefined
-          : renderBotDirectory(
-              (
-                await deps.prisma.bot.findMany({
-                  where: {
-                    spaceId: run.spaceId,
-                    userId: run.userId,
-                    archivedAt: null,
-                    id: { not: bot.id },
-                    thread: { isNot: null },
-                  },
-                  select: { id: true, name: true, title: true, description: true },
-                  orderBy: { createdAt: "asc" },
-                  take: BOT_DIRECTORY_LIMIT,
-                })
-              ).map((peer) => ({
-                id: peer.id,
-                name: peer.name,
-                title: peer.title,
-                description: peer.description,
-              })),
-            );
+        const botDirectory = await loadRunBotDirectory(
+          deps.prisma,
+          { spaceId: run.spaceId, userId: run.userId },
+          bot.id,
+          thread.groupId ?? undefined,
+          !thread.groupId || Boolean(goalRoom),
+        );
 
         if (heldForTakeover) {
           const releasedCheckpoint = takeoverCheckpointOf(
@@ -5364,7 +5371,6 @@ export function createRunExecutor(deps: ExecutorDeps) {
             peerReadOnly
               ? undefined
               : "run_subagent is a short helper inside this turn only. It is not a bot, has no thread, and does not show in the list. Use it for parallel work you will summarize here.",
-            peerReadOnly ? undefined : botDirectory,
             peerReadOnly
               ? undefined
               : "archive_bot safely archives a bot this bot created, and only that bot. Use it when the user asks to remove that bot or when it is finished and unused. The user can restore it or permanently delete it later. confirm_name must exactly match its name.",
@@ -5494,6 +5500,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             brief: groupBrief?.content,
             summary: comparisonRun ? null : compactedHistory.summary,
             history: comparisonRun ? [] : history,
+            teammates: comparisonRun ? undefined : botDirectory,
             requiredContext,
             sourceMessageId: run.sourceMessageId,
             query: task.prompt,

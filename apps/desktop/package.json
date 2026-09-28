@@ -78,6 +78,18 @@
         "to": "host-service/python/hermes_launcher.py"
       },
       {
+        "from": "../host-service/dist/python/hermes_profile.py",
+        "to": "host-service/python/hermes_profile.py"
+      },
+      {
+        "from": "../host-service/dist/python/hermes_sources.json",
+        "to": "host-service/python/hermes_sources.json"
+      },
+      {
+        "from": "../host-service/dist/python/runtime_config_profile.json",
+        "to": "host-service/python/runtime_config_profile.json"
+      },
+      {
         "from": "../host-service/dist/native/${os}_${arch}",
         "to": "host-service/native/${os}_${arch}",
         "filter": [

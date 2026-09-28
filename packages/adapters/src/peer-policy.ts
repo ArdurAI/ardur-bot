@@ -6,6 +6,7 @@ const PEER_CARD_TOOLS = new Set([
   "attach_artifact",
   "complete_task",
   "read_file",
+  "list_bots",
 ]);
 
 /** Only an exact reference in the admitted card may reach the read path. */

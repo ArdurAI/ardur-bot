@@ -2503,6 +2503,8 @@ const MessageBubble = memo(function MessageBubble({
         recipientName={groupId ? undefined : botName}
         actionProps={actionProps}
         onOpenPeer={onOpenBot}
+        botId={cardBotId}
+        groupId={groupId ?? undefined}
       />
     );
   }

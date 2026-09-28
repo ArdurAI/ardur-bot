@@ -10,17 +10,13 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import json
+
+from hermes_profile import acknowledge, check_catalog, check_constructed, validate
 
 
 PIN = "29112bef099274229cadff79cdff7bf7b99c4b77"
-SOURCES = {
-    "acp_adapter/session.py": "423f9b8b065600607dced5185ce58cd60d2fe450844caf6ce6229c3b7ceeb835",
-    "acp_adapter/server.py": "5ebbbda6511a692faeaf8f57e0ad88182bf22c2d818d16c94f1e95516bb7375d",
-    "acp_adapter/entry.py": "b70e7b189e36644d60576bc1acdc929ae4bd16c80022d5e2b7a8dec97b24d383",
-    "run_agent.py": "5b2e7083680e6c728f2306adc73e5f814c444aaa9ff3e3b840206142c67a7149",
-    "pyproject.toml": "c70c8b52f6cc08a4e65f0fc1713c26814fd4f19811bc7e01de645009b2a76600",
-    "uv.lock": "383cd8f98ec23dc3fe4cf63759ec73be5a869cc953f068b4e79ec4e8ed00287d",
-}
+SOURCES = json.loads(Path(__file__).with_name("hermes_sources.json").read_text())
 
 
 def require(condition: bool, message: str) -> None:
@@ -74,6 +70,9 @@ def main() -> None:
     require(1 <= max_iterations <= 64, "Provider call limit is invalid")
     require(1 <= run_budget_seconds <= 600, "Run time limit is invalid")
     require(os.environ.get("PYTHONDONTWRITEBYTECODE") == "1", "Bytecode writes are forbidden")
+    require(os.environ.get("HERMES_DISABLE_LAZY_INSTALLS") == "1" and
+            os.environ.get("PATH") == "/usr/bin:/bin", "Runtime code acquisition is forbidden")
+    profile = validate(home, os.environ) if os.environ.get("ARDUR_HERMES_PROFILE") else None
     check_install(root, home)
     sys.path.insert(0, str(root))
     with contextlib.redirect_stdout(sys.stderr):
@@ -102,6 +101,9 @@ def main() -> None:
                 )
                 agent.session_cwd = cwd
                 agent._print_fn = session._acp_stderr_print
+                if profile:
+                    agent._skip_mcp_refresh = True
+                    check_constructed(agent, profile["manifest"])
                 return agent
 
         class ArdurACPAgent(server.HermesACPAgent):
@@ -110,14 +112,27 @@ def main() -> None:
                 self._session_created = False
                 self._prompt_started = False
 
+            def _schedule_mcp_late_refresh(self, state):
+                return None
+
             async def new_session(self, cwd, mcp_servers=None, **kwargs):
                 require(not self._session_created, "Only one ACP session is allowed")
                 require(len(mcp_servers or []) == 1 and mcp_servers[0].name == "ardur", "Only the Ardur MCP server is allowed")
                 self._session_created = True
-                return await super().new_session(cwd, mcp_servers=mcp_servers, **kwargs)
+                response = await super().new_session(cwd, mcp_servers=mcp_servers, **kwargs)
+                if profile:
+                    state = self.session_manager._sessions.get(response.session_id)
+                    require(state is not None, "Constructed session is unavailable")
+                    check_catalog(state.agent, profile["allowedTools"])
+                    acknowledge(home, profile["hash"], response.session_id)
+                return response
 
             async def prompt(self, prompt, session_id, **kwargs):
                 require(self._session_created and not self._prompt_started, "Only one ACP prompt is allowed")
+                if profile:
+                    state = self.session_manager._sessions.get(session_id)
+                    require(state is not None, "Constructed session is unavailable")
+                    check_catalog(state.agent, profile["allowedTools"])
                 self._prompt_started = True
                 return await super().prompt(prompt, session_id, **kwargs)
 

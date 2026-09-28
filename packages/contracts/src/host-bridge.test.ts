@@ -1,16 +1,83 @@
 import { describe, expect, it } from "vitest";
+import * as z from "zod";
 import {
   decodeHostFrame,
   encodeHostFrame,
   HOST_FRAME_BYTES,
+  HOST_HEALTH_ACCEPTED,
   HOST_WRITE_FRAME_BYTES,
   HostOperationSchema,
   HostRuntimeEventSchema,
   hostSocketUrl,
+  negotiateHostHealth,
 } from "./host-bridge.js";
 import { RuntimeKindSchema } from "./runtime-pins.js";
 
 describe("host protocol", () => {
+  it("keeps a new host's health valid for strict servers before and after provider relay", () => {
+    const health = {
+      platform: "linux" as const,
+      roots: [],
+      load: 0,
+      claude: { runtimeKind: "claude-code" as const, available: false, models: [] },
+      codex: { runtimeKind: "codex-app-server" as const, available: false, models: [] },
+      hermes: { runtimeKind: "hermes" as const, available: false, models: [] },
+      capabilities: {
+        providerRelay: 1 as const,
+        hermesConfigurationProfile: "hermes-ardur-v2" as const,
+        hermesLauncherGeneration: 1 as const,
+      },
+    };
+    const preRelayHealth = z.strictObject({
+      platform: z.literal("linux"),
+      roots: z.array(z.string()),
+      load: z.literal(0),
+      claude: z.unknown(),
+      codex: z.unknown(),
+    });
+    const relayHealth = preRelayHealth.extend({
+      hermes: z.unknown().optional(),
+      capabilities: z.strictObject({ providerRelay: z.literal(1) }).optional(),
+    });
+    const legacy = negotiateHostHealth(health, undefined);
+    expect(preRelayHealth.parse(legacy)).toEqual(legacy);
+    expect(legacy.capabilities).toBeUndefined();
+    expect(legacy.hermes).toBeUndefined();
+    const relay = negotiateHostHealth(health, "providerRelay,hermes");
+    expect(relayHealth.parse(relay)).toEqual(relay);
+    expect(relay.capabilities).toEqual({ providerRelay: 1 });
+    expect(relay.hermes).toEqual(health.hermes);
+    expect(relayHealth.safeParse(health).success).toBe(false);
+  });
+  it("accepts an old host and advertises the complete profile to a new one", () => {
+    const oldHealth = {
+      platform: "linux" as const,
+      roots: [],
+      load: 0,
+      claude: { runtimeKind: "claude-code" as const, available: false, models: [] },
+      codex: { runtimeKind: "codex-app-server" as const, available: false, models: [] },
+    };
+    expect(decodeHostFrame(JSON.stringify({ v: 1, type: "health", health: oldHealth }))).toEqual({
+      v: 1,
+      type: "health",
+      health: oldHealth,
+    });
+    const newHealth = {
+      ...oldHealth,
+      hermes: { runtimeKind: "hermes" as const, available: true, models: [] },
+      capabilities: {
+        providerRelay: 1 as const,
+        hermesConfigurationProfile: "hermes-ardur-v2" as const,
+        hermesLauncherGeneration: 1 as const,
+      },
+    };
+    expect(negotiateHostHealth(newHealth, HOST_HEALTH_ACCEPTED)).toEqual(newHealth);
+    expect(decodeHostFrame(encodeHostFrame({ v: 1, type: "health", health: newHealth }))).toEqual({
+      v: 1,
+      type: "health",
+      health: newHealth,
+    });
+  });
   it("round-trips a Hermes terminal problem with its product runtime kind", () => {
     const frame = {
       v: 1 as const,

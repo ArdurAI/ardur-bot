@@ -1,22 +1,33 @@
 import type { HostLabel, TeamRow } from "@ardurbot/contracts";
-import { runtimeEffortLabel, sortTeamRows, TEAM_REFRESH_MS } from "@ardurbot/core";
+import {
+  presenceFreshness,
+  runtimeEffortLabel,
+  sortTeamRows,
+  TEAM_REFRESH_MS,
+} from "@ardurbot/core";
 import { Button } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import type { ReactNode } from "react";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { decodeArtifactBase64, downloadArtifactBytes } from "../lib/artifact-open";
 import { rpc } from "../lib/rpc";
+import { localizedTeamDeliveryText } from "../lib/team-delivery-text";
 import { ComparisonList } from "./ComparePanel";
 import { CompareStart } from "./CompareStart";
 import { useThreadRefresh } from "./dashboard/use-thread-refresh";
 import { useTargetName } from "./fleet/target-name";
+
+const PeerMessagesOverlay = lazy(() =>
+  import("./PeerMessagesOverlay").then((module) => ({ default: module.PeerMessagesOverlay })),
+);
 
 export function TeamBoard({ navigation }: { navigation?: ReactNode }) {
   const [rows, setRows] = useState<TeamRow[]>([]);
   const [hostLabel, setHostLabel] = useState<HostLabel>();
   const [error, setError] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [now, setNow] = useState(Date.now());
   const alive = useRef(true);
   const pending = useRef(false);
   const refresh = useCallback(async () => {
@@ -41,9 +52,17 @@ export function TeamBoard({ navigation }: { navigation?: ReactNode }) {
     void refresh();
     // Roster changes have no space-wide stream; this also repairs unavailable thread streams.
     const timer = setInterval(() => void refresh(), TEAM_REFRESH_MS);
+    const clock = setInterval(() => setNow(Date.now()), TEAM_REFRESH_MS);
+    const onVisible = () => {
+      setNow(Date.now());
+      if (document.visibilityState === "visible") void refresh();
+    };
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       alive.current = false;
       clearInterval(timer);
+      clearInterval(clock);
+      document.removeEventListener("visibilitychange", onVisible);
     };
   }, [refresh]);
   useThreadRefresh(rows, refresh);
@@ -90,7 +109,13 @@ export function TeamBoard({ navigation }: { navigation?: ReactNode }) {
       <ComparisonList />
       <div ref={list} className="space-y-2">
         {rows.map((row) => (
-          <TeamBoardRow key={row.botId} row={row} hostLabel={hostLabel} refresh={refresh} />
+          <TeamBoardRow
+            key={row.botId}
+            row={row}
+            hostLabel={hostLabel}
+            refresh={refresh}
+            now={now}
+          />
         ))}
       </div>
     </section>
@@ -100,14 +125,18 @@ export function TeamBoardRow({
   row,
   hostLabel,
   refresh,
+  now = Date.now(),
 }: {
   row: TeamRow;
   hostLabel?: HostLabel;
   refresh: () => Promise<void>;
+  now?: number;
 }) {
   const { t } = useLingui();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
+  const [peerOpen, setPeerOpen] = useState(false);
+  const navigate = useNavigate();
   const card = row.delegations.find((item) => item.id === row.delegationId)?.card;
   const targetName = useTargetName(hostLabel);
   const computerName = row.computerBuiltin
@@ -129,210 +158,266 @@ export function TeamBoardRow({
     }
   };
   return (
-    <article
-      data-team-bot={row.botId}
-      className="rounded-lg border border-border bg-card transition-transform duration-[150ms] ease-out motion-reduce:transition-none"
-    >
-      <details>
-        <summary className="flex h-20 cursor-pointer items-center gap-3 px-4">
-          <span className="w-28 shrink-0 truncate font-medium">{row.botName}</span>
-          {computerName ? (
-            <span className="truncate text-xs text-muted-foreground">{computerName}</span>
-          ) : null}
-          <span className="min-w-0 flex-1 truncate text-sm">
-            <TeamStatus row={row} />
-          </span>
-        </summary>
-        <div className="space-y-4 border-t border-border p-4 text-sm">
-          {row.chain.length ? <p>{row.chain.map((entry) => entry.name).join(" → ")}</p> : null}
-          {row.state === "waiting-approval" && row.requesterName ? (
-            <p>
-              <Trans>
-                Requested by {row.requesterName} — acting as {row.botName}
-              </Trans>
-            </p>
-          ) : null}
-          {card ? (
-            <>
-              <p>{row.sentence}</p>
-              <CompareStart botId={row.botId} delegationId={row.delegationId ?? undefined} />
-              {card.responsibleUserId ? (
-                <p>
-                  <Trans>Responsible human</Trans>: {card.responsibleUserId}
-                </p>
-              ) : null}
-              <ul>
-                {card.doneWhen.map((item, index) => {
-                  const report = card.reports.find((entry) => entry.index === index);
-                  return (
-                    <li key={`${index}:${item}`}>
-                      {item} —{" "}
-                      {report ? (
-                        <>
-                          {report.met ? t`Reported met` : t`Reported unmet`}: {report.report}
-                        </>
-                      ) : (
-                        t`Not reported`
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
-              <details>
-                <summary>
-                  <Trans>Inputs and boundaries</Trans>
-                </summary>
+    <>
+      {peerOpen && row.latestPeerBotId ? (
+        <Suspense fallback={null}>
+          <PeerMessagesOverlay
+            botId={row.botId}
+            groupId={row.latestDeliveryGroupId}
+            botName={row.botName}
+            botColor={row.botColor ?? "currentColor"}
+            peerBotId={row.latestPeerBotId}
+            peerBotName={row.latestPeerBotName ?? "Bot"}
+            peerBotColor={row.latestPeerBotColor ?? "currentColor"}
+            onClose={() => setPeerOpen(false)}
+            onOpenPeerThread={() => {
+              setPeerOpen(false);
+              navigate(`/app/${row.latestPeerBotId}`);
+            }}
+          />
+        </Suspense>
+      ) : null}
+      <article
+        data-team-bot={row.botId}
+        className="rounded-lg border border-border bg-card transition-transform duration-[150ms] ease-out motion-reduce:transition-none"
+      >
+        <details>
+          <summary className="flex h-20 cursor-pointer items-center gap-3 px-4">
+            <span className="w-28 shrink-0 truncate font-medium">{row.botName}</span>
+            {computerName ? (
+              <span className="truncate text-xs text-muted-foreground">{computerName}</span>
+            ) : null}
+            <span className="min-w-0 flex-1 truncate text-sm">
+              <TeamStatus row={row} now={now} />
+            </span>
+          </summary>
+          <div className="space-y-4 border-t border-border p-4 text-sm">
+            {row.observedAt && presenceFreshness(row.observedAt, now) === "aged" ? (
+              <p className="text-muted-foreground">
+                <Trans>Updated 1m ago</Trans>
+              </p>
+            ) : null}
+            {(row.activeRunCount ?? 0) > 1 ? (
+              <p>
+                <Trans>{row.activeRunCount} active tasks</Trans>
+              </p>
+            ) : null}
+            {row.latestDeliveryState ? (
+              <p>
+                <Trans>Latest message</Trans>: {localizedTeamDeliveryText(row.latestDeliveryState)}
+              </p>
+            ) : null}
+            {row.latestPeerBotId ? (
+              <Button size="sm" variant="outline" onClick={() => setPeerOpen(true)}>
+                <Trans>Conversation with {row.latestPeerBotName ?? "Bot"}</Trans>
+              </Button>
+            ) : null}
+            {row.pendingPeerCount ? (
+              <p>
+                <Trans>{row.pendingPeerCount} peer messages waiting</Trans>
+              </p>
+            ) : null}
+            {row.chain.length ? <p>{row.chain.map((entry) => entry.name).join(" → ")}</p> : null}
+            {row.state === "waiting-approval" && row.requesterName ? (
+              <p>
+                <Trans>
+                  Requested by {row.requesterName} — acting as {row.botName}
+                </Trans>
+              </p>
+            ) : null}
+            {card ? (
+              <>
+                <p>{row.sentence}</p>
+                <CompareStart botId={row.botId} delegationId={row.delegationId ?? undefined} />
+                {card.responsibleUserId ? (
+                  <p>
+                    <Trans>Responsible human</Trans>: {card.responsibleUserId}
+                  </p>
+                ) : null}
                 <ul>
-                  {card.inputs.map((input, index) => (
-                    <li key={`${input.type}:${index}`}>
-                      {input.type === "text"
-                        ? input.text
-                        : input.type === "file"
-                          ? input.artifactId
-                          : input.type === "url"
-                            ? input.url
-                            : `${input.documentId} · ${input.revision}`}
-                    </li>
-                  ))}
+                  {card.doneWhen.map((item, index) => {
+                    const report = card.reports.find((entry) => entry.index === index);
+                    return (
+                      <li key={`${index}:${item}`}>
+                        {item} —{" "}
+                        {report ? (
+                          <>
+                            {report.met ? t`Reported met` : t`Reported unmet`}: {report.report}
+                          </>
+                        ) : (
+                          t`Not reported`
+                        )}
+                      </li>
+                    );
+                  })}
                 </ul>
-                <p>{card.approvalBoundaries.scopes.join(", ")}</p>
-                <p>{card.approvalBoundaries.connectors.join(", ")}</p>
-                <p>
-                  <Trans>Budget</Trans>: {card.budget.tokens} · {card.budget.deadlineAt}
-                </p>
-              </details>
-              <details>
-                <summary>
-                  <Trans>Timeline</Trans>
-                </summary>
-                <ol>
-                  {card.timeline.map((event) => (
-                    <li key={event.id}>
-                      <time dateTime={event.at}>{new Date(event.at).toLocaleTimeString()}</time> ·{" "}
-                      {event.kind}
-                      {event.text ? ` — ${event.text}` : ""}
-                    </li>
-                  ))}
-                </ol>
-              </details>
-              {card.artifacts.length ? (
-                <div>
-                  <Trans>Artifacts</Trans>
+                <details>
+                  <summary>
+                    <Trans>Inputs and boundaries</Trans>
+                  </summary>
                   <ul>
-                    {card.artifacts.map((id) => (
-                      <li key={id}>
-                        <Button
-                          variant="link"
-                          size="sm"
-                          onClick={async () => {
-                            try {
-                              const artifact = await rpc.artifacts.get({
-                                ...(row.groupId ? { groupId: row.groupId } : { botId: row.botId }),
-                                artifactId: id,
-                              });
-                              downloadArtifactBytes(
-                                artifact.name,
-                                artifact.mimeType,
-                                decodeArtifactBase64(artifact.contentBase64),
-                              );
-                            } catch {
-                              setError(true);
-                            }
-                          }}
-                        >
-                          {id}
-                        </Button>
+                    {card.inputs.map((input, index) => (
+                      <li key={`${input.type}:${index}`}>
+                        {input.type === "text"
+                          ? input.text
+                          : input.type === "file"
+                            ? input.artifactId
+                            : input.type === "url"
+                              ? input.url
+                              : `${input.documentId} · ${input.revision}`}
                       </li>
                     ))}
                   </ul>
-                </div>
-              ) : null}
-            </>
-          ) : null}
-          {row.executing ? (
-            <details>
-              <summary>
-                <Trans>Executing</Trans>
-              </summary>
-              <dl className="grid grid-cols-2 gap-2">
-                <dt>
-                  <Trans>Provider</Trans>
-                </dt>
-                <dd>{row.executing.pin.provider}</dd>
-                <dt>
-                  <Trans>Model</Trans>
-                </dt>
-                <dd>{row.executing.pin.modelId}</dd>
-                <dt>
-                  <Trans>Effort</Trans>
-                </dt>
-                <dd>
-                  {runtimeEffortLabel(row.executing.pin, row.executing.runtimeInfo, t`requested`) ??
-                    "—"}
-                </dd>
-                <dt>
-                  <Trans>Runtime</Trans>
-                </dt>
-                <dd>{row.executing.pin.runtimeKind}</dd>
-                <dt>
-                  <Trans>Computer</Trans>
-                </dt>
-                <dd>
-                  {row.executing.computer.kind} · {row.executing.computer.id ?? "—"}
-                </dd>
-              </dl>
-            </details>
-          ) : null}
-          <p>
-            <Trans>Tokens</Trans>: {row.usage.tokens}
-          </p>
-          {row.usage.costs.map((cost, index) => (
-            <p key={`${index}:${cost.amount}`}>
-              <Trans>Cost</Trans>: {cost.amount} · {cost.provenance}
+                  <p>{card.approvalBoundaries.scopes.join(", ")}</p>
+                  <p>{card.approvalBoundaries.connectors.join(", ")}</p>
+                  <p>
+                    <Trans>Budget</Trans>: {card.budget.tokens} · {card.budget.deadlineAt}
+                  </p>
+                </details>
+                <details>
+                  <summary>
+                    <Trans>Timeline</Trans>
+                  </summary>
+                  <ol>
+                    {card.timeline.map((event) => (
+                      <li key={event.id}>
+                        <time dateTime={event.at}>{new Date(event.at).toLocaleTimeString()}</time> ·{" "}
+                        {event.kind}
+                        {event.text ? ` — ${event.text}` : ""}
+                      </li>
+                    ))}
+                  </ol>
+                </details>
+                {card.artifacts.length ? (
+                  <div>
+                    <Trans>Artifacts</Trans>
+                    <ul>
+                      {card.artifacts.map((id) => (
+                        <li key={id}>
+                          <Button
+                            variant="link"
+                            size="sm"
+                            onClick={async () => {
+                              try {
+                                const artifact = await rpc.artifacts.get({
+                                  ...(row.groupId
+                                    ? { groupId: row.groupId }
+                                    : { botId: row.botId }),
+                                  artifactId: id,
+                                });
+                                downloadArtifactBytes(
+                                  artifact.name,
+                                  artifact.mimeType,
+                                  decodeArtifactBase64(artifact.contentBase64),
+                                );
+                              } catch {
+                                setError(true);
+                              }
+                            }}
+                          >
+                            {id}
+                          </Button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </>
+            ) : null}
+            {row.executing ? (
+              <details>
+                <summary>
+                  <Trans>Executing</Trans>
+                </summary>
+                <dl className="grid grid-cols-2 gap-2">
+                  <dt>
+                    <Trans>Provider</Trans>
+                  </dt>
+                  <dd>{row.executing.pin.provider}</dd>
+                  <dt>
+                    <Trans>Model</Trans>
+                  </dt>
+                  <dd>{row.executing.pin.modelId}</dd>
+                  <dt>
+                    <Trans>Effort</Trans>
+                  </dt>
+                  <dd>
+                    {runtimeEffortLabel(
+                      row.executing.pin,
+                      row.executing.runtimeInfo,
+                      t`requested`,
+                    ) ?? "—"}
+                  </dd>
+                  <dt>
+                    <Trans>Runtime</Trans>
+                  </dt>
+                  <dd>{row.executing.pin.runtimeKind}</dd>
+                  <dt>
+                    <Trans>Computer</Trans>
+                  </dt>
+                  <dd>
+                    {row.executing.computer.kind} · {row.executing.computer.id ?? "—"}
+                  </dd>
+                </dl>
+              </details>
+            ) : null}
+            <p>
+              <Trans>Tokens</Trans>: {row.usage.tokens}
             </p>
-          ))}
-        </div>
-      </details>
-      {row.canStop || row.canAccept || row.action ? (
-        <div className="flex min-h-10 items-center gap-2 px-4 pb-2">
-          {row.canStop ? (
-            <Button size="sm" variant="ghost" disabled={busy} onClick={() => void act("stop")}>
-              <Trans>Stop</Trans>
-            </Button>
-          ) : null}
-          {row.canAccept ? (
-            <Button size="sm" disabled={busy} onClick={() => void act("accept")}>
-              <Trans>Accept</Trans>
-            </Button>
-          ) : null}
-          {row.action ? (
-            <Link
-              className="text-sm underline"
-              to={`/app/${row.chain.find((item) => item.role === "reviewer")?.id ?? row.botId}`}
-            >
-              {row.state === "waiting-approval" ? t`Review approval` : row.action}
-            </Link>
-          ) : null}
-          {error ? (
-            <span role="alert">
-              <Trans>Could not update this task; try again.</Trans>
-            </span>
-          ) : null}
-        </div>
-      ) : null}
-    </article>
+            {row.usage.costs.map((cost, index) => (
+              <p key={`${index}:${cost.amount}`}>
+                <Trans>Cost</Trans>: {cost.amount} · {cost.provenance}
+              </p>
+            ))}
+          </div>
+        </details>
+        {row.canStop || row.canAccept || row.action ? (
+          <div className="flex min-h-10 items-center gap-2 px-4 pb-2">
+            {row.canStop ? (
+              <Button size="sm" variant="ghost" disabled={busy} onClick={() => void act("stop")}>
+                <Trans>Stop</Trans>
+              </Button>
+            ) : null}
+            {row.canAccept ? (
+              <Button size="sm" disabled={busy} onClick={() => void act("accept")}>
+                <Trans>Accept</Trans>
+              </Button>
+            ) : null}
+            {row.action ? (
+              <Link
+                className="text-sm underline"
+                to={`/app/${row.chain.find((item) => item.role === "reviewer")?.id ?? row.botId}`}
+              >
+                {row.state === "waiting-approval" ? t`Review approval` : row.action}
+              </Link>
+            ) : null}
+            {error ? (
+              <span role="alert">
+                <Trans>Could not update this task; try again.</Trans>
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+      </article>
+    </>
   );
 }
-function TeamStatus({ row }: { row: TeamRow }) {
+function TeamStatus({ row, now }: { row: TeamRow; now: number }) {
+  if (
+    row.availability === "unknown" ||
+    row.availability === "unavailable" ||
+    (row.observedAt && presenceFreshness(row.observedAt, now) === "unavailable")
+  )
+    return <Trans>Status unavailable</Trans>;
   switch (row.state) {
     case "idle":
       return <Trans>Idle</Trans>;
     case "queued":
       return <Trans>Queued</Trans>;
     case "working":
-      return row.sentence ? (
+      return row.currentTaskTitle || row.sentence ? (
         <Trans>
-          Working on {row.sentence} for {row.requesterName}
+          Working on {row.currentTaskTitle ?? row.sentence} for {row.requesterName}
         </Trans>
       ) : (
         <Trans>Working</Trans>
