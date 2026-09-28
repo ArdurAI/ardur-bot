@@ -213,13 +213,24 @@ export function delegationProblem(code: DelegationProblem["code"]): DelegationPr
   const [message, action] = problemCopy[code];
   return { kind: "problem", code, message, action };
 }
+/** Why a worker stopped; the gate and the finished card share these lines. */
+export type DelegationStopReason = "budget" | "deadline" | "stopped";
+export function delegationStopLine(reason: DelegationStopReason, worker: string): string {
+  if (reason === "budget")
+    return `${worker} used its token budget. Raise the budget and try again.`;
+  if (reason === "deadline") return `${worker} reached its deadline. Start a new task to continue.`;
+  return "Worker stopped.";
+}
 export const DELEGATION_LIMITS = {
   depth: 1,
   concurrent: 4,
   hops: 6,
   descendants: 12,
   tokens: 120_000,
-  reservationTokens: 10_000,
+  // One realistic request for a standard-context model: a full standard context
+  // (DEFAULT_MODEL_CONTEXT_WINDOW) plus one output (DEFAULT_MODEL_MAX_TOKENS).
+  // A smaller reservation cannot survive the worker's first request.
+  reservationTokens: 36_864,
   durationMs: 3_600_000,
 } as const;
 export const delegationsContract = {

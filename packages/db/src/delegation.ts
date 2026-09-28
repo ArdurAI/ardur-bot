@@ -4,6 +4,7 @@ import type {
   DelegationProblem,
   DelegationRecord,
   DelegationSnapshot,
+  DelegationStopReason,
   MessageBlock,
 } from "@ardurbot/contracts";
 import {
@@ -498,6 +499,15 @@ export async function requestCancelInTransaction(
   return { cancelRequested: true as const };
 }
 
+/** Same order as the execution gate: a passed deadline is terminal regardless of spend. */
+export function delegationStopReason(
+  row: { deadlineAt: Date; usedTokens: number; reservedTokens: number },
+  now = new Date(),
+): DelegationStopReason {
+  if (row.deadlineAt <= now) return "deadline";
+  if (row.usedTokens >= row.reservedTokens) return "budget";
+  return "stopped";
+}
 /** Called only after the executor finishes or confirms its abort. The unique summary is durable. */
 export async function finishDelegation(
   tx: Prisma.TransactionClient,

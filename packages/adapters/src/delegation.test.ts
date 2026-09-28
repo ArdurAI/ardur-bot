@@ -338,3 +338,62 @@ it("records a blocked card when a peer run forges a hidden tool call", async () 
     }),
   );
 });
+
+function stoppingPrisma(row: {
+  status: string;
+  deadlineAt: Date;
+  usedTokens: number;
+  reservedTokens: number;
+}) {
+  const updateMany = vi.fn(async () => ({ count: 1 }));
+  const prisma = {
+    run: {
+      findUniqueOrThrow: vi.fn(async () => ({
+        id: "run",
+        taskId: "task",
+        delegationId: "handoff",
+        spaceId: "space",
+        userId: "owner",
+      })),
+      updateMany,
+    },
+    delegationRoot: { findUnique: vi.fn(async () => null) },
+    delegation: { findUniqueOrThrow: vi.fn(async () => row) },
+  } as unknown as PrismaClient;
+  return { prisma, updateMany };
+}
+it("names the token budget when a worker is stopped for overspending it", async () => {
+  // The evidence row: a 10000 reservation against a first request that used 16734.
+  const { prisma, updateMany } = stoppingPrisma({
+    status: "running",
+    deadlineAt: new Date(Date.now() + 60_000),
+    usedTokens: 16_734,
+    reservedTokens: 10_000,
+  });
+  const denied = await checkDelegationExecution(prisma, "run", "shell");
+  expect(denied).toContain("token budget");
+  expect(denied).not.toContain("or is stopping");
+  expect(updateMany).toHaveBeenCalledWith(
+    expect.objectContaining({
+      data: expect.objectContaining({ cancelRequestedAt: expect.any(Date) }),
+    }),
+  );
+});
+it("names the deadline when a worker is stopped past its deadline", async () => {
+  const { prisma } = stoppingPrisma({
+    status: "running",
+    deadlineAt: new Date(Date.now() - 1_000),
+    usedTokens: 0,
+    reservedTokens: 36_864,
+  });
+  expect(await checkDelegationExecution(prisma, "run", "shell")).toContain("deadline");
+});
+it("names the stop when a worker is already stopping", async () => {
+  const { prisma } = stoppingPrisma({
+    status: "cancel-requested",
+    deadlineAt: new Date(Date.now() + 60_000),
+    usedTokens: 0,
+    reservedTokens: 36_864,
+  });
+  expect(await checkDelegationExecution(prisma, "run", "shell")).toContain("stopping");
+});

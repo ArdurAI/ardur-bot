@@ -1,8 +1,10 @@
 import type { ConnectorRoute } from "@ardurbot/adapter-kit";
-import { DelegationAuthoritySchema, TaskCardSchema } from "@ardurbot/contracts";
+import type { DelegationStopReason } from "@ardurbot/contracts";
+import { DelegationAuthoritySchema, delegationStopLine, TaskCardSchema } from "@ardurbot/contracts";
 import { classifyRemoteTool, remotePermissionExpansion } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import {
+  delegationStopReason,
   peerTrafficPaused,
   reconcileGoalExhaustion,
   requestCancel,
@@ -101,17 +103,20 @@ export async function checkDelegationExecution(
   }
   if (helperDelegationId && (row.kind !== "helper" || row.parentRunId !== runId))
     return "This helper does not belong to this run.";
-  if (
-    !["queued", "running"].includes(row.status) ||
-    row.deadlineAt <= new Date() ||
-    row.usedTokens >= row.reservedTokens
-  ) {
+  const stopReason: DelegationStopReason | null = !["queued", "running"].includes(row.status)
+    ? "stopped"
+    : row.deadlineAt <= new Date() || row.usedTokens >= row.reservedTokens
+      ? delegationStopReason(row)
+      : null;
+  if (stopReason) {
     if (!helperDelegationId)
       await prisma.run.updateMany({
         where: { id: run.id, cancelRequestedAt: null },
         data: { cancelRequestedAt: new Date() },
       });
-    return "This worker has reached its budget or is stopping.";
+    return stopReason === "stopped"
+      ? "This worker is stopping."
+      : delegationStopLine(stopReason, "This worker");
   }
   if (!tool) return;
   const authority = DelegationAuthoritySchema.parse(row.authority);

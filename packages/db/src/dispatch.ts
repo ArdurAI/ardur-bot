@@ -4,12 +4,13 @@ import {
   CHANNEL_SCOPES,
   CHAT_COPY,
   canonicalDispatchJson,
+  delegationStopLine,
 } from "@ardurbot/contracts";
 import type { RemoteAuthority } from "@ardurbot/core";
 import { checkRemoteTool, effectiveRemoteAuthority } from "@ardurbot/core";
 import { settleBotMessageWakesInTransaction } from "./bot-comms.js";
 import type { DeviceGrant, Prisma, PrismaClient } from "./client.js";
-import { finishDelegation } from "./delegation.js";
+import { delegationStopReason, finishDelegation } from "./delegation.js";
 import {
   assertDeviceTrusted,
   auditDevice,
@@ -482,8 +483,17 @@ export async function confirmDispatchStop(
       type: "run.cancelled",
       payload: {},
     });
-    if (run.delegationId)
-      await finishDelegation(tx, run.delegationId, "cancelled", "Worker stopped.");
+    if (run.delegationId) {
+      const delegation = await tx.delegation.findUnique({ where: { id: run.delegationId } });
+      await finishDelegation(
+        tx,
+        run.delegationId,
+        "cancelled",
+        delegation
+          ? delegationStopLine(delegationStopReason(delegation, now), delegation.actingName)
+          : delegationStopLine("stopped", "Worker"),
+      );
+    }
     const stopped = await tx.run.updateMany({
       where: { id: runId, cancelRequestedAt: { not: null }, status: { in: ACTIVE } },
       data: {
@@ -509,7 +519,12 @@ export async function confirmDispatchStop(
       },
     });
     for (const helper of helpers)
-      await finishDelegation(tx, helper.id, "cancelled", "Worker stopped.");
+      await finishDelegation(
+        tx,
+        helper.id,
+        "cancelled",
+        delegationStopLine(delegationStopReason(helper, now), helper.actingName),
+      );
     await persistDispatchSummary(tx, run, "stopped", null);
     return true;
   });

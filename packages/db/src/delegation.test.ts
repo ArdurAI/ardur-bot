@@ -6,6 +6,7 @@ import {
   acceptDelegation,
   admitDelegation,
   DelegationAdmissionError,
+  delegationStopReason,
   finishDelegation,
   requestCancel,
 } from "./delegation.js";
@@ -171,6 +172,19 @@ describe("transactional delegation admission", () => {
   });
 });
 
+it.each([
+  ["deadline", { deadlineAt: new Date(Date.now() - 1_000), usedTokens: 0, reservedTokens: 36_864 }],
+  [
+    "budget",
+    { deadlineAt: new Date(Date.now() + 60_000), usedTokens: 36_864, reservedTokens: 36_864 },
+  ],
+  [
+    "stopped",
+    { deadlineAt: new Date(Date.now() + 60_000), usedTokens: 100, reservedTokens: 36_864 },
+  ],
+] as const)("names the %s stop reason from the worker row", (reason, row) => {
+  expect(delegationStopReason(row)).toBe(reason);
+});
 it("writes one completion summary and changes it on explicit acceptance", async () => {
   const f = fixture();
   const row = await f.admit();
