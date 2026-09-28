@@ -202,7 +202,7 @@ describe("SetupEngine", () => {
   });
 
   it.each(["retry", "start"] as const)(
-    "joins Retry followed by %s before dependency recheck settles and keeps cancellation ownership",
+    "joins Retry followed by %s before the command recheck settles and keeps cancellation ownership",
     async (next) => {
       const gate = deferred<void>();
       const check = vi.fn(async () => ({
@@ -247,6 +247,71 @@ describe("SetupEngine", () => {
       expect(engine.snapshot().steps[3]?.status).toBe("cancelled");
     },
   );
+
+  it("joins Retry and Start while a saved prerequisite is rechecked and cancelled", async () => {
+    const files = memoryStore();
+    const gate = deferred<void>();
+    const prerequisiteCheck = vi.fn(async () => {
+      if (prerequisiteCheck.mock.calls.length > 1) await gate.promise;
+      return { kind: "satisfied" as const, checkedAt: 100, evidence: "ready" };
+    });
+    const prerequisiteCancel = vi.fn(async () => undefined);
+    const commandCheck = vi.fn(async () => ({
+      kind: "needed" as const,
+      reasonCode: "command-absent",
+    }));
+    const commandRun = vi.fn(async () => ({ kind: "verified" as const, proof: "command" }));
+    const commandCancel = vi.fn(async () => undefined);
+    const steps = [
+      step({ check: prerequisiteCheck, cancel: prerequisiteCancel }),
+      step({
+        id: "command",
+        requires: ["prerequisites"],
+        canSkip: true,
+        check: commandCheck,
+        run: commandRun,
+        cancel: commandCancel,
+      }),
+    ];
+    const firstEngine = await SetupEngine.open(files.store, steps, clock);
+    await firstEngine.start();
+    expect(firstEngine.snapshot().steps[3]?.status).toBe("waiting-input");
+
+    const reopened = await SetupEngine.open(files.store, steps, clock);
+    const first = reopened.retry("command");
+    await vi.waitFor(() => expect(prerequisiteCheck).toHaveBeenCalledTimes(2));
+    const second = reopened.retry("command");
+    const third = reopened.start();
+    expect(reopened.running()).toBe(true);
+    expect(reopened.snapshot().steps[0]?.status).toBe("checking");
+    expect(reopened.snapshot().steps[3]?.status).toBe("waiting-input");
+    expect(commandCheck).toHaveBeenCalledOnce();
+    expect(commandRun).not.toHaveBeenCalled();
+
+    const stopping = reopened.cancel();
+    await vi.waitFor(() => expect(reopened.snapshot().steps[0]?.status).toBe("cancelling"));
+    gate.resolve();
+    await Promise.all([first, second, third, stopping]);
+
+    expect(second).toBe(first);
+    expect(third).toBe(first);
+    expect(prerequisiteCheck).toHaveBeenCalledTimes(2);
+    expect(prerequisiteCancel).toHaveBeenCalledOnce();
+    expect(commandCheck).toHaveBeenCalledOnce();
+    expect(commandRun).not.toHaveBeenCalled();
+    expect(commandCancel).not.toHaveBeenCalled();
+    expect(reopened.running()).toBe(false);
+    expect(reopened.snapshot()).toMatchObject({
+      currentStep: null,
+      interrupted: false,
+      blocked: false,
+    });
+    expect(reopened.snapshot().steps[0]?.status).toBe("cancelled");
+    expect(reopened.snapshot().steps[3]?.status).toBe("waiting-input");
+    const saved = JSON.parse(files.raw()!);
+    expect(saved.pending).toBeNull();
+    expect(saved.snapshot).toEqual(reopened.snapshot());
+  });
 
   it.each(["check", "run", "verify"] as const)(
     "settles cancellation at the %s await boundary",
