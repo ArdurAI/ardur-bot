@@ -3,12 +3,12 @@ import {
   canonicalRunnerJobRequest,
   RUNNER_JOB_ACTIVE_STATES,
   RUNNER_LIMITS,
-  RunnerJobRequestSchema,
   type Runner,
   type RunnerEnvironment,
   type RunnerJobCleanupState,
   type RunnerJobPhase,
   type RunnerJobRequest,
+  RunnerJobRequestSchema,
   type RunnerJobState,
   type RunnerKind,
   type RunnerLimits,
@@ -145,9 +145,15 @@ export function admitRunnerJob(
   if (runner.kind !== "docker")
     return refusal("unsupported-kind", "Only Docker runners are available in this release.");
   if (view.engine.kind !== runner.kind)
-    return refusal("engine-mismatch", "The saved connection no longer matches this runner's engine.");
+    return refusal(
+      "engine-mismatch",
+      "The saved connection no longer matches this runner's engine.",
+    );
   if (view.engine.connectionRevision !== runner.connection.revision)
-    return refusal("engine-mismatch", "The saved connection changed since this runner was registered.");
+    return refusal(
+      "engine-mismatch",
+      "The saved connection changed since this runner was registered.",
+    );
 
   // Environment: must belong to this runner, be in its probed catalog, be
   // verified, and carry the immutable image identity it was probed with.
@@ -165,7 +171,10 @@ export function admitRunnerJob(
       environment.resolvedDigest !== null &&
       view.boundImageDigest !== environment.resolvedDigest
     )
-      return refusal("image-identity-mismatch", "This environment's image changed since it was tested.");
+      return refusal(
+        "image-identity-mismatch",
+        "This environment's image changed since it was tested.",
+      );
   }
 
   // Probe freshness: expired probes and unreachable or unknown runners never admit.
@@ -191,7 +200,10 @@ export function admitRunnerJob(
 
   // R1 rejects goal-origin jobs and secret grants outright.
   if (view.goalOrigin)
-    return refusal("goal-jobs-unsupported", "Runner jobs are not available for goals in this release.");
+    return refusal(
+      "goal-jobs-unsupported",
+      "Runner jobs are not available for goals in this release.",
+    );
   if (request.secretGrants.length > 0)
     return refusal("secrets-unsupported", "Runner jobs cannot use secrets in this release.");
 
@@ -203,7 +215,11 @@ export function admitRunnerJob(
   const cpuMillis = request.resources?.cpuMillis ?? limits.cpuMillis;
   const memoryBytes = request.resources?.memoryBytes ?? limits.memoryBytes;
   const diskBytes = request.resources?.diskBytes ?? limits.diskBytes;
-  if (cpuMillis > limits.cpuMillis || memoryBytes > limits.memoryBytes || diskBytes > limits.diskBytes)
+  if (
+    cpuMillis > limits.cpuMillis ||
+    memoryBytes > limits.memoryBytes ||
+    diskBytes > limits.diskBytes
+  )
     return refusal("resources-exceed-limits", "This runner cannot enforce the requested limit.");
 
   // Daily caps. Cancellations and failed launches count; retries never reset them.
@@ -362,10 +378,7 @@ export function confirmRunnerCleanup(
 }
 
 /** Absolute allocation deadline: staging + command + collection windows. */
-export function runnerJobDeadline(options: {
-  dispatchedAt: Date;
-  durationSeconds: number;
-}): Date {
+export function runnerJobDeadline(options: { dispatchedAt: Date; durationSeconds: number }): Date {
   return new Date(
     options.dispatchedAt.getTime() +
       (RUNNER_LIMITS.stagingSeconds +
@@ -405,5 +418,8 @@ export function runnerKindSupported(kind: RunnerKind): boolean {
 
 /** Effective limits clamped to the R1 duration ceiling; used for policy snapshots. */
 export function clampRunnerLimits(limits: RunnerLimits): RunnerLimits {
-  return { ...limits, maxDurationSeconds: Math.min(limits.maxDurationSeconds, RUNNER_LIMITS.maxDurationSeconds) };
+  return {
+    ...limits,
+    maxDurationSeconds: Math.min(limits.maxDurationSeconds, RUNNER_LIMITS.maxDurationSeconds),
+  };
 }

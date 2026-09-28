@@ -99,15 +99,17 @@ export const RUNNER_LIMITS = {
 export const RunnerLimitsSchema = z.object({
   maxConcurrentJobs: z.number().int().min(1).max(16),
   maxQueuedJobs: z.number().int().min(0).max(1000),
-  maxDurationSeconds: z
-    .number()
-    .int()
-    .min(1)
-    .max(RUNNER_LIMITS.maxDurationSeconds),
+  maxDurationSeconds: z.number().int().min(1).max(RUNNER_LIMITS.maxDurationSeconds),
   maxQueueSeconds: z.number().int().min(1).max(86_400),
   cpuMillis: z.number().int().min(1).max(102_400),
-  memoryBytes: z.number().int().min(1024 * 1024),
-  diskBytes: z.number().int().min(1024 * 1024),
+  memoryBytes: z
+    .number()
+    .int()
+    .min(1024 * 1024),
+  diskBytes: z
+    .number()
+    .int()
+    .min(1024 * 1024),
   pids: z.number().int().min(1).max(8192),
   maxInputBytes: z.number().int().min(1),
   maxArtifactBytes: z.number().int().min(1),
@@ -190,7 +192,9 @@ export const RunnerEnvironmentSchema = z.object({
   os: z.enum(RUNNER_OS),
   architecture: z.string().min(1).max(32),
   /** Observed tool versions; never a promise about untested tools. */
-  tools: z.array(z.object({ name: z.string().min(1).max(64), version: z.string().max(128).nullable() })).max(256),
+  tools: z
+    .array(z.object({ name: z.string().min(1).max(64), version: z.string().max(128).nullable() }))
+    .max(256),
   dependencyManifestHash: z.string().max(128).nullable(),
   lockfileHash: z.string().max(128).nullable(),
   setupArgv: z.array(z.string().min(1).max(4096)).max(64).nullable(),
@@ -225,6 +229,9 @@ export const RunnerProbeResultSchema = z.object({
 });
 export type RunnerProbeResult = z.infer<typeof RunnerProbeResultSchema>;
 
+// Constructed with String.raw so no literal control characters appear in source.
+const CONTROL_OR_DEL = new RegExp(String.raw`[\0-\x1f\x7f]`);
+
 /**
  * Paths inside a job workspace. Relative, no traversal, no absolute paths, no
  * host file system references, no control characters: a path a model chose
@@ -237,13 +244,16 @@ export const RunnerFilePathSchema = z
   .string()
   .min(1)
   .max(RUNNER_PATH_MAX_LENGTH)
-  .refine((value) => !/[\0-\x1f\x7f]/.test(value), "Control characters are not allowed")
+  .refine((value) => !CONTROL_OR_DEL.test(value), "Control characters are not allowed")
   .refine((value) => !value.includes("\\"), "Backslash paths are not allowed")
   .refine((value) => !value.startsWith("/"), "Absolute paths are not allowed")
   .refine((value) => !value.startsWith("~"), "Home paths are not allowed")
   .refine((value) => !value.includes("//"), "Empty path segments are not allowed")
   .refine((value) => !value.endsWith("/"), "Paths must name a file")
-  .refine((value) => value.split("/").every((part) => part !== "." && part !== ".."), "Path traversal is not allowed")
+  .refine(
+    (value) => value.split("/").every((part) => part !== "." && part !== ".."),
+    "Path traversal is not allowed",
+  )
   .refine((value) => value.split("/").length <= RUNNER_PATH_MAX_DEPTH, "Path is too deep");
 export type RunnerFilePath = z.infer<typeof RunnerFilePathSchema>;
 
@@ -295,8 +305,18 @@ export const RunnerJobRequestSchema = z.strictObject({
   resources: z
     .strictObject({
       cpuMillis: z.number().int().min(1).max(RUNNER_LIMITS.cpuMillis).optional(),
-      memoryBytes: z.number().int().min(1024 * 1024).max(RUNNER_LIMITS.memoryBytes).optional(),
-      diskBytes: z.number().int().min(1024 * 1024).max(RUNNER_LIMITS.tmpfsBytes).optional(),
+      memoryBytes: z
+        .number()
+        .int()
+        .min(1024 * 1024)
+        .max(RUNNER_LIMITS.memoryBytes)
+        .optional(),
+      diskBytes: z
+        .number()
+        .int()
+        .min(1024 * 1024)
+        .max(RUNNER_LIMITS.tmpfsBytes)
+        .optional(),
     })
     .optional(),
   /** Names already-authorized grants. R1 admission rejects any non-empty list. */
@@ -317,7 +337,9 @@ export function canonicalRunnerJobRequest(request: RunnerJobRequest): string {
   const canonical = {
     runnerId: parsed.runnerId,
     environmentId: parsed.environmentId,
-    ...(parsed.environmentRevision === undefined ? {} : { environmentRevision: parsed.environmentRevision }),
+    ...(parsed.environmentRevision === undefined
+      ? {}
+      : { environmentRevision: parsed.environmentRevision }),
     command: {
       argv: [...parsed.command.argv],
       ...(parsed.command.cwd === undefined ? {} : { cwd: parsed.command.cwd }),
@@ -325,7 +347,11 @@ export function canonicalRunnerJobRequest(request: RunnerJobRequest): string {
     filesIn: parsed.filesIn.map((file) =>
       file.source === "artifact"
         ? { artifactId: file.artifactId, path: file.path, source: "artifact" }
-        : { path: file.path, source: "workspace-snapshot", workspaceSnapshotId: file.workspaceSnapshotId },
+        : {
+            path: file.path,
+            source: "workspace-snapshot",
+            workspaceSnapshotId: file.workspaceSnapshotId,
+          },
     ),
     filesOut: parsed.filesOut.map((file) => ({ path: file.path, required: file.required })),
     resources:
@@ -344,9 +370,18 @@ export function canonicalRunnerJobRequest(request: RunnerJobRequest): string {
   return JSON.stringify(canonical);
 }
 
-export const RUNNER_JOB_ACTIVE_STATES = ["queued", "staging", "running", "collecting", "cleaning"] as const;
+export const RUNNER_JOB_ACTIVE_STATES = [
+  "queued",
+  "staging",
+  "running",
+  "collecting",
+  "cleaning",
+] as const;
 export const RUNNER_JOB_TERMINAL_STATES = ["finished", "failed", "cancelled"] as const;
-export const RunnerJobStateSchema = z.enum([...RUNNER_JOB_ACTIVE_STATES, ...RUNNER_JOB_TERMINAL_STATES]);
+export const RunnerJobStateSchema = z.enum([
+  ...RUNNER_JOB_ACTIVE_STATES,
+  ...RUNNER_JOB_TERMINAL_STATES,
+]);
 export type RunnerJobState = z.infer<typeof RunnerJobStateSchema>;
 export type RunnerJobTerminalState = (typeof RUNNER_JOB_TERMINAL_STATES)[number];
 
@@ -428,7 +463,14 @@ export const RunnerJobResultSchema = z.object({
   runnerId: z.string().min(1),
   state: RunnerJobStateSchema,
   exitCode: z.number().int().nullable(),
-  artifacts: z.array(RunnerJobArtifactSchema.pick({ artifactId: true, relativePath: true, sha256: true, size: true })),
+  artifacts: z.array(
+    RunnerJobArtifactSchema.pick({
+      artifactId: true,
+      relativePath: true,
+      sha256: true,
+      size: true,
+    }),
+  ),
   cleanupState: RunnerJobCleanupStateSchema,
   failureCode: RunnerJobFailureCodeSchema.optional(),
 });

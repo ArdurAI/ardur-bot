@@ -1,8 +1,4 @@
-import {
-  runnerJobRequestHash,
-  stopRunnerJob,
-  type RunnerAdmissionDecision,
-} from "@ardurbot/core";
+import { type RunnerAdmissionDecision, runnerJobRequestHash, stopRunnerJob } from "@ardurbot/core";
 import type { Prisma, PrismaClient } from "./client.js";
 import { withTransactionRetry } from "./transaction-retry.js";
 
@@ -14,7 +10,13 @@ import { withTransactionRetry } from "./transaction-retry.js";
  * Cleanup records are idempotent, and every owner action writes an audit row.
  */
 
-export const RUNNER_ACTIVE_JOB_STATES = ["queued", "staging", "running", "collecting", "cleaning"] as const;
+export const RUNNER_ACTIVE_JOB_STATES = [
+  "queued",
+  "staging",
+  "running",
+  "collecting",
+  "cleaning",
+] as const;
 export type RunnerActiveJobState = (typeof RUNNER_ACTIVE_JOB_STATES)[number];
 
 export class RunnerJobAdmissionError extends Error {
@@ -104,10 +106,18 @@ export async function admitRunnerJobRow(
       // One active job per bot slot, enforced transactionally as well as by the
       // partial index; the index is the final word under concurrency.
       const activeForBot = await tx.runnerJob.count({
-        where: { spaceId: input.spaceId, userId: input.userId, botId: input.botId, state: { in: [...RUNNER_ACTIVE_JOB_STATES] } },
+        where: {
+          spaceId: input.spaceId,
+          userId: input.userId,
+          botId: input.botId,
+          state: { in: [...RUNNER_ACTIVE_JOB_STATES] },
+        },
       });
       if (activeForBot > 0)
-        throw new RunnerJobAdmissionError("slot-occupied", "This bot already has a runner job in flight.");
+        throw new RunnerJobAdmissionError(
+          "slot-occupied",
+          "This bot already has a runner job in flight.",
+        );
 
       const queuedAt = input.queuedAt ?? new Date();
       const job = await tx.runnerJob.create({
@@ -121,7 +131,9 @@ export async function admitRunnerJobRow(
           operationKey: input.operationKey,
           requestHash: input.decision.requestHash,
           request: input.request as Prisma.InputJsonValue,
-          placementSnapshot: (input.placementSnapshot ?? undefined) as Prisma.InputJsonValue | undefined,
+          placementSnapshot: (input.placementSnapshot ?? undefined) as
+            | Prisma.InputJsonValue
+            | undefined,
           policySnapshot: input.policySnapshot as Prisma.InputJsonValue,
           environmentSnapshot: input.environmentSnapshot as Prisma.InputJsonValue,
           state: "queued",
@@ -229,7 +241,9 @@ export async function transitionRunnerJob(
       ...(input.next.providerRef !== undefined ? { providerRef: input.next.providerRef } : {}),
       ...(input.next.providerUid !== undefined ? { providerUid: input.next.providerUid } : {}),
       ...(input.next.leaseOwner !== undefined ? { leaseOwner: input.next.leaseOwner } : {}),
-      ...(input.next.leaseExpiresAt !== undefined ? { leaseExpiresAt: input.next.leaseExpiresAt } : {}),
+      ...(input.next.leaseExpiresAt !== undefined
+        ? { leaseExpiresAt: input.next.leaseExpiresAt }
+        : {}),
       ...(input.next.startedAt !== undefined ? { startedAt: input.next.startedAt } : {}),
       ...(input.next.commandFinishedAt !== undefined
         ? { commandFinishedAt: input.next.commandFinishedAt }

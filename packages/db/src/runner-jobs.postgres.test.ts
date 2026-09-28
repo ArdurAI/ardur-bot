@@ -1,15 +1,16 @@
-import { admitRunnerJobRow, type AdmitRunnerJobInput } from "./runner-jobs.js";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createDb, type PrismaClient } from "./client.js";
 import {
+  type AdmitRunnerJobInput,
+  admitRunnerJobRow,
   confirmRunnerJobCleanup,
   getRunnerJob,
-  reconcileRunnerJobsOnRestart,
   RunnerJobAdmissionError,
   RunnerScopeError,
+  reconcileRunnerJobsOnRestart,
   stopRunnerJobRow,
   transitionRunnerJob,
 } from "./runner-jobs.js";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createDb, type PrismaClient } from "./client.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 const describePostgres =
@@ -59,14 +60,27 @@ describePostgres("runner job persistence (PostgreSQL)", () => {
       },
     });
     await prisma.user.create({
-      data: { id: userId, name: "Runner jobs", email: `${userId}@ardurbot.test`, emailVerified: false },
+      data: {
+        id: userId,
+        name: "Runner jobs",
+        email: `${userId}@ardurbot.test`,
+        emailVerified: false,
+      },
     });
     await prisma.bot.create({
       data: { id: botId, spaceId: spaceA, userId, name: "Runner jobs", color: "ink" },
     });
     await prisma.thread.create({ data: { id: threadId, spaceId: spaceA, userId, botId } });
     await prisma.task.create({
-      data: { id: taskId, spaceId: spaceA, userId, botId, threadId, prompt: "Run tests", status: "running" },
+      data: {
+        id: taskId,
+        spaceId: spaceA,
+        userId,
+        botId,
+        threadId,
+        prompt: "Run tests",
+        status: "running",
+      },
     });
     await prisma.run.create({
       data: {
@@ -142,7 +156,12 @@ describePostgres("runner job persistence (PostgreSQL)", () => {
   async function releaseSlot(jobIds: string[]) {
     await prisma.runnerJob.updateMany({
       where: { id: { in: jobIds } },
-      data: { state: "cancelled", phase: "finished", cleanupState: "clean", cleanupConfirmedAt: new Date() },
+      data: {
+        state: "cancelled",
+        phase: "finished",
+        cleanupState: "clean",
+        cleanupConfirmedAt: new Date(),
+      },
     });
   }
 
@@ -182,7 +201,11 @@ describePostgres("runner job persistence (PostgreSQL)", () => {
   it("admits one job and replays the same operation key", async () => {
     const input = admission();
     const job = await admitRunnerJobRow(prisma, input);
-    expect(job).toMatchObject({ state: "queued", phase: "waiting-capacity", cleanupState: "pending" });
+    expect(job).toMatchObject({
+      state: "queued",
+      phase: "waiting-capacity",
+      cleanupState: "pending",
+    });
     const replayed = await admitRunnerJobRow(prisma, input);
     expect(replayed.id).toBe(job.id);
     const usage = await prisma.runnerUsage.findUniqueOrThrow({ where: { jobId: job.id } });
@@ -199,7 +222,10 @@ describePostgres("runner job persistence (PostgreSQL)", () => {
     const job = await admitRunnerJobRow(prisma, input);
     // The same key with a different canonical request is a conflict.
     await expect(
-      admitRunnerJobRow(prisma, { ...input, decision: { ...input.decision, requestHash: "0".repeat(64) } }),
+      admitRunnerJobRow(prisma, {
+        ...input,
+        decision: { ...input.decision, requestHash: "0".repeat(64) },
+      }),
     ).rejects.toBeInstanceOf(RunnerJobAdmissionError);
     await releaseSlot([job.id]);
   });
@@ -208,7 +234,10 @@ describePostgres("runner job persistence (PostgreSQL)", () => {
     const base = admission();
     const attempts = await Promise.allSettled(
       Array.from({ length: 4 }, (_, i) =>
-        admitRunnerJobRow(prisma, admission({ ...base, operationKey: `${base.operationKey}-race-${i}` })),
+        admitRunnerJobRow(
+          prisma,
+          admission({ ...base, operationKey: `${base.operationKey}-race-${i}` }),
+        ),
       ),
     );
     const fulfilled = attempts.filter((result) => result.status === "fulfilled");
@@ -219,14 +248,24 @@ describePostgres("runner job persistence (PostgreSQL)", () => {
       expect((result as PromiseRejectedResult).reason).toBeInstanceOf(RunnerJobAdmissionError);
     // The winner holds the slot; the losers never created a row.
     const active = await prisma.runnerJob.count({
-      where: { spaceId: spaceA, userId, botId, state: { in: ["queued", "staging", "running", "collecting", "cleaning"] } },
+      where: {
+        spaceId: spaceA,
+        userId,
+        botId,
+        state: { in: ["queued", "staging", "running", "collecting", "cleaning"] },
+      },
     });
     expect(active).toBe(1);
     // Move the winner to a terminal state so later cases start from an empty slot.
     const winner = (fulfilled[0] as PromiseFulfilledResult<{ id: string }>).value;
     await prisma.runnerJob.update({
       where: { id: winner.id },
-      data: { state: "cancelled", phase: "finished", cleanupState: "clean", cleanupConfirmedAt: new Date() },
+      data: {
+        state: "cancelled",
+        phase: "finished",
+        cleanupState: "clean",
+        cleanupConfirmedAt: new Date(),
+      },
     });
   });
 
@@ -238,7 +277,13 @@ describePostgres("runner job persistence (PostgreSQL)", () => {
       spaceId: spaceA,
       fromStates: ["queued"],
       fence: 0,
-      next: { state: "staging", phase: "staging", bumpFence: true, leaseOwner: "worker-a", leaseExpiresAt: new Date(Date.now() + 60_000) },
+      next: {
+        state: "staging",
+        phase: "staging",
+        bumpFence: true,
+        leaseOwner: "worker-a",
+        leaseExpiresAt: new Date(Date.now() + 60_000),
+      },
     });
     expect(claimed?.executionFence).toBe(1);
     // Worker B still holds fence 0: its transition must not apply.
@@ -277,7 +322,14 @@ describePostgres("runner job persistence (PostgreSQL)", () => {
 
   it("keeps the bot home computer id unchanged by job activity", async () => {
     const homeComputer = await prisma.computer.create({
-      data: { spaceId: spaceA, userId, scope: "dedicated", scopeKey: `bot:${botId}`, homeKey: botId, kind: "docker" },
+      data: {
+        spaceId: spaceA,
+        userId,
+        scope: "dedicated",
+        scopeKey: `bot:${botId}`,
+        homeKey: botId,
+        kind: "docker",
+      },
     });
     await prisma.bot.update({ where: { id: botId }, data: { computerId: homeComputer.id } });
     const job = await admitRunnerJobRow(prisma, admission());
@@ -369,7 +421,11 @@ describePostgres("runner job persistence (PostgreSQL)", () => {
     });
     const live = await admitRunnerJobRow(
       prisma,
-      admission({ botId: `rj-bot2-${suffix}`, threadId: `rj-thread2-${suffix}`, runId: `rj-run2-${suffix}` }),
+      admission({
+        botId: `rj-bot2-${suffix}`,
+        threadId: `rj-thread2-${suffix}`,
+        runId: `rj-run2-${suffix}`,
+      }),
     );
     await prisma.thread.create({
       data: { id: `rj-thread2-${suffix}`, spaceId: spaceA, userId, botId: `rj-bot2-${suffix}` },

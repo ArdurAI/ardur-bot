@@ -1,26 +1,26 @@
 import {
   defaultRunnerLimits,
   RUNNER_LIMITS,
-  unknownRunnerCapabilities,
   type Runner,
   type RunnerEnvironment,
   type RunnerJobState,
+  unknownRunnerCapabilities,
 } from "@ardurbot/contracts";
+import { describe, expect, it } from "vitest";
 import {
   admitRunnerJob,
   canTransition,
   clampRunnerLimits,
   confirmRunnerCleanup,
   parseRunnerJobRequest,
+  RUNNER_STATE_PHASE,
+  type RunnerAdmissionView,
   reconcileRunnerJobOnRestart,
   runnerJobDeadline,
-  runnerJobRequestHash,
-  RUNNER_STATE_PHASE,
   runnerJobHoldsSlot,
+  runnerJobRequestHash,
   stopRunnerJob,
-  type RunnerAdmissionView,
 } from "./runner-policy.js";
-import { describe, expect, it } from "vitest";
 
 const NOW = new Date("2026-09-28T12:00:00.000Z");
 
@@ -167,9 +167,7 @@ describe("runner job request contracts", () => {
       connectionId: "conn-1",
       image: "ubuntu:latest",
     })) {
-      expect(() =>
-        parseRunnerJobRequest({ ...baseRequest, [key]: value }),
-      ).toThrow();
+      expect(() => parseRunnerJobRequest({ ...baseRequest, [key]: value })).toThrow();
     }
   });
 
@@ -178,7 +176,10 @@ describe("runner job request contracts", () => {
       parseRunnerJobRequest({ ...baseRequest, timeoutSeconds: RUNNER_LIMITS.maxDurationSeconds }),
     ).not.toThrow();
     expect(() =>
-      parseRunnerJobRequest({ ...baseRequest, timeoutSeconds: RUNNER_LIMITS.maxDurationSeconds + 1 }),
+      parseRunnerJobRequest({
+        ...baseRequest,
+        timeoutSeconds: RUNNER_LIMITS.maxDurationSeconds + 1,
+      }),
     ).toThrow();
   });
 
@@ -207,10 +208,15 @@ describe("runner job request contracts", () => {
 
   it("hashes requests canonically: defaults equal explicit defaults, any change differs", () => {
     const a = parseRunnerJobRequest(baseRequest);
-    const b = parseRunnerJobRequest({ ...baseRequest, timeoutSeconds: RUNNER_LIMITS.defaultDurationSeconds });
+    const b = parseRunnerJobRequest({
+      ...baseRequest,
+      timeoutSeconds: RUNNER_LIMITS.defaultDurationSeconds,
+    });
     expect(runnerJobRequestHash(a)).toBe(runnerJobRequestHash(b));
     expect(runnerJobRequestHash(a)).not.toBe(
-      runnerJobRequestHash(parseRunnerJobRequest({ ...baseRequest, command: { argv: ["pnpm", "test", "--all"] } })),
+      runnerJobRequestHash(
+        parseRunnerJobRequest({ ...baseRequest, command: { argv: ["pnpm", "test", "--all"] } }),
+      ),
     );
     expect(runnerJobRequestHash(a)).not.toBe(
       runnerJobRequestHash(parseRunnerJobRequest({ ...baseRequest, runnerId: "runner-2" })),
@@ -235,46 +241,64 @@ describe("runner admission refusals", () => {
   });
 
   it("refuses disabled, paused, draining and retired runners", () => {
-    expect(admitRunnerJob(request, view({ runner: runner({ admissionState: "disabled" }) })))
-      .toMatchObject({ ok: false, code: "runner-disabled" });
-    expect(admitRunnerJob(request, view({ runner: runner({ admissionState: "paused" }) })))
-      .toMatchObject({ ok: false, code: "runner-disabled" });
-    expect(admitRunnerJob(request, view({ runner: runner({ admissionState: "draining" }) })))
-      .toMatchObject({ ok: false, code: "runner-draining" });
+    expect(
+      admitRunnerJob(request, view({ runner: runner({ admissionState: "disabled" }) })),
+    ).toMatchObject({ ok: false, code: "runner-disabled" });
+    expect(
+      admitRunnerJob(request, view({ runner: runner({ admissionState: "paused" }) })),
+    ).toMatchObject({ ok: false, code: "runner-disabled" });
+    expect(
+      admitRunnerJob(request, view({ runner: runner({ admissionState: "draining" }) })),
+    ).toMatchObject({ ok: false, code: "runner-draining" });
     expect(
       admitRunnerJob(request, view({ runner: runner({ retiredAt: NOW.toISOString() }) })),
     ).toMatchObject({ ok: false, code: "runner-retired" });
   });
 
   it("refuses when sharing is off, or the bot has no rule, or an explicit deny", () => {
-    expect(admitRunnerJob(request, view({ runner: runner({ sharingEnabled: false }) })))
-      .toMatchObject({ ok: false, code: "sharing-disabled" });
-    expect(admitRunnerJob(request, view({ botAccess: "none" })))
-      .toMatchObject({ ok: false, code: "not-shared" });
-    expect(admitRunnerJob(request, view({ botAccess: "deny" })))
-      .toMatchObject({ ok: false, code: "not-shared" });
+    expect(
+      admitRunnerJob(request, view({ runner: runner({ sharingEnabled: false }) })),
+    ).toMatchObject({ ok: false, code: "sharing-disabled" });
+    expect(admitRunnerJob(request, view({ botAccess: "none" }))).toMatchObject({
+      ok: false,
+      code: "not-shared",
+    });
+    expect(admitRunnerJob(request, view({ botAccess: "deny" }))).toMatchObject({
+      ok: false,
+      code: "not-shared",
+    });
   });
 
   it("refuses unsupported kinds and engine mismatches", () => {
-    expect(admitRunnerJob(request, view({ runner: runner({ kind: "ssh" }) })))
-      .toMatchObject({ ok: false, code: "unsupported-kind" });
-    expect(admitRunnerJob(request, view({ engine: { kind: "podman", connectionRevision: 3 } })))
-      .toMatchObject({ ok: false, code: "engine-mismatch" });
-    expect(admitRunnerJob(request, view({ engine: { kind: "docker", connectionRevision: 4 } })))
-      .toMatchObject({ ok: false, code: "engine-mismatch" });
+    expect(admitRunnerJob(request, view({ runner: runner({ kind: "ssh" }) }))).toMatchObject({
+      ok: false,
+      code: "unsupported-kind",
+    });
+    expect(
+      admitRunnerJob(request, view({ engine: { kind: "podman", connectionRevision: 3 } })),
+    ).toMatchObject({ ok: false, code: "engine-mismatch" });
+    expect(
+      admitRunnerJob(request, view({ engine: { kind: "docker", connectionRevision: 4 } })),
+    ).toMatchObject({ ok: false, code: "engine-mismatch" });
   });
 
   it("refuses unknown, unprobed and unsupported environments", () => {
-    expect(admitRunnerJob(request, view({ environment: environment({ runnerId: "runner-2" }) })))
-      .toMatchObject({ ok: false, code: "environment-not-found" });
+    expect(
+      admitRunnerJob(request, view({ environment: environment({ runnerId: "runner-2" }) })),
+    ).toMatchObject({ ok: false, code: "environment-not-found" });
     expect(
       admitRunnerJob(
         request,
-        view({ runner: runner({ capabilities: { ...unknownRunnerCapabilities(), environments: ["env-other"] } }) }),
+        view({
+          runner: runner({
+            capabilities: { ...unknownRunnerCapabilities(), environments: ["env-other"] },
+          }),
+        }),
       ),
     ).toMatchObject({ ok: false, code: "environment-unsupported" });
-    expect(admitRunnerJob(request, view({ environment: environment({ verifiedAt: null }) })))
-      .toMatchObject({ ok: false, code: "environment-unverified" });
+    expect(
+      admitRunnerJob(request, view({ environment: environment({ verifiedAt: null }) })),
+    ).toMatchObject({ ok: false, code: "environment-unverified" });
     expect(
       admitRunnerJob(
         request,
@@ -288,7 +312,9 @@ describe("runner admission refusals", () => {
   it("refuses an image identity mismatch between the bound digest and the environment", () => {
     const decision = admitRunnerJob(
       request,
-      view({ boundImageDigest: "sha256:2222222222222222222222222222222222222222222222222222222222222222" }),
+      view({
+        boundImageDigest: "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+      }),
     );
     expect(decision).toMatchObject({ ok: false, code: "image-identity-mismatch" });
   });
@@ -300,10 +326,12 @@ describe("runner admission refusals", () => {
         view({ runner: runner({ probeExpiresAt: new Date(NOW.getTime() - 1).toISOString() }) }),
       ),
     ).toMatchObject({ ok: false, code: "probe-stale" });
-    expect(admitRunnerJob(request, view({ runner: runner({ reachability: "unknown" }) })))
-      .toMatchObject({ ok: false, code: "probe-stale" });
-    expect(admitRunnerJob(request, view({ runner: runner({ reachability: "unreachable" }) })))
-      .toMatchObject({ ok: false, code: "runner-unreachable" });
+    expect(
+      admitRunnerJob(request, view({ runner: runner({ reachability: "unknown" }) })),
+    ).toMatchObject({ ok: false, code: "probe-stale" });
+    expect(
+      admitRunnerJob(request, view({ runner: runner({ reachability: "unreachable" }) })),
+    ).toMatchObject({ ok: false, code: "runner-unreachable" });
   });
 
   it("refuses oversize inputs in aggregate and per file", () => {
@@ -326,7 +354,9 @@ describe("runner admission refusals", () => {
     }));
     const decision = admitRunnerJob(
       parseRunnerJobRequest({ ...baseRequest, filesIn: many }),
-      view({ runner: runner({ limits: { ...defaultRunnerLimits(), maxInputBytes: 10 * 1024 * 1024 } }) }),
+      view({
+        runner: runner({ limits: { ...defaultRunnerLimits(), maxInputBytes: 10 * 1024 * 1024 } }),
+      }),
     );
     expect(decision).toMatchObject({ ok: false, code: "input-too-large" });
   });
@@ -353,7 +383,9 @@ describe("runner admission refusals", () => {
         ...baseRequest,
         resources: { memoryBytes: RUNNER_LIMITS.memoryBytes },
       }),
-      view({ runner: runner({ limits: { ...defaultRunnerLimits(), memoryBytes: 1024 * 1024 * 1024 } }) }),
+      view({
+        runner: runner({ limits: { ...defaultRunnerLimits(), memoryBytes: 1024 * 1024 * 1024 } }),
+      }),
     );
     expect(memory).toMatchObject({ ok: false, code: "resources-exceed-limits" });
   });
@@ -365,8 +397,10 @@ describe("runner admission refusals", () => {
         view(),
       ),
     ).toMatchObject({ ok: false, code: "secrets-unsupported" });
-    expect(admitRunnerJob(request, view({ goalOrigin: true })))
-      .toMatchObject({ ok: false, code: "goal-jobs-unsupported" });
+    expect(admitRunnerJob(request, view({ goalOrigin: true }))).toMatchObject({
+      ok: false,
+      code: "goal-jobs-unsupported",
+    });
   });
 
   it("replays an identical operation key and refuses a conflicting reuse", () => {
@@ -384,12 +418,18 @@ describe("runner admission refusals", () => {
   });
 
   it("refuses when the bot slot is occupied and at daily caps", () => {
-    expect(admitRunnerJob(request, view({ activeBotSlotJobs: 1 })))
-      .toMatchObject({ ok: false, code: "slot-occupied" });
-    expect(admitRunnerJob(request, view({ jobsStartedToday: RUNNER_LIMITS.maxJobsPerDay })))
-      .toMatchObject({ ok: false, code: "daily-job-limit" });
+    expect(admitRunnerJob(request, view({ activeBotSlotJobs: 1 }))).toMatchObject({
+      ok: false,
+      code: "slot-occupied",
+    });
     expect(
-      admitRunnerJob(request, view({ runnerMillisUsedToday: RUNNER_LIMITS.maxRunnerSecondsPerDay * 1000 })),
+      admitRunnerJob(request, view({ jobsStartedToday: RUNNER_LIMITS.maxJobsPerDay })),
+    ).toMatchObject({ ok: false, code: "daily-job-limit" });
+    expect(
+      admitRunnerJob(
+        request,
+        view({ runnerMillisUsedToday: RUNNER_LIMITS.maxRunnerSecondsPerDay * 1000 }),
+      ),
     ).toMatchObject({ ok: false, code: "daily-time-limit" });
   });
 });
@@ -450,7 +490,11 @@ describe("runner job state machine", () => {
       expect(outcome.state).toBe(state);
     }
     // Queued work holds no live process: Stop resolves it at once.
-    const queued = stopRunnerJob({ state: "queued", terminationConfirmed: false, dispatched: true });
+    const queued = stopRunnerJob({
+      state: "queued",
+      terminationConfirmed: false,
+      dispatched: true,
+    });
     expect(queued).toMatchObject({
       cancelRequested: true,
       state: "cancelled",
@@ -459,13 +503,29 @@ describe("runner job state machine", () => {
   });
 
   it("confirms a stop only after termination is confirmed", () => {
-    const outcome = stopRunnerJob({ state: "running", terminationConfirmed: true, dispatched: true });
-    expect(outcome).toMatchObject({ state: "cancelled", cancelConfirmed: true, cleanupState: "pending" });
+    const outcome = stopRunnerJob({
+      state: "running",
+      terminationConfirmed: true,
+      dispatched: true,
+    });
+    expect(outcome).toMatchObject({
+      state: "cancelled",
+      cancelConfirmed: true,
+      cleanupState: "pending",
+    });
   });
 
   it("cancels a never-dispatched job immediately with trivial cleanup", () => {
-    const outcome = stopRunnerJob({ state: "queued", terminationConfirmed: false, dispatched: false });
-    expect(outcome).toMatchObject({ state: "cancelled", cancelConfirmed: true, cleanupState: "clean" });
+    const outcome = stopRunnerJob({
+      state: "queued",
+      terminationConfirmed: false,
+      dispatched: false,
+    });
+    expect(outcome).toMatchObject({
+      state: "cancelled",
+      cancelConfirmed: true,
+      cleanupState: "clean",
+    });
   });
 
   it("ignores a stop on a terminal job", () => {
@@ -477,18 +537,35 @@ describe("runner job state machine", () => {
   });
 
   it("makes cleanup confirmation idempotent and keeps failures visible", () => {
-    expect(confirmRunnerCleanup("pending", "clean")).toEqual({ cleanupState: "clean", changed: true });
-    expect(confirmRunnerCleanup("clean", "clean")).toEqual({ cleanupState: "clean", changed: false });
-    expect(confirmRunnerCleanup("pending", "failed")).toEqual({ cleanupState: "failed", changed: true });
-    expect(confirmRunnerCleanup("failed", "failed")).toEqual({ cleanupState: "failed", changed: false });
-    expect(confirmRunnerCleanup("failed", "clean")).toEqual({ cleanupState: "clean", changed: true });
+    expect(confirmRunnerCleanup("pending", "clean")).toEqual({
+      cleanupState: "clean",
+      changed: true,
+    });
+    expect(confirmRunnerCleanup("clean", "clean")).toEqual({
+      cleanupState: "clean",
+      changed: false,
+    });
+    expect(confirmRunnerCleanup("pending", "failed")).toEqual({
+      cleanupState: "failed",
+      changed: true,
+    });
+    expect(confirmRunnerCleanup("failed", "failed")).toEqual({
+      cleanupState: "failed",
+      changed: false,
+    });
+    expect(confirmRunnerCleanup("failed", "clean")).toEqual({
+      cleanupState: "clean",
+      changed: true,
+    });
   });
 
   it("derives the absolute deadline from staging + command + collection windows", () => {
     const deadline = runnerJobDeadline({ dispatchedAt: NOW, durationSeconds: 300 });
     expect(deadline.toISOString()).toBe(
-      new Date(NOW.getTime() + (RUNNER_LIMITS.stagingSeconds + 300 + RUNNER_LIMITS.artifactCollectionSeconds) * 1000)
-        .toISOString(),
+      new Date(
+        NOW.getTime() +
+          (RUNNER_LIMITS.stagingSeconds + 300 + RUNNER_LIMITS.artifactCollectionSeconds) * 1000,
+      ).toISOString(),
     );
   });
 
@@ -511,13 +588,28 @@ describe("runner job state machine", () => {
     ).toEqual({ action: "reattach", state: "running", phase: "executing" });
     // A running row with no lease at all is an orphan: cleanup, never a second launch.
     expect(
-      reconcileRunnerJobOnRestart({ state: "running", phase: "executing", leaseExpiresAt: null, now: NOW }),
+      reconcileRunnerJobOnRestart({
+        state: "running",
+        phase: "executing",
+        leaseExpiresAt: null,
+        now: NOW,
+      }),
     ).toEqual({ action: "cleanup", state: "cleaning", phase: "reconciling" });
     expect(
-      reconcileRunnerJobOnRestart({ state: "finished", phase: "finished", leaseExpiresAt: null, now: NOW }),
+      reconcileRunnerJobOnRestart({
+        state: "finished",
+        phase: "finished",
+        leaseExpiresAt: null,
+        now: NOW,
+      }),
     ).toEqual({ action: "none", state: "finished", phase: "finished" });
     expect(
-      reconcileRunnerJobOnRestart({ state: "queued", phase: "waiting-capacity", leaseExpiresAt: null, now: NOW }),
+      reconcileRunnerJobOnRestart({
+        state: "queued",
+        phase: "waiting-capacity",
+        leaseExpiresAt: null,
+        now: NOW,
+      }),
     ).toEqual({ action: "none", state: "queued", phase: "waiting-capacity" });
   });
 
