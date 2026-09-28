@@ -4,6 +4,7 @@ import { admitDelegation, updateWorkerTask } from "@ardurbot/db";
 import { expect, it, vi } from "vitest";
 import { prepareDelegation } from "./delegation.js";
 import { checkDelegationExecution } from "./delegation-execution.js";
+import { piModelContextWindow } from "./pi-models.js";
 
 vi.mock("@ardurbot/db", async (importOriginal) => ({
   ...(await importOriginal<typeof Database>()),
@@ -15,6 +16,69 @@ vi.mock("@ardurbot/db", async (importOriginal) => ({
   })),
   updateWorkerTask: vi.fn(async () => ({ ok: true })),
 }));
+vi.mock("./pi-models.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./pi-models.js")>()),
+  piModelContextWindow: vi.fn(() => undefined),
+}));
+it("passes a one-request floor derived from the worker's pinned model to admission", async () => {
+  const pin = {
+    provider: "scripted",
+    modelId: "scripted",
+    effort: "off",
+    credentialId: "scripted",
+    revision: 4,
+    runtimeKind: "pi",
+  };
+  const tx = {
+    run: {
+      findUniqueOrThrow: vi.fn(async () => ({
+        id: "parent",
+        botId: "bot",
+        runtimePin: pin,
+        runtimeDestination: { host: "localhost", local: true },
+      })),
+      findUnique: vi.fn(async () => ({ taskId: "root" })),
+    },
+    bot: {
+      findFirstOrThrow: vi.fn(async () => ({
+        computerId: "computer",
+        computer: { scope: "dedicated", kind: "test" },
+      })),
+    },
+  } as unknown as Prisma.TransactionClient;
+  vi.mocked(piModelContextWindow).mockReturnValue(8_192);
+  await prepareDelegation(tx, {
+    parentRunId: "parent",
+    actingBotId: "bot",
+    actingName: "Helper",
+    spaceId: "space",
+    userId: "owner",
+    kind: "helper",
+    admissionKey: "helper-floor",
+    prompt: "Review",
+  });
+  // A known 8192-token context needs one full context plus one output: 8192 + 4096.
+  expect(admitDelegation).toHaveBeenCalledWith(
+    tx,
+    expect.objectContaining({ minimumTokens: 12_288 }),
+  );
+  vi.mocked(piModelContextWindow).mockReturnValue(undefined);
+  await prepareDelegation(tx, {
+    parentRunId: "parent",
+    actingBotId: "bot",
+    actingName: "Helper",
+    spaceId: "space",
+    userId: "owner",
+    kind: "helper",
+    admissionKey: "helper-floor-unknown",
+    prompt: "Review",
+  });
+  // An unknown model gets the standard-context floor: 32768 + 4096.
+  expect(admitDelegation).toHaveBeenLastCalledWith(
+    tx,
+    expect.objectContaining({ minimumTokens: 36_864 }),
+  );
+});
 it("inherits the exact resolved snapshot including connection and runtime without calling a resolver", async () => {
   const pin = {
     provider: "scripted",

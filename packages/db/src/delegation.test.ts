@@ -43,7 +43,7 @@ describe("transactional delegation admission", () => {
     expect(f.state().root).toMatchObject({
       activeDescendants: 4,
       totalDescendants: 4,
-      reservedTokens: 40000,
+      reservedTokens: 4 * DELEGATION_LIMITS.reservationTokens,
     });
     expect(f.state().runs).toHaveLength(5);
     expect(f.tx.$queryRaw).toHaveBeenCalled();
@@ -280,7 +280,7 @@ it("keeps a status summary when a peer finishes without a written answer", async
 it("counts coordinator usage before the first handoff and rolls back an exhausted root", async () => {
   const f = fixture();
   f.tx.usageRecord.aggregate.mockResolvedValue({
-    _sum: { inputTokens: 119000, outputTokens: 1000 },
+    _sum: { inputTokens: 199000, outputTokens: 1000 },
   });
   await expect(f.admit()).rejects.toMatchObject({ problem: { code: "budget-exhausted" } });
   expect(f.tx.usageRecord.aggregate).toHaveBeenCalledWith({
@@ -289,6 +289,42 @@ it("counts coordinator usage before the first handoff and rolls back an exhauste
   });
   expect(f.state().root).toBeNull();
   expect(f.state().rows).toHaveLength(0);
+});
+it("reserves one realistic request by default instead of the old 10000 floor", async () => {
+  const f = fixture();
+  const row = await f.admit();
+  expect(row.reservedTokens).toBe(DELEGATION_LIMITS.reservationTokens);
+  expect(row.reservedTokens).toBeGreaterThanOrEqual(36_864);
+  expect(f.state().root).toMatchObject({ reservedTokens: row.reservedTokens });
+});
+it("refuses an explicit worker budget below one realistic request without starting", async () => {
+  const f = fixture();
+  const before = structuredClone(f.state());
+  await expect(f.admit({ tokens: 10_000, minimumTokens: 36_864 })).rejects.toMatchObject({
+    problem: { code: "budget-too-small" },
+  });
+  expect(f.state()).toEqual(before);
+});
+it("honours an explicit worker budget that covers one realistic request", async () => {
+  const f = fixture();
+  const row = await f.admit({ tokens: 12_288, minimumTokens: 12_288 });
+  expect(row.reservedTokens).toBe(12_288);
+});
+it("refuses before starting when the remaining task budget cannot cover one request", async () => {
+  const f = fixture();
+  // The evidence root: tokenLimit 120000 with 102721 already spent before the handoff.
+  await f.tx.delegationRoot.upsert({
+    create: {
+      tokenLimit: 120_000,
+      usedTokens: 102_721,
+      deadlineAt: new Date(Date.now() + 3_600_000),
+    },
+  });
+  const before = structuredClone(f.state());
+  await expect(f.admit()).rejects.toMatchObject({
+    problem: { code: "budget-exhausted" },
+  });
+  expect(f.state()).toEqual(before);
 });
 it("does not let an inherited worker change the parent's computer", async () => {
   const f = fixture();
@@ -413,7 +449,7 @@ it("returns a completed card for rework with one more hop and a fresh bounded re
   expect(f.state().root).toMatchObject({
     activeDescendants: 1,
     totalDescendants: 2,
-    reservedTokens: 10000,
+    reservedTokens: DELEGATION_LIMITS.reservationTokens,
   });
   expect(f.state().rows[0].card.timeline.at(-1).text).toBe("Check the missing citation");
   await db.$transaction((tx) => finishDelegation(tx, row.id, "completed", "Second pass"));

@@ -175,6 +175,8 @@ export async function admitDelegation(
     prompt: string;
     snapshot: DelegationSnapshot;
     tokens?: number;
+    /** One-request floor for the worker's pinned model; explicit budgets below it refuse. */
+    minimumTokens?: number;
     deadlineAt?: Date;
     newChild?: boolean;
     card?: unknown;
@@ -252,12 +254,11 @@ export async function admitDelegation(
   if (root.totalDescendants >= root.maxDescendants || root.activeDescendants >= root.maxConcurrent)
     refuse("descendants-exceeded");
   const tokens = input.tokens ?? DELEGATION_LIMITS.reservationTokens;
-  if (
-    !Number.isSafeInteger(tokens) ||
-    tokens <= 0 ||
-    root.reservedTokens + root.usedTokens + tokens > root.tokenLimit
-  )
-    refuse("budget-exhausted");
+  if (!Number.isSafeInteger(tokens) || tokens <= 0) refuse("budget-exhausted");
+  // An explicit budget the owner or coordinator set is never raised silently; one that
+  // cannot cover even one request for the worker's model refuses before the worker starts.
+  if (input.minimumTokens !== undefined && tokens < input.minimumTokens) refuse("budget-too-small");
+  if (root.reservedTokens + root.usedTokens + tokens > root.tokenLimit) refuse("budget-exhausted");
   const deadlineAt = new Date(
     Math.min(
       root.deadlineAt.getTime(),

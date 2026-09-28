@@ -161,7 +161,7 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
         rootTaskId: rootTask.id,
         objective: "Finish the fixture",
         tokenLimit: 100_000,
-        perWorkerTokens: 10_000,
+        perWorkerTokens: 40_000,
         maxConcurrent: 2,
         maxDescendants: 10,
         untilAt,

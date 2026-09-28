@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
 import type { AgentUsage, RequestUsageObservation } from "@ardurbot/adapter-kit";
 import { RequestUsageCollector, usageEvent } from "@ardurbot/adapter-kit";
-import { type ContextSnapshot, TaskCardSchema } from "@ardurbot/contracts";
+import { type ContextSnapshot, DELEGATION_LIMITS, TaskCardSchema } from "@ardurbot/contracts";
 import type { Prisma, PrismaClient } from "@ardurbot/db";
 import {
   admitDelegation,
+  confirmDispatchStop,
   createDb,
   finishDelegation,
   rejectDelegation,
@@ -619,7 +620,7 @@ postgres("request ledger on disposable PostgreSQL", () => {
     });
     await db.prisma.delegationRoot.update({
       where: { rootTaskId: f.id },
-      data: { tokenLimit: 20_000, reservedTokens: 1000, activeDescendants: 1 },
+      data: { tokenLimit: 120_000, reservedTokens: 1000, activeDescendants: 1 },
     });
     const snapshot = {
       pin: f.pin,
@@ -729,7 +730,10 @@ postgres("request ledger on disposable PostgreSQL", () => {
         "Revise the synthetic result",
       ),
     );
-    expect(await f.root()).toMatchObject({ reservedTokens: 10_100, usedTokens: 0 });
+    expect(await f.root()).toMatchObject({
+      reservedTokens: 100 + DELEGATION_LIMITS.reservationTokens,
+      usedTokens: 0,
+    });
     const reworkRun = await db.prisma.run.update({
       where: { id: rework.runId },
       data: { status: "running", leaseOwner: "worker", leaseFence: 2 },
@@ -744,7 +748,10 @@ postgres("request ledger on disposable PostgreSQL", () => {
     await reworkRecord(fresh.start());
     await reworkRecord(fresh.snapshot({ input: 0, output: 0 }));
     await reworkRecord(fresh.finish("success"));
-    expect(await f.root()).toMatchObject({ reservedTokens: 10_100, usedTokens: 0 });
+    expect(await f.root()).toMatchObject({
+      reservedTokens: 100 + DELEGATION_LIMITS.reservationTokens,
+      usedTokens: 0,
+    });
     await db.prisma.$transaction((tx) =>
       finishDelegation(tx, delegation.id, "completed", "Revised result", rework.runId),
     );
@@ -794,7 +801,10 @@ postgres("request ledger on disposable PostgreSQL", () => {
     );
     await thirdRecord(thirdHold.snapshot({ input: 15, output: 5 }));
     await thirdRecord(thirdHold.finish("success"));
-    expect(await f.root()).toMatchObject({ reservedTokens: 10_000, usedTokens: 40 });
+    expect(await f.root()).toMatchObject({
+      reservedTokens: DELEGATION_LIMITS.reservationTokens,
+      usedTokens: 40,
+    });
     const fourthRun = await db.prisma.run.update({
       where: { id: fourth.runId },
       data: { status: "running", leaseOwner: "worker", leaseFence: 2 },
@@ -809,7 +819,10 @@ postgres("request ledger on disposable PostgreSQL", () => {
     await fourthRecord(fourthRequest.start());
     await fourthRecord(fourthRequest.snapshot({ input: 9980, output: 0 }));
     await fourthRecord(fourthRequest.finish("success"));
-    expect(await f.root()).toMatchObject({ reservedTokens: 20, usedTokens: 10_020 });
+    expect(await f.root()).toMatchObject({
+      reservedTokens: DELEGATION_LIMITS.reservationTokens - 9_980,
+      usedTokens: 10_020,
+    });
     await db.prisma.$transaction((tx) =>
       finishDelegation(tx, delegation.id, "completed", "Final result", fourth.runId),
     );

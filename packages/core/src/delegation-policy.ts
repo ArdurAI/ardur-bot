@@ -4,6 +4,21 @@ import type {
   LocalityPolicy,
   ModelDestination,
 } from "@ardurbot/contracts";
+import { DEFAULT_MODEL_CONTEXT_WINDOW, DEFAULT_MODEL_MAX_TOKENS } from "@ardurbot/contracts";
+
+/**
+ * The smallest reservation that lets a worker finish one realistic request for its
+ * pinned model: one full context plus one output. Models with a smaller known context
+ * need less; unknown or larger contexts use the standard window, which keeps the floor
+ * inside what a goal or task budget can actually carry.
+ */
+export function minimumDelegationReservation(contextWindow?: number): number {
+  const context =
+    contextWindow !== undefined && Number.isSafeInteger(contextWindow) && contextWindow > 0
+      ? Math.min(contextWindow, DEFAULT_MODEL_CONTEXT_WINDOW)
+      : DEFAULT_MODEL_CONTEXT_WINDOW;
+  return context + DEFAULT_MODEL_MAX_TOKENS;
+}
 
 export function intersectDelegationAuthority(
   ...layers: readonly DelegationAuthority[]

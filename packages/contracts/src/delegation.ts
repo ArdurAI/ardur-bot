@@ -186,6 +186,10 @@ const problemCopy = {
     "This task has no remaining worker budget; start a new task to continue.",
     "Start task",
   ],
+  "budget-too-small": [
+    "This worker's budget cannot cover one request for its model; raise the worker budget to continue.",
+    "Raise budget",
+  ],
   "deadline-passed": [
     "This task's deadline has passed or it is stopping; start a new task to continue.",
     "Start task",

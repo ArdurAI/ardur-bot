@@ -164,7 +164,7 @@ export function fixture() {
             maxConcurrent: 4,
             maxHops: 6,
             maxDescendants: 12,
-            tokenLimit: 120000,
+            tokenLimit: 200000,
             ...create,
           }),
       ),

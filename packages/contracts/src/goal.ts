@@ -3,7 +3,8 @@ import * as z from "zod";
 import { Id, IsoDate } from "./ids.js";
 
 export const GOAL_DEFAULT_TOKEN_LIMIT = 600_000;
-export const GOAL_DEFAULT_PER_WORKER_TOKENS = 30_000;
+/** Covers one realistic worker request (a standard context plus one output) with headroom. */
+export const GOAL_DEFAULT_PER_WORKER_TOKENS = 40_000;
 export const GOAL_DEFAULT_MAX_DESCENDANTS = 60;
 export const GOAL_MAX_DEPTH = 1;
 export const GOAL_MAX_HOPS = 6;

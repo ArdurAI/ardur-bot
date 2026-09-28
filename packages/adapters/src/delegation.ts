@@ -5,6 +5,7 @@ import type {
   RuntimeProblem,
 } from "@ardurbot/contracts";
 import { DelegationSnapshotSchema, RuntimePinSchema, runtimePinProblem } from "@ardurbot/contracts";
+import { minimumDelegationReservation } from "@ardurbot/core";
 import type { Bot, Prisma, PrismaClient, ThreadEvents } from "@ardurbot/db";
 import {
   admitDelegation,
@@ -13,6 +14,7 @@ import {
   inheritedRemoteOrigin,
 } from "@ardurbot/db";
 import { destinationForModel } from "./model-locality.js";
+import { piModelContextWindow } from "./pi-models.js";
 import type { ResolvedRunPin } from "./run-model-pin.js";
 
 export type DelegationResolver = (
@@ -123,7 +125,15 @@ export async function prepareDelegation(
         : destinationForModel(selected! as ResolvedRunPin),
     };
   }
-  const record = await admitDelegation(tx, { ...input, snapshot });
+  const record = await admitDelegation(tx, {
+    ...input,
+    snapshot,
+    minimumTokens: minimumDelegationReservation(
+      snapshot.pin.provider && snapshot.pin.modelId
+        ? piModelContextWindow(snapshot.pin.provider, snapshot.pin.modelId)
+        : undefined,
+    ),
+  });
   const admittedSnapshot = DelegationSnapshotSchema.parse(record.snapshot);
   return {
     ok: true as const,

@@ -296,6 +296,9 @@ export async function startComparison(deps: ComparisonDeps, scope: Scope, raw: C
           rootTaskId: task.id,
           coordinatorBotId: coordinator.bot.id,
           coordinatorThreadId: thread.id,
+          // The owner chose this budget by choosing the participants; admit every run.
+          tokenLimit:
+            (prepared.length + Number(input.reserveMerge)) * DELEGATION_LIMITS.reservationTokens,
           reservedTokens: input.reserveMerge ? DELEGATION_LIMITS.reservationTokens : 0,
           deadlineAt: new Date(parent.createdAt.getTime() + DELEGATION_LIMITS.durationMs),
         },
@@ -359,6 +362,11 @@ export async function mergeComparison(deps: ComparisonDeps, scope: Scope, raw: C
         await tx.delegationRoot.update({
           where: { rootTaskId: row.rootTaskId },
           data: { reservedTokens: { decrement: DELEGATION_LIMITS.reservationTokens } },
+        });
+      else
+        await tx.delegationRoot.update({
+          where: { rootTaskId: row.rootTaskId },
+          data: { tokenLimit: { increment: DELEGATION_LIMITS.reservationTokens } },
         });
       const frozenInput = comparisonMergeInput(selected, comparison.participants);
       const runId = await queueComparisonRun(
