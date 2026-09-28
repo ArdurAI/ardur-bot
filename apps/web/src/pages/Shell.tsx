@@ -240,7 +240,7 @@ import {
 } from "./shell/computer-error-state";
 import { ComputerScreenError } from "./shell/computer-screen-error";
 import { useComputerTerminal } from "./shell/computer-terminal";
-import { isComputerVisible } from "./shell/computer-visibility";
+import { getEffectiveWorkspaceTab, isComputerVisible } from "./shell/computer-visibility";
 import {
   AppConnectCard,
   ArtifactImage,
@@ -797,7 +797,12 @@ export function ShellPage({
   const readVisibleGroups = useRef(new Set<string>());
   useNotifications();
   const computerVisible = useRef(false);
-  computerVisible.current = isComputerVisible(computerOpen, panel, workspaceTab);
+  const effectiveWorkspaceTab = getEffectiveWorkspaceTab(
+    workspaceTab,
+    computer?.capabilities?.graphical,
+  );
+  const isVisible = isComputerVisible(computerOpen, panel, effectiveWorkspaceTab);
+  computerVisible.current = isVisible;
   const autoSpoken = useRef<string | null>(null);
   const autoSpokenBotId = useRef<string | null>(null);
 
@@ -2582,7 +2587,7 @@ export function ShellPage({
   useEffect(() => {
     const heartbeatBotId = computerBot?.id ?? active?.id;
     if (
-      !isComputerVisible(computerOpen, panel, workspaceTab) ||
+      !isVisible ||
       !heartbeatBotId ||
       computer?.state !== "running"
     )

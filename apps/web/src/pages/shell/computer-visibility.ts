@@ -1,10 +1,25 @@
+export function getEffectiveWorkspaceTab(
+  tab: string,
+  graphical: boolean | undefined,
+  filesAvailable: boolean = true,
+): string {
+  return tab === "tasks" ||
+    tab === "routines" ||
+    (tab === "files" && filesAvailable) ||
+    (tab === "screen" && graphical === true) ||
+    (tab === "computer" && graphical !== true)
+    ? tab
+    : "tasks";
+}
+
 export function isComputerVisible(
   computerOpen: boolean,
   panel: string | null,
-  workspaceTab: string,
+  effectiveWorkspaceTab: string,
 ): boolean {
   return (
     computerOpen ||
-    (panel === "computer" && (workspaceTab === "screen" || workspaceTab === "computer"))
+    (panel === "computer" &&
+      (effectiveWorkspaceTab === "screen" || effectiveWorkspaceTab === "computer"))
   );
 }

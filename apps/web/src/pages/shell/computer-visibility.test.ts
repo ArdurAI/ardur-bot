@@ -22,3 +22,27 @@ describe("isComputerVisible", () => {
     expect(isComputerVisible(false, "computer", "computer")).toBe(true);
   });
 });
+
+import { getEffectiveWorkspaceTab } from "./computer-visibility";
+
+describe("getEffectiveWorkspaceTab", () => {
+  it("resolves unsupported screen to tasks on non-graphical", () => {
+    expect(getEffectiveWorkspaceTab("screen", false)).toBe("tasks");
+  });
+
+  it("resolves unsupported computer to tasks on graphical", () => {
+    expect(getEffectiveWorkspaceTab("computer", true)).toBe("tasks");
+  });
+
+  it("keeps screen on graphical", () => {
+    expect(getEffectiveWorkspaceTab("screen", true)).toBe("screen");
+  });
+
+  it("keeps computer on non-graphical", () => {
+    expect(getEffectiveWorkspaceTab("computer", false)).toBe("computer");
+  });
+
+  it("resolves files to tasks when files are unavailable", () => {
+    expect(getEffectiveWorkspaceTab("files", true, false)).toBe("tasks");
+  });
+});

@@ -4,6 +4,7 @@ import { useLingui } from "@lingui/react/macro";
 import type { ReactNode } from "react";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { rpc } from "../../lib/rpc";
+import { getEffectiveWorkspaceTab } from "../shell/computer-visibility";
 import { WorkspaceTasks } from "./WorkspaceTasks";
 
 const WorkspaceFiles = lazy(() =>
@@ -57,14 +58,11 @@ export function WorkspacePane({
       ? context
       : null;
   const filesAvailable = currentContext?.files !== "unavailable" && currentContext?.computerId;
-  const selected =
-    tab === "tasks" ||
-    tab === "routines" ||
-    (tab === "files" && filesAvailable) ||
-    (tab === "screen" && computer?.capabilities?.graphical === true) ||
-    (tab === "computer" && computer?.capabilities?.graphical !== true)
-      ? tab
-      : "tasks";
+  const selected = getEffectiveWorkspaceTab(
+    tab,
+    computer?.capabilities?.graphical,
+    !!filesAvailable,
+  );
   const tabs = [
     {
       id: "tasks",
