@@ -145,3 +145,19 @@ export const HermesExecutionEnvelopeSchema = z.strictObject({
   effectiveRuntimeConfig: RuntimeConfigExecutionManifestSchema,
   effectiveRuntimeConfigHash: z.string().regex(/^[a-f0-9]{64}$/),
 });
+
+export const HermesRuntimeConfigPreviewSchema = z.strictObject({
+  settings: HermesRuntimeConfigV2Schema,
+  managed: z.strictObject({
+    model: z.string(),
+    thinkingLevel: z.string(),
+    connection: z.string(),
+    credentials: z.string(),
+    tools: z.string(),
+    approvals: z.string(),
+    paths: z.string(),
+    nativeChildren: z.boolean(),
+    nativeCompression: z.boolean(),
+  }),
+});
+export type HermesRuntimeConfigPreview = z.infer<typeof HermesRuntimeConfigPreviewSchema>;

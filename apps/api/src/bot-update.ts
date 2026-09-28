@@ -1,3 +1,5 @@
+import { ORPCError } from "@orpc/server";
+
 import { appendEventInTransaction, type Prisma, type PrismaClient } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 
@@ -21,49 +23,56 @@ export async function commitBotUpdate(
   },
   appendEvent: AppendEvent = appendEventInTransaction,
 ): Promise<{ id: string; name: string; title: string; description: string }> {
-  if (!options.emitBotUpdated) {
-    return options.prisma.bot.update({
-      where: {
-        id: options.botId,
-        ...(options.expectedModelPinRevision === undefined
-          ? {}
-          : { modelPinRevision: options.expectedModelPinRevision }),
-      },
-      data: options.data,
-      select: { id: true, name: true, title: true, description: true },
+  try {
+    if (!options.emitBotUpdated) {
+      return await options.prisma.bot.update({
+        where: {
+          id: options.botId,
+          ...(options.expectedModelPinRevision === undefined
+            ? {}
+            : { modelPinRevision: options.expectedModelPinRevision }),
+        },
+        data: options.data,
+        select: { id: true, name: true, title: true, description: true },
+      });
+    }
+
+    const committed = await options.prisma.$transaction(async (tx) => {
+      const updated = await tx.bot.update({
+        where: {
+          id: options.botId,
+          ...(options.expectedModelPinRevision === undefined
+            ? {}
+            : { modelPinRevision: options.expectedModelPinRevision }),
+        },
+        data: options.data,
+        select: { id: true, name: true, title: true, description: true },
+      });
+      const event = await appendEvent(tx, {
+        spaceId: options.spaceId,
+        threadId: options.threadId,
+        botId: options.botId,
+        type: "bot.updated",
+        payload: {
+          botId: updated.id,
+          name: updated.name,
+          title: updated.title,
+          description: updated.description,
+        },
+      });
+      return { updated, seq: event.seq };
     });
+
+    await options.notify(options.threadId, committed.seq).catch((error) => {
+      getLogger().error("bot.updated realtime notification", error);
+    });
+    return committed.updated;
+  } catch (error: any) {
+    if (error?.code === "P2025" && options.expectedModelPinRevision !== undefined) {
+      throw new ORPCError("CONFLICT", { message: "The bot's configuration was updated by another session." });
+    }
+    throw error;
   }
-
-  const committed = await options.prisma.$transaction(async (tx) => {
-    const updated = await tx.bot.update({
-      where: {
-        id: options.botId,
-        ...(options.expectedModelPinRevision === undefined
-          ? {}
-          : { modelPinRevision: options.expectedModelPinRevision }),
-      },
-      data: options.data,
-      select: { id: true, name: true, title: true, description: true },
-    });
-    const event = await appendEvent(tx, {
-      spaceId: options.spaceId,
-      threadId: options.threadId,
-      botId: options.botId,
-      type: "bot.updated",
-      payload: {
-        botId: updated.id,
-        name: updated.name,
-        title: updated.title,
-        description: updated.description,
-      },
-    });
-    return { updated, seq: event.seq };
-  });
-
-  await options.notify(options.threadId, committed.seq).catch((error) => {
-    getLogger().error("bot.updated realtime notification", error);
-  });
-  return committed.updated;
 }
 
 export function botProfileLabelsChanged(input: {

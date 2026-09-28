@@ -628,7 +628,8 @@ function sameChoice(left: RuntimePin, right: RuntimePin): boolean {
     left.provider === right.provider &&
     left.modelId === right.modelId &&
     left.effort === right.effort &&
-    left.credentialId === right.credentialId
+    left.credentialId === right.credentialId &&
+    left.runtimeConfigHash === right.runtimeConfigHash
   );
 }
 

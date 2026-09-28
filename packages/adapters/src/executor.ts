@@ -2059,6 +2059,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
             ? {
                 historyMode: "quoted-system-context" as const,
                 configurationHash: selected.pin.runtimeConfigHash,
+                effectiveRuntimeConfig: selected.pin.effectiveRuntimeConfig,
+                effectiveRuntimeConfigHash: selected.pin.effectiveRuntimeConfigHash,
               }
             : {}),
           ...(["claude-code", "antigravity"].includes(selected.pin.runtimeKind)

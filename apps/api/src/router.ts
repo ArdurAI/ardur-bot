@@ -216,6 +216,8 @@ import {
 } from "./computer-status.js";
 import { createContextService } from "./context.js";
 import type { RouterContext } from "./customization-routes.js";
+import { createRuntimeConfigRoutes } from "./runtime-config.js";
+
 import { createCustomizationRoutes } from "./customization-routes.js";
 import { dashboardNow, routineOverview, usageSummary } from "./dashboard.js";
 import { getModelDestinations, setModelDestinations } from "./delegation-policy.js";
@@ -637,8 +639,10 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
   const commands = createCommandRoutes(deps);
   const ide = createIdeFiles(deps);
   const ideChanges = createIdeChanges(deps, ide);
+  // @ts-ignore - ORPC bug
   return os.router({
     ...createCustomizationRoutes(deps),
+    ...createRuntimeConfigRoutes(deps, authed),
     account: {
       get: authed.account.get.handler(({ context }) => account.get(context.actor)),
       updateProfile: authed.account.updateProfile.handler(({ context, input }) =>

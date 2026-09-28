@@ -84,6 +84,8 @@ export const RuntimeInfoSchema = z.object({
   requestedEffort: z.string().optional(),
   wireEffort: z.string().optional(),
   effortMappingVersion: z.string().optional(),
+  effectiveRuntimeConfig: z.any().optional(),
+  effectiveRuntimeConfigHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
 });
 export type RuntimeInfo = z.infer<typeof RuntimeInfoSchema>;
 
@@ -97,6 +99,11 @@ export const RuntimePinSchema = z.object({
   revision: z.number().int().nonnegative(),
   runtimeConfig: HermesRuntimeConfigSchema.optional(),
   runtimeConfigHash: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .optional(),
+  effectiveRuntimeConfig: z.any().optional(),
+  effectiveRuntimeConfigHash: z
     .string()
     .regex(/^[a-f0-9]{64}$/)
     .optional(),

@@ -18,6 +18,10 @@ import {
 import { inheritedOllamaEffort, spaceDefaultEffort } from "@ardurbot/core";
 import type { findDefaultModelCredential, PrismaClient } from "@ardurbot/db";
 import { findDefaultModelCredential as findSpaceDefault } from "@ardurbot/db";
+import { compileHermesRuntimeConfig } from "@ardurbot/host-runtime/runtimes/hermes-config";
+import { canonicalRuntimeJson, normalizeHermesRuntimeConfig } from "@ardurbot/core/runtime-config";
+import { createHash } from "node:crypto";
+
 import { hermesCompatibility, hermesConfigHash } from "./hermes-compatibility.js";
 import { modelLocalityAllowed } from "./model-locality.js";
 import { listPiCatalog } from "./pi-models.js";
@@ -205,7 +209,24 @@ export async function resolveRunModelPin(input: {
     )
       return runtimePinProblem(pin, "locality-denied", MODEL_LOCALITY_DENIED_MESSAGE);
     const problem = validateRuntimePin(resolved, pin);
-    return problem ?? hermesCompatibility(pin, resolved) ?? { ...resolved, kind: "resolved", pin };
+    const compatibilityProblem = problem ?? hermesCompatibility(pin, resolved);
+    if (compatibilityProblem) return compatibilityProblem;
+    
+    if (pin.runtimeKind === "hermes" && pin.runtimeConfig) {
+      const document = normalizeHermesRuntimeConfig(pin.runtimeConfig);
+      const compiled = compileHermesRuntimeConfig(document, {
+        id: resolved.id,
+        contextWindow: resolved.contextWindow ?? 8192,
+        maxTokens: resolved.maxTokens ?? 4096,
+        reasoning: resolved.reasoning ?? false,
+        acceptsImages: resolved.acceptsImages ?? false,
+        thinkingLevel: (resolved.thinkingLevel ?? "off") as any
+      });
+      pin.effectiveRuntimeConfig = compiled.manifest;
+      pin.effectiveRuntimeConfigHash = createHash("sha256").update(canonicalRuntimeJson(compiled.manifest)).digest("hex");
+    }
+    
+    return { ...resolved, kind: "resolved", pin };
   } catch (error) {
     if (error instanceof AnthropicOAuthUnavailableError) {
       return runtimePinProblem(pin, "pin-credential-missing", error.message);
