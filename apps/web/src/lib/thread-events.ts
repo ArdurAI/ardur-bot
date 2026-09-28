@@ -10,6 +10,7 @@ import type {
 import {
   ProviderErrorKindSchema,
   RunTriggerSchema,
+  RuntimePinSchema,
   RuntimeProblemSchema,
 } from "@ardurbot/contracts";
 import {
@@ -32,6 +33,7 @@ import {
 
 function runFromStartedEvent(event: ProductEvent, previous: Run | undefined): Run {
   const trigger = RunTriggerSchema.safeParse(event.payload.trigger);
+  const pin = RuntimePinSchema.safeParse(event.payload.runtimePin);
   return {
     id: event.runId ?? previous?.id ?? event.id,
     botId: event.botId,
@@ -45,6 +47,7 @@ function runFromStartedEvent(event: ProductEvent, previous: Run | undefined): Ru
         : (previous?.routineId ?? null),
     modelProvider: previous?.modelProvider ?? null,
     modelId: previous?.modelId ?? null,
+    runtimePin: pin.success ? pin.data : previous?.runtimePin,
     error: null,
     startedAt: previous?.startedAt ?? event.createdAt,
     completedAt: null,
@@ -64,6 +67,16 @@ export function activeThreadRuns(
   snapshot: ThreadSnapshot | null,
 ): NonNullable<ThreadSnapshot["activeRuns"]> {
   return snapshot?.activeRuns ?? (snapshot?.run ? [snapshot.run] : []);
+}
+
+export function activeMemberRun(runs: readonly Run[], botId: string): Run | null {
+  // Snapshots list runs newest first. A run that has left the queue is the one the member is
+  // working on; a newer queued run, pinned or not, must not hide it. Among equals, prefer the
+  // run whose model choice was already captured.
+  const active = runs.filter((run) => run.botId === botId && isActive(run.status));
+  const started = active.filter((run) => run.status !== "queued");
+  const pool = started.length ? started : active;
+  return pool.find((run) => run.runtimePin != null) ?? pool[0] ?? null;
 }
 
 /**
@@ -255,6 +268,10 @@ export function isThreadSnapshotEvent(event: ProductEvent): boolean {
     event.type === "computer.takeover.requested" ||
     isRunTerminalEvent(event)
   );
+}
+
+export function isGroupMemberModelPinEvent(event: ProductEvent): boolean {
+  return event.type === "group.memberModelPin.set" || event.type === "group.memberModelPin.cleared";
 }
 
 export function reduceThreadSnapshot(

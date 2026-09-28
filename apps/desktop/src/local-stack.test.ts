@@ -86,6 +86,9 @@ describe("Compose deployment settings", () => {
               "docker",
               [
                 "compose",
+                // The stack runs beside its .env; resolve env_file entries against this copy.
+                "--project-directory",
+                dir,
                 "--env-file",
                 envFile,
                 "-f",
@@ -107,7 +110,7 @@ describe("Compose deployment settings", () => {
               },
             );
           const initial = render("ghcr.io/ardurai/ardur-bot/computer:dev");
-          expect(initial.status, `${name}: Compose render failed`).toBe(0);
+          expect(initial.status, `${name}: Compose render failed: ${initial.stderr}`).toBe(0);
           const selected = parseComposeImageSettings(initial.stdout);
           const field = {
             ARDURBOT_COMPUTER_CHANNEL: selected.channel,
@@ -116,7 +119,7 @@ describe("Compose deployment settings", () => {
           }[key!];
           expect(field, name).toBe(expected);
           const final = render(reference!);
-          expect(final.status, `${name}: final Compose render failed`).toBe(0);
+          expect(final.status, `${name}: final Compose render failed: ${final.stderr}`).toBe(0);
           expect(parseComposeImageSettings(final.stdout).image, name).toBe(reference);
         }
       } finally {

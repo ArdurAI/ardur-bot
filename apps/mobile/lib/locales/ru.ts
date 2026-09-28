@@ -1,4 +1,10 @@
 export const RU_MESSAGES: Record<string, string> = {
+  "This group's model is blocked by the bot or space settings. Change the destination policy or choose another group model.":
+    "Модель группы заблокирована настройками бота или пространства. Измените правила для места назначения или выберите другую модель группы.",
+  "{botName} couldn't use the model set for this group. Reconnect it or change the group model.":
+    "{botName} не смог использовать модель, выбранную для этой группы. Восстановите подключение или измените модель группы.",
+  "{botName} couldn't use the model set for this group. Change the group model or check this bot's settings.":
+    "{botName} не смог использовать модель, выбранную для этой группы. Измените модель группы или проверьте настройки бота.",
   Antigravity: "Antigravity",
   "Antigravity did not finish in time. Try again.":
     "Antigravity не завершил запрос вовремя. Повторите попытку.",
@@ -1193,4 +1199,11 @@ export const RU_MESSAGES: Record<string, string> = {
   "Based on {count} requests in the last {days} days.":
     "По {count} запросам за последние {days} дн.",
   "Allow {tool} for {bot} without asking?": "Разрешать {tool} для {bot} без вопроса?",
+  "This bot uses a model chosen for this group. Change it in Group settings.":
+    "Этот бот использует модель, выбранную для группы. Измените её в настройках группы.",
+  "Model in this group": "Модель в этой группе",
+  "Same as bot": "Как у бота",
+  "Could not save group model.": "Не удалось сохранить модель группы.",
+  "This member's model changed. Reload the group.":
+    "Модель этого участника изменилась. Перезагрузите группу.",
 };

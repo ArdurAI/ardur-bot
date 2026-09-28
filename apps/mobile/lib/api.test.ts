@@ -1970,6 +1970,23 @@ describe("mobile thread event reduction", () => {
     ).toBe("Slack · Alex: Hello from the group");
   });
 
+  it("uses a structured notice translation in displayed text and preserves legacy fallback", () => {
+    const structured = mobileMessage("notice", [
+      {
+        kind: "text",
+        text: "English fallback",
+        notice: { id: "group-model-credential-missing", botName: "Worker" },
+      },
+    ]);
+    expect(blockText(structured, (notice) => `${notice.botName}: translated`)).toBe(
+      "Worker: translated",
+    );
+    expect(blockText(structured)).toBe("English fallback");
+    expect(blockText(mobileMessage("legacy", [{ kind: "text", text: "Legacy notice" }]))).toBe(
+      "Legacy notice",
+    );
+  });
+
   it("deduplicates durable messages and replaces matching transient subagent state", () => {
     const initial = snapshot([
       mobileMessage("message-1", [{ kind: "text", text: "old" }]),

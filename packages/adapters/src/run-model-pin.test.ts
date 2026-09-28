@@ -334,3 +334,23 @@ it.each(["claude-code", "codex-app-server"] as const)(
     });
   },
 );
+
+it("blocks a native room selection when the bot requires local execution", async () => {
+  const f = fixture();
+  const native = {
+    runtimeKind: "claude-code" as const,
+    provider: "anthropic",
+    modelId: "native-fixture",
+    effort: "low",
+    credentialId: "native:claude-code",
+    revision: 1,
+  };
+  expect(
+    await resolveRunModelPin({
+      ...f,
+      snapshot: native,
+      bot: { allowedModelDestinations: { mode: "local" } },
+    }),
+  ).toMatchObject({ kind: "problem", code: "locality-denied", pin: native });
+  expect(f.loadKey).not.toHaveBeenCalled();
+});

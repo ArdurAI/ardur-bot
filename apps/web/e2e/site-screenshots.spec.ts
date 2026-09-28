@@ -377,6 +377,7 @@ test("captures bot chat, group collaboration, and routines from seeded demo data
   await captureSiteScreenshot(page, "app-chat");
 
   await page.goto("/app/g/operations-group");
+  await expect(page.getByTestId("group-participant-models")).toBeVisible();
   await expect(
     page.getByText("Checks are green and the release note matches the deployed version.", {
       exact: false,

@@ -1,4 +1,6 @@
+import { modelPinOptionKey } from "@ardurbot/core";
 import { expect, type Page, test } from "@playwright/test";
+import { listPiCatalog } from "../../../packages/adapters/src/pi-models";
 import {
   captureScreenshot,
   completeOnboarding,
@@ -11,6 +13,71 @@ import {
 async function createBot(page: Page, name: string) {
   return createNamedBot(page, name);
 }
+
+test("a group member choice appears in the room and on its captured run", async ({
+  page,
+}, testInfo) => {
+  await signup(page, `group-choice-${Date.now()}@ardurbot.test`, "password12", "Group choice");
+  await completeOnboarding(page);
+  await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
+  const catalogChoice = listPiCatalog().find(
+    (entry) => entry.provider === "openai" && !entry.placeholder,
+  );
+  expect(catalogChoice).toBeDefined();
+  const credential = await rpc<{ id: string }>(page, "models/connect", {
+    provider: catalogChoice!.provider,
+    apiKey: "fixture-key",
+  });
+  await page.reload();
+  const first = await createBot(page, "Room first");
+  await createBot(page, "Room second");
+  await openNewGroup(page);
+  const panel = page.getByTestId("side-panel");
+  await panel.locator("label:has-text('Name') input").fill("Choice room");
+  await panel.getByRole("button", { name: "Room first" }).click();
+  await panel.getByRole("button", { name: "Room second" }).click();
+  await panel.getByRole("button", { name: "Create group", exact: true }).click();
+  await page.waitForURL(/\/app\/g\/[^/]+$/);
+  const groupId = page.url().split("/").at(-1)!;
+  await page.getByTestId("bot-settings-trigger").click();
+  const control = panel.getByTestId(`group-model-${first}`);
+  const select = control.locator("select").first();
+  await expect
+    .poll(async () => select.locator("option[value]:not([value=''])").count())
+    .toBeGreaterThan(0);
+  await select.selectOption(
+    modelPinOptionKey(catalogChoice!.provider, catalogChoice!.id, credential.id),
+  );
+  const saved = page.waitForResponse(
+    (response) =>
+      response.url().includes("/rpc/groups/setMemberModelPin") &&
+      response.request().method() === "POST",
+  );
+  await control.getByRole("button", { name: "Save model" }).click();
+  expect((await saved).ok()).toBe(true);
+  const group = await rpc<{
+    members: Array<{ botId: string; runtimePin: { modelId: string } | null }>;
+  }>(page, "groups/get", { groupId });
+  const modelId = group.members.find((member) => member.botId === first)?.runtimePin?.modelId;
+  expect(modelId).toBe(catalogChoice!.id);
+  await expect(
+    page.getByTestId(`group-participant-${first}`).getByLabel(`Using ${modelId}`),
+  ).toBeVisible();
+  await captureScreenshot(page, testInfo, "group-model-settings");
+  await page.getByRole("combobox", { name: "Message Choice room" }).fill("@Room first say ready");
+  await page.getByRole("button", { name: /Send/ }).last().click();
+  await expect
+    .poll(async () => {
+      const snapshot = await rpc<{
+        contextRun?: { botId: string; runtimePin?: { modelId: string } } | null;
+      }>(page, "threads/get", { groupId });
+      return snapshot.contextRun?.botId === first ? snapshot.contextRun.runtimePin?.modelId : null;
+    })
+    .toBe(modelId);
+  await expect(
+    page.getByTestId(`group-participant-${first}`).getByLabel(`Using ${modelId}`),
+  ).toBeVisible();
+});
 
 test("create group from + and see two bots in one transcript", async ({ page }, testInfo) => {
   const stamp = Date.now();

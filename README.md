@@ -22,7 +22,7 @@ Inherited from Rakazo and working:
 
 - Persistent bots with their own conversation, memory, routines and history
 - Group chats and delegation between bots, plus short-lived subagents
-- A provider, model and thinking level per bot
+- A provider, model and thinking level per bot, with a separate model and thinking choice for each bot in a group room
 <!-- site-facts:providers:start -->
 <!-- Generated from site/data/product.json by pnpm site:facts; edit that file. -->
 - Providers: OpenRouter, OpenAI Codex (ChatGPT account), Anthropic (API key),

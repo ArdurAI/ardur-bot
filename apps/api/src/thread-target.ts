@@ -21,6 +21,7 @@ import {
   RunTriggerSchema,
   RuntimeInfoSchema,
   RuntimePinSchema,
+  RuntimePinSourceSchema,
   type ThreadSnapshot,
 } from "@ardurbot/contracts";
 import { RunPlacementSchema } from "@ardurbot/contracts/fleet";
@@ -42,6 +43,7 @@ import {
   goalExhaustionReason,
   IsolationError,
   lockOwnedGroup,
+  mapGroupMembers,
   type Prisma,
   type PrismaClient,
   type ThreadEvents,
@@ -319,12 +321,7 @@ export async function resolveThreadTarget(
   if (input.groupId) {
     const group = await groupRepos.getGroupTarget(actor, input.groupId);
     if (!group.thread) throw new IsolationError();
-    const members = group.members.map((member) => ({
-      botId: member.bot.id,
-      name: member.bot.name,
-      color: member.bot.color,
-      status: member.bot.runs[0]?.status ?? "idle",
-    }));
+    const members = mapGroupMembers(group.members);
     return {
       kind: "group",
       groupId: group.id,
@@ -615,6 +612,7 @@ function mapRun(run: {
   modelProvider: string | null;
   modelId: string | null;
   runtimePin?: unknown;
+  runtimePinSource?: unknown;
   placement?: unknown;
   runtimeInfo?: unknown;
   contextSnapshot?: unknown;
@@ -636,6 +634,9 @@ function mapRun(run: {
     routingRule: RoutingRuleSchema.safeParse(run.routingRule).data ?? null,
     runtimeInfo: RuntimeInfoSchema.safeParse(run.runtimeInfo).data ?? null,
     runtimePin: RuntimePinSchema.safeParse(run.runtimePin).data ?? null,
+    ...(RuntimePinSourceSchema.safeParse(run.runtimePinSource).success
+      ? { runtimePinSource: RuntimePinSourceSchema.parse(run.runtimePinSource) }
+      : {}),
     ...(RunPlacementSchema.safeParse(run.placement).success
       ? { placement: RunPlacementSchema.parse(run.placement) }
       : {}),
