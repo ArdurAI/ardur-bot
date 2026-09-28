@@ -127,6 +127,14 @@
           }
         }
       }
+    },
+    {
+      "includes": ["packages/core/src/feature-docs-*.json"],
+      "json": {
+        "formatter": {
+          "expand": "always"
+        }
+      }
     }
   ]
 }
