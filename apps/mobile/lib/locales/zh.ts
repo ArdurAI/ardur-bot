@@ -99,6 +99,9 @@ export const ZH_MESSAGES: Record<string, string> = {
   "What should your bots call you?": "你的 Bot 应该如何称呼你？",
   "What best describes your work?": "哪一项最符合你的工作？",
   "Instructions for all bots": "所有 Bot 的指令",
+  "Save instructions": "保存指令",
+  "Sign-in and security": "登录与安全",
+  "Devices and sessions": "设备与会话",
   "Space ID": "空间 ID",
   "Log out of all devices": "退出所有设备",
   "This signs out every other session and keeps this one signed in.":

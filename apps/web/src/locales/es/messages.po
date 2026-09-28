@@ -386,7 +386,6 @@ msgid "Accessibility"
 msgstr ""
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
-#: src/pages/account/AccountSettings.tsx
 #: src/pages/settings-sections.ts
 msgid "Account"
 msgstr "Cuenta"
@@ -1264,6 +1263,10 @@ msgstr "Tableros"
 msgid "Booting"
 msgstr ""
 
+#: src/pages/Shell.tsx
+msgid "Booting live desktop…"
+msgstr "Iniciando escritorio en vivo…"
+
 #. placeholder {0}: computerBot?.name ?? active?.name
 #: src/pages/Shell.tsx
 msgid "Booting up {0}’s computer"
@@ -1901,6 +1904,7 @@ msgstr ""
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/TeamBoard.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Computer"
 msgstr "Computadora"
 
@@ -1916,6 +1920,10 @@ msgstr ""
 msgid "Computer engine is unavailable."
 msgstr ""
 
+#: src/pages/Shell.tsx
+msgid "Computer failed to boot"
+msgstr "La computadora no pudo iniciarse"
+
 #: src/pages/storage/StorageSettings.tsx
 msgid "Computer homes"
 msgstr ""
@@ -1923,6 +1931,10 @@ msgstr ""
 #: src/pages/Shell.tsx
 msgid "Computer is asleep"
 msgstr "La computadora está en reposo"
+
+#: src/pages/Shell.tsx
+msgid "Computer is asleep. Open it to wake."
+msgstr "La computadora está suspendida. Ábrala para despertar."
 
 #: src/pages/system/SystemPage.tsx
 msgid "Computer use"
@@ -3381,6 +3393,10 @@ msgstr ""
 msgid "Devices"
 msgstr ""
 
+#: src/pages/account/AccountSettings.tsx
+msgid "Devices and sessions"
+msgstr "Dispositivos y sesiones"
+
 #: src/pages/DevicesSettings.tsx
 msgid "Devices are unavailable; reconnect to your home."
 msgstr ""
@@ -3615,7 +3631,6 @@ msgid "Effort: not applicable"
 msgstr ""
 
 #: src/pages/Auth.tsx
-#: src/pages/settings-sections.ts
 msgid "Email"
 msgstr "Correo"
 
@@ -3665,6 +3680,14 @@ msgstr ""
 
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Enter a valid token."
+msgstr ""
+
+#: src/pages/shell/hermes-limits.tsx
+msgid "Enter a whole number between 1 and 600 for the time limit."
+msgstr ""
+
+#: src/pages/shell/hermes-limits.tsx
+msgid "Enter a whole number between 1 and 64 for model calls per turn."
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
@@ -3778,7 +3801,7 @@ msgstr "Expandir {0}"
 
 #: src/pages/Shell.tsx
 msgid "Expand workspace"
-msgstr ""
+msgstr "Expandir espacio de trabajo"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Experimental"
@@ -3890,7 +3913,7 @@ msgstr ""
 #: src/pages/workspace/WorkspaceFiles.tsx
 #: src/pages/workspace/WorkspacePane.tsx
 msgid "Files"
-msgstr ""
+msgstr "Archivos"
 
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Files are unavailable on this computer."
@@ -4844,7 +4867,7 @@ msgstr ""
 
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Loading tasks…"
-msgstr ""
+msgstr "Cargando tareas…"
 
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "Loading the extension catalogue…"
@@ -5795,7 +5818,7 @@ msgstr ""
 
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Nothing running or queued"
-msgstr ""
+msgstr "Nada en ejecución o en cola"
 
 #: src/pages/LearningInbox.tsx
 msgid "Nothing to review."
@@ -5970,7 +5993,7 @@ msgstr ""
 
 #: src/pages/workspace/WorkspaceScreen.tsx
 msgid "Open screen"
-msgstr ""
+msgstr "Abrir pantalla"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Open Screen recording settings"
@@ -5978,7 +6001,7 @@ msgstr ""
 
 #: src/pages/workspace/WorkspaceScreen.tsx
 msgid "Open screen to view this computer."
-msgstr ""
+msgstr "Abra la pantalla para ver esta computadora."
 
 #: src/components/composer/command-description.ts
 msgid "Open Settings"
@@ -6962,6 +6985,7 @@ msgstr "Reanudar mensajes del equipo"
 
 #: src/components/Context.tsx
 #: src/components/integrations/DirectMcpSearch.tsx
+#: src/pages/account/AccountProfile.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -7005,7 +7029,7 @@ msgstr "Volver a Ardur"
 
 #: src/pages/Shell.tsx
 msgid "Return to conversation"
-msgstr ""
+msgstr "Volver a la conversación"
 
 #: src/pages/GuidedOnboarding.tsx
 msgid "Return to setup"
@@ -7262,6 +7286,10 @@ msgstr "Guardar de todos modos"
 msgid "Save credentials"
 msgstr ""
 
+#: src/pages/account/AccountProfile.tsx
+msgid "Save instructions"
+msgstr "Guardar instrucciones"
+
 #: src/pages/group-model-control.tsx
 msgid "Save model"
 msgstr "Guardar modelo"
@@ -7303,6 +7331,10 @@ msgstr ""
 #: src/pages/ScratchpadSection.tsx
 msgid "Saved, but list refresh failed"
 msgstr "Guardado, pero falló la actualización de la lista"
+
+#: src/pages/account/AccountProfile.tsx
+msgid "Saved, but not applied everywhere."
+msgstr "Guardado, pero no se aplicó en todas partes."
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Saved."
@@ -7346,7 +7378,7 @@ msgstr ""
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/workspace/WorkspacePane.tsx
 msgid "Screen"
-msgstr ""
+msgstr "Pantalla"
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Screen and terminal: Not available on this computer"
@@ -7695,6 +7727,10 @@ msgstr ""
 #: src/pages/Welcome.tsx
 msgid "Sign up"
 msgstr "Registrarse"
+
+#: src/pages/account/AccountSettings.tsx
+msgid "Sign-in and security"
+msgstr "Inicio de sesión y seguridad"
 
 #: src/lib/mcp-sign-in.ts
 msgid "Sign-in did not finish. Try again."
@@ -8073,9 +8109,10 @@ msgid "System"
 msgstr "Sistema"
 
 #: src/pages/ide/terminal.tsx
+#: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 msgid "Take control"
-msgstr ""
+msgstr "Tomar el control"
 
 #: src/pages/ide/terminal.tsx
 #: src/pages/shell/computer-terminal.tsx
@@ -8098,7 +8135,7 @@ msgstr ""
 #: src/pages/Shell.tsx
 #: src/pages/workspace/WorkspacePane.tsx
 msgid "Tasks"
-msgstr ""
+msgstr "Tareas"
 
 #: src/pages/customize/SkillsPage.tsx
 msgid "Taught skills"
@@ -9008,11 +9045,14 @@ msgstr "En curso"
 msgid "Working from the last copy"
 msgstr ""
 
-#. placeholder {0}: row.currentTaskTitle ?? row.sentence
-#. placeholder {1}: row.requesterName
 #: src/pages/TeamBoard.tsx
-msgid "Working on {0} for {1}"
-msgstr ""
+msgid "Working on {task}"
+msgstr "Trabajando en {task}"
+
+#. placeholder {0}: row.requesterName
+#: src/pages/TeamBoard.tsx
+msgid "Working on {task} for {0}"
+msgstr "Trabajando en {task} para {0}"
 
 #: src/pages/Auth.tsx
 #: src/pages/CallView.tsx
@@ -9023,7 +9063,7 @@ msgstr "Trabajando…"
 #: src/components/integrations/manage/IntegrationDetails.tsx
 #: src/pages/Shell.tsx
 msgid "Workspace"
-msgstr ""
+msgstr "Espacio de trabajo"
 
 #: src/pages/ChannelPairingSettings.tsx
 msgid "Workspace or server ID"

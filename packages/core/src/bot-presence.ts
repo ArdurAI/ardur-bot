@@ -67,7 +67,6 @@ export function projectBotPresence(input: {
   taskTitle?: string;
   activityAt?: Date;
   maintenanceActive?: boolean;
-  pendingApprovalRunIds: ReadonlySet<string>;
   pendingPeerCount: number;
   latestDelivery?: {
     id: string;
@@ -96,17 +95,7 @@ export function projectBotPresence(input: {
       ["leased", "running"].includes(run.status) &&
       (!run.leaseExpiresAt || run.leaseExpiresAt <= observedAt),
   );
-  const waiting = input.runs.some(
-    (run) =>
-      (run.status === "waiting_input" && input.pendingApprovalRunIds.has(run.id)) ||
-      (run.status === "waiting_takeover" &&
-        bot.computer?.controlHolder === "user" &&
-        bot.computer.controlRunId === run.id &&
-        Boolean(
-          bot.computer.controlLeaseExpiresAt && bot.computer.controlLeaseExpiresAt > observedAt,
-        )),
-  );
-  const blocked = input.runs.some((run) =>
+  const waiting = input.runs.some((run) =>
     ["waiting_input", "waiting_takeover"].includes(run.status),
   );
   const queued = input.runs.some((run) => run.status === "queued");
@@ -116,13 +105,11 @@ export function projectBotPresence(input: {
       ? "busy"
       : waiting
         ? "waiting-owner"
-        : blocked
-          ? "unavailable"
-          : queued
-            ? "queued"
-            : ["failed", "error"].includes(bot.computer?.state ?? "")
-              ? "unavailable"
-              : "idle";
+        : queued
+          ? "queued"
+          : ["failed", "error"].includes(bot.computer?.state ?? "")
+            ? "unavailable"
+            : "idle";
   const selectedRun = live[0] ?? input.runs.find((run) => run.status === "queued");
   const selectedCard = input.cards.find(
     (card) => card.id === selectedRun?.delegationId && ["running", "queued"].includes(card.status),

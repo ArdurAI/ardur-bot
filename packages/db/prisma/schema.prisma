@@ -590,6 +590,7 @@ model Message {
   @@unique([threadId, seq])
   @@unique([threadId, clientNonce])
   @@index([threadId, seq])
+  @@index([botId, role, createdAt(sort: Desc)])
   @@index([replyToMessageId])
   @@map("messages")
 }

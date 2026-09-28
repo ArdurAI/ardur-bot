@@ -22,7 +22,8 @@ export interface ApprovedEffectReplayQueue {
 export function createApprovedEffectReplayQueue(
   effects: readonly ApprovedEffectReplay[],
 ): ApprovedEffectReplayQueue {
-  const pending = [...effects];
+  // An approved peer hold releases a held bot message; it is not a tool call to replay.
+  const pending = effects.filter((effect) => effect.kind !== "peer_hold");
 
   return {
     nextToolName() {

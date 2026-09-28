@@ -1,6 +1,7 @@
 import type { BotAvailability, BotPresence } from "@ardurbot/contracts";
 import { projectBotPresence } from "@ardurbot/core";
 import type { PrismaClient } from "./client.js";
+import { Prisma } from "./generated/prisma/client.js";
 
 export async function loadBotPresence(
   prisma: PrismaClient,
@@ -159,12 +160,27 @@ export async function loadBotPresence(
       where: { ...scope, botId: { in: botIds }, leaseExpiresAt: { gt: observedAt } },
       select: { botId: true },
     }),
-    prisma.message.findMany({
-      where: { botId: { in: botIds }, thread: scope, role: "bot" },
-      distinct: ["botId"],
-      orderBy: { createdAt: "desc" },
-      select: { botId: true, createdAt: true },
-    }),
+    prisma.$queryRaw<{ botId: string; createdAt: Date }[]>`
+      SELECT scoped.id AS "botId", latest."createdAt"
+      FROM "bots" scoped
+      JOIN LATERAL (
+        SELECT message."createdAt"
+        FROM "messages" message
+        WHERE message."botId" = scoped.id
+          AND message.role = 'bot'
+          AND EXISTS (
+            SELECT 1 FROM "threads" thread
+            WHERE thread.id = message."threadId"
+              AND thread."spaceId" = ${scope.spaceId}
+              AND thread."userId" = ${scope.userId}
+          )
+        ORDER BY message."createdAt" DESC
+        LIMIT 1
+      ) latest ON true
+      WHERE scoped.id IN (${Prisma.join(botIds)})
+        AND scoped."spaceId" = ${scope.spaceId}
+        AND scoped."userId" = ${scope.userId}
+    `,
     prisma.connection.findMany({
       where: {
         ...scope,
@@ -174,14 +190,6 @@ export async function loadBotPresence(
       select: { id: true, displayName: true },
     }),
   ]);
-  const runIds = activeRuns.map((run) => run.id);
-  const pendingApprovals = runIds.length
-    ? await prisma.externalEffect.findMany({
-        where: { spaceId: scope.spaceId, runId: { in: runIds }, status: "intended" },
-        select: { runId: true },
-      })
-    : [];
-  const approvalIds = new Set(pendingApprovals.map((row) => row.runId));
   const goals = await prisma.teamGoal.findMany({
     where: { ...scope, id: { in: activeRuns.flatMap((run) => run.goalId ?? []) } },
     select: { id: true, objective: true, groupId: true },
@@ -233,7 +241,6 @@ export async function loadBotPresence(
       taskTitle: tasks.find((task) => task.id === taskRun?.taskId)?.prompt,
       activityAt: activity.find((row) => row.botId === bot.id)?.createdAt,
       maintenanceActive: maintenance.some((row) => row.botId === bot.id),
-      pendingApprovalRunIds: approvalIds,
       pendingPeerCount: pendingCounts.find((row) => row.recipientBotId === bot.id)?._count.id ?? 0,
       ...(latestDelivery ? { latestDelivery } : {}),
       computerDisplayName: connections.find((row) => row.id === bot.computer?.connectionId)

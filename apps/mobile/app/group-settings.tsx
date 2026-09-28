@@ -243,6 +243,11 @@ export default function GroupSettingsScreen() {
                 botRuntimeKind={bot?.runtimeKind}
                 experimental={bot?.runtimeExperimental}
                 onSaved={onGroupSaved}
+                onBotReloaded={(refreshed) =>
+                  setBots((current) =>
+                    current.map((item) => (item.id === refreshed.id ? refreshed : item)),
+                  )
+                }
                 onError={setError}
               />
             );

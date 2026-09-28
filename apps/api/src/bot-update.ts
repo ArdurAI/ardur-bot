@@ -1,7 +1,49 @@
+import type { HermesRuntimeConfigV2Draft } from "@ardurbot/contracts/runtime-config";
+import {
+  canonicalRuntimeJson,
+  effectiveHermesRuntimeConfigV2,
+  normalizeHermesRuntimeConfig,
+} from "@ardurbot/core/runtime-config";
 import { appendEventInTransaction, type Prisma, type PrismaClient } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
+import { ORPCError } from "@orpc/server";
 
 type AppendEvent = typeof appendEventInTransaction;
+
+/** Decide whether an editor save changes execution, before the fenced row update. */
+export function prepareRuntimeConfigSave(
+  existing: { runtimeKind?: string; runtimeConfig?: unknown; modelPinRevision: number },
+  input: {
+    runtimeKind?: string;
+    runtimeConfig?: HermesRuntimeConfigV2Draft | null;
+    expectedModelPinRevision?: number;
+  },
+  pinChanged: boolean,
+) {
+  if (input.runtimeConfig !== undefined && (input.runtimeKind ?? existing.runtimeKind) !== "hermes")
+    throw new ORPCError("BAD_REQUEST", { message: "Hermes settings require the Hermes runtime." });
+  const runtimeConfig =
+    input.runtimeConfig == null ? null : normalizeHermesRuntimeConfig(input.runtimeConfig);
+  const configChanged =
+    input.runtimeConfig !== undefined &&
+    canonicalRuntimeJson(effectiveHermesRuntimeConfigV2(existing.runtimeConfig)) !==
+      canonicalRuntimeJson(effectiveHermesRuntimeConfigV2(runtimeConfig));
+  const executionChanged = pinChanged || configChanged;
+  if (executionChanged) {
+    if (input.expectedModelPinRevision === undefined)
+      throw new ORPCError("BAD_REQUEST", { message: "Reload bot settings before saving." });
+    if (input.expectedModelPinRevision !== existing.modelPinRevision)
+      throw new ORPCError("CONFLICT", { message: "Bot settings changed. Reload before saving." });
+    if (existing.modelPinRevision >= 2_147_483_647)
+      throw new ORPCError("CONFLICT", { message: "Bot settings revision cannot advance." });
+  }
+  return {
+    configChanged,
+    runtimeConfig,
+    incrementRevision: configChanged && !pinChanged,
+    expectedModelPinRevision: executionChanged ? existing.modelPinRevision : undefined,
+  };
+}
 
 /**
  * Persist a bot row. When profile labels change, write `bot.updated` in the same
@@ -21,49 +63,58 @@ export async function commitBotUpdate(
   },
   appendEvent: AppendEvent = appendEventInTransaction,
 ): Promise<{ id: string; name: string; title: string; description: string }> {
-  if (!options.emitBotUpdated) {
-    return options.prisma.bot.update({
-      where: {
-        id: options.botId,
-        ...(options.expectedModelPinRevision === undefined
-          ? {}
-          : { modelPinRevision: options.expectedModelPinRevision }),
-      },
-      data: options.data,
-      select: { id: true, name: true, title: true, description: true },
+  try {
+    if (!options.emitBotUpdated) {
+      return await options.prisma.bot.update({
+        where: {
+          id: options.botId,
+          ...(options.expectedModelPinRevision === undefined
+            ? {}
+            : { modelPinRevision: options.expectedModelPinRevision }),
+        },
+        data: options.data,
+        select: { id: true, name: true, title: true, description: true },
+      });
+    }
+
+    const committed = await options.prisma.$transaction(async (tx) => {
+      const updated = await tx.bot.update({
+        where: {
+          id: options.botId,
+          ...(options.expectedModelPinRevision === undefined
+            ? {}
+            : { modelPinRevision: options.expectedModelPinRevision }),
+        },
+        data: options.data,
+        select: { id: true, name: true, title: true, description: true },
+      });
+      const event = await appendEvent(tx, {
+        spaceId: options.spaceId,
+        threadId: options.threadId,
+        botId: options.botId,
+        type: "bot.updated",
+        payload: {
+          botId: updated.id,
+          name: updated.name,
+          title: updated.title,
+          description: updated.description,
+        },
+      });
+      return { updated, seq: event.seq };
     });
+
+    await options.notify(options.threadId, committed.seq).catch((error) => {
+      getLogger().error("bot.updated realtime notification", error);
+    });
+    return committed.updated;
+  } catch (error: any) {
+    if (error?.code === "P2025" && options.expectedModelPinRevision !== undefined) {
+      throw new ORPCError("CONFLICT", {
+        message: "The bot's configuration was updated by another session.",
+      });
+    }
+    throw error;
   }
-
-  const committed = await options.prisma.$transaction(async (tx) => {
-    const updated = await tx.bot.update({
-      where: {
-        id: options.botId,
-        ...(options.expectedModelPinRevision === undefined
-          ? {}
-          : { modelPinRevision: options.expectedModelPinRevision }),
-      },
-      data: options.data,
-      select: { id: true, name: true, title: true, description: true },
-    });
-    const event = await appendEvent(tx, {
-      spaceId: options.spaceId,
-      threadId: options.threadId,
-      botId: options.botId,
-      type: "bot.updated",
-      payload: {
-        botId: updated.id,
-        name: updated.name,
-        title: updated.title,
-        description: updated.description,
-      },
-    });
-    return { updated, seq: event.seq };
-  });
-
-  await options.notify(options.threadId, committed.seq).catch((error) => {
-    getLogger().error("bot.updated realtime notification", error);
-  });
-  return committed.updated;
 }
 
 export function botProfileLabelsChanged(input: {

@@ -21,6 +21,14 @@ vi.mock("../lib/use-model-oauth-signin", () => ({
   useModelOAuthSignIn: (options: { onPersistenceChange?: (pending: boolean) => void }) => {
     api.persistenceChange = options.onPersistenceChange ?? null;
     return {
+      Select: (p: any) => <div {...p} />,
+      SelectTrigger: (p: any) => <div {...p} />,
+      SelectValue: (p: any) => <div {...p} />,
+      SelectContent: (p: any) => <div {...p} />,
+      SelectItem: (p: any) => <div {...p} />,
+      SelectGroup: (p: any) => <div {...p} />,
+      SelectLabel: (p: any) => <div {...p} />,
+      SelectSeparator: (p: any) => <div {...p} />,
       oauth: null,
       pasteCode: "",
       setPasteCode: vi.fn(),
@@ -46,6 +54,14 @@ vi.mock("@lingui/react/macro", () => ({
 vi.mock("@ardurbot/ui-web", () => {
   const Container = ({ children }: { children?: ReactNode }) => <div>{children}</div>;
   return {
+    Select: (p: any) => <div {...p} />,
+    SelectTrigger: (p: any) => <div {...p} />,
+    SelectValue: (p: any) => <div {...p} />,
+    SelectContent: (p: any) => <div {...p} />,
+    SelectItem: (p: any) => <div {...p} />,
+    SelectGroup: (p: any) => <div {...p} />,
+    SelectLabel: (p: any) => <div {...p} />,
+    SelectSeparator: (p: any) => <div {...p} />,
     Button: ({
       variant: _variant,
       size: _size,

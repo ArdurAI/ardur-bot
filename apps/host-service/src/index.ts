@@ -78,6 +78,7 @@ async function connect() {
     current.once("upgrade", (response) => {
       const header = response.headers[HOST_HEALTH_ACCEPT_HEADER];
       acceptedHealth = typeof header === "string" ? header : undefined;
+      host.setAcceptedHealth(acceptedHealth);
     });
     let authenticatedAt = Date.now();
     let healthBusy = false;

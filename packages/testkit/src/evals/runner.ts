@@ -125,7 +125,7 @@ export async function runTrial(
           provider,
           displayName: provider,
         });
-      const bot = await rpc<{ id: string }>(app, cookie, "bots/create", {
+      const bot = await rpc<{ id: string; modelPinRevision?: number }>(app, cookie, "bots/create", {
         name: "Assistant",
         title: "",
         description: "",
@@ -140,6 +140,7 @@ export async function runTrial(
       actors.push({ botId, cookie, ...persistedBot });
       await rpc(app, cookie, "bots/update", {
         botId,
+        expectedModelPinRevision: bot.modelPinRevision ?? 0,
         modelProvider: options.connection.provider,
         modelId: options.connection.modelId,
       });

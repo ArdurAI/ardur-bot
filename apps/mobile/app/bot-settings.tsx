@@ -1,22 +1,18 @@
-import type {
-  ComputerMode,
-  HermesRuntimeConfig,
-  RuntimeKind,
-  ThinkingLevel,
-} from "@ardurbot/contracts";
+import type { ComputerMode, RuntimeKind, ThinkingLevel } from "@ardurbot/contracts";
 import {
   BOT_COLORS,
   BOT_DESCRIPTION_MAX_LENGTH,
   BOT_NAME_MAX_LENGTH,
   BOT_TITLE_MAX_LENGTH,
-  HERMES_RUNTIME_DEFAULTS,
   normalizeCreateBotProfile,
 } from "@ardurbot/contracts";
+import type { HermesRuntimeConfigV2 } from "@ardurbot/contracts/runtime-config";
 import {
   modelPinOptionKey as modelOptionKey,
   parseModelPinOptionKey as parseModelOptionKey,
   spaceDefaultEffort,
 } from "@ardurbot/core";
+import { effectiveHermesRuntimeConfigV2 } from "@ardurbot/core/runtime-config";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
@@ -64,7 +60,9 @@ export default function BotSettingsScreen() {
   const [advancedOpen, setAdvancedOpen] = useState(focus === "model");
   const [runtimeExperimental, setRuntimeExperimental] = useState(false);
   const [runtimeKind, setRuntimeKind] = useState<RuntimeKind>("pi");
-  const [runtimeConfig, setRuntimeConfig] = useState<HermesRuntimeConfig>(HERMES_RUNTIME_DEFAULTS);
+  const [runtimeConfig, setRuntimeConfig] = useState<HermesRuntimeConfigV2>(() =>
+    effectiveHermesRuntimeConfigV2(null),
+  );
   const [modelKey, setModelKey] = useState("");
   const [thinkingLevel, setThinkingLevel] = useState("");
   const [credentials, setCredentials] = useState<MobileModelCredential[]>([]);
@@ -94,7 +92,7 @@ export default function BotSettingsScreen() {
       .then((next) => {
         setBot(next);
         setRuntimeKind(next.runtimeKind ?? "pi");
-        setRuntimeConfig(next.runtimeConfig ?? HERMES_RUNTIME_DEFAULTS);
+        setRuntimeConfig(effectiveHermesRuntimeConfigV2(next.runtimeConfig));
         if (next.runtimeKind === "hermes") setAdvancedOpen(true);
         setRuntimeExperimental(next.runtimeExperimental ?? false);
         setName(next.name);
@@ -302,7 +300,8 @@ export default function BotSettingsScreen() {
         modelId?: string | null;
         modelCredentialId?: string | null;
         runtimeKind?: RuntimeKind;
-        runtimeConfig?: HermesRuntimeConfig;
+        runtimeConfig?: HermesRuntimeConfigV2;
+        expectedModelPinRevision?: number;
         runtimeExperimental?: boolean;
         thinkingLevel?: ThinkingLevel | null;
       } = { botId };
@@ -340,6 +339,7 @@ export default function BotSettingsScreen() {
       }
       // Use key presence so clearing title/description to "" still persists.
       if (Object.keys(input).length > 1) {
+        input.expectedModelPinRevision = bot.modelPinRevision ?? 0;
         await rpc("bots/update", input);
       }
       router.back();
@@ -380,7 +380,7 @@ export default function BotSettingsScreen() {
         {botId ? <ContextSection botId={botId} /> : null}
         {bot ? (
           <View style={{ alignItems: "center", marginBottom: 24 }}>
-            <BotAvatar color={color} identity={bot.id} size={64} status={bot.status} />
+            <BotAvatar color={color} identity={bot.id} label={name} size={64} status={bot.status} />
           </View>
         ) : null}
         <Text style={{ color: tokens.mutedForeground, fontSize: 14 }}>{t("Name")}</Text>
@@ -496,11 +496,11 @@ export default function BotSettingsScreen() {
               <TextInput
                 accessibilityLabel={t("Model calls per turn")}
                 keyboardType="number-pad"
-                value={String(runtimeConfig.maxProviderRequests)}
+                value={String(runtimeConfig.limits.maxProviderRequests)}
                 onChangeText={(value) =>
                   setRuntimeConfig((current) => ({
                     ...current,
-                    maxProviderRequests: Number(value),
+                    limits: { ...current.limits, maxProviderRequests: Number(value) },
                   }))
                 }
                 style={{
@@ -517,9 +517,12 @@ export default function BotSettingsScreen() {
               <TextInput
                 accessibilityLabel={t("Time limit")}
                 keyboardType="number-pad"
-                value={String(runtimeConfig.timeoutMs / 1_000)}
+                value={String(runtimeConfig.limits.timeoutMs / 1_000)}
                 onChangeText={(value) =>
-                  setRuntimeConfig((current) => ({ ...current, timeoutMs: Number(value) * 1_000 }))
+                  setRuntimeConfig((current) => ({
+                    ...current,
+                    limits: { ...current.limits, timeoutMs: Number(value) * 1_000 },
+                  }))
                 }
                 style={{
                   color: tokens.foreground,

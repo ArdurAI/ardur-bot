@@ -386,7 +386,6 @@ msgid "Accessibility"
 msgstr ""
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
-#: src/pages/account/AccountSettings.tsx
 #: src/pages/settings-sections.ts
 msgid "Account"
 msgstr "खाता"
@@ -1264,6 +1263,10 @@ msgstr "बोर्ड"
 msgid "Booting"
 msgstr ""
 
+#: src/pages/Shell.tsx
+msgid "Booting live desktop…"
+msgstr "लाइव डेस्कटॉप बूट हो रहा है…"
+
 #. placeholder {0}: computerBot?.name ?? active?.name
 #: src/pages/Shell.tsx
 msgid "Booting up {0}’s computer"
@@ -1901,6 +1904,7 @@ msgstr ""
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/TeamBoard.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Computer"
 msgstr "कंप्यूटर"
 
@@ -1916,6 +1920,10 @@ msgstr ""
 msgid "Computer engine is unavailable."
 msgstr ""
 
+#: src/pages/Shell.tsx
+msgid "Computer failed to boot"
+msgstr "कंप्यूटर बूट होने में विफल रहा"
+
 #: src/pages/storage/StorageSettings.tsx
 msgid "Computer homes"
 msgstr ""
@@ -1923,6 +1931,10 @@ msgstr ""
 #: src/pages/Shell.tsx
 msgid "Computer is asleep"
 msgstr "कंप्यूटर निष्क्रिय है"
+
+#: src/pages/Shell.tsx
+msgid "Computer is asleep. Open it to wake."
+msgstr "कंप्यूटर स्लीप मोड में है। जगाने के लिए इसे खोलें।"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Computer use"
@@ -3381,6 +3393,10 @@ msgstr ""
 msgid "Devices"
 msgstr ""
 
+#: src/pages/account/AccountSettings.tsx
+msgid "Devices and sessions"
+msgstr "डिवाइस और सेशन"
+
 #: src/pages/DevicesSettings.tsx
 msgid "Devices are unavailable; reconnect to your home."
 msgstr ""
@@ -3615,7 +3631,6 @@ msgid "Effort: not applicable"
 msgstr ""
 
 #: src/pages/Auth.tsx
-#: src/pages/settings-sections.ts
 msgid "Email"
 msgstr "ईमेल"
 
@@ -3665,6 +3680,14 @@ msgstr ""
 
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Enter a valid token."
+msgstr ""
+
+#: src/pages/shell/hermes-limits.tsx
+msgid "Enter a whole number between 1 and 600 for the time limit."
+msgstr ""
+
+#: src/pages/shell/hermes-limits.tsx
+msgid "Enter a whole number between 1 and 64 for model calls per turn."
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
@@ -3778,7 +3801,7 @@ msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Expand workspace"
-msgstr ""
+msgstr "कार्यक्षेत्र का विस्तार करें"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Experimental"
@@ -3890,7 +3913,7 @@ msgstr ""
 #: src/pages/workspace/WorkspaceFiles.tsx
 #: src/pages/workspace/WorkspacePane.tsx
 msgid "Files"
-msgstr ""
+msgstr "फ़ाइलें"
 
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Files are unavailable on this computer."
@@ -4844,7 +4867,7 @@ msgstr ""
 
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Loading tasks…"
-msgstr ""
+msgstr "कार्य लोड हो रहे हैं…"
 
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "Loading the extension catalogue…"
@@ -5795,7 +5818,7 @@ msgstr ""
 
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Nothing running or queued"
-msgstr ""
+msgstr "कुछ भी चल नहीं रहा है या कतार में नहीं है"
 
 #: src/pages/LearningInbox.tsx
 msgid "Nothing to review."
@@ -5970,7 +5993,7 @@ msgstr ""
 
 #: src/pages/workspace/WorkspaceScreen.tsx
 msgid "Open screen"
-msgstr ""
+msgstr "स्क्रीन खोलें"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Open Screen recording settings"
@@ -5978,7 +6001,7 @@ msgstr ""
 
 #: src/pages/workspace/WorkspaceScreen.tsx
 msgid "Open screen to view this computer."
-msgstr ""
+msgstr "इस कंप्यूटर को देखने के लिए स्क्रीन खोलें।"
 
 #: src/components/composer/command-description.ts
 msgid "Open Settings"
@@ -6962,6 +6985,7 @@ msgstr "टीम संदेश फिर शुरू करें"
 
 #: src/components/Context.tsx
 #: src/components/integrations/DirectMcpSearch.tsx
+#: src/pages/account/AccountProfile.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -7005,7 +7029,7 @@ msgstr "Ardur पर लौटें"
 
 #: src/pages/Shell.tsx
 msgid "Return to conversation"
-msgstr ""
+msgstr "बातचीत पर लौटें"
 
 #: src/pages/GuidedOnboarding.tsx
 msgid "Return to setup"
@@ -7262,6 +7286,10 @@ msgstr "फिर भी सहेजें"
 msgid "Save credentials"
 msgstr ""
 
+#: src/pages/account/AccountProfile.tsx
+msgid "Save instructions"
+msgstr "निर्देश सहेजें"
+
 #: src/pages/group-model-control.tsx
 msgid "Save model"
 msgstr "मॉडल सहेजें"
@@ -7303,6 +7331,10 @@ msgstr ""
 #: src/pages/ScratchpadSection.tsx
 msgid "Saved, but list refresh failed"
 msgstr "सहेजा गया, लेकिन सूची रिफ़्रेश विफल रही"
+
+#: src/pages/account/AccountProfile.tsx
+msgid "Saved, but not applied everywhere."
+msgstr "सहेजा गया, लेकिन हर जगह लागू नहीं हुआ।"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Saved."
@@ -7346,7 +7378,7 @@ msgstr ""
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/workspace/WorkspacePane.tsx
 msgid "Screen"
-msgstr ""
+msgstr "स्क्रीन"
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Screen and terminal: Not available on this computer"
@@ -7695,6 +7727,10 @@ msgstr ""
 #: src/pages/Welcome.tsx
 msgid "Sign up"
 msgstr "साइन अप करें"
+
+#: src/pages/account/AccountSettings.tsx
+msgid "Sign-in and security"
+msgstr "साइन-इन और सुरक्षा"
 
 #: src/lib/mcp-sign-in.ts
 msgid "Sign-in did not finish. Try again."
@@ -8073,9 +8109,10 @@ msgid "System"
 msgstr "सिस्टम"
 
 #: src/pages/ide/terminal.tsx
+#: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 msgid "Take control"
-msgstr ""
+msgstr "नियंत्रण लें"
 
 #: src/pages/ide/terminal.tsx
 #: src/pages/shell/computer-terminal.tsx
@@ -8098,7 +8135,7 @@ msgstr ""
 #: src/pages/Shell.tsx
 #: src/pages/workspace/WorkspacePane.tsx
 msgid "Tasks"
-msgstr ""
+msgstr "कार्य"
 
 #: src/pages/customize/SkillsPage.tsx
 msgid "Taught skills"
@@ -9008,11 +9045,14 @@ msgstr "काम जारी है"
 msgid "Working from the last copy"
 msgstr ""
 
-#. placeholder {0}: row.currentTaskTitle ?? row.sentence
-#. placeholder {1}: row.requesterName
 #: src/pages/TeamBoard.tsx
-msgid "Working on {0} for {1}"
-msgstr ""
+msgid "Working on {task}"
+msgstr "{task} पर काम कर रहा है"
+
+#. placeholder {0}: row.requesterName
+#: src/pages/TeamBoard.tsx
+msgid "Working on {task} for {0}"
+msgstr "{0} के लिए {task} पर काम कर रहा है"
 
 #: src/pages/Auth.tsx
 #: src/pages/CallView.tsx
@@ -9023,7 +9063,7 @@ msgstr "काम चल रहा है…"
 #: src/components/integrations/manage/IntegrationDetails.tsx
 #: src/pages/Shell.tsx
 msgid "Workspace"
-msgstr ""
+msgstr "कार्यक्षेत्र"
 
 #: src/pages/ChannelPairingSettings.tsx
 msgid "Workspace or server ID"

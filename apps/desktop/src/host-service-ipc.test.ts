@@ -9,8 +9,10 @@ const fake = vi.hoisted(() => ({
   handlers: new Map<string, (event: unknown, value?: unknown) => Promise<unknown>>(),
   read: vi.fn(),
   write: vi.fn(),
+  clear: vi.fn(),
   start: vi.fn(),
   stop: vi.fn(),
+  storageAvailable: true,
   keepRunning: true,
   saveLifecycle: vi.fn(),
   picker: vi.fn(),
@@ -38,6 +40,7 @@ vi.mock("./host-service.js", () => ({
   HostServiceStore: class {
     read = fake.read;
     write = fake.write;
+    clear = fake.clear;
   },
   HostServiceSupervisor: class {
     start = fake.start;
@@ -45,7 +48,7 @@ vi.mock("./host-service.js", () => ({
   },
   hostServiceLaunch: vi.fn(),
   hostServiceIdentity: vi.fn(() => "fixture-registration"),
-  hostStorageAvailable: vi.fn(),
+  hostStorageAvailable: vi.fn(() => fake.storageAvailable),
   selectedHostRoot: async (path: string) => path,
 }));
 vi.mock("./tray.js", () => ({ updateHostTray: vi.fn() }));
@@ -61,6 +64,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   fake.handlers.clear();
   fake.keepRunning = true;
+  fake.storageAvailable = true;
   vi.spyOn(console, "error").mockImplementation(() => {});
   fake.read.mockResolvedValue({ apiUrl: "https://example.test", hostRoots: [] });
 });
@@ -72,17 +76,96 @@ function fixture(
   target = "https://example.test",
   folders = new LocalFolders("/fixture/unused/local-folders.json"),
 ) {
+  let currentTarget = target;
   const frame = { url: `${target}/app` };
   const window = { webContents: { mainFrame: frame } } as unknown as BrowserWindow;
   const service = installHostService({
     window: () => window,
-    target: () => target,
+    target: () => currentTarget,
     tray: () => null,
     local: { owns: (url) => new URL(url).origin === LOCAL_ORIGIN, folders },
   });
   const event = { sender: window.webContents, senderFrame: frame } as unknown as IpcMainInvokeEvent;
-  return { event, service, add: fake.handlers.get("desktop.host.addRoot")! };
+  return {
+    event,
+    service,
+    changeTarget: (next: string) => {
+      currentTarget = next;
+    },
+    add: fake.handlers.get("desktop.host.addRoot")!,
+  };
 }
+
+describe("saved host pairing activation", () => {
+  it("restores a pairing after the matching window becomes active", async () => {
+    const f = fixture();
+    await f.service.activate("https://example.test");
+    expect(fake.start).toHaveBeenCalledExactlyOnceWith({
+      apiUrl: "https://example.test",
+      hostRoots: [],
+    });
+  });
+
+  it("does not start an unpaired target", async () => {
+    fake.read.mockResolvedValue(null);
+    await fixture().service.activate("https://example.test");
+    expect(fake.start).not.toHaveBeenCalled();
+    expect(fake.stop).toHaveBeenCalledOnce();
+  });
+
+  it("does not start a pairing for another target", async () => {
+    fake.read.mockResolvedValue({ apiUrl: "https://other.test", hostRoots: [] });
+    await fixture().service.activate("https://example.test");
+    expect(fake.start).not.toHaveBeenCalled();
+    expect(fake.stop).toHaveBeenCalledOnce();
+  });
+
+  it("does not start a pairing owned by local mode", async () => {
+    fake.read.mockResolvedValue({ apiUrl: LOCAL_ORIGIN, hostRoots: [] });
+    await fixture(LOCAL_ORIGIN).service.activate(LOCAL_ORIGIN);
+    expect(fake.read).not.toHaveBeenCalled();
+    expect(fake.start).not.toHaveBeenCalled();
+  });
+
+  it("does not read or start a pairing without secure storage", async () => {
+    fake.storageAvailable = false;
+    await fixture().service.activate("https://example.test");
+    expect(fake.read).not.toHaveBeenCalled();
+    expect(fake.start).not.toHaveBeenCalled();
+  });
+
+  it("stops when the active target changes while the pairing is read", async () => {
+    let finishRead!: (value: unknown) => void;
+    fake.read.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishRead = resolve;
+        }),
+    );
+    const f = fixture();
+    const activation = f.service.activate("https://example.test");
+    await vi.waitFor(() => expect(fake.read).toHaveBeenCalledOnce());
+    f.changeTarget("https://other.test");
+    finishRead({ apiUrl: "https://example.test", hostRoots: [] });
+    await activation;
+    expect(fake.start).not.toHaveBeenCalled();
+    expect(fake.stop).toHaveBeenCalledOnce();
+  });
+
+  it("rejects an insecure non-loopback target and stops after clear", async () => {
+    const insecure = fixture("http://example.test");
+    await insecure.service.activate("http://example.test");
+    expect(fake.read).not.toHaveBeenCalled();
+    expect(fake.start).not.toHaveBeenCalled();
+
+    const paired = fixture();
+    await paired.service.activate("https://example.test");
+    await fake.handlers.get("desktop.host.clear")!(paired.event);
+    expect(fake.start).toHaveBeenCalledOnce();
+    expect(fake.stop).toHaveBeenCalledTimes(2);
+    expect(fake.clear).toHaveBeenCalledOnce();
+  });
+});
 describe("host folder selection", () => {
   it("returns and registers only the folder selected in the native dialog", async () => {
     const f = fixture();
