@@ -273,6 +273,7 @@ import { wakeGoalAfterDelegation } from "./goal-wake.js";
 import { handoffToGroupBot, loadGroupContext } from "./group-handoff.js";
 import { captureRunModelPin, selectRunPinSource } from "./group-model-pin.js";
 import {
+  brokerObservedRuntimeInfo,
   effectiveHermesConfig,
   hermesCompatibility,
   hermesConfigHash,
@@ -1187,12 +1188,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           );
         },
         observed: async (model, wireEffort) =>
-          request.onBrokerRuntimeInfo?.({
-            ...(model ? { reportedModel: model } : {}),
-            requestedEffort: pin.effort!,
-            wireEffort,
-            effortMappingVersion: "broker-chat-completions-v1",
-          }),
+          request.onBrokerRuntimeInfo?.(brokerObservedRuntimeInfo(pin.effort, model, wireEffort)),
         requiredContext: hermesContextDocument(request),
       });
       return { broker, scope };

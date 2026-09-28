@@ -20,6 +20,20 @@ export function hermesConfigHash(config: HermesRuntimeConfig): string {
     .digest("hex");
 }
 
+/** Provider wire observations are requests, not attested provider behavior. */
+export function brokerObservedRuntimeInfo(
+  effort: string | null,
+  reportedModel?: string,
+  wireEffort?: string,
+) {
+  return {
+    ...(reportedModel ? { reportedModel } : {}),
+    requestedEffort: normalizedThinkingLevel(effort),
+    ...(wireEffort ? { wireEffort } : {}),
+    effortMappingVersion: "broker-chat-completions-v1",
+  };
+}
+
 /** One admission rule for editing and run resolution; only qualified compatible endpoints enter M1. */
 export function hermesCompatibility(
   pin: RuntimePin,
