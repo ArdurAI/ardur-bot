@@ -387,11 +387,22 @@ export function createLearningService(deps: {
           ...config.budgets,
         };
 
+        const storedPinForCompare = previous?.reviewerPin ? RuntimePinSchema.parse(previous.reviewerPin) : null;
+        const newPinForCompare = data.reviewerPin === Prisma.DbNull ? null : (data.reviewerPin as RuntimePin | undefined);
+        const samePin = data.reviewerPin === undefined || (
+          storedPinForCompare?.provider === newPinForCompare?.provider &&
+          storedPinForCompare?.modelId === newPinForCompare?.modelId &&
+          storedPinForCompare?.credentialId === newPinForCompare?.credentialId &&
+          storedPinForCompare?.effort === newPinForCompare?.effort &&
+          storedPinForCompare?.runtimeKind === newPinForCompare?.runtimeKind &&
+          storedPinForCompare?.runtimeConfigHash === (newPinForCompare as any)?.runtimeConfigHash
+        );
+
         const same = previous &&
           previous.enabled === data.enabled &&
           previous.consolidationEnabled === data.consolidationEnabled &&
           previous.insightsEnabled === data.insightsEnabled &&
-          (data.reviewerPin === undefined || JSON.stringify(previous.reviewerPin) === JSON.stringify(data.reviewerPin === Prisma.DbNull ? null : data.reviewerPin)) &&
+          samePin &&
           previous.botDailyTokens === data.botDailyTokens &&
           previous.spaceDailyTokens === data.spaceDailyTokens &&
           previous.maxProposals === data.maxProposals &&

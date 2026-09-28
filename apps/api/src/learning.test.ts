@@ -745,7 +745,7 @@ it("configure an unchanged configure writes nothing", async () => {
     enabled: false,
     consolidationEnabled: false,
     insightsEnabled: true,
-    reviewerPin: { runtimeKind: "pi", provider: "p1", modelId: "m1", credentialId: "c1", effort: null, revision: 1 },
+    reviewerPin: { effort: null, credentialId: "c1", provider: "p1", runtimeKind: "pi", modelId: "m1", revision: 1 },
     botDailyTokens: 30000,
     spaceDailyTokens: 150000,
     maxProposals: 3,
