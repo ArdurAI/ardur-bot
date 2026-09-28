@@ -195,6 +195,12 @@ CREATE TABLE "runner_usage" (
 );
 
 -- CreateIndex
+-- Unique composite key the runner-jobs ownership foreign key references. A
+-- runner id already unique alone; the composite form lets the database prove
+-- a job's runner belongs to the job's own space and owner at insert time.
+CREATE UNIQUE INDEX "runners_id_spaceId_ownerUserId_key" ON "runners"("id", "spaceId", "ownerUserId");
+
+-- CreateIndex
 CREATE INDEX "runners_spaceId_ownerUserId_idx" ON "runners"("spaceId", "ownerUserId");
 
 -- CreateIndex
@@ -231,12 +237,15 @@ CREATE INDEX "runner_jobs_runId_idx" ON "runner_jobs"("runId");
 CREATE INDEX "runner_jobs_threadId_idx" ON "runner_jobs"("threadId");
 
 -- CreateIndex
--- Partial unique execution slot: one active job per (spaceId, userId, botId)
--- regardless of runner, including jobs whose cancellation/cleanup outcome is
--- still uncertain. Prisma cannot express a partial unique index; the schema
+-- Partial unique execution slot: one job per (spaceId, userId, botId) while
+-- the bot's execution slot is reserved — every state before cleanup resolves,
+-- plus cleaning/terminal states whose cleanup has not been confirmed clean.
+-- A slot stays reserved until cleanup is confirmed; uncertain cleanup never
+-- frees capacity. Prisma cannot express a partial unique index; the schema
 -- documents it next to RunnerJob.
 CREATE UNIQUE INDEX "runner_jobs_active_slot_key" ON "runner_jobs"("spaceId", "userId", "botId")
-WHERE state IN ('queued', 'staging', 'running', 'collecting', 'cleaning');
+WHERE state IN ('queued', 'staging', 'running', 'collecting')
+   OR (state IN ('cleaning', 'finished', 'failed', 'cancelled') AND "cleanupState" <> 'clean');
 
 -- CreateIndex
 CREATE INDEX "runner_job_events_jobId_executionFence_idx" ON "runner_job_events"("jobId", "executionFence");
@@ -272,6 +281,14 @@ CREATE INDEX "runner_usage_settlementState_updatedAt_idx" ON "runner_usage"("set
 -- Connection deletion is restricted while a runner exists; retiring a runner
 -- drains cleanup before the connection may be removed.
 ALTER TABLE "runners" ADD CONSTRAINT "runners_spaceId_fkey" FOREIGN KEY ("spaceId") REFERENCES "spaces"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+-- Composite ownership: a job's runner must exist in the job's own space under
+-- its owner. A request for space B can therefore never persist a job
+-- referencing space A's runner: the row is inconsistent at insert time, not
+-- merely at read time. (Enforced by application code as well; this is the
+-- database-level guarantee.)
+ALTER TABLE "runner_jobs" ADD CONSTRAINT "runner_jobs_runner_owner_fkey" FOREIGN KEY ("runnerId", "spaceId", "userId") REFERENCES "runners"("id", "spaceId", "ownerUserId") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "runners" ADD CONSTRAINT "runners_connectionId_fkey" FOREIGN KEY ("connectionId") REFERENCES "connections"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

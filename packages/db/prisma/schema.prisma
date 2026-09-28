@@ -2622,8 +2622,13 @@ model RunnerEnvironment {
 
 /// Durable runner job. Attribution IDs deliberately carry no cascading foreign
 /// keys: a job record and its cleanup references survive bot/thread/run deletion.
-/// One active job per bot execution slot is enforced by the partial unique index
-/// runner_jobs_active_slot_key (see migration SQL; Prisma cannot express it).
+/// One job per bot execution slot is enforced by the partial unique index
+/// runner_jobs_active_slot_key (see migration SQL; Prisma cannot express it):
+/// it covers every state before cleanup resolves, plus cleaning and terminal
+/// states whose cleanupState is not yet 'clean', so a slot stays reserved until
+/// cleanup is confirmed. The composite ownership foreign key
+/// runner_jobs_runner_owner_fkey (also in the migration SQL) additionally
+/// requires the job's runner to exist in the job's own space under its owner.
 model RunnerJob {
   id                   String   @id @default(cuid())
   runnerId             String
