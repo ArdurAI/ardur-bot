@@ -9,7 +9,13 @@ const captureRoot = process.env.FEATURE_DOCS_DIR
   : mkdtemp(path.join(tmpdir(), "feature-docs-"));
 const fixtureTime = new Date("2026-09-24T12:00:30.000Z");
 
-test.use({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1, colorScheme: "light" });
+test.use({
+  viewport: { width: 1280, height: 800 },
+  deviceScaleFactor: 1,
+  colorScheme: "light",
+  locale: "en-US",
+  timezoneId: "UTC",
+});
 
 async function capture(page: Page, id: string): Promise<void> {
   const directory = path.join(await captureRoot, "docs");
@@ -103,7 +109,7 @@ test("onboarding: inspect the required connection", async ({ page }) => {
   );
   await page.goto("/onboarding");
   await expect(page.getByRole("heading", { name: "Connect a model" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Provider" })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Provider" })).toBeVisible();
   const key = page.getByLabel("API key", { exact: true });
   await expect(key).toBeVisible();
   await capture(page, "docs-onboarding-open");

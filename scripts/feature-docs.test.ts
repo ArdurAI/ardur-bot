@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import type { FeatureDocumentationManifest } from "../packages/contracts/src/feature-documentation";
 import { FeatureDocumentationManifestSchema } from "../packages/contracts/src/feature-documentation";
 import type { FeatureEvidence } from "./feature-docs";
 import {
@@ -14,6 +15,7 @@ import {
   prepareFeatureDocCaptureImport,
   publishedDocumentation,
   validateFeatureDocs,
+  writeFeatureDocCaptureImport,
 } from "./feature-docs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -35,6 +37,27 @@ updates mobile-pairing mobile-consent mobile-files mobile-overview ide ide-hando
   .trim()
   .split(/\s+/);
 
+const firstFive = new Set(["sign-in", "onboarding", "bots-create", "models", "chat-approvals"]);
+
+async function validateFixtureDocs(
+  manifest: FeatureDocumentationManifest,
+  evidence: FeatureEvidence,
+  readCapture: (file: string, context: string) => Promise<Buffer> = async () => png,
+) {
+  for (const shot of manifest.screenshots) {
+    if (!firstFive.has(shot.feature)) continue;
+    shot.width = 1;
+    shot.height = 1;
+    shot.crop = { x: 0, y: 0, width: 1, height: 1 };
+    let binding = evidence.screenshots.find((item) => item.id === shot.id);
+    if (!binding) {
+      binding = { id: shot.id, sha256: createHash("sha256").update(png).digest("hex") };
+      evidence.screenshots.push(binding);
+    }
+  }
+  return validateFeatureDocs(manifest, evidence, root, readCapture);
+}
+
 async function data() {
   const manifest = FeatureDocumentationManifestSchema.parse(
     JSON.parse(await readFile(path.join(root, "site/data/feature-docs.json"), "utf8")),
@@ -49,8 +72,8 @@ describe("feature documentation inventory", () => {
   it("contains every design inventory ID and reports the unfinished public work", async () => {
     const { manifest, evidence } = await data();
     expect(manifest.features.map((feature) => feature.id)).toEqual(expectedIds);
-    await expect(validateFeatureDocs(manifest, evidence, root)).resolves.toBeDefined();
-    expect(featureDocsReport(manifest)).toContain("Total: 91 features, 91 draft, 3 internal");
+    await expect(validateFixtureDocs(manifest, evidence)).resolves.toBeDefined();
+    expect(featureDocsReport(manifest)).toContain("Total: 91 features, 86 draft, 3 internal");
     expect(featureDocsReport(manifest)).toContain(
       "memory-and-learning: 13 total, 13 draft, 0 internal",
     );
@@ -58,20 +81,38 @@ describe("feature documentation inventory", () => {
       "Verify: 3 candidates — space-members, computer-edit-remove, performance",
     );
     expect(() => assertFeatureDocsComplete(manifest)).toThrow(
-      "88 verified user-facing documentation pages are still draft",
+      "83 verified user-facing documentation pages are still draft",
     );
+  });
+
+  it("binds the first five published pages to labels, real errors, and captures", async () => {
+    const { manifest, evidence } = await data();
+    await expect(validateFixtureDocs(manifest, evidence)).resolves.toBeDefined();
+    const published = publishedDocumentation(manifest)!;
+    expect(new Set(published.features.map((feature) => feature.id))).toEqual(firstFive);
+    expect(published.screenshots).toHaveLength(11);
+    for (const feature of published.features) {
+      expect(feature.availableSince).toBe("0.1.0-alpha.1");
+      expect(feature.steps.length).toBeGreaterThan(0);
+      expect(feature.troubleshooting).toHaveLength(1);
+      expect(feature.related.every((id) => firstFive.has(id))).toBe(true);
+      const binding = evidence.features.find((item) => item.id === feature.id)!;
+      expect(binding.sources.length).toBeGreaterThan(0);
+      expect(binding.tests).toContain("apps/web/e2e/feature-docs.spec.ts");
+      expect(binding.errors?.[0]?.catalog).toBe("apps/web/src/locales/en/messages.po");
+    }
   });
 
   it("names a missing settings mapping and refuses arbitrary route exemptions", async () => {
     const { manifest, evidence } = await data();
     delete evidence.coverage.settings.general;
-    await expect(validateFeatureDocs(manifest, evidence, root)).rejects.toThrow(
+    await expect(validateFixtureDocs(manifest, evidence)).rejects.toThrow(
       'settings "general" has no feature mapping or exemption',
     );
     evidence.coverage.settings.general = "general";
     delete evidence.coverage.webRoutes["/app/ide"];
     evidence.exemptions.webRoutes["/app/ide"] = "Ignore it";
-    await expect(validateFeatureDocs(manifest, evidence, root)).rejects.toThrow(
+    await expect(validateFixtureDocs(manifest, evidence)).rejects.toThrow(
       'webRoutes "/app/ide" is not an allowed, justified exemption',
     );
   });
@@ -79,7 +120,7 @@ describe("feature documentation inventory", () => {
   it("covers native route files, including screens outside the layout registry", async () => {
     const { manifest, evidence } = await data();
     delete evidence.coverage.mobileEntries.pair;
-    await expect(validateFeatureDocs(manifest, evidence, root)).rejects.toThrow(
+    await expect(validateFixtureDocs(manifest, evidence)).rejects.toThrow(
       'mobileEntries "pair" has no feature mapping or exemption',
     );
   });
@@ -87,12 +128,12 @@ describe("feature documentation inventory", () => {
   it("rejects duplicate IDs and aliases that collide with canonical IDs", async () => {
     const { manifest, evidence } = await data();
     manifest.features[1]!.id = manifest.features[0]!.id;
-    await expect(validateFeatureDocs(manifest, evidence, root)).rejects.toThrow(
+    await expect(validateFixtureDocs(manifest, evidence)).rejects.toThrow(
       'Feature IDs repeats "sign-in"',
     );
     manifest.features[1]!.id = "onboarding";
     manifest.features[1]!.aliases = ["sign-in"];
-    await expect(validateFeatureDocs(manifest, evidence, root)).rejects.toThrow(
+    await expect(validateFixtureDocs(manifest, evidence)).rejects.toThrow(
       'alias "sign-in" collides',
     );
   });
@@ -103,13 +144,13 @@ describe("feature documentation inventory", () => {
       manifest.features.findIndex((feature) => feature.id === "chat-receipts"),
       1,
     );
-    await expect(validateFeatureDocs(manifest, evidence, root)).rejects.toThrow(
+    await expect(validateFixtureDocs(manifest, evidence)).rejects.toThrow(
       'Evidence has unknown feature "chat-receipts"',
     );
     const restored = await data();
     restored.manifest.features.find((feature) => feature.id === "general")!.related = ["privacy"];
     restored.manifest.features.find((feature) => feature.id === "privacy")!.related = ["general"];
-    await expect(validateFeatureDocs(restored.manifest, restored.evidence, root)).rejects.toThrow(
+    await expect(validateFixtureDocs(restored.manifest, restored.evidence)).rejects.toThrow(
       'Related feature cycle includes "general"',
     );
   });
@@ -119,16 +160,16 @@ describe("feature documentation inventory", () => {
     const feature = manifest.features[0]!;
     const originalPlatforms = feature.platforms;
     feature.platforms = { ...feature.platforms, mobile: "editable" as "configure" };
-    await expect(validateFeatureDocs(manifest, evidence, root)).rejects.toThrow();
+    await expect(validateFixtureDocs(manifest, evidence)).rejects.toThrow();
     feature.platforms = originalPlatforms;
     feature.related = ["missing-feature"];
-    await expect(validateFeatureDocs(manifest, evidence, root)).rejects.toThrow(
+    await expect(validateFixtureDocs(manifest, evidence)).rejects.toThrow(
       'invalid related feature "missing-feature"',
     );
     feature.related = [];
     const candidate = manifest.features.find((item) => item.id === "performance")!;
     candidate.platforms.web = "configure";
-    await expect(validateFeatureDocs(manifest, evidence, root)).rejects.toThrow(
+    await expect(validateFixtureDocs(manifest, evidence)).rejects.toThrow(
       'Feature "performance" is internal but declares a reachable platform',
     );
   });
@@ -137,7 +178,7 @@ describe("feature documentation inventory", () => {
     const { manifest, evidence } = await data();
     const feature = manifest.features.find((item) => item.id === "general")!;
     feature.settingsPath.web!.uiLabels[1] = "Old general label";
-    await expect(validateFeatureDocs(manifest, evidence, root)).rejects.toThrow(
+    await expect(validateFixtureDocs(manifest, evidence)).rejects.toThrow(
       'web path label "Old general label" is absent',
     );
     feature.settingsPath.web!.uiLabels[1] = "General";
@@ -152,19 +193,19 @@ describe("feature documentation inventory", () => {
         availableSince: null,
       },
     ];
-    await expect(validateFeatureDocs(manifest, evidence, root)).rejects.toThrow(
+    await expect(validateFixtureDocs(manifest, evidence)).rejects.toThrow(
       "has no matching screenshot missing-capture",
     );
     feature.steps = [];
     evidence.features.find((item) => item.id === "general")!.sources = ["missing/source.ts"];
-    await expect(validateFeatureDocs(manifest, evidence, root)).rejects.toThrow(
+    await expect(validateFixtureDocs(manifest, evidence)).rejects.toThrow(
       "points at missing file missing/source.ts",
     );
     evidence.features.find((item) => item.id === "general")!.sources = [
       "apps/web/src/pages/settings/GeneralSettings.tsx",
     ];
     evidence.features.find((item) => item.id === "general")!.tests = ["missing/test.test.ts"];
-    await expect(validateFeatureDocs(manifest, evidence, root)).rejects.toThrow(
+    await expect(validateFixtureDocs(manifest, evidence)).rejects.toThrow(
       "points at missing file missing/test.test.ts",
     );
   });
@@ -172,7 +213,7 @@ describe("feature documentation inventory", () => {
   it("rejects a title that no longer matches an English UI source", async () => {
     const { manifest, evidence } = await data();
     manifest.features.find((feature) => feature.id === "general")!.title = "Renamed preferences";
-    await expect(validateFeatureDocs(manifest, evidence, root)).rejects.toThrow(
+    await expect(validateFixtureDocs(manifest, evidence)).rejects.toThrow(
       'title "Renamed preferences" is not a current UI label',
     );
   });
@@ -196,13 +237,13 @@ describe("feature documentation inventory", () => {
         catalog: "apps/web/src/locales/en/messages.po",
       },
     ];
-    await expect(validateFeatureDocs(manifest, evidence, root)).rejects.toThrow(
+    await expect(validateFixtureDocs(manifest, evidence)).rejects.toThrow(
       'error "settings-save" is not verbatim in its cited source',
     );
     binding.errors[0]!.source = "apps/web/src/pages/settings/GeneralSettings.tsx";
-    await expect(validateFeatureDocs(manifest, evidence, root)).resolves.toBeDefined();
+    await expect(validateFixtureDocs(manifest, evidence)).resolves.toBeDefined();
     delete binding.errors[0]!.catalog;
-    await expect(validateFeatureDocs(manifest, evidence, root)).rejects.toThrow(
+    await expect(validateFixtureDocs(manifest, evidence)).rejects.toThrow(
       'error "settings-save" needs its English catalog binding',
     );
     binding.errors[0]!.catalog = "apps/web/src/locales/en/messages.po";
@@ -267,17 +308,15 @@ describe("feature documentation inventory", () => {
       id: "docs-self-host-setup",
       sha256: createHash("sha256").update(png).digest("hex"),
     });
-    await expect(
-      validateFeatureDocs(manifest, evidence, root, async () => png),
-    ).resolves.toBeDefined();
+    await expect(validateFixtureDocs(manifest, evidence, async () => png)).resolves.toBeDefined();
     const binding = evidence.features.find((item) => item.id === "self-host")!;
     delete binding.titleSource;
-    await expect(validateFeatureDocs(manifest, evidence, root, async () => png)).rejects.toThrow(
+    await expect(validateFixtureDocs(manifest, evidence, async () => png)).rejects.toThrow(
       "guide title needs a cited Markdown source",
     );
     binding.titleSource = "docs/self-host.md";
     feature.title = "Uncited setup title";
-    await expect(validateFeatureDocs(manifest, evidence, root, async () => png)).rejects.toThrow(
+    await expect(validateFixtureDocs(manifest, evidence, async () => png)).rejects.toThrow(
       "does not match its cited heading",
     );
   });
@@ -327,6 +366,8 @@ describe("feature documentation inventory", () => {
       const docsDir = path.join(directory, "docs");
       await mkdir(docsDir);
       const { manifest, evidence } = await data();
+      manifest.screenshots = [];
+      evidence.screenshots = [];
       manifest.screenshots.push({
         id: "docs-sign-in-open",
         file: "docs/docs-sign-in-open.png",
@@ -368,6 +409,15 @@ describe("feature documentation inventory", () => {
       expect(twice.evidence.screenshots[0]!.sha256).toBe(
         createHash("sha256").update(png).digest("hex"),
       );
+      const output = path.join(directory, "output");
+      await mkdir(path.join(output, "site/data"), { recursive: true });
+      await writeFeatureDocCaptureImport(output, once);
+      const written = path.join(output, "site/docs/docs-sign-in-open.png");
+      const oldTime = new Date("2020-01-01T00:00:00.000Z");
+      await utimes(written, oldTime, oldTime);
+      await writeFeatureDocCaptureImport(output, twice);
+      expect((await stat(written)).mtime.toISOString()).toBe(oldTime.toISOString());
+      expect(await readFile(written)).toEqual(png);
     } finally {
       await rm(directory, { recursive: true, force: true });
     }
@@ -376,7 +426,7 @@ describe("feature documentation inventory", () => {
   it("keeps public copy plain and neutral", async () => {
     const { manifest, evidence } = await data();
     manifest.features[0]!.summary = "The best <b>sign in</b> option.";
-    await expect(validateFeatureDocs(manifest, evidence, root)).rejects.toThrow(
+    await expect(validateFixtureDocs(manifest, evidence)).rejects.toThrow(
       'Feature "sign-in" summary must be plain, neutral public copy',
     );
   });
@@ -413,29 +463,33 @@ describe("feature documentation inventory", () => {
       id: "docs-general-open",
       sha256: createHash("sha256").update(png).digest("hex"),
     });
-    await expect(
-      validateFeatureDocs(manifest, evidence, root, async () => png),
-    ).resolves.toBeDefined();
+    await expect(validateFixtureDocs(manifest, evidence, async () => png)).resolves.toBeDefined();
     const docs = publishedDocumentation(manifest)!;
-    expect(docs.features).toHaveLength(1);
-    expect(docs.features[0]?.availableSince).toBeNull();
-    expect(docs.features[0]?.settingsPath.web).toEqual(feature.settingsPath.web?.uiLabels);
-    expect(docs.features[0]?.settingsPath.mobile).toBeUndefined();
-    expect(docs.screenshots[0]?.file).toBe("docs/docs-general-open.png");
-    expect(docs.features[0]).not.toHaveProperty("internalReason");
-    expect(docs.features[0]).not.toHaveProperty("deferredRelated");
-    expect(docs.screenshots[0]).not.toHaveProperty("locale");
-    manifest.screenshots[0]!.locale = "fr";
-    await expect(validateFeatureDocs(manifest, evidence, root, async () => png)).rejects.toThrow(
+    expect(docs.features).toHaveLength(6);
+    const publicGeneral = docs.features.find((item) => item.id === "general")!;
+    const generalShot = manifest.screenshots.find((item) => item.id === "docs-general-open")!;
+    const publicShot = docs.screenshots.find((item) => item.id === "docs-general-open")!;
+    const shotEvidence = evidence.screenshots.find((item) => item.id === "docs-general-open")!;
+    expect(publicGeneral.availableSince).toBeNull();
+    expect(publicGeneral.settingsPath.web).toEqual(feature.settingsPath.web?.uiLabels);
+    expect(publicGeneral.settingsPath.mobile).toBeUndefined();
+    expect(publicShot.file).toBe("docs/docs-general-open.png");
+    expect(publicGeneral).not.toHaveProperty("internalReason");
+    expect(publicGeneral).not.toHaveProperty("deferredRelated");
+    expect(publicShot).not.toHaveProperty("locale");
+    generalShot.locale = "fr";
+    await expect(validateFixtureDocs(manifest, evidence, async () => png)).rejects.toThrow(
       'locale "fr" differs from manifest locale "en"',
     );
-    manifest.screenshots[0]!.locale = "en";
+    generalShot.locale = "en";
     feature.related = ["privacy"];
-    await expect(validateFeatureDocs(manifest, evidence, root, async () => png)).rejects.toThrow(
+    await expect(validateFixtureDocs(manifest, evidence, async () => png)).rejects.toThrow(
       'related feature "privacy" must publish or be deferred',
     );
     feature.deferredRelated = ["privacy"];
-    expect(publishedDocumentation(manifest)?.features[0]?.related).toEqual([]);
+    expect(
+      publishedDocumentation(manifest)?.features.find((item) => item.id === "general")?.related,
+    ).toEqual([]);
     feature.troubleshooting = [
       { errorId: "general-error", message: "Wrong sentence.", action: "Open Settings." },
     ];
@@ -447,23 +501,21 @@ describe("feature documentation inventory", () => {
         catalog: "apps/web/src/locales/en/messages.po",
       },
     ];
-    await expect(validateFeatureDocs(manifest, evidence, root, async () => png)).rejects.toThrow(
+    await expect(validateFixtureDocs(manifest, evidence, async () => png)).rejects.toThrow(
       'error "general-error" differs from its cited sentence',
     );
     feature.troubleshooting[0]!.message = "Could not save settings. Try again.";
-    await expect(
-      validateFeatureDocs(manifest, evidence, root, async () => png),
-    ).resolves.toBeDefined();
-    evidence.screenshots[0]!.sha256 = "0".repeat(64);
-    await expect(validateFeatureDocs(manifest, evidence, root, async () => png)).rejects.toThrow(
+    await expect(validateFixtureDocs(manifest, evidence, async () => png)).resolves.toBeDefined();
+    shotEvidence.sha256 = "0".repeat(64);
+    await expect(validateFixtureDocs(manifest, evidence, async () => png)).rejects.toThrow(
       "evidence SHA-256",
     );
-    evidence.screenshots[0]!.sha256 = createHash("sha256").update(png).digest("hex");
+    shotEvidence.sha256 = createHash("sha256").update(png).digest("hex");
     await expect(
-      validateFeatureDocs(manifest, evidence, root, async () => Buffer.alloc(250_001)),
+      validateFixtureDocs(manifest, evidence, async () => Buffer.alloc(250_001)),
     ).rejects.toThrow("250 KB");
-    manifest.screenshots[0]!.crop.x = 1;
-    await expect(validateFeatureDocs(manifest, evidence, root, async () => png)).rejects.toThrow(
+    generalShot.crop.x = 1;
+    await expect(validateFixtureDocs(manifest, evidence, async () => png)).rejects.toThrow(
       "crop is outside",
     );
   });

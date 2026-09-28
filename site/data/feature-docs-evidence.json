@@ -11,7 +11,17 @@
         "docs/self-host.md"
       ],
       "tests": [
-        "packages/auth/src/index.test.ts"
+        "packages/auth/src/index.test.ts",
+        "apps/web/e2e/auth-lifecycle.spec.ts",
+        "apps/web/e2e/feature-docs.spec.ts"
+      ],
+      "errors": [
+        {
+          "id": "auth-unreachable",
+          "text": "Could not reach the server",
+          "source": "apps/web/src/pages/Auth.tsx",
+          "catalog": "apps/web/src/locales/en/messages.po"
+        }
       ]
     },
     {
@@ -23,7 +33,17 @@
         "README.md"
       ],
       "tests": [
-        "apps/api/src/onboarding.test.ts"
+        "apps/api/src/onboarding.test.ts",
+        "apps/web/e2e/onboarding-model-required.spec.ts",
+        "apps/web/e2e/feature-docs.spec.ts"
+      ],
+      "errors": [
+        {
+          "id": "onboarding-save",
+          "text": "Could not save model",
+          "source": "apps/web/src/pages/Onboarding.tsx",
+          "catalog": "apps/web/src/locales/en/messages.po"
+        }
       ]
     },
     {
@@ -140,7 +160,17 @@
         "README.md"
       ],
       "tests": [
-        "apps/api/src/bot-update.test.ts"
+        "apps/api/src/bot-update.test.ts",
+        "apps/web/e2e/new-bot-ux.spec.ts",
+        "apps/web/e2e/feature-docs.spec.ts"
+      ],
+      "errors": [
+        {
+          "id": "bot-create",
+          "text": "Could not create bot",
+          "source": "apps/web/src/pages/shell/bot-panel.tsx",
+          "catalog": "apps/web/src/locales/en/messages.po"
+        }
       ]
     },
     {
@@ -280,7 +310,16 @@
         "docs/governance.md"
       ],
       "tests": [
-        "packages/core/src/action-approval.test.ts"
+        "packages/core/src/action-approval.test.ts",
+        "apps/web/e2e/feature-docs.spec.ts"
+      ],
+      "errors": [
+        {
+          "id": "approval-submit",
+          "text": "Could not submit this answer",
+          "source": "apps/web/src/components/AskCard.tsx",
+          "catalog": "apps/web/src/locales/en/messages.po"
+        }
       ]
     },
     {
@@ -643,7 +682,17 @@
         "README.md"
       ],
       "tests": [
-        "packages/core/src/model-providers.test.ts"
+        "packages/core/src/model-providers.test.ts",
+        "apps/web/e2e/model-settings.spec.ts",
+        "apps/web/e2e/feature-docs.spec.ts"
+      ],
+      "errors": [
+        {
+          "id": "models-load",
+          "text": "Could not load model settings",
+          "source": "apps/web/src/pages/ModelSettingsOverlay.tsx",
+          "catalog": "apps/web/src/locales/en/messages.po"
+        }
       ]
     },
     {

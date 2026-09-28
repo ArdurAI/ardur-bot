@@ -655,6 +655,14 @@ export async function importFeatureDocCaptures(directory: string, rootDir = root
     const id = path.basename(file, ".png");
     return captures.get(id) ?? existingRelativeBytes(rootDir, file, context);
   });
+  await writeFeatureDocCaptureImport(rootDir, { manifest, evidence, captures });
+}
+
+export async function writeFeatureDocCaptureImport(
+  rootDir: string,
+  prepared: Awaited<ReturnType<typeof prepareFeatureDocCaptureImport>>,
+): Promise<void> {
+  const { manifest, evidence, captures } = prepared;
   await mkdir(path.join(rootDir, "site/docs"), { recursive: true });
   for (const [id, bytes] of captures)
     await writeIfChanged(path.join(rootDir, "site/docs", `${id}.png`), bytes);
