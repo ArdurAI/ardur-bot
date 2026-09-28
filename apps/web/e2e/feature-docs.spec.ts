@@ -25,10 +25,9 @@ test.use({
   timezoneId: "UTC",
 });
 
-async function capture(page: Page, id: string, app = true): Promise<void> {
+async function capture(page: Page, id: string): Promise<void> {
   await expect(page.getByText("Loading…", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Loading model catalog…", { exact: true })).toHaveCount(0);
-  if (app) await expectModelReady(page);
   const directory = path.join(await captureRoot, "docs");
   await mkdir(directory, { recursive: true });
   const file = path.join(directory, `${id}.png`);
@@ -39,14 +38,9 @@ async function capture(page: Page, id: string, app = true): Promise<void> {
   ).toBeLessThanOrEqual(250_000);
 }
 
-/** Every app capture must show a usable model; a warning header is never documentation. */
+/** Check the visible header before a scenario opens any overlay or leaves the bot page. */
 async function expectModelReady(page: Page) {
   const chip = page.getByRole("button", { name: /^Change model: / }).first();
-  if (!(await chip.count())) {
-    await expect(page.getByTestId("group-participant-models")).toBeVisible();
-    await expect(page.getByTestId("group-participant-models")).not.toContainText("not available");
-    return;
-  }
   await expect(chip).toBeVisible();
   await expect(chip).not.toContainText("not available");
 }
@@ -170,19 +164,19 @@ test("sign-in: open the form and recovery route", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Sign in to Ardur" })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Email" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Continue with email" })).toBeVisible();
-  await capture(page, "docs-sign-in-open", false);
+  await capture(page, "docs-sign-in-open");
   await page.route("**/api/auth/sign-in/email", (route) => route.abort());
   await page.getByRole("textbox", { name: "Email" }).fill("reader@example.test");
   await page.getByLabel("Password", { exact: true }).fill("fixture-password");
   await page.getByRole("button", { name: "Continue with email" }).click();
   await expect(page.getByRole("alert")).toHaveText("Could not reach the server");
-  await capture(page, "docs-sign-in-error", false);
+  await capture(page, "docs-sign-in-error");
   const recovery = page.getByRole("link", { name: "Forgot password?" });
   await expect(recovery).toBeVisible();
   await recovery.click();
   await expect(page).toHaveURL(/\/forgot-password$/);
   await expect(page.getByRole("button", { name: "Send reset link" })).toBeVisible();
-  await capture(page, "docs-sign-in-recovery", false);
+  await capture(page, "docs-sign-in-recovery");
 });
 
 test("onboarding: prepare a required connection", async ({ page }) => {
@@ -206,11 +200,11 @@ test("onboarding: prepare a required connection", async ({ page }) => {
   const key = page.getByLabel("API key", { exact: true });
   await expect(key).toBeVisible();
   await expect(page.getByRole("button", { name: "Continue", exact: true })).toBeDisabled();
-  await capture(page, "docs-onboarding-open", false);
+  await capture(page, "docs-onboarding-open");
   await key.fill("fixture-key");
   const next = page.getByRole("button", { name: "Continue", exact: true });
   await expect(next).toBeEnabled();
-  await capture(page, "docs-onboarding-connect", false);
+  await capture(page, "docs-onboarding-connect");
 });
 
 test("bots-create: select a computer mode before creating", async ({ page }) => {
@@ -239,7 +233,6 @@ test("bots-create: select a computer mode before creating", async ({ page }) => 
   await expect(page).toHaveURL(/\/app\/new-bot$/);
   await expect(page.getByPlaceholder("Message Planner")).toBeVisible();
   await expect(form).toBeHidden();
-  await expectModelReady(page);
   await capture(page, "docs-bots-create-ready");
 });
 
@@ -302,6 +295,7 @@ test("routines: edit a scheduled routine and inspect its result", async ({ page 
   const state = routineDocsFixture();
   await useDashboard(page, state);
   await page.goto("/app/bot");
+  await expectModelReady(page);
   await page.getByTitle("Agent computer").click();
   await expect(page.getByRole("button", { name: /Morning brief/ })).toBeVisible();
   await capture(page, "docs-routines-open");
@@ -320,7 +314,7 @@ test("routines: edit a scheduled routine and inspect its result", async ({ page 
   await capture(page, "docs-routines-saved");
   await page.getByRole("button", { name: "Test run" }).click();
   await expect(panel.getByText("Run history")).toBeVisible();
-  await expect(panel.getByText("Completed", { exact: true })).toBeVisible();
+  await expect(panel.getByText("Done", { exact: true })).toBeVisible();
   await capture(page, "docs-routines-result");
 });
 
@@ -328,6 +322,7 @@ test("memory-documents: inspect history and approve a reviewed change", async ({
   const state = memoryDocsFixture();
   await useDashboard(page, state);
   await page.goto("/app/bot");
+  await expectModelReady(page);
   await page
     .locator("header.app-drag")
     .getByRole("button", { name: "Settings", exact: true })
@@ -364,6 +359,7 @@ test("computers: inspect capacity, connection form, and test outcomes", async ({
   const state = computerDocsFixture();
   await useDashboard(page, state);
   await page.goto("/app/bot");
+  await expectModelReady(page);
   await page
     .locator("header.app-drag")
     .getByRole("button", { name: "Settings", exact: true })
@@ -395,6 +391,7 @@ test("integrations: inspect the catalog, tool access, and connection form", asyn
   const state = integrationDocsFixture();
   await useDashboard(page, state);
   await page.goto("/app/bot");
+  await expectModelReady(page);
   await page
     .locator("header.app-drag")
     .getByRole("button", { name: "Settings", exact: true })
@@ -433,8 +430,15 @@ test("group-goals: start a goal in a room and stop it", async ({ page }) => {
     groups: [state.group],
     rpc: state.rpc,
   });
+  await page.goto("/app/bot");
+  await expectModelReady(page);
   await page.goto("/app/g/operations-group");
-  await expect(page.getByTestId("group-participant-models")).toBeVisible();
+  for (const member of state.group.members) {
+    const chip = page.getByTestId(`group-participant-${member.botId}`);
+    await expect(chip).toBeVisible();
+    await expect(chip.getByRole("status", { name: /^Using / })).toBeVisible();
+    await expect(chip).not.toContainText("not available");
+  }
   await page.getByTestId("bot-settings-trigger").click();
   const panel = page.getByTestId("side-panel");
   await expect(panel).toHaveAttribute("data-panel", "group-settings");
@@ -447,12 +451,12 @@ test("group-goals: start a goal in a room and stop it", async ({ page }) => {
   await expect(panel.getByRole("button", { name: "Start goal" })).toBeEnabled();
   await capture(page, "docs-group-goals-form");
   await panel.getByRole("button", { name: "Start goal" }).click();
-  await expect.poll(() => state.goal?.status).toBe("running");
+  await expect.poll(() => state.goal?.status, { timeout: 3_000 }).toBe("running");
   await expect(page.getByText("Goal: Working", { exact: false })).toBeVisible();
   await panel.getByRole("button", { name: "Close panel" }).click();
   await capture(page, "docs-group-goals-progress");
   await page.getByRole("button", { name: "Stop", exact: true }).click();
-  await expect.poll(() => state.goal?.status).toBe("stopped");
+  await expect.poll(() => state.goal?.status, { timeout: 3_000 }).toBe("stopped");
   await expect(page.getByText("Goal: Stopped", { exact: false })).toBeVisible();
   await capture(page, "docs-group-goals-stopped");
 });
