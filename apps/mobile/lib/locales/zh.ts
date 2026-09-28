@@ -1,4 +1,10 @@
 export const ZH_MESSAGES: Record<string, string> = {
+  "This group's model is blocked by the bot or space settings. Change the destination policy or choose another group model.":
+    "群组模型被 Bot 或空间设置阻止。请更改目标位置策略，或选择其他群组模型。",
+  "{botName} couldn't use the model set for this group. Reconnect it or change the group model.":
+    "{botName} 无法使用为此群组设置的模型。请重新连接，或更改群组模型。",
+  "{botName} couldn't use the model set for this group. Change the group model or check this bot's settings.":
+    "{botName} 无法使用为此群组设置的模型。请更改群组模型，或检查 Bot 设置。",
   Antigravity: "Antigravity",
   "Antigravity did not finish in time. Try again.": "Antigravity 未能按时完成。请重试。",
   "Antigravity's live model list could not be checked. Check again.":
@@ -1148,4 +1154,10 @@ export const ZH_MESSAGES: Record<string, string> = {
     "基于最近 {days} 天内 {approvals} 次批准且没有拒绝。",
   "Based on {count} requests in the last {days} days.": "基于最近 {days} 天内的 {count} 次请求。",
   "Allow {tool} for {bot} without asking?": "允许 {bot} 使用 {tool} 而不再询问？",
+  "This bot uses a model chosen for this group. Change it in Group settings.":
+    "此 Bot 使用为该群组选择的模型。请在群组设置中更改。",
+  "Model in this group": "此群组中的模型",
+  "Same as bot": "与 Bot 相同",
+  "Could not save group model.": "无法保存群组模型。",
+  "This member's model changed. Reload the group.": "此成员的模型已更改。请重新加载群组。",
 };
