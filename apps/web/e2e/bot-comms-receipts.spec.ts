@@ -112,16 +112,16 @@ test("shows one delivery chip advance through Delivered, Read and Replied in bot
         `[data-message-id="${deskMessageId}"] [data-testid="peer-receipt-chip"]`,
       );
       await receiptGate(page, "accept");
-      await expect(roomRequest).toHaveText("Read by Worker", {
+      await expect(roomRequest.locator('span[dir="auto"]')).toHaveText("Read by Worker", {
         timeout: 60_000,
       });
-      await expect(deskRequest).toHaveText("Read by Worker");
+      await expect(deskRequest.locator('span[dir="auto"]')).toHaveText("Read by Worker");
       await receiptGate(page, "reply");
       gateArmed = false;
-      await expect(roomRequest).toHaveText("Replied", {
+      await expect(roomRequest.locator('span[dir="auto"]')).toHaveText("Replied", {
         timeout: 60_000,
       });
-      await expect(deskRequest).toHaveText("Replied");
+      await expect(deskRequest.locator('span[dir="auto"]')).toHaveText("Replied");
       await expect(roomRequest).toHaveCount(1);
       await expect(deskRequest).toHaveCount(1);
       const timeline = await receiptTimeline(page, roomMessageId, deskMessageId);

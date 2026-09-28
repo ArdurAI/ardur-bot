@@ -49,6 +49,7 @@ describe("BotAvatar", () => {
       <BotAvatar color={DEFAULT_GROK_BOT_COLOR} identity="maya" size={28} status="running" />,
     );
     expect(html).toContain("M");
+    expect(html).toContain('aria-hidden="true"');
     expect(html).toContain("<svg");
     expect(html).toContain("<circle");
     expect(html).not.toContain("<path");

@@ -303,13 +303,6 @@ export async function wakeGoalCoordinatorForDelegation(prisma: PrismaClient, del
         return null;
       const goal = await tx.teamGoal.findUnique({ where: { rootTaskId: row.rootTaskId } });
       if (!goal || goal.spaceId !== row.spaceId || goal.userId !== row.userId) return null;
-      if (row.kind === "message" && row.status === "cancelled") {
-        await tx.delegation.update({
-          where: { id: row.id },
-          data: { coordinatorWokenAt: new Date() },
-        });
-        return null;
-      }
       if (
         row.kind === "message" &&
         (await peerTrafficPaused(tx, {
@@ -317,8 +310,15 @@ export async function wakeGoalCoordinatorForDelegation(prisma: PrismaClient, del
           userId: goal.userId,
           groupId: goal.groupId,
         }))
-      )
+      ) {
+        // A pause cancels peer work without starting new coordinator work.
+        if (row.status === "cancelled")
+          await tx.delegation.update({
+            where: { id: row.id },
+            data: { coordinatorWokenAt: new Date() },
+          });
         return null;
+      }
       const root = await tx.delegationRoot.findUniqueOrThrow({
         where: { rootTaskId: row.rootTaskId },
       });

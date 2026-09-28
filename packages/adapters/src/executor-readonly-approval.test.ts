@@ -204,6 +204,9 @@ function fixture({
     updatedAt: new Date(0),
   };
   const prisma = {
+    chatGroupMember: { findMany: vi.fn(async () => []) },
+    botMessageDelivery: { updateMany: vi.fn(async () => ({ count: 0 })) },
+    botMessageWake: { findMany: vi.fn(async () => []) },
     delegationRoot: { findUnique: vi.fn(async () => null) },
     space: {
       findUnique: vi.fn(async () => ({ allowedModelDestinations: null })),
