@@ -8,7 +8,7 @@
     "statusLine": "Pre-alpha. Unsigned desktop previews; build from source or self-host.",
     "license": "Apache-2.0",
     "repoUrl": "https://github.com/ArdurAI/ardur-bot",
-    "docsUrl": "https://github.com/ArdurAI/ardur-bot/tree/dev/docs"
+    "docsUrl": "https://ardur.ai/docs/features/"
   },
   "features": [
     {
