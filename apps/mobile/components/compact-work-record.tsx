@@ -71,6 +71,7 @@ export function CompactWorkRecord({
           flexDirection: "row",
           alignItems: "center",
           gap: 12,
+          minHeight: 44,
         }}
         accessibilityRole="button"
         accessibilityState={{ expanded }}
@@ -120,6 +121,8 @@ export function CompactWorkRecord({
               fontFamily: "Menlo",
               fontSize: 12,
               color: tokens.mutedForeground,
+              flexShrink: 1,
+              minWidth: 0,
             }}
             numberOfLines={1}
             ellipsizeMode="tail"

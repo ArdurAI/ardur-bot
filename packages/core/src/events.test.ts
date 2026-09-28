@@ -128,6 +128,51 @@ describe("reduceLiveMessageBlocks", () => {
     ]);
   });
 
+  it("keeps a replacement activity title intact after narration", () => {
+    const narration = reduceLiveMessageBlocks([], {
+      type: "progress",
+      payload: { text: "Let me check the calendar first." },
+    });
+    const next = reduceLiveMessageBlocks(narration, {
+      type: "progress",
+      payload: { text: "Running tests", activity: true },
+    });
+
+    expect(next).toEqual([
+      { kind: "progress", text: "Let me check the calendar first." },
+      { kind: "progress", text: "Running tests", activity: true },
+    ]);
+  });
+
+  it("keeps a replacement reasoning summary intact after narration", () => {
+    const narration = reduceLiveMessageBlocks([], {
+      type: "progress",
+      payload: { text: "Let me check." },
+    });
+    const next = reduceLiveMessageBlocks(narration, {
+      type: "progress",
+      payload: { text: "Weighing options.", reasoning: true },
+    });
+
+    expect(next).toEqual([
+      { kind: "progress", text: "Let me check." },
+      { kind: "progress", text: "Weighing options.", reasoning: true },
+    ]);
+  });
+
+  it("continues a same-category narration delta from the accumulated offset", () => {
+    const narration = reduceLiveMessageBlocks([], {
+      type: "progress",
+      payload: { text: "Let me check." },
+    });
+    const next = reduceLiveMessageBlocks(narration, {
+      type: "progress",
+      payload: { delta: " Still looking.", streaming: true },
+    });
+
+    expect(next).toEqual([{ kind: "progress", text: "Let me check. Still looking." }]);
+  });
+
   it("folds narration flushed to text before a tool call into the record", () => {
     const streamed = reduceLiveMessageBlocks([], {
       type: "progress",

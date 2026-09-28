@@ -220,8 +220,14 @@ export function reduceLiveMessageBlocks(
     progressCategory(tailProgress) !== updateCategory;
   const segments = tailProgress && !sealed ? blocks.slice(0, -1) : blocks;
   const priorText = liveMessageText(blocks);
-  const flushedLength =
-    tailProgress && !sealed && progressCategory(tailProgress) === "narration"
+  // A replacement `text` payload that changes category carries only the new
+  // block's text, so the accumulated offset would slice its title away. The
+  // offset applies solely to deltas that continue the same category.
+  const replacementStartsBlock =
+    sealed && update.type === "progress" && typeof update.payload?.delta !== "string";
+  const flushedLength = replacementStartsBlock
+    ? 0
+    : tailProgress && !sealed && progressCategory(tailProgress) === "narration"
       ? Math.max(0, priorText.length - tailProgress.text.length)
       : priorText.length;
   const tailText =
