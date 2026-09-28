@@ -1,9 +1,8 @@
 import type { FleetTarget } from "@ardurbot/contracts";
 import type { SetupDetail } from "@ardurbot/contracts/desktop-setup";
 import type { FleetDiscoveryReport } from "@ardurbot/host-runtime/fleet/discovery";
-import { discoverFleetReport } from "@ardurbot/host-runtime/fleet/discovery";
 import type { FleetProcess } from "@ardurbot/host-runtime/fleet/process";
-import { systemFleetProcess } from "@ardurbot/host-runtime/fleet/process";
+import { discoverFleetReport, systemFleetProcess } from "../fleet-discovery.js";
 import type { SetupStep } from "./engine.js";
 import { SetupStepFailure } from "./engine.js";
 
