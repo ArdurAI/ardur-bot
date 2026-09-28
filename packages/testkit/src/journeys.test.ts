@@ -3740,8 +3740,9 @@ describeJourneys("required product journeys", () => {
         describeCalls++;
         return {
           ...description,
-          // Keep fixture pin admission intact, then exercise the live steering callback branch.
-          capabilities: { ...description.capabilities, scripted: describeCalls < 5 },
+          // Force the live steering callback branch from the first execution-time
+          // descriptor read; admission must retain the runtime's startup capability.
+          capabilities: { ...description.capabilities, scripted: false },
         };
       });
     const requests: Array<{ claimSteering: unknown; prompt: string; history: unknown }> = [];
@@ -3777,6 +3778,7 @@ describeJourneys("required product journeys", () => {
         describeCalls,
       }),
     ).toHaveLength(1);
+    expect(describeCalls).toBeGreaterThan(0);
     expect(requests[0]?.claimSteering).toBeUndefined();
     expect(JSON.stringify([requests[0]?.prompt, requests[0]?.history])).not.toContain(
       unassignedText,

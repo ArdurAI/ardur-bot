@@ -484,7 +484,11 @@ export class HostBridge {
       return false;
     const op = request.operation;
     if (this.fleetRequests.get(request.id) === JSON.stringify(request)) return true;
-    if (op.op === "computer.remote.secret" || op.op === "computer.remote.discover")
+    if (
+      op.op === "computer.remote.secret" ||
+      op.op === "computer.remote.secret.delete" ||
+      op.op === "computer.remote.discover"
+    )
       return this.fleetRequests.get(request.id) === JSON.stringify(request);
     if (op.op !== "computer.remote.call") {
       if (!("maintenanceId" in op) || !op.maintenanceId || !("homeKey" in op)) return false;

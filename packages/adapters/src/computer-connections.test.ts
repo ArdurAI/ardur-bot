@@ -36,7 +36,13 @@ afterEach(() => {
 });
 
 function fixture(metadata: Record<string, unknown>) {
-  const row = { id: "saved", metadata, secretId: "encrypted", userId: "owner" };
+  const row = {
+    id: "saved",
+    metadata,
+    secretId: "encrypted",
+    userId: "owner",
+    updatedAt: new Date(0),
+  };
   const prisma = {
     connection: {
       findFirst: vi.fn(async ({ where }) =>
@@ -58,6 +64,44 @@ function fixture(metadata: Record<string, unknown>) {
     provider: new ConnectedSandboxProvider(new NoneSandboxProvider(), connections),
   };
 }
+
+it("rebuilds providers in every resolver when the persisted revision changes", async () => {
+  const { prisma, connections } = fixture({
+    engine: "docker",
+    socket: "unix:///fixture/first.sock",
+  });
+  const worker = new ComputerConnections(prisma as unknown as PrismaClient, { load: () => "" }, {});
+  const first = await connections.resolve("saved", context);
+  const workerFirst = await worker.resolve("saved", context);
+  prisma.connection.findFirst.mockResolvedValue({
+    id: "saved",
+    metadata: { engine: "docker", socket: "unix:///fixture/second.sock" },
+    secretId: "encrypted",
+    userId: "owner",
+    updatedAt: new Date(1),
+  });
+  expect(await connections.resolve("saved", context)).not.toBe(first);
+  expect(await worker.resolve("saved", context)).not.toBe(workerFirst);
+});
+it("rebuilds a provider when credential metadata changes within the same timestamp", async () => {
+  const { prisma, connections } = fixture({
+    engine: "docker",
+    socket: "unix:///fixture/docker.sock",
+  });
+  const first = await connections.resolve("saved", context);
+  prisma.connection.findFirst.mockResolvedValue({
+    id: "saved",
+    metadata: {
+      engine: "docker",
+      socket: "unix:///fixture/docker.sock",
+      hostSecretId: "afdf5a2e-09f0-42c9-917e-35c45f34db37",
+    },
+    secretId: "encrypted",
+    userId: "owner",
+    updatedAt: new Date(0),
+  });
+  expect(await connections.resolve("saved", context)).not.toBe(first);
+});
 
 describe("saved computer connections", () => {
   it.each([undefined, "saved"])(

@@ -279,6 +279,7 @@ function fixture({
     actionAutoReviewPreference: { findUnique: vi.fn(async () => ({ enabled: autoReview })) },
     event: { findMany: vi.fn(async () => []) },
     externalEffect,
+    $transaction: vi.fn(async (callback: (tx: unknown) => Promise<unknown>) => callback(prisma)),
   };
   const pauseRunForInput = vi.fn(async () => {
     run.status = "waiting_input";

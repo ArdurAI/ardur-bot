@@ -5,6 +5,7 @@ import type {
   ContextSnapshot,
   Feedback,
   Group,
+  GroupModelFailureNotice,
   Me,
   MessageBlock,
   ModelCatalogEntry,
@@ -938,9 +939,14 @@ export function copyableMobileMessageText(message: MobileMessage): string {
     .trim();
 }
 
-export function blockText(message: MobileMessage) {
+export function blockText(
+  message: MobileMessage,
+  translateNotice?: (notice: GroupModelFailureNotice) => string,
+) {
   return message.blocks
     .map((block) => {
+      if (block.kind === "text" && block.notice && translateNotice)
+        return translateNotice(block.notice);
       if (block.kind === "channel_message") {
         return `${messagingProviderLabel(block.provider, block.transport)} · ${block.fromLabel}: ${block.text}`;
       }

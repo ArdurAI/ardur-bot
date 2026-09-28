@@ -1,6 +1,8 @@
+import { createHash } from "node:crypto";
 import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { inflateSync } from "node:zlib";
 import type {
   FeatureDocumentationEvidence,
   FeatureDocumentationManifest,
@@ -9,6 +11,7 @@ import {
   FeatureDocumentationEvidenceSchema,
   FeatureDocumentationManifestSchema,
 } from "../packages/contracts/src/feature-documentation";
+import { SiteDocumentationSchema } from "../packages/contracts/src/site-product";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const manifestFile = "site/data/feature-docs.json";
@@ -26,11 +29,27 @@ const nameDenylist =
 const claimDenylist =
   /\b(?:best|fastest|seamless|effortless|ultimate|guaranteed|always|never|all your|powered by|created by|built by)\b/i;
 const markup = /<[^>]+>|\[[^\]]*\]|[`*_#\r\n]|^\s*[-+]\s/m;
+const deniedPhrases = [
+  "every memory",
+  "instant sync",
+  "works with any repo",
+  "edits in every app automatically sync",
+  "secrets can never leak",
+  "tamper-proof",
+  "private folders inside a shared repo",
+  "all your skills and plugins travel with memory",
+];
+const compareSlug = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
 export type FeatureEvidence = FeatureDocumentationEvidence;
 
 function assertPlain(value: string, context: string): void {
-  if (markup.test(value) || nameDenylist.test(value) || claimDenylist.test(value)) {
+  if (
+    markup.test(value) ||
+    nameDenylist.test(value) ||
+    claimDenylist.test(value) ||
+    deniedPhrases.some((phrase) => value.toLowerCase().includes(phrase))
+  ) {
     throw new Error(`${context} must be plain, neutral public copy.`);
   }
 }
@@ -89,11 +108,11 @@ function assertCoverage(
   }
 }
 
-async function existingRelativeFile(
+async function existingRelativeBytes(
   rootDir: string,
   file: string,
   context: string,
-): Promise<string> {
+): Promise<Buffer> {
   if (path.isAbsolute(file) || file.split("/").includes("..") || file.includes("\\"))
     throw new Error(`${context} must use a repository-relative path.`);
   const absolute = path.resolve(rootDir, file);
@@ -104,7 +123,205 @@ async function existingRelativeFile(
   const resolved = await realpath(absolute);
   if (!resolved.startsWith(`${await realpath(rootDir)}${path.sep}`))
     throw new Error(`${context} resolves outside the repository.`);
-  return readFile(absolute, "utf8");
+  return readFile(absolute);
+}
+
+async function existingRelativeFile(
+  rootDir: string,
+  file: string,
+  context: string,
+): Promise<string> {
+  return (await existingRelativeBytes(rootDir, file, context)).toString("utf8");
+}
+
+function pngCrc(bytes: Buffer): number {
+  let crc = 0xffffffff;
+  for (const byte of bytes) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function pngRows(width: number, height: number, bitsPerPixel: number, interlace: number) {
+  const passes = interlace
+    ? [
+        [0, 0, 8, 8],
+        [4, 0, 8, 8],
+        [0, 4, 4, 8],
+        [2, 0, 4, 4],
+        [0, 2, 2, 4],
+        [1, 0, 2, 2],
+        [0, 1, 1, 2],
+      ]
+    : [[0, 0, 1, 1]];
+  return passes.flatMap(([x, y, dx, dy]) => {
+    const columns = Math.max(0, Math.ceil((width - x!) / dx!));
+    const rows = Math.max(0, Math.ceil((height - y!) / dy!));
+    return columns && rows
+      ? [{ size: 1 + Math.ceil((columns * bitsPerPixel) / 8), count: rows }]
+      : [];
+  });
+}
+
+export function assertDocumentationPng(
+  bytes: Buffer,
+  width: number,
+  height: number,
+  file: string,
+): void {
+  const invalid = () => {
+    throw new Error(`${file} must be a ${width}x${height} PNG no larger than 250 KB.`);
+  };
+  if (
+    bytes.length < 45 ||
+    bytes.length > 250_000 ||
+    bytes.subarray(0, 8).toString("hex") !== "89504e470d0a1a0a"
+  )
+    invalid();
+  let offset = 8;
+  let bitDepth = 0;
+  let colorType = 0;
+  let interlace = 0;
+  let seenHeader = false;
+  let seenData = false;
+  let dataEnded = false;
+  let seenEnd = false;
+  let seenPalette = false;
+  const idat: Buffer[] = [];
+  while (offset < bytes.length) {
+    if (offset + 12 > bytes.length) invalid();
+    const length = bytes.readUInt32BE(offset);
+    const end = offset + 12 + length;
+    if (end > bytes.length) invalid();
+    const type = bytes.toString("ascii", offset + 4, offset + 8);
+    const chunk = bytes.subarray(offset + 4, offset + 8 + length);
+    if (pngCrc(chunk) !== bytes.readUInt32BE(end - 4)) invalid();
+    const payload = bytes.subarray(offset + 8, end - 4);
+    if (!seenHeader && (type !== "IHDR" || length !== 13)) invalid();
+    if (type === "IHDR") {
+      if (seenHeader || length !== 13) invalid();
+      seenHeader = true;
+      if (
+        payload.readUInt32BE(0) !== width ||
+        payload.readUInt32BE(4) !== height ||
+        !width ||
+        !height
+      )
+        invalid();
+      bitDepth = payload[8]!;
+      colorType = payload[9]!;
+      interlace = payload[12]!;
+      const allowedDepths: Record<number, number[]> = {
+        0: [1, 2, 4, 8, 16],
+        2: [8, 16],
+        3: [1, 2, 4, 8],
+        4: [8, 16],
+        6: [8, 16],
+      };
+      if (
+        !allowedDepths[colorType]?.includes(bitDepth) ||
+        payload[10] !== 0 ||
+        payload[11] !== 0 ||
+        interlace > 1
+      )
+        invalid();
+    } else if (type === "PLTE") {
+      if (seenData || seenPalette || !length || length % 3 || length > 768) invalid();
+      seenPalette = true;
+    } else if (type === "IDAT") {
+      if (dataEnded || (colorType === 3 && !seenPalette) || !length) invalid();
+      seenData = true;
+      idat.push(payload);
+    } else if (type === "IEND") {
+      if (length !== 0 || !seenData || end !== bytes.length) invalid();
+      seenEnd = true;
+    } else if (type.charCodeAt(0) >= 65 && type.charCodeAt(0) <= 90) {
+      invalid();
+    }
+    if (seenData && type !== "IDAT") dataEnded = true;
+    offset = end;
+  }
+  if (!seenEnd) invalid();
+  const channels = colorType === 2 ? 3 : colorType === 4 ? 2 : colorType === 6 ? 4 : 1;
+  const rows = pngRows(width, height, bitDepth * channels, interlace);
+  const expectedLength = rows.reduce((sum, row) => sum + row.size * row.count, 0);
+  if (expectedLength > 50_000_000) invalid();
+  try {
+    const pixels = inflateSync(Buffer.concat(idat), { maxOutputLength: expectedLength + 1 });
+    if (pixels.length !== expectedLength) invalid();
+    let rowStart = 0;
+    for (const row of rows)
+      for (let index = 0; index < row.count; index++) {
+        if (pixels[rowStart]! > 4) invalid();
+        rowStart += row.size;
+      }
+  } catch {
+    invalid();
+  }
+}
+
+/** The published projection contains only Addendum D fields. */
+export function publishedDocumentation(manifest: FeatureDocumentationManifest) {
+  const published = manifest.features
+    .filter((feature) => feature.status === "published" && !feature.internal)
+    .sort((a, b) => compareSlug(a.area, b.area) || a.order - b.order || compareSlug(a.id, b.id));
+  // Nothing published means no block at all: the website rejects an empty one.
+  if (published.length === 0) return undefined;
+  const features = published.map((feature) => ({
+    id: feature.id,
+    aliases: feature.aliases,
+    title: feature.title,
+    summary: feature.summary,
+    area: feature.area,
+    order: feature.order,
+    status: "published" as const,
+    availableSince: feature.availableSince,
+    platforms: feature.platforms,
+    settingsPath: Object.fromEntries(
+      Object.entries(feature.settingsPath)
+        .filter(([, value]) => Boolean(value))
+        .map(([platform, value]) => [platform, value!.uiLabels]),
+    ),
+    steps: feature.steps.map(
+      ({ id, aliases, text, uiLabels, screenshotId, expected, availableSince }) => ({
+        id,
+        aliases,
+        text,
+        uiLabels,
+        screenshotId: screenshotId!,
+        expected,
+        availableSince,
+      }),
+    ),
+    boundaries: feature.boundaries,
+    troubleshooting: feature.troubleshooting,
+    related: feature.related.filter((id) => !feature.deferredRelated?.includes(id)),
+  }));
+  const used = new Set(
+    features.flatMap((feature) => feature.steps.map((step) => step.screenshotId)),
+  );
+  const screenshots = manifest.screenshots
+    .filter((shot) => used.has(shot.id))
+    .sort((a, b) => compareSlug(a.id, b.id))
+    .map(({ id, file, alt, width, height, crop, platform, theme, feature, step }) => ({
+      id,
+      file,
+      alt,
+      width,
+      height,
+      crop,
+      platform,
+      theme,
+      feature,
+      step,
+    }));
+  return SiteDocumentationSchema.parse({
+    manifestVersion: manifest.manifestVersion,
+    locale: manifest.locale,
+    features,
+    screenshots,
+  });
 }
 
 /** Validate a draft authoring snapshot against the current checkout, without network or writes. */
@@ -112,6 +329,7 @@ export async function validateFeatureDocs(
   input: unknown,
   evidence: FeatureEvidence,
   rootDir = root,
+  readCapture = (file: string, context: string) => existingRelativeBytes(rootDir, file, context),
 ): Promise<FeatureDocumentationManifest> {
   const manifest = FeatureDocumentationManifestSchema.parse(input);
   evidence = FeatureDocumentationEvidenceSchema.parse(evidence);
@@ -169,6 +387,13 @@ export async function validateFeatureDocs(
     manifest.screenshots.map((shot) => shot.id),
     "Screenshot IDs",
   );
+  assertUnique(
+    evidence.screenshots.map((shot) => shot.id),
+    "Screenshot evidence IDs",
+  );
+  const screenshotHashes = new Map(evidence.screenshots.map((shot) => [shot.id, shot.sha256]));
+  for (const id of screenshotHashes.keys())
+    if (!screenshots.has(id)) throw new Error(`Screenshot evidence has unknown capture "${id}".`);
   const usedScreenshots = new Set<string>();
   for (const feature of manifest.features) {
     const context = `Feature "${feature.id}"`;
@@ -194,11 +419,8 @@ export async function validateFeatureDocs(
       Object.values(feature.platforms).some((state) => state !== "unavailable")
     )
       throw new Error(`${context} is internal but declares a reachable platform.`);
-    if (
-      feature.status === "published" &&
-      (feature.internal || !feature.steps.length || !feature.availableSince)
-    )
-      throw new Error(`${context} cannot publish without verified steps and availability.`);
+    if (feature.status === "published" && (feature.internal || !feature.steps.length))
+      throw new Error(`${context} cannot publish without verified steps.`);
     const orders = areas.get(feature.area) ?? new Set<number>();
     if (orders.has(feature.order))
       throw new Error(`${context} repeats order ${feature.order} in ${feature.area}.`);
@@ -206,12 +428,32 @@ export async function validateFeatureDocs(
     areas.set(feature.area, orders);
     for (const [name, value] of Object.entries({ title: feature.title, summary: feature.summary }))
       assertPlain(value, `${context} ${name}`);
-    if (
-      !feature.internal &&
-      feature.id !== "self-host" &&
-      !labels.has(feature.title) &&
-      !(await nativeLabel(feature.title))
-    )
+    const titleInNative =
+      feature.status === "draft" || feature.settingsPath.mobile
+        ? await nativeLabel(feature.title)
+        : false;
+    if (feature.titleSource === "guide") {
+      if (
+        feature.internal ||
+        Object.values(feature.settingsPath).some(Boolean) ||
+        !binding.titleSource?.endsWith(".md") ||
+        !binding.sources.includes(binding.titleSource)
+      )
+        throw new Error(`${context} guide title needs a cited Markdown source and no UI path.`);
+      const guide = await existingRelativeFile(
+        rootDir,
+        binding.titleSource,
+        `${context} guide title`,
+      );
+      if (
+        !guide
+          .split(/\r?\n/)
+          .some((line) => /^#{1,6} /.test(line) && line.replace(/^#{1,6} /, "") === feature.title)
+      )
+        throw new Error(`${context} title "${feature.title}" does not match its cited heading.`);
+    } else if (binding.titleSource) {
+      throw new Error(`${context} title source requires an explicit guide title.`);
+    } else if (!feature.internal && !labels.has(feature.title) && !titleInNative)
       throw new Error(`${context} title "${feature.title}" is not a current UI label.`);
     for (const alias of feature.aliases) {
       if (allNames.has(alias))
@@ -228,8 +470,11 @@ export async function validateFeatureDocs(
       }
       for (const [name, value] of Object.entries({ text: step.text, expected: step.expected }))
         assertPlain(value, `${context} step "${step.id}" ${name}`);
+      for (const named of step.text.matchAll(/“([^”]+)”/g))
+        if (!step.uiLabels.includes(named[1]!))
+          throw new Error(`${context} step "${step.id}" names an unlisted UI label.`);
       for (const label of step.uiLabels) {
-        if (!labels.has(label) && !(await nativeLabel(label)))
+        if (!labels.has(label) && (!feature.settingsPath.mobile || !(await nativeLabel(label))))
           throw new Error(
             `${context} step "${step.id}" label "${label}" is absent from English UI sources.`,
           );
@@ -288,18 +533,38 @@ export async function validateFeatureDocs(
     for (const related of feature.related)
       if (!idSet.has(related) || related === feature.id)
         throw new Error(`${context} has invalid related feature "${related}".`);
+    for (const deferred of feature.deferredRelated ?? [])
+      if (
+        !feature.related.includes(deferred) ||
+        manifest.features.find((item) => item.id === deferred)?.status !== "draft"
+      )
+        throw new Error(`${context} has invalid deferred related feature "${deferred}".`);
+    if (feature.status === "published")
+      for (const related of feature.related)
+        if (
+          manifest.features.find((item) => item.id === related)?.status !== "published" &&
+          !feature.deferredRelated?.includes(related)
+        )
+          throw new Error(`${context} related feature "${related}" must publish or be deferred.`);
     for (const boundary of feature.boundaries) assertPlain(boundary, `${context} boundary`);
     if (!binding.sources.length) throw new Error(`${context} needs a source path.`);
     for (const file of [...binding.sources, ...binding.tests])
       await existingRelativeFile(rootDir, file, `${context} evidence`);
     const errors = new Map((binding.errors ?? []).map((item) => [item.id, item]));
+    assertUnique(
+      feature.troubleshooting.map((item) => item.errorId),
+      `${context} error IDs`,
+    );
     for (const item of feature.troubleshooting) {
       assertPlain(item.action, `${context} troubleshooting action`);
+      assertPlain(item.message, `${context} troubleshooting message`);
       const error = errors.get(item.errorId);
       if (!error) throw new Error(`${context} error "${item.errorId}" lacks an evidence sentence.`);
+      if (item.message !== error.text)
+        throw new Error(`${context} error "${item.errorId}" differs from its cited sentence.`);
       assertPlain(error.text, `${context} error sentence`);
       const source = await existingRelativeFile(rootDir, error.source, `${context} error source`);
-      if (!labels.has(error.text) && !source.includes(error.text))
+      if (!labels.has(error.text) && !source.includes(JSON.stringify(error.text)))
         throw new Error(`${context} error "${item.errorId}" is not verbatim in its cited source.`);
     }
   }
@@ -322,15 +587,42 @@ export async function validateFeatureDocs(
   }
   for (const shot of manifest.screenshots) {
     if (!usedScreenshots.has(shot.id)) throw new Error(`Screenshot "${shot.id}" is unused.`);
+    if (shot.locale !== manifest.locale)
+      throw new Error(
+        `Screenshot "${shot.id}" locale "${shot.locale}" differs from manifest locale "${manifest.locale}".`,
+      );
     assertPlain(shot.alt, `Screenshot "${shot.id}" alt`);
-    if (
-      shot.crop &&
-      (shot.crop.x + shot.crop.width > shot.width || shot.crop.y + shot.crop.height > shot.height)
-    )
+    if (shot.file !== `docs/${shot.id}.png`)
+      throw new Error(`Screenshot "${shot.id}" has an invalid file name.`);
+    if (shot.crop.x + shot.crop.width > shot.width || shot.crop.y + shot.crop.height > shot.height)
       throw new Error(`Screenshot "${shot.id}" crop is outside its dimensions.`);
-    await existingRelativeFile(rootDir, shot.path, `Screenshot "${shot.id}"`);
+    const bytes = await readCapture(`site/${shot.file}`, `Screenshot "${shot.id}"`);
+    assertDocumentationPng(bytes, shot.width, shot.height, shot.file);
+    const expectedHash = screenshotHashes.get(shot.id);
+    if (!expectedHash || createHash("sha256").update(bytes).digest("hex") !== expectedHash)
+      throw new Error(`Screenshot "${shot.id}" does not match its evidence SHA-256.`);
+  }
+  const publicBlock = publishedDocumentation(manifest);
+  if (publicBlock) {
+    const strings = (value: unknown): string[] => {
+      if (typeof value === "string") return [value];
+      if (Array.isArray(value)) return value.flatMap(strings);
+      if (value && typeof value === "object") return Object.values(value).flatMap(strings);
+      return [];
+    };
+    const renderedText = strings(publicBlock);
+    for (const value of [...renderedText, renderedText.join(" ")])
+      assertPlain(value, "Published documentation");
   }
   return manifest;
+}
+
+export function assertFeatureDocsComplete(manifest: FeatureDocumentationManifest): void {
+  const drafts = manifest.features.filter(
+    (feature) => !feature.internal && feature.status !== "published",
+  );
+  if (drafts.length)
+    throw new Error(`${drafts.length} verified user-facing documentation pages are still draft.`);
 }
 
 export function featureDocsReport(manifest: FeatureDocumentationManifest): string {
@@ -352,16 +644,25 @@ export function featureDocsReport(manifest: FeatureDocumentationManifest): strin
 }
 
 export async function runFeatureDocs(rootDir = root): Promise<string> {
+  return featureDocsReport(await loadValidatedFeatureDocs(rootDir));
+}
+
+export async function loadValidatedFeatureDocs(
+  rootDir = root,
+): Promise<FeatureDocumentationManifest> {
   const manifest = JSON.parse(await readFile(path.join(rootDir, manifestFile), "utf8")) as unknown;
   const evidence = FeatureDocumentationEvidenceSchema.parse(
     JSON.parse(await readFile(path.join(rootDir, evidenceFile), "utf8")),
   );
-  return featureDocsReport(await validateFeatureDocs(manifest, evidence, rootDir));
+  return validateFeatureDocs(manifest, evidence, rootDir);
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  runFeatureDocs()
-    .then((report) => console.log(report))
+  loadValidatedFeatureDocs()
+    .then((manifest) => {
+      console.log(featureDocsReport(manifest));
+      if (process.argv.includes("--complete")) assertFeatureDocsComplete(manifest);
+    })
     .catch((error: unknown) => {
       console.error(error);
       process.exitCode = 1;

@@ -153,6 +153,29 @@ export class SetupEngine {
   running(): boolean {
     return this.inflight !== null || this.cancelFlight !== null;
   }
+  /** A saved row is never enough to authorize the service handoff after a restart. */
+  pilotReady(): boolean {
+    if (
+      this.inflight ||
+      this.cancelFlight ||
+      this.cancelling ||
+      this.newer ||
+      this.cleanupPending()
+    )
+      return false;
+    if (this.journal.snapshot.interrupted) return false;
+    const required = ["prerequisites", "database", "migrations"] as const;
+    if (
+      !required.every((id) => this.row(id).status === "succeeded" && this.freshlyVerified.has(id))
+    )
+      return false;
+    const command = this.row("command");
+    return (
+      command.status === "skipped" ||
+      command.status === "not-applicable" ||
+      (command.status === "succeeded" && this.freshlyVerified.has("command"))
+    );
+  }
   onChange(listener: (snapshot: SetupSnapshot) => void): () => void {
     this.listeners.add(listener);
     return () => {
@@ -191,16 +214,9 @@ export class SetupEngine {
     if (this.newer || this.cancelling || this.journal.snapshot.interrupted || this.cleanupPending())
       return Promise.resolve(this.snapshot());
     const index = this.steps.findIndex((step) => step.id === stepId);
-    if (index < 0 || !this.dependenciesMet(this.steps[index]!))
+    if (index < 0 || this.steps[index]!.requires.some((id) => this.row(id).status !== "succeeded"))
       return Promise.resolve(this.snapshot());
-    if (stepId === "migrations") {
-      const databaseIndex = this.steps.findIndex((step) => step.id === "database");
-      if (databaseIndex >= 0) {
-        this.freshlyVerified.delete("database");
-        return this.schedule(databaseIndex, false);
-      }
-    }
-    return this.schedule(index, true);
+    return this.schedule(index, true, this.steps.length, true);
   }
 
   async skip(stepId: SetupStepId): Promise<SetupSnapshot> {
@@ -213,7 +229,9 @@ export class SetupEngine {
     )
       return this.snapshot();
     const step = this.steps.find((entry) => entry.id === stepId);
-    if (!step?.canSkip || !this.dependenciesMet(step)) return this.snapshot();
+    if (!step?.canSkip) return this.snapshot();
+    const index = this.steps.indexOf(step);
+    if (!(await this.recheckDependencies(step, index))) return this.snapshot();
     const row = this.row(stepId);
     if (row.status === "succeeded") return this.snapshot();
     this.transition(stepId, "skipped", "user-skipped");
@@ -280,25 +298,62 @@ export class SetupEngine {
     return this.snapshot();
   }
 
-  private schedule(startIndex: number, explicit: boolean): Promise<SetupSnapshot> {
-    this.abort = new AbortController();
+  private schedule(
+    startIndex: number,
+    explicit: boolean,
+    stopBefore = this.steps.length,
+    retry = false,
+  ): Promise<SetupSnapshot> {
+    if (this.inflight) return this.inflight;
+    const controller = new AbortController();
+    this.abort = controller;
     const runId = randomUUID();
     this.journal.snapshot.runId = runId;
-    const running = this.execute(startIndex, explicit, this.abort.signal).finally(() => {
-      if (this.inflight === running) this.inflight = null;
-      this.abort = null;
+    const execution = retry
+      ? this.executeRetry(startIndex, controller.signal)
+      : this.execute(startIndex, explicit, controller.signal, stopBefore);
+    const running = execution.finally(() => {
+      if (this.inflight === running) {
+        this.inflight = null;
+        this.abort = null;
+      }
     });
     this.inflight = running;
     return running;
+  }
+
+  private async executeRetry(index: number, signal: AbortSignal): Promise<SetupSnapshot> {
+    const step = this.steps[index]!;
+    if (!this.dependenciesMet(step)) {
+      await this.execute(0, false, signal, index);
+      if (
+        signal.aborted ||
+        this.cancelling ||
+        this.journal.snapshot.interrupted ||
+        this.cleanupPending() ||
+        !this.dependenciesMet(step)
+      )
+        return this.snapshot();
+    }
+    if (signal.aborted || this.cancelling) return this.snapshot();
+    if (step.id === "migrations") {
+      const databaseIndex = this.steps.findIndex((item) => item.id === "database");
+      if (databaseIndex >= 0) {
+        this.freshlyVerified.delete("database");
+        return this.execute(databaseIndex, false, signal, this.steps.length);
+      }
+    }
+    return this.execute(index, true, signal, this.steps.length);
   }
 
   private async execute(
     startIndex: number,
     explicit: boolean,
     signal: AbortSignal,
+    stopBefore: number,
   ): Promise<SetupSnapshot> {
     try {
-      for (let index = startIndex; index < this.steps.length; index++) {
+      for (let index = startIndex; index < stopBefore; index++) {
         const step = this.steps[index]!;
         if (signal.aborted || this.cancelling) break;
         if (!this.dependenciesMet(step)) break;
@@ -400,6 +455,17 @@ export class SetupEngine {
   private dependenciesMet(step: SetupStep): boolean {
     return step.requires.every(
       (id) => this.row(id).status === "succeeded" && this.freshlyVerified.has(id),
+    );
+  }
+  private async recheckDependencies(step: SetupStep, stopBefore: number): Promise<boolean> {
+    if (this.dependenciesMet(step)) return true;
+    if (step.requires.some((id) => this.row(id).status !== "succeeded")) return false;
+    await this.schedule(0, false, stopBefore);
+    return (
+      !this.cancelling &&
+      !this.journal.snapshot.interrupted &&
+      !this.cleanupPending() &&
+      this.dependenciesMet(step)
     );
   }
   private row(id: SetupStepId): SetupStepSnapshot {

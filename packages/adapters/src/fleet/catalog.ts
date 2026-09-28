@@ -1,5 +1,10 @@
 import type { AdapterContext, SandboxProvider } from "@ardurbot/adapter-kit";
-import type { CapacitySnapshot, FleetTarget } from "@ardurbot/contracts";
+import type {
+  CapacitySnapshot,
+  ComputerConnectionSettings,
+  FleetTarget,
+  HostLabel,
+} from "@ardurbot/contracts";
 import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
 import {
   ENGINE_LABELS,
@@ -9,6 +14,7 @@ import {
 } from "@ardurbot/contracts/fleet";
 import { sandboxKindForBot } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
+import { engineFailureReason } from "@ardurbot/host-runtime/fleet/probe";
 import type { ComputerIdentity, ComputerSecretLoader } from "../computer-connections.js";
 import {
   ComputerConnections,
@@ -25,6 +31,29 @@ import { hostCapacity } from "./service.js";
 /** Kinds outside the fleet list, such as none and fake, belong to the default row. */
 function fleetKind(kind: string | null | undefined): FleetTarget["kind"] {
   return FLEET_KINDS.find((known) => known === kind) ?? "default";
+}
+
+/** Clarify only the old generated default; owner-chosen names remain untouched. */
+export function projectedEngineName(
+  name: string,
+  settings: ComputerConnectionSettings,
+  host: HostLabel,
+): string {
+  if (name !== "Docker on this Mac" && name !== "Docker on this computer") return name;
+  const location = host === "This Mac" ? "this Mac" : "this computer";
+  const endpoint = settings.endpoint ?? settings.socket;
+  if (endpoint?.includes(".docker/run/docker.sock") || settings.dockerContext === "desktop-linux")
+    return `Docker Desktop on ${location}`;
+  if (endpoint?.includes(".orbstack/") || settings.dockerContext === "orbstack")
+    return `OrbStack on ${location}`;
+  const profile = /\.colima\/([^/]+)\/docker\.sock/.exec(endpoint ?? "")?.[1];
+  if (profile) return `Colima (${profile}) on ${location}`;
+  if (settings.dockerContext === "colima") return `Colima (default) on ${location}`;
+  if (settings.dockerContext?.startsWith("colima-"))
+    return `Colima (${settings.dockerContext.slice(7)}) on ${location}`;
+  if (settings.dockerContext?.startsWith("kind-"))
+    return `kind (${settings.dockerContext.slice(5)})`;
+  return name;
 }
 
 /** Clusters and hosted providers report no capacity; a registered one is still available. */
@@ -71,8 +100,14 @@ function placementEngineFamily(provider: SandboxProvider) {
 
 export class FleetCatalog {
   readonly connections: ComputerConnections;
-  private readonly diagnostics = new Map<string, { version?: string; os?: string }>();
-  recordTest(id: string, details: { version?: string; os?: string }) {
+  private readonly diagnostics = new Map<
+    string,
+    Pick<FleetTarget, "version" | "os" | "reachability"> & { capacity?: CapacitySnapshot }
+  >();
+  recordTest(
+    id: string,
+    details: Pick<FleetTarget, "version" | "os" | "reachability"> & { capacity?: CapacitySnapshot },
+  ) {
     this.diagnostics.set(id, details);
   }
   private readonly docker: DockerSandboxProvider;
@@ -150,7 +185,11 @@ export class FleetCatalog {
       ...context,
       signal: AbortSignal.any([context.signal, AbortSignal.timeout(10000)]),
     });
-    this.recordTest("default", { version: info.version, os: info.os });
+    this.recordTest("default", {
+      version: info.version,
+      os: info.os,
+      reachability: { status: "running", checkedAt: new Date().toISOString() },
+    });
   }
   /** A row for connectionless computers of a kind this deployment runs beside its default. */
   private async kindTarget(
@@ -233,15 +272,29 @@ export class FleetCatalog {
             dockerState = "unavailable";
             return unknownCapacity();
           });
+    const previousDockerDiagnostic = this.diagnostics.get("default");
+    const dockerDiagnostic =
+      previousDockerDiagnostic?.reachability &&
+      Date.now() - Date.parse(previousDockerDiagnostic.reachability.checkedAt) < 30_000
+        ? previousDockerDiagnostic
+        : undefined;
     const dockerRow = {
       id: defaultRowIsDocker ? "default" : "docker",
-      name: hostLabel === "This Mac" ? "Docker on this Mac" : "Docker on this computer",
+      name:
+        hostLabel === "This Mac" ? "Docker engine on this Mac" : "Docker engine on this computer",
       kind: "docker" as const,
       builtin: "local-docker" as const,
       connectionId: null,
-      state: (dockerSnapshot.source === "not-reported"
+      state: (dockerDiagnostic?.reachability?.status === "installed-not-running"
         ? "unavailable"
-        : dockerState) as FleetTarget["state"],
+        : dockerSnapshot.source === "not-reported"
+          ? "unavailable"
+          : dockerState) as FleetTarget["state"],
+      reachability:
+        dockerDiagnostic?.reachability ??
+        (dockerSnapshot.source !== "not-reported"
+          ? { status: "running" as const, checkedAt: new Date().toISOString() }
+          : undefined),
       capacity: dockerSnapshot,
       bots: [],
     };
@@ -266,21 +319,59 @@ export class FleetCatalog {
       ...(await probeInBatches(rows, async (row): Promise<FleetTarget> => {
         const settings = ComputerConnectionSettingsSchema.parse(row.metadata);
         let state: FleetTarget["state"] = row.status === "connected" ? "connected" : "unavailable";
-        const capacity = await this.connections
+        const diagnostic = this.diagnostics.get(row.id);
+        const recent =
+          diagnostic?.reachability &&
+          Date.now() - Date.parse(diagnostic.reachability.checkedAt) < 30_000;
+        let reachability = recent ? diagnostic.reachability : undefined;
+        let capacity = await this.connections
           .resolve(row.id, context)
           .then((provider) => provider.capacity?.(context) ?? unknownCapacity())
           .catch(() => {
             state = "unavailable";
             return unknownCapacity();
           });
-        if (rowState(settings.engine, capacity) === "unavailable") state = "unavailable";
+        capacity = (recent ? diagnostic?.capacity : undefined) ?? capacity;
+        if (recent && diagnostic?.reachability?.status !== "running") capacity = unknownCapacity();
+        if (rowState(settings.engine, capacity) === "unavailable") {
+          state = "unavailable";
+          if (!reachability && (settings.engine === "docker" || settings.engine === "podman")) {
+            const checkedAt = new Date().toISOString();
+            try {
+              const provider = await this.connections.resolve(row.id, context);
+              if ("test" in provider && typeof provider.test === "function") {
+                const details = (await provider.test({
+                  ...context,
+                  signal: AbortSignal.any([context.signal, AbortSignal.timeout(3000)]),
+                })) as { capacity?: CapacitySnapshot };
+                capacity = details.capacity ?? capacity;
+                if (capacity.source !== "not-reported") state = "connected";
+                reachability = { status: "running", checkedAt };
+              }
+            } catch (error) {
+              reachability = {
+                status:
+                  settings.endpoint?.startsWith("ssh://") || settings.endpoint?.startsWith("tcp://")
+                    ? "not-reachable"
+                    : "installed-not-running",
+                reason: engineFailureReason(error) ?? "not-reachable",
+                checkedAt,
+              };
+            }
+          }
+        } else if (!recent && (settings.engine === "docker" || settings.engine === "podman")) {
+          reachability = { status: "running", checkedAt: new Date().toISOString() };
+        }
+        if (reachability?.status === "running") state = "connected";
+        if (reachability && reachability.status !== "running") state = "unavailable";
         return {
           ...this.diagnostics.get(row.id),
           id: row.id,
-          name: row.displayName,
+          name: projectedEngineName(row.displayName, settings, hostLabel),
           kind: settings.engine,
           connectionId: row.id,
           state,
+          reachability,
           capacity,
           endpoint: settings.endpoint ?? settings.socket,
           context: settings.context,

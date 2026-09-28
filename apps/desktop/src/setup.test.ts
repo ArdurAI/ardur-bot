@@ -138,6 +138,17 @@ describe.each(Object.entries(modes))("setup window with %s", (_name, { starting,
   });
 });
 
+it("sends Retry from a resumed saved-local failure to the stack bridge", async () => {
+  const failed: Stack = {
+    ...modes["local mode"].stack("failed"),
+    message: "The API stopped.",
+  };
+  const setup = openSetup({ stack: failed, resume: true });
+  await vi.waitFor(() => expect(setup.continueButton().textContent).toBe("Retry"));
+  setup.continueButton().click();
+  await vi.waitFor(() => expect(setup.bridge.stack.start).toHaveBeenCalledOnce());
+});
+
 it("offers Reset local data only for a failure that needs it, then starts fresh", async () => {
   const failed = (offerReset: boolean): Stack => ({
     ...modes["local mode"].stack("failed"),
