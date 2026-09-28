@@ -315,6 +315,7 @@ test("routines: edit a scheduled routine and inspect its result", async ({ page 
   await capture(page, "docs-routines-edit");
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect.poll(() => state.current.prompt).toBe("Summarize the revised sample plan.");
+  await expect(page.getByLabel("How often")).toHaveValue("Weekdays");
   await expect(page.getByRole("button", { name: "Test run" })).toBeEnabled();
   await capture(page, "docs-routines-saved");
   await page.getByRole("button", { name: "Test run" }).click();
@@ -448,6 +449,7 @@ test("group-goals: start a goal in a room and stop it", async ({ page }) => {
   await panel.getByRole("button", { name: "Start goal" }).click();
   await expect.poll(() => state.goal?.status).toBe("running");
   await expect(page.getByText("Goal: Working", { exact: false })).toBeVisible();
+  await panel.getByRole("button", { name: "Close panel" }).click();
   await capture(page, "docs-group-goals-progress");
   await page.getByRole("button", { name: "Stop", exact: true }).click();
   await expect.poll(() => state.goal?.status).toBe("stopped");
