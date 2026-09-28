@@ -235,6 +235,7 @@ import {
   visibleComputerError,
 } from "./shell/computer-error-state";
 import { ComputerScreenError } from "./shell/computer-screen-error";
+import { ComputersUnavailableHint, computersAreUnavailable } from "../components/ComputersUnavailableHint";
 import { useComputerTerminal } from "./shell/computer-terminal";
 import {
   AppConnectCard,
@@ -789,7 +790,7 @@ export function ShellPage({
   const readVisibleGroups = useRef(new Set<string>());
   useNotifications();
   const computerVisible = useRef(false);
-  computerVisible.current = computerOpen;
+  computerVisible.current = computerOpen || panel === "computer";
   const autoSpoken = useRef<string | null>(null);
   const autoSpokenBotId = useRef<string | null>(null);
 
@@ -2572,7 +2573,7 @@ export function ShellPage({
 
   useEffect(() => {
     const heartbeatBotId = computerBot?.id ?? active?.id;
-    if (!computerOpen || !heartbeatBotId || computer?.state !== "running") return;
+    if ((!computerOpen && panel !== "computer") || !heartbeatBotId || computer?.state !== "running") return;
     const ping = () =>
       void rpc.computer.heartbeat({ botId: heartbeatBotId }).catch(() => undefined);
     ping();
@@ -3748,7 +3749,20 @@ export function ShellPage({
                     computer,
                     open: computerOpen,
                     url: embeddedScreenUrl,
-                    error: computerScreenError,
+                    error: computerScreenError ?? (
+                      !embeddedScreenUrl || computer?.state !== "running" ? (
+                        computersAreUnavailable(bootstrapMe?.sandboxProvider) ? (
+                          <ComputersUnavailableHint />
+                        ) : (
+                          computerPlaceholder(
+                            computer?.state,
+                            booting,
+                            computerLabel(computer?.mode, active.name),
+                            computer?.imagePulling ? computer.imagePullPercent : undefined
+                          )
+                        )
+                      ) : null
+                    ),
                     onOpen: () => void openComputer(undefined, true),
                   }}
                   routines={
@@ -6683,6 +6697,19 @@ function DesktopKindEmptyState({ className }: { className?: string }) {
   );
 }
 
+function computerPlaceholder(
+  state: ComputerStatus["state"] | undefined,
+  booting: boolean,
+  label: string,
+  imagePullPercent?: number | null
+) {
+  if (imagePullPercent !== undefined) return computerPullLabel(imagePullPercent);
+  if (state === "booting" || booting) return t`Booting live desktop…`;
+  if (state === "running") return label;
+  if (state === "suspended") return t`Computer is asleep. Open it to wake.`;
+  if (state === "error") return t`Computer failed to boot`;
+  return null;
+}
 function computerPullLabel(percent: number | null | undefined) {
   return percent === null || percent === undefined
     ? t`Preparing the bot computer…`
