@@ -127,7 +127,7 @@ export function SettingsOverlay({
           <nav
             data-testid="settings-nav"
             aria-label={t`Settings`}
-            className="flex max-h-[35vh] shrink-0 flex-col gap-3 overflow-y-auto border-b border-border p-3 md:max-h-none md:w-56 md:border-b-0 md:border-e"
+            className="flex max-h-[35vh] shrink-0 flex-col gap-3 overflow-y-auto border-b border-border bg-background p-3 md:max-h-none md:w-56 md:border-b-0 md:border-e"
           >
             <Input
               type="search"
@@ -140,12 +140,16 @@ export function SettingsOverlay({
               const items = visible.filter((item) => item.group === group);
               if (!items.length) return null;
               return (
-                <fieldset
+                <div
                   key={group}
+                  role="group"
                   className="min-w-0"
-                  aria-label={i18n._(settingsGroupLabels[group])}
+                  aria-labelledby={`settings-group-${group}`}
                 >
-                  <div className="px-2 pb-1 text-xs text-muted-foreground">
+                  <div
+                    id={`settings-group-${group}`}
+                    className="px-2 font-mono text-[11px] uppercase tracking-[0.1em] text-muted-foreground pb-1"
+                  >
                     {i18n._(settingsGroupLabels[group])}
                   </div>
                   {items.map((item) => {
@@ -158,24 +162,26 @@ export function SettingsOverlay({
                         aria-current={active.id === item.id ? "page" : undefined}
                         disabled={busy}
                         onClick={() => navigate(item.id)}
-                        className={`w-full justify-start gap-2 text-sm ${active.id === item.id ? "bg-muted" : "text-muted-foreground"}`}
+                        className={`w-full justify-start gap-2 text-sm ${active.id === item.id ? "relative border border-border bg-card font-semibold text-foreground shadow-xs before:absolute before:inset-y-1.5 before:start-0 before:w-0.5 before:rounded-full before:bg-foreground" : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"}`}
                       >
                         <Icon className="size-4" strokeWidth={1.75} />
                         {i18n._(item.label)}
                       </Button>
                     );
                   })}
-                </fieldset>
+                </div>
               );
             })}
             {!visible.length ? (
               <p className="px-2 text-sm text-muted-foreground">{t`No settings found.`}</p>
             ) : null}
           </nav>
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
             <div className="flex items-center justify-between gap-4 px-6 pt-6">
               <div className="flex min-w-0 items-center gap-3">
-                <DialogTitle className="text-2xl font-medium">{title}</DialogTitle>
+                <DialogTitle className="font-serif text-4xl font-normal tracking-tight">
+                  {title}
+                </DialogTitle>
                 {docsFeatureId ? (
                   <FeatureDocsLink featureId={docsFeatureId} title={title} iconOnly />
                 ) : null}

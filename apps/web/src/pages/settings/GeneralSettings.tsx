@@ -144,7 +144,11 @@ export default function GeneralSettings({
           <Trans>Appearance</Trans>
         </h3>
         <SettingsRow label={t`Theme`}>
-          <div className="flex gap-1" data-testid="ui-appearance-select">
+          <div
+            className="flex w-fit overflow-hidden rounded-lg border border-border"
+            role="group"
+            data-testid="ui-appearance-select"
+          >
             {(
               [
                 { value: "system", label: t`System`, icon: Monitor },
@@ -154,15 +158,17 @@ export default function GeneralSettings({
             ).map(({ value, label, icon: Icon }) => (
               <Toggle
                 key={value}
-                variant="outline"
+                variant="segmented"
                 aria-label={label}
                 title={label}
                 data-testid={`ui-appearance-${value}`}
                 pressed={preferences.theme === value}
                 disabled={busy || !ready}
                 onPressedChange={() => save({ theme: value })}
+                className="gap-2 px-3"
               >
-                <Icon className="size-4" />
+                <Icon className="size-4 shrink-0" />
+                {label}
               </Toggle>
             ))}
           </div>

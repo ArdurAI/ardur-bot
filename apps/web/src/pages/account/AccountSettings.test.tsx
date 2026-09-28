@@ -28,6 +28,14 @@ vi.mock("@lingui/react/macro", () => {
   const t = (parts: TemplateStringsArray, ...values: unknown[]) =>
     parts.reduce((text, part, i) => text + part + (values[i] ?? ""), "");
   return {
+    Select: (p: any) => <div {...p} />,
+    SelectTrigger: (p: any) => <div {...p} />,
+    SelectValue: (p: any) => <div {...p} />,
+    SelectContent: (p: any) => <div {...p} />,
+    SelectItem: (p: any) => <div {...p} />,
+    SelectGroup: (p: any) => <div {...p} />,
+    SelectLabel: (p: any) => <div {...p} />,
+    SelectSeparator: (p: any) => <div {...p} />,
     useLingui: () => ({ t, i18n: { locale: "en" } }),
     Trans: ({ children }: { children: ReactNode }) => children,
   };
@@ -35,6 +43,14 @@ vi.mock("@lingui/react/macro", () => {
 vi.mock("@ardurbot/ui-web", () => {
   const box = ({ children }: { children?: ReactNode }) => <div>{children}</div>;
   return {
+    Select: (p: any) => <div {...p} />,
+    SelectTrigger: (p: any) => <div {...p} />,
+    SelectValue: (p: any) => <div {...p} />,
+    SelectContent: (p: any) => <div {...p} />,
+    SelectItem: (p: any) => <div {...p} />,
+    SelectGroup: (p: any) => <div {...p} />,
+    SelectLabel: (p: any) => <div {...p} />,
+    SelectSeparator: (p: any) => <div {...p} />,
     Button: ({
       variant: _v,
       size: _s,

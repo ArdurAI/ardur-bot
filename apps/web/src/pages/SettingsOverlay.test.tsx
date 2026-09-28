@@ -255,7 +255,9 @@ it("loads the registered pages without duplicate navigation", async () => {
 it("keeps Import under Customize for the owner and hides it from other members", async () => {
   const owner = await render();
   expect(
-    owner.querySelector('fieldset[aria-label="Customize"] [data-testid="settings-nav-import"]'),
+    owner.querySelector(
+      'div[aria-labelledby="settings-group-Customize"] [data-testid="settings-nav-import"]',
+    ),
   ).not.toBeNull();
   const { container } = await renderSettings(
     <PreferencesProvider userId="test">
