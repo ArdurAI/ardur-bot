@@ -1,6 +1,7 @@
 import * as z from "zod";
 import type { ThinkingLevel } from "./domain.js";
 import { Id } from "./ids.js";
+import { HERMES_RUNTIME_V1_DEFAULTS, HermesRuntimeConfigV1Schema } from "./runtime-config.js";
 
 export const RuntimeKindSchema = z.enum([
   "pi",
@@ -39,17 +40,9 @@ export const nativeRuntimeHealthKeys = {
   hermes: "hermes",
 } as const;
 
-export const HermesRuntimeConfigSchema = z.strictObject({
-  version: z.literal(1),
-  maxProviderRequests: z.number().int().min(1).max(64),
-  timeoutMs: z.number().int().min(1_000).max(600_000).multipleOf(1_000),
-});
+export const HermesRuntimeConfigSchema = HermesRuntimeConfigV1Schema;
 export type HermesRuntimeConfig = z.infer<typeof HermesRuntimeConfigSchema>;
-export const HERMES_RUNTIME_DEFAULTS: HermesRuntimeConfig = {
-  version: 1,
-  maxProviderRequests: 16,
-  timeoutMs: 180_000,
-};
+export const HERMES_RUNTIME_DEFAULTS: HermesRuntimeConfig = HERMES_RUNTIME_V1_DEFAULTS;
 export const HERMES_HOST_MAX_OUTPUT_TOKENS = 65_536;
 
 export const RuntimeAvailabilitySchema = z.object({

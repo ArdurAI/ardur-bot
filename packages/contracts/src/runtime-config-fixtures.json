@@ -1,0 +1,20 @@
+{
+  "valid": [
+    "{\"version\":2,\"runtimeKind\":\"hermes\"}",
+    "{\"version\":2,\"runtimeKind\":\"hermes\",\"limits\":{\"maxProviderRequests\":1,\"timeoutMs\":1000},\"context\":{\"maxInputBytes\":4096,\"overflow\":\"stop\"},\"harness\":{\"agent\":{\"api_max_retries\":3}}}",
+    "{\"version\":2,\"runtimeKind\":\"hermes\",\"limits\":{\"maxProviderRequests\":64,\"timeoutMs\":600000},\"context\":{\"maxInputBytes\":65536,\"overflow\":\"trim\"},\"harness\":{\"agent\":{\"api_max_retries\":1}}}"
+  ],
+  "invalid": [
+    "{\"version\":3,\"runtimeKind\":\"hermes\"}",
+    "{\"version\":2,\"runtimeKind\":\"prime-agent\"}",
+    "{\"version\":2,\"runtimeKind\":\"hermes\",\"limits\":{\"maxProviderRequests\":0}}",
+    "{\"version\":2,\"runtimeKind\":\"hermes\",\"limits\":{\"timeoutMs\":1500}}",
+    "{\"version\":2,\"runtimeKind\":\"hermes\",\"context\":{\"maxInputBytes\":4097}}",
+    "{\"version\":2,\"runtimeKind\":\"hermes\",\"harness\":{\"agent\":{\"api_max_retries\":0}}}",
+    "{\"version\":2,\"runtimeKind\":\"hermes\",\"version\":2}",
+    "{\"version\":2,\"runtimeKind\":\"hermes\",\"\\u0076ersion\":2}",
+    "{\"version\":2,\"runtimeKind\":\"hermes\",\"__proto__\":{}}",
+    "{\"version\":2,\"runtimeKind\":\"hermes\",\"model\":\"fake-model\"}",
+    "{\"version\":2,\"runtimeKind\":\"hermes\",\"harness\":{\"agent\":{\"compression\":{\"enabled\":true}}}}"
+  ]
+}
