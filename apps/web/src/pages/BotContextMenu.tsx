@@ -114,12 +114,22 @@ export function BotContextMenu({
               {bot.sectionId === null ? <Check className="ms-auto" /> : null}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={onCreateSection}>
+            <DropdownMenuItem
+              onClick={onCreateSection}
+              onPointerEnter={() => void import("./shell/dialogs")}
+              onFocus={() => void import("./shell/dialogs")}
+              onPointerDown={() => void import("./shell/dialogs")}
+            >
               <FolderPlus />
               {t`New section`}
             </DropdownMenuItem>
             {bot.sectionId && onRenameSection ? (
-              <DropdownMenuItem onClick={() => onRenameSection(bot.sectionId!)}>
+              <DropdownMenuItem
+                onClick={() => onRenameSection(bot.sectionId!)}
+                onPointerEnter={() => void import("./shell/dialogs")}
+                onFocus={() => void import("./shell/dialogs")}
+                onPointerDown={() => void import("./shell/dialogs")}
+              >
                 <Pencil />
                 {t`Rename section`}
               </DropdownMenuItem>
@@ -146,7 +156,12 @@ export function BotContextMenu({
           {t`Duplicate`}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={onClear}>
+        <DropdownMenuItem
+          onClick={onClear}
+          onPointerEnter={() => void import("./shell/dialogs")}
+          onFocus={() => void import("./shell/dialogs")}
+          onPointerDown={() => void import("./shell/dialogs")}
+        >
           <Eraser />
           {t`Clear conversation`}
         </DropdownMenuItem>
@@ -154,7 +169,13 @@ export function BotContextMenu({
           <Archive />
           {t`Archive`}
         </DropdownMenuItem>
-        <DropdownMenuItem variant="destructive" onClick={onDelete}>
+        <DropdownMenuItem
+          variant="destructive"
+          onClick={onDelete}
+          onPointerEnter={() => void import("./shell/dialogs")}
+          onFocus={() => void import("./shell/dialogs")}
+          onPointerDown={() => void import("./shell/dialogs")}
+        >
           <Trash2 />
           {t`Delete`}
         </DropdownMenuItem>

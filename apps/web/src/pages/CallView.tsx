@@ -122,19 +122,25 @@ export function CallView({
     let unsubSpeech: (() => void) | undefined;
     let cancelled = false;
     // A call needs voice immediately, so the speaker module loads here on first use.
-    withSpeaker((speaker) => {
-      if (cancelled) return;
-      unsubSpeech = speaker.subscribe((state) => {
-        if (state.status === "speaking") {
-          setCallPhase("speaking");
-          setCaption(state.caption ?? "");
-        } else if (state.status === "idle" && phaseRef.current !== "listening") {
-          setCaption("");
-          void listen();
-        }
-        if (state.error) setError(state.error);
-      });
-    });
+    withSpeaker(
+      (speaker) => {
+        if (cancelled) return;
+        unsubSpeech = speaker.subscribe((state) => {
+          if (state.status === "speaking") {
+            setCallPhase("speaking");
+            setCaption(state.caption ?? "");
+          } else if (state.status === "idle" && phaseRef.current !== "listening") {
+            setCaption("");
+            void listen();
+          }
+          if (state.error) setError(state.error);
+        });
+      },
+      (error) => {
+        if (cancelled) return;
+        setError(error instanceof Error ? error.message : String(error));
+      },
+    );
     const unsubDictation = dictation.subscribe((state) => {
       if (state.status === "listening") {
         setHeard(pendingSecretAsk(snapshotRef.current) ? "" : state.transcript);
@@ -179,18 +185,24 @@ export function CallView({
       if (text) {
         spokenMessage.current = lastBot.id;
         dictation.stop("cancel");
-        withSpeaker((speaker) =>
-          speaker.speak(
-            secretAsk
-              ? `${text}. ${secretPromptRef.current}`
-              : ask
-                ? `${text}. ${askPromptRef.current}`
-                : text,
-            {
-              botId,
-              messageId: lastBot.id,
-            },
-          ),
+        withSpeaker(
+          (speaker) =>
+            speaker.speak(
+              secretAsk
+                ? `${text}. ${secretPromptRef.current}`
+                : ask
+                  ? `${text}. ${askPromptRef.current}`
+                  : text,
+              {
+                botId,
+                messageId: lastBot.id,
+              },
+            ),
+          (error) => {
+            setError(error instanceof Error ? error.message : String(error));
+            setCaption("");
+            void listen();
+          },
         );
         return;
       }
@@ -221,8 +233,14 @@ export function CallView({
         }
       }
       if (phrases.length) {
-        withSpeaker((speaker) =>
-          speaker.speak(phrases.join(". "), { botId, messageId: `narrate:${lastKey}` }),
+        withSpeaker(
+          (speaker) =>
+            speaker.speak(phrases.join(". "), { botId, messageId: `narrate:${lastKey}` }),
+          (error) => {
+            setError(error instanceof Error ? error.message : String(error));
+            setCaption("");
+            void listen();
+          },
         );
       }
     }

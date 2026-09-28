@@ -24,12 +24,16 @@ export function loadSpeaker(): Promise<Speaker> {
 }
 
 /**
- * Runs an action once the speaker module is ready. A failed load is swallowed:
- * every action here is best-effort playback control, and the tts module reports
- * its own failures through the speaker state it publishes.
+ * Runs an action once the speaker module is ready. A failed load is reported
+ * through onError if supplied, otherwise swallowed for best-effort callers.
  */
-export function withSpeaker(action: (speaker: Speaker) => void): void {
-  void loadSpeaker().then(action, () => undefined);
+export function withSpeaker(
+  action: (speaker: Speaker) => void,
+  onError?: (error: unknown) => void,
+): Promise<void> {
+  return loadSpeaker().then(action, (error: unknown) => {
+    onError?.(error);
+  });
 }
 
 /**

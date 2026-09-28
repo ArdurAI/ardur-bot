@@ -283,35 +283,43 @@ const PeerMessagesOverlay = lazy(() =>
 const CallView = lazy(() => import("./CallView").then((module) => ({ default: module.CallView })));
 // Both pickers sit behind a click and pull the command-menu dependency, so they
 // load on demand; the hotkey listener stays local to keep the palette shortcut instant.
+const loadBotCreatePicker = () => import("./shell/bot-picker");
 const BotCreatePicker = lazy(() =>
-  import("./shell/bot-picker").then((module) => ({ default: module.BotCreatePicker })),
+  loadBotCreatePicker().then((module) => ({ default: module.BotCreatePicker })),
 );
+const preloadBotCreatePicker = () => {
+  void loadBotCreatePicker();
+};
 const CommandPalette = lazy(() =>
   import("./shell/command-palette").then((module) => ({ default: module.CommandPalette })),
 );
 // Every dialog opens from a click, so the shared dialog module loads on demand.
+const loadDialogs = () => import("./shell/dialogs");
+const preloadDialogs = () => {
+  void loadDialogs();
+};
 const ClearConversationDialog = lazy(() =>
-  import("./shell/dialogs").then((module) => ({
+  loadDialogs().then((module) => ({
     default: module.ClearConversationDialog,
   })),
 );
 const DeleteBotDialog = lazy(() =>
-  import("./shell/dialogs").then((module) => ({ default: module.DeleteBotDialog })),
+  loadDialogs().then((module) => ({ default: module.DeleteBotDialog })),
 );
 const DeleteItemDialog = lazy(() =>
-  import("./shell/dialogs").then((module) => ({ default: module.DeleteItemDialog })),
+  loadDialogs().then((module) => ({ default: module.DeleteItemDialog })),
 );
 const NewBotSectionDialog = lazy(() =>
-  import("./shell/dialogs").then((module) => ({ default: module.NewBotSectionDialog })),
+  loadDialogs().then((module) => ({ default: module.NewBotSectionDialog })),
 );
 const NewSpaceDialog = lazy(() =>
-  import("./shell/dialogs").then((module) => ({ default: module.NewSpaceDialog })),
+  loadDialogs().then((module) => ({ default: module.NewSpaceDialog })),
 );
 const PickerInfoDialog = lazy(() =>
-  import("./shell/dialogs").then((module) => ({ default: module.PickerInfoDialog })),
+  loadDialogs().then((module) => ({ default: module.PickerInfoDialog })),
 );
 const RenameBotSectionDialog = lazy(() =>
-  import("./shell/dialogs").then((module) => ({ default: module.RenameBotSectionDialog })),
+  loadDialogs().then((module) => ({ default: module.RenameBotSectionDialog })),
 );
 
 type Panel =
@@ -2801,6 +2809,10 @@ export function ShellPage({
                 className="app-no-drag text-[21px] text-muted-foreground/70 hover:text-foreground/75"
                 title={t`Create`}
                 data-testid="create-menu-trigger"
+                onPointerEnter={preloadBotCreatePicker}
+                onFocus={preloadBotCreatePicker}
+                onPointerDown={preloadBotCreatePicker}
+                onClick={preloadBotCreatePicker}
               >
                 +
               </PopoverTrigger>
@@ -3187,6 +3199,9 @@ export function ShellPage({
                         size="xs"
                         className="text-destructive hover:text-destructive"
                         aria-label={t`Delete ${bot.name}`}
+                        onPointerEnter={preloadDialogs}
+                        onFocus={preloadDialogs}
+                        onPointerDown={preloadDialogs}
                         onClick={() => setDeleteTarget(bot)}
                       >
                         <Trans>Delete</Trans>
@@ -3218,6 +3233,9 @@ export function ShellPage({
                         size="xs"
                         className="text-destructive hover:text-destructive"
                         aria-label={t`Delete ${group.name}`}
+                        onPointerEnter={preloadDialogs}
+                        onFocus={preloadDialogs}
+                        onPointerDown={preloadDialogs}
                         onClick={() => setDeleteGroupTarget(group)}
                       >
                         <Trans>Delete</Trans>
@@ -4184,6 +4202,9 @@ export function ShellPage({
             >
               <DropdownMenuItem
                 variant="destructive"
+                onPointerEnter={preloadDialogs}
+                onFocus={preloadDialogs}
+                onPointerDown={preloadDialogs}
                 onClick={() => {
                   const target = spaces.find((space) => space.id === spaceMenu.id);
                   if (target) setDeleteSpaceTarget(target);
@@ -4198,90 +4219,100 @@ export function ShellPage({
         ) : null}
 
         {deleteTarget ? (
-          <DeleteBotDialog
-            bot={deleteTarget}
-            onCancel={() => setDeleteTarget(null)}
-            onConfirm={async (deleteMemories) => {
-              await rpc.bots.remove({ botId: deleteTarget.id, deleteMemories });
-              setDeleteTarget(null);
-              setPanel(null);
-              await refreshBots(true);
-            }}
-          />
+          <Suspense fallback={null}>
+            <DeleteBotDialog
+              bot={deleteTarget}
+              onCancel={() => setDeleteTarget(null)}
+              onConfirm={async (deleteMemories) => {
+                await rpc.bots.remove({ botId: deleteTarget.id, deleteMemories });
+                setDeleteTarget(null);
+                setPanel(null);
+                await refreshBots(true);
+              }}
+            />
+          </Suspense>
         ) : null}
 
         {deleteGroupTarget ? (
-          <DeleteItemDialog
-            item={deleteGroupTarget}
-            noun="group"
-            onCancel={() => setDeleteGroupTarget(null)}
-            onConfirm={async () => {
-              await rpc.groups.remove({ groupId: deleteGroupTarget.id });
-              setDeleteGroupTarget(null);
-              setPanel(null);
-              await refreshBots(true);
-            }}
-          />
+          <Suspense fallback={null}>
+            <DeleteItemDialog
+              item={deleteGroupTarget}
+              noun="group"
+              onCancel={() => setDeleteGroupTarget(null)}
+              onConfirm={async () => {
+                await rpc.groups.remove({ groupId: deleteGroupTarget.id });
+                setDeleteGroupTarget(null);
+                setPanel(null);
+                await refreshBots(true);
+              }}
+            />
+          </Suspense>
         ) : null}
 
         {deleteSpaceTarget ? (
-          <DeleteItemDialog
-            item={deleteSpaceTarget}
-            noun="space"
-            description={
-              <Trans>Only empty spaces can be deleted. Delete its bots and groups first.</Trans>
-            }
-            onCancel={() => setDeleteSpaceTarget(null)}
-            onConfirm={async () => {
-              const targetId = deleteSpaceTarget.id;
-              const result = await rpc.spaces.remove({ spaceId: targetId });
-              setDeleteSpaceTarget(null);
-              setPanel(null);
-              const effectiveSpaceId = selectedSpaceId() ?? bootstrapMe?.spaceId;
-              if (effectiveSpaceId === targetId) {
-                // The auth boundary changed, so reload like a space switch.
-                if (selectSpace(result.activeSpaceId)) {
-                  window.location.assign("/app/bots");
-                  return;
-                }
+          <Suspense fallback={null}>
+            <DeleteItemDialog
+              item={deleteSpaceTarget}
+              noun="space"
+              description={
+                <Trans>Only empty spaces can be deleted. Delete its bots and groups first.</Trans>
               }
-              await refreshBots(true);
-            }}
-          />
+              onCancel={() => setDeleteSpaceTarget(null)}
+              onConfirm={async () => {
+                const targetId = deleteSpaceTarget.id;
+                const result = await rpc.spaces.remove({ spaceId: targetId });
+                setDeleteSpaceTarget(null);
+                setPanel(null);
+                const effectiveSpaceId = selectedSpaceId() ?? bootstrapMe?.spaceId;
+                if (effectiveSpaceId === targetId) {
+                  // The auth boundary changed, so reload like a space switch.
+                  if (selectSpace(result.activeSpaceId)) {
+                    window.location.assign("/app/bots");
+                    return;
+                  }
+                }
+                await refreshBots(true);
+              }}
+            />
+          </Suspense>
         ) : null}
 
         {newSectionTarget ? (
-          <NewBotSectionDialog
-            bot={newSectionTarget.chat}
-            onCancel={() => setNewSectionTarget(null)}
-            onConfirm={async (name) => {
-              await rpc.botSections.create(
-                newSectionTarget.kind === "bot"
-                  ? { botId: newSectionTarget.chat.id, name }
-                  : { groupId: newSectionTarget.chat.id, name },
-              );
-              setNewSectionTarget(null);
-              await refreshBots();
-            }}
-          />
+          <Suspense fallback={null}>
+            <NewBotSectionDialog
+              bot={newSectionTarget.chat}
+              onCancel={() => setNewSectionTarget(null)}
+              onConfirm={async (name) => {
+                await rpc.botSections.create(
+                  newSectionTarget.kind === "bot"
+                    ? { botId: newSectionTarget.chat.id, name }
+                    : { groupId: newSectionTarget.chat.id, name },
+                );
+                setNewSectionTarget(null);
+                await refreshBots();
+              }}
+            />
+          </Suspense>
         ) : null}
 
         {renameSectionTarget ? (
-          <RenameBotSectionDialog
-            section={renameSectionTarget.section}
-            onCancel={() => setRenameSectionTarget(null)}
-            onConfirm={async (name) => {
-              await rpc.botSections.update(
-                {
-                  sectionId: renameSectionTarget.section.id,
-                  name,
-                },
-                { context: { spaceId: renameSectionTarget.spaceId } },
-              );
-              setRenameSectionTarget(null);
-              await refreshBots();
-            }}
-          />
+          <Suspense fallback={null}>
+            <RenameBotSectionDialog
+              section={renameSectionTarget.section}
+              onCancel={() => setRenameSectionTarget(null)}
+              onConfirm={async (name) => {
+                await rpc.botSections.update(
+                  {
+                    sectionId: renameSectionTarget.section.id,
+                    name,
+                  },
+                  { context: { spaceId: renameSectionTarget.spaceId } },
+                );
+                setRenameSectionTarget(null);
+                await refreshBots();
+              }}
+            />
+          </Suspense>
         ) : null}
 
         {sectionMenu ? (
@@ -4309,6 +4340,9 @@ export function ShellPage({
               className="w-[220px]"
             >
               <DropdownMenuItem
+                onPointerEnter={preloadDialogs}
+                onFocus={preloadDialogs}
+                onPointerDown={preloadDialogs}
                 onClick={() => {
                   setRenameSectionTarget({
                     section: sectionMenu.section,
@@ -4340,66 +4374,74 @@ export function ShellPage({
         ) : null}
 
         {newSpaceOpen ? (
-          <NewSpaceDialog
-            onCancel={() => setNewSpaceOpen(false)}
-            onConfirm={async (name) => {
-              const space = await rpc.spaces.create({ name });
-              if (!selectSpace(space.id)) {
-                setNewSpaceOpen(false);
-                await refreshBots();
-                return;
-              }
-              window.location.assign("/onboarding");
-            }}
-          />
+          <Suspense fallback={null}>
+            <NewSpaceDialog
+              onCancel={() => setNewSpaceOpen(false)}
+              onConfirm={async (name) => {
+                const space = await rpc.spaces.create({ name });
+                if (!selectSpace(space.id)) {
+                  setNewSpaceOpen(false);
+                  await refreshBots();
+                  return;
+                }
+                window.location.assign("/onboarding");
+              }}
+            />
+          </Suspense>
         ) : null}
 
         {pickerInfoTopic ? (
-          <PickerInfoDialog topic={pickerInfoTopic} onClose={() => setPickerInfoTopic(null)} />
+          <Suspense fallback={null}>
+            <PickerInfoDialog topic={pickerInfoTopic} onClose={() => setPickerInfoTopic(null)} />
+          </Suspense>
         ) : null}
 
         {clearTarget ? (
-          <ClearConversationDialog
-            bot={clearTarget.chat}
-            onCancel={() => setClearTarget(null)}
-            onConfirm={async () => {
-              await rpc.threads.clear(
-                clearTarget.kind === "bot"
-                  ? { botId: clearTarget.chat.id }
-                  : { groupId: clearTarget.chat.id },
-              );
-              if (
-                (clearTarget.kind === "bot" && active?.id === clearTarget.chat.id) ||
-                (clearTarget.kind === "group" && activeGroup?.id === clearTarget.chat.id)
-              ) {
-                expandedHistoryThread.current = null;
-                pinnedAroundRef.current = null;
-                historyEpoch.current += 1;
-                updateSnapshot((current) =>
-                  current ? { ...current, messages: [], olderCursor: null, run: null } : current,
+          <Suspense fallback={null}>
+            <ClearConversationDialog
+              bot={clearTarget.chat}
+              onCancel={() => setClearTarget(null)}
+              onConfirm={async () => {
+                await rpc.threads.clear(
+                  clearTarget.kind === "bot"
+                    ? { botId: clearTarget.chat.id }
+                    : { groupId: clearTarget.chat.id },
                 );
-              }
-              setClearTarget(null);
-              await refreshBots();
-            }}
-          />
+                if (
+                  (clearTarget.kind === "bot" && active?.id === clearTarget.chat.id) ||
+                  (clearTarget.kind === "group" && activeGroup?.id === clearTarget.chat.id)
+                ) {
+                  expandedHistoryThread.current = null;
+                  pinnedAroundRef.current = null;
+                  historyEpoch.current += 1;
+                  updateSnapshot((current) =>
+                    current ? { ...current, messages: [], olderCursor: null, run: null } : current,
+                  );
+                }
+                setClearTarget(null);
+                await refreshBots();
+              }}
+            />
+          </Suspense>
         ) : null}
 
         {deleteRoutineTarget ? (
-          <DeleteItemDialog
-            item={deleteRoutineTarget}
-            noun="routine"
-            onCancel={() => setDeleteRoutineTarget(null)}
-            onConfirm={async () => {
-              const target = deleteRoutineTarget;
-              await rpc.routines.remove({ routineId: target.id });
-              setDeleteRoutineTarget(null);
-              setEditingRoutine((current) => (current?.id === target.id ? null : current));
-              if (activeBotId.current !== target.botId) return;
-              await refreshThread(target.botId);
-              if (activeBotId.current === target.botId) setPanel("computer");
-            }}
-          />
+          <Suspense fallback={null}>
+            <DeleteItemDialog
+              item={deleteRoutineTarget}
+              noun="routine"
+              onCancel={() => setDeleteRoutineTarget(null)}
+              onConfirm={async () => {
+                const target = deleteRoutineTarget;
+                await rpc.routines.remove({ routineId: target.id });
+                setDeleteRoutineTarget(null);
+                setEditingRoutine((current) => (current?.id === target.id ? null : current));
+                if (activeBotId.current !== target.botId) return;
+                await refreshThread(target.botId);
+                if (activeBotId.current === target.botId) setPanel("computer");
+              }}
+            />
+          </Suspense>
         ) : null}
 
         {messagingSettingsOpen ? (

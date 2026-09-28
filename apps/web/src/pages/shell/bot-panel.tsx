@@ -728,6 +728,9 @@ export function BotSettings({
           variant="ghost"
           size="sm"
           className="-ms-2.5 text-destructive hover:text-destructive"
+          onPointerEnter={() => void import("./dialogs")}
+          onFocus={() => void import("./dialogs")}
+          onPointerDown={() => void import("./dialogs")}
           onClick={onClear}
         >
           <Trans>Clear conversation</Trans>
