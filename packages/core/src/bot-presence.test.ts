@@ -111,4 +111,23 @@ describe("derived bot presence", () => {
     expect(result.latestDeliveryId).toBeUndefined();
     expect(projectBotPresence(input).currentTaskTitle).toBe("Other-room task");
   });
+
+  it("keeps personal desk work out of a restricted peer's directory", () => {
+    const result = projectBotPresence({
+      bot,
+      groupIds: [],
+      runs: [run("private-run", "running", new Date(now.getTime() + 1_000))],
+      cards: [],
+      taskTitle: "Private desk prompt",
+      pendingApprovalRunIds: new Set(),
+      pendingPeerCount: 0,
+      observedAt: now,
+      callerBotId: "restricted-peer",
+      visibleGroupId: "__desk__",
+    });
+    expect(result).toMatchObject({ availability: "busy", activeRunCount: 1, activeRunIds: [] });
+    expect(result.currentTaskTitle).toBeUndefined();
+    expect(result.goalId).toBeUndefined();
+    expect(result.delegationId).toBeUndefined();
+  });
 });

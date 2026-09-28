@@ -480,6 +480,51 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
     expect(await prisma.botMessageDelivery.count({ where: { spaceId, userId } })).toBe(before);
   });
 
+  it("redacts an unrelated desk task in read-only peer list_bots mode", async () => {
+    const f = await fixture();
+    const unrelated = await prisma.bot.create({
+      data: { spaceId, userId, name: "Unrelated bot", color: "ink" },
+    });
+    const desk = await prisma.thread.create({
+      data: { spaceId, userId, botId: unrelated.id },
+    });
+    const task = await prisma.task.create({
+      data: {
+        spaceId,
+        userId,
+        botId: unrelated.id,
+        threadId: desk.id,
+        prompt: "Private desk task",
+        status: "running",
+      },
+    });
+    const run = await prisma.run.create({
+      data: {
+        spaceId,
+        userId,
+        botId: unrelated.id,
+        threadId: desk.id,
+        taskId: task.id,
+        status: "running",
+        trigger: "follow_up",
+        leaseExpiresAt: new Date(Date.now() + 60_000),
+      },
+    });
+    const result = await loadBotPresence(prisma, { spaceId, userId }, {
+      callerBotId: f.worker.id,
+      visibleGroupId: "__desk__",
+      canSend: true,
+      limit: 50,
+    });
+    const row = result.bots.find((bot) => bot.botId === unrelated.id);
+    expect(row).toMatchObject({ availability: "busy", activeRunCount: 1, activeRunIds: [] });
+    expect(row?.currentTaskTitle).toBeUndefined();
+    expect(row?.goalId).toBeUndefined();
+    expect(row?.delegationId).toBeUndefined();
+    expect(JSON.stringify(row)).not.toContain(run.id);
+    expect(JSON.stringify(row)).not.toContain(task.prompt);
+  });
+
   it("commits a long worker result and wakes once from its bounded receipt", async () => {
     const f = await fixture();
     expect(await completeWorker(f, "x".repeat(16_000))).not.toBe(false);

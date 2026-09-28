@@ -120,11 +120,23 @@ export function projectBotPresence(input: {
     (card) => card.id === selectedRun?.delegationId && ["running", "queued"].includes(card.status),
   );
   const parsedCard = selectedCard ? TaskCardSchema.safeParse(selectedCard.card) : null;
-  // A room's directory may reveal that a bot is busy elsewhere, but not that room's task.
-  const taskVisible =
-    !input.visibleGroupId ||
-    !selectedRun?.thread?.groupId ||
-    selectedRun.thread.groupId === input.visibleGroupId;
+  // A peer may see advisory availability, but task context requires a shared room.
+  // A personal desk thread has no room and cannot grant another bot access.
+  const runTaskVisible = (run: Run | undefined) => {
+    if (!input.callerBotId || input.callerBotId === bot.id)
+      return !input.visibleGroupId ||
+        !run?.thread?.groupId ||
+        run.thread.groupId === input.visibleGroupId;
+    const roomId = run?.thread?.groupId;
+    return Boolean(
+      roomId &&
+        input.groupIds.includes(roomId) &&
+        (!input.visibleGroupId ||
+          input.visibleGroupId === "__desk__" ||
+          roomId === input.visibleGroupId),
+    );
+  };
+  const taskVisible = runTaskVisible(selectedRun);
   const latestAt = input.runs
     .flatMap((run) => [run.startedAt, run.completedAt])
     .concat(input.activityAt ?? [])
@@ -140,14 +152,7 @@ export function projectBotPresence(input: {
     groupIds: input.groupIds,
     ...(taskVisible && selectedRun?.goalId ? { goalId: selectedRun.goalId } : {}),
     availability,
-    activeRunIds: live
-      .filter(
-        (run) =>
-          !input.visibleGroupId ||
-          !run.thread?.groupId ||
-          run.thread.groupId === input.visibleGroupId,
-      )
-      .map((run) => run.id),
+    activeRunIds: live.filter(runTaskVisible).map((run) => run.id),
     activeRunCount: live.length,
     concurrentLimit: Math.max(1, bot.concurrentRuns ?? 1),
     ...(taskVisible
