@@ -155,7 +155,8 @@ export function GroupMemberModelControl({
         groupId,
         botId: activeMember.botId,
         memberId: activeMember.memberId,
-        expectedRevision: activeMember.modelPinRevision,
+        expectedRevision: activeMember.modelPinRevision ?? 0,
+        expectedBotModelPinRevision: bot?.modelPinRevision ?? 0,
       };
       const group = await rpc<MobileGroup>(
         resolvedPin ? "groups/setMemberModelPin" : "groups/clearMemberModelPin",

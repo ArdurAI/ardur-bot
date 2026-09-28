@@ -195,6 +195,14 @@ describe("group model owner mutation", () => {
       updateGroupMemberModelPin(
         f.deps,
         actor,
+        { ...target, expectedRevision: 1, expectedBotModelPinRevision: undefined },
+        selected,
+      ),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(
+      updateGroupMemberModelPin(
+        f.deps,
+        actor,
         { ...target, expectedRevision: 1, expectedBotModelPinRevision: 1 },
         selected,
       ),

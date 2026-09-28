@@ -330,6 +330,22 @@ function createFleetContract() {
   };
 }
 
+export const groupsContract = {
+  
+    create: oc.input(CreateGroupInput).output(GroupSchema),
+    list: oc.output(z.array(GroupSchema)),
+    listArchived: oc.output(z.array(GroupSchema)),
+    get: oc.input(groupId).output(GroupDetailSchema),
+    duplicate: oc.input(groupId).output(GroupSchema),
+    update: oc.input(UpdateGroupInput).output(GroupSchema),
+    setMemberModelPin: oc.input(SetGroupMemberModelPinInput).output(GroupSchema),
+    clearMemberModelPin: oc.input(ClearGroupMemberModelPinInput).output(GroupSchema),
+    archive: oc.input(groupId).output(z.object({ ok: z.literal(true) })),
+    restore: oc.input(groupId).output(z.object({ ok: z.literal(true) })),
+    remove: oc.input(groupId).output(z.object({ ok: z.literal(true) })),
+};
+export type GroupsContract = typeof groupsContract;
+
 export const appContract = {
   features: featuresContract,
   dashboard: dashboardContract,
@@ -583,19 +599,7 @@ export const appContract = {
       }),
     ),
   },
-  groups: {
-    create: oc.input(CreateGroupInput).output(GroupSchema),
-    list: oc.output(z.array(GroupSchema)),
-    listArchived: oc.output(z.array(GroupSchema)),
-    get: oc.input(groupId).output(GroupDetailSchema),
-    duplicate: oc.input(groupId).output(GroupSchema),
-    update: oc.input(UpdateGroupInput).output(GroupSchema),
-    setMemberModelPin: oc.input(SetGroupMemberModelPinInput).output(GroupSchema),
-    clearMemberModelPin: oc.input(ClearGroupMemberModelPinInput).output(GroupSchema),
-    archive: oc.input(groupId).output(z.object({ ok: z.literal(true) })),
-    restore: oc.input(groupId).output(z.object({ ok: z.literal(true) })),
-    remove: oc.input(groupId).output(z.object({ ok: z.literal(true) })),
-  },
+  groups: groupsContract as GroupsContract,
   botSections: {
     list: oc.output(z.array(BotSectionSchema)),
     create: oc

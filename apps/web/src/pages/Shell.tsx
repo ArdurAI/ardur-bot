@@ -3801,6 +3801,8 @@ export function ShellPage({
                     botId: member.botId,
                     memberId: member.memberId,
                     expectedRevision: member.modelPinRevision ?? 0,
+                    expectedBotModelPinRevision:
+                      bots.find((b) => b.id === member.botId)?.modelPinRevision ?? 0,
                   };
                   const updated = pin
                     ? await rpc.groups.setMemberModelPin({ ...target, pin })
