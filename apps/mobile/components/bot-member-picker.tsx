@@ -20,7 +20,13 @@ export function BotMemberPicker({
     const checked = selected.includes(bot.id);
     return (
       <View key={bot.id} style={styles.row}>
-        <BotAvatar color={bot.color} identity={bot.id} size={34} status={bot.status} />
+        <BotAvatar
+          color={bot.color}
+          identity={bot.id}
+          label={bot.name}
+          size={34}
+          status={bot.status}
+        />
         <Text style={[styles.name, { color: tokens.foreground }]}>{bot.name}</Text>
         <Switch
           accessibilityLabel={bot.name}

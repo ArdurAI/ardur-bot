@@ -1,4 +1,5 @@
 import type { Actor } from "@ardurbot/contracts";
+import { HERMES_RUNTIME_V2_DEFAULTS } from "@ardurbot/contracts/runtime-config";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Prisma, type PrismaClient } from "./client.js";
 import { createRepos } from "./repos.js";
@@ -109,6 +110,24 @@ describe("createRepos.listBots", () => {
     };
     const bots = await createRepos(prisma as unknown as PrismaClient).listBots(actor);
     expect(bots[0]?.runtimeConfig).toBeNull();
+  });
+  it("reads v1 and v2 rows while refusing malformed stored settings", async () => {
+    const rows: Array<typeof baseBot & { runtimeConfig: unknown }> = [
+      {
+        ...baseBot,
+        id: "old",
+        runtimeConfig: { version: 1, maxProviderRequests: 4, timeoutMs: 90000 },
+      },
+      { ...baseBot, id: "new", runtimeConfig: HERMES_RUNTIME_V2_DEFAULTS },
+    ];
+    const prisma = {
+      bot: { findMany: vi.fn(async () => rows) },
+      run: { findMany: vi.fn(async () => []) },
+    };
+    const repos = createRepos(prisma as unknown as PrismaClient);
+    expect((await repos.listBots(actor)).map((bot) => bot.runtimeConfig?.version)).toEqual([1, 2]);
+    rows[1] = { ...rows[1]!, runtimeConfig: { ...HERMES_RUNTIME_V2_DEFAULTS, providers: {} } };
+    await expect(repos.listBots(actor)).rejects.toThrow();
   });
   it("passes memoryScope through as null when unset", async () => {
     await expect(reposFor(null).listBots(actor)).resolves.toEqual([

@@ -1151,16 +1151,23 @@ it("reads and saves only Hermes limits with the existing model pin", async () =>
       }),
     ),
   );
-  await vi.waitFor(() => {
-    expect(container.textContent).toContain("Hermes is not installed on this computer.");
-    expect(container.textContent).toContain("Hermes runs with this computer's access.");
-    expect(container.querySelector<HTMLInputElement>('input[type="number"][max="64"]')?.value).toBe(
-      "7",
-    );
-    expect(
-      container.querySelector<HTMLInputElement>('input[type="number"][max="600"]')?.value,
-    ).toBe("42");
-    expect(container.textContent).not.toContain("Connect Hermes");
+  await vi.waitFor(
+    () =>
+      expect(
+        container.querySelector<HTMLInputElement>('input[type="number"][max="64"]')?.value,
+      ).toBe("7"),
+    { timeout: 5_000 },
+  );
+  expect(container.textContent).toContain("Hermes is not installed on this computer.");
+  expect(container.textContent).toContain("Hermes runs with this computer's access.");
+  expect(container.querySelector<HTMLInputElement>('input[type="number"][max="600"]')?.value).toBe(
+    "42",
+  );
+  expect(container.textContent).not.toContain("Connect Hermes");
+  const callLimit = container.querySelector<HTMLInputElement>('input[type="number"][max="64"]')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(callLimit, "8");
+    callLimit.dispatchEvent(new Event("input", { bubbles: true }));
   });
   await save();
   expect(onSave).toHaveBeenLastCalledWith(
@@ -1169,9 +1176,46 @@ it("reads and saves only Hermes limits with the existing model pin", async () =>
       modelProvider: "ollama",
       modelId: "llama3.2:1b",
       modelCredentialId: "connection",
-      runtimeConfig: { version: 1, maxProviderRequests: 7, timeoutMs: 42_000 },
+      expectedModelPinRevision: 0,
+      runtimeConfig: {
+        version: 2,
+        runtimeKind: "hermes",
+        limits: { maxProviderRequests: 8, timeoutMs: 42_000 },
+        context: { maxInputBytes: 16_384, overflow: "trim" },
+        harness: { agent: { api_max_retries: 1 } },
+      },
     }),
   );
+});
+
+it("blocks saving and shows a validation error for fractional Hermes limits", async () => {
+  await act(async () =>
+    root.render(settings({ runtimeKind: "hermes", runtimeExperimental: true })),
+  );
+  await vi.waitFor(() =>
+    expect(
+      container.querySelector<HTMLInputElement>('input[type="number"][max="64"]'),
+    ).not.toBeNull(),
+  );
+  const calls = container.querySelector<HTMLInputElement>('input[type="number"][max="64"]')!;
+  const time = container.querySelector<HTMLInputElement>('input[type="number"][max="600"]')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(calls, "1.5");
+    calls.dispatchEvent(new Event("input", { bubbles: true }));
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(time, "1.5");
+    time.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  expect(calls.value).toBe("1.5");
+  expect(time.value).toBe("1.5");
+  expect(container.textContent).toContain("Enter a whole number");
+
+  const button = [...container.querySelectorAll("button")].find(
+    (element) => element.textContent === "Save",
+  ) as HTMLButtonElement;
+  expect(button.disabled).toBe(true);
+
+  await act(async () => button.click());
+  expect(onSave).not.toHaveBeenCalled();
 });
 
 it("shows the incompatible Hermes connection only while it is selected", async () => {
@@ -1306,4 +1350,122 @@ it("focuses the model select once it appears after a focus request made for anot
   });
   expect(nativeModel?.isConnected).toBe(false);
   expect(document.activeElement).toBe(modelSelect());
+});
+
+it("two-session lost-update scenario returns a conflict", async () => {
+  // Session A opens at rev 4
+  await act(async () =>
+    root.render(
+      settings({
+        modelPinRevision: 4,
+        runtimeKind: "pi",
+        modelId: "gpt-5.3-codex-spark",
+        modelProvider: "openai-codex",
+      }),
+    ),
+  );
+
+  // Session A changes draft
+  const input = container.querySelector<HTMLInputElement>('input[id$="-title"]')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+      input,
+      "changed",
+    );
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+
+  // Session B saves, Shell polls rev 5
+  await act(async () =>
+    root.render(
+      settings({
+        modelPinRevision: 5,
+        runtimeKind: "pi",
+        modelId: "gpt-6-astra",
+        modelProvider: "openai-codex",
+      }),
+    ),
+  );
+
+  // Session A saves
+  await save();
+
+  // It should send rev 4
+  expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ expectedModelPinRevision: 4 }));
+});
+
+it("untouched draft follows the refresh", async () => {
+  // Session A opens at rev 4
+  await act(async () =>
+    root.render(
+      settings({
+        modelPinRevision: 4,
+        runtimeKind: "pi",
+        modelId: "gpt-5.3-codex-spark",
+        modelProvider: "openai-codex",
+      }),
+    ),
+  );
+
+  // Session B saves, Shell polls rev 5
+  await act(async () =>
+    root.render(
+      settings({
+        modelPinRevision: 5,
+        runtimeKind: "pi",
+        modelId: "gpt-6-astra",
+        modelProvider: "openai-codex",
+      }),
+    ),
+  );
+
+  // Session A saves
+  await save();
+
+  // It should send rev 5 (draft followed refresh)
+  expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ expectedModelPinRevision: 5 }));
+});
+
+it("saving after re-seed uses the new revision", async () => {
+  // Session A opens at rev 4
+  await act(async () =>
+    root.render(
+      settings({
+        modelPinRevision: 4,
+        runtimeKind: "pi",
+        modelId: "gpt-5.3-codex-spark",
+        modelProvider: "openai-codex",
+      }),
+    ),
+  );
+
+  // Session B saves, Shell polls rev 5
+  await act(async () =>
+    root.render(
+      settings({
+        modelPinRevision: 5,
+        runtimeKind: "pi",
+        modelId: "gpt-6-astra",
+        modelProvider: "openai-codex",
+      }),
+    ),
+  );
+
+  // Session A changes draft to model-4
+  const input = container.querySelector<HTMLInputElement>('input[id$="-title"]')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(
+      input,
+      "changed 2",
+    );
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+
+  // Session A saves
+  await save();
+
+  // It should send rev 5, having based its edit on the refreshed draft
+  expect(onSave).toHaveBeenCalledWith(
+    expect.objectContaining({ expectedModelPinRevision: 5, title: "changed 2" }),
+  );
 });

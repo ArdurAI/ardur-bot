@@ -129,7 +129,9 @@ function ActivityRow({
   const { t } = useLingui();
   const title = run.groupName ? `${run.botName} · ${run.groupName}` : run.botName;
   const presenceUnknown =
-    !["completed", "failed", "cancelled"].includes(run.status) &&
+    !["completed", "failed", "cancelled", "waiting_input", "waiting_takeover"].includes(
+      run.status,
+    ) &&
     (team?.availability === "unknown" ||
       team?.availability === "unavailable" ||
       (team?.observedAt && presenceFreshness(team.observedAt, now) === "unavailable"));

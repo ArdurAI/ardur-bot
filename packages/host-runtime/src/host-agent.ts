@@ -22,6 +22,7 @@ import {
   HOST_WINDOW,
   HostRequestSchema,
   HostRuntimeEventSchema,
+  negotiateHostHealth,
 } from "@ardurbot/contracts/host-bridge";
 import type { RuntimeAvailability } from "@ardurbot/contracts/runtime-pins";
 import { normalizedThinkingLevel, RuntimePinError } from "@ardurbot/contracts/runtime-pins";
@@ -76,6 +77,10 @@ export class HostAgent {
   private importer?: LocalImportScanner;
   private readonly mcp: HostMcpServers;
   refreshMcp?: () => Promise<void>;
+  private acceptedHealth?: string;
+  setAcceptedHealth(advertisement?: string) {
+    this.acceptedHealth = advertisement;
+  }
   constructor(
     private readonly config: {
       token?: string;
@@ -306,7 +311,10 @@ export class HostAgent {
       } else if (op.op === "computer.remote.call") {
         await this.fleet.call(op, context, send);
       } else if (op.op === "host.health") {
-        await send("result", await this.health(op.refreshSignIn));
+        await send(
+          "result",
+          negotiateHostHealth(await this.health(op.refreshSignIn), this.acceptedHealth),
+        );
       } else if (op.op === "board.run") {
         const result = await new BoardRunner({ root: this.config.root, hostRoots: this.roots }).run(
           op.request,

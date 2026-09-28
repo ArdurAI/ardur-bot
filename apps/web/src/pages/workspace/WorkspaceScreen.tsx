@@ -8,13 +8,17 @@ export function WorkspaceScreen({
   open,
   url,
   error,
+  status,
   onOpen,
+  visible = true,
 }: {
   computer: ComputerStatus | null;
   open: boolean;
   url: string | null;
   error: ReactNode;
+  status?: ReactNode;
   onOpen(): void;
+  visible?: boolean;
 }) {
   const { t } = useLingui();
   return (
@@ -29,7 +33,7 @@ export function WorkspaceScreen({
           <div className="grid h-full place-items-center text-sm text-muted-foreground">
             {t`Open in full window`}
           </div>
-        ) : computer?.state === "running" && url ? (
+        ) : computer?.state === "running" && url && visible ? (
           <iframe
             title={t`Bot screen preview`}
             src={url}
@@ -39,7 +43,7 @@ export function WorkspaceScreen({
           />
         ) : (
           <div className="grid h-full place-items-center text-sm text-muted-foreground">
-            {t`Open screen to view this computer.`}
+            {status || t`Open screen to view this computer.`}
           </div>
         )}
         {!error ? (

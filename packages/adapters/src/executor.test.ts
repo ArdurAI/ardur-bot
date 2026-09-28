@@ -25,6 +25,7 @@ import {
   toolCompletionAuditPayload,
   toolCompletionFromResult,
 } from "./executor.js";
+import { effectiveHermesConfig, hermesConfigHash } from "./hermes-compatibility.js";
 import { serializeModelSecret } from "./pi-oauth.js";
 import { agentHistoryTurn } from "./reply-context.js";
 
@@ -1714,6 +1715,59 @@ description: Prepare standup notes
       id: "text-only-model",
       acceptsImages: false,
     });
+  });
+
+  it("captures a bounded Hermes manifest before comparison admission persists the pin", async () => {
+    const provider = "openai-compatible";
+    const config = effectiveHermesConfig(null);
+    const plaintext = serializeModelSecret({
+      kind: "openai_compatible",
+      baseUrl: "http://127.0.0.1:8000/v1",
+      maxTokens: 16_384,
+    });
+    const bot = {
+      runtimeKind: "hermes",
+      modelProvider: provider,
+      modelId: "comparison-model",
+      thinkingLevel: "off",
+      modelCredentialId: "credential-openai-compatible",
+      modelPinRevision: 2,
+      runtimeConfig: config,
+      runtimeConfigHash: hermesConfigHash(config),
+    };
+    const preference = modelPreference({
+      provider,
+      secretId: "secret-openai-compatible",
+      modelId: bot.modelId,
+      isDefault: false,
+    });
+    const prisma = {
+      space: { findUnique: vi.fn(async () => ({ allowedModelDestinations: null })) },
+      bot: { findFirst: vi.fn(async () => bot) },
+      spaceModelPreference: { findFirst: vi.fn(async () => preference) },
+      userModelCredential: { findFirst: vi.fn(async () => preference.credential) },
+      deploymentSettings: { findUnique: vi.fn(async () => null) },
+      secret: {
+        findFirst: vi.fn(async () => ({ id: "secret-openai-compatible", ciphertext: plaintext })),
+        findUnique: vi.fn(async () => null),
+      },
+    } as unknown as PrismaClient;
+    const executor = createRunExecutor({
+      prisma,
+      secretStore: { load: vi.fn(() => plaintext), put: vi.fn() },
+    } as unknown as Parameters<typeof createRunExecutor>[0]);
+    const selected = await executor.resolveModel(
+      { userId: "user-1", spaceId: "ws-1", botId: "bot-1" },
+      true,
+    );
+    expect(selected.kind).toBe("resolved");
+    if (selected.kind !== "resolved") return;
+    expect(selected.maxTokens).toBe(10_000);
+    expect(selected.pin.effectiveRuntimeConfig?.model).toMatchObject({
+      contextWindow: selected.contextWindow,
+      maxTokens: selected.maxTokens,
+    });
+    expect(selected.pin.effectiveRuntimeConfigHash).toMatch(/^[a-f0-9]{64}$/);
   });
 
   it("keeps the pin and does not borrow the default provider credential", async () => {
