@@ -8,7 +8,7 @@ export function useTakeControl(
     setTakingControl(true);
     try {
       await bootComputer({ botId, takeControl: true, overlay: false });
-    } catch (e) {
+    } catch (_e) {
       // Error is expected to be dispatched by bootComputer
     } finally {
       setTakingControl(false);

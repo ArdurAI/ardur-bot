@@ -479,7 +479,7 @@ describe("lingui catalogs", () => {
       "Booting live desktop…",
       "Computer is asleep. Open it to wake.",
       "Computer failed to boot",
-      "Computer"
+      "Computer",
     ];
     for (const locale of ["en", "de", "ko", "tr", "hi", "pt-BR", "zh-CN", "es", "ru"]) {
       const catalog = readFileSync(

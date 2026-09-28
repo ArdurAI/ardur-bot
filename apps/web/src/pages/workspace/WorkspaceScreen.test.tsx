@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-import { expect, it, vi } from "vitest";
+
 import { act } from "react";
 import { createRoot } from "react-dom/client";
+import { expect, it, vi } from "vitest";
 import { WorkspaceScreen } from "./WorkspaceScreen";
 
 const translate = (strings: TemplateStringsArray, ...values: any[]) => {
@@ -26,13 +27,13 @@ it("shows the open button when a status is present but no error", async () => {
         error={null}
         status="Computer is asleep. Open it to wake."
         onOpen={() => {}}
-      />
+      />,
     );
   });
-  
+
   expect(container.textContent).toContain("Computer is asleep. Open it to wake.");
   expect(container.querySelector('[data-testid="computer-preview-open"]')).not.toBeNull();
-  
+
   root.unmount();
   container.remove();
 });
@@ -49,13 +50,13 @@ it("hides the open button when an error is present", async () => {
         url={null}
         error="Network error"
         onOpen={() => {}}
-      />
+      />,
     );
   });
-  
+
   expect(container.textContent).toContain("Network error");
   expect(container.querySelector('[data-testid="computer-preview-open"]')).toBeNull();
-  
+
   root.unmount();
   container.remove();
 });

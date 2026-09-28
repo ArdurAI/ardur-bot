@@ -230,9 +230,6 @@ import {
 } from "./RoutineEditor";
 import type { SettingsSection } from "./SettingsOverlay";
 import { SpaceSearchResults } from "./SpaceSearch";
-import { isComputerVisible } from "./shell/computer-visibility";
-import { useTakeControl } from "./shell/use-take-control";
-import { useComputerTerminalOpen } from "./shell/use-computer-terminal-open";
 import { BotModelChip } from "./shell/bot-model-chip";
 import { BotSettings, CreateBotForm } from "./shell/bot-panel";
 import { isCommandPaletteHotkey } from "./shell/command-palette-hotkey";
@@ -243,6 +240,7 @@ import {
 } from "./shell/computer-error-state";
 import { ComputerScreenError } from "./shell/computer-screen-error";
 import { useComputerTerminal } from "./shell/computer-terminal";
+import { isComputerVisible } from "./shell/computer-visibility";
 import {
   AppConnectCard,
   ArtifactImage,
@@ -251,6 +249,8 @@ import {
   McpApprovalCard,
 } from "./shell/message-cards";
 import { ProviderErrorMessage } from "./shell/provider-error-message";
+import { useComputerTerminalOpen } from "./shell/use-computer-terminal-open";
+import { useTakeControl } from "./shell/use-take-control";
 import { handleWorkspaceOpenRun } from "./shell/workspace-run";
 import { SystemDictation } from "./system/SystemDictation";
 import { WindowChrome } from "./WindowChrome";
@@ -2581,7 +2581,11 @@ export function ShellPage({
 
   useEffect(() => {
     const heartbeatBotId = computerBot?.id ?? active?.id;
-    if (!isComputerVisible(computerOpen, panel, workspaceTab) || !heartbeatBotId || computer?.state !== "running")
+    if (
+      !isComputerVisible(computerOpen, panel, workspaceTab) ||
+      !heartbeatBotId ||
+      computer?.state !== "running"
+    )
       return;
     const ping = () =>
       void rpc.computer.heartbeat({ botId: heartbeatBotId }).catch(() => undefined);
