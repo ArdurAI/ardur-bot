@@ -1,8 +1,8 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { exec as execCallback } from "node:child_process";
-import { promisify } from "node:util";
-import { createDb } from "./client.js";
 import path from "node:path";
+import { promisify } from "node:util";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createDb } from "./client.js";
 
 const exec = promisify(execCallback);
 const databaseUrl = process.env.DATABASE_URL;

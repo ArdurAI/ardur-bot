@@ -431,11 +431,7 @@ function TeamStatus({ row, now }: { row: TeamRow; now: number }) {
         );
       }
       if (task) {
-        return (
-          <Trans>
-            Working on {task}
-          </Trans>
-        );
+        return <Trans>Working on {task}</Trans>;
       }
       return <Trans>Working</Trans>;
     }

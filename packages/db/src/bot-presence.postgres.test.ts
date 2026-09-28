@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { createDb } from "./client.js";
 import { loadBotPresence } from "./bot-presence.js";
+import { createDb } from "./client.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 const describePostgres =
