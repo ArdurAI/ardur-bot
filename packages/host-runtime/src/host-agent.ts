@@ -44,6 +44,10 @@ import { AntigravityRuntime, probeAntigravity } from "./runtimes/antigravity-run
 import { ClaudeCodeRuntime, probeClaude } from "./runtimes/claude-code-runtime.js";
 import { CodexAppServerRuntime, probeCodex } from "./runtimes/codex-app-server-runtime.js";
 import {
+  HERMES_MANAGED_PROFILE_IDENTITY,
+  validateCompiledHermesProfile,
+} from "./runtimes/hermes-config.js";
+import {
   HERMES_SOURCE_PIN,
   hermesInstallCandidate,
   pinnedHermesLaunch,
@@ -144,8 +148,23 @@ export class HostAgent {
         };
       }
     }
+    let profileAvailable = false;
+    try {
+      resolveHermesLauncherAsset(process.argv[1] ?? "", import.meta.url);
+      profileAvailable = true;
+    } catch {
+      // A partial installation must not advertise the managed profile.
+    }
     return {
-      capabilities: { providerRelay: 1 },
+      capabilities: {
+        providerRelay: 1,
+        ...(profileAvailable
+          ? {
+              hermesConfigurationProfile: HERMES_MANAGED_PROFILE_IDENTITY.profile,
+              hermesLauncherGeneration: 1 as const,
+            }
+          : {}),
+      },
       platform: process.platform as HostHealth["platform"],
       name: hostname().slice(0, 80),
       roots: this.roots,
@@ -497,6 +516,25 @@ export class HostAgent {
     if (kind === "pi") throw new Error("Runtime is not a host runtime.");
     if ((kind === "hermes") !== Boolean(turn.providerBroker))
       throw new Error("Provider grant does not match the runtime.");
+    if (turn.executionEnvelope && kind !== "hermes")
+      throw new Error("Runtime configuration does not match the runtime.");
+    const profile = turn.executionEnvelope
+      ? validateCompiledHermesProfile(turn.executionEnvelope, {
+          id: turn.model.id,
+          contextWindow: turn.model.contextWindow ?? 0,
+          maxTokens: turn.model.maxTokens ?? 0,
+          reasoning: turn.model.reasoning === true,
+          acceptsImages: turn.model.acceptsImages === true,
+          thinkingLevel: turn.model.thinkingLevel ?? "off",
+        })
+      : undefined;
+    if (
+      profile &&
+      (turn.model.runtimePin.runtimeConfig !== undefined ||
+        profile.envelope.runtimeConfigHash !== turn.model.runtimePin.runtimeConfigHash)
+    )
+      throw new Error("Runtime pin configuration does not match the manifest.");
+    let profileAcknowledged = !profile;
     const callback = async (
       method:
         | "authorizeTool"
@@ -511,6 +549,17 @@ export class HostAgent {
       args: unknown[],
     ) => {
       state.abort.signal.throwIfAborted();
+      if (
+        !profileAcknowledged &&
+        [
+          "provider.open",
+          "provider.read",
+          "executeTool",
+          "authorizeTool",
+          "onToolCompleted",
+        ].includes(method)
+      )
+        throw new Error("Hermes configuration is not acknowledged.");
       if (state.callbacks.size >= HOST_WINDOW) throw new Error("Too many runtime callbacks.");
       const callId = randomUUID();
       return new Promise<unknown>((resolve, reject) => {
@@ -601,6 +650,10 @@ export class HostAgent {
           args: [launcher],
           launch: pinnedHermesLaunch(qualified.root, launcher),
           pinned: true,
+          executionEnvelope: profile?.envelope,
+          onProfileAcknowledged: () => {
+            profileAcknowledged = true;
+          },
           stagingParent: this.config.root,
           onTurnFinished: () => relay.close(),
         });

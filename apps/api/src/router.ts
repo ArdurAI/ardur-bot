@@ -157,11 +157,13 @@ import {
   findModelCredential,
   findSpaceMemoryConfig,
   formatMessagingLinkCode,
+  getBotCommunicationPolicy,
   getGoal,
   getUserPreferences,
   InvalidSpaceNameError,
   IsolationError,
   issueMessagingLinkCode,
+  listBotCommunicationDeliveries,
   listDelegations,
   lockOwnedGroup,
   newestModelCredentialOrder,
@@ -178,6 +180,7 @@ import {
   SpaceNotFoundError,
   selectSpaceModelPreference,
   selectSpaceVoicePreference,
+  setBotCommunicationPaused,
   startGoal,
   stopGoal,
   touchGroupUpdatedAt,
@@ -313,6 +316,8 @@ import {
   toVoiceStatus,
   voiceContext,
 } from "./voice.js";
+import { createWorkspaceFiles } from "./workspace-files.js";
+import { workspaceTasks } from "./workspace-tasks.js";
 
 const MAX_COMPUTER_TEXT_FILE_BYTES = 2 * 1024 * 1024;
 const THREAD_MESSAGE_PAGE_SIZE = 100;
@@ -636,6 +641,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
   const systemSettings = createSystemSettings(deps.prisma);
   const commands = createCommandRoutes(deps);
   const ide = createIdeFiles(deps);
+  const workspaceFiles = createWorkspaceFiles(deps);
   const ideChanges = createIdeChanges(deps, ide);
   return os.router({
     ...createCustomizationRoutes(deps),
@@ -702,6 +708,20 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         ide.save(context.actor, input, context.signal),
       ),
       changes: authed.ide.changes.handler(({ context, input }) => ideChanges(context.actor, input)),
+    },
+    workspace: {
+      describe: authed.workspace.describe.handler(({ context, input }) =>
+        workspaceFiles.describe(context.actor, input.botId),
+      ),
+      list: authed.workspace.list.handler(({ context, input }) =>
+        workspaceFiles.list(context.actor, input),
+      ),
+      read: authed.workspace.read.handler(({ context, input }) =>
+        workspaceFiles.read(context.actor, input),
+      ),
+      tasks: authed.workspace.tasks.handler(({ context, input }) =>
+        workspaceTasks(deps.prisma, context.actor, input.botId),
+      ),
     },
     terminal: {
       close: authed.terminal.close.handler(
@@ -5865,6 +5885,23 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
     },
     team: {
       board: authed.team.board.handler(({ context }) => teamBoard(deps.prisma, context.actor)),
+    },
+    botComms: {
+      getPolicy: authed.botComms.getPolicy.handler(({ context, input }) => {
+        if (!context.actor.isDeploymentOwner || !context.authSessionId)
+          throw new ORPCError("FORBIDDEN");
+        return getBotCommunicationPolicy(deps.prisma, context.actor, input.groupId);
+      }),
+      setPaused: authed.botComms.setPaused.handler(({ context, input }) => {
+        if (!context.actor.isDeploymentOwner || !context.authSessionId)
+          throw new ORPCError("FORBIDDEN");
+        return setBotCommunicationPaused(deps.prisma, context.actor, input);
+      }),
+      listDeliveries: authed.botComms.listDeliveries.handler(({ context, input }) => {
+        if (!context.actor.isDeploymentOwner || !context.authSessionId)
+          throw new ORPCError("FORBIDDEN");
+        return listBotCommunicationDeliveries(deps.prisma, context.actor, input);
+      }),
     },
     goals: {
       start: authed.goals.start.handler(async ({ context, input }) => {

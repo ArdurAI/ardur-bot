@@ -193,14 +193,22 @@ export function AvatarStudioPopover({
                 <div className="mb-2 text-[11px] font-medium tracking-wider text-muted-foreground uppercase">
                   <Trans>Shape</Trans>
                 </div>
-                <div className="grid grid-cols-4 place-items-center gap-2">
-                  {[0, 1, 2, 3, 4, 5, 6, 7].map((shapeIndex) => (
+                <div className="grid grid-cols-5 place-items-center gap-2">
+                  {[-1, 0, 1, 2, 3, 4, 5, 6, 7].map((shapeIndex) => (
                     <GrokShapePreview
                       key={shapeIndex}
                       shapeIndex={shapeIndex}
                       color={currentColor}
-                      selected={!parsed.isImage && currentShape === shapeIndex}
-                      onClick={() => selectShape(shapeIndex)}
+                      selected={
+                        !parsed.isImage &&
+                        (shapeIndex === -1
+                          ? currentShape === undefined
+                          : currentShape === shapeIndex)
+                      }
+                      onClick={() =>
+                        shapeIndex === -1 ? onChange(currentColor) : selectShape(shapeIndex)
+                      }
+                      identity={identity}
                     />
                   ))}
                 </div>

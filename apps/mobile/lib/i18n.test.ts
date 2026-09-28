@@ -31,6 +31,58 @@ function collectSourceFiles(dir: string): string[] {
 }
 
 describe("mobile i18n", () => {
+  it("covers Team presence, peer conversation, and every delivery state in Russian and Chinese", async () => {
+    const { resetI18nForTests, t } = await import("./i18n");
+    const { teamDeliveryText } = await import("@ardurbot/core");
+    const keys = [
+      "Updated 1m ago",
+      "Latest message",
+      "Conversation with {name}",
+      "{count} active tasks",
+      "{count} peer messages waiting",
+      "Conversation",
+      "Open peer thread",
+      "This chat is view-only",
+      "Could not load this chat.",
+      "No messages yet.",
+      "Status unavailable",
+      "Idle",
+      "Working on",
+      "Waiting for approval",
+      "The task needs attention",
+      "Done — waiting for your OK",
+      "active tasks",
+      "Allow preparation",
+      "Preparation allowed",
+      "Request expired",
+      "Pause team messages",
+      "Resume team messages",
+      "Pause group messages",
+      "Resume group messages",
+      "Team messages paused",
+      "Resume at home",
+      "Could not load team message controls",
+      "Could not update team messages",
+    ];
+    for (const locale of ["ru", "zh-CN"] as const) {
+      resetI18nForTests(locale);
+      for (const key of keys) expect(t(key), `${locale}: ${key}`).not.toBe(key);
+      expect(t("Conversation with {name}", { name: "Worker" })).toContain("Worker");
+      expect(t("{count} active tasks", { count: 2 })).toContain("2");
+      for (const state of [
+        "queued",
+        "delivered",
+        "read",
+        "replied",
+        "denied",
+        "expired",
+        "cancelled",
+        "failed",
+        "unknown",
+      ])
+        expect(teamDeliveryText(state, t), `${locale}: ${state}`).not.toBe(teamDeliveryText(state));
+    }
+  });
   it("translates every shared runtime label in both mobile catalogs", async () => {
     const { ZH_MESSAGES } = await import("./locales/zh");
     const { RU_MESSAGES } = await import("./locales/ru");

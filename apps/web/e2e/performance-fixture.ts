@@ -64,6 +64,7 @@ export async function installPerformanceFixture(
   trace = false,
   manualTrace = false,
   account: Partial<Record<keyof typeof me, unknown>> = {},
+  computer?: unknown,
 ) {
   const current = { ...me, ...account };
   let sent = false;
@@ -73,6 +74,7 @@ export async function installPerformanceFixture(
     cursor: sent && index === 0 ? 101 : 100,
     olderCursor: null,
     run: null,
+    ...(computer ? { computer } : {}),
     messages: [
       ...Array.from({ length: 100 }, (_, seq) => ({
         id: `fixture-message-${index}-${seq}`,

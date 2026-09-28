@@ -7,7 +7,7 @@
   "main": "dist/main.js",
   "scripts": {
     "dev": "pnpm build && electron .",
-    "build": "pnpm --filter @ardurbot/host-service build && node ../../scripts/desktop-version.mjs && tsc -p tsconfig.json && tsc -p tsconfig.guided.json && node scripts/copy-static.mjs && node scripts/build-guided-setup.mjs && node scripts/bundle-services.mjs",
+    "build": "pnpm --filter @ardurbot/host-service build && node ../../scripts/desktop-version.mjs && node --import tsx scripts/generate-window-colors.mjs && tsc -p tsconfig.json && tsc -p tsconfig.guided.json && node scripts/copy-static.mjs && node scripts/build-guided-setup.mjs && node scripts/bundle-services.mjs",
     "pack": "pnpm --filter @ardurbot/web build && pnpm build && electron-builder",
     "pack:dir": "pnpm --filter @ardurbot/web build && pnpm build && electron-builder --dir",
     "check": "tsc --noEmit -p tsconfig.json && tsc -p tsconfig.guided.json",
@@ -58,8 +58,12 @@
         "to": "stack/.env.images.example"
       },
       {
-        "from": "assets/icon.png",
-        "to": "tray.png"
+        "from": "assets/trayTemplate.png",
+        "to": "trayTemplate.png"
+      },
+      {
+        "from": "assets/tray-32.png",
+        "to": "tray-32.png"
       },
       {
         "from": "assets/icon.ico",
@@ -72,6 +76,18 @@
       {
         "from": "../host-service/dist/python/hermes_launcher.py",
         "to": "host-service/python/hermes_launcher.py"
+      },
+      {
+        "from": "../host-service/dist/python/hermes_profile.py",
+        "to": "host-service/python/hermes_profile.py"
+      },
+      {
+        "from": "../host-service/dist/python/hermes_sources.json",
+        "to": "host-service/python/hermes_sources.json"
+      },
+      {
+        "from": "../host-service/dist/python/runtime_config_profile.json",
+        "to": "host-service/python/runtime_config_profile.json"
       },
       {
         "from": "../host-service/dist/native/${os}_${arch}",

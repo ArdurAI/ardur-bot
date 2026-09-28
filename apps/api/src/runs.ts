@@ -40,6 +40,7 @@ export async function listSpaceRuns(
   prisma: PrismaClient,
   actor: Actor,
   filter: "active" | "recent",
+  scope?: { botId: string; rootTaskIds: string[] },
 ): Promise<RunActivityRow[]> {
   const preferences = await getUserPreferences(prisma, actor.userId);
   const rows = await prisma.run.findMany({
@@ -47,6 +48,15 @@ export async function listSpaceRuns(
       spaceId: actor.spaceId,
       userId: actor.userId,
       bot: { archivedAt: null },
+      ...(scope
+        ? {
+            OR: [
+              { botId: scope.botId },
+              { delegationRootTaskId: { in: scope.rootTaskIds } },
+              { taskId: { in: scope.rootTaskIds } },
+            ],
+          }
+        : {}),
       ...(filter === "active"
         ? { status: { in: [...ACTIVE_RUN_STATUSES] } }
         : { status: { in: [...TERMINAL_STATUSES] } }),
@@ -144,6 +154,7 @@ export async function listSpaceRuns(
     externalThread: Boolean(row.thread.externalConversationId),
     status: row.status as RunActivityRow["status"],
     trigger: RunTriggerSchema.parse(row.trigger),
+    routineId: row.routineId,
     notificationsEnabled:
       activityNotificationsEnabled(row.thread.groupId, row.bot.notifyOnFinish) &&
       preferences.notifications[

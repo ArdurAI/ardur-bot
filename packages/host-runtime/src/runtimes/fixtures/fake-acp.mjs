@@ -1,3 +1,4 @@
+import { writeFileSync } from "node:fs";
 import { readFile, realpath } from "node:fs/promises";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
@@ -46,6 +47,41 @@ async function handle(value) {
     if (!value.params?.cwd || !Array.isArray(value.params?.mcpServers)) process.exit(3);
     sessionId = `fixture-${process.pid}`;
     mcp = value.params.mcpServers[0];
+    if (scenario === "profile-construction-tool") {
+      const client = new Client({ name: "fixture", version: "0.1.0" });
+      const transport = new StdioClientTransport({
+        command: mcp.command,
+        args: mcp.args,
+        env: {
+          ...process.env,
+          ...Object.fromEntries(mcp.env.map(({ name, value }) => [name, value])),
+        },
+        stderr: "pipe",
+      });
+      await client.connect(transport);
+      let result;
+      try {
+        result = await client.callTool({ name: "fixture_echo", arguments: { value: "early" } });
+      } catch {
+        result = { isError: true };
+      }
+      writeFileSync(
+        join(process.env.HERMES_HOME, "construction-result.json"),
+        JSON.stringify({ isError: result.isError === true }),
+      );
+      await client.close();
+    }
+    if (scenario === "profile-ack" || scenario === "profile-stale")
+      writeFileSync(
+        join(process.env.HERMES_HOME, "runtime-ack.json"),
+        JSON.stringify({
+          profile: "hermes-ardur-v2",
+          configurationHash:
+            scenario === "profile-stale" ? "0".repeat(64) : process.env.ARDUR_HERMES_EXPECTED_HASH,
+          sessionId,
+        }),
+        { mode: 0o600, flag: "wx" },
+      );
     send({ id: value.id, result: { sessionId } });
     return;
   }

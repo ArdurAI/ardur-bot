@@ -20,6 +20,8 @@ From `apps/web`, record one 1920 × 1080 take (choose a writable directory outsi
 WEB_PORT=5391 SITE_VIDEO_DIR=<dir> pnpm exec playwright test e2e/site-video.spec.ts
 ```
 
+When running Playwright specs locally without a dedicated port, Playwright starts its own web server and fails fast if the port is already in use by a running dev stack. To opt in to reusing an existing dev server, set `PLAYWRIGHT_REUSE_SERVER=1`.
+
 From the repository root, export the approved take:
 
 ```sh

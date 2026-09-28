@@ -68,6 +68,15 @@ export async function deviceRpc<T>(
 ): Promise<T> {
   const body = value as Record<string, unknown>;
   const botId = typeof body.botId === "string" ? body.botId : "";
+  if (procedure === "botComms/getPolicy") return dispatchClient.request<T>("team-policy", body);
+  if (procedure === "botComms/setPaused") {
+    if (body.paused !== true) throw new Error("Resume team messages at home.");
+    return dispatchClient.request<T>("team-pause", {
+      scope: body.scope,
+      groupId: body.groupId,
+      expectedRevision: body.expectedRevision,
+    });
+  }
   if (procedure === "delegations/cancel")
     return dispatchClient.request<T>("team-stop", { rootTaskId: body.rootTaskId });
   if (procedure === "delegations/accept")

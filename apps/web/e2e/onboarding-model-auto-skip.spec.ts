@@ -59,4 +59,7 @@ test("onboarding skips model connect when a default model is already available",
     timeout: 20_000,
   });
   await captureScreenshot(page, testInfo, "onboarding-model-auto-skip");
+  // The shell can still be refreshing /rpc/me as the test ends. Let intercepted
+  // fetches finish before Playwright disposes their response bodies.
+  await page.unrouteAll({ behavior: "wait" });
 });

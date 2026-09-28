@@ -68,6 +68,10 @@ function fixture(runStatus = "running", delegationStatus = "running") {
     status: runStatus,
     createdAt: new Date(),
     startedAt: runStatus === "queued" ? null : new Date(),
+    completedAt: null,
+    leaseExpiresAt: ["leased", "running"].includes(runStatus)
+      ? new Date(Date.now() + 60_000)
+      : null,
     runtimePin: snapshot.pin,
     runtimeComputer: snapshot.computer,
     runtimeDestination: snapshot.destination,
@@ -86,10 +90,22 @@ function fixture(runStatus = "running", delegationStatus = "running") {
         {
           id: "worker",
           name: "Reviewer",
+          title: "Reviewer",
+          description: "",
+          concurrentRuns: null,
+          groupMembers: [],
           modelId: "changed-current-pin",
           thread: { id: "thread", nextEventSeq: 2 },
         },
-        { id: "chief", name: "Chief", thread: null },
+        {
+          id: "chief",
+          name: "Chief",
+          title: "Chief",
+          description: "",
+          concurrentRuns: null,
+          groupMembers: [],
+          thread: null,
+        },
       ]),
     },
     run: { findMany: scoped([run]) },
@@ -117,9 +133,17 @@ function fixture(runStatus = "running", delegationStatus = "running") {
       ]),
     },
     event: { findMany: vi.fn(async () => []) },
+    botMessageDelivery: { findMany: scoped([]), groupBy: scoped([]) },
+    botCommunicationPolicy: { findMany: scoped([]) },
+    botBrief: { findMany: scoped([]) },
+    teamGoal: { findMany: scoped([]) },
+    task: { findMany: scoped([]) },
+    connection: { findMany: scoped([]) },
     message: {
-      findMany: vi.fn(() => {
-        throw new Error("Narration must never be read");
+      findMany: vi.fn(async ({ select, where }) => {
+        expect(where.thread).toEqual({ spaceId: "space", userId: "owner" });
+        expect(select).toEqual({ botId: true, createdAt: true });
+        return [];
       }),
     },
   };
@@ -149,7 +173,7 @@ describe("team.board", () => {
     const result = TeamBoardSchema.parse(await teamBoard(f.prisma, actor));
     expect(result.rows[0].state).toBe(state);
     expect(result.rows[1].state).toBe("idle");
-    expect(f.db.message.findMany).not.toHaveBeenCalled();
+    expect(f.db.message.findMany).toHaveBeenCalled();
     expect(result.rows[0].usage).toEqual({ tokens: 150, costs: [] });
     expect(result.rows[0].sentence).not.toContain("narration");
     if (run !== "queued") expect(result.rows[0].executing?.pin.modelId).toBe("executed-model");
@@ -185,6 +209,10 @@ describe("team.board", () => {
     ].map(([kind, connectionId], index) => ({
       id: `bot-${index}`,
       name: `Bot ${index}`,
+      title: "",
+      description: "",
+      concurrentRuns: null,
+      groupMembers: [],
       thread: null,
       computer: { kind, connectionId },
     }));

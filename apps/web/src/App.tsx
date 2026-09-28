@@ -16,15 +16,34 @@ import {
   sessionRetryDelayMs,
   showSessionUnavailable,
 } from "./lib/session-gate";
-import { IntegrationSetupPage } from "./pages/IntegrationSetup";
-import { LocalSettingsPage } from "./pages/LocalSettings";
-import { McpOAuthCallbackPage } from "./pages/McpOAuthCallback";
-import { SharedCommandPage, SharedCommandSignIn } from "./pages/SharedCommand";
 import { ShellPage } from "./pages/Shell";
 import { useOpenTo } from "./pages/shell/open-to";
-import { QuickComposer } from "./pages/system/QuickComposer";
 
 const IdePage = lazy(() => import("./pages/ide/IdePage"));
+
+// Pages for their own routes load with the route; nothing else needs them at startup.
+const IntegrationSetupPage = lazy(() =>
+  import("./pages/IntegrationSetup").then((module) => ({
+    default: module.IntegrationSetupPage,
+  })),
+);
+const LocalSettingsPage = lazy(() =>
+  import("./pages/LocalSettings").then((module) => ({ default: module.LocalSettingsPage })),
+);
+const McpOAuthCallbackPage = lazy(() =>
+  import("./pages/McpOAuthCallback").then((module) => ({
+    default: module.McpOAuthCallbackPage,
+  })),
+);
+const QuickComposer = lazy(() =>
+  import("./pages/system/QuickComposer").then((module) => ({ default: module.QuickComposer })),
+);
+const SharedCommandPage = lazy(() =>
+  import("./pages/SharedCommand").then((module) => ({ default: module.SharedCommandPage })),
+);
+const SharedCommandSignIn = lazy(() =>
+  import("./pages/SharedCommand").then((module) => ({ default: module.SharedCommandSignIn })),
+);
 
 const AuthPage = lazy(() =>
   import("./pages/Auth").then((module) => ({ default: module.AuthPage })),
@@ -44,7 +63,12 @@ const WelcomePage = lazy(() =>
 const NotFoundPage = lazy(() => import("./pages/NotFound"));
 
 export function App() {
-  if (window.location.pathname === LOCAL_SETTINGS_PAGE) return <LocalSettingsPage />;
+  if (window.location.pathname === LOCAL_SETTINGS_PAGE)
+    return (
+      <Suspense fallback={<div className="h-full bg-background" />}>
+        <LocalSettingsPage />
+      </Suspense>
+    );
   return <SessionApp />;
 }
 

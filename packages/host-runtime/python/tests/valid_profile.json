@@ -1,0 +1,168 @@
+{
+  "runtimeKind": "hermes",
+  "runtimeConfig": {
+    "version": 2,
+    "runtimeKind": "hermes",
+    "limits": {
+      "maxProviderRequests": 16,
+      "timeoutMs": 180000
+    },
+    "context": {
+      "maxInputBytes": 16384,
+      "overflow": "trim"
+    },
+    "harness": {
+      "agent": {
+        "api_max_retries": 1
+      }
+    }
+  },
+  "runtimeConfigHash": "6f1dfcf5a34ffc81b935c1300bfb1302200bd663b478d269cde5421659e357d1",
+  "effectiveRuntimeConfig": {
+    "format": 1,
+    "profile": {
+      "format": 1,
+      "profile": "hermes-ardur-v2",
+      "sourceRevision": "29112bef099274229cadff79cdff7bf7b99c4b77",
+      "artifactVersion": 1
+    },
+    "runtimeKind": "hermes",
+    "settings": {
+      "version": 2,
+      "runtimeKind": "hermes",
+      "limits": {
+        "maxProviderRequests": 16,
+        "timeoutMs": 180000
+      },
+      "context": {
+        "maxInputBytes": 16384,
+        "overflow": "trim"
+      },
+      "harness": {
+        "agent": {
+          "api_max_retries": 1
+        }
+      }
+    },
+    "model": {
+      "id": "fixture-model",
+      "contextWindow": 32768,
+      "maxTokens": 1024,
+      "reasoning": true,
+      "acceptsImages": false,
+      "thinkingLevel": "high"
+    },
+    "generatedConfig": {
+      "model": {
+        "default": "fixture-model",
+        "provider": "custom",
+        "context_length": 32768,
+        "supports_vision": false
+      },
+      "custom_providers": [],
+      "model_overrides": {
+        "custom:ardur": {
+          "fixture-model": {
+            "context_window": 32768,
+            "supports_reasoning": true,
+            "supports_vision": false,
+            "supports_tools": true
+          }
+        }
+      },
+      "fallback_providers": [],
+      "toolsets": [],
+      "agent": {
+        "disabled_toolsets": [
+          "web",
+          "terminal",
+          "process",
+          "files",
+          "browser",
+          "vision",
+          "skills",
+          "todo",
+          "memory",
+          "session_search",
+          "execute_code",
+          "delegate_task",
+          "cronjob"
+        ],
+        "reasoning_effort": "high",
+        "coding_context": "off",
+        "environment_probe": false,
+        "api_max_retries": 1,
+        "max_turns": 16,
+        "run_budget_seconds": 180
+      },
+      "context": {
+        "engine": "compressor"
+      },
+      "context_file_max_chars": 16384,
+      "compression": {
+        "enabled": false,
+        "micro_compact": false,
+        "proactive_prune_tokens": 0,
+        "idle_compact_after_seconds": 0,
+        "codex_app_server_auto": "off"
+      },
+      "auxiliary": {
+        "background_review": {
+          "enabled": false
+        },
+        "title_generation": {
+          "enabled": false
+        }
+      },
+      "memory": {
+        "memory_enabled": false,
+        "user_profile_enabled": false
+      },
+      "skills": {
+        "project_discovery": false,
+        "external_dirs": [],
+        "inline_shell": false
+      },
+      "delegation": {
+        "max_iterations": 0
+      },
+      "cron": {
+        "allow_agent_scheduling": false
+      },
+      "hooks": {},
+      "hooks_auto_accept": false,
+      "plugins": {
+        "enabled": []
+      },
+      "telemetry": {
+        "shared_metrics": {
+          "enabled": false
+        }
+      },
+      "security": {
+        "allow_lazy_installs": false
+      },
+      "tools": {
+        "tool_search": {
+          "enabled": "off"
+        }
+      },
+      "mcp_servers": {}
+    },
+    "launcher": {
+      "model": "fixture-model",
+      "maxIterations": 16,
+      "runBudgetSeconds": 180,
+      "contextFileMaxChars": 16384,
+      "apiMaxRetries": 1
+    },
+    "bindings": {
+      "credentials": "broker-grant",
+      "tools": "ardur-catalog",
+      "approvals": "ardur-policy",
+      "paths": "ephemeral-owned-home",
+      "network": "managed-relay"
+    }
+  },
+  "effectiveRuntimeConfigHash": "43c84f0000245529cea27e8d7cd5cc99a4c77f476ca988d0b9725f323f5294cc"
+}

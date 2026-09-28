@@ -1,7 +1,11 @@
-import { GROUP_MEMBER_MAX, GROUP_MEMBER_MIN } from "@ardurbot/contracts";
+import {
+  type BotCommunicationPolicy,
+  GROUP_MEMBER_MAX,
+  GROUP_MEMBER_MIN,
+} from "@ardurbot/contracts";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
-import { Alert, Pressable, ScrollView, Text, TextInput } from "react-native";
+import { Alert, Button, Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { BotMemberPicker } from "../components/bot-member-picker";
 import { ContextSection } from "../components/context-section";
 import { GroupMemberModelControl } from "../components/group-member-model-control";
@@ -12,6 +16,7 @@ import {
   type MobileModelCredential,
   rpc,
 } from "../lib/api";
+import { hasPairedDevice } from "../lib/dispatch";
 import { useI18n } from "../lib/i18n";
 import { presentMessageActionSheet } from "../lib/message-action-sheet";
 import { useMobileTokens, useResolvedAppearance } from "../lib/native";
@@ -34,6 +39,61 @@ export default function GroupSettingsScreen() {
   const [selected, setSelected] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [spaceTraffic, setSpaceTraffic] = useState<BotCommunicationPolicy | null>(null);
+  const [groupTraffic, setGroupTraffic] = useState<BotCommunicationPolicy | null>(null);
+  const [trafficBusy, setTrafficBusy] = useState(false);
+  const [pairedDevice, setPairedDevice] = useState(false);
+
+  useEffect(() => {
+    void hasPairedDevice().then(setPairedDevice);
+  }, []);
+
+  useEffect(() => {
+    if (!groupId) return;
+    let active = true;
+    void Promise.all([
+      rpc<BotCommunicationPolicy>("botComms/getPolicy", {}),
+      rpc<BotCommunicationPolicy>("botComms/getPolicy", { groupId }),
+    ])
+      .then(([space, groupPolicy]) => {
+        if (active) {
+          setSpaceTraffic(space);
+          setGroupTraffic(groupPolicy);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setSpaceTraffic(null);
+          setGroupTraffic(null);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [groupId]);
+
+  async function setTrafficPaused(policy: BotCommunicationPolicy) {
+    if (trafficBusy || !groupId || (pairedDevice && policy.paused)) return;
+    setTrafficBusy(true);
+    try {
+      await rpc("botComms/setPaused", {
+        scope: policy.scope,
+        ...(policy.groupId ? { groupId: policy.groupId } : {}),
+        paused: !policy.paused,
+        expectedRevision: policy.revision,
+      });
+      const [space, groupPolicy] = await Promise.all([
+        rpc<BotCommunicationPolicy>("botComms/getPolicy", {}),
+        rpc<BotCommunicationPolicy>("botComms/getPolicy", { groupId }),
+      ]);
+      setSpaceTraffic(space);
+      setGroupTraffic(groupPolicy);
+    } catch {
+      Alert.alert(t("Could not update team messages"));
+    } finally {
+      setTrafficBusy(false);
+    }
+  }
 
   useEffect(() => {
     if (!groupId) return;
@@ -252,6 +312,32 @@ export default function GroupSettingsScreen() {
           <Text style={{ color: tokens.destructive, fontSize: 16 }}>{t("Delete group")}</Text>
         </Pressable>
         <Text style={{ color: tokens.mutedForeground }}>{t("Context")}</Text>
+        {spaceTraffic && groupTraffic ? (
+          <View style={{ marginTop: 16, gap: 8 }}>
+            <Button
+              title={
+                spaceTraffic.paused
+                  ? pairedDevice
+                    ? t("Resume at home")
+                    : t("Resume team messages")
+                  : t("Pause team messages")
+              }
+              disabled={trafficBusy || (pairedDevice && spaceTraffic.paused)}
+              onPress={() => void setTrafficPaused(spaceTraffic)}
+            />
+            <Button
+              title={
+                groupTraffic.paused
+                  ? pairedDevice
+                    ? t("Resume at home")
+                    : t("Resume group messages")
+                  : t("Pause group messages")
+              }
+              disabled={trafficBusy || (pairedDevice && groupTraffic.paused)}
+              onPress={() => void setTrafficPaused(groupTraffic)}
+            />
+          </View>
+        ) : null}
         {group?.members.map((member) => (
           <ContextSection
             key={member.botId}

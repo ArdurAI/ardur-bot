@@ -41,7 +41,12 @@ function fixture() {
     { target: "test" },
     REMOTE_APPROVAL_MARKER,
   );
-  const effect = { id: "effect", kind: "deploy", runId: "run", request };
+  const effect: { id: string; kind: string; runId: string; request: unknown } = {
+    id: "effect",
+    kind: "deploy",
+    runId: "run",
+    request,
+  };
   const binding = {
     effectId: "effect",
     instanceId: "home",
@@ -105,6 +110,19 @@ function fixture() {
   };
 }
 describe("executor device boundary", () => {
+  it("binds a preparation hold to one owner device answer without granting a write", async () => {
+    const f = fixture();
+    f.effect.kind = "peer_hold";
+    f.effect.request = { deliveryId: "held-delivery", preparationOnly: true };
+    f.binding.requestFingerprint = deviceDigest(canonicalDispatchJson(f.effect.request));
+    f.answer.requestFingerprint = f.binding.requestFingerprint;
+    Object.assign(f.tx, {
+      deploymentSettings: { findUnique: vi.fn(async () => ({ ownerUserId: "owner" })) },
+    });
+    await validateDeviceApproval(f.db, f.effect, f.answer);
+    expect(f.binding.answeredByGrantId).toBe("phone");
+    expect(f.tx.deviceApprovalBinding.updateMany).toHaveBeenCalledTimes(1);
+  });
   it.each(["program", "argv", "identity", "workspace", "cwd", "computerId"])(
     "binds device approval to the unredacted host %s",
     async (field) => {

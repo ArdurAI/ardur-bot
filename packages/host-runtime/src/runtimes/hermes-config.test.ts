@@ -8,7 +8,8 @@ import {
   validateHermesExecutionEnvelope,
 } from "@ardurbot/core/node/runtime-config-hash";
 import { describe, expect, it } from "vitest";
-import { compileHermesRuntimeConfig } from "./hermes-config.js";
+import fixture from "../../python/tests/valid_profile.json" with { type: "json" };
+import { compileHermesRuntimeConfig, validateCompiledHermesProfile } from "./hermes-config.js";
 
 const model = {
   id: "fixture-model",
@@ -20,6 +21,29 @@ const model = {
 };
 
 describe("Hermes managed configuration compiler", () => {
+  it("accepts the cross-language fixture and rejects a forged effective hash or policy", () => {
+    const selected = {
+      id: "fixture-model",
+      contextWindow: 32_768,
+      maxTokens: 1_024,
+      reasoning: true,
+      acceptsImages: false,
+      thinkingLevel: "high" as const,
+    };
+    expect(validateCompiledHermesProfile(fixture, selected).compiled.manifest).toEqual(
+      fixture.effectiveRuntimeConfig,
+    );
+    expect(() =>
+      validateCompiledHermesProfile(
+        { ...fixture, effectiveRuntimeConfigHash: "0".repeat(64) },
+        selected,
+      ),
+    ).toThrow();
+    const forged = structuredClone(fixture);
+    forged.effectiveRuntimeConfig.generatedConfig.compression.enabled = true;
+    forged.effectiveRuntimeConfigHash = effectiveRuntimeConfigHash(forged.effectiveRuntimeConfig);
+    expect(() => validateCompiledHermesProfile(forged, selected)).toThrow();
+  });
   it("produces deterministic settings, fixed policy and a nonsecret preview", () => {
     const first = compileHermesRuntimeConfig(HERMES_RUNTIME_V2_DEFAULTS, model);
     expect(compileHermesRuntimeConfig(HERMES_RUNTIME_V2_DEFAULTS, model)).toEqual(first);

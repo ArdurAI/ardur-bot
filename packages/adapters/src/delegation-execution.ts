@@ -2,7 +2,12 @@ import type { ConnectorRoute } from "@ardurbot/adapter-kit";
 import { DelegationAuthoritySchema, TaskCardSchema } from "@ardurbot/contracts";
 import { classifyRemoteTool, remotePermissionExpansion } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
-import { reconcileGoalExhaustion, requestCancel, updateWorkerTask } from "@ardurbot/db";
+import {
+  peerTrafficPaused,
+  reconcileGoalExhaustion,
+  requestCancel,
+  updateWorkerTask,
+} from "@ardurbot/db";
 import { grantedMcpTools, mcpGrantForBot } from "./integration-access.js";
 import { peerReadOnlyRuntimeSupported, peerReadOnlyToolAllowed } from "./peer-policy.js";
 
@@ -15,6 +20,44 @@ export async function checkDelegationExecution(
   helperDelegationId?: string,
 ): Promise<string | undefined> {
   const run = await prisma.run.findUniqueOrThrow({ where: { id: runId } });
+  if (run.goalId) {
+    const peerDelegation = run.delegationId
+      ? await prisma.delegation.findFirst({
+          where: { id: run.delegationId, kind: "message" },
+          select: { id: true },
+        })
+      : null;
+    const peerWake = await prisma.botMessageWake.findFirst({
+      where: { runId, state: "bound" },
+      select: { id: true },
+    });
+    const peerCoordinatorWake = run.clientNonce?.startsWith("goal-wake:")
+      ? await prisma.delegation.findFirst({
+          where: { id: run.clientNonce.slice("goal-wake:".length), kind: "message" },
+          select: { id: true },
+        })
+      : null;
+    if (peerDelegation || peerWake || peerCoordinatorWake) {
+      const goal = await prisma.teamGoal.findUnique({
+        where: { id: run.goalId },
+        select: { groupId: true },
+      });
+      if (
+        !goal ||
+        (await peerTrafficPaused(prisma, {
+          spaceId: run.spaceId,
+          userId: run.userId,
+          groupId: goal.groupId,
+        }))
+      ) {
+        await prisma.run.updateMany({
+          where: { id: runId, cancelRequestedAt: null },
+          data: { cancelRequestedAt: new Date() },
+        });
+        return "Team messages are paused.";
+      }
+    }
+  }
   const rootTaskId = run.delegationRootTaskId ?? run.taskId;
   const root = await prisma.delegationRoot.findUnique({ where: { rootTaskId } });
   if (

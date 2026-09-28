@@ -18,6 +18,7 @@ export const RunActivityRowSchema = z.object({
   externalThread: z.boolean().optional(),
   status: RunStatus,
   trigger: RunTriggerSchema,
+  routineId: Id.nullable().optional(),
   notificationsEnabled: z.boolean(),
   promptSnippet: z.string(),
   updatedAt: z.string(),

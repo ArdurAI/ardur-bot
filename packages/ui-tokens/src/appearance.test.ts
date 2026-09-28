@@ -89,7 +89,11 @@ describe("appearance preference", () => {
     expect(tokensForAppearance("dark")).toBe(darkTokens);
     expect(tokensForAppearance("light")).toBe(lightTokens);
     for (const key of Object.keys(darkTokens) as (keyof ColorTokens)[]) {
-      if (key === "destructiveForeground") continue;
+      if (
+        key === "destructiveForeground" ||
+        ["bengara", "indigo", "moss", "persimmon", "plum", "teal", "ochre", "slate"].includes(key)
+      )
+        continue;
       expect(darkTokens[key], key).not.toBe(lightTokens[key]);
     }
   });
@@ -100,6 +104,14 @@ describe("appearance preference", () => {
     expect(dark.secondary).not.toBe(dark.primary);
     expect(light.secondary).not.toBe(light.primary);
     expect(dark.secondaryForeground).not.toBe(dark.primaryForeground);
+  });
+
+  it("keeps the hover accent distinct from resting button surfaces", () => {
+    for (const appearance of ["dark", "light"] as const) {
+      const palette = tokensForAppearance(appearance);
+      expect(palette.accent).not.toBe(palette.secondary);
+      expect(palette.accent).not.toBe(palette.background);
+    }
   });
 
   it("separates user bubbles from bot bubbles and the sidebar from the app", () => {

@@ -3,6 +3,9 @@ import type { AgentRunRequest, AgentUsage } from "@ardurbot/adapter-kit";
 import type { HostFrame, HostOperation } from "@ardurbot/contracts/host-bridge";
 import type { HostClient } from "@ardurbot/host-runtime/host-client";
 import { describe, expect, it, vi } from "vitest";
+import profileFixture from "../../host-runtime/python/tests/valid_profile.json" with {
+  type: "json",
+};
 import { approvalPausedToolResult } from "./approval-effect.js";
 import type { BrokerScope, HermesProviderBroker } from "./hermes-provider-broker.js";
 import { RemoteHostRuntime } from "./remote-host-runtime.js";
@@ -66,6 +69,45 @@ async function collect(source: ReturnType<RemoteHostRuntime["run"]>) {
   return events;
 }
 describe("worker-owned remote runtime callbacks", () => {
+  it("requires a matching host profile before opening a B12 broker", async () => {
+    const brokerForTurn = vi.fn();
+    const remote = new RemoteHostRuntime(
+      {
+        health: async () => ({
+          generation: crypto.randomUUID(),
+          capabilities: { providerRelay: 1 },
+        }),
+      } as unknown as HostClient,
+      "hermes",
+      brokerForTurn,
+    );
+    const base = request();
+    const run: AgentRunRequest = {
+      ...base,
+      model: {
+        ...base.model,
+        provider: "fixture",
+        id: "fixture-model",
+        thinkingLevel: "high",
+        runtimePin: {
+          runtimeKind: "hermes",
+          provider: "fixture",
+          modelId: "fixture-model",
+          effort: "high",
+          credentialId: "credential",
+          revision: 1,
+          runtimeConfig: profileFixture.runtimeConfig,
+          runtimeConfigHash: profileFixture.runtimeConfigHash,
+          effectiveRuntimeConfig: profileFixture.effectiveRuntimeConfig,
+          effectiveRuntimeConfigHash: profileFixture.effectiveRuntimeConfigHash,
+        } as unknown as AgentRunRequest["model"]["runtimePin"],
+      },
+    };
+    await expect(collect(remote.run(run))).rejects.toThrow(
+      "Update the connected host to use these runtime settings.",
+    );
+    expect(brokerForTurn).not.toHaveBeenCalled();
+  });
   it.each(["claude-code", "codex-app-server", "antigravity"] as const)(
     "keeps the three-argument host request for %s",
     async (kind) => {

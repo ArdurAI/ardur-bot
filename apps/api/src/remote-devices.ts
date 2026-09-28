@@ -20,12 +20,14 @@ import {
   DeviceRequestError,
   deviceDigest,
   dispatchState,
+  getBotCommunicationPolicy,
   issueDeviceNonce,
   loadRemoteAuthority,
   requestCancel,
   requestDispatchStop,
   requestShortCodePairing,
   requireDispatchEnabled,
+  setBotCommunicationPaused,
   startDevicePairing,
   verifyDeviceSignature,
 } from "@ardurbot/db";
@@ -340,6 +342,58 @@ export function mountRemoteDevices(
           throw new DeviceRequestError("Change permissions or connections at home.");
         return c.json(await deps.read(grant, read.procedure, read.input));
       }
+      case "team-policy": {
+        requireScope("read");
+        const body = z.object({ groupId: z.string().optional() }).strict().parse(input.body);
+        const owner = await deps.prisma.deploymentSettings.findUnique({
+          where: { id: "default" },
+          select: { ownerUserId: true },
+        });
+        if (owner?.ownerUserId !== grant.userId)
+          throw new DeviceRequestError("This action is unavailable from this device.");
+        return c.json(
+          await getBotCommunicationPolicy(
+            deps.prisma,
+            {
+              spaceId: grant.spaceId,
+              userId: grant.userId,
+              email: "",
+              isDeploymentOwner: true,
+            },
+            body.groupId,
+          ),
+        );
+      }
+      case "team-pause": {
+        requireScope("stop");
+        const body = z
+          .object({
+            scope: z.enum(["space", "group"]),
+            groupId: z.string().optional(),
+            expectedRevision: z.number().int().positive(),
+          })
+          .strict()
+          .parse(input.body);
+        const owner = await deps.prisma.deploymentSettings.findUnique({
+          where: { id: "default" },
+          select: { ownerUserId: true },
+        });
+        if (owner?.ownerUserId !== grant.userId)
+          throw new DeviceRequestError("This action is unavailable from this device.");
+        return c.json(
+          await setBotCommunicationPaused(
+            deps.prisma,
+            {
+              spaceId: grant.spaceId,
+              userId: grant.userId,
+              email: "",
+              isDeploymentOwner: true,
+            },
+            { ...body, paused: true },
+            { id: grant.id, instanceId: grant.instanceId },
+          ),
+        );
+      }
       case "team-stop": {
         requireScope("stop");
         const body = z.object({ rootTaskId: z.string() }).parse(input.body);
@@ -478,9 +532,46 @@ export function mountRemoteDevices(
             throw new DeviceRequestError("Answer this request at home.");
         } else if (!body.effectId || !body.nonce || !body.requestFingerprint)
           throw new DeviceRequestError("This older approval must be answered at home.");
+        let answerThreadId = run.threadId;
+        if (body.effectId) {
+          const held = await deps.prisma.botMessageDelivery.findFirst({
+            where: {
+              approvalEffectId: body.effectId,
+              spaceId: grant.spaceId,
+              userId: grant.userId,
+              state: "held",
+            },
+            select: { senderThreadId: true },
+          });
+          if (held) {
+            const card = await deps.prisma.message.findFirst({
+              where: {
+                id: body.messageId,
+                threadId: held.senderThreadId,
+                runId: run.id,
+                role: "bot",
+              },
+              select: { blocks: true },
+            });
+            if (
+              !Array.isArray(card?.blocks) ||
+              !card.blocks.some(
+                (block) =>
+                  typeof block === "object" &&
+                  block !== null &&
+                  "approvalEffectId" in block &&
+                  block.approvalEffectId === body.effectId &&
+                  "peerHold" in block &&
+                  block.peerHold === true,
+              )
+            )
+              throw new DeviceRequestError("This approval changed; review it again.", 409);
+            answerThreadId = held.senderThreadId;
+          }
+        }
         const answered = await deps.events.answerRunInput({
           spaceId: run.spaceId,
-          threadId: run.threadId,
+          threadId: answerThreadId,
           runId: run.id,
           messageId: body.messageId,
           answeredByUserId: grant.userId,
