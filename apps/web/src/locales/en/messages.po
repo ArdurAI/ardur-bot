@@ -2576,6 +2576,10 @@ msgstr "Could not load voice settings"
 msgid "Could not load your bots; reopen quick access."
 msgstr "Could not load your bots; reopen quick access."
 
+#: src/pages/system/SystemPage.tsx
+msgid "Could not open setup. Try again."
+msgstr "Could not open setup. Try again."
+
 #: src/pages/ChannelPairingSettings.tsx
 msgid "Could not pair this account. Check its settings and try again."
 msgstr "Could not pair this account. Check its settings and try again."
@@ -6812,6 +6816,10 @@ msgstr "Run on other bots"
 #: src/pages/system/SystemPage.tsx
 msgid "Run on startup"
 msgstr "Run on startup"
+
+#: src/pages/system/SystemPage.tsx
+msgid "Run setup again"
+msgstr "Run setup again"
 
 #: src/pages/Shell.tsx
 msgid "Run time must be in the future."

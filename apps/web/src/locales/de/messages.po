@@ -2576,6 +2576,10 @@ msgstr "Stimmeinstellungen konnten nicht geladen werden"
 msgid "Could not load your bots; reopen quick access."
 msgstr ""
 
+#: src/pages/system/SystemPage.tsx
+msgid "Could not open setup. Try again."
+msgstr ""
+
 #: src/pages/ChannelPairingSettings.tsx
 msgid "Could not pair this account. Check its settings and try again."
 msgstr ""
@@ -6811,6 +6815,10 @@ msgstr ""
 
 #: src/pages/system/SystemPage.tsx
 msgid "Run on startup"
+msgstr ""
+
+#: src/pages/system/SystemPage.tsx
+msgid "Run setup again"
 msgstr ""
 
 #: src/pages/Shell.tsx
