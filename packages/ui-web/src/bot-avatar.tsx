@@ -133,6 +133,7 @@ export const BotAvatar = memo(function BotAvatar({
           "ardurbot-bot-avatar relative flex shrink-0 select-none items-center justify-center bg-secondary",
           className,
         )}
+        aria-hidden="true"
         data-status={avatarStatus}
         style={{
           width: size,
@@ -207,6 +208,7 @@ export const BotAvatar = memo(function BotAvatar({
           "ardurbot-bot-avatar relative flex shrink-0 select-none items-center justify-center bg-card",
           className,
         )}
+        aria-hidden="true"
         data-status={avatarStatus}
         style={{
           width: size,
@@ -273,6 +275,7 @@ export const BotAvatar = memo(function BotAvatar({
         "ardurbot-bot-avatar relative flex shrink-0 select-none items-center justify-center",
         className,
       )}
+      aria-hidden="true"
       data-status={avatarStatus}
       style={{
         width: isRunning ? size * 0.8 : size,
@@ -412,10 +415,11 @@ function OrganicAvatar({
 const reducedMotionMedia = "(prefers-reduced-motion: reduce)";
 
 function reducedMotionSnapshot(): boolean {
-  return window.matchMedia(reducedMotionMedia).matches;
+  return typeof window.matchMedia === "function" && window.matchMedia(reducedMotionMedia).matches;
 }
 
 function subscribeToReducedMotion(onChange: () => void): () => void {
+  if (typeof window.matchMedia !== "function") return () => {};
   const media = window.matchMedia(reducedMotionMedia);
   media.addEventListener("change", onChange);
   return () => media.removeEventListener("change", onChange);
@@ -444,7 +448,7 @@ export function GrokShapePreview({
       onClick={onClick}
       aria-label={
         shapeIndex === -1
-          ? "Initial"
+          ? "Seal"
           : (SHIPPED_SHAPE_KEYS[shapeIndex % SHIPPED_SHAPE_KEYS.length] ?? "hex")
       }
       aria-pressed={selected ?? false}
