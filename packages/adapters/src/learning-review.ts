@@ -57,9 +57,7 @@ export interface LearningReviewDependencies {
   prisma: PrismaClient;
   runtime: AgentRuntime;
   /** Resolve the runtime that can run the reviewer pin; defaults to deps.runtime. */
-  resolveRuntime?: (
-    pin: RuntimePin,
-  ) => Promise<{ runtime: AgentRuntime } | RuntimeProblem>;
+  resolveRuntime?: (pin: RuntimePin) => Promise<{ runtime: AgentRuntime } | RuntimeProblem>;
   memoryDocuments?: MemoryService;
   secretStore: EncryptedSecretStore;
   resolvePin?: typeof resolveReviewerPin;

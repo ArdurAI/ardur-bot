@@ -29,8 +29,8 @@ import type { LocalImportJobOptions } from "./local-import-jobs.js";
 import { createLocalImportJobs } from "./local-import-jobs.js";
 import type { MemoryProviderResolver } from "./memory-provider-factory.js";
 import { deliverMessagingOutbound, mirrorMessagingOutbound } from "./messaging-delivery.js";
-import { createRuntimeRegistry } from "./runtime-registry.js";
 import { recordRunUsage } from "./run-usage.js";
+import { createRuntimeRegistry } from "./runtime-registry.js";
 import type { EncryptedSecretStore } from "./secrets.js";
 import { expireTaughtSkillTeaching } from "./teaching-session.js";
 
@@ -116,7 +116,9 @@ export function createBackgroundJobHandlers(deps: {
             const source = await deps.prisma.run.findUnique({
               where: { id: payload.runId },
               select: {
-                bot: { select: { computer: { select: { kind: true } }, runtimeExperimental: true } },
+                bot: {
+                  select: { computer: { select: { kind: true } }, runtimeExperimental: true },
+                },
               },
             });
             const bot = source?.bot;
