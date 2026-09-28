@@ -173,27 +173,60 @@ const standaloneScope = {
   purpose: "helper" as const,
   runtimePin: { runtimeKind: "pi", provider: "fixture", modelId: "fixture" },
 };
+/** In-memory ledger mirroring production semantics: updates address rows by id
+ *  (no request key in update data) and observation receipts persist per
+ *  (usageRecordId, sequence), so replay dedup is actually exercised. */
 function standalonePrisma() {
+  let nextId = 0;
   const rows = new Map<string, Record<string, unknown>>();
+  const byRequestKey = new Map<string, string>();
+  const receipts = new Map<string, Record<string, unknown>>();
   const tx = {
     usageRecord: {
-      findUnique: vi.fn(async ({ where }: { where: { requestKey: string } }) => {
-        const row = rows.get(where.requestKey);
+      findUnique: vi.fn(async ({ where }: { where: { id?: string; requestKey?: string } }) => {
+        const id = where.id ?? (where.requestKey ? byRequestKey.get(where.requestKey) : undefined);
+        const row = id ? rows.get(id) : undefined;
         return row ? structuredClone(row) : null;
       }),
       create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
-        rows.set(data.requestKey as string, { id: "standalone", ...data });
-        return { id: "standalone", ...data };
+        const id = `usage-${++nextId}`;
+        const row = { ...data, id };
+        rows.set(id, row);
+        if (data.requestKey) byRequestKey.set(data.requestKey as string, id);
+        return structuredClone(row);
       }),
-      update: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
-        const key = data.requestKey as string;
-        rows.set(key, { ...rows.get(key), ...data });
-        return { id: "standalone", ...data };
-      }),
+      update: vi.fn(
+        async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => {
+          const row = rows.get(where.id);
+          if (!row) throw new Error(`usage row ${where.id} not found`);
+          Object.assign(row, data);
+          return structuredClone(row);
+        },
+      ),
     },
     requestUsageObservation: {
-      findUnique: vi.fn(async () => null),
-      create: vi.fn(async () => ({ id: "receipt" })),
+      findUnique: vi.fn(
+        async ({
+          where,
+        }: {
+          where: { usageRecordId_sequence: { usageRecordId: string; sequence: number } };
+        }) => {
+          const key = `${where.usageRecordId_sequence.usageRecordId}:${where.usageRecordId_sequence.sequence}`;
+          const receipt = receipts.get(key);
+          return receipt ? structuredClone(receipt) : null;
+        },
+      ),
+      create: vi.fn(
+        async ({
+          data,
+        }: {
+          data: { usageRecordId: string; sequence: number } & Record<string, unknown>;
+        }) => {
+          const key = `${data.usageRecordId}:${data.sequence}`;
+          receipts.set(key, { ...data });
+          return { id: `receipt-${key}` };
+        },
+      ),
     },
   };
   const prisma = {
@@ -201,98 +234,170 @@ function standalonePrisma() {
     $transaction: (fn: (tx: Prisma.TransactionClient) => Promise<unknown>) =>
       fn(tx as unknown as Prisma.TransactionClient),
   } as unknown as PrismaClient;
-  return { prisma, tx };
+  return { prisma, rows, receipts };
 }
-it("records standalone usage with purpose, runtime pin, request identity and cache categories", async () => {
-  const { prisma, tx } = standalonePrisma();
-  const collector = new RequestUsageCollector({
+const collector = () =>
+  new RequestUsageCollector({
     provider: "fixture",
     model: "fixture",
+    inputSemantics: "total-with-cache-subsets",
+    mappingVersion: "fixture-v1",
+  });
+const storedRow = (rows: Map<string, Record<string, unknown>>) => {
+  expect(rows.size).toBe(1);
+  return [...rows.values()][0]!;
+};
+it("records standalone usage with purpose, runtime pin, request identity and cache categories", async () => {
+  const { prisma, rows, receipts } = standalonePrisma();
+  const request = collector();
+  for (const event of [
+    request.start(),
+    request.snapshot({ input: 100, output: 30, cacheRead: 60, cacheWrite: 10, reasoning: 5 }),
+    request.finish("success"),
+  ] as AgentUsage[])
+    await recordStandaloneUsage({ prisma }, standaloneScope, event);
+  expect(storedRow(rows)).toMatchObject({
+    runId: null,
+    purpose: "helper",
+    threadId: "judge-thread",
+    runtimePin: standaloneScope.runtimePin,
+    inputTokens: 100,
+    outputTokens: 30,
+    logicalInputTokens: 100,
+    cacheReadInputTokens: 60,
+    cacheWriteInputTokens: 10,
+    uncachedInputTokens: 30,
+    reasoningTokens: 5,
+    coverage: "complete",
+  });
+  expect(receipts.size).toBe(3);
+});
+
+it("keeps unreported standalone usage explicit instead of writing measured zeros", async () => {
+  const { prisma, rows } = standalonePrisma();
+  const request = collector();
+  for (const event of [request.start(), request.finish("failed")] as AgentUsage[])
+    await recordStandaloneUsage({ prisma }, standaloneScope, event);
+  expect(storedRow(rows)).toMatchObject({
+    inputTokens: 0,
+    outputTokens: 0,
+    logicalInputTokens: null,
+    cacheReadInputTokens: null,
+    cacheWriteInputTokens: null,
+    reportedOutputTokens: null,
+    coverage: "partial",
+    categoryCoverage: {
+      logicalInput: "unknown",
+      uncachedInput: "unknown",
+      cacheReadInput: "unknown",
+      cacheWriteInput: "unknown",
+      output: "unknown",
+      reasoning: "unknown",
+    },
+  });
+});
+
+it("persists identity-free legacy deltas as standalone rows without a zero claim", async () => {
+  const { prisma, rows } = standalonePrisma();
+  const usage = { provider: "fixture", model: "fixture", inputTokens: 100, outputTokens: 30 };
+  await recordStandaloneUsage({ prisma }, standaloneScope, usage);
+  await recordStandaloneUsage({ prisma }, standaloneScope, { ...usage, reported: false });
+  expect(storedRow(rows)).toMatchObject({
+    purpose: "helper",
+    inputTokens: 100,
+    outputTokens: 30,
+    coverage: "partial",
+  });
+});
+
+it("counts a replayed duplicate snapshot once in the stored row", async () => {
+  const { prisma, rows, receipts } = standalonePrisma();
+  const request = collector();
+  const started = request.start();
+  const snapshot = request.snapshot({ input: 100, output: 30 });
+  for (const event of [started, snapshot, snapshot, request.finish("success")] as AgentUsage[])
+    await recordStandaloneUsage({ prisma }, standaloneScope, event);
+  expect(storedRow(rows)).toMatchObject({ inputTokens: 100, outputTokens: 30 });
+  // start, snapshot, finish — the replayed snapshot stored no extra receipt.
+  expect(receipts.size).toBe(3);
+});
+
+it("stores a distinct retry attempt as its own row with its own totals", async () => {
+  const { prisma, rows } = standalonePrisma();
+  const first = new RequestUsageCollector({
+    provider: "fixture",
+    model: "fixture",
+    requestId: "judge-request",
+    attemptId: "first",
+    inputSemantics: "total-with-cache-subsets",
+    mappingVersion: "fixture-v1",
+  });
+  const retry = new RequestUsageCollector({
+    provider: "fixture",
+    model: "fixture",
+    requestId: "judge-request",
+    attemptId: "retry",
     inputSemantics: "total-with-cache-subsets",
     mappingVersion: "fixture-v1",
   });
   for (const event of [
-    collector.start(),
-    collector.snapshot({ input: 100, output: 30, cacheRead: 60, cacheWrite: 10, reasoning: 5 }),
-    collector.finish("success"),
+    first.start(),
+    first.snapshot({ input: 100, output: 30 }),
+    first.finish("failed"),
+    retry.start(),
+    retry.snapshot({ input: 20, output: 8 }),
+    retry.finish("success"),
   ] as AgentUsage[])
     await recordStandaloneUsage({ prisma }, standaloneScope, event);
-  expect(tx.usageRecord.create).toHaveBeenCalledTimes(1);
-  expect(tx.usageRecord.create).toHaveBeenCalledWith({
-    data: expect.objectContaining({
-      runId: null,
-      purpose: "helper",
-      threadId: "judge-thread",
-      runtimePin: standaloneScope.runtimePin,
-      requestId: expect.any(String),
-      attemptId: expect.any(String),
-    }),
-  });
-  expect(tx.usageRecord.update).toHaveBeenCalledTimes(2);
-  expect(tx.usageRecord.update).toHaveBeenLastCalledWith({
-    where: { id: "standalone" },
-    data: expect.objectContaining({
-      inputTokens: 100,
-      outputTokens: 30,
-      logicalInputTokens: 100,
-      cacheReadInputTokens: 60,
-      cacheWriteInputTokens: 10,
-      uncachedInputTokens: 30,
-      reasoningTokens: 5,
-      coverage: "complete",
-    }),
-  });
-  expect(tx.requestUsageObservation.create).toHaveBeenCalledTimes(3);
+  expect(rows.size).toBe(2);
+  const [a, b] = [...rows.values()];
+  expect(a).toMatchObject({ attemptId: "first", inputTokens: 100, outputTokens: 30 });
+  expect(b).toMatchObject({ attemptId: "retry", inputTokens: 20, outputTokens: 8 });
 });
 
-it("keeps unreported standalone usage explicit instead of writing measured zeros", async () => {
-  const { prisma, tx } = standalonePrisma();
-  const collector = new RequestUsageCollector({
+it("accumulates stored delta observations into the row totals", async () => {
+  const { prisma, rows } = standalonePrisma();
+  const delta = (
+    sequence: number,
+    input: number,
+    output: number,
+    outcome: "started" | "success" = "started",
+  ): AgentUsage => ({
     provider: "fixture",
     model: "fixture",
-    inputSemantics: "total-with-cache-subsets",
-    mappingVersion: "fixture-v1",
-  });
-  for (const event of [collector.start(), collector.finish("failed")] as AgentUsage[])
-    await recordStandaloneUsage({ prisma }, standaloneScope, event);
-  expect(tx.usageRecord.create).toHaveBeenCalledTimes(1);
-  expect(tx.usageRecord.update).toHaveBeenCalledTimes(1);
-  expect(tx.usageRecord.update).toHaveBeenLastCalledWith({
-    where: { id: "standalone" },
-    data: expect.objectContaining({
-      inputTokens: 0,
-      outputTokens: 0,
-      logicalInputTokens: null,
-      cacheReadInputTokens: null,
-      cacheWriteInputTokens: null,
-      reportedOutputTokens: null,
-      coverage: "partial",
-      categoryCoverage: {
-        logicalInput: "unknown",
-        uncachedInput: "unknown",
-        cacheReadInput: "unknown",
-        cacheWriteInput: "unknown",
-        output: "unknown",
-        reasoning: "unknown",
-      },
-    }),
-  });
-});
-
-it("preserves identity-free legacy deltas as standalone rows without a zero claim", async () => {
-  const { prisma, tx } = standalonePrisma();
-  const usage = { provider: "fixture", model: "fixture", inputTokens: 100, outputTokens: 30 };
-  await recordStandaloneUsage({ prisma }, standaloneScope, usage);
-  await recordStandaloneUsage({ prisma }, standaloneScope, { ...usage, reported: false });
-  expect(tx.usageRecord.create).toHaveBeenCalledTimes(1);
-  expect(tx.usageRecord.create).toHaveBeenCalledWith({
-    data: expect.objectContaining({
+    inputTokens: input,
+    outputTokens: output,
+    request: {
+      requestId: "delta-request",
+      attemptId: "0",
+      parentRequestId: null,
       purpose: "helper",
-      inputTokens: 100,
-      outputTokens: 30,
-      coverage: "partial",
-    }),
+      counter: { mode: "delta", epochId: "0", sequence },
+      inputSemantics: "total-with-cache-subsets",
+      reasoningSemantics: "subset-of-output",
+      categories: {
+        logicalInput: input,
+        uncachedInput: null,
+        cacheReadInput: null,
+        cacheWriteInput: null,
+        output,
+        reasoning: null,
+      },
+      cost: null,
+      pricingProvenance: null,
+      collection: {
+        mappingVersion: "fixture-v1",
+        scope: "runtime-call",
+        outcome,
+        availability: "partial",
+        raw: {},
+        limitations: [],
+      },
+    },
   });
+  for (const event of [delta(0, 100, 30), delta(1, 40, 10), delta(2, 0, 0, "success")])
+    await recordStandaloneUsage({ prisma }, standaloneScope, event);
+  expect(storedRow(rows)).toMatchObject({ inputTokens: 140, outputTokens: 40 });
 });
 
 it("stores the usage pin, not the source run's pin, when a reviewer pin is supplied", async () => {
