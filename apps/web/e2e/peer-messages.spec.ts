@@ -47,13 +47,19 @@ test("shows peer chips in transcript and opens view-only peer chat", async ({ pa
   await expect(page.getByRole("button", { name: "Send" })).toBeVisible({ timeout: 60_000 });
 
   const transcript = page.getByTestId("transcript");
+  // The visible label follows the receipt (Sent, Delivered, Read by, Replied); the peer's name
+  // always ends the accessible name.
   const chip = transcript
     .getByTestId("peer-receipt-chip")
-    .filter({ hasText: "Researcher" })
+    .and(transcript.getByRole("button", { name: /Researcher$/ }))
     .first();
   await expect(chip).toBeVisible({ timeout: 30_000 });
-  await expect(chip.getByText(/Messaged|Message from/)).toBeVisible();
-  await expect(chip).toHaveAccessibleName(/Messaged Researcher|Message from Researcher/);
+  await expect(chip).toContainText(
+    /^(Sent|Delivered (to|from) Researcher|Read by \w+|Replied|Waiting for a turn)$/,
+  );
+  await expect(chip).toHaveAccessibleName(
+    /^((Sent|Delivered) to|(Message|Delivered) from|(Read by \w+|Replied|Waiting for a turn) · (to|from)) Researcher$/,
+  );
   await expect(chip.locator(".ardurbot-bot-avatar")).toBeVisible();
   await expect(chip).not.toContainText("{peer}");
   // User bubble still contains the phrase; peer body must not appear outside the chip.
