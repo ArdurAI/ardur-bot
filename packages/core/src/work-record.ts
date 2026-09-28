@@ -31,7 +31,7 @@ export function mapMessageBlockToActivity(block: MessageBlock): ActivityEvidence
         outcome: "pending" 
       };
     }
-    return { label: "narration", title: block.text, outcome: "pending" };
+    return { label: "reasoning", title: block.text, outcome: "pending" };
   }
 
   if (block.kind === "steps") {

@@ -3514,6 +3514,7 @@ msgstr "Documents stay in the local journal."
 msgid "Don’t have an account?"
 msgstr "Don’t have an account?"
 
+#: src/components/ai/CompactWorkRecord.tsx
 #: src/lib/run-status-label.ts
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardColumns.tsx
@@ -7157,6 +7158,7 @@ msgstr "Run setup again"
 msgid "Run time must be in the future."
 msgstr "Run time must be in the future."
 
+#: src/components/ai/CompactWorkRecord.tsx
 #: src/components/CloudAgentCard.tsx
 msgid "running"
 msgstr "running"
@@ -8998,6 +9000,7 @@ msgstr "Work"
 msgid "Work items"
 msgstr "Work items"
 
+#: src/components/ai/CompactWorkRecord.tsx
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/TeamBoard.tsx

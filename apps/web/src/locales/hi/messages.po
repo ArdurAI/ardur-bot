@@ -3514,6 +3514,7 @@ msgstr ""
 msgid "Don’t have an account?"
 msgstr "खाता नहीं है?"
 
+#: src/components/ai/CompactWorkRecord.tsx
 #: src/lib/run-status-label.ts
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardColumns.tsx
@@ -7157,6 +7158,7 @@ msgstr ""
 msgid "Run time must be in the future."
 msgstr ""
 
+#: src/components/ai/CompactWorkRecord.tsx
 #: src/components/CloudAgentCard.tsx
 msgid "running"
 msgstr "चल रहा है"
@@ -8998,6 +9000,7 @@ msgstr "काम"
 msgid "Work items"
 msgstr "कार्य आइटम"
 
+#: src/components/ai/CompactWorkRecord.tsx
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/TeamBoard.tsx

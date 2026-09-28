@@ -1,16 +1,42 @@
 import type { MessageBlock } from "@ardurbot/contracts";
 import { mapMessageBlockToActivity } from "@ardurbot/core";
-import { useMemo, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { useMemo, useState, useEffect, useRef } from "react";
+import { Pressable, Text, View, Animated, AccessibilityInfo } from "react-native";
 import { mobileTokens } from "../lib/appearance";
 import { useI18n } from "../lib/i18n";
 import { NativeCommandBlock } from "./command-block";
 import { NativeSymbol } from "./native-symbol";
 
-export function CompactWorkRecord({ blocks }: { blocks: MessageBlock[] }) {
+export function CompactWorkRecord({ blocks, renderBlock }: { blocks: MessageBlock[], renderBlock?: (block: MessageBlock, i: number) => React.ReactNode }) {
   const tokens = mobileTokens();
   const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
+
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    let isActive = true;
+    AccessibilityInfo.isReduceMotionEnabled().then((reduceMotion) => {
+      if (!isActive || reduceMotion) return;
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 0.5,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 600,
+            useNativeDriver: true,
+          }),
+        ])
+      ).start();
+    });
+    return () => {
+      isActive = false;
+      pulseAnim.stopAnimation();
+    };
+  }, [pulseAnim]);
 
   const mapped = useMemo(
     () => blocks.map((b) => ({ block: b, evidence: mapMessageBlockToActivity(b) })),
@@ -44,7 +70,7 @@ export function CompactWorkRecord({ blocks }: { blocks: MessageBlock[] }) {
             <View
               style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1, maxWidth: 150 }}
             >
-              <View style={{ height: 2, backgroundColor: tokens.foreground, flex: 1 }} />
+              <Animated.View style={{ height: 2, backgroundColor: tokens.foreground, flex: 1, opacity: pulseAnim }} />
               <View
                 style={{
                   height: 2,
@@ -106,6 +132,10 @@ export function CompactWorkRecord({ blocks }: { blocks: MessageBlock[] }) {
           }}
         >
           {nonNarration.map((m, i) => {
+            const customRender = renderBlock?.(m.block, i);
+            if (customRender) {
+              return <View key={i}>{customRender}</View>;
+            }
             if (m.block.kind === "command") {
               return (
                 <View key={i} style={{ marginTop: 4 }}>

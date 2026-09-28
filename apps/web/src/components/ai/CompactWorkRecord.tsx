@@ -5,7 +5,13 @@ import { Check, ChevronDown, ChevronRight } from "lucide-react";
 import { useMemo, useState } from "react";
 import { ThreadCommandBlock } from "../ThreadCommandBlock";
 
-export function CompactWorkRecord({ blocks }: { blocks: MessageBlock[] }) {
+export function CompactWorkRecord({
+  blocks,
+  renderBlock,
+}: {
+  blocks: MessageBlock[];
+  renderBlock?: (block: MessageBlock, i: number) => React.ReactNode;
+}) {
   const [expanded, setExpanded] = useState(false);
 
   const mapped = useMemo(
@@ -55,6 +61,10 @@ export function CompactWorkRecord({ blocks }: { blocks: MessageBlock[] }) {
       {expanded && (
         <div className="flex flex-col gap-3 pl-4 border-l-2 border-border mt-2">
           {nonNarration.map((m, i) => {
+            const customRender = renderBlock?.(m.block, i);
+            if (customRender) {
+              return <div key={i}>{customRender}</div>;
+            }
             if (m.block.kind === "command") {
               return <ThreadCommandBlock key={i} block={m.block.command} />;
             }
