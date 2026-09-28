@@ -436,7 +436,8 @@ export class SetupEngine {
           if (this.journal.pending?.stepId === step.id) this.journal.pending = null;
           if (
             !this.journal.receipts[step.id] ||
-            (step.id === "services" && this.journal.receipts[step.id]?.proof !== checked.evidence)
+            (["services", "model", "first-bot"].includes(step.id) &&
+              this.journal.receipts[step.id]?.proof !== checked.evidence)
           )
             this.journal.receipts[step.id] = { kind: "verified", proof: checked.evidence };
           await this.persist();

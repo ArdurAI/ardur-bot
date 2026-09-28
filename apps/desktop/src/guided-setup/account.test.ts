@@ -151,5 +151,13 @@ describe("account guided steps", () => {
     expect(stale.steps[7]?.status).toBe("pending");
     expect(stale.steps[8]?.status).toBe("pending");
     expect(stale.complete).toBe(false);
+    const recovered = await engine.recheckAccount();
+    expect(recovered).toMatchObject({ accountReady: true, complete: true });
+    expect(JSON.parse(raw!).receipts.model.proof).toBe("target-a:account-b");
+    expect(JSON.parse(raw!).receipts["first-bot"].proof).toBe("target-a:account-b");
+    const stable = await engine.recheckAccount();
+    expect(stable).toMatchObject({ accountReady: true, complete: true });
+    expect(stable.steps[6]?.status).toBe("succeeded");
+    expect(stable.steps[7]?.status).toBe("succeeded");
   });
 });
