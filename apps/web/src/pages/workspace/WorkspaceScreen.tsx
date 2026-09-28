@@ -8,12 +8,14 @@ export function WorkspaceScreen({
   open,
   url,
   error,
+  status,
   onOpen,
 }: {
   computer: ComputerStatus | null;
   open: boolean;
   url: string | null;
   error: ReactNode;
+  status?: ReactNode;
   onOpen(): void;
 }) {
   const { t } = useLingui();
@@ -39,7 +41,7 @@ export function WorkspaceScreen({
           />
         ) : (
           <div className="grid h-full place-items-center text-sm text-muted-foreground">
-            {t`Open screen to view this computer.`}
+            {status || t`Open screen to view this computer.`}
           </div>
         )}
         {!error ? (

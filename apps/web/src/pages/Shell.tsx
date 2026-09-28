@@ -3754,9 +3754,9 @@ export function ShellPage({
                     computer,
                     open: computerOpen,
                     url: embeddedScreenUrl,
-                    error:
-                      computerScreenError ??
-                      (!embeddedScreenUrl || computer?.state !== "running" ? (
+                    error: computerScreenError,
+                    status:
+                      !embeddedScreenUrl || computer?.state !== "running" ? (
                         computersAreUnavailable(bootstrapMe?.sandboxProvider) ? (
                           <ComputersUnavailableHint />
                         ) : (
@@ -3767,7 +3767,7 @@ export function ShellPage({
                             computer?.imagePulling ? computer.imagePullPercent : undefined,
                           )
                         )
-                      ) : null),
+                      ) : null,
                     onOpen: () => void openComputer(undefined, true),
                   }}
                   routines={
