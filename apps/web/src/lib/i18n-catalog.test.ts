@@ -283,8 +283,8 @@ describe("lingui catalogs", () => {
     const sentences = [
       "Default computer",
       "Deployment default ({defaultLabel})",
-      "Docker on this Mac",
-      "Docker on this computer",
+      "Docker engine on this Mac",
+      "Docker engine on this computer",
       "This moves the computer from {sourceLabel} to {destinationLabel} and replaces its files. Continue?",
     ];
     const literal = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
