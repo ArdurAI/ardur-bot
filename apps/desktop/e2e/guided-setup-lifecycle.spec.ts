@@ -2,7 +2,16 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { _electron as electron, expect, test } from "@playwright/test";
+import type { SetupEngine as SetupEngineClass } from "../src/guided-setup/engine.js";
+import type { installGuidedSetupIpc as installGuidedSetupIpcFn } from "../src/guided-setup/ipc.js";
+import type { SetupJournalStore as SetupJournalStoreClass } from "../src/guided-setup/store.js";
 import { GUIDED_SETUP_FIXTURE_REQUEST_CHANNELS } from "./guided-setup-fixture-channels.js";
+
+interface GuidedSetupTestHook {
+  SetupEngine: typeof SetupEngineClass;
+  SetupJournalStore: typeof SetupJournalStoreClass;
+  installGuidedSetupIpc: typeof installGuidedSetupIpcFn;
+}
 
 test("cancel settles during services start and re-check preserves the owned receipt", async () => {
   test.setTimeout(60_000);
@@ -11,6 +20,7 @@ test("cancel settles during services start and re-check preserves the owned rece
   for (const [key, value] of Object.entries(process.env)) if (value !== undefined) env[key] = value;
   env.ARDURBOT_PERFORMANCE_USER_DATA = userData;
   env.ARDURBOT_GUIDED_SETUP = "1";
+  env.ARDURBOT_GUIDED_SETUP_TEST_HOOK = "1";
   delete env.ARDURBOT_WEB_URL;
   const executablePath = process.env.ARDURBOT_E2E_EXECUTABLE;
   const desktop = await electron.launch({
@@ -22,14 +32,12 @@ test("cancel settles during services start and re-check preserves the owned rece
   try {
     const setup = await desktop.firstWindow();
     await expect(setup.getByRole("heading", { name: "Set up Ardur" })).toBeVisible();
-    await desktop.evaluate(async ({ app, BrowserWindow, ipcMain }, requestChannels) => {
-      const { join } = await import("node:path");
-      const { pathToFileURL } = await import("node:url");
-      const moduleUrl = (name: string) =>
-        pathToFileURL(join(app.getAppPath(), "dist", "guided-setup", name)).href;
-      const { SetupEngine } = await import(moduleUrl("engine.js"));
-      const { SetupJournalStore } = await import(moduleUrl("store.js"));
-      const { installGuidedSetupIpc } = await import(moduleUrl("ipc.js"));
+    await desktop.evaluate(async ({ BrowserWindow, ipcMain }, requestChannels) => {
+      // Dynamic import is unavailable inside evaluate; the main process exposes its loaded modules.
+      const hook = (globalThis as { __ardurGuidedSetupTest?: GuidedSetupTestHook })
+        .__ardurGuidedSetupTest;
+      if (!hook) throw new Error("Guided setup test hook is not installed.");
+      const { SetupEngine, SetupJournalStore, installGuidedSetupIpc } = hook;
       let raw: string | null = null;
       let healthy = false;
       let serviceRuns = 0;
