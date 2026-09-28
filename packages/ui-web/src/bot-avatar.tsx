@@ -498,12 +498,25 @@ export function GrokShapePreview({
 
 export function Wordmark({ className }: { className?: string }) {
   return (
-    <div className={cn("flex items-center gap-3", className)}>
-      <div className="flex h-11 w-11 items-center justify-center gap-1.5 rounded-full bg-card">
-        <span className="h-4 w-[7px] rounded-full bg-primary" />
-        <span className="h-4 w-[7px] rounded-full bg-primary" />
-      </div>
-      <span className="font-serif text-[26px] tracking-tight text-foreground">Ardur</span>
+    <div className={cn("flex items-center gap-[34px]", className)}>
+      <svg
+        viewBox="0 0 400 400"
+        className="size-[34px] text-foreground"
+        aria-hidden="true"
+        fill="none"
+      >
+        <path
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="36"
+          strokeLinecap="round"
+          d="M 322 100 A 150 150 0 1 0 334 296"
+        />
+        <rect x="322" y="118" width="40" height="232" rx="20" fill="currentColor" />
+      </svg>
+      <span className="font-serif text-[34px] leading-none tracking-[-0.02em] text-foreground">
+        Ardur
+      </span>
     </div>
   );
 }
