@@ -38,6 +38,31 @@ function fixture() {
 }
 
 describe("run pin snapshots", () => {
+  it("rejects a saved Hermes connection above the host output ceiling", async () => {
+    const f = fixture();
+    f.findCredential.mockResolvedValue({ ...credential, provider: "openai-compatible" });
+    f.loadKey.mockResolvedValue({
+      provider: "openai-compatible",
+      id: "same-model",
+      baseUrl: "http://127.0.0.1:8080/v1",
+      maxTokens: 131_072,
+      thinkingLevel: "off",
+    });
+    const config = effectiveHermesConfig(null);
+    const snapshot = {
+      ...pin,
+      runtimeKind: "hermes" as const,
+      provider: "openai-compatible",
+      modelId: "same-model",
+      effort: "off",
+      runtimeConfig: config,
+      runtimeConfigHash: hermesConfigHash(config),
+    };
+    expect(await resolveRunModelPin({ ...f, snapshot, bot: {} })).toMatchObject({
+      kind: "problem",
+      code: "runtime-configuration-invalid",
+    });
+  });
   it("keeps a Hermes connection and limits immutable across bot edits", async () => {
     const f = fixture();
     f.findCredential.mockResolvedValue({ ...credential, provider: "openai-compatible" });

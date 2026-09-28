@@ -53,7 +53,8 @@ export function hermesCompatibility(
     !Number.isSafeInteger(model.contextWindow ?? DEFAULT_MODEL_CONTEXT_WINDOW) ||
     !Number.isSafeInteger(model.maxTokens ?? DEFAULT_MODEL_MAX_TOKENS) ||
     (model.contextWindow ?? DEFAULT_MODEL_CONTEXT_WINDOW) <= 0 ||
-    (model.maxTokens ?? DEFAULT_MODEL_MAX_TOKENS) <= 0
+    (model.maxTokens ?? DEFAULT_MODEL_MAX_TOKENS) <= 0 ||
+    (model.maxTokens ?? DEFAULT_MODEL_MAX_TOKENS) > 65_536
   )
     return runtimePinProblem(
       pin,
