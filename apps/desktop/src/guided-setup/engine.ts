@@ -33,14 +33,20 @@ export interface SetupStep {
   revision: number;
   requires: readonly SetupStepId[];
   canSkip: boolean;
+  waitForInput?: boolean;
   check(context: SetupContext, signal: AbortSignal): Promise<StepVerification>;
+  recheck?(context: SetupContext, signal: AbortSignal): Promise<StepVerification>;
   run(context: SetupContext, signal: AbortSignal): Promise<StepReceipt>;
   verify(
     context: SetupContext,
     receipt: StepReceipt,
     signal: AbortSignal,
   ): Promise<StepVerification>;
-  cancel(context: SetupContext, receipt: StepReceipt | null): Promise<void>;
+  /** Return steps whose verified resources were stopped by cleanup. */
+  cancel(
+    context: SetupContext,
+    receipt: StepReceipt | null,
+  ): Promise<readonly SetupStepId[] | undefined>;
   rollback?(context: SetupContext, receipt: StepReceipt | null): Promise<void>;
 }
 export interface SetupClock {
@@ -79,6 +85,11 @@ function emptySnapshot(steps: readonly SetupStep[]): SetupSnapshot {
 
 const ACTIVE = new Set<SetupStepStatus>(["checking", "running", "verifying", "cancelling"]);
 class JournalWriteError extends Error {}
+export class SetupStepFailure extends Error {
+  constructor(readonly reasonCode: string) {
+    super(reasonCode);
+  }
+}
 export class SetupEngine {
   private journal: SetupJournal;
   private readonly steps: readonly SetupStep[];
@@ -121,6 +132,9 @@ export class SetupEngine {
       engine.journal = loaded.journal;
       const snap = engine.journal.snapshot;
       for (const row of snap.steps) {
+        const implementation = steps.find((step) => step.id === row.id);
+        row.available = implementation !== undefined;
+        row.revision = implementation?.revision ?? 0;
         if (ACTIVE.has(row.status) || row.status === "cancelling") {
           row.status = "interrupted";
           row.reasonCode = "setup-interrupted";
@@ -164,16 +178,19 @@ export class SetupEngine {
     )
       return false;
     if (this.journal.snapshot.interrupted) return false;
-    const required = ["prerequisites", "database", "migrations"] as const;
+    const required = ["prerequisites", "database", "migrations", "services"] as const;
     if (
       !required.every((id) => this.row(id).status === "succeeded" && this.freshlyVerified.has(id))
     )
       return false;
     const command = this.row("command");
+    const engines = this.row("engines");
     return (
-      command.status === "skipped" ||
-      command.status === "not-applicable" ||
-      (command.status === "succeeded" && this.freshlyVerified.has("command"))
+      (command.status === "skipped" ||
+        command.status === "not-applicable" ||
+        (command.status === "succeeded" && this.freshlyVerified.has("command"))) &&
+      (engines.status === "skipped" ||
+        (engines.status === "succeeded" && this.freshlyVerified.has("engines")))
     );
   }
   onChange(listener: (snapshot: SetupSnapshot) => void): () => void {
@@ -237,7 +254,7 @@ export class SetupEngine {
     this.transition(stepId, "skipped", "user-skipped");
     if (this.journal.pending?.stepId === stepId) this.journal.pending = null;
     await this.persist();
-    return this.snapshot();
+    return this.schedule(index + 1, false);
   }
 
   cancel(): Promise<SetupSnapshot> {
@@ -261,10 +278,13 @@ export class SetupEngine {
       await this.inflight?.catch(() => undefined);
       const step = current ? this.steps.find((item) => item.id === current) : undefined;
       const receipt = current ? this.receiptFor(current) : null;
-      const cleaned = await step?.cancel({ runId: this.journal.snapshot.runId }, receipt).then(
-        () => true,
-        () => false,
-      );
+      let cleaned = true;
+      try {
+        const invalidated = await step?.cancel({ runId: this.journal.snapshot.runId }, receipt);
+        if (invalidated) this.invalidate(invalidated);
+      } catch {
+        cleaned = false;
+      }
       this.failInMemory(current, cleaned === false ? "cleanup-incomplete" : "journal-write-failed");
       this.cancelling = false;
       return this.snapshot();
@@ -275,7 +295,8 @@ export class SetupEngine {
       const step = this.steps.find((item) => item.id === current);
       const receipt = this.receiptFor(current);
       try {
-        await step?.cancel({ runId: this.journal.snapshot.runId }, receipt);
+        const invalidated = await step?.cancel({ runId: this.journal.snapshot.runId }, receipt);
+        if (invalidated) this.invalidate(invalidated);
         if (this.journal.pending?.stepId === current)
           await step?.rollback?.({ runId: this.journal.snapshot.runId }, receipt);
       } catch {
@@ -358,19 +379,27 @@ export class SetupEngine {
         if (signal.aborted || this.cancelling) break;
         if (!this.dependenciesMet(step)) break;
         const row = this.row(step.id);
-        if (row.status === "skipped" && !explicit) continue;
+        if (!explicit && row.status === "succeeded" && this.freshlyVerified.has(step.id)) continue;
+        const savedSuccess = row.status === "succeeded";
+        const previouslySkipped = row.status === "skipped" && !explicit;
         this.journal.snapshot.currentStep = step.id;
         row.attempt += 1;
         this.transition(step.id, "checking", null);
         await this.persist();
         if (signal.aborted || this.cancelling) break;
         const context = { runId: this.journal.snapshot.runId };
-        const checked = await step.check(context, signal);
+        const checked = await (savedSuccess && step.recheck
+          ? step.recheck(context, signal)
+          : step.check(context, signal));
         if (signal.aborted || this.cancelling) break;
         if (checked.kind === "satisfied") {
           this.success(step, checked, "already-ready");
           if (this.journal.pending?.stepId === step.id) this.journal.pending = null;
-          this.journal.receipts[step.id] = { kind: "verified", proof: checked.evidence };
+          if (
+            !this.journal.receipts[step.id] ||
+            (step.id === "services" && this.journal.receipts[step.id]?.proof !== checked.evidence)
+          )
+            this.journal.receipts[step.id] = { kind: "verified", proof: checked.evidence };
           await this.persist();
           explicit = false;
           continue;
@@ -381,12 +410,17 @@ export class SetupEngine {
           explicit = false;
           continue;
         }
+        if (previouslySkipped) {
+          this.transition(step.id, "skipped", "user-skipped");
+          await this.persist();
+          continue;
+        }
         if (checked.kind === "blocked") {
           this.transition(step.id, "failed", checked.reasonCode, checked.details);
           await this.persist();
           break;
         }
-        if (step.canSkip && !explicit) {
+        if ((step.canSkip || step.waitForInput) && !explicit) {
           this.transition(step.id, "waiting-input", checked.reasonCode, checked.details);
           await this.persist();
           break;
@@ -428,7 +462,11 @@ export class SetupEngine {
         const current = this.journal.snapshot.currentStep;
         this.failInMemory(
           current,
-          error instanceof JournalWriteError ? "journal-write-failed" : "setup-step-failed",
+          error instanceof JournalWriteError
+            ? "journal-write-failed"
+            : error instanceof SetupStepFailure
+              ? error.reasonCode
+              : "setup-step-failed",
         );
         await this.persist().catch(() => this.failInMemory(current, "journal-write-failed"));
       }
@@ -475,6 +513,19 @@ export class SetupEngine {
     return this.activeReceipt?.stepId === id
       ? this.activeReceipt.receipt
       : (this.journal.receipts[id] ?? null);
+  }
+  private invalidate(stepIds: readonly SetupStepId[]): void {
+    for (const id of stepIds) {
+      const row = this.row(id);
+      this.freshlyVerified.delete(id);
+      delete this.journal.receipts[id];
+      row.status = "pending";
+      row.verifiedAt = null;
+      row.reasonCode = null;
+      row.details = [];
+    }
+    this.journal.snapshot.machineReady = false;
+    this.journal.snapshot.complete = false;
   }
   private cleanupPending(): boolean {
     return this.journal.snapshot.steps.some((row) => row.reasonCode === "cleanup-incomplete");

@@ -1,5 +1,5 @@
 import type { ChildProcess } from "node:child_process";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { chmod, mkdir, readdir, readFile, rm, stat, unlink, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
@@ -19,9 +19,12 @@ import type { EmbeddedPostgresLike, EmbeddedPostgresOptions } from "./local-post
 import { MissingDatabaseBinariesError, postgresServesFolder } from "./local-postgres.js";
 
 const directories: string[] = [];
+const fixturePids = new Set<number>();
 
 afterEach(async () => {
   vi.useRealTimers();
+  await reapFixtureProcesses(fixturePids);
+  fixturePids.clear();
   await Promise.all(directories.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
@@ -735,11 +738,18 @@ describe("reset", () => {
     },
   );
 
-  it.skipIf(process.platform === "win32")(
-    "ends bot commands still running in the data folder before it moves anything",
+  const psUnavailable = psDeniedReason();
+  it.skipIf(psUnavailable !== null)(
+    `ends bot commands still running in the data folder before it moves anything${psUnavailable ? ` (${psUnavailable})` : ""}`,
     { timeout: 30_000 },
-    async () => {
+    async (context) => {
+      const denied = psDeniedReason();
+      if (denied) {
+        context.skip(`Skipping: ${denied}`);
+        return;
+      }
       const root = await userData();
+      const trackedPids = new Set<number>();
       let command = 0;
       const worker = [
         'const { spawn } = require("node:child_process");',
@@ -757,9 +767,17 @@ describe("reset", () => {
           spawn: (_command, args, options) => {
             if (!isWorker(args)) return fakeChild();
             const child = spawn(process.execPath, ["-e", worker], options);
+            if (child.pid) {
+              trackedPids.add(child.pid);
+              fixturePids.add(child.pid);
+            }
             child.stdout?.on("data", (chunk: Buffer) => {
               const found = /command (\d+)/u.exec(chunk.toString());
-              if (found) command = Number(found[1]);
+              if (found) {
+                command = Number(found[1]);
+                trackedPids.add(command);
+                fixturePids.add(command);
+              }
             });
             return child;
           },
@@ -770,9 +788,21 @@ describe("reset", () => {
         await vi.waitFor(() => expect(command).toBeGreaterThan(0));
         expect(alive(command)).toBe(true);
         await controller.resetData();
-        await vi.waitFor(() => expect(alive(command)).toBe(false), { timeout: 5_000 });
+        await vi.waitFor(
+          () => {
+            for (const pid of trackedPids) {
+              expect(alive(pid)).toBe(false);
+            }
+          },
+          { timeout: 5_000 },
+        );
       } finally {
-        if (command && alive(command)) process.kill(command, "SIGKILL");
+        // Supervision would respawn a worker killed here; stop it before reaping.
+        await controller.stop().catch(() => {});
+        await reapFixtureProcesses(trackedPids);
+        for (const pid of trackedPids) {
+          expect(alive(pid)).toBe(false);
+        }
       }
     },
   );
@@ -917,6 +947,78 @@ function alive(pid: number): boolean {
     return true;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Signals a process group and the process itself. If the process is a group leader,
+ * -pid signals all members of the group; pid signals the process directly.
+ */
+function signalTarget(pid: number, signal: NodeJS.Signals): void {
+  if (pid <= 0 || pid === process.pid) return;
+  const targets = process.platform === "win32" ? [pid] : [-pid, pid];
+  for (const target of targets) {
+    try {
+      process.kill(target, signal);
+    } catch {
+      // Process or process group does not exist or already gone.
+    }
+  }
+}
+
+/**
+ * Terminates fixture processes and their process groups. If the fixture is stopped
+ * (state T), SIGCONT resumes it so SIGTERM/SIGKILL take effect. Polls kill -0 to
+ * verify no fixture process survives.
+ */
+async function reapFixtureProcesses(pids: Iterable<number>): Promise<void> {
+  const targets = Array.from(new Set(pids)).filter((pid) => pid > 0 && pid !== process.pid);
+  if (targets.length === 0) return;
+
+  // Resume stopped processes so SIGTERM is processed.
+  for (const pid of targets) {
+    if (alive(pid)) {
+      signalTarget(pid, "SIGCONT");
+      signalTarget(pid, "SIGTERM");
+    }
+  }
+
+  // Wait briefly for graceful exit.
+  const waitStart = Date.now();
+  while (Date.now() - waitStart < 100) {
+    if (targets.every((pid) => !alive(pid))) return;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+
+  // Force kill any survivors.
+  for (const pid of targets) {
+    if (alive(pid)) {
+      signalTarget(pid, "SIGCONT");
+      signalTarget(pid, "SIGKILL");
+    }
+  }
+
+  // Poll kill -0 until all are gone.
+  const deadline = Date.now() + 2_000;
+  while (Date.now() < deadline) {
+    if (targets.every((pid) => !alive(pid))) return;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+}
+
+/**
+ * Returns a skip reason if the host environment does not allow /bin/ps to run.
+ */
+function psDeniedReason(): string | null {
+  if (process.platform === "win32") {
+    return "Process listing with ps is not supported on Windows.";
+  }
+  try {
+    execFileSync("/bin/ps", ["-A", "-o", "pid="], { stdio: "ignore", timeout: 2_000 });
+    return null;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code ?? "restricted";
+    return `Host restricts /bin/ps (${code}).`;
   }
 }
 
@@ -1072,6 +1174,7 @@ describe("database lifecycle", () => {
     const unrelated = spawn(process.execPath, ["-e", "setTimeout(() => {}, 60_000)"], {
       stdio: "ignore",
     });
+    if (unrelated.pid) fixturePids.add(unrelated.pid);
     const closed = await closedLoopbackPort();
     await writeFile(
       path.join(databaseDir, "postmaster.pid"),
@@ -1099,7 +1202,10 @@ describe("database lifecycle", () => {
       expect(state).toMatchObject({ phase: "failed", message: "The database stopped." });
     } finally {
       kill.mockRestore();
-      unrelated.kill("SIGKILL");
+      await reapFixtureProcesses(
+        [unrelated.pid].filter((pid): pid is number => typeof pid === "number"),
+      );
+      if (unrelated.pid) expect(alive(unrelated.pid)).toBe(false);
     }
   });
 
@@ -1599,6 +1705,34 @@ describe("failure sentences", () => {
 });
 
 describe("service readiness", () => {
+  it.each([
+    { workerReady: false, health: true, message: "The worker stopped." },
+    { workerReady: true, health: false, message: "The API stopped." },
+  ])(
+    "does not accept only one readiness signal ($message)",
+    async ({ workerReady, health, message }) => {
+      const root = await userData();
+      let now = 0;
+      const controller = new LocalModeController(
+        harness(root, {
+          workerReady,
+          allocatePort: async () => 23456,
+          portAvailable: async () => true,
+          postgresFactory: () => runningPostgres(),
+          now: () => now,
+          fetch: async () => {
+            now = 1_000_000;
+            return health ? healthResponse() : new Response(null, { status: 503 });
+          },
+        }),
+      );
+      const signal = new AbortController().signal;
+      expect(await controller.servicesReady(signal)).toBe(false);
+      expect(await controller.startServices(signal)).toMatchObject({ phase: "failed", message });
+      expect(await controller.servicesReady(signal)).toBe(false);
+      await controller.stop();
+    },
+  );
   it("is not ready while the worker has given up, and Retry gives it a fresh restart budget", async () => {
     const root = await userData();
     const failed: string[] = [];

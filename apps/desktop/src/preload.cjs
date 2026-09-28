@@ -40,6 +40,9 @@ contextBridge.exposeInMainWorld("ardurbotDesktop", {
     show: (message) => ipcRenderer.invoke("desktop.notifications.show", message),
   },
   system: {
+    ...(process.argv?.includes("--ardurbot-guided-setup")
+      ? { runSetupAgain: () => ipcRenderer.invoke("desktop.guidedSetup.openAgain") }
+      : {}),
     state: () => ipcRenderer.invoke("desktop.system.state"),
     set: (key, value) => ipcRenderer.invoke("desktop.system.set", key, value),
     moveStorage: (recommended) => ipcRenderer.invoke("desktop.system.moveStorage", recommended),

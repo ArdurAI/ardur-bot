@@ -1,6 +1,10 @@
 import type { ArdurBotSetup } from "@ardurbot/contracts";
 import type { SetupSnapshot, SetupStepId } from "@ardurbot/contracts/desktop-setup";
-import { GuidedSetupView, guidedSetupText } from "@ardurbot/ui-web/components/guided-setup";
+import {
+  GuidedSetupView,
+  guidedSetupText,
+  pilotReadyFromSnapshot,
+} from "@ardurbot/ui-web/components/guided-setup";
 import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -15,6 +19,8 @@ export function SetupDocument({ setupBridge = bridge }: { setupBridge?: ArdurBot
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
   const [cancelBusy, setCancelBusy] = useState(false);
+  const [startupChoice, setStartupChoice] = useState<boolean | null>(null);
+  const [startupError, setStartupError] = useState("");
 
   useEffect(() => {
     const guided = bridge?.guidedSetup;
@@ -31,6 +37,16 @@ export function SetupDocument({ setupBridge = bridge }: { setupBridge?: ArdurBot
       .catch(() => {
         if (mounted) setStatus(guidedSetupText.loadFailed);
       });
+    if (bridge?.platform === "darwin" || bridge?.platform === "win32") {
+      void guided
+        .getStartup()
+        .then((state) => {
+          if (mounted) setStartupChoice(state.supported ? state.enabled : null);
+        })
+        .catch(() => {
+          if (mounted) setStatus(guidedSetupText.loadFailed);
+        });
+    }
     return () => {
       mounted = false;
       unsubscribe();
@@ -59,6 +75,10 @@ export function SetupDocument({ setupBridge = bridge }: { setupBridge?: ArdurBot
     try {
       const next = await guided.cancel();
       setSnapshot((old) => (old && old.sequence > next.sequence ? old : next));
+      if (bridge?.platform === "darwin" || bridge?.platform === "win32") {
+        const state = await guided.getStartup();
+        setStartupChoice(state.supported ? state.enabled : null);
+      }
     } catch {
       setStatus(guidedSetupText.updateFailed);
     } finally {
@@ -99,11 +119,7 @@ export function SetupDocument({ setupBridge = bridge }: { setupBridge?: ArdurBot
     try {
       const checked = await guided.start();
       setSnapshot((old) => (old && old.sequence > checked.sequence ? old : checked));
-      const prepared = checked.steps.slice(0, 3).every((row) => row.status === "succeeded");
-      const commandDone = ["succeeded", "skipped", "not-applicable"].includes(
-        checked.steps[3]?.status ?? "",
-      );
-      if (!prepared || !commandDone) return;
+      if (!pilotReadyFromSnapshot(checked)) return;
       const state = await bridge.stack.start();
       if (!state) throw new Error("Setup handoff is unavailable.");
       window.location.assign("setup.html");
@@ -172,6 +188,19 @@ export function SetupDocument({ setupBridge = bridge }: { setupBridge?: ArdurBot
         ) : snapshot && guided ? (
           <GuidedSetupView
             snapshot={snapshot}
+            startupSupported={startupChoice !== null}
+            startupChoice={startupChoice ?? false}
+            startupError={startupError}
+            onStartupChoice={(enabled) => {
+              setStartupError("");
+              void guided
+                .setStartup(enabled)
+                .then((result) => {
+                  if (result.ok) setStartupChoice(result.enabled ?? false);
+                  else setStartupError(result.error ?? "Could not change startup. Try again.");
+                })
+                .catch(() => setStartupError("Could not change startup. Try again."));
+            }}
             onStart={() => void run(() => guided.start())}
             onRetry={(id: SetupStepId) => void run(() => guided.retry(id))}
             onSkip={(id: SetupStepId) => void run(() => guided.skip(id))}

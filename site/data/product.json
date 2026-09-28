@@ -853,5 +853,613 @@
       "height": 1800,
       "theme": "light"
     }
-  ]
+  ],
+  "documentation": {
+    "manifestVersion": 1,
+    "locale": "en",
+    "features": [
+      {
+        "id": "bots-create",
+        "aliases": [],
+        "title": "New bot",
+        "summary": "Name a bot, choose its computer mode, then open its conversation.",
+        "area": "bots-and-conversations",
+        "order": 10,
+        "status": "published",
+        "availableSince": "0.1.0-alpha.1",
+        "platforms": {
+          "web": "configure",
+          "desktop": "configure",
+          "mobile": "configure"
+        },
+        "settingsPath": {
+          "mobile": [
+            "New bot"
+          ]
+        },
+        "steps": [
+          {
+            "id": "open",
+            "aliases": [],
+            "text": "Open the bot creation picker.",
+            "uiLabels": [
+              "Create",
+              "Create new Bot"
+            ],
+            "screenshotId": "docs-bots-create-open",
+            "expected": "The new bot choice is visible.",
+            "availableSince": "0.1.0-alpha.1"
+          },
+          {
+            "id": "form",
+            "aliases": [],
+            "text": "Open the new bot form.",
+            "uiLabels": [
+              "New bot",
+              "Name",
+              "Private"
+            ],
+            "screenshotId": "docs-bots-create-form",
+            "expected": "Name and computer mode controls are visible.",
+            "availableSince": "0.1.0-alpha.1"
+          },
+          {
+            "id": "private",
+            "aliases": [],
+            "text": "Name the bot and choose Private computer mode.",
+            "uiLabels": [
+              "Name",
+              "Private"
+            ],
+            "screenshotId": "docs-bots-create-private",
+            "expected": "Private is selected before creation.",
+            "availableSince": "0.1.0-alpha.1"
+          },
+          {
+            "id": "ready",
+            "aliases": [],
+            "text": "Choose Create to open the new bot conversation.",
+            "uiLabels": [
+              "Create"
+            ],
+            "screenshotId": "docs-bots-create-ready",
+            "expected": "The Planner conversation opens.",
+            "availableSince": "0.1.0-alpha.1"
+          }
+        ],
+        "boundaries": [
+          "Create requires a nonempty bot name."
+        ],
+        "troubleshooting": [
+          {
+            "errorId": "bot-create",
+            "message": "Could not create bot",
+            "action": "Review the name and retry Create."
+          }
+        ],
+        "related": [
+          "chat-approvals"
+        ]
+      },
+      {
+        "id": "chat-approvals",
+        "aliases": [],
+        "title": "Review approval",
+        "summary": "Review a pending request and choose whether to allow or deny it.",
+        "area": "bots-and-conversations",
+        "order": 120,
+        "status": "published",
+        "availableSince": "0.1.0-alpha.1",
+        "platforms": {
+          "web": "configure",
+          "desktop": "configure",
+          "mobile": "configure"
+        },
+        "settingsPath": {},
+        "steps": [
+          {
+            "id": "pending",
+            "aliases": [],
+            "text": "Inspect the pending approval card.",
+            "uiLabels": [
+              "Allow once",
+              "Deny"
+            ],
+            "screenshotId": "docs-chat-approvals-pending",
+            "expected": "Both responses are available.",
+            "availableSince": "0.1.0-alpha.1"
+          },
+          {
+            "id": "denied",
+            "aliases": [],
+            "text": "Choose Deny for the request.",
+            "uiLabels": [
+              "Deny"
+            ],
+            "screenshotId": "docs-chat-approvals-denied",
+            "expected": "Denied is visible and the pending response controls close.",
+            "availableSince": "0.1.0-alpha.1"
+          }
+        ],
+        "boundaries": [
+          "Deny does not authorize the requested action."
+        ],
+        "troubleshooting": [
+          {
+            "errorId": "approval-submit",
+            "message": "Could not submit this answer",
+            "action": "Retry the response after checking the connection."
+          }
+        ],
+        "related": []
+      },
+      {
+        "id": "models",
+        "aliases": [],
+        "title": "Models",
+        "summary": "Inspect a connected model, review the default control, and prepare another connection.",
+        "area": "connections-and-computers",
+        "order": 10,
+        "status": "published",
+        "availableSince": "0.1.0-alpha.1",
+        "platforms": {
+          "web": "configure",
+          "desktop": "configure",
+          "mobile": "configure"
+        },
+        "settingsPath": {
+          "web": [
+            "Settings",
+            "Models"
+          ],
+          "desktop": [
+            "Settings",
+            "Models"
+          ],
+          "mobile": [
+            "Models"
+          ]
+        },
+        "steps": [
+          {
+            "id": "open",
+            "aliases": [],
+            "text": "Open Settings and select Models.",
+            "uiLabels": [
+              "Settings",
+              "Models",
+              "Connected"
+            ],
+            "screenshotId": "docs-models-open",
+            "expected": "The Models heading and connected credential are visible.",
+            "availableSince": "0.1.0-alpha.1"
+          },
+          {
+            "id": "default",
+            "aliases": [],
+            "text": "Choose another model on the connected provider to reveal the default control.",
+            "uiLabels": [
+              "Model",
+              "Use this model"
+            ],
+            "screenshotId": "docs-models-default",
+            "expected": "Use this model is available for the selected model.",
+            "availableSince": "0.1.0-alpha.1"
+          },
+          {
+            "id": "add",
+            "aliases": [],
+            "text": "Select an unconnected provider to open its key form.",
+            "uiLabels": [
+              "API key",
+              "Connect API key"
+            ],
+            "screenshotId": "docs-models-add",
+            "expected": "The connection form is ready for a key.",
+            "availableSince": "0.1.0-alpha.1"
+          }
+        ],
+        "boundaries": [
+          "A missing catalog leaves no model to choose from."
+        ],
+        "troubleshooting": [
+          {
+            "errorId": "models-load",
+            "message": "Could not load model settings",
+            "action": "Retry after checking the server connection."
+          },
+          {
+            "errorId": "models-catalog-unavailable",
+            "message": "No model catalog is available.",
+            "action": "Check the server connection, then reopen Models."
+          }
+        ],
+        "related": []
+      },
+      {
+        "id": "sign-in",
+        "aliases": [],
+        "title": "Sign in to Ardur",
+        "summary": "Use the email form, recognize a connection failure, and open password recovery when available.",
+        "area": "getting-started",
+        "order": 10,
+        "status": "published",
+        "availableSince": "0.1.0-alpha.1",
+        "platforms": {
+          "web": "configure",
+          "desktop": "configure",
+          "mobile": "configure"
+        },
+        "settingsPath": {
+          "web": [
+            "Sign in to Ardur"
+          ],
+          "desktop": [
+            "Sign in to Ardur"
+          ],
+          "mobile": [
+            "Sign in to Ardur"
+          ]
+        },
+        "steps": [
+          {
+            "id": "open",
+            "aliases": [],
+            "text": "Open the sign-in page and find the email form.",
+            "uiLabels": [
+              "Sign in to Ardur",
+              "Email",
+              "Continue with email"
+            ],
+            "screenshotId": "docs-sign-in-open",
+            "expected": "The email form is ready.",
+            "availableSince": "0.1.0-alpha.1"
+          },
+          {
+            "id": "error",
+            "aliases": [],
+            "text": "Submit the email form while the server cannot be reached.",
+            "uiLabels": [
+              "Email",
+              "Password",
+              "Continue with email",
+              "Could not reach the server"
+            ],
+            "screenshotId": "docs-sign-in-error",
+            "expected": "The form shows a server connection error.",
+            "availableSince": "0.1.0-alpha.1"
+          },
+          {
+            "id": "recovery",
+            "aliases": [],
+            "text": "Choose password recovery from the sign-in page.",
+            "uiLabels": [
+              "Forgot password?",
+              "Send reset link"
+            ],
+            "screenshotId": "docs-sign-in-recovery",
+            "expected": "The reset-link form opens.",
+            "availableSince": "0.1.0-alpha.1"
+          }
+        ],
+        "boundaries": [
+          "Password recovery depends on the server configuration."
+        ],
+        "troubleshooting": [
+          {
+            "errorId": "auth-unreachable",
+            "message": "Could not reach the server",
+            "action": "Check the server address and connection, then retry the email form."
+          }
+        ],
+        "related": [
+          "onboarding"
+        ]
+      },
+      {
+        "id": "onboarding",
+        "aliases": [],
+        "title": "Connect a model",
+        "summary": "Connect a model before starting a conversation when the server requires one.",
+        "area": "getting-started",
+        "order": 20,
+        "status": "published",
+        "availableSince": "0.1.0-alpha.1",
+        "platforms": {
+          "web": "configure",
+          "desktop": "configure",
+          "mobile": "unavailable"
+        },
+        "settingsPath": {
+          "web": [
+            "Connect a model"
+          ],
+          "desktop": [
+            "Connect a model"
+          ]
+        },
+        "steps": [
+          {
+            "id": "open",
+            "aliases": [],
+            "text": "Open the required model connection form.",
+            "uiLabels": [
+              "Connect a model",
+              "Provider",
+              "API key"
+            ],
+            "screenshotId": "docs-onboarding-open",
+            "expected": "The selected connection and required fields are visible.",
+            "availableSince": "0.1.0-alpha.1"
+          },
+          {
+            "id": "connect",
+            "aliases": [],
+            "text": "Enter a key for the selected connection.",
+            "uiLabels": [
+              "API key",
+              "Continue"
+            ],
+            "screenshotId": "docs-onboarding-connect",
+            "expected": "Continue is enabled after a key is entered.",
+            "availableSince": "0.1.0-alpha.1"
+          }
+        ],
+        "boundaries": [
+          "Continue stays disabled until the required connection details are present."
+        ],
+        "troubleshooting": [
+          {
+            "errorId": "onboarding-save",
+            "message": "Could not save model",
+            "action": "Check the connection details and try again."
+          }
+        ],
+        "related": [
+          "bots-create",
+          "models"
+        ]
+      }
+    ],
+    "screenshots": [
+      {
+        "id": "docs-bots-create-form",
+        "file": "docs/docs-bots-create-form.png",
+        "alt": "New bot: Name and computer mode controls are visible.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "bots-create",
+        "step": "form"
+      },
+      {
+        "id": "docs-bots-create-open",
+        "file": "docs/docs-bots-create-open.png",
+        "alt": "New bot: The new bot choice is visible.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "bots-create",
+        "step": "open"
+      },
+      {
+        "id": "docs-bots-create-private",
+        "file": "docs/docs-bots-create-private.png",
+        "alt": "New bot: Private is selected before creation.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "bots-create",
+        "step": "private"
+      },
+      {
+        "id": "docs-bots-create-ready",
+        "file": "docs/docs-bots-create-ready.png",
+        "alt": "New bot: The Planner conversation opens.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "bots-create",
+        "step": "ready"
+      },
+      {
+        "id": "docs-chat-approvals-denied",
+        "file": "docs/docs-chat-approvals-denied.png",
+        "alt": "Review approval: Denied is visible and the pending response controls close.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "chat-approvals",
+        "step": "denied"
+      },
+      {
+        "id": "docs-chat-approvals-pending",
+        "file": "docs/docs-chat-approvals-pending.png",
+        "alt": "Review approval: Both responses are available.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "chat-approvals",
+        "step": "pending"
+      },
+      {
+        "id": "docs-models-add",
+        "file": "docs/docs-models-add.png",
+        "alt": "Models: The connection form is ready for a key.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "models",
+        "step": "add"
+      },
+      {
+        "id": "docs-models-default",
+        "file": "docs/docs-models-default.png",
+        "alt": "Models: Use this model is available for the selected model.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "models",
+        "step": "default"
+      },
+      {
+        "id": "docs-models-open",
+        "file": "docs/docs-models-open.png",
+        "alt": "Models: The Models heading and connected credential are visible.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "models",
+        "step": "open"
+      },
+      {
+        "id": "docs-onboarding-connect",
+        "file": "docs/docs-onboarding-connect.png",
+        "alt": "Connect a model: Continue is enabled after a key is entered.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "onboarding",
+        "step": "connect"
+      },
+      {
+        "id": "docs-onboarding-open",
+        "file": "docs/docs-onboarding-open.png",
+        "alt": "Connect a model: The selected connection and required fields are visible.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "onboarding",
+        "step": "open"
+      },
+      {
+        "id": "docs-sign-in-error",
+        "file": "docs/docs-sign-in-error.png",
+        "alt": "Sign in to Ardur: The form shows a server connection error.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "sign-in",
+        "step": "error"
+      },
+      {
+        "id": "docs-sign-in-open",
+        "file": "docs/docs-sign-in-open.png",
+        "alt": "Sign in to Ardur: The email form is ready.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "sign-in",
+        "step": "open"
+      },
+      {
+        "id": "docs-sign-in-recovery",
+        "file": "docs/docs-sign-in-recovery.png",
+        "alt": "Sign in to Ardur: The reset-link form opens.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "sign-in",
+        "step": "recovery"
+      }
+    ]
+  }
 }

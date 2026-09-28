@@ -79,6 +79,7 @@ export interface GuidedStepsDependencies {
     "databaseReady" | "migrationsReady" | "prepareDatabase" | "applyMigrations" | "stop"
   >;
   command: ArdurCommandInstaller;
+  ownership?: { databaseStartedHere: boolean };
 }
 
 function satisfied(now: number, evidence: string, details: SetupDetail[] = []): StepVerification {
@@ -87,6 +88,12 @@ function satisfied(now: number, evidence: string, details: SetupDetail[] = []): 
 const noMutation: StepReceipt = { kind: "verified", proof: "preflight" };
 
 export function firstGuidedSteps(deps: GuidedStepsDependencies): SetupStep[] {
+  const stopOwnedDatabase = async () => {
+    if (deps.ownership && !deps.ownership.databaseStartedHere) return;
+    await deps.localMode.stop();
+    if (deps.ownership) deps.ownership.databaseStartedHere = false;
+    return ["database", "migrations"] as const;
+  };
   const preflight = async (): Promise<StepVerification> => {
     const { prerequisites: p } = deps;
     const supported =
@@ -176,13 +183,14 @@ export function firstGuidedSteps(deps: GuidedStepsDependencies): SetupStep[] {
       run: async (_, signal) => {
         const state = await deps.localMode.prepareDatabase(signal);
         if (state.phase === "failed") throw new Error("database-failed");
+        if (deps.ownership) deps.ownership.databaseStartedHere = true;
         return { kind: "owned", proof: "owned-data-folder" };
       },
       verify: async (_, _receipt, signal) =>
         (await deps.localMode.databaseReady(signal))
           ? satisfied(deps.prerequisites.now(), "owned-data-folder")
           : { kind: "blocked", reasonCode: "database-ownership-unconfirmed" },
-      cancel: async () => deps.localMode.stop(),
+      cancel: stopOwnedDatabase,
     },
     {
       id: "migrations",
@@ -196,7 +204,7 @@ export function firstGuidedSteps(deps: GuidedStepsDependencies): SetupStep[] {
         return { kind: "verified", proof: "migration-runner-settled" };
       },
       verify: (_, _receipt, signal) => migrationCheck(signal),
-      cancel: async () => deps.localMode.stop(),
+      cancel: stopOwnedDatabase,
     },
     {
       id: "command",
@@ -208,7 +216,7 @@ export function firstGuidedSteps(deps: GuidedStepsDependencies): SetupStep[] {
       verify: commandCheck,
       cancel: async () => {
         await deps.command.reconcile();
-        await deps.localMode.stop();
+        return stopOwnedDatabase();
       },
       rollback: async () => deps.command.reconcile(),
     },

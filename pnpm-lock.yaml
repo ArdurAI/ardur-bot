@@ -105,6 +105,9 @@ importers:
       '@ardurbot/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@ardurbot/host-runtime':
+        specifier: workspace:*
+        version: link:../../packages/host-runtime
       electron-updater:
         specifier: 6.8.9
         version: 6.8.9

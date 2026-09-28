@@ -261,6 +261,17 @@ export class LocalModeController {
     return this.stage("services", signal);
   }
 
+  /** The same two signals used by waitForServices, scoped to this controller's children. */
+  async servicesReady(signal: AbortSignal): Promise<boolean> {
+    return (
+      this.current.phase === "ready" &&
+      this.children.has("api") &&
+      this.children.has("worker") &&
+      this.workerReady &&
+      (await this.probe(signal))
+    );
+  }
+
   async databaseOwned(): Promise<boolean> {
     if (!this.postgres || !this.secrets || !this.postgresPort) return false;
     return this.serves(this.postgresPort, this.secrets.POSTGRES_PASSWORD);

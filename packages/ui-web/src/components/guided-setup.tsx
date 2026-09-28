@@ -29,6 +29,11 @@ export const guidedSetupText = {
   retry: "Retry",
   retryStop: "Retry stop",
   skip: "Skip",
+  runOnStartup: "Run on startup",
+  foundUnchecked: "Found; connection not checked",
+  connected: "Connected",
+  unknown: "Unknown",
+  noComputers: "No optional computers found",
   showDetails: "Show details",
   hideDetails: "Hide details",
   copyDetails: "Copy details",
@@ -87,6 +92,9 @@ export const guidedSetupText = {
     "database-ownership-unconfirmed": "Local storage ownership could not be confirmed. Try again.",
     "newer-journal": "Setup was saved by a newer version of Ardur. Update Ardur to continue.",
     "journal-write-failed": "Setup progress could not be saved. Check storage and retry.",
+    "services-not-ready": "Ardur services did not become ready. Try again.",
+    "discovery-timeout": "Optional computer discovery timed out. Retry.",
+    "discovery-failed": "Optional computers could not be checked. Retry.",
   },
 } as const;
 
@@ -143,6 +151,19 @@ export interface GuidedSetupViewProps {
   onCopyDetails: (text: string) => Promise<boolean>;
   onContinue?: () => void;
   onClose?: () => void;
+  startupSupported?: boolean;
+  startupChoice?: boolean;
+  startupError?: string;
+  onStartupChoice?: (enabled: boolean) => void;
+}
+
+export function pilotReadyFromSnapshot(snapshot: SetupSnapshot): boolean {
+  return (
+    snapshot.steps.slice(0, 3).every((row) => row.status === "succeeded") &&
+    ["succeeded", "skipped", "not-applicable"].includes(snapshot.steps[3]?.status ?? "") &&
+    snapshot.steps[4]?.status === "succeeded" &&
+    ["succeeded", "skipped"].includes(snapshot.steps[5]?.status ?? "")
+  );
 }
 
 export function GuidedSetupView(props: GuidedSetupViewProps) {
@@ -163,9 +184,7 @@ export function GuidedSetupView(props: GuidedSetupViewProps) {
   const stopFailed = snapshot.steps.some((row) => row.reasonCode === "cleanup-incomplete");
   const newerJournal = snapshot.steps.some((row) => row.reasonCode === "newer-journal");
   const stopping = snapshot.steps.some((row) => row.status === "cancelling");
-  const pilotReady =
-    snapshot.steps.slice(0, 3).every((row) => row.status === "succeeded") &&
-    ["succeeded", "skipped", "not-applicable"].includes(snapshot.steps[3]?.status ?? "");
+  const pilotReady = pilotReadyFromSnapshot(snapshot);
   const started = snapshot.steps.some((row) => row.attempt > 0 || row.status !== "pending");
   const cancelled = snapshot.steps.some((row) => row.status === "cancelled");
 
@@ -264,6 +283,48 @@ export function GuidedSetupView(props: GuidedSetupViewProps) {
                   {row.status === "waiting-input" && row.reasonCode === "add-folder-to-path" && (
                     <p>{guidedSetupText.path}</p>
                   )}
+                  {row.id === "services" &&
+                    row.status === "waiting-input" &&
+                    props.startupSupported && (
+                      <label className="guided-startup-choice">
+                        <input
+                          type="checkbox"
+                          checked={props.startupChoice ?? false}
+                          onChange={(event) => props.onStartupChoice?.(event.target.checked)}
+                        />
+                        {guidedSetupText.runOnStartup}
+                      </label>
+                    )}
+                  {row.id === "services" && props.startupError && (
+                    <p role="alert" className="guided-error">
+                      {props.startupError}
+                    </p>
+                  )}
+                  {row.id === "engines" &&
+                    row.details.length > 0 &&
+                    (row.details[0]?.code === "no-optional-computers" ? (
+                      <p>{guidedSetupText.noComputers}</p>
+                    ) : (
+                      <ul className="guided-targets">
+                        {row.details
+                          .filter((detail) => detail.code.startsWith("target-"))
+                          .map((detail, index) => (
+                            <li key={`${detail.code}-${index}`}>
+                              <span>{detail.text}</span>
+                              {" — "}
+                              <span>
+                                {detail.code === "target-connected"
+                                  ? guidedSetupText.connected
+                                  : detail.code === "target-discovered"
+                                    ? guidedSetupText.foundUnchecked
+                                    : detail.code === "target-unavailable"
+                                      ? guidedSetupText.unavailable
+                                      : guidedSetupText.unknown}
+                              </span>
+                            </li>
+                          ))}
+                      </ul>
+                    ))}
                   {row.status === "waiting-input" && row.id === "command" && (
                     <div className="guided-row-actions">
                       <Button type="button" onClick={() => props.onRetry(row.id)}>
@@ -279,12 +340,30 @@ export function GuidedSetupView(props: GuidedSetupViewProps) {
                       </Button>
                     </div>
                   )}
+                  {row.status === "waiting-input" &&
+                    (row.id === "services" || row.id === "engines") && (
+                      <div className="guided-row-actions">
+                        <Button type="button" onClick={() => props.onRetry(row.id)}>
+                          {guidedSetupText.continue}
+                        </Button>
+                        {row.id === "engines" && (
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            className="guided-secondary"
+                            onClick={() => props.onSkip(row.id)}
+                          >
+                            {guidedSetupText.skip}
+                          </Button>
+                        )}
+                      </div>
+                    )}
                   {row.status === "failed" && !stopFailed && !newerJournal && (
                     <div className="guided-row-actions">
                       <Button ref={failureRef} type="button" onClick={() => props.onRetry(row.id)}>
                         {guidedSetupText.retry}
                       </Button>
-                      {row.id === "command" && (
+                      {(row.id === "command" || row.id === "engines") && (
                         <Button
                           type="button"
                           variant="secondary"

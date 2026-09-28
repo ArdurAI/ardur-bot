@@ -50,6 +50,18 @@
 .guided-row-body p {
   margin: 0.4rem 0;
 }
+.guided-startup-choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.guided-startup-choice input {
+  accent-color: var(--primary);
+}
+.guided-targets {
+  margin: 0.5rem 0;
+  padding-left: 1.5rem;
+}
 .guided-row-actions,
 .guided-actions {
   display: flex;

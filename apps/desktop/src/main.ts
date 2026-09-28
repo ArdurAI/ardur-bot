@@ -1,9 +1,10 @@
 import { spawn } from "node:child_process";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { existsSync } from "node:fs";
 import { readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { DesktopReachability, DesktopSetup } from "@ardurbot/contracts";
+import { GUIDED_SETUP_CHANNELS } from "@ardurbot/contracts/desktop-setup";
 import { LOCAL_SETTINGS_PAGE } from "@ardurbot/contracts/local-settings";
 import type { Session } from "electron";
 import { app, BrowserWindow, dialog, ipcMain, Menu, net, session, shell } from "electron";
@@ -23,7 +24,9 @@ import { DOCKER_INSTALL_LINKS, isDesktopSetupLink, runDocker } from "./docker-cl
 import { installCustomizationIpc } from "./extensions/ipc.js";
 import { ArdurCommandInstaller, realCommandBoundary } from "./guided-setup/command.js";
 import { SetupEngine } from "./guided-setup/engine.js";
+import { enginesGuidedStep } from "./guided-setup/engines.js";
 import { installGuidedSetupIpc } from "./guided-setup/ipc.js";
+import { serviceGuidedStep } from "./guided-setup/services.js";
 import { firstGuidedSteps, systemPrerequisites } from "./guided-setup/steps.js";
 import { SetupJournalStore } from "./guided-setup/store.js";
 import { installHostService } from "./host-service-ipc.js";
@@ -83,6 +86,8 @@ import {
 } from "./setup-config.js";
 import { clearSetup, readSetup, writeSetup } from "./setup-store.js";
 import { collectStorageUsage } from "./storage-usage.js";
+import { systemSenderAllowed } from "./system/install.js";
+import { setStartup, startupEnabled, startupSupported } from "./system/native-controls.js";
 import { readEnabledRoutines } from "./system/routines.js";
 import { installSystemRuntime } from "./system/runtime.js";
 import { systemTray } from "./system/tray.js";
@@ -334,6 +339,9 @@ function createWindow(url: string, partition: string | null) {
     ...(icon ? { icon } : {}),
     webPreferences: {
       preload: path.join(import.meta.dirname, "preload.cjs"),
+      ...(GUIDED_SETUP_ENABLED && !legacyCompose
+        ? { additionalArguments: ["--ardurbot-guided-setup"] }
+        : {}),
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,
@@ -1448,9 +1456,15 @@ app.whenReady().then(async () => {
     },
   });
   if (GUIDED_SETUP_ENABLED && !legacyCompose) {
-    guidedEngine = await SetupEngine.open(
-      new SetupJournalStore(userDataDir),
-      firstGuidedSteps({
+    const setupOwnership = { databaseStartedHere: false };
+    const servicesStep = serviceGuidedStep({
+      localMode,
+      ownership: setupOwnership,
+      dataFolderFingerprint: createHash("sha256").update(userDataDir).digest("hex").slice(0, 20),
+      now: () => Date.now(),
+    });
+    guidedEngine = await SetupEngine.open(new SetupJournalStore(userDataDir), [
+      ...firstGuidedSteps({
         prerequisites: systemPrerequisites({
           platform: process.platform,
           arch: process.arch,
@@ -1459,6 +1473,7 @@ app.whenReady().then(async () => {
           binaries: postgresBinaries,
         }),
         localMode,
+        ownership: setupOwnership,
         command: new ArdurCommandInstaller(
           process.execPath,
           app.getVersion(),
@@ -1466,11 +1481,31 @@ app.whenReady().then(async () => {
           realCommandBoundary(),
         ),
       }),
-    );
+      servicesStep,
+      enginesGuidedStep({
+        now: () => Date.now(),
+        cancelServices: () => servicesStep.cancel({ runId: "" }, null),
+      }),
+    ]);
     guidedIpcCleanup = installGuidedSetupIpc({
       ipc: ipcMain,
       window: () => setupWindow,
       engine: guidedEngine,
+      startup: {
+        supported: () => startupSupported(process.platform),
+        enabled: () => startupEnabled(process.platform, app),
+        set: (enabled) => setStartup(process.platform, app, enabled),
+      },
+    });
+    ipcMain.handle(GUIDED_SETUP_CHANNELS.openAgain, (event, ...args: unknown[]) => {
+      if (
+        args.length !== 0 ||
+        !systemSenderAllowed(event, mainWindow, currentTargetUrl) ||
+        currentSetup?.mode !== "new"
+      )
+        throw new Error("Open System settings in the desktop app.");
+      showSetupWindow();
+      void guidedEngine?.start();
     });
   }
   currentSetup = await readSetup(userDataDir);

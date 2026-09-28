@@ -1,6 +1,8 @@
+import type { DesktopLocalStackState } from "@ardurbot/contracts";
 import { describe, expect, it, vi } from "vitest";
 import type { SetupContext, SetupStep } from "./engine.js";
 import { SetupEngine } from "./engine.js";
+import { serviceGuidedStep } from "./services.js";
 import type { JournalFileBoundary, StepReceipt } from "./store.js";
 import { SetupJournalStore } from "./store.js";
 
@@ -13,11 +15,13 @@ function deferred<T>() {
 }
 function memoryStore() {
   let raw: string | null = null;
+  const writes: string[] = [];
   let rejectWrite: ((value: string) => boolean) | null = null;
   const files: JournalFileBoundary = {
     read: async () => raw,
-    write: async (_, value) => {
+    write: async (file, value) => {
       if (rejectWrite?.(value)) throw new Error("write failed");
+      writes.push(file);
       raw = value;
     },
     exists: async () => raw !== null,
@@ -26,6 +30,7 @@ function memoryStore() {
   return {
     store: new SetupJournalStore("/fixture/data", files),
     raw: () => raw,
+    writes,
     setRaw: (value: string | null) => {
       raw = value;
     },
@@ -50,7 +55,74 @@ function step(overrides: Partial<SetupStep> = {}): SetupStep {
 const clock = { monotonic: () => 10, wall: () => 100 };
 
 describe("SetupEngine", () => {
-  it("requires fresh checks before handing a saved pilot to local services", async () => {
+  it("activates steps 5 and 6 in an I1 journal without changing its version or receipts", async () => {
+    const files = memoryStore();
+    const ready = async () => ({ kind: "satisfied" as const, checkedAt: 100, evidence: "checked" });
+    const original = [
+      step({ check: ready }),
+      step({ id: "database", requires: ["prerequisites"], check: ready }),
+      step({ id: "migrations", requires: ["database"], check: ready }),
+      step({ id: "command", requires: ["migrations"], canSkip: true }),
+    ];
+    const first = await SetupEngine.open(files.store, original, clock);
+    await first.start();
+    await first.skip("command");
+    const receipts = JSON.parse(files.raw()!).receipts;
+    const upgraded = await SetupEngine.open(
+      files.store,
+      [
+        ...original,
+        step({ id: "services", requires: ["migrations"], waitForInput: true }),
+        step({ id: "engines", requires: ["services"], canSkip: true }),
+      ],
+      clock,
+    );
+    expect(
+      upgraded
+        .snapshot()
+        .steps.slice(4, 6)
+        .map((row) => [row.available, row.revision]),
+    ).toEqual([
+      [true, 1],
+      [true, 1],
+    ]);
+    await upgraded.start();
+    expect(upgraded.snapshot().steps[4]?.status).toBe("waiting-input");
+    const saved = JSON.parse(files.raw()!);
+    expect(saved.snapshot.planVersion).toBe(1);
+    expect(saved.receipts.prerequisites).toEqual(receipts.prerequisites);
+  });
+  it("rechecks saved rows, reuses owned receipts, and repairs only needed work", async () => {
+    const files = memoryStore();
+    let ownedReady = false;
+    const ownedRun = vi.fn(async () => {
+      ownedReady = true;
+      return { kind: "owned" as const, proof: "folder-fingerprint" };
+    });
+    const repairRun = vi.fn(async () => ({ kind: "verified" as const, proof: "repair" }));
+    const steps = [
+      step({
+        check: async () =>
+          ownedReady
+            ? { kind: "satisfied", checkedAt: 100, evidence: "folder-fingerprint" }
+            : { kind: "needed", reasonCode: "needed" },
+        run: ownedRun,
+      }),
+      step({ id: "database", requires: ["prerequisites"], run: repairRun }),
+    ];
+    const first = await SetupEngine.open(files.store, steps, clock);
+    await first.start();
+    const before = JSON.parse(files.raw()!);
+    expect(before.receipts.prerequisites).toEqual({ kind: "owned", proof: "folder-fingerprint" });
+    const reopened = await SetupEngine.open(files.store, steps, clock);
+    await reopened.start();
+    const after = JSON.parse(files.raw()!);
+    expect(ownedRun).toHaveBeenCalledOnce();
+    expect(repairRun).toHaveBeenCalledTimes(2);
+    expect(after.receipts.prerequisites).toEqual(before.receipts.prerequisites);
+    expect(files.writes.every((file) => file.endsWith("guided-setup.json"))).toBe(true);
+  });
+  it("requires fresh checks through services and optional computers before handoff", async () => {
     const files = memoryStore();
     const satisfied = async () => ({
       kind: "satisfied" as const,
@@ -62,17 +134,103 @@ describe("SetupEngine", () => {
       step({ id: "database", requires: ["prerequisites"], check: satisfied }),
       step({ id: "migrations", requires: ["database"], check: satisfied }),
       step({ id: "command", requires: ["migrations"], canSkip: true }),
+      step({ id: "services", requires: ["migrations"], check: satisfied }),
+      step({ id: "engines", requires: ["services"], canSkip: true }),
     ];
     const first = await SetupEngine.open(files.store, steps, clock);
     expect(first.pilotReady()).toBe(false);
     await first.start();
     expect(first.pilotReady()).toBe(false);
     await first.skip("command");
+    await first.start();
+    await first.skip("engines");
     expect(first.pilotReady()).toBe(true);
     const reopened = await SetupEngine.open(files.store, steps, clock);
     expect(reopened.pilotReady()).toBe(false);
     await reopened.start();
     expect(reopened.pilotReady()).toBe(true);
+  });
+  it("offers the services choice immediately after skipping the command", async () => {
+    const ready = async () => ({ kind: "satisfied" as const, checkedAt: 100, evidence: "ready" });
+    const engine = await SetupEngine.open(
+      memoryStore().store,
+      [
+        step({ check: ready }),
+        step({ id: "database", requires: ["prerequisites"], check: ready }),
+        step({ id: "migrations", requires: ["database"], check: ready }),
+        step({ id: "command", requires: ["migrations"], canSkip: true }),
+        step({ id: "services", requires: ["migrations"], waitForInput: true }),
+        step({ id: "engines", requires: ["services"], canSkip: true }),
+      ],
+      clock,
+    );
+    expect((await engine.start()).steps[3]?.status).toBe("waiting-input");
+    const next = await engine.skip("command");
+    expect(next.steps[3]?.status).toBe("skipped");
+    expect(next.currentStep).toBe("services");
+    expect(next.steps[4]?.status).toBe("waiting-input");
+  });
+  it("rechecks saved optional-computer success before handoff and exposes a failed recheck", async () => {
+    const files = memoryStore();
+    const ready = async () => ({ kind: "satisfied" as const, checkedAt: 100, evidence: "ready" });
+    let discoveryReady = true;
+    const recheck = vi.fn(async () =>
+      discoveryReady
+        ? { kind: "satisfied" as const, checkedAt: 100, evidence: "fleet" }
+        : { kind: "blocked" as const, reasonCode: "discovery-timeout" },
+    );
+    const steps = [
+      step({ check: ready }),
+      step({ id: "database", requires: ["prerequisites"], check: ready }),
+      step({ id: "migrations", requires: ["database"], check: ready }),
+      step({ id: "command", requires: ["migrations"], canSkip: true, check: ready }),
+      step({ id: "services", requires: ["migrations"], check: ready }),
+      step({ id: "engines", requires: ["services"], canSkip: true, recheck }),
+    ];
+    const first = await SetupEngine.open(files.store, steps, clock);
+    await first.start();
+    await first.skip("engines");
+    await first.retry("engines");
+    expect(first.pilotReady()).toBe(true);
+    const reopened = await SetupEngine.open(files.store, steps, clock);
+    expect(reopened.pilotReady()).toBe(false);
+    await reopened.start();
+    expect(recheck).toHaveBeenCalledOnce();
+    expect(reopened.pilotReady()).toBe(true);
+    discoveryReady = false;
+    const failed = await SetupEngine.open(files.store, steps, clock);
+    await failed.start();
+    expect(failed.pilotReady()).toBe(false);
+    expect(failed.snapshot().steps[5]).toMatchObject({
+      status: "failed",
+      reasonCode: "discovery-timeout",
+    });
+  });
+  it("can skip failed optional discovery and become ready for handoff", async () => {
+    const ready = async () => ({ kind: "satisfied" as const, checkedAt: 100, evidence: "ready" });
+    const engine = await SetupEngine.open(
+      memoryStore().store,
+      [
+        step({ check: ready }),
+        step({ id: "database", requires: ["prerequisites"], check: ready }),
+        step({ id: "migrations", requires: ["database"], check: ready }),
+        step({ id: "command", requires: ["migrations"], canSkip: true, check: ready }),
+        step({ id: "services", requires: ["migrations"], check: ready }),
+        step({
+          id: "engines",
+          requires: ["services"],
+          canSkip: true,
+          run: async () => {
+            throw new Error("malformed discovery output");
+          },
+        }),
+      ],
+      clock,
+    );
+    expect((await engine.start()).steps[5]?.status).toBe("waiting-input");
+    expect((await engine.retry("engines")).steps[5]?.status).toBe("failed");
+    expect((await engine.skip("engines")).steps[5]?.status).toBe("skipped");
+    expect(engine.pilotReady()).toBe(true);
   });
   it("persists active and waiting durations without carrying monotonic time across restart", async () => {
     const files = memoryStore();
@@ -548,6 +706,71 @@ describe("SetupEngine", () => {
     expect(checks).toHaveBeenCalledTimes(2);
     expect(restarted.steps[3]?.status).toBe("waiting-input");
   });
+
+  it.each([false, true])(
+    "restarts after cancelling at services when the database was already running: %s",
+    async (alreadyRunning) => {
+      let databaseReady = alreadyRunning;
+      const ownership = { databaseStartedHere: false };
+      const ready = async () => ({ kind: "satisfied" as const, checkedAt: 100, evidence: "ready" });
+      const databaseCheck = vi.fn(async () =>
+        databaseReady ? ready() : { kind: "needed" as const, reasonCode: "database-stopped" },
+      );
+      const migrationsCheck = vi.fn(async () =>
+        databaseReady ? ready() : { kind: "blocked" as const, reasonCode: "database-stopped" },
+      );
+      const prepareDatabase = vi.fn(async () => {
+        databaseReady = true;
+        ownership.databaseStartedHere = true;
+        return { kind: "owned" as const, proof: "database" };
+      });
+      const stop = vi.fn(async () => {
+        databaseReady = false;
+      });
+      const startServices = vi.fn(async () => {
+        expect(databaseReady).toBe(true);
+        return { phase: "ready" } as DesktopLocalStackState;
+      });
+      const engine = await SetupEngine.open(
+        memoryStore().store,
+        [
+          step({ check: ready }),
+          step({
+            id: "database",
+            requires: ["prerequisites"],
+            check: databaseCheck,
+            run: prepareDatabase,
+          }),
+          step({ id: "migrations", requires: ["database"], check: migrationsCheck }),
+          step({
+            id: "command",
+            requires: ["migrations"],
+            canSkip: true,
+            check: async () => ({ kind: "notApplicable", reasonCode: "command-unavailable" }),
+          }),
+          serviceGuidedStep({
+            localMode: { servicesReady: async () => false, startServices, stop },
+            ownership,
+            dataFolderFingerprint: "fixture",
+            now: () => 100,
+          }),
+        ],
+        clock,
+      );
+      expect((await engine.start()).steps[4]?.status).toBe("waiting-input");
+      await engine.cancel();
+      expect(stop).toHaveBeenCalledTimes(alreadyRunning ? 0 : 1);
+      expect(engine.snapshot().steps[1]?.status).toBe(alreadyRunning ? "succeeded" : "pending");
+      expect(engine.snapshot().steps[2]?.status).toBe(alreadyRunning ? "succeeded" : "pending");
+
+      expect((await engine.start()).steps[4]?.status).toBe("waiting-input");
+      expect(databaseCheck).toHaveBeenCalledTimes(alreadyRunning ? 1 : 2);
+      expect(migrationsCheck).toHaveBeenCalledTimes(alreadyRunning ? 1 : 2);
+      expect(prepareDatabase).toHaveBeenCalledTimes(alreadyRunning ? 0 : 2);
+      await engine.retry("services");
+      expect(startServices).toHaveBeenCalledOnce();
+    },
+  );
 
   it("stops before mutation when the pending journal write fails", async () => {
     const files = memoryStore();

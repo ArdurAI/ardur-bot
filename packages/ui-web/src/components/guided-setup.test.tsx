@@ -78,6 +78,30 @@ function mount() {
 afterEach(() => vi.useRealTimers());
 
 describe("GuidedSetupView", () => {
+  it("omits the startup choice on unsupported platforms", async () => {
+    const view = mount();
+    try {
+      const snapshot = fixture("waiting-input");
+      snapshot.currentStep = "services";
+      snapshot.steps[1]!.status = "succeeded";
+      snapshot.steps[4]!.available = true;
+      snapshot.steps[4]!.status = "waiting-input";
+      await act(async () =>
+        view.root.render(
+          <GuidedSetupView snapshot={snapshot} startupSupported={false} {...view.actions} />,
+        ),
+      );
+      expect(view.host.querySelector('input[type="checkbox"]')).toBeNull();
+      await act(async () =>
+        view.root.render(
+          <GuidedSetupView snapshot={snapshot} startupSupported {...view.actions} />,
+        ),
+      );
+      expect(view.host.querySelector('input[type="checkbox"]')).not.toBeNull();
+    } finally {
+      await view.cleanup();
+    }
+  });
   it("shows nine ordered rows and keeps future work unavailable", async () => {
     const view = mount();
     try {
@@ -236,6 +260,29 @@ describe("GuidedSetupView", () => {
       }
     },
   );
+
+  it("offers Skip after optional computer discovery fails", async () => {
+    const view = mount();
+    try {
+      const snapshot = fixture("failed");
+      snapshot.currentStep = "engines";
+      snapshot.steps[1]!.status = "succeeded";
+      snapshot.steps[5]!.available = true;
+      snapshot.steps[5]!.status = "failed";
+      snapshot.steps[5]!.attempt = 1;
+      snapshot.steps[5]!.reasonCode = "discovery-timeout";
+      await view.render(snapshot);
+      const row = view.host.querySelectorAll("ol > li")[5]!;
+      const skip = [...row.querySelectorAll("button")].find(
+        (button) => button.textContent === "Skip",
+      );
+      expect(skip).toBeDefined();
+      await act(async () => skip?.click());
+      expect(view.actions.onSkip).toHaveBeenCalledWith("engines");
+    } finally {
+      await view.cleanup();
+    }
+  });
 
   it("offers Retry stop before Resume when reopened cleanup is incomplete", async () => {
     const view = mount();

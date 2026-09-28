@@ -317,6 +317,24 @@ export async function bundleMigrator(outfile = path.join(desktopDir, "dist", "db
   return { outfile, externals: [...externals].sort() };
 }
 
+/** The desktop entry must load only JavaScript; fleet discovery comes from TypeScript sources. */
+export async function bundleFleetDiscovery(
+  outfile = path.join(desktopDir, "dist", "fleet-discovery.js"),
+) {
+  const { build } = esbuildRequire("esbuild");
+  await build({
+    absWorkingDir: repoRoot,
+    entryPoints: ["apps/desktop/scripts/fleet-discovery-entry.ts"],
+    outfile,
+    bundle: true,
+    format: "esm",
+    platform: "node",
+    target: "node22",
+    logLevel: "warning",
+  });
+  return outfile;
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const staged = await bundleServices();
   process.stdout.write(
@@ -324,4 +342,6 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   );
   const migrator = await bundleMigrator();
   process.stdout.write(`Migrator bundled with ${migrator.externals.join(", ")}\n`);
+  await bundleFleetDiscovery();
+  process.stdout.write("Fleet discovery bundled for desktop main.\n");
 }

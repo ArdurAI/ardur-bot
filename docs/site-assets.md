@@ -28,12 +28,20 @@ captions, and sidecar before committing any media.
 
 ## Feature documentation snapshots
 
+The five initial page captures come from the real web controls exercised by
+`apps/web/e2e/feature-docs.spec.ts`. On a runner that can start the web app, set
+`FEATURE_DOCS_DIR` to an output directory and run that Playwright spec with one worker; it writes
+`docs/<screenshotId>.png` beneath the directory. Run
+`pnpm feature-docs:import-captures <dir>` from the repository root to check the complete capture
+set, decoder, 250 KB limit and declared dimensions, then copy only those files into `site/docs/`
+and record their hashes. The command is safe to repeat with the same captures.
+
 `site/data/feature-docs.json` holds draft and published page records; source and test bindings live
 in `site/data/feature-docs-evidence.json`. Run `pnpm feature-docs:report` to see draft coverage,
 then `pnpm site:facts` to generate the public `documentation` block. A page graduates when its
 labels and error sentences match cited UI sources, each step has a real PNG under `site/docs/`
 with matching metadata and a 250 KB maximum, and related pages are published or explicitly
-deferred. Record each capture's SHA-256 in the private evidence file. `pnpm site:facts:check`
+deferred. Record each capture's SHA-256 in the evidence file. `pnpm site:facts:check`
 verifies those bindings. CI stages only referenced docs PNGs
 with `product.json` in one orphan commit; a docs image change changes the content digest.
 `pnpm feature-docs:complete` remains red while any verified user-facing page is draft. Keep

@@ -50,6 +50,7 @@ export interface DesktopDeviceListenerState {
 }
 
 export interface ArdurBotDesktop {
+  system?: { runSetupAgain?(): Promise<void> };
   customization?: DesktopCustomization;
   notifications?: {
     supported(): Promise<boolean>;

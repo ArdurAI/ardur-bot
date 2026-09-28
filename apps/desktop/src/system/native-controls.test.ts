@@ -46,6 +46,20 @@ describe("startup", () => {
     expect(() => setStartup("darwin", app, true)).toThrow("Allow startup");
     expect(app.setLoginItemSettings).toHaveBeenLastCalledWith({ openAtLogin: false });
   });
+  it("restores the earlier setting when read-back throws", () => {
+    const app = loginApp();
+    app.getLoginItemSettings
+      .mockImplementationOnce(() => ({
+        openAtLogin: false,
+        executableWillLaunchAtLogin: false,
+      }))
+      .mockImplementationOnce(() => {
+        throw new Error("native read failed");
+      });
+    expect(() => setStartup("darwin", app, true)).toThrow("Allow startup");
+    expect(app.setLoginItemSettings).toHaveBeenLastCalledWith({ openAtLogin: false });
+    expect(startupEnabled("darwin", app)).toBe(false);
+  });
 });
 
 describe("permission status", () => {
