@@ -4565,11 +4565,11 @@ msgstr ""
 
 #: src/components/FeatureDocsLink.tsx
 msgid "Learn more"
-msgstr ""
+msgstr "자세히 알아보기"
 
 #: src/components/FeatureDocsLink.tsx
 msgid "Learn more about {title}"
-msgstr ""
+msgstr "{title}에 대해 자세히 알아보기"
 
 #. placeholder {0}: counts.appliedThisWeek
 #: src/pages/LearningInbox.tsx

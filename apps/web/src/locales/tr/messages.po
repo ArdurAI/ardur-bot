@@ -4565,11 +4565,11 @@ msgstr ""
 
 #: src/components/FeatureDocsLink.tsx
 msgid "Learn more"
-msgstr ""
+msgstr "Daha fazla bilgi"
 
 #: src/components/FeatureDocsLink.tsx
 msgid "Learn more about {title}"
-msgstr ""
+msgstr "{title} hakkında daha fazla bilgi"
 
 #. placeholder {0}: counts.appliedThisWeek
 #: src/pages/LearningInbox.tsx

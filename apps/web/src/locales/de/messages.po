@@ -4565,11 +4565,11 @@ msgstr ""
 
 #: src/components/FeatureDocsLink.tsx
 msgid "Learn more"
-msgstr ""
+msgstr "Mehr erfahren"
 
 #: src/components/FeatureDocsLink.tsx
 msgid "Learn more about {title}"
-msgstr ""
+msgstr "Mehr über {title} erfahren"
 
 #. placeholder {0}: counts.appliedThisWeek
 #: src/pages/LearningInbox.tsx
