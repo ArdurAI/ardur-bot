@@ -188,6 +188,28 @@ export function GroupMemberModelControl({
     }
   }
 
+  function changeRuntime(next: "pi" | "hermes") {
+    setDraftKind(next);
+    const pin = activeMember.runtimePin;
+    if (
+      !pin ||
+      pin.runtimeKind === next ||
+      !pin.provider ||
+      !pin.modelId ||
+      !pin.credentialId ||
+      pin.credentialId.startsWith("native:") ||
+      (next === "hermes" && !["openai-compatible", "ollama"].includes(pin.provider ?? ""))
+    )
+      return;
+    void choose({
+      runtimeKind: next,
+      provider: pin.provider,
+      modelId: pin.modelId,
+      credentialId: pin.credentialId,
+      effort: pin.effort,
+    });
+  }
+
   const activePin = activeMember.runtimePin;
   const pinnedChoice =
     activePin?.provider && activePin.modelId && activePin.credentialId
@@ -256,9 +278,9 @@ export function GroupMemberModelControl({
               more: t("More"),
               colorScheme,
               actions: [
-                { text: t("Ardur (built-in)"), onPress: () => setDraftKind("pi") },
+                { text: t("Ardur (built-in)"), onPress: () => changeRuntime("pi") },
                 ...(experimental
-                  ? [{ text: t("Hermes"), onPress: () => setDraftKind("hermes") }]
+                  ? [{ text: t("Hermes"), onPress: () => changeRuntime("hermes") }]
                   : []),
               ],
             })

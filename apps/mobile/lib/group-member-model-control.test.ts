@@ -51,6 +51,95 @@ beforeEach(() => {
   for (const key of Object.keys(translations)) delete translations[key];
 });
 
+it("persists runtime-only switches before screen Save and after reload in both directions", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  let saved: GroupMember = {
+    ...member,
+    runtimePin: {
+      runtimeKind: "pi",
+      provider: "openai-compatible",
+      modelId: "valid",
+      credentialId: "connection",
+      effort: "high",
+      revision: 2,
+    },
+  };
+  vi.mocked(rpc).mockImplementation(async (route, input) => {
+    if (route === "groups/setMemberModelPin") {
+      const update = input as {
+        expectedRevision: number;
+        pin: NonNullable<GroupMember["runtimePin"]>;
+      };
+      expect(update.expectedRevision).toBe(saved.modelPinRevision);
+      saved = {
+        ...saved,
+        modelPinRevision: update.expectedRevision + 1,
+        runtimePin: { ...update.pin, revision: update.expectedRevision + 1 },
+      };
+    }
+    return route === "groups/list"
+      ? [{ id: "room", members: [saved] }]
+      : { id: "room", members: [saved] };
+  });
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  const props = {
+    groupId: "room",
+    experimental: true,
+    catalog: [
+      {
+        provider: "openai-compatible",
+        id: "valid",
+        label: "Valid",
+        reasoning: true,
+        thinkingLevels: ["high"],
+      },
+    ],
+    credentials: [
+      {
+        id: "connection",
+        provider: "openai-compatible",
+        label: "Connection",
+        thinkingLevel: "high",
+      },
+    ],
+    onSaved: vi.fn(),
+    onError: vi.fn(),
+  };
+  async function reload() {
+    const groups = (await rpc("groups/list")) as Array<{ members: GroupMember[] }>;
+    await act(async () =>
+      root.render(
+        createElement(GroupMemberModelControl, {
+          ...props,
+          member: groups[0]!.members[0]!,
+        } as never),
+      ),
+    );
+  }
+  await reload();
+  for (const next of ["Hermes", "Ardur (built-in)"] as const) {
+    await act(async () =>
+      (node.querySelector('button[aria-label="Runtime · Worker"]') as HTMLButtonElement).click(),
+    );
+    await act(async () =>
+      vi
+        .mocked(presentMessageActionSheet)
+        .mock.calls.at(-1)![0]
+        .actions.find((action) => action.text === next)!
+        .onPress(),
+    );
+    await rpc("groups/update", { groupId: "room" });
+    await reload();
+    expect(saved.runtimePin?.runtimeKind).toBe(next === "Hermes" ? "hermes" : "pi");
+    expect(node.textContent).toContain(next);
+  }
+  expect(
+    vi.mocked(rpc).mock.calls.filter(([route]) => route === "groups/setMemberModelPin"),
+  ).toHaveLength(2);
+  await act(async () => root.unmount());
+});
+
 it("chooses a compatible Hermes group connection, reads it back, and keeps it on Pi", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const saved = {
