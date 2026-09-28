@@ -473,4 +473,25 @@ describe("lingui catalogs", () => {
       }
     }
   });
+
+  it("translates new computer placeholders in every shipped catalog", () => {
+    const sentences = [
+      "Booting live desktop…",
+      "Computer is asleep. Open it to wake.",
+      "Computer failed to boot",
+      "Computer"
+    ];
+    for (const locale of ["en", "de", "ko", "tr", "hi", "pt-BR", "zh-CN", "es", "ru"]) {
+      const catalog = readFileSync(
+        fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url)),
+        "utf8",
+      );
+      for (const sentence of sentences) {
+        expect(catalog).toContain(`msgid ${JSON.stringify(sentence)}`);
+        if (locale !== "en") {
+          expect(catalog).not.toContain(`msgid ${JSON.stringify(sentence)}\nmsgstr ""`);
+        }
+      }
+    }
+  });
 });
