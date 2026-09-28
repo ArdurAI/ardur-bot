@@ -476,7 +476,6 @@ it("uses the native model sheet to save and clear the selected member pin", asyn
 
     botId: "worker",
     memberId: "member",
-    expectedBotModelPinRevision: expect.any(Number),
     expectedRevision: 3,
   });
   await act(async () => root.unmount());
@@ -636,6 +635,7 @@ it("reloads the group on conflict and sends the refreshed revision on the next s
       new RpcError("This member's model changed. Reload the group.", "CONFLICT"),
     )
     .mockResolvedValueOnce([reloadedGroup])
+    .mockResolvedValueOnce([{ id: "worker", modelPinRevision: 3 }])
     .mockResolvedValueOnce(savedGroup);
 
   const node = document.createElement("div");
@@ -692,6 +692,7 @@ it("reloads the group on conflict and sends the refreshed revision on the next s
     },
   });
   expect(rpc).toHaveBeenNthCalledWith(2, "groups/list");
+  expect(rpc).toHaveBeenNthCalledWith(3, "bots/list");
   expect(onError).toHaveBeenCalledWith("This member's model changed. Reload the group.");
   expect(onSaved).toHaveBeenCalledWith(reloadedGroup);
 
@@ -704,12 +705,12 @@ it("reloads the group on conflict and sends the refreshed revision on the next s
   const nextSheet = vi.mocked(presentMessageActionSheet).mock.calls.at(-1)![0];
   await act(async () => nextSheet.actions[1]!.onPress());
 
-  expect(rpc).toHaveBeenNthCalledWith(3, "groups/setMemberModelPin", {
+  expect(rpc).toHaveBeenNthCalledWith(4, "groups/setMemberModelPin", {
     groupId: "room",
 
     botId: "worker",
     memberId: "member",
-    expectedBotModelPinRevision: expect.any(Number),
+    expectedBotModelPinRevision: 3,
     expectedRevision: 5,
     pin: {
       runtimeKind: "pi",

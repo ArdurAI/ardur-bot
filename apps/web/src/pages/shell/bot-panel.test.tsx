@@ -1188,6 +1188,31 @@ it("reads and saves only Hermes limits with the existing model pin", async () =>
   );
 });
 
+it("keeps fractional Hermes limits in the draft without publishing invalid settings", async () => {
+  await act(async () =>
+    root.render(settings({ runtimeKind: "hermes", runtimeExperimental: true })),
+  );
+  await vi.waitFor(() =>
+    expect(
+      container.querySelector<HTMLInputElement>('input[type="number"][max="64"]'),
+    ).not.toBeNull(),
+  );
+  const calls = container.querySelector<HTMLInputElement>('input[type="number"][max="64"]')!;
+  const time = container.querySelector<HTMLInputElement>('input[type="number"][max="600"]')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(calls, "1.5");
+    calls.dispatchEvent(new Event("input", { bubbles: true }));
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(time, "1.5");
+    time.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  expect(calls.value).toBe("1.5");
+  expect(time.value).toBe("1.5");
+  await save();
+  expect(onSave).toHaveBeenLastCalledWith(
+    expect.not.objectContaining({ runtimeConfig: expect.anything() }),
+  );
+});
+
 it("shows the incompatible Hermes connection only while it is selected", async () => {
   api.availability.mockResolvedValue({ runtimeKind: "hermes", available: true, models: [] });
   await act(async () =>

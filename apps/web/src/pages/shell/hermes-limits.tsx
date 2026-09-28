@@ -43,7 +43,7 @@ export function HermesLimits({
             const val = event.target.value;
             setCalls(val);
             const num = Number(val);
-            if (num >= 1 && num <= 64) {
+            if (Number.isInteger(num) && num >= 1 && num <= 64) {
               onChange({ ...settings, limits: { ...settings.limits, maxProviderRequests: num } });
             }
           }}
@@ -62,7 +62,7 @@ export function HermesLimits({
             const val = event.target.value;
             setTime(val);
             const num = Number(val);
-            if (num >= 1 && num <= 600) {
+            if (Number.isInteger(num) && num >= 1 && num <= 600) {
               onChange({ ...settings, limits: { ...settings.limits, timeoutMs: num * 1_000 } });
             }
           }}

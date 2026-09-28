@@ -227,7 +227,6 @@ import {
 import type { SettingsSection } from "./SettingsOverlay";
 import { SpaceSearchResults } from "./SpaceSearch";
 import { BotModelChip } from "./shell/bot-model-chip";
-import { BotSettings, CreateBotForm } from "./shell/bot-panel";
 import { isCommandPaletteHotkey } from "./shell/command-palette-hotkey";
 import {
   initialComputerErrorState,
@@ -247,6 +246,13 @@ import { ProviderErrorMessage } from "./shell/provider-error-message";
 import { handleWorkspaceOpenRun } from "./shell/workspace-run";
 import { SystemDictation } from "./system/SystemDictation";
 import { WindowChrome } from "./WindowChrome";
+
+const BotSettings = lazy(() =>
+  import("./shell/bot-panel").then((module) => ({ default: module.BotSettings })),
+);
+const CreateBotForm = lazy(() =>
+  import("./shell/bot-panel").then((module) => ({ default: module.CreateBotForm })),
+);
 
 const TeamBoard = lazy(() =>
   import("./TeamBoard").then((module) => ({ default: module.TeamBoard })),
@@ -3801,11 +3807,14 @@ export function ShellPage({
                     botId: member.botId,
                     memberId: member.memberId,
                     expectedRevision: member.modelPinRevision ?? 0,
-                    expectedBotModelPinRevision:
-                      bots.find((b) => b.id === member.botId)?.modelPinRevision ?? 0,
                   };
                   const updated = pin
-                    ? await rpc.groups.setMemberModelPin({ ...target, pin })
+                    ? await rpc.groups.setMemberModelPin({
+                        ...target,
+                        expectedBotModelPinRevision:
+                          bots.find((b) => b.id === member.botId)?.modelPinRevision ?? 0,
+                        pin,
+                      })
                     : await rpc.groups.clearMemberModelPin(target);
                   setGroups((current) =>
                     current.map((group) => (group.id === updated.id ? updated : group)),
@@ -3813,9 +3822,8 @@ export function ShellPage({
                   await refreshGroupThread(activeGroup.id).catch(() => undefined);
                 }}
                 onReloadMember={async (member) => {
-                  const latest = (await rpc.groups.list()).find(
-                    (group) => group.id === activeGroup.id,
-                  );
+                  const [groups] = await Promise.all([rpc.groups.list(), refreshBots()]);
+                  const latest = groups.find((group) => group.id === activeGroup.id);
                   if (!latest) return undefined;
                   setGroups((current) =>
                     current.map((group) => (group.id === latest.id ? latest : group)),
@@ -3851,44 +3859,48 @@ export function ShellPage({
               />
             ) : null}
             {panel === "create" ? (
-              <CreateBotForm
-                onCancel={() => setPanel(null)}
-                onCreate={(input) => createBot(input)}
-              />
+              <Suspense fallback={null}>
+                <CreateBotForm
+                  onCancel={() => setPanel(null)}
+                  onCreate={(input) => createBot(input)}
+                />
+              </Suspense>
             ) : null}
             {panel === "settings" && active ? (
-              <BotSettings
-                key={active.id}
-                bot={active}
-                modelFocusRequest={modelFocusRequest}
-                runtimeFocusRequest={runtimeFocusRequest}
-                modelSettings={modelSettings}
-                overrideGroups={groups}
-                onOpenGroup={(id) => {
-                  navigate(`/app/g/${id}`);
-                  setPanel("group-settings");
-                }}
-                memoryProviderConfigured={memoryProviderConfig != null}
-                onSkillsChange={setAgentSkills}
-                onSave={async ({ computerMode, ...patch }) => {
-                  if (computerMode !== active.computerMode) {
-                    await rpc.bots.setComputer({
-                      botId: active.id,
-                      mode: computerMode,
-                    });
-                  }
-                  await rpc.bots.update({ botId: active.id, ...patch });
-                  await refreshBots();
-                }}
-                onExport={async () => {
-                  const { path } = await rpc.export.bot({ botId: active.id });
-                  const anchor = document.createElement("a");
-                  anchor.href = path;
-                  anchor.download = "bot-v2.tar.gz";
-                  anchor.click();
-                }}
-                onClear={() => setClearTarget({ kind: "bot", chat: active })}
-              />
+              <Suspense fallback={null}>
+                <BotSettings
+                  key={active.id}
+                  bot={active}
+                  modelFocusRequest={modelFocusRequest}
+                  runtimeFocusRequest={runtimeFocusRequest}
+                  modelSettings={modelSettings}
+                  overrideGroups={groups}
+                  onOpenGroup={(id) => {
+                    navigate(`/app/g/${id}`);
+                    setPanel("group-settings");
+                  }}
+                  memoryProviderConfigured={memoryProviderConfig != null}
+                  onSkillsChange={setAgentSkills}
+                  onSave={async ({ computerMode, ...patch }) => {
+                    if (computerMode !== active.computerMode) {
+                      await rpc.bots.setComputer({
+                        botId: active.id,
+                        mode: computerMode,
+                      });
+                    }
+                    await rpc.bots.update({ botId: active.id, ...patch });
+                    await refreshBots();
+                  }}
+                  onExport={async () => {
+                    const { path } = await rpc.export.bot({ botId: active.id });
+                    const anchor = document.createElement("a");
+                    anchor.href = path;
+                    anchor.download = "bot-v2.tar.gz";
+                    anchor.click();
+                  }}
+                  onClear={() => setClearTarget({ kind: "bot", chat: active })}
+                />
+              </Suspense>
             ) : null}
             {panel === "routines" && active ? (
               <Suspense fallback={null}>
