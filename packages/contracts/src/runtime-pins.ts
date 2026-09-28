@@ -1,6 +1,10 @@
 import * as z from "zod";
 import type { ThinkingLevel } from "./domain.js";
 import { Id } from "./ids.js";
+import {
+  HistoricalHermesRuntimeConfigSchema,
+  RuntimeConfigExecutionManifestSchema,
+} from "./runtime-config.js";
 import { HERMES_RUNTIME_V1_DEFAULTS, HermesRuntimeConfigV1Schema } from "./runtime-config-v1.js";
 
 export const RuntimeKindSchema = z.enum([
@@ -84,6 +88,11 @@ export const RuntimeInfoSchema = z.object({
   requestedEffort: z.string().optional(),
   wireEffort: z.string().optional(),
   effortMappingVersion: z.string().optional(),
+  effectiveRuntimeConfig: RuntimeConfigExecutionManifestSchema.optional(),
+  effectiveRuntimeConfigHash: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .optional(),
 });
 export type RuntimeInfo = z.infer<typeof RuntimeInfoSchema>;
 
@@ -95,8 +104,13 @@ export const RuntimePinSchema = z.object({
   effort: z.string().nullable(),
   credentialId: z.string().nullable(),
   revision: z.number().int().nonnegative(),
-  runtimeConfig: HermesRuntimeConfigSchema.optional(),
+  runtimeConfig: HistoricalHermesRuntimeConfigSchema.optional(),
   runtimeConfigHash: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .optional(),
+  effectiveRuntimeConfig: RuntimeConfigExecutionManifestSchema.optional(),
+  effectiveRuntimeConfigHash: z
     .string()
     .regex(/^[a-f0-9]{64}$/)
     .optional(),

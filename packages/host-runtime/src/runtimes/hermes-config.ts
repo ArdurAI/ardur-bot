@@ -7,6 +7,7 @@ import {
   HERMES_MANAGED_PROFILE,
   HERMES_SOURCE_REVISION,
   HermesRuntimeConfigV2Schema,
+  RuntimeConfigExecutionManifestSchema,
   RuntimeConfigManagedProfileSchema,
 } from "@ardurbot/contracts/runtime-config";
 import { validateHermesExecutionEnvelope } from "@ardurbot/core/node/runtime-config-hash";
@@ -125,7 +126,7 @@ export function compileHermesRuntimeConfig(
     contextFileMaxChars: settings.context.maxInputBytes,
     apiMaxRetries: settings.harness.agent.api_max_retries,
   };
-  const manifest = {
+  const manifest = RuntimeConfigExecutionManifestSchema.parse({
     format: 1,
     profile: HERMES_MANAGED_PROFILE_IDENTITY,
     runtimeKind: "hermes",
@@ -147,7 +148,7 @@ export function compileHermesRuntimeConfig(
       paths: "ephemeral-owned-home",
       network: "managed-relay",
     },
-  } as const;
+  });
   return {
     configYaml: `${JSON.stringify(generatedConfig, null, 2)}\n`,
     launcher,

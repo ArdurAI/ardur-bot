@@ -148,14 +148,19 @@ export async function runProductionTask(options: {
       provider: "SCOREBOARD",
       displayName: "Synthetic task records",
     });
-    const bot = await fixtureRpc<{ id: string }>(handles, cookie, "bots/create", {
-      name: "Task fixture",
-      title: "",
-      description: "",
-      instructions:
-        "Complete the supplied synthetic task. Do not use tools outside its declared permissions.",
-      notifyOnFinish: false,
-    });
+    const bot = await fixtureRpc<{ id: string; modelPinRevision?: number }>(
+      handles,
+      cookie,
+      "bots/create",
+      {
+        name: "Task fixture",
+        title: "",
+        description: "",
+        instructions:
+          "Complete the supplied synthetic task. Do not use tools outside its declared permissions.",
+        notifyOnFinish: false,
+      },
+    );
     botId = bot.id;
     const material = taskMaterial(
       task,
@@ -172,6 +177,7 @@ export async function runProductionTask(options: {
     }
     await fixtureRpc(handles, cookie, "bots/update", {
       botId,
+      expectedModelPinRevision: bot.modelPinRevision ?? 0,
       modelProvider: "openai-compatible",
       modelId: options.model?.id ?? "scoreboard-v1",
       thinkingLevel: "off",

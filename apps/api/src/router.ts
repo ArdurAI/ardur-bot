@@ -1,5 +1,4 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { isDeepStrictEqual } from "node:util";
 import type {
   AdapterContext,
   AgentHomeStore,
@@ -114,7 +113,6 @@ import {
   COMPUTER_IMAGE_DOWNLOAD_FAILED_CODE,
   ComputerImageDownloadError,
   ENGINE_MISSING_CODE,
-  HermesRuntimeConfigSchema,
   HOST_MOVE_UNAVAILABLE_CODE,
   HostMoveUnavailableError,
   IntegrationManifestSchema,
@@ -137,6 +135,7 @@ import {
   nextCronDateAcrossStrict,
   sandboxKindForBot,
 } from "@ardurbot/core";
+import { decodeHistoricalHermesRuntimeConfig } from "@ardurbot/core/runtime-config";
 import type { Pool, PrismaClient, ThreadEvents } from "@ardurbot/db";
 import {
   appendEventInTransaction,
@@ -200,7 +199,11 @@ import { aiConsentStatus, allowAiConsent } from "./ai-consent.js";
 import { createOwnedArtifact, getOwnedArtifact, getSpaceArtifact } from "./artifacts.js";
 import { boardCall, createBoard } from "./board.js";
 import { botModelPinUpdate } from "./bot-model-pin.js";
-import { botProfileLabelsChanged, commitBotUpdate } from "./bot-update.js";
+import {
+  botProfileLabelsChanged,
+  commitBotUpdate,
+  prepareRuntimeConfigSave,
+} from "./bot-update.js";
 import { createCapabilitySettings } from "./capability-settings.js";
 import { createCommandRoutes } from "./command-routes.js";
 import { createComparisons } from "./comparisons.js";
@@ -275,6 +278,7 @@ import {
 import { createRemoteDevices } from "./remote-devices.js";
 import { routineHistory } from "./routine-history.js";
 import { listSpaceRuns } from "./runs.js";
+import { createRuntimeConfigRoutes } from "./runtime-config.js";
 import { addScreenProxyCapability } from "./screen-proxy.js";
 import { querySpaceSearch } from "./search.js";
 import { withSerializableRetry } from "./serializable-retry.js";
@@ -645,6 +649,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
   const ideChanges = createIdeChanges(deps, ide);
   return os.router({
     ...createCustomizationRoutes(deps),
+    ...createRuntimeConfigRoutes(deps),
     account: {
       get: authed.account.get.handler(({ context }) => account.get(context.actor)),
       updateProfile: authed.account.updateProfile.handler(({ context, input }) =>
@@ -1503,7 +1508,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
             runtimeConfig:
               source.runtimeConfig == null
                 ? null
-                : HermesRuntimeConfigSchema.parse(source.runtimeConfig),
+                : decodeHistoricalHermesRuntimeConfig(source.runtimeConfig),
             runtimeExperimental: source.runtimeExperimental,
           })
           .catch((error: unknown) => {
@@ -1550,17 +1555,11 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           if (!section) throw new IsolationError();
         }
         const modelPinUpdate = await botModelPinUpdate(deps, context.actor, existing, input);
-        const configChanged =
-          input.runtimeConfig !== undefined &&
-          !isDeepStrictEqual(input.runtimeConfig, existing.runtimeConfig ?? null);
-        if (
-          configChanged &&
-          input.runtimeConfig &&
-          (input.runtimeKind ?? existing.runtimeKind) !== "hermes"
-        )
-          throw new ORPCError("BAD_REQUEST", {
-            message: "Hermes limits require the Hermes runtime.",
-          });
+        const configSave = prepareRuntimeConfigSave(
+          existing,
+          input,
+          "modelPinRevision" in modelPinUpdate,
+        );
         if (!existing.thread) throw new IsolationError();
         await commitBotUpdate({
           prisma: deps.prisma,
@@ -1568,10 +1567,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           spaceId: context.actor.spaceId,
           threadId: existing.thread.id,
           botId: input.botId,
-          expectedModelPinRevision:
-            configChanged || "modelPinRevision" in modelPinUpdate
-              ? existing.modelPinRevision
-              : undefined,
+          expectedModelPinRevision: configSave.expectedModelPinRevision,
           emitBotUpdated: botProfileLabelsChanged(input),
           data: {
             name: input.name,
@@ -1587,12 +1583,10 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
             voiceId: input.voiceId,
             autoSpeak: input.autoSpeak,
             ...modelPinUpdate,
-            ...(configChanged
+            ...(configSave.configChanged
               ? {
-                  runtimeConfig: input.runtimeConfig ?? Prisma.DbNull,
-                  ...(!("modelPinRevision" in modelPinUpdate)
-                    ? { modelPinRevision: { increment: 1 } }
-                    : {}),
+                  runtimeConfig: configSave.runtimeConfig ?? Prisma.DbNull,
+                  ...(configSave.incrementRevision ? { modelPinRevision: { increment: 1 } } : {}),
                 }
               : {}),
             runtimeExperimental: input.runtimeExperimental,
