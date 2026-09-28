@@ -410,7 +410,9 @@ describe("group model control", () => {
     const fresh = { ...stale, modelPinRevision: 2 };
     const save = vi.fn(async (value: GroupMember) => {
       if (value.modelPinRevision !== 2) {
-        throw new ORPCError("CONFLICT", { message: "This member's model revision cannot advance." });
+        throw new ORPCError("CONFLICT", {
+          message: "This member's model revision cannot advance.",
+        });
       }
     });
     const reload = vi.fn(async () => fresh);
@@ -440,7 +442,9 @@ describe("group model control", () => {
     const stale = { ...member, modelPinRevision: 1, runtimePin: pin };
     const fresh = { ...member, modelPinRevision: 2, runtimePin: null };
     const save = vi.fn(async () => {
-      throw new ORPCError("CONFLICT", { message: "This member's model changed. Reload the group." });
+      throw new ORPCError("CONFLICT", {
+        message: "This member's model changed. Reload the group.",
+      });
     });
     await act(async () =>
       root.render(
