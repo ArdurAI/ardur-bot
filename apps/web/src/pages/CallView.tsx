@@ -4,7 +4,7 @@ import { Button, Dialog, DialogContent, DialogHeader, DialogTitle } from "@ardur
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useRef, useState } from "react";
 import { dictation } from "../lib/dictation";
-import { speaker } from "../lib/tts";
+import { withSpeaker } from "../lib/tts-lazy";
 
 type Phase = "listening" | "thinking" | "speaking";
 
@@ -51,12 +51,12 @@ export function CallView({
   function hangUp() {
     closing.current = true;
     dictation.stop("cancel");
-    speaker.stop();
+    withSpeaker((speaker) => speaker.stop());
     onClose();
   }
 
   function interrupt() {
-    if (phaseRef.current === "speaking") speaker.stop();
+    if (phaseRef.current === "speaking") withSpeaker((speaker) => speaker.stop());
     else dictation.stop("cancel");
     void listen();
   }
@@ -70,7 +70,7 @@ export function CallView({
       return;
     }
     setCallPhase("listening");
-    speaker.stop();
+    withSpeaker((speaker) => speaker.stop());
     setHeard("");
     try {
       await dictation.listen({
@@ -119,15 +119,21 @@ export function CallView({
     closing.current = false;
     spokenMessage.current = null;
     narrated.current.clear();
-    const unsubSpeech = speaker.subscribe((state) => {
-      if (state.status === "speaking") {
-        setCallPhase("speaking");
-        setCaption(state.caption ?? "");
-      } else if (state.status === "idle" && phaseRef.current !== "listening") {
-        setCaption("");
-        void listen();
-      }
-      if (state.error) setError(state.error);
+    let unsubSpeech: (() => void) | undefined;
+    let cancelled = false;
+    // A call needs voice immediately, so the speaker module loads here on first use.
+    withSpeaker((speaker) => {
+      if (cancelled) return;
+      unsubSpeech = speaker.subscribe((state) => {
+        if (state.status === "speaking") {
+          setCallPhase("speaking");
+          setCaption(state.caption ?? "");
+        } else if (state.status === "idle" && phaseRef.current !== "listening") {
+          setCaption("");
+          void listen();
+        }
+        if (state.error) setError(state.error);
+      });
     });
     const unsubDictation = dictation.subscribe((state) => {
       if (state.status === "listening") {
@@ -137,11 +143,11 @@ export function CallView({
     });
     void listen();
     return () => {
-      closing.current = true;
-      unsubSpeech();
+      cancelled = true;
+      unsubSpeech?.();
       unsubDictation();
       dictation.stop("cancel");
-      speaker.stop();
+      withSpeaker((speaker) => speaker.stop());
     };
   }, [botId]);
 
@@ -173,16 +179,18 @@ export function CallView({
       if (text) {
         spokenMessage.current = lastBot.id;
         dictation.stop("cancel");
-        void speaker.speak(
-          secretAsk
-            ? `${text}. ${secretPromptRef.current}`
-            : ask
-              ? `${text}. ${askPromptRef.current}`
-              : text,
-          {
-            botId,
-            messageId: lastBot.id,
-          },
+        withSpeaker((speaker) =>
+          speaker.speak(
+            secretAsk
+              ? `${text}. ${secretPromptRef.current}`
+              : ask
+                ? `${text}. ${askPromptRef.current}`
+                : text,
+            {
+              botId,
+              messageId: lastBot.id,
+            },
+          ),
         );
         return;
       }
@@ -213,7 +221,9 @@ export function CallView({
         }
       }
       if (phrases.length) {
-        void speaker.speak(phrases.join(". "), { botId, messageId: `narrate:${lastKey}` });
+        withSpeaker((speaker) =>
+          speaker.speak(phrases.join(". "), { botId, messageId: `narrate:${lastKey}` }),
+        );
       }
     }
   }, [snapshot, botId]);
