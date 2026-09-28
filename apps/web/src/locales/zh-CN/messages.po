@@ -4943,6 +4943,11 @@ msgstr "其中似乎包含凭据。请从文件中删除后重新扫描。"
 msgid "low — quick, with a little checking"
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/HostComputerPrompt.tsx
+msgid "macOS will not ask for extra permission if you let bots run on this Mac. They run as you."
+msgstr "若让 Bot 在这台 Mac 上运行，它们会使用你的账户权限，macOS 不会再逐项询问。"
+
 #: src/pages/board/BoardsSettings.tsx
 msgid "Make default"
 msgstr "设为默认"
@@ -9119,6 +9124,11 @@ msgstr "你的邮箱"
 #: src/pages/Auth.tsx
 msgid "Your name"
 msgstr "你的名字"
+
+#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/HostComputerPrompt.tsx
+msgid "Your OS will not ask for extra permission if you let bots run on {hostLabel}. They run as you."
+msgstr "若让 Bot 在 {hostLabel} 上运行，它们会使用你的账户权限，系统不会再逐项询问。"
 
 #: src/pages/DevicesSettings.tsx
 msgid "Your phone can reach this Mac on your network."

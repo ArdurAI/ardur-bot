@@ -155,6 +155,7 @@ export function ComputerProfile({
       : (connection?.settings.engine ??
         (choosingDefault && deploymentDefault ? deploymentDefault : status.kind));
   const hostComputer = status.kind === "desktop";
+  const hostLabel = status.hostLabel === "This Mac" ? t`this Mac` : t`this computer`;
   const engineLabel = (kind: string) =>
     kind !== "desktop"
       ? (ENGINE_LABELS[kind] ?? kind)
@@ -202,6 +203,13 @@ export function ComputerProfile({
       <p className="text-sm text-muted-foreground">
         <Trans>Engine: {label}</Trans>
       </p>
+      {hostComputer ? (
+        <p className="text-xs text-muted-foreground/80">
+          {status.hostLabel === "This Mac"
+            ? t`macOS will not ask for extra permission if you let bots run on this Mac. They run as you.`
+            : t`Your OS will not ask for extra permission if you let bots run on ${hostLabel}. They run as you.`}
+        </p>
+      ) : null}
       {engineError ? (
         <div role="alert" className="text-sm text-destructive">
           <p>{engineError}</p>

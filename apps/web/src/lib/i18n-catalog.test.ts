@@ -489,6 +489,27 @@ describe("lingui catalogs", () => {
     }
   });
 
+  it("translates the host-computer warning in every shipped catalog", () => {
+    const sentences = [
+      "macOS will not ask for extra permission if you let bots run on this Mac. They run as you.",
+      "Your OS will not ask for extra permission if you let bots run on {hostLabel}. They run as you.",
+    ];
+    for (const locale of ["en", "de", "ko", "tr", "hi", "pt-BR", "zh-CN", "es", "ru"]) {
+      const catalog = readFileSync(
+        fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url)),
+        "utf8",
+      );
+      for (const sentence of sentences) {
+        expect(catalog, `${locale}: ${sentence}`).toContain(
+          `msgid ${JSON.stringify(sentence)}\nmsgstr "`,
+        );
+        expect(catalog, `${locale}: ${sentence}`).not.toContain(
+          `msgid ${JSON.stringify(sentence)}\nmsgstr ""`,
+        );
+      }
+    }
+  });
+
   it("translates new computer placeholders in every shipped catalog", () => {
     const sentences = [
       "Booting live desktop…",
