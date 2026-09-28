@@ -51,6 +51,137 @@ beforeEach(() => {
   for (const key of Object.keys(translations)) delete translations[key];
 });
 
+it("chooses a compatible Hermes group connection, reads it back, and keeps it on Pi", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const saved = {
+    ...member,
+    modelPinRevision: 3,
+    runtimePin: {
+      runtimeKind: "hermes" as const,
+      provider: "openai-compatible",
+      modelId: "valid",
+      credentialId: "connection",
+      effort: "high",
+      revision: 3,
+    },
+  };
+  vi.mocked(rpc).mockResolvedValueOnce({ id: "room", members: [saved] });
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  const props = {
+    groupId: "room",
+    member,
+    experimental: true,
+    catalog: [
+      {
+        provider: "openai-compatible",
+        id: "valid",
+        label: "Valid",
+        reasoning: true,
+        thinkingLevels: ["high"],
+      },
+    ],
+    credentials: [
+      {
+        id: "connection",
+        provider: "openai-compatible",
+        label: "Connection",
+        thinkingLevel: "high",
+      },
+    ],
+    onSaved: vi.fn(),
+    onError: vi.fn(),
+  };
+  await act(async () => root.render(createElement(GroupMemberModelControl, props as never)));
+  await act(async () =>
+    (node.querySelector('button[aria-label="Runtime · Worker"]') as HTMLButtonElement).click(),
+  );
+  await act(async () =>
+    vi
+      .mocked(presentMessageActionSheet)
+      .mock.calls.at(-1)![0]
+      .actions.find((action) => action.text === "Hermes")!
+      .onPress(),
+  );
+  await act(async () =>
+    (
+      node.querySelector('button[aria-label="Model in this group · Worker"]') as HTMLButtonElement
+    ).click(),
+  );
+  const sheet = vi.mocked(presentMessageActionSheet).mock.calls.at(-1)![0];
+  await act(async () => sheet.actions[1]!.onPress());
+  expect(rpc).toHaveBeenCalledWith(
+    "groups/setMemberModelPin",
+    expect.objectContaining({
+      pin: expect.objectContaining({ runtimeKind: "hermes", credentialId: "connection" }),
+    }),
+  );
+  expect(node.textContent).toContain("openai-compatible · Valid");
+  await act(async () =>
+    (node.querySelector('button[aria-label="Runtime · Worker"]') as HTMLButtonElement).click(),
+  );
+  await act(async () =>
+    vi.mocked(presentMessageActionSheet).mock.calls.at(-1)![0].actions[0]!.onPress(),
+  );
+  await act(async () =>
+    (
+      node.querySelector('button[aria-label="Model in this group · Worker"]') as HTMLButtonElement
+    ).click(),
+  );
+  expect(vi.mocked(presentMessageActionSheet).mock.calls.at(-1)![0].actions[1]?.text).toBe(
+    "openai-compatible · Valid",
+  );
+  await act(async () => root.unmount());
+});
+
+it("explains an incompatible saved connection and omits it from Hermes choices", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  await act(async () =>
+    root.render(
+      createElement(GroupMemberModelControl, {
+        groupId: "room",
+        member: {
+          ...member,
+          runtimePin: {
+            runtimeKind: "pi",
+            provider: "anthropic",
+            modelId: "valid",
+            credentialId: "connection",
+            effort: "high",
+            revision: 2,
+          },
+        },
+        experimental: true,
+        catalog: [{ provider: "anthropic", id: "valid", label: "Valid" }],
+        credentials: [{ id: "connection", provider: "anthropic", label: "Connection" }],
+        onSaved: vi.fn(),
+        onError: vi.fn(),
+      } as never),
+    ),
+  );
+  await act(async () =>
+    (node.querySelector('button[aria-label="Runtime · Worker"]') as HTMLButtonElement).click(),
+  );
+  await act(async () =>
+    vi
+      .mocked(presentMessageActionSheet)
+      .mock.calls.at(-1)![0]
+      .actions.find((action) => action.text === "Hermes")!
+      .onPress(),
+  );
+  expect(node.textContent).toContain("Hermes does not yet support Anthropic connections.");
+  await act(async () =>
+    (
+      node.querySelector('button[aria-label="Model in this group · Worker"]') as HTMLButtonElement
+    ).click(),
+  );
+  expect(vi.mocked(presentMessageActionSheet).mock.calls.at(-1)![0].actions).toHaveLength(1);
+  expect(rpc).not.toHaveBeenCalled();
+  await act(async () => root.unmount());
+});
+
 it("uses the native model sheet to save and clear the selected member pin", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const updated = {
@@ -95,10 +226,16 @@ it("uses the native model sheet to save and clear the selected member pin", asyn
       } as never),
     ),
   );
-  expect(node.querySelector("button")?.getAttribute("aria-label")).toBe(
-    "Model in this group · Worker",
+  expect(
+    node
+      .querySelector('button[aria-label="Model in this group · Worker"]')
+      ?.getAttribute("aria-label"),
+  ).toBe("Model in this group · Worker");
+  await act(async () =>
+    (
+      node.querySelector('button[aria-label="Model in this group · Worker"]') as HTMLButtonElement
+    ).click(),
   );
-  await act(async () => node.querySelector("button")!.click());
   const sheet = vi.mocked(presentMessageActionSheet).mock.calls.at(-1)![0];
   expect(sheet.actions.map((action) => action.text)).toEqual(["Same as bot", "Fixture · Valid"]);
   await act(async () => sheet.actions[1]!.onPress());
@@ -140,7 +277,11 @@ it("uses the native model sheet to save and clear the selected member pin", asyn
     ),
   );
   expect(node.textContent).toContain("Fixture · Valid");
-  await act(async () => node.querySelector("button")!.click());
+  await act(async () =>
+    (
+      node.querySelector('button[aria-label="Model in this group · Worker"]') as HTMLButtonElement
+    ).click(),
+  );
   const resetSheet = vi.mocked(presentMessageActionSheet).mock.calls.at(-1)![0];
   await act(async () => resetSheet.actions[0]!.onPress());
   expect(rpc).toHaveBeenLastCalledWith("groups/clearMemberModelPin", {
@@ -192,7 +333,11 @@ it("preserves saved effort when reselecting the member's current model", async (
       } as never),
     ),
   );
-  await act(async () => node.querySelector("button")!.click());
+  await act(async () =>
+    (
+      node.querySelector('button[aria-label="Model in this group · Worker"]') as HTMLButtonElement
+    ).click(),
+  );
   const sheet = vi.mocked(presentMessageActionSheet).mock.calls.at(-1)![0];
   await act(async () => sheet.actions[1]!.onPress());
   expect(rpc).toHaveBeenCalledWith("groups/setMemberModelPin", {
@@ -259,7 +404,9 @@ it("changes effort on the same saved model and connection", async () => {
     ),
   );
   expect(node.textContent).toContain("High");
-  await act(async () => node.querySelectorAll("button")[1]!.click());
+  await act(async () =>
+    (node.querySelector('button[aria-label="Thinking · Worker"]') as HTMLButtonElement).click(),
+  );
   const sheet = vi.mocked(presentMessageActionSheet).mock.calls.at(-1)![0];
   await act(async () => sheet.actions.find((action) => action.text === "Low")!.onPress());
   expect(rpc).toHaveBeenCalledWith("groups/setMemberModelPin", {
@@ -325,7 +472,11 @@ it("reloads the group on conflict and sends the refreshed revision on the next s
   );
 
   // First save attempts with stale expectedRevision: 2, but API returns CONFLICT
-  await act(async () => node.querySelector("button")!.click());
+  await act(async () =>
+    (
+      node.querySelector('button[aria-label="Model in this group · Worker"]') as HTMLButtonElement
+    ).click(),
+  );
   const sheet = vi.mocked(presentMessageActionSheet).mock.calls.at(-1)![0];
   await act(async () => sheet.actions[1]!.onPress());
 
@@ -347,7 +498,11 @@ it("reloads the group on conflict and sends the refreshed revision on the next s
   expect(onSaved).toHaveBeenCalledWith(reloadedGroup);
 
   // Next save sends the reloaded revision 5
-  await act(async () => node.querySelector("button")!.click());
+  await act(async () =>
+    (
+      node.querySelector('button[aria-label="Model in this group · Worker"]') as HTMLButtonElement
+    ).click(),
+  );
   const nextSheet = vi.mocked(presentMessageActionSheet).mock.calls.at(-1)![0];
   await act(async () => nextSheet.actions[1]!.onPress());
 

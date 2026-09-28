@@ -153,6 +153,66 @@ describe("group model control", () => {
       effort: null,
     });
   });
+  it("saves and reads back a Hermes group connection, then keeps it on Pi", async () => {
+    const compatibleSettings = {
+      ...settings!,
+      catalog: [{ ...settings!.catalog[0]!, provider: "openai-compatible" }],
+      credentials: [{ ...settings!.credentials[0]!, provider: "openai-compatible" }],
+    };
+    const save = vi.fn(async (_member: GroupMember, choice: GroupMember["runtimePin"]) => {
+      expect(choice?.runtimeKind).toBe("hermes");
+      await act(async () =>
+        root.render(
+          <GroupModelControl
+            member={{ ...member, modelPinRevision: 1, runtimePin: { ...choice!, revision: 1 } }}
+            bot={{ ...bot, runtimeExperimental: true }}
+            settings={compatibleSettings}
+            onSave={save as never}
+          />,
+        ),
+      );
+    });
+    await act(async () =>
+      root.render(
+        <GroupModelControl
+          member={member}
+          bot={{ ...bot, runtimeExperimental: true }}
+          settings={compatibleSettings}
+          onSave={save as never}
+        />,
+      ),
+    );
+    await change(container.querySelector('select[id$="-runtime"]')!, "hermes");
+    await change(
+      container.querySelector('select[id$="-model"]')!,
+      modelPinOptionKey("openai-compatible", "model-a", "credential"),
+    );
+    const saveButton = [...container.querySelectorAll("button")].find(
+      (item) => item.textContent === "Save model",
+    )!;
+    expect(saveButton.disabled).toBe(false);
+    await act(async () => saveButton.click());
+    expect(
+      container.querySelector('select[id$="-model"]')?.getAttribute("value") ??
+        (container.querySelector('select[id$="-model"]') as HTMLSelectElement).value,
+    ).toBe(modelPinOptionKey("openai-compatible", "model-a", "credential"));
+    await change(container.querySelector('select[id$="-runtime"]')!, "pi");
+    expect((container.querySelector('select[id$="-model"]') as HTMLSelectElement).value).toBe(
+      modelPinOptionKey("openai-compatible", "model-a", "credential"),
+    );
+  });
+
+  it("explains an incompatible Hermes group connection and blocks saving it", async () => {
+    await render({ ...member, runtimePin: pin }, vi.fn(), { ...bot, runtimeExperimental: true });
+    await change(container.querySelector('select[id$="-runtime"]')!, "hermes");
+    expect(container.querySelector('[role="status"]')?.textContent).toContain(
+      "Hermes does not yet support this connection.",
+    );
+    const saveButton = [...container.querySelectorAll("button")].find(
+      (item) => item.textContent === "Save model",
+    )!;
+    expect(saveButton.disabled).toBe(true);
+  });
   it("starts inherited, saves an explicit equal choice, and can reset", async () => {
     const save = await render(member);
     const select = container.querySelector("select")!;

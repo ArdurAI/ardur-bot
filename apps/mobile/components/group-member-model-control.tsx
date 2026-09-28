@@ -1,4 +1,4 @@
-import type { GroupMember, SetGroupMemberModelPinInput } from "@ardurbot/contracts";
+import type { GroupMember, RuntimeKind, SetGroupMemberModelPinInput } from "@ardurbot/contracts";
 import { spaceDefaultEffort } from "@ardurbot/core";
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, Text } from "react-native";
@@ -27,6 +27,7 @@ export function GroupMemberModelControl({
   member,
   catalog,
   credentials,
+  experimental,
   onSaved,
   onError,
 }: {
@@ -34,6 +35,7 @@ export function GroupMemberModelControl({
   member: GroupMember;
   catalog: MobileModel[];
   credentials: MobileModelCredential[];
+  experimental?: boolean;
   onSaved: (group: MobileGroup) => void;
   onError: (message: string) => void;
 }) {
@@ -42,15 +44,19 @@ export function GroupMemberModelControl({
   const colorScheme = useResolvedAppearance();
   const [pending, setPending] = useState(false);
   const [activeMember, setActiveMember] = useState(member);
+  const [draftKind, setDraftKind] = useState<RuntimeKind>(member.runtimePin?.runtimeKind ?? "pi");
 
   useEffect(() => {
     setActiveMember(member);
+    setDraftKind(member.runtimePin?.runtimeKind ?? "pi");
   }, [member]);
 
   const choices = useMemo<Choice[]>(() => {
     const currentPin = activeMember.runtimePin;
     const result: Choice[] = [];
     for (const credential of credentials) {
+      if (draftKind === "hermes" && !["openai-compatible", "ollama"].includes(credential.provider))
+        continue;
       const hasSeveralConnections = credentials.some(
         (item) => item.id !== credential.id && item.provider === credential.provider,
       );
@@ -77,7 +83,7 @@ export function GroupMemberModelControl({
         result.push({
           label: `${hasSeveralConnections ? credential.label : (entry.providerName ?? entry.provider)} · ${entry.label}`,
           pin: {
-            runtimeKind: "pi",
+            runtimeKind: draftKind,
             provider: entry.provider,
             modelId: entry.id,
             credentialId: credential.id,
@@ -97,7 +103,7 @@ export function GroupMemberModelControl({
         result.push({
           label: `${credential.label} · ${credential.modelId}`,
           pin: {
-            runtimeKind: "pi",
+            runtimeKind: draftKind,
             provider: credential.provider,
             modelId: credential.modelId,
             credentialId: credential.id,
@@ -107,7 +113,7 @@ export function GroupMemberModelControl({
       }
     }
     return result;
-  }, [catalog, credentials, activeMember.runtimePin]);
+  }, [catalog, credentials, activeMember.runtimePin, draftKind]);
 
   async function choose(pin: Choice["pin"] | null, preserveCurrentEffort = true) {
     if (!activeMember.memberId || activeMember.modelPinRevision == null || pending) return;
@@ -139,6 +145,7 @@ export function GroupMemberModelControl({
           (item) => item.memberId === activeMember.memberId || item.botId === activeMember.botId,
         ) ?? activeMember,
       );
+      if (resolvedPin) setDraftKind(resolvedPin.runtimeKind);
       onSaved(group);
     } catch (error: unknown) {
       const isConflict =
@@ -231,8 +238,39 @@ export function GroupMemberModelControl({
           choice.pin.credentialId === activePin.credentialId,
       )?.label ?? activePin.modelId)
     : t("Same as bot");
+  const incompatibleHermes =
+    draftKind === "hermes" &&
+    activePin != null &&
+    Boolean(activePin.provider && !["openai-compatible", "ollama"].includes(activePin.provider));
   return (
     <>
+      {experimental || draftKind === "hermes" ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${t("Runtime")} · ${activeMember.name}`}
+          disabled={!activeMember.memberId || pending}
+          onPress={() =>
+            presentMessageActionSheet({
+              title: t("Runtime"),
+              cancel: t("Cancel"),
+              more: t("More"),
+              colorScheme,
+              actions: [
+                { text: t("Ardur (built-in)"), onPress: () => setDraftKind("pi") },
+                ...(experimental
+                  ? [{ text: t("Hermes"), onPress: () => setDraftKind("hermes") }]
+                  : []),
+              ],
+            })
+          }
+          style={{ paddingVertical: 12 }}
+        >
+          <Text style={{ color: tokens.mutedForeground }}>{t("Runtime")}</Text>
+          <Text style={{ color: tokens.foreground }}>
+            {draftKind === "hermes" ? t("Hermes") : t("Ardur (built-in)")}
+          </Text>
+        </Pressable>
+      ) : null}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`${t("Model in this group")} · ${activeMember.name}`}
@@ -262,7 +300,14 @@ export function GroupMemberModelControl({
           {selectedEffortLabel ? ` · ${selectedEffortLabel}` : ""}
         </Text>
       </Pressable>
-      {pinnedChoice && activePin?.runtimeKind === "pi" && effortChoices.length ? (
+      {incompatibleHermes ? (
+        <Text style={{ color: tokens.mutedForeground }}>
+          {activePin?.provider === "anthropic"
+            ? t("Hermes does not yet support Anthropic connections.")
+            : t("Hermes does not yet support this connection.")}
+        </Text>
+      ) : null}
+      {pinnedChoice && effortChoices.length ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`${t("Thinking")} · ${activeMember.name}`}
@@ -275,7 +320,11 @@ export function GroupMemberModelControl({
               colorScheme,
               actions: effortChoices.map((choice) => ({
                 text: choice.label,
-                onPress: () => void choose({ ...pinnedChoice, effort: choice.effort }, false),
+                onPress: () =>
+                  void choose(
+                    { ...pinnedChoice, runtimeKind: draftKind, effort: choice.effort },
+                    false,
+                  ),
               })),
             })
           }
