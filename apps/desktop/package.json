@@ -58,7 +58,7 @@
         "to": "stack/.env.images.example"
       },
       {
-        "from": "assets/icon.png",
+        "from": "assets/tray.png",
         "to": "tray.png"
       },
       {

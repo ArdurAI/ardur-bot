@@ -12,6 +12,7 @@ files=(
   "apps/www/public/icon-192.png"
   "apps/www/public/icon-512.png"
   "apps/desktop/assets/icon.png"
+  "apps/desktop/assets/tray.png"
   "apps/desktop/assets/icon-macos.png"
   "apps/desktop/assets/icon.ico"
   "apps/mobile/assets/icon.png"
