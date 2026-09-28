@@ -45,6 +45,7 @@ import { ClaudeCodeRuntime, probeClaude } from "./runtimes/claude-code-runtime.j
 import { CodexAppServerRuntime, probeCodex } from "./runtimes/codex-app-server-runtime.js";
 import {
   HERMES_SOURCE_PIN,
+  hermesInstallCandidate,
   pinnedHermesLaunch,
   probeHermesInstall,
   resolveHermesLauncherAsset,
@@ -128,14 +129,17 @@ export class HostAgent {
           : "Hermes is not installed on this computer.",
       reasonId: process.platform === "win32" ? "platform-unsupported" : "install-missing",
     };
-    if (process.platform !== "win32" && process.env.ARDUR_HERMES_INSTALL) {
+    const hermesInstall = hermesInstallCandidate(
+      this.config.root,
+      process.env.ARDUR_HERMES_INSTALL,
+    );
+    if (process.platform !== "win32" && hermesInstall) {
       try {
-        probeHermesInstall(process.env.ARDUR_HERMES_INSTALL);
+        probeHermesInstall(hermesInstall);
         hermes = { runtimeKind: "hermes", available: true, version: HERMES_SOURCE_PIN, models: [] };
       } catch {
         hermes = {
           ...hermes,
-          reason: "Hermes install did not pass its pinned check.",
           reasonId: "install-invalid",
         };
       }
@@ -581,7 +585,7 @@ export class HostAgent {
     try {
       let runtime = this.runtimes[kind];
       if (kind === "hermes") {
-        const install = process.env.ARDUR_HERMES_INSTALL;
+        const install = hermesInstallCandidate(this.config.root, process.env.ARDUR_HERMES_INSTALL);
         if (!install || !relay) throw new Error("Pinned Hermes install is unavailable.");
         const qualified = probeHermesInstall(install);
         const staging = await realpath(this.config.root);

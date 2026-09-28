@@ -12,6 +12,11 @@ the first import requires a click. The local-first user can reuse existing work
 without uploading files. The operator can inspect provenance, rescan and undo.
 The builder gets the same contracts on web, Electron and mobile.
 
+Choosing Hermes as a bot runtime does not trigger this import. Existing assigned
+Ardur connections, skills, plugins and MCP tools remain behind the same Ardur tool
+bridge and permissions. Imported MCP definitions are not assigned to a bot by the
+import itself, and Hermes does not install native skills or plugins from this page.
+
 ## Flow and ownership
 
 ```mermaid

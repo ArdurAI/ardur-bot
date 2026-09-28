@@ -258,8 +258,8 @@ import { sanitizeConnectorError } from "./connector-safety.js";
 import { assembleTurnContext } from "./context/assemble.js";
 import { claimBotRun } from "./context/concurrency.js";
 import {
-  recordAndForwardBrokerUsage,
   persistBrokerContextUsage,
+  recordAndForwardBrokerUsage,
   recordContextUsage,
   resumeContextSnapshot,
 } from "./context/metrics.js";

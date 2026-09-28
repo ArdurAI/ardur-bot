@@ -1,4 +1,10 @@
-# Hermes runtime (Experimental)
+---
+title: "Hermes runtime (Experimental)"
+description: "Hermes is a selectable bot runtime for an owner with a pinned, qualified Hermes"
+source_path: "docs/runtimes/hermes.md"
+---
+
+> [Source: docs/runtimes/hermes.md](https://github.com/ArdurAI/ardur-bot/blob/__ARDUR_BOT_SOURCE_REF__/docs/runtimes/hermes.md). Edit the source file, then run `python3 site/scripts/sync_docs.py` to refresh this page.
 
 Hermes is a selectable bot runtime for an owner with a pinned, qualified Hermes
 installation on a paired macOS or Linux host. Windows is unavailable until its

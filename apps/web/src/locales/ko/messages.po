@@ -1586,6 +1586,7 @@ msgstr "Bot 선택…"
 msgid "Choose a folder inside your home folder."
 msgstr ""
 
+#: src/pages/group-model-control.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Choose a model"
@@ -4080,10 +4081,12 @@ msgstr "샘플 듣기"
 msgid "Hermes"
 msgstr "Hermes"
 
+#: src/pages/group-model-control.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Hermes does not yet support Anthropic connections."
 msgstr "Hermes는 아직 Anthropic 연결을 지원하지 않습니다."
 
+#: src/pages/group-model-control.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Hermes does not yet support this connection."
 msgstr "Hermes는 아직 이 연결을 지원하지 않습니다."

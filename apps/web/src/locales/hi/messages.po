@@ -1586,6 +1586,7 @@ msgstr ""
 msgid "Choose a folder inside your home folder."
 msgstr ""
 
+#: src/pages/group-model-control.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Choose a model"
@@ -4080,10 +4081,12 @@ msgstr "एक नमूना सुनें"
 msgid "Hermes"
 msgstr "Hermes"
 
+#: src/pages/group-model-control.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Hermes does not yet support Anthropic connections."
 msgstr "Hermes अभी Anthropic कनेक्शन का समर्थन नहीं करता।"
 
+#: src/pages/group-model-control.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "Hermes does not yet support this connection."
 msgstr "Hermes अभी इस कनेक्शन का समर्थन नहीं करता।"

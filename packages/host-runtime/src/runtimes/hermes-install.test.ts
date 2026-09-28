@@ -2,7 +2,31 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, it } from "vitest";
-import { probeHermesInstall, resolveHermesLauncherAsset } from "./hermes-install.js";
+import {
+  hermesInstallCandidate,
+  probeHermesInstall,
+  resolveHermesLauncherAsset,
+} from "./hermes-install.js";
+
+it.skipIf(process.platform === "win32")(
+  "prefers the explicit install over the one managed host location",
+  async () => {
+    const hostData = await mkdtemp(path.join(tmpdir(), "hermes-host-data-"));
+    try {
+      const root = path.join(hostData, "workspaces");
+      const managed = path.join(hostData, "runtimes", "hermes-agent");
+      await mkdir(managed, { recursive: true });
+      expect(hermesInstallCandidate(root, path.join(hostData, "explicit"))).toBe(
+        path.join(hostData, "explicit"),
+      );
+      expect(hermesInstallCandidate(root, undefined)).toBe(managed);
+      await rm(managed, { recursive: true });
+      expect(hermesInstallCandidate(root, undefined)).toBeNull();
+    } finally {
+      await rm(hostData, { recursive: true, force: true });
+    }
+  },
+);
 
 it("resolves a source launcher from its module, independent of the host cwd", () => {
   const bundle = path.join(tmpdir(), "unrelated-host", "host-service.cjs");

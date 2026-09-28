@@ -7,6 +7,8 @@ export const RU_MESSAGES: Record<string, string> = {
     "{botName} не смог использовать модель, выбранную для этой группы. Измените модель группы или проверьте настройки бота.",
   Antigravity: "Antigravity",
   Hermes: "Hermes",
+  "Ardur (built-in)": "Ardur (встроенная)",
+  Runtime: "Среда выполнения",
   "Model calls per turn": "Вызовы модели за ход",
   "Time limit": "Ограничение времени",
   "Hermes is not installed on this computer.": "Hermes не установлен на этом компьютере.",

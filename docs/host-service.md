@@ -114,6 +114,10 @@ Injection variables such as `NODE_OPTIONS`, `BASH_ENV`, `ENV`, `ZDOTDIR`,
 `LD_PRELOAD` and `DYLD_INSERT_LIBRARIES` are also excluded. Bot-managed environment
 secrets are not injected into host commands. Electron adds its own fixed Node-mode
 flags only for the host-service launch; native CLIs do not inherit those flags.
+`ARDUR_HERMES_INSTALL` is an optional host-service install selector, not a bot
+command variable. When unset, Hermes qualification checks only
+`<desktop application data>/host-service/runtimes/hermes-agent`; see the
+[Hermes runtime guide](runtimes/hermes.md) for the pinned source layout.
 
 `getHostEnvironment` in `packages/host-runtime/src/host-environment.ts` captures one
 login PATH per process and shares concurrent initialization. On macOS/Linux it

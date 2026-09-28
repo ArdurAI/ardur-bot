@@ -7,6 +7,8 @@ export const ZH_MESSAGES: Record<string, string> = {
     "{botName} 无法使用为此群组设置的模型。请更改群组模型，或检查 Bot 设置。",
   Antigravity: "Antigravity",
   Hermes: "Hermes",
+  "Ardur (built-in)": "Ardur（内置）",
+  Runtime: "运行环境",
   "Model calls per turn": "每轮模型调用次数",
   "Time limit": "时间限制",
   "Hermes is not installed on this computer.": "此计算机上未安装 Hermes。",
