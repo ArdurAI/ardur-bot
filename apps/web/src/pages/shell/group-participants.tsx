@@ -2,12 +2,15 @@ import type { Bot, Group, Run } from "@ardurbot/contracts";
 import { useLingui } from "@lingui/react/macro";
 import { activeMemberRun } from "../../lib/thread-events";
 import type { ModelSettings } from "../../lib/use-model-settings";
-import { resolveBotModelChip } from "./bot-model-chip";
+import { resolveBotModelChip, resolveNextRunDisclosure } from "./bot-model-chip";
 
 /**
  * The group header's member/model line: one line, " · " separators like the bot
  * model chip, truncated with an ellipsis when it does not fit. The full text
- * stays in the DOM for screen readers and is repeated in the hover title.
+ * stays in the DOM for screen readers and is repeated in the hover title. A
+ * member whose admitted run still uses an older choice keeps the chip's
+ * "Next run" disclosure as inline text: the active model plus what the next
+ * run will use, from the same comparison the chip uses.
  */
 export function GroupParticipantModels({
   activeGroup,
@@ -24,19 +27,25 @@ export function GroupParticipantModels({
   const members = activeGroup.members.flatMap((member) => {
     const participant = bots.find((bot) => bot.id === member.botId);
     if (!participant) return [];
+    const run = activeMemberRun(currentRuns, member.botId);
     const chip = resolveBotModelChip(participant, modelSettings, {
       pin: member.effectiveRuntimePin,
-      run: activeMemberRun(currentRuns, member.botId),
+      run,
       display: "using",
       requested: t`requested`,
       notAvailable: t` · not available`,
     });
-    return [{ member, chip }];
+    const next = resolveNextRunDisclosure(participant, modelSettings, {
+      display: "using",
+      run,
+      nextPin: member.effectiveRuntimePin,
+    });
+    return [{ member, chip, next }];
   });
   const fullText = members
-    .map(({ member, chip }) =>
+    .map(({ member, chip, next }) =>
       chip
-        ? `${member.name} · ${chip.pinUnknown ? `${t`Next run`} · ` : ""}${chip.label}`
+        ? `${member.name} · ${chip.pinUnknown ? `${t`Next run`} · ` : ""}${chip.label}${next.differs ? ` · ${t`Next run`} · ${next.label}` : ""}`
         : member.name,
     )
     .join(" · ");
@@ -46,7 +55,7 @@ export function GroupParticipantModels({
       className="app-no-drag min-w-0 truncate text-xs text-muted-foreground"
       title={fullText}
     >
-      {members.map(({ member, chip }, index) => {
+      {members.map(({ member, chip, next }, index) => {
         const currentId = chip?.currentId;
         return (
           <span key={member.botId} data-testid={`group-participant-${member.botId}`}>
@@ -62,6 +71,12 @@ export function GroupParticipantModels({
                   {chip.pinUnknown ? <>{t`Next run`} · </> : null}
                   {chip.label}
                 </span>
+                {next.differs ? (
+                  <>
+                    {" "}
+                    · {t`Next run`} · {next.label}
+                  </>
+                ) : null}
               </>
             ) : null}
           </span>

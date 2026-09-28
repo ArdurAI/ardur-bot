@@ -169,6 +169,39 @@ function sameSelection(a: Omit<RuntimePin, "revision">, b: Omit<RuntimePin, "rev
   );
 }
 
+/** The saved choice that the next run will use, and whether the admitted run still differs from it. */
+export function resolveNextRunDisclosure(
+  bot: Bot,
+  settings: ModelSettings | null,
+  options: {
+    display?: "change" | "using";
+    run?: { runtimePin?: RuntimePin | null; runtimeInfo?: RuntimeInfo | null } | null;
+    nextPin?: RuntimePin | null;
+  },
+): { label: string; differs: boolean } {
+  const display = options.display ?? "change";
+  const next = options.nextPin
+    ? normalizeSuppliedNextPin(options.nextPin, settings)
+    : nextBotPin(bot, settings);
+  const connection = settings?.credentials.find((item) => item.id === next.credentialId);
+  const label = [
+    runtimeNames[next.runtimeKind],
+    next.provider,
+    next.modelId,
+    next.effort,
+    connection?.label ?? next.credentialId,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+  // An admitted explicit group pin can still carry the stored "off"; compare both sides in
+  // the same representation so an unchanged local selection never reads as a change.
+  const admitted = options.run?.runtimePin;
+  const differs =
+    display === "using" &&
+    (admitted ? !sameSelection(normalizeSuppliedNextPin(admitted, settings), next) : false);
+  return { label, differs };
+}
+
 export function BotModelChip({
   bot,
   settings,
@@ -196,23 +229,11 @@ export function BotModelChip({
   });
   if (!chip) return null;
   const { label, currentId, pinUnknown, model } = chip;
-  const next = nextPin ? normalizeSuppliedNextPin(nextPin, settings) : nextBotPin(bot, settings);
-  const connection = settings?.credentials.find((item) => item.id === next.credentialId);
-  const nextLabel = [
-    runtimeNames[next.runtimeKind],
-    next.provider,
-    next.modelId,
-    next.effort,
-    connection?.label ?? next.credentialId,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-  // An admitted explicit group pin can still carry the stored "off"; compare both sides in
-  // the same representation so an unchanged local selection never reads as a change.
-  const nextDiffers =
-    display === "using" &&
-    run?.runtimePin &&
-    !sameSelection(normalizeSuppliedNextPin(run.runtimePin, settings), next);
+  const { label: nextLabel, differs: nextDiffers } = resolveNextRunDisclosure(bot, settings, {
+    display,
+    run,
+    nextPin,
+  });
   return (
     <span className="inline-flex min-w-0 items-center gap-1">
       {onClick ? (
