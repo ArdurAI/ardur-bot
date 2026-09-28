@@ -30,6 +30,7 @@ export function useModelOAuthSignIn(options: {
   const oauthLoginIdRef = useRef<string | null>(null);
   const oauthCodeSubmittingRef = useRef(false);
   const oauthCaptureRef = useRef<(() => void) | null>(null);
+  const persistenceCountRef = useRef(0);
   const onFinishedRef = useRef(onFinished);
   const onErrorRef = useRef(onError);
   const onClearErrorRef = useRef(onClearError);
@@ -62,6 +63,7 @@ export function useModelOAuthSignIn(options: {
   async function finishSubscriptionSignIn(loginId: string, controller: AbortController) {
     await waitForModelOAuth(loginId, controller.signal);
     if (controller.signal.aborted) return;
+    persistenceCountRef.current += 1;
     onPersistenceChangeRef.current?.(true);
     try {
       await rpc.models.finishOAuth({ loginId }, { signal: controller.signal });
@@ -76,7 +78,8 @@ export function useModelOAuthSignIn(options: {
         onErrorRef.current(err instanceof Error ? err.message : "Connected, but could not refresh");
       }
     } finally {
-      onPersistenceChangeRef.current?.(false);
+      persistenceCountRef.current -= 1;
+      if (persistenceCountRef.current === 0) onPersistenceChangeRef.current?.(false);
     }
   }
 

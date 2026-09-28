@@ -9,6 +9,7 @@ const api = vi.hoisted(() => ({
   finishOAuth: vi.fn(),
   open: vi.fn(),
   waitForModelOAuth: vi.fn(),
+  refresh: vi.fn(),
 }));
 vi.mock("./rpc", () => ({ rpc: { models: api } }));
 vi.mock("./desktop", () => ({
@@ -25,18 +26,23 @@ let root: ReturnType<typeof createRoot>;
 
 const persistenceChange = vi.fn();
 function Pairing() {
-  const { startSubscriptionSignIn } = useModelOAuthSignIn({
-    onFinished: () => undefined,
+  const { cancelOAuthAttempt, startSubscriptionSignIn } = useModelOAuthSignIn({
+    onFinished: api.refresh,
     onError: () => undefined,
     onPersistenceChange: persistenceChange,
   });
   return (
-    <button
-      type="button"
-      onClick={() => void startSubscriptionSignIn({ provider: "fixture", modelId: "model" })}
-    >
-      Pair
-    </button>
+    <>
+      <button
+        type="button"
+        onClick={() => void startSubscriptionSignIn({ provider: "fixture", modelId: "model" })}
+      >
+        Pair
+      </button>
+      <button type="button" onClick={() => cancelOAuthAttempt()}>
+        Cancel
+      </button>
+    </>
   );
 }
 
@@ -51,6 +57,7 @@ beforeEach(() => {
   });
   api.open.mockResolvedValue(undefined);
   api.cancelOAuth.mockResolvedValue(undefined);
+  api.refresh.mockResolvedValue(undefined);
   api.waitForModelOAuth.mockImplementation(() => new Promise<void>(() => undefined));
   node = document.createElement("div");
   root = createRoot(node);
@@ -85,5 +92,50 @@ it("reports OAuth persistence until finish completes", async () => {
   expect(persistenceChange).toHaveBeenCalledWith(true);
   expect(persistenceChange).not.toHaveBeenCalledWith(false);
   await act(async () => finish());
+  expect(persistenceChange).toHaveBeenLastCalledWith(false);
+});
+
+it("keeps persistence pending when an older refresh settles during a retry", async () => {
+  let finishOlderRefresh!: () => void;
+  let finishNewerSave!: () => void;
+  api.beginOAuth
+    .mockResolvedValueOnce({
+      mode: "device-code",
+      loginId: "login-a",
+      verificationUri: "https://example.com/verify",
+      userCode: "ABCD",
+    })
+    .mockResolvedValueOnce({
+      mode: "device-code",
+      loginId: "login-b",
+      verificationUri: "https://example.com/verify",
+      userCode: "EFGH",
+    });
+  api.waitForModelOAuth.mockResolvedValue(undefined);
+  api.finishOAuth.mockResolvedValueOnce(undefined).mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        finishNewerSave = resolve;
+      }),
+  );
+  api.refresh.mockImplementationOnce(
+    () =>
+      new Promise<void>((resolve) => {
+        finishOlderRefresh = resolve;
+      }),
+  );
+  await act(async () => root.render(<Pairing />));
+  const [pair, cancel] = node.querySelectorAll("button");
+  await act(async () => pair?.click());
+  expect(api.refresh).toHaveBeenCalledOnce();
+  await act(async () => cancel?.click());
+  await act(async () => pair?.click());
+  expect(api.finishOAuth).toHaveBeenCalledTimes(2);
+  expect(persistenceChange).toHaveBeenLastCalledWith(true);
+
+  await act(async () => finishOlderRefresh());
+  expect(persistenceChange).not.toHaveBeenCalledWith(false);
+
+  await act(async () => finishNewerSave());
   expect(persistenceChange).toHaveBeenLastCalledWith(false);
 });
