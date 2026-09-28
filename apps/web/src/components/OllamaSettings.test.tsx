@@ -72,10 +72,15 @@ it("tests the detected URL, reports empty tags and saves a keyless connection be
 it("reports an Ollama save until the connection and refresh finish", async () => {
   let finish!: (value: { id: string }) => void;
   const onSavePendingChange = vi.fn();
-  api.connect.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
-  await act(async () => root.render(
-    <OllamaSettings onChanged={changed} onSavePendingChange={onSavePendingChange} />,
-  ));
+  api.connect.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  await act(async () =>
+    root.render(<OllamaSettings onChanged={changed} onSavePendingChange={onSavePendingChange} />),
+  );
   await act(async () => button("Test").click());
   await act(async () => button("Save").click());
   expect(onSavePendingChange).toHaveBeenCalledWith(true);

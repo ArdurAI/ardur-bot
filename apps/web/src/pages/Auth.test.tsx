@@ -100,11 +100,14 @@ it("keeps the guided destination through sign-up and returns there after registr
       </MemoryRouter>,
     );
   });
-  expect(container.querySelector<HTMLAnchorElement>('a[href^="/sign-up"]')?.getAttribute("href"))
-    .toBe("/sign-up?next=%2Fguided-onboarding%3Fstep%3Dmodel");
+  expect(
+    container.querySelector<HTMLAnchorElement>('a[href^="/sign-up"]')?.getAttribute("href"),
+  ).toBe("/sign-up?next=%2Fguided-onboarding%3Fstep%3Dmodel");
   await act(async () => container.querySelector<HTMLAnchorElement>('a[href^="/sign-up"]')?.click());
   await act(async () => {
-    container.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    container
+      .querySelector("form")!
+      .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
   });
   expect(container.querySelector('[data-testid="guided"]')?.textContent).toBe("ready");
   expect(container.querySelector('[data-testid="legacy"]')).toBeNull();

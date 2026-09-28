@@ -73,7 +73,12 @@ it("cancels an owned pairing attempt when the Models view closes", async () => {
 it("reports OAuth persistence until finish completes", async () => {
   let finish!: () => void;
   api.waitForModelOAuth.mockResolvedValue(undefined);
-  api.finishOAuth.mockImplementation(() => new Promise<void>((resolve) => { finish = resolve; }));
+  api.finishOAuth.mockImplementation(
+    () =>
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+  );
   await act(async () => root.render(<Pairing />));
   await act(async () => node.querySelector("button")?.click());
   expect(api.finishOAuth).toHaveBeenCalledOnce();

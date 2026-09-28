@@ -110,7 +110,9 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
       }
       clearSpaceSelection();
       await refreshAuthSession();
-      navigate(mode === "up" ? (returnPath ?? "/onboarding") : authReturnPath(searchParams.get("next")));
+      navigate(
+        mode === "up" ? (returnPath ?? "/onboarding") : authReturnPath(searchParams.get("next")),
+      );
     } catch {
       setError(t`Could not reach the server`);
     } finally {

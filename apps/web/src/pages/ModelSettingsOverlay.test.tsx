@@ -21,13 +21,13 @@ vi.mock("../lib/use-model-oauth-signin", () => ({
   useModelOAuthSignIn: (options: { onPersistenceChange?: (pending: boolean) => void }) => {
     api.persistenceChange = options.onPersistenceChange ?? null;
     return {
-    oauth: null,
-    pasteCode: "",
-    setPasteCode: vi.fn(),
-    oauthPending: false,
-    cancelOAuthAttempt: vi.fn(),
-    startSubscriptionSignIn: api.signIn,
-    submitOAuthCode: vi.fn(),
+      oauth: null,
+      pasteCode: "",
+      setPasteCode: vi.fn(),
+      oauthPending: false,
+      cancelOAuthAttempt: vi.fn(),
+      startSubscriptionSignIn: api.signIn,
+      submitOAuthCode: vi.fn(),
     };
   },
 }));
@@ -128,9 +128,15 @@ const render = () =>
 
 it("reports subscription persistence through the overlay handoff", async () => {
   const onSavePendingChange = vi.fn();
-  await act(async () => root.render(
-    <ModelSettingsOverlay embedded onClose={() => undefined} onSavePendingChange={onSavePendingChange} />,
-  ));
+  await act(async () =>
+    root.render(
+      <ModelSettingsOverlay
+        embedded
+        onClose={() => undefined}
+        onSavePendingChange={onSavePendingChange}
+      />,
+    ),
+  );
   onSavePendingChange.mockClear();
   await act(async () => api.persistenceChange?.(true));
   expect(onSavePendingChange).toHaveBeenLastCalledWith(true);
@@ -142,15 +148,38 @@ it("reports an Ollama connection save through the overlay handoff", async () => 
   let finish!: (value: { id: string }) => void;
   api.list.mockResolvedValue([
     ...catalog,
-    { provider: "ollama", providerName: "Ollama", id: "local", label: "Local", billing: "", auth: "api-key" },
+    {
+      provider: "ollama",
+      providerName: "Ollama",
+      id: "local",
+      label: "Local",
+      billing: "",
+      auth: "api-key",
+    },
   ]);
   api.ollama.mockResolvedValue({ baseUrl: "http://127.0.0.1:11434", models: [], canPull: true });
-  api.testOllama.mockResolvedValue({ baseUrl: "http://127.0.0.1:11434", models: [], canPull: true, version: "test" });
-  api.connect.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+  api.testOllama.mockResolvedValue({
+    baseUrl: "http://127.0.0.1:11434",
+    models: [],
+    canPull: true,
+    version: "test",
+  });
+  api.connect.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
   const onSavePendingChange = vi.fn();
-  await act(async () => root.render(
-    <ModelSettingsOverlay embedded onClose={() => undefined} onSavePendingChange={onSavePendingChange} />,
-  ));
+  await act(async () =>
+    root.render(
+      <ModelSettingsOverlay
+        embedded
+        onClose={() => undefined}
+        onSavePendingChange={onSavePendingChange}
+      />,
+    ),
+  );
   await act(async () => button("Ollama").click());
   await act(async () => button("Test").click());
   onSavePendingChange.mockClear();

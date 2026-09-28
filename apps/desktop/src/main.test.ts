@@ -151,8 +151,13 @@ describe("guided setup service handoff", () => {
       waitForMountedAppDocument: vi.fn(async () => undefined),
       URL,
     };
-    vm.runInNewContext(`this.openAccount = async (step) => {${source.slice(start + "openAccount: async (step) => {".length, end)}\n}`, context);
-    await (context as typeof context & { openAccount: (step: string) => Promise<void> }).openAccount("finish");
+    vm.runInNewContext(
+      `this.openAccount = async (step) => {${source.slice(start + "openAccount: async (step) => {".length, end)}\n}`,
+      context,
+    );
+    await (
+      context as typeof context & { openAccount: (step: string) => Promise<void> }
+    ).openAccount("finish");
     expect(loadURL).toHaveBeenCalledWith("http://127.0.0.1:3333/app");
     expect(mainWindow.show).toHaveBeenCalledOnce();
     expect(context.openGuidedAccount).not.toHaveBeenCalled();
@@ -405,13 +410,17 @@ describe("local mode failures in the main process", () => {
 
   it("reactivates the app when the retained checklist is hidden", () => {
     const start = source.indexOf('  app.on("activate", () => {');
-    const end = source.indexOf('\n  });', start) + '\n  });'.length;
+    const end = source.indexOf("\n  });", start) + "\n  });".length;
     const setupWindow = new WindowFake();
     setupWindow.isVisible = () => false;
     const mainWindow = new WindowFake();
     let activate: (() => void) | undefined;
     const context = {
-      app: { on: (_event: string, handler: () => void) => { activate = handler; } },
+      app: {
+        on: (_event: string, handler: () => void) => {
+          activate = handler;
+        },
+      },
       setupWindow,
       mainWindow,
       clearTimeout: vi.fn(),

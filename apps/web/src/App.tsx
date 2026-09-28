@@ -106,7 +106,10 @@ function SessionApp() {
             path="/sign-up"
             element={
               user ? (
-                <Navigate to={searchParams.has("next") ? signInDestination : "/onboarding"} replace />
+                <Navigate
+                  to={searchParams.has("next") ? signInDestination : "/onboarding"}
+                  replace
+                />
               ) : (
                 <AuthPage key="up" mode="up" />
               )
