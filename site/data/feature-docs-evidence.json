@@ -1,4 +1,62 @@
 {
+  "screenshots": [
+    {
+      "id": "docs-sign-in-open",
+      "sha256": "35c8d4dd1cb24c4d641606da72b90e854ee6fc4dff5aee1e3ab5fde2225c3c13"
+    },
+    {
+      "id": "docs-sign-in-error",
+      "sha256": "b2784707df94cb770959ff74f2e884341ebd792f56440e51906de06c48a762cc"
+    },
+    {
+      "id": "docs-sign-in-recovery",
+      "sha256": "e1f71afe6d165c2d0625aad4db1866c483b5b614213396140494fb468ea3678c"
+    },
+    {
+      "id": "docs-onboarding-open",
+      "sha256": "c47b58f885c2f84613a8aacddf1be1cd54a187b3a802ecd09fb99a0a866ef779"
+    },
+    {
+      "id": "docs-onboarding-connect",
+      "sha256": "d9b4c053d8e09618165153db508b1ab9a2a2430a3ab4e7a4b92b1348cf129b69"
+    },
+    {
+      "id": "docs-bots-create-open",
+      "sha256": "d316f6628d8080efde164c6fd79d30810ae539b893463e9bba921dfc0f62973c"
+    },
+    {
+      "id": "docs-bots-create-form",
+      "sha256": "e9d533ff7cf0d2cb659691b5b8b7854c8646994942743a2a8ec3fdddf9ae9f65"
+    },
+    {
+      "id": "docs-bots-create-private",
+      "sha256": "d527cc518160a925dc133495b987213f91b0e242df4286190f8e4c5ed015bd41"
+    },
+    {
+      "id": "docs-bots-create-ready",
+      "sha256": "9cfa686d4e62124cb6bb7ce0c8eed6fabd54b13ae76e9c63325f40a037a27993"
+    },
+    {
+      "id": "docs-chat-approvals-pending",
+      "sha256": "3b868ce3223ea29fcad1cdb6cf1b460d76e009a998d69efaed167f0382cb12ac"
+    },
+    {
+      "id": "docs-chat-approvals-denied",
+      "sha256": "9dabf1c072f4cbf7496104c8054cdcfe3fca473c43e762d5bcd89bda281da7e9"
+    },
+    {
+      "id": "docs-models-open",
+      "sha256": "1dfcc3f6c2e0ecc4482d61404c0b4e383e3d794179d07a0e60e7ecc4a0f341cf"
+    },
+    {
+      "id": "docs-models-default",
+      "sha256": "8495639cf1b228e69013c16e5507cea6508f8e13734cde72e3063857c5d81430"
+    },
+    {
+      "id": "docs-models-add",
+      "sha256": "5db77d13821518153bd2a235ae27baeff636b523960f95752c5c82873c7903a1"
+    }
+  ],
   "features": [
     {
       "id": "sign-in",
@@ -1127,7 +1185,6 @@
     },
     {
       "id": "self-host",
-      "titleSource": "docs/self-host.md",
       "sources": [
         "README.md",
         "docs/self-host.md",
@@ -1137,7 +1194,8 @@
         "docs/self-host-sandbox-providers.md",
         "docs/self-host-restricted-network.md"
       ],
-      "tests": []
+      "tests": [],
+      "titleSource": "docs/self-host.md"
     },
     {
       "id": "admin-recovery",
@@ -1159,7 +1217,6 @@
       "tests": []
     }
   ],
-  "screenshots": [],
   "coverage": {
     "settings": {
       "general": "general",
