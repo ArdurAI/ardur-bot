@@ -1,7 +1,7 @@
 import * as z from "zod";
 import type { ThinkingLevel } from "./domain.js";
 import { Id } from "./ids.js";
-import { HERMES_RUNTIME_V1_DEFAULTS, HermesRuntimeConfigV1Schema } from "./runtime-config.js";
+import { HERMES_RUNTIME_V1_DEFAULTS, HermesRuntimeConfigV1Schema } from "./runtime-config-v1.js";
 
 export const RuntimeKindSchema = z.enum([
   "pi",

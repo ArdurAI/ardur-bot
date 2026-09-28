@@ -17,6 +17,7 @@
     "./local-settings": "./src/local-settings.js",
     "./runtime-pins": "./src/runtime-pins.ts",
     "./runtime-config": "./src/runtime-config.ts",
+    "./runtime-config-v1": "./src/runtime-config-v1.ts",
     "./runtime-config-editor": "./src/runtime-config-editor.ts",
     "./host-bridge": "./src/host-bridge.ts",
     "./fleet": "./src/fleet.ts",
