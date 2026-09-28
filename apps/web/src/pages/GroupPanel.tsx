@@ -209,6 +209,7 @@ export function GroupSettings({
   onModelPin: (
     member: GroupMember,
     pin: SetGroupMemberModelPinInput["pin"] | null,
+    expectedBotModelPinRevision?: number,
   ) => Promise<void>;
   onReloadMember?: (member: GroupMember) => Promise<GroupMember | undefined>;
   modelSettings: ModelSettings | null;

@@ -3844,7 +3844,7 @@ export function ShellPage({
                 group={activeGroup}
                 bots={bots}
                 modelSettings={modelSettings}
-                onModelPin={async (member, pin) => {
+                onModelPin={async (member, pin, expectedBotModelPinRevision) => {
                   if (!member.memberId) return;
                   const target = {
                     groupId: activeGroup.id,
@@ -3856,7 +3856,8 @@ export function ShellPage({
                     ? await rpc.groups.setMemberModelPin({
                         ...target,
                         expectedBotModelPinRevision:
-                          bots.find((b) => b.id === member.botId)?.modelPinRevision ?? 0,
+                          expectedBotModelPinRevision ??
+                          (bots.find((b) => b.id === member.botId)?.modelPinRevision ?? 0),
                         pin,
                       })
                     : await rpc.groups.clearMemberModelPin(target);

@@ -848,4 +848,171 @@ describe("group model control", () => {
     expect(container.querySelector("button")?.getAttribute("aria-label")).toContain("model-b");
     expect(container.querySelector("button")?.getAttribute("aria-label")).not.toContain("model-a");
   });
+
+  it("displays captured Hermes runtime settings and allows refreshing to bot settings", async () => {
+    const groupMember = {
+      ...member,
+      modelPinRevision: 1,
+      runtimePin: {
+        runtimeKind: "hermes" as const,
+        provider: "openai-compatible",
+        modelId: "model-a",
+        credentialId: "credential",
+        effort: "high",
+        revision: 1,
+        runtimeConfig: {
+          version: 2 as const,
+          runtimeKind: "hermes" as const,
+          limits: {
+            maxProviderRequests: 5,
+            timeoutMs: 30_000,
+          },
+          context: {
+            maxInputBytes: 16_384,
+            overflow: "trim" as const,
+          },
+          harness: {
+            agent: {
+              api_max_retries: 1,
+            },
+          },
+        },
+      },
+    };
+    const hermesBot = {
+      ...bot,
+      runtimeKind: "hermes" as const,
+      modelPinRevision: 3,
+      runtimeExperimental: true,
+      runtimeConfig: {
+        version: 2 as const,
+        runtimeKind: "hermes" as const,
+        limits: {
+          maxProviderRequests: 10,
+          timeoutMs: 60_000,
+        },
+        context: {
+          maxInputBytes: 32_768,
+          overflow: "trim" as const,
+        },
+        harness: {
+          agent: {
+            api_max_retries: 1,
+          },
+        },
+      },
+    };
+    const save = vi.fn(async () => undefined);
+    await act(async () =>
+      root.render(
+        <GroupModelControl
+          member={groupMember}
+          bot={hermesBot}
+          settings={settings}
+          onSave={save}
+        />,
+      ),
+    );
+
+    const text = container.textContent ?? "";
+    expect(text).toContain("Runtime settings");
+    expect(text).toContain("Model calls per turn: 5");
+    expect(text).toContain("Time limit (seconds): 30");
+    expect(text).toContain("Context limit (KiB): 16");
+    expect(text).toContain("Captured for this group.");
+
+    const refreshButton = [...container.querySelectorAll("button")].find(
+      (b) => b.textContent === "Use bot runtime settings",
+    );
+    expect(refreshButton).toBeDefined();
+
+    await act(async () => refreshButton!.click());
+    expect(save).toHaveBeenCalledWith(
+      groupMember,
+      expect.objectContaining({
+        runtimeKind: "hermes",
+        provider: "openai-compatible",
+        modelId: "model-a",
+      }),
+      3,
+    );
+  });
+
+  it("handles conflict when refreshing group runtime settings", async () => {
+    const groupMember = {
+      ...member,
+      modelPinRevision: 1,
+      runtimePin: {
+        runtimeKind: "hermes" as const,
+        provider: "openai-compatible",
+        modelId: "model-a",
+        credentialId: "credential",
+        effort: "high",
+        revision: 1,
+        runtimeConfig: {
+          version: 2 as const,
+          runtimeKind: "hermes" as const,
+          limits: {
+            maxProviderRequests: 5,
+            timeoutMs: 30_000,
+          },
+          context: {
+            maxInputBytes: 16_384,
+            overflow: "trim" as const,
+          },
+          harness: {
+            agent: {
+              api_max_retries: 1,
+            },
+          },
+        },
+      },
+    };
+    const hermesBot = {
+      ...bot,
+      runtimeKind: "hermes" as const,
+      modelPinRevision: 3,
+      runtimeExperimental: true,
+      runtimeConfig: {
+        version: 2 as const,
+        runtimeKind: "hermes" as const,
+        limits: {
+          maxProviderRequests: 10,
+          timeoutMs: 60_000,
+        },
+        context: {
+          maxInputBytes: 32_768,
+          overflow: "trim" as const,
+        },
+        harness: {
+          agent: {
+            api_max_retries: 1,
+          },
+        },
+      },
+    };
+    const save = vi.fn(async () => {
+      throw new ORPCError("CONFLICT", {
+        message: "Bot settings changed. Reload before saving.",
+      });
+    });
+    await act(async () =>
+      root.render(
+        <GroupModelControl
+          member={groupMember}
+          bot={hermesBot}
+          settings={settings}
+          onSave={save}
+        />,
+      ),
+    );
+
+    const refreshButton = [...container.querySelectorAll("button")].find(
+      (b) => b.textContent === "Use bot runtime settings",
+    );
+    await act(async () => refreshButton!.click());
+    expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+      "Bot settings changed. Reload before saving.",
+    );
+  });
 });

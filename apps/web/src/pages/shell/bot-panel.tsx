@@ -55,8 +55,8 @@ const KnowledgeSection = lazy(() =>
   import("../KnowledgeSection").then((module) => ({ default: module.KnowledgeSection })),
 );
 
-const HermesLimits = lazy(() =>
-  import("./hermes-limits").then((module) => ({ default: module.HermesLimits })),
+const RuntimeConfigPanel = lazy(() =>
+  import("./runtime-config-panel").then((module) => ({ default: module.RuntimeConfigPanel })),
 );
 
 const fieldLabelClass = "mt-4 block text-[14px] text-muted-foreground";
@@ -255,6 +255,9 @@ export function BotSettings({
 }) {
   const { t } = useLingui();
   const [advancedOpened, setAdvancedOpened] = useState(false);
+  const [knowledgeTab, setKnowledgeTab] = useState<"memory" | "skills" | "learning">("memory");
+  const knowledgeRef = useRef<HTMLDivElement>(null);
+  const advancedDetailsRef = useRef<HTMLDetailsElement>(null);
   const modelRef = useRef<HTMLSelectElement>(null);
   const runtimeRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -668,10 +671,24 @@ export function BotSettings({
                 </p>
               ) : null}
               <Suspense fallback={null}>
-                <HermesLimits
+                <RuntimeConfigPanel
                   value={runtimeConfig}
+                  pin={{
+                    runtimeKind: "hermes",
+                    provider: selectedModel?.provider ?? null,
+                    modelId: selectedModel?.modelId ?? null,
+                    effort: thinkingLevel || null,
+                    credentialId: selectedModel?.credentialId ?? null,
+                  }}
+                  botId={bot.id}
                   onChange={setRuntimeConfig}
                   onError={setValidationError}
+                  onOpenLearning={() => {
+                    setAdvancedOpened(true);
+                    setKnowledgeTab("learning");
+                    if (advancedDetailsRef.current) advancedDetailsRef.current.open = true;
+                    knowledgeRef.current?.scrollIntoView({ block: "nearest" });
+                  }}
                 />
               </Suspense>
             </>
@@ -708,6 +725,7 @@ export function BotSettings({
         </details>
       ) : null}
       <details
+        ref={advancedDetailsRef}
         data-testid="bot-settings-advanced"
         className="group mt-5"
         onToggle={(event) => {
@@ -726,7 +744,13 @@ export function BotSettings({
         <Suspense fallback={null}>
           <ScratchpadSection botId={bot.id} />
           {advancedOpened ? (
-            <KnowledgeSection botId={bot.id} onSkillsChange={onSkillsChange} />
+            <div ref={knowledgeRef}>
+              <KnowledgeSection
+                botId={bot.id}
+                onSkillsChange={onSkillsChange}
+                defaultTab={knowledgeTab}
+              />
+            </div>
           ) : null}
         </Suspense>
         {memoryProviderConfigured ? (
