@@ -21,6 +21,7 @@ export function authReturnPath(next: string | null): string {
     return "/app";
   if (/^\/(?:integrations\/setup|mcp\/oauth\/callback|onboarding)(?:\?[^#]*)?$/.test(next))
     return next;
+  if (/^\/guided-onboarding\?step=(?:model|bot|finish)$/.test(next)) return next;
   if (/^\/commands\/[^/?#]+\/[^/?#]+(?:\?space=[^&#]+)?$/.test(next)) return next;
   if (/^\/app(?:\/[^/?#\\]+)*\/?(?:\?[^#\\]*)?$/.test(next)) return next;
   return "/app";

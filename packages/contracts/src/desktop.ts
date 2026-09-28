@@ -1,5 +1,5 @@
 import type { DesktopCustomization } from "./desktop-extensions.js";
-import type { GuidedSetupBridge } from "./desktop-setup.js";
+import type { GuidedSetupBridge, SetupSnapshot } from "./desktop-setup.js";
 
 /**
  * `unsupported` covers an unpackaged build and a repository with no published releases, which is
@@ -51,6 +51,11 @@ export interface DesktopDeviceListenerState {
 
 export interface ArdurBotDesktop {
   system?: { runSetupAgain?(): Promise<void> };
+  guidedSetup?: {
+    returnToSetup(): Promise<void>;
+    refreshAccount(): Promise<void>;
+    onChange(listener: (snapshot: SetupSnapshot) => void): () => void;
+  };
   customization?: DesktopCustomization;
   notifications?: {
     supported(): Promise<boolean>;

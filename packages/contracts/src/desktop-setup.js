@@ -88,4 +88,9 @@ export const GUIDED_SETUP_CHANNELS = {
   startup: "desktop.guidedSetup.startup",
   startupState: "desktop.guidedSetup.startupState",
   openAgain: "desktop.guidedSetup.openAgain",
+  openModels: "desktop.guidedSetup.openModels",
+  createBot: "desktop.guidedSetup.createBot",
+  openApp: "desktop.guidedSetup.openApp",
+  returnToSetup: "desktop.guidedSetup.returnToSetup",
+  refreshAccount: "desktop.guidedSetup.refreshAccount",
 };

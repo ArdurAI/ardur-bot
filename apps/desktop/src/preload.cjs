@@ -63,6 +63,19 @@ contextBridge.exposeInMainWorld("ardurbotDesktop", {
       };
     },
   },
+  ...(process.argv?.includes("--ardurbot-guided-setup")
+    ? {
+        guidedSetup: {
+          returnToSetup: () => ipcRenderer.invoke("desktop.guidedSetup.returnToSetup"),
+          refreshAccount: () => ipcRenderer.invoke("desktop.guidedSetup.refreshAccount"),
+          onChange: (listener) => {
+            const handler = (_event, snapshot) => listener(snapshot);
+            ipcRenderer.on("desktop.guidedSetup.changed", handler);
+            return () => ipcRenderer.off("desktop.guidedSetup.changed", handler);
+          },
+        },
+      }
+    : {}),
   host: {
     state: () => ipcRenderer.invoke("desktop.host.state"),
     setKeepRunning: (enabled) => ipcRenderer.invoke("desktop.host.setKeepRunning", enabled),
