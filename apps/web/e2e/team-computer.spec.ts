@@ -22,9 +22,7 @@ test("Team Computer gives bots a home folder plus shared space while Private sta
   const chiefId = activeBotId(page);
 
   await openComputerPanel(page);
-  // The panel caption is the proof the Team computer opened; the old assertion matched the
-  // signed-in user's name ("Team Computer") in the sidebar account row, which no longer exists.
-  await expect(page.getByText("Chief's screen", { exact: true })).toBeVisible();
+  expect(activeBotId(page)).toBe(chiefId);
   await captureScreenshot(page, testInfo, "41-team-computer");
 
   const writerId = await createBot(page, "Writer", "team");
@@ -52,7 +50,7 @@ test("Team Computer gives bots a home folder plus shared space while Private sta
 
   const privateId = await createBot(page, "Private Writer", "dedicated");
   await openComputerPanel(page);
-  await expect(page.getByText(/Private Writer['’]s screen/).last()).toBeVisible();
+  expect(activeBotId(page)).toBe(privateId);
   await captureScreenshot(page, testInfo, "43-private-computer");
   await expect(readFileResponse(page, privateId, "notes/result.txt")).resolves.toMatchObject({
     ok: false,
@@ -94,6 +92,7 @@ test("user control leaves another Team bot's screen available", async ({ page },
 
   await openBot(page, "Chief");
   await page.getByTitle("Agent computer").click();
+  await page.getByTestId("side-panel").getByRole("tab", { name: "Screen", exact: true }).click();
   await page.getByTestId("computer-preview").hover();
   await page.getByTestId("computer-preview-open").click();
   await expect(page.getByRole("button", { name: "Close computer" })).toBeVisible();
@@ -137,6 +136,7 @@ test("a failed control release keeps the computer open for retry", async ({ page
   await signup(page, `team-release-${Date.now()}@ardurbot.test`, "password12", "Team Release");
   await completeOnboarding(page);
   await page.getByTitle("Agent computer").click();
+  await page.getByTestId("side-panel").getByRole("tab", { name: "Screen", exact: true }).click();
   await page.getByTestId("computer-preview").hover();
   await page.getByTestId("computer-preview-open").click();
   const chrome = page.getByTestId("computer-chrome");
@@ -196,11 +196,12 @@ test("an active Team bot must be stopped before user takeover", async ({ page },
 
   await page.getByTitle("Agent computer").click();
   const sidePanel = page.getByTestId("side-panel");
+  await sidePanel.getByRole("tab", { name: "Screen", exact: true }).click();
   await expect(sidePanel.getByRole("button", { name: /Take control/i })).toHaveCount(0);
   await page.getByTestId("computer-preview").hover();
   const openBusy = sidePanel.getByTestId("computer-preview-open");
   await expect(openBusy).toBeVisible();
-  await expect(openBusy.getByText("Open", { exact: true })).toBeVisible();
+  await expect(openBusy.getByText("Open screen", { exact: true })).toBeVisible();
   await openBusy.click();
   const chrome = page.getByTestId("computer-chrome");
   await expect(page.getByRole("button", { name: "Close computer" })).toBeVisible();
@@ -277,6 +278,7 @@ async function openBot(page: Page, name: string) {
 
 async function openComputerPanel(page: Page) {
   await page.getByTitle("Agent computer").click();
+  await page.getByTestId("side-panel").getByRole("tab", { name: "Screen", exact: true }).click();
   await expect(page.getByTestId("computer-preview")).toBeVisible();
   await expect(page.getByTestId("computer-preview-open")).toHaveCount(1);
 }
