@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { loadBotPresence } from "./bot-presence.js";
 import { createDb } from "./client.js";
+import { provisionMessagingIdentity } from "./messaging.js";
 
 const databaseUrl = process.env.DATABASE_URL;
 const describePostgres =
@@ -21,98 +22,59 @@ describePostgres("bot presence activity query (PostgreSQL)", () => {
   });
 
   it("selects the newest eligible message per bot and keeps bots without messages", async () => {
-    const spaceId = "space-presence-1";
-    const userId = "user-presence-1";
-    const scope = { spaceId, userId };
-    const color = "yellow";
-
-    // Create two bots
-    const bot1 = await db.prisma.bot.create({
-      data: { id: "bot-1", spaceId, userId, name: "Bot 1", color },
-    });
-    const bot2 = await db.prisma.bot.create({
-      data: { id: "bot-no-msgs", spaceId, userId, name: "Bot 2", color },
-    });
-    const bot3 = await db.prisma.bot.create({
-      data: { id: "bot-other-space", spaceId: "space-other", userId, name: "Bot 3", color },
-    });
-
-    // Create threads
-    const thread1 = await db.prisma.thread.create({
-      data: { id: "thread-1", spaceId, userId },
-    });
-    const threadOther = await db.prisma.thread.create({
-      data: { id: "thread-other", spaceId: "space-other", userId },
-    });
-
-    // Insert messages for Bot 1
-    // 1. Older bot message
-    await db.prisma.message.create({
+    // Two separate people, each with their own space, bot and thread, so the scope filter is real.
+    const signup = { signupsEnabled: undefined, signupAllowlist: undefined };
+    const mine = await provisionMessagingIdentity(
+      db.prisma,
+      { provider: "sendblue", address: "+15550002221" },
+      signup,
+    );
+    const other = await provisionMessagingIdentity(
+      db.prisma,
+      { provider: "sendblue", address: "+15550002222" },
+      signup,
+    );
+    const active = await db.prisma.bot.findUniqueOrThrow({ where: { id: mine.botId } });
+    const quiet = await db.prisma.bot.create({
       data: {
-        id: "msg-1",
-        threadId: thread1.id,
-        botId: bot1.id,
-        role: "bot",
-        seq: 1,
-        blocks: [],
-        createdAt: new Date("2026-09-01T10:00:00Z"),
-      },
-    });
-    // 2. Newer bot message (this should be selected)
-    const expectedTime = new Date("2026-09-02T10:00:00Z");
-    await db.prisma.message.create({
-      data: {
-        id: "msg-2",
-        threadId: thread1.id,
-        botId: bot1.id,
-        role: "bot",
-        seq: 2,
-        blocks: [],
-        createdAt: expectedTime,
-      },
-    });
-    // 3. Even newer but non-bot message (e.g. user message)
-    await db.prisma.message.create({
-      data: {
-        id: "msg-3",
-        threadId: thread1.id,
-        botId: bot1.id,
-        role: "user",
-        seq: 3,
-        blocks: [],
-        createdAt: new Date("2026-09-03T10:00:00Z"),
-      },
-    });
-    // 4. Even newer bot message but in an excluded thread scope
-    await db.prisma.message.create({
-      data: {
-        id: "msg-4",
-        threadId: threadOther.id,
-        botId: bot1.id,
-        role: "bot",
-        seq: 1,
-        blocks: [],
-        createdAt: new Date("2026-09-04T10:00:00Z"),
+        spaceId: mine.spaceId,
+        userId: mine.userId,
+        name: "Quiet bot",
+        color: active.color,
       },
     });
 
-    const result = await loadBotPresence(db.prisma, scope);
+    const message = (id: string, threadId: string, role: string, seq: number, at: string) =>
+      db.prisma.message.create({
+        data: {
+          id,
+          threadId,
+          botId: active.id,
+          role,
+          seq,
+          blocks: [],
+          createdAt: new Date(at),
+        },
+      });
+    await message("presence-older", mine.threadId, "bot", 101, "2026-09-01T10:00:00Z");
+    const expected = new Date("2026-09-02T10:00:00Z");
+    await message("presence-newest-bot", mine.threadId, "bot", 102, expected.toISOString());
+    // Newer, but not the bot speaking.
+    await message("presence-user", mine.threadId, "user", 103, "2026-09-03T10:00:00Z");
+    // Newer, but in a thread outside this person's scope.
+    await message("presence-other-thread", other.threadId, "bot", 101, "2026-09-04T10:00:00Z");
 
-    // Sort by id for deterministic assertion
-    const bots = result.bots.sort((a, b) => a.botId.localeCompare(b.botId));
+    const result = await loadBotPresence(db.prisma, {
+      spaceId: mine.spaceId,
+      userId: mine.userId,
+    });
 
-    // Bot 1 should have the timestamp of msg-2
-    const bot1Presence = bots.find((b) => b.botId === bot1.id);
-    expect(bot1Presence).toBeDefined();
-    expect(bot1Presence?.lastActiveAt).toBe(expectedTime.toISOString());
-
-    // Bot 2 has no messages, should still be in the directory
-    const bot2Presence = bots.find((b) => b.botId === bot2.id);
-    expect(bot2Presence).toBeDefined();
-    expect(bot2Presence?.lastActiveAt).toBeUndefined();
-
-    // Bot 3 should not be in the directory (different space)
-    const bot3Presence = bots.find((b) => b.botId === bot3.id);
-    expect(bot3Presence).toBeUndefined();
+    expect(result.bots.find((bot) => bot.botId === active.id)?.lastActiveAt).toBe(
+      expected.toISOString(),
+    );
+    const quietPresence = result.bots.find((bot) => bot.botId === quiet.id);
+    expect(quietPresence).toBeDefined();
+    expect(quietPresence?.lastActiveAt).toBeUndefined();
+    expect(result.bots.some((bot) => bot.botId === other.botId)).toBe(false);
   });
 });
