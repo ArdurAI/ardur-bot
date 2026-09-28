@@ -186,6 +186,7 @@ export function GroupMemberModelControl({
         (error instanceof Error &&
           error.message.includes("This member's model changed. Reload the group."));
       if (isConflict) {
+        let refreshedMember: GroupMember | undefined;
         try {
           const groups = await rpc<MobileGroup[]>("groups/list");
           const refreshed = Array.isArray(groups)
@@ -198,6 +199,7 @@ export function GroupMemberModelControl({
             );
             if (reloadedMember) {
               setActiveMember(reloadedMember);
+              refreshedMember = reloadedMember;
             }
             onSaved(refreshed);
           }
@@ -208,8 +210,23 @@ export function GroupMemberModelControl({
           error instanceof Error && error.message
             ? error.message
             : "This member's model changed. Reload the group.";
+        const confirmed = refreshedMember ?? activeMember;
+        setDraftKind(
+          confirmed.runtimePin?.runtimeKind ??
+            botRuntimeKind ??
+            bot?.runtimeKind ??
+            confirmed.effectiveRuntimePin?.runtimeKind ??
+            "pi",
+        );
         onError(t(message));
       } else {
+        setDraftKind(
+          activeMember.runtimePin?.runtimeKind ??
+            botRuntimeKind ??
+            bot?.runtimeKind ??
+            activeMember.effectiveRuntimePin?.runtimeKind ??
+            "pi",
+        );
         onError(t("Could not save group model."));
       }
     } finally {
@@ -311,7 +328,9 @@ export function GroupMemberModelControl({
     );
   return (
     <>
-      {experimental || draftKind !== "pi" ? (
+      {experimental ||
+      draftKind !== "pi" ||
+      (activeMember.runtimePin?.runtimeKind && activeMember.runtimePin.runtimeKind !== "pi") ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`${t("Runtime")} · ${activeMember.name}`}

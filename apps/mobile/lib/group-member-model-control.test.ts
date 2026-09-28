@@ -879,3 +879,69 @@ it("displays an inherited Hermes runtime initially and persists a runtime-only s
   });
   await act(async () => root.unmount());
 });
+
+it("restores confirmed runtime and keeps runtime recovery available when save fails with Experimental off", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const hermesMember: GroupMember = {
+    ...member,
+    modelPinRevision: 2,
+    runtimePin: {
+      runtimeKind: "hermes",
+      provider: "openai-compatible",
+      modelId: "valid",
+      credentialId: "connection",
+      effort: "high",
+      revision: 2,
+    },
+  };
+  vi.mocked(rpc).mockRejectedValueOnce(new Error("Save failed"));
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  const onError = vi.fn();
+  await act(async () =>
+    root.render(
+      createElement(GroupMemberModelControl, {
+        groupId: "room",
+        member: hermesMember,
+        experimental: false,
+        catalog: [
+          {
+            provider: "openai-compatible",
+            id: "valid",
+            label: "Valid",
+            reasoning: true,
+            thinkingLevels: ["high"],
+          },
+        ],
+        credentials: [
+          {
+            id: "connection",
+            provider: "openai-compatible",
+            label: "Connection",
+            thinkingLevel: "high",
+          },
+        ],
+        onSaved: vi.fn(),
+        onError,
+      } as never),
+    ),
+  );
+  const runtimeButton = node.querySelector(
+    'button[aria-label="Runtime · Worker"]',
+  ) as HTMLButtonElement;
+  expect(runtimeButton).not.toBeNull();
+  expect(runtimeButton.textContent).toContain("Hermes");
+  await act(async () => runtimeButton.click());
+  await act(async () =>
+    vi
+      .mocked(presentMessageActionSheet)
+      .mock.calls.at(-1)![0]
+      .actions.find((action) => action.text === "Ardur (built-in)")!
+      .onPress(),
+  );
+  expect(onError).toHaveBeenCalledWith("Could not save group model.");
+  const retryButton = node.querySelector('button[aria-label="Runtime · Worker"]');
+  expect(retryButton).not.toBeNull();
+  expect(retryButton?.textContent).toContain("Hermes");
+  await act(async () => root.unmount());
+});
