@@ -386,7 +386,6 @@ msgid "Accessibility"
 msgstr "Accessibility"
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
-#: src/pages/account/AccountSettings.tsx
 #: src/pages/settings-sections.ts
 msgid "Account"
 msgstr "Account"
@@ -3381,6 +3380,10 @@ msgstr "Device permissions"
 msgid "Devices"
 msgstr "Devices"
 
+#: src/pages/account/AccountSettings.tsx
+msgid "Devices and sessions"
+msgstr "Devices and sessions"
+
 #: src/pages/DevicesSettings.tsx
 msgid "Devices are unavailable; reconnect to your home."
 msgstr "Devices are unavailable; reconnect to your home."
@@ -3615,7 +3618,6 @@ msgid "Effort: not applicable"
 msgstr "Effort: not applicable"
 
 #: src/pages/Auth.tsx
-#: src/pages/settings-sections.ts
 msgid "Email"
 msgstr "Email"
 
@@ -7262,6 +7264,10 @@ msgstr "Save anyway"
 msgid "Save credentials"
 msgstr "Save credentials"
 
+#: src/pages/account/AccountProfile.tsx
+msgid "Save instructions"
+msgstr "Save instructions"
+
 #: src/pages/group-model-control.tsx
 msgid "Save model"
 msgstr "Save model"
@@ -7695,6 +7701,10 @@ msgstr "Sign out"
 #: src/pages/Welcome.tsx
 msgid "Sign up"
 msgstr "Sign up"
+
+#: src/pages/account/AccountSettings.tsx
+msgid "Sign-in and security"
+msgstr "Sign-in and security"
 
 #: src/lib/mcp-sign-in.ts
 msgid "Sign-in did not finish. Try again."
