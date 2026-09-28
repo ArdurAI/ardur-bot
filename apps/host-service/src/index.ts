@@ -118,7 +118,7 @@ async function connect() {
     };
     receiveFrames(
       current,
-      (frame) => host.receive(frame),
+      (frame) => host.receive(frame, acceptedHealth),
       () => {
         host.close();
         state(false);

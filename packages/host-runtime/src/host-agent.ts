@@ -22,6 +22,7 @@ import {
   HOST_WINDOW,
   HostRequestSchema,
   HostRuntimeEventSchema,
+  negotiateHostHealth,
 } from "@ardurbot/contracts/host-bridge";
 import type { RuntimeAvailability } from "@ardurbot/contracts/runtime-pins";
 import { normalizedThinkingLevel, RuntimePinError } from "@ardurbot/contracts/runtime-pins";
@@ -178,7 +179,7 @@ export class HostAgent {
       integrations,
     };
   }
-  async receive(frame: HostFrame) {
+  async receive(frame: HostFrame, acceptedHealth?: string) {
     if (frame.type === "request") {
       const request = HostRequestSchema.parse(frame);
       if (this.active.size >= HOST_IN_FLIGHT || this.seen.has(frame.id)) {
@@ -204,7 +205,7 @@ export class HostAgent {
         callbacks: new Map(),
       };
       this.active.set(frame.id, state);
-      void this.execute(request, state);
+      void this.execute(request, state, acceptedHealth);
       return;
     }
     if (!("id" in frame)) throw new Error("Unexpected host request.");
@@ -243,7 +244,7 @@ export class HostAgent {
       state.callbacks.clear();
     }
   }
-  private async execute(request: HostRequest, state: Active) {
+  private async execute(request: HostRequest, state: Active, acceptedHealth?: string) {
     const timeout = setTimeout(() => {
       state.abort.abort();
       state.wake?.();
@@ -306,7 +307,10 @@ export class HostAgent {
       } else if (op.op === "computer.remote.call") {
         await this.fleet.call(op, context, send);
       } else if (op.op === "host.health") {
-        await send("result", await this.health(op.refreshSignIn));
+        await send(
+          "result",
+          negotiateHostHealth(await this.health(op.refreshSignIn), acceptedHealth),
+        );
       } else if (op.op === "board.run") {
         const result = await new BoardRunner({ root: this.config.root, hostRoots: this.roots }).run(
           op.request,

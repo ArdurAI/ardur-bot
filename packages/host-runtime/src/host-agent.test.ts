@@ -149,6 +149,16 @@ it("keeps ordinary host operations available to a server with the pre-relay stri
   await completed("req");
   expect(runner).toHaveBeenCalledOnce();
   expect(frames).toContainEqual(expect.objectContaining({ channel: "result", data: { ok: true } }));
+  await agent.receive({ ...request({ op: "host.health" }), id: "refresh" }, "providerRelay,hermes");
+  await completed("refresh");
+  const refreshed = frames.findLast(
+    (frame) => frame.type === "stream" && frame.channel === "result",
+  );
+  expect(refreshed?.type === "stream" ? HostHealthSchema.parse(refreshed.data) : null).toBeTruthy();
+  const oldRelayHealth = HostHealthSchema.extend({
+    capabilities: HostHealthSchema.shape.capabilities.unwrap().pick({ providerRelay: true }),
+  });
+  expect(refreshed?.type === "stream" ? oldRelayHealth.parse(refreshed.data) : null).toBeTruthy();
 });
 const request = (operation: HostOperation): HostRequest => ({
   v: 1,
