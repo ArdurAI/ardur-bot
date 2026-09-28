@@ -405,6 +405,7 @@ export function TeamBoardRow({
 function TeamStatus({ row, now }: { row: TeamRow; now: number }) {
   if (
     row.availability === "unknown" ||
+    row.availability === "unavailable" ||
     (row.observedAt && presenceFreshness(row.observedAt, now) === "unavailable")
   )
     return <Trans>Status unavailable</Trans>;

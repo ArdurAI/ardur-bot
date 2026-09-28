@@ -58,3 +58,10 @@ it("translates a built-in computer name from its key and the deployment's host l
       .computerName,
   ).toBe("office");
 });
+it("does not present unavailable presence as idle", () => {
+  const text = mobileTeamRow(
+    { ...row, state: "idle", availability: "unavailable" },
+    (value) => value,
+  ).text;
+  expect(text).toBe("Status unavailable");
+});

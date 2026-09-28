@@ -201,5 +201,23 @@ it("shows unknown and stale presence honestly, and returns from a peer conversat
     ),
   );
   expect(node.textContent).toContain("Status unavailable");
+  await act(async () =>
+    root.render(
+      <MemoryRouter>
+        <TeamBoardRow
+          row={{
+            ...row,
+            state: "idle",
+            availability: "unavailable",
+            observedAt: new Date(current).toISOString(),
+          }}
+          now={current}
+          refresh={async () => {}}
+        />
+      </MemoryRouter>,
+    ),
+  );
+  expect(node.textContent).toContain("Status unavailable");
+  expect(node.textContent).not.toContain("Idle");
   await act(async () => root.unmount());
 });

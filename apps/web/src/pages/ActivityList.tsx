@@ -129,6 +129,7 @@ function ActivityRow({
   const title = run.groupName ? `${run.botName} · ${run.groupName}` : run.botName;
   const presenceUnknown =
     team?.availability === "unknown" ||
+    team?.availability === "unavailable" ||
     (team?.observedAt && presenceFreshness(team.observedAt, now) === "unavailable");
   const label = presenceUnknown ? t`Status unavailable` : statusLabel(run.status);
   const activityLabel = t`${title}, ${label}`;

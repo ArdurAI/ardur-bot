@@ -25,6 +25,7 @@ export function teamRowText(
 ): string {
   if (
     row.availability === "unknown" ||
+    row.availability === "unavailable" ||
     (row.observedAt && presenceFreshness(row.observedAt, now) === "unavailable")
   )
     return t("Status unavailable");
