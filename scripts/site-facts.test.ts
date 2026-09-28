@@ -121,7 +121,7 @@ describe("site facts", () => {
     );
     expect(product.schemaVersion).toBe(1);
     const generated = await generatedProduct(root);
-    expect(generated.documentation?.features).toHaveLength(5);
+    expect(generated.documentation?.features).toHaveLength(10);
     await expect(validateReferences(generated, root)).resolves.toBeUndefined();
     expect(SiteProductSchema.safeParse(product).success).toBe(true);
     const emptyBlock = { manifestVersion: 1, locale: "en", features: [], screenshots: [] };
@@ -137,6 +137,17 @@ describe("site facts", () => {
     const ninth = { ...product, screenshots: [...product.screenshots, product.screenshots[0]] };
     while (ninth.screenshots.length <= 8) ninth.screenshots.push(product.screenshots[0]!);
     expect(SiteProductSchema.safeParse(ninth).success).toBe(false);
+  });
+
+  it("rejects an accidental unpublish in check mode", async () => {
+    const root = await fixture();
+    const file = path.join(root, "site/data/feature-docs.json");
+    const manifest = JSON.parse(await readFile(file, "utf8"));
+    for (const feature of manifest.features) feature.status = "draft";
+    await writeFile(file, `${JSON.stringify(manifest, null, 2)}\n`);
+    await expect(runSiteFacts("check", root)).rejects.toThrow(
+      "Feature documentation needs at least one published page.",
+    );
   });
 
   it("derives memory storage and publication choices from shipped code", async () => {

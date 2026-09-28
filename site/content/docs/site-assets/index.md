@@ -51,4 +51,4 @@ deferred. Record each capture's SHA-256 in the evidence file. `pnpm site:facts:c
 verifies those bindings. CI stages only referenced docs PNGs
 with `product.json` in one orphan commit; a docs image change changes the content digest.
 `pnpm feature-docs:complete` remains red while any verified user-facing page is draft. Keep
-`product.docsUrl` at its existing destination until the website serves feature pages.
+`product.docsUrl` pointing at the website's feature pages, which serve the published records; in-app links use `<docsUrl><featureId>/#step-<stepId>` and `#error-<errorId>`.

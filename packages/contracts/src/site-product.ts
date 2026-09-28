@@ -145,6 +145,8 @@ export const SiteProductSchema = z
       license: z.literal("Apache-2.0"),
       repoUrl: httpsUrl,
       docsUrl: httpsUrl,
+      /** The self-hosting guide; the feature pages under docsUrl carry no server setup. */
+      selfHostDocsUrl: httpsUrl.optional(),
     }),
     features: z
       .array(

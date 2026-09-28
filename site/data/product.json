@@ -8,7 +8,8 @@
     "statusLine": "Pre-alpha. Unsigned desktop previews; build from source or self-host.",
     "license": "Apache-2.0",
     "repoUrl": "https://github.com/ArdurAI/ardur-bot",
-    "docsUrl": "https://github.com/ArdurAI/ardur-bot/tree/dev/docs"
+    "docsUrl": "https://ardur.ai/docs/features/",
+    "selfHostDocsUrl": "https://github.com/ArdurAI/ardur-bot/blob/dev/docs/self-host.md"
   },
   "features": [
     {
@@ -879,8 +880,10 @@
         },
         "steps": [
           {
-            "id": "open",
-            "aliases": [],
+            "id": "open-new-bot-menu",
+            "aliases": [
+              "open"
+            ],
             "text": "Open the bot creation picker.",
             "uiLabels": [
               "Create",
@@ -891,8 +894,10 @@
             "availableSince": "0.1.0-alpha.1"
           },
           {
-            "id": "form",
-            "aliases": [],
+            "id": "open-new-bot-form",
+            "aliases": [
+              "form"
+            ],
             "text": "Open the new bot form.",
             "uiLabels": [
               "New bot",
@@ -904,8 +909,10 @@
             "availableSince": "0.1.0-alpha.1"
           },
           {
-            "id": "private",
-            "aliases": [],
+            "id": "choose-private-computer",
+            "aliases": [
+              "private"
+            ],
             "text": "Name the bot and choose Private computer mode.",
             "uiLabels": [
               "Name",
@@ -916,8 +923,10 @@
             "availableSince": "0.1.0-alpha.1"
           },
           {
-            "id": "ready",
-            "aliases": [],
+            "id": "open-created-bot",
+            "aliases": [
+              "ready"
+            ],
             "text": "Choose Create to open the new bot conversation.",
             "uiLabels": [
               "Create"
@@ -958,8 +967,10 @@
         "settingsPath": {},
         "steps": [
           {
-            "id": "pending",
-            "aliases": [],
+            "id": "review-pending-action",
+            "aliases": [
+              "pending"
+            ],
             "text": "Inspect the pending approval card.",
             "uiLabels": [
               "Allow once",
@@ -970,8 +981,10 @@
             "availableSince": "0.1.0-alpha.1"
           },
           {
-            "id": "denied",
-            "aliases": [],
+            "id": "see-denied-action",
+            "aliases": [
+              "denied"
+            ],
             "text": "Choose Deny for the request.",
             "uiLabels": [
               "Deny"
@@ -1022,8 +1035,10 @@
         },
         "steps": [
           {
-            "id": "open",
-            "aliases": [],
+            "id": "open-model-settings",
+            "aliases": [
+              "open"
+            ],
             "text": "Open Settings and select Models.",
             "uiLabels": [
               "Settings",
@@ -1035,20 +1050,24 @@
             "availableSince": "0.1.0-alpha.1"
           },
           {
-            "id": "default",
-            "aliases": [],
+            "id": "choose-default-model",
+            "aliases": [
+              "default"
+            ],
             "text": "Choose another model on the connected provider to reveal the default control.",
             "uiLabels": [
               "Model",
               "Use this model"
             ],
             "screenshotId": "docs-models-default",
-            "expected": "Use this model is available for the selected model.",
+            "expected": "The Use this model button appears for the selected model.",
             "availableSince": "0.1.0-alpha.1"
           },
           {
-            "id": "add",
-            "aliases": [],
+            "id": "open-connection-form",
+            "aliases": [
+              "add"
+            ],
             "text": "Select an unconnected provider to open its key form.",
             "uiLabels": [
               "API key",
@@ -1077,6 +1096,204 @@
         "related": []
       },
       {
+        "id": "computers",
+        "aliases": [],
+        "title": "Computers",
+        "summary": "Inspect a computer, open its connection form, and test reachability.",
+        "area": "connections-and-computers",
+        "order": 40,
+        "status": "published",
+        "availableSince": "0.1.0-alpha.1",
+        "platforms": {
+          "web": "configure",
+          "desktop": "configure",
+          "mobile": "read-only"
+        },
+        "settingsPath": {
+          "web": [
+            "Settings",
+            "Computers"
+          ],
+          "desktop": [
+            "Settings",
+            "Computers"
+          ]
+        },
+        "steps": [
+          {
+            "id": "inspect-computer-capacity",
+            "aliases": [],
+            "text": "Open Settings, then Computers, and inspect the connected computer.",
+            "uiLabels": [
+              "Settings",
+              "Computers",
+              "Running"
+            ],
+            "screenshotId": "docs-computers-open",
+            "expected": "The computer state and free memory appear.",
+            "availableSince": "0.1.0-alpha.1"
+          },
+          {
+            "id": "open-add-computer",
+            "aliases": [],
+            "text": "Open Add computer to inspect the connection fields.",
+            "uiLabels": [
+              "Add computer",
+              "Connection type",
+              "Name"
+            ],
+            "screenshotId": "docs-computers-add",
+            "expected": "The connection form opens.",
+            "availableSince": "0.1.0-alpha.1"
+          },
+          {
+            "id": "inspect-refused-test",
+            "aliases": [],
+            "text": "Test a computer when its engine cannot be reached.",
+            "uiLabels": [
+              "Test",
+              "Engine not reachable"
+            ],
+            "screenshotId": "docs-computers-refused",
+            "expected": "The row shows the reachability refusal.",
+            "availableSince": "0.1.0-alpha.1"
+          },
+          {
+            "id": "retry-computer-test",
+            "aliases": [],
+            "text": "Test the computer again after the connection responds.",
+            "uiLabels": [
+              "Test",
+              "Running"
+            ],
+            "screenshotId": "docs-computers-tested",
+            "expected": "The row shows a running connection.",
+            "availableSince": "0.1.0-alpha.1"
+          }
+        ],
+        "boundaries": [
+          "A test checks reachability; opening the form does not save a connection.",
+          "Mobile can inspect computers but cannot configure connections in this flow."
+        ],
+        "troubleshooting": [
+          {
+            "errorId": "computer-unreachable",
+            "message": "Engine not reachable",
+            "action": "Check the computer connection and press Test again."
+          }
+        ],
+        "related": [
+          "bots-create"
+        ]
+      },
+      {
+        "id": "integrations",
+        "aliases": [],
+        "title": "Integrations",
+        "summary": "Find an integration, set and save tool permissions, and open a connection form.",
+        "area": "connections-and-computers",
+        "order": 110,
+        "status": "published",
+        "availableSince": "0.1.0-alpha.1",
+        "platforms": {
+          "web": "configure",
+          "desktop": "configure",
+          "mobile": "read-only"
+        },
+        "settingsPath": {
+          "web": [
+            "Settings",
+            "Customize",
+            "Integrations"
+          ],
+          "desktop": [
+            "Settings",
+            "Customize",
+            "Integrations"
+          ]
+        },
+        "steps": [
+          {
+            "id": "browse-integration-catalog",
+            "aliases": [],
+            "text": "Open Settings, then Integrations, and find a catalog entry.",
+            "uiLabels": [
+              "Settings",
+              "Customize",
+              "Integrations"
+            ],
+            "screenshotId": "docs-integrations-open",
+            "expected": "The integration table appears.",
+            "availableSince": "0.1.0-alpha.1"
+          },
+          {
+            "id": "review-tool-access",
+            "aliases": [],
+            "text": "Open Manage and inspect the read tool permission.",
+            "uiLabels": [
+              "Manage",
+              "Ask"
+            ],
+            "screenshotId": "docs-integrations-access",
+            "expected": "The read tool permission is Ask.",
+            "availableSince": "0.1.0-alpha.1"
+          },
+          {
+            "id": "allow-read-tool",
+            "aliases": [],
+            "text": "Change the read tool permission to Allow.",
+            "uiLabels": [
+              "Allow"
+            ],
+            "screenshotId": "docs-integrations-allow",
+            "expected": "The read tool shows Allow.",
+            "availableSince": "0.1.0-alpha.1"
+          },
+          {
+            "id": "remove-tool-access",
+            "aliases": [],
+            "text": "Change the read tool permission to Block, then choose Save.",
+            "uiLabels": [
+              "Block",
+              "Save"
+            ],
+            "screenshotId": "docs-integrations-block",
+            "expected": "The saved read tool permission is Block.",
+            "availableSince": "0.1.0-alpha.1"
+          },
+          {
+            "id": "open-connection-form",
+            "aliases": [],
+            "text": "Choose Back, reopen Manage to confirm Block persisted, then choose Back and open Use a token for another integration.",
+            "uiLabels": [
+              "Back",
+              "Manage",
+              "Block",
+              "Use a token",
+              "Fine-grained token"
+            ],
+            "screenshotId": "docs-integrations-connect",
+            "expected": "The token entry field appears.",
+            "availableSince": "0.1.0-alpha.1"
+          }
+        ],
+        "boundaries": [
+          "Opening a connection form does not connect an account.",
+          "Permission changes take effect only after Save; Block removes tool access, and write tools remain subject to their approval policy.",
+          "On mobile, a connected integration opens Manage on web; tool permissions are changed in the web or desktop app."
+        ],
+        "troubleshooting": [
+          {
+            "errorId": "integration-access",
+            "message": "Could not save or load access.",
+            "action": "Choose Try again to reload access, then set the permission and choose Save again."
+          }
+        ],
+        "related": [
+          "bots-create"
+        ]
+      },
+      {
         "id": "sign-in",
         "aliases": [],
         "title": "Sign in to Ardur",
@@ -1103,8 +1320,10 @@
         },
         "steps": [
           {
-            "id": "open",
-            "aliases": [],
+            "id": "open-sign-in",
+            "aliases": [
+              "open"
+            ],
             "text": "Open the sign-in page and find the email form.",
             "uiLabels": [
               "Sign in to Ardur",
@@ -1116,8 +1335,10 @@
             "availableSince": "0.1.0-alpha.1"
           },
           {
-            "id": "error",
-            "aliases": [],
+            "id": "show-connection-error",
+            "aliases": [
+              "error"
+            ],
             "text": "Submit the email form while the server cannot be reached.",
             "uiLabels": [
               "Email",
@@ -1130,8 +1351,10 @@
             "availableSince": "0.1.0-alpha.1"
           },
           {
-            "id": "recovery",
-            "aliases": [],
+            "id": "open-password-recovery",
+            "aliases": [
+              "recovery"
+            ],
             "text": "Choose password recovery from the sign-in page.",
             "uiLabels": [
               "Forgot password?",
@@ -1180,8 +1403,10 @@
         },
         "steps": [
           {
-            "id": "open",
-            "aliases": [],
+            "id": "open-model-connection",
+            "aliases": [
+              "open"
+            ],
             "text": "Open the required model connection form.",
             "uiLabels": [
               "Connect a model",
@@ -1193,8 +1418,10 @@
             "availableSince": "0.1.0-alpha.1"
           },
           {
-            "id": "connect",
-            "aliases": [],
+            "id": "enter-connection-key",
+            "aliases": [
+              "connect"
+            ],
             "text": "Enter a key for the selected connection.",
             "uiLabels": [
               "API key",
@@ -1219,6 +1446,258 @@
           "bots-create",
           "models"
         ]
+      },
+      {
+        "id": "memory-documents",
+        "aliases": [],
+        "title": "Memory",
+        "summary": "Find a memory document, inspect its history, and approve a reviewed change.",
+        "area": "memory-and-learning",
+        "order": 10,
+        "status": "published",
+        "availableSince": "0.1.0-alpha.1",
+        "platforms": {
+          "web": "configure",
+          "desktop": "configure",
+          "mobile": "read-only"
+        },
+        "settingsPath": {
+          "web": [
+            "Settings",
+            "Memory"
+          ],
+          "desktop": [
+            "Settings",
+            "Memory"
+          ]
+        },
+        "steps": [
+          {
+            "id": "find-memory-document",
+            "aliases": [],
+            "text": "Open Settings, then Memory, and find Preferences.",
+            "uiLabels": [
+              "Settings",
+              "Memory",
+              "Preferences"
+            ],
+            "screenshotId": "docs-memory-documents-open",
+            "expected": "Preferences appears in the document list.",
+            "availableSince": "0.1.0-alpha.1"
+          },
+          {
+            "id": "open-document-detail",
+            "aliases": [],
+            "text": "Open Preferences to read the saved content.",
+            "uiLabels": [
+              "Preferences",
+              "Memory document"
+            ],
+            "screenshotId": "docs-memory-documents-detail",
+            "expected": "The document content appears in its detail.",
+            "availableSince": "0.1.0-alpha.1"
+          },
+          {
+            "id": "inspect-document-history",
+            "aliases": [],
+            "text": "Open History for the document.",
+            "uiLabels": [
+              "History"
+            ],
+            "screenshotId": "docs-memory-documents-history",
+            "expected": "The first saved revision appears.",
+            "availableSince": "0.1.0-alpha.1"
+          },
+          {
+            "id": "approve-reviewed-change",
+            "aliases": [],
+            "text": "Request a change and approve its suggestion.",
+            "uiLabels": [
+              "Send",
+              "Memory suggestions",
+              "Approve"
+            ],
+            "screenshotId": "docs-memory-documents-change",
+            "expected": "The approved content appears in the document.",
+            "availableSince": "0.1.0-alpha.1"
+          }
+        ],
+        "boundaries": [
+          "A requested change needs review and approval before it is applied.",
+          "Mobile memory browsing does not expose this desktop review flow."
+        ],
+        "troubleshooting": [
+          {
+            "errorId": "memory-load",
+            "message": "Could not load memory.",
+            "action": "Choose Retry after the memory service is available."
+          }
+        ],
+        "related": [
+          "bots-create"
+        ]
+      },
+      {
+        "id": "routines",
+        "aliases": [],
+        "title": "Routines",
+        "summary": "Edit a routine, save its schedule, and inspect a test run.",
+        "area": "routines-and-boards",
+        "order": 10,
+        "status": "published",
+        "availableSince": "0.1.0-alpha.1",
+        "platforms": {
+          "web": "configure",
+          "desktop": "configure",
+          "mobile": "read-only"
+        },
+        "settingsPath": {},
+        "steps": [
+          {
+            "id": "open-scheduled-routines",
+            "aliases": [],
+            "text": "Open the bot computer and find Morning brief.",
+            "uiLabels": [
+              "Routines"
+            ],
+            "screenshotId": "docs-routines-open",
+            "expected": "The scheduled routine appears.",
+            "availableSince": "0.1.0-alpha.1"
+          },
+          {
+            "id": "edit-routine-instruction",
+            "aliases": [],
+            "text": "Open Morning brief and revise its Instruction.",
+            "uiLabels": [
+              "Name",
+              "Instruction"
+            ],
+            "screenshotId": "docs-routines-edit",
+            "expected": "The revised instruction appears in the editor.",
+            "availableSince": "0.1.0-alpha.1"
+          },
+          {
+            "id": "save-routine",
+            "aliases": [],
+            "text": "Save the revised routine.",
+            "uiLabels": [
+              "Save",
+              "Test run"
+            ],
+            "screenshotId": "docs-routines-saved",
+            "expected": "The Test run button is available after saving.",
+            "availableSince": "0.1.0-alpha.1"
+          },
+          {
+            "id": "inspect-run-result",
+            "aliases": [],
+            "text": "Run the routine once and inspect Run history.",
+            "uiLabels": [
+              "Test run",
+              "Run history",
+              "Done"
+            ],
+            "screenshotId": "docs-routines-result",
+            "expected": "Run history shows the test run as Done.",
+            "availableSince": "0.1.0-alpha.1"
+          }
+        ],
+        "boundaries": [
+          "A test run starts work; scheduled runs depend on the saved trigger and active state.",
+          "The mobile routine screen can read and test routines, but the editor is on web and desktop."
+        ],
+        "troubleshooting": [
+          {
+            "errorId": "routine-save",
+            "message": "Could not save routine",
+            "action": "Check the routine fields and try Save again."
+          }
+        ],
+        "related": [
+          "bots-create"
+        ]
+      },
+      {
+        "id": "group-goals",
+        "aliases": [],
+        "title": "Start goal",
+        "summary": "Start bounded work in a group room, watch its status, and stop it.",
+        "area": "team-work",
+        "order": 20,
+        "status": "published",
+        "availableSince": "0.1.0-alpha.1",
+        "platforms": {
+          "web": "configure",
+          "desktop": "configure",
+          "mobile": "read-only"
+        },
+        "settingsPath": {},
+        "steps": [
+          {
+            "id": "open-start-goal",
+            "aliases": [],
+            "text": "Open group settings and find Start goal.",
+            "uiLabels": [
+              "Start goal",
+              "Objective"
+            ],
+            "screenshotId": "docs-group-goals-ready",
+            "expected": "The goal form appears for the group coordinator.",
+            "availableSince": "0.1.0-alpha.1"
+          },
+          {
+            "id": "fill-goal-form",
+            "aliases": [],
+            "text": "Enter the Objective and Done when condition.",
+            "uiLabels": [
+              "Objective",
+              "Done when (one per line)",
+              "Start goal"
+            ],
+            "screenshotId": "docs-group-goals-form",
+            "expected": "Start goal is ready to submit.",
+            "availableSince": "0.1.0-alpha.1"
+          },
+          {
+            "id": "watch-goal-progress",
+            "aliases": [],
+            "text": "Start the goal and return to the room.",
+            "uiLabels": [
+              "Start goal",
+              "Goal",
+              "Working"
+            ],
+            "screenshotId": "docs-group-goals-progress",
+            "expected": "The room shows the working goal.",
+            "availableSince": "0.1.0-alpha.1"
+          },
+          {
+            "id": "stop-running-goal",
+            "aliases": [],
+            "text": "Choose Stop in the room.",
+            "uiLabels": [
+              "Stop",
+              "Stopped"
+            ],
+            "screenshotId": "docs-group-goals-stopped",
+            "expected": "The room shows the stopped goal.",
+            "availableSince": "0.1.0-alpha.1"
+          }
+        ],
+        "boundaries": [
+          "Only an authorized owner with a group coordinator can start this flow.",
+          "Stopping a goal ends new coordinator work; it does not undo completed actions."
+        ],
+        "troubleshooting": [
+          {
+            "errorId": "goal-start",
+            "message": "Could not start goal. Check the deadline and try again.",
+            "action": "Check the required fields and deadline, then retry."
+          }
+        ],
+        "related": [
+          "bots-create"
+        ]
       }
     ],
     "screenshots": [
@@ -1237,7 +1716,7 @@
         "platform": "web",
         "theme": "light",
         "feature": "bots-create",
-        "step": "form"
+        "step": "open-new-bot-form"
       },
       {
         "id": "docs-bots-create-open",
@@ -1254,7 +1733,7 @@
         "platform": "web",
         "theme": "light",
         "feature": "bots-create",
-        "step": "open"
+        "step": "open-new-bot-menu"
       },
       {
         "id": "docs-bots-create-private",
@@ -1271,7 +1750,7 @@
         "platform": "web",
         "theme": "light",
         "feature": "bots-create",
-        "step": "private"
+        "step": "choose-private-computer"
       },
       {
         "id": "docs-bots-create-ready",
@@ -1288,7 +1767,7 @@
         "platform": "web",
         "theme": "light",
         "feature": "bots-create",
-        "step": "ready"
+        "step": "open-created-bot"
       },
       {
         "id": "docs-chat-approvals-denied",
@@ -1305,7 +1784,7 @@
         "platform": "web",
         "theme": "light",
         "feature": "chat-approvals",
-        "step": "denied"
+        "step": "see-denied-action"
       },
       {
         "id": "docs-chat-approvals-pending",
@@ -1322,7 +1801,296 @@
         "platform": "web",
         "theme": "light",
         "feature": "chat-approvals",
-        "step": "pending"
+        "step": "review-pending-action"
+      },
+      {
+        "id": "docs-computers-add",
+        "file": "docs/docs-computers-add.png",
+        "alt": "Computers: The connection form opens.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "computers",
+        "step": "open-add-computer"
+      },
+      {
+        "id": "docs-computers-open",
+        "file": "docs/docs-computers-open.png",
+        "alt": "Computers: The computer state and free memory appear.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "computers",
+        "step": "inspect-computer-capacity"
+      },
+      {
+        "id": "docs-computers-refused",
+        "file": "docs/docs-computers-refused.png",
+        "alt": "Computers: The row shows the reachability refusal.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "computers",
+        "step": "inspect-refused-test"
+      },
+      {
+        "id": "docs-computers-tested",
+        "file": "docs/docs-computers-tested.png",
+        "alt": "Computers: The row shows a running connection.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "computers",
+        "step": "retry-computer-test"
+      },
+      {
+        "id": "docs-group-goals-form",
+        "file": "docs/docs-group-goals-form.png",
+        "alt": "Start goal: Start goal is ready to submit.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "group-goals",
+        "step": "fill-goal-form"
+      },
+      {
+        "id": "docs-group-goals-progress",
+        "file": "docs/docs-group-goals-progress.png",
+        "alt": "Start goal: The room shows the working goal.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "group-goals",
+        "step": "watch-goal-progress"
+      },
+      {
+        "id": "docs-group-goals-ready",
+        "file": "docs/docs-group-goals-ready.png",
+        "alt": "Start goal: The goal form appears for the group coordinator.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "group-goals",
+        "step": "open-start-goal"
+      },
+      {
+        "id": "docs-group-goals-stopped",
+        "file": "docs/docs-group-goals-stopped.png",
+        "alt": "Start goal: The room shows the stopped goal.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "group-goals",
+        "step": "stop-running-goal"
+      },
+      {
+        "id": "docs-integrations-access",
+        "file": "docs/docs-integrations-access.png",
+        "alt": "Integrations: The read tool asks first.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "integrations",
+        "step": "review-tool-access"
+      },
+      {
+        "id": "docs-integrations-allow",
+        "file": "docs/docs-integrations-allow.png",
+        "alt": "Integrations: The read tool shows Allow.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "integrations",
+        "step": "allow-read-tool"
+      },
+      {
+        "id": "docs-integrations-block",
+        "file": "docs/docs-integrations-block.png",
+        "alt": "Integrations: The read tool is no longer selected.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "integrations",
+        "step": "remove-tool-access"
+      },
+      {
+        "id": "docs-integrations-connect",
+        "file": "docs/docs-integrations-connect.png",
+        "alt": "Integrations: The token entry field appears.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "integrations",
+        "step": "open-connection-form"
+      },
+      {
+        "id": "docs-integrations-open",
+        "file": "docs/docs-integrations-open.png",
+        "alt": "Integrations: The integration table appears.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "integrations",
+        "step": "browse-integration-catalog"
+      },
+      {
+        "id": "docs-memory-documents-change",
+        "file": "docs/docs-memory-documents-change.png",
+        "alt": "Memory: The approved content appears in the document.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "memory-documents",
+        "step": "approve-reviewed-change"
+      },
+      {
+        "id": "docs-memory-documents-detail",
+        "file": "docs/docs-memory-documents-detail.png",
+        "alt": "Memory: The document content appears in its detail.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "memory-documents",
+        "step": "open-document-detail"
+      },
+      {
+        "id": "docs-memory-documents-history",
+        "file": "docs/docs-memory-documents-history.png",
+        "alt": "Memory: The first saved revision appears.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "memory-documents",
+        "step": "inspect-document-history"
+      },
+      {
+        "id": "docs-memory-documents-open",
+        "file": "docs/docs-memory-documents-open.png",
+        "alt": "Memory: Preferences appears in the document list.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "memory-documents",
+        "step": "find-memory-document"
       },
       {
         "id": "docs-models-add",
@@ -1339,7 +2107,7 @@
         "platform": "web",
         "theme": "light",
         "feature": "models",
-        "step": "add"
+        "step": "open-connection-form"
       },
       {
         "id": "docs-models-default",
@@ -1356,7 +2124,7 @@
         "platform": "web",
         "theme": "light",
         "feature": "models",
-        "step": "default"
+        "step": "choose-default-model"
       },
       {
         "id": "docs-models-open",
@@ -1373,7 +2141,7 @@
         "platform": "web",
         "theme": "light",
         "feature": "models",
-        "step": "open"
+        "step": "open-model-settings"
       },
       {
         "id": "docs-onboarding-connect",
@@ -1390,7 +2158,7 @@
         "platform": "web",
         "theme": "light",
         "feature": "onboarding",
-        "step": "connect"
+        "step": "enter-connection-key"
       },
       {
         "id": "docs-onboarding-open",
@@ -1407,7 +2175,75 @@
         "platform": "web",
         "theme": "light",
         "feature": "onboarding",
-        "step": "open"
+        "step": "open-model-connection"
+      },
+      {
+        "id": "docs-routines-edit",
+        "file": "docs/docs-routines-edit.png",
+        "alt": "Routines: The revised instruction appears in the editor.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "routines",
+        "step": "edit-routine-instruction"
+      },
+      {
+        "id": "docs-routines-open",
+        "file": "docs/docs-routines-open.png",
+        "alt": "Routines: The scheduled routine appears.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "routines",
+        "step": "open-scheduled-routines"
+      },
+      {
+        "id": "docs-routines-result",
+        "file": "docs/docs-routines-result.png",
+        "alt": "Routines: Run history shows the completed test run.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "routines",
+        "step": "inspect-run-result"
+      },
+      {
+        "id": "docs-routines-saved",
+        "file": "docs/docs-routines-saved.png",
+        "alt": "Routines: The Test run button is available after saving.",
+        "width": 1280,
+        "height": 800,
+        "crop": {
+          "x": 0,
+          "y": 0,
+          "width": 1280,
+          "height": 800
+        },
+        "platform": "web",
+        "theme": "light",
+        "feature": "routines",
+        "step": "save-routine"
       },
       {
         "id": "docs-sign-in-error",
@@ -1424,7 +2260,7 @@
         "platform": "web",
         "theme": "light",
         "feature": "sign-in",
-        "step": "error"
+        "step": "show-connection-error"
       },
       {
         "id": "docs-sign-in-open",
@@ -1441,7 +2277,7 @@
         "platform": "web",
         "theme": "light",
         "feature": "sign-in",
-        "step": "open"
+        "step": "open-sign-in"
       },
       {
         "id": "docs-sign-in-recovery",
@@ -1458,7 +2294,7 @@
         "platform": "web",
         "theme": "light",
         "feature": "sign-in",
-        "step": "recovery"
+        "step": "open-password-recovery"
       }
     ]
   }

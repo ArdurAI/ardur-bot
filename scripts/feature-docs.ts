@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { inflateSync } from "node:zlib";
 import type {
   FeatureDocumentationEvidence,
   FeatureDocumentationManifest,
@@ -16,11 +17,22 @@ import { validatePngScreenshot } from "../packages/testkit/src/png-validation";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const manifestFile = "site/data/feature-docs.json";
 const evidenceFile = "site/data/feature-docs-evidence.json";
-const firstFive = new Set(["sign-in", "onboarding", "bots-create", "models", "chat-approvals"]);
 const settingsFile = "apps/web/src/pages/settings-sections.ts";
 const webRoutesFile = "apps/web/src/App.tsx";
 const mobileLayoutFile = "apps/mobile/app/_layout.tsx";
 const slug = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+/** The website's documentation areas, in its display order; any other area drops the whole block. */
+const websiteAreas = new Set([
+  "getting-started",
+  "bots-and-conversations",
+  "team-work",
+  "routines-and-boards",
+  "memory-and-learning",
+  "connections-and-computers",
+  "desktop",
+  "mobile",
+  "ide-and-operations",
+]);
 const allowedExemptions = {
   webRoutes: new Set(["/mcp/oauth/callback", "*"]),
   mobileEntries: new Set(["board", "connectors"]),
@@ -189,9 +201,51 @@ export function assertDocumentationPng(
   try {
     validatePngScreenshot(bytes, file);
     if (bytes.readUInt32BE(16) !== width || bytes.readUInt32BE(20) !== height) invalid();
+    assertExactImageData(bytes, width, height);
   } catch {
     invalid();
   }
+}
+
+/**
+ * The shared decoder proves the picture decodes; this proves the compressed image data is exactly
+ * the picture and nothing else. A strict inflate verifies the zlib header and checksum on every Node
+ * release, and the inflated length must equal the filtered raster size for the declared header.
+ */
+function assertExactImageData(bytes: Buffer, width: number, height: number): void {
+  const bitDepth = bytes[24]!;
+  const colorType = bytes[25]!;
+  const interlace = bytes[28]!;
+  const channels = colorType === 2 ? 3 : colorType === 4 ? 2 : colorType === 6 ? 4 : 1;
+  const rowBytes = (columns: number) => 1 + Math.ceil((columns * bitDepth * channels) / 8);
+  const passes = interlace
+    ? [
+        [0, 0, 8, 8],
+        [4, 0, 8, 8],
+        [0, 4, 4, 8],
+        [2, 0, 4, 4],
+        [0, 2, 2, 4],
+        [1, 0, 2, 2],
+        [0, 1, 1, 2],
+      ]
+    : [[0, 0, 1, 1]];
+  let expected = 0;
+  for (const [x, y, dx, dy] of passes) {
+    const columns = Math.max(0, Math.ceil((width - x!) / dx!));
+    const rows = Math.max(0, Math.ceil((height - y!) / dy!));
+    if (columns && rows) expected += rows * rowBytes(columns);
+  }
+  const idat: Buffer[] = [];
+  let offset = 8;
+  while (offset + 12 <= bytes.length) {
+    const length = bytes.readUInt32BE(offset);
+    if (bytes.toString("ascii", offset + 4, offset + 8) === "IDAT")
+      idat.push(bytes.subarray(offset + 8, offset + 8 + length));
+    offset += 12 + length;
+  }
+  if (!idat.length) throw new Error("PNG has no image data.");
+  const raw = inflateSync(Buffer.concat(idat), { maxOutputLength: expected + 1 });
+  if (raw.length !== expected) throw new Error("PNG image data does not match its header.");
 }
 
 /** The published projection contains only Addendum D fields. */
@@ -333,6 +387,8 @@ export async function validateFeatureDocs(
   const usedScreenshots = new Set<string>();
   for (const feature of manifest.features) {
     const context = `Feature "${feature.id}"`;
+    if (!websiteAreas.has(feature.area))
+      throw new Error(`${context} area "${feature.area}" is not one of the website's areas.`);
     const binding = evidenceById.get(feature.id);
     if (!binding) throw new Error(`${context} has no evidence binding.`);
     const nativeSources = binding.sources.filter((file) => file.startsWith("apps/mobile/"));
@@ -428,8 +484,9 @@ export async function validateFeatureDocs(
     }
     for (const [platform, entry] of Object.entries(feature.settingsPath)) {
       if (!entry) continue;
-      if (feature.platforms[platform as keyof typeof feature.platforms] === "unavailable")
-        throw new Error(`${context} has a ${platform} path but marks it unavailable.`);
+      // The website accepts a path only where the platform is configurable; a read-only screen has none.
+      if (feature.platforms[platform as keyof typeof feature.platforms] !== "configure")
+        throw new Error(`${context} has a ${platform} path but is not configurable there.`);
       if (entry.entry.kind === "settings" && !settings.has(entry.entry.sectionId))
         throw new Error(
           `${context} references unknown settings section "${entry.entry.sectionId}".`,
@@ -618,7 +675,7 @@ export async function prepareFeatureDocCaptureImport(
 ) {
   const manifest = FeatureDocumentationManifestSchema.parse(inputManifest);
   const evidence = FeatureDocumentationEvidenceSchema.parse(inputEvidence);
-  const shots = manifest.screenshots.filter((shot) => firstFive.has(shot.feature));
+  const shots = manifest.screenshots;
   const expected = new Set(shots.map((shot) => `${shot.id}.png`));
   const docsDir = path.join(directory, "docs");
   const entries = await readdir(docsDir, { withFileTypes: true });
