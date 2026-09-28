@@ -4387,6 +4387,7 @@ msgstr "Integration options"
 
 #: src/components/composer/ComposerMenu.tsx
 #: src/components/Context.tsx
+#: src/components/integrations/manage/IntegrationDetails.tsx
 #: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/settings-sections.ts
@@ -4561,6 +4562,14 @@ msgstr "Later"
 #: src/pages/LearningInbox.tsx
 msgid "Later edits overlap this change. Review both versions in History."
 msgstr "Later edits overlap this change. Review both versions in History."
+
+#: src/components/FeatureDocsLink.tsx
+msgid "Learn more"
+msgstr "Learn more"
+
+#: src/components/FeatureDocsLink.tsx
+msgid "Learn more about {title}"
+msgstr "Learn more about {title}"
 
 #. placeholder {0}: counts.appliedThisWeek
 #: src/pages/LearningInbox.tsx
@@ -4930,6 +4939,7 @@ msgid "Memories"
 msgstr "Memories"
 
 #: src/pages/KnowledgeSection.tsx
+#: src/pages/memory/MemoryDocuments.tsx
 #: src/pages/memory/MemoryProposals.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/settings-sections.ts
@@ -6833,6 +6843,7 @@ msgstr "rev {0}"
 msgid "Review and approve each suggestion before it is saved."
 msgstr "Review and approve each suggestion before it is saved."
 
+#: src/components/AskCard.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Review approval"
 msgstr "Review approval"

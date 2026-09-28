@@ -3,6 +3,7 @@ import { useLingui } from "@lingui/react/macro";
 import { XIcon } from "lucide-react";
 import { Suspense, useEffect, useRef, useState } from "react";
 import { LoadingState } from "../components/ai/primitives";
+import { FeatureDocsLink } from "../components/FeatureDocsLink";
 import {
   matchesSetting,
   SettingsSearchProvider,
@@ -61,6 +62,7 @@ export function SettingsOverlay({
   const available = settingsSections.filter((item) => item.available(context));
   const active = available.find((item) => item.id === section) ?? available[0]!;
   const title = i18n._(active.label);
+  const docsFeatureId = active.docsFeatureId;
   const visible = available.filter(
     (item) =>
       matchesSetting(i18n._(item.label), search.query) ||
@@ -172,7 +174,12 @@ export function SettingsOverlay({
           </nav>
           <div className="flex min-h-0 min-w-0 flex-1 flex-col">
             <div className="flex items-center justify-between gap-4 px-6 pt-6">
-              <DialogTitle className="text-2xl font-medium">{title}</DialogTitle>
+              <div className="flex min-w-0 items-center gap-3">
+                <DialogTitle className="text-2xl font-medium">{title}</DialogTitle>
+                {docsFeatureId ? (
+                  <FeatureDocsLink featureId={docsFeatureId} title={title} iconOnly />
+                ) : null}
+              </div>
               <DialogClose
                 aria-label={closeLabel}
                 disabled={busy}

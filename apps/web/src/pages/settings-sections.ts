@@ -1,3 +1,4 @@
+import { featureDocsForSettings } from "@ardurbot/core";
 import type { MessageDescriptor } from "@lingui/core";
 import { msg } from "@lingui/core/macro";
 import {
@@ -30,6 +31,7 @@ export const settingsGroupLabels = {
 };
 export type SettingsRegistration = {
   id: SettingsSection;
+  docsFeatureId: string | null;
   group: "Settings" | "Desktop app" | "Customize" | "Platform";
   label: MessageDescriptor;
   icon: ComponentType<{ className?: string; strokeWidth?: number }>;
@@ -45,7 +47,7 @@ const hasUpdates = (context: SettingsContext) =>
 
 /** Replace one entry when a page lands; no shell switch or eager page import is needed. */
 // biome-ignore format: One registration per line keeps independent settings streams easy to merge.
-export const settingsSections: SettingsRegistration[] = [
+const settingsEntries: Omit<SettingsRegistration, "docsFeatureId">[] = [
   { id: "general", searchLabels: [msg`Open to`, msg`Theme`, msg`Chat font`, msg`Motion`, msg`Notifications`, msg`Trusted folders`], group: "Settings", label: msg`General`, icon: Settings, component: lazy(() => import("./settings/GeneralSettings")), available: always },
   { id: "account", searchLabels: [msg`Password`, msg`Full name`, msg`What should your bots call you?`, msg`Avatar`, msg`Language`, msg`Email`, msg`Local devices`, msg`Active sessions`, msg`Advanced`], group: "Settings", label: msg`Account`, icon: User, component: lazy(() => import("./account/AccountSettings")), available: always },
   { id: "privacy", searchLabels: [msg`Export data`, msg`Export memory`, msg`Uploaded files`, msg`Memory preferences`, msg`Learning consent`], group: "Settings", label: msg`Privacy`, icon: Shield, component: lazy(() => import("./settings/PrivacySettings")), available: always },
@@ -69,3 +71,8 @@ export const settingsSections: SettingsRegistration[] = [
   { id: "plugins", group: "Customize", label: msg`Plugins`, icon: Blocks, component: lazy(() => import("./customize/PluginsPage")), available: always },
   { id: "updates", group: "Platform", label: msg`Updates`, icon: CloudDownload, component: lazy(() => import("./AccountSettingsOverlay").then((m) => ({ default: m.UpdatesSettingsPanel }))), available: hasUpdates },
 ];
+
+export const settingsSections: SettingsRegistration[] = settingsEntries.map((entry) => ({
+  ...entry,
+  docsFeatureId: featureDocsForSettings(entry.id),
+}));

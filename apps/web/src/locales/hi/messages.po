@@ -4387,6 +4387,7 @@ msgstr ""
 
 #: src/components/composer/ComposerMenu.tsx
 #: src/components/Context.tsx
+#: src/components/integrations/manage/IntegrationDetails.tsx
 #: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/settings-sections.ts
@@ -4560,6 +4561,14 @@ msgstr ""
 
 #: src/pages/LearningInbox.tsx
 msgid "Later edits overlap this change. Review both versions in History."
+msgstr ""
+
+#: src/components/FeatureDocsLink.tsx
+msgid "Learn more"
+msgstr ""
+
+#: src/components/FeatureDocsLink.tsx
+msgid "Learn more about {title}"
 msgstr ""
 
 #. placeholder {0}: counts.appliedThisWeek
@@ -4930,6 +4939,7 @@ msgid "Memories"
 msgstr ""
 
 #: src/pages/KnowledgeSection.tsx
+#: src/pages/memory/MemoryDocuments.tsx
 #: src/pages/memory/MemoryProposals.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/settings-sections.ts
@@ -6833,6 +6843,7 @@ msgstr "रिवीज़न {0}"
 msgid "Review and approve each suggestion before it is saved."
 msgstr ""
 
+#: src/components/AskCard.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Review approval"
 msgstr ""
