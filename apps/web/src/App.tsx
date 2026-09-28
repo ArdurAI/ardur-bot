@@ -104,7 +104,13 @@ function SessionApp() {
           />
           <Route
             path="/sign-up"
-            element={user ? <Navigate to="/onboarding" replace /> : <AuthPage key="up" mode="up" />}
+            element={
+              user ? (
+                <Navigate to={searchParams.has("next") ? signInDestination : "/onboarding"} replace />
+              ) : (
+                <AuthPage key="up" mode="up" />
+              )
+            }
           />
           <Route
             path="/forgot-password"

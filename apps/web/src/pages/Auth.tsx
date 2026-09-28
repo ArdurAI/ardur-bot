@@ -21,6 +21,9 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
   const { t } = useLingui();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const returnPath = searchParams.has("next") ? authReturnPath(searchParams.get("next")) : null;
+  const authLink = (path: string) =>
+    returnPath ? `${path}?next=${encodeURIComponent(returnPath)}` : path;
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -102,12 +105,12 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
         return;
       }
       if (mode === "up" && signupRequiresEmailVerification(result.data)) {
-        setSearchParams({ verify: "email" });
+        setSearchParams(returnPath ? { verify: "email", next: returnPath } : { verify: "email" });
         return;
       }
       clearSpaceSelection();
       await refreshAuthSession();
-      navigate(mode === "up" ? "/onboarding" : authReturnPath(searchParams.get("next")));
+      navigate(mode === "up" ? (returnPath ?? "/onboarding") : authReturnPath(searchParams.get("next")));
     } catch {
       setError(t`Could not reach the server`);
     } finally {
@@ -119,7 +122,7 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
     <AuthFrame onSubmit={submit} title={title}>
       {sent ? (
         <div className="w-full text-center">
-          <Link to="/sign-in" className="font-medium text-foreground">
+          <Link to={authLink("/sign-in")} className="font-medium text-foreground">
             <Trans>Back to sign in</Trans>
           </Link>
         </div>
@@ -216,14 +219,14 @@ export function AuthPage({ mode }: { mode: AuthMode }) {
             {mode === "in" ? (
               <>
                 <Trans>Don’t have an account?</Trans>{" "}
-                <Link to="/sign-up" className="font-medium text-foreground">
+                <Link to={authLink("/sign-up")} className="font-medium text-foreground">
                   <Trans>Sign up</Trans>
                 </Link>
               </>
             ) : mode === "up" ? (
               <>
                 <Trans>Already have an account?</Trans>{" "}
-                <Link to="/sign-in" className="font-medium text-foreground">
+                <Link to={authLink("/sign-in")} className="font-medium text-foreground">
                   <Trans>Sign in</Trans>
                 </Link>
               </>

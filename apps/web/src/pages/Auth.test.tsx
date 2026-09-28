@@ -84,3 +84,28 @@ it("waits for the public session refetch before entering onboarding", async () =
   await act(async () => finishRefresh());
   expect(container.querySelector('[data-testid="onboarding"]')?.textContent).toBe("ready");
 });
+
+it("keeps the guided destination through sign-up and returns there after registration", async () => {
+  auth.signUp.mockResolvedValue({ data: { token: "fixture-token" }, error: null });
+  auth.refetch.mockResolvedValue(undefined);
+  await act(async () => {
+    root.render(
+      <MemoryRouter initialEntries={["/sign-in?next=%2Fguided-onboarding%3Fstep%3Dmodel"]}>
+        <Routes>
+          <Route path="/sign-in" element={<AuthPage mode="in" />} />
+          <Route path="/sign-up" element={<AuthPage mode="up" />} />
+          <Route path="/guided-onboarding" element={<output data-testid="guided">ready</output>} />
+          <Route path="/onboarding" element={<output data-testid="legacy">legacy</output>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+  });
+  expect(container.querySelector<HTMLAnchorElement>('a[href^="/sign-up"]')?.getAttribute("href"))
+    .toBe("/sign-up?next=%2Fguided-onboarding%3Fstep%3Dmodel");
+  await act(async () => container.querySelector<HTMLAnchorElement>('a[href^="/sign-up"]')?.click());
+  await act(async () => {
+    container.querySelector("form")!.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  });
+  expect(container.querySelector('[data-testid="guided"]')?.textContent).toBe("ready");
+  expect(container.querySelector('[data-testid="legacy"]')).toBeNull();
+});

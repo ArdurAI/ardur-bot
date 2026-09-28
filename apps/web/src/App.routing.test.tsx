@@ -174,6 +174,18 @@ it("keeps a deferred desktop model on the authenticated guided route", async () 
   expect(node.querySelector('[data-testid="onboarding-page"]')).toBeNull();
 });
 
+it("returns an authenticated registration route to guided account setup", async () => {
+  vi.stubGlobal("ardurbotDesktop", { guidedSetup: { returnToSetup: vi.fn() } });
+  await act(async () =>
+    root.render(
+      <MemoryRouter initialEntries={["/sign-up?next=%2Fguided-onboarding%3Fstep%3Dmodel"]}>
+        <App />
+      </MemoryRouter>,
+    ),
+  );
+  expect(node.querySelector('[data-testid="guided-onboarding-page"]')).not.toBeNull();
+});
+
 it.each([
   ["/onboarding", "/sign-in?next=%2Fonboarding"],
   ["/guided-onboarding?step=finish", "/sign-in?next=%2Fguided-onboarding%3Fstep%3Dfinish"],
