@@ -6,6 +6,7 @@ import {
   DEFAULT_MODEL_MAX_TOKENS,
   HERMES_RUNTIME_DEFAULTS,
   HermesRuntimeConfigSchema,
+  normalizedThinkingLevel,
   runtimePinProblem,
 } from "@ardurbot/contracts";
 
@@ -59,7 +60,7 @@ export function hermesCompatibility(
       "runtime-configuration-invalid",
       "This connection needs bounded context and output limits.",
     );
-  if ((pin.effort === "none" ? "off" : pin.effort) !== (model.thinkingLevel ?? "off"))
+  if (normalizedThinkingLevel(pin.effort) !== normalizedThinkingLevel(model.thinkingLevel))
     return runtimePinProblem(
       pin,
       "pin-effort-unsupported",

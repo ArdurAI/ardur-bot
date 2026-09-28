@@ -10,6 +10,9 @@ export const RuntimeKindSchema = z.enum([
   "hermes",
 ]);
 export type RuntimeKind = z.infer<typeof RuntimeKindSchema>;
+/** The pin may store no-thinking as null or "none"; runtime models use "off". */
+export const normalizedThinkingLevel = (value: string | null | undefined): string =>
+  value == null || value === "none" ? "off" : value;
 export const runtimeNames: Record<RuntimeKind, string> = {
   pi: "Ardur",
   "claude-code": "Claude Code",

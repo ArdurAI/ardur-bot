@@ -12,6 +12,7 @@ import {
 import type { Actor, RuntimeKind, UpdateBotInput } from "@ardurbot/contracts";
 import {
   nativeRuntimeProviders,
+  normalizedThinkingLevel,
   ollamaThink,
   ThinkingLevelSchema,
   validateAntigravityPin,
@@ -151,7 +152,7 @@ export async function botModelPinUpdate(
             baseUrl: `${connection.baseUrl}/v1`,
             contextWindow: model.contextWindow,
             maxTokens: Math.max(1, Math.min(4096, Math.floor(model.contextWindow / 4))),
-            thinkingLevel: ThinkingLevelSchema.parse(effort),
+            thinkingLevel: ThinkingLevelSchema.parse(normalizedThinkingLevel(effort)),
           },
         );
         if (problem) throw new ORPCError("BAD_REQUEST", { message: problem.reason });

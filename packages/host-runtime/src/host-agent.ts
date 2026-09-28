@@ -24,7 +24,7 @@ import {
   HostRuntimeEventSchema,
 } from "@ardurbot/contracts/host-bridge";
 import type { RuntimeAvailability } from "@ardurbot/contracts/runtime-pins";
-import { RuntimePinError } from "@ardurbot/contracts/runtime-pins";
+import { normalizedThinkingLevel, RuntimePinError } from "@ardurbot/contracts/runtime-pins";
 import { BoardRunner } from "./board/runner.js";
 import type { HostWire } from "./bridge-wire.js";
 import { hostLostProblem, importProblem } from "./bridge-wire.js";
@@ -470,7 +470,10 @@ export class HostAgent {
     if (
       turn.model.provider !== turn.model.runtimePin.provider ||
       turn.model.id !== turn.model.runtimePin.modelId ||
-      turn.model.thinkingLevel !== turn.model.runtimePin.effort
+      (kind === "hermes"
+        ? normalizedThinkingLevel(turn.model.thinkingLevel) !==
+          normalizedThinkingLevel(turn.model.runtimePin.effort)
+        : turn.model.thinkingLevel !== turn.model.runtimePin.effort)
     )
       throw new Error("Runtime pin mismatch.");
     if (kind === "pi") throw new Error("Runtime is not a host runtime.");
