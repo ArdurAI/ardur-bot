@@ -231,6 +231,7 @@ import {
 import type { SettingsSection } from "./SettingsOverlay";
 import { SpaceSearchResults } from "./SpaceSearch";
 import { isComputerVisible } from "./shell/computer-visibility";
+import { useTakeControl } from "./shell/use-take-control";
 import { BotModelChip } from "./shell/bot-model-chip";
 import { BotSettings, CreateBotForm } from "./shell/bot-panel";
 import { isCommandPaletteHotkey } from "./shell/command-palette-hotkey";
@@ -696,6 +697,7 @@ export function ShellPage({
   }, [sectionMenu]);
   const closeSectionMenu = useCallback(() => setSectionMenu(null), []);
   const [booting, setBooting] = useState(false);
+  const { takingControl, takeControl } = useTakeControl(bootComputer);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [initialBotsLoaded, setInitialBotsLoaded] = useState(false);
   const [bootstrapMe, setBootstrapMe] = useState<Me | null>();
@@ -4678,11 +4680,11 @@ export function ShellPage({
                     type="button"
                     variant="outline"
                     size="sm"
+                    disabled={takingControl}
                     aria-label={t`Take control`}
                     onClick={async () => {
                       if (computerBotIdRef.current) {
-                        await rpc.computer.takeover({ botId: computerBotIdRef.current });
-                        await refreshComputerFor(computerBotIdRef.current);
+                        await takeControl(computerBotIdRef.current);
                       }
                     }}
                   >
