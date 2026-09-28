@@ -4,6 +4,13 @@ import path from "node:path";
 import { expect, type Page, test } from "@playwright/test";
 import { listPiCatalog } from "../../../packages/adapters/src/pi-models";
 import { dashboardFixture } from "./dashboard-fixture";
+import {
+  computerDocsFixture,
+  groupGoalDocsFixture,
+  integrationDocsFixture,
+  memoryDocsFixture,
+  routineDocsFixture,
+} from "./feature-docs-fixtures";
 
 const captureRoot = process.env.FEATURE_DOCS_DIR
   ? Promise.resolve(process.env.FEATURE_DOCS_DIR)
@@ -18,9 +25,10 @@ test.use({
   timezoneId: "UTC",
 });
 
-async function capture(page: Page, id: string): Promise<void> {
+async function capture(page: Page, id: string, app = true): Promise<void> {
   await expect(page.getByText("Loading…", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Loading model catalog…", { exact: true })).toHaveCount(0);
+  if (app) await expectModelReady(page);
   const directory = path.join(await captureRoot, "docs");
   await mkdir(directory, { recursive: true });
   const file = path.join(directory, `${id}.png`);
@@ -34,12 +42,24 @@ async function capture(page: Page, id: string): Promise<void> {
 /** Every app capture must show a usable model; a warning header is never documentation. */
 async function expectModelReady(page: Page) {
   const chip = page.getByRole("button", { name: /^Change model: / }).first();
+  if (!(await chip.count())) {
+    await expect(page.getByTestId("group-participant-models")).toBeVisible();
+    await expect(page.getByTestId("group-participant-models")).not.toContainText("not available");
+    return;
+  }
   await expect(chip).toBeVisible();
   await expect(chip).not.toContainText("not available");
 }
 
-async function useDashboard(page: Page) {
-  const fixture = dashboardFixture();
+type DocsScenario = {
+  botCount?: number;
+  groups?: Record<string, unknown>[];
+  routines?: Record<string, unknown>[];
+  rpc?: (procedure: string, input?: Record<string, unknown>) => unknown;
+};
+
+async function useDashboard(page: Page, scenario: DocsScenario = {}) {
+  const fixture = dashboardFixture(scenario.botCount ?? 1);
   const base = fixture.rpc("bootstrap") as Record<string, unknown>;
   const catalog = listPiCatalog();
   // A current model that supports the bot's medium thinking level, so the header never reads
@@ -83,8 +103,18 @@ async function useDashboard(page: Page) {
     modelCredentialId: credential.id,
     thinkingLevel: "medium",
   };
-  const bots = [initialBot];
-  const space = { ...(base.spaces as Record<string, unknown>[])[0]!, bots };
+  const bots = [
+    initialBot,
+    ...(base.bots as Record<string, unknown>[]).slice(1).map((bot) => ({
+      ...bot,
+      modelProvider: connected.provider,
+      modelId: connected.id,
+      modelCredentialId: credential.id,
+      thinkingLevel: "medium",
+    })),
+  ];
+  const groups = scenario.groups ?? [];
+  const space = { ...(base.spaces as Record<string, unknown>[])[0]!, bots, groups };
   await page.clock.setFixedTime(fixtureTime);
   await page.route("**/api/auth/get-session*", (route) => route.fulfill({ json: fixture.session }));
   await page.route("**/rpc/**", async (route) => {
@@ -93,7 +123,9 @@ async function useDashboard(page: Page) {
       return route.fulfill({ contentType: "text/event-stream", body: "" });
     const input = route.request().postDataJSON()?.json as Record<string, unknown> | undefined;
     let value: unknown;
-    if (procedure === "models/list") value = catalog;
+    const scenarioValue = scenario.rpc?.(procedure, input);
+    if (scenarioValue !== undefined) value = scenarioValue;
+    else if (procedure === "models/list") value = catalog;
     else if (procedure === "models/credentials") value = [credential];
     else if (procedure === "me") value = me;
     else if (procedure === "bots/create") {
@@ -102,8 +134,10 @@ async function useDashboard(page: Page) {
     } else if (procedure === "bots/list") value = bots;
     else if (procedure === "bots/get")
       value = bots.find((bot) => bot.id === input?.botId) ?? bots[0];
-    else if (procedure === "bootstrap") value = { ...base, me, bots, spaces: [space] };
+    else if (procedure === "bootstrap")
+      value = { ...base, me, bots, groups, routines: scenario.routines ?? [], spaces: [space] };
     else if (procedure === "spaces/list") value = { current: space, spaces: [space] };
+    else if (procedure === "groups/list") value = groups;
     else if (
       (procedure === "threads/get" || procedure === "threads/head") &&
       input?.botId === "new-bot"
@@ -134,19 +168,19 @@ test("sign-in: open the form and recovery route", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "Sign in to Ardur" })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Email" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Continue with email" })).toBeVisible();
-  await capture(page, "docs-sign-in-open");
+  await capture(page, "docs-sign-in-open", false);
   await page.route("**/api/auth/sign-in/email", (route) => route.abort());
   await page.getByRole("textbox", { name: "Email" }).fill("reader@example.test");
   await page.getByLabel("Password", { exact: true }).fill("fixture-password");
   await page.getByRole("button", { name: "Continue with email" }).click();
   await expect(page.getByRole("alert")).toHaveText("Could not reach the server");
-  await capture(page, "docs-sign-in-error");
+  await capture(page, "docs-sign-in-error", false);
   const recovery = page.getByRole("link", { name: "Forgot password?" });
   await expect(recovery).toBeVisible();
   await recovery.click();
   await expect(page).toHaveURL(/\/forgot-password$/);
   await expect(page.getByRole("button", { name: "Send reset link" })).toBeVisible();
-  await capture(page, "docs-sign-in-recovery");
+  await capture(page, "docs-sign-in-recovery", false);
 });
 
 test("onboarding: prepare a required connection", async ({ page }) => {
@@ -170,11 +204,11 @@ test("onboarding: prepare a required connection", async ({ page }) => {
   const key = page.getByLabel("API key", { exact: true });
   await expect(key).toBeVisible();
   await expect(page.getByRole("button", { name: "Continue", exact: true })).toBeDisabled();
-  await capture(page, "docs-onboarding-open");
+  await capture(page, "docs-onboarding-open", false);
   await key.fill("fixture-key");
   const next = page.getByRole("button", { name: "Continue", exact: true });
   await expect(next).toBeEnabled();
-  await capture(page, "docs-onboarding-connect");
+  await capture(page, "docs-onboarding-connect", false);
 });
 
 test("bots-create: select a computer mode before creating", async ({ page }) => {
@@ -260,4 +294,156 @@ test("chat-approvals: inspect and deny a pending action", async ({ page }) => {
   await expect(deny).toBeHidden();
   await expect(page.getByRole("button", { name: "Sending…" })).toBeHidden();
   await capture(page, "docs-chat-approvals-denied");
+});
+
+test("routines: edit a scheduled routine and inspect its result", async ({ page }) => {
+  const state = routineDocsFixture();
+  await useDashboard(page, state);
+  await page.goto("/app/bot");
+  await page.getByTitle("Agent computer").click();
+  await expect(page.getByRole("button", { name: /Morning brief/ })).toBeVisible();
+  await capture(page, "docs-routines-open");
+  await page.getByRole("button", { name: /Morning brief/ }).click();
+  const panel = page.getByTestId("side-panel");
+  await expect(panel).toHaveAttribute("data-panel", "routine");
+  await expect(page.locator("label:has-text('Name') input")).toHaveValue("Morning brief");
+  await page
+    .locator("label:has-text('Instruction') textarea")
+    .fill("Summarize the revised sample plan.");
+  await capture(page, "docs-routines-edit");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect.poll(() => state.current.prompt).toBe("Summarize the revised sample plan.");
+  await expect(page.getByRole("button", { name: "Test run" })).toBeEnabled();
+  await capture(page, "docs-routines-saved");
+  await page.getByRole("button", { name: "Test run" }).click();
+  await expect(panel.getByText("Run history")).toBeVisible();
+  await expect(panel.getByText("Completed", { exact: true })).toBeVisible();
+  await capture(page, "docs-routines-result");
+});
+
+test("memory-documents: inspect history and approve a reviewed change", async ({ page }) => {
+  const state = memoryDocsFixture();
+  await useDashboard(page, state);
+  await page.goto("/app/bot");
+  await page
+    .locator("header.app-drag")
+    .getByRole("button", { name: "Settings", exact: true })
+    .click();
+  const settings = page.getByTestId("user-settings");
+  await settings.getByTestId("settings-nav-memory").click();
+  const memory = settings.getByTestId("memory-settings-page");
+  await expect(memory.getByRole("button", { name: /Preferences.*Updated/ })).toBeVisible();
+  await capture(page, "docs-memory-documents-open");
+  await memory.getByRole("button", { name: /Preferences.*Updated/ }).click();
+  const document = memory.getByRole("region", { name: "Memory document" });
+  await expect(document.getByText("Use concise answers.", { exact: true })).toBeVisible();
+  await capture(page, "docs-memory-documents-detail");
+  await document.getByText("History", { exact: true }).click();
+  await expect(
+    document.getByTestId("memory-history").getByRole("button", { name: "Revision 1" }),
+  ).toBeVisible();
+  await capture(page, "docs-memory-documents-history");
+  await memory
+    .getByLabel("Tell your bot what to change or remove")
+    .fill("Cite sources in answers.");
+  await memory.getByRole("button", { name: "Send", exact: true }).click();
+  const suggestions = memory.getByRole("region", { name: "Memory suggestions" });
+  await expect(suggestions.getByRole("button", { name: "Approve" })).toBeVisible();
+  await suggestions.getByRole("button", { name: "Approve" }).click();
+  await expect.poll(() => state.approved).toBe(true);
+  await expect(
+    document.getByText("Use concise answers and cite sources.", { exact: true }),
+  ).toBeVisible();
+  await capture(page, "docs-memory-documents-change");
+});
+
+test("computers: inspect capacity, connection form, and test outcomes", async ({ page }) => {
+  const state = computerDocsFixture();
+  await useDashboard(page, state);
+  await page.goto("/app/bot");
+  await page
+    .locator("header.app-drag")
+    .getByRole("button", { name: "Settings", exact: true })
+    .click();
+  const settings = page.getByTestId("user-settings");
+  await settings.getByTestId("settings-nav-computer").click();
+  const fleet = settings.getByTestId("fleet-settings");
+  await expect(fleet).toContainText("24.0 GB free");
+  const row = fleet.locator('[data-fleet-target="workshop"]');
+  await expect(row).toContainText("Running");
+  await capture(page, "docs-computers-open");
+  await fleet.getByRole("button", { name: "Add computer", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Add computer" });
+  await expect(dialog.getByLabel("Connection type")).toBeVisible();
+  await expect(dialog.getByLabel("Name")).toBeVisible();
+  await capture(page, "docs-computers-add");
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  state.setFail(true);
+  await row.getByRole("button", { name: "Test" }).click();
+  await expect(row).toContainText("Engine not reachable");
+  await capture(page, "docs-computers-refused");
+  state.setFail(false);
+  await row.getByRole("button", { name: "Test" }).click();
+  await expect(row).toContainText("Running");
+  await capture(page, "docs-computers-tested");
+});
+
+test("integrations: inspect the catalog, tool access, and connection form", async ({ page }) => {
+  const state = integrationDocsFixture();
+  await useDashboard(page, state);
+  await page.goto("/app/bot");
+  await page
+    .locator("header.app-drag")
+    .getByRole("button", { name: "Settings", exact: true })
+    .click();
+  const settings = page.getByTestId("user-settings");
+  await settings.getByTestId("settings-nav-integrations").click();
+  await expect(settings.getByTestId("integration-notion")).toBeVisible();
+  await capture(page, "docs-integrations-open");
+  await settings.getByTestId("integration-notion").getByRole("button", { name: "Manage" }).click();
+  const manage = settings.getByTestId("integration-manage");
+  const read = manage.getByRole("checkbox", { name: "read_notes" });
+  await expect(read).toBeChecked();
+  const approval = manage.getByRole("button", { name: "Approval for read_notes" });
+  await expect(approval).toContainText("Ask first");
+  await capture(page, "docs-integrations-access");
+  await approval.click();
+  await expect(approval).toContainText("Allow");
+  await capture(page, "docs-integrations-allow");
+  await read.uncheck();
+  await expect(read).not.toBeChecked();
+  await capture(page, "docs-integrations-block");
+  await manage.getByRole("button", { name: "Close" }).click();
+  await settings
+    .getByTestId("integration-github")
+    .getByRole("button", { name: "Use a token" })
+    .click();
+  await expect(settings.getByLabel("Fine-grained token")).toHaveAttribute("type", "password");
+  await capture(page, "docs-integrations-connect");
+});
+
+test("group-goals: start a goal in a room and stop it", async ({ page }) => {
+  const state = groupGoalDocsFixture();
+  await useDashboard(page, { botCount: 2, groups: [state.group], rpc: state.rpc });
+  await page.goto("/app/g/operations-group");
+  await expect(page.getByTestId("group-participant-models")).toBeVisible();
+  await page.getByTestId("bot-settings-trigger").click();
+  const panel = page.getByTestId("side-panel");
+  await expect(panel).toHaveAttribute("data-panel", "group-settings");
+  await expect(panel.getByRole("textbox", { name: "Objective" })).toBeVisible();
+  await capture(page, "docs-group-goals-ready");
+  await panel.getByRole("textbox", { name: "Objective" }).fill("Review the sample release plan.");
+  await panel
+    .getByRole("textbox", { name: "Done when (one per line)" })
+    .fill("The plan has an independent check.");
+  await expect(panel.getByRole("button", { name: "Start goal" })).toBeEnabled();
+  await capture(page, "docs-group-goals-form");
+  await panel.getByRole("button", { name: "Start goal" }).click();
+  await expect.poll(() => state.goal?.status).toBe("running");
+  await expect(page.getByText("Goal: Working", { exact: false })).toBeVisible();
+  await capture(page, "docs-group-goals-progress");
+  await page.getByRole("button", { name: "Stop", exact: true }).click();
+  await expect.poll(() => state.goal?.status).toBe("stopped");
+  await expect(page.getByText("Goal: Stopped", { exact: false })).toBeVisible();
+  await capture(page, "docs-group-goals-stopped");
 });
