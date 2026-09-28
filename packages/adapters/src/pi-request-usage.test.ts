@@ -72,6 +72,38 @@ describe("Pi raw numeric mappings", () => {
       reasoning: 8,
     });
   });
+  it("maps Z.ai GLM additive cache counters when prompt_tokens excludes cache hits", () => {
+    // DeepSeek-style OpenAI-compatible shape used by Z.ai's GLM routes:
+    // prompt_tokens carries only the cache-miss portion, and the hit count is
+    // disclosed beside it. Cache subsets must still partition logical input.
+    const raw = piWireUsage("openai-completions", {
+      usage: {
+        prompt_tokens: 60,
+        completion_tokens: 20,
+        total_tokens: 1520,
+        prompt_cache_hit_tokens: 1440,
+        prompt_cache_miss_tokens: 60,
+      },
+    });
+    expect(normalizeUsageCounts(raw!, "total-with-cache-subsets").categories).toEqual({
+      logicalInput: 1500,
+      uncachedInput: null,
+      cacheReadInput: 1440,
+      cacheWriteInput: null,
+      output: 20,
+      reasoning: null,
+    });
+  });
+  it("treats a GLM response without cache fields as not reported, not zero", () => {
+    const raw = piWireUsage("openai-completions", {
+      usage: { prompt_tokens: 100, completion_tokens: 20, total_tokens: 120 },
+    });
+    expect(normalizeUsageCounts(raw!, "total-with-cache-subsets").categories).toMatchObject({
+      logicalInput: 100,
+      cacheReadInput: null,
+      cacheWriteInput: null,
+    });
+  });
   it("maps Anthropic additive fields and retains the cache TTL subset", () => {
     const raw = piWireUsage("anthropic-messages", {
       type: "message_start",
