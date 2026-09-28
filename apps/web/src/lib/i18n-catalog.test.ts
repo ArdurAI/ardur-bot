@@ -26,11 +26,7 @@ describe("lingui catalogs", () => {
         sourceLocale: "en",
         filename,
       });
-      for (const message of [
-        "Sign-in and security",
-        "Devices and sessions",
-        "Save instructions",
-      ]) {
+      for (const message of ["Sign-in and security", "Devices and sessions", "Save instructions"]) {
         const entry = Object.values(catalog).find((value) => value.message === message);
         expect(entry?.translation, `${locale}: ${message}`).toBeTruthy();
       }
