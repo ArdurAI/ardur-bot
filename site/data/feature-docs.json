@@ -2692,7 +2692,7 @@
       "id": "integrations",
       "aliases": [],
       "title": "Integrations",
-      "summary": "Find an integration, inspect its tools, and open a connection form.",
+      "summary": "Find an integration, set and save tool permissions, and open a connection form.",
       "area": "connections-and-computers",
       "order": 110,
       "internal": false,
@@ -2754,19 +2754,19 @@
         {
           "id": "review-tool-access",
           "aliases": [],
-          "text": "Open Manage and inspect the selected read tool.",
+          "text": "Open Manage and inspect the read tool permission.",
           "uiLabels": [
             "Manage",
-            "Ask first"
+            "Ask"
           ],
           "screenshotId": "docs-integrations-access",
-          "expected": "The read tool asks first.",
+          "expected": "The read tool permission is Ask.",
           "availableSince": "0.1.0-alpha.1"
         },
         {
           "id": "allow-read-tool",
           "aliases": [],
-          "text": "Change the read tool approval to Allow.",
+          "text": "Change the read tool permission to Allow.",
           "uiLabels": [
             "Allow"
           ],
@@ -2777,20 +2777,23 @@
         {
           "id": "remove-tool-access",
           "aliases": [],
-          "text": "Clear the read tool selection.",
+          "text": "Change the read tool permission to Block, then choose Save.",
           "uiLabels": [
-            "Manage"
+            "Block",
+            "Save"
           ],
           "screenshotId": "docs-integrations-block",
-          "expected": "The read tool is no longer selected.",
+          "expected": "The saved read tool permission is Block.",
           "availableSince": "0.1.0-alpha.1"
         },
         {
           "id": "open-connection-form",
           "aliases": [],
-          "text": "Close Manage and open Use a token for another integration.",
+          "text": "Choose Back, reopen Manage to confirm Block persisted, then choose Back and open Use a token for another integration.",
           "uiLabels": [
-            "Close",
+            "Back",
+            "Manage",
+            "Block",
             "Use a token",
             "Fine-grained token"
           ],
@@ -2801,13 +2804,13 @@
       ],
       "boundaries": [
         "Opening a connection form does not connect an account.",
-        "Clearing a tool selection removes its access; write tools remain subject to their approval policy."
+        "Permission changes take effect only after Save; Block removes tool access, and write tools remain subject to their approval policy."
       ],
       "troubleshooting": [
         {
           "errorId": "integration-access",
           "message": "Could not save or load access.",
-          "action": "Choose Try again before changing tool access."
+          "action": "Choose Try again to reload access, then set the permission and choose Save again."
         }
       ],
       "related": [

@@ -402,18 +402,25 @@ test("integrations: inspect the catalog, tool access, and connection form", asyn
   await capture(page, "docs-integrations-open");
   await settings.getByTestId("integration-notion").getByRole("button", { name: "Manage" }).click();
   const manage = settings.getByTestId("integration-manage");
-  const read = manage.getByRole("checkbox", { name: "read_notes" });
-  await expect(read).toBeChecked();
-  const approval = manage.getByRole("button", { name: "Approval for read_notes" });
-  await expect(approval).toContainText("Ask first");
+  const permission = manage.getByRole("combobox", { name: "Permission for read_notes" });
+  await expect(permission).toHaveValue("ask");
   await capture(page, "docs-integrations-access");
-  await approval.click();
-  await expect(approval).toContainText("Allow");
+  await permission.selectOption("allow");
+  await expect(permission).toHaveValue("allow");
   await capture(page, "docs-integrations-allow");
-  await read.uncheck();
-  await expect(read).not.toBeChecked();
+  await permission.selectOption("block");
+  await manage.getByRole("button", { name: "Save", exact: true }).click();
+  await expect.poll(() => state.connection.spaceAllowedTools).not.toContain("read_notes");
+  await expect(permission).toHaveValue("block");
   await capture(page, "docs-integrations-block");
-  await manage.getByRole("button", { name: "Close" }).click();
+  await manage.getByRole("button", { name: "Back" }).click();
+  await settings.getByTestId("integration-notion").getByRole("button", { name: "Manage" }).click();
+  await expect(
+    settings
+      .getByTestId("integration-manage")
+      .getByRole("combobox", { name: "Permission for read_notes" }),
+  ).toHaveValue("block");
+  await settings.getByTestId("integration-manage").getByRole("button", { name: "Back" }).click();
   await settings
     .getByTestId("integration-github")
     .getByRole("button", { name: "Use a token" })

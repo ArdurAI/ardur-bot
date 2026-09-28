@@ -188,7 +188,7 @@ export function computerDocsFixture() {
 }
 
 export function integrationDocsFixture() {
-  const connection = {
+  let connection = {
     id: "notes-connection",
     catalogId: "notion",
     state: "connected",
@@ -212,13 +212,28 @@ export function integrationDocsFixture() {
     },
   };
   return {
-    rpc(procedure: string): unknown {
+    get connection() {
+      return connection;
+    },
+    rpc(procedure: string, input?: Record<string, unknown>): unknown {
       if (procedure === "integrations/list")
         return { catalog: integrationCatalog, connections: [connection] };
       if (procedure === "integrations/grants" || procedure === "integrations/resourceTools")
         return [];
       if (procedure === "integrations/status") return connection;
       if (procedure === "integrations/discover") return connection.manifest;
+      if (procedure === "integrations/assign") {
+        if (input?.connectionId !== connection.id || !Array.isArray(input.toolIds))
+          throw new Error("Unexpected integration assignment.");
+        connection = {
+          ...connection,
+          spaceAllowedTools: input.toolIds as string[],
+          spaceToolPolicies:
+            (input.spaceToolPolicies as Record<string, "allow" | "ask-first">) ??
+            connection.spaceToolPolicies,
+        };
+        return [];
+      }
       return undefined;
     },
   };
