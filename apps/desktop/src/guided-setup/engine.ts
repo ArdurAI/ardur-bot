@@ -33,6 +33,7 @@ export interface SetupStep {
   revision: number;
   requires: readonly SetupStepId[];
   canSkip: boolean;
+  waitForInput?: boolean;
   check(context: SetupContext, signal: AbortSignal): Promise<StepVerification>;
   run(context: SetupContext, signal: AbortSignal): Promise<StepReceipt>;
   verify(
@@ -79,6 +80,11 @@ function emptySnapshot(steps: readonly SetupStep[]): SetupSnapshot {
 
 const ACTIVE = new Set<SetupStepStatus>(["checking", "running", "verifying", "cancelling"]);
 class JournalWriteError extends Error {}
+export class SetupStepFailure extends Error {
+  constructor(readonly reasonCode: string) {
+    super(reasonCode);
+  }
+}
 export class SetupEngine {
   private journal: SetupJournal;
   private readonly steps: readonly SetupStep[];
@@ -121,6 +127,9 @@ export class SetupEngine {
       engine.journal = loaded.journal;
       const snap = engine.journal.snapshot;
       for (const row of snap.steps) {
+        const implementation = steps.find((step) => step.id === row.id);
+        row.available = implementation !== undefined;
+        row.revision = implementation?.revision ?? 0;
         if (ACTIVE.has(row.status) || row.status === "cancelling") {
           row.status = "interrupted";
           row.reasonCode = "setup-interrupted";
@@ -164,16 +173,19 @@ export class SetupEngine {
     )
       return false;
     if (this.journal.snapshot.interrupted) return false;
-    const required = ["prerequisites", "database", "migrations"] as const;
+    const required = ["prerequisites", "database", "migrations", "services"] as const;
     if (
       !required.every((id) => this.row(id).status === "succeeded" && this.freshlyVerified.has(id))
     )
       return false;
     const command = this.row("command");
+    const engines = this.row("engines");
     return (
-      command.status === "skipped" ||
-      command.status === "not-applicable" ||
-      (command.status === "succeeded" && this.freshlyVerified.has("command"))
+      (command.status === "skipped" ||
+        command.status === "not-applicable" ||
+        (command.status === "succeeded" && this.freshlyVerified.has("command"))) &&
+      (engines.status === "skipped" ||
+        (engines.status === "succeeded" && this.freshlyVerified.has("engines")))
     );
   }
   onChange(listener: (snapshot: SetupSnapshot) => void): () => void {
@@ -358,7 +370,7 @@ export class SetupEngine {
         if (signal.aborted || this.cancelling) break;
         if (!this.dependenciesMet(step)) break;
         const row = this.row(step.id);
-        if (row.status === "skipped" && !explicit) continue;
+        const previouslySkipped = row.status === "skipped" && !explicit;
         this.journal.snapshot.currentStep = step.id;
         row.attempt += 1;
         this.transition(step.id, "checking", null);
@@ -370,7 +382,11 @@ export class SetupEngine {
         if (checked.kind === "satisfied") {
           this.success(step, checked, "already-ready");
           if (this.journal.pending?.stepId === step.id) this.journal.pending = null;
-          this.journal.receipts[step.id] = { kind: "verified", proof: checked.evidence };
+          if (
+            !this.journal.receipts[step.id] ||
+            (step.id === "services" && this.journal.receipts[step.id]?.proof !== checked.evidence)
+          )
+            this.journal.receipts[step.id] = { kind: "verified", proof: checked.evidence };
           await this.persist();
           explicit = false;
           continue;
@@ -381,12 +397,17 @@ export class SetupEngine {
           explicit = false;
           continue;
         }
+        if (previouslySkipped) {
+          this.transition(step.id, "skipped", "user-skipped");
+          await this.persist();
+          continue;
+        }
         if (checked.kind === "blocked") {
           this.transition(step.id, "failed", checked.reasonCode, checked.details);
           await this.persist();
           break;
         }
-        if (step.canSkip && !explicit) {
+        if ((step.canSkip || step.waitForInput) && !explicit) {
           this.transition(step.id, "waiting-input", checked.reasonCode, checked.details);
           await this.persist();
           break;
@@ -428,7 +449,11 @@ export class SetupEngine {
         const current = this.journal.snapshot.currentStep;
         this.failInMemory(
           current,
-          error instanceof JournalWriteError ? "journal-write-failed" : "setup-step-failed",
+          error instanceof JournalWriteError
+            ? "journal-write-failed"
+            : error instanceof SetupStepFailure
+              ? error.reasonCode
+              : "setup-step-failed",
         );
         await this.persist().catch(() => this.failInMemory(current, "journal-write-failed"));
       }

@@ -21,14 +21,24 @@ export function setStartup(
   if (!startupSupported(platform))
     throw new Error("Run on startup is unavailable on this computer.");
   const previous = startupEnabled(platform, app);
-  app.setLoginItemSettings({ openAtLogin: enabled, ...(platform === "win32" ? { enabled } : {}) });
-  if (startupEnabled(platform, app) !== enabled) {
+  try {
+    app.setLoginItemSettings({
+      openAtLogin: enabled,
+      ...(platform === "win32" ? { enabled } : {}),
+    });
+    if (startupEnabled(platform, app) === enabled) return;
+  } catch {
+    // Treat a failed read-back as unconfirmed and restore the previous preference.
+  }
+  try {
     app.setLoginItemSettings({
       openAtLogin: previous,
       ...(platform === "win32" ? { enabled: previous } : {}),
     });
-    throw new Error("Allow startup in your system settings, then try again.");
+  } catch {
+    throw new Error("Startup could not be restored. Check your system settings.");
   }
+  throw new Error("Allow startup in your system settings, then try again.");
 }
 
 export function permissionStatus(value: string): PermissionStatus {

@@ -1599,6 +1599,34 @@ describe("failure sentences", () => {
 });
 
 describe("service readiness", () => {
+  it.each([
+    { workerReady: false, health: true, message: "The worker stopped." },
+    { workerReady: true, health: false, message: "The API stopped." },
+  ])(
+    "does not accept only one readiness signal ($message)",
+    async ({ workerReady, health, message }) => {
+      const root = await userData();
+      let now = 0;
+      const controller = new LocalModeController(
+        harness(root, {
+          workerReady,
+          allocatePort: async () => 23456,
+          portAvailable: async () => true,
+          postgresFactory: () => runningPostgres(),
+          now: () => now,
+          fetch: async () => {
+            now = 1_000_000;
+            return health ? healthResponse() : new Response(null, { status: 503 });
+          },
+        }),
+      );
+      const signal = new AbortController().signal;
+      expect(await controller.servicesReady(signal)).toBe(false);
+      expect(await controller.startServices(signal)).toMatchObject({ phase: "failed", message });
+      expect(await controller.servicesReady(signal)).toBe(false);
+      await controller.stop();
+    },
+  );
   it("is not ready while the worker has given up, and Retry gives it a fresh restart budget", async () => {
     const root = await userData();
     const failed: string[] = [];

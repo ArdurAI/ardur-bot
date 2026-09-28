@@ -13,11 +13,13 @@ function deferred<T>() {
 }
 function memoryStore() {
   let raw: string | null = null;
+  const writes: string[] = [];
   let rejectWrite: ((value: string) => boolean) | null = null;
   const files: JournalFileBoundary = {
     read: async () => raw,
-    write: async (_, value) => {
+    write: async (file, value) => {
       if (rejectWrite?.(value)) throw new Error("write failed");
+      writes.push(file);
       raw = value;
     },
     exists: async () => raw !== null,
@@ -26,6 +28,7 @@ function memoryStore() {
   return {
     store: new SetupJournalStore("/fixture/data", files),
     raw: () => raw,
+    writes,
     setRaw: (value: string | null) => {
       raw = value;
     },
@@ -50,7 +53,74 @@ function step(overrides: Partial<SetupStep> = {}): SetupStep {
 const clock = { monotonic: () => 10, wall: () => 100 };
 
 describe("SetupEngine", () => {
-  it("requires fresh checks before handing a saved pilot to local services", async () => {
+  it("activates steps 5 and 6 in an I1 journal without changing its version or receipts", async () => {
+    const files = memoryStore();
+    const ready = async () => ({ kind: "satisfied" as const, checkedAt: 100, evidence: "checked" });
+    const original = [
+      step({ check: ready }),
+      step({ id: "database", requires: ["prerequisites"], check: ready }),
+      step({ id: "migrations", requires: ["database"], check: ready }),
+      step({ id: "command", requires: ["migrations"], canSkip: true }),
+    ];
+    const first = await SetupEngine.open(files.store, original, clock);
+    await first.start();
+    await first.skip("command");
+    const receipts = JSON.parse(files.raw()!).receipts;
+    const upgraded = await SetupEngine.open(
+      files.store,
+      [
+        ...original,
+        step({ id: "services", requires: ["migrations"], waitForInput: true }),
+        step({ id: "engines", requires: ["services"], canSkip: true }),
+      ],
+      clock,
+    );
+    expect(
+      upgraded
+        .snapshot()
+        .steps.slice(4, 6)
+        .map((row) => [row.available, row.revision]),
+    ).toEqual([
+      [true, 1],
+      [true, 1],
+    ]);
+    await upgraded.start();
+    expect(upgraded.snapshot().steps[4]?.status).toBe("waiting-input");
+    const saved = JSON.parse(files.raw()!);
+    expect(saved.snapshot.planVersion).toBe(1);
+    expect(saved.receipts.prerequisites).toEqual(receipts.prerequisites);
+  });
+  it("rechecks saved rows, reuses owned receipts, and repairs only needed work", async () => {
+    const files = memoryStore();
+    let ownedReady = false;
+    const ownedRun = vi.fn(async () => {
+      ownedReady = true;
+      return { kind: "owned" as const, proof: "folder-fingerprint" };
+    });
+    const repairRun = vi.fn(async () => ({ kind: "verified" as const, proof: "repair" }));
+    const steps = [
+      step({
+        check: async () =>
+          ownedReady
+            ? { kind: "satisfied", checkedAt: 100, evidence: "folder-fingerprint" }
+            : { kind: "needed", reasonCode: "needed" },
+        run: ownedRun,
+      }),
+      step({ id: "database", requires: ["prerequisites"], run: repairRun }),
+    ];
+    const first = await SetupEngine.open(files.store, steps, clock);
+    await first.start();
+    const before = JSON.parse(files.raw()!);
+    expect(before.receipts.prerequisites).toEqual({ kind: "owned", proof: "folder-fingerprint" });
+    const reopened = await SetupEngine.open(files.store, steps, clock);
+    await reopened.start();
+    const after = JSON.parse(files.raw()!);
+    expect(ownedRun).toHaveBeenCalledOnce();
+    expect(repairRun).toHaveBeenCalledTimes(2);
+    expect(after.receipts.prerequisites).toEqual(before.receipts.prerequisites);
+    expect(files.writes.every((file) => file.endsWith("guided-setup.json"))).toBe(true);
+  });
+  it("requires fresh checks through services and optional computers before handoff", async () => {
     const files = memoryStore();
     const satisfied = async () => ({
       kind: "satisfied" as const,
@@ -62,12 +132,16 @@ describe("SetupEngine", () => {
       step({ id: "database", requires: ["prerequisites"], check: satisfied }),
       step({ id: "migrations", requires: ["database"], check: satisfied }),
       step({ id: "command", requires: ["migrations"], canSkip: true }),
+      step({ id: "services", requires: ["migrations"], check: satisfied }),
+      step({ id: "engines", requires: ["services"], canSkip: true }),
     ];
     const first = await SetupEngine.open(files.store, steps, clock);
     expect(first.pilotReady()).toBe(false);
     await first.start();
     expect(first.pilotReady()).toBe(false);
     await first.skip("command");
+    await first.start();
+    await first.skip("engines");
     expect(first.pilotReady()).toBe(true);
     const reopened = await SetupEngine.open(files.store, steps, clock);
     expect(reopened.pilotReady()).toBe(false);
