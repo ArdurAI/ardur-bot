@@ -1,15 +1,18 @@
 import { createHash, randomUUID } from "node:crypto";
 import { runContinueJob } from "@ardurbot/adapter-kit";
 import type { MessageBlock } from "@ardurbot/contracts";
-import { BOT_MESSAGE_MAX_HOPS, buildBotMessageWakePrompt } from "@ardurbot/core";
+import { BOT_MESSAGE_MAX_HOPS, buildBotMessageWakePrompt, peerPairKey } from "@ardurbot/core";
 import {
   acknowledgeBotMessageInput,
   appendBotMessageWakeInTransaction,
   appendEventInTransaction,
   BotInboxFullError,
+  checkPeerTrafficLimits,
   createThreadMessageInTransaction,
   dispatchBotMessageWake,
   goalBotAuthorityFingerprint,
+  lockPeerTrafficPolicy,
+  recordPeerTrafficBlock,
   withTransactionRetry,
 } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
@@ -99,6 +102,11 @@ export async function replyToBotDelivery(
   try {
     const committed = await withTransactionRetry(() =>
       deps.prisma.$transaction(async (tx) => {
+        const paused = await lockPeerTrafficPolicy(tx, {
+          spaceId: run.spaceId,
+          userId: run.userId,
+          groupId: candidate.sourceGroupId ?? candidate.targetGroupId,
+        });
         const root = await tx.delegationRoot.findUnique({
           where: { rootTaskId: candidate.rootTaskId },
           select: { coordinatorThreadId: true },
@@ -131,6 +139,7 @@ export async function replyToBotDelivery(
             return { ok: false as const, error: "This delivery key belongs to another reply." };
           return { ok: true as const, replayed: true as const, deliveryId: replay.id };
         }
+        if (paused) return { ok: false as const, error: "Team messages are paused." };
         const parent = await tx.botMessageDelivery.findUnique({ where: { id: candidate.id } });
         const source = await tx.run.findFirst({
           where: {
@@ -198,6 +207,32 @@ export async function replyToBotDelivery(
         });
         if (!recipient || (input.confirm_name && input.confirm_name !== recipient.name))
           return { ok: false as const, error: "The original sender is unavailable." };
+        if (input.intent === "question") {
+          const now = new Date();
+          const limit = await checkPeerTrafficLimits(tx, {
+            spaceId: run.spaceId,
+            userId: run.userId,
+            groupId: goal.groupId,
+            goalId: goal.id,
+            senderBotId: run.botId,
+            recipientBotId: recipient.id,
+            wakes: true,
+            now,
+          });
+          if (limit) {
+            await recordPeerTrafficBlock(tx, {
+              spaceId: run.spaceId,
+              userId: run.userId,
+              groupId: goal.groupId,
+              goalId: goal.id,
+              senderBotId: run.botId,
+              recipientBotId: recipient.id,
+              reason: limit,
+              now,
+            });
+            return { ok: false as const, error: "Team message limit reached." };
+          }
+        }
         const authorityFingerprint = await goalBotAuthorityFingerprint(tx, {
           spaceId: run.spaceId,
           userId: run.userId,
@@ -268,6 +303,7 @@ export async function replyToBotDelivery(
             inReplyToDeliveryId: parent.id,
             senderBotId: run.botId,
             recipientBotId: recipient.id,
+            pairKey: peerPairKey(run.botId, recipient.id),
             senderThreadId: run.threadId,
             recipientThreadId: parent.senderThreadId,
             sourceRunId: run.id,

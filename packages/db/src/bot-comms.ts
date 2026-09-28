@@ -6,6 +6,7 @@ import {
   canAppendBotMessageToBatch,
 } from "@ardurbot/contracts";
 import { buildBotMessageWakePrompt } from "@ardurbot/core";
+import { lockPeerTrafficPolicy, peerTrafficPaused } from "./bot-comms-policy.js";
 import type { Prisma, PrismaClient } from "./client.js";
 import { appendEventInTransaction } from "./events.js";
 import { createThreadMessageInTransaction } from "./messages.js";
@@ -604,6 +605,14 @@ async function bindBotMessageWakeInTransaction(
   const root = await tx.delegationRoot.findUnique({ where: { rootTaskId: wake.rootTaskId } });
   const now = new Date();
   if (
+    await peerTrafficPaused(tx, {
+      spaceId: wake.spaceId,
+      userId: wake.userId,
+      groupId: goal?.groupId,
+    })
+  )
+    return { runId: null, updatedThreads };
+  if (
     !goal ||
     !root ||
     goal.untilAt <= now ||
@@ -925,6 +934,72 @@ export async function expireQuietBotMessages(prisma: PrismaClient, now = new Dat
   return stale.length;
 }
 
+/** Only the peer delivery expires; ordinary effect approval lifetimes are unchanged. */
+export async function expireHeldBotMessages(prisma: PrismaClient, now = new Date(), limit = 100) {
+  const stale = await prisma.botMessageDelivery.findMany({
+    where: { state: "held", expiresAt: { lte: now } },
+    orderBy: [{ expiresAt: "asc" }, { id: "asc" }],
+    take: limit,
+    select: { id: true, senderThreadId: true, recipientThreadId: true },
+  });
+  let expired = 0;
+  for (const row of stale)
+    await prisma.$transaction(async (tx) => {
+      for (const threadId of [...new Set([row.senderThreadId, row.recipientThreadId])].sort())
+        await tx.$queryRaw`SELECT id FROM threads WHERE id = ${threadId} FOR UPDATE`;
+      const delivery = await tx.botMessageDelivery.findUnique({ where: { id: row.id } });
+      if (delivery?.state !== "held" || delivery.expiresAt > now) return;
+      await tx.botMessageDelivery.update({
+        where: { id: delivery.id },
+        data: { state: "expired", outcome: "expired" },
+      });
+      await projectDeliveryState(tx, delivery.id, "expired");
+      if (delivery.approvalEffectId)
+        await tx.externalEffect.updateMany({
+          where: { id: delivery.approvalEffectId, status: "intended" },
+          data: { status: "failed", result: { reason: "peer-delivery-expired" } },
+        });
+      if (delivery.delegationId) {
+        const run = await tx.run.findFirst({
+          where: { delegationId: delivery.delegationId, status: "waiting_input" },
+          select: { id: true, taskId: true },
+        });
+        if (run) {
+          await tx.run.update({
+            where: { id: run.id },
+            data: { status: "cancelled", completedAt: now },
+          });
+          await tx.task.update({ where: { id: run.taskId }, data: { status: "cancelled" } });
+          const ask = await tx.message.findUnique({
+            where: {
+              threadId_clientNonce: {
+                threadId: delivery.senderThreadId,
+                clientNonce: `peer-hold:${delivery.idempotencyKey}`,
+              },
+            },
+          });
+          if (ask) {
+            const blocks = (ask.blocks as MessageBlock[]).map((block) =>
+              block.kind === "ask" && block.approvalEffectId === delivery.approvalEffectId
+                ? { ...block, status: "answered" as const, answer: "expired" }
+                : block,
+            );
+            await tx.message.update({ where: { id: ask.id }, data: { blocks } });
+            await appendEventInTransaction(tx, {
+              spaceId: delivery.spaceId,
+              threadId: ask.threadId,
+              botId: delivery.senderBotId,
+              type: "thread.message.updated",
+              payload: { messageId: ask.id, role: "bot", blocks },
+            });
+          }
+        }
+      }
+      expired++;
+    });
+  return expired;
+}
+
 /** Return only quiet deliveries claimed by the current run attempt. */
 export async function claimQuietBotMessages(
   prisma: PrismaClient,
@@ -933,6 +1008,12 @@ export async function claimQuietBotMessages(
   if (input.deliveryIds.length === 0) return [];
   return withTransactionRetry(() =>
     prisma.$transaction(async (tx) => {
+      const claimant = await tx.run.findUnique({
+        where: { id: input.runId },
+        select: { spaceId: true, userId: true },
+      });
+      if (!claimant) throw new Error("Quiet delivery claim lost its run lease.");
+      await lockPeerTrafficPolicy(tx, claimant);
       await tx.$queryRaw`SELECT id FROM runs WHERE id = ${input.runId} FOR UPDATE`;
       const run = await tx.run.findFirst({
         where: {
@@ -947,6 +1028,25 @@ export async function claimQuietBotMessages(
       if (!run) throw new Error("Quiet delivery claim lost its run lease.");
       const claimedIds: string[] = [];
       for (const id of input.deliveryIds) {
+        const delivery = await tx.botMessageDelivery.findFirst({
+          where: { id, spaceId: run.spaceId, userId: run.userId },
+          select: { goalId: true, sourceGroupId: true },
+        });
+        if (!delivery) continue;
+        const goal =
+          delivery.goalId && !delivery.sourceGroupId
+            ? await tx.teamGoal.findUnique({
+                where: { id: delivery.goalId },
+                select: { groupId: true },
+              })
+            : null;
+        if (
+          await peerTrafficPaused(tx, {
+            ...claimant,
+            groupId: delivery.sourceGroupId ?? goal?.groupId,
+          })
+        )
+          continue;
         const claimed = await tx.botMessageDelivery.updateMany({
           where: {
             id,
@@ -1114,6 +1214,20 @@ export async function refreshBoundBotMessageWakeRun(
             },
           })
         : null;
+      if (
+        goal &&
+        (await peerTrafficPaused(tx, {
+          spaceId: wake.spaceId,
+          userId: wake.userId,
+          groupId: goal.groupId,
+        }))
+      ) {
+        await tx.run.updateMany({
+          where: { id: run.id, cancelRequestedAt: null },
+          data: { cancelRequestedAt: new Date() },
+        });
+        return false;
+      }
       if (!goal || !(await currentCoordinatorGroup(tx, wake, goal))) {
         await finishWake(tx, wake, "cancelled", "group-unavailable", true);
         await tx.run.update({

@@ -157,11 +157,13 @@ import {
   findModelCredential,
   findSpaceMemoryConfig,
   formatMessagingLinkCode,
+  getBotCommunicationPolicy,
   getGoal,
   getUserPreferences,
   InvalidSpaceNameError,
   IsolationError,
   issueMessagingLinkCode,
+  listBotCommunicationDeliveries,
   listDelegations,
   lockOwnedGroup,
   newestModelCredentialOrder,
@@ -178,6 +180,7 @@ import {
   SpaceNotFoundError,
   selectSpaceModelPreference,
   selectSpaceVoicePreference,
+  setBotCommunicationPaused,
   startGoal,
   stopGoal,
   touchGroupUpdatedAt,
@@ -5865,6 +5868,23 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
     },
     team: {
       board: authed.team.board.handler(({ context }) => teamBoard(deps.prisma, context.actor)),
+    },
+    botComms: {
+      getPolicy: authed.botComms.getPolicy.handler(({ context, input }) => {
+        if (!context.actor.isDeploymentOwner || !context.authSessionId)
+          throw new ORPCError("FORBIDDEN");
+        return getBotCommunicationPolicy(deps.prisma, context.actor, input.groupId);
+      }),
+      setPaused: authed.botComms.setPaused.handler(({ context, input }) => {
+        if (!context.actor.isDeploymentOwner || !context.authSessionId)
+          throw new ORPCError("FORBIDDEN");
+        return setBotCommunicationPaused(deps.prisma, context.actor, input);
+      }),
+      listDeliveries: authed.botComms.listDeliveries.handler(({ context, input }) => {
+        if (!context.actor.isDeploymentOwner || !context.authSessionId)
+          throw new ORPCError("FORBIDDEN");
+        return listBotCommunicationDeliveries(deps.prisma, context.actor, input);
+      }),
     },
     goals: {
       start: authed.goals.start.handler(async ({ context, input }) => {

@@ -30,6 +30,7 @@ import {
   settleBotMessageWakesInTransaction,
   settleQuietBotMessageClaimsInTransaction,
 } from "./bot-comms.js";
+import { peerTrafficPaused } from "./bot-comms-policy.js";
 import { cancelRunsInTransaction } from "./cancel-runs.js";
 import type { Prisma, PrismaClient } from "./client.js";
 import { materializeCommandEvent } from "./command-blocks.js";
@@ -762,7 +763,7 @@ async function commitAnswerRunInput(
       threadId: runThreadId,
       status: "waiting_input",
     },
-    select: { botId: true, userId: true, checkpoint: true },
+    select: { botId: true, userId: true, taskId: true, checkpoint: true },
   });
   if (!run) return null;
   const message = await tx.message.findFirst({
@@ -809,6 +810,79 @@ async function commitAnswerRunInput(
     }
   }
 
+  const peerHold =
+    approvalEffect?.kind === "peer_hold"
+      ? await tx.botMessageDelivery.findFirst({
+          where: {
+            approvalEffectId: approvalEffect.id,
+            spaceId: input.spaceId,
+            userId: run.userId,
+            state: "held",
+          },
+        })
+      : null;
+  if (
+    approvalEffect?.kind === "peer_hold" &&
+    (!peerHold ||
+      input.answeredByUserId !== run.userId ||
+      !["allow", "deny"].includes(input.answer))
+  )
+    return null;
+  if (peerHold) {
+    await tx.$queryRaw`SELECT id FROM threads WHERE id = ${peerHold.recipientThreadId} FOR UPDATE`;
+    if (input.answer === "allow") {
+      const goal = peerHold.goalId
+        ? await tx.teamGoal.findFirst({
+            where: {
+              id: peerHold.goalId,
+              rootTaskId: peerHold.rootTaskId,
+              spaceId: peerHold.spaceId,
+              userId: peerHold.userId,
+              status: "running",
+              untilAt: { gt: new Date() },
+            },
+          })
+        : null;
+      const root = await tx.delegationRoot.findUnique({
+        where: { rootTaskId: peerHold.rootTaskId },
+      });
+      const group = goal
+        ? await tx.chatGroup.findFirst({
+            where: {
+              id: goal.groupId,
+              spaceId: peerHold.spaceId,
+              userId: peerHold.userId,
+              archivedAt: null,
+              coordinatorBotId: peerHold.senderBotId,
+              members: { some: { botId: peerHold.recipientBotId, bot: { archivedAt: null } } },
+            },
+          })
+        : null;
+      if (
+        !goal ||
+        !root ||
+        !group ||
+        peerHold.expiresAt <= new Date() ||
+        root.cancelRequestedAt ||
+        root.deadlineAt <= new Date() ||
+        root.usedTokens >= Math.min(root.tokenLimit, goal.tokenLimit) ||
+        (await peerTrafficPaused(tx, {
+          spaceId: peerHold.spaceId,
+          userId: peerHold.userId,
+          groupId: goal.groupId,
+        })) ||
+        (await goalBotAuthorityFingerprint(tx, {
+          spaceId: peerHold.spaceId,
+          userId: peerHold.userId,
+          goalId: goal.id,
+          rootTaskId: root.rootTaskId,
+          botId: peerHold.recipientBotId,
+        })) !== peerHold.authorityFingerprint
+      )
+        return null;
+    }
+  }
+
   const queued = await tx.run.updateMany({
     where: {
       id: input.runId,
@@ -817,11 +891,45 @@ async function commitAnswerRunInput(
       status: "waiting_input",
     },
     data: {
-      status: "queued",
+      status: peerHold && input.answer === "deny" ? "cancelled" : "queued",
+      ...(peerHold && input.answer === "deny" ? { completedAt: new Date() } : {}),
       ...(choiceAsk ? { checkpoint: null } : {}),
     },
   });
   if (queued.count !== 1) return null;
+  if (peerHold) {
+    const deliveryState = input.answer === "allow" ? "delivered" : "denied";
+    await tx.botMessageDelivery.update({
+      where: { id: peerHold.id },
+      data: {
+        state: deliveryState,
+        ...(deliveryState === "delivered" ? { deliveredAt: new Date() } : { outcome: "denied" }),
+      },
+    });
+    await tx.task.update({
+      where: { id: run.taskId },
+      data: { status: deliveryState === "denied" ? "cancelled" : "queued" },
+    });
+    for (const messageId of [peerHold.outboundMessageId, peerHold.inboundMessageId]) {
+      if (!messageId) continue;
+      const receipt = await tx.message.findUnique({ where: { id: messageId } });
+      if (!receipt) continue;
+      const receiptBlocks = (receipt.blocks as MessageBlock[]).map((block) =>
+        (block.kind === "bot_message_sent" || block.kind === "bot_message_received") &&
+        block.deliveryId === peerHold.id
+          ? { ...block, deliveryState }
+          : block,
+      );
+      await tx.message.update({ where: { id: messageId }, data: { blocks: receiptBlocks } });
+      await appendEventInTransaction(tx, {
+        spaceId: peerHold.spaceId,
+        threadId: receipt.threadId,
+        botId: peerHold.recipientBotId,
+        type: "thread.message.updated",
+        payload: { messageId, blocks: receiptBlocks },
+      });
+    }
+  }
 
   const recordedAnswer = secretAsk ? "" : (selectedChoice?.id ?? input.answer);
 
@@ -910,7 +1018,7 @@ async function commitAnswerRunInput(
     threadId: input.threadId,
     botId: run.botId,
     type: "thread.message.updated",
-    runId: input.runId,
+    runId: peerHold && input.answer === "deny" ? undefined : input.runId,
     payload: { messageId: message.id, role: "bot", blocks },
   });
   return { threadId: updated.threadId, seq: updated.seq };

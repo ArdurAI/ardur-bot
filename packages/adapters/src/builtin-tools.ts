@@ -802,6 +802,34 @@ export const builtinAgentTools: ConnectorTool[] = [
       type: "object",
       properties: {
         card: z.toJSONSchema(TaskCardRequestSchema),
+        requested_effects: {
+          type: "array",
+          maxItems: 10,
+          items: {
+            type: "object",
+            properties: {
+              kind: {
+                type: "string",
+                enum: [
+                  "connector-write",
+                  "mcp-write",
+                  "host-command",
+                  "secret-use",
+                  "spend",
+                  "delete",
+                  "archive",
+                  "publish",
+                  "standing-instructions",
+                  "unknown",
+                ],
+              },
+              toolName: { type: "string" },
+              resourceRef: { type: "string" },
+              argsDigest: { type: "string" },
+            },
+            required: ["kind"],
+          },
+        },
         name: {
           type: "string",
           description: "Short label shown in the thread, e.g. scout or reviewer.",

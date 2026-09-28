@@ -4,6 +4,7 @@ import type { MessageBlock } from "@ardurbot/contracts";
 import type { Pool, PrismaClient, ThreadEvents } from "@ardurbot/db";
 import {
   dispatchBotMessageWake,
+  expireHeldBotMessages,
   expireQuietBotMessages,
   goalExhaustionReason,
   reconcileGoalExhaustion,
@@ -394,6 +395,9 @@ export function createJobReconciler(
     }
 
     if (deps.prisma.botMessageDelivery) {
+      await expireHeldBotMessages(deps.prisma, now, batchSize).catch((error) =>
+        getLogger().error("held bot message expiry", error),
+      );
       await expireQuietBotMessages(deps.prisma, now, batchSize).catch((error) =>
         getLogger().error("quiet message expiry", error),
       );

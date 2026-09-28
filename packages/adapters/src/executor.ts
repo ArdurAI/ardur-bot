@@ -4861,6 +4861,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   | "fyi"
                   | undefined,
                 card: redactTaskValue(args.card, runSecrets),
+                requested_effects: redactTaskValue(args.requested_effects, runSecrets),
                 deliveryKey: effectKey,
                 inReplyToDeliveryId: args.inReplyToDeliveryId
                   ? String(args.inReplyToDeliveryId)
