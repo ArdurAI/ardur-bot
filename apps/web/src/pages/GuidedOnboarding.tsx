@@ -18,6 +18,7 @@ export function GuidedOnboardingPage() {
     firstBot: boolean;
   } | null>(null);
   const stopped = useRef(false);
+  const createStatus = useRef<AbortController | null>(null);
   const saveWait = useRef<Promise<void> | null>(null);
   const settleSave = useRef<(() => void) | null>(null);
   const bridge = desktopBridge()?.guidedSetup;
@@ -36,18 +37,25 @@ export function GuidedOnboardingPage() {
   }, []);
 
   useEffect(() => {
-    return bridge?.onChange((snapshot) => {
+    const unsubscribe = bridge?.onChange((snapshot) => {
       stopped.current = snapshot.steps.some(
         (row) => row.status === "cancelling" || row.status === "cancelled",
       );
       if (stopped.current) {
+        createStatus.current?.abort();
         void (async () => {
           await saveWait.current;
           navigate("/guided-onboarding?step=finish", { replace: true });
         })();
       }
     });
+    return unsubscribe;
   }, [bridge, navigate]);
+
+  useEffect(() => () => {
+    stopped.current = true;
+    createStatus.current?.abort();
+  }, []);
 
   useEffect(() => {
     if (step !== "finish") return;
@@ -72,11 +80,14 @@ export function GuidedOnboardingPage() {
   }
 
   async function createBot() {
-    if (busy) return;
+    if (busy || stopped.current) return;
+    const controller = new AbortController();
+    createStatus.current = controller;
     setBusy(true);
     setError("");
     try {
-      const status = await rpc.guidedSetup.status();
+      const status = await rpc.guidedSetup.status(undefined, { signal: controller.signal });
+      if (stopped.current || controller.signal.aborted) return;
       if (status.model === "missing") {
         setError("Model setup is incomplete");
         return;
@@ -93,6 +104,7 @@ export function GuidedOnboardingPage() {
     } catch {
       if (!stopped.current) setError("The first bot could not be created. Try again.");
     } finally {
+      if (createStatus.current === controller) createStatus.current = null;
       setBusy(false);
     }
   }

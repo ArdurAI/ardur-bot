@@ -130,3 +130,27 @@ it("stops scheduling greeting calls after cancel during bot creation", async () 
   expect(api.start).not.toHaveBeenCalled();
   expect(api.promptFocus).not.toHaveBeenCalled();
 });
+
+it("aborts the initial status request and does not create a bot after cancellation", async () => {
+  let resolveStatus: (status: { model: "saved"; firstBot: false }) => void = () => undefined;
+  api.status.mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        resolveStatus = resolve;
+      }),
+  );
+  await render("bot");
+  const button = [...node.querySelectorAll("button")].find(
+    (entry) => entry.textContent === "Create bot",
+  );
+  await act(async () => button?.click());
+  const signal = api.status.mock.calls[0]?.[1]?.signal as AbortSignal | undefined;
+  expect(signal?.aborted).toBe(false);
+  const onChange = api.onChange.mock.calls[0]?.[0] as (snapshot: {
+    steps: { status: string }[];
+  }) => void;
+  await act(async () => onChange({ steps: [{ status: "cancelled" }] }));
+  expect(signal?.aborted).toBe(true);
+  await act(async () => resolveStatus({ model: "saved", firstBot: false }));
+  expect(api.ensureFirstBot).not.toHaveBeenCalled();
+});
