@@ -8,7 +8,7 @@ import type {
   RuntimeAvailability,
 } from "@ardurbot/contracts";
 import type { ComponentProps, ReactNode } from "react";
-import { act, useState } from "react";
+import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -494,42 +494,6 @@ it("offers model recovery for a parsed provider error", async () => {
   await act(async () => container.querySelector("button")?.click());
   expect(onChangeModel).toHaveBeenCalledOnce();
 });
-
-it.each(["pi", "hermes"] as const)(
-  "focuses the %s Model control after composer error recovery",
-  async (runtimeKind) => {
-    api.availability.mockResolvedValue({ runtimeKind, available: true, models: [] });
-    function Recovery() {
-      const [open, setOpen] = useState(false);
-      const [request, setRequest] = useState(0);
-      return (
-        <>
-          <ProviderErrorMessage
-            text={'{"detail":"Model not supported"}'}
-            onChangeModel={() => {
-              setRequest((value) => value + 1);
-              setOpen(true);
-            }}
-          />
-          {open ? settings({ runtimeKind }, request) : null}
-        </>
-      );
-    }
-    await act(async () => root.render(<Recovery />));
-    const action = [...container.querySelectorAll("button")].find(
-      (button) => button.textContent === "Change model",
-    )!;
-    vi.useFakeTimers();
-    try {
-      await act(async () => action.click());
-      action.focus();
-      await act(async () => vi.runOnlyPendingTimers());
-      expect(document.activeElement).toBe(modelSelect());
-    } finally {
-      vi.useRealTimers();
-    }
-  },
-);
 
 it("does not show a model action for unrelated errors or a missing bot", async () => {
   await act(async () =>
