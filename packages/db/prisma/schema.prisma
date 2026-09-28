@@ -239,6 +239,7 @@ model Space {
   taughtSkills                TaughtSkill[]
   agentSkills                 AgentSkill[]
   connections                 Connection[]
+  runners                     Runner[]
   capabilities                CapabilityInstall[]
   memoryDocuments             MemoryDocument[]
   agentHomes                  AgentHome[]
@@ -938,6 +939,11 @@ model Connection {
   secretId    String?
   providerRef String?
   metadata    Json     @default("{}")
+  /// Compatibility flag from the runner migration: existing computer connections
+  /// keep `true`; connections created as runner-only start `false` and are
+  /// filtered out of home-placement candidates until the owner opts in.
+  homePlacementAllowed Boolean @default(true)
+  runners     Runner[]
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -2524,4 +2530,229 @@ model BotBrief {
   @@index([threadId, leaseExpiresAt])
   @@index([spaceId, userId, botId])
   @@map("bot_briefs")
+}
+
+/// Runner registration: an explicit, shared-by-choice execution target distinct
+/// from a bot's persistent home computer. The connection reference is immutable;
+/// deletion of the connection is restricted while a runner exists.
+model Runner {
+  id                    String    @id @default(cuid())
+  spaceId               String
+  space                 Space     @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  ownerUserId           String
+  name                  String
+  kind                  String
+  connectionId          String
+  connection            Connection @relation(fields: [connectionId], references: [id], onDelete: Restrict)
+  executionHostId       String    @default("server")
+  connectionRevision    Int       @default(0)
+  admissionState        String    @default("enabled")
+  capabilities          Json      @default("{}")
+  capabilitiesObservedAt DateTime?
+  capabilityRevision    Int       @default(0)
+  reachability          String    @default("unknown")
+  lastProbeAt           DateTime?
+  probeExpiresAt        DateTime?
+  lastProbeCode         String?
+  policyRevision        Int       @default(0)
+  sharingEnabled        Boolean   @default(false)
+  defaultAccess         String    @default("deny")
+  protected             Boolean   @default(true)
+  limits                Json      @default("{}")
+  notes                 String    @default("") @db.Text
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  retiredAt             DateTime?
+  environments          RunnerEnvironment[]
+  accessRules           RunnerAccessRule[]
+  jobs                  RunnerJob[]
+
+  @@unique([spaceId, ownerUserId, connectionId])
+  @@index([spaceId, ownerUserId])
+  @@map("runners")
+}
+
+/// Explicit per-bot sharing. Unique per runner and subject; an explicit deny
+/// beats any allow; the runner's global sharing switch beats all allows.
+model RunnerAccessRule {
+  id          String  @id @default(cuid())
+  runnerId    String
+  runner      Runner  @relation(fields: [runnerId], references: [id], onDelete: Cascade)
+  spaceId     String
+  ownerUserId String
+  subjectKind String
+  subjectId   String
+  effect      String  @default("allow")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([runnerId, subjectKind, subjectId])
+  @@index([spaceId, ownerUserId])
+  @@map("runner_access_rules")
+}
+
+/// Owner-defined environment revision. Immutable once verified; jobs snapshot
+/// the revision they admitted so replacing an image or PATH cannot retarget work.
+model RunnerEnvironment {
+  id                     String   @id @default(cuid())
+  runnerId               String
+  runner                 Runner   @relation(fields: [runnerId], references: [id], onDelete: Cascade)
+  name                   String
+  kind                   String
+  profileId              String?
+  requestedImage         String?
+  resolvedImageId        String?
+  resolvedDigest         String?
+  os                     String   @default("unknown")
+  architecture           String   @default("unknown")
+  tools                  Json     @default("[]")
+  dependencyManifestHash String?
+  lockfileHash           String?
+  setupArgv              Json?
+  networkMode            String   @default("none")
+  revision               Int      @default(1)
+  verifiedAt             DateTime?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@unique([runnerId, name])
+  @@index([runnerId])
+  @@map("runner_environments")
+}
+
+/// Durable runner job. Attribution IDs deliberately carry no cascading foreign
+/// keys: a job record and its cleanup references survive bot/thread/run deletion.
+/// One active job per bot execution slot is enforced by the partial unique index
+/// runner_jobs_active_slot_key (see migration SQL; Prisma cannot express it).
+model RunnerJob {
+  id                   String   @id @default(cuid())
+  runnerId             String
+  runner               Runner   @relation(fields: [runnerId], references: [id], onDelete: Restrict)
+  spaceId              String
+  userId               String
+  botId                String
+  threadId             String
+  runId                String
+  goalId               String?
+  delegationId         String?
+  operationKey          String   @unique
+  requestHash          String
+  request              Json
+  placementSnapshot    Json?
+  policySnapshot       Json?
+  environmentSnapshot  Json?
+  state                String   @default("queued")
+  phase                String   @default("awaiting-approval")
+  approvalEffectId     String?
+  providerRef          String?
+  providerUid          String?
+  executionFence       Int      @default(0)
+  leaseOwner           String?
+  leaseExpiresAt       DateTime?
+  queuedAt             DateTime @default(now())
+  startedAt            DateTime?
+  commandFinishedAt    DateTime?
+  finishedAt           DateTime?
+  deadlineAt           DateTime?
+  cancelRequestedAt    DateTime?
+  cancelConfirmedAt    DateTime?
+  exitCode             Int?
+  failureCode          String?
+  cleanupState         String   @default("pending")
+  cleanupConfirmedAt   DateTime?
+  outputTruncated      Boolean  @default(false)
+  usedRunnerMillis     Int      @default(0)
+  reservedRunnerMillis Int      @default(0)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  events               RunnerJobEvent[]
+  artifacts            RunnerJobArtifact[]
+  usage                RunnerUsage?
+
+  @@index([runnerId, state, queuedAt])
+  @@index([spaceId, userId, botId, queuedAt])
+  @@index([cleanupState, updatedAt])
+  @@index([runId])
+  @@index([threadId])
+  @@map("runner_jobs")
+}
+
+/// Bounded, ordered, redacted job log/control stream for reconnect and replay.
+model RunnerJobEvent {
+  id             String   @id @default(cuid())
+  jobId          String
+  job            RunnerJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  seq            Int
+  executionFence Int
+  kind           String
+  stream         String?
+  redactedPayload String @db.Text
+  createdAt      DateTime @default(now())
+
+  @@unique([jobId, seq])
+  @@index([jobId, executionFence])
+  @@map("runner_job_events")
+}
+
+/// Artifact metadata for collected job outputs; the artifact row itself is the
+/// existing Artifact entity scoped to the same owner/space. No uncontrolled URL.
+model RunnerJobArtifact {
+  id              String   @id @default(cuid())
+  jobId           String
+  job             RunnerJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  artifactId      String
+  relativePath    String
+  sha256          String
+  size            Int
+  collectionState String   @default("pending")
+  createdAt       DateTime @default(now())
+
+  @@unique([jobId, relativePath])
+  @@index([artifactId])
+  @@map("runner_job_artifacts")
+}
+
+/// Append-only audit for owner actions on runners: grants, probes, admission,
+/// approvals, dispatch, cancellation and cleanup. Never secret bytes or raw output.
+model RunnerAuditEvent {
+  id             String   @id @default(cuid())
+  runnerId       String?
+  jobId          String?
+  spaceId        String
+  userId         String
+  actorKind      String
+  actorId        String
+  action         String
+  reasonCode     String?
+  policyRevision Int?
+  requestHash    String?
+  createdAt      DateTime @default(now())
+
+  @@index([spaceId, createdAt])
+  @@index([runnerId, createdAt])
+  @@index([jobId])
+  @@map("runner_audit_events")
+}
+
+/// Runner-time accounting, settled exactly once per job. Immutable settled
+/// totals except explicit audited corrections.
+model RunnerUsage {
+  id                     String   @id @default(cuid())
+  jobId                  String   @unique
+  job                    RunnerJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  spaceId                String
+  userId                 String
+  botId                  String
+  reservedRunnerMillis   Int      @default(0)
+  usedRunnerMillis       Int      @default(0)
+  costMicros             Int      @default(0)
+  costProvenance         String?
+  settlementState        String   @default("reserved")
+  settledAt              DateTime?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  @@index([spaceId, createdAt])
+  @@index([settlementState, updatedAt])
+  @@map("runner_usage")
 }
