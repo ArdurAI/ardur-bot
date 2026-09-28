@@ -562,7 +562,7 @@ async function updateUsageBudget(
   const current = await tx.delegation.findUniqueOrThrow({ where: { id: delegationId } });
   const active =
     !retainedPriorAttempt &&
-    current.runId === runId &&
+    (current.runId === runId || (current.hop === 1 && current.runId === null)) &&
     ["queued", "running", "cancel-requested"].includes(current.status);
   const attemptSpent =
     active && current.hop > 1
