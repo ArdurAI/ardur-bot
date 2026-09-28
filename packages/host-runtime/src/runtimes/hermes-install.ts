@@ -7,6 +7,15 @@ import type { HermesLaunch, HermesLaunchSpec } from "./hermes-runtime.js";
 import { stopNative } from "./native-process.js";
 
 export const HERMES_SOURCE_PIN = "29112bef099274229cadff79cdff7bf7b99c4b77";
+/** The workspace root is supplied by the trusted host configuration, never a bot request. */
+export function hermesInstallCandidate(
+  hostRoot: string,
+  explicit: string | undefined,
+): string | null {
+  if (explicit) return explicit;
+  const managed = path.join(path.dirname(hostRoot), "runtimes", "hermes-agent");
+  return existsSync(managed) ? managed : null;
+}
 const sourceHashes = {
   "acp_adapter/session.py": "423f9b8b065600607dced5185ce58cd60d2fe450844caf6ce6229c3b7ceeb835",
   "acp_adapter/server.py": "5ebbbda6511a692faeaf8f57e0ad88182bf22c2d818d16c94f1e95516bb7375d",
@@ -16,7 +25,7 @@ const sourceHashes = {
   "uv.lock": "383cd8f98ec23dc3fe4cf63759ec73be5a869cc953f068b4e79ec4e8ed00287d",
 } as const;
 
-/** Only a caller-supplied install can qualify. Never probe a personal home or PATH. */
+/** Only the trusted explicit or managed install can qualify. Never probe a personal home or PATH. */
 export function probeHermesInstall(root: string): { python: string; root: string } {
   if (process.platform === "win32" || !path.isAbsolute(root))
     throw new Error("Pinned Hermes is unavailable on this host.");

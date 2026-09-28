@@ -177,6 +177,47 @@ describe("bot pin editing", () => {
     ).toMatchObject({ runtimeKind: "pi", modelCredentialId: "selected" });
   });
 
+  it("rejects a Pi connection with an output cap above the Hermes host ceiling", async () => {
+    const { deps, findFirst } = fixture();
+    vi.mocked(deps.prisma.spaceModelPreference.findFirst).mockResolvedValue({
+      modelId: "same-model",
+      isDefault: false,
+    } as never);
+    findFirst.mockResolvedValue({
+      id: "selected",
+      userId: "user",
+      provider: "openai-compatible",
+      label: "local",
+      secretId: "secret",
+      defaultModel: "same-model",
+      isDefault: false,
+    });
+    vi.spyOn(deps.secrets, "load").mockReturnValue(
+      JSON.stringify({
+        kind: "openai_compatible",
+        baseUrl: "http://localhost:8080/v1",
+        reasoning: false,
+        contextWindow: 131_072,
+        maxTokens: 131_072,
+      }),
+    );
+    await expect(
+      botModelPinUpdate(
+        deps,
+        actor,
+        {
+          ...existing,
+          runtimeKind: "pi",
+          modelProvider: "openai-compatible",
+          modelId: "same-model",
+          thinkingLevel: "off",
+          modelCredentialId: "selected",
+        },
+        { botId: "bot", runtimeKind: "hermes" },
+      ),
+    ).rejects.toThrow("bounded context and output limits");
+  });
+
   it("does not replace a removed Hermes connection with another matching model id", async () => {
     const { deps, findFirst } = fixture();
     findFirst.mockResolvedValue(null!);

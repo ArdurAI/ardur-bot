@@ -50,6 +50,7 @@ export const HERMES_RUNTIME_DEFAULTS: HermesRuntimeConfig = {
   maxProviderRequests: 16,
   timeoutMs: 180_000,
 };
+export const HERMES_HOST_MAX_OUTPUT_TOKENS = 65_536;
 
 export const RuntimeAvailabilitySchema = z.object({
   runtimeKind: RuntimeKindSchema,

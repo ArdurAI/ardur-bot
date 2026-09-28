@@ -16,11 +16,12 @@ import { HermesProviderBroker } from "./hermes-provider-broker.js";
 
 const install = process.env.ARDUR_HERMES_INSTALL;
 let qualified: ReturnType<typeof probeHermesInstall> | undefined;
+let qualificationError: string | undefined;
 if (process.env.ARDUR_HERMES_INSTALL_LANE === "1" && install) {
   try {
     qualified = probeHermesInstall(install);
-  } catch {
-    // The opt-in lane records a skip when its designated install is unavailable.
+  } catch (error) {
+    qualificationError = error instanceof Error ? error.message : "Install probe failed.";
   }
 }
 
@@ -39,7 +40,13 @@ const packet = (modelId: string, delta: Record<string, unknown>, finish: string 
   })}\n\n`;
 
 if (!qualified) {
-  it.skip("pinned install lane skipped: set both ARDUR_HERMES_INSTALL_LANE=1 and a qualified ARDUR_HERMES_INSTALL", () => {});
+  if (process.env.ARDUR_HERMES_INSTALL_LANE === "1") {
+    it("requires the designated qualified install when enabled", () => {
+      throw new Error(qualificationError ?? "The designated pinned install is missing.");
+    });
+  } else {
+    it.skip("pinned install lane skipped: set both ARDUR_HERMES_INSTALL_LANE=1 and a qualified ARDUR_HERMES_INSTALL", () => {});
+  }
 } else {
   const trusted = qualified;
   const runInstallLane = async (modelId: string) => {

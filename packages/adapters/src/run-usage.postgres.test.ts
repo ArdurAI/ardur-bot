@@ -11,7 +11,14 @@ import {
   updateWorkerTask,
 } from "@ardurbot/db";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { aggregateContext, recordContextUsage, resumeContextSnapshot } from "./context/metrics.js";
+import {
+  aggregateContext,
+  persistBrokerContextUsage,
+  recordAndForwardBrokerUsage,
+  recordContextUsage,
+  resumeContextSnapshot,
+} from "./context/metrics.js";
+import { HermesProviderBroker } from "./hermes-provider-broker.js";
 import { loadLearningRecords } from "./learning-records.js";
 import type { RecordedContextUsage } from "./run-usage.js";
 import { brokerRunAllowance, recordBrokerRunUsage, recordRunUsage } from "./run-usage.js";
@@ -144,6 +151,126 @@ postgres("request ledger on disposable PostgreSQL", () => {
     const root = () => prisma.delegationRoot.findUniqueOrThrow({ where: { rootTaskId: id } });
     return { id, run, pin, request, usage, record, rows, root, events };
   }
+
+  it("persists accepted fake-provider broker usage once and leaves unmeasured usage unknown", async () => {
+    async function turn(measured: boolean) {
+      const f = await fixture();
+      await db.prisma.run.update({
+        where: { id: f.id },
+        data: { leaseOwner: "worker", leaseFence: 2 },
+      });
+      const snapshot: ContextSnapshot = {
+        layers: { stable: 0, brief: 0, summary: 0, messages: 0, recall: 0, message: 0 },
+        recallRan: false,
+        recallCalls: 0,
+        cachedTokens: null,
+        inputTokens: null,
+        queueWaitMs: null,
+        timeToFirstTokenMs: null,
+        routingRule: null,
+      };
+      const observations: AgentUsage[] = [];
+      const scope = {
+        runId: f.id,
+        botId: f.id,
+        userId: f.run.userId,
+        spaceId: f.id,
+        operationId: "fake-provider-turn",
+        leaseOwner: "worker",
+        leaseFence: 2,
+        hostGeneration: 1,
+        configurationHash: "fixture-config",
+        pin: { credentialId: "fixture", provider: "fixture", modelId: "fixture", effort: "off" },
+      };
+      const save = async () => {
+        const result = await db.prisma.run.updateMany({
+          where: { id: f.id, leaseOwner: "worker", leaseFence: 2 },
+          data: { contextSnapshot: snapshot },
+        });
+        expect(result.count).toBe(1);
+      };
+      const record = async (usage: AgentUsage) => {
+        observations.push(usage);
+        await recordAndForwardBrokerUsage(
+          { prisma: db.prisma, events: f.events },
+          f.run,
+          usage,
+          { leaseOwner: "worker", leaseFence: 2, runtimePin: f.pin },
+          (accepted) => persistBrokerContextUsage(snapshot, accepted, save),
+        );
+      };
+      await save();
+      const broker = new HermesProviderBroker({
+        scope,
+        credentialId: "fixture",
+        pinnedEffort: "off",
+        connection: {
+          credentialId: "fixture",
+          provider: "fixture",
+          modelId: "fixture",
+          baseUrl: "http://127.0.0.1:1/v1",
+          route: "openai-completions",
+          contextWindow: 80,
+          maxOutputTokens: 20,
+          acceptsImages: false,
+          supportsDeveloperRole: false,
+          effort: { field: "none", supported: ["off"] },
+          reportedModel: "required",
+        },
+        tools: [],
+        purpose: "main",
+        maxRequests: 1,
+        maxReservedTokens: 100,
+        expiresAt: Date.now() + 60_000,
+        active: async () => true,
+        record,
+        fetch: vi.fn(
+          async () =>
+            new Response(
+              JSON.stringify({
+                model: "fixture",
+                ...(measured
+                  ? {
+                      usage: {
+                        prompt_tokens: 12,
+                        completion_tokens: 3,
+                        prompt_tokens_details: { cached_tokens: 4 },
+                      },
+                    }
+                  : {}),
+              }),
+              { headers: { "content-type": "application/json" } },
+            ),
+        ),
+      });
+      const response = await broker.open({
+        grant: broker.grant,
+        scope,
+        path: "/v1/chat/completions",
+        body: { model: "fixture", messages: [{ role: "user", content: "fixture" }], stream: false },
+      });
+      expect(response.ok).toBe(true);
+      const measurement = observations.find(
+        (usage) => usage.request?.categories.logicalInput === 12,
+      );
+      if (measurement) await record(measurement);
+      const stored = await db.prisma.run.findUniqueOrThrow({ where: { id: f.id } });
+      return { f, stored };
+    }
+
+    const measured = await turn(true);
+    expect(measured.stored.contextSnapshot).toMatchObject({ inputTokens: 12, cachedTokens: 4 });
+    expect((await measured.f.rows())[0]?.observations).toHaveLength(3);
+    const unmeasured = await turn(false);
+    expect(unmeasured.stored.contextSnapshot).toMatchObject({
+      inputTokens: null,
+      cachedTokens: null,
+    });
+    expect((await unmeasured.f.rows())[0]).toMatchObject({
+      inputTokens: 0,
+      cacheReadInputTokens: null,
+    });
+  });
 
   it("counts 20 concurrent duplicate deliveries once across independent clients", async () => {
     const f = await fixture();

@@ -4,6 +4,7 @@ import type { HermesRuntimeConfig, RuntimePin, RuntimeProblem } from "@ardurbot/
 import {
   DEFAULT_MODEL_CONTEXT_WINDOW,
   DEFAULT_MODEL_MAX_TOKENS,
+  HERMES_HOST_MAX_OUTPUT_TOKENS,
   HERMES_RUNTIME_DEFAULTS,
   HermesRuntimeConfigSchema,
   normalizedThinkingLevel,
@@ -18,6 +19,20 @@ export function hermesConfigHash(config: HermesRuntimeConfig): string {
   return createHash("sha256")
     .update(JSON.stringify([config.version, config.maxProviderRequests, config.timeoutMs]))
     .digest("hex");
+}
+
+/** Provider wire observations are requests, not attested provider behavior. */
+export function brokerObservedRuntimeInfo(
+  effort: string | null,
+  reportedModel?: string,
+  wireEffort?: string,
+) {
+  return {
+    ...(reportedModel ? { reportedModel } : {}),
+    requestedEffort: normalizedThinkingLevel(effort),
+    ...(wireEffort ? { wireEffort } : {}),
+    effortMappingVersion: "broker-chat-completions-v1",
+  };
 }
 
 /** One admission rule for editing and run resolution; only qualified compatible endpoints enter M1. */
@@ -53,7 +68,8 @@ export function hermesCompatibility(
     !Number.isSafeInteger(model.contextWindow ?? DEFAULT_MODEL_CONTEXT_WINDOW) ||
     !Number.isSafeInteger(model.maxTokens ?? DEFAULT_MODEL_MAX_TOKENS) ||
     (model.contextWindow ?? DEFAULT_MODEL_CONTEXT_WINDOW) <= 0 ||
-    (model.maxTokens ?? DEFAULT_MODEL_MAX_TOKENS) <= 0
+    (model.maxTokens ?? DEFAULT_MODEL_MAX_TOKENS) <= 0 ||
+    (model.maxTokens ?? DEFAULT_MODEL_MAX_TOKENS) > HERMES_HOST_MAX_OUTPUT_TOKENS
   )
     return runtimePinProblem(
       pin,

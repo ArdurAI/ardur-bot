@@ -14,6 +14,7 @@ import { LocalImportRootsSchema } from "./local-import.js";
 import { McpCredentialFlagsSchema } from "./mcp.js";
 import { RequestUsageObservationSchema } from "./request-usage.js";
 import {
+  HERMES_HOST_MAX_OUTPUT_TOKENS,
   RuntimeAvailabilitySchema,
   RuntimeInfoSchema,
   RuntimePinSchema,
@@ -166,7 +167,7 @@ export const HostTurnSchema = z.strictObject({
     runtimePin: HostRuntimePinSchema,
     provider: z.string().max(160),
     id: z.string().max(256),
-    maxTokens: z.number().int().min(1).max(65_536).optional(),
+    maxTokens: z.number().int().min(1).max(HERMES_HOST_MAX_OUTPUT_TOKENS).optional(),
     contextWindow: z.number().int().min(1).max(2_000_000).optional(),
     acceptsImages: z.boolean().optional(),
     reasoning: z.boolean().optional(),

@@ -43,6 +43,11 @@ export function GroupModelControl({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const selectedModel = parseModelPinOptionKey(key);
+  const incompatibleHermes =
+    kind === "hermes" &&
+    Boolean(
+      selectedModel?.provider && !["openai-compatible", "ollama"].includes(selectedModel.provider),
+    );
   const selectedCredential = settings?.credentials.find(
     (item) => item.id === selectedModel?.credentialId,
   );
@@ -71,24 +76,27 @@ export function GroupModelControl({
   async function save() {
     if (!activeMember?.memberId || saving) return;
     const selected = parseModelPinOptionKey(key);
-    if (!inherit && (!selected?.provider || !selected.modelId || !selected.credentialId)) return;
+    if (
+      !inherit &&
+      (!selected?.provider || !selected.modelId || !selected.credentialId || incompatibleHermes)
+    )
+      return;
     const credential = settings?.credentials.find((item) => item.id === selected?.credentialId);
     const catalogEntry = settings?.catalog.find(
       (item) => item.provider === selected?.provider && item.id === selected.modelId,
     );
     const nextEffort =
-      kind === "pi" &&
-      selected?.provider === "ollama" &&
-      (credential?.reasoning ?? catalogEntry?.reasoning) === false
-        ? null
-        : effort ||
-          (kind === "pi"
-            ? (credential?.thinkingLevel ??
+      kind === "pi" || kind === "hermes"
+        ? selected?.provider === "ollama" &&
+          (credential?.reasoning ?? catalogEntry?.reasoning) === false
+          ? null
+          : effort ||
+            (credential?.thinkingLevel ??
               spaceDefaultEffort(
                 credential?.reasoning ?? catalogEntry?.reasoning,
                 credential?.thinkingLevels ?? catalogEntry?.thinkingLevels,
               ))
-            : null);
+        : effort || null;
     setSaving(true);
     setError(null);
     try {
@@ -133,14 +141,15 @@ export function GroupModelControl({
       <label htmlFor={`${id}-model`} className="text-xs text-muted-foreground">
         <Trans>Model in this group</Trans> · {bot.name}
       </label>
-      {kind === "pi" ? (
+      {kind === "pi" || kind === "hermes" ? (
         <ModelPinSelect
           id={`${id}-model`}
           settings={settings}
           showAll={showAll}
           value={inherit ? "" : key}
           disabled={!member?.memberId || saving}
-          defaultLabel={t`Same as bot`}
+          defaultLabel={kind === "hermes" ? t`Choose a model` : t`Same as bot`}
+          allowedProviders={kind === "hermes" ? ["openai-compatible", "ollama"] : undefined}
           onChange={(value) => {
             setInherit(!value);
             setKey(value);
@@ -160,7 +169,7 @@ export function GroupModelControl({
           <Trans>Same as bot</Trans>
         </Button>
       )}
-      {!inherit && kind === "pi" ? (
+      {!inherit && (kind === "pi" || kind === "hermes") ? (
         <>
           <ShowAllModels checked={showAll} onChange={setShowAll} />
           <ModelEffortSelect
@@ -178,6 +187,13 @@ export function GroupModelControl({
           />
         </>
       ) : null}
+      {incompatibleHermes ? (
+        <p role="status" className="mt-2 text-sm text-muted-foreground">
+          {selectedModel?.provider === "anthropic"
+            ? t`Hermes does not yet support Anthropic connections.`
+            : t`Hermes does not yet support this connection.`}
+        </p>
+      ) : null}
       {activeMember?.memberId ? (
         <details className="mt-2 text-xs text-muted-foreground">
           <summary className="cursor-pointer">
@@ -188,8 +204,6 @@ export function GroupModelControl({
             onKind={(value) => {
               setKind(value);
               setInherit(false);
-              setKey("");
-              setEffort("");
             }}
             modelKey={key}
             onModel={(value) => {
@@ -216,6 +230,7 @@ export function GroupModelControl({
           !activeMember?.memberId ||
           saving ||
           (!inherit && !key) ||
+          incompatibleHermes ||
           (kind !== "pi" && !bot.runtimeExperimental)
         }
         onClick={() => void save()}

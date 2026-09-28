@@ -40,6 +40,8 @@ Inherited from Rakazo and working:
 
 Experimental Antigravity text conversations can run on a connected host computer with an exact model pin; see [Antigravity runtime](docs/antigravity-runtime.md).
 
+Experimental Hermes bots reuse a compatible Ardur model connection on a paired macOS or Linux host with a configured pinned installation. Hermes is unavailable on Windows; see [Hermes runtime](docs/runtimes/hermes.md).
+
 ## Memory
 
 ### What is stored where

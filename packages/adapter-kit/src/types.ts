@@ -504,6 +504,11 @@ export interface AgentRunRequest {
       "reportedModel" | "requestedEffort" | "wireEffort" | "effortMappingVersion"
     >,
   ) => Promise<void>;
+  /** Accepted ledger deltas only; the runtime must not emit these as usage events. */
+  onBrokerContextUsage?: (usage: {
+    inputTokens: number;
+    cachedTokens: number | null;
+  }) => Promise<void>;
   /** Lease-fenced receipt candidates already assembled into the initial input. */
   inputReceipt?: { leaseFence: number; deliveryIds: string[] };
   /** Called only after a supported runtime accepts those IDs into a valid turn. */

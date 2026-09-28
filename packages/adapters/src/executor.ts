@@ -257,7 +257,12 @@ import { checkpointRunComputerWorkspace, isRemoteHostAbsolutePath } from "./comp
 import { sanitizeConnectorError } from "./connector-safety.js";
 import { assembleTurnContext } from "./context/assemble.js";
 import { claimBotRun } from "./context/concurrency.js";
-import { recordContextUsage, resumeContextSnapshot } from "./context/metrics.js";
+import {
+  persistBrokerContextUsage,
+  recordAndForwardBrokerUsage,
+  recordContextUsage,
+  resumeContextSnapshot,
+} from "./context/metrics.js";
 import { fitContextRecall, recallLocalDocuments } from "./context/recall.js";
 import { formatCurrentTimeInstruction } from "./current-time.js";
 import type { DelegationResolver } from "./delegation.js";
@@ -273,6 +278,7 @@ import { wakeGoalAfterDelegation } from "./goal-wake.js";
 import { handoffToGroupBot, loadGroupContext } from "./group-handoff.js";
 import { captureRunModelPin, selectRunPinSource } from "./group-model-pin.js";
 import {
+  brokerObservedRuntimeInfo,
   effectiveHermesConfig,
   hermesCompatibility,
   hermesConfigHash,
@@ -365,7 +371,7 @@ import {
   secretPausedToolResult,
   tryCompleteConnectionWithCode,
 } from "./run-secret.js";
-import { brokerRunAllowance, recordBrokerRunUsage, recordRunUsage } from "./run-usage.js";
+import { brokerRunAllowance, recordRunUsage } from "./run-usage.js";
 import type { RuntimeRegistry } from "./runtime-registry.js";
 import { createRuntimeRegistry } from "./runtime-registry.js";
 import { reportRuntimeWaits, withRuntimeCleanup } from "./runtime-stream.js";
@@ -1174,7 +1180,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
         expiresAt: Date.now() + config.timeoutMs,
         active,
         record: async (usage) => {
-          await recordBrokerRunUsage(
+          await recordAndForwardBrokerUsage(
             deps,
             { ...source, delegationId: source.delegationId },
             usage,
@@ -1184,15 +1190,11 @@ export function createRunExecutor(deps: ExecutorDeps) {
               runtimePin: pin,
               ...(summary ? { briefAttemptedAt: brief!.attemptedAt! } : {}),
             },
+            request.onBrokerContextUsage,
           );
         },
         observed: async (model, wireEffort) =>
-          request.onBrokerRuntimeInfo?.({
-            ...(model ? { reportedModel: model } : {}),
-            requestedEffort: pin.effort!,
-            wireEffort,
-            effortMappingVersion: "broker-chat-completions-v1",
-          }),
+          request.onBrokerRuntimeInfo?.(brokerObservedRuntimeInfo(pin.effort, model, wireEffort)),
         requiredContext: hermesContextDocument(request),
       });
       return { broker, scope };
@@ -5683,6 +5685,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   data: { runtimeInfo },
                 });
                 if (saved.count !== 1) throw new Error("Provider evidence ownership was lost.");
+              },
+              onBrokerContextUsage: async (usage) => {
+                if (comparisonRun || selected.pin.runtimeKind !== "hermes") return;
+                await persistBrokerContextUsage(turnContext.snapshot, usage, saveContextSnapshot);
               },
               script,
               allowSilentEmpty: allowSilentEmptyRun,

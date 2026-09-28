@@ -1,9 +1,15 @@
-import type { ComputerMode, RuntimeKind, ThinkingLevel } from "@ardurbot/contracts";
+import type {
+  ComputerMode,
+  HermesRuntimeConfig,
+  RuntimeKind,
+  ThinkingLevel,
+} from "@ardurbot/contracts";
 import {
   BOT_COLORS,
   BOT_DESCRIPTION_MAX_LENGTH,
   BOT_NAME_MAX_LENGTH,
   BOT_TITLE_MAX_LENGTH,
+  HERMES_RUNTIME_DEFAULTS,
   normalizeCreateBotProfile,
 } from "@ardurbot/contracts";
 import {
@@ -58,6 +64,7 @@ export default function BotSettingsScreen() {
   const [advancedOpen, setAdvancedOpen] = useState(focus === "model");
   const [runtimeExperimental, setRuntimeExperimental] = useState(false);
   const [runtimeKind, setRuntimeKind] = useState<RuntimeKind>("pi");
+  const [runtimeConfig, setRuntimeConfig] = useState<HermesRuntimeConfig>(HERMES_RUNTIME_DEFAULTS);
   const [modelKey, setModelKey] = useState("");
   const [thinkingLevel, setThinkingLevel] = useState("");
   const [credentials, setCredentials] = useState<MobileModelCredential[]>([]);
@@ -87,6 +94,8 @@ export default function BotSettingsScreen() {
       .then((next) => {
         setBot(next);
         setRuntimeKind(next.runtimeKind ?? "pi");
+        setRuntimeConfig(next.runtimeConfig ?? HERMES_RUNTIME_DEFAULTS);
+        if (next.runtimeKind === "hermes") setAdvancedOpen(true);
         setRuntimeExperimental(next.runtimeExperimental ?? false);
         setName(next.name);
         setTitle(next.title);
@@ -198,7 +207,8 @@ export default function BotSettingsScreen() {
     : t("Space default");
 
   const modelChoices: PickerChoice[] = useMemo(() => {
-    const choices: PickerChoice[] = [{ key: "", label: spaceDefaultLabel }];
+    const choices: PickerChoice[] =
+      runtimeKind === "hermes" ? [] : [{ key: "", label: spaceDefaultLabel }];
     if (modelKey && !connectedOptions.some((option) => option.key === modelKey)) {
       choices.push({
         key: modelKey,
@@ -209,7 +219,7 @@ export default function BotSettingsScreen() {
       choices.push({ key: option.key, label: option.label });
     }
     return choices;
-  }, [connectedOptions, modelKey, spaceDefaultLabel]);
+  }, [connectedOptions, modelKey, runtimeKind, spaceDefaultLabel]);
 
   const thinkingChoices: PickerChoice[] = useMemo(
     () => [
@@ -237,7 +247,8 @@ export default function BotSettingsScreen() {
   );
 
   const selectedModelLabel =
-    modelChoices.find((choice) => choice.key === modelKey)?.label ?? spaceDefaultLabel;
+    modelChoices.find((choice) => choice.key === modelKey)?.label ??
+    (runtimeKind === "hermes" ? t("Choose a model") : spaceDefaultLabel);
   const selectedThinkingLabel =
     thinkingChoices.find((choice) => choice.key === thinkingLevel)?.label ?? defaultThinkingLabel;
 
@@ -291,6 +302,7 @@ export default function BotSettingsScreen() {
         modelId?: string | null;
         modelCredentialId?: string | null;
         runtimeKind?: RuntimeKind;
+        runtimeConfig?: HermesRuntimeConfig;
         runtimeExperimental?: boolean;
         thinkingLevel?: ThinkingLevel | null;
       } = { botId };
@@ -305,6 +317,7 @@ export default function BotSettingsScreen() {
       if (runtimeExperimental !== (bot.runtimeExperimental ?? false))
         input.runtimeExperimental = runtimeExperimental;
       if (runtimeKind !== (bot.runtimeKind ?? "pi")) input.runtimeKind = runtimeKind;
+      if (runtimeKind === "hermes") input.runtimeConfig = runtimeConfig;
       const modelChanged =
         (selected?.provider ?? null) !== (bot.modelProvider ?? null) ||
         (selected?.modelId ?? null) !== (bot.modelId ?? null) ||
@@ -450,6 +463,11 @@ export default function BotSettingsScreen() {
           ))}
         </ScrollView>
         <ComputerModePicker value={computerMode} onChange={setComputerMode} />
+        {runtimeKind === "hermes" ? (
+          <Text style={{ color: tokens.mutedForeground, marginTop: 8 }}>
+            {t("Hermes runs with this computer's access.")}
+          </Text>
+        ) : null}
         <View
           onLayout={(event) => {
             if (focus === "runtime")
@@ -457,16 +475,63 @@ export default function BotSettingsScreen() {
           }}
         >
           <RuntimeSettings
+            botId={botId}
             experimental={runtimeExperimental}
             onExperimental={setRuntimeExperimental}
             kind={runtimeKind}
-            onKind={setRuntimeKind}
+            onKind={(kind) => {
+              setRuntimeKind(kind);
+              if (kind === "hermes") setAdvancedOpen(true);
+            }}
             modelKey={modelKey}
             onModel={setModelKey}
             effort={thinkingLevel}
             onEffort={setThinkingLevel}
           />
         </View>
+        {runtimeKind === "hermes" ? (
+          <View style={{ flexDirection: "row", gap: 12, marginTop: 12 }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: tokens.mutedForeground }}>{t("Model calls per turn")}</Text>
+              <TextInput
+                accessibilityLabel={t("Model calls per turn")}
+                keyboardType="number-pad"
+                value={String(runtimeConfig.maxProviderRequests)}
+                onChangeText={(value) =>
+                  setRuntimeConfig((current) => ({
+                    ...current,
+                    maxProviderRequests: Number(value),
+                  }))
+                }
+                style={{
+                  color: tokens.foreground,
+                  borderColor: tokens.border,
+                  borderWidth: 1,
+                  borderRadius: 11,
+                  padding: 12,
+                }}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: tokens.mutedForeground }}>{t("Time limit")}</Text>
+              <TextInput
+                accessibilityLabel={t("Time limit")}
+                keyboardType="number-pad"
+                value={String(runtimeConfig.timeoutMs / 1_000)}
+                onChangeText={(value) =>
+                  setRuntimeConfig((current) => ({ ...current, timeoutMs: Number(value) * 1_000 }))
+                }
+                style={{
+                  color: tokens.foreground,
+                  borderColor: tokens.border,
+                  borderWidth: 1,
+                  borderRadius: 11,
+                  padding: 12,
+                }}
+              />
+            </View>
+          </View>
+        ) : null}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t("Advanced")}
@@ -485,7 +550,7 @@ export default function BotSettingsScreen() {
             {advancedOpen ? "⌃" : "⌄"}
           </Text>
         </Pressable>
-        {advancedOpen && runtimeKind === "pi" ? (
+        {advancedOpen && (runtimeKind === "pi" || runtimeKind === "hermes") ? (
           <View>
             <Text
               style={{
@@ -512,6 +577,15 @@ export default function BotSettingsScreen() {
             >
               <Text style={{ color: tokens.foreground }}>{selectedModelLabel}</Text>
             </Pressable>
+            {runtimeKind === "hermes" &&
+            effectiveProvider &&
+            !["openai-compatible", "ollama"].includes(effectiveProvider) ? (
+              <Text style={{ color: tokens.mutedForeground, marginTop: 8 }}>
+                {effectiveProvider === "anthropic"
+                  ? t("Hermes does not yet support Anthropic connections.")
+                  : t("Hermes does not yet support this connection.")}
+              </Text>
+            ) : null}
             {isOllama && effectiveEntry?.reasoning === false ? (
               <Text style={{ color: tokens.mutedForeground }}>{t("Effort: not applicable")}</Text>
             ) : thinkingOptions.length || thinkingLevel ? (

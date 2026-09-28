@@ -1,6 +1,19 @@
 import type { ContextSnapshot } from "@ardurbot/contracts";
-import { expect, it } from "vitest";
-import { aggregateContext, recordContextUsage, resumeContextSnapshot } from "./metrics.js";
+import { expect, it, vi } from "vitest";
+import {
+  aggregateContext,
+  forwardRecordedBrokerUsage,
+  recordContextUsage,
+  resumeContextSnapshot,
+} from "./metrics.js";
+
+it("forwards only accepted broker usage deltas once", async () => {
+  const sink = vi.fn(async () => undefined);
+  await forwardRecordedBrokerUsage(null, sink);
+  await forwardRecordedBrokerUsage({ inputTokens: 12, cachedTokens: 4 }, sink);
+  expect(sink).toHaveBeenCalledOnce();
+  expect(sink).toHaveBeenCalledWith({ inputTokens: 12, cachedTokens: 4 });
+});
 
 it("keeps missing cache coverage unknown across accepted deltas and continuations", () => {
   const snapshot: ContextSnapshot = {

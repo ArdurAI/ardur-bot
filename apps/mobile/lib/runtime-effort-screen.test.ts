@@ -100,6 +100,65 @@ it("offers and selects the probed efforts through the native Thinking sheet", as
   await act(async () => root.unmount());
 });
 
+it("offers Hermes in the native runtime sheet without clearing a shared model pin", async () => {
+  vi.mocked(rpc).mockResolvedValue({ runtimeKind: "pi", available: true, models: [] });
+  const onKind = vi.fn();
+  const onModel = vi.fn();
+  const onEffort = vi.fn();
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  await act(async () =>
+    root.render(
+      createElement(RuntimeSettings, {
+        kind: "pi",
+        onKind,
+        modelKey: modelPinOptionKey("ollama", "llama3.2:1b", "connection"),
+        onModel,
+        effort: "off",
+        onEffort,
+        experimental: false,
+        onExperimental: vi.fn(),
+      }),
+    ),
+  );
+  await act(async () => node.querySelector<HTMLButtonElement>('[aria-label="Runs on"]')!.click());
+  const sheet = vi.mocked(presentMessageActionSheet).mock.calls.at(-1)![0];
+  sheet.actions.find((action) => action.text === "Hermes")!.onPress();
+  expect(onKind).toHaveBeenCalledWith("hermes");
+  expect(onModel).not.toHaveBeenCalled();
+  expect(onEffort).not.toHaveBeenCalled();
+  await act(async () => root.unmount());
+});
+
+it("shows a missing Hermes install without offering a separate model picker", async () => {
+  vi.mocked(rpc).mockResolvedValue({
+    runtimeKind: "hermes",
+    available: false,
+    reason: "Hermes is not installed on this computer.",
+    models: [],
+  });
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  await act(async () =>
+    root.render(
+      createElement(RuntimeSettings, {
+        kind: "hermes",
+        onKind: vi.fn(),
+        modelKey: modelPinOptionKey("ollama", "llama3.2:1b", "connection"),
+        onModel: vi.fn(),
+        effort: "off",
+        onEffort: vi.fn(),
+        experimental: true,
+        onExperimental: vi.fn(),
+      }),
+    ),
+  );
+  expect(node.textContent).toContain("Hermes is not installed on this computer.");
+  expect(node.querySelector('[aria-label="Model"]')).toBeNull();
+  expect(node.textContent).not.toContain("Connect Hermes");
+  await act(async () => root.unmount());
+});
+
 it("selects Antigravity's fixed effort and hides the redundant Thinking control", async () => {
   vi.mocked(rpc).mockResolvedValue({
     runtimeKind: "antigravity",

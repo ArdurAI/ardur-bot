@@ -19,6 +19,7 @@ export function ModelPinSelect({
   inputRef,
   unavailableSelection = false,
   needsConnection = false,
+  allowedProviders,
 }: {
   settings: ModelSettings | null;
   showAll: boolean;
@@ -30,6 +31,7 @@ export function ModelPinSelect({
   inputRef?: Ref<HTMLSelectElement>;
   unavailableSelection?: boolean;
   needsConnection?: boolean;
+  allowedProviders?: readonly string[];
 }) {
   const { t } = useLingui();
   const catalog = settings?.catalog ?? [];
@@ -37,6 +39,7 @@ export function ModelPinSelect({
   const options: Array<{ key: string; provider: string; modelId: string; label: string }> = [];
   const seen = new Set<string>();
   for (const credential of credentials) {
+    if (allowedProviders && !allowedProviders.includes(credential.provider)) continue;
     const providerModels = availableProviderModels(catalog, credential.provider, showAll).filter(
       (entry) =>
         !entry.placeholder && (!entry.credentialId || entry.credentialId === credential.id),

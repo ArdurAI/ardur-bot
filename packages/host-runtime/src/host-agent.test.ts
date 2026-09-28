@@ -58,7 +58,44 @@ afterEach(async () => {
   for (const agent of agents.splice(0)) agent.close();
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
   vi.restoreAllMocks();
+  vi.unstubAllEnvs();
 });
+it.skipIf(process.platform === "win32")(
+  "reports a missing managed Hermes install without searching elsewhere",
+  async () => {
+    vi.stubEnv("ARDUR_HERMES_INSTALL", "");
+    const { agent } = await fixture();
+    expect((await agent.health()).hermes).toMatchObject({
+      available: false,
+      reasonId: "install-missing",
+      reason: "Hermes is not installed on this computer.",
+    });
+  },
+);
+it.skipIf(process.platform === "win32")(
+  "refuses a managed Hermes project with a dotenv file",
+  async () => {
+    vi.stubEnv("ARDUR_HERMES_INSTALL", "");
+    const data = await mkdtemp(path.join(tmpdir(), "hermes-managed-host-"));
+    roots.push(data);
+    const root = path.join(data, "workspaces");
+    const managed = path.join(data, "runtimes", "hermes-agent");
+    await mkdir(path.join(managed, ".venv", "bin"), { recursive: true });
+    await writeFile(path.join(managed, ".venv", "bin", "python"), "fixture");
+    await writeFile(path.join(managed, ".env"), "");
+    const agent = new HostAgent(
+      { root, hostRoots: [root] },
+      { send: async () => undefined, close: vi.fn() },
+    );
+    agents.push(agent);
+    await agent.initialize();
+    expect((await agent.health()).hermes).toMatchObject({
+      available: false,
+      reasonId: "install-invalid",
+      reason: "Hermes is not installed on this computer.",
+    });
+  },
+);
 it("streams board JSON from the owner's runner without provisioning a bot computer", async () => {
   const stdout = JSON.stringify([{ title: "x".repeat(60_000) }]);
   const run = vi.spyOn(BoardRunner.prototype, "run").mockResolvedValue({ ok: true, stdout });

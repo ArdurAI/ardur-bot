@@ -37,7 +37,10 @@ sequenceDiagram
 - Desktop stores the encrypted configuration under its application data directory.
   Linux `basic_text` storage is refused. Only the app's active main frame can invoke
   pairing or open the native folder picker. The renderer receives no host token.
-- The host opens no network listener. The native MCP relay uses a private local
+- The host opens no externally reachable network listener. Hermes alone opens an
+  ephemeral `127.0.0.1` HTTP listener for its per-turn provider relay; the worker
+  grants one bounded, revocable token and keeps the model connection credential.
+  The native MCP relay uses a private local
   socket on macOS/Linux and an authenticated named pipe on Windows. The fixed relay
   sets `ELECTRON_RUN_AS_NODE=1`, including when launched by a vendor CLI.
 - Host sockets require WSS outside loopback. Worker authentication is a
@@ -111,6 +114,10 @@ Injection variables such as `NODE_OPTIONS`, `BASH_ENV`, `ENV`, `ZDOTDIR`,
 `LD_PRELOAD` and `DYLD_INSERT_LIBRARIES` are also excluded. Bot-managed environment
 secrets are not injected into host commands. Electron adds its own fixed Node-mode
 flags only for the host-service launch; native CLIs do not inherit those flags.
+`ARDUR_HERMES_INSTALL` is an optional host-service install selector, not a bot
+command variable. When unset, Hermes qualification checks only
+`<desktop application data>/host-service/runtimes/hermes-agent`; see the
+[Hermes runtime guide](runtimes/hermes.md) for the pinned source layout.
 
 `getHostEnvironment` in `packages/host-runtime/src/host-environment.ts` captures one
 login PATH per process and shares concurrent initialization. On macOS/Linux it

@@ -177,6 +177,7 @@ export default function GroupSettingsScreen() {
               member={member}
               catalog={catalog}
               credentials={credentials}
+              experimental={bots.find((bot) => bot.id === member.botId)?.runtimeExperimental}
               onSaved={onGroupSaved}
               onError={setError}
             />

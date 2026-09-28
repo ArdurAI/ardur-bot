@@ -1586,6 +1586,8 @@ msgstr "Choose a bot…"
 msgid "Choose a folder inside your home folder."
 msgstr "Choose a folder inside your home folder."
 
+#: src/pages/group-model-control.tsx
+#: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Choose a model"
 msgstr "Choose a model"
@@ -4092,6 +4094,28 @@ msgstr "Header value"
 msgid "Hear a sample"
 msgstr "Hear a sample"
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Hermes"
+msgstr "Hermes"
+
+#: src/pages/group-model-control.tsx
+#: src/pages/shell/bot-panel.tsx
+msgid "Hermes does not yet support Anthropic connections."
+msgstr "Hermes does not yet support Anthropic connections."
+
+#: src/pages/group-model-control.tsx
+#: src/pages/shell/bot-panel.tsx
+msgid "Hermes does not yet support this connection."
+msgstr "Hermes does not yet support this connection."
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Hermes is not installed on this computer."
+msgstr "Hermes is not installed on this computer."
+
+#: src/pages/shell/bot-panel.tsx
+msgid "Hermes runs with this computer's access."
+msgstr "Hermes runs with this computer's access."
+
 #: src/pages/VoiceSettingsOverlay.tsx
 msgid "Hi, this is how I'll sound when I read replies out loud."
 msgstr "Hi, this is how I'll sound when I read replies out loud."
@@ -5105,6 +5129,10 @@ msgstr "Model"
 #: src/pages/BotContextMenu.tsx
 msgid "Model & effort"
 msgstr "Model & effort"
+
+#: src/pages/shell/hermes-limits.tsx
+msgid "Model calls per turn"
+msgstr "Model calls per turn"
 
 #: src/pages/LearningInbox.tsx
 msgid "model estimate"
@@ -8221,6 +8249,10 @@ msgstr "This week (UTC)"
 #: src/pages/LearningInsights.tsx
 msgid "Thumbs"
 msgstr "Thumbs"
+
+#: src/pages/shell/hermes-limits.tsx
+msgid "Time limit"
+msgstr "Time limit"
 
 #: src/pages/RoutineSchedule.tsx
 msgid "Time of day"

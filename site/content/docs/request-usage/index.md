@@ -165,8 +165,8 @@ existing path.
 
 ## Worker provider broker
 
-`HermesProviderBroker` is a worker-only, dormant Chat Completions admission boundary. No runtime
-selection or host relay is enabled by this module. A worker supplies the persisted run scope,
+`HermesProviderBroker` is the worker-owned Chat Completions admission boundary for an
+Experimental Hermes runtime. A worker supplies the persisted run scope,
 complete pin, lease and host generation, an exact connection record, and the frozen Ardur bridge
 tool catalog. The grant holds an opaque ID, bearer value and expiry in memory. Neither it nor the
 provider credential enters the ledger. The worker must revoke the grant on stop, pause, failure,
@@ -189,17 +189,19 @@ write prevents provider I/O. The reservation is the declared context window plus
 output allowance. It is a conservative admission bound, not a measured token count or a dollar
 cap; the provider's adherence to its declared context limit remains a route qualification.
 
-JSON and SSE responses are bounded to 8 MiB and reduced to documented numeric usage fields.
+JSON and SSE provider responses are bounded to 4 MiB per turn and reduced to documented numeric usage fields.
 Absent categories stay `null`; reported zero stays zero. A provider-reported model mismatch fails
 the call, and a profile may require a reported model. Error payloads and provider headers are
-not returned to the harness. The current worker API buffers a bounded response before returning
-it; a later host relay must preserve backpressure and callback framing. Started receipts may
+not returned to the host. The host relay preserves bounded callback framing. Started receipts may
 remain after a crash, and their reservation remains consumed. This avoids silently treating an
 uncertain bill as zero.
 
 A runtime with `usageAccounting: "external"` leaves provider spend to the broker sink. Executor
 accounting ignores its ACP aggregate usage events and creates no fallback request receipt, so
-the same invocation cannot be charged twice. The ordinary runtime accounting path is unchanged.
+the same invocation cannot be charged twice. Accepted primary-run ledger deltas also update
+the run's context snapshot; duplicate, delegated or unmeasured receipts do not invent cache
+statistics. Unknown internal call purpose remains `unknown`, and missing usage remains unknown.
+The ordinary runtime accounting path is unchanged.
 
 Background handlers connect Ardur summaries and detached reviews to `recordRunUsage`. New
 `history.compact` jobs carry `sourceRunId`; older queued jobs select the latest run within the same
