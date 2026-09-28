@@ -69,6 +69,163 @@ async function collect(source: ReturnType<RemoteHostRuntime["run"]>) {
   return events;
 }
 describe("worker-owned remote runtime callbacks", () => {
+  it("sends a complete v2 envelope only to a matching host profile", async () => {
+    const generation = crypto.randomUUID();
+    const requestHost = vi.fn(async function* (operation: HostOperation) {
+      expect(operation).toMatchObject({
+        op: "runtime.turn",
+        request: {
+          executionEnvelope: profileFixture,
+          model: { runtimePin: { runtimeKind: "hermes" } },
+        },
+      });
+      yield {
+        v: 1,
+        type: "stream",
+        id: "request",
+        seq: 0,
+        channel: "event",
+        data: { type: "done" },
+      } as const;
+    });
+    const remote = new RemoteHostRuntime(
+      {
+        health: async () => ({
+          generation,
+          capabilities: {
+            providerRelay: 1,
+            hermesConfigurationProfile: "hermes-ardur-v2",
+            hermesLauncherGeneration: 1,
+          },
+        }),
+        request: requestHost,
+      } as unknown as HostClient,
+      "hermes",
+      async (_run, _context, fence) => ({
+        broker: {
+          grant: { id: crypto.randomUUID(), token: "a".repeat(43), expiresAt: Date.now() + 60000 },
+          revoke: vi.fn(),
+        } as unknown as HermesProviderBroker,
+        scope: {
+          runId: "run",
+          botId: "bot",
+          userId: "owner",
+          spaceId: "space",
+          operationId: fence.operationId,
+          leaseOwner: "worker",
+          leaseFence: 1,
+          hostGeneration: createHash("sha256").update(generation).digest().readUIntBE(0, 6),
+          configurationHash: profileFixture.effectiveRuntimeConfigHash,
+          pin: {
+            credentialId: "credential",
+            provider: "fixture",
+            modelId: "fixture-model",
+            effort: "high",
+          },
+        },
+      }),
+    );
+    const base = request();
+    const run = {
+      ...base,
+      model: {
+        ...base.model,
+        provider: "fixture",
+        id: "fixture-model",
+        thinkingLevel: "high" as const,
+        runtimePin: {
+          runtimeKind: "hermes" as const,
+          provider: "fixture",
+          modelId: "fixture-model",
+          effort: "high",
+          credentialId: "credential",
+          revision: 1,
+          runtimeConfig: profileFixture.runtimeConfig,
+          runtimeConfigHash: profileFixture.runtimeConfigHash,
+          effectiveRuntimeConfig: profileFixture.effectiveRuntimeConfig,
+          effectiveRuntimeConfigHash: profileFixture.effectiveRuntimeConfigHash,
+        },
+      },
+    } as AgentRunRequest;
+    expect(await collect(remote.run(run, { userId: "owner", spaceId: "space" }))).toEqual([
+      { type: "done" },
+    ]);
+    expect(requestHost).toHaveBeenCalledOnce();
+  });
+  it("rejects a summary broker scoped to the root hash", async () => {
+    const generation = crypto.randomUUID();
+    const revoke = vi.fn();
+    const requestHost = vi.fn();
+    const remote = new RemoteHostRuntime(
+      {
+        health: async () => ({
+          generation,
+          capabilities: {
+            providerRelay: 1,
+            hermesConfigurationProfile: "hermes-ardur-v2",
+            hermesLauncherGeneration: 1,
+          },
+        }),
+        request: requestHost,
+      } as unknown as HostClient,
+      "hermes",
+      async (_run, _context, fence) => ({
+        broker: {
+          grant: { id: crypto.randomUUID(), token: "a".repeat(43), expiresAt: Date.now() + 60000 },
+          revoke,
+        } as unknown as HermesProviderBroker,
+        scope: {
+          runId: "summary",
+          botId: "bot",
+          userId: "owner",
+          spaceId: "space",
+          operationId: fence.operationId,
+          leaseOwner: "worker",
+          leaseFence: 1,
+          hostGeneration: createHash("sha256").update(generation).digest().readUIntBE(0, 6),
+          configurationHash: profileFixture.effectiveRuntimeConfigHash,
+          pin: {
+            credentialId: "credential",
+            provider: "fixture",
+            modelId: "fixture-model",
+            effort: "high",
+          },
+        },
+      }),
+    );
+    const base = request();
+    const run = {
+      ...base,
+      runId: "summary",
+      providerSourceRunId: "run",
+      providerPurpose: "summary" as const,
+      providerRunMaxOutputTokens: 4096,
+      tools: "none" as const,
+      model: {
+        ...base.model,
+        provider: "fixture",
+        id: "fixture-model",
+        thinkingLevel: "high" as const,
+        runtimePin: {
+          runtimeKind: "hermes" as const,
+          provider: "fixture",
+          modelId: "fixture-model",
+          effort: "high",
+          credentialId: "credential",
+          revision: 1,
+          runtimeConfig: profileFixture.runtimeConfig,
+          runtimeConfigHash: profileFixture.runtimeConfigHash,
+          effectiveRuntimeConfig: profileFixture.effectiveRuntimeConfig,
+          effectiveRuntimeConfigHash: profileFixture.effectiveRuntimeConfigHash,
+        },
+      },
+    } as AgentRunRequest;
+    await expect(collect(remote.run(run, { userId: "owner", spaceId: "space" }))).rejects.toThrow(
+      "Provider broker scope does not match this host turn.",
+    );
+    expect(revoke).toHaveBeenCalled();
+    expect(requestHost).not.toHaveBeenCalled();
+  });
   it("requires a matching host profile before opening a B12 broker", async () => {
     const brokerForTurn = vi.fn();
     const remote = new RemoteHostRuntime(

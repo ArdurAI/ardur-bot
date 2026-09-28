@@ -121,7 +121,7 @@ export const RuntimeConfigExecutionManifestSchema = z.strictObject({
     acceptsImages: z.boolean(),
     thinkingLevel: z.enum(["off", "minimal", "low", "medium", "high", "xhigh", "max"]),
   }),
-  generatedConfig: z.record(z.string(), z.unknown()),
+  generatedConfig: z.record(z.string(), z.json()),
   launcher: z.strictObject({
     model: z.string().min(1),
     maxIterations: z.number().int().min(1).max(64),
@@ -138,6 +138,16 @@ export const RuntimeConfigExecutionManifestSchema = z.strictObject({
   }),
 });
 export type RuntimeConfigExecutionManifest = z.infer<typeof RuntimeConfigExecutionManifestSchema>;
+export const RuntimeConfigOperationManifestSchema = z.strictObject({
+  format: z.literal(1),
+  purpose: z.literal("summary"),
+  sourceEffectiveRuntimeConfigHash: z.string().regex(/^[a-f0-9]{64}$/),
+  maxOutputTokens: z.number().int().min(1).max(65_536),
+  tools: z.literal("none"),
+  modelId: z.string().min(1),
+  effort: z.string().nullable(),
+});
+export type RuntimeConfigOperationManifest = z.infer<typeof RuntimeConfigOperationManifestSchema>;
 export const HermesExecutionEnvelopeSchema = z.strictObject({
   runtimeKind: z.literal("hermes"),
   runtimeConfig: HermesRuntimeConfigV2Schema,

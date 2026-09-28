@@ -283,7 +283,11 @@ import {
   hermesCompatibility,
   hermesConfigHash,
 } from "./hermes-compatibility.js";
-import { HermesProviderBroker } from "./hermes-provider-broker.js";
+import {
+  HermesProviderBroker,
+  summaryOperationHash,
+  summaryOperationManifest,
+} from "./hermes-provider-broker.js";
 import {
   LEGACY_HISTORY_WINDOW_SIZE,
   MAX_RECALLED_MEMORIES,
@@ -1073,6 +1077,34 @@ export function createRunExecutor(deps: ExecutorDeps) {
         select: { id: true },
       });
       if (!secret) throw new Error("The pinned connection was removed.");
+      if (summary && request.tools !== "none")
+        throw new Error("Summary maintenance cannot use tools.");
+      const operationManifest = summary
+        ? summaryOperationManifest(
+            pin,
+            request.providerRunMaxOutputTokens ??
+              request.model.maxTokens ??
+              DEFAULT_MODEL_MAX_TOKENS,
+          )
+        : null;
+      const operationHash = operationManifest ? summaryOperationHash(operationManifest) : null;
+      if (operationManifest && operationHash) {
+        await deps.prisma.$transaction(async (tx) => {
+          await appendEventInTransaction(tx, {
+            spaceId: source.spaceId,
+            threadId: source.threadId,
+            botId: source.botId,
+            type: "run.configurationApplied",
+            runId: source.id,
+            payload: {
+              operationId: hostFence.operationId,
+              sourceRunId: source.id,
+              manifest: operationManifest,
+              hash: operationHash,
+            },
+          });
+        });
+      }
       const scope = {
         runId: request.runId,
         botId: request.botId,
@@ -1087,7 +1119,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           .update(hostFence.hostGeneration)
           .digest()
           .readUIntBE(0, 6),
-        configurationHash: pin.runtimeConfigHash,
+        configurationHash: operationHash ?? pin.effectiveRuntimeConfigHash ?? pin.runtimeConfigHash,
         ...(summary ? { briefAttemptedAt: brief!.attemptedAt!.toISOString() } : {}),
         pin: {
           credentialId: pin.credentialId!,
@@ -1173,11 +1205,14 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   parameters: tool.inputSchema as Record<string, unknown>,
                 })),
         purpose: request.providerPurpose ?? "unknown",
-        maxRequests: config.maxProviderRequests,
+        maxRequests: config.limits.maxProviderRequests,
         maxReservedTokens:
           sourceAllowance ??
-          Math.min(2_147_483_647, config.maxProviderRequests * (contextWindow + runOutputTokens)),
-        expiresAt: Date.now() + config.timeoutMs,
+          Math.min(
+            2_147_483_647,
+            config.limits.maxProviderRequests * (contextWindow + runOutputTokens),
+          ),
+        expiresAt: Date.now() + config.limits.timeoutMs,
         active,
         record: async (usage) => {
           await recordAndForwardBrokerUsage(
@@ -1257,12 +1292,14 @@ export function createRunExecutor(deps: ExecutorDeps) {
     bot: Parameters<typeof resolveRunModelPin>[0]["bot"],
     snapshot?: unknown,
     registerSecrets?: (values: string[]) => void,
+    newAdmission = false,
   ) =>
     resolveRunModelPin({
       prisma: deps.prisma,
       scope,
       bot,
       snapshot,
+      newAdmission,
       scripted: scriptedRuntimeAvailable,
       loadKey: async (credential, pin, selectDefaultEffort) => {
         const key = await resolveModelKey(
@@ -1935,8 +1972,12 @@ export function createRunExecutor(deps: ExecutorDeps) {
             savedUsageGroupId: run.usageGroupId,
             comparisonId: run.comparisonId,
           });
-          selected = await resolvePin(run, bot, candidate.snapshot, (values) =>
-            runSecrets.push(...values),
+          selected = await resolvePin(
+            run,
+            bot,
+            candidate.snapshot,
+            (values) => runSecrets.push(...values),
+            run.runtimePin == null,
           );
           if (selected.kind === "problem" && candidate.source.kind !== "group-member")
             throw new RuntimePinError(selected);
@@ -2058,7 +2099,8 @@ export function createRunExecutor(deps: ExecutorDeps) {
           ...(selected.pin.runtimeKind === "hermes"
             ? {
                 historyMode: "quoted-system-context" as const,
-                configurationHash: selected.pin.runtimeConfigHash,
+                configurationHash:
+                  selected.pin.effectiveRuntimeConfigHash ?? selected.pin.runtimeConfigHash,
                 effectiveRuntimeConfig: selected.pin.effectiveRuntimeConfig,
                 effectiveRuntimeConfigHash: selected.pin.effectiveRuntimeConfigHash,
               }

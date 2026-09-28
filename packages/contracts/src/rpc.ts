@@ -181,7 +181,7 @@ import {
 import { ExportDownloadSchema } from "./privacy.js";
 import { FeedbackReasonSchema, MessageReactionSchema } from "./reactions.js";
 import { RoutineRunSchema, RunsListOutputSchema } from "./runs.js";
-import { HermesRuntimeConfigPreviewSchema, HermesRuntimeConfigV2DraftSchema } from "./runtime-config.js";
+import { HermesRuntimeConfigPreviewSchema, RuntimeConfigIssueSchema } from "./runtime-config.js";
 import { RuntimeAvailabilitySchema, RuntimeKindSchema, RuntimePinSchema } from "./runtime-pins.js";
 import { SearchQueryOutputSchema } from "./search.js";
 import { teamContract } from "./team.js";
@@ -497,11 +497,16 @@ export const appContract = {
       .input(
         z.object({
           runtimeKind: z.string(),
-          runtimeConfig: HermesRuntimeConfigV2DraftSchema,
+          runtimeConfig: z.unknown(),
           pin: RuntimePinSchema.omit({ revision: true }),
-        })
+        }),
       )
-      .output(z.object({ preview: HermesRuntimeConfigPreviewSchema })),
+      .output(
+        z.object({
+          preview: HermesRuntimeConfigPreviewSchema.optional(),
+          issues: z.array(RuntimeConfigIssueSchema),
+        }),
+      ),
   },
   models: {
     ollama: oc.output(OllamaStatusSchema),

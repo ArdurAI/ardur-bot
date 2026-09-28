@@ -1,7 +1,10 @@
-import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import type { AgentUsage, UsagePurpose } from "@ardurbot/adapter-kit";
 import { RequestUsageCollector } from "@ardurbot/adapter-kit";
+import type { RuntimePin } from "@ardurbot/contracts";
+import { RuntimeConfigOperationManifestSchema } from "@ardurbot/contracts/runtime-config";
+import { canonicalRuntimeJson } from "@ardurbot/core/runtime-config";
 import { chatCompletionsUsage } from "./openai-chat-usage.js";
 import {
   assertAllowedOpenAiCompatibleUrl,
@@ -43,6 +46,36 @@ export type BrokerScope = {
   briefAttemptedAt?: string;
   pin: { credentialId: string; provider: string; modelId: string; effort: string };
 };
+
+/** A maintenance operation keeps the source pin but has its own bounded admission identity. */
+export function summaryOperationManifest(pin: RuntimePin, maxOutputTokens: number) {
+  if (
+    pin.runtimeKind !== "hermes" ||
+    !pin.effectiveRuntimeConfigHash ||
+    !Number.isSafeInteger(maxOutputTokens) ||
+    maxOutputTokens < 1 ||
+    maxOutputTokens > 65_536
+  )
+    throw new Error("The summary configuration is incomplete.");
+  return RuntimeConfigOperationManifestSchema.parse({
+    format: 1 as const,
+    purpose: "summary" as const,
+    sourceEffectiveRuntimeConfigHash: pin.effectiveRuntimeConfigHash,
+    maxOutputTokens,
+    tools: "none" as const,
+    modelId: pin.modelId,
+    effort: pin.effort,
+  });
+}
+
+export function summaryOperationHash(
+  manifest: ReturnType<typeof summaryOperationManifest>,
+): string {
+  return createHash("sha256")
+    .update("ardur:runtime-operation:v1\n", "utf8")
+    .update(canonicalRuntimeJson(manifest), "utf8")
+    .digest("hex");
+}
 
 export type BrokerConnection = {
   credentialId: string;

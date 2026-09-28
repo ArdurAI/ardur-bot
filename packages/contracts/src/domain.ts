@@ -19,7 +19,10 @@ import {
 } from "./mcp.js";
 import { ProviderErrorKindSchema } from "./provider-errors.js";
 import {
-  HermesRuntimeConfigSchema,
+  HermesRuntimeConfigV2DraftSchema,
+  HistoricalHermesRuntimeConfigSchema,
+} from "./runtime-config.js";
+import {
   RuntimeInfoSchema,
   RuntimeKindSchema,
   RuntimePinSchema,
@@ -99,7 +102,7 @@ export const BotSchema = z.object({
   thinkingLevel: ThinkingLevelSchema.nullable(),
   modelCredentialId: z.string().nullable().optional(),
   runtimeKind: RuntimeKindSchema.default("pi"),
-  runtimeConfig: HermesRuntimeConfigSchema.nullable().optional(),
+  runtimeConfig: HistoricalHermesRuntimeConfigSchema.nullable().optional(),
   runtimeExperimental: z.boolean().optional(),
   modelPinRevision: z.number().int().nonnegative().optional(),
   groupModelOverrideCount: z.number().int().nonnegative().optional(),
@@ -186,6 +189,7 @@ const GroupMemberModelPinTarget = z
   })
   .strict();
 export const SetGroupMemberModelPinInput = GroupMemberModelPinTarget.extend({
+  expectedBotModelPinRevision: z.number().int().nonnegative().optional(),
   pin: z
     .object({
       runtimeKind: RuntimeKindSchema,
@@ -393,7 +397,8 @@ export const UpdateBotInput = z
     thinkingLevel: ThinkingLevelSchema.nullable().optional(),
     modelCredentialId: z.string().min(1).nullable().optional(),
     runtimeKind: RuntimeKindSchema.optional(),
-    runtimeConfig: HermesRuntimeConfigSchema.nullable().optional(),
+    runtimeConfig: HermesRuntimeConfigV2DraftSchema.nullable().optional(),
+    expectedModelPinRevision: z.number().int().nonnegative().optional(),
     runtimeExperimental: z.boolean().optional(),
     teamChatAmbientEnabled: z.boolean().optional(),
     teamChatRules: z.string().max(TEAM_CHAT_RULES_MAX_LENGTH).optional(),

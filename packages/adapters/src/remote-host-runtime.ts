@@ -16,6 +16,7 @@ import { validateHermesExecutionEnvelope } from "@ardurbot/core/node/runtime-con
 import type { HostClient } from "@ardurbot/host-runtime/host-client";
 import * as z from "zod";
 import type { BrokerScope, HermesProviderBroker } from "./hermes-provider-broker.js";
+import { summaryOperationHash, summaryOperationManifest } from "./hermes-provider-broker.js";
 
 /** The host turn receives the same tool catalog the executor selected, including board tools. */
 export function advertisedHostTools(tools: AgentRunRequest["tools"]) {
@@ -102,6 +103,18 @@ export class RemoteHostRuntime implements AgentRuntime {
           health?.capabilities?.hermesLauncherGeneration !== 1)
       )
         throw new Error("Update the connected host to use these runtime settings.");
+      const operationHash =
+        this.kind === "hermes" &&
+        request.providerPurpose === "summary" &&
+        request.providerSourceRunId &&
+        request.providerSourceRunId !== request.runId
+          ? summaryOperationHash(
+              summaryOperationManifest(
+                capturedPin!,
+                request.providerRunMaxOutputTokens ?? request.model.maxTokens ?? 4_096,
+              ),
+            )
+          : undefined;
       const operationId = randomUUID();
       brokerSession =
         this.kind === "hermes"
@@ -129,10 +142,13 @@ export class RemoteHostRuntime implements AgentRuntime {
           scope.pin.provider !== request.model.provider ||
           scope.pin.modelId !== request.model.id ||
           scope.pin.effort !== request.model.thinkingLevel ||
-          ((executionEnvelope?.effectiveRuntimeConfigHash ?? pin?.runtimeConfigHash) !==
-            undefined &&
+          ((operationHash ??
+            executionEnvelope?.effectiveRuntimeConfigHash ??
+            pin?.runtimeConfigHash) !== undefined &&
             scope.configurationHash !==
-              (executionEnvelope?.effectiveRuntimeConfigHash ?? pin?.runtimeConfigHash))
+              (operationHash ??
+                executionEnvelope?.effectiveRuntimeConfigHash ??
+                pin?.runtimeConfigHash))
         ) {
           brokerSession.broker.revoke();
           throw new Error("Provider broker scope does not match this host turn.");
@@ -241,11 +257,15 @@ export class RemoteHostRuntime implements AgentRuntime {
             return { seq, chunk: chunk.toString("base64"), done };
           }
           if (frame.method === "onRuntimeInfo") {
-            await request.onRuntimeInfo?.(
-              HostRuntimeInfoSchema.parse(frame.args[0]) as ReturnType<
-                typeof RuntimeInfoSchema.parse
-              >,
-            );
+            const info = HostRuntimeInfoSchema.parse(frame.args[0]) as ReturnType<
+              typeof RuntimeInfoSchema.parse
+            >;
+            if (
+              executionEnvelope &&
+              info.configurationHash !== executionEnvelope.effectiveRuntimeConfigHash
+            )
+              throw new Error("The host applied a different Hermes configuration.");
+            await request.onRuntimeInfo?.(info);
             return;
           }
           if (frame.method === "acknowledgeInput") {

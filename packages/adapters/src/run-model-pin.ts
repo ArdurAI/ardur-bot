@@ -16,11 +16,14 @@ import {
   ThinkingLevelSchema,
 } from "@ardurbot/contracts";
 import { inheritedOllamaEffort, spaceDefaultEffort } from "@ardurbot/core";
+import {
+  effectiveRuntimeConfigHash,
+  validateHermesExecutionEnvelope,
+} from "@ardurbot/core/node/runtime-config-hash";
+import { migrateHermesRuntimeConfig } from "@ardurbot/core/runtime-config";
 import type { findDefaultModelCredential, PrismaClient } from "@ardurbot/db";
 import { findDefaultModelCredential as findSpaceDefault } from "@ardurbot/db";
 import { compileHermesRuntimeConfig } from "@ardurbot/host-runtime/runtimes/hermes-config";
-import { canonicalRuntimeJson, migrateHermesRuntimeConfig } from "@ardurbot/core/runtime-config";
-import { createHash } from "node:crypto";
 
 import { hermesCompatibility, hermesConfigHash } from "./hermes-compatibility.js";
 import { modelLocalityAllowed } from "./model-locality.js";
@@ -44,6 +47,8 @@ export async function resolveRunModelPin(input: {
   bot: BotPinFields | null;
   snapshot?: unknown;
   scripted: boolean;
+  /** True only before the run pin is first captured, including explicit group choices. */
+  newAdmission?: boolean;
   loadKey: (
     credential: Credential,
     pin: RuntimePin,
@@ -79,6 +84,16 @@ export async function resolveRunModelPin(input: {
       );
     }
     pin = parsed.data;
+    if (input.newAdmission && pin.runtimeKind === "hermes" && pin.runtimeConfig?.version === 1) {
+      if (pin.runtimeConfigHash !== hermesConfigHash(pin.runtimeConfig))
+        return runtimePinProblem(
+          pin,
+          "runtime-configuration-invalid",
+          "The recorded Hermes limits are invalid.",
+        );
+      const runtimeConfig = migrateHermesRuntimeConfig(pin.runtimeConfig);
+      pin = { ...pin, runtimeConfig, runtimeConfigHash: hermesConfigHash(runtimeConfig) };
+    }
   } else if (hasBotPin(bot)) {
     pin = requestedBotPin(bot!);
   } else {
@@ -183,6 +198,18 @@ export async function resolveRunModelPin(input: {
       "runtime-configuration-invalid",
       "The recorded Hermes limits are invalid.",
     );
+  if (
+    pin.runtimeKind === "hermes" &&
+    input.snapshot != null &&
+    !input.newAdmission &&
+    pin.runtimeConfig?.version === 2 &&
+    !pin.effectiveRuntimeConfig
+  )
+    return runtimePinProblem(
+      pin,
+      "runtime-configuration-invalid",
+      "This run uses an older runtime configuration. Start a new run.",
+    );
   if (input.snapshot != null || hasBotPin(bot))
     credential = await credentialForPin(input.prisma, input.scope, pin);
   if (pin.provider === "scripted" && !input.scripted)
@@ -211,21 +238,35 @@ export async function resolveRunModelPin(input: {
     const problem = validateRuntimePin(resolved, pin);
     const compatibilityProblem = problem ?? hermesCompatibility(pin, resolved);
     if (compatibilityProblem) return compatibilityProblem;
-    
-    if (pin.runtimeKind === "hermes" && pin.runtimeConfig) {
-      const document = migrateHermesRuntimeConfig(pin.runtimeConfig);
+
+    if (
+      pin.runtimeKind === "hermes" &&
+      input.newAdmission &&
+      pin.runtimeConfig?.version === 2 &&
+      !pin.effectiveRuntimeConfig
+    ) {
+      const document = pin.runtimeConfig;
       const compiled = compileHermesRuntimeConfig(document, {
         id: resolved.id,
         contextWindow: resolved.contextWindow ?? 8192,
         maxTokens: resolved.maxTokens ?? 4096,
         reasoning: resolved.reasoning ?? false,
         acceptsImages: resolved.acceptsImages ?? false,
-        thinkingLevel: (resolved.thinkingLevel ?? "off") as any
+        thinkingLevel: ThinkingLevelSchema.parse(resolved.thinkingLevel ?? "off"),
       });
       pin.effectiveRuntimeConfig = compiled.manifest;
-      pin.effectiveRuntimeConfigHash = createHash("sha256").update(canonicalRuntimeJson(compiled.manifest)).digest("hex");
+      pin.effectiveRuntimeConfigHash = effectiveRuntimeConfigHash(compiled.manifest);
     }
-    
+    if (pin.runtimeKind === "hermes" && pin.effectiveRuntimeConfig) {
+      validateHermesExecutionEnvelope({
+        runtimeKind: "hermes",
+        runtimeConfig: pin.runtimeConfig,
+        runtimeConfigHash: pin.runtimeConfigHash,
+        effectiveRuntimeConfig: pin.effectiveRuntimeConfig,
+        effectiveRuntimeConfigHash: pin.effectiveRuntimeConfigHash,
+      });
+    }
+
     return { ...resolved, kind: "resolved", pin };
   } catch (error) {
     if (error instanceof AnthropicOAuthUnavailableError) {

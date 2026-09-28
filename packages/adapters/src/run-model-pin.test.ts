@@ -72,11 +72,11 @@ describe("run pin snapshots", () => {
       baseUrl: "http://127.0.0.1:8080/v1",
       thinkingLevel: "off",
     });
-    const runtimeConfig = effectiveHermesConfig({
+    const runtimeConfig = {
       version: 1,
       maxProviderRequests: 7,
       timeoutMs: 42_000,
-    });
+    } as const;
     const snapshot = {
       ...pin,
       runtimeKind: "hermes" as const,
@@ -107,6 +107,42 @@ describe("run pin snapshots", () => {
         bot: {},
       }),
     ).toMatchObject({ code: "runtime-configuration-invalid" });
+  });
+  it("upgrades a v1 group choice only for new admission and keeps the historical hash", async () => {
+    const f = fixture();
+    f.findCredential.mockResolvedValue({ ...credential, provider: "openai-compatible" });
+    f.loadKey.mockResolvedValue({
+      provider: "openai-compatible",
+      id: "same-model",
+      baseUrl: "http://127.0.0.1:8080/v1",
+      thinkingLevel: "off",
+      contextWindow: 32768,
+      maxTokens: 4096,
+    });
+    const config = { version: 1 as const, maxProviderRequests: 7, timeoutMs: 42000 };
+    const snapshot = {
+      ...pin,
+      runtimeKind: "hermes" as const,
+      provider: "openai-compatible",
+      modelId: "same-model",
+      effort: "off",
+      runtimeConfig: config,
+      runtimeConfigHash: hermesConfigHash(config),
+    };
+    const historical = await resolveRunModelPin({ ...f, snapshot, bot: {} });
+    expect(historical).toMatchObject({ kind: "resolved", pin: snapshot });
+    expect(historical.pin).not.toHaveProperty("effectiveRuntimeConfig");
+    const admitted = await resolveRunModelPin({ ...f, snapshot, bot: {}, newAdmission: true });
+    expect(admitted).toMatchObject({
+      kind: "resolved",
+      pin: {
+        runtimeConfig: { version: 2, limits: { maxProviderRequests: 7, timeoutMs: 42000 } },
+        effectiveRuntimeConfig: { profile: { profile: "hermes-ardur-v2" } },
+      },
+    });
+    expect(admitted.pin.runtimeConfigHash).not.toBe(snapshot.runtimeConfigHash);
+    expect(admitted.pin.effectiveRuntimeConfigHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(snapshot.runtimeConfig.version).toBe(1);
   });
   it("keeps an Anthropic pin and returns a reconnect action for legacy OAuth", async () => {
     const f = fixture();

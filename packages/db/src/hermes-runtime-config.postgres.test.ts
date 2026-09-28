@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
+import { HermesRuntimeConfigV1Schema } from "@ardurbot/contracts/runtime-config";
+import { migrateHermesRuntimeConfig } from "@ardurbot/core/runtime-config";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb } from "./client.js";
 
@@ -70,10 +72,7 @@ postgres("Hermes Bot configuration migration on disposable PostgreSQL", () => {
 });
 
 const v2Migration = readFileSync(
-  new URL(
-    "../prisma/migrations/20260927200000_runtime_config_v2/migration.sql",
-    import.meta.url,
-  ),
+  new URL("../prisma/migrations/20260927200000_runtime_config_v2/migration.sql", import.meta.url),
   "utf8",
 );
 
@@ -87,42 +86,78 @@ postgres("Hermes Bot configuration v2 migration on disposable PostgreSQL", () =>
     await db.pool.end();
   });
 
-  it("migrates version 1 to version 2 and initializes missing configs", async () => {
+  it("keeps old rows readable during rollout and matches lazy v2 migration", async () => {
     const schema = `hermes_migration_v2_${randomUUID().replaceAll("-", "")}`;
     const client = await db.pool.connect();
     try {
       await client.query(`CREATE SCHEMA "${schema}"`);
       await client.query(`SET search_path TO "${schema}"`);
-      await client.query('CREATE TABLE "bots" (id TEXT PRIMARY KEY, "runtimeKind" TEXT, "runtimeConfig" JSONB)');
-      
+      await client.query(
+        'CREATE TABLE "bots" (id TEXT PRIMARY KEY, "runtimeKind" TEXT, "runtimeConfig" JSONB)',
+      );
+
       const v1Config = { version: 1, maxProviderRequests: 20, timeoutMs: 300_000 };
-      await client.query('INSERT INTO "bots" (id, "runtimeKind", "runtimeConfig") VALUES ($1, $2, $3::jsonb)', ["v1-bot", "hermes", JSON.stringify(v1Config)]);
-      await client.query('INSERT INTO "bots" (id, "runtimeKind", "runtimeConfig") VALUES ($1, $2, $3::jsonb)', ["null-hermes", "hermes", null]);
-      await client.query('INSERT INTO "bots" (id, "runtimeKind", "runtimeConfig") VALUES ($1, $2, $3::jsonb)', ["null-other", "pi", null]);
-      
+      await client.query(
+        'INSERT INTO "bots" (id, "runtimeKind", "runtimeConfig") VALUES ($1, $2, $3::jsonb)',
+        ["v1-bot", "hermes", JSON.stringify(v1Config)],
+      );
+      await client.query(
+        'INSERT INTO "bots" (id, "runtimeKind", "runtimeConfig") VALUES ($1, $2, $3::jsonb)',
+        ["null-hermes", "hermes", null],
+      );
+      await client.query(
+        'INSERT INTO "bots" (id, "runtimeKind", "runtimeConfig") VALUES ($1, $2, $3::jsonb)',
+        ["null-other", "pi", null],
+      );
+      await client.query(
+        'INSERT INTO "bots" (id, "runtimeKind", "runtimeConfig") VALUES ($1, $2, $3::jsonb)',
+        ["dormant", "pi", JSON.stringify(v1Config)],
+      );
+
       await client.query(v2Migration);
-      
-      const v1Bot = await client.query('SELECT "runtimeConfig" FROM "bots" WHERE id = $1', ["v1-bot"]);
-      expect(v1Bot.rows[0].runtimeConfig).toEqual({
+
+      const v1Bot = await client.query('SELECT "runtimeConfig" FROM "bots" WHERE id = $1', [
+        "v1-bot",
+      ]);
+      expect(HermesRuntimeConfigV1Schema.parse(v1Bot.rows[0].runtimeConfig)).toEqual(v1Config);
+      expect(migrateHermesRuntimeConfig(v1Bot.rows[0].runtimeConfig)).toEqual({
         version: 2,
         runtimeKind: "hermes",
         limits: { maxProviderRequests: 20, timeoutMs: 300_000 },
         context: { maxInputBytes: 16384, overflow: "trim" },
-        harness: { agent: { api_max_retries: 1 } }
+        harness: { agent: { api_max_retries: 1 } },
       });
-      
-      const nullHermesBot = await client.query('SELECT "runtimeConfig" FROM "bots" WHERE id = $1', ["null-hermes"]);
-      expect(nullHermesBot.rows[0].runtimeConfig).toEqual({
-        version: 2,
-        runtimeKind: "hermes",
-        limits: { maxProviderRequests: 16, timeoutMs: 180000 },
-        context: { maxInputBytes: 16384, overflow: "trim" },
-        harness: { agent: { api_max_retries: 1 } }
-      });
-      
-      const nullOtherBot = await client.query('SELECT "runtimeConfig" FROM "bots" WHERE id = $1', ["null-other"]);
+
+      const nullHermesBot = await client.query('SELECT "runtimeConfig" FROM "bots" WHERE id = $1', [
+        "null-hermes",
+      ]);
+      expect(nullHermesBot.rows[0].runtimeConfig).toBeNull();
+
+      const nullOtherBot = await client.query('SELECT "runtimeConfig" FROM "bots" WHERE id = $1', [
+        "null-other",
+      ]);
       expect(nullOtherBot.rows[0].runtimeConfig).toBeNull();
-      
+      expect(
+        (await client.query('SELECT "runtimeConfig" FROM "bots" WHERE id = $1', ["dormant"]))
+          .rows[0].runtimeConfig,
+      ).toEqual(v1Config);
+
+      for (const invalid of [
+        { ...v1Config, maxProviderRequests: 65 },
+        { ...v1Config, timeoutMs: 1001 },
+        { ...v1Config, provider: "forbidden" },
+        { version: 1, maxProviderRequests: "16", timeoutMs: 180000 },
+      ]) {
+        await client.query('UPDATE "bots" SET "runtimeConfig" = $1::jsonb WHERE id = $2', [
+          JSON.stringify(invalid),
+          "v1-bot",
+        ]);
+        await expect(client.query(v2Migration)).rejects.toThrow(/invalid rows/);
+        expect(
+          (await client.query('SELECT "runtimeConfig" FROM "bots" WHERE id = $1', ["v1-bot"]))
+            .rows[0].runtimeConfig,
+        ).toEqual(invalid);
+      }
     } finally {
       await client.query("RESET search_path");
       await client.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
