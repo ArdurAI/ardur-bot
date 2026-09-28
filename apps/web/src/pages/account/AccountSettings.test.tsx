@@ -260,3 +260,50 @@ it("keeps the instructions card visible under the real search stylesheet rule", 
     style.remove();
   }
 });
+it("advances the save baseline so editing back stays savable", async () => {
+  await act(async () => root.render(<AccountSettings />));
+  const saveProfile = () =>
+    [...container.querySelectorAll("button")].find((node) => node.textContent === "Save")!;
+  const saveInstructions = () =>
+    [...container.querySelectorAll("button")].find(
+      (node) => node.textContent === "Save instructions",
+    )!;
+  async function type(node: HTMLInputElement | HTMLTextAreaElement, value: string) {
+    await act(async () => {
+      const proto =
+        node instanceof HTMLInputElement
+          ? HTMLInputElement.prototype
+          : HTMLTextAreaElement.prototype;
+      Object.getOwnPropertyDescriptor(proto, "value")!.set!.call(node, value);
+      node.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+  }
+  expect(saveProfile().disabled).toBe(true);
+  await type(container.querySelector<HTMLInputElement>("input#account-display-name")!, "Chief");
+  expect(saveProfile().disabled).toBe(false);
+  await act(async () => saveProfile().click());
+  expect(saveProfile().disabled, "save stays enabled right after saving").toBe(true);
+  await type(container.querySelector<HTMLInputElement>("input#account-display-name")!, "Captain");
+  expect(saveProfile().disabled, "editing back to the original value must stay savable").toBe(
+    false,
+  );
+
+  expect(saveInstructions().disabled).toBe(true);
+  await type(
+    container.querySelector<HTMLTextAreaElement>("textarea#account-instructions")!,
+    "Be terse.",
+  );
+  expect(saveInstructions().disabled).toBe(false);
+  await act(async () => saveInstructions().click());
+  expect(saveInstructions().disabled, "instructions save stays enabled right after saving").toBe(
+    true,
+  );
+  await type(
+    container.querySelector<HTMLTextAreaElement>("textarea#account-instructions")!,
+    "Use concise answers.",
+  );
+  expect(
+    saveInstructions().disabled,
+    "editing instructions back to the original text must stay savable",
+  ).toBe(false);
+});

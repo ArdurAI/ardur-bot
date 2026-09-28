@@ -31,7 +31,9 @@ export function AccountProfile({
     workType: account.workType,
     avatarStyle: account.avatarStyle,
   });
+  const [savedProfile, setSavedProfile] = useState<AccountProfileInput>(profile);
   const [instructions, setInstructions] = useState(account.instructions);
+  const [savedInstructions, setSavedInstructions] = useState(account.instructions);
   const [revision, setRevision] = useState(account.instructionsRevision);
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState("");
@@ -61,10 +63,12 @@ export function AccountProfile({
       if (section === "profile") {
         const result = await rpc.account.updateProfile(profile);
         setProfile(result);
+        setSavedProfile(result);
         await onSaved?.(result);
       } else {
         const result = await rpc.account.updateInstructions({ instructions, revision });
         setRevision(result.revision);
+        setSavedInstructions(instructions);
       }
       setSaved(section);
     } catch (cause) {
@@ -81,11 +85,11 @@ export function AccountProfile({
     }
   }
   const profileChanged =
-    profile.name !== account.name ||
-    profile.displayName !== account.displayName ||
-    profile.workType !== account.workType ||
-    profile.avatarStyle !== account.avatarStyle;
-  const instructionsChanged = instructions !== account.instructions;
+    profile.name !== savedProfile.name ||
+    profile.displayName !== savedProfile.displayName ||
+    profile.workType !== savedProfile.workType ||
+    profile.avatarStyle !== savedProfile.avatarStyle;
+  const instructionsChanged = instructions !== savedInstructions;
 
   return (
     <div className="space-y-8">
@@ -225,6 +229,7 @@ export function AccountProfile({
                   .get()
                   .then((latest) => {
                     setInstructions(latest.instructions);
+                    setSavedInstructions(latest.instructions);
                     setRevision(latest.instructionsRevision);
                     setConflict(false);
                     setError("");
