@@ -338,9 +338,12 @@ test("memory-documents: inspect history and approve a reviewed change", async ({
   await expect(document.getByText("Use concise answers.", { exact: true })).toBeVisible();
   await capture(page, "docs-memory-documents-detail");
   await document.getByText("History", { exact: true }).click();
-  await expect(
-    document.getByTestId("memory-history").getByRole("button", { name: "Revision 1" }),
-  ).toBeVisible();
+  const firstRevision = document
+    .getByTestId("memory-history")
+    .getByRole("button", { name: "Revision 1" });
+  await expect(firstRevision).toBeVisible();
+  await firstRevision.scrollIntoViewIfNeeded();
+  await expect(firstRevision).toBeInViewport();
   await capture(page, "docs-memory-documents-history");
   await memory
     .getByLabel("Tell your bot what to change or remove")

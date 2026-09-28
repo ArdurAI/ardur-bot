@@ -2683,7 +2683,7 @@
       "platforms": {
         "web": "configure",
         "desktop": "configure",
-        "mobile": "configure"
+        "mobile": "read-only"
       },
       "settingsPath": {
         "web": {
@@ -2706,15 +2706,6 @@
           "entry": {
             "kind": "settings",
             "sectionId": "integrations"
-          }
-        },
-        "mobile": {
-          "uiLabels": [
-            "Integrations"
-          ],
-          "entry": {
-            "kind": "route",
-            "route": "/integrations"
           }
         }
       },
@@ -2785,7 +2776,8 @@
       ],
       "boundaries": [
         "Opening a connection form does not connect an account.",
-        "Permission changes take effect only after Save; Block removes tool access, and write tools remain subject to their approval policy."
+        "Permission changes take effect only after Save; Block removes tool access, and write tools remain subject to their approval policy.",
+        "On mobile, a connected integration opens Manage on web; tool permissions are changed in the web or desktop app."
       ],
       "troubleshooting": [
         {
