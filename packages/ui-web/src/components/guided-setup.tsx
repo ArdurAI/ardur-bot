@@ -363,7 +363,7 @@ export function GuidedSetupView(props: GuidedSetupViewProps) {
                       <Button ref={failureRef} type="button" onClick={() => props.onRetry(row.id)}>
                         {guidedSetupText.retry}
                       </Button>
-                      {row.id === "command" && (
+                      {(row.id === "command" || row.id === "engines") && (
                         <Button
                           type="button"
                           variant="secondary"

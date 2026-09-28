@@ -18,7 +18,11 @@ const ids = [
 ] as const;
 const fixtureCase = new URLSearchParams(window.location.search).get("case") ?? "services";
 const currentStep =
-  fixtureCase === "engines" ? "engines" : fixtureCase === "recheck" ? "prerequisites" : "services";
+  fixtureCase === "engines" || fixtureCase === "engines-failed"
+    ? "engines"
+    : fixtureCase === "recheck"
+      ? "prerequisites"
+      : "services";
 const snapshot: SetupSnapshot = {
   schemaVersion: 1,
   planVersion: 1,
@@ -51,11 +55,18 @@ const snapshot: SetupSnapshot = {
               : "succeeded"
             : index === 5 && fixtureCase === "engines"
               ? "succeeded"
+              : index === 5 && fixtureCase === "engines-failed"
+                ? "failed"
               : "pending",
     activeElapsedMs: index === 0 ? 26 : index === 1 ? 19_800 : index === 2 ? 64_000 : 0,
     waitingElapsedMs: 0,
     verifiedAt: index < 4 ? 1 : null,
-    reasonCode: fixtureCase === "services" && index === 4 ? "services-not-ready" : null,
+    reasonCode:
+      fixtureCase === "services" && index === 4
+        ? "services-not-ready"
+        : fixtureCase === "engines-failed" && index === 5
+          ? "discovery-timeout"
+          : null,
     details:
       fixtureCase === "engines" && index === 5
         ? [

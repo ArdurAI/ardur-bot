@@ -35,6 +35,14 @@ test("shared guided setup keeps optional computer states distinct", async ({ pag
   await captureScreenshot(page, testInfo, "guided-setup-engines");
 });
 
+test("failed optional computer discovery still offers Skip", async ({ page }, testInfo) => {
+  await page.goto("/guided-setup-fixture.html?case=engines-failed");
+  const engines = page.locator('.guided-step[aria-current="step"]');
+  await expect(engines).toContainText("Optional computer discovery timed out. Retry.");
+  await expect(engines.getByRole("button", { name: "Skip" })).toBeVisible();
+  await captureScreenshot(page, testInfo, "guided-setup-engines-failed");
+});
+
 test("shared guided setup shows a re-check without resetting rows", async ({ page }, testInfo) => {
   await page.goto("/guided-setup-fixture.html?case=recheck");
   const current = page.locator('.guided-step[aria-current="step"]');

@@ -261,6 +261,29 @@ describe("GuidedSetupView", () => {
     },
   );
 
+  it("offers Skip after optional computer discovery fails", async () => {
+    const view = mount();
+    try {
+      const snapshot = fixture("failed");
+      snapshot.currentStep = "engines";
+      snapshot.steps[1]!.status = "succeeded";
+      snapshot.steps[5]!.available = true;
+      snapshot.steps[5]!.status = "failed";
+      snapshot.steps[5]!.attempt = 1;
+      snapshot.steps[5]!.reasonCode = "discovery-timeout";
+      await view.render(snapshot);
+      const row = view.host.querySelectorAll("ol > li")[5]!;
+      const skip = [...row.querySelectorAll("button")].find(
+        (button) => button.textContent === "Skip",
+      );
+      expect(skip).toBeDefined();
+      await act(async () => skip?.click());
+      expect(view.actions.onSkip).toHaveBeenCalledWith("engines");
+    } finally {
+      await view.cleanup();
+    }
+  });
+
   it("offers Retry stop before Resume when reopened cleanup is incomplete", async () => {
     const view = mount();
     try {

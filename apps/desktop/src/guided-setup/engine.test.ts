@@ -204,6 +204,32 @@ describe("SetupEngine", () => {
       reasonCode: "discovery-timeout",
     });
   });
+  it("can skip failed optional discovery and become ready for handoff", async () => {
+    const ready = async () => ({ kind: "satisfied" as const, checkedAt: 100, evidence: "ready" });
+    const engine = await SetupEngine.open(
+      memoryStore().store,
+      [
+        step({ check: ready }),
+        step({ id: "database", requires: ["prerequisites"], check: ready }),
+        step({ id: "migrations", requires: ["database"], check: ready }),
+        step({ id: "command", requires: ["migrations"], canSkip: true, check: ready }),
+        step({ id: "services", requires: ["migrations"], check: ready }),
+        step({
+          id: "engines",
+          requires: ["services"],
+          canSkip: true,
+          run: async () => {
+            throw new Error("malformed discovery output");
+          },
+        }),
+      ],
+      clock,
+    );
+    expect((await engine.start()).steps[5]?.status).toBe("waiting-input");
+    expect((await engine.retry("engines")).steps[5]?.status).toBe("failed");
+    expect((await engine.skip("engines")).steps[5]?.status).toBe("skipped");
+    expect(engine.pilotReady()).toBe(true);
+  });
   it("persists active and waiting durations without carrying monotonic time across restart", async () => {
     const files = memoryStore();
     let tick = 1;
