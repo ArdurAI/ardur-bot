@@ -257,17 +257,28 @@ export function BotSettings({
     runtimeRef.current?.querySelector("select")?.focus();
     runtimeRef.current?.scrollIntoView({ block: "nearest" });
   }, [runtimeFocusRequest]);
-  // The model select exists only for the built-in runtime, and a focus request can arrive
-  // while another runtime is shown or before the select has rendered; the request stays
-  // pending until the select mounts, so it is honoured exactly once without timers.
+  // A request may arrive before the Pi/Hermes select mounts. The next task also restores
+  // focus if the composer error button finishes its click after React's focus effect.
   const pendingModelFocus = useRef(0);
+  const modelFocusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const focusModel = useCallback(() => {
     const select = modelRef.current;
     if (!select) return;
     select.focus();
     select.scrollIntoView({ block: "nearest" });
+    if (modelFocusTimer.current) clearTimeout(modelFocusTimer.current);
+    modelFocusTimer.current = setTimeout(() => {
+      if (modelRef.current === select && select.isConnected) select.focus();
+      modelFocusTimer.current = null;
+    }, 0);
     pendingModelFocus.current = 0;
   }, []);
+  useEffect(
+    () => () => {
+      if (modelFocusTimer.current) clearTimeout(modelFocusTimer.current);
+    },
+    [],
+  );
   useEffect(() => {
     if (!modelFocusRequest) return;
     pendingModelFocus.current = modelFocusRequest;
