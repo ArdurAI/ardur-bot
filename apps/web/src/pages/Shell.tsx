@@ -132,10 +132,6 @@ import { AskCard } from "../components/AskCard";
 import { ActiveBotGlyph } from "../components/ai/CollaborationMarker";
 import { CloudAgentCard } from "../components/CloudAgentCard";
 import { ComputerMaintenanceActions } from "../components/ComputerMaintenanceActions";
-import {
-  ComputersUnavailableHint,
-  computersAreUnavailable,
-} from "../components/ComputersUnavailableHint";
 import { ComputerUpdateProgress } from "../components/ComputerUpdateProgress";
 import { RunContext } from "../components/ContextEntry";
 import type { PendingAttachment } from "../components/composer/attachments";
@@ -193,8 +189,6 @@ import {
   activeThreadRuns,
   applyThreadSendReceipt,
   clearActiveThreadRuns,
-  computerPanelAutoBoot,
-  computerPanelAutoUsesBoot,
   computerPanelNeedsMaintenance,
   computerTakeoverBlocked,
   isComputerStatusEvent,
@@ -303,6 +297,9 @@ type Panel =
   | null;
 
 const RoutinesPanel = lazy(() => import("../components/composer/RoutinesPanel"));
+const WorkspacePane = lazy(() =>
+  import("./workspace/WorkspacePane").then((module) => ({ default: module.WorkspacePane })),
+);
 const SlashPicker = lazy(() => import("../components/composer/SlashPicker"));
 
 const ATTACHMENT_ACCEPT = ATTACHMENT_ALLOWED_MIME_TYPES.join(",");
@@ -424,6 +421,57 @@ export function ShellPage({
   const [attachmentNotice, setAttachmentNotice] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [panel, setPanel] = useState<Panel>(null);
+  const [workspaceTab, setWorkspaceTab] = useState("");
+  const [workspaceExpanded, setWorkspaceExpanded] = useState(false);
+  const paneReturnFocus = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (
+        event.key === "Escape" &&
+        panel === "computer" &&
+        event.target instanceof Element &&
+        event.target.closest("[data-workspace-chrome]")
+      ) {
+        event.preventDefault();
+        setPanel(null);
+        paneReturnFocus.current?.focus();
+        return;
+      }
+      if (
+        !(event.metaKey || event.ctrlKey) ||
+        !event.shiftKey ||
+        event.altKey ||
+        event.repeat ||
+        event.isComposing ||
+        event.code !== "KeyE"
+      )
+        return;
+      if (
+        event.target instanceof Element &&
+        event.target.closest('[role="dialog"], [data-terminal-root]')
+      )
+        return;
+      if (!activeBotId.current) return;
+      event.preventDefault();
+      if (panel === "computer") {
+        setPanel(null);
+        paneReturnFocus.current?.focus();
+      } else {
+        paneReturnFocus.current =
+          document.activeElement instanceof HTMLElement ? document.activeElement : null;
+        setPanel("computer");
+        requestAnimationFrame(() =>
+          document
+            .querySelector<HTMLElement>(
+              '[data-panel="computer"] [role="tab"][aria-selected="true"]',
+            )
+            ?.focus(),
+        );
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [panel]);
   const [modelFocusRequest, setModelFocusRequest] = useState(0);
   const [runtimeFocusRequest, setRuntimeFocusRequest] = useState(0);
   useEffect(() => {
@@ -669,7 +717,6 @@ export function ShellPage({
   } | null>(null);
   // Owned here so the menu survives the DashboardPage remount when bootstrap resolves its space.
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
-  const autoBooted = useRef<string | null>(null);
   const routineSavePending = useRef(false);
   const webhookSecretProvisionRef = useRef(new Map<string, Promise<string>>());
   const ensureWebhookSecret = (botId: string) =>
@@ -701,7 +748,7 @@ export function ShellPage({
   const readVisibleGroups = useRef(new Set<string>());
   useNotifications();
   const computerVisible = useRef(false);
-  computerVisible.current = panel === "computer" || computerOpen;
+  computerVisible.current = computerOpen;
   const autoSpoken = useRef<string | null>(null);
   const autoSpokenBotId = useRef<string | null>(null);
 
@@ -2414,42 +2461,6 @@ export function ShellPage({
   }
 
   useEffect(() => {
-    if (panel !== "computer") {
-      autoBooted.current = null;
-      return;
-    }
-    if (!active) return;
-    const botId = active.id;
-    let cancelled = false;
-    void (async () => {
-      // Refresh from the server first. A stale SSE "booting" snapshot used to
-      // skip this effect, so an RPC takeover never showed "You have control".
-      const snap = await refreshThread(botId).catch(() => null);
-      if (cancelled || activeBotId.current !== botId) return;
-      const state = snap?.computer?.state;
-      const screen = state === "running" ? await refreshComputerScreen(botId) : null;
-      if (cancelled || activeBotId.current !== botId) return;
-      const action = computerPanelAutoBoot(state, screen);
-      if (action === "wait") {
-        if (state === "running") autoBooted.current = botId;
-        return;
-      }
-      if (action === "boot" && autoBooted.current === botId) return;
-      autoBooted.current = botId;
-      if (!computerPanelAutoUsesBoot(action)) return;
-      await bootComputer({
-        botId,
-        takeControl: false,
-        overlay: action === "boot",
-        force: true,
-      }).catch(() => undefined);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [panel, active?.id]);
-
-  useEffect(() => {
     setComputerOpen(false);
     dispatchComputerError({ type: "dismiss" });
     setComputerBotId(active?.id);
@@ -2519,8 +2530,7 @@ export function ShellPage({
 
   useEffect(() => {
     const heartbeatBotId = computerBot?.id ?? active?.id;
-    if ((panel !== "computer" && !computerOpen) || !heartbeatBotId || computer?.state !== "running")
-      return;
+    if (!computerOpen || !heartbeatBotId || computer?.state !== "running") return;
     const ping = () =>
       void rpc.computer.heartbeat({ botId: heartbeatBotId }).catch(() => undefined);
     ping();
@@ -2528,7 +2538,7 @@ export function ShellPage({
     return () => window.clearInterval(timer);
   }, [panel, computerOpen, computerBot?.id, active?.id, computer?.state]);
 
-  async function openComputer(botId?: string) {
+  async function openComputer(botId?: string, viewOnly = false) {
     const id = botId ?? active?.id;
     if (!id) return;
     const bot = botsRef.current.find((candidate) => candidate.id === id);
@@ -2549,7 +2559,7 @@ export function ShellPage({
     try {
       await bootComputer({
         botId: id,
-        takeControl: needsTakeover && !blocked,
+        takeControl: !viewOnly && needsTakeover && !blocked,
         overlay: (needsTakeover && !blocked) || targetComputer?.state !== "running",
         force: targetComputer?.state !== "running",
       });
@@ -3585,17 +3595,30 @@ export function ShellPage({
       <SlidingPanel
         open={Boolean(panel && (active || activeGroup || panel === "create"))}
         panel={panel ?? "closed"}
+        workspace={panel === "computer"}
+        expanded={panel === "computer" && workspaceExpanded}
       >
         {panel && (active || activeGroup || panel === "create") ? (
-          <div className="rk-scroll h-full w-full overflow-y-auto px-5 py-[17px] md:w-[384px]">
+          <div
+            className={
+              panel === "computer"
+                ? "flex h-full min-h-0 w-full flex-col overflow-hidden px-3 py-3"
+                : "rk-scroll h-full w-full overflow-y-auto px-5 py-[17px] md:w-[384px]"
+            }
+          >
             {panel !== "routine" &&
             panel !== "create" &&
             panel !== "create-group" &&
             panel !== "group-settings" ? (
-              <div className="mb-4 flex items-center justify-between">
+              <div
+                data-workspace-chrome={panel === "computer" ? "" : undefined}
+                className="mb-4 flex shrink-0 items-center justify-between"
+              >
                 <span className="text-[13.5px] text-muted-foreground">
                   {panel === "settings" ? (
                     <Trans>Settings</Trans>
+                  ) : panel === "computer" ? (
+                    <Trans>Workspace</Trans>
                   ) : active ? (
                     (computer?.state ?? active.status)
                   ) : (
@@ -3603,6 +3626,18 @@ export function ShellPage({
                   )}
                 </span>
                 <div className="flex gap-1">
+                  {panel === "computer" ? (
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={
+                        workspaceExpanded ? t`Return to conversation` : t`Expand workspace`
+                      }
+                      onClick={() => setWorkspaceExpanded((value) => !value)}
+                    >
+                      {workspaceExpanded ? <X size={16} /> : <Maximize2 size={16} />}
+                    </Button>
+                  ) : null}
                   {active &&
                   panel === "computer" &&
                   !computerOpen &&
@@ -3630,7 +3665,10 @@ export function ShellPage({
                     variant="ghost"
                     size="icon-sm"
                     aria-label={t`Close panel`}
-                    onClick={() => setPanel(null)}
+                    onClick={() => {
+                      setPanel(null);
+                      setWorkspaceExpanded(false);
+                    }}
                   >
                     <X size={16} strokeWidth={1.8} />
                   </Button>
@@ -3638,90 +3676,54 @@ export function ShellPage({
               </div>
             ) : null}
             {panel === "computer" && active ? (
-              <div>
-                <div
-                  data-testid="computer-preview"
-                  className="group relative aspect-[16/10] overflow-hidden rounded-[14px] bg-background"
-                >
-                  {computerOpen ? (
-                    <div className="grid h-full place-items-center text-sm text-muted-foreground/80">
-                      <Trans>Open in full window</Trans>
-                    </div>
-                  ) : computer?.capabilities?.graphical === false ? (
-                    <p className="p-4 text-muted-foreground">{t`Not available on this computer`}</p>
-                  ) : computer?.kind === "desktop" ? (
-                    <DesktopKindEmptyState className="grid h-full place-items-center px-6 text-center text-sm text-muted-foreground/80" />
-                  ) : computer?.state === "running" && embeddedScreenUrl && !computerScreenError ? (
-                    <iframe
-                      title={t`Bot screen preview`}
-                      src={embeddedScreenUrl}
-                      sandbox={screenIframeSandbox(embeddedScreenUrl)}
-                      className="h-full w-full border-0 bg-black"
-                      allow="clipboard-read; clipboard-write"
-                      style={{ pointerEvents: "none" }}
-                    />
-                  ) : (
-                    <div className="grid h-full place-items-center px-6 text-center text-sm text-muted-foreground/80">
-                      {computerScreenError ??
-                        (computersAreUnavailable(bootstrapMe?.sandboxProvider) ? (
-                          <ComputersUnavailableHint />
-                        ) : (
-                          computerPlaceholder(
-                            computer?.state,
-                            booting,
-                            computerLabel(computer?.mode, active.name),
-                            computer?.imagePulling ? computer.imagePullPercent : undefined,
-                          )
-                        ))}
-                    </div>
-                  )}
-                  {!computerScreenError ? (
-                    <button
-                      type="button"
-                      data-testid="computer-preview-open"
-                      className="absolute inset-0 flex cursor-pointer items-center justify-center bg-overlay/40 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
-                      aria-label={t`Open`}
-                      onClick={() => void openComputer()}
-                    >
-                      <span className="inline-flex items-center gap-2 rounded-full bg-overlay px-3.5 py-2 text-[14px] text-foreground shadow-md">
-                        <Maximize2 size={15} strokeWidth={1.9} aria-hidden />
-                        <Trans>Open</Trans>
-                      </span>
-                    </button>
-                  ) : null}
-                </div>
-                <p className="mt-2 truncate text-[13.5px] text-muted-foreground" dir="auto">
-                  {t`${active.name}'s screen`}
-                </p>
-                <RoutineListHeader
-                  onCreate={() => {
-                    setRoutineDraft(emptyRoutineDraft());
-                    setRoutineWebhookSecret(null);
-                    setEditingRoutine(null);
-                    setRoutineError(null);
-                    setPanel("routine");
+              <Suspense fallback={null}>
+                <WorkspacePane
+                  bot={active}
+                  computer={computer}
+                  tab={workspaceTab}
+                  onTabChange={setWorkspaceTab}
+                  onOpenRun={(run) =>
+                    navigate(run.groupId ? `/app/g/${run.groupId}` : `/app/${run.botId}`)
+                  }
+                  screen={{
+                    computer,
+                    open: computerOpen,
+                    url: embeddedScreenUrl,
+                    error: computerScreenError,
+                    onOpen: () => void openComputer(undefined, true),
                   }}
+                  routines={
+                    <div>
+                      <RoutineListHeader
+                        onCreate={() => {
+                          setRoutineDraft(emptyRoutineDraft());
+                          setRoutineWebhookSecret(null);
+                          setEditingRoutine(null);
+                          setRoutineError(null);
+                          setPanel("routine");
+                        }}
+                      />
+                      {activeRoutines.map((routine) => (
+                        <RoutineListRow
+                          key={routine.id}
+                          routine={routine}
+                          running={
+                            snapshot?.run?.routineId === routine.id && isActive(snapshot.run.status)
+                          }
+                          onOpen={() => {
+                            setRoutineDraft(draftFromRoutine(routine));
+                            setRoutineWebhookSecret(null);
+                            setEditingRoutine(routine);
+                            setRoutineError(null);
+                            setPanel("routine");
+                          }}
+                          onStop={() => void stopRun()}
+                        />
+                      ))}
+                    </div>
+                  }
                 />
-                {activeRoutines.map((routine) => {
-                  const routineRunning =
-                    snapshot?.run?.routineId === routine.id && isActive(snapshot.run.status);
-                  return (
-                    <RoutineListRow
-                      key={routine.id}
-                      routine={routine}
-                      running={routineRunning}
-                      onOpen={() => {
-                        setRoutineDraft(draftFromRoutine(routine));
-                        setRoutineWebhookSecret(null);
-                        setEditingRoutine(routine);
-                        setRoutineError(null);
-                        setPanel("routine");
-                      }}
-                      onStop={() => void stopRun()}
-                    />
-                  );
-                })}
-              </div>
+              </Suspense>
             ) : null}
             {panel === "create-group" ? (
               <CreateGroupForm
@@ -4296,6 +4298,28 @@ export function ShellPage({
           onOpenChange={setCommandPaletteOpen}
           bots={bots}
           onOpenTerminal={terminalSurface.open}
+          workspaceTabs={
+            active
+              ? [
+                  { id: "tasks", label: t`Tasks` },
+                  ...(computer?.computerId &&
+                  computer.kind !== "fake" &&
+                  computer.kind !== "desktop" &&
+                  (computer.state === "running" ||
+                    (computer.homeRevision && computer.homeRevision !== "empty"))
+                    ? [{ id: "files", label: t`Files` }]
+                    : []),
+                  { id: "routines", label: t`Routines` },
+                  ...(computer?.capabilities?.graphical === true
+                    ? [{ id: "screen", label: t`Screen` }]
+                    : []),
+                ]
+              : []
+          }
+          onOpenWorkspaceTab={(tab) => {
+            setWorkspaceTab(tab);
+            setPanel("computer");
+          }}
           onSelectBot={(id) => {
             setMobileSidebarOpen(false);
             navigate(`/app/${id}`);
@@ -6548,20 +6572,6 @@ function DesktopKindEmptyState({ className }: { className?: string }) {
       </Trans>
     </div>
   );
-}
-
-function computerPlaceholder(
-  state: ComputerStatus["state"] | undefined,
-  booting: boolean,
-  label: string,
-  imagePullPercent?: number | null,
-) {
-  if (imagePullPercent !== undefined) return computerPullLabel(imagePullPercent);
-  if (state === "booting" || booting) return t`Booting live desktop…`;
-  if (state === "running") return label;
-  if (state === "suspended") return t`Computer is asleep. Open it to wake.`;
-  if (state === "error") return t`Computer failed to boot`;
-  return t`Computer is stopped`;
 }
 
 function computerPullLabel(percent: number | null | undefined) {
