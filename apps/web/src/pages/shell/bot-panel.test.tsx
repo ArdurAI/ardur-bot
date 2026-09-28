@@ -1151,18 +1151,24 @@ it("reads and saves only Hermes limits with the existing model pin", async () =>
       }),
     ),
   );
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 20));
-  });
+  await vi.waitFor(
+    () =>
+      expect(
+        container.querySelector<HTMLInputElement>('input[type="number"][max="64"]')?.value,
+      ).toBe("7"),
+    { timeout: 5_000 },
+  );
   expect(container.textContent).toContain("Hermes is not installed on this computer.");
   expect(container.textContent).toContain("Hermes runs with this computer's access.");
-  expect(container.querySelector<HTMLInputElement>('input[type="number"][max="64"]')?.value).toBe(
-    "7",
-  );
   expect(container.querySelector<HTMLInputElement>('input[type="number"][max="600"]')?.value).toBe(
     "42",
   );
   expect(container.textContent).not.toContain("Connect Hermes");
+  const callLimit = container.querySelector<HTMLInputElement>('input[type="number"][max="64"]')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(callLimit, "8");
+    callLimit.dispatchEvent(new Event("input", { bubbles: true }));
+  });
   await save();
   expect(onSave).toHaveBeenLastCalledWith(
     expect.objectContaining({
@@ -1170,7 +1176,14 @@ it("reads and saves only Hermes limits with the existing model pin", async () =>
       modelProvider: "ollama",
       modelId: "llama3.2:1b",
       modelCredentialId: "connection",
-      runtimeConfig: { version: 1, maxProviderRequests: 7, timeoutMs: 42_000 },
+      expectedModelPinRevision: 0,
+      runtimeConfig: {
+        version: 2,
+        runtimeKind: "hermes",
+        limits: { maxProviderRequests: 8, timeoutMs: 42_000 },
+        context: { maxInputBytes: 16_384, overflow: "trim" },
+        harness: { agent: { api_max_retries: 1 } },
+      },
     }),
   );
 });

@@ -3,7 +3,6 @@ import type {
   Bot,
   ComputerMode,
   Group,
-  HermesRuntimeConfig,
   ModelCatalogEntry,
   RuntimeKind,
   ThinkingLevel,
@@ -13,8 +12,11 @@ import {
   BOT_DESCRIPTION_MAX_LENGTH,
   BOT_NAME_MAX_LENGTH,
   BOT_TITLE_MAX_LENGTH,
-  HERMES_RUNTIME_DEFAULTS,
 } from "@ardurbot/contracts";
+import type {
+  HermesRuntimeConfigV2,
+  HistoricalHermesRuntimeConfig,
+} from "@ardurbot/contracts/runtime-config";
 import {
   modelPinOptionKey as modelOptionKey,
   parseModelPinOptionKey as parseModelOptionKey,
@@ -241,7 +243,8 @@ export function BotSettings({
     modelId?: string | null;
     modelCredentialId?: string | null;
     runtimeKind?: RuntimeKind;
-    runtimeConfig?: HermesRuntimeConfig;
+    runtimeConfig?: HermesRuntimeConfigV2;
+    expectedModelPinRevision?: number;
     runtimeExperimental?: boolean;
     thinkingLevel?: ThinkingLevel | null;
   }) => Promise<void>;
@@ -295,8 +298,8 @@ export function BotSettings({
   const [voices, setVoices] = useState<VoiceInfo[]>([]);
   const [runtimeExperimental, setRuntimeExperimental] = useState(bot.runtimeExperimental ?? false);
   const [runtimeKind, setRuntimeKind] = useState<RuntimeKind>(bot.runtimeKind ?? "pi");
-  const [runtimeConfig, setRuntimeConfig] = useState<HermesRuntimeConfig>(
-    bot.runtimeConfig ?? HERMES_RUNTIME_DEFAULTS,
+  const [runtimeConfig, setRuntimeConfig] = useState<HistoricalHermesRuntimeConfig | null>(
+    bot.runtimeConfig ?? null,
   );
   const [modelKey, setModelKey] = useState(
     bot.modelProvider && bot.modelId
@@ -397,7 +400,8 @@ export function BotSettings({
         autoSpeak,
         voiceId: voiceId || null,
         runtimeKind,
-        ...(runtimeKind === "hermes" ? { runtimeConfig } : {}),
+        expectedModelPinRevision: bot.modelPinRevision ?? 0,
+        ...(runtimeKind === "hermes" && runtimeConfig?.version === 2 ? { runtimeConfig } : {}),
         runtimeExperimental,
         modelProvider: selected?.provider ?? null,
         modelId: selected?.modelId ?? null,

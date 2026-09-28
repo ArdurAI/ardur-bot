@@ -103,15 +103,21 @@ describe.skipIf(!databaseAvailable)("capabilities and memory through persisted R
         baseUrl: model.baseUrl,
         apiKey: "local",
       });
-      const bot = await rpc<{ id: string }>(handles.app, cookie, "bots/create", {
-        name: "Coordinator fixture",
-        title: "",
-        description: "",
-        instructions: "Complete the task.",
-        notifyOnFinish: false,
-      });
+      const bot = await rpc<{ id: string; modelPinRevision?: number }>(
+        handles.app,
+        cookie,
+        "bots/create",
+        {
+          name: "Coordinator fixture",
+          title: "",
+          description: "",
+          instructions: "Complete the task.",
+          notifyOnFinish: false,
+        },
+      );
       await rpc(handles.app, cookie, "bots/update", {
         botId: bot.id,
+        expectedModelPinRevision: bot.modelPinRevision ?? 0,
         modelProvider: model.model.provider,
         modelId: model.model.id,
       });

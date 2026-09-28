@@ -19,7 +19,13 @@ import { ORPCError } from "@orpc/server";
 import { validateModelPinSelection } from "./model-pin-validation.js";
 import type { RouterDeps } from "./router.js";
 
-type Target = { groupId: string; botId: string; memberId: string; expectedRevision: number };
+type Target = {
+  groupId: string;
+  botId: string;
+  memberId: string;
+  expectedRevision: number;
+  expectedBotModelPinRevision?: number;
+};
 type Choice = Omit<RuntimePin, "revision">;
 
 function sameChoice(left: RuntimePin | null, right: Choice | null) {
@@ -102,7 +108,15 @@ export async function updateGroupMemberModelPin(
     const member = await tx.chatGroupMember.findUnique({
       where: { id: target.memberId },
       include: {
-        bot: { select: { userId: true, spaceId: true, archivedAt: true, runtimeConfig: true } },
+        bot: {
+          select: {
+            userId: true,
+            spaceId: true,
+            archivedAt: true,
+            runtimeConfig: true,
+            modelPinRevision: true,
+          },
+        },
       },
     });
     if (
@@ -124,6 +138,23 @@ export async function updateGroupMemberModelPin(
       ? { ...choice!, runtimeConfig: config, runtimeConfigHash: hermesConfigHash(config) }
       : choice;
     const oldPin = member.runtimePin == null ? null : RuntimePinSchema.parse(member.runtimePin);
+    const refresh =
+      oldPin?.runtimeKind === "hermes" &&
+      selectedChoice?.runtimeKind === "hermes" &&
+      oldPin.provider === selectedChoice.provider &&
+      oldPin.modelId === selectedChoice.modelId &&
+      oldPin.effort === selectedChoice.effort &&
+      oldPin.credentialId === selectedChoice.credentialId &&
+      oldPin.runtimeConfigHash !== selectedChoice.runtimeConfigHash;
+    if (refresh && target.expectedBotModelPinRevision === undefined)
+      throw new ORPCError("BAD_REQUEST", {
+        message: "Reload bot settings before refreshing this group.",
+      });
+    if (
+      target.expectedBotModelPinRevision !== undefined &&
+      target.expectedBotModelPinRevision !== member.bot.modelPinRevision
+    )
+      throw new ORPCError("CONFLICT", { message: "Bot settings changed. Reload before saving." });
     if (sameChoice(oldPin, selectedChoice)) return { threadId: group.thread.id, seq: null };
     if (member.modelPinRevision !== target.expectedRevision)
       throw new ORPCError("CONFLICT", {
