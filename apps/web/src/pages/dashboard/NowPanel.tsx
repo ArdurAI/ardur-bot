@@ -1,5 +1,5 @@
 import type { RunActivityRow } from "@ardurbot/contracts";
-import { activeDelegations } from "@ardurbot/core";
+import { activeDelegations, presenceFreshness } from "@ardurbot/core";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { lazy, Suspense, useState } from "react";
 import { Link } from "react-router-dom";
@@ -30,7 +30,25 @@ export default function NowPanel({
 }: { data: Awaited<ReturnType<typeof load>> } & PanelActions) {
   const { t } = useLingui();
   const [review, setReview] = useState<RunActivityRow | null>(null);
-  const delegations = activeDelegations(data.rows);
+  const delegations = activeDelegations(data.rows).filter((item) =>
+    data.rows.some(
+      (row) =>
+        row.botId === item.actingBotId &&
+        row.availability === "busy" &&
+        row.activeRunIds?.includes(item.runId ?? ""),
+    ),
+  );
+  const runs = data.runs.filter(
+    (run) =>
+      data.rows.some(
+        (row) =>
+          row.botId === run.botId &&
+          row.observedAt &&
+          presenceFreshness(row.observedAt) !== "unavailable" &&
+          row.activeRunIds?.includes(run.runId) &&
+          row.availability === "busy",
+      ) || data.approvals.some((approval) => approval.runId === run.runId),
+  );
   return (
     <div className="space-y-3 text-sm">
       {review ? (
@@ -38,12 +56,13 @@ export default function NowPanel({
           <ChatTaskReview run={review} onClose={() => setReview(null)} />
         </Suspense>
       ) : null}
-      {!data.runs.length && !delegations.length ? (
+      {!runs.length && !delegations.length ? (
         <p className="text-muted-foreground">
           <Trans>Nothing running</Trans>
         </p>
       ) : null}
-      {data.runs.map((run) => {
+      {runs.map((run) => {
+        const presence = data.rows.find((row) => row.botId === run.botId);
         const started = run.startedAt ?? run.createdAt;
         const seconds = started
           ? Math.max(0, Math.floor((Date.now() - Date.parse(started)) / 1000))
@@ -51,7 +70,9 @@ export default function NowPanel({
         const label = (
           <>
             <span className="font-medium">{run.botName}</span>
-            <span className="min-w-0 flex-1 truncate">{run.promptSnippet}</span>
+            <span className="min-w-0 flex-1 truncate">
+              {presence?.currentTaskTitle ?? run.promptSnippet}
+            </span>
             {seconds !== null ? (
               <span className="tabular-nums text-muted-foreground">{t`${seconds}s`}</span>
             ) : null}

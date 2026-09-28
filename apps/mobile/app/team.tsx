@@ -1,5 +1,5 @@
 import type { HostLabel, TeamRow } from "@ardurbot/contracts";
-import { runtimeEffortLabel, TEAM_REFRESH_MS } from "@ardurbot/core";
+import { runtimeEffortLabel, TEAM_REFRESH_MS, teamDeliveryText } from "@ardurbot/core";
 import { Stack, useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import { ActivityIndicator, Alert, Button, FlatList, StyleSheet, Text, View } from "react-native";
@@ -14,6 +14,7 @@ export default function TeamScreen() {
   const [rows, setRows] = useState<TeamRow[]>([]);
   const [hostLabel, setHostLabel] = useState<HostLabel>();
   const [loaded, setLoaded] = useState(false);
+  const [now, setNow] = useState(Date.now());
   const [error, setError] = useState(false);
   const [retry, setRetry] = useState(0);
   const [busy, setBusy] = useState<string | null>(null);
@@ -41,9 +42,11 @@ export default function TeamScreen() {
       void refresh();
       // Device-authenticated mobile sessions have no thread event stream.
       const timer = setInterval(() => void refresh(), TEAM_REFRESH_MS);
+      const clock = setInterval(() => setNow(Date.now()), TEAM_REFRESH_MS);
       return () => {
         active = false;
         clearInterval(timer);
+        clearInterval(clock);
       };
     }, [retry]),
   );
@@ -77,7 +80,7 @@ export default function TeamScreen() {
         data={rows}
         keyExtractor={(row) => row.botId}
         renderItem={({ item: row }) => {
-          const item = mobileTeamRow(row, t, hostLabel);
+          const item = mobileTeamRow(row, t, hostLabel, now);
           return (
             <View
               style={[styles.row, { borderColor: tokens.border, backgroundColor: tokens.card }]}
@@ -89,6 +92,26 @@ export default function TeamScreen() {
               <Text numberOfLines={2} style={{ color: tokens.foreground }}>
                 {item.text}
               </Text>
+              {row.observedAt &&
+              now - Date.parse(row.observedAt) >= 30_000 &&
+              now - Date.parse(row.observedAt) < 60_000 ? (
+                <Text style={{ color: tokens.mutedForeground }}>{t("Updated 1m ago")}</Text>
+              ) : null}
+              {(row.activeRunCount ?? 0) > 1 ? (
+                <Text style={{ color: tokens.mutedForeground }}>
+                  {t("{count} active tasks", { count: row.activeRunCount ?? 0 })}
+                </Text>
+              ) : null}
+              {row.latestDeliveryState ? (
+                <Text style={{ color: tokens.mutedForeground }}>
+                  {t("Latest message")}: {teamDeliveryText(row.latestDeliveryState, t)}
+                </Text>
+              ) : null}
+              {row.pendingPeerCount ? (
+                <Text style={{ color: tokens.mutedForeground }}>
+                  {t("{count} peer messages waiting", { count: row.pendingPeerCount })}
+                </Text>
+              ) : null}
               {row.state === "waiting-approval" && row.requesterName ? (
                 <Text style={{ color: tokens.mutedForeground }}>
                   {t("Requested by")} {row.requesterName} — {t("acting as")} {row.botName}
@@ -105,6 +128,17 @@ export default function TeamScreen() {
                 </Text>
               ) : null}
               <View style={styles.actions}>
+                {row.latestPeerBotId ? (
+                  <Button
+                    title={t("Conversation with {name}", {
+                      name: row.latestPeerBotName ?? t("Bot"),
+                    })}
+                    color={tokens.foreground}
+                    onPress={() =>
+                      router.push({ pathname: "/thread", params: { botId: row.botId } })
+                    }
+                  />
+                ) : null}
                 {item.stop ? (
                   <Button
                     title={t("Stop")}

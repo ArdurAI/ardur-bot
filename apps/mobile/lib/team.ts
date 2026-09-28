@@ -23,6 +23,7 @@ export function mobileTeamRow(
   row: TeamRow,
   translate: (text: string) => string,
   hostLabel?: HostLabel,
+  now = Date.now(),
 ) {
   const computerName = mobileTargetName(
     { name: row.computerName, builtin: row.computerBuiltin },
@@ -32,7 +33,7 @@ export function mobileTeamRow(
   return {
     id: row.botId,
     name: row.botName,
-    text: teamRowText(row, translate),
+    text: teamRowText(row, translate, now),
     computerName,
     stop: row.canStop,
     accept: row.canAccept,

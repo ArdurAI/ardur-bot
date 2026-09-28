@@ -1,4 +1,5 @@
-import type { RunActivityRow } from "@ardurbot/contracts";
+import type { RunActivityRow, TeamRow } from "@ardurbot/contracts";
+import { presenceFreshness, teamDeliveryText } from "@ardurbot/core";
 import { i18n } from "@lingui/core";
 import { t } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
@@ -25,7 +26,9 @@ export function ActivityList({ onOpenRun }: ActivityListProps) {
   const open = (run: RunActivityRow) => (run.externalThread ? setReview(run) : onOpenRun(run));
   const [activeRuns, setActiveRuns] = useState<RunActivityRow[]>([]);
   const [recentRuns, setRecentRuns] = useState<RunActivityRow[]>([]);
+  const [teamRows, setTeamRows] = useState<TeamRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
     let cancelled = false;
@@ -33,13 +36,16 @@ export function ActivityList({ onOpenRun }: ActivityListProps) {
 
     const tick = async () => {
       try {
-        const [active, recent] = await Promise.all([
+        const [active, recent, team] = await Promise.allSettled([
           rpc.runs.list({ filter: "active" }),
           rpc.runs.list({ filter: "recent" }),
+          rpc.team.board({}),
         ]);
         if (cancelled) return;
-        setActiveRuns(active.runs);
-        setRecentRuns(recent.runs);
+        if (active.status === "fulfilled") setActiveRuns(active.value.runs);
+        if (recent.status === "fulfilled") setRecentRuns(recent.value.runs);
+        if (team.status === "fulfilled") setTeamRows(team.value.rows);
+        setNow(Date.now());
       } catch {
         // Keep the last good snapshot on transient RPC failures.
         if (cancelled) return;
@@ -78,7 +84,13 @@ export function ActivityList({ onOpenRun }: ActivityListProps) {
             <Trans>Now</Trans>
           </div>
           {activeRuns.map((run) => (
-            <ActivityRow key={run.runId} run={run} onOpen={() => open(run)} />
+            <ActivityRow
+              key={run.runId}
+              run={run}
+              team={teamRows.find((row) => row.botId === run.botId)}
+              now={now}
+              onOpen={() => open(run)}
+            />
           ))}
         </section>
       ) : null}
@@ -88,7 +100,13 @@ export function ActivityList({ onOpenRun }: ActivityListProps) {
             <Trans>Recent</Trans>
           </div>
           {recentRuns.map((run) => (
-            <ActivityRow key={run.runId} run={run} onOpen={() => open(run)} />
+            <ActivityRow
+              key={run.runId}
+              run={run}
+              team={teamRows.find((row) => row.botId === run.botId)}
+              now={now}
+              onOpen={() => open(run)}
+            />
           ))}
         </section>
       ) : null}
@@ -96,12 +114,25 @@ export function ActivityList({ onOpenRun }: ActivityListProps) {
   );
 }
 
-function ActivityRow({ run, onOpen }: { run: RunActivityRow; onOpen: () => void }) {
+function ActivityRow({
+  run,
+  team,
+  now,
+  onOpen,
+}: {
+  run: RunActivityRow;
+  team?: TeamRow;
+  now: number;
+  onOpen: () => void;
+}) {
   const { t } = useLingui();
   const title = run.groupName ? `${run.botName} · ${run.groupName}` : run.botName;
-  const label = statusLabel(run.status);
+  const presenceUnknown =
+    team?.availability === "unknown" ||
+    (team?.observedAt && presenceFreshness(team.observedAt, now) === "unavailable");
+  const label = presenceUnknown ? t`Status unavailable` : statusLabel(run.status);
   const activityLabel = t`${title}, ${label}`;
-  const tone = statusTone(run.status);
+  const tone = presenceUnknown ? "text-muted-foreground" : statusTone(run.status);
   return (
     <div>
       <button
@@ -122,9 +153,14 @@ function ActivityRow({ run, onOpen }: { run: RunActivityRow; onOpen: () => void 
             </span>
           </div>
           <div className="mt-0.5 flex items-baseline gap-2">
-            {run.promptSnippet ? (
+            {team?.currentTaskTitle || run.promptSnippet ? (
               <span className="min-w-0 flex-1 truncate text-[13px] text-muted-foreground">
-                {run.promptSnippet}
+                {team?.currentTaskTitle ?? run.promptSnippet}
+              </span>
+            ) : null}
+            {team?.latestDeliveryState ? (
+              <span className="text-xs text-muted-foreground">
+                {teamDeliveryText(team.latestDeliveryState, (value) => t({ id: value }))}
               </span>
             ) : null}
             <span className={`ms-auto shrink-0 text-xs ${tone}`}>{label}</span>
