@@ -1264,6 +1264,10 @@ msgstr "Доски"
 msgid "Booting"
 msgstr ""
 
+#: src/pages/Shell.tsx
+msgid "Booting live desktop…"
+msgstr "Загрузка рабочего стола…"
+
 #. placeholder {0}: computerBot?.name ?? active?.name
 #: src/pages/Shell.tsx
 msgid "Booting up {0}’s computer"
@@ -1901,6 +1905,7 @@ msgstr ""
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/TeamBoard.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Computer"
 msgstr "Компьютер"
 
@@ -1916,6 +1921,10 @@ msgstr ""
 msgid "Computer engine is unavailable."
 msgstr ""
 
+#: src/pages/Shell.tsx
+msgid "Computer failed to boot"
+msgstr "Не удалось запустить компьютер"
+
 #: src/pages/storage/StorageSettings.tsx
 msgid "Computer homes"
 msgstr "Домашние папки компьютеров"
@@ -1923,6 +1932,10 @@ msgstr "Домашние папки компьютеров"
 #: src/pages/Shell.tsx
 msgid "Computer is asleep"
 msgstr "Компьютер спит"
+
+#: src/pages/Shell.tsx
+msgid "Computer is asleep. Open it to wake."
+msgstr "Компьютер в спящем режиме. Откройте, чтобы разбудить."
 
 #: src/pages/system/SystemPage.tsx
 msgid "Computer use"
@@ -3778,7 +3791,7 @@ msgstr "Развернуть {0}"
 
 #: src/pages/Shell.tsx
 msgid "Expand workspace"
-msgstr ""
+msgstr "Развернуть рабочую область"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Experimental"
@@ -3890,7 +3903,7 @@ msgstr "Создал бот {name}"
 #: src/pages/workspace/WorkspaceFiles.tsx
 #: src/pages/workspace/WorkspacePane.tsx
 msgid "Files"
-msgstr ""
+msgstr "Файлы"
 
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Files are unavailable on this computer."
@@ -4844,7 +4857,7 @@ msgstr ""
 
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Loading tasks…"
-msgstr ""
+msgstr "Загрузка задач…"
 
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "Loading the extension catalogue…"
@@ -5795,7 +5808,7 @@ msgstr ""
 
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Nothing running or queued"
-msgstr ""
+msgstr "Нет запущенных или ожидающих задач"
 
 #: src/pages/LearningInbox.tsx
 msgid "Nothing to review."
@@ -5970,7 +5983,7 @@ msgstr ""
 
 #: src/pages/workspace/WorkspaceScreen.tsx
 msgid "Open screen"
-msgstr ""
+msgstr "Открыть экран"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Open Screen recording settings"
@@ -5978,7 +5991,7 @@ msgstr ""
 
 #: src/pages/workspace/WorkspaceScreen.tsx
 msgid "Open screen to view this computer."
-msgstr ""
+msgstr "Откройте экран для просмотра этого компьютера."
 
 #: src/components/composer/command-description.ts
 msgid "Open Settings"
@@ -7005,7 +7018,7 @@ msgstr "Вернуться в Ardur"
 
 #: src/pages/Shell.tsx
 msgid "Return to conversation"
-msgstr ""
+msgstr "Вернуться к беседе"
 
 #: src/pages/GuidedOnboarding.tsx
 msgid "Return to setup"
@@ -7346,7 +7359,7 @@ msgstr ""
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/workspace/WorkspacePane.tsx
 msgid "Screen"
-msgstr ""
+msgstr "Экран"
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Screen and terminal: Not available on this computer"
@@ -8073,9 +8086,10 @@ msgid "System"
 msgstr "Системная"
 
 #: src/pages/ide/terminal.tsx
+#: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 msgid "Take control"
-msgstr ""
+msgstr "Взять под контроль"
 
 #: src/pages/ide/terminal.tsx
 #: src/pages/shell/computer-terminal.tsx
@@ -8098,7 +8112,7 @@ msgstr ""
 #: src/pages/Shell.tsx
 #: src/pages/workspace/WorkspacePane.tsx
 msgid "Tasks"
-msgstr ""
+msgstr "Задачи"
 
 #: src/pages/customize/SkillsPage.tsx
 msgid "Taught skills"
@@ -9008,11 +9022,14 @@ msgstr "В работе"
 msgid "Working from the last copy"
 msgstr ""
 
-#. placeholder {0}: row.currentTaskTitle ?? row.sentence
-#. placeholder {1}: row.requesterName
 #: src/pages/TeamBoard.tsx
-msgid "Working on {0} for {1}"
-msgstr ""
+msgid "Working on {task}"
+msgstr "Работает над задачей «{task}»"
+
+#. placeholder {0}: row.requesterName
+#: src/pages/TeamBoard.tsx
+msgid "Working on {task} for {0}"
+msgstr "Работает над задачей «{task}» для {0}"
 
 #: src/pages/Auth.tsx
 #: src/pages/CallView.tsx
@@ -9023,7 +9040,7 @@ msgstr "Выполняется…"
 #: src/components/integrations/manage/IntegrationDetails.tsx
 #: src/pages/Shell.tsx
 msgid "Workspace"
-msgstr ""
+msgstr "Рабочая область"
 
 #: src/pages/ChannelPairingSettings.tsx
 msgid "Workspace or server ID"

@@ -74,6 +74,8 @@ export async function generateWinget(version, assets, outputDir) {
 export async function generateCask(version, assets, output) {
   releaseVersion(`v${version}`, version);
   let template = await readFile(new URL("../homebrew/Casks/ardur.rb", import.meta.url), "utf8");
+  // The template's leading comment documents its placeholders; the published cask starts at the stanza.
+  template = template.replace(/^# Release workflow replaces[^\n]*\n/, "");
   for (const arch of ["arm64", "x64"]) {
     const dmg = await readFile(path.join(assets, `ardur-${version}-mac-${arch}.dmg`));
     template = template.replace(

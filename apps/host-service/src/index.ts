@@ -78,6 +78,7 @@ async function connect() {
     current.once("upgrade", (response) => {
       const header = response.headers[HOST_HEALTH_ACCEPT_HEADER];
       acceptedHealth = typeof header === "string" ? header : undefined;
+      host.setAcceptedHealth(acceptedHealth);
     });
     let authenticatedAt = Date.now();
     let healthBusy = false;
@@ -118,7 +119,7 @@ async function connect() {
     };
     receiveFrames(
       current,
-      (frame) => host.receive(frame, acceptedHealth),
+      (frame) => host.receive(frame),
       () => {
         host.close();
         state(false);

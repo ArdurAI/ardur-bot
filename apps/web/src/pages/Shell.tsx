@@ -132,6 +132,10 @@ import { AskCard } from "../components/AskCard";
 import { ActiveBotGlyph } from "../components/ai/CollaborationMarker";
 import { CloudAgentCard } from "../components/CloudAgentCard";
 import { ComputerMaintenanceActions } from "../components/ComputerMaintenanceActions";
+import {
+  ComputersUnavailableHint,
+  computersAreUnavailable,
+} from "../components/ComputersUnavailableHint";
 import { ComputerUpdateProgress } from "../components/ComputerUpdateProgress";
 import { RunContext } from "../components/ContextEntry";
 import type { PendingAttachment } from "../components/composer/attachments";
@@ -235,6 +239,7 @@ import {
 } from "./shell/computer-error-state";
 import { ComputerScreenError } from "./shell/computer-screen-error";
 import { useComputerTerminal } from "./shell/computer-terminal";
+import { getEffectiveWorkspaceTab, isComputerVisible } from "./shell/computer-visibility";
 import {
   AppConnectCard,
   ArtifactImage,
@@ -243,6 +248,8 @@ import {
   McpApprovalCard,
 } from "./shell/message-cards";
 import { ProviderErrorMessage } from "./shell/provider-error-message";
+import { useComputerTerminalOpen } from "./shell/use-computer-terminal-open";
+import { useTakeControl } from "./shell/use-take-control";
 import { handleWorkspaceOpenRun } from "./shell/workspace-run";
 import { SystemDictation } from "./system/SystemDictation";
 import { WindowChrome } from "./WindowChrome";
@@ -470,6 +477,7 @@ export function ShellPage({
         event.target.closest("[data-workspace-chrome]")
       ) {
         event.preventDefault();
+        setWorkspaceExpanded(false);
         setPanel(null);
         paneReturnFocus.current?.focus();
         return;
@@ -491,6 +499,7 @@ export function ShellPage({
       if (!activeBotId.current) return;
       event.preventDefault();
       if (panel === "computer") {
+        setWorkspaceExpanded(false);
         setPanel(null);
         paneReturnFocus.current?.focus();
       } else {
@@ -695,6 +704,7 @@ export function ShellPage({
   }, [sectionMenu]);
   const closeSectionMenu = useCallback(() => setSectionMenu(null), []);
   const [booting, setBooting] = useState(false);
+  const { takingControl, takeControl } = useTakeControl(bootComputer);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [initialBotsLoaded, setInitialBotsLoaded] = useState(false);
   const [bootstrapMe, setBootstrapMe] = useState<Me | null>();
@@ -793,7 +803,7 @@ export function ShellPage({
   const readVisibleGroups = useRef(new Set<string>());
   useNotifications();
   const computerVisible = useRef(false);
-  computerVisible.current = computerOpen;
+
   const autoSpoken = useRef<string | null>(null);
   const autoSpokenBotId = useRef<string | null>(null);
 
@@ -804,6 +814,12 @@ export function ShellPage({
       : (bots.find((b) => b.id === botId) ?? bots[0]);
   const computerBot =
     (computerBotId ? bots.find((bot) => bot.id === computerBotId) : undefined) ?? active;
+  const effectiveWorkspaceTab = getEffectiveWorkspaceTab(
+    workspaceTab,
+    computer?.capabilities?.graphical,
+  );
+  const isVisible = isComputerVisible(computerOpen, panel, effectiveWorkspaceTab);
+  computerVisible.current = isVisible;
   computerOpenRef.current = computerOpen;
   computerBotIdRef.current = computerBotId ?? active?.id;
   const activeGroup = groups.find((group) => group.id === groupId);
@@ -1760,6 +1776,7 @@ export function ShellPage({
         setEditingRoutine(routine);
         setPanel("routine");
       } else {
+        setWorkspaceTab("routines");
         setPanel("computer");
       }
       const next = new URLSearchParams(searchParams);
@@ -2576,13 +2593,18 @@ export function ShellPage({
 
   useEffect(() => {
     const heartbeatBotId = computerBot?.id ?? active?.id;
-    if (!computerOpen || !heartbeatBotId || computer?.state !== "running") return;
+    if (
+      !isComputerVisible(computerOpen, panel, effectiveWorkspaceTab) ||
+      !heartbeatBotId ||
+      computer?.state !== "running"
+    )
+      return;
     const ping = () =>
       void rpc.computer.heartbeat({ botId: heartbeatBotId }).catch(() => undefined);
     ping();
     const timer = window.setInterval(ping, 60_000);
     return () => window.clearInterval(timer);
-  }, [panel, computerOpen, computerBot?.id, active?.id, computer?.state]);
+  }, [panel, workspaceTab, computerOpen, computerBot?.id, active?.id, computer?.state]);
 
   async function openComputer(botId?: string, viewOnly = false) {
     const id = botId ?? active?.id;
@@ -2599,6 +2621,7 @@ export function ShellPage({
       setScreenUrl(targetScreen);
     }
     setComputerOpen(true);
+    setWorkspaceExpanded(false);
     computerVisible.current = true;
     const needsTakeover = !userHoldsComputerControl(targetComputer, id);
     const blocked = computerTakeoverBlocked(targetComputer, snapshot?.run?.status);
@@ -2665,12 +2688,18 @@ export function ShellPage({
       }
     },
     onStop: stopRun,
-    onOpen: () => setComputerOpen(true),
+    onOpen: useComputerTerminalOpen(setComputerOpen, setWorkspaceExpanded),
   });
   const displayedComputerError = visibleComputerError(
     computerErrorState,
     Boolean(embeddedScreenUrl),
   );
+  useEffect(() => {
+    if (isVisible && !embeddedScreenUrl && computer?.state === "running") {
+      const targetId = computerBot?.id ?? active?.id;
+      if (targetId) void refreshComputerScreen(targetId);
+    }
+  }, [isVisible, embeddedScreenUrl, computer?.state, computerBot?.id, active?.id]);
   const computerScreenError = displayedComputerError ? (
     <ComputerScreenError
       message={displayedComputerError.message}
@@ -3752,6 +3781,19 @@ export function ShellPage({
                     open: computerOpen,
                     url: embeddedScreenUrl,
                     error: computerScreenError,
+                    status:
+                      !embeddedScreenUrl || computer?.state !== "running" ? (
+                        computersAreUnavailable(bootstrapMe?.sandboxProvider) ? (
+                          <ComputersUnavailableHint />
+                        ) : (
+                          computerPlaceholder(
+                            computer?.state,
+                            booting,
+                            computerLabel(computer?.mode, active.name),
+                            computer?.imagePulling ? computer.imagePullPercent : undefined,
+                          )
+                        )
+                      ) : null,
                     onOpen: () => void openComputer(undefined, true),
                   }}
                   routines={
@@ -3950,7 +3992,10 @@ export function ShellPage({
                 saving={savingRoutine}
                 running={runningRoutine}
                 error={routineError}
-                onBack={() => setPanel("computer")}
+                onBack={() => {
+                  setWorkspaceTab("routines");
+                  setPanel("computer");
+                }}
                 onClose={() => setPanel(null)}
                 onEnsureWebhook={async () => {
                   await ensureWebhookSecret(active.id);
@@ -4080,6 +4125,7 @@ export function ShellPage({
                     setDeleteRoutineTarget(editingRoutine);
                     return;
                   }
+                  setWorkspaceTab("routines");
                   setPanel("computer");
                 }}
               />
@@ -4482,7 +4528,10 @@ export function ShellPage({
                 setEditingRoutine((current) => (current?.id === target.id ? null : current));
                 if (activeBotId.current !== target.botId) return;
                 await refreshThread(target.botId);
-                if (activeBotId.current === target.botId) setPanel("computer");
+                if (activeBotId.current === target.botId) {
+                  setWorkspaceTab("routines");
+                  setPanel("computer");
+                }
               }}
             />
           </Suspense>
@@ -4657,7 +4706,22 @@ export function ShellPage({
                     takeoverRequested={Boolean(computer?.takeoverRequested)}
                     onRelease={releaseComputer}
                   />
-                ) : null}
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={takingControl}
+                    aria-label={t`Take control`}
+                    onClick={async () => {
+                      if (computerBotIdRef.current) {
+                        await takeControl(computerBotIdRef.current);
+                      }
+                    }}
+                  >
+                    <Trans>Take control</Trans>
+                  </Button>
+                )}
                 {computerBot && !recordingSkill ? (
                   <TeachComputerOverlayControl
                     key={computerBot.id}
@@ -4695,6 +4759,9 @@ export function ShellPage({
                 {sendError}
               </div>
             ) : null}
+            {computerScreenError ? (
+              <div className="border-b border-border bg-background py-6">{computerScreenError}</div>
+            ) : null}
             {terminalSurface.tabs}
             <div className="relative min-h-0 flex-1 bg-background">
               {terminalSurface.content ??
@@ -4702,7 +4769,7 @@ export function ShellPage({
                   <p className="p-4 text-muted-foreground">{t`Not available on this computer`}</p>
                 ) : computer?.kind === "desktop" ? (
                   <DesktopKindEmptyState className="grid h-full place-items-center px-8 text-center text-sm text-muted-foreground/80" />
-                ) : computer?.state === "running" && embeddedScreenUrl && !computerScreenError ? (
+                ) : computer?.state === "running" && embeddedScreenUrl ? (
                   <>
                     <iframe
                       title={t`Bot screen`}
@@ -4726,12 +4793,11 @@ export function ShellPage({
                   </>
                 ) : (
                   <div className="grid h-full place-items-center text-sm text-muted-foreground/80">
-                    {computerScreenError ??
-                      (computer?.state === "suspended"
-                        ? t`Computer is asleep`
-                        : computer?.imagePulling
-                          ? computerPullLabel(computer.imagePullPercent)
-                          : computerLabel(computer?.mode, computerBot.name))}
+                    {computer?.state === "suspended"
+                      ? t`Computer is asleep`
+                      : computer?.imagePulling
+                        ? computerPullLabel(computer.imagePullPercent)
+                        : computerLabel(computer?.mode, computerBot.name)}
                   </div>
                 ))}
             </div>
@@ -6679,6 +6745,19 @@ function DesktopKindEmptyState({ className }: { className?: string }) {
   );
 }
 
+function computerPlaceholder(
+  state: ComputerStatus["state"] | undefined,
+  booting: boolean,
+  label: string,
+  imagePullPercent?: number | null,
+) {
+  if (imagePullPercent !== undefined) return computerPullLabel(imagePullPercent);
+  if (state === "booting" || booting) return t`Booting live desktop…`;
+  if (state === "running") return label;
+  if (state === "suspended") return t`Computer is asleep. Open it to wake.`;
+  if (state === "error") return t`Computer failed to boot`;
+  return null;
+}
 function computerPullLabel(percent: number | null | undefined) {
   return percent === null || percent === undefined
     ? t`Preparing the bot computer…`

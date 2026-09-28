@@ -77,6 +77,10 @@ export class HostAgent {
   private importer?: LocalImportScanner;
   private readonly mcp: HostMcpServers;
   refreshMcp?: () => Promise<void>;
+  private acceptedHealth?: string;
+  setAcceptedHealth(advertisement?: string) {
+    this.acceptedHealth = advertisement;
+  }
   constructor(
     private readonly config: {
       token?: string;
@@ -179,7 +183,7 @@ export class HostAgent {
       integrations,
     };
   }
-  async receive(frame: HostFrame, acceptedHealth?: string) {
+  async receive(frame: HostFrame) {
     if (frame.type === "request") {
       const request = HostRequestSchema.parse(frame);
       if (this.active.size >= HOST_IN_FLIGHT || this.seen.has(frame.id)) {
@@ -205,7 +209,7 @@ export class HostAgent {
         callbacks: new Map(),
       };
       this.active.set(frame.id, state);
-      void this.execute(request, state, acceptedHealth);
+      void this.execute(request, state);
       return;
     }
     if (!("id" in frame)) throw new Error("Unexpected host request.");
@@ -244,7 +248,7 @@ export class HostAgent {
       state.callbacks.clear();
     }
   }
-  private async execute(request: HostRequest, state: Active, acceptedHealth?: string) {
+  private async execute(request: HostRequest, state: Active) {
     const timeout = setTimeout(() => {
       state.abort.abort();
       state.wake?.();
@@ -309,7 +313,7 @@ export class HostAgent {
       } else if (op.op === "host.health") {
         await send(
           "result",
-          negotiateHostHealth(await this.health(op.refreshSignIn), acceptedHealth),
+          negotiateHostHealth(await this.health(op.refreshSignIn), this.acceptedHealth),
         );
       } else if (op.op === "board.run") {
         const result = await new BoardRunner({ root: this.config.root, hostRoots: this.roots }).run(

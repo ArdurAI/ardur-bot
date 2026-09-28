@@ -457,7 +457,8 @@
     "homebrew": {
       "tapRepo": "ArdurAI/homebrew-tap",
       "caskPath": "Casks/ardur.rb",
-      "command": "brew install --cask ardurai/tap/ardur"
+      "command": "brew tap ArdurAI/tap && brew trust --cask ArdurAI/tap/ardur && brew install --cask ArdurAI/tap/ardur",
+      "verified": true
     }
   },
   "personas": [

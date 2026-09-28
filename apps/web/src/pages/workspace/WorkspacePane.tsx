@@ -4,6 +4,7 @@ import { useLingui } from "@lingui/react/macro";
 import type { ReactNode } from "react";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { rpc } from "../../lib/rpc";
+import { getEffectiveWorkspaceTab } from "../shell/computer-visibility";
 import { WorkspaceTasks } from "./WorkspaceTasks";
 
 const WorkspaceFiles = lazy(() =>
@@ -30,6 +31,7 @@ export function WorkspacePane({
     open: boolean;
     url: string | null;
     error: ReactNode;
+    status?: ReactNode;
     onOpen(): void;
   };
   onOpenRun(run: RunActivityRow): void;
@@ -56,13 +58,11 @@ export function WorkspacePane({
       ? context
       : null;
   const filesAvailable = currentContext?.files !== "unavailable" && currentContext?.computerId;
-  const selected =
-    tab === "tasks" ||
-    tab === "routines" ||
-    (tab === "files" && filesAvailable) ||
-    (tab === "screen" && computer?.capabilities?.graphical === true)
-      ? tab
-      : "tasks";
+  const selected = getEffectiveWorkspaceTab(
+    tab,
+    computer?.capabilities?.graphical,
+    !!filesAvailable,
+  );
   const tabs = [
     {
       id: "tasks",
@@ -101,12 +101,22 @@ export function WorkspacePane({
             label: t`Screen`,
             content: (
               <Suspense fallback={null}>
-                <WorkspaceScreen {...screen} />
+                <WorkspaceScreen {...screen} visible={selected === "screen"} />
               </Suspense>
             ),
           },
         ]
-      : []),
+      : [
+          {
+            id: "computer",
+            label: t`Computer`,
+            content: (
+              <Suspense fallback={null}>
+                <WorkspaceScreen {...screen} visible={selected === "computer"} />
+              </Suspense>
+            ),
+          },
+        ]),
   ];
   return <WorkspaceTabs tabs={tabs} value={selected} onChange={onTabChange} />;
 }

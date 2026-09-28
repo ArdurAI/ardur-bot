@@ -73,7 +73,7 @@ After synchronization, shared notes are Markdown files in the connected reposito
   third-party apps to use it), Codex through OpenAI's documented integration, Kimi and Z.ai
   coding plans, Gemini with an API key, Ollama as a first-class choice
 - Computers on Podman and kind/Kubernetes
-- Download and Homebrew install
+- Signed and notarized downloads
 - A fast, smooth UI on Windows, macOS and Linux
 
 Roadmap and questions live in [Discussions](https://github.com/ArdurAI/ardur-bot/discussions).
@@ -122,16 +122,18 @@ For bounded coordinator work in a group, see [team goals](/docs/goals/).
 Docker remains available later as an added computer, and Compose remains the way
 to run a server. Unsigned previews use manual downloads for updates on every OS.
 
-After the owner publishes the [Homebrew tap](/docs/desktop-release/#homebrew-tap-handoff):
+Install the same preview with [Homebrew](/docs/desktop-release/#homebrew-tap-handoff):
 
 ```sh
-brew install --cask ardurai/tap/ardur
-ardur --version
+brew tap ArdurAI/tap
+brew trust --cask ArdurAI/tap/ardur
+brew install --cask ArdurAI/tap/ardur
 ```
 
-The cask does not bypass macOS quarantine. The tap is a separate publication step; no existing
-tap or published release is assumed by this checkout. See [desktop releases](/docs/desktop-release/)
-for build and acceptance instructions.
+Current Homebrew requires the trust step before it loads a third-party cask; Homebrew releases
+without the trust command can skip it. Previews are unsigned and not notarized; approve the app
+once in Privacy & Security. The cask does not bypass macOS quarantine. See
+[desktop releases](/docs/desktop-release/) for build and acceptance instructions.
 
 ## Run from source
 

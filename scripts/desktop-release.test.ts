@@ -76,6 +76,13 @@ describe("release metadata", () => {
       for (const arch of ["arm64", "x64"])
         expect(cask).toContain(createHash("sha256").update(arch).digest("hex"));
       expect(cask).not.toContain("@VERSION@");
+      // The template documents its placeholders in a leading comment; only the
+      // published cask drops it, and the template in this repository keeps it.
+      expect(cask.startsWith('cask "ardur" do')).toBe(true);
+      expect(cask).not.toContain("Release workflow replaces");
+      expect(
+        await readFile(new URL("../homebrew/Casks/ardur.rb", import.meta.url), "utf8"),
+      ).toContain("# Release workflow replaces these placeholders");
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
