@@ -42,6 +42,7 @@ function fixture(metadata: Record<string, unknown>) {
     secretId: "encrypted",
     userId: "owner",
     updatedAt: new Date(0),
+    homePlacementAllowed: true,
   };
   const prisma = {
     connection: {
@@ -79,6 +80,7 @@ it("rebuilds providers in every resolver when the persisted revision changes", a
     secretId: "encrypted",
     userId: "owner",
     updatedAt: new Date(1),
+    homePlacementAllowed: true,
   });
   expect(await connections.resolve("saved", context)).not.toBe(first);
   expect(await worker.resolve("saved", context)).not.toBe(workerFirst);
@@ -99,6 +101,7 @@ it("rebuilds a provider when credential metadata changes within the same timesta
     secretId: "encrypted",
     userId: "owner",
     updatedAt: new Date(0),
+    homePlacementAllowed: true,
   });
   expect(await connections.resolve("saved", context)).not.toBe(first);
 });
@@ -164,6 +167,21 @@ describe("saved computer connections", () => {
     await expect(connections.resolve("saved", { ...context, spaceId: "other" })).rejects.toThrow(
       "unavailable",
     );
+    expect(secrets.load).not.toHaveBeenCalled();
+    expect(prisma.secret.findFirst).not.toHaveBeenCalled();
+  });
+
+  it("refuses to place computers on a runner-only connection", async () => {
+    const { connections, secrets, prisma } = fixture({ engine: "docker" });
+    prisma.connection.findFirst.mockResolvedValue({
+      id: "saved",
+      metadata: { engine: "docker", socket: "unix:///fixture/docker.sock" },
+      secretId: "encrypted",
+      userId: "owner",
+      homePlacementAllowed: false,
+      updatedAt: new Date(0),
+    });
+    await expect(connections.resolve("saved", context)).rejects.toThrow("reserved for runner jobs");
     expect(secrets.load).not.toHaveBeenCalled();
     expect(prisma.secret.findFirst).not.toHaveBeenCalled();
   });

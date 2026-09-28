@@ -40,6 +40,10 @@ export class ComputerConnections {
     });
     if (!row)
       throw new Error("The computer connection is unavailable; choose a connection in Settings.");
+    // A runner-only connection backs runner registrations, never bot homes:
+    // no computer operation may be placed on it, even by an explicit id.
+    if (row.homePlacementAllowed === false)
+      throw new Error("This connection is reserved for runner jobs; it cannot host computers.");
     const key = `${context.spaceId}:${id}`;
     const revision = JSON.stringify([row.updatedAt?.getTime() ?? 0, row.metadata, row.secretId]);
     let cached = this.providers.get(key);

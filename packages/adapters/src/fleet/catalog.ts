@@ -217,7 +217,16 @@ export class FleetCatalog {
   async list(context: AdapterContext) {
     const [rows, bots, space, deployment, hostLabel] = await Promise.all([
       this.prisma.connection.findMany({
-        where: { spaceId: context.spaceId, userId: context.userId, connectorId: "computer" },
+        where: {
+          spaceId: context.spaceId,
+          userId: context.userId,
+          connectorId: "computer",
+          // A connection the owner marked runner-only is not a home-placement
+          // candidate: homePlacementAllowed is the placement boundary the
+          // runner migration promised, so the fleet list never shows it as a
+          // place a bot's home can move to.
+          homePlacementAllowed: true,
+        },
         take: 128,
       }),
       this.prisma.bot.findMany({

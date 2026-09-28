@@ -114,6 +114,63 @@ it("keeps an explicit failed Test ahead of cached healthy capacity", async () =>
   });
 });
 
+it("never lists a runner-only connection as a placement target", async () => {
+  // The fleet list is where placement draws its candidates; a connection the
+  // owner marked runner-only must not appear there as a place a home can move.
+  const rows = [
+    {
+      id: "saved",
+      displayName: "Docker",
+      status: "connected",
+      homePlacementAllowed: true,
+      metadata: { engine: "docker", endpoint: "unix:///fixture/docker.sock" },
+    },
+    {
+      id: "runner-only",
+      displayName: "Runner host",
+      status: "connected",
+      homePlacementAllowed: false,
+      metadata: { engine: "docker", endpoint: "unix:///fixture/runner.sock" },
+    },
+  ];
+  const prisma = {
+    connection: {
+      // Emulate the query the catalog is expected to send: when it filters
+      // homePlacementAllowed, only rows matching that value come back. On the
+      // unfixed catalog the where clause lacks the key and the runner-only
+      // row is returned — exactly the placement leak under test.
+      findMany: async ({ where }: { where: { homePlacementAllowed?: boolean } }) =>
+        rows.filter(
+          (row) =>
+            where.homePlacementAllowed === undefined ||
+            row.homePlacementAllowed === where.homePlacementAllowed,
+        ),
+    },
+    bot: { findMany: async () => [] },
+    space: { findUniqueOrThrow: async () => ({ placement: { mode: "free-memory" } }) },
+    deploymentSettings: { findUnique: async () => null },
+    hostRegistration: { findUnique: async () => null },
+  } as unknown as PrismaClient;
+  const fallback = {
+    describe: () => ({ id: "docker", kind: "docker" }),
+    capacity: async () => unknownCapacity(),
+  } as unknown as SandboxProvider;
+  const catalog = new FleetCatalog(prisma, { load: () => "" }, {}, fallback);
+  vi.spyOn(catalog.connections, "resolve").mockResolvedValue({
+    capacity: async () => unknownCapacity(),
+  } as never);
+  const context: AdapterContext = {
+    userId: "owner",
+    spaceId: "space",
+    operationId: "test",
+    traceId: "test",
+    signal: new AbortController().signal,
+  };
+  const fleet = await catalog.list(context);
+  expect(fleet.targets.some((target) => target.id === "saved")).toBe(true);
+  expect(fleet.targets.some((target) => target.id === "runner-only")).toBe(false);
+});
+
 function localDocker(ref: Partial<ComputerRef> = {}) {
   return {
     provision: vi.spyOn(DockerSandboxProvider.prototype, "provision").mockResolvedValue({
