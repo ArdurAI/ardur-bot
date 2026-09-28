@@ -5948,6 +5948,14 @@ msgstr ""
 msgid "Preferred computer"
 msgstr ""
 
+#: src/pages/Shell.tsx
+msgid "Preparing the bot computer…"
+msgstr "正在准备机器人电脑…"
+
+#: src/pages/Shell.tsx
+msgid "Preparing the bot computer… {percent}%"
+msgstr "正在准备机器人电脑… {percent}%"
+
 #: src/pages/system/SystemPage.tsx
 msgid "Prevent idle sleep while routines are enabled; your display can turn off, and closing the lid still puts the computer to sleep."
 msgstr ""
@@ -6637,7 +6645,7 @@ msgstr "重试 {0}"
 msgid "Retry now"
 msgstr "立即重试"
 
-#: src/pages/Shell.tsx
+#: src/pages/shell/computer-screen-error.tsx
 msgid "Retry screen"
 msgstr ""
 
@@ -8101,6 +8109,7 @@ msgstr ""
 #: src/pages/customize/CustomizeControls.tsx
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/shell/computer-screen-error.tsx
 msgid "Try again"
 msgstr "重试"
 

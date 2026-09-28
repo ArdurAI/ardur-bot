@@ -1,13 +1,23 @@
 # Pull-based self-host: published GHCR images + Postgres + local Docker computers.
 # Drop this file and .env into any directory, then:
 #   docker compose --env-file .env -f docker-compose.images.yml up -d
+# Set ARDURBOT_COMPUTER_IMAGE_REF to the app-version image when invoking Compose directly;
+# install-images.sh and the desktop launcher render Compose to select it for their invocations.
 #
-# Tag contract matches docs/self-host.md (edge from main; release tags when published).
-# Default is edge because that tag is published on every main build (linux/amd64 + linux/arm64).
+# Tag contract matches docs/self-host.md (manual edge from main; release tags when published).
+# Pin a published app tag; edge is available only after a manual main workflow run.
 # Pin a published vX.Y.Z tag for a fixed version; `latest` moves to each new stable release.
 # Default SANDBOX_PROVIDER=docker boots a local computer via the in-stack supervisor (no E2B key).
 # Optional: set e2b / daytona / box plus the matching API key for remote computers.
 name: ardurbot
+
+# Rendered by `compose config` so launchers use Compose's dotenv/interpolation rules.
+x-ardurbot-image-selection:
+  app_version: ${ARDURBOT_APP_VERSION:-}
+  image_tag: ${ARDURBOT_IMAGE_TAG:-}
+  channel: ${ARDURBOT_COMPUTER_CHANNEL:-}
+  explicit_image: ${ARDURBOT_COMPUTER_IMAGE:-}
+  explicit_ref: ${ARDURBOT_COMPUTER_IMAGE_REF:-}
 
 services:
   postgres:
@@ -32,9 +42,10 @@ services:
       timeout: 5s
       retries: 20
 
-  # Pull-only stub so `compose up` fetches the published desktop image without a checkout.
+  # Keep the selected image visible to deployment tooling; the supervisor pulls on first use.
   computer:
-    image: ${ARDURBOT_COMPUTER_IMAGE:-ghcr.io/ardurai/ardur-bot/computer}:${ARDURBOT_COMPUTER_IMAGE_TAG:-edge}
+    image: ${ARDURBOT_COMPUTER_IMAGE:-${ARDURBOT_COMPUTER_IMAGE_REF:-${ARDURBOT_COMPUTER_IMAGE_REF_BOOTSTRAP:?Set ARDURBOT_COMPUTER_IMAGE_REF for this app version}}}${ARDURBOT_COMPUTER_IMAGE:+${ARDURBOT_COMPUTER_IMAGE_TAG:+:${ARDURBOT_COMPUTER_IMAGE_TAG}}}
+    profiles: [computer]
     command: ["true"]
     network_mode: none
     restart: "no"
@@ -66,7 +77,10 @@ services:
       SUPERVISOR_HOST: "0.0.0.0"
       SUPERVISOR_PORT: "7091"
       DOCKER_SOCKET: /var/run/docker.sock
-      ARDURBOT_COMPUTER_IMAGE: ${ARDURBOT_COMPUTER_IMAGE:-ghcr.io/ardurai/ardur-bot/computer}:${ARDURBOT_COMPUTER_IMAGE_TAG:-edge}
+      # Blank delegates to the supervisor's local → published resolution on first use.
+      # The optional tag suffix keeps older name + tag installations working.
+      ARDURBOT_COMPUTER_IMAGE: ${ARDURBOT_COMPUTER_IMAGE:-}${ARDURBOT_COMPUTER_IMAGE_TAG:+:${ARDURBOT_COMPUTER_IMAGE_TAG}}
+      ARDURBOT_COMPUTER_CHANNEL: ${ARDURBOT_COMPUTER_CHANNEL:-}
       ARDURBOT_COMPUTER_MEMORY: ${ARDURBOT_COMPUTER_MEMORY:-2g}
       ARDURBOT_COMPUTER_CPUS: ${ARDURBOT_COMPUTER_CPUS:-2}
       ARDURBOT_COMPUTER_PIDS_LIMIT: ${ARDURBOT_COMPUTER_PIDS_LIMIT:-2048}
@@ -85,8 +99,6 @@ services:
     networks:
       - app
     depends_on:
-      computer:
-        condition: service_completed_successfully
       data-init:
         condition: service_completed_successfully
     healthcheck:

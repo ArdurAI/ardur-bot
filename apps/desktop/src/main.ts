@@ -1371,6 +1371,7 @@ app.whenReady().then(async () => {
       packaged: app.isPackaged,
       override: process.env.ARDURBOT_IMAGE_TAG,
     }),
+    appVersion: app.getVersion(),
     probe: (url, signal, token) => probeManagedStack(url, token, signal),
     randomHex: (bytes) => randomBytes(bytes).toString("hex"),
     onState: (state) => {

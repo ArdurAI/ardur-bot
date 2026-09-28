@@ -1,11 +1,13 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
+import { LOCAL_COMPUTER_IMAGE } from "@ardurbot/contracts/computer-image";
 import { MAX_DESKTOP_DISPLAY, screenPorts } from "@ardurbot/core/node/desktop-runtime";
 import type Docker from "dockerode";
 import type { ContainerEngine } from "./container-engine.js";
 import { engineHostConfig } from "./container-engine.js";
 
-export const COMPUTER_IMAGE = process.env.ARDURBOT_COMPUTER_IMAGE ?? "ardurbot/computer:local";
+export { LOCAL_COMPUTER_IMAGE, resolveComputerImage } from "@ardurbot/contracts/computer-image";
+export const COMPUTER_IMAGE = process.env.ARDURBOT_COMPUTER_IMAGE?.trim() || LOCAL_COMPUTER_IMAGE;
 export const COMPUTER_UID = 1000;
 export const COMPUTER_GID = 1000;
 export const COMPUTER_USER = `${COMPUTER_UID}:${COMPUTER_GID}`;

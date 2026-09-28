@@ -1087,69 +1087,88 @@ describe("computer provisioning", () => {
     }
   });
 
-  it("releases the screen when activation fails on a resumed Team computer", async () => {
-    const dataDir = await mkdtemp(path.join(tmpdir(), "ardurbot-team-activation-rollback-"));
-    const ref = {
-      id: "provider-1",
-      botId: "team-home",
-      kind: "docker" as const,
-      providerRef: "provider-1",
-      fresh: false,
-    };
-    const stop = vi.fn().mockResolvedValue(undefined);
-    const releaseScreen = vi.fn().mockResolvedValue(undefined);
-    const updateMany = vi
-      .fn()
-      .mockResolvedValueOnce({ count: 1 })
-      .mockResolvedValueOnce({ count: 0 })
-      .mockResolvedValueOnce({ count: 0 });
-    const prisma = {
-      computer: {
-        findUniqueOrThrow: vi.fn().mockResolvedValue({
-          id: "computer-1",
-          homeKey: "team-home",
-          providerRef: "provider-1",
-          kind: "docker",
-          scope: "team",
-          state: "stopped",
-          controlLeaseId: null,
-          updatedAt: new Date("2024-01-01T00:00:00.000Z"),
+  it.each(["stopped", "booting"] as const)(
+    "releases the screen and publishes the authoritative %s state after losing the claim",
+    async (authoritativeState) => {
+      const dataDir = await mkdtemp(path.join(tmpdir(), "ardurbot-team-activation-rollback-"));
+      const ref = {
+        id: "provider-1",
+        botId: "team-home",
+        kind: "docker" as const,
+        providerRef: "provider-1",
+        fresh: false,
+      };
+      const stop = vi.fn().mockResolvedValue(undefined);
+      const releaseScreen = vi.fn().mockResolvedValue(undefined);
+      const updateMany = vi
+        .fn()
+        .mockResolvedValueOnce({ count: 1 })
+        .mockResolvedValueOnce({ count: 0 })
+        .mockResolvedValueOnce({ count: 0 });
+      const append = vi.fn().mockResolvedValue(undefined);
+      const prisma = {
+        thread: { findFirst: vi.fn().mockResolvedValue({ id: "thread-1" }) },
+        computer: {
+          findUnique: vi.fn().mockResolvedValue({ state: authoritativeState }),
+          findUniqueOrThrow: vi.fn().mockResolvedValue({
+            id: "computer-1",
+            homeKey: "team-home",
+            providerRef: "provider-1",
+            kind: "docker",
+            scope: "team",
+            state: "stopped",
+            controlLeaseId: null,
+            updatedAt: new Date("2024-01-01T00:00:00.000Z"),
+          }),
+          updateMany,
+        },
+      } as unknown as PrismaClient;
+      const sandbox = {
+        provision: vi.fn(async (_request: unknown, provisionContext: AdapterContext) => {
+          await provisionContext.onComputerImageProgress?.(null);
+          await provisionContext.onComputerImageProgress?.(45);
+          return ref;
         }),
-        updateMany,
-      },
-    } as unknown as PrismaClient;
-    const sandbox = {
-      provision: vi.fn().mockResolvedValue(ref),
-      prepare: vi.fn().mockResolvedValue(undefined),
-      execute: vi.fn(async function* () {
-        yield { type: "exit", code: 0 };
-      }),
-      stop,
-      releaseScreen,
-    } as unknown as SandboxProvider;
+        prepare: vi.fn().mockResolvedValue(undefined),
+        execute: vi.fn(async function* () {
+          yield { type: "exit", code: 0 };
+        }),
+        stop,
+        releaseScreen,
+      } as unknown as SandboxProvider;
 
-    try {
-      await expect(
-        provisionComputer(
-          {
-            prisma,
-            sandbox,
-            home: {} as AgentHomeStore,
-            jobs: {} as JobPublisher,
-            events: {} as ThreadEvents,
-            dataDir,
-          },
-          "computer-1",
-          context,
-        ),
-      ).rejects.toThrow("Computer is busy");
-      expect(sandbox.execute).toHaveBeenCalled();
-      expect(releaseScreen).toHaveBeenCalledWith(ref, context);
-      expect(stop).toHaveBeenCalledWith(ref, context);
-    } finally {
-      await rm(dataDir, { recursive: true, force: true });
-    }
-  });
+      try {
+        await expect(
+          provisionComputer(
+            {
+              prisma,
+              sandbox,
+              home: {} as AgentHomeStore,
+              jobs: {} as JobPublisher,
+              events: { append } as unknown as ThreadEvents,
+              dataDir,
+            },
+            "computer-1",
+            context,
+          ),
+        ).rejects.toThrow("Computer is busy");
+        expect(sandbox.execute).toHaveBeenCalled();
+        expect(releaseScreen).toHaveBeenCalledWith(ref, context);
+        expect(stop).toHaveBeenCalledWith(ref, context);
+        expect(append.mock.calls.map(([input]) => input.payload)).toEqual([
+          { status: "booting", imagePulling: true, imagePullPercent: null },
+          { status: "booting", imagePulling: true, imagePullPercent: 45 },
+          { status: authoritativeState },
+        ]);
+        expect(prisma.computer.findUnique).toHaveBeenCalledWith({
+          where: { id: "computer-1" },
+          select: { state: true },
+        });
+      } finally {
+        await rm(dataDir, { recursive: true, force: true });
+      }
+    },
+  );
 
   it("retains a fresh provider reference when rollback also fails", async () => {
     const dataDir = await mkdtemp(path.join(tmpdir(), "ardurbot-prepare-rollback-failure-"));

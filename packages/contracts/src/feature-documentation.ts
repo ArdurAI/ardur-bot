@@ -40,6 +40,8 @@ const feature = z.strictObject({
   aliases: z.array(slug).default([]),
   /** Exact visible UI text when the feature has a named control or page. */
   title: plainText,
+  /** An explicitly cited Markdown heading for a guide without a named UI entry. */
+  titleSource: z.literal("guide").optional(),
   summary: plainText,
   /** Task-oriented tree group; records are ordered within their area. */
   area: slug,
@@ -53,25 +55,27 @@ const feature = z.strictObject({
   settingsPath: paths,
   steps: z.array(step),
   boundaries: z.array(plainText),
-  troubleshooting: z.array(z.strictObject({ errorId: slug, action: plainText })),
+  troubleshooting: z.array(
+    z.strictObject({ errorId: slug, message: plainText, action: plainText }),
+  ),
   related: z.array(slug),
+  /** Related drafts must be named explicitly before a page can publish. */
+  deferredRelated: z.array(slug).optional(),
 });
 
 const screenshot = z.strictObject({
   id: slug,
-  /** Repository-relative capture path. */
-  path: z.string().min(1),
+  /** Published asset path; source capture lives at site/<file>. */
+  file: z.string().regex(/^docs\/[a-z0-9]+(?:-[a-z0-9]+)*\.png$/),
   alt: plainText,
   width: z.number().int().positive(),
   height: z.number().int().positive(),
-  crop: z
-    .strictObject({
-      x: z.number().int().nonnegative(),
-      y: z.number().int().nonnegative(),
-      width: z.number().int().positive(),
-      height: z.number().int().positive(),
-    })
-    .nullable(),
+  crop: z.strictObject({
+    x: z.number().int().nonnegative(),
+    y: z.number().int().nonnegative(),
+    width: z.number().int().positive(),
+    height: z.number().int().positive(),
+  }),
   platform,
   locale: z.string().min(2),
   theme: z.enum(["light", "dark"]),
@@ -94,11 +98,18 @@ export type FeatureDocumentationScreenshot = FeatureDocumentationManifest["scree
 
 /** Source and registry bindings stay out of published page copy. */
 export const FeatureDocumentationEvidenceSchema = z.strictObject({
+  screenshots: z.array(
+    z.strictObject({
+      id: slug,
+      sha256: z.string().regex(/^[a-f0-9]{64}$/),
+    }),
+  ),
   features: z.array(
     z.strictObject({
       id: slug,
       sources: z.array(z.string().min(1)),
       tests: z.array(z.string().min(1)),
+      titleSource: z.string().min(1).optional(),
       errors: z
         .array(z.strictObject({ id: slug, text: plainText, source: z.string().min(1) }))
         .optional(),

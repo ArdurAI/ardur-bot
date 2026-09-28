@@ -10,6 +10,7 @@ export * from "./capability-settings.js";
 export * from "./command-blocks.js";
 export * from "./comparison.js";
 export * from "./computer-connections.js";
+export * from "./computer-image-download.js";
 export * from "./computer-profiles.js";
 export * from "./context.js";
 export * from "./customization.js";
