@@ -455,6 +455,31 @@ describe("feature documentation inventory", () => {
     }
   });
 
+  it("imports captures declared for a newly documented feature", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "feature-docs-expanded-import-"));
+    try {
+      const docsDir = path.join(directory, "docs");
+      await mkdir(docsDir);
+      const { manifest, evidence } = await data();
+      const shot = manifest.screenshots.find((entry) => entry.feature === "routines");
+      if (!shot) throw new Error("Routine capture fixture is missing.");
+      manifest.screenshots = [
+        { ...shot, width: 1, height: 1, crop: { x: 0, y: 0, width: 1, height: 1 } },
+      ];
+      evidence.screenshots = [];
+      await writeFile(path.join(docsDir, `${shot.id}.png`), png);
+
+      const prepared = await prepareFeatureDocCaptureImport(manifest, evidence, directory);
+      expect(prepared.captures.get(shot.id)).toEqual(png);
+      expect(prepared.evidence.screenshots).toContainEqual({
+        id: shot.id,
+        sha256: createHash("sha256").update(png).digest("hex"),
+      });
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("keeps public copy plain and neutral", async () => {
     const { manifest, evidence } = await data();
     manifest.features[0]!.summary = "The best <b>sign in</b> option.";

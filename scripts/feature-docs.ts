@@ -16,7 +16,6 @@ import { validatePngScreenshot } from "../packages/testkit/src/png-validation";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const manifestFile = "site/data/feature-docs.json";
 const evidenceFile = "site/data/feature-docs-evidence.json";
-const firstFive = new Set(["sign-in", "onboarding", "bots-create", "models", "chat-approvals"]);
 const settingsFile = "apps/web/src/pages/settings-sections.ts";
 const webRoutesFile = "apps/web/src/App.tsx";
 const mobileLayoutFile = "apps/mobile/app/_layout.tsx";
@@ -618,7 +617,7 @@ export async function prepareFeatureDocCaptureImport(
 ) {
   const manifest = FeatureDocumentationManifestSchema.parse(inputManifest);
   const evidence = FeatureDocumentationEvidenceSchema.parse(inputEvidence);
-  const shots = manifest.screenshots.filter((shot) => firstFive.has(shot.feature));
+  const shots = manifest.screenshots;
   const expected = new Set(shots.map((shot) => `${shot.id}.png`));
   const docsDir = path.join(directory, "docs");
   const entries = await readdir(docsDir, { withFileTypes: true });
