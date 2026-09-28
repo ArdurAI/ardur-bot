@@ -69,6 +69,51 @@ export function effectiveBotModel(
   };
 }
 
+export function resolveBotModelChip(
+  bot: Bot,
+  settings: ModelSettings | null,
+  options: {
+    pin?: RuntimePin | null;
+    run?: { runtimePin?: RuntimePin | null; runtimeInfo?: RuntimeInfo | null } | null;
+    display?: "change" | "using";
+    requested: string;
+    notAvailable: string;
+  },
+): {
+  label: string;
+  currentId: string;
+  pinUnknown: boolean;
+  model: NonNullable<ReturnType<typeof effectiveBotModel>>;
+} | null {
+  const display = options.display ?? "change";
+  const pin = options.pin;
+  const run = options.run;
+  const pinUnknown = display === "using" && Boolean(run) && !run?.runtimePin;
+  const requested = display === "using" ? (run?.runtimePin ?? pin) : pin;
+  const displayBot = requested
+    ? {
+        ...bot,
+        runtimeKind: requested.runtimeKind,
+        modelProvider: requested.provider,
+        modelId: requested.modelId,
+        thinkingLevel: (requested.provider === "ollama" && requested.effort === "none"
+          ? "off"
+          : requested.effort) as Bot["thinkingLevel"],
+        modelCredentialId: requested.credentialId,
+        modelPinRevision: pin ? requested.revision : bot.modelPinRevision,
+      }
+    : bot;
+  const model = effectiveBotModel(displayBot, settings);
+  if (!model) return null;
+  const effort =
+    displayBot.runtimeKind === "claude-code" || displayBot.runtimeKind === "antigravity"
+      ? botEffortLabel(displayBot, display === "using" ? run : null, options.requested)
+      : (model.effortLabel ?? model.thinkingLevel);
+  const label = `${displayBot.runtimeKind && displayBot.runtimeKind !== "pi" ? "" : "Ardur · "}${model.providerLabel} · ${model.label}${effort ? ` · ${effort}` : ""}${model.unavailable ? options.notAvailable : ""}`;
+  const currentId = requested?.modelId ?? displayBot.modelId ?? model.label;
+  return { label, currentId, pinUnknown, model };
+}
+
 function nextBotPin(bot: Bot, settings: ModelSettings | null): Omit<RuntimePin, "revision"> {
   const overridden = Boolean(
     bot.modelProvider != null || bot.modelId != null || bot.modelCredentialId != null,
@@ -142,29 +187,15 @@ export function BotModelChip({
   display?: "change" | "using";
 }) {
   const { t } = useLingui();
-  const pinUnknown = display === "using" && Boolean(run) && !run?.runtimePin;
-  const requested = display === "using" ? (run?.runtimePin ?? pin) : pin;
-  const displayBot = requested
-    ? {
-        ...bot,
-        runtimeKind: requested.runtimeKind,
-        modelProvider: requested.provider,
-        modelId: requested.modelId,
-        thinkingLevel: (requested.provider === "ollama" && requested.effort === "none"
-          ? "off"
-          : requested.effort) as Bot["thinkingLevel"],
-        modelCredentialId: requested.credentialId,
-        modelPinRevision: pin ? requested.revision : bot.modelPinRevision,
-      }
-    : bot;
-  const model = effectiveBotModel(displayBot, settings);
-  if (!model) return null;
-  const effort =
-    displayBot.runtimeKind === "claude-code" || displayBot.runtimeKind === "antigravity"
-      ? botEffortLabel(displayBot, display === "using" ? run : null, t`requested`)
-      : (model.effortLabel ?? model.thinkingLevel);
-  const label = `${displayBot.runtimeKind && displayBot.runtimeKind !== "pi" ? "" : "Ardur · "}${model.providerLabel} · ${model.label}${effort ? ` · ${effort}` : ""}${model.unavailable ? t` · not available` : ""}`;
-  const currentId = requested?.modelId ?? displayBot.modelId ?? model.label;
+  const chip = resolveBotModelChip(bot, settings, {
+    pin,
+    run,
+    display,
+    requested: t`requested`,
+    notAvailable: t` · not available`,
+  });
+  if (!chip) return null;
+  const { label, currentId, pinUnknown, model } = chip;
   const next = nextPin ? normalizeSuppliedNextPin(nextPin, settings) : nextBotPin(bot, settings);
   const connection = settings?.credentials.find((item) => item.id === next.credentialId);
   const nextLabel = [
