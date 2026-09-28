@@ -3,7 +3,12 @@ import { activeBotId, captureScreenshot, completeOnboarding, rpc, signup } from 
 
 test("shows peer chips in transcript and opens view-only peer chat", async ({ page }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `peer-msg-${stamp}@ardurbot.test`, "password12", "Peer Msg");
+  await signup(
+    page,
+    `peer-msg-${testInfo.workerIndex}-${stamp}@ardurbot.test`,
+    "password12",
+    "Peer Msg",
+  );
   await completeOnboarding(page);
   await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
 
