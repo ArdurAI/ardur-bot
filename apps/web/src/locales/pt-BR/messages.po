@@ -8942,3 +8942,47 @@ msgstr "Sua equipe de agentes sempre ativos<0/>, a quem você pode dar trabalho 
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Allow preparation"
+msgstr "Permitir preparação"
+
+#: src/pages/GroupPanel.tsx
+msgid "Preparation allowed"
+msgstr "Preparação permitida"
+
+#: src/pages/GroupPanel.tsx
+msgid "Request expired"
+msgstr "Solicitação expirada"
+
+#: src/pages/GroupPanel.tsx
+msgid "Pause team messages"
+msgstr "Pausar mensagens da equipe"
+
+#: src/pages/GroupPanel.tsx
+msgid "Resume team messages"
+msgstr "Retomar mensagens da equipe"
+
+#: src/pages/GroupPanel.tsx
+msgid "Pause group messages"
+msgstr "Pausar mensagens do grupo"
+
+#: src/pages/GroupPanel.tsx
+msgid "Resume group messages"
+msgstr "Retomar mensagens do grupo"
+
+#: src/pages/GroupPanel.tsx
+msgid "Team messages paused"
+msgstr "Mensagens da equipe pausadas"
+
+#: src/pages/GroupPanel.tsx
+msgid "Resume at home"
+msgstr "Retomar em casa"
+
+#: src/pages/GroupPanel.tsx
+msgid "Could not load team message controls"
+msgstr "Não foi possível carregar os controles de mensagens da equipe"
+
+#: src/pages/GroupPanel.tsx
+msgid "Could not update team messages"
+msgstr "Não foi possível atualizar as mensagens da equipe"

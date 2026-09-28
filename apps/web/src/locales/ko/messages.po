@@ -8942,3 +8942,47 @@ msgstr "언제든 실제 작업을 맡길 수 있는<0/>나만의 Agent 팀"
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Allow preparation"
+msgstr "준비 허용"
+
+#: src/pages/GroupPanel.tsx
+msgid "Preparation allowed"
+msgstr "준비가 허용됨"
+
+#: src/pages/GroupPanel.tsx
+msgid "Request expired"
+msgstr "요청이 만료됨"
+
+#: src/pages/GroupPanel.tsx
+msgid "Pause team messages"
+msgstr "팀 메시지 일시 중지"
+
+#: src/pages/GroupPanel.tsx
+msgid "Resume team messages"
+msgstr "팀 메시지 다시 시작"
+
+#: src/pages/GroupPanel.tsx
+msgid "Pause group messages"
+msgstr "그룹 메시지 일시 중지"
+
+#: src/pages/GroupPanel.tsx
+msgid "Resume group messages"
+msgstr "그룹 메시지 다시 시작"
+
+#: src/pages/GroupPanel.tsx
+msgid "Team messages paused"
+msgstr "팀 메시지가 일시 중지됨"
+
+#: src/pages/GroupPanel.tsx
+msgid "Resume at home"
+msgstr "홈에서 다시 시작"
+
+#: src/pages/GroupPanel.tsx
+msgid "Could not load team message controls"
+msgstr "팀 메시지 설정을 불러올 수 없음"
+
+#: src/pages/GroupPanel.tsx
+msgid "Could not update team messages"
+msgstr "팀 메시지를 업데이트할 수 없음"

@@ -8942,3 +8942,47 @@ msgstr "Your team of always-on agents<0/>that you can give real work to."
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr "Yours"
+
+#: src/pages/GroupPanel.tsx
+msgid "Allow preparation"
+msgstr "Allow preparation"
+
+#: src/pages/GroupPanel.tsx
+msgid "Preparation allowed"
+msgstr "Preparation allowed"
+
+#: src/pages/GroupPanel.tsx
+msgid "Request expired"
+msgstr "Request expired"
+
+#: src/pages/GroupPanel.tsx
+msgid "Pause team messages"
+msgstr "Pause team messages"
+
+#: src/pages/GroupPanel.tsx
+msgid "Resume team messages"
+msgstr "Resume team messages"
+
+#: src/pages/GroupPanel.tsx
+msgid "Pause group messages"
+msgstr "Pause group messages"
+
+#: src/pages/GroupPanel.tsx
+msgid "Resume group messages"
+msgstr "Resume group messages"
+
+#: src/pages/GroupPanel.tsx
+msgid "Team messages paused"
+msgstr "Team messages paused"
+
+#: src/pages/GroupPanel.tsx
+msgid "Resume at home"
+msgstr "Resume at home"
+
+#: src/pages/GroupPanel.tsx
+msgid "Could not load team message controls"
+msgstr "Could not load team message controls"
+
+#: src/pages/GroupPanel.tsx
+msgid "Could not update team messages"
+msgstr "Could not update team messages"

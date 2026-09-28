@@ -8942,3 +8942,47 @@ msgstr "你的一支随时在线的 Agent 团队<0/>可以交给它们真正的�
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Allow preparation"
+msgstr "允许准备"
+
+#: src/pages/GroupPanel.tsx
+msgid "Preparation allowed"
+msgstr "已允许准备"
+
+#: src/pages/GroupPanel.tsx
+msgid "Request expired"
+msgstr "请求已过期"
+
+#: src/pages/GroupPanel.tsx
+msgid "Pause team messages"
+msgstr "暂停团队消息"
+
+#: src/pages/GroupPanel.tsx
+msgid "Resume team messages"
+msgstr "恢复团队消息"
+
+#: src/pages/GroupPanel.tsx
+msgid "Pause group messages"
+msgstr "暂停群组消息"
+
+#: src/pages/GroupPanel.tsx
+msgid "Resume group messages"
+msgstr "恢复群组消息"
+
+#: src/pages/GroupPanel.tsx
+msgid "Team messages paused"
+msgstr "团队消息已暂停"
+
+#: src/pages/GroupPanel.tsx
+msgid "Resume at home"
+msgstr "在主设备上恢复"
+
+#: src/pages/GroupPanel.tsx
+msgid "Could not load team message controls"
+msgstr "无法加载团队消息控制项"
+
+#: src/pages/GroupPanel.tsx
+msgid "Could not update team messages"
+msgstr "无法更新团队消息"

@@ -8942,3 +8942,47 @@ msgstr "हमेशा चालू रहने वाले एजेंट�
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Allow preparation"
+msgstr "तैयारी की अनुमति दें"
+
+#: src/pages/GroupPanel.tsx
+msgid "Preparation allowed"
+msgstr "तैयारी की अनुमति दी गई"
+
+#: src/pages/GroupPanel.tsx
+msgid "Request expired"
+msgstr "अनुरोध की समय-सीमा समाप्त हो गई"
+
+#: src/pages/GroupPanel.tsx
+msgid "Pause team messages"
+msgstr "टीम संदेश रोकें"
+
+#: src/pages/GroupPanel.tsx
+msgid "Resume team messages"
+msgstr "टीम संदेश फिर शुरू करें"
+
+#: src/pages/GroupPanel.tsx
+msgid "Pause group messages"
+msgstr "समूह संदेश रोकें"
+
+#: src/pages/GroupPanel.tsx
+msgid "Resume group messages"
+msgstr "समूह संदेश फिर शुरू करें"
+
+#: src/pages/GroupPanel.tsx
+msgid "Team messages paused"
+msgstr "टीम संदेश रुके हुए हैं"
+
+#: src/pages/GroupPanel.tsx
+msgid "Resume at home"
+msgstr "घर से फिर शुरू करें"
+
+#: src/pages/GroupPanel.tsx
+msgid "Could not load team message controls"
+msgstr "टीम संदेश नियंत्रण लोड नहीं हो सके"
+
+#: src/pages/GroupPanel.tsx
+msgid "Could not update team messages"
+msgstr "टीम संदेश अपडेट नहीं हो सके"

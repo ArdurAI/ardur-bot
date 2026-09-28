@@ -8942,3 +8942,47 @@ msgstr "Ваша команда постоянно работающих аген
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Allow preparation"
+msgstr "Разрешить подготовку"
+
+#: src/pages/GroupPanel.tsx
+msgid "Preparation allowed"
+msgstr "Подготовка разрешена"
+
+#: src/pages/GroupPanel.tsx
+msgid "Request expired"
+msgstr "Срок запроса истёк"
+
+#: src/pages/GroupPanel.tsx
+msgid "Pause team messages"
+msgstr "Приостановить сообщения команды"
+
+#: src/pages/GroupPanel.tsx
+msgid "Resume team messages"
+msgstr "Возобновить сообщения команды"
+
+#: src/pages/GroupPanel.tsx
+msgid "Pause group messages"
+msgstr "Приостановить сообщения группы"
+
+#: src/pages/GroupPanel.tsx
+msgid "Resume group messages"
+msgstr "Возобновить сообщения группы"
+
+#: src/pages/GroupPanel.tsx
+msgid "Team messages paused"
+msgstr "Сообщения команды приостановлены"
+
+#: src/pages/GroupPanel.tsx
+msgid "Resume at home"
+msgstr "Возобновить дома"
+
+#: src/pages/GroupPanel.tsx
+msgid "Could not load team message controls"
+msgstr "Не удалось загрузить настройки сообщений команды"
+
+#: src/pages/GroupPanel.tsx
+msgid "Could not update team messages"
+msgstr "Не удалось обновить сообщения команды"

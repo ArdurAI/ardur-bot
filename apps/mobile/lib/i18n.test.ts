@@ -52,6 +52,17 @@ describe("mobile i18n", () => {
       "The task needs attention",
       "Done — waiting for your OK",
       "active tasks",
+      "Allow preparation",
+      "Preparation allowed",
+      "Request expired",
+      "Pause team messages",
+      "Resume team messages",
+      "Pause group messages",
+      "Resume group messages",
+      "Team messages paused",
+      "Resume at home",
+      "Could not load team message controls",
+      "Could not update team messages",
     ];
     for (const locale of ["ru", "zh-CN"] as const) {
       resetI18nForTests(locale);

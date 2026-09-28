@@ -11,6 +11,17 @@ const messages = [
   "Status unavailable",
   "Delivered",
   "Not approved",
+  "Allow preparation",
+  "Preparation allowed",
+  "Request expired",
+  "Pause team messages",
+  "Resume team messages",
+  "Pause group messages",
+  "Resume group messages",
+  "Team messages paused",
+  "Resume at home",
+  "Could not load team message controls",
+  "Could not update team messages",
 ];
 
 it("extracts Team presence and delivery labels into every web catalog", () => {

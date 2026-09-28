@@ -8942,3 +8942,47 @@ msgstr "Gerçek işler verebileceğin,<0/>her zaman açık agent takımın."
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Allow preparation"
+msgstr "Hazırlığa izin ver"
+
+#: src/pages/GroupPanel.tsx
+msgid "Preparation allowed"
+msgstr "Hazırlığa izin verildi"
+
+#: src/pages/GroupPanel.tsx
+msgid "Request expired"
+msgstr "İsteğin süresi doldu"
+
+#: src/pages/GroupPanel.tsx
+msgid "Pause team messages"
+msgstr "Ekip mesajlarını duraklat"
+
+#: src/pages/GroupPanel.tsx
+msgid "Resume team messages"
+msgstr "Ekip mesajlarını sürdür"
+
+#: src/pages/GroupPanel.tsx
+msgid "Pause group messages"
+msgstr "Grup mesajlarını duraklat"
+
+#: src/pages/GroupPanel.tsx
+msgid "Resume group messages"
+msgstr "Grup mesajlarını sürdür"
+
+#: src/pages/GroupPanel.tsx
+msgid "Team messages paused"
+msgstr "Ekip mesajları duraklatıldı"
+
+#: src/pages/GroupPanel.tsx
+msgid "Resume at home"
+msgstr "Evde sürdür"
+
+#: src/pages/GroupPanel.tsx
+msgid "Could not load team message controls"
+msgstr "Ekip mesajı denetimleri yüklenemedi"
+
+#: src/pages/GroupPanel.tsx
+msgid "Could not update team messages"
+msgstr "Ekip mesajları güncellenemedi"
