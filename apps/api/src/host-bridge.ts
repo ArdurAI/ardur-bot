@@ -9,6 +9,8 @@ import type { BoardRun, BoardRunResult } from "@ardurbot/contracts/board";
 import { BoardError, BoardRunResultSchema } from "@ardurbot/contracts/board";
 import type { HostOperation, HostRequest } from "@ardurbot/contracts/host-bridge";
 import {
+  HOST_HEALTH_ACCEPT_HEADER,
+  HOST_HEALTH_ACCEPTED,
   HOST_WRITE_FRAME_BYTES,
   HostOperationSchema,
   HostRuntimePinSchema,
@@ -686,6 +688,10 @@ export class HostBridge {
       noServer: true,
       maxPayload: HOST_WRITE_FRAME_BYTES,
       perMessageDeflate: false,
+    });
+    wss.on("headers", (headers, request) => {
+      if (request.url === "/api/host-bridge/socket")
+        headers.push(`${HOST_HEALTH_ACCEPT_HEADER}: ${HOST_HEALTH_ACCEPTED}`);
     });
     server.on("upgrade", (request, socket, head) => {
       if (!["/api/host-bridge/socket", "/api/host-bridge/worker"].includes(request.url ?? ""))

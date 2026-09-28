@@ -4,7 +4,13 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import type { AgentRuntime, AgentRuntimeEvent } from "@ardurbot/adapter-kit";
 import type { HostFrame, HostOperation, HostRequest } from "@ardurbot/contracts/host-bridge";
-import { decodeHostFrame, encodeHostFrame, HOST_WINDOW } from "@ardurbot/contracts/host-bridge";
+import {
+  decodeHostFrame,
+  encodeHostFrame,
+  HOST_WINDOW,
+  HostHealthSchema,
+  negotiateHostHealth,
+} from "@ardurbot/contracts/host-bridge";
 import { HermesExecutionEnvelopeSchema } from "@ardurbot/contracts/runtime-config";
 import { RuntimePinError, runtimePinProblem } from "@ardurbot/contracts/runtime-pins";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -119,6 +125,29 @@ it("streams board JSON from the owner's runner without provisioning a bot comput
       .map((frame) => (frame.type === "stream" ? frame.data : ""))
       .join(""),
   ).toBe(stdout);
+  expect(frames).toContainEqual(expect.objectContaining({ channel: "result", data: { ok: true } }));
+});
+it("keeps ordinary host operations available to a server with the pre-relay strict health schema", async () => {
+  const { agent, frames, completed } = await fixture();
+  const oldStrictHealth = HostHealthSchema.omit({
+    generation: true,
+    capabilities: true,
+    hermes: true,
+  });
+  const health = negotiateHostHealth(await agent.health(), undefined);
+  const sentHealth = JSON.parse(JSON.stringify(health));
+  expect(oldStrictHealth.parse(sentHealth)).toEqual(sentHealth);
+  const runner = vi.spyOn(BoardRunner.prototype, "run").mockResolvedValue({
+    ok: true,
+    stdout: "ready",
+  });
+  const board: HostOperation = {
+    op: "board.run",
+    request: { action: "command", actor: "Owner", workspace: { kind: "space" }, argv: ["ready"] },
+  };
+  await agent.receive(request(board));
+  await completed("req");
+  expect(runner).toHaveBeenCalledOnce();
   expect(frames).toContainEqual(expect.objectContaining({ channel: "result", data: { ok: true } }));
 });
 const request = (operation: HostOperation): HostRequest => ({

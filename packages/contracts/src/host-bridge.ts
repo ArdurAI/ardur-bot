@@ -313,6 +313,39 @@ export const HostHealthSchema = z.strictObject({
   integrations: z.array(HostIntegrationSchema).max(16).optional(),
 });
 export type HostHealth = z.infer<typeof HostHealthSchema>;
+export const HOST_HEALTH_ACCEPT_HEADER = "x-ardur-host-health-accept";
+export const HOST_HEALTH_ACCEPTED =
+  "providerRelay,hermes,hermesConfigurationProfile,hermesLauncherGeneration";
+
+/** A missing upgrade advertisement means the peer may use the original strict health schema. */
+export function negotiateHostHealth(health: HostHealth, advertisement?: string): HostHealth {
+  const accepted = new Set(
+    (advertisement && advertisement.length <= 256 ? advertisement : "")
+      .split(",")
+      .map((value) => value.trim()),
+  );
+  const { capabilities, hermes, ...legacy } = health;
+  return {
+    ...legacy,
+    ...(accepted.has("hermes") && hermes ? { hermes } : {}),
+    ...(accepted.has("providerRelay") && capabilities
+      ? {
+          capabilities: {
+            providerRelay: capabilities.providerRelay,
+            ...(accepted.has("hermesConfigurationProfile") &&
+            accepted.has("hermesLauncherGeneration") &&
+            capabilities.hermesConfigurationProfile &&
+            capabilities.hermesLauncherGeneration
+              ? {
+                  hermesConfigurationProfile: capabilities.hermesConfigurationProfile,
+                  hermesLauncherGeneration: capabilities.hermesLauncherGeneration,
+                }
+              : {}),
+          },
+        }
+      : {}),
+  };
+}
 export const HostStatusSchema = z.strictObject({
   roots: z.array(path).max(32).default([]),
   configured: z.boolean(),

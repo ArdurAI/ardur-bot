@@ -91,6 +91,20 @@ function healthFrame(): HostFrame {
 }
 
 describe("outbound host hub", () => {
+  it("accepts an older host's health and forwards an ordinary operation", async () => {
+    const hub = new HostHub(async () => true);
+    const host = wire();
+    const worker = wire();
+    hub.attach(host, "owner", "first");
+    const oldHealth = healthFrame();
+    if (oldHealth.type !== "health") throw new Error("Invalid fixture.");
+    delete oldHealth.health.capabilities;
+    await hub.fromHost(host, oldHealth);
+    expect(hub.health?.capabilities).toBeUndefined();
+    await hub.request(request, worker);
+    expect(host.frames).toEqual([request]);
+    hub.detach();
+  });
   it("keeps Hermes on a negotiated host and fences provider callbacks to its worker", async () => {
     const hub = new HostHub(async () => true),
       host = wire(),
