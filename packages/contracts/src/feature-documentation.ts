@@ -53,25 +53,27 @@ const feature = z.strictObject({
   settingsPath: paths,
   steps: z.array(step),
   boundaries: z.array(plainText),
-  troubleshooting: z.array(z.strictObject({ errorId: slug, action: plainText })),
+  troubleshooting: z.array(
+    z.strictObject({ errorId: slug, message: plainText, action: plainText }),
+  ),
   related: z.array(slug),
+  /** Related drafts must be named explicitly before a page can publish. */
+  deferredRelated: z.array(slug).optional(),
 });
 
 const screenshot = z.strictObject({
   id: slug,
-  /** Repository-relative capture path. */
-  path: z.string().min(1),
+  /** Published asset path; source capture lives at site/<file>. */
+  file: z.string().regex(/^docs\/[a-z0-9]+(?:-[a-z0-9]+)*\.png$/),
   alt: plainText,
   width: z.number().int().positive(),
   height: z.number().int().positive(),
-  crop: z
-    .strictObject({
-      x: z.number().int().nonnegative(),
-      y: z.number().int().nonnegative(),
-      width: z.number().int().positive(),
-      height: z.number().int().positive(),
-    })
-    .nullable(),
+  crop: z.strictObject({
+    x: z.number().int().nonnegative(),
+    y: z.number().int().nonnegative(),
+    width: z.number().int().positive(),
+    height: z.number().int().positive(),
+  }),
   platform,
   locale: z.string().min(2),
   theme: z.enum(["light", "dark"]),

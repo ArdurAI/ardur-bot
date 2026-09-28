@@ -854,5 +854,11 @@
       "height": 1800,
       "theme": "light"
     }
-  ]
+  ],
+  "documentation": {
+    "manifestVersion": 1,
+    "locale": "en",
+    "features": [],
+    "screenshots": []
+  }
 }

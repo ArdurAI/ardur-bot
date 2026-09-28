@@ -4,7 +4,12 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { FeatureDocumentationManifestSchema } from "../packages/contracts/src/feature-documentation";
 import type { FeatureEvidence } from "./feature-docs";
-import { featureDocsReport, validateFeatureDocs } from "./feature-docs";
+import {
+  assertFeatureDocsComplete,
+  featureDocsReport,
+  publishedDocumentation,
+  validateFeatureDocs,
+} from "./feature-docs";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const expectedIds = `
@@ -42,6 +47,9 @@ describe("feature documentation inventory", () => {
     );
     expect(featureDocsReport(manifest)).toContain(
       "Verify: 3 candidates — space-members, computer-edit-remove, performance",
+    );
+    expect(() => assertFeatureDocsComplete(manifest)).toThrow(
+      "88 verified user-facing documentation pages are still draft",
     );
   });
 
@@ -165,6 +173,82 @@ describe("feature documentation inventory", () => {
     manifest.features[0]!.summary = "The best <b>sign in</b> option.";
     await expect(validateFeatureDocs(manifest, evidence, root)).rejects.toThrow(
       'Feature "sign-in" summary must be plain, neutral public copy',
+    );
+  });
+
+  it("projects only published Addendum D fields and validates a capture", async () => {
+    const { manifest, evidence } = await data();
+    const feature = manifest.features.find((item) => item.id === "general")!;
+    feature.status = "published";
+    feature.steps = [
+      {
+        id: "open",
+        aliases: ["start"],
+        text: "Open “Settings”.",
+        uiLabels: ["Settings"],
+        screenshotId: "docs-general-open",
+        expected: "General is visible.",
+        availableSince: null,
+      },
+    ];
+    manifest.screenshots.push({
+      id: "docs-general-open",
+      file: "docs/docs-general-open.png",
+      alt: "General settings panel.",
+      width: 1,
+      height: 1,
+      crop: { x: 0, y: 0, width: 1, height: 1 },
+      platform: "web",
+      locale: "en",
+      theme: "light",
+      feature: "general",
+      step: "open",
+    });
+    const png = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL/nwAAAABJRU5ErkJggg==",
+      "base64",
+    );
+    await expect(
+      validateFeatureDocs(manifest, evidence, root, async () => png),
+    ).resolves.toBeDefined();
+    const docs = publishedDocumentation(manifest);
+    expect(docs.features).toHaveLength(1);
+    expect(docs.features[0]?.availableSince).toBeNull();
+    expect(docs.features[0]?.settingsPath.web).toEqual(feature.settingsPath.web?.uiLabels);
+    expect(docs.features[0]?.settingsPath.mobile).toBeUndefined();
+    expect(docs.screenshots[0]?.file).toBe("docs/docs-general-open.png");
+    expect(docs.features[0]).not.toHaveProperty("internalReason");
+    expect(docs.features[0]).not.toHaveProperty("deferredRelated");
+    expect(docs.screenshots[0]).not.toHaveProperty("locale");
+    feature.related = ["privacy"];
+    await expect(validateFeatureDocs(manifest, evidence, root, async () => png)).rejects.toThrow(
+      'related feature "privacy" must publish or be deferred',
+    );
+    feature.deferredRelated = ["privacy"];
+    expect(publishedDocumentation(manifest).features[0]?.related).toEqual([]);
+    feature.troubleshooting = [
+      { errorId: "general-error", message: "Wrong sentence.", action: "Open Settings." },
+    ];
+    evidence.features.find((item) => item.id === "general")!.errors = [
+      {
+        id: "general-error",
+        text: "Settings",
+        source: "apps/web/src/locales/en/messages.po",
+      },
+    ];
+    await expect(validateFeatureDocs(manifest, evidence, root, async () => png)).rejects.toThrow(
+      'error "general-error" differs from its cited sentence',
+    );
+    feature.troubleshooting[0]!.message = "Settings";
+    await expect(
+      validateFeatureDocs(manifest, evidence, root, async () => png),
+    ).resolves.toBeDefined();
+    await expect(
+      validateFeatureDocs(manifest, evidence, root, async () => Buffer.alloc(250_001)),
+    ).rejects.toThrow("250 KB");
+    manifest.screenshots[0]!.crop.x = 1;
+    await expect(validateFeatureDocs(manifest, evidence, root, async () => png)).rejects.toThrow(
+      "crop is outside",
     );
   });
 });

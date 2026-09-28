@@ -22,6 +22,7 @@ import { CreateRoutineInput } from "../packages/contracts/src/domain";
 import { SiteProductSchema } from "../packages/contracts/src/site-product";
 import { POPULAR_MODEL_PROVIDER_IDS } from "../packages/core/src/model-providers";
 import {
+  generatedProduct,
   generatedReadme,
   memoryFromCode,
   providersFromCatalog,
@@ -81,6 +82,29 @@ describe("site facts", () => {
     ]);
   });
 
+  it("accepts a generated empty documentation block while retaining the eight-slot homepage bound", async () => {
+    const product = await generatedProduct(sourceRoot);
+    expect(product.schemaVersion).toBe(1);
+    expect(product.documentation).toEqual({
+      manifestVersion: 1,
+      locale: "en",
+      features: [],
+      screenshots: [],
+    });
+    expect(SiteProductSchema.safeParse(product).success).toBe(true);
+    const { documentation: _documentation, ...oldSnapshot } = product;
+    expect(SiteProductSchema.safeParse(oldSnapshot).success).toBe(true);
+    expect(
+      SiteProductSchema.safeParse({
+        ...product,
+        documentation: { ...product.documentation, manifestVersion: 2 },
+      }).success,
+    ).toBe(false);
+    const ninth = { ...product, screenshots: [...product.screenshots, product.screenshots[0]] };
+    while (ninth.screenshots.length <= 8) ninth.screenshots.push(product.screenshots[0]!);
+    expect(SiteProductSchema.safeParse(ninth).success).toBe(false);
+  });
+
   it("derives memory storage and publication choices from shipped code", async () => {
     const root = await fixture();
     const product = SiteProductSchema.parse(
@@ -99,7 +123,7 @@ describe("site facts", () => {
     await expect(validateReferences(product, root)).resolves.toBeUndefined();
     product.memory!.storage[0]!.detail = "Stale curated storage text.";
     await writeFile(path.join(root, "site/data/product.json"), `${JSON.stringify(product)}\n`);
-    await expect(runSiteFacts("check", root)).rejects.toThrow("is stale");
+    await expect(runSiteFacts("check", root, sourceRoot)).rejects.toThrow("is stale");
   });
 
   it("requires every memory source to name an existing README heading", async () => {
@@ -647,16 +671,16 @@ describe("site facts", () => {
 
   it("is idempotent and regenerates changed README blocks", async () => {
     const root = await fixture();
-    expect(await runSiteFacts("write", root)).toBe(false);
-    expect(await runSiteFacts("write", root)).toBe(false);
+    expect(await runSiteFacts("write", root, sourceRoot)).toBe(false);
+    expect(await runSiteFacts("write", root, sourceRoot)).toBe(false);
     const readmePath = path.join(root, "README.md");
     const original = await readFile(readmePath, "utf8");
     const stale = original.replace("- Providers:", "- Old providers:");
     await writeFile(readmePath, stale);
-    await expect(runSiteFacts("check", root)).rejects.toThrow(
+    await expect(runSiteFacts("check", root, sourceRoot)).rejects.toThrow(
       "README.md site facts blocks are stale. Run `pnpm site:facts`",
     );
-    expect(await runSiteFacts("write", root)).toBe(true);
+    expect(await runSiteFacts("write", root, sourceRoot)).toBe(true);
     expect(await readFile(readmePath, "utf8")).toBe(original);
   });
 
@@ -666,7 +690,7 @@ describe("site facts", () => {
     const product = JSON.parse(await readFile(productPath, "utf8"));
     product.providers.pop();
     await writeFile(productPath, `${JSON.stringify(product, null, 2)}\n`);
-    await expect(runSiteFacts("check", root)).rejects.toThrow(
+    await expect(runSiteFacts("check", root, sourceRoot)).rejects.toThrow(
       "site/data/product.json is stale. Run `pnpm site:facts` and commit the result.",
     );
   });
@@ -678,10 +702,10 @@ describe("site facts", () => {
     product.generatedAt = "2026-09-27T00:00:00.000Z";
     product.source = { repo: "ArdurAI/ardur-bot", ref: "dev", commit: "a".repeat(40) };
     await writeFile(productPath, `${JSON.stringify(product, null, 2)}\n`);
-    await expect(runSiteFacts("check", root)).rejects.toThrow(
+    await expect(runSiteFacts("check", root, sourceRoot)).rejects.toThrow(
       "site/data/product.json must omit generatedAt and source",
     );
-    expect(await runSiteFacts("write", root)).toBe(true);
+    expect(await runSiteFacts("write", root, sourceRoot)).toBe(true);
     expect(JSON.parse(await readFile(productPath, "utf8"))).not.toHaveProperty("generatedAt");
   });
 

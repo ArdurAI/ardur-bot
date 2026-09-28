@@ -18,6 +18,7 @@
     "site:facts": "node --import tsx scripts/site-facts.ts",
     "site:facts:check": "node --import tsx scripts/site-facts.ts --check",
     "feature-docs:report": "node --import tsx scripts/feature-docs.ts",
+    "feature-docs:complete": "node --import tsx scripts/feature-docs.ts --complete",
     "db:migrate": "pnpm --filter @ardurbot/db migrate",
     "db:backfill-pins": "tsx apps/api/src/backfill-runtime-pins-cli.ts",
     "sandbox:build": "tsx scripts/build-computers.ts",

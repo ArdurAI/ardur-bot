@@ -15,6 +15,119 @@ const source = z.object({
   commit: z.string().regex(/^[a-f0-9]{40}$/),
 });
 
+const documentationStep = z.strictObject({
+  id,
+  aliases: z.array(id),
+  text,
+  uiLabels: z.array(text),
+  screenshotId: id,
+  expected: text,
+  availableSince: text.nullable(),
+});
+
+export const SiteDocumentationSchema = z
+  .strictObject({
+    manifestVersion: z.literal(1),
+    locale: z.literal("en"),
+    features: z.array(
+      z.strictObject({
+        id,
+        aliases: z.array(id),
+        title: text,
+        summary: text,
+        area: id,
+        order: z.number().int().nonnegative(),
+        status: z.literal("published"),
+        availableSince: text.nullable(),
+        platforms: z.strictObject({
+          web: z.enum(["configure", "read-only", "unavailable"]),
+          desktop: z.enum(["configure", "read-only", "unavailable"]),
+          mobile: z.enum(["configure", "read-only", "unavailable"]),
+        }),
+        settingsPath: z.strictObject({
+          web: z.array(text).min(1).optional(),
+          desktop: z.array(text).min(1).optional(),
+          mobile: z.array(text).min(1).optional(),
+        }),
+        steps: z.array(documentationStep).min(1),
+        boundaries: z.array(text),
+        troubleshooting: z.array(z.strictObject({ errorId: id, message: text, action: text })),
+        related: z.array(id),
+      }),
+    ),
+    screenshots: z.array(
+      z.strictObject({
+        id,
+        file: z.string().regex(/^docs\/[a-z0-9]+(?:-[a-z0-9]+)*\.png$/),
+        alt: text,
+        width: z.number().int().positive(),
+        height: z.number().int().positive(),
+        crop: z.strictObject({
+          x: z.number().int().nonnegative(),
+          y: z.number().int().nonnegative(),
+          width: z.number().int().positive(),
+          height: z.number().int().positive(),
+        }),
+        platform: z.enum(["web", "desktop", "mobile"]),
+        theme: z.enum(["light", "dark"]),
+        feature: id,
+        step: id,
+      }),
+    ),
+  })
+  .superRefine((docs, context) => {
+    const ids = new Set(docs.features.map((feature) => feature.id));
+    const shots = new Map(docs.screenshots.map((shot) => [shot.id, shot]));
+    const used = new Set<string>();
+    if (ids.size !== docs.features.length || shots.size !== docs.screenshots.length)
+      context.addIssue({ code: "custom", message: "Documentation IDs must be unique" });
+    const names = new Set(ids);
+    for (const feature of docs.features) {
+      for (const alias of feature.aliases) {
+        if (names.has(alias))
+          context.addIssue({ code: "custom", message: `Duplicate alias ${alias}` });
+        names.add(alias);
+      }
+      const stepNames = new Set(feature.steps.map((step) => step.id));
+      if (stepNames.size !== feature.steps.length)
+        context.addIssue({ code: "custom", message: `Duplicate step ID in ${feature.id}` });
+      if (
+        new Set(feature.troubleshooting.map((item) => item.errorId)).size !==
+        feature.troubleshooting.length
+      )
+        context.addIssue({ code: "custom", message: `Duplicate error ID in ${feature.id}` });
+      for (const step of feature.steps) {
+        for (const alias of step.aliases) {
+          if (stepNames.has(alias))
+            context.addIssue({ code: "custom", message: `Duplicate step alias ${alias}` });
+          stepNames.add(alias);
+        }
+        const shot = shots.get(step.screenshotId);
+        if (!shot || shot.feature !== feature.id || shot.step !== step.id)
+          context.addIssue({
+            code: "custom",
+            message: `Missing screenshot for ${feature.id}/${step.id}`,
+          });
+        used.add(step.screenshotId);
+      }
+      for (const related of feature.related)
+        if (!ids.has(related))
+          context.addIssue({ code: "custom", message: `Unpublished related feature ${related}` });
+    }
+    for (const shot of docs.screenshots) {
+      if (
+        shot.file !== `docs/${shot.id}.png` ||
+        !used.has(shot.id) ||
+        shot.crop.x + shot.crop.width > shot.width ||
+        shot.crop.y + shot.crop.height > shot.height
+      )
+        context.addIssue({
+          code: "custom",
+          message: `Invalid documentation screenshot ${shot.id}`,
+        });
+    }
+  });
+
 export const SiteProductSchema = z
   .strictObject({
     schemaVersion: z.literal(1),
@@ -149,6 +262,7 @@ export const SiteProductSchema = z
       )
       .min(1)
       .max(8),
+    documentation: SiteDocumentationSchema.optional(),
   })
   .superRefine((data, context) => {
     if (Boolean(data.generatedAt) !== Boolean(data.source)) {
