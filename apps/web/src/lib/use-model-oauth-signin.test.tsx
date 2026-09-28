@@ -23,10 +23,12 @@ import { useModelOAuthSignIn } from "./use-model-oauth-signin";
 let node: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
 
+const persistenceChange = vi.fn();
 function Pairing() {
   const { startSubscriptionSignIn } = useModelOAuthSignIn({
     onFinished: () => undefined,
     onError: () => undefined,
+    onPersistenceChange: persistenceChange,
   });
   return (
     <button
@@ -66,4 +68,17 @@ it("cancels an owned pairing attempt when the Models view closes", async () => {
   await act(async () => root.unmount());
   expect(api.cancelOAuth).toHaveBeenCalledWith({ loginId: "login-a" });
   expect(api.finishOAuth).not.toHaveBeenCalled();
+});
+
+it("reports OAuth persistence until finish completes", async () => {
+  let finish!: () => void;
+  api.waitForModelOAuth.mockResolvedValue(undefined);
+  api.finishOAuth.mockImplementation(() => new Promise<void>((resolve) => { finish = resolve; }));
+  await act(async () => root.render(<Pairing />));
+  await act(async () => node.querySelector("button")?.click());
+  expect(api.finishOAuth).toHaveBeenCalledOnce();
+  expect(persistenceChange).toHaveBeenCalledWith(true);
+  expect(persistenceChange).not.toHaveBeenCalledWith(false);
+  await act(async () => finish());
+  expect(persistenceChange).toHaveBeenLastCalledWith(false);
 });
