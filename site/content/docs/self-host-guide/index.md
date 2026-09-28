@@ -1,5 +1,5 @@
 ---
-title: "Self-hosting Ardur"
+title: "Self-hosting"
 description: "The signed-in product is a long-running API, a Graphile Worker, and Postgres. It uses the computer it is installed on by default. Docker, Podman, Kubernetes, and SSH are optional…"
 source_path: "docs/self-host.md"
 ---
