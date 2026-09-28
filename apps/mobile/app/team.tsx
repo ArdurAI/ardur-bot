@@ -135,7 +135,18 @@ export default function TeamScreen() {
                     })}
                     color={tokens.foreground}
                     onPress={() =>
-                      router.push({ pathname: "/thread", params: { botId: row.botId } })
+                      router.push({
+                        pathname: "/peer-conversation",
+                        params: {
+                          botId: row.botId,
+                          botName: row.botName,
+                          peerBotId: row.latestPeerBotId,
+                          peerName: row.latestPeerBotName ?? t("Bot"),
+                          ...(row.latestDeliveryGroupId
+                            ? { groupId: row.latestDeliveryGroupId }
+                            : {}),
+                        },
+                      })
                     }
                   />
                 ) : null}

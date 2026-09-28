@@ -1,23 +1,11 @@
-import { ChatMarkdown } from "@ardurbot/chat-ui/native";
 import type { MessageBlock } from "@ardurbot/contracts";
 import { botMessageReceiptKind } from "@ardurbot/core";
-import { useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  Button,
-  Modal,
-  Pressable,
-  ScrollView,
-  Text,
-  type TextProps,
-  View,
-} from "react-native";
-import type { MobileMessage, MobileMessagePage } from "../lib/api";
-import { rpc } from "../lib/api";
+import { useState } from "react";
+import { Button, Modal, Pressable, Text, type TextProps, View } from "react-native";
 import { mobileTokens } from "../lib/appearance";
 import { useI18n } from "../lib/i18n";
-import { useResolvedAppearance } from "../lib/native";
 import { BotAvatar } from "./bot-avatar";
+import { PeerConversation } from "./peer-conversation";
 
 type PeerMessageBlock = Extract<
   MessageBlock,
@@ -42,10 +30,6 @@ export function PeerMessageReceipt({
   groupId?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const [messages, setMessages] = useState<MobileMessage[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [failed, setFailed] = useState(false);
-  const colorScheme = useResolvedAppearance();
   const tokens = mobileTokens();
   const { t } = useI18n();
   const sent = block.kind === "bot_message_sent";
@@ -79,55 +63,6 @@ export function PeerMessageReceipt({
       : receipt === "delivered"
         ? label
         : `${label} · ${sent ? t("to {peer}", { peer }) : t("from {peer}", { peer })}`;
-  useEffect(() => {
-    if (!open) return;
-    if (!botId && !groupId) {
-      setMessages([{ id: "current", role: "bot", blocks: [block] }]);
-      return;
-    }
-    let active = true;
-    setLoading(true);
-    setFailed(false);
-    const load = async () => {
-      let before: number | undefined;
-      let collected: MobileMessage[] = [];
-      do {
-        const page = await rpc<MobileMessagePage>("threads/messages", {
-          ...(groupId ? { groupId } : { botId }),
-          before,
-          includePeerRuns: true,
-        });
-        if (!active) return;
-        collected = [...page.messages, ...collected];
-        before = page.olderCursor ?? undefined;
-      } while (before !== undefined);
-      if (active) setMessages(collected);
-    };
-    void load()
-      .catch(() => {
-        if (active) setFailed(true);
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, [open, botId, groupId, block]);
-  const conversation = messages.flatMap((message) =>
-    message.blocks.flatMap((entry) => {
-      if (entry.kind === "bot_message_sent" && entry.toBotId === peerBotId)
-        return [
-          { id: message.id, author: recipientName ?? t("Bot"), text: entry.text, truncated: false },
-        ];
-      if (entry.kind === "bot_message_received" && entry.fromBotId === peerBotId)
-        return [
-          { id: message.id, author: peer, text: entry.text, truncated: Boolean(entry.truncated) },
-        ];
-      return [];
-    }),
-  );
-
   return (
     <View style={{ width: "100%", alignItems: "center", gap: 6 }}>
       <Pressable
@@ -159,42 +94,23 @@ export function PeerMessageReceipt({
         presentationStyle="pageSheet"
         onRequestClose={() => setOpen(false)}
       >
-        <View style={{ flex: 1, backgroundColor: tokens.background, padding: 16, gap: 12 }}>
-          <Text style={{ color: tokens.foreground, fontSize: 18, fontWeight: "600" }}>{peer}</Text>
-          <Button title={t("Close")} onPress={() => setOpen(false)} />
-          {loading ? <ActivityIndicator /> : null}
-          {failed ? (
-            <Text accessibilityRole="alert" style={{ color: tokens.destructive }}>
-              {t("Could not load this chat.")}
-            </Text>
-          ) : null}
-          {!loading && !failed && !conversation.length ? (
-            <Text style={{ color: tokens.mutedForeground }}>{t("No messages yet.")}</Text>
-          ) : null}
-          <ScrollView contentContainerStyle={{ gap: 10 }}>
-            {conversation.map((item) => (
-              <View
-                key={item.id}
-                style={{ borderRadius: 12, backgroundColor: tokens.card, padding: 12 }}
-              >
-                <Text style={{ color: tokens.mutedForeground }}>{item.author}</Text>
-                <ChatMarkdown palette={tokens} colorScheme={colorScheme}>
-                  {item.text}
-                </ChatMarkdown>
-                {item.truncated ? (
-                  <Button
-                    title={t("Open peer thread")}
-                    onPress={() => {
-                      setOpen(false);
-                      onOpenPeer(peerBotId, peer);
-                    }}
-                  />
-                ) : null}
-              </View>
-            ))}
-          </ScrollView>
-          <Text style={{ color: tokens.mutedForeground }}>{t("This chat is view-only")}</Text>
-        </View>
+        {open ? (
+          <View style={{ flex: 1, backgroundColor: tokens.background }}>
+            <Button title={t("Close")} onPress={() => setOpen(false)} />
+            <PeerConversation
+              botId={botId}
+              groupId={groupId}
+              peerBotId={peerBotId}
+              peerName={peer}
+              botName={recipientName ?? t("Bot")}
+              fallbackBlock={block}
+              onOpenPeer={(id, name) => {
+                setOpen(false);
+                onOpenPeer(id, name);
+              }}
+            />
+          </View>
+        ) : null}
       </Modal>
     </View>
   );
