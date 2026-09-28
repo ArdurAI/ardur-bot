@@ -71,6 +71,30 @@ export * from "./remote-policy.js";
 export * from "./response-bytes.js";
 export * from "./rpc-error-message.js";
 export * from "./run-state.js";
+export {
+  admitRunnerJob,
+  clampRunnerLimits,
+  confirmRunnerCleanup as confirmRunnerJobCleanup,
+  parseRunnerJobRequest,
+  reconcileRunnerJobOnRestart,
+  RUNNER_STATE_PHASE,
+  runnerJobDeadline,
+  runnerJobHoldsSlot,
+  runnerJobRequestHash,
+  runnerKindSupported,
+  stopRunnerJob,
+  SUPPORTED_RUNNER_KINDS,
+} from "./runner-policy.js";
+export type {
+  ReconcileAction,
+  RunnerAdmissionDecision,
+  RunnerAdmissionRefusal,
+  RunnerAdmissionRefusalCode,
+  RunnerAdmissionView,
+  RunnerStopInput,
+  RunnerStopOutcome,
+  RunnerTransitionCheck,
+} from "./runner-policy.js";
 export * from "./runtime-effort.js";
 export * from "./sandbox-command.js";
 export * from "./screen-lease.js";
