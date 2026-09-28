@@ -7,6 +7,8 @@ export interface ComputerScreenResult {
 export async function loadComputerScreen(options: {
   load: () => Promise<{ url: string | null }>;
   isCurrent: () => boolean;
+  /** Report superseded results so pending user retries can still resolve. */
+  observe?: (result: ComputerScreenResult) => void;
   commit: (result: ComputerScreenResult) => void;
   fallbackError: string;
 }): Promise<string | null> {
@@ -20,6 +22,7 @@ export async function loadComputerScreen(options: {
       error: error instanceof Error && error.message ? error.message : options.fallbackError,
     };
   }
+  options.observe?.(result);
   if (!options.isCurrent()) return null;
   options.commit(result);
   return result.url;

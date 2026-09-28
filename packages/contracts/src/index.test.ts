@@ -26,6 +26,19 @@ import {
 import { appContract } from "./rpc.js";
 
 describe("contracts", () => {
+  it("preserves a structured group failure notice alongside its fallback text", () => {
+    expect(
+      MessageBlock.parse({
+        kind: "text",
+        text: "Fallback",
+        notice: { id: "group-model-credential-missing", botName: "Worker" },
+      }),
+    ).toEqual({
+      kind: "text",
+      text: "Fallback",
+      notice: { id: "group-model-credential-missing", botName: "Worker" },
+    });
+  });
   it("accepts structured live activity progress", () => {
     expect(MessageBlock.parse({ kind: "progress", text: "Using browser", activity: true })).toEqual(
       { kind: "progress", text: "Using browser", activity: true },

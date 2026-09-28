@@ -26,7 +26,10 @@ and remote providers. This stack credential does not replace a remote provider's
 
 Compose starts a **sandbox supervisor** (from the app image) on the internal
 network (port `7091` in published-images). It creates sibling **computer**
-containers from `ARDURBOT_COMPUTER_IMAGE` + `ARDURBOT_COMPUTER_IMAGE_TAG`.
+containers from an explicit `ARDURBOT_COMPUTER_IMAGE` (with an optional legacy tag), a local
+build, or the image for the running app version. For direct Compose commands, set
+`ARDURBOT_COMPUTER_IMAGE_REF` as described in [self-hosting](/docs/self-host-guide/); the installer
+and desktop launcher set it for you.
 
 Requirements:
 

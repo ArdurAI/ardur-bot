@@ -8,7 +8,11 @@ export const MEMORY_REVIEW_UNAVAILABLE_MESSAGE =
 export const MemoryIntentInputSchema = z
   .object({
     intent: z.enum(["import", "edit"]),
-    text: z.string().trim().min(1).max(12000),
+    text: z
+      .string()
+      .min(1)
+      .max(12000)
+      .refine((text) => !!text.trim()),
     requestId: z
       .string()
       .min(1)

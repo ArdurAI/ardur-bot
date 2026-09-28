@@ -2,10 +2,7 @@
 
 For Fleet targets, capacity, placement, transport limits and verification, see [Fleet P1](fleet.md).
 
-Status: implemented for offline verification; live acceptance is still required. No images
-were built or published during this change. The Kubernetes client could not be installed in
-the restricted command environment; complete dependency installation and refresh the lockfile
-before attempting a live computer or merging.
+Status: implemented for offline verification; live acceptance is still required.
 
 ## Decisions and boundaries
 
@@ -16,13 +13,19 @@ Both profiles use `infra/sandboxes/computer/Dockerfile`; `IMAGE_PROFILE` selects
 Developer adds a dated Debian package snapshot (including Bookworm backports for the pinned
 `glab` package) and the versioned Node image. These inputs are
 versioned but are not content-addressed until real image digests are recorded in the registry.
-The registry's null digests deliberately mean unpublished, not verified. After publishing,
-record each manifest SHA-256 there; providers prefer that digest over its tag.
+The registry's null digests mean no verified digest has been recorded; they do not establish
+publication status. After publishing, record each manifest SHA-256 there; providers prefer that
+digest over its tag.
 
-`pnpm sandbox:build` builds both registry tags and a compatibility `:local` alias for Standard.
+`pnpm build:computers` (also `pnpm sandbox:build`) builds both profile tags and a `:local` alias for Standard.
 `pnpm sandbox:build --podman` uses Podman. CI builds both profiles in an advisory job. Provisioning
-requires the selected image to be loaded already; it neither builds nor silently pulls another
-image. An existing deployment's `ARDURBOT_COMPUTER_IMAGE` override still applies only to Standard.
+uses the locally built Standard alias when present; otherwise Docker pulls the published Standard
+image on first use. The published name is `ghcr.io/ardurai/ardur-bot/computer`: prerelease app
+versions use `:dev`, and release versions use their exact version tag. `ARDURBOT_COMPUTER_IMAGE`
+overrides Standard; `ARDURBOT_COMPUTER_CHANNEL=dev|release` overrides the version channel. The
+organization owner must make the GHCR `computer` package public after its first publish for
+anonymous pulls. Developer still uses its explicit profile tag and must be built or loaded into
+the selected engine. A locally built image is never silently replaced.
 Kubernetes uses the registry pin and `IfNotPresent`, allowing images loaded into kind to work
 offline and a registry pull of that same pin on other clusters.
 
@@ -92,7 +95,10 @@ Docker socket, a running macOS Podman machine socket, or Linux's rootless socket
 machine. Use a host-run supervisor and bind-mounted data with Podman; Docker volume-subpath
 mounts are explicitly refused on Podman. The computer lifecycle needs no Compose command.
 Readiness uses the existing computer control transport rather than Docker healthcheck JSON.
-Local image inspect is required before create; build/load/tag images explicitly in each engine.
+Docker inspects the selected image before create and downloads a missing published Standard image
+once for concurrent bots. Podman still requires an image already in its own store. The resolved
+name can be pre-pulled into Docker or Podman. Kubernetes keeps its profile tag, so load or retag
+the same image under that tag in each node store.
 A selected engine that disagrees with the socket's detected engine fails instead of falling back.
 The deployment default preserves existing Dockerode `DOCKER_HOST`/TLS handling and its precedence
 over socket discovery. Each saved connection is limited to a local Unix socket.

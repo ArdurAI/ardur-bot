@@ -9,6 +9,7 @@ import {
   humanizeToolName,
   isRunTerminalEvent,
   projectMessages,
+  redactSecrets,
   reduceLiveMessageBlocks,
   runFailureError,
   sanitizeJsonValue,
@@ -16,15 +17,26 @@ import {
   trackToolCallStreak,
   trackToolNameStreak,
 } from "./events.js";
+import { redactLearningText } from "./learning-signals.js";
 
 describe("containsSecret", () => {
   it("detects secrets that JSON escaping changes", () => {
-    expect(containsSecret({ 'api"key': { nested: 'api"key' } }, ['api"key'])).toBe(true);
+    expect(containsSecret({ 'api"key42': { nested: 'api"key42' } }, ['api"key42'])).toBe(true);
     expect(containsSecret({ nested: ["line\nbreak"] }, ["line\nbreak"])).toBe(true);
   });
 
   it("does not confuse escaped text with the original control character", () => {
     expect(containsSecret({ value: "literal\\ntext" }, ["\n"])).toBe(false);
+  });
+
+  it("redacts every registered value, including short values inside prose", () => {
+    expect(redactSecrets("prefix ab12cdsuffix", ["ab12cd"])).toBe("prefix [redacted]suffix");
+    expect(containsSecret({ content: "prefix ab12cdsuffix" }, ["ab12cd"])).toBe(true);
+    expect(redactSecrets("plain", [])).toBe("plain");
+  });
+
+  it("uses exact registered values across stream chunks", () => {
+    expect(redactLearningText("before ab12cdsuffix", ["ab12cd"])).toBe("before [redacted]suffix");
   });
 });
 
@@ -670,6 +682,16 @@ describe("createStreamingRedactor", () => {
     ].join("");
     expect(output).toBe("before [redacted] after");
     expect(output).not.toContain("fake-secret-123");
+  });
+
+  it("redacts a six-character credential split across command output chunks", () => {
+    const redactor = createStreamingRedactor(["ab12cd"]);
+    const output = [
+      redactor.push("prefix ab"),
+      redactor.push("12cdsuffix"),
+      redactor.finish(),
+    ].join("");
+    expect(output).toBe("prefix [redacted]suffix");
   });
 
   it("does not delay chunks when there are no known secrets", () => {

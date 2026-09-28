@@ -295,6 +295,38 @@ export function dashboardFixture(botCount = 1) {
         "messaging/status": { enabled: false, providers: [], identities: [], openSignup: false },
         "voice/status": { transcribe: false, synthesize: false },
         "memory/config": null,
+        "memory/providerConfig": {
+          generation: 0,
+          documentStore: "postgres",
+          documentSettings: {},
+          provider: "builtin",
+          settings: {},
+          defaultMemoryScope: "isolated",
+          updatedAt: now,
+        },
+        "memory/list": { items: [], nextCursor: null },
+        "learning/settings": {
+          enabled: false,
+          consolidationEnabled: false,
+          reviewerPin: null,
+          canConfigure: true,
+          destination: {
+            runtimeKind: "pi",
+            provider: "openai-compatible",
+            modelId: "fixture",
+            credentialId: "fixture",
+            effort: "medium",
+            revision: 0,
+          },
+          budgets: {
+            botDailyTokens: 30000,
+            spaceDailyTokens: 150000,
+            maxProposals: 3,
+            timeoutMs: 30000,
+            maxOutputTokens: 2000,
+            maxOutputChars: 12000,
+          },
+        },
       };
       values["dashboard/now"] = {
         rows,

@@ -1,3 +1,5 @@
+import path from "node:path";
+
 const SECRET_NAME = /TOKEN|SECRET|KEY|PASSWORD|CREDENTIAL|^GOOGLE_APPLICATION_CREDENTIALS$/i;
 const OS_VARIABLES = [
   "PATH",
@@ -31,6 +33,7 @@ const OS_VARIABLES = [
   "GH_CONFIG_DIR",
   "GLAB_CONFIG_DIR",
   "JENKINS_URL",
+  "ARDUR_HERMES_INSTALL",
 ];
 
 /**
@@ -54,6 +57,13 @@ export function filterHostEnvironment(source, platform = "posix") {
       source[key].length <= 4096 &&
       !/[\0\r\n]/.test(source[key])
     ) {
+      if (
+        name === "ARDUR_HERMES_INSTALL" &&
+        !(platform === "win32"
+          ? path.win32.isAbsolute(source[key])
+          : path.posix.isAbsolute(source[key]))
+      )
+        continue;
       if (name === "JENKINS_URL") {
         try {
           const url = new URL(source[key]);

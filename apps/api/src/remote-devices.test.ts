@@ -112,6 +112,8 @@ describe("isolated device routes", () => {
     "integrationSetup/save",
     "actionApprovalRules/create",
     "bots/update",
+    "groups/setMemberModelPin",
+    "groups/clearMemberModelPin",
     "account/updateProfile",
     "account/updateInstructions",
     "account/setTrustedDevices",

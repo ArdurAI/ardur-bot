@@ -33,13 +33,14 @@ import { vaultNotePath } from "./obsidian-store.js";
 // An allowlist, not a collection of patterns that might miss a new cache/credential format.
 export const GIT_MEMORY_IGNORE =
   "*\n!/.gitignore\n!/memories/\n!/memories/space-shared/\n!/memories/space-shared/*.md\n!/history/\n!/history/*/\n!/history/*/*.md\n";
+export const GIT_PUBLISH_MODES = ["publish", "propose"] as const;
 export interface GitStoreOptions {
   transport: GitTransport;
   quarantine: MarkdownFiles;
   spaceId: string;
   machineId: string;
   branch: string;
-  mode: "publish" | "propose";
+  mode: (typeof GIT_PUBLISH_MODES)[number];
   clock?: () => Date;
   knownSecrets?: () => Promise<readonly string[]>;
   exclusive<T>(action: () => Promise<T>): Promise<T>;

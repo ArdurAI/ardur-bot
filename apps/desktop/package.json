@@ -70,6 +70,10 @@
         "to": "host-service/host-service.cjs"
       },
       {
+        "from": "../host-service/dist/python/hermes_launcher.py",
+        "to": "host-service/python/hermes_launcher.py"
+      },
+      {
         "from": "../host-service/dist/native/${os}_${arch}",
         "to": "host-service/native/${os}_${arch}",
         "filter": [

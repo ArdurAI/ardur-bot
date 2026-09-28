@@ -13,7 +13,12 @@ const focus = vi.hoisted(() => ({
 }));
 vi.mock("./api", () => ({ rpc: request }));
 vi.mock("expo-clipboard", () => ({ setStringAsync: copy }));
-vi.mock("./i18n", () => ({ useI18n: () => ({ t: (text: string) => text }) }));
+vi.mock("./i18n", () => ({
+  useI18n: () => ({
+    t: (text: string, values?: Record<string, string | number>) =>
+      text.replace(/\{(\w+)\}/g, (match, key: string) => String(values?.[key] ?? match)),
+  }),
+}));
 vi.mock("./appearance", () => ({ mobileTokens: () => ({}) }));
 vi.mock("./native", () => ({ native: {}, useThemedStyles: (fn: () => unknown) => fn() }));
 vi.mock("expo-router", () => ({
@@ -113,6 +118,7 @@ function input(container: HTMLElement, label: string, text: string) {
 }
 afterEach(() => {
   vi.clearAllMocks();
+  request.mockReset();
   vi.unstubAllGlobals();
 });
 
@@ -174,6 +180,48 @@ it.each(["import", "edit"] as const)(
     });
   },
 );
+
+it("keeps a rejected import editable and submits its correction", async () => {
+  request
+    .mockRejectedValueOnce({
+      data: {
+        code: "MEMORY_CREDENTIAL_LINE",
+        lineNumber: 2,
+        maskedLine: "- Key: [redacted]",
+      },
+    })
+    .mockResolvedValueOnce([]);
+  await mounted(createElement(MemoryIntentControls), async (container) => {
+    await act(async () => button(container, "Start import").click());
+    const original = "Preferences\n- Key: fixture-value";
+    await act(async () => input(container, "Paste memory", original));
+    await act(async () => button(container, "Review import").click());
+    expect(container.textContent).toContain("Line 2: - Key: [redacted] Edit or remove this line.");
+    expect(
+      (container.querySelector('textarea[aria-label="Paste memory"]') as HTMLTextAreaElement).value,
+    ).toBe(original);
+    await act(async () => input(container, "Paste memory", "Preferences\n- Be concise."));
+    await act(async () => button(container, "Review import").click());
+    expect(request.mock.calls.map(([, body]) => body.text)).toEqual([
+      original,
+      "Preferences\n- Be concise.",
+    ]);
+    expect(container.textContent).not.toContain("Line 2:");
+  });
+});
+
+it("explains the section limit while retaining the pasted text", async () => {
+  request.mockRejectedValueOnce({ data: { code: "MEMORY_IMPORT_SECTION_LIMIT" } });
+  await mounted(createElement(MemoryIntentControls), async (container) => {
+    await act(async () => button(container, "Start import").click());
+    await act(async () => input(container, "Paste memory", "Four sections"));
+    await act(async () => button(container, "Review import").click());
+    expect(container.textContent).toContain("Split this import into at most three sections.");
+    expect(
+      (container.querySelector('textarea[aria-label="Paste memory"]') as HTMLTextAreaElement).value,
+    ).toBe("Four sections");
+  });
+});
 
 it("unlocks an edit that fails after refocus without showing a stale error", async () => {
   const pending = pendingRequest();
