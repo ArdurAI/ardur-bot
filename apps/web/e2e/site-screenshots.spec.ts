@@ -339,26 +339,41 @@ test("captures bot chat, group collaboration, and routines from seeded demo data
                 ? (data.bots.find((bot) => bot.id === input?.botId) ?? data.bots[0])
                 : procedure === "groups/list"
                   ? [data.group]
-                  : procedure === "routines/list"
-                    ? input?.botId === "bot"
-                      ? data.routines
-                      : []
-                    : procedure === "runs/list" || procedure === "dashboard/now"
+                  : procedure === "workspace/tasks"
+                    ? {
+                        runs: [],
+                        delegations: [],
+                        routines: [],
+                        observedAt: "2026-09-24T12:00:30.000Z",
+                      }
+                    : procedure === "workspace/describe"
                       ? {
-                          ...(original as object),
-                          runs: (original as { runs: Record<string, unknown>[] }).runs.map(
-                            (run) => ({
-                              ...run,
-                              botName: "Chief of Staff",
-                              promptSnippet: "Review release checklist",
-                            }),
-                          ),
+                          botId: input?.botId ?? "bot",
+                          computerId: null,
+                          generation: null,
+                          files: "unavailable",
+                          observedAt: "2026-09-24T12:00:30.000Z",
                         }
-                      : procedure === "threads/get" || procedure === "threads/head"
-                        ? input?.groupId === data.group.id
-                          ? data.groupSnapshot
-                          : data.appSnapshot
-                        : original;
+                      : procedure === "routines/list"
+                        ? input?.botId === "bot"
+                          ? data.routines
+                          : []
+                        : procedure === "runs/list" || procedure === "dashboard/now"
+                          ? {
+                              ...(original as object),
+                              runs: (original as { runs: Record<string, unknown>[] }).runs.map(
+                                (run) => ({
+                                  ...run,
+                                  botName: "Chief of Staff",
+                                  promptSnippet: "Review release checklist",
+                                }),
+                              ),
+                            }
+                          : procedure === "threads/get" || procedure === "threads/head"
+                            ? input?.groupId === data.group.id
+                              ? data.groupSnapshot
+                              : data.appSnapshot
+                            : original;
     await route.fulfill({ json: { json: result } });
   });
 
@@ -387,9 +402,10 @@ test("captures bot chat, group collaboration, and routines from seeded demo data
 
   await page.goto("/app/bot");
   await page.getByTitle("Agent computer").click();
+  await page.getByRole("tab", { name: "Routines", exact: true }).click();
   await expect(page.getByText("Morning brief")).toBeVisible();
   await expect(page.getByText("Every day at 4:00 PM")).toBeVisible();
-  await expect(page.getByTestId("computer-preview")).toBeVisible();
+  await expect(page.getByTestId("side-panel")).toHaveAttribute("data-panel", "computer");
   await captureSiteScreenshot(page, "routines");
 
   await page

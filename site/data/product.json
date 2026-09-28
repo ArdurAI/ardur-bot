@@ -16,7 +16,7 @@
       "id": "team",
       "eyebrow": "TEAM",
       "title": "Named bots, together",
-      "body": "Give each bot its own conversation and history, and bring bots together in group chats.",
+      "body": "Give each bot its own conversation and history, and bring bots together in group chats. Inspect tasks and read-only workspace files beside a conversation on web and desktop, or in native screens on mobile.",
       "source": "README.md#What you get today"
     },
     {
@@ -841,7 +841,7 @@
     {
       "id": "routines",
       "file": "screenshots/routines.png",
-      "alt": "Chief of Staff bot conversation with the computer side panel and three scheduled routines: Morning brief, Inbox triage, and Evening wrap-up.",
+      "alt": "Chief of Staff bot conversation beside the workspace Routines tab with Morning brief, Inbox triage, and Evening wrap-up.",
       "width": 2880,
       "height": 1800,
       "theme": "light"
