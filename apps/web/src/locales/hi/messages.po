@@ -1309,6 +1309,11 @@ msgstr "बॉट काम कर रहे हैं"
 msgid "Bots keep the board and memory current"
 msgstr ""
 
+#. placeholder {0}: removing.bots.map((bot) => bot.name).join(", ")
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Bots on this computer: {0}"
+msgstr "इस कंप्यूटर पर बॉट: {0}"
+
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Brain label"
 msgstr ""
@@ -1541,6 +1546,11 @@ msgstr "अपना ईमेल देखें"
 #: src/pages/LearningCurator.tsx
 msgid "Checked"
 msgstr ""
+
+#. placeholder {0}: new Date(target.reachability.checkedAt).toLocaleString()
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Checked {0}"
+msgstr "जाँच की गई {0}"
 
 #: src/components/DesktopUpdates.tsx
 #: src/components/OllamaSettings.tsx
@@ -1776,6 +1786,24 @@ msgstr ""
 #: src/pages/LearningInsights.tsx
 msgid "coding"
 msgstr ""
+
+#. placeholder {0}: target.context.slice(7)
+#: src/pages/fleet/target-name.ts
+msgid "Colima ({0}) on this computer"
+msgstr "Colima ({0}) इस कंप्यूटर"
+
+#. placeholder {0}: target.context.slice(7)
+#: src/pages/fleet/target-name.ts
+msgid "Colima ({0}) on this Mac"
+msgstr "Colima ({0}) इस Mac"
+
+#: src/pages/fleet/target-name.ts
+msgid "Colima (default) on this computer"
+msgstr "Colima (डिफ़ॉल्ट) इस कंप्यूटर"
+
+#: src/pages/fleet/target-name.ts
+msgid "Colima (default) on this Mac"
+msgstr "Colima (डिफ़ॉल्ट) इस Mac"
 
 #. placeholder {0}: group.title
 #: src/pages/Shell.tsx
@@ -2064,6 +2092,10 @@ msgstr ""
 #: src/pages/shell/terminal-session.tsx
 msgid "Connection lost — reconnecting"
 msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Connection saved, but the test failed:"
+msgstr "कनेक्शन सहेजा गया, लेकिन जाँच विफल रही:"
 
 #. placeholder {0}: item.name
 #: src/pages/PluginsOverlay.tsx
@@ -2556,6 +2588,10 @@ msgstr ""
 msgid "Could not load this chat."
 msgstr "यह चैट लोड नहीं हो सकी."
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Could not load this computer. Try again."
+msgstr "यह कंप्यूटर लोड नहीं हो सका। फिर कोशिश करें।"
+
 #: src/components/ArtifactFileCard.tsx
 msgid "Could not load this file."
 msgstr "यह फ़ाइल लोड नहीं हो सकी।"
@@ -2637,6 +2673,10 @@ msgstr "समूह हटाया नहीं जा सका"
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Could not remove rule"
 msgstr "नियम हटाया नहीं जा सका"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Could not remove this computer. Try again."
+msgstr "यह कंप्यूटर हटाया नहीं जा सका। फिर कोशिश करें।"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not rename connection"
@@ -2864,6 +2904,10 @@ msgstr ""
 #: src/pages/Shell.tsx
 msgid "Could not update reaction"
 msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Could not update the computer. Check its settings and try again."
+msgstr "यह कंप्यूटर अपडेट नहीं हो सका। सेटिंग जाँचें और फिर कोशिश करें।"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Could not update the computer. Check the connection and try again."
@@ -3363,17 +3407,33 @@ msgstr "डेमो में पासवर्ड टाइप न करे�
 msgid "Docker"
 msgstr "Docker"
 
+#: src/pages/fleet/target-name.ts
+msgid "Docker Desktop on this computer"
+msgstr "Docker Desktop इस कंप्यूटर"
+
+#: src/pages/fleet/target-name.ts
+msgid "Docker Desktop on this Mac"
+msgstr "Docker Desktop इस Mac"
+
+#: src/pages/fleet/target-name.ts
+msgid "Docker engine (default context) on this computer"
+msgstr "Docker इंजन इस कंप्यूटर (डिफ़ॉल्ट संदर्भ)"
+
+#: src/pages/fleet/target-name.ts
+msgid "Docker engine (default context) on this Mac"
+msgstr "Docker इंजन इस Mac (डिफ़ॉल्ट संदर्भ)"
+
+#: src/pages/fleet/target-name.ts
+msgid "Docker engine on this computer"
+msgstr "Docker इंजन इस कंप्यूटर"
+
+#: src/pages/fleet/target-name.ts
+msgid "Docker engine on this Mac"
+msgstr "Docker इंजन इस Mac"
+
 #: src/pages/HostComputerPrompt.tsx
 msgid "Docker limits access to your computer for added security. Using {hostLabel} lets bots work with your local files and tools."
 msgstr "Docker अतिरिक्त सुरक्षा के लिए आपके कंप्यूटर तक पहुँच सीमित करता है। {hostLabel} चुनने पर बॉट्स आपकी स्थानीय फ़ाइलों और टूल्स के साथ काम कर सकते हैं।"
-
-#: src/pages/fleet/target-name.ts
-msgid "Docker on this computer"
-msgstr ""
-
-#: src/pages/fleet/target-name.ts
-msgid "Docker on this Mac"
-msgstr ""
 
 #: src/pages/KnowledgeSection.tsx
 msgid "Document"
@@ -3466,9 +3526,14 @@ msgstr "पुराना संदेश"
 
 #: src/components/Context.tsx
 #: src/pages/board/Board.tsx
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/LearningInbox.tsx
 msgid "Edit"
 msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Edit computer"
+msgstr "कंप्यूटर संपादित करें"
 
 #: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/McpServersOverlay.tsx
@@ -3515,6 +3580,14 @@ msgstr ""
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Engine endpoint"
 msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Engine not reachable"
+msgstr "इंजन तक पहुँचा नहीं जा सकता"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Engine not running"
+msgstr "इंजन चल नहीं रहा"
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Engine: {label}"
@@ -4250,6 +4323,10 @@ msgstr ""
 msgid "Installed on your computer"
 msgstr ""
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Installed, not running"
+msgstr "इंस्टॉल है, चल नहीं रहा"
+
 #: src/pages/customize/PluginsPage.tsx
 msgid "Installing"
 msgstr ""
@@ -4399,6 +4476,11 @@ msgstr ""
 #: src/pages/RoutineEditor.tsx
 msgid "key"
 msgstr ""
+
+#. placeholder {0}: target.context.slice(5)
+#: src/pages/fleet/target-name.ts
+msgid "kind ({0})"
+msgstr "kind ({0})"
 
 #: src/pages/KnowledgeSection.tsx
 msgid "Knowledge"
@@ -5095,6 +5177,11 @@ msgstr ""
 msgid "Move automatically"
 msgstr ""
 
+#. placeholder {0}: botNames.join(", ")
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Move bots first: {0}"
+msgstr "पहले इन बॉट्स को स्थानांतरित करें: {0}"
+
 #: src/pages/shell/dialogs.tsx
 msgid "Move them to your shared memory."
 msgstr "उन्हें अपनी साझा मेमोरी में ले जाएं।"
@@ -5510,6 +5597,10 @@ msgstr "आरंभ नहीं किया गया"
 msgid "Not now"
 msgstr "अभी नहीं"
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Not reachable"
+msgstr "पहुँचा नहीं जा सकता"
+
 #: src/components/ThreadCommandBlock.tsx
 #: src/pages/ide/diff.tsx
 msgid "Not recorded"
@@ -5788,6 +5879,14 @@ msgstr "या एक API कुंजी कनेक्ट करें"
 msgid "Or paste an API key"
 msgstr "या एक API कुंजी पेस्ट करें"
 
+#: src/pages/fleet/target-name.ts
+msgid "OrbStack on this computer"
+msgstr "OrbStack इस कंप्यूटर"
+
+#: src/pages/fleet/target-name.ts
+msgid "OrbStack on this Mac"
+msgstr "OrbStack इस Mac"
+
 #: src/pages/account/AccountProfile.tsx
 msgid "Organic"
 msgstr ""
@@ -5894,6 +5993,10 @@ msgstr "अपनी API कुंजी पेस्ट करें"
 #: src/pages/RoutineEditor.tsx
 msgid "Paused"
 msgstr "रुका हुआ"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Permission denied on the socket"
+msgstr "सॉकेट की अनुमति नहीं है"
 
 #. placeholder {0}: tool.id
 #: src/components/integrations/manage/ToolPermissions.tsx
@@ -6371,6 +6474,7 @@ msgstr ""
 #: src/pages/customize/ConfigureExtension.tsx
 #: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/customize/SkillsPage.tsx
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
@@ -6381,6 +6485,15 @@ msgstr "हटाएं"
 #: src/pages/Shell.tsx
 msgid "Remove {0}"
 msgstr "{0} हटाएं"
+
+#. placeholder {0}: targetName(removing)
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Remove {0}? Its saved connection and credentials will be deleted. Past run history remains."
+msgstr "{0} हटाएँ? इसका सहेजा हुआ कनेक्शन और क्रेडेंशियल मिट जाएगा। पुराना रन इतिहास बना रहेगा।"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Remove computer"
+msgstr "कंप्यूटर हटाएँ"
 
 #: src/components/MessageFeedback.tsx
 msgid "Remove feedback"
@@ -6834,6 +6947,7 @@ msgstr "चल रहा है"
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/fleet/FleetSettings.tsx
 msgid "Running"
 msgstr "चल रहा है"
 
@@ -6844,6 +6958,10 @@ msgstr "चल रहा है · रोकें"
 #: src/pages/RoutineEditor.tsx
 msgid "Running…"
 msgstr "चल रहा है…"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Runs are active on this computer. Saving this connection change may interrupt them. Save anyway?"
+msgstr "इस कंप्यूटर पर रन सक्रिय हैं। कनेक्शन बदलने से वे रुक सकते हैं। फिर भी सहेजें?"
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/shell/runtime-settings.tsx
@@ -6899,6 +7017,7 @@ msgstr ""
 #: src/pages/customize/McpCredentialFix.tsx
 #: src/pages/DevicesSettings.tsx
 #: src/pages/ExternalConversationSettings.tsx
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/ide/IdePage.tsx
 #: src/pages/KnowledgeSection.tsx
@@ -6914,6 +7033,10 @@ msgstr "सहेजें"
 #: src/components/composer/command-description.ts
 msgid "Save a memory note"
 msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Save anyway"
+msgstr "फिर भी सहेजें"
 
 #: src/pages/import/ImportedServerCredentials.tsx
 msgid "Save credentials"
@@ -7424,6 +7547,10 @@ msgstr ""
 msgid "Slash commands"
 msgstr ""
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Socket missing"
+msgstr "सॉकेट नहीं मिला"
+
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Software update"
 msgstr ""
@@ -7560,6 +7687,10 @@ msgstr ""
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Start recording"
 msgstr "रिकॉर्डिंग शुरू करें"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Start the engine and press Test."
+msgstr "इंजन शुरू करें और टेस्ट दबाएँ।"
 
 #: src/lib/run-status-label.ts
 msgid "Starting"
@@ -8054,6 +8185,10 @@ msgstr "दिन का समय"
 #: src/components/Context.tsx
 msgid "Time to first token"
 msgstr "पहले टोकन तक का समय"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Timed out"
+msgstr "समय सीमा समाप्त"
 
 #: src/pages/LearningInbox.tsx
 #: src/pages/TeamBoard.tsx

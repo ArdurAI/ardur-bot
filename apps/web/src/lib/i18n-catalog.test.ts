@@ -361,8 +361,8 @@ describe("lingui catalogs", () => {
     const sentences = [
       "Default computer",
       "Deployment default ({defaultLabel})",
-      "Docker on this Mac",
-      "Docker on this computer",
+      "Docker engine on this Mac",
+      "Docker engine on this computer",
       "This moves the computer from {sourceLabel} to {destinationLabel} and replaces its files. Continue?",
     ];
     const literal = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -379,6 +379,37 @@ describe("lingui catalogs", () => {
       expect(catalog).not.toContain(
         "Moving a computer onto the machine running Ardur is not available yet.",
       );
+    }
+  });
+
+  it("translates saved computer actions and engine diagnostics in every shipped catalog", () => {
+    const sentences = [
+      "Docker Desktop on this Mac",
+      "Colima (default) on this Mac",
+      "Installed, not running",
+      "Engine not running",
+      "Permission denied on the socket",
+      "Socket missing",
+      "Start the engine and press Test.",
+      "Edit computer",
+      "Remove computer",
+      "Remove {0}? Its saved connection and credentials will be deleted. Past run history remains.",
+      "Runs are active on this computer. Saving this connection change may interrupt them. Save anyway?",
+      "Connection saved, but the test failed:",
+      "Move bots first: {0}",
+    ];
+    for (const locale of ["en", "de", "ko", "tr", "hi", "pt-BR", "zh-CN", "es", "ru"]) {
+      const catalog = readFileSync(
+        fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url)),
+        "utf8",
+      );
+      for (const sentence of sentences) {
+        const key = `msgid ${JSON.stringify(sentence)}\nmsgstr "`;
+        const at = catalog.indexOf(key);
+        expect(at, `${locale}: ${sentence} missing from catalog`).toBeGreaterThanOrEqual(0);
+        const translated = catalog.slice(at + key.length, catalog.indexOf('"', at + key.length));
+        expect(translated.trim(), `${locale}: ${sentence} must not be empty`).toBeTruthy();
+      }
     }
   });
 

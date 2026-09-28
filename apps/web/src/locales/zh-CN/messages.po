@@ -1309,6 +1309,11 @@ msgstr "Bot 正在工作"
 msgid "Bots keep the board and memory current"
 msgstr "机器人会保持看板和记忆为最新"
 
+#. placeholder {0}: removing.bots.map((bot) => bot.name).join(", ")
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Bots on this computer: {0}"
+msgstr "此计算机上的机器人：{0}"
+
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Brain label"
 msgstr ""
@@ -1541,6 +1546,11 @@ msgstr "请查看邮箱"
 #: src/pages/LearningCurator.tsx
 msgid "Checked"
 msgstr ""
+
+#. placeholder {0}: new Date(target.reachability.checkedAt).toLocaleString()
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Checked {0}"
+msgstr "检查于 {0}"
 
 #: src/components/DesktopUpdates.tsx
 #: src/components/OllamaSettings.tsx
@@ -1776,6 +1786,24 @@ msgstr ""
 #: src/pages/LearningInsights.tsx
 msgid "coding"
 msgstr "编程"
+
+#. placeholder {0}: target.context.slice(7)
+#: src/pages/fleet/target-name.ts
+msgid "Colima ({0}) on this computer"
+msgstr "Colima ({0}) 此计算机"
+
+#. placeholder {0}: target.context.slice(7)
+#: src/pages/fleet/target-name.ts
+msgid "Colima ({0}) on this Mac"
+msgstr "Colima ({0}) 此 Mac"
+
+#: src/pages/fleet/target-name.ts
+msgid "Colima (default) on this computer"
+msgstr "Colima (默认) 此计算机"
+
+#: src/pages/fleet/target-name.ts
+msgid "Colima (default) on this Mac"
+msgstr "Colima (默认) 此 Mac"
 
 #. placeholder {0}: group.title
 #: src/pages/Shell.tsx
@@ -2064,6 +2092,10 @@ msgstr ""
 #: src/pages/shell/terminal-session.tsx
 msgid "Connection lost — reconnecting"
 msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Connection saved, but the test failed:"
+msgstr "连接已保存，但测试失败："
 
 #. placeholder {0}: item.name
 #: src/pages/PluginsOverlay.tsx
@@ -2556,6 +2588,10 @@ msgstr ""
 msgid "Could not load this chat."
 msgstr "无法加载此对话。"
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Could not load this computer. Try again."
+msgstr "无法加载此计算机，请重试。"
+
 #: src/components/ArtifactFileCard.tsx
 msgid "Could not load this file."
 msgstr "无法加载此文件。"
@@ -2637,6 +2673,10 @@ msgstr "无法移除群组"
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Could not remove rule"
 msgstr "无法移除规则"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Could not remove this computer. Try again."
+msgstr "无法移除此计算机，请重试。"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not rename connection"
@@ -2864,6 +2904,10 @@ msgstr ""
 #: src/pages/Shell.tsx
 msgid "Could not update reaction"
 msgstr "无法更新反应"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Could not update the computer. Check its settings and try again."
+msgstr "无法更新此计算机，请检查设置后重试。"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Could not update the computer. Check the connection and try again."
@@ -3363,17 +3407,33 @@ msgstr "不要在示范中输入密码。凭据请用「接管」。"
 msgid "Docker"
 msgstr "Docker"
 
+#: src/pages/fleet/target-name.ts
+msgid "Docker Desktop on this computer"
+msgstr "Docker Desktop 此计算机"
+
+#: src/pages/fleet/target-name.ts
+msgid "Docker Desktop on this Mac"
+msgstr "Docker Desktop 此 Mac"
+
+#: src/pages/fleet/target-name.ts
+msgid "Docker engine (default context) on this computer"
+msgstr "Docker 引擎 此计算机 (默认上下文)"
+
+#: src/pages/fleet/target-name.ts
+msgid "Docker engine (default context) on this Mac"
+msgstr "Docker 引擎 此 Mac (默认上下文)"
+
+#: src/pages/fleet/target-name.ts
+msgid "Docker engine on this computer"
+msgstr "Docker 引擎 此计算机"
+
+#: src/pages/fleet/target-name.ts
+msgid "Docker engine on this Mac"
+msgstr "Docker 引擎 此 Mac"
+
 #: src/pages/HostComputerPrompt.tsx
 msgid "Docker limits access to your computer for added security. Using {hostLabel} lets bots work with your local files and tools."
 msgstr "Docker 限制对你电脑的访问，以提高安全性。使用{hostLabel}时，Bot 可以处理你的本地文件并使用本地工具。"
-
-#: src/pages/fleet/target-name.ts
-msgid "Docker on this computer"
-msgstr "这台电脑上的 Docker"
-
-#: src/pages/fleet/target-name.ts
-msgid "Docker on this Mac"
-msgstr "这台 Mac 上的 Docker"
 
 #: src/pages/KnowledgeSection.tsx
 msgid "Document"
@@ -3466,9 +3526,14 @@ msgstr "更早的消息"
 
 #: src/components/Context.tsx
 #: src/pages/board/Board.tsx
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/LearningInbox.tsx
 msgid "Edit"
 msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Edit computer"
+msgstr "编辑计算机"
 
 #: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/McpServersOverlay.tsx
@@ -3515,6 +3580,14 @@ msgstr ""
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Engine endpoint"
 msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Engine not reachable"
+msgstr "引擎无法访问"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Engine not running"
+msgstr "引擎未运行"
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Engine: {label}"
@@ -4250,6 +4323,10 @@ msgstr ""
 msgid "Installed on your computer"
 msgstr ""
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Installed, not running"
+msgstr "已安装，未运行"
+
 #: src/pages/customize/PluginsPage.tsx
 msgid "Installing"
 msgstr ""
@@ -4399,6 +4476,11 @@ msgstr ""
 #: src/pages/RoutineEditor.tsx
 msgid "key"
 msgstr "密钥"
+
+#. placeholder {0}: target.context.slice(5)
+#: src/pages/fleet/target-name.ts
+msgid "kind ({0})"
+msgstr "kind ({0})"
 
 #: src/pages/KnowledgeSection.tsx
 msgid "Knowledge"
@@ -5095,6 +5177,11 @@ msgstr ""
 msgid "Move automatically"
 msgstr ""
 
+#. placeholder {0}: botNames.join(", ")
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Move bots first: {0}"
+msgstr "请先移动这些机器人：{0}"
+
 #: src/pages/shell/dialogs.tsx
 msgid "Move them to your shared memory."
 msgstr "把它们移到共享记忆。"
@@ -5510,6 +5597,10 @@ msgstr "未初始化"
 msgid "Not now"
 msgstr "暂不"
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Not reachable"
+msgstr "无法访问"
+
 #: src/components/ThreadCommandBlock.tsx
 #: src/pages/ide/diff.tsx
 msgid "Not recorded"
@@ -5788,6 +5879,14 @@ msgstr "或连接 API 密钥"
 msgid "Or paste an API key"
 msgstr "或粘贴 API 密钥"
 
+#: src/pages/fleet/target-name.ts
+msgid "OrbStack on this computer"
+msgstr "OrbStack 此计算机"
+
+#: src/pages/fleet/target-name.ts
+msgid "OrbStack on this Mac"
+msgstr "OrbStack 此 Mac"
+
 #: src/pages/account/AccountProfile.tsx
 msgid "Organic"
 msgstr "自然"
@@ -5894,6 +5993,10 @@ msgstr "粘贴你的 API 密钥"
 #: src/pages/RoutineEditor.tsx
 msgid "Paused"
 msgstr "已暂停"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Permission denied on the socket"
+msgstr "没有套接字访问权限"
 
 #. placeholder {0}: tool.id
 #: src/components/integrations/manage/ToolPermissions.tsx
@@ -6371,6 +6474,7 @@ msgstr ""
 #: src/pages/customize/ConfigureExtension.tsx
 #: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/customize/SkillsPage.tsx
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
@@ -6381,6 +6485,15 @@ msgstr "移除"
 #: src/pages/Shell.tsx
 msgid "Remove {0}"
 msgstr "移除 {0}"
+
+#. placeholder {0}: targetName(removing)
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Remove {0}? Its saved connection and credentials will be deleted. Past run history remains."
+msgstr "移除 {0}？已保存的连接和凭据将被删除，过去的运行历史会保留。"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Remove computer"
+msgstr "移除计算机"
 
 #: src/components/MessageFeedback.tsx
 msgid "Remove feedback"
@@ -6834,6 +6947,7 @@ msgstr "运行中"
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/fleet/FleetSettings.tsx
 msgid "Running"
 msgstr "运行中"
 
@@ -6844,6 +6958,10 @@ msgstr "运行中 · 停止"
 #: src/pages/RoutineEditor.tsx
 msgid "Running…"
 msgstr "正在运行…"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Runs are active on this computer. Saving this connection change may interrupt them. Save anyway?"
+msgstr "此计算机上有正在进行的运行。更改连接可能中断它们。仍要保存吗？"
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/shell/runtime-settings.tsx
@@ -6899,6 +7017,7 @@ msgstr ""
 #: src/pages/customize/McpCredentialFix.tsx
 #: src/pages/DevicesSettings.tsx
 #: src/pages/ExternalConversationSettings.tsx
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/ide/IdePage.tsx
 #: src/pages/KnowledgeSection.tsx
@@ -6914,6 +7033,10 @@ msgstr "保存"
 #: src/components/composer/command-description.ts
 msgid "Save a memory note"
 msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Save anyway"
+msgstr "仍要保存"
 
 #: src/pages/import/ImportedServerCredentials.tsx
 msgid "Save credentials"
@@ -7424,6 +7547,10 @@ msgstr ""
 msgid "Slash commands"
 msgstr ""
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Socket missing"
+msgstr "找不到套接字"
+
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Software update"
 msgstr "软件更新"
@@ -7560,6 +7687,10 @@ msgstr ""
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Start recording"
 msgstr "开始录制"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Start the engine and press Test."
+msgstr "启动引擎后点击“测试”。"
 
 #: src/lib/run-status-label.ts
 msgid "Starting"
@@ -8054,6 +8185,10 @@ msgstr "时间"
 #: src/components/Context.tsx
 msgid "Time to first token"
 msgstr "首个词元耗时"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Timed out"
+msgstr "已超时"
 
 #: src/pages/LearningInbox.tsx
 #: src/pages/TeamBoard.tsx

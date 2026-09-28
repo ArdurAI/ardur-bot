@@ -86,8 +86,8 @@ it.each([false, true, undefined])(
 it.each([
   ["host", "This Mac", "This Mac"],
   ["host", "This computer", "This computer"],
-  ["local-docker", "This Mac", "Docker on this Mac"],
-  ["local-docker", "This computer", "Docker on this computer"],
+  ["local-docker", "This Mac", "Docker engine on this Mac"],
+  ["local-docker", "This computer", "Docker engine on this computer"],
 ] as const)(
   "translates a built-in computer of kind %s under host label %s",
   async (computerBuiltin, hostLabel, expected) => {

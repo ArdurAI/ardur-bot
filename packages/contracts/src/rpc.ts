@@ -102,7 +102,14 @@ import {
 } from "./domain.js";
 import { ProductEventSchema } from "./events.js";
 import { featuresContract } from "./features.js";
-import { FleetSchema, FleetTargetSchema, PlacementSettingsSchema } from "./fleet.js";
+import {
+  FleetConnectionDetailsSchema,
+  FleetSchema,
+  FleetTargetSchema,
+  FleetTestResultSchema,
+  FleetUpdateResultSchema,
+  PlacementSettingsSchema,
+} from "./fleet.js";
 import { goalsContract } from "./goal.js";
 import { HostStatusSchema } from "./host-bridge.js";
 import {
@@ -289,7 +296,19 @@ function createFleetContract() {
   return {
     list: oc.output(FleetSchema),
     discover: oc.output(FleetTargetSchema.array()),
-    test: oc.input(z.object({ connectionId: Id.nullable() })).output(FleetTargetSchema.array()),
+    test: oc.input(z.object({ connectionId: Id.nullable() })).output(FleetTestResultSchema),
+    details: oc.input(z.object({ connectionId: Id })).output(FleetConnectionDetailsSchema),
+    update: oc
+      .input(
+        z.object({
+          connectionId: Id,
+          connection: ComputerConnectionInputSchema,
+          revision: z.iso.datetime(),
+          confirmActive: z.boolean().default(false),
+        }),
+      )
+      .output(FleetUpdateResultSchema),
+    remove: oc.input(z.object({ connectionId: Id })).output(z.object({ ok: z.literal(true) })),
     placement: oc.input(PlacementSettingsSchema).output(PlacementSettingsSchema),
     bot: oc
       .input(

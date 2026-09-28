@@ -5,6 +5,7 @@ import {
   RemoteComputerCallSchema,
   RemoteDiscoverySchema,
   RemoteKubeconfigSchema,
+  RemoteSecretDeleteSchema,
   RemoteSecretSchema,
 } from "./fleet-bridge.js";
 import { HostIntegrationSchema } from "./host-integrations.js";
@@ -201,6 +202,7 @@ export const HostOperationSchema = /* @__PURE__ */ (() =>
     RemoteComputerCallSchema,
     RemoteDiscoverySchema,
     RemoteSecretSchema,
+    RemoteSecretDeleteSchema,
     RemoteKubeconfigSchema,
     z.strictObject({
       op: z.literal("computer.files.export"),

@@ -1,14 +1,28 @@
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
 import { homedir, userInfo } from "node:os";
 import path from "node:path";
 import type { FleetTarget } from "@ardurbot/contracts";
 import {
   EngineEndpointSchema,
+  hostLabel,
   SshSettingsSchema,
   unknownCapacity,
 } from "@ardurbot/contracts/fleet";
+import { probeEngineEndpoint } from "./probe.js";
 import type { FleetProcess } from "./process.js";
 import { systemFleetProcess } from "./process.js";
+
+const localHost = hostLabel(process.platform) === "This Mac" ? "this Mac" : "this computer";
+export function dockerContextName(name: string): string {
+  if (name === "default") return `Docker engine (default context) on ${localHost}`;
+  if (name === "desktop-linux" || name === "docker-desktop")
+    return `Docker Desktop on ${localHost}`;
+  if (name === "orbstack") return `OrbStack on ${localHost}`;
+  if (name === "colima") return `Colima (default) on ${localHost}`;
+  if (name.startsWith("colima-")) return `Colima (${name.slice(7)}) on ${localHost}`;
+  if (name.startsWith("kind-")) return `kind (${name.slice(5)})`;
+  return name;
+}
 
 export function parseDockerContexts(output: string): FleetTarget[] {
   const parsed: unknown = output.trim().startsWith("[")
@@ -30,7 +44,7 @@ export function parseDockerContexts(output: string): FleetTarget[] {
     return [
       {
         id: `context:${item.Name}`,
-        name: item.Name,
+        name: dockerContextName(item.Name),
         kind: "docker" as const,
         connectionId: null,
         state: "discovered" as const,
@@ -115,11 +129,24 @@ export async function discoverFleetReport(
   socketExists: (path: string) => boolean = existsSync,
 ): Promise<FleetDiscoveryReport> {
   const targets: FleetTarget[] = [];
+  const colimaRoot = path.join(homedir(), ".colima");
+  const profiles = existsSync(colimaRoot)
+    ? readdirSync(colimaRoot, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name)
+    : [];
   for (const [name, socket, kind] of [
-    ["Docker on this Mac", path.join(homedir(), ".docker/run/docker.sock"), "docker"],
-    ["OrbStack", path.join(homedir(), ".orbstack/run/docker.sock"), "docker"],
-    ["Colima", path.join(homedir(), ".colima/default/docker.sock"), "docker"],
-    ["Docker", "/var/run/docker.sock", "docker"],
+    [`Docker Desktop on ${localHost}`, path.join(homedir(), ".docker/run/docker.sock"), "docker"],
+    [`OrbStack on ${localHost}`, path.join(homedir(), ".orbstack/run/docker.sock"), "docker"],
+    ...profiles.map(
+      (profile) =>
+        [
+          `Colima (${profile}) on ${localHost}`,
+          path.join(colimaRoot, profile, "docker.sock"),
+          "docker",
+        ] as const,
+    ),
+    [`Docker engine on ${localHost}`, "/var/run/docker.sock", "docker"],
     [
       "Podman",
       `${process.env.XDG_RUNTIME_DIR ?? `/run/user/${process.getuid?.() ?? 1000}`}/podman/podman.sock`,
@@ -201,7 +228,7 @@ export async function discoverFleetReport(
   ]);
   signal?.throwIfAborted();
   for (const result of results) if (result.status === "fulfilled") targets.push(...result.value);
-  const filtered = targets.filter(
+  const unique = targets.filter(
     (target, index) =>
       targets.findIndex(
         (other) =>
@@ -209,8 +236,24 @@ export async function discoverFleetReport(
           (target.endpoint && other.kind === target.kind && other.endpoint === target.endpoint),
       ) === index,
   );
+  const engines = unique.filter((target) => target.kind === "docker" || target.kind === "podman");
+  const probed: Array<readonly [string, NonNullable<FleetTarget["reachability"]>]> = [];
+  for (let offset = 0; offset < engines.length; offset += 4)
+    probed.push(
+      ...(await Promise.all(
+        engines
+          .slice(offset, offset + 4)
+          .map(
+            async (target) => [target.id, await probeEngineEndpoint(target, processes)] as const,
+          ),
+      )),
+    );
+  const byId = new Map(probed);
+  const probedTargets = unique.map((target) =>
+    byId.has(target.id) ? { ...target, reachability: byId.get(target.id) } : target,
+  );
   return {
-    targets: filtered,
+    targets: probedTargets,
     timedOut: results.some(
       (result, index) => result.status === "rejected" && deadlines[index]?.aborted,
     ),

@@ -1309,6 +1309,11 @@ msgstr "봇 작업 중"
 msgid "Bots keep the board and memory current"
 msgstr ""
 
+#. placeholder {0}: removing.bots.map((bot) => bot.name).join(", ")
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Bots on this computer: {0}"
+msgstr "이 컴퓨터의 봇: {0}"
+
 #: src/pages/memory-providers/SerenitySettingsForm.tsx
 msgid "Brain label"
 msgstr ""
@@ -1541,6 +1546,11 @@ msgstr "이메일을 확인하세요"
 #: src/pages/LearningCurator.tsx
 msgid "Checked"
 msgstr ""
+
+#. placeholder {0}: new Date(target.reachability.checkedAt).toLocaleString()
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Checked {0}"
+msgstr "확인 시간 {0}"
 
 #: src/components/DesktopUpdates.tsx
 #: src/components/OllamaSettings.tsx
@@ -1776,6 +1786,24 @@ msgstr ""
 #: src/pages/LearningInsights.tsx
 msgid "coding"
 msgstr ""
+
+#. placeholder {0}: target.context.slice(7)
+#: src/pages/fleet/target-name.ts
+msgid "Colima ({0}) on this computer"
+msgstr "Colima ({0}) 이 컴퓨터"
+
+#. placeholder {0}: target.context.slice(7)
+#: src/pages/fleet/target-name.ts
+msgid "Colima ({0}) on this Mac"
+msgstr "Colima ({0}) 이 Mac"
+
+#: src/pages/fleet/target-name.ts
+msgid "Colima (default) on this computer"
+msgstr "Colima (기본) 이 컴퓨터"
+
+#: src/pages/fleet/target-name.ts
+msgid "Colima (default) on this Mac"
+msgstr "Colima (기본) 이 Mac"
 
 #. placeholder {0}: group.title
 #: src/pages/Shell.tsx
@@ -2064,6 +2092,10 @@ msgstr ""
 #: src/pages/shell/terminal-session.tsx
 msgid "Connection lost — reconnecting"
 msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Connection saved, but the test failed:"
+msgstr "연결을 저장했지만 테스트에 실패했습니다:"
 
 #. placeholder {0}: item.name
 #: src/pages/PluginsOverlay.tsx
@@ -2556,6 +2588,10 @@ msgstr ""
 msgid "Could not load this chat."
 msgstr "이 채팅을 불러오지 못했습니다."
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Could not load this computer. Try again."
+msgstr "이 컴퓨터를 불러오지 못했습니다. 다시 시도하세요."
+
 #: src/components/ArtifactFileCard.tsx
 msgid "Could not load this file."
 msgstr "파일을 불러오지 못했습니다."
@@ -2637,6 +2673,10 @@ msgstr "그룹을 삭제하지 못했습니다."
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Could not remove rule"
 msgstr "확인 규칙을 삭제하지 못했습니다."
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Could not remove this computer. Try again."
+msgstr "이 컴퓨터를 제거하지 못했습니다. 다시 시도하세요."
 
 #: src/pages/PluginsOverlay.tsx
 msgid "Could not rename connection"
@@ -2864,6 +2904,10 @@ msgstr ""
 #: src/pages/Shell.tsx
 msgid "Could not update reaction"
 msgstr "반응을 업데이트할 수 없습니다"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Could not update the computer. Check its settings and try again."
+msgstr "이 컴퓨터를 업데이트하지 못했습니다. 설정을 확인하고 다시 시도하세요."
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Could not update the computer. Check the connection and try again."
@@ -3363,17 +3407,33 @@ msgstr "시연 중에는 비밀번호를 입력하지 마세요. 인증이 필�
 msgid "Docker"
 msgstr "Docker"
 
+#: src/pages/fleet/target-name.ts
+msgid "Docker Desktop on this computer"
+msgstr "Docker Desktop 이 컴퓨터"
+
+#: src/pages/fleet/target-name.ts
+msgid "Docker Desktop on this Mac"
+msgstr "Docker Desktop 이 Mac"
+
+#: src/pages/fleet/target-name.ts
+msgid "Docker engine (default context) on this computer"
+msgstr "Docker 엔진 이 컴퓨터 (기본 컨텍스트)"
+
+#: src/pages/fleet/target-name.ts
+msgid "Docker engine (default context) on this Mac"
+msgstr "Docker 엔진 이 Mac (기본 컨텍스트)"
+
+#: src/pages/fleet/target-name.ts
+msgid "Docker engine on this computer"
+msgstr "Docker 엔진 이 컴퓨터"
+
+#: src/pages/fleet/target-name.ts
+msgid "Docker engine on this Mac"
+msgstr "Docker 엔진 이 Mac"
+
 #: src/pages/HostComputerPrompt.tsx
 msgid "Docker limits access to your computer for added security. Using {hostLabel} lets bots work with your local files and tools."
 msgstr "Docker는 보안을 위해 컴퓨터 접근을 제한합니다. {hostLabel}에서는 Bot이 로컬 파일과 도구로 작업할 수 있습니다."
-
-#: src/pages/fleet/target-name.ts
-msgid "Docker on this computer"
-msgstr ""
-
-#: src/pages/fleet/target-name.ts
-msgid "Docker on this Mac"
-msgstr ""
 
 #: src/pages/KnowledgeSection.tsx
 msgid "Document"
@@ -3466,9 +3526,14 @@ msgstr "이전 메시지"
 
 #: src/components/Context.tsx
 #: src/pages/board/Board.tsx
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/LearningInbox.tsx
 msgid "Edit"
 msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Edit computer"
+msgstr "컴퓨터 편집"
 
 #: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/McpServersOverlay.tsx
@@ -3515,6 +3580,14 @@ msgstr ""
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Engine endpoint"
 msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Engine not reachable"
+msgstr "엔진에 연결할 수 없음"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Engine not running"
+msgstr "엔진이 실행 중이 아님"
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Engine: {label}"
@@ -4250,6 +4323,10 @@ msgstr ""
 msgid "Installed on your computer"
 msgstr ""
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Installed, not running"
+msgstr "설치됨, 실행 중이 아님"
+
 #: src/pages/customize/PluginsPage.tsx
 msgid "Installing"
 msgstr ""
@@ -4399,6 +4476,11 @@ msgstr ""
 #: src/pages/RoutineEditor.tsx
 msgid "key"
 msgstr "key"
+
+#. placeholder {0}: target.context.slice(5)
+#: src/pages/fleet/target-name.ts
+msgid "kind ({0})"
+msgstr "kind ({0})"
 
 #: src/pages/KnowledgeSection.tsx
 msgid "Knowledge"
@@ -5095,6 +5177,11 @@ msgstr ""
 msgid "Move automatically"
 msgstr ""
 
+#. placeholder {0}: botNames.join(", ")
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Move bots first: {0}"
+msgstr "먼저 이 봇들을 이동하세요: {0}"
+
 #: src/pages/shell/dialogs.tsx
 msgid "Move them to your shared memory."
 msgstr "공용 기억으로 옮깁니다."
@@ -5510,6 +5597,10 @@ msgstr "초기화되지 않음"
 msgid "Not now"
 msgstr "나중에"
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Not reachable"
+msgstr "연결할 수 없음"
+
 #: src/components/ThreadCommandBlock.tsx
 #: src/pages/ide/diff.tsx
 msgid "Not recorded"
@@ -5788,6 +5879,14 @@ msgstr "또는 API 키 연결"
 msgid "Or paste an API key"
 msgstr "또는 API 키 붙여넣기"
 
+#: src/pages/fleet/target-name.ts
+msgid "OrbStack on this computer"
+msgstr "OrbStack 이 컴퓨터"
+
+#: src/pages/fleet/target-name.ts
+msgid "OrbStack on this Mac"
+msgstr "OrbStack 이 Mac"
+
 #: src/pages/account/AccountProfile.tsx
 msgid "Organic"
 msgstr "자연스럽게"
@@ -5894,6 +5993,10 @@ msgstr "API 키를 붙여넣으세요"
 #: src/pages/RoutineEditor.tsx
 msgid "Paused"
 msgstr "일시 중지됨"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Permission denied on the socket"
+msgstr "소켓 접근 권한 없음"
 
 #. placeholder {0}: tool.id
 #: src/components/integrations/manage/ToolPermissions.tsx
@@ -6371,6 +6474,7 @@ msgstr ""
 #: src/pages/customize/ConfigureExtension.tsx
 #: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/customize/SkillsPage.tsx
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/HostComputerSettings.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/ScratchpadSection.tsx
@@ -6381,6 +6485,15 @@ msgstr "삭제"
 #: src/pages/Shell.tsx
 msgid "Remove {0}"
 msgstr "{0} 삭제"
+
+#. placeholder {0}: targetName(removing)
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Remove {0}? Its saved connection and credentials will be deleted. Past run history remains."
+msgstr "{0}을(를) 제거할까요? 저장된 연결과 자격 증명이 삭제됩니다. 이전 실행 기록은 유지됩니다."
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Remove computer"
+msgstr "컴퓨터 제거"
 
 #: src/components/MessageFeedback.tsx
 msgid "Remove feedback"
@@ -6834,6 +6947,7 @@ msgstr "실행 중"
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/fleet/FleetSettings.tsx
 msgid "Running"
 msgstr "실행 중"
 
@@ -6844,6 +6958,10 @@ msgstr "실행 중 · 중지"
 #: src/pages/RoutineEditor.tsx
 msgid "Running…"
 msgstr "실행 중…"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Runs are active on this computer. Saving this connection change may interrupt them. Save anyway?"
+msgstr "이 컴퓨터에서 실행 중인 작업이 있습니다. 연결을 바꾸면 중단될 수 있습니다. 그래도 저장할까요?"
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/pages/shell/runtime-settings.tsx
@@ -6899,6 +7017,7 @@ msgstr ""
 #: src/pages/customize/McpCredentialFix.tsx
 #: src/pages/DevicesSettings.tsx
 #: src/pages/ExternalConversationSettings.tsx
+#: src/pages/fleet/FleetSettings.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/ide/IdePage.tsx
 #: src/pages/KnowledgeSection.tsx
@@ -6914,6 +7033,10 @@ msgstr "저장"
 #: src/components/composer/command-description.ts
 msgid "Save a memory note"
 msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Save anyway"
+msgstr "그래도 저장"
 
 #: src/pages/import/ImportedServerCredentials.tsx
 msgid "Save credentials"
@@ -7424,6 +7547,10 @@ msgstr ""
 msgid "Slash commands"
 msgstr ""
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Socket missing"
+msgstr "소켓 없음"
+
 #: src/components/SoftwareUpdateSection.tsx
 msgid "Software update"
 msgstr "소프트웨어 업데이트"
@@ -7560,6 +7687,10 @@ msgstr ""
 #: src/components/teach/TeachComputerOverlay.tsx
 msgid "Start recording"
 msgstr "작업 녹화 시작"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Start the engine and press Test."
+msgstr "엔진을 시작하고 테스트를 누르세요."
 
 #: src/lib/run-status-label.ts
 msgid "Starting"
@@ -8054,6 +8185,10 @@ msgstr "실행 시각"
 #: src/components/Context.tsx
 msgid "Time to first token"
 msgstr "첫 토큰까지 걸린 시간"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Timed out"
+msgstr "시간 초과"
 
 #: src/pages/LearningInbox.tsx
 #: src/pages/TeamBoard.tsx
