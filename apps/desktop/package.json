@@ -7,7 +7,7 @@
   "main": "dist/main.js",
   "scripts": {
     "dev": "pnpm build && electron .",
-    "build": "pnpm --filter @ardurbot/host-service build && node ../../scripts/desktop-version.mjs && tsc -p tsconfig.json && tsc -p tsconfig.guided.json && node scripts/copy-static.mjs && node scripts/build-guided-setup.mjs && node scripts/bundle-services.mjs",
+    "build": "pnpm --filter @ardurbot/host-service build && node ../../scripts/desktop-version.mjs && node --import tsx scripts/generate-window-colors.mjs && tsc -p tsconfig.json && tsc -p tsconfig.guided.json && node scripts/copy-static.mjs && node scripts/build-guided-setup.mjs && node scripts/bundle-services.mjs",
     "pack": "pnpm --filter @ardurbot/web build && pnpm build && electron-builder",
     "pack:dir": "pnpm --filter @ardurbot/web build && pnpm build && electron-builder --dir",
     "check": "tsc --noEmit -p tsconfig.json && tsc -p tsconfig.guided.json",

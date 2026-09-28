@@ -102,6 +102,14 @@ describe("appearance preference", () => {
     expect(dark.secondaryForeground).not.toBe(dark.primaryForeground);
   });
 
+  it("keeps the hover accent distinct from resting button surfaces", () => {
+    for (const appearance of ["dark", "light"] as const) {
+      const palette = tokensForAppearance(appearance);
+      expect(palette.accent).not.toBe(palette.secondary);
+      expect(palette.accent).not.toBe(palette.background);
+    }
+  });
+
   it("separates user bubbles from bot bubbles and the sidebar from the app", () => {
     const dark = tokensForAppearance("dark");
     const light = tokensForAppearance("light");
