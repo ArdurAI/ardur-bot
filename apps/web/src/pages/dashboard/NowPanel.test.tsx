@@ -55,3 +55,27 @@ it("shows the prompt belonging to each concurrent run", async () => {
     expect(view.node.textContent).not.toContain("Latest task");
   } finally { await view.close(); }
 });
+
+it("retains queued runs, owner-held takeover work, and queued delegations", async () => {
+  const view = await render({
+    runs: [
+      makeRun("queued", "queued", "Queued research"),
+      makeRun("held", "waiting_takeover", "Waiting for computer"),
+    ],
+    rows: [{
+      botId: "worker",
+      availability: "queued",
+      observedAt: "2026-01-01T00:00:00.000Z",
+      activeRunIds: [],
+      delegations: [{ id: "delegation", actingBotId: "worker", status: "queued", card: { goal: "Queued handoff" } }],
+    } as TeamRow],
+    approvals: [],
+  });
+  try {
+    expect(view.node.textContent).toContain("Queued research");
+    expect(view.node.textContent).toContain("Waiting for computer");
+    expect(view.node.textContent).toContain("Queued handoff");
+    expect(view.node.textContent).toContain("Status unavailable");
+    expect(view.node.textContent).not.toContain("Nothing running");
+  } finally { await view.close(); }
+});

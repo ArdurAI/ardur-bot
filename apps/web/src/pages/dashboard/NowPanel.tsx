@@ -30,25 +30,16 @@ export default function NowPanel({
 }: { data: Awaited<ReturnType<typeof load>> } & PanelActions) {
   const { t } = useLingui();
   const [review, setReview] = useState<RunActivityRow | null>(null);
-  const delegations = activeDelegations(data.rows).filter((item) =>
-    data.rows.some(
-      (row) =>
-        row.botId === item.actingBotId &&
-        row.availability === "busy" &&
-        row.activeRunIds?.includes(item.runId ?? ""),
-    ),
-  );
-  const runs = data.runs.filter(
-    (run) =>
-      data.rows.some(
-        (row) =>
-          row.botId === run.botId &&
-          row.observedAt &&
-          presenceFreshness(row.observedAt) !== "unavailable" &&
-          row.activeRunIds?.includes(run.runId) &&
-          row.availability === "busy",
-      ) || data.approvals.some((approval) => approval.runId === run.runId),
-  );
+  // These owner-scoped records are authoritative; presence only qualifies their freshness.
+  const delegations = activeDelegations(data.rows);
+  const runs = data.runs;
+  const presenceUnavailable = (botId: string) => {
+    const row = data.rows.find((item) => item.botId === botId);
+    return !row?.observedAt ||
+      presenceFreshness(row.observedAt) === "unavailable" ||
+      row.availability === "unknown" ||
+      row.availability === "unavailable";
+  };
   return (
     <div className="space-y-3 text-sm">
       {review ? (
@@ -72,6 +63,11 @@ export default function NowPanel({
             <span className="min-w-0 flex-1 truncate">
               {run.promptSnippet}
             </span>
+            {run.status === "queued" ? <span><Trans>Queued</Trans></span> : null}
+            {run.status === "waiting_takeover" ? <span><Trans>Needs takeover</Trans></span> : null}
+            {presenceUnavailable(run.botId) ? (
+              <span className="text-muted-foreground"><Trans>Status unavailable</Trans></span>
+            ) : null}
             {seconds !== null ? (
               <span className="tabular-nums text-muted-foreground">{t`${seconds}s`}</span>
             ) : null}
@@ -142,6 +138,9 @@ export default function NowPanel({
                 ? t`Stopping`
                 : t`Working`}
           </span>
+          {presenceUnavailable(delegation.actingBotId) ? (
+            <span className="text-muted-foreground"> · <Trans>Status unavailable</Trans></span>
+          ) : null}
         </Link>
       ))}
     </div>
