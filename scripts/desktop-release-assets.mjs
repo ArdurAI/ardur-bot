@@ -27,12 +27,15 @@ for (const directory of await readdir(source)) {
 for (const [platform, arch, extensions] of [
   ["mac", "arm64", ["dmg", "zip"]],
   ["mac", "x64", ["dmg", "zip"]],
-  ["linux", "x64", ["AppImage", "deb"]],
   ["win", "x64", ["exe"]],
 ]) {
   for (const extension of extensions)
     await readFile(path.join(destination, `ardur-${version}-${platform}-${arch}.${extension}`));
 }
+// electron-builder's ${arch} is target-specific on Linux: the x64 AppImage is
+// x86_64 and the x64 deb is amd64, while arm64 keeps one name for both formats.
+for (const file of [`ardur-${version}-linux-x86_64.AppImage`, `ardur-${version}-linux-amd64.deb`])
+  await readFile(path.join(destination, file));
 const armLinux = (await readdir(destination)).filter((file) => file.includes("-linux-arm64."));
 if (armLinux.length > 0) {
   for (const extension of ["AppImage", "deb"])

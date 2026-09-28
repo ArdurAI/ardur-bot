@@ -1,6 +1,15 @@
 @import "tailwindcss";
 @import "@ardurbot/ui-web/styles.css";
-@import "@fontsource-variable/geist/wght.css";
+@import "@fontsource-variable/instrument-sans/wght.css";
+@import "@fontsource/instrument-serif/400.css";
+@import "@fontsource/instrument-serif/400-italic.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+
+@theme {
+  --font-sans: var(--chat-font-sans);
+  --font-serif: var(--chat-font-serif);
+  --font-mono: var(--chat-font-mono);
+}
 
 @source "../../packages/ui-web/src/**/*.{ts,tsx}";
 @source "./src/**/*.{ts,tsx}";

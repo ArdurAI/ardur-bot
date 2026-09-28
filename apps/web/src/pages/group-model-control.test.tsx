@@ -284,6 +284,46 @@ describe("group model control", () => {
     )!;
     expect(saveButton.disabled).toBe(true);
   });
+
+  it("allows clearing a saved Hermes override when Experimental is disabled", async () => {
+    const hermesPin = {
+      runtimeKind: "hermes" as const,
+      provider: "openai-compatible",
+      modelId: "model-a",
+      credentialId: "credential",
+      effort: "high",
+      revision: 1,
+    };
+    const compatibleSettings = {
+      ...settings!,
+      catalog: [{ ...settings!.catalog[0]!, provider: "openai-compatible" }],
+      credentials: [{ ...settings!.credentials[0]!, provider: "openai-compatible" }],
+    };
+    const save = vi.fn(async () => undefined);
+    await act(async () =>
+      root.render(
+        <GroupModelControl
+          member={{ ...member, runtimePin: hermesPin }}
+          bot={{ ...bot, runtimeExperimental: false }}
+          settings={compatibleSettings}
+          onSave={save}
+        />,
+      ),
+    );
+    const modelSelect = container.querySelector('select[id$="-model"]') as HTMLSelectElement;
+    expect(modelSelect.value).toBe(modelPinOptionKey("openai-compatible", "model-a", "credential"));
+
+    await change(modelSelect, "");
+    expect(modelSelect.value).toBe("");
+
+    const saveButton = [...container.querySelectorAll("button")].find(
+      (item) => item.textContent === "Save model",
+    )!;
+    expect(saveButton.disabled).toBe(false);
+    await act(async () => saveButton.click());
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ botId: member.botId }), null);
+  });
+
   it("starts inherited, saves an explicit equal choice, and can reset", async () => {
     const save = await render(member);
     const select = container.querySelector("select")!;
