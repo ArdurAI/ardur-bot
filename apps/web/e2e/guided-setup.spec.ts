@@ -51,3 +51,39 @@ test("shared guided setup shows a re-check without resetting rows", async ({ pag
   await expect(page.locator('.guided-step[data-status="succeeded"]')).toHaveCount(5);
   await captureScreenshot(page, testInfo, "guided-setup-recheck");
 });
+
+test("deferred model keeps first bot optional", async ({ page }, testInfo) => {
+  await page.goto("/guided-setup-fixture.html?case=model-deferred");
+  await expect(page.locator('.guided-step[data-status="skipped"]')).toContainText([
+    "Connect a model",
+  ]);
+  const bot = page.locator('.guided-step[aria-current="step"]');
+  await expect(bot.getByRole("button", { name: "Do this later" })).toBeVisible();
+  await expect(bot.getByRole("button", { name: "Create bot" })).toHaveCount(0);
+  await captureScreenshot(page, testInfo, "guided-setup-model-deferred");
+});
+
+test("saved model and created bot remain distinct from execution", async ({ page }, testInfo) => {
+  await page.goto("/guided-setup-fixture.html?case=bot-created");
+  await expect(page.getByText("Connection saved", { exact: true })).toBeVisible();
+  await expect(page.locator('.guided-step[aria-current="step"]')).toContainText(
+    "Create your first bot",
+  );
+  await expect(page.getByText("Setup complete", { exact: true })).toHaveCount(0);
+  await captureScreenshot(page, testInfo, "guided-setup-bot-created");
+});
+
+for (const [scenario, heading, model, bot] of [
+  ["incomplete", "Ardur is ready", "Model setup is incomplete", "First bot not created"],
+  ["complete", "Setup complete", "", ""],
+]) {
+  test(`finish summary ${scenario}`, async ({ page }, testInfo) => {
+    await page.goto(`/guided-setup-fixture.html?case=${scenario}`);
+    const finish = page.locator('.guided-step[aria-current="step"]');
+    await expect(finish).toContainText(heading);
+    if (model) await expect(finish).toContainText(model);
+    if (bot) await expect(finish).toContainText(bot);
+    await expect(page.getByRole("button", { name: "Open Ardur" })).toBeVisible();
+    await captureScreenshot(page, testInfo, `guided-setup-${scenario}`);
+  });
+}

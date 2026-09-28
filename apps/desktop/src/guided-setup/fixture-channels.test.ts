@@ -1,10 +1,10 @@
-import { GUIDED_SETUP_CHANNELS } from "@ardurbot/contracts/desktop-setup";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { GUIDED_SETUP_CHANNELS } from "@ardurbot/contracts/desktop-setup";
 import { describe, expect, it } from "vitest";
 import { GUIDED_SETUP_FIXTURE_REQUEST_CHANNELS } from "../../e2e/guided-setup-fixture-channels.js";
-import { installGuidedSetupIpc } from "./ipc.js";
 import type { SetupEngine } from "./engine.js";
+import { installGuidedSetupIpc } from "./ipc.js";
 
 describe("guided setup lifecycle fixture", () => {
   it("removes every request handler before installing its engine", () => {
@@ -39,13 +39,20 @@ describe("guided setup lifecycle fixture", () => {
       install();
     }).not.toThrow();
     for (const channel of GUIDED_SETUP_FIXTURE_REQUEST_CHANNELS) {
-      if (channel !== GUIDED_SETUP_CHANNELS.openAgain) expect(handlers.has(channel)).toBe(true);
+      if (
+        channel !== GUIDED_SETUP_CHANNELS.openAgain &&
+        channel !== GUIDED_SETUP_CHANNELS.returnToSetup &&
+        channel !== GUIDED_SETUP_CHANNELS.refreshAccount
+      )
+        expect(handlers.has(channel)).toBe(true);
     }
     const lifecycle = readFileSync(
       fileURLToPath(new URL("../../e2e/guided-setup-lifecycle.spec.ts", import.meta.url)),
       "utf8",
     );
-    expect(lifecycle).toContain("for (const channel of requestChannels) ipcMain.removeHandler(channel)");
+    expect(lifecycle).toContain(
+      "for (const channel of requestChannels) ipcMain.removeHandler(channel)",
+    );
     expect(lifecycle).toContain("}, GUIDED_SETUP_FIXTURE_REQUEST_CHANNELS)");
   });
 });

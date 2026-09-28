@@ -13,6 +13,10 @@ export function GuidedOnboardingPage() {
   const ensureFirstBot = useFirstBotSetup();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [account, setAccount] = useState<{
+    model: "missing" | "saved" | "checked";
+    firstBot: boolean;
+  } | null>(null);
   const stopped = useRef(false);
   const bridge = desktopBridge()?.guidedSetup;
   const step = params.get("step");
@@ -27,6 +31,22 @@ export function GuidedOnboardingPage() {
       }
     });
   }, [bridge, navigate]);
+
+  useEffect(() => {
+    if (step !== "finish") return;
+    let active = true;
+    void rpc.guidedSetup.status().then(
+      (status) => {
+        if (active) setAccount(status);
+      },
+      () => {
+        if (active) setAccount(null);
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [step]);
 
   async function returnToSetup() {
     if (!stopped.current) await bridge?.refreshAccount();
@@ -83,7 +103,15 @@ export function GuidedOnboardingPage() {
         ) : (
           <>
             <h1 className="text-2xl font-medium">Finish setup</h1>
-            <Button onClick={() => navigate("/guided-onboarding?step=model")}>Open Models</Button>
+            {account?.model === "missing" && <p>Model setup is incomplete</p>}
+            {account && !account.firstBot && <p>First bot not created</p>}
+            {account?.model === "missing" ? (
+              <Button onClick={() => navigate("/guided-onboarding?step=model")}>Open Models</Button>
+            ) : account && !account.firstBot ? (
+              <Button disabled={busy} onClick={() => void createBot()}>
+                Create bot
+              </Button>
+            ) : null}
           </>
         )}
         {error && (

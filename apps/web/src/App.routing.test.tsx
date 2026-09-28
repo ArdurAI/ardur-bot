@@ -36,6 +36,11 @@ vi.mock("./pages/Auth", () => ({
 vi.mock("./pages/Onboarding", () => ({
   OnboardingPage: () => <output data-testid="onboarding-page">onboarding</output>,
 }));
+vi.mock("./pages/GuidedOnboarding", () => ({
+  GuidedOnboardingPage: () => (
+    <output data-testid="guided-onboarding-page">guided account setup</output>
+  ),
+}));
 vi.mock("./pages/ide/IdePage", () => ({ default: () => <output>ide</output> }));
 vi.mock("./pages/Shell", () => ({
   ShellPage: ({
@@ -152,8 +157,26 @@ it("defaults malformed preferences to Dashboard and does not use an account iden
   writeOpenTo("dashboard");
 });
 
+it("keeps a deferred desktop model on the authenticated guided route", async () => {
+  vi.stubGlobal("ardurbotDesktop", {
+    guidedSetup: { returnToSetup: vi.fn(), refreshAccount: vi.fn() },
+  });
+  await act(async () =>
+    root.render(
+      <MemoryRouter initialEntries={["/guided-onboarding?step=finish"]}>
+        <App />
+      </MemoryRouter>,
+    ),
+  );
+  expect(node.querySelector('[data-testid="guided-onboarding-page"]')?.textContent).toBe(
+    "guided account setup",
+  );
+  expect(node.querySelector('[data-testid="onboarding-page"]')).toBeNull();
+});
+
 it.each([
   ["/onboarding", "/sign-in?next=%2Fonboarding"],
+  ["/guided-onboarding?step=finish", "/sign-in?next=%2Fguided-onboarding%3Fstep%3Dfinish"],
   ["/mcp/oauth/callback", "/sign-in?next=%2Fmcp%2Foauth%2Fcallback"],
   [
     "/mcp/oauth/callback?code=sample&state=local-state",
