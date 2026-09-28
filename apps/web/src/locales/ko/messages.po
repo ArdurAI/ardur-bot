@@ -56,7 +56,7 @@ msgstr "{0} {unitLabel}"
 #. placeholder {0}: row.activeRunCount
 #: src/pages/TeamBoard.tsx
 msgid "{0} active tasks"
-msgstr ""
+msgstr "진행 중인 작업 {0}개"
 
 #. placeholder {0}: file.size
 #: src/pages/settings/UploadedFiles.tsx
@@ -125,7 +125,7 @@ msgstr "{0} MB"
 #. placeholder {0}: row.pendingPeerCount
 #: src/pages/TeamBoard.tsx
 msgid "{0} peer messages waiting"
-msgstr ""
+msgstr "대기 중인 봇 메시지 {0}개"
 
 #. placeholder {0}: grant.limits.maxPerDay
 #: src/pages/LearningInbox.tsx
@@ -2177,7 +2177,7 @@ msgstr ""
 #. placeholder {0}: row.latestPeerBotName ?? "Bot"
 #: src/pages/TeamBoard.tsx
 msgid "Conversation with {0}"
-msgstr ""
+msgstr "{0}와의 대화"
 
 #: src/pages/GroupPanel.tsx
 msgid "Coordinator"
@@ -3233,7 +3233,7 @@ msgstr "삭제 중…"
 
 #: src/lib/team-delivery-text.ts
 msgid "Delivered"
-msgstr ""
+msgstr "전달됨"
 
 #: src/components/PeerMessageReceipt.tsx
 msgid "Delivered from {peer}"
@@ -4611,7 +4611,7 @@ msgstr ""
 
 #: src/pages/TeamBoard.tsx
 msgid "Latest message"
-msgstr ""
+msgstr "최근 메시지"
 
 #: src/components/FeatureDocsLink.tsx
 msgid "Learn more"
@@ -5633,7 +5633,7 @@ msgstr "아직 없음"
 
 #: src/lib/team-delivery-text.ts
 msgid "Not approved"
-msgstr ""
+msgstr "승인되지 않음"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "not available"
@@ -7814,7 +7814,7 @@ msgstr ""
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Status unavailable"
-msgstr ""
+msgstr "상태를 확인할 수 없음"
 
 #: src/pages/LearningObservation.tsx
 msgid "Steering corrections"
@@ -8552,7 +8552,7 @@ msgstr "업데이트됨"
 
 #: src/pages/TeamBoard.tsx
 msgid "Updated 1m ago"
-msgstr ""
+msgstr "1분 전에 업데이트됨"
 
 #: src/pages/settings-sections.ts
 msgid "Updates"
