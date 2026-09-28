@@ -376,7 +376,12 @@ export function GrokShapePreview({
 export function Wordmark({ className }: { className?: string }) {
   return (
     <div className={cn("flex items-center gap-[34px]", className)}>
-      <svg viewBox="0 0 400 400" className="size-[34px] text-foreground" aria-hidden="true" fill="none">
+      <svg
+        viewBox="0 0 400 400"
+        className="size-[34px] text-foreground"
+        aria-hidden="true"
+        fill="none"
+      >
         <path
           fill="none"
           stroke="currentColor"
@@ -386,7 +391,9 @@ export function Wordmark({ className }: { className?: string }) {
         />
         <rect x="322" y="118" width="40" height="232" rx="20" fill="currentColor" />
       </svg>
-      <span className="font-serif text-[34px] leading-none tracking-[-0.02em] text-foreground">Ardur</span>
+      <span className="font-serif text-[34px] leading-none tracking-[-0.02em] text-foreground">
+        Ardur
+      </span>
     </div>
   );
 }
