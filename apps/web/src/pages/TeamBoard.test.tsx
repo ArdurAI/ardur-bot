@@ -228,7 +228,7 @@ it("shows unknown and stale presence honestly, and returns from a peer conversat
 });
 
 it.each([
-  ["working", "Working", "Working on Review sources for"],
+  ["working", "Working on Review sources", "for "],
   ["blocked", "Blocked — The task needs attention", "Status unavailable"],
 ] as const)("keeps %s status readable without a requester", async (state, expected, absent) => {
   const node = document.createElement("div");
