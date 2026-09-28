@@ -70,7 +70,10 @@ it("adopts two refreshed groups before Save without removing a peer's new member
     flushSync(() => render(group("Newest", ["a", "b", "c", "d"], "c")));
   });
   expect(node.querySelector("input")?.value).toBe("Newest");
-  expect(node.querySelectorAll('button[aria-pressed="true"]')).toHaveLength(4);
+  const selectedMembers = [...node.querySelectorAll('button[aria-pressed="true"]')]
+    .map((button) => button.textContent?.trim())
+    .filter((name) => bots.some((bot) => bot.name === name));
+  expect(selectedMembers).toEqual(["a", "b", "c", "d"]);
   await act(async () => saveButton().click());
   expect(onSave).toHaveBeenCalledWith({
     name: undefined,

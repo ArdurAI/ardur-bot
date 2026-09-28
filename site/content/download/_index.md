@@ -4,9 +4,9 @@ description: "Every real way to install it today: what exists, and what does not
 eyebrow: "Install"
 ---
 
-There is no signed installer and no published Homebrew tap yet. What exists today is an
-**unsigned desktop preview**, a **source checkout**, and a **self-hosted server**. This page says
-plainly which is which; nothing here is invented.
+There is no signed installer yet. What exists today is an **unsigned desktop preview**
+(direct download or Homebrew), a **source checkout**, and a **self-hosted server**. This page
+says plainly which is which; nothing here is invented.
 
 ## Desktop preview (unsigned)
 
@@ -37,12 +37,23 @@ Updates on unsigned previews are download-only on every OS: the app shows
 &ldquo;A new version is available&rdquo; and links to the release page. There is no
 in-place automatic update for an unsigned build.
 
-## Homebrew (not published yet)
+## Homebrew
 
-The release workflow builds a Homebrew cask file and attaches it to each pre-release, but no tap
-has been published. Until then, `brew install --cask ardurai/tap/ardur-bot` will not work. See
-[Homebrew tap handoff]({{< repo-link "docs/desktop-release.md#homebrew-tap-handoff" >}}) for the
-exact two commands that publish it once the tap repository exists.
+The tap is published at [ArdurAI/homebrew-tap](https://github.com/ArdurAI/homebrew-tap) and
+carries the same preview as the direct download. Current Homebrew requires trusting a
+third-party cask before it loads it:
+
+```sh
+brew tap ArdurAI/tap
+brew trust --cask ArdurAI/tap/ardur
+brew install --cask ArdurAI/tap/ardur
+```
+
+Homebrew releases without the trust command can skip that step. Previews are unsigned and
+not notarized; approve the app once in Privacy & Security. Homebrew still checks each
+download against the cask's SHA-256. See
+[Homebrew tap handoff]({{< repo-link "docs/desktop-release.md#homebrew-tap-handoff" >}}) for
+how each release updates the cask.
 
 ## Build from source
 

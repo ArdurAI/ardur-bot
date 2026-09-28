@@ -785,4 +785,17 @@ describe("site facts", () => {
     changed.providers.find((provider) => provider.id === "openrouter")!.name = "Fixture Provider";
     expect(generatedReadme(readme, changed)).toContain("Fixture Provider");
   });
+
+  it("builds the Homebrew command from the shipped cask name", async () => {
+    const root = await fixture();
+    const generated = await generatedProduct(root);
+    const casks = (await readdir(path.join(root, "homebrew/Casks"))).filter((name) =>
+      name.endsWith(".rb"),
+    );
+    const cask = casks[0]!.slice(0, -3);
+    expect(generated.install.homebrew.caskPath).toBe(`Casks/${casks[0]}`);
+    expect(generated.install.homebrew.command).toBe(
+      `brew tap ArdurAI/tap && brew trust --cask ArdurAI/tap/${cask} && brew install --cask ArdurAI/tap/${cask}`,
+    );
+  });
 });

@@ -298,6 +298,7 @@ test("routines: edit a scheduled routine and inspect its result", async ({ page 
   await page.goto("/app/bot");
   await expectModelReady(page);
   await page.getByTitle("Agent computer").click();
+  await page.getByRole("tab", { name: "Routines", exact: true }).click();
   await expect(page.getByRole("button", { name: /Morning brief/ })).toBeVisible();
   await capture(page, "docs-routines-open");
   await page.getByRole("button", { name: /Morning brief/ }).click();
@@ -483,7 +484,7 @@ test("group-goals: start a goal in a room and stop it", async ({ page }) => {
   await panel.getByRole("button", { name: "Start goal" }).click();
   await expect.poll(() => state.goal?.status, { timeout: 3_000 }).toBe("running");
   await expect(page.getByText("Goal: Working", { exact: false })).toBeVisible();
-  // The desktop layout has no panel close control; the room's goal bar carries progress and Stop.
+  await expect(panel).toHaveAttribute("data-panel", "closed");
   await capture(page, "docs-group-goals-progress");
   await page.getByRole("button", { name: "Stop", exact: true }).click();
   await expect.poll(() => state.goal?.status, { timeout: 3_000 }).toBe("stopped");

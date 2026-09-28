@@ -99,7 +99,8 @@ test("takeover, routine, integrations, and export are reachable", async ({ page 
   }
   await page.getByTitle("Agent computer").click();
   await expect(sidePanel).toHaveAttribute("data-panel", "computer");
-  await expect(sidePanel).toHaveCSS("width", "384px");
+  await expect(sidePanel).toHaveCSS("width", "480px");
+  await sidePanel.getByRole("tab", { name: "Screen", exact: true }).click();
   const [mainBox, panelBox] = await Promise.all([
     page.locator("main").boundingBox(),
     sidePanel.boundingBox(),
@@ -119,6 +120,7 @@ test("takeover, routine, integrations, and export are reachable", async ({ page 
   });
   await captureScreenshot(page, testInfo, "09a-computer-takeover-skipped");
 
+  await sidePanel.getByRole("tab", { name: "Routines", exact: true }).click();
   await page.getByRole("button", { name: "Create Routine" }).click();
   await page.locator("label:has-text('Name') input").fill("Monday briefing");
   await page

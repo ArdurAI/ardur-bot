@@ -19,7 +19,6 @@ const messages = [
   "Pause group messages",
   "Resume group messages",
   "Team messages paused",
-  "Resume at home",
   "Could not load team message controls",
   "Could not update team messages",
 ];
