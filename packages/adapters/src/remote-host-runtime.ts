@@ -12,6 +12,7 @@ import {
   HostTurnSchema,
 } from "@ardurbot/contracts/host-bridge";
 import type { RuntimeInfoSchema } from "@ardurbot/contracts/runtime-pins";
+import { runtimeSupportsTools } from "@ardurbot/contracts/runtime-pins";
 import { validateHermesExecutionEnvelope } from "@ardurbot/core/node/runtime-config-hash";
 import type { HostClient } from "@ardurbot/host-runtime/host-client";
 import * as z from "zod";
@@ -43,7 +44,7 @@ export class RemoteHostRuntime implements AgentRuntime {
       capabilities: {
         streaming: true,
         compaction: false,
-        tools: this.kind !== "antigravity",
+        tools: runtimeSupportsTools(this.kind),
         scripted: false,
         ...(this.kind === "hermes" ? { usageAccounting: "external" as const } : {}),
       },

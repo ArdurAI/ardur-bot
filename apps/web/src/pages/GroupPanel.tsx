@@ -6,6 +6,8 @@ import {
   GROUP_MEMBER_MIN,
   type Group,
   type GroupMember,
+  runtimeNames,
+  runtimeSupportsTools,
   type SetGroupMemberModelPinInput,
 } from "@ardurbot/contracts";
 import { BotAvatar, Button, Input, NativeSelect, NativeSelectOption } from "@ardurbot/ui-web";
@@ -325,6 +327,13 @@ export function GroupSettings({
     });
   }
 
+  const coordinatorRuntime = coordinator
+    ? (group.members.find((member) => member.botId === coordinator)?.effectiveRuntimePin
+        ?.runtimeKind ??
+      bots.find((bot) => bot.id === coordinator)?.runtimeKind ??
+      "pi")
+    : null;
+
   return (
     <div>
       <div className="mb-4 flex items-center justify-between">
@@ -391,6 +400,14 @@ export function GroupSettings({
             ))}
         </NativeSelect>
       </label>
+      {coordinatorRuntime && !runtimeSupportsTools(coordinatorRuntime) ? (
+        <p className="mt-2 text-[13px] text-warning" data-testid="coordinator-tools-warning">
+          <Trans>
+            {runtimeNames[coordinatorRuntime]} can't use Ardur tools — a coordinator needs tools to
+            hand off work.
+          </Trans>
+        </p>
+      ) : null}
       <Button
         className="mt-5 w-full"
         disabled={pending !== null || !validSelection(name, selected)}
