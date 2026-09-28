@@ -3095,6 +3095,7 @@ export function ShellPage({
                             <BotAvatar
                               color={item.chat.color}
                               identity={item.chat.id}
+                              label={item.chat.name}
                               size={38}
                               status={item.chat.status}
                             />
@@ -3187,6 +3188,7 @@ export function ShellPage({
                       <BotAvatar
                         color={bot.color}
                         identity={bot.id}
+                        label={bot.name}
                         size={28}
                         status={bot.status}
                       />
@@ -3411,6 +3413,7 @@ export function ShellPage({
                 <BotAvatar
                   color={active.color}
                   identity={active.id}
+                  label={active.name}
                   size={26}
                   status={active.status}
                 />
@@ -4595,6 +4598,7 @@ export function ShellPage({
                 <BotAvatar
                   color={computerBot.color}
                   identity={computerBot.id}
+                  label={computerBot.name}
                   size={28}
                   status={computerBot.status}
                 />
@@ -5958,7 +5962,14 @@ function MentionOptionIcon({ mention }: { mention: ComposerMention }) {
       </span>
     );
   }
-  return <BotAvatar color={mention.color ?? FALLBACK_BOT_COLOR} identity={mention.id} size={16} />;
+  return (
+    <BotAvatar
+      color={mention.color ?? FALLBACK_BOT_COLOR}
+      identity={mention.id}
+      label={mention.name}
+      size={16}
+    />
+  );
 }
 
 function MentionChipIcon({ mention }: { mention: ComposerMention }) {
@@ -5975,7 +5986,14 @@ function MentionChipIcon({ mention }: { mention: ComposerMention }) {
       </span>
     );
   }
-  return <BotAvatar color={mention.color ?? FALLBACK_BOT_COLOR} identity={mention.id} size={16} />;
+  return (
+    <BotAvatar
+      color={mention.color ?? FALLBACK_BOT_COLOR}
+      identity={mention.id}
+      label={mention.name}
+      size={16}
+    />
+  );
 }
 
 function previewMessageText(message: ThreadMessage): string {
@@ -6254,6 +6272,7 @@ const MessageView = memo(function MessageView({
           <BotAvatar
             color={speakerBot?.color ?? FALLBACK_BOT_COLOR}
             identity={message.botId}
+            label={speakerName}
             size={22}
           />
           {speakerName}

@@ -79,7 +79,13 @@ function MemberPicker({
               checked ? "bg-muted" : "hover:bg-accent"
             }`}
           >
-            <BotAvatar color={bot.color} identity={bot.id} size={32} status={bot.status} />
+            <BotAvatar
+              color={bot.color}
+              identity={bot.id}
+              label={bot.name}
+              size={32}
+              status={bot.status}
+            />
             <span className="flex-1 text-[15px] text-foreground" dir="auto">
               {bot.name}
             </span>

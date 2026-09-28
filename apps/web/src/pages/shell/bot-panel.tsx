@@ -442,6 +442,7 @@ export function BotSettings({
         <AvatarStudioPopover
           value={color}
           identity={bot.id}
+          label={name}
           status={bot.status}
           size={76}
           onChange={(newColor) => {

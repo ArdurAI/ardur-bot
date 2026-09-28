@@ -81,6 +81,8 @@ export interface BotAvatarProps {
   size?: number;
   status?: string;
   identity?: string;
+  /** Display name used for the seal initial; identity stays the hash seed. */
+  label?: string;
   className?: string;
   variant?: AvatarStyle;
 }
@@ -90,6 +92,7 @@ export const BotAvatar = memo(function BotAvatar({
   size = 36,
   status,
   identity = "",
+  label,
   className,
   variant,
 }: BotAvatarProps) {
@@ -115,7 +118,7 @@ export const BotAvatar = memo(function BotAvatar({
     return resolvePersonaShape(effectiveId);
   }, [parsed.shapeIndex, effectiveId]);
 
-  const initial = (effectiveId || "A")[0]!.toUpperCase();
+  const initial = (label?.trim() || effectiveId || "A")[0]!.toUpperCase();
 
   const reducedMotion = useSyncExternalStore(
     subscribeToReducedMotion,
@@ -431,16 +434,18 @@ export function GrokShapePreview({
   selected,
   onClick,
   identity,
+  label,
 }: {
   shapeIndex: number;
   color: string;
   selected?: boolean;
   onClick?: () => void;
   identity?: string;
+  label?: string;
 }) {
   const colorDef = resolvePersonaColorDef("preview", color);
   const effectiveId = identity || color || "agent";
-  const initial = (effectiveId || "A")[0]!.toUpperCase();
+  const initial = (label?.trim() || effectiveId || "A")[0]!.toUpperCase();
 
   return (
     <button

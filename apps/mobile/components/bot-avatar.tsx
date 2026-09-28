@@ -44,6 +44,7 @@ export const BotAvatar = memo(function BotAvatar({
   size = 54,
   status,
   identity,
+  label,
   variant,
   muted = false,
 }: {
@@ -51,6 +52,8 @@ export const BotAvatar = memo(function BotAvatar({
   size?: number;
   status?: string;
   identity?: string;
+  /** Display name used for the seal initial; identity stays the hash seed. */
+  label?: string;
   variant?: AvatarStyle;
   muted?: boolean;
 }) {
@@ -74,7 +77,7 @@ export const BotAvatar = memo(function BotAvatar({
     effectiveId,
     parsed.kind === "shape" || parsed.kind === "color" ? parsed.color : color,
   );
-  const initial = (effectiveId || "A")[0]!.toUpperCase();
+  const initial = (label?.trim() || effectiveId || "A")[0]!.toUpperCase();
 
   const reducedMotion = useReducedMotion();
   const progress = useSharedValue(0);
