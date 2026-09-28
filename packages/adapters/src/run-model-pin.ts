@@ -19,7 +19,7 @@ import { inheritedOllamaEffort, spaceDefaultEffort } from "@ardurbot/core";
 import type { findDefaultModelCredential, PrismaClient } from "@ardurbot/db";
 import { findDefaultModelCredential as findSpaceDefault } from "@ardurbot/db";
 import { compileHermesRuntimeConfig } from "@ardurbot/host-runtime/runtimes/hermes-config";
-import { canonicalRuntimeJson, normalizeHermesRuntimeConfig } from "@ardurbot/core/runtime-config";
+import { canonicalRuntimeJson, migrateHermesRuntimeConfig } from "@ardurbot/core/runtime-config";
 import { createHash } from "node:crypto";
 
 import { hermesCompatibility, hermesConfigHash } from "./hermes-compatibility.js";
@@ -213,7 +213,7 @@ export async function resolveRunModelPin(input: {
     if (compatibilityProblem) return compatibilityProblem;
     
     if (pin.runtimeKind === "hermes" && pin.runtimeConfig) {
-      const document = normalizeHermesRuntimeConfig(pin.runtimeConfig);
+      const document = migrateHermesRuntimeConfig(pin.runtimeConfig);
       const compiled = compileHermesRuntimeConfig(document, {
         id: resolved.id,
         contextWindow: resolved.contextWindow ?? 8192,

@@ -1,7 +1,7 @@
 import { ORPCError, implement, type Router } from "@orpc/server";
 import { normalizedThinkingLevel, ThinkingLevelSchema } from "@ardurbot/contracts";
 import { compileHermesRuntimeConfig, type HermesConfigModel } from "@ardurbot/host-runtime/runtimes/hermes-config";
-import { normalizeHermesRuntimeConfig } from "@ardurbot/core/runtime-config";
+import { migrateHermesRuntimeConfig } from "@ardurbot/core/runtime-config";
 import { validateModelPinSelection } from "./model-pin-validation.js";
 import { type RouterDeps } from "./router.js";
 import type { RouterContext } from "./customization-routes.js";
@@ -81,7 +81,7 @@ export const createRuntimeConfigRoutes = (deps: RouterDeps, authedRoutes: any) =
         thinkingLevel,
       };
 
-      const document = normalizeHermesRuntimeConfig(input.runtimeConfig);
+      const document = migrateHermesRuntimeConfig(input.runtimeConfig);
       const compiled = compileHermesRuntimeConfig(document, modelConfig);
 
       return {
