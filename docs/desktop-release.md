@@ -163,26 +163,35 @@ runs in a virtual display.
 
 ## Homebrew tap handoff
 
-`homebrew/Casks/ardur.rb` is a template, not an installable cask yet. The release workflow
+The tap is [`ArdurAI/homebrew-tap`](https://github.com/ArdurAI/homebrew-tap) (tap name
+`ArdurAI/tap`), shared with other ArdurAI packages; the Ardur cask lives at `Casks/ardur.rb`
+there. `homebrew/Casks/ardur.rb` in this repository stays the template: the release workflow
 fills its version, architecture-specific DMG URLs, and SHA-256 values from the built files and
 attaches `ardur.rb` to the pre-release. It never contacts a tap or makes a repository commit.
 
-After the owner creates `ArdurAI/homebrew-tap`, these **two commands** publish the first cask:
+Each release updates the cask through a reviewed pull request. In a checkout of
+`ArdurAI/homebrew-tap`:
 
 ```sh
-gh release download v0.1.0-alpha.1 --repo ArdurAI/ardur-bot --pattern ardur.rb --dir homebrew/Casks --clobber
-gh api repos/ArdurAI/homebrew-tap/contents/Casks/ardur.rb --method PUT -f message='build: publish desktop cask' -f content="$(base64 < homebrew/Casks/ardur.rb | tr -d '\n')"
+gh release download v0.1.0-alpha.2 --repo ArdurAI/ardur-bot --pattern ardur.rb
+git checkout -b ardur-0.1.0-alpha.2
+cp ardur.rb Casks/ardur.rb
 ```
 
-For later updates, the second command also needs the current cask file's `sha` parameter.
-Users can then run:
+Push the branch and open a pull request. The tap CI checks the cask against the release's
+`checksums.txt` for both Mac architectures, audits it, and fetches the Apple silicon DMG.
+After the pull request merges, users run:
 
 ```sh
-brew install --cask ardurai/tap/ardur
+brew tap ArdurAI/tap
+brew trust --cask ArdurAI/tap/ardur
+brew install --cask ArdurAI/tap/ardur
 ```
 
-Homebrew verifies the downloaded checksum. It does not sign, notarize, or silently remove
-quarantine from the app. Use the same opening instructions as a direct download.
+Current Homebrew requires the trust step before it loads a third-party cask; Homebrew
+releases without the trust command can skip it. Homebrew verifies the downloaded checksum
+against the cask's SHA-256. It does not sign, notarize, or silently remove quarantine from
+the app. Use the same opening instructions as a direct download.
 
 ## Platform acceptance still required
 

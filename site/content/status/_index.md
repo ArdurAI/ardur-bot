@@ -32,8 +32,10 @@ the repo file it comes from.
 
 - Desktop previews are **unsigned**; macOS builds are also **not notarized**, and updates are
   download-only on every OS — [Desktop pre-releases]({{< repo-link "docs/desktop-release.md" >}}).
-- No signed installer and no published Homebrew tap yet; the cask template exists but has not been
-  published — [Homebrew tap handoff]({{< repo-link "docs/desktop-release.md#homebrew-tap-handoff" >}}).
+- The published Homebrew cask carries the same preview: `brew tap ArdurAI/tap`,
+  `brew trust --cask ArdurAI/tap/ardur`, then `brew install --cask ArdurAI/tap/ardur`;
+  previews are unsigned and not notarized, and current Homebrew needs the trust step —
+  [Homebrew tap handoff]({{< repo-link "docs/desktop-release.md#homebrew-tap-handoff" >}}).
 - A tag push currently stops at the performance-evidence gate because no physical evidence runner
   exists yet; publication needs a manual dispatch with an explicit waiver reason —
   [Evidence index]({{< repo-link "docs/performance.md#evidence-index" >}}).
@@ -54,7 +56,7 @@ the repo file it comes from.
   OpenAI's documented integration, Kimi and Z.ai coding plans, Gemini with an API key, and Ollama
   as a first-class choice — [README]({{< repo-link "README.md#where-it-is-going" >}}).
 - Computers on Podman and kind/Kubernetes — [README]({{< repo-link "README.md#where-it-is-going" >}}).
-- A published Homebrew tap and, later, signed and notarized downloads —
+- Signed and notarized downloads —
   [README]({{< repo-link "README.md#where-it-is-going" >}}).
 - A fast, smooth UI on Windows, macOS and Linux — [README]({{< repo-link "README.md#where-it-is-going" >}}).
 
