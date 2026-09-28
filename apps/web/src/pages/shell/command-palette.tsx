@@ -190,5 +190,3 @@ export function CommandPalette({
     </CommandDialog>
   );
 }
-
-export { isCommandPaletteHotkey } from "./command-palette-hotkey";

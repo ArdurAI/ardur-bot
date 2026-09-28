@@ -8640,6 +8640,10 @@ msgstr ""
 msgid "Voice"
 msgstr "Stimme"
 
+#: src/pages/CallView.tsx
+msgid "Voice failed"
+msgstr "Stimmfehler"
+
 #: src/pages/system/SystemPage.tsx
 msgid "Voice shortcut"
 msgstr ""
