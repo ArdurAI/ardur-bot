@@ -88,6 +88,25 @@ describe("isolated device routes", () => {
         .status,
     ).toBe(403);
   });
+  it("rejects owner pause when current space authority has removed Stop", async () => {
+    const f = fixture();
+    f.grant.scopes.push("stop");
+    Object.assign(f.tx, {
+      $queryRaw: vi.fn(async () => [{ id: f.grant.id }]),
+      instanceIdentity: {
+        ...f.tx.instanceIdentity,
+        findUnique: vi.fn(async () => ({ instanceId: "home", scopes: ["read", "stop"] })),
+      },
+      bot: {
+        findMany: vi.fn(async () => [{ id: "worker" }]),
+        findFirst: vi.fn(async () => ({ id: "worker" })),
+      },
+    });
+    f.tx.remoteAuthorityPolicy.findMany.mockResolvedValue([{ layer: "space", scopes: ["read"] }]);
+    const response = await f.call(f.signed("team-pause", { scope: "space", expectedRevision: 1 }));
+    expect(response.status).toBe(403);
+    expect(f.tx.botCommunicationPolicy.findMany).not.toHaveBeenCalled();
+  });
   it.each(["board/workspaces", "board/snapshot", "board/show", "board/view", "board/work"])(
     "allows the signed read-only Board procedure %s",
     async (procedure) => {

@@ -390,6 +390,7 @@ export function mountRemoteDevices(
               isDeploymentOwner: true,
             },
             { ...body, paused: true },
+            { id: grant.id, instanceId: grant.instanceId },
           ),
         );
       }
