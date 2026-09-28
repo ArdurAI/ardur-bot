@@ -4738,6 +4738,9 @@ export function ShellPage({
                 {sendError}
               </div>
             ) : null}
+            {computerScreenError ? (
+              <div className="border-b border-border bg-background py-6">{computerScreenError}</div>
+            ) : null}
             {terminalSurface.tabs}
             <div className="relative min-h-0 flex-1 bg-background">
               {terminalSurface.content ??
@@ -4745,7 +4748,7 @@ export function ShellPage({
                   <p className="p-4 text-muted-foreground">{t`Not available on this computer`}</p>
                 ) : computer?.kind === "desktop" ? (
                   <DesktopKindEmptyState className="grid h-full place-items-center px-8 text-center text-sm text-muted-foreground/80" />
-                ) : computer?.state === "running" && embeddedScreenUrl && !computerScreenError ? (
+                ) : computer?.state === "running" && embeddedScreenUrl ? (
                   <>
                     <iframe
                       title={t`Bot screen`}
@@ -4769,12 +4772,11 @@ export function ShellPage({
                   </>
                 ) : (
                   <div className="grid h-full place-items-center text-sm text-muted-foreground/80">
-                    {computerScreenError ??
-                      (computer?.state === "suspended"
+                    {computer?.state === "suspended"
                         ? t`Computer is asleep`
                         : computer?.imagePulling
                           ? computerPullLabel(computer.imagePullPercent)
-                          : computerLabel(computer?.mode, computerBot.name))}
+                          : computerLabel(computer?.mode, computerBot.name)}
                   </div>
                 ))}
             </div>
