@@ -40,6 +40,7 @@ export const BotPresenceSchema = z.object({
   reviewState: z.string().optional(),
   latestDeliveryId: z.string().optional(),
   latestDeliveryState: z.string().optional(),
+  latestDeliveryGroupId: z.string().optional(),
   latestPeerBotId: z.string().optional(),
 });
 export type BotPresence = z.infer<typeof BotPresenceSchema>;

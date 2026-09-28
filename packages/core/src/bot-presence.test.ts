@@ -130,4 +130,25 @@ describe("derived bot presence", () => {
     expect(result.goalId).toBeUndefined();
     expect(result.delegationId).toBeUndefined();
   });
+
+  it("carries the group containing an owner's latest peer delivery", () => {
+    const result = projectBotPresence({
+      bot,
+      groupIds: ["room"],
+      runs: [],
+      cards: [],
+      pendingApprovalRunIds: new Set(),
+      pendingPeerCount: 0,
+      observedAt: now,
+      latestDelivery: {
+        id: "delivery",
+        state: "delivered",
+        senderBotId: "worker",
+        recipientBotId: "peer",
+        sourceGroupId: "room",
+      },
+    });
+    expect(result.latestDeliveryGroupId).toBe("room");
+    expect(result.latestPeerBotId).toBe("peer");
+  });
 });

@@ -13,8 +13,8 @@ vi.mock("./CompareStart", () => ({
 }));
 vi.mock("./ComparePanel", () => ({ ComparisonList: () => null }));
 vi.mock("./PeerMessagesOverlay", () => ({
-  PeerMessagesOverlay: ({ onClose }: { onClose: () => void }) => (
-    <div data-testid="peer-sheet">
+  PeerMessagesOverlay: ({ onClose, groupId }: { onClose: () => void; groupId?: string }) => (
+    <div data-testid="peer-sheet" data-group-id={groupId}>
       <button type="button" onClick={onClose}>
         Close conversation
       </button>
@@ -167,6 +167,7 @@ it("shows unknown and stale presence honestly, and returns from a peer conversat
             latestPeerBotId: "peer",
             latestPeerBotName: "Worker",
             latestDeliveryState: "read",
+            latestDeliveryGroupId: "goal-room",
           }}
           now={current}
           refresh={async () => {}}
@@ -180,6 +181,7 @@ it("shows unknown and stale presence honestly, and returns from a peer conversat
   );
   await act(async () => open!.click());
   expect(node.querySelector('[data-testid="peer-sheet"]')).toBeTruthy();
+  expect(node.querySelector('[data-testid="peer-sheet"]')?.getAttribute("data-group-id")).toBe("goal-room");
   await act(async () =>
     node.querySelector<HTMLButtonElement>('[data-testid="peer-sheet"] button')!.click(),
   );

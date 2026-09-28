@@ -163,6 +163,7 @@ export function TeamBoardRow({
         <Suspense fallback={null}>
           <PeerMessagesOverlay
             botId={row.botId}
+            groupId={row.latestDeliveryGroupId}
             botName={row.botName}
             botColor={row.botColor ?? "currentColor"}
             peerBotId={row.latestPeerBotId}

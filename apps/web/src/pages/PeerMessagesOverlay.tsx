@@ -20,6 +20,7 @@ import { rpc } from "../lib/rpc";
  */
 export function PeerMessagesOverlay({
   botId,
+  groupId,
   botName,
   botColor,
   peerBotId,
@@ -29,6 +30,7 @@ export function PeerMessagesOverlay({
   onOpenPeerThread,
 }: {
   botId: string;
+  groupId?: string;
   botName: string;
   botColor: string;
   peerBotId: string;
@@ -56,7 +58,10 @@ export function PeerMessagesOverlay({
     void loadPeerHistory({
       signal: abort.signal,
       loadPage: (before, signal) =>
-        rpc.threads.messages({ botId, before, includePeerRuns: true }, { signal }),
+        rpc.threads.messages(
+          { ...(groupId ? { groupId } : { botId }), before, includePeerRuns: true },
+          { signal },
+        ),
     })
       .then((loaded) => {
         if (abort.signal.aborted) return;
@@ -71,7 +76,7 @@ export function PeerMessagesOverlay({
     return () => {
       abort.abort();
     };
-  }, [botId, reloadKey]);
+  }, [botId, groupId, reloadKey]);
 
   const title = `${botName} · ${peerBotName}`;
 

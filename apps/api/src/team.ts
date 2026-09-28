@@ -199,6 +199,7 @@ export async function teamBoard(
       waitingForBotId: presence?.waitingForBotId,
       latestDeliveryId: presence?.latestDeliveryId,
       latestDeliveryState: presence?.latestDeliveryState,
+      latestDeliveryGroupId: presence?.latestDeliveryGroupId,
       latestPeerBotId: presence?.latestPeerBotId,
       latestPeerBotName: bots.find((peer) => peer.id === presence?.latestPeerBotId)?.name,
       latestPeerBotColor: bots.find((peer) => peer.id === presence?.latestPeerBotId)?.color,

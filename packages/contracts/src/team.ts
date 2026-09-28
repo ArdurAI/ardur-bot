@@ -27,6 +27,7 @@ export const TeamRowSchema = z.object({
   waitingForBotId: z.string().optional(),
   latestDeliveryId: z.string().optional(),
   latestDeliveryState: z.string().optional(),
+  latestDeliveryGroupId: z.string().optional(),
   latestPeerBotId: z.string().optional(),
   latestPeerBotName: z.string().optional(),
   latestPeerBotColor: z.string().optional(),

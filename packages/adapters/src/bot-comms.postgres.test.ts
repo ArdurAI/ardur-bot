@@ -525,6 +525,15 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
     expect(JSON.stringify(row)).not.toContain(task.prompt);
   });
 
+  it("projects a coordinator's latest peer conversation to its group thread", async () => {
+    const f = await fixture();
+    const result = await loadBotPresence(prisma, { spaceId, userId });
+    expect(result.bots.find((bot) => bot.botId === f.coordinator.id)?.latestDeliveryGroupId)
+      .toBe(f.room.groupId);
+    expect(result.bots.find((bot) => bot.botId === f.worker.id)?.latestDeliveryGroupId)
+      .toBeUndefined();
+  });
+
   it("commits a long worker result and wakes once from its bounded receipt", async () => {
     const f = await fixture();
     expect(await completeWorker(f, "x".repeat(16_000))).not.toBe(false);

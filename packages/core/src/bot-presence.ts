@@ -69,7 +69,14 @@ export function projectBotPresence(input: {
   maintenanceActive?: boolean;
   pendingApprovalRunIds: ReadonlySet<string>;
   pendingPeerCount: number;
-  latestDelivery?: { id: string; state: string; senderBotId: string; recipientBotId: string };
+  latestDelivery?: {
+    id: string;
+    state: string;
+    senderBotId: string;
+    recipientBotId: string;
+    sourceGroupId?: string | null;
+    targetGroupId?: string | null;
+  };
   computerDisplayName?: string;
   observedAt: Date;
   callerBotId?: string;
@@ -143,6 +150,9 @@ export function projectBotPresence(input: {
     .filter((date): date is Date => date instanceof Date)
     .sort((a, b) => b.getTime() - a.getTime())[0];
   const canMessage = Boolean(bot.thread && bot.id !== input.callerBotId && input.canSend !== false);
+  const latestDeliveryGroupId = input.latestDelivery?.senderBotId === bot.id
+    ? input.latestDelivery.sourceGroupId
+    : input.latestDelivery?.targetGroupId;
   return {
     botId: bot.id,
     name: bot.name,
@@ -184,6 +194,7 @@ export function projectBotPresence(input: {
       ? {
           latestDeliveryId: input.latestDelivery.id,
           latestDeliveryState: input.latestDelivery.state,
+          ...(latestDeliveryGroupId ? { latestDeliveryGroupId } : {}),
           latestPeerBotId:
             input.latestDelivery.senderBotId === bot.id
               ? input.latestDelivery.recipientBotId
