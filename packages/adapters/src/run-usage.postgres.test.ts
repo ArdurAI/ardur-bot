@@ -278,6 +278,40 @@ postgres("request ledger on disposable PostgreSQL", () => {
     });
     await expect(record(next.start())).rejects.toThrow("admission is stale");
   });
+  it("admits a brief refresh after a main broker turn with the same source allowance", async () => {
+    const f = await fixture();
+    await db.prisma.run.update({ where: { id: f.id }, data: { leaseOwner: "worker", leaseFence: 2 } });
+    const make = (purpose: "main" | "summary", reservedTokens: number) =>
+      new RequestUsageCollector({
+        provider: "fixture", model: "fixture", purpose,
+        mappingVersion: "broker-chat-completions-v1",
+        inputSemantics: "total-with-cache-subsets",
+        admission: { kind: "worker-provider-broker", reservedTokens,
+          maxRequests: 4, maxReservedTokens: 4 * (32_768 + 4_096) },
+      });
+    const main = make("main", 4_300);
+    const record = (usage: AgentUsage, briefAttemptedAt?: Date) =>
+      recordBrokerRunUsage({ prisma: db.prisma, events: f.events }, f.run, usage,
+        briefAttemptedAt
+          ? { leaseOwner: "brief", leaseFence: 0, runtimePin: f.pin, briefAttemptedAt }
+          : { leaseOwner: "worker", leaseFence: 2, runtimePin: f.pin });
+    await record(main.start());
+    await record(main.snapshot({ input: 100, output: 20 }));
+    await record(main.finish("success"));
+    await db.prisma.run.update({ where: { id: f.id }, data: { status: "completed" } });
+    const attemptedAt = new Date();
+    await db.prisma.botBrief.create({ data: {
+      spaceId: f.id, userId: "fixture-user", botId: f.id, threadId: f.id,
+      groupKey: "direct", pendingRunId: f.id, attemptedAt,
+      leaseExpiresAt: new Date(attemptedAt.getTime() + 60_000),
+    } });
+    const summary = make("summary", 2_200);
+    await record(summary.start(), attemptedAt);
+    await record(summary.snapshot({ input: 80, output: 10 }), attemptedAt);
+    await record(summary.finish("success"), attemptedAt);
+    expect(await f.rows()).toHaveLength(2);
+    expect(await f.root()).toMatchObject({ usedTokens: 210, reservedTokens: 0 });
+  });
   it("rejects a broker reservation beyond the persisted root token limit", async () => {
     const f = await fixture();
     await db.prisma.run.update({

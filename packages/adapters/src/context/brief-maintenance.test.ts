@@ -148,6 +148,7 @@ it("marks a changed group pending and rewrites after the turn with the selected 
   await refreshRunBrief(f.deps, "run");
   expect(f.requests[0]).toMatchObject({
     tools: "none",
+    providerRunMaxOutputTokens: 4_096,
     model: { id: "pinned", thinkingLevel: "high", maxTokens: 2000 },
   });
   expect(f.requests[0]?.prompt).toContain('"acceptedAt":null');

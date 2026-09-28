@@ -494,6 +494,8 @@ export interface AgentRunRequest {
   /** Worker-only accounting scope for auxiliary turns. Never sent to the host. */
   providerSourceRunId?: string;
   providerPurpose?: UsagePurpose;
+  /** Worker-only source model output cap, before an auxiliary turn lowers its own cap. */
+  providerRunMaxOutputTokens?: number;
   onBrokerRuntimeInfo?: (
     info: Pick<
       RuntimeInfo,

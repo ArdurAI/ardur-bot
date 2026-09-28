@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { AgentRunRequest, AgentRuntime, AgentUsage } from "@ardurbot/adapter-kit";
-import type { MessageBlock } from "@ardurbot/contracts";
+import { DEFAULT_MODEL_MAX_TOKENS, type MessageBlock } from "@ardurbot/contracts";
 import {
   blocksToAgentHistoryText,
   isMessagingChannelRun,
@@ -302,6 +302,7 @@ export async function refreshRunBrief(deps: BriefMaintenanceDeps, runId: string)
                   runId: maintenanceRunId,
                   providerSourceRunId: run.id,
                   providerPurpose: "summary",
+                  providerRunMaxOutputTokens: resolved.model.maxTokens ?? DEFAULT_MODEL_MAX_TOKENS,
                   nativeCwd:
                     bot.computer?.kind === "desktop"
                       ? (bot.computer.providerRef ?? undefined)

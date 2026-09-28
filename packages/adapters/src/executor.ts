@@ -36,6 +36,7 @@ import {
   computerCapabilities,
   computerProfileNote,
   DelegationSnapshotSchema,
+  DEFAULT_MODEL_MAX_TOKENS,
   isAttachmentImageMimeType,
   mcpCredentialConflict,
   OLLAMA_NO_IMAGES,
@@ -1119,7 +1120,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
       };
       const config = effectiveHermesConfig(pin.runtimeConfig);
       const contextWindow = request.model.contextWindow ?? 32_768;
-      const maxOutputTokens = request.model.maxTokens ?? 4_096;
+      const maxOutputTokens = request.model.maxTokens ?? DEFAULT_MODEL_MAX_TOKENS;
+      const runOutputTokens = request.providerRunMaxOutputTokens ?? maxOutputTokens;
+      if (!Number.isSafeInteger(runOutputTokens) || runOutputTokens < maxOutputTokens)
+        throw new Error("The Hermes run model limits are invalid.");
       const broker = new HermesProviderBroker({
         scope,
         credentialId: pin.credentialId!,
@@ -1155,7 +1159,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
         maxRequests: config.maxProviderRequests,
         maxReservedTokens: Math.min(
           2_147_483_647,
-          config.maxProviderRequests * (contextWindow + maxOutputTokens),
+          config.maxProviderRequests * (contextWindow + runOutputTokens),
         ),
         expiresAt: Date.now() + config.timeoutMs,
         active,
