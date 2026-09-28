@@ -7,6 +7,7 @@ import {
   HostLifecyclePreferences,
   HostServiceStore,
   HostServiceSupervisor,
+  hostGuardPaths,
   hostServiceIdentity,
   hostServiceLaunch,
   hostStorageAvailable,
@@ -63,6 +64,11 @@ export function installHostService(options: {
       appPath: app.getAppPath(),
     }),
     (connected) => updateHostTray(options.tray(), connected),
+    undefined,
+    (config) => ({
+      ...config,
+      guardPaths: hostGuardPaths(app.getPath("userData")),
+    }),
   );
   let tail = Promise.resolve();
   function trusted(event: IpcMainInvokeEvent) {

@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   read: vi.fn(),
   close: vi.fn(),
   sockets: [] as EventEmitter[],
+  agentConfigs: [] as unknown[],
   process: { on: vi.fn(), once: vi.fn(), send: vi.fn(), exit: vi.fn() },
 }));
 vi.mock("node:process", () => ({ default: mocks.process }));
@@ -22,6 +23,9 @@ vi.mock("@ardurbot/host-runtime/host-agent", () => ({
     configureMcp = mocks.configureMcp;
     health = vi.fn(async () => ({}));
     close = mocks.close;
+    constructor(config: unknown) {
+      mocks.agentConfigs.push(config);
+    }
   },
 }));
 vi.mock("ws", () => ({
@@ -46,6 +50,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(0);
   mocks.sockets.length = 0;
+  mocks.agentConfigs.length = 0;
   vi.stubGlobal("fetch", mocks.read);
 });
 afterEach(() => {
@@ -164,4 +169,45 @@ it("closes the agent and exits only after the shutdown grace period", async () =
   expect(mocks.process.exit).not.toHaveBeenCalled();
   await vi.advanceTimersByTimeAsync(1);
   expect(mocks.process.exit).toHaveBeenCalledExactlyOnceWith(0);
+});
+
+it("accepts guardrail paths and ports and hands them to the host agent", async () => {
+  mocks.read.mockResolvedValueOnce(Response.json(registrations));
+  await import("./index.js");
+  processEvents.emit(
+    "message",
+    {
+      apiUrl: "https://example.test",
+      token: "x".repeat(43),
+      root: "/fixture",
+      hostRoots: ["/fixture"],
+      guardPaths: ["/fixture/user-data/secrets.env", "/fixture/user-data/postgres"],
+      guardPorts: [55433],
+    },
+    undefined,
+  );
+  await vi.waitFor(() => expect(mocks.sockets).toHaveLength(1));
+  expect(mocks.agentConfigs[0]).toMatchObject({
+    guardPaths: ["/fixture/user-data/secrets.env", "/fixture/user-data/postgres"],
+    guardPorts: [55433],
+  });
+});
+
+it("refuses a configuration with a relative guardrail path", async () => {
+  mocks.read.mockResolvedValueOnce(Response.json(registrations));
+  await import("./index.js");
+  processEvents.emit(
+    "message",
+    {
+      apiUrl: "https://example.test",
+      token: "x".repeat(43),
+      root: "/fixture",
+      hostRoots: ["/fixture"],
+      guardPaths: ["relative/secrets.env"],
+    },
+    undefined,
+  );
+  await vi.advanceTimersByTimeAsync(1500);
+  expect(mocks.sockets).toHaveLength(0);
+  expect(mocks.agentConfigs).toHaveLength(0);
 });

@@ -4,6 +4,7 @@ import { constants } from "node:fs";
 import { access, lstat, mkdir, rename, rmdir, stat } from "node:fs/promises";
 import path from "node:path";
 import type { DesktopLocalStackState } from "@ardurbot/contracts";
+import { hostGuardPaths } from "./host-service.js";
 import { localFoldersFile } from "./local-folders.js";
 import { writeServiceLog } from "./local-logs.js";
 import type { EmbeddedPostgresLike, EmbeddedPostgresOptions } from "./local-postgres.js";
@@ -1160,6 +1161,8 @@ function serviceEnvironment(
     API_URL: settings.origin,
     API_HOST: "127.0.0.1",
     API_PORT: String(settings.apiPort),
+    // The command guardrail in the services denies these control-plane paths to host work.
+    ARDURBOT_GUARD_PATHS: hostGuardPaths(settings.userDataDir).join(path.delimiter),
     NODE_ENV: source.NODE_ENV === "test" ? "production" : (source.NODE_ENV ?? "production"),
     // The supervisor reads the worker's ready line from structured logs.
     LOG_FORMAT: "json",

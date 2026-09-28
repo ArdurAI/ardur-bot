@@ -100,6 +100,12 @@ describe("local mode start", () => {
       expect(env.SANDBOX_SUPERVISOR_TOKEN?.length).toBeGreaterThanOrEqual(32);
       // Local mode's own folder list; a pairing with another server is never read.
       expect(env.ARDURBOT_HOST_ROOTS_FILE).toBe(localFoldersFile(root));
+      // The command guardrail denies Ardur's control-plane files to host work.
+      const guarded = env.ARDURBOT_GUARD_PATHS?.split(path.delimiter) ?? [];
+      expect(guarded).toContain(path.join(root, "secrets.env"));
+      expect(guarded).toContain(path.join(root, "postgres"));
+      expect(guarded).toContain(path.join(root, "stack", ".env"));
+      expect(guarded).toContain(path.join(root, "host-service", "host-service.enc"));
       expect(env.LOG_FORMAT).toBe("json");
     }
     expect(port).not.toBe(5432);

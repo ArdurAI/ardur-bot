@@ -7,6 +7,12 @@ import {
   nativeEnvironment,
   resolveHostBinary,
 } from "../host-environment.js";
+import {
+  type HostGuardrailConfig,
+  resolveGuardrailPathsSync,
+  seatbeltArgv,
+  seatbeltProfile,
+} from "../host-guardrails.js";
 
 export { nativeEnvironment } from "../host-environment.js";
 
@@ -36,6 +42,31 @@ export const spawnNative: NativeSpawn = (binary, args, cwd) =>
     windowsHide: true,
     detached: process.platform !== "win32" && !process.send,
   });
+
+/**
+ * Wraps a native runtime launch in the host command guardrail on macOS. The runtime's own
+ * tools already stay behind Ardur's tool gating, but a read-only sandbox profile (Codex)
+ * still lets the process read Ardur's env file or database; the Seatbelt wrap removes that.
+ * On other platforms the base spawn is returned unchanged — no protection is implied.
+ * The profile builds lazily once; a profile that cannot be built fails the launch closed.
+ */
+export function guardNativeSpawn(
+  base: NativeSpawn,
+  guard: HostGuardrailConfig | undefined,
+  platform: NodeJS.Platform = process.platform,
+): NativeSpawn {
+  if (platform !== "darwin" || !guard || (!guard.paths.length && !guard.ports.length)) return base;
+  let built: string | undefined;
+  const profile = () =>
+    (built ??= seatbeltProfile({
+      paths: resolveGuardrailPathsSync(guard.paths),
+      ports: guard.ports,
+    }));
+  return (binary, args, cwd) => {
+    const wrapped = seatbeltArgv([binary, ...args], profile());
+    return base(wrapped[0]!, wrapped.slice(1), cwd);
+  };
+}
 
 export async function probeCommand(
   binary: string,

@@ -10,11 +10,13 @@ import type {
 import { RequestUsageCollector, usageEvent } from "@ardurbot/adapter-kit";
 import type { RuntimeAvailability, RuntimePin } from "@ardurbot/contracts/runtime-pins";
 import { RuntimePinError, runtimePinProblem } from "@ardurbot/contracts/runtime-pins";
+import { guardrailConfigFromEnv } from "../host-guardrails.js";
 import { startArdurMcpServer } from "./ardur-mcp-server.js";
 import { createArdurToolBridge } from "./claude-mcp-bridge.js";
 import type { NativeSpawn } from "./native-process.js";
 import {
   findNativeBinary,
+  guardNativeSpawn,
   jsonLines,
   probeCommand,
   RuntimeQueue,
@@ -302,7 +304,9 @@ export class ClaudeStreamParser {
 
 export class ClaudeCodeRuntime implements AgentRuntime {
   private running = new Map<string, ChildProcessWithoutNullStreams>();
-  constructor(private readonly start: NativeSpawn = spawnNative) {}
+  constructor(
+    private readonly start: NativeSpawn = guardNativeSpawn(spawnNative, guardrailConfigFromEnv()),
+  ) {}
   describe() {
     return {
       id: "claude-code",

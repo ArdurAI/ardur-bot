@@ -12,6 +12,7 @@ import {
   runtimePinProblem,
   validateAntigravityPin,
 } from "@ardurbot/contracts";
+import { guardrailConfigFromEnv } from "../host-guardrails.js";
 import { antigravityModels, capturedAntigravityModels } from "./antigravity-models.js";
 import {
   AntigravityDiagnostics,
@@ -21,6 +22,7 @@ import {
 import type { NativeSpawn } from "./native-process.js";
 import {
   findNativeBinary,
+  guardNativeSpawn,
   probeCommand,
   RuntimeQueue,
   spawnNative,
@@ -175,7 +177,7 @@ export class AntigravityRuntime implements AgentRuntime {
     { child: ChildProcessWithoutNullStreams; abort: () => void }
   >();
   constructor(
-    private readonly start: NativeSpawn = spawnNative,
+    private readonly start: NativeSpawn = guardNativeSpawn(spawnNative, guardrailConfigFromEnv()),
     private readonly resolveBinary: typeof findNativeBinary = findNativeBinary,
     private readonly deadlineMs = 125_000,
   ) {}

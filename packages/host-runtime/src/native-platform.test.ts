@@ -1,6 +1,11 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
-import { nativeBinaryCandidates, nativeEnvironment } from "./runtimes/native-process.js";
+import { describe, expect, it, vi } from "vitest";
+import {
+  guardNativeSpawn,
+  type NativeSpawn,
+  nativeBinaryCandidates,
+  nativeEnvironment,
+} from "./runtimes/native-process.js";
 
 describe("native platform launch policy", () => {
   it("uses Windows executable paths and ignores relative search entries and shell wrappers", () => {
@@ -33,5 +38,34 @@ describe("native platform launch policy", () => {
     expect(source).toContain('env: { ELECTRON_RUN_AS_NODE: "1" }');
     expect(source).toContain("timingSafeEqual");
     expect(source).toContain("ardur-tools-${randomUUID()}");
+  });
+});
+
+describe("guardNativeSpawn", () => {
+  const base = vi.fn() as unknown as NativeSpawn;
+  const guard = { paths: ["/fixture/user-data/secrets.env"], ports: [55433] };
+  it("wraps the launch with sandbox-exec on macOS", () => {
+    const start = guardNativeSpawn(base, guard, "darwin");
+    start("/fixture/bin/claude", ["-p"], "/fixture/work");
+    const [binary, args, cwd] = (base as unknown as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    expect(binary).toBe("/usr/bin/sandbox-exec");
+    expect(args[0]).toBe("-p");
+    expect(args[1]).toContain('(subpath "/fixture/user-data/secrets.env")');
+    expect(args[1]).toContain('(remote ip "localhost:55433")');
+    expect(args.slice(2)).toEqual(["/fixture/bin/claude", "-p"]);
+    expect(cwd).toBe("/fixture/work");
+  });
+  it("passes through off macOS and without a guard", () => {
+    for (const start of [
+      guardNativeSpawn(base, guard, "linux"),
+      guardNativeSpawn(base, guard, "win32"),
+      guardNativeSpawn(base, undefined, "darwin"),
+      guardNativeSpawn(base, { paths: [], ports: [] }, "darwin"),
+    ]) {
+      start("/fixture/bin/claude", ["-p"], "/fixture/work");
+      const [binary, args] = (base as unknown as ReturnType<typeof vi.fn>).mock.calls.at(-1)!;
+      expect(binary).toBe("/fixture/bin/claude");
+      expect(args).toEqual(["-p"]);
+    }
   });
 });

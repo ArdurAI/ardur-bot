@@ -4,9 +4,32 @@ import path from "node:path";
 import { expect, it } from "vitest";
 import {
   hermesInstallCandidate,
+  hermesLaunchArgv,
   probeHermesInstall,
   resolveHermesLauncherAsset,
 } from "./hermes-install.js";
+
+it("wraps the pinned Hermes process in the host guardrail only on macOS", () => {
+  const guard = { paths: ["/fixture/user-data/secrets.env"], ports: [55433] };
+  const wrapped = hermesLaunchArgv(
+    "/fixture/.venv/bin/python",
+    "/fixture/launcher.py",
+    guard,
+    "darwin",
+  );
+  expect(wrapped[0]).toBe("/usr/bin/sandbox-exec");
+  expect(wrapped[1]).toBe("-p");
+  expect(wrapped[2]).toContain('(subpath "/fixture/user-data/secrets.env")');
+  expect(wrapped[2]).toContain('(remote ip "localhost:55433")');
+  expect(wrapped.slice(3)).toEqual(["/fixture/.venv/bin/python", "-B", "/fixture/launcher.py"]);
+  for (const platform of ["linux", "win32"] as const)
+    expect(
+      hermesLaunchArgv("/fixture/.venv/bin/python", "/fixture/launcher.py", guard, platform),
+    ).toEqual(["/fixture/.venv/bin/python", "-B", "/fixture/launcher.py"]);
+  expect(
+    hermesLaunchArgv("/fixture/.venv/bin/python", "/fixture/launcher.py", undefined, "darwin"),
+  ).toEqual(["/fixture/.venv/bin/python", "-B", "/fixture/launcher.py"]);
+});
 
 it.skipIf(process.platform === "win32")(
   "prefers the explicit install over the one managed host location",

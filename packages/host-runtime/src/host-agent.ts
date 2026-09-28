@@ -36,6 +36,7 @@ import { engineFailureReason } from "./fleet/probe.js";
 import { systemFleetProcess } from "./fleet/process.js";
 import { FleetService } from "./fleet/service.js";
 import { getHostEnvironment, inspectHostEnvironment } from "./host-environment.js";
+import { type HostGuardrailConfig, loopbackPortOf } from "./host-guardrails.js";
 import { inspectHostIntegrations } from "./host-integrations.js";
 import { HostMcpServers } from "./host-mcp.js";
 import { confinedHostCwd } from "./host-policy.js";
@@ -58,7 +59,7 @@ import {
 import { startHermesProviderRelay } from "./runtimes/hermes-provider-relay.js";
 import { HermesRuntime } from "./runtimes/hermes-runtime.js";
 import type { NativeSpawn } from "./runtimes/native-process.js";
-import { spawnNative } from "./runtimes/native-process.js";
+import { guardNativeSpawn, spawnNative } from "./runtimes/native-process.js";
 
 type Active = {
   abort: AbortController;
@@ -76,6 +77,10 @@ export class HostAgent {
   private fleet: FleetService;
   private importer?: LocalImportScanner;
   private readonly mcp: HostMcpServers;
+  private readonly guard: HostGuardrailConfig;
+  private readonly runtimes: Partial<
+    Record<"claude-code" | "codex-app-server" | "antigravity" | "hermes", AgentRuntime>
+  >;
   refreshMcp?: () => Promise<void>;
   private acceptedHealth?: string;
   setAcceptedHealth(advertisement?: string) {
@@ -87,22 +92,39 @@ export class HostAgent {
       root: string;
       hostRoots: string[];
       mcpServers?: HostMcpRegistration[];
+      /** Control-plane paths and loopback ports host work must never touch. */
+      guardPaths?: string[];
+      guardPorts?: number[];
+      apiUrl?: string;
     },
     private readonly wire: HostWire,
-    private readonly runtimes: Partial<
+    runtimes?: Partial<
       Record<"claude-code" | "codex-app-server" | "antigravity" | "hermes", AgentRuntime>
-    > = {
-      "claude-code": new ClaudeCodeRuntime(),
-      "codex-app-server": new CodexAppServerRuntime(),
-      antigravity: new AntigravityRuntime(),
-    },
+    >,
   ) {
     this.fleet = new FleetService(config.root, config.token ?? randomUUID());
     this.mcp = new HostMcpServers(config.mcpServers);
+    this.guard = {
+      paths: config.guardPaths ?? [],
+      ports: [
+        ...new Set(
+          [...(config.guardPorts ?? []), loopbackPortOf(config.apiUrl)].filter(
+            (port): port is number => port !== undefined,
+          ),
+        ),
+      ],
+    };
+    const start: NativeSpawn = guardNativeSpawn(spawnNative, this.guard);
+    this.runtimes = runtimes ?? {
+      "claude-code": new ClaudeCodeRuntime(start),
+      "codex-app-server": new CodexAppServerRuntime(start),
+      antigravity: new AntigravityRuntime(start),
+    };
     this.sandbox = new DesktopSandboxProvider({
       root: config.root,
       hostRoots: config.hostRoots,
       restricted: true,
+      guard: this.guard,
     });
   }
   async initialize() {
@@ -316,11 +338,11 @@ export class HostAgent {
           negotiateHostHealth(await this.health(op.refreshSignIn), this.acceptedHealth),
         );
       } else if (op.op === "board.run") {
-        const result = await new BoardRunner({ root: this.config.root, hostRoots: this.roots }).run(
-          op.request,
-          request.scope.spaceId,
-          state.abort.signal,
-        );
+        const result = await new BoardRunner({
+          root: this.config.root,
+          hostRoots: this.roots,
+          guard: this.guard,
+        }).run(op.request, request.scope.spaceId, state.abort.signal);
         if (result.ok && result.stdout) {
           for (let offset = 0; offset < result.stdout.length; offset += 24 * 1024)
             await send("stdout", result.stdout.slice(offset, offset + 24 * 1024));
@@ -656,7 +678,7 @@ export class HostAgent {
         hermes = new HermesRuntime({
           command: qualified.python,
           args: [launcher],
-          launch: pinnedHermesLaunch(qualified.root, launcher),
+          launch: pinnedHermesLaunch(qualified.root, launcher, this.guard),
           pinned: true,
           executionEnvelope: profile?.envelope,
           onProfileAcknowledged: () => {

@@ -10,12 +10,14 @@ import type {
 import type { RuntimeAvailability } from "@ardurbot/contracts/runtime-pins";
 import { RuntimePinError, runtimePinProblem } from "@ardurbot/contracts/runtime-pins";
 import * as z from "zod";
+import { guardrailConfigFromEnv } from "../host-guardrails.js";
 import { startArdurMcpServer } from "./ardur-mcp-server.js";
 import { createArdurToolBridge } from "./claude-mcp-bridge.js";
 import { CodexUsageCollector } from "./codex-usage.js";
 import type { NativeSpawn } from "./native-process.js";
 import {
   findNativeBinary,
+  guardNativeSpawn,
   jsonLines,
   probeCommand,
   RuntimeQueue,
@@ -277,7 +279,9 @@ export async function probeCodex(start: NativeSpawn = spawnNative): Promise<Runt
 
 export class CodexAppServerRuntime implements AgentRuntime {
   private running = new Map<string, () => Promise<void>>();
-  constructor(private readonly start: NativeSpawn = spawnNative) {}
+  constructor(
+    private readonly start: NativeSpawn = guardNativeSpawn(spawnNative, guardrailConfigFromEnv()),
+  ) {}
   describe() {
     return {
       id: "codex-app-server",

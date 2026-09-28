@@ -6,6 +6,12 @@ import path from "node:path";
 import type { BoardRun, BoardRunResult, BoardWorkspace } from "@ardurbot/contracts/board";
 import { BoardError, BoardRunSchema } from "@ardurbot/contracts/board";
 import { getHostEnvironment, redactHostStatus, resolveHostBinary } from "../host-environment.js";
+import {
+  type HostGuardrailConfig,
+  resolveGuardrailPaths,
+  seatbeltArgv,
+  seatbeltProfile,
+} from "../host-guardrails.js";
 import { validateBoardArgv } from "./argv.js";
 
 export const BOARD_INIT_FLAGS = ["--non-interactive", "--skip-agents", "--skip-hooks", "--stealth"];
@@ -146,8 +152,24 @@ export class BoardRunner {
       hostRoots: string[];
       timeoutMs?: number;
       environment?: () => Promise<NodeJS.ProcessEnv>;
+      /** Ardur's own control-plane paths/ports; board commands are wrapped on macOS. */
+      guard?: HostGuardrailConfig;
+      /** Test seam; production is always process.platform. */
+      platform?: NodeJS.Platform;
     },
   ) {}
+  private guardProfile?: Promise<string | null>;
+  private seatbelt(): Promise<string | null> {
+    this.guardProfile ??= (async () => {
+      const guard = this.options.guard;
+      if (!guard || (this.options.platform ?? process.platform) !== "darwin") return null;
+      return seatbeltProfile({
+        paths: await resolveGuardrailPaths(guard.paths),
+        ports: guard.ports,
+      });
+    })();
+    return this.guardProfile;
+  }
   private async folder(request: BoardRun, spaceId: string) {
     if (!/^[a-zA-Z0-9_-]{1,160}$/.test(spaceId))
       return fail("forbidden", "This board is not available in this space.");
@@ -198,41 +220,55 @@ export class BoardRunner {
     signal?: AbortSignal,
   ) {
     return new Promise<string>((resolve, reject) => {
-      execFile(
-        binary,
-        argv,
-        {
-          cwd,
-          env,
-          shell: false,
-          timeout: this.options.timeoutMs ?? 30_000,
-          maxBuffer: 2 * 1024 * 1024,
-          signal,
-          windowsHide: true,
+      void this.seatbelt().then(
+        (profile) => {
+          const command = profile ? seatbeltArgv([binary, ...argv], profile) : [binary, ...argv];
+          execFile(
+            command[0]!,
+            command.slice(1),
+            {
+              cwd,
+              env,
+              shell: false,
+              timeout: this.options.timeoutMs ?? 30_000,
+              maxBuffer: 2 * 1024 * 1024,
+              signal,
+              windowsHide: true,
+            },
+            (error, stdout, stderr) => {
+              if (!error) return resolve(stdout);
+              const diagnostic = boardFailureDetail(stderr);
+              const code =
+                error.killed || error.name === "AbortError"
+                  ? "timeout"
+                  : /lock|another process|in use|busy/i.test(stderr)
+                    ? "busy"
+                    : /dolt.*(?:not found|not installed|executable)/i.test(stderr)
+                      ? "dolt_missing"
+                      : "command_failed";
+              const message =
+                code === "timeout"
+                  ? "The board command timed out."
+                  : code === "busy"
+                    ? "Another write is in progress"
+                    : code === "dolt_missing"
+                      ? "Dolt is not installed on this computer."
+                      : diagnostic
+                        ? `Beads reported: ${diagnostic.replace(/[.!?]$/, "")}.`
+                        : "Beads could not finish this change. Check the item and its dependencies.";
+              reject(new BoardError({ code, message }));
+            },
+          );
         },
-        (error, stdout, stderr) => {
-          if (!error) return resolve(stdout);
-          const diagnostic = boardFailureDetail(stderr);
-          const code =
-            error.killed || error.name === "AbortError"
-              ? "timeout"
-              : /lock|another process|in use|busy/i.test(stderr)
-                ? "busy"
-                : /dolt.*(?:not found|not installed|executable)/i.test(stderr)
-                  ? "dolt_missing"
-                  : "command_failed";
-          const message =
-            code === "timeout"
-              ? "The board command timed out."
-              : code === "busy"
-                ? "Another write is in progress"
-                : code === "dolt_missing"
-                  ? "Dolt is not installed on this computer."
-                  : diagnostic
-                    ? `Beads reported: ${diagnostic.replace(/[.!?]$/, "")}.`
-                    : "Beads could not finish this change. Check the item and its dependencies.";
-          reject(new BoardError({ code, message }));
-        },
+        // A guardrail that cannot be built fails the board command closed.
+        (error) =>
+          reject(
+            new BoardError({
+              code: "command_failed",
+              message:
+                error instanceof Error ? error.message : "The host guardrail could not initialize.",
+            }),
+          ),
       );
     });
   }
