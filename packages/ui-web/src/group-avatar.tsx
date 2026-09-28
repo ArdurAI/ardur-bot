@@ -64,6 +64,9 @@ export const GroupAvatar = memo(function GroupAvatar({
 
   const overlap = Math.round(size / 3);
   const visibleMembers = members.slice(0, members.length > 3 ? 2 : members.length);
+  // Same edge the seal itself uses, so the background ring hugs the hand-cut
+  // shape and the separation gap stays even all round.
+  const sealRadius = size < 28 ? "50%" : "50% 48% 52% 50% / 49% 51% 49% 51%";
 
   return (
     <div
@@ -78,7 +81,7 @@ export const GroupAvatar = memo(function GroupAvatar({
             marginLeft: index === 0 ? 0 : -overlap,
             width: size,
             height: size,
-            borderRadius: "50%",
+            borderRadius: sealRadius,
             boxShadow: "0 0 0 2px var(--background)",
             zIndex: index + 1,
           }}
@@ -98,7 +101,7 @@ export const GroupAvatar = memo(function GroupAvatar({
             marginLeft: -overlap,
             width: size,
             height: size,
-            borderRadius: "50%",
+            borderRadius: sealRadius,
             boxShadow: "0 0 0 2px var(--background)",
             fontSize: Math.round(size * 0.3),
             zIndex: members.length + 1,

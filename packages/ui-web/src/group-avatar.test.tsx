@@ -91,6 +91,36 @@ describe("GroupAvatar", () => {
     expect(html).not.toContain("border-width:2px");
   });
 
+  it("draws the separation ring with the seal's own edge so the gap stays even", () => {
+    // The wrapper carrying the background box-shadow ring must use the same
+    // radius as the seal inside it: the hand-cut ellipse at 28 px and above,
+    // a true circle below.
+    const ringRadius = (html: string) =>
+      html.match(/border-radius:([^;]+);box-shadow:0 0 0 2px var\(--background\)/)?.[1];
+
+    const large = renderToString(
+      <GroupAvatar
+        members={[
+          { name: "A", color: "#F59E0B" },
+          { name: "B", color: "#3B82F6" },
+        ]}
+        size={40}
+      />,
+    );
+    expect(ringRadius(large)).toBe("50% 48% 52% 50% / 49% 51% 49% 51%");
+
+    const small = renderToString(
+      <GroupAvatar
+        members={[
+          { name: "A", color: "#F59E0B" },
+          { name: "B", color: "#3B82F6" },
+        ]}
+        size={24}
+      />,
+    );
+    expect(ringRadius(small)).toBe("50%");
+  });
+
   it("exposes data-status on group member avatars", () => {
     const html = renderToString(
       <GroupAvatar

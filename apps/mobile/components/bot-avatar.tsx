@@ -31,47 +31,13 @@ import Svg, {
 } from "react-native-svg";
 import { mobileTokens } from "../lib/appearance";
 import { workingAvatarDuration, workingAvatarFrame } from "../lib/avatar-motion";
-import { mobileBotAvatarPresentation } from "../lib/bot-avatar";
+import { mobileBotAvatarPresentation, sealEdgePath } from "../lib/bot-avatar";
 import { useI18n } from "../lib/i18n";
 import { useAvatarStyle } from "./avatar-style";
 import { NativeSymbol } from "./native-symbol";
 
 const AnimatedRect = Animated.createAnimatedComponent(Rect);
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
-
-/**
- * Generate an SVG path matching the hand-cut seal edge.
- * CSS: border-radius: 50% 48% 52% 50% / 49% 51% 49% 51%
- * Below 28 px the edge is a true circle, per the design canvas.
- */
-function sealEdgePath(s: number): string {
-  if (s < 28) {
-    const r = s / 2;
-    return `M${r},0A${r},${r},0,1,1,${r},${s}A${r},${r},0,1,1,${r},0Z`;
-  }
-  // Horizontal radii: TL=50%, TR=48%, BR=52%, BL=50%
-  // Vertical radii:   TL=49%, TR=51%, BR=49%, BL=51%
-  const hTL = s * 0.5;
-  const vTL = s * 0.49;
-  const hTR = s * 0.48;
-  const vTR = s * 0.51;
-  const hBR = s * 0.52;
-  const vBR = s * 0.49;
-  const hBL = s * 0.5;
-  const vBL = s * 0.51;
-  return [
-    `M${hTL},0`,
-    `L${s - hTR},0`,
-    `A${hTR},${vTR},0,0,1,${s},${vTR}`,
-    `L${s},${s - vBR}`,
-    `A${hBR},${vBR},0,0,1,${s - hBR},${s}`,
-    `L${hBL},${s}`,
-    `A${hBL},${vBL},0,0,1,0,${s - vBL}`,
-    `L0,${vTL}`,
-    `A${hTL},${vTL},0,0,1,${hTL},0`,
-    "Z",
-  ].join("");
-}
 
 export const BotAvatar = memo(function BotAvatar({
   color,
