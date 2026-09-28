@@ -1,5 +1,6 @@
 import { ChatMarkdown } from "@ardurbot/chat-ui/native";
 import type { MessageBlock } from "@ardurbot/contracts";
+import { selectPeerTranscript } from "@ardurbot/core";
 import { useEffect, useState } from "react";
 import { ActivityIndicator, Button, ScrollView, Text, View } from "react-native";
 import type { MobileMessage, MobileMessagePage } from "../lib/api";
@@ -70,22 +71,7 @@ export function PeerConversation({
     };
   }, [botId, groupId, fallbackBlock]);
 
-  const conversation = messages.flatMap((message) =>
-    message.blocks.flatMap((entry) => {
-      if (entry.kind === "bot_message_sent" && entry.toBotId === peerBotId)
-        return [{ id: message.id, author: botName, text: entry.text, truncated: false }];
-      if (entry.kind === "bot_message_received" && entry.fromBotId === peerBotId)
-        return [
-          {
-            id: message.id,
-            author: peerName,
-            text: entry.text,
-            truncated: Boolean(entry.truncated),
-          },
-        ];
-      return [];
-    }),
-  );
+  const conversation = selectPeerTranscript(messages, botId, peerBotId, Boolean(groupId));
 
   return (
     <View style={{ flex: 1, backgroundColor: tokens.background, padding: 16, gap: 12 }}>
@@ -102,10 +88,14 @@ export function PeerConversation({
       <ScrollView contentContainerStyle={{ gap: 10 }}>
         {conversation.map((item) => (
           <View
-            key={item.id}
+            key={item.messageId}
             style={{ borderRadius: 12, backgroundColor: tokens.card, padding: 12 }}
           >
-            <Text style={{ color: tokens.mutedForeground }}>{item.author}</Text>
+            <Text style={{ color: tokens.mutedForeground }}>
+              {item.authorBotId === botId || (!item.authorBotId && item.direction === "sent")
+                ? botName
+                : peerName}
+            </Text>
             <ChatMarkdown palette={tokens} colorScheme={colorScheme}>
               {item.text}
             </ChatMarkdown>
