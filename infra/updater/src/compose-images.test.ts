@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { resolveComputerImage } from "@ardurbot/contracts/computer-image";
 import { describe, expect, it } from "vitest";
@@ -87,10 +88,16 @@ function publishedNames(matrixName: unknown, ref: "dev" | "tag"): string[] {
 }
 
 function renderedComputerImage(env: Record<string, string>) {
+  // Deployments run Compose beside a .env; some Compose releases check env_file entries during
+  // config, so render from a scratch project directory that holds an empty one.
+  const projectDir = mkdtempSync(path.join(tmpdir(), "ardurbot-compose-images-"));
+  writeFileSync(path.join(projectDir, ".env"), "");
   const result = spawnSync(
     "docker",
     [
       "compose",
+      "--project-directory",
+      projectDir,
       "--env-file",
       "/dev/null",
       "-f",
@@ -113,6 +120,7 @@ function renderedComputerImage(env: Record<string, string>) {
       },
     },
   );
+  rmSync(projectDir, { recursive: true, force: true });
   if (result.status !== 0) throw new Error(`Compose config failed: ${result.stderr}`);
   const rendered = JSON.parse(result.stdout) as {
     services: Record<string, { image?: string; environment?: Record<string, string> }>;

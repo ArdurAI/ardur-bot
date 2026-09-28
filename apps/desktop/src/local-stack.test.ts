@@ -86,6 +86,9 @@ describe("Compose deployment settings", () => {
               "docker",
               [
                 "compose",
+                // The stack runs beside its .env; resolve env_file entries against this copy.
+                "--project-directory",
+                dir,
                 "--env-file",
                 envFile,
                 "-f",
