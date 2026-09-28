@@ -1,5 +1,5 @@
 import type { FleetTarget } from "@ardurbot/contracts";
-import type { SetupDetail } from "@ardurbot/contracts/desktop-setup";
+import type { SetupDetail, SetupStepId } from "@ardurbot/contracts/desktop-setup";
 import type { FleetDiscoveryReport } from "@ardurbot/host-runtime/fleet/discovery";
 import type { FleetProcess } from "@ardurbot/host-runtime/fleet/process";
 import { discoverFleetReport, systemFleetProcess } from "../fleet-discovery.js";
@@ -36,7 +36,7 @@ export function enginesGuidedStep(deps: {
   now(): number;
   processes?: FleetProcess;
   discover?: (processes: FleetProcess, signal: AbortSignal) => Promise<FleetDiscoveryReport>;
-  cancelServices?: () => Promise<void>;
+  cancelServices?: () => Promise<readonly SetupStepId[] | undefined>;
 }): SetupStep {
   let found: FleetDiscoveryReport | null = null;
   const processes = deps.processes ?? systemFleetProcess;
@@ -77,7 +77,7 @@ export function enginesGuidedStep(deps: {
         : { kind: "blocked", reasonCode: "fleet-discovery-failed" },
     cancel: async () => {
       found = null;
-      await deps.cancelServices?.();
+      return deps.cancelServices?.();
     },
   };
 }

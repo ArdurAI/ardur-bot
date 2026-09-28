@@ -92,6 +92,7 @@ export function firstGuidedSteps(deps: GuidedStepsDependencies): SetupStep[] {
     if (deps.ownership && !deps.ownership.databaseStartedHere) return;
     await deps.localMode.stop();
     if (deps.ownership) deps.ownership.databaseStartedHere = false;
+    return ["database", "migrations"] as const;
   };
   const preflight = async (): Promise<StepVerification> => {
     const { prerequisites: p } = deps;
@@ -215,7 +216,7 @@ export function firstGuidedSteps(deps: GuidedStepsDependencies): SetupStep[] {
       verify: commandCheck,
       cancel: async () => {
         await deps.command.reconcile();
-        await stopOwnedDatabase();
+        return stopOwnedDatabase();
       },
       rollback: async () => deps.command.reconcile(),
     },

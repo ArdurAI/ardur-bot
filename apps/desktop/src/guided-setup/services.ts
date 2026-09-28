@@ -58,6 +58,7 @@ export function serviceGuidedStep(deps: ServiceStepDependencies): SetupStep {
         ]);
         startedHere = false;
         if (deps.ownership) deps.ownership.databaseStartedHere = false;
+        return ["database", "migrations", "services"] as const;
       } finally {
         if (timer) clearTimeout(timer);
       }

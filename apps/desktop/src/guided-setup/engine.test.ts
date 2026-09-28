@@ -1,6 +1,8 @@
+import type { DesktopLocalStackState } from "@ardurbot/contracts";
 import { describe, expect, it, vi } from "vitest";
 import type { SetupContext, SetupStep } from "./engine.js";
 import { SetupEngine } from "./engine.js";
+import { serviceGuidedStep } from "./services.js";
 import type { JournalFileBoundary, StepReceipt } from "./store.js";
 import { SetupJournalStore } from "./store.js";
 
@@ -704,6 +706,71 @@ describe("SetupEngine", () => {
     expect(checks).toHaveBeenCalledTimes(2);
     expect(restarted.steps[3]?.status).toBe("waiting-input");
   });
+
+  it.each([false, true])(
+    "restarts after cancelling at services when the database was already running: %s",
+    async (alreadyRunning) => {
+      let databaseReady = alreadyRunning;
+      const ownership = { databaseStartedHere: false };
+      const ready = async () => ({ kind: "satisfied" as const, checkedAt: 100, evidence: "ready" });
+      const databaseCheck = vi.fn(async () =>
+        databaseReady ? ready() : { kind: "needed" as const, reasonCode: "database-stopped" },
+      );
+      const migrationsCheck = vi.fn(async () =>
+        databaseReady ? ready() : { kind: "blocked" as const, reasonCode: "database-stopped" },
+      );
+      const prepareDatabase = vi.fn(async () => {
+        databaseReady = true;
+        ownership.databaseStartedHere = true;
+        return { kind: "owned" as const, proof: "database" };
+      });
+      const stop = vi.fn(async () => {
+        databaseReady = false;
+      });
+      const startServices = vi.fn(async () => {
+        expect(databaseReady).toBe(true);
+        return { phase: "ready" } as DesktopLocalStackState;
+      });
+      const engine = await SetupEngine.open(
+        memoryStore().store,
+        [
+          step({ check: ready }),
+          step({
+            id: "database",
+            requires: ["prerequisites"],
+            check: databaseCheck,
+            run: prepareDatabase,
+          }),
+          step({ id: "migrations", requires: ["database"], check: migrationsCheck }),
+          step({
+            id: "command",
+            requires: ["migrations"],
+            canSkip: true,
+            check: async () => ({ kind: "notApplicable", reasonCode: "command-unavailable" }),
+          }),
+          serviceGuidedStep({
+            localMode: { servicesReady: async () => false, startServices, stop },
+            ownership,
+            dataFolderFingerprint: "fixture",
+            now: () => 100,
+          }),
+        ],
+        clock,
+      );
+      expect((await engine.start()).steps[4]?.status).toBe("waiting-input");
+      await engine.cancel();
+      expect(stop).toHaveBeenCalledTimes(alreadyRunning ? 0 : 1);
+      expect(engine.snapshot().steps[1]?.status).toBe(alreadyRunning ? "succeeded" : "pending");
+      expect(engine.snapshot().steps[2]?.status).toBe(alreadyRunning ? "succeeded" : "pending");
+
+      expect((await engine.start()).steps[4]?.status).toBe("waiting-input");
+      expect(databaseCheck).toHaveBeenCalledTimes(alreadyRunning ? 1 : 2);
+      expect(migrationsCheck).toHaveBeenCalledTimes(alreadyRunning ? 1 : 2);
+      expect(prepareDatabase).toHaveBeenCalledTimes(alreadyRunning ? 0 : 2);
+      await engine.retry("services");
+      expect(startServices).toHaveBeenCalledOnce();
+    },
+  );
 
   it("stops before mutation when the pending journal write fails", async () => {
     const files = memoryStore();
