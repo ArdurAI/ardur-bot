@@ -50,7 +50,13 @@ it("renders the entire command literally in an expandable block and answers the 
     await act(async () => root.render(<AskCard block={block} canAnswer onAnswer={answer} />));
     expect(node.querySelector("details")?.open).toBe(true);
     expect(node.querySelector("pre")?.textContent).toBe(`${text}\n${detail}`);
-    expect(node.querySelector("a, [data-markdown]")).toBeNull();
+    expect(node.querySelector("pre a, [data-markdown]")).toBeNull();
+    expect(node.querySelector('a[href="https://example.test"]')).toBeNull();
+    const help = node.querySelector(
+      'a[href="https://ardur.ai/docs/features/chat-approvals/#step-review-pending-action"]',
+    );
+    expect(help?.textContent).toBe("Learn more");
+    expect(help?.getAttribute("target")).toBe("_blank");
     node.querySelector("details")!.open = false;
     node.querySelector("details")!.open = true;
     expect(node.querySelector("pre")?.textContent).toBe(`${text}\n${detail}`);
