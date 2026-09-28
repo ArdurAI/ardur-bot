@@ -1,0 +1,41 @@
+/**
+ * The integration suites the disposable-database harness runs in CI. Kept in
+ * its own module so a unit test can hold the registration to account: a
+ * Postgres suite that is not listed here gets no routine CI coverage at all,
+ * because the harness rejects unknown `--spec` values.
+ */
+export const INTEGRATION_SUITES: readonly string[] = [
+  "packages/testkit/src/pi-offline.postgres.test.ts",
+  "packages/testkit/src/capabilities-memory.postgres.test.ts",
+  "packages/testkit/src/computer-approval.postgres.test.ts",
+  "packages/testkit/src/eval-history.postgres.test.ts",
+  "packages/testkit/src/eval-customer-support.postgres.test.ts",
+  "packages/testkit/src/journeys.test.ts",
+  "packages/testkit/src/authorization.test.ts",
+  "packages/testkit/src/attachments.test.ts",
+  "packages/testkit/src/voice.test.ts",
+  "packages/testkit/src/search.test.ts",
+  "packages/testkit/src/executor-lifecycle.test.ts",
+  "packages/testkit/src/connections.test.ts",
+  "packages/testkit/src/bot-secrets.test.ts",
+  "packages/db/src/space-membership.postgres.test.ts",
+  "packages/db/src/group-model-pins.postgres.test.ts",
+  "packages/db/src/hermes-runtime-config.postgres.test.ts",
+  "packages/testkit/src/group-model-visible.postgres.test.ts",
+  "packages/db/src/messaging.postgres.test.ts",
+  "packages/db/src/learning.postgres.test.ts",
+  "packages/adapters/src/learning-insights.postgres.test.ts",
+  "packages/adapters/src/bot-comms.postgres.test.ts",
+  "packages/db/src/command-blocks.postgres.test.ts",
+  "packages/adapters/src/board/filing.postgres.test.ts",
+  "packages/adapters/src/board/delivery.postgres.test.ts",
+  "packages/memory/src/commit.postgres.test.ts",
+  "packages/memory/src/scoped-reads.postgres.test.ts",
+  "packages/adapters/src/memory/scoped-reads-wrapper.postgres.test.ts",
+  "packages/adapters/src/wakeup.postgres.test.ts",
+  "packages/adapters/src/realtime.postgres.test.ts",
+  "packages/adapters/src/run-usage.postgres.test.ts",
+  "packages/adapters/src/job-reconciler.postgres.test.ts",
+  "packages/adapters/src/cloud-agent.postgres.test.ts",
+  "packages/db/src/runner-jobs.postgres.test.ts",
+];
