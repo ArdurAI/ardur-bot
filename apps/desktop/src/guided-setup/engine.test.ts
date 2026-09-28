@@ -170,6 +170,31 @@ describe("SetupEngine", () => {
     expect(next.currentStep).toBe("services");
     expect(next.steps[4]?.status).toBe("waiting-input");
   });
+  it("continues to account setup after skipped optional machine steps without rediscovery", async () => {
+    const ready = async () => ({ kind: "satisfied" as const, checkedAt: 100, evidence: "ready" });
+    const discover = vi.fn(async () => ({ kind: "blocked" as const, reasonCode: "timeout" }));
+    const engine = await SetupEngine.open(
+      memoryStore().store,
+      [
+        step({ check: ready }),
+        step({ id: "database", requires: ["prerequisites"], check: ready }),
+        step({ id: "migrations", requires: ["database"], check: ready }),
+        step({ id: "command", requires: ["migrations"], canSkip: true }),
+        step({ id: "services", requires: ["migrations"], check: ready }),
+        step({ id: "engines", requires: ["services"], canSkip: true, recheck: discover }),
+        step({ id: "model", requires: ["engines"], canSkip: true, waitForInput: true }),
+      ],
+      clock,
+    );
+    await engine.start();
+    await engine.skip("command");
+    expect(engine.snapshot().steps[5]?.status).toBe("waiting-input");
+    const next = await engine.skip("engines");
+    expect(next.steps[5]?.status).toBe("skipped");
+    expect(next.steps[6]?.status).toBe("waiting-input");
+    expect((await engine.start()).steps[6]?.status).toBe("waiting-input");
+    expect(discover).not.toHaveBeenCalled();
+  });
   it("rechecks saved optional-computer success before handoff and exposes a failed recheck", async () => {
     const files = memoryStore();
     const ready = async () => ({ kind: "satisfied" as const, checkedAt: 100, evidence: "ready" });

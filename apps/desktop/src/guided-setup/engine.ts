@@ -418,6 +418,9 @@ export class SetupEngine {
         if (!explicit && row.status === "succeeded" && this.freshlyVerified.has(step.id)) continue;
         const savedSuccess = row.status === "succeeded";
         const previouslySkipped = row.status === "skipped" && !explicit;
+        // A skipped machine choice remains the user's choice across Continue and restart.
+        // Account steps still read back saved state so they can become satisfied later.
+        if (previouslySkipped && !step.waitForInput) continue;
         this.journal.snapshot.currentStep = step.id;
         row.attempt += 1;
         this.transition(step.id, "checking", null);
@@ -537,13 +540,17 @@ export class SetupEngine {
     }
   }
   private dependenciesMet(step: SetupStep): boolean {
-    return step.requires.every(
-      (id) => this.row(id).status === "succeeded" && this.freshlyVerified.has(id),
-    );
+    return step.requires.every((id) => this.dependencySatisfied(id));
+  }
+  private dependencySatisfied(id: SetupStepId): boolean {
+    const status = this.row(id).status;
+    if (status === "skipped") return this.steps.find((step) => step.id === id)?.canSkip === true;
+    return status === "succeeded" && this.freshlyVerified.has(id);
   }
   private async recheckDependencies(step: SetupStep, stopBefore: number): Promise<boolean> {
     if (this.dependenciesMet(step)) return true;
-    if (step.requires.some((id) => this.row(id).status !== "succeeded")) return false;
+    if (step.requires.some((id) => !["succeeded", "skipped"].includes(this.row(id).status)))
+      return false;
     await this.schedule(0, false, stopBefore);
     return (
       !this.cancelling &&
