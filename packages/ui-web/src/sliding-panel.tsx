@@ -61,7 +61,7 @@ export function SlidingPanel({
         aria-hidden={!open}
         inert={!open}
         style={widthStyle}
-        className={`${expanded ? "fixed inset-0 z-50 max-w-none" : "absolute inset-y-0 end-0 z-20 max-w-full border-s border-sidebar-border"} flex w-full min-h-0 flex-col overflow-hidden bg-background transition-[transform,opacity] duration-[240ms] ease-[cubic-bezier(0.2,0.7,0.2,1)] motion-reduce:transition-none ${!expanded && workspace ? "md:w-(--workspace-pane-width)" : !expanded ? "max-w-[384px]" : ""} ${open ? "translate-x-0 opacity-100" : "pointer-events-none translate-x-full opacity-0 rtl:-translate-x-full"}`}
+        className={`${expanded ? "fixed inset-0 z-50 max-w-none" : "absolute inset-y-0 end-0 z-20 border-s border-sidebar-border"} flex w-full min-h-0 flex-col overflow-hidden bg-background transition-[transform,opacity] duration-[240ms] ease-[cubic-bezier(0.2,0.7,0.2,1)] motion-reduce:transition-none ${!expanded && workspace ? "md:w-(--workspace-pane-width)" : !expanded ? "max-w-[384px]" : ""} ${open ? "translate-x-0 opacity-100" : "pointer-events-none translate-x-full opacity-0 rtl:-translate-x-full"}`}
       >
         {workspace && open && !expanded ? (
           <hr
