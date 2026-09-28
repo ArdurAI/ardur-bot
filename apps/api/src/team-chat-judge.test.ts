@@ -7,12 +7,11 @@ import {
   ModelTeamChatEngagementJudge,
   parseTeamChatEngagementDecision,
   renderTeamChatEngagementPrompt,
+  TEAM_CHAT_JUDGE_USAGE_PURPOSE,
 } from "./team-chat-judge.js";
 
 async function judgeUsage(usage: AgentUsage[], failed = false) {
-  const create = vi.fn(async (_args: { data: { inputTokens: number; outputTokens: number } }) => ({
-    id: "usage",
-  }));
+  const recordUsage = vi.fn(async () => undefined);
   const judge = new ModelTeamChatEngagementJudge({
     runtime: {
       async *run() {
@@ -21,11 +20,16 @@ async function judgeUsage(usage: AgentUsage[], failed = false) {
         yield { type: "done", text: '{"act":true}' };
       },
     } as AgentRuntime,
-    prisma: { usageRecord: { create } } as unknown as PrismaClient,
+    prisma: {} as PrismaClient,
     secrets: {} as EncryptedSecretStore,
     deploymentProvider: "fixture",
     deploymentModel: "fixture",
-    resolvePinnedModel: async () => ({ provider: "fixture", id: "fixture" }),
+    resolvePinnedModel: async () => ({
+      provider: "fixture",
+      id: "fixture",
+      runtimePin: { runtimeKind: "pi", provider: "fixture", modelId: "fixture" },
+    }),
+    recordUsage,
   });
   const decision = await judge.decide({
     bot: {
@@ -40,7 +44,7 @@ async function judgeUsage(usage: AgentUsage[], failed = false) {
     rules: "",
     messages: [],
   });
-  return { create, decision };
+  return { recordUsage, decision };
 }
 
 const usageRequest = (attemptId = "first") =>
@@ -54,51 +58,58 @@ const usageRequest = (attemptId = "first") =>
   });
 
 describe("team chat engagement judge", () => {
-  it.each([false, true])("persists cumulative spend once even on failure (%s)", async (failed) => {
-    const request = usageRequest();
-    const started = request.start();
-    const snapshot = request.snapshot({ input: 100, output: 30 });
-    const { create, decision } = await judgeUsage(
-      [started, snapshot, request.finish(failed ? "failed" : "success"), snapshot],
-      failed,
-    );
-    expect(decision).toEqual({ act: !failed });
-    expect(create).toHaveBeenCalledOnce();
-    expect(create).toHaveBeenCalledWith({
-      data: expect.objectContaining({ inputTokens: 100, outputTokens: 30 }),
-    });
-  });
+  it.each([false, true])(
+    "forwards every usage event to shared accounting even on failure (%s)",
+    async (failed) => {
+      const request = usageRequest();
+      const started = request.start();
+      const snapshot = request.snapshot({ input: 100, output: 30 });
+      const { recordUsage, decision } = await judgeUsage(
+        [started, snapshot, request.finish(failed ? "failed" : "success"), snapshot],
+        failed,
+      );
+      expect(decision).toEqual({ act: !failed });
+      expect(recordUsage).toHaveBeenCalledTimes(4);
+      expect(recordUsage).toHaveBeenCalledWith(
+        expect.objectContaining({ type: "usage" }),
+        expect.objectContaining({
+          spaceId: "space",
+          userId: "user",
+          botId: "bot",
+          threadId: expect.stringMatching(/^team-chat-judge:/),
+          runtimePin: { runtimeKind: "pi", provider: "fixture", modelId: "fixture" },
+        }),
+      );
+    },
+  );
 
-  it("charges only new cumulative spend while counting a distinct retry", async () => {
+  it("scopes a distinct retry request to its own usage row via shared accounting", async () => {
     const request = usageRequest();
     const retry = usageRequest("retry");
-    const { create } = await judgeUsage([
+    const { recordUsage } = await judgeUsage([
       request.snapshot({ input: 40, output: 10 }),
       request.snapshot({ input: 100, output: 30 }),
       request.finish("failed"),
       retry.snapshot({ input: 20, output: 8 }),
       retry.finish("success"),
     ]);
-    expect(create.mock.calls.map(([args]) => args)).toEqual([
-      { data: expect.objectContaining({ inputTokens: 40, outputTokens: 10 }) },
-      { data: expect.objectContaining({ inputTokens: 60, outputTokens: 20 }) },
-      { data: expect.objectContaining({ inputTokens: 20, outputTokens: 8 }) },
-    ]);
+    const events = recordUsage.mock.calls.map(([usage]) => usage as AgentUsage);
+    expect(new Set(events.map((event) => event.request?.attemptId))).toEqual(
+      new Set(["first", "retry"]),
+    );
   });
 
-  it("does not persist unavailable receipts as measured zero", async () => {
+  it("forwards unavailable receipts so accounting records an explicit limitation, not zero", async () => {
     const request = usageRequest();
-    const { create } = await judgeUsage([request.start(), request.finish("failed")], true);
-    expect(create).not.toHaveBeenCalled();
+    const { recordUsage } = await judgeUsage([request.start(), request.finish("failed")], true);
+    expect(recordUsage).toHaveBeenCalledTimes(2);
+    expect(TEAM_CHAT_JUDGE_USAGE_PURPOSE).toBe("helper");
   });
 
-  it("preserves totals-only deltas without deduplicating equal amounts", async () => {
+  it("forwards identity-free totals without deduplicating equal amounts", async () => {
     const usage = { provider: "fixture", model: "fixture", inputTokens: 100, outputTokens: 30 };
-    const { create } = await judgeUsage([usage, usage]);
-    expect(create).toHaveBeenCalledTimes(2);
-    expect(create).toHaveBeenNthCalledWith(2, {
-      data: expect.objectContaining({ inputTokens: 100, outputTokens: 30 }),
-    });
+    const { recordUsage } = await judgeUsage([usage, usage]);
+    expect(recordUsage).toHaveBeenCalledTimes(2);
   });
 
   it("renders untrusted messages without treating them as instructions", () => {

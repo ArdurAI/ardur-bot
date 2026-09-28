@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
-import type { AgentUsage } from "@ardurbot/adapter-kit";
+import type { AgentUsage, UsagePurpose } from "@ardurbot/adapter-kit";
 import { DELEGATION_LIMITS } from "@ardurbot/contracts";
 import type { PrismaClient, ThreadEvents, UsageRecord } from "@ardurbot/db";
 import {
@@ -123,6 +123,155 @@ export async function recordRunUsage(
   return usage.reported === false || (delegation && delegation.runId !== run.id)
     ? null
     : { inputTokens: usage.inputTokens, cachedTokens: usage.cachedTokens ?? null };
+}
+
+/**
+ * Usage for a model request that owns no run (engagement judges and similar side
+ * calls). Rows carry purpose, runtime pin, request identity and cache categories,
+ * with no run, budget or thread-event side effects. Callers stream every usage
+ * event here; replay deduplication is the ledger's, by request key and sequence.
+ */
+export async function recordStandaloneUsage(
+  deps: Pick<UsageDependencies, "prisma">,
+  scope: {
+    spaceId: string;
+    userId: string;
+    botId: string;
+    threadId: string;
+    purpose: UsagePurpose;
+    runtimePin?: unknown;
+  },
+  usage: AgentUsage,
+): Promise<void> {
+  const runtimePin =
+    scope.runtimePin === undefined ? Prisma.JsonNull : (scope.runtimePin as Prisma.InputJsonValue);
+  if (!usage.request) {
+    // Identity-free events stay one delta row per event; an explicit "not
+    // reported" marker never becomes a measured zero.
+    if (usage.reported === false) return;
+    if (
+      ![usage.inputTokens, usage.outputTokens].every(
+        (value) => Number.isInteger(value) && value >= 0 && value <= 2_147_483_647,
+      )
+    )
+      throw new Error("Invalid legacy usage totals");
+    await deps.prisma.usageRecord.create({
+      data: {
+        spaceId: scope.spaceId,
+        userId: scope.userId,
+        botId: scope.botId,
+        threadId: scope.threadId,
+        runId: null,
+        provider: usage.provider,
+        model: usage.model,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        purpose: scope.purpose,
+        coverage: "partial",
+        runtimePin,
+        cost: null,
+      },
+    });
+    return;
+  }
+  const request = parseRequestUsage(usage.request);
+  const supplied = usageTokenTotals(request.categories, request.reasoningSemantics);
+  if (supplied.inputTokens !== usage.inputTokens || supplied.outputTokens !== usage.outputTokens)
+    throw new Error("Legacy usage totals disagree with request categories");
+  const requestKey = digest([
+    scope.spaceId,
+    scope.userId,
+    scope.threadId,
+    request.requestId,
+    request.attemptId,
+    request.counter.epochId,
+  ]);
+  const fingerprint = digest([usage.provider, usage.model, request]);
+  await deps.prisma.$transaction(async (tx) => {
+    const existing = await tx.usageRecord.findUnique({ where: { requestKey } });
+    if (existing) {
+      const receipt = await tx.requestUsageObservation.findUnique({
+        where: {
+          usageRecordId_sequence: {
+            usageRecordId: existing.id,
+            sequence: request.counter.sequence,
+          },
+        },
+      });
+      if (receipt) {
+        if (receipt.fingerprint !== fingerprint)
+          throw new Error("Conflicting usage observation replay");
+        return;
+      }
+      if (
+        existing.purpose !== scope.purpose ||
+        existing.provider !== usage.provider ||
+        existing.model !== usage.model ||
+        existing.threadId !== scope.threadId ||
+        existing.parentRequestId !== request.parentRequestId ||
+        existing.counterMode !== request.counter.mode ||
+        existing.inputSemantics !== request.inputSemantics ||
+        existing.reasoningSemantics !== request.reasoningSemantics
+      )
+        throw new Error("Usage request attribution changed within an attempt");
+      if (
+        request.counter.mode === "cumulative" &&
+        request.counter.sequence <= existing.lastSequence!
+      )
+        throw new Error("Out-of-order cumulative usage observation");
+    }
+    const totals = accumulateRequestUsage(existing ? storedTotals(existing) : null, request);
+    const tokens = usageTokenTotals(totals.categories, request.reasoningSemantics);
+    const { categories } = totals;
+    const data = {
+      ...tokens,
+      logicalInputTokens: categories.logicalInput,
+      uncachedInputTokens: categories.uncachedInput,
+      cacheReadInputTokens: categories.cacheReadInput,
+      cacheWriteInputTokens: categories.cacheWriteInput,
+      reportedOutputTokens: categories.output,
+      reasoningTokens: categories.reasoning,
+      categoryCoverage: totals.categoryCoverage,
+      coverage: Object.values(totals.categoryCoverage).every((value) => value === "complete")
+        ? "complete"
+        : "partial",
+      cost: totals.cost,
+      pricingProvenance: totals.cost === null ? Prisma.JsonNull : { kind: "request-observations" },
+      lastSequence: Math.max(existing?.lastSequence ?? -1, request.counter.sequence),
+    };
+    const record = existing
+      ? await tx.usageRecord.update({ where: { id: existing.id }, data })
+      : await tx.usageRecord.create({
+          data: {
+            ...data,
+            spaceId: scope.spaceId,
+            userId: scope.userId,
+            botId: scope.botId,
+            threadId: scope.threadId,
+            runId: null,
+            provider: usage.provider,
+            model: usage.model,
+            requestKey,
+            requestId: request.requestId,
+            attemptId: request.attemptId,
+            parentRequestId: request.parentRequestId,
+            purpose: scope.purpose,
+            counterEpoch: request.counter.epochId,
+            counterMode: request.counter.mode,
+            inputSemantics: request.inputSemantics,
+            reasoningSemantics: request.reasoningSemantics,
+            runtimePin,
+          },
+        });
+    await tx.requestUsageObservation.create({
+      data: {
+        usageRecordId: record.id,
+        sequence: request.counter.sequence,
+        fingerprint,
+        observation: request as unknown as Prisma.InputJsonValue,
+      },
+    });
+  });
 }
 
 /** The broker uses this sink for started receipts and every later observation. */

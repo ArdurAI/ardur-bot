@@ -1,6 +1,8 @@
+import type { AgentUsage } from "@ardurbot/adapter-kit";
+import { RequestUsageCollector } from "@ardurbot/adapter-kit";
 import type { Prisma, PrismaClient } from "@ardurbot/db";
 import { expect, it, vi } from "vitest";
-import { recordRunUsage } from "./run-usage.js";
+import { recordRunUsage, recordStandaloneUsage } from "./run-usage.js";
 
 it("attributes the usage record and its event to the same run", async () => {
   const create = vi.fn(async () => ({ id: "usage" }));
@@ -128,5 +130,135 @@ it("charges coordinator usage to the existing root under the admission lock", as
   });
   expect(tx.usageRecord.create).toHaveBeenCalledWith({
     data: expect.objectContaining({ rootTaskId: "goal-root" }),
+  });
+});
+
+const standaloneScope = {
+  spaceId: "space",
+  userId: "user",
+  botId: "bot",
+  threadId: "judge-thread",
+  purpose: "helper" as const,
+  runtimePin: { runtimeKind: "pi", provider: "fixture", modelId: "fixture" },
+};
+function standalonePrisma() {
+  const rows = new Map<string, Record<string, unknown>>();
+  const tx = {
+    usageRecord: {
+      findUnique: vi.fn(async ({ where }: { where: { requestKey: string } }) => {
+        const row = rows.get(where.requestKey);
+        return row ? structuredClone(row) : null;
+      }),
+      create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
+        rows.set(data.requestKey as string, { id: "standalone", ...data });
+        return { id: "standalone", ...data };
+      }),
+      update: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
+        const key = data.requestKey as string;
+        rows.set(key, { ...rows.get(key), ...data });
+        return { id: "standalone", ...data };
+      }),
+    },
+    requestUsageObservation: {
+      findUnique: vi.fn(async () => null),
+      create: vi.fn(async () => ({ id: "receipt" })),
+    },
+  };
+  const prisma = {
+    ...tx,
+    $transaction: (fn: (tx: Prisma.TransactionClient) => Promise<unknown>) =>
+      fn(tx as unknown as Prisma.TransactionClient),
+  } as unknown as PrismaClient;
+  return { prisma, tx };
+}
+it("records standalone usage with purpose, runtime pin, request identity and cache categories", async () => {
+  const { prisma, tx } = standalonePrisma();
+  const collector = new RequestUsageCollector({
+    provider: "fixture",
+    model: "fixture",
+    inputSemantics: "total-with-cache-subsets",
+    mappingVersion: "fixture-v1",
+  });
+  for (const event of [
+    collector.start(),
+    collector.snapshot({ input: 100, output: 30, cacheRead: 60, cacheWrite: 10, reasoning: 5 }),
+    collector.finish("success"),
+  ] as AgentUsage[])
+    await recordStandaloneUsage({ prisma }, standaloneScope, event);
+  expect(tx.usageRecord.create).toHaveBeenCalledTimes(1);
+  expect(tx.usageRecord.create).toHaveBeenCalledWith({
+    data: expect.objectContaining({
+      runId: null,
+      purpose: "helper",
+      threadId: "judge-thread",
+      runtimePin: standaloneScope.runtimePin,
+      requestId: expect.any(String),
+      attemptId: expect.any(String),
+    }),
+  });
+  expect(tx.usageRecord.update).toHaveBeenCalledTimes(2);
+  expect(tx.usageRecord.update).toHaveBeenLastCalledWith({
+    where: { id: "standalone" },
+    data: expect.objectContaining({
+      inputTokens: 100,
+      outputTokens: 30,
+      logicalInputTokens: 100,
+      cacheReadInputTokens: 60,
+      cacheWriteInputTokens: 10,
+      uncachedInputTokens: 30,
+      reasoningTokens: 5,
+      coverage: "complete",
+    }),
+  });
+  expect(tx.requestUsageObservation.create).toHaveBeenCalledTimes(3);
+});
+
+it("keeps unreported standalone usage explicit instead of writing measured zeros", async () => {
+  const { prisma, tx } = standalonePrisma();
+  const collector = new RequestUsageCollector({
+    provider: "fixture",
+    model: "fixture",
+    inputSemantics: "total-with-cache-subsets",
+    mappingVersion: "fixture-v1",
+  });
+  for (const event of [collector.start(), collector.finish("failed")] as AgentUsage[])
+    await recordStandaloneUsage({ prisma }, standaloneScope, event);
+  expect(tx.usageRecord.create).toHaveBeenCalledTimes(1);
+  expect(tx.usageRecord.update).toHaveBeenCalledTimes(1);
+  expect(tx.usageRecord.update).toHaveBeenLastCalledWith({
+    where: { id: "standalone" },
+    data: expect.objectContaining({
+      inputTokens: 0,
+      outputTokens: 0,
+      logicalInputTokens: null,
+      cacheReadInputTokens: null,
+      cacheWriteInputTokens: null,
+      reportedOutputTokens: null,
+      coverage: "partial",
+      categoryCoverage: {
+        logicalInput: "unknown",
+        uncachedInput: "unknown",
+        cacheReadInput: "unknown",
+        cacheWriteInput: "unknown",
+        output: "unknown",
+        reasoning: "unknown",
+      },
+    }),
+  });
+});
+
+it("preserves identity-free legacy deltas as standalone rows without a zero claim", async () => {
+  const { prisma, tx } = standalonePrisma();
+  const usage = { provider: "fixture", model: "fixture", inputTokens: 100, outputTokens: 30 };
+  await recordStandaloneUsage({ prisma }, standaloneScope, usage);
+  await recordStandaloneUsage({ prisma }, standaloneScope, { ...usage, reported: false });
+  expect(tx.usageRecord.create).toHaveBeenCalledTimes(1);
+  expect(tx.usageRecord.create).toHaveBeenCalledWith({
+    data: expect.objectContaining({
+      purpose: "helper",
+      inputTokens: 100,
+      outputTokens: 30,
+      coverage: "partial",
+    }),
   });
 });
