@@ -797,6 +797,8 @@ describe("reset", () => {
           { timeout: 5_000 },
         );
       } finally {
+        // Supervision would respawn a worker killed here; stop it before reaping.
+        await controller.stop().catch(() => {});
         await reapFixtureProcesses(trackedPids);
         for (const pid of trackedPids) {
           expect(alive(pid)).toBe(false);
