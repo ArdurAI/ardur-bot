@@ -390,8 +390,8 @@ export function Wordmark({ className }: { className?: string }) {
         <path
           fill="none"
           stroke="currentColor"
-          stroke-width="36"
-          stroke-linecap="round"
+          strokeWidth="36"
+          strokeLinecap="round"
           d="M 322 100 A 150 150 0 1 0 334 296"
         ></path>
         <rect x="322" y="118" width="40" height="232" rx="20" fill="currentColor"></rect>

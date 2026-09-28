@@ -1,9 +1,17 @@
-const { chromium } = require("../node_modules/.pnpm/playwright@1.63.0/node_modules/playwright");
-const path = require("path");
-const fs = require("fs");
-const { execSync } = require("child_process");
+const path = require("node:path");
+const fs = require("node:fs");
+const os = require("node:os");
+const { execFileSync } = require("node:child_process");
+const { createRequire } = require("node:module");
 
-const brandDir = path.join(__dirname, "../packages/ui-tokens/assets/brand");
+const root = path.resolve(__dirname, "..");
+
+// Playwright is a devDependency of the desktop app; @playwright/test re-exports
+// the chromium browser type, so normal module resolution finds the browser.
+const requireFromDesktop = createRequire(path.join(root, "apps", "desktop", "package.json"));
+const { chromium } = require(requireFromDesktop.resolve("@playwright/test"));
+
+const brandDir = path.join(root, "packages/ui-tokens/assets/brand");
 fs.mkdirSync(brandDir, { recursive: true });
 
 const ink = "#1C1A17";
@@ -44,7 +52,7 @@ writeSvg("lockup-paper.svg", lockupPaper);
 function appIcon(id, size, svgContext, isAdaptive = false) {
   const radius = Math.round(size * 0.225);
   const bg = isAdaptive ? "transparent" : clay;
-  const br = isAdaptive ? "0" : radius + "px";
+  const br = isAdaptive ? "0" : `${radius}px`;
   return `<div id="${id}" class="box" style="width: ${size}px; height: ${size}px; background: ${bg}; border-radius: ${br}; color: ${paper}; display: flex; align-items: center; justify-content: center;"><svg viewBox="0 0 400 400" style="width: 72.5%; height: 72.5%;">${svgContext}</svg></div>`;
 }
 
@@ -74,87 +82,166 @@ ${monochromeIcon("monochrome-icon", 1024, svg3)}
 <div id="icon-background" class="box" style="width: 1024px; height: 1024px; background: ${clay};"></div>
 </body></html>`;
 
-async function render() {
-  const browser = await chromium.launch();
-  const page = await browser.newPage();
-  await page.setContent(html);
-
-  async function snap(selector, dest, width, height, omitBackground = false) {
-    const el = await page.$(selector);
-    fs.mkdirSync(path.dirname(dest), { recursive: true });
-    await el.screenshot({ path: dest, omitBackground });
-  }
-
-  await snap("#favicon-16", "apps/web/public/favicon-16x16.png", null, null, true);
-  await snap("#favicon-32", "apps/web/public/favicon-32x32.png", null, null, true);
-  await snap("#favicon-16", "apps/www/public/favicon-16x16.png", null, null, true);
-  await snap("#favicon-32", "apps/www/public/favicon-32x32.png", null, null, true);
-
-  await snap("#icon-180", "apps/web/public/apple-touch-icon.png", null, null, true);
-  await snap("#icon-192", "apps/web/public/icon-192.png", null, null, true);
-  await snap("#icon-512", "apps/web/public/icon-512.png", null, null, true);
-
-  await snap("#icon-180", "apps/www/public/apple-touch-icon.png", null, null, true);
-  await snap("#icon-192", "apps/www/public/icon-192.png", null, null, true);
-  await snap("#icon-512", "apps/www/public/icon-512.png", null, null, true);
-
-  await snap("#icon-1024", "apps/desktop/assets/icon.png", null, null, true);
-  await snap("#icon-1024", "apps/desktop/assets/icon-macos.png", null, null, true);
-
-  // Tray icon is monochrome black for macos Template
-  await snap("#tray-icon", "apps/desktop/assets/trayTemplate.png", null, null, true);
-
-  // Clean up old tray.png if it exists
-  if (fs.existsSync("apps/desktop/assets/tray.png")) {
-    fs.unlinkSync("apps/desktop/assets/tray.png");
-  }
-
-  await snap("#icon-1024", "apps/mobile/assets/icon.png", null, null, true);
-  await snap("#icon-1024", "apps/mobile/assets/splash-icon.png", null, null, true);
-  await snap("#adaptive-icon", "apps/mobile/assets/adaptive-icon.png", null, null, true);
-
-  // "monochrome: black with alpha for macOS template images (*Template.png so macOS tints them), no tile"
-  // Let's use #monochrome-icon (which is monochromeIcon helper) but it should be named appropriately if it's meant for Android monochrome
-  // The spec says "monochrome: black with alpha for macOS template images (*Template.png so macOS tints them), no tile."
-  // Wait, Expo's monochrome icon might be for Android. Android monochrome icons are just flat svgs or pngs.
-  // The previous code had "apps/mobile/assets/monochrome-icon.png". Android monochrome icons are usually one color.
-  await snap("#monochrome-icon", "apps/mobile/assets/monochrome-icon.png", null, null, true);
-  await snap("#icon-background", "apps/mobile/assets/icon-background.png", null, null, false);
-
-  await snap("#favicon-48", "apps/mobile/assets/favicon.png", null, null, true);
-  await snap("#notification-icon", "apps/mobile/assets/notification-icon.png", null, null, true);
-
-  await browser.close();
-
-  execSync(
-    "sips -s format ico apps/web/public/favicon-32x32.png --out apps/web/public/favicon.ico",
-  );
-  execSync(
-    "sips -s format ico apps/www/public/favicon-32x32.png --out apps/www/public/favicon.ico",
-  );
-  execSync(
-    "sips -s format ico -z 256 256 apps/desktop/assets/icon.png --out apps/desktop/assets/icon.ico",
-  );
-
-  const rendersDir = "/Users/nutakki/repos/ardur-bot-wt/.work/sessions/mark-renders/";
-  fs.mkdirSync(rendersDir, { recursive: true });
-
-  const sampleBrowser = await chromium.launch();
-  const samplePage = await sampleBrowser.newPage();
-  await samplePage.setContent(html);
-
-  async function sampleSnap(selector, name) {
-    const el = await samplePage.$(selector);
-    await el.screenshot({ path: path.join(rendersDir, name), omitBackground: true });
-  }
-
-  await sampleSnap("#favicon-16", "16.png");
-  await sampleSnap("#favicon-32", "32.png");
-  await sampleSnap("#favicon-48", "48.png");
-  await sampleSnap("#icon-96", "96.png");
-  await sampleSnap("#icon-160", "160.png");
-  await sampleSnap("#icon-1024", "1024.png");
-
-  await sampleBrowser.close();
+// A .ico file is a 6-byte header, one 16-byte directory entry per image, then the
+// image payloads. Windows Vista and later read PNG-encoded entries directly.
+function writeIco(dest, pngPaths) {
+  const pngs = pngPaths.map((file) => fs.readFileSync(file));
+  const header = Buffer.alloc(6);
+  header.writeUInt16LE(0, 0); // reserved
+  header.writeUInt16LE(1, 2); // 1 = icon
+  header.writeUInt16LE(pngs.length, 4);
+  const entries = Buffer.alloc(16 * pngs.length);
+  const parts = [header, entries];
+  let offset = header.length + entries.length;
+  pngs.forEach((png, i) => {
+    const size = png.readUInt32BE(16); // width from the PNG IHDR chunk
+    const dimension = size >= 256 ? 0 : size; // 0 means 256
+    entries.writeUInt8(dimension, i * 16);
+    entries.writeUInt8(dimension, i * 16 + 1);
+    entries.writeUInt16LE(1, i * 16 + 4); // color planes
+    entries.writeUInt16LE(32, i * 16 + 6); // bits per pixel
+    entries.writeUInt32LE(png.length, i * 16 + 8);
+    entries.writeUInt32LE(offset, i * 16 + 12);
+    parts.push(png);
+    offset += png.length;
+  });
+  fs.writeFileSync(dest, Buffer.concat(parts));
 }
-render().catch(console.error);
+
+// electron-builder derives the packaged .icns itself; this keeps a reference
+// .icns next to the samples for review. iconutil only exists on macOS.
+function writeIcnsIfSupported(bySize, workDir) {
+  if (process.platform !== "darwin") {
+    console.log("Skipping icon.icns: iconutil is only available on macOS.");
+    return;
+  }
+  const iconsetDir = path.join(workDir, "icon.iconset");
+  fs.mkdirSync(iconsetDir, { recursive: true });
+  for (const size of [16, 32, 128, 256, 512]) {
+    fs.copyFileSync(bySize.get(size), path.join(iconsetDir, `icon_${size}x${size}.png`));
+    fs.copyFileSync(bySize.get(size * 2), path.join(iconsetDir, `icon_${size}x${size}@2x.png`));
+  }
+  try {
+    execFileSync("iconutil", ["-c", "icns", iconsetDir, "-o", path.join(workDir, "icon.icns")]);
+    console.log(`Reference icon.icns written to ${workDir}`);
+  } catch (error) {
+    console.log(`Skipping icon.icns: ${error.message}`);
+  }
+}
+
+async function main() {
+  const browser = await chromium.launch();
+  try {
+    const page = await browser.newPage();
+    await page.setContent(html);
+
+    const rendered = new Map();
+    const snap = async (dest, selector, omitBackground = true) => {
+      const el = await page.$(selector);
+      const absolute = path.join(root, dest);
+      fs.mkdirSync(path.dirname(absolute), { recursive: true });
+      await el.screenshot({ path: absolute, omitBackground });
+      rendered.set(dest, absolute);
+      return absolute;
+    };
+
+    await snap("apps/web/public/favicon-16x16.png", "#favicon-16");
+    await snap("apps/web/public/favicon-32x32.png", "#favicon-32");
+    await snap("apps/www/public/favicon-16x16.png", "#favicon-16");
+    await snap("apps/www/public/favicon-32x32.png", "#favicon-32");
+
+    await snap("apps/web/public/apple-touch-icon.png", "#icon-180");
+    await snap("apps/web/public/icon-192.png", "#icon-192");
+    await snap("apps/web/public/icon-512.png", "#icon-512");
+
+    await snap("apps/www/public/apple-touch-icon.png", "#icon-180");
+    await snap("apps/www/public/icon-192.png", "#icon-192");
+    await snap("apps/www/public/icon-512.png", "#icon-512");
+
+    await snap("apps/desktop/assets/icon.png", "#icon-1024");
+    await snap("apps/desktop/assets/icon-macos.png", "#icon-1024");
+
+    // macOS menu bar icon: monochrome black with alpha, tinted by the system.
+    await snap("apps/desktop/assets/trayTemplate.png", "#tray-icon");
+    // Linux tray icon: the clay tile with the paper mark at 32 px, visible on
+    // dark and light panels (Linux does not tint *Template.png like macOS).
+    await snap("apps/desktop/assets/tray-32.png", "#favicon-32");
+
+    // Remove the pre-rename tray asset if an earlier checkout still has it.
+    const staleTray = path.join(root, "apps/desktop/assets/tray.png");
+    if (fs.existsSync(staleTray)) fs.unlinkSync(staleTray);
+
+    await snap("apps/mobile/assets/icon.png", "#icon-1024");
+    await snap("apps/mobile/assets/splash-icon.png", "#icon-1024");
+    await snap("apps/mobile/assets/adaptive-icon.png", "#adaptive-icon");
+    await snap("apps/mobile/assets/monochrome-icon.png", "#monochrome-icon");
+    await snap("apps/mobile/assets/icon-background.png", "#icon-background", false);
+
+    await snap("apps/mobile/assets/favicon.png", "#favicon-48");
+    await snap("apps/mobile/assets/notification-icon.png", "#notification-icon");
+
+    // Intermediates (per-size renders and the review samples) stay out of the
+    // repository; they are written to a temp dir and thrown away with it.
+    const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "ardur-icons-"));
+    // Small sizes use the tuned favicon variants; 128 px and up use the icon set.
+    const sizeSelectors = new Map([
+      [16, "#favicon-16"],
+      [32, "#favicon-32"],
+      [64, "#favicon-64"],
+      [128, "#icon-128"],
+      [256, "#icon-256"],
+      [512, "#icon-512"],
+      [1024, "#icon-1024"],
+    ]);
+    const bySize = new Map();
+    for (const [size, selector] of sizeSelectors) {
+      const el = await page.$(selector);
+      const dest = path.join(workDir, `icon-${size}.png`);
+      await el.screenshot({ path: dest, omitBackground: true });
+      bySize.set(size, dest);
+    }
+
+    writeIco(
+      path.join(root, "apps/web/public/favicon.ico"),
+      ["apps/web/public/favicon-16x16.png", "apps/web/public/favicon-32x32.png"].map((file) =>
+        rendered.get(file),
+      ),
+    );
+    writeIco(
+      path.join(root, "apps/www/public/favicon.ico"),
+      ["apps/www/public/favicon-16x16.png", "apps/www/public/favicon-32x32.png"].map((file) =>
+        rendered.get(file),
+      ),
+    );
+    writeIco(
+      path.join(root, "apps/desktop/assets/icon.ico"),
+      [16, 32, 64, 128, 256].map((size) => bySize.get(size)),
+    );
+
+    const samples = [
+      ["#favicon-16", "16.png"],
+      ["#favicon-32", "32.png"],
+      ["#favicon-48", "48.png"],
+      ["#icon-96", "96.png"],
+      ["#icon-160", "160.png"],
+      ["#icon-1024", "1024.png"],
+    ];
+    for (const [selector, name] of samples) {
+      const el = await page.$(selector);
+      await el.screenshot({
+        path: path.join(workDir, name),
+        omitBackground: true,
+      });
+    }
+
+    writeIcnsIfSupported(bySize, workDir);
+    console.log(`Icon samples and intermediates written to ${workDir}`);
+  } finally {
+    await browser.close();
+  }
+}
+
+main().catch((error) => {
+  console.error(error);
+  process.exitCode = 1;
+});

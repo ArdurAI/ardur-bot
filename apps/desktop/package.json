@@ -62,6 +62,10 @@
         "to": "trayTemplate.png"
       },
       {
+        "from": "assets/tray-32.png",
+        "to": "tray-32.png"
+      },
+      {
         "from": "assets/icon.ico",
         "to": "tray.ico"
       },
