@@ -16,6 +16,49 @@ import {
 } from "./index.js";
 
 describe("appearance preference", () => {
+  it("meets WCAG AA contrast for foreground/background pairs", () => {
+    function getL(c) {
+      if (!c.startsWith("#") || c.length !== 7) return 0;
+      let rgb = [
+        parseInt(c.slice(1, 3), 16),
+        parseInt(c.slice(3, 5), 16),
+        parseInt(c.slice(5, 7), 16),
+      ];
+      rgb = rgb.map((x) => x / 255);
+      rgb = rgb.map((x) => (x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4));
+      return 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
+    }
+    function contrast(c1, c2) {
+      const l1 = getL(c1);
+      const l2 = getL(c2);
+      return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+    }
+    const checkPairs = (tokens) => {
+      const pairs = [
+        ["foreground", "background"],
+        ["mutedForeground", "muted"],
+        ["mutedForeground", "background"],
+        ["cardForeground", "card"],
+        ["popoverForeground", "popover"],
+        ["primaryForeground", "primary"],
+        ["secondaryForeground", "secondary"],
+        ["destructiveForeground", "destructive"],
+        ["chatUserForeground", "chatUser"],
+        ["sidebarForeground", "sidebar"],
+        ["sidebarAccentForeground", "sidebarAccent"],
+      ];
+      for (const [fg, bg] of pairs) {
+        const ratio = contrast(tokens[fg], tokens[bg]);
+        expect(
+          ratio,
+          `${fg} on ${bg} (${tokens[fg]} on ${tokens[bg]}) ratio ${ratio}`,
+        ).toBeGreaterThanOrEqual(4.5);
+      }
+    };
+    checkPairs(lightTokens);
+    checkPairs(darkTokens);
+  });
+
   it("defaults unknown values to system", () => {
     expect(normalizeAppearancePreference(null)).toBe("system");
     expect(normalizeAppearancePreference("nope")).toBe("system");

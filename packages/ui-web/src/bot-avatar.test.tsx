@@ -31,7 +31,7 @@ describe("BotAvatar", () => {
   });
 
   it.each([...ACTIVE_RUN_STATUSES])("marks active run status %s as working", (status) => {
-    const html = renderToString(<BotAvatar color="#3B82F6" status={status} />);
+    const html = renderToString(<BotAvatar color="var(--ring)" status={status} />);
     expect(html).toContain("<svg");
     expect(html).toContain('data-working="true"');
   });

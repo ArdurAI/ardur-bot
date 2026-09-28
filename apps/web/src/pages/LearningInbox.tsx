@@ -354,7 +354,7 @@ function LearningCard({
   const pending = proposal.status === "pending";
   return (
     <article
-      className="rounded-lg border p-3 motion-safe:animate-in motion-safe:fade-in duration-100 motion-reduce:animate-none"
+      className="rounded-lg border p-3 motion-safe:animate-in motion-safe:fade-in duration-[240ms] ease-[cubic-bezier(0.2,0.7,0.2,1)] motion-reduce:animate-none"
       data-status={proposal.status}
       id={`learning-${proposal.id}`}
     >

@@ -152,7 +152,7 @@ export function Changes({
         <Button
           variant="ghost"
           key={change.id}
-          className="flex w-full justify-start font-mono text-xs"
+          className="flex w-full justify-start font-mono text-[13px] normal-case"
           onClick={() => onOpen(change)}
         >
           {change.path}

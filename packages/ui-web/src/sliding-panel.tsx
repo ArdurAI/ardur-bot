@@ -26,7 +26,7 @@ export function SlidingPanel({
         data-panel={panel}
         aria-hidden={!open}
         inert={!open}
-        className={`absolute inset-y-0 end-0 z-20 flex w-full max-w-[384px] min-h-0 flex-col overflow-hidden border-s border-sidebar-border bg-background transition-[transform,opacity] duration-200 ease-out motion-reduce:transition-none ${open ? "translate-x-0 opacity-100" : "pointer-events-none translate-x-full opacity-0 rtl:-translate-x-full"}`}
+        className={`absolute inset-y-0 end-0 z-20 flex w-full max-w-[384px] min-h-0 flex-col overflow-hidden border-s border-sidebar-border bg-background transition-[transform,opacity] duration-[240ms] ease-[cubic-bezier(0.2,0.7,0.2,1)] motion-reduce:transition-none ${open ? "translate-x-0 opacity-100" : "pointer-events-none translate-x-full opacity-0 rtl:-translate-x-full"}`}
       >
         {open ? children : retained}
       </aside>

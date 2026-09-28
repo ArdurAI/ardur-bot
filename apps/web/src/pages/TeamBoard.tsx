@@ -131,7 +131,7 @@ export function TeamBoardRow({
   return (
     <article
       data-team-bot={row.botId}
-      className="rounded-lg border border-border bg-card transition-transform duration-200 motion-reduce:transition-none"
+      className="rounded-lg border border-border bg-card transition-transform duration-[150ms] ease-out motion-reduce:transition-none"
     >
       <details>
         <summary className="flex h-20 cursor-pointer items-center gap-3 px-4">
