@@ -1138,20 +1138,18 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
             ];
           });
           const isBridgeMode = process.env.ARDURBOT_HOST_BRIDGE === "api";
-
+          const owner = isBridgeMode ? await nativeHostOwner(deps.prisma, context.actor.userId) : true;
+          
           let healthAvailable = false;
           let healthReason: string | undefined;
 
           if (isBridgeMode) {
-            healthAvailable = Boolean(
-              health?.capabilities?.providerRelay === 1 && health.hermes?.available,
-            );
-            healthReason =
-              !host?.connected || !health
-                ? "Host service is not running — open the desktop app."
-                : health.capabilities?.providerRelay !== 1
-                  ? "Update Ardur on the connected computer for the provider relay."
-                  : (health?.hermes?.reason ?? "Hermes is not installed on this computer.");
+            healthAvailable = Boolean(health?.capabilities?.providerRelay === 1 && health.hermes?.available);
+            healthReason = !host?.connected || !health
+              ? "Host service is not running — open the desktop app."
+              : health.capabilities?.providerRelay !== 1
+                ? "Update Ardur on the connected computer for the provider relay."
+                : (health?.hermes?.reason ?? "Hermes is not installed on this computer.");
           } else {
             const localProbe = await nativeRuntimeAvailability("hermes", input.refresh);
             healthAvailable = localProbe.available;
@@ -1159,9 +1157,9 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           }
 
           const available = Boolean(
-            (isBridgeMode ? owner : true) &&
+            owner &&
               (!bot || bot.computer?.kind === "desktop") &&
-              healthAvailable,
+              healthAvailable
           );
           return {
             runtimeKind: "hermes" as const,

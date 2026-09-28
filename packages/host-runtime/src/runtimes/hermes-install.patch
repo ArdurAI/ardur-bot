@@ -1,0 +1,54 @@
+--- packages/host-runtime/src/runtimes/hermes-install.ts
++++ packages/host-runtime/src/runtimes/hermes-install.ts
+@@ -1,11 +1,14 @@
+ import { spawn } from "node:child_process";
+ import { createHash } from "node:crypto";
+ import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
++import { realpath } from "node:fs/promises";
+ import path from "node:path";
+ import { fileURLToPath } from "node:url";
+ import sourceHashes from "../../python/hermes_sources.json" with { type: "json" };
+-import type { HermesLaunch, HermesLaunchSpec } from "./hermes-runtime.js";
++import { HermesRuntime, type HermesLaunch, type HermesLaunchSpec } from "./hermes-runtime.js";
+ import { stopNative } from "./native-process.js";
++import type { HermesExecutionEnvelopeSchema } from "@ardurbot/contracts/runtime-config";
++import type * as z from "zod";
+ 
+ export const HERMES_SOURCE_PIN = "29112bef099274229cadff79cdff7bf7b99c4b77";
+ 
+@@ -98,3 +101,35 @@
+     return { child, teardown: async () => stopNative(child) };
+   };
+ }
++
++export async function buildHermesRuntime(options: {
++  hostRoot: string;
++  explicitInstall?: string;
++  bundleFile: string;
++  moduleUrl: string | undefined;
++  executionEnvelope?: z.infer<typeof HermesExecutionEnvelopeSchema>;
++  onProfileAcknowledged: () => void;
++  onTurnFinished: () => void;
++}): Promise<HermesRuntime | null> {
++  const install = hermesInstallCandidate(options.hostRoot, options.explicitInstall);
++  if (!install) return null;
++  const qualified = probeHermesInstall(install);
++  const staging = await realpath(options.hostRoot);
++  const overlap = path.relative(qualified.root, staging);
++  if (
++    overlap === "" ||
++    (overlap !== ".." && !overlap.startsWith(`..${path.sep}`) && !path.isAbsolute(overlap))
++  )
++    throw new Error("Hermes staging cannot overlap its install.");
++  const launcher = resolveHermesLauncherAsset(options.bundleFile, options.moduleUrl);
++  return new HermesRuntime({
++    command: qualified.python,
++    args: [launcher],
++    launch: pinnedHermesLaunch(qualified.root, launcher),
++    pinned: true,
++    executionEnvelope: options.executionEnvelope,
++    onProfileAcknowledged: options.onProfileAcknowledged,
++    stagingParent: options.hostRoot,
++    onTurnFinished: options.onTurnFinished,
++  });
++}

@@ -1,0 +1,14 @@
+--- packages/adapters/src/runtimes/local-hermes-runtime.test.ts
++++ packages/adapters/src/runtimes/local-hermes-runtime.test.ts
+@@ -8,6 +8,11 @@
+ import { fileURLToPath } from "node:url";
+ import profileFixture from "@ardurbot/host-runtime/python/tests/valid_profile.json" with { type: "json" };
+ 
++vi.mock("@ardurbot/core/node/runtime-config-hash", async (original) => ({
++  ...(await original<object>()),
++  validateHermesExecutionEnvelope: (x: any) => x,
++}));
++
+ describe("LocalHermesRuntime", () => {
+   let root: string;
+   let installDir: string;

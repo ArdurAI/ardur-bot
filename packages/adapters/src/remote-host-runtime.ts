@@ -16,7 +16,7 @@ import { validateHermesExecutionEnvelope } from "@ardurbot/core/node/runtime-con
 import type { HostClient } from "@ardurbot/host-runtime/host-client";
 import * as z from "zod";
 import type { BrokerScope, HermesProviderBroker } from "./hermes-provider-broker.js";
-import { summaryOperationHash, summaryOperationManifest } from "./hermes-provider-broker.js";
+import { HermesRelayDispatcher, summaryOperationHash, summaryOperationManifest } from "./hermes-provider-broker.js";
 
 /** The host turn receives the same tool catalog the executor selected, including board tools. */
 export function advertisedHostTools(tools: AgentRunRequest["tools"]) {
@@ -172,11 +172,7 @@ export class RemoteHostRuntime implements AgentRuntime {
           throw new Error("Provider broker scope does not match this host turn.");
         }
       }
-      let response: Buffer | undefined;
-      let responseStatus = 200;
-      let responseType: "application/json" | "text/event-stream" = "application/json";
-      let readSequence = 0;
-      let opening = false;
+      let relayDispatcher: HermesRelayDispatcher | undefined;
       const homeKey = request.nativeCwd?.startsWith("host:")
         ? request.nativeCwd.slice(5)
         : request.botId;
@@ -243,44 +239,10 @@ export class RemoteHostRuntime implements AgentRuntime {
           abort.signal.throwIfAborted();
           if (frame.method.startsWith("provider.")) {
             if (!brokerSession) throw new Error("Provider callback is unavailable.");
-            if (frame.method === "provider.cancel") {
-              if (opening) brokerSession.broker.revoke();
-              response = undefined;
-              return;
+            if (!relayDispatcher) {
+              relayDispatcher = new HermesRelayDispatcher(brokerSession, abort.signal);
             }
-            if (frame.method === "provider.open") {
-              if (opening || response) throw new Error("Provider request is already active.");
-              opening = true;
-              try {
-                const opened = await brokerSession.broker.open({
-                  grant: brokerSession.broker.grant,
-                  scope: brokerSession.scope,
-                  path: "/v1/chat/completions",
-                  body: frame.args[0],
-                  signal: abort.signal,
-                });
-                if (!opened.ok) throw new Error("Provider request failed.");
-                responseStatus = opened.status;
-                responseType = opened.headers.get("content-type")?.includes("text/event-stream")
-                  ? "text/event-stream"
-                  : "application/json";
-                response = Buffer.from(await opened.arrayBuffer());
-                readSequence = 0;
-                return { status: responseStatus, contentType: responseType };
-              } finally {
-                opening = false;
-              }
-            }
-            if (!response || frame.args[0] !== readSequence)
-              throw new Error("Provider response sequence changed.");
-            const chunk = response.subarray(
-              readSequence * 24 * 1024,
-              (readSequence + 1) * 24 * 1024,
-            );
-            const done = (readSequence + 1) * 24 * 1024 >= response.length;
-            const seq = readSequence++;
-            if (done) response = undefined;
-            return { seq, chunk: chunk.toString("base64"), done };
+            return relayDispatcher.dispatch(frame.method, frame.args);
           }
           if (frame.method === "onRuntimeInfo") {
             const info = HostRuntimeInfoSchema.parse(frame.args[0]) as ReturnType<

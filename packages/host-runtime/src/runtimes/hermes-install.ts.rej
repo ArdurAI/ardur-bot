@@ -1,0 +1,16 @@
+@@ -9,6 +9,15 @@
+ 
+ export const HERMES_SOURCE_PIN = "29112bef099274229cadff79cdff7bf7b99c4b77";
+ 
++export function localHermesRoot(): string {
++  const dataDir = process.env.DATA_DIR ?? "./data";
++  return path.resolve(path.dirname(dataDir));
++}
++
++export function localHermesStaging(): string {
++  return path.join(localHermesRoot(), "hermes-staging");
++}
++
+ /** The workspace root is supplied by the trusted host configuration, never a bot request. */
+ export function hermesInstallCandidate(
+   hostRoot: string,

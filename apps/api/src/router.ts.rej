@@ -1,0 +1,9 @@
+@@ -1138,8 +1138,7 @@
+             });
+             const isBridgeMode = process.env.ARDURBOT_HOST_BRIDGE === "api";
+-            const owner = isBridgeMode ? await nativeHostOwner(deps.prisma, context.actor.userId) : true;
+             
+             let healthAvailable = false;
+             let healthReason: string | undefined;
+ 
+             if (isBridgeMode) {

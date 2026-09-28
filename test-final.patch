@@ -1,0 +1,28 @@
+--- packages/adapters/src/runtimes/local-hermes-runtime.test.ts
++++ packages/adapters/src/runtimes/local-hermes-runtime.test.ts
+@@ -48,9 +48,9 @@
+           modelId: "fixture-model",
+           effort: "high",
+           revision: 1,
+-          runtimeConfig: profileFixture.runtimeConfig,
++          runtimeConfig: profileFixture.runtimeConfig as any,
+           runtimeConfigHash: profileFixture.runtimeConfigHash,
+-          effectiveRuntimeConfig: profileFixture.effectiveRuntimeConfig,
++          effectiveRuntimeConfig: profileFixture.effectiveRuntimeConfig as any,
+           effectiveRuntimeConfigHash: profileFixture.effectiveRuntimeConfigHash,
+         },
+       },
+@@ -121,12 +121,12 @@
+   it("refuses relay after turn end", async () => {
+     const fakeAcp = fileURLToPath(new URL("../../../host-runtime/src/runtimes/fixtures/fake-acp.mjs", import.meta.url));
+     await writeFile(
+-      join(installDir, ".venv", "bin", "python"),
++      join(root, "install", ".venv", "bin", "python"),
+       `#!/usr/bin/env node\nimport ${JSON.stringify(fakeAcp)};\n`
+     );
+     const fs = await import("node:fs/promises");
+-    await fs.chmod(join(installDir, ".venv", "bin", "python"), 0o755);
++    await fs.chmod(join(root, "install", ".venv", "bin", "python"), 0o755);
+ 
+     const brokerMethod = vi.fn(async () => ({ result: { foo: "bar" } }));
+     const broker = { grant: { port: 0, runId: "123", timeoutSeconds: 5, relayToken: "token" } };

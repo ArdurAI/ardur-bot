@@ -103,6 +103,8 @@ export class RuntimeRegistry {
   }
 }
 
+import { LocalHermesRuntime } from "./runtimes/local-hermes-runtime.js";
+
 export function createRuntimeRegistry(
   pi: AgentRuntime,
   brokerForTurn?: (
@@ -119,7 +121,7 @@ export function createRuntimeRegistry(
   const antigravity = client
     ? new RemoteHostRuntime(client, "antigravity")
     : new AntigravityRuntime();
-  const hermes = client ? new RemoteHostRuntime(client, "hermes", brokerForTurn) : undefined;
+  const hermes = client ? new RemoteHostRuntime(client, "hermes", brokerForTurn) : new LocalHermesRuntime(brokerForTurn);
   return new RuntimeRegistry({
     pi: {
       factory: () => pi,
@@ -140,10 +142,7 @@ export function createRuntimeRegistry(
       probe: () => nativeRuntimeAvailability("antigravity"),
     },
     hermes: {
-      factory: () => {
-        if (!hermes) throw new Error("Hermes needs a connected host.");
-        return hermes;
-      },
+      factory: () => hermes,
       probe: () => nativeRuntimeAvailability("hermes"),
     },
   });
@@ -168,13 +167,33 @@ export async function nativeRuntimeAvailability(
       }
     );
   }
-  if (kind === "hermes")
+  if (kind === "hermes") {
+    if (process.platform === "win32") {
+      return {
+        runtimeKind: "hermes",
+        available: false,
+        models: [],
+        reason: "Pinned Hermes is unavailable on this host.",
+      };
+    }
+    const { localHermesRoot, hermesInstallCandidate, probeHermesInstall } = await import("@ardurbot/host-runtime/runtimes/hermes-install");
+    const install = hermesInstallCandidate(localHermesRoot(), process.env.ARDUR_HERMES_INSTALL);
+    let available = false;
+    if (install) {
+      try {
+        probeHermesInstall(install);
+        available = true;
+      } catch {
+        available = false;
+      }
+    }
     return {
-      runtimeKind: kind,
-      available: false,
+      runtimeKind: "hermes",
+      available,
       models: [],
-      reason: "Hermes needs a connected host.",
+      ...(!available ? { reason: "Hermes is not installed on this computer." } : {}),
     };
+  }
   return kind === "claude-code"
     ? probeClaude()
     : kind === "codex-app-server"

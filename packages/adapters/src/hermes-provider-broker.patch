@@ -1,0 +1,60 @@
+--- packages/adapters/src/hermes-provider-broker.ts
++++ packages/adapters/src/hermes-provider-broker.ts
+@@ -672,3 +672,46 @@
+     }
+   }
+ }
++
++export class HermesRelayDispatcher {
++  private opening = false;
++  private response: Buffer | undefined;
++  private responseStatus = 200;
++  private responseType: "application/json" | "text/event-stream" = "application/json";
++  private readSequence = 0;
++
++  constructor(
++    private readonly brokerSession: { broker: HermesProviderBroker; scope: BrokerScope },
++    private readonly abortSignal: AbortSignal,
++  ) {}
++
++  async dispatch(method: string, args: unknown[]) {
++    if (method === "provider.cancel") {
++      if (this.opening) this.brokerSession.broker.revoke();
++      this.response = undefined;
++      return;
++    }
++    if (method === "provider.open") {
++      if (this.opening || this.response) throw new Error("Provider request is already active.");
++      this.opening = true;
++      try {
++        const opened = await this.brokerSession.broker.open({
++          grant: this.brokerSession.broker.grant,
++          scope: this.brokerSession.scope,
++          path: "/v1/chat/completions",
++          body: args[0],
++          signal: this.abortSignal,
++        });
++        if (!opened.ok) throw new Error("Provider request failed.");
++        this.responseStatus = opened.status;
++        this.responseType = opened.headers.get("content-type")?.includes("text/event-stream")
++          ? "text/event-stream"
++          : "application/json";
++        this.response = Buffer.from(await opened.arrayBuffer());
++        this.readSequence = 0;
++        return { status: this.responseStatus, contentType: this.responseType };
++      } finally {
++        this.opening = false;
++      }
++    }
++    if (!this.response || args[0] !== this.readSequence)
++      throw new Error("Provider response sequence changed.");
++    const chunk = this.response.subarray(
++      this.readSequence * 24 * 1024,
++      (this.readSequence + 1) * 24 * 1024,
++    );
++    const done = (this.readSequence + 1) * 24 * 1024 >= this.response.length;
++    const seq = this.readSequence++;
++    if (done) this.response = undefined;
++    return { seq, chunk: chunk.toString("base64"), done };
++  }
++}

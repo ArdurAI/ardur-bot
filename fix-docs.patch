@@ -1,0 +1,19 @@
+--- docs/runtimes/hermes.md
++++ docs/runtimes/hermes.md
+@@ -2,9 +2,9 @@
+ 
+ Hermes is a selectable bot runtime for an owner with a pinned, qualified Hermes
+-installation on a paired macOS or Linux host. Windows is unavailable until its
+-native acceptance lane passes. Selecting Hermes reuses the bot's existing Ardur
+-connection, model, effort, computer, integrations, connectors, MCP assignments,
+-skills and plugins. It does not import local configuration or ask for a Hermes
+-account. A missing install, unsupported connection, non-host computer or old host
+-relay protocol blocks execution without changing the saved pin.
++installation on a paired macOS or Linux host, or running Ardur natively on this computer
++in local mode or the dev stack. Windows is unavailable until its native acceptance
++lane passes. Selecting Hermes reuses the bot's existing Ardur connection, model,
++effort, computer, integrations, connectors, MCP assignments, skills and plugins.
++It does not import local configuration or ask for a Hermes account. A missing install,
++unsupported connection, non-host computer (unless running locally) or old host relay
++protocol blocks execution without changing the saved pin.
+ 
