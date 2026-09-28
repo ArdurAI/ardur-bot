@@ -315,9 +315,12 @@ export class HermesRuntime implements AgentRuntime {
     context?: Partial<AdapterContext>,
   ): AsyncIterable<AgentRuntimeEvent> {
     if (this.running.has(request.runId)) throw new Error("This Hermes run is already active.");
-    const limits = this.options.pinned
-      ? HermesRuntimeConfigSchema.parse(request.model.runtimePin?.runtimeConfig)
-      : HERMES_RUNTIME_DEFAULTS;
+    const parsedLimits = this.options.pinned
+      ? HermesRuntimeConfigSchema.safeParse(request.model.runtimePin?.runtimeConfig)
+      : null;
+    if (parsedLimits && !parsedLimits.success)
+      throw new Error("The recorded Hermes limits are missing or invalid. Change the pin.");
+    const limits = parsedLimits?.data ?? HERMES_RUNTIME_DEFAULTS;
     const config = hermesConfig(request, this.options.pinned);
     const queue = new RuntimeQueue<AgentRuntimeEvent>(undefined, false);
     const turn: ActiveTurn = { active: true, queue };

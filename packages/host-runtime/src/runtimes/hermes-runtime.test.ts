@@ -68,6 +68,17 @@ function turnFinishSignal(runId: string) {
 }
 
 describe("HermesRuntime M0 ACP seam", () => {
+  it("refuses a pinned turn without validated limits before launch", async () => {
+    const launch = vi.fn(launchUnconfinedProcess);
+    const adapter = new HermesRuntime({ command: process.execPath, pinned: true, launch });
+    const base = request();
+    await expect(
+      collect(adapter, request({
+        model: { ...base.model, maxTokens: 1_024, contextWindow: 32_768 },
+      })),
+    ).rejects.toThrow("The recorded Hermes limits are missing or invalid. Change the pin.");
+    expect(launch).not.toHaveBeenCalled();
+  });
   it("passes snapshot limits to the pinned launcher through a synthetic turn", async () => {
     let env: Record<string, string> | undefined;
     const adapter = new HermesRuntime({
