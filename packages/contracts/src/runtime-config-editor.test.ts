@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { RuntimeConfigIssueSchema } from "./runtime-config.js";
 import { parseRuntimeConfigText } from "./runtime-config-editor.js";
 
 const fixtures = JSON.parse(
@@ -100,5 +101,26 @@ describe("bounded Advanced JSON input", () => {
         '{"version":2,"runtimeKind":"hermes","harness":{"agent":{"api_max_retries":4}}}',
       ).issues[0]?.code,
     ).toBe("out-of-range");
+  });
+
+  it("classifies inherited Object.prototype property names as schema-valid unknown-field issues", () => {
+    for (const name of [
+      "toString",
+      "valueOf",
+      "hasOwnProperty",
+      "isPrototypeOf",
+      "propertyIsEnumerable",
+      "toLocaleString",
+    ]) {
+      const text = JSON.stringify({ version: 2, runtimeKind: "hermes", [name]: 1 });
+      const result = parseRuntimeConfigText(text);
+      expect(result.success, text).toBe(false);
+      expect(result.issues).toHaveLength(1);
+      const [issue] = result.issues;
+      expect(issue?.code).toBe("unknown-field");
+      expect(issue?.reasonId).toBe("unknown-field");
+      expect(RuntimeConfigIssueSchema.safeParse(issue).success).toBe(true);
+      expect(JSON.parse(JSON.stringify(issue))).toEqual(issue);
+    }
   });
 });
