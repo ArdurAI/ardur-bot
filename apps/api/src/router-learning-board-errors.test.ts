@@ -128,3 +128,67 @@ it("sends only a generic code for an error it has no sentence for, so screens sh
     }),
   });
 });
+
+vi.mock("./model-pin-validation.js", () => ({
+  validateModelPinSelection: vi.fn(),
+}));
+
+it("accepts and validates a Codex runtime reviewer", async () => {
+  const { validateModelPinSelection: mockedValidate } = await import("./model-pin-validation.js");
+  vi.mocked(mockedValidate).mockResolvedValue({
+    runtimeKind: "codex",
+    provider: "fake",
+    modelId: "fake-model",
+    credentialId: "cred-1",
+    effort: "high",
+    revision: 1,
+  });
+  
+  const { call } = await routerFixture({
+    setReviewer: vi.fn().mockResolvedValue({}),
+  });
+  
+  const response = await call("learning/setReviewer", {
+    expectedRevision: 0,
+    pin: {
+      runtimeKind: "codex",
+      provider: "fake",
+      modelId: "fake-model",
+      credentialId: "cred-1",
+      effort: "high",
+    }
+  });
+  
+  expect(response.status).toBe(200);
+});
+
+it("rejects another user's connection with a sentence", async () => {
+  const { validateModelPinSelection: mockedValidate } = await import("./model-pin-validation.js");
+  const { ORPCError } = await import("@orpc/server");
+  vi.mocked(mockedValidate).mockRejectedValue(
+    new ORPCError("FORBIDDEN", { message: "This connection belongs to another space member." })
+  );
+  
+  const { call } = await routerFixture({
+    setReviewer: vi.fn(),
+  });
+  
+  const response = await call("learning/setReviewer", {
+    expectedRevision: 0,
+    pin: {
+      runtimeKind: "pi",
+      provider: "fake",
+      modelId: "fake-model",
+      credentialId: "cred-1",
+      effort: null,
+    }
+  });
+  
+  expect(response.status).toBe(403);
+  await expect(response.json()).resolves.toEqual({
+    json: expect.objectContaining({
+      code: "FORBIDDEN",
+      message: "This connection belongs to another space member.",
+    }),
+  });
+});

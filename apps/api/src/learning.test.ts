@@ -573,3 +573,188 @@ it("saves Always allow only for a read tool, re-checked on the server", async ()
     expect.objectContaining({ data: expect.objectContaining({ status: "acted" }) }),
   );
 });
+
+it("setReviewer saves revision + 1 and sets configuredBy", async () => {
+  const actor = { spaceId: "space", userId: "owner" } as Actor;
+  const configRow = {
+    spaceId: "space",
+    reviewerPin: { runtimeKind: "pi", provider: "p1", modelId: "m1", credentialId: "c1", effort: null, revision: 1 },
+  };
+  const upsert = vi.fn(async () => ({}));
+  const prisma = {
+    spaceMember: { findUnique: vi.fn(async () => ({ role: "owner" })) },
+    spaceLearningConfig: {
+      findUnique: vi.fn(async () => configRow),
+      upsert,
+    },
+  };
+  const service = createLearningService({ prisma: prisma as never, jobs: {} as never });
+  await service.setReviewer(actor, {
+    expectedRevision: 1,
+    pin: { runtimeKind: "pi", provider: "p2", modelId: "m2", credentialId: "c2", effort: "high" },
+  });
+  expect(upsert).toHaveBeenCalledWith(
+    expect.objectContaining({
+      update: expect.objectContaining({
+        configuredBy: "owner",
+        reviewerPin: expect.objectContaining({ provider: "p2", modelId: "m2", revision: 2 }),
+      }),
+    })
+  );
+});
+
+it("setReviewer an unchanged choice causes no upsert", async () => {
+  const actor = { spaceId: "space", userId: "owner" } as Actor;
+  const configRow = {
+    spaceId: "space",
+    reviewerPin: { runtimeKind: "pi", provider: "p1", modelId: "m1", credentialId: "c1", effort: null, revision: 1 },
+  };
+  const upsert = vi.fn(async () => ({}));
+  const prisma = {
+    spaceMember: { findUnique: vi.fn(async () => ({ role: "owner" })) },
+    spaceLearningConfig: {
+      findUnique: vi.fn(async () => configRow),
+      upsert,
+    },
+  };
+  const service = createLearningService({ prisma: prisma as never, jobs: {} as never });
+  await service.setReviewer(actor, {
+    expectedRevision: 1,
+    pin: { runtimeKind: "pi", provider: "p1", modelId: "m1", credentialId: "c1", effort: null },
+  });
+  expect(upsert).not.toHaveBeenCalled();
+});
+
+it("setReviewer a stale revision returns CONFLICT", async () => {
+  const actor = { spaceId: "space", userId: "owner" } as Actor;
+  const configRow = {
+    spaceId: "space",
+    reviewerPin: { runtimeKind: "pi", provider: "p1", modelId: "m1", credentialId: "c1", effort: null, revision: 2 },
+  };
+  const prisma = {
+    spaceMember: { findUnique: vi.fn(async () => ({ role: "owner" })) },
+    spaceLearningConfig: {
+      findUnique: vi.fn(async () => configRow),
+    },
+  };
+  const service = createLearningService({ prisma: prisma as never, jobs: {} as never });
+  await expect(
+    service.setReviewer(actor, {
+      expectedRevision: 1,
+      pin: { runtimeKind: "pi", provider: "p2", modelId: "m2", credentialId: "c2", effort: null },
+    })
+  ).rejects.toMatchObject({ code: "CONFLICT" });
+});
+
+it("configure keeps the stored pin when given a lower or equal revision", async () => {
+  const actor = { spaceId: "space", userId: "owner" } as Actor;
+  const configRow = {
+    spaceId: "space",
+    enabled: false,
+    reviewerPin: { runtimeKind: "pi", provider: "p1", modelId: "m1", credentialId: "c1", effort: null, revision: 3 },
+  };
+  const upsert = vi.fn(async () => ({}));
+  const prisma = {
+    spaceMember: { findUnique: vi.fn(async () => ({ role: "owner" })) },
+    spaceLearningConfig: {
+      findUnique: vi.fn(async () => configRow),
+      upsert,
+    },
+  };
+  const service = createLearningService({ prisma: prisma as never, jobs: {} as never });
+  await service.configure(actor, {
+    enabled: true,
+    reviewerPin: { runtimeKind: "pi", provider: "p2", modelId: "m2", credentialId: "c2", effort: null, revision: 2 },
+  });
+  expect(upsert).toHaveBeenCalledWith(
+    expect.objectContaining({
+      update: expect.objectContaining({
+        reviewerPin: expect.objectContaining({ provider: "p1", revision: 3 }),
+      }),
+    })
+  );
+});
+
+it("configure a higher revision is validated and saved", async () => {
+  const actor = { spaceId: "space", userId: "owner" } as Actor;
+  const configRow = {
+    spaceId: "space",
+    enabled: false,
+    reviewerPin: { runtimeKind: "pi", provider: "p1", modelId: "m1", credentialId: "c1", effort: null, revision: 1 },
+  };
+  const upsert = vi.fn(async () => ({}));
+  const prisma = {
+    spaceMember: { findUnique: vi.fn(async () => ({ role: "owner" })) },
+    spaceLearningConfig: {
+      findUnique: vi.fn(async () => configRow),
+      upsert,
+    },
+  };
+  const validateModelPin = vi.fn(async (pin: any) => pin);
+  const service = createLearningService({ prisma: prisma as never, jobs: {} as never });
+  await service.configure(
+    actor,
+    {
+      enabled: true,
+      reviewerPin: { runtimeKind: "pi", provider: "p2", modelId: "m2", credentialId: "c2", effort: null, revision: 2 },
+    },
+    validateModelPin
+  );
+  expect(validateModelPin).toHaveBeenCalled();
+  expect(upsert).toHaveBeenCalledWith(
+    expect.objectContaining({
+      update: expect.objectContaining({
+        reviewerPin: expect.objectContaining({ provider: "p2", revision: 2 }),
+      }),
+    })
+  );
+});
+
+it("configure enabling with an incomplete pin is refused", async () => {
+  const actor = { spaceId: "space", userId: "owner" } as Actor;
+  const configRow = { spaceId: "space", enabled: false };
+  const prisma = {
+    spaceMember: { findUnique: vi.fn(async () => ({ role: "owner" })) },
+    spaceLearningConfig: {
+      findUnique: vi.fn(async () => configRow),
+    },
+    modelCredential: { findFirst: vi.fn(async () => null) }
+  };
+  const service = createLearningService({ prisma: prisma as never, jobs: {} as never });
+  await expect(
+    service.configure(actor, {
+      enabled: true,
+    })
+  ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+});
+
+it("configure an unchanged configure writes nothing", async () => {
+  const actor = { spaceId: "space", userId: "owner" } as Actor;
+  const configRow = {
+    spaceId: "space",
+    enabled: false,
+    consolidationEnabled: false,
+    insightsEnabled: true,
+    reviewerPin: { runtimeKind: "pi", provider: "p1", modelId: "m1", credentialId: "c1", effort: null, revision: 1 },
+    botDailyTokens: 30000,
+    spaceDailyTokens: 150000,
+    maxProposals: 3,
+    timeoutMs: 30000,
+    maxOutputTokens: 2000,
+    maxOutputChars: 12000,
+  };
+  const upsert = vi.fn(async () => ({}));
+  const prisma = {
+    spaceMember: { findUnique: vi.fn(async () => ({ role: "owner" })) },
+    spaceLearningConfig: {
+      findUnique: vi.fn(async () => configRow),
+      upsert,
+    },
+  };
+  const service = createLearningService({ prisma: prisma as never, jobs: {} as never });
+  await service.configure(actor, {
+    enabled: false,
+    reviewerPin: { runtimeKind: "pi", provider: "p1", modelId: "m1", credentialId: "c1", effort: null, revision: 1 },
+  });
+  expect(upsert).not.toHaveBeenCalled();
+});
