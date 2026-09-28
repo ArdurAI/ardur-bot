@@ -158,9 +158,19 @@ msgstr ""
 msgid "{0} will still respond to direct mentions."
 msgstr ""
 
-#. placeholder {0}: active.name
-#: src/pages/Shell.tsx
-msgid "{0}'s screen"
+#. placeholder {0}: Math.floor(seconds / 86_400)
+#: src/pages/workspace/WorkspaceTasks.tsx
+msgid "{0}d ago"
+msgstr ""
+
+#. placeholder {0}: Math.floor(seconds / 3600)
+#: src/pages/workspace/WorkspaceTasks.tsx
+msgid "{0}h ago"
+msgstr ""
+
+#. placeholder {0}: Math.floor(seconds / 60)
+#: src/pages/workspace/WorkspaceTasks.tsx
+msgid "{0}m ago"
 msgstr ""
 
 #. placeholder {0}: o.exposedRuns
@@ -969,6 +979,7 @@ msgstr ""
 
 #: src/pages/ide/dialogs.tsx
 #: src/pages/ide/IdePage.tsx
+#: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Ask a bot"
 msgstr ""
 
@@ -1249,10 +1260,6 @@ msgstr "Panolar"
 msgid "Booting"
 msgstr ""
 
-#: src/pages/Shell.tsx
-msgid "Booting live desktop…"
-msgstr "Canlı masaüstü başlatılıyor…"
-
 #. placeholder {0}: computerBot?.name ?? active?.name
 #: src/pages/Shell.tsx
 msgid "Booting up {0}’s computer"
@@ -1275,7 +1282,7 @@ msgstr "Bot"
 msgid "Bot screen"
 msgstr "Bot ekranı"
 
-#: src/pages/Shell.tsx
+#: src/pages/workspace/WorkspaceScreen.tsx
 msgid "Bot screen preview"
 msgstr "Bot ekranı önizlemesi"
 
@@ -1408,6 +1415,7 @@ msgstr "Sunucuya ulaşılamıyor."
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/settings/UploadedFiles.tsx
 #: src/pages/shell/dialogs.tsx
+#: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Cancel"
 msgstr "İptal"
 
@@ -1593,6 +1601,10 @@ msgstr "Bir bot şekli ve rengi seçin veya görüntü yükleyin"
 msgid "Choose a bot…"
 msgstr ""
 
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Choose a file."
+msgstr ""
+
 #: src/pages/import/LocalImportPage.tsx
 msgid "Choose a folder inside your home folder."
 msgstr ""
@@ -1704,7 +1716,9 @@ msgid "Close"
 msgstr "Kapat"
 
 #. placeholder {0}: basename(current.path)
+#. placeholder {0}: basename(file.path)
 #: src/pages/ide/IdePage.tsx
+#: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Close {0}"
 msgstr ""
 
@@ -1897,10 +1911,6 @@ msgstr ""
 msgid "Computer engine is unavailable."
 msgstr ""
 
-#: src/pages/Shell.tsx
-msgid "Computer failed to boot"
-msgstr "Bilgisayar başlatılamadı"
-
 #: src/pages/storage/StorageSettings.tsx
 msgid "Computer homes"
 msgstr ""
@@ -1908,14 +1918,6 @@ msgstr ""
 #: src/pages/Shell.tsx
 msgid "Computer is asleep"
 msgstr "Bilgisayar uykuda"
-
-#: src/pages/Shell.tsx
-msgid "Computer is asleep. Open it to wake."
-msgstr ""
-
-#: src/pages/Shell.tsx
-msgid "Computer is stopped"
-msgstr "Bilgisayar durduruldu"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Computer use"
@@ -2523,6 +2525,10 @@ msgstr ""
 msgid "Could not load devices."
 msgstr ""
 
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Could not load files. Try again."
+msgstr ""
+
 #: src/pages/MemoryHistory.tsx
 msgid "Could not load history. Retry."
 msgstr ""
@@ -2675,6 +2681,10 @@ msgstr ""
 
 #: src/pages/MemoryImportExport.tsx
 msgid "Could not read this memory bundle. Choose a valid export."
+msgstr ""
+
+#: src/pages/workspace/WorkspaceTasks.tsx
+msgid "Could not refresh tasks"
 msgstr ""
 
 #: src/pages/ScratchpadSection.tsx
@@ -3183,6 +3193,10 @@ msgstr ""
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardColumns.tsx
 msgid "Deferred"
+msgstr ""
+
+#: src/pages/workspace/WorkspaceTasks.tsx
+msgid "Delegated"
 msgstr ""
 
 #: src/components/integrations/card/IntegrationCards.tsx
@@ -3749,6 +3763,10 @@ msgstr "Genişlet"
 msgid "Expand {0}"
 msgstr ""
 
+#: src/pages/Shell.tsx
+msgid "Expand workspace"
+msgstr ""
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Experimental"
 msgstr ""
@@ -3853,6 +3871,16 @@ msgstr ""
 
 #: src/pages/board/FiledBy.tsx
 msgid "Filed by {name}"
+msgstr ""
+
+#: src/pages/Shell.tsx
+#: src/pages/workspace/WorkspaceFiles.tsx
+#: src/pages/workspace/WorkspacePane.tsx
+msgid "Files"
+msgstr ""
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Files are unavailable on this computer."
 msgstr ""
 
 #: src/pages/customize/CustomizeControls.tsx
@@ -4502,6 +4530,7 @@ msgid "Jump to replied message"
 msgstr "Yanıtlanan mesaja git"
 
 #: src/pages/ActivityList.tsx
+#: src/pages/workspace/WorkspaceTasks.tsx
 msgid "just now"
 msgstr "az önce"
 
@@ -4734,6 +4763,14 @@ msgstr ""
 msgid "Listening…"
 msgstr "Dinliyor…"
 
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Live"
+msgstr ""
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Live files"
+msgstr ""
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Load"
 msgstr ""
@@ -4790,6 +4827,10 @@ msgstr "Kurallar yükleniyor…"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Loading system settings…"
+msgstr ""
+
+#: src/pages/workspace/WorkspaceTasks.tsx
+msgid "Loading tasks…"
 msgstr ""
 
 #: src/pages/customize/ExtensionsPage.tsx
@@ -5476,6 +5517,10 @@ msgstr ""
 msgid "No connections"
 msgstr ""
 
+#: src/pages/workspace/WorkspaceTasks.tsx
+msgid "No delegated work"
+msgstr ""
+
 #: src/components/integrations/catalog/ResourcePicker.tsx
 msgid "No destinations found."
 msgstr ""
@@ -5734,6 +5779,10 @@ msgstr "Henüz hatırlanan bir şey yok"
 msgid "Nothing running"
 msgstr ""
 
+#: src/pages/workspace/WorkspaceTasks.tsx
+msgid "Nothing running or queued"
+msgstr ""
+
 #: src/pages/LearningInbox.tsx
 msgid "Nothing to review."
 msgstr ""
@@ -5865,11 +5914,19 @@ msgstr ""
 msgid "Open chat links in the desktop app."
 msgstr ""
 
+#: src/pages/workspace/WorkspaceTasks.tsx
+msgid "Open conversation"
+msgstr ""
+
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Open documentation"
 msgstr ""
 
-#: src/pages/Shell.tsx
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Open files"
+msgstr ""
+
+#: src/pages/workspace/WorkspaceScreen.tsx
 msgid "Open in full window"
 msgstr "Tam pencerede aç"
 
@@ -5897,8 +5954,16 @@ msgstr "Gezinmeyi aç"
 msgid "Open routines"
 msgstr ""
 
+#: src/pages/workspace/WorkspaceScreen.tsx
+msgid "Open screen"
+msgstr ""
+
 #: src/pages/system/SystemPage.tsx
 msgid "Open Screen recording settings"
+msgstr ""
+
+#: src/pages/workspace/WorkspaceScreen.tsx
+msgid "Open screen to view this computer."
 msgstr ""
 
 #: src/components/composer/command-description.ts
@@ -6335,6 +6400,7 @@ msgstr "Kuyruk bekleme süresi"
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/TeamBoard.tsx
+#: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Queued"
 msgstr "Kuyrukta"
 
@@ -6343,6 +6409,7 @@ msgid "Quick access shortcut"
 msgstr ""
 
 #: src/pages/ide/dialogs.tsx
+#: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Quick open"
 msgstr ""
 
@@ -6371,6 +6438,10 @@ msgstr "Okundu"
 #: src/components/PeerMessageReceipt.tsx
 msgid "Read by {recipient}"
 msgstr "{recipient} tarafından okundu"
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Read only in this pane. Open IDE to edit."
+msgstr ""
 
 #: src/pages/ide/IdePage.tsx
 msgid "Read only: file is larger than 2 MB"
@@ -6414,6 +6485,7 @@ msgstr ""
 
 #: src/pages/ActivityList.tsx
 #: src/pages/dashboard/RoutinesPanel.tsx
+#: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Recent"
 msgstr "Son"
 
@@ -6510,6 +6582,7 @@ msgid "Reduced"
 msgstr ""
 
 #: src/pages/board/BoardsSettings.tsx
+#: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Refresh"
 msgstr "Yenile"
 
@@ -6870,6 +6943,7 @@ msgstr ""
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/UploadedFiles.tsx
 #: src/pages/system/SystemPage.tsx
+#: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Retry"
 msgstr ""
 
@@ -6890,6 +6964,10 @@ msgstr ""
 #: src/pages/McpOAuthCallback.tsx
 msgid "Return to Ardur"
 msgstr "Ardur'ya dön"
+
+#: src/pages/Shell.tsx
+msgid "Return to conversation"
+msgstr ""
 
 #: src/pages/GuidedOnboarding.tsx
 msgid "Return to setup"
@@ -7004,6 +7082,8 @@ msgstr "Rutin"
 #: src/pages/dashboard/panels.ts
 #: src/pages/RoutineEditor.tsx
 #: src/pages/settings/GeneralSettings.tsx
+#: src/pages/Shell.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Routines"
 msgstr "Rutinler"
 
@@ -7049,6 +7129,7 @@ msgstr "çalışıyor"
 #: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/fleet/FleetSettings.tsx
+#: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Running"
 msgstr "Çalışıyor"
 
@@ -7157,6 +7238,10 @@ msgstr "Modeli kaydet"
 msgid "Saved"
 msgstr "Kaydedildi"
 
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Saved files"
+msgstr ""
+
 #: src/pages/GitMemorySettings.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/MemoryHistory.tsx
@@ -7219,7 +7304,9 @@ msgstr "Evet ya da hayır de veya bir cümleyle yanıtla."
 msgid "Scopes"
 msgstr ""
 
+#: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Screen"
 msgstr ""
 
@@ -7334,6 +7421,10 @@ msgstr ""
 #: src/components/AskCard.tsx
 msgid "Send answer"
 msgstr "Yanıtı gönder"
+
+#: src/pages/workspace/WorkspaceTasks.tsx
+msgid "Send follow-up"
+msgstr ""
 
 #: src/components/AskCard.tsx
 msgid "Send it"
@@ -7816,6 +7907,14 @@ msgstr ""
 msgid "Status unavailable"
 msgstr "Durum kullanılamıyor"
 
+#: src/pages/workspace/WorkspaceTasks.tsx
+msgid "Steer"
+msgstr ""
+
+#: src/pages/workspace/WorkspaceTasks.tsx
+msgid "Steer work"
+msgstr ""
+
 #: src/pages/LearningObservation.tsx
 msgid "Steering corrections"
 msgstr ""
@@ -7832,6 +7931,10 @@ msgstr "Adımlar"
 msgid "Stop"
 msgstr "Durdur"
 
+#: src/pages/workspace/WorkspaceTasks.tsx
+msgid "Stop delegated work"
+msgstr ""
+
 #: src/pages/Shell.tsx
 msgid "Stop speaking"
 msgstr "Seslendirmeyi durdur"
@@ -7844,6 +7947,10 @@ msgstr "Öğretmeyi durdur"
 msgid "Stop the current run"
 msgstr ""
 
+#: src/pages/workspace/WorkspaceTasks.tsx
+msgid "Stop work in this conversation"
+msgstr ""
+
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/GroupPanel.tsx
@@ -7852,6 +7959,7 @@ msgstr "Durduruldu"
 
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Stopping"
 msgstr ""
 
@@ -7949,6 +8057,8 @@ msgid "Task contracts"
 msgstr ""
 
 #: src/pages/settings/GeneralSettings.tsx
+#: src/pages/Shell.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Tasks"
 msgstr ""
 
@@ -8180,6 +8290,10 @@ msgstr ""
 #: src/components/ArtifactFileCard.tsx
 msgid "This file is not valid UTF-8 Markdown."
 msgstr "Bu dosya geçerli bir UTF-8 Markdown değil."
+
+#: src/pages/ide/file-tree.tsx
+msgid "This folder is empty."
+msgstr ""
 
 #: src/pages/system/SystemPage.tsx
 msgid "This folder is managed by the server."
@@ -8862,6 +8976,7 @@ msgid "Working…"
 msgstr "Çalışıyor…"
 
 #: src/components/integrations/manage/IntegrationDetails.tsx
+#: src/pages/Shell.tsx
 msgid "Workspace"
 msgstr ""
 

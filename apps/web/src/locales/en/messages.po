@@ -158,10 +158,20 @@ msgstr "{0} suggestions to review"
 msgid "{0} will still respond to direct mentions."
 msgstr "{0} will still respond to direct mentions."
 
-#. placeholder {0}: active.name
-#: src/pages/Shell.tsx
-msgid "{0}'s screen"
-msgstr "{0}'s screen"
+#. placeholder {0}: Math.floor(seconds / 86_400)
+#: src/pages/workspace/WorkspaceTasks.tsx
+msgid "{0}d ago"
+msgstr "{0}d ago"
+
+#. placeholder {0}: Math.floor(seconds / 3600)
+#: src/pages/workspace/WorkspaceTasks.tsx
+msgid "{0}h ago"
+msgstr "{0}h ago"
+
+#. placeholder {0}: Math.floor(seconds / 60)
+#: src/pages/workspace/WorkspaceTasks.tsx
+msgid "{0}m ago"
+msgstr "{0}m ago"
 
 #. placeholder {0}: o.exposedRuns
 #. placeholder {1}: o.before.runs
@@ -969,6 +979,7 @@ msgstr "Ask"
 
 #: src/pages/ide/dialogs.tsx
 #: src/pages/ide/IdePage.tsx
+#: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Ask a bot"
 msgstr "Ask a bot"
 
@@ -1249,10 +1260,6 @@ msgstr "Boards"
 msgid "Booting"
 msgstr "Booting"
 
-#: src/pages/Shell.tsx
-msgid "Booting live desktop…"
-msgstr "Booting live desktop…"
-
 #. placeholder {0}: computerBot?.name ?? active?.name
 #: src/pages/Shell.tsx
 msgid "Booting up {0}’s computer"
@@ -1275,7 +1282,7 @@ msgstr "Bot"
 msgid "Bot screen"
 msgstr "Bot screen"
 
-#: src/pages/Shell.tsx
+#: src/pages/workspace/WorkspaceScreen.tsx
 msgid "Bot screen preview"
 msgstr "Bot screen preview"
 
@@ -1408,6 +1415,7 @@ msgstr "Can't reach the server."
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/settings/UploadedFiles.tsx
 #: src/pages/shell/dialogs.tsx
+#: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Cancel"
 msgstr "Cancel"
 
@@ -1593,6 +1601,10 @@ msgstr "Choose a bot shape, color, or upload an image"
 msgid "Choose a bot…"
 msgstr "Choose a bot…"
 
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Choose a file."
+msgstr "Choose a file."
+
 #: src/pages/import/LocalImportPage.tsx
 msgid "Choose a folder inside your home folder."
 msgstr "Choose a folder inside your home folder."
@@ -1704,7 +1716,9 @@ msgid "Close"
 msgstr "Close"
 
 #. placeholder {0}: basename(current.path)
+#. placeholder {0}: basename(file.path)
 #: src/pages/ide/IdePage.tsx
+#: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Close {0}"
 msgstr "Close {0}"
 
@@ -1897,10 +1911,6 @@ msgstr "Computer change pending."
 msgid "Computer engine is unavailable."
 msgstr "Computer engine is unavailable."
 
-#: src/pages/Shell.tsx
-msgid "Computer failed to boot"
-msgstr "Computer failed to boot"
-
 #: src/pages/storage/StorageSettings.tsx
 msgid "Computer homes"
 msgstr "Computer homes"
@@ -1908,14 +1918,6 @@ msgstr "Computer homes"
 #: src/pages/Shell.tsx
 msgid "Computer is asleep"
 msgstr "Computer is asleep"
-
-#: src/pages/Shell.tsx
-msgid "Computer is asleep. Open it to wake."
-msgstr "Computer is asleep. Open it to wake."
-
-#: src/pages/Shell.tsx
-msgid "Computer is stopped"
-msgstr "Computer is stopped"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Computer use"
@@ -2523,6 +2525,10 @@ msgstr "Could not load destinations."
 msgid "Could not load devices."
 msgstr "Could not load devices."
 
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Could not load files. Try again."
+msgstr "Could not load files. Try again."
+
 #: src/pages/MemoryHistory.tsx
 msgid "Could not load history. Retry."
 msgstr "Could not load history. Retry."
@@ -2676,6 +2682,10 @@ msgstr "Could not read system settings; try again."
 #: src/pages/MemoryImportExport.tsx
 msgid "Could not read this memory bundle. Choose a valid export."
 msgstr "Could not read this memory bundle. Choose a valid export."
+
+#: src/pages/workspace/WorkspaceTasks.tsx
+msgid "Could not refresh tasks"
+msgstr "Could not refresh tasks"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Could not remove"
@@ -3184,6 +3194,10 @@ msgstr "Defer until"
 #: src/pages/board/BoardColumns.tsx
 msgid "Deferred"
 msgstr "Deferred"
+
+#: src/pages/workspace/WorkspaceTasks.tsx
+msgid "Delegated"
+msgstr "Delegated"
 
 #: src/components/integrations/card/IntegrationCards.tsx
 #: src/pages/BotContextMenu.tsx
@@ -3749,6 +3763,10 @@ msgstr "Expand"
 msgid "Expand {0}"
 msgstr "Expand {0}"
 
+#: src/pages/Shell.tsx
+msgid "Expand workspace"
+msgstr "Expand workspace"
+
 #: src/pages/shell/runtime-settings.tsx
 msgid "Experimental"
 msgstr "Experimental"
@@ -3854,6 +3872,16 @@ msgstr "Feedback corrections"
 #: src/pages/board/FiledBy.tsx
 msgid "Filed by {name}"
 msgstr "Filed by {name}"
+
+#: src/pages/Shell.tsx
+#: src/pages/workspace/WorkspaceFiles.tsx
+#: src/pages/workspace/WorkspacePane.tsx
+msgid "Files"
+msgstr "Files"
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Files are unavailable on this computer."
+msgstr "Files are unavailable on this computer."
 
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Filter"
@@ -4502,6 +4530,7 @@ msgid "Jump to replied message"
 msgstr "Jump to replied message"
 
 #: src/pages/ActivityList.tsx
+#: src/pages/workspace/WorkspaceTasks.tsx
 msgid "just now"
 msgstr "just now"
 
@@ -4734,6 +4763,14 @@ msgstr "Listening"
 msgid "Listening…"
 msgstr "Listening…"
 
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Live"
+msgstr "Live"
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Live files"
+msgstr "Live files"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Load"
 msgstr "Load"
@@ -4791,6 +4828,10 @@ msgstr "Loading rules…"
 #: src/pages/system/SystemPage.tsx
 msgid "Loading system settings…"
 msgstr "Loading system settings…"
+
+#: src/pages/workspace/WorkspaceTasks.tsx
+msgid "Loading tasks…"
+msgstr "Loading tasks…"
 
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "Loading the extension catalogue…"
@@ -5476,6 +5517,10 @@ msgstr "No connected browsers"
 msgid "No connections"
 msgstr "No connections"
 
+#: src/pages/workspace/WorkspaceTasks.tsx
+msgid "No delegated work"
+msgstr "No delegated work"
+
 #: src/components/integrations/catalog/ResourcePicker.tsx
 msgid "No destinations found."
 msgstr "No destinations found."
@@ -5734,6 +5779,10 @@ msgstr "Nothing remembered yet"
 msgid "Nothing running"
 msgstr "Nothing running"
 
+#: src/pages/workspace/WorkspaceTasks.tsx
+msgid "Nothing running or queued"
+msgstr "Nothing running or queued"
+
 #: src/pages/LearningInbox.tsx
 msgid "Nothing to review."
 msgstr "Nothing to review."
@@ -5865,11 +5914,19 @@ msgstr "Open bot settings"
 msgid "Open chat links in the desktop app."
 msgstr "Open chat links in the desktop app."
 
+#: src/pages/workspace/WorkspaceTasks.tsx
+msgid "Open conversation"
+msgstr "Open conversation"
+
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Open documentation"
 msgstr "Open documentation"
 
-#: src/pages/Shell.tsx
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Open files"
+msgstr "Open files"
+
+#: src/pages/workspace/WorkspaceScreen.tsx
 msgid "Open in full window"
 msgstr "Open in full window"
 
@@ -5897,9 +5954,17 @@ msgstr "Open navigation"
 msgid "Open routines"
 msgstr "Open routines"
 
+#: src/pages/workspace/WorkspaceScreen.tsx
+msgid "Open screen"
+msgstr "Open screen"
+
 #: src/pages/system/SystemPage.tsx
 msgid "Open Screen recording settings"
 msgstr "Open Screen recording settings"
+
+#: src/pages/workspace/WorkspaceScreen.tsx
+msgid "Open screen to view this computer."
+msgstr "Open screen to view this computer."
 
 #: src/components/composer/command-description.ts
 msgid "Open Settings"
@@ -6335,6 +6400,7 @@ msgstr "Queue wait"
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/TeamBoard.tsx
+#: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Queued"
 msgstr "Queued"
 
@@ -6343,6 +6409,7 @@ msgid "Quick access shortcut"
 msgstr "Quick access shortcut"
 
 #: src/pages/ide/dialogs.tsx
+#: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Quick open"
 msgstr "Quick open"
 
@@ -6371,6 +6438,10 @@ msgstr "Read"
 #: src/components/PeerMessageReceipt.tsx
 msgid "Read by {recipient}"
 msgstr "Read by {recipient}"
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Read only in this pane. Open IDE to edit."
+msgstr "Read only in this pane. Open IDE to edit."
 
 #: src/pages/ide/IdePage.tsx
 msgid "Read only: file is larger than 2 MB"
@@ -6414,6 +6485,7 @@ msgstr "Recall only"
 
 #: src/pages/ActivityList.tsx
 #: src/pages/dashboard/RoutinesPanel.tsx
+#: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Recent"
 msgstr "Recent"
 
@@ -6510,6 +6582,7 @@ msgid "Reduced"
 msgstr "Reduced"
 
 #: src/pages/board/BoardsSettings.tsx
+#: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Refresh"
 msgstr "Refresh"
 
@@ -6870,6 +6943,7 @@ msgstr "Restricted"
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/UploadedFiles.tsx
 #: src/pages/system/SystemPage.tsx
+#: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Retry"
 msgstr "Retry"
 
@@ -6890,6 +6964,10 @@ msgstr "Retry screen"
 #: src/pages/McpOAuthCallback.tsx
 msgid "Return to Ardur"
 msgstr "Return to Ardur"
+
+#: src/pages/Shell.tsx
+msgid "Return to conversation"
+msgstr "Return to conversation"
 
 #: src/pages/GuidedOnboarding.tsx
 msgid "Return to setup"
@@ -7004,6 +7082,8 @@ msgstr "Routine"
 #: src/pages/dashboard/panels.ts
 #: src/pages/RoutineEditor.tsx
 #: src/pages/settings/GeneralSettings.tsx
+#: src/pages/Shell.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Routines"
 msgstr "Routines"
 
@@ -7049,6 +7129,7 @@ msgstr "running"
 #: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/fleet/FleetSettings.tsx
+#: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Running"
 msgstr "Running"
 
@@ -7157,6 +7238,10 @@ msgstr "Save model"
 msgid "Saved"
 msgstr "Saved"
 
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Saved files"
+msgstr "Saved files"
+
 #: src/pages/GitMemorySettings.tsx
 #: src/pages/KnowledgeSection.tsx
 #: src/pages/MemoryHistory.tsx
@@ -7219,7 +7304,9 @@ msgstr "Say yes or no, or answer in a sentence."
 msgid "Scopes"
 msgstr "Scopes"
 
+#: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Screen"
 msgstr "Screen"
 
@@ -7334,6 +7421,10 @@ msgstr "Send <0>{linkCode}</0> to the line from your chat app within 10 minutes.
 #: src/components/AskCard.tsx
 msgid "Send answer"
 msgstr "Send answer"
+
+#: src/pages/workspace/WorkspaceTasks.tsx
+msgid "Send follow-up"
+msgstr "Send follow-up"
 
 #: src/components/AskCard.tsx
 msgid "Send it"
@@ -7816,6 +7907,14 @@ msgstr "Status"
 msgid "Status unavailable"
 msgstr "Status unavailable"
 
+#: src/pages/workspace/WorkspaceTasks.tsx
+msgid "Steer"
+msgstr "Steer"
+
+#: src/pages/workspace/WorkspaceTasks.tsx
+msgid "Steer work"
+msgstr "Steer work"
+
 #: src/pages/LearningObservation.tsx
 msgid "Steering corrections"
 msgstr "Steering corrections"
@@ -7832,6 +7931,10 @@ msgstr "Steps"
 msgid "Stop"
 msgstr "Stop"
 
+#: src/pages/workspace/WorkspaceTasks.tsx
+msgid "Stop delegated work"
+msgstr "Stop delegated work"
+
 #: src/pages/Shell.tsx
 msgid "Stop speaking"
 msgstr "Stop speaking"
@@ -7844,6 +7947,10 @@ msgstr "Stop teaching"
 msgid "Stop the current run"
 msgstr "Stop the current run"
 
+#: src/pages/workspace/WorkspaceTasks.tsx
+msgid "Stop work in this conversation"
+msgstr "Stop work in this conversation"
+
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/dashboard/ComputersPanel.tsx
 #: src/pages/GroupPanel.tsx
@@ -7852,6 +7959,7 @@ msgstr "Stopped"
 
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/DelegationLines.tsx
+#: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Stopping"
 msgstr "Stopping"
 
@@ -7949,6 +8057,8 @@ msgid "Task contracts"
 msgstr "Task contracts"
 
 #: src/pages/settings/GeneralSettings.tsx
+#: src/pages/Shell.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Tasks"
 msgstr "Tasks"
 
@@ -8180,6 +8290,10 @@ msgstr "This computer"
 #: src/components/ArtifactFileCard.tsx
 msgid "This file is not valid UTF-8 Markdown."
 msgstr "This file is not valid UTF-8 Markdown."
+
+#: src/pages/ide/file-tree.tsx
+msgid "This folder is empty."
+msgstr "This folder is empty."
 
 #: src/pages/system/SystemPage.tsx
 msgid "This folder is managed by the server."
@@ -8862,6 +8976,7 @@ msgid "Working…"
 msgstr "Working…"
 
 #: src/components/integrations/manage/IntegrationDetails.tsx
+#: src/pages/Shell.tsx
 msgid "Workspace"
 msgstr "Workspace"
 
