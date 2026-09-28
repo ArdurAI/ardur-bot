@@ -1,4 +1,5 @@
 import { Button } from "@ardurbot/ui-web";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { desktopBridge } from "../lib/desktop";
@@ -8,11 +9,12 @@ import { ModelSettingsOverlay } from "./ModelSettingsOverlay";
 
 /** The desktop checklist owns progress; this page keeps account actions authenticated. */
 export function GuidedOnboardingPage() {
+  const { t } = useLingui();
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const ensureFirstBot = useFirstBotSetup();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<"model-incomplete" | "create-failed" | null>(null);
   const [account, setAccount] = useState<{
     model: "missing" | "saved" | "checked";
     firstBot: boolean;
@@ -52,10 +54,13 @@ export function GuidedOnboardingPage() {
     return unsubscribe;
   }, [bridge, navigate]);
 
-  useEffect(() => () => {
-    stopped.current = true;
-    createStatus.current?.abort();
-  }, []);
+  useEffect(
+    () => () => {
+      stopped.current = true;
+      createStatus.current?.abort();
+    },
+    [],
+  );
 
   useEffect(() => {
     if (step !== "finish") return;
@@ -84,12 +89,12 @@ export function GuidedOnboardingPage() {
     const controller = new AbortController();
     createStatus.current = controller;
     setBusy(true);
-    setError("");
+    setError(null);
     try {
       const status = await rpc.guidedSetup.status(undefined, { signal: controller.signal });
       if (stopped.current || controller.signal.aborted) return;
       if (status.model === "missing") {
-        setError("Model setup is incomplete");
+        setError("model-incomplete");
         return;
       }
       const bot = await ensureFirstBot();
@@ -102,7 +107,7 @@ export function GuidedOnboardingPage() {
       navigate(`/app/${bot.id}`);
       await returnToSetup();
     } catch {
-      if (!stopped.current) setError("The first bot could not be created. Try again.");
+      if (!stopped.current) setError("create-failed");
     } finally {
       if (createStatus.current === controller) createStatus.current = null;
       setBusy(false);
@@ -116,11 +121,13 @@ export function GuidedOnboardingPage() {
     >
       <div className="mx-auto max-w-3xl space-y-6">
         <Button variant="secondary" onClick={() => void returnToSetup()}>
-          Return to setup
+          <Trans>Return to setup</Trans>
         </Button>
         {step === "model" ? (
           <>
-            <h1 className="text-2xl font-medium">Connect a model</h1>
+            <h1 className="text-2xl font-medium">
+              <Trans>Connect a model</Trans>
+            </h1>
             <ModelSettingsOverlay
               embedded
               onClose={() => void returnToSetup()}
@@ -129,32 +136,50 @@ export function GuidedOnboardingPage() {
           </>
         ) : step === "bot" ? (
           <>
-            <h1 className="text-2xl font-medium">Create your first bot</h1>
+            <h1 className="text-2xl font-medium">
+              <Trans>Create your first bot</Trans>
+            </h1>
             <Button disabled={busy} onClick={() => void createBot()}>
-              Create bot
+              <Trans>Create bot</Trans>
             </Button>
           </>
         ) : (
           <>
-            <h1 className="text-2xl font-medium">Finish setup</h1>
-            {account?.model === "missing" && <p>Model setup is incomplete</p>}
-            {account && !account.firstBot && <p>First bot not created</p>}
+            <h1 className="text-2xl font-medium">
+              <Trans>Finish setup</Trans>
+            </h1>
+            {account?.model === "missing" && (
+              <p>
+                <Trans>Model setup is incomplete</Trans>
+              </p>
+            )}
+            {account && !account.firstBot && (
+              <p>
+                <Trans>First bot not created</Trans>
+              </p>
+            )}
             {account?.model === "missing" ? (
-              <Button onClick={() => navigate("/guided-onboarding?step=model")}>Open Models</Button>
+              <Button onClick={() => navigate("/guided-onboarding?step=model")}>
+                <Trans>Open Models</Trans>
+              </Button>
             ) : account && !account.firstBot ? (
               <Button disabled={busy} onClick={() => void createBot()}>
-                Create bot
+                <Trans>Create bot</Trans>
               </Button>
             ) : null}
           </>
         )}
         {error && (
           <p role="alert" className="text-destructive">
-            {error}
+            {error === "model-incomplete"
+              ? t`Model setup is incomplete`
+              : t`The first bot could not be created. Try again.`}
           </p>
         )}
-        {error === "Model setup is incomplete" && (
-          <Button onClick={() => navigate("/guided-onboarding?step=model")}>Open Models</Button>
+        {error === "model-incomplete" && (
+          <Button onClick={() => navigate("/guided-onboarding?step=model")}>
+            <Trans>Open Models</Trans>
+          </Button>
         )}
       </div>
     </main>

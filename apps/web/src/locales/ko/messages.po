@@ -2004,6 +2004,7 @@ msgstr ""
 msgid "Connect a desktop app to approve new devices."
 msgstr ""
 
+#: src/pages/GuidedOnboarding.tsx
 #: src/pages/Onboarding.tsx
 msgid "Connect a model"
 msgstr "AI 모델 연결"
@@ -2970,6 +2971,10 @@ msgstr "새 섹션을 만들고 {0}을 옮깁니다."
 msgid "Create account"
 msgstr "계정 만들기"
 
+#: src/pages/GuidedOnboarding.tsx
+msgid "Create bot"
+msgstr "봇 만들기"
+
 #: src/pages/GroupPanel.tsx
 msgid "Create group"
 msgstr "그룹 만들기"
@@ -2999,6 +3004,10 @@ msgstr "스페이스 만들기"
 #: src/pages/Auth.tsx
 msgid "Create your Ardur"
 msgstr "Ardur 계정 만들기"
+
+#: src/pages/GuidedOnboarding.tsx
+msgid "Create your first bot"
+msgstr "첫 번째 봇 만들기"
 
 #: src/components/AskCard.tsx
 #: src/pages/account/AccountTables.tsx
@@ -3852,6 +3861,10 @@ msgstr "찾는 중…"
 msgid "Fine-grained token"
 msgstr ""
 
+#: src/pages/GuidedOnboarding.tsx
+msgid "Finish setup"
+msgstr "설정 완료"
+
 #. placeholder {0}: new URL(oauth.verificationUri).hostname
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -3873,6 +3886,10 @@ msgstr ""
 #: src/pages/McpOAuthCallback.tsx
 msgid "Finishing MCP connection…"
 msgstr "MCP 연결을 마무리하는 중…"
+
+#: src/pages/GuidedOnboarding.tsx
+msgid "First bot not created"
+msgstr "첫 번째 봇이 아직 생성되지 않았습니다"
 
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Flag unexpected actions"
@@ -5104,6 +5121,10 @@ msgstr "모델 선택지"
 msgid "Model or memory unavailable"
 msgstr "모델 또는 메모리를 사용할 수 없음"
 
+#: src/pages/GuidedOnboarding.tsx
+msgid "Model setup is incomplete"
+msgstr "모델 설정이 완료되지 않았습니다"
+
 #: src/pages/AccountSettingsOverlay.tsx
 msgid "Model spend uses your provider keys."
 msgstr "모델 사용 비용은 연결한 서비스의 API 키로 청구됩니다."
@@ -5794,6 +5815,10 @@ msgstr ""
 #: src/pages/LocalSettings.tsx
 msgid "Open local settings from the desktop app on the server’s computer."
 msgstr ""
+
+#: src/pages/GuidedOnboarding.tsx
+msgid "Open Models"
+msgstr "모델 열기"
 
 #: src/pages/Shell.tsx
 msgid "Open navigation"
@@ -6794,6 +6819,10 @@ msgstr ""
 #: src/pages/McpOAuthCallback.tsx
 msgid "Return to Ardur"
 msgstr "Ardur로 돌아가기"
+
+#: src/pages/GuidedOnboarding.tsx
+msgid "Return to setup"
+msgstr "설정으로 돌아가기"
 
 #. placeholder {0}: doc.revision
 #: src/pages/KnowledgeSection.tsx
@@ -7941,6 +7970,10 @@ msgstr ""
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "The connection was cancelled."
 msgstr ""
+
+#: src/pages/GuidedOnboarding.tsx
+msgid "The first bot could not be created. Try again."
+msgstr "첫 번째 봇을 만들 수 없습니다. 다시 시도하세요."
 
 #: src/pages/group-model-control.tsx
 msgid "The group model choice was reloaded. Pick again."

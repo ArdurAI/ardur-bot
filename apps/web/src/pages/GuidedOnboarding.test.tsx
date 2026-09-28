@@ -15,6 +15,23 @@ const api = vi.hoisted(() => ({
   onChange: vi.fn(),
   savePendingChange: null as ((pending: boolean) => void) | null,
 }));
+const locale = vi.hoisted(() => ({ language: "en" }));
+
+vi.mock("@lingui/react/macro", () => ({
+  useLingui: () => ({
+    t: (parts: TemplateStringsArray) => parts[0],
+  }),
+  Trans: ({ children }: { children: string }) =>
+    locale.language === "es"
+      ? ((
+          {
+            "Return to setup": "Volver a la configuración",
+            "Create your first bot": "Crea tu primer bot",
+            "Create bot": "Crear bot",
+          } as Record<string, string>
+        )[children] ?? children)
+      : children,
+}));
 
 vi.mock("../lib/desktop", () => ({
   desktopBridge: () => ({
@@ -69,6 +86,7 @@ beforeEach(() => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   vi.clearAllMocks();
   api.savePendingChange = null;
+  locale.language = "en";
   api.status.mockResolvedValue({ model: "saved", firstBot: false });
   api.refreshAccount.mockResolvedValue(undefined);
   api.returnToSetup.mockResolvedValue(undefined);
@@ -106,6 +124,14 @@ it("waits for an in-flight model save before account read-back and returning", a
   await act(async () => api.savePendingChange?.(false));
   expect(api.refreshAccount).toHaveBeenCalledOnce();
   expect(api.returnToSetup).toHaveBeenCalledOnce();
+});
+
+it("renders guided controls through the translation mechanism", async () => {
+  locale.language = "es";
+  await render("bot");
+  expect(node.textContent).toContain("Volver a la configuración");
+  expect(node.textContent).toContain("Crea tu primer bot");
+  expect(node.textContent).toContain("Crear bot");
 });
 
 it("stops scheduling greeting calls after cancel during bot creation", async () => {

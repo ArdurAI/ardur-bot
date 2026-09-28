@@ -17,6 +17,32 @@ describe("lingui catalogs", () => {
     i18n.activate("en");
   });
 
+  it.each(["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
+    "catalogs the authenticated guided account controls in %s",
+    async (locale) => {
+      const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));
+      const catalog = await formatter().parse(readFileSync(filename, "utf8"), {
+        locale,
+        sourceLocale: "en",
+        filename,
+      });
+      for (const message of [
+        "Return to setup",
+        "Connect a model",
+        "Create your first bot",
+        "Create bot",
+        "Finish setup",
+        "Model setup is incomplete",
+        "First bot not created",
+        "Open Models",
+        "The first bot could not be created. Try again.",
+      ]) {
+        const entry = Object.values(catalog).find((value) => value.message === message);
+        expect(entry?.translation, `${locale}: ${message}`).toBeTruthy();
+      }
+    },
+  );
+
   it.each([
     ["en", "Line 2: - [redacted] Edit or reject this line."],
     ["de", "Zeile 2: - [redacted] Diese Zeile bearbeiten oder ablehnen."],
