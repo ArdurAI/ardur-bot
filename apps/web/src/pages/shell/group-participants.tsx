@@ -46,24 +46,27 @@ export function GroupParticipantModels({
       className="app-no-drag min-w-0 truncate text-xs text-muted-foreground"
       title={fullText}
     >
-      {members.map(({ member, chip }, index) => (
-        <span key={member.botId} data-testid={`group-participant-${member.botId}`}>
-          {index > 0 ? " · " : null}
-          {member.name}
-          {chip ? (
-            <>
-              {" · "}
-              <span
-                role="status"
-                aria-label={chip.pinUnknown ? t`Next run` : t`Using ${chip.currentId}`}
-              >
-                {chip.pinUnknown ? <>{t`Next run`} · </> : null}
-                {chip.label}
-              </span>
-            </>
-          ) : null}
-        </span>
-      ))}
+      {members.map(({ member, chip }, index) => {
+        const currentId = chip?.currentId;
+        return (
+          <span key={member.botId} data-testid={`group-participant-${member.botId}`}>
+            {index > 0 ? " · " : null}
+            {member.name}
+            {chip ? (
+              <>
+                {" · "}
+                <span
+                  role="status"
+                  aria-label={chip.pinUnknown ? t`Next run` : t`Using ${currentId}`}
+                >
+                  {chip.pinUnknown ? <>{t`Next run`} · </> : null}
+                  {chip.label}
+                </span>
+              </>
+            ) : null}
+          </span>
+        );
+      })}
     </div>
   );
 }

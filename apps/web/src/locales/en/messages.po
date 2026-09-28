@@ -22,6 +22,7 @@ msgid " — not available on your account"
 msgstr " — not available on your account"
 
 #: src/pages/shell/bot-model-chip.tsx
+#: src/pages/shell/group-participants.tsx
 msgid " · not available"
 msgstr " · not available"
 
@@ -5498,6 +5499,7 @@ msgid "Next"
 msgstr "Next"
 
 #: src/pages/shell/bot-model-chip.tsx
+#: src/pages/shell/group-participants.tsx
 msgid "Next run"
 msgstr "Next run"
 
@@ -6861,6 +6863,7 @@ msgstr "Request expired"
 
 #: src/pages/ComparePanel.tsx
 #: src/pages/shell/bot-model-chip.tsx
+#: src/pages/shell/group-participants.tsx
 #: src/pages/TeamBoard.tsx
 msgid "requested"
 msgstr "requested"
@@ -8843,6 +8846,7 @@ msgid "User"
 msgstr "User"
 
 #: src/pages/shell/bot-model-chip.tsx
+#: src/pages/shell/group-participants.tsx
 msgid "Using {currentId}"
 msgstr "Using {currentId}"
 
