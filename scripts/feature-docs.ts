@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { mkdir, readdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { inflateSync } from "node:zlib";
 import type {
   FeatureDocumentationEvidence,
   FeatureDocumentationManifest,
@@ -189,9 +190,51 @@ export function assertDocumentationPng(
   try {
     validatePngScreenshot(bytes, file);
     if (bytes.readUInt32BE(16) !== width || bytes.readUInt32BE(20) !== height) invalid();
+    assertExactImageData(bytes, width, height);
   } catch {
     invalid();
   }
+}
+
+/**
+ * The shared decoder proves the picture decodes; this proves the compressed image data is exactly
+ * the picture and nothing else. A strict inflate verifies the zlib header and checksum on every Node
+ * release, and the inflated length must equal the filtered raster size for the declared header.
+ */
+function assertExactImageData(bytes: Buffer, width: number, height: number): void {
+  const bitDepth = bytes[24]!;
+  const colorType = bytes[25]!;
+  const interlace = bytes[28]!;
+  const channels = colorType === 2 ? 3 : colorType === 4 ? 2 : colorType === 6 ? 4 : 1;
+  const rowBytes = (columns: number) => 1 + Math.ceil((columns * bitDepth * channels) / 8);
+  const passes = interlace
+    ? [
+        [0, 0, 8, 8],
+        [4, 0, 8, 8],
+        [0, 4, 4, 8],
+        [2, 0, 4, 4],
+        [0, 2, 2, 4],
+        [1, 0, 2, 2],
+        [0, 1, 1, 2],
+      ]
+    : [[0, 0, 1, 1]];
+  let expected = 0;
+  for (const [x, y, dx, dy] of passes) {
+    const columns = Math.max(0, Math.ceil((width - x!) / dx!));
+    const rows = Math.max(0, Math.ceil((height - y!) / dy!));
+    if (columns && rows) expected += rows * rowBytes(columns);
+  }
+  const idat: Buffer[] = [];
+  let offset = 8;
+  while (offset + 12 <= bytes.length) {
+    const length = bytes.readUInt32BE(offset);
+    if (bytes.toString("ascii", offset + 4, offset + 8) === "IDAT")
+      idat.push(bytes.subarray(offset + 8, offset + 8 + length));
+    offset += 12 + length;
+  }
+  if (!idat.length) throw new Error("PNG has no image data.");
+  const raw = inflateSync(Buffer.concat(idat), { maxOutputLength: expected + 1 });
+  if (raw.length !== expected) throw new Error("PNG image data does not match its header.");
 }
 
 /** The published projection contains only Addendum D fields. */
