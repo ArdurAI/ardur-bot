@@ -142,7 +142,7 @@ export function firstGuidedSteps(deps: GuidedStepsDependencies): SetupStep[] {
         details: [
           {
             code: "command-collision",
-            text: "The terminal command points to another app. Choose another location.",
+            text: "Another app owns the ardur command. Skip this step, or remove or rename that command and retry.",
           },
         ],
       };
