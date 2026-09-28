@@ -35,6 +35,7 @@ export interface SetupStep {
   canSkip: boolean;
   waitForInput?: boolean;
   check(context: SetupContext, signal: AbortSignal): Promise<StepVerification>;
+  recheck?(context: SetupContext, signal: AbortSignal): Promise<StepVerification>;
   run(context: SetupContext, signal: AbortSignal): Promise<StepReceipt>;
   verify(
     context: SetupContext,
@@ -370,6 +371,9 @@ export class SetupEngine {
         if (signal.aborted || this.cancelling) break;
         if (!this.dependenciesMet(step)) break;
         const row = this.row(step.id);
+        if (!explicit && row.status === "succeeded" && this.freshlyVerified.has(step.id))
+          continue;
+        const savedSuccess = row.status === "succeeded";
         const previouslySkipped = row.status === "skipped" && !explicit;
         this.journal.snapshot.currentStep = step.id;
         row.attempt += 1;
@@ -377,7 +381,9 @@ export class SetupEngine {
         await this.persist();
         if (signal.aborted || this.cancelling) break;
         const context = { runId: this.journal.snapshot.runId };
-        const checked = await step.check(context, signal);
+        const checked = await (savedSuccess && step.recheck
+          ? step.recheck(context, signal)
+          : step.check(context, signal));
         if (signal.aborted || this.cancelling) break;
         if (checked.kind === "satisfied") {
           this.success(step, checked, "already-ready");

@@ -1,6 +1,10 @@
 import type { ArdurBotSetup } from "@ardurbot/contracts";
 import type { SetupSnapshot, SetupStepId } from "@ardurbot/contracts/desktop-setup";
-import { GuidedSetupView, guidedSetupText } from "@ardurbot/ui-web/components/guided-setup";
+import {
+  GuidedSetupView,
+  guidedSetupText,
+  pilotReadyFromSnapshot,
+} from "@ardurbot/ui-web/components/guided-setup";
 import { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 
@@ -99,6 +103,9 @@ export function SetupDocument({ setupBridge = bridge }: { setupBridge?: ArdurBot
     setBusy(true);
     setStatus("");
     try {
+      const checked = await guided.start();
+      setSnapshot((old) => (old && old.sequence > checked.sequence ? old : checked));
+      if (!pilotReadyFromSnapshot(checked)) return;
       const state = await bridge.stack.start();
       if (!state) throw new Error("Setup handoff is unavailable.");
       window.location.assign("setup.html");

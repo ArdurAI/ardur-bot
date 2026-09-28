@@ -157,6 +157,15 @@ export interface GuidedSetupViewProps {
   onStartupChoice?: (enabled: boolean) => void;
 }
 
+export function pilotReadyFromSnapshot(snapshot: SetupSnapshot): boolean {
+  return (
+    snapshot.steps.slice(0, 3).every((row) => row.status === "succeeded") &&
+    ["succeeded", "skipped", "not-applicable"].includes(snapshot.steps[3]?.status ?? "") &&
+    snapshot.steps[4]?.status === "succeeded" &&
+    ["succeeded", "skipped"].includes(snapshot.steps[5]?.status ?? "")
+  );
+}
+
 export function GuidedSetupView(props: GuidedSetupViewProps) {
   const { snapshot } = props;
   const [expanded, setExpanded] = useState<SetupStepId | null>(null);
@@ -175,11 +184,7 @@ export function GuidedSetupView(props: GuidedSetupViewProps) {
   const stopFailed = snapshot.steps.some((row) => row.reasonCode === "cleanup-incomplete");
   const newerJournal = snapshot.steps.some((row) => row.reasonCode === "newer-journal");
   const stopping = snapshot.steps.some((row) => row.status === "cancelling");
-  const pilotReady =
-    snapshot.steps.slice(0, 3).every((row) => row.status === "succeeded") &&
-    ["succeeded", "skipped", "not-applicable"].includes(snapshot.steps[3]?.status ?? "") &&
-    snapshot.steps[4]?.status === "succeeded" &&
-    ["succeeded", "skipped"].includes(snapshot.steps[5]?.status ?? "");
+  const pilotReady = pilotReadyFromSnapshot(snapshot);
   const started = snapshot.steps.some((row) => row.attempt > 0 || row.status !== "pending");
   const cancelled = snapshot.steps.some((row) => row.status === "cancelled");
 

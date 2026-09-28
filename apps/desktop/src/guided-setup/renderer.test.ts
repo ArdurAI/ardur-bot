@@ -87,6 +87,54 @@ async function mount(bridge: ArdurBotSetup) {
 }
 
 describe("guided setup document", () => {
+  it("rechecks a saved ready journal before handoff", async () => {
+    const initial = snapshot("succeeded");
+    for (const row of initial.steps.slice(0, 6)) {
+      row.available = true;
+      row.status = "succeeded";
+    }
+    const fake = fakeBridge(initial);
+    fake.guided.start.mockResolvedValue(initial);
+    const view = await mount(fake.bridge);
+    try {
+      const continueButton = [...view.host.querySelectorAll("button")].find(
+        (button) => button.textContent === "Continue setup",
+      );
+      expect(continueButton).toBeDefined();
+      await act(async () => continueButton?.click());
+      expect(fake.guided.start).toHaveBeenCalledOnce();
+      expect(fake.bridge.stack.start).toHaveBeenCalledOnce();
+    } finally {
+      await view.cleanup();
+    }
+  });
+
+  it("shows a concrete failed recheck without attempting handoff", async () => {
+    const initial = snapshot("succeeded");
+    for (const row of initial.steps.slice(0, 6)) {
+      row.available = true;
+      row.status = "succeeded";
+    }
+    const failed = structuredClone(initial);
+    failed.sequence = 2;
+    failed.currentStep = "engines";
+    failed.steps[5]!.status = "failed";
+    failed.steps[5]!.reasonCode = "discovery-timeout";
+    const fake = fakeBridge(initial);
+    fake.guided.start.mockResolvedValue(failed);
+    const view = await mount(fake.bridge);
+    try {
+      const continueButton = [...view.host.querySelectorAll("button")].find(
+        (button) => button.textContent === "Continue setup",
+      );
+      await act(async () => continueButton?.click());
+      expect(fake.guided.start).toHaveBeenCalledOnce();
+      expect(fake.bridge.stack.start).not.toHaveBeenCalled();
+      expect(view.host.textContent).toContain("Optional computer discovery timed out. Retry.");
+    } finally {
+      await view.cleanup();
+    }
+  });
   it.each(["Start setup", "Retry", "Resume"])(
     "sends Cancel while %s is still pending",
     async (label) => {

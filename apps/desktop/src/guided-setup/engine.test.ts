@@ -168,6 +168,42 @@ describe("SetupEngine", () => {
     expect(next.currentStep).toBe("services");
     expect(next.steps[4]?.status).toBe("waiting-input");
   });
+  it("rechecks saved optional-computer success before handoff and exposes a failed recheck", async () => {
+    const files = memoryStore();
+    const ready = async () => ({ kind: "satisfied" as const, checkedAt: 100, evidence: "ready" });
+    let discoveryReady = true;
+    const recheck = vi.fn(async () =>
+      discoveryReady
+        ? { kind: "satisfied" as const, checkedAt: 100, evidence: "fleet" }
+        : { kind: "blocked" as const, reasonCode: "discovery-timeout" },
+    );
+    const steps = [
+      step({ check: ready }),
+      step({ id: "database", requires: ["prerequisites"], check: ready }),
+      step({ id: "migrations", requires: ["database"], check: ready }),
+      step({ id: "command", requires: ["migrations"], canSkip: true, check: ready }),
+      step({ id: "services", requires: ["migrations"], check: ready }),
+      step({ id: "engines", requires: ["services"], canSkip: true, recheck }),
+    ];
+    const first = await SetupEngine.open(files.store, steps, clock);
+    await first.start();
+    await first.skip("engines");
+    await first.retry("engines");
+    expect(first.pilotReady()).toBe(true);
+    const reopened = await SetupEngine.open(files.store, steps, clock);
+    expect(reopened.pilotReady()).toBe(false);
+    await reopened.start();
+    expect(recheck).toHaveBeenCalledOnce();
+    expect(reopened.pilotReady()).toBe(true);
+    discoveryReady = false;
+    const failed = await SetupEngine.open(files.store, steps, clock);
+    await failed.start();
+    expect(failed.pilotReady()).toBe(false);
+    expect(failed.snapshot().steps[5]).toMatchObject({
+      status: "failed",
+      reasonCode: "discovery-timeout",
+    });
+  });
   it("persists active and waiting durations without carrying monotonic time across restart", async () => {
     const files = memoryStore();
     let tick = 1;

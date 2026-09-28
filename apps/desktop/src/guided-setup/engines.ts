@@ -41,16 +41,29 @@ export function enginesGuidedStep(deps: {
   let found: FleetDiscoveryReport | null = null;
   const processes = deps.processes ?? systemFleetProcess;
   const discover = deps.discover ?? discoverFleetReport;
+  const rediscover = async (signal: AbortSignal) => {
+    found = await discover(processes, signal);
+    if (found.timedOut) throw new SetupStepFailure("discovery-timeout");
+    if (found.failed) throw new SetupStepFailure("discovery-failed");
+    return found;
+  };
   return {
     id: "engines",
     revision: 1,
     requires: ["services"],
     canSkip: true,
     check: async () => ({ kind: "needed", reasonCode: "optional-computers-unchecked" }),
+    recheck: async (_, signal) => {
+      const report = await rediscover(signal);
+      return {
+        kind: "satisfied",
+        checkedAt: deps.now(),
+        evidence: "local-fleet-discovery",
+        details: fleetDetails(report.targets),
+      };
+    },
     run: async (_, signal) => {
-      found = await discover(processes, signal);
-      if (found.timedOut) throw new SetupStepFailure("discovery-timeout");
-      if (found.failed) throw new SetupStepFailure("discovery-failed");
+      await rediscover(signal);
       return { kind: "verified", proof: "local-fleet-discovery" };
     },
     verify: async () =>
