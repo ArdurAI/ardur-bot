@@ -95,7 +95,7 @@ export type BrokerOptions = {
   active: () => Promise<boolean>;
   /** A started observation must commit before the provider transport is called. */
   record: (usage: AgentUsage) => Promise<void>;
-  observed?: (model: string, effort: string | undefined) => Promise<void>;
+  observed?: (model: string | undefined, effort: string | undefined) => Promise<void>;
   requiredContext?: string;
   fetch?: typeof globalThis.fetch;
 };
@@ -487,10 +487,6 @@ export class HermesProviderBroker {
         await active();
         const url = `${assertAllowedOpenAiCompatibleUrl(connection.baseUrl).toString().replace(/\/$/, "")}/chat/completions`;
         live();
-        await this.options.observed?.(
-          String(body.model),
-          typeof body.reasoning_effort === "string" ? body.reasoning_effort : undefined,
-        );
         const response = await this.transport(url, {
           method: "POST",
           headers: {
@@ -603,6 +599,11 @@ export class HermesProviderBroker {
           await finish(Date.now() >= this.grant.expiresAt ? "timed-out" : "cancelled");
           throw new Error("Provider request was cancelled.");
         }
+        if (response.ok)
+          await this.options.observed?.(
+            observedModel ? connection.modelId : undefined,
+            typeof body.reasoning_effort === "string" ? body.reasoning_effort : undefined,
+          );
         await finish(response.ok ? "success" : "failed");
         if (response.ok) this.deliveredBytes += size;
         return new Response(response.ok ? bytes : "Provider request failed.", {

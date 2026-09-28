@@ -89,6 +89,33 @@ function fixture(patch: Partial<BrokerOptions> = {}) {
 }
 
 describe("worker provider broker", () => {
+  it("records model evidence only from a validated response", async () => {
+    const observed = vi.fn(async (_model: string | undefined, _effort: string | undefined) => {});
+    const matching = fixture({ observed });
+    await matching.broker.open(matching.request());
+    expect(observed).toHaveBeenCalledWith("fixture-model", "high");
+
+    observed.mockClear();
+    const absent = fixture({
+      observed,
+      connection: { ...matching.options.connection, reportedModel: "if-present" },
+      fetch: vi.fn(async () => json({ usage: { prompt_tokens: 1 } })),
+    });
+    await absent.broker.open(absent.request());
+    expect(observed).toHaveBeenCalledWith(undefined, "high");
+
+    observed.mockClear();
+    const substituted = fixture({
+      observed,
+      fetch: vi.fn(async () => json({ model: "different-model" })),
+    });
+    await expect(substituted.broker.open(substituted.request())).rejects.toThrow("Provider request failed.");
+    expect(observed).not.toHaveBeenCalled();
+
+    const failed = fixture({ observed, fetch: vi.fn(async () => { throw new Error("offline"); }) });
+    await expect(failed.broker.open(failed.request())).rejects.toThrow();
+    expect(observed).not.toHaveBeenCalled();
+  });
   it("refuses a provider request that dropped required Ardur context", async () => {
     const f = fixture({ requiredContext: "Required Ardur instruction" });
     await expect(f.broker.open(f.request())).rejects.toThrow();

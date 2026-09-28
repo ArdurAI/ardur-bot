@@ -1174,7 +1174,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
         },
         observed: async (model, wireEffort) =>
           request.onBrokerRuntimeInfo?.({
-            reportedModel: model,
+            ...(model ? { reportedModel: model } : {}),
             requestedEffort: pin.effort!,
             wireEffort,
             effortMappingVersion: "broker-chat-completions-v1",
