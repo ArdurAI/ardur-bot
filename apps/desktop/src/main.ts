@@ -764,7 +764,7 @@ function showSetupWindow(error: string | null = null, options: { resume?: boolea
  * same sentence and its own buttons.
  */
 function showServiceFailure(message: string, offerReset = false) {
-  if (setupWindow !== null && !setupWindow.isDestroyed()) return;
+  if (setupWindow !== null && !setupWindow.isDestroyed() && setupWindow.isVisible()) return;
   const win = mainWindow;
   if (win === null || win.isDestroyed() || serviceFailurePrompt) return;
   serviceFailurePrompt = true;
@@ -808,7 +808,7 @@ async function confirmLocalReset(parent: BrowserWindow): Promise<boolean> {
  * clears this sentence.
  */
 function showResetFailure(message: string, parent: BrowserWindow) {
-  if (setupWindow !== null && !setupWindow.isDestroyed()) return;
+  if (setupWindow !== null && !setupWindow.isDestroyed() && setupWindow.isVisible()) return;
   if (parent.isDestroyed() || serviceFailurePrompt) return;
   serviceFailurePrompt = true;
   void dialog
@@ -1911,7 +1911,7 @@ app.whenReady().then(async () => {
 
   // Register before startup awaits so macOS dock clicks during probe/open are handled.
   app.on("activate", () => {
-    if (setupWindow !== null && !setupWindow.isDestroyed()) {
+    if (setupWindow !== null && !setupWindow.isDestroyed() && setupWindow.isVisible()) {
       setupWindow.show();
       setupWindow.focus();
       return;
