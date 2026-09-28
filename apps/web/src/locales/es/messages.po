@@ -2852,6 +2852,11 @@ msgstr ""
 msgid "Could not update this computer. Try again."
 msgstr ""
 
+#: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/pages/McpServersOverlay.tsx
+msgid "Could not update this field. Retry."
+msgstr "No se pudo actualizar este campo. Inténtalo de nuevo."
+
 #: src/pages/board/Board.tsx
 #: src/pages/board/ItemForm.tsx
 msgid "Could not update this item."
@@ -2953,6 +2958,10 @@ msgstr "Creando…"
 #: src/pages/PluginsOverlay.tsx
 msgid "Credential"
 msgstr "Credencial"
+
+#: src/components/integrations/McpCredentialFields.tsx
+msgid "Credential fields"
+msgstr "Campos de credenciales"
 
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
@@ -4508,6 +4517,18 @@ msgstr "Claro"
 #: src/components/integrations/catalog/McpToolReview.tsx
 msgid "Limit tools"
 msgstr "Limitar herramientas"
+
+#. placeholder {0}: data.lineNumber
+#. placeholder {1}: data.maskedLine
+#: src/pages/memory/MemoryProposals.tsx
+msgid "Line {0}: {1} Edit or reject this line."
+msgstr "Línea {0}: {1} Edita o rechaza esta línea."
+
+#. placeholder {0}: data.lineNumber
+#. placeholder {1}: data.maskedLine
+#: src/pages/memory/MemoryImport.tsx
+msgid "Line {0}: {1} Edit or remove this line."
+msgstr "Línea {0}: {1} Edita o elimina esta línea."
 
 #: src/pages/RoutineEditor.tsx
 msgid "Linear issue"
@@ -6598,6 +6619,7 @@ msgstr ""
 #: src/pages/LearningObservation.tsx
 #: src/pages/LearningTimeline.tsx
 #: src/pages/memory/MemoryPage.tsx
+#: src/pages/MemoryHistory.tsx
 #: src/pages/RoutineHistory.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/UploadedFiles.tsx
@@ -6990,6 +7012,14 @@ msgstr ""
 #: src/pages/SpaceSearch.tsx
 msgid "Searching…"
 msgstr "Buscando…"
+
+#: src/components/integrations/McpCredentialFields.tsx
+msgid "Secret"
+msgstr "Secreto"
+
+#: src/components/integrations/McpCredentialFields.tsx
+msgid "Secret for {key}"
+msgstr "Secreto para {key}"
 
 #: src/pages/account/AccountProfile.tsx
 msgid "Select"
@@ -7426,6 +7456,10 @@ msgstr "Leer esta respuesta"
 #: src/pages/CallView.tsx
 msgid "Speaking…"
 msgstr "Hablando…"
+
+#: src/pages/memory/MemoryImport.tsx
+msgid "Split this import into at most three sections."
+msgstr "Divide esta importación en un máximo de tres secciones."
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "SSH agent"

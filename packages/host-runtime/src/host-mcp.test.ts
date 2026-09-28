@@ -23,7 +23,7 @@ vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
     }
     async callTool() {
       fixture.calls();
-      return { content: [{ type: "text", text: "fixture-secret" }] };
+      return { content: [{ type: "text", text: "fixture-secret information" }] };
     }
   },
 }));
@@ -80,5 +80,27 @@ describe("paired host MCP process ownership", () => {
       ),
     ).rejects.toThrow();
     expect(fixture.calls).toHaveBeenCalledTimes(1);
+  });
+  it("keeps an explicitly unmarked environment value out of host redaction", async () => {
+    const registration = HostMcpRegistrationSchema.parse({
+      serverId: "plain-server",
+      spaceId: "space",
+      userId: "owner",
+      revision: 1,
+      command: "node",
+      args: [],
+      env: { LOG_LEVEL: "info" },
+      credentialFlags: { env: { LOG_LEVEL: false }, headers: {} },
+      redactions: ["fixture-secret"],
+      cwd: "/fixture",
+    });
+    const servers = new HostMcpServers([registration]);
+    const result = await servers.execute(
+      { op: "mcp.call", serverId: "plain-server", revision: 1, name: "read_fixture", args: {} },
+      { spaceId: "space", userId: "owner", botId: "bot", runId: "run" },
+      new AbortController().signal,
+    );
+    expect(JSON.stringify(result)).toContain("[redacted] information");
+    await servers.replace([]);
   });
 });

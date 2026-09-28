@@ -941,6 +941,7 @@ describe("local import lifecycle", () => {
       .finally(() =>
         installLogger(createLogger({ service: "ardurbot-worker", level: "off", sinks: [] })),
       );
+    expect(response.result).toMatchObject({ created: 3, failed: 1 });
     expect(sink.events).toEqual([
       expect.objectContaining({
         message: "local-import item failed",

@@ -10,6 +10,7 @@ import {
 import { HostIntegrationSchema } from "./host-integrations.js";
 import { IDE_FILE_BYTES } from "./ide.js";
 import { LocalImportRootsSchema } from "./local-import.js";
+import { McpCredentialFlagsSchema } from "./mcp.js";
 import { RequestUsageObservationSchema } from "./request-usage.js";
 import {
   RuntimeAvailabilitySchema,
@@ -26,6 +27,37 @@ export const HOST_FILE_BYTES = 128 * 1024;
 export const HOST_WRITE_FRAME_BYTES = Math.ceil(IDE_FILE_BYTES / 3) * 4 + 8192;
 export const HOST_IN_FLIGHT = 4;
 export const HOST_WINDOW = 8;
+export const HostProviderGrantSchema = z.strictObject({
+  protocol: z.literal(1),
+  id: z.uuid(),
+  token: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
+  expiresAt: z.number().int().positive(),
+  hostGeneration: z.uuid(),
+});
+export type HostProviderGrant = z.infer<typeof HostProviderGrantSchema>;
+export const HostProviderOpenSchema = z.strictObject({
+  status: z.number().int().min(200).max(599),
+  contentType: z.enum(["application/json", "text/event-stream"]),
+});
+export const HostProviderReadSchema = z.strictObject({
+  seq: z.number().int().nonnegative(),
+  chunk: z
+    .string()
+    .max(32 * 1024)
+    .regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/),
+  done: z.boolean(),
+});
+/** Hermes is a negotiated host operation until product pin editing lands. */
+export const HostRuntimePinSchema = z.union([
+  RuntimePinSchema,
+  RuntimePinSchema.extend({ runtimeKind: z.literal("hermes") }),
+]);
+export const HostRuntimeInfoSchema = z.union([
+  RuntimeInfoSchema,
+  RuntimeInfoSchema.extend({ runtimeKind: z.literal("hermes") }),
+]);
+export const HostRuntimeProblemSchema = RuntimeProblemSchema.extend({ pin: HostRuntimePinSchema });
+export type HostRuntimeProblem = z.infer<typeof HostRuntimeProblemSchema>;
 export const HOST_TOOLS = [
   "git",
   "gh",
@@ -96,6 +128,7 @@ const tool = z.strictObject({
   route: z.unknown().optional(),
 });
 export const HostTurnSchema = z.strictObject({
+  providerBroker: HostProviderGrantSchema.optional(),
   controlledComparison: z.boolean().optional(),
   botId: id,
   runId: id,
@@ -126,9 +159,13 @@ export const HostTurnSchema = z.strictObject({
     .optional(),
   tools: z.union([z.literal("none"), z.array(tool).max(256)]),
   model: z.strictObject({
-    runtimePin: RuntimePinSchema,
+    runtimePin: HostRuntimePinSchema,
     provider: z.string().max(160),
     id: z.string().max(256),
+    maxTokens: z.number().int().min(1).max(65_536).optional(),
+    contextWindow: z.number().int().min(64_000).max(2_000_000).optional(),
+    acceptsImages: z.boolean().optional(),
+    reasoning: z.boolean().optional(),
     thinkingLevel: z
       .enum(["off", "minimal", "low", "medium", "high", "xhigh", "max"])
       .nullable()
@@ -139,7 +176,8 @@ export const HostTurnSchema = z.strictObject({
 });
 export type HostTurn = z.infer<typeof HostTurnSchema>;
 export const HostMcpRegistrationSchema = z.strictObject({
-  redactions: z.array(z.string().max(4096)).max(256).default([]),
+  redactions: z.array(z.string().max(16384)).max(512).default([]),
+  credentialFlags: McpCredentialFlagsSchema.optional(),
   serverId: id,
   userId: id,
   spaceId: id,
@@ -246,6 +284,8 @@ export const HostRequestSchema = /* @__PURE__ */ (() =>
   }))();
 export type HostRequest = z.infer<typeof HostRequestSchema>;
 export const HostHealthSchema = z.strictObject({
+  generation: z.uuid().optional(),
+  capabilities: z.strictObject({ providerRelay: z.literal(1) }).optional(),
   capacity: CapacitySnapshotSchema.optional(),
   name: z.string().trim().min(1).max(80).optional(),
   platform: z.enum(["darwin", "linux", "win32"]),
@@ -287,7 +327,7 @@ export const HostFrameSchema = /* @__PURE__ */ (() =>
       v: z.literal(1),
       type: z.literal("end"),
       id,
-      problem: RuntimeProblemSchema.optional(),
+      problem: HostRuntimeProblemSchema.optional(),
     }),
     z.strictObject({
       v: z.literal(1),
@@ -301,6 +341,9 @@ export const HostFrameSchema = /* @__PURE__ */ (() =>
         "onRuntimeInfo",
         "acknowledgeInput",
         "claimSteering",
+        "provider.open",
+        "provider.read",
+        "provider.cancel",
       ]),
       args: z.array(z.unknown()).max(5),
     }),

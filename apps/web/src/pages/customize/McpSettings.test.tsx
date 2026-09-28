@@ -79,6 +79,18 @@ vi.mock("@ardurbot/ui-web", () => {
       <option value={value}>{children}</option>
     ),
     Input: Container,
+    Switch: ({
+      checked,
+      onCheckedChange,
+      ...props
+    }: ComponentProps<"input"> & { onCheckedChange?(checked: boolean): void }) => (
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onCheckedChange?.(event.target.checked)}
+        {...props}
+      />
+    ),
     Button: ({
       variant: _variant,
       size: _size,
@@ -161,6 +173,24 @@ it("routes desktop STDIO creation through native configuration review", async ()
   });
   expect(host.textContent).toContain("Configuration review");
   expect(api.create).not.toHaveBeenCalled();
+});
+
+it("lets the owner unmark a plain MCP entry without revealing its value", async () => {
+  const entry = server({
+    envKeys: ["LOG_LEVEL", "PGPASSWORD"],
+    credentialFlags: { env: { LOG_LEVEL: true, PGPASSWORD: true }, headers: {} },
+  });
+  api.list.mockResolvedValue([entry]);
+  api.update.mockResolvedValue(entry);
+  await act(async () => root.render(<McpServersOverlay embedded onClose={() => undefined} />));
+  const toggle = host.querySelector<HTMLInputElement>('input[aria-label="Secret for LOG_LEVEL"]')!;
+  expect(toggle.checked).toBe(true);
+  await act(async () => toggle.click());
+  expect(api.update).toHaveBeenCalledWith({
+    id: entry.id,
+    credentialFlags: { env: { LOG_LEVEL: false, PGPASSWORD: true }, headers: {} },
+  });
+  expect(host.textContent).not.toContain("info");
 });
 
 it("retries failed diagnostics without exposing raw configuration", async () => {

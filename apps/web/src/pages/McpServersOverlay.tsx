@@ -1,4 +1,10 @@
-import type { Bot, BotMcpServer, McpServer, McpTransport } from "@ardurbot/contracts";
+import type {
+  Bot,
+  BotMcpServer,
+  McpCredentialFlags,
+  McpServer,
+  McpTransport,
+} from "@ardurbot/contracts";
 import { LOCAL_IMPORT_TOOL_NAMES } from "@ardurbot/contracts/local-import";
 import { deriveMcpSlug } from "@ardurbot/core";
 import {
@@ -27,6 +33,10 @@ import { Check, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState } from "react";
 import { McpToolReview } from "../components/integrations/catalog/McpToolReview";
+import {
+  changedMcpCredentialFlags,
+  McpCredentialFields,
+} from "../components/integrations/McpCredentialFields";
 import { desktopBridge } from "../lib/desktop";
 import { connectMcpOauth, MCP_OAUTH_CHANNEL } from "../lib/mcp-connect";
 import { mcpFailureSentence, mcpOutcomeSentence, mcpSignIn } from "../lib/mcp-sign-in";
@@ -331,6 +341,25 @@ export function McpServersOverlay({
     }
   }
 
+  async function setEntrySecret(
+    server: McpServer,
+    kind: keyof McpCredentialFlags,
+    name: string,
+    secret: boolean,
+  ) {
+    setError(null);
+    setSaving(true);
+    const flags = changedMcpCredentialFlags(server, kind, name, secret);
+    try {
+      await rpc.mcp.servers.update({ id: server.id, credentialFlags: flags });
+      await refresh();
+    } catch {
+      setError(t`Could not update this field. Retry.`);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <McpSettingsFrame embedded={embedded} onClose={onClose}>
       <div className="contents">
@@ -562,6 +591,13 @@ export function McpServersOverlay({
                         <ImportedServerCredentials
                           server={server}
                           onSaved={() => refresh().then(() => undefined)}
+                        />
+                        <McpCredentialFields
+                          server={server}
+                          disabled={saving}
+                          onChange={(kind, key, checked) =>
+                            void setEntrySecret(server, kind, key, checked)
+                          }
                         />
                         {statusText ? (
                           <p

@@ -62,7 +62,9 @@ const NATIVE_TOOLSETS = [
   "cronjob",
 ];
 
-export function hermesConfig(request: AgentRunRequest) {
+export function hermesConfig(request: AgentRunRequest, pinned = false) {
+  if (pinned && (!request.model.maxTokens || !request.model.contextWindow))
+    throw new Error("Hermes requires finite model limits.");
   const endpoint = request.model.baseUrl;
   if (!endpoint) throw new Error("Hermes needs a pinned provider endpoint.");
   const url = new URL(endpoint);
@@ -74,7 +76,7 @@ export function hermesConfig(request: AgentRunRequest) {
     url.search ||
     url.hash
   )
-    throw new Error("This spike accepts only a loopback fake provider.");
+    throw new Error("Hermes requires a loopback provider relay.");
   if (!request.model.apiKey || Buffer.byteLength(request.model.apiKey) > 4096)
     throw new Error("Hermes needs a bounded provider key for this turn.");
   if (!request.model.id || !/^[\w./:-]+$/.test(request.model.id))
@@ -82,20 +84,22 @@ export function hermesConfig(request: AgentRunRequest) {
   return {
     model: {
       default: request.model.id,
-      provider: "custom:ardur",
+      provider: pinned ? "custom" : "custom:ardur",
       context_length: request.model.contextWindow ?? 65_536,
       supports_vision: request.model.acceptsImages === true,
     },
-    custom_providers: [
-      {
-        name: "ardur",
-        base_url: endpoint,
-        key_env: "ARDUR_HERMES_PROVIDER_KEY",
-        api_mode: "chat_completions",
-        model: request.model.id,
-        discover_models: false,
-      },
-    ],
+    custom_providers: pinned
+      ? []
+      : [
+          {
+            name: "ardur",
+            base_url: endpoint,
+            key_env: "ARDUR_HERMES_PROVIDER_KEY",
+            api_mode: "chat_completions",
+            model: request.model.id,
+            discover_models: false,
+          },
+        ],
     model_overrides:
       request.model.reasoning || request.model.acceptsImages
         ? {
@@ -128,6 +132,7 @@ export function hermesConfig(request: AgentRunRequest) {
     hooks_auto_accept: false,
     plugins: { enabled: [] },
     telemetry: { shared_metrics: { enabled: false } },
+    security: { allow_lazy_installs: false },
     tools: { tool_search: { enabled: "off" } },
     mcp_servers: {},
   };
@@ -213,6 +218,9 @@ export class HermesRuntime implements AgentRuntime {
       args?: string[];
       launch: HermesLaunch;
       onPermissionAttempt?: () => void;
+      /** The owned launcher supplies provider configuration directly to AIAgent. */
+      pinned?: boolean;
+      stagingParent?: string;
       /** Test and observability hook, called once after the turn is fenced and its queue has ended. */
       onTurnFinished?: (runId: string, reason: "done" | "pause" | "failure" | "cancel") => void;
     },
@@ -294,12 +302,16 @@ export class HermesRuntime implements AgentRuntime {
     await this.finishTurn(runId, "cancel");
   }
 
+  async fail(runId: string) {
+    await this.finishTurn(runId, "failure", new Error("Hermes provider request was refused."));
+  }
+
   async *run(
     request: AgentRunRequest,
     context?: Partial<AdapterContext>,
   ): AsyncIterable<AgentRuntimeEvent> {
     if (this.running.has(request.runId)) throw new Error("This Hermes run is already active.");
-    const config = hermesConfig(request);
+    const config = hermesConfig(request, this.options.pinned);
     const queue = new RuntimeQueue<AgentRuntimeEvent>(undefined, false);
     const turn: ActiveTurn = { active: true, queue };
     this.running.set(request.runId, turn);
@@ -313,7 +325,7 @@ export class HermesRuntime implements AgentRuntime {
     let mcp: Awaited<ReturnType<typeof startArdurMcpServer>> | undefined;
     try {
       if (!turn.active) return;
-      home = await mkdtemp(join(tmpdir(), "ardur-hermes-"));
+      home = await mkdtemp(join(this.options.stagingParent ?? tmpdir(), "ardur-hermes-"));
       const workspace = join(home, "workspace");
       await mkdir(workspace, { mode: 0o700 });
       await writeFile(join(home, "config.yaml"), `${JSON.stringify(config, null, 2)}\n`, {
@@ -387,7 +399,15 @@ export class HermesRuntime implements AgentRuntime {
           PATH: "/usr/bin:/bin",
           LANG: "C.UTF-8",
           HERMES_ACP_SKIP_CONFIGURED_MCP: "1",
+          HERMES_DISABLE_LAZY_INSTALLS: "1",
           ARDUR_HERMES_PROVIDER_KEY: request.model.apiKey!,
+          ...(this.options.pinned
+            ? {
+                ARDUR_HERMES_RELAY_URL: request.model.baseUrl!,
+                ARDUR_HERMES_MODEL: request.model.id,
+                ARDUR_HERMES_MAX_TOKENS: String(request.model.maxTokens),
+              }
+            : {}),
         },
       });
       turn.child = result.child;

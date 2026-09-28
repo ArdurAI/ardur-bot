@@ -32,9 +32,18 @@ function redactPayloadValue(value: unknown, secrets: string[]): unknown {
   }
   if (typeof value !== "object") return value;
   return Object.fromEntries(
-    Object.entries(value).map(([key, item]) => [
-      redactSecrets(key, secrets),
-      redactPayloadValue(item, secrets),
-    ]),
+    Object.entries(value).map(([key, item]) => {
+      const credentialField = /(?:cookie|session|token|key|password|authorization|secret)/iu.test(
+        key,
+      );
+      const exactCredential =
+        credentialField &&
+        (typeof item === "string" || typeof item === "number") &&
+        secrets.includes(String(item));
+      return [
+        redactSecrets(key, secrets),
+        exactCredential ? "[redacted]" : redactPayloadValue(item, secrets),
+      ];
+    }),
   );
 }

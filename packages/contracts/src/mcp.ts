@@ -3,6 +3,56 @@ import * as z from "zod";
 export const McpTransportSchema = z.enum(["streamable_http", "sse", "stdio"]);
 export type McpTransport = z.infer<typeof McpTransportSchema>;
 
+/** Flags live beside values in the encrypted MCP material. Missing flags mean
+ * a legacy entry and must be treated as secret. */
+export const McpCredentialFlagsSchema = z.object({
+  env: z.record(z.string(), z.boolean()).default({}),
+  headers: z.record(z.string(), z.boolean()).default({}),
+});
+export type McpCredentialFlags = z.infer<typeof McpCredentialFlagsSchema>;
+
+const plainConfigurationNames = new Set([
+  "LOG_LEVEL",
+  "PATH",
+  "HOME",
+  "LANG",
+  "TZ",
+  "NODE_ENV",
+  "DEBUG",
+]);
+
+export function defaultMcpEntrySecret(name: string): boolean {
+  return !plainConfigurationNames.has(name.toUpperCase());
+}
+
+export function mcpEntryIsSecret(
+  flags: Partial<McpCredentialFlags> | undefined,
+  kind: keyof McpCredentialFlags,
+  name: string,
+): boolean {
+  return flags?.[kind]?.[name] !== false;
+}
+
+/** Preserve an owner's choices; only genuinely new entries receive name defaults. */
+export function mcpCredentialFlagsForEntries(
+  previous: {
+    env?: Record<string, string>;
+    headers?: Record<string, string>;
+    credentialFlags?: Partial<McpCredentialFlags>;
+  },
+  next: { env?: Record<string, string>; headers?: Record<string, string> },
+): McpCredentialFlags {
+  const flags: McpCredentialFlags = { env: {}, headers: {} };
+  for (const kind of ["env", "headers"] as const) {
+    for (const name of Object.keys(next[kind] ?? {})) {
+      flags[kind][name] = Object.hasOwn(previous[kind] ?? {}, name)
+        ? mcpEntryIsSecret(previous.credentialFlags, kind, name)
+        : defaultMcpEntrySecret(name);
+    }
+  }
+  return flags;
+}
+
 export function isLocalMcpHost(hostname: string): boolean {
   return (
     hostname === "localhost" ||

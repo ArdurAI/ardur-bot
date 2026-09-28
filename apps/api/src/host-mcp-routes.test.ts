@@ -58,7 +58,15 @@ it("keeps the host online with 200 registrations and explains only the refused e
     result: vi.fn(),
   } as unknown as HostBridge;
   const secrets = {
-    load: vi.fn(() => JSON.stringify({ command: "node", args: [], env: {}, cwd: "/fixture" })),
+    load: vi.fn(() =>
+      JSON.stringify({
+        command: "node",
+        args: [],
+        env: { LOG_LEVEL: "info", PGPASSWORD: "bluebird-42" },
+        credentialFlags: { env: { LOG_LEVEL: false, PGPASSWORD: true }, headers: {} },
+        cwd: "/fixture",
+      }),
+    ),
   } as unknown as EncryptedSecretStore;
   mountHostMcpRoutes(app, { prisma, hostBridge, secrets });
   const settings = createMcpSettings({ prisma, hostBridge, secrets });
@@ -67,7 +75,12 @@ it("keeps the host online with 200 registrations and explains only the refused e
     app.request("/api/host-bridge/mcp", { headers: { authorization: "Bearer fixture" } });
   const response = await request();
   expect(response.status).toBe(200);
-  expect(await response.json()).toHaveLength(200);
+  const registrations = await response.json();
+  expect(registrations).toHaveLength(200);
+  expect(registrations[0]).toMatchObject({
+    credentialFlags: { env: { LOG_LEVEL: false, PGPASSWORD: true } },
+    redactions: ["bluebird-42"],
+  });
   expect(rows.filter((row) => row.enabled)).toHaveLength(200);
   expect(updateMany).toHaveBeenCalledWith(
     expect.objectContaining({
