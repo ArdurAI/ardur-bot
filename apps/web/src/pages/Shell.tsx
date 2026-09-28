@@ -797,12 +797,7 @@ export function ShellPage({
   const readVisibleGroups = useRef(new Set<string>());
   useNotifications();
   const computerVisible = useRef(false);
-  const effectiveWorkspaceTab = getEffectiveWorkspaceTab(
-    workspaceTab,
-    computer?.capabilities?.graphical,
-  );
-  const isVisible = isComputerVisible(computerOpen, panel, effectiveWorkspaceTab);
-  computerVisible.current = isVisible;
+
   const autoSpoken = useRef<string | null>(null);
   const autoSpokenBotId = useRef<string | null>(null);
 
@@ -813,6 +808,12 @@ export function ShellPage({
       : (bots.find((b) => b.id === botId) ?? bots[0]);
   const computerBot =
     (computerBotId ? bots.find((bot) => bot.id === computerBotId) : undefined) ?? active;
+  const effectiveWorkspaceTab = getEffectiveWorkspaceTab(
+    workspaceTab,
+    computer?.capabilities?.graphical,
+  );
+  const isVisible = isComputerVisible(computerOpen, panel, effectiveWorkspaceTab);
+  computerVisible.current = isVisible;
   computerOpenRef.current = computerOpen;
   computerBotIdRef.current = computerBotId ?? active?.id;
   const activeGroup = groups.find((group) => group.id === groupId);
@@ -2587,7 +2588,7 @@ export function ShellPage({
   useEffect(() => {
     const heartbeatBotId = computerBot?.id ?? active?.id;
     if (
-      !isVisible ||
+      !isComputerVisible(computerOpen, panel, effectiveWorkspaceTab) ||
       !heartbeatBotId ||
       computer?.state !== "running"
     )
@@ -2687,6 +2688,12 @@ export function ShellPage({
     computerErrorState,
     Boolean(embeddedScreenUrl),
   );
+  useEffect(() => {
+    if (isVisible && !embeddedScreenUrl && computer?.state === "running") {
+      const targetId = computerBot?.id ?? active?.id;
+      if (targetId) void refreshComputerScreen(targetId);
+    }
+  }, [isVisible, embeddedScreenUrl, computer?.state, computerBot?.id, active?.id]);
   const computerScreenError = displayedComputerError ? (
     <ComputerScreenError
       message={displayedComputerError.message}
@@ -4773,10 +4780,10 @@ export function ShellPage({
                 ) : (
                   <div className="grid h-full place-items-center text-sm text-muted-foreground/80">
                     {computer?.state === "suspended"
-                        ? t`Computer is asleep`
-                        : computer?.imagePulling
-                          ? computerPullLabel(computer.imagePullPercent)
-                          : computerLabel(computer?.mode, computerBot.name)}
+                      ? t`Computer is asleep`
+                      : computer?.imagePulling
+                        ? computerPullLabel(computer.imagePullPercent)
+                        : computerLabel(computer?.mode, computerBot.name)}
                   </div>
                 ))}
             </div>

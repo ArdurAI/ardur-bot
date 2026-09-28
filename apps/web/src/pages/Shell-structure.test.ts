@@ -5,7 +5,7 @@ import { join } from 'path';
 describe('Shell structure', () => {
   it('renders computerScreenError outside the screen-only content branch', () => {
     const code = readFileSync(join(__dirname, 'Shell.tsx'), 'utf8');
-    // Ensure computerScreenError is placed above terminalSurface.tabs, 
+    // Ensure computerScreenError is placed above terminalSurface.tabs,
     // not hidden inside the else branch.
     expect(code).toMatch(/\{computerScreenError \? \(\s*<div[^>]*>\s*\{computerScreenError\}\s*<\/div>\s*\) : null\}\s*\{terminalSurface\.tabs\}/);
     expect(code).not.toMatch(/!computerScreenError \? \(/);
