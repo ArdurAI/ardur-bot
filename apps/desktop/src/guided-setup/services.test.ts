@@ -5,6 +5,28 @@ import { serviceGuidedStep } from "./services.js";
 const context = { runId: "test-run" };
 
 describe("guided services", () => {
+  it("stops a database started by setup at the services prompt but preserves an existing one", async () => {
+    const stop = vi.fn(async () => undefined);
+    const ownership = { databaseStartedHere: false };
+    const services = serviceGuidedStep({
+      localMode: {
+        servicesReady: async () => false,
+        startServices: async () => ({ phase: "ready" }) as DesktopLocalStackState,
+        stop,
+      },
+      ownership,
+      dataFolderFingerprint: "abc123",
+      now: () => 100,
+    });
+    await services.check(context, new AbortController().signal);
+    await services.cancel(context, null);
+    expect(stop).not.toHaveBeenCalled();
+    ownership.databaseStartedHere = true;
+    await services.check(context, new AbortController().signal);
+    await services.cancel(context, null);
+    expect(stop).toHaveBeenCalledOnce();
+    expect(ownership.databaseStartedHere).toBe(false);
+  });
   it("requires both controller readiness signals and keeps the data path out of the receipt", async () => {
     let apiHealth = true;
     let workerLine = false;

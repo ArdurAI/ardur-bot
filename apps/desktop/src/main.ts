@@ -1455,8 +1455,10 @@ app.whenReady().then(async () => {
     },
   });
   if (GUIDED_SETUP_ENABLED && !legacyCompose) {
+    const setupOwnership = { databaseStartedHere: false };
     const servicesStep = serviceGuidedStep({
       localMode,
+      ownership: setupOwnership,
       dataFolderFingerprint: createHash("sha256").update(userDataDir).digest("hex").slice(0, 20),
       now: () => Date.now(),
     });
@@ -1470,6 +1472,7 @@ app.whenReady().then(async () => {
           binaries: postgresBinaries,
         }),
         localMode,
+        ownership: setupOwnership,
         command: new ArdurCommandInstaller(
           process.execPath,
           app.getVersion(),

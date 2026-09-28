@@ -7,6 +7,7 @@ export interface ServiceStepDependencies {
   dataFolderFingerprint: string;
   now(): number;
   stopTimeoutMs?: number;
+  ownership?: { databaseStartedHere: boolean };
 }
 
 /** A ready receipt names only the folder fingerprint; no local path crosses IPC or disk. */
@@ -45,7 +46,7 @@ export function serviceGuidedStep(deps: ServiceStepDependencies): SetupStep {
         : { kind: "blocked", reasonCode: "services-not-ready" };
     },
     cancel: async () => {
-      if (!startedHere) return;
+      if (!startedHere && !deps.ownership?.databaseStartedHere) return;
       const timeout = deps.stopTimeoutMs ?? 10_000;
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {
@@ -56,6 +57,7 @@ export function serviceGuidedStep(deps: ServiceStepDependencies): SetupStep {
           }),
         ]);
         startedHere = false;
+        if (deps.ownership) deps.ownership.databaseStartedHere = false;
       } finally {
         if (timer) clearTimeout(timer);
       }

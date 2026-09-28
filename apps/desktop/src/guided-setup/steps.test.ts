@@ -95,6 +95,24 @@ describe("first guided steps", () => {
     });
   });
 
+  it("records database ownership only when this setup starts it", async () => {
+    const f = fixture();
+    const ownership = { databaseStartedHere: false };
+    f.deps.ownership = ownership;
+    const database = firstGuidedSteps(f.deps)[1]!;
+    const signal = new AbortController().signal;
+    expect(await database.check(context, signal)).toMatchObject({ kind: "needed" });
+    expect(ownership.databaseStartedHere).toBe(false);
+    await database.run(context, signal);
+    expect(ownership.databaseStartedHere).toBe(true);
+    f.setOwned(true);
+    const existing = { databaseStartedHere: false };
+    f.deps.ownership = existing;
+    const adopted = firstGuidedSteps(f.deps)[1]!;
+    expect(await adopted.check(context, signal)).toMatchObject({ kind: "satisfied" });
+    expect(existing.databaseStartedHere).toBe(false);
+  });
+
   it("passes cancellation into the migration wrapper and waits for its settlement", async () => {
     const f = fixture();
     f.setOwned(true);
