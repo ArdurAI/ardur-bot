@@ -140,6 +140,7 @@ export function SettingsOverlay({
               const items = visible.filter((item) => item.group === group);
               if (!items.length) return null;
               return (
+                // biome-ignore lint/a11y/useSemanticElements: A fieldset legend would duplicate the nav group label read by aria-labelledby.
                 <div
                   key={group}
                   role="group"

@@ -144,6 +144,7 @@ export default function GeneralSettings({
           <Trans>Appearance</Trans>
         </h3>
         <SettingsRow label={t`Theme`}>
+          {/* biome-ignore lint/a11y/useSemanticElements: Three segmented toggles form one control; a fieldset legend would duplicate the Theme label. */}
           <div
             className="flex w-fit overflow-hidden rounded-lg border border-border"
             role="group"
