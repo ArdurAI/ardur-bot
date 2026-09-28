@@ -10,22 +10,43 @@
     <script type="module">
       import { createElement as h } from "react";
       import { createRoot } from "react-dom/client";
+      import { CompactWorkRecord } from "../../src/components/ai/CompactWorkRecord";
       import "../../src/styles.css";
 
       const live = new URLSearchParams(location.search).get("live") === "1";
+      const blocks = [
+        {
+          kind: "progress",
+          text: live ? "Checking calendar..." : "Checking calendar...",
+          activity: true,
+        },
+        ...(live ? [] : [
+          {
+            kind: "steps",
+            steps: [{ label: "Google Calendar", count: 1 }],
+            durationMs: 400
+          }
+        ])
+      ];
+
+      const record = h(CompactWorkRecord, { blocks });
       const response = h(
         "div",
         { "data-testid": "response" },
         live ? "Opening the terminal now…" : "Terminal is open and ready.",
       );
+
+      const content = h("div", { className: "flex flex-col gap-2" }, record, response);
+
       const bubble = h(
         "div",
         {
           className:
             "max-w-[74%] space-y-2.5 rounded-[20px] bg-[#1A1A1D] px-[18px] py-3 text-[15.5px] leading-[1.5] text-[#DFDFE2]",
         },
-        response,
+        content,
       );
+
       createRoot(document.getElementById("root")).render(
         h(
           "main",

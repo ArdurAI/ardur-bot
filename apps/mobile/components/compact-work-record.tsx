@@ -1,0 +1,159 @@
+import type { MessageBlock } from "@ardurbot/contracts";
+import { mapMessageBlockToActivity } from "@ardurbot/core";
+import { useMemo, useState } from "react";
+import { Pressable, Text, View } from "react-native";
+import { mobileTokens } from "../lib/appearance";
+import { useI18n } from "../lib/i18n";
+import { NativeCommandBlock } from "./command-block";
+import { NativeSymbol } from "./native-symbol";
+
+export function CompactWorkRecord({ blocks }: { blocks: MessageBlock[] }) {
+  const tokens = mobileTokens();
+  const { t } = useI18n();
+  const [expanded, setExpanded] = useState(false);
+
+  const mapped = useMemo(
+    () => blocks.map((b) => ({ block: b, evidence: mapMessageBlockToActivity(b) })),
+    [blocks],
+  );
+  const nonNarration = mapped.filter(
+    (m) => m.evidence.label !== "narration" && m.evidence.label !== "unavailable",
+  );
+
+  if (nonNarration.length === 0) return null;
+
+  const active = nonNarration.filter((m) => m.evidence.outcome === "pending");
+  const isDone = active.length === 0;
+  const currentState =
+    active.length > 0 ? active[active.length - 1] : nonNarration[nonNarration.length - 1];
+
+  return (
+    <View style={{ marginVertical: 8, width: "100%" }}>
+      <Pressable
+        onPress={() => setExpanded(!expanded)}
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 12,
+        }}
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
+      >
+        <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 8 }}>
+          {!isDone && (
+            <View
+              style={{ flexDirection: "row", alignItems: "center", gap: 8, flex: 1, maxWidth: 150 }}
+            >
+              <View style={{ height: 2, backgroundColor: tokens.foreground, flex: 1 }} />
+              <View
+                style={{
+                  height: 2,
+                  borderTopWidth: 2,
+                  borderStyle: "dotted",
+                  borderColor: tokens.border,
+                  width: 50,
+                }}
+              />
+            </View>
+          )}
+          {isDone && (
+            <NativeSymbol
+              ios="checkmark"
+              android="checkmark-outline"
+              size={14}
+              color={tokens.success}
+            />
+          )}
+          <Text
+            style={{
+              fontFamily: "Menlo",
+              fontSize: 12,
+              color: tokens.mutedForeground,
+            }}
+            numberOfLines={1}
+            ellipsizeMode="tail"
+          >
+            {currentState?.evidence.title ?? (isDone ? t("Done") : t("Working"))}
+            {currentState?.evidence.outcome === "pending" && " ..."}
+          </Text>
+        </View>
+        {expanded ? (
+          <NativeSymbol
+            ios="chevron.down"
+            android="chevron-down-outline"
+            size={14}
+            color={tokens.mutedForeground}
+          />
+        ) : (
+          <NativeSymbol
+            ios="chevron.right"
+            android="chevron-forward-outline"
+            size={14}
+            color={tokens.mutedForeground}
+          />
+        )}
+      </Pressable>
+
+      {expanded && (
+        <View
+          style={{
+            flexDirection: "column",
+            gap: 12,
+            paddingLeft: 16,
+            borderLeftWidth: 2,
+            borderColor: tokens.border,
+            marginTop: 8,
+          }}
+        >
+          {nonNarration.map((m, i) => {
+            if (m.block.kind === "command") {
+              return (
+                <View key={i} style={{ marginTop: 4 }}>
+                  <NativeCommandBlock block={m.block.command} />
+                </View>
+              );
+            }
+            return (
+              <View
+                key={i}
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 16,
+                }}
+              >
+                <Text
+                  style={{
+                    fontFamily: "Menlo",
+                    fontSize: 12,
+                    color: tokens.mutedForeground,
+                    flex: 1,
+                  }}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  {m.evidence.title}
+                </Text>
+                <Text
+                  style={{
+                    fontFamily: "Menlo",
+                    fontSize: 12,
+                    color: tokens.mutedForeground,
+                    opacity: 0.7,
+                  }}
+                >
+                  {m.evidence.outcome === "pending"
+                    ? t("running")
+                    : m.evidence.durationMs
+                      ? `${(m.evidence.durationMs / 1000).toFixed(1)}s`
+                      : ""}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+      )}
+    </View>
+  );
+}

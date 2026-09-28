@@ -130,6 +130,7 @@ import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArtifactFileCard } from "../components/ArtifactFileCard";
 import { AskCard } from "../components/AskCard";
 import { ActiveBotGlyph } from "../components/ai/CollaborationMarker";
+import { CompactWorkRecord } from "../components/ai/CompactWorkRecord";
 import { CloudAgentCard } from "../components/CloudAgentCard";
 import { ComputerMaintenanceActions } from "../components/ComputerMaintenanceActions";
 import { ComputerUpdateProgress } from "../components/ComputerUpdateProgress";
@@ -147,8 +148,6 @@ import { useComposerCommands } from "../components/composer/use-composer-command
 import type { FeedbackEdit } from "../components/MessageFeedback";
 import { MessageFeedback } from "../components/MessageFeedback";
 import { MessageHoverMetadata } from "../components/MessageHoverMetadata";
-import { PeerMessageReceipt } from "../components/PeerMessageReceipt";
-import { ThreadCommandBlock } from "../components/ThreadCommandBlock";
 import { SkillDraftCard } from "../components/teach/SkillDraftCard";
 import { TeachCaptureOverlay } from "../components/teach/TeachCaptureOverlay";
 import { TeachComputerOverlayControl } from "../components/teach/TeachComputerOverlay";
@@ -3536,10 +3535,8 @@ export function ShellPage({
             }}
             onReact={reactToMessage}
             onJumpToMessage={jumpToReplyMessage}
-            onOpenPeerMessages={(peer) => {
-              setPeerConversation(peer);
-            }}
             memberName={resolveTranscriptMemberName}
+
             peerBot={resolveTranscriptBot}
             onRefresh={refreshActiveThread}
             onBotChanged={refreshBots}
@@ -4772,8 +4769,8 @@ const Transcript = memo(function Transcript({
   onQuote,
   onReact,
   onJumpToMessage,
-  onOpenPeerMessages,
   memberName,
+
   peerBot,
   onRefresh,
   onBotChanged,
@@ -4803,7 +4800,6 @@ const Transcript = memo(function Transcript({
     edit?: FeedbackEdit,
   ) => Promise<void>;
   onJumpToMessage: (messageId: string) => void;
-  onOpenPeerMessages: (peer: { peerBotId: string; peerBotName: string }) => void;
   memberName?: (botId: string | undefined) => string | undefined;
   peerBot: (botId: string) => { color: string; status?: string } | undefined;
   onRefresh: () => Promise<void>;
@@ -5072,7 +5068,6 @@ const Transcript = memo(function Transcript({
                       )
                     }
                     onOpenBot={onOpenBot}
-                    onOpenPeerMessages={onOpenPeerMessages}
                     onAnswer={onAnswer}
                     speakerName={
                       peerReceipt
@@ -5081,7 +5076,6 @@ const Transcript = memo(function Transcript({
                           ? memberName?.(message.botId)
                           : undefined
                     }
-                    memberName={memberName}
                     peerBot={peerBot}
                     replyPreview={
                       message.replyToMessageId
@@ -6189,9 +6183,7 @@ const MessageView = memo(function MessageView({
   message,
   onAnswer,
   onOpenBot,
-  onOpenPeerMessages,
   speakerName,
-  memberName,
   peerBot,
   replyPreview,
   replyToMessageId,
@@ -6210,9 +6202,7 @@ const MessageView = memo(function MessageView({
   message: ThreadMessage;
   onAnswer: (message: ThreadMessage, text: string) => Promise<void>;
   onOpenBot: (botId: string) => void;
-  onOpenPeerMessages: (peer: { peerBotId: string; peerBotName: string }) => void;
   speakerName?: string;
-  memberName?: (botId: string | undefined) => string | undefined;
   peerBot: (botId: string) => { color: string; status?: string } | undefined;
   replyPreview?: ThreadMessage;
   replyToMessageId?: string;
@@ -6281,6 +6271,7 @@ const MessageView = memo(function MessageView({
     return (
       <>
         {messageContext}
+        <CompactWorkRecord blocks={message.blocks} />
         <div className="flex w-fit max-w-full justify-start">
           <div
             data-testid="message-bot-bubble"
@@ -6318,37 +6309,17 @@ const MessageView = memo(function MessageView({
   return (
     <>
       {messageContext}
+      <CompactWorkRecord blocks={message.blocks} />
       {message.blocks.map((block, i) => {
-        if (block.kind === "command")
-          return <ThreadCommandBlock key={block.command.commandId} block={block.command} />;
-        if (isToolActivityBlock(block)) return null;
-        if (block.kind === "handoff") {
-          const from = memberName?.(block.fromBotId) ?? t`bot`;
-          const to = memberName?.(block.toBotId) ?? t`bot`;
-          return (
-            <div
-              key={i}
-              className="flex items-center justify-center gap-2 py-1 text-[13.5px] text-muted-foreground"
-            >
-              <span>
-                ↪ {to} ← {from}
-              </span>
-              <span>{block.text}</span>
-            </div>
-          );
-        }
-        if (block.kind === "bot_message_sent" || block.kind === "bot_message_received") {
-          return (
-            <PeerMessageReceipt
-              key={i}
-              block={block}
-              color={
-                peerBot(block.kind === "bot_message_sent" ? block.toBotId : block.fromBotId)
-                  ?.color ?? FALLBACK_BOT_COLOR
-              }
-              onOpen={onOpenPeerMessages}
-            />
-          );
+        if (
+          block.kind === "command" ||
+          isToolActivityBlock(block) ||
+          block.kind === "handoff" ||
+          block.kind === "subagent" ||
+          block.kind === "bot_message_sent" ||
+          block.kind === "bot_message_received"
+        ) {
+          return null;
         }
         if (block.kind === "channel_message") {
           return (
@@ -6387,44 +6358,7 @@ const MessageView = memo(function MessageView({
             </div>
           );
         }
-        if (block.kind === "subagent") {
-          const running = block.status === "running";
-          const failed = block.status === "failed";
-          return (
-            <div
-              key={i}
-              className="w-[min(420px,90%)] rounded-[18px] border border-border bg-muted px-[18px] py-4"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-[15px] font-medium text-foreground" dir="auto">
-                  {block.name}
-                </span>
-                <span
-                  className={`rounded-full px-[11px] py-1 text-[13px] ${
-                    failed
-                      ? "bg-destructive/15 text-destructive"
-                      : running
-                        ? "bg-warning/15 text-warning"
-                        : "bg-success/15 text-success"
-                  }`}
-                  style={{
-                    animation: running ? "rkPulse 1.2s ease-in-out infinite" : undefined,
-                  }}
-                >
-                  {running ? <Trans>subagent</Trans> : block.status}
-                </span>
-              </div>
-              <div className="mt-2 text-[13.5px] text-muted-foreground">{block.task}</div>
-              {block.progress || block.result ? (
-                <div className="mt-2.5 text-[14.5px] leading-[1.5] text-foreground/75">
-                  <ChatMarkdown streaming={running}>
-                    {block.result || block.progress || ""}
-                  </ChatMarkdown>
-                </div>
-              ) : null}
-            </div>
-          );
-        }
+
         if (block.kind === "child_bot") {
           const removed = block.status === "deleted" || block.status === "archived";
           return (

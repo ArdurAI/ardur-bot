@@ -74,7 +74,7 @@ import { ApprovalPreview } from "../components/ApprovalPreview";
 import { AskActions } from "../components/AskActions";
 import { BotAvatar } from "../components/bot-avatar";
 import { BotRuntimeLabel } from "../components/bot-runtime-label";
-import { NativeCommandBlock } from "../components/command-block";
+import { CompactWorkRecord } from "../components/compact-work-record";
 import { MobileRunContext } from "../components/context-section";
 import { DispatchStatus } from "../components/DispatchStatus";
 import {
@@ -83,7 +83,6 @@ import {
 } from "../components/markdown-artifact-preview";
 import { MessageFeedback } from "../components/message-feedback";
 import { NativeSymbol } from "../components/native-symbol";
-import { PeerMessageReceipt } from "../components/peer-message-receipt";
 import {
   applyMobileThreadEvent,
   blockText,
@@ -1590,7 +1589,6 @@ function Thread() {
               groupId={groupId}
               message={message}
               botName={displayName}
-              bots={mentionBots}
               members={snap?.members}
               replyPreview={
                 message.replyToMessageId ? messagesById.get(message.replyToMessageId) : undefined
@@ -2415,7 +2413,6 @@ type MessageActionProps = Pick<
 const MessageBubble = memo(function MessageBubble({
   botId,
   botName,
-  bots,
   groupId,
   message,
   members,
@@ -2428,7 +2425,6 @@ const MessageBubble = memo(function MessageBubble({
 }: {
   botId: string;
   botName?: string;
-  bots: MobileBot[];
   groupId?: string;
   message: MobileMessage;
   members?: MobileSnapshot["members"];
@@ -2439,10 +2435,10 @@ const MessageBubble = memo(function MessageBubble({
   onPreviewMarkdown: (target: MarkdownArtifactPreviewTarget) => void;
   actionProps: MessageActionProps;
 }) {
-  const colorScheme = useResolvedAppearance();
+  const _colorScheme = useResolvedAppearance();
   const tokens = mobileTokens();
   const { t } = useI18n();
-  const [peerExpanded, setPeerExpanded] = useState(false);
+  const [_peerExpanded, _setPeerExpanded] = useState(false);
   const artifactTarget: MobileArtifactTarget = groupId ? { groupId } : { botId };
   const cardBotId = message.botId ?? botId;
   const appConnectBlocks = message.blocks.filter(
@@ -2453,17 +2449,7 @@ const MessageBubble = memo(function MessageBubble({
     (block): block is Extract<MessageBlock, { kind: "ask" }> =>
       block.kind === "ask" && !isApprovalAskBlock(block) && !block.actions?.length,
   );
-  if (message.blocks.some((block) => block.kind === "command")) {
-    return (
-      <View style={{ width: "100%", gap: 8 }}>
-        {message.blocks.map((block) =>
-          block.kind === "command" ? (
-            <NativeCommandBlock key={block.command.commandId} block={block.command} />
-          ) : null,
-        )}
-      </View>
-    );
-  }
+
   if (ask) {
     return (
       <View style={{ gap: 8, width: "100%" }}>
@@ -2485,45 +2471,7 @@ const MessageBubble = memo(function MessageBubble({
       </View>
     );
   }
-  const handoff = message.blocks.find((block) => block.kind === "handoff");
-  if (handoff) {
-    const from = memberName(members, handoff.fromBotId) ?? t("bot");
-    const to = memberName(members, handoff.toBotId) ?? t("bot");
-    return (
-      <AgentEventLabel
-        actionProps={actionProps}
-        label={t("{from} messaged {to}", { from, to })}
-        detail={handoff.text}
-        expanded={peerExpanded}
-        onToggle={() => setPeerExpanded((expanded) => !expanded)}
-      />
-    );
-  }
-  const peerMessage = message.blocks.find(
-    (
-      block,
-    ): block is Extract<MessageBlock, { kind: "bot_message_sent" | "bot_message_received" }> =>
-      block.kind === "bot_message_sent" || block.kind === "bot_message_received",
-  );
-  if (peerMessage) {
-    const sent = peerMessage.kind === "bot_message_sent";
-    const peerBotId = sent ? peerMessage.toBotId : peerMessage.fromBotId;
-    const peerColor =
-      bots.find((bot) => bot.id === peerBotId)?.color ??
-      members?.find((member) => member.botId === peerBotId)?.color ??
-      tokens.mutedForeground;
-    return (
-      <PeerMessageReceipt
-        block={peerMessage}
-        color={peerColor}
-        recipientName={groupId ? undefined : botName}
-        actionProps={actionProps}
-        onOpenPeer={onOpenBot}
-        botId={cardBotId}
-        groupId={groupId ?? undefined}
-      />
-    );
-  }
+
   const channelMessage = message.blocks.find(
     (block): block is Extract<MessageBlock, { kind: "channel_message" }> =>
       block.kind === "channel_message",
@@ -2545,62 +2493,7 @@ const MessageBubble = memo(function MessageBubble({
     (block) =>
       block.kind === "subagent" || block.kind === "child_bot" || block.kind === "cloud_agent",
   );
-  if (special?.kind === "subagent") {
-    const running = special.status === "running";
-    const failed = special.status === "failed";
-    return (
-      <Pressable
-        {...actionProps}
-        style={{
-          width: "90%",
-          borderRadius: 18,
-          borderWidth: 1,
-          borderColor: tokens.border,
-          backgroundColor: tokens.card,
-          paddingHorizontal: 16,
-          paddingVertical: 14,
-        }}
-      >
-        <View
-          style={{
-            flexDirection: "row",
-            justifyContent: "space-between",
-            gap: 8,
-          }}
-        >
-          <Text style={{ color: tokens.foreground, fontSize: 15, fontWeight: "600" }}>
-            {special.name || t("subagent")}
-          </Text>
-          <Text
-            style={{
-              color: failed ? tokens.destructive : running ? tokens.warning : tokens.success,
-              fontSize: 13,
-            }}
-          >
-            {running
-              ? t("Running")
-              : special.status === "failed"
-                ? t("Failed")
-                : special.status === "completed"
-                  ? t("Completed")
-                  : special.status}
-          </Text>
-        </View>
-        {special.task ? (
-          <Text style={{ color: tokens.mutedForeground, marginTop: 8, fontSize: 13.5 }}>
-            {special.task}
-          </Text>
-        ) : null}
-        {special.result || special.progress ? (
-          <View style={{ marginTop: 8 }}>
-            <ChatMarkdown palette={tokens} colorScheme={colorScheme} streaming={running}>
-              {special.result || special.progress || ""}
-            </ChatMarkdown>
-          </View>
-        ) : null}
-      </Pressable>
-    );
-  }
+
   if (special?.kind === "cloud_agent") {
     const title = special.title || t("Cloud agent");
     const statusLabel =
@@ -2972,6 +2865,7 @@ const MessageBubble = memo(function MessageBubble({
   const firstContent = segments.findIndex((segment) => segment.kind === "content");
   return (
     <View style={{ gap: 8, width: "100%" }}>
+      <CompactWorkRecord blocks={message.blocks} />
       {segments.map((segment, index) => (
         <MessageTextCard
           key={`${message.id}-content-${index}`}
@@ -3063,55 +2957,6 @@ function MessageTextCard({
           {contentText}
         </ChatMarkdown>
       )}
-    </Pressable>
-  );
-}
-
-function AgentEventLabel({
-  label,
-  detail,
-  expanded,
-  onToggle,
-  actionProps,
-}: {
-  label: string;
-  detail?: string;
-  expanded: boolean;
-  onToggle: () => void;
-  actionProps: MessageActionProps;
-}) {
-  const colorScheme = useResolvedAppearance();
-  const tokens = mobileTokens();
-  const { t } = useI18n();
-  return (
-    <Pressable
-      {...actionProps}
-      onPress={onToggle}
-      accessibilityRole="button"
-      accessibilityLabel={expanded ? t("Hide {label}", { label }) : t("Show {label}", { label })}
-      style={{ width: "100%", paddingVertical: 4, alignItems: "center" }}
-    >
-      <Text style={{ color: tokens.mutedForeground, fontSize: 13.5, textAlign: "center" }}>
-        ↔ {label}
-      </Text>
-      {expanded && detail ? (
-        <View
-          style={{
-            width: "100%",
-            marginTop: 6,
-            borderRadius: 14,
-            borderWidth: 1,
-            borderColor: tokens.border,
-            backgroundColor: tokens.card,
-            paddingHorizontal: 14,
-            paddingVertical: 10,
-          }}
-        >
-          <ChatMarkdown palette={tokens} colorScheme={colorScheme}>
-            {detail}
-          </ChatMarkdown>
-        </View>
-      ) : null}
     </Pressable>
   );
 }
