@@ -15,6 +15,7 @@ import type { Prisma, PrismaClient } from "@ardurbot/db";
 import type { MemoryService } from "@ardurbot/memory";
 import { proposalView } from "./learning-apply.js";
 import { learningMember } from "./learning-grants.js";
+import { assertSafeMemoryContent } from "./learning-memory-safety.js";
 import { resolveReviewerPin, reviewerDestination } from "./learning-pin.js";
 import { proposalDiff, proposalFingerprint } from "./learning-proposal.js";
 import { learningHash } from "./learning-records.js";
@@ -55,7 +56,8 @@ export async function proposeMemoryIntent(
     ...scope,
     botId: bot.id,
   });
-  const text = redactLearningText(input.text, knownSecrets);
+  const text =
+    input.intent === "import" ? input.text : redactLearningText(input.text, knownSecrets);
   const watermark = learningHash([input.intent, text]);
   const prior = await deps.prisma.reviewExecution.findUnique({ where: { idempotencyKey } });
   if (prior) {
@@ -127,6 +129,9 @@ export async function proposeMemoryIntent(
         )
       : null;
   if (resolved?.kind === "problem") throw new RuntimePinError(resolved);
+  // Parse and check the original import before any review row, evidence, diff, or proposal exists.
+  const importDrafts = input.intent === "import" ? importedMemoryDrafts(text) : null;
+  if (importDrafts) assertSafeMemoryContent(text, knownSecrets);
   const reservation =
     input.intent === "import"
       ? 0
@@ -171,7 +176,7 @@ export async function proposeMemoryIntent(
   let usageSeen = input.intent === "import";
   const usageTotals = new ObservedUsageTotals();
   try {
-    let drafts = importedMemoryDrafts(text);
+    let drafts = importDrafts ?? [];
     if (input.intent === "edit" && resolved) {
       if (!deps.runtime) throw new Error("The coordinator runtime is unavailable.");
       const controller = new AbortController();
@@ -229,7 +234,8 @@ export async function proposeMemoryIntent(
     const evidenceId = randomUUID();
     const proposals = drafts.map((draft) => {
       const head = memoryIntentTarget(draft, documents, actor.userId);
-      const content = redactLearningText(draft.content, knownSecrets);
+      const content =
+        input.intent === "import" ? draft.content : redactLearningText(draft.content, knownSecrets);
       return LearningProposalSchema.parse({
         id: randomUUID(),
         type: "memory",

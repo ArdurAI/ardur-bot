@@ -11,6 +11,7 @@ import { SpaceToolPoliciesSchema } from "./integration-catalog.js";
 import { LearningJourneyEntrySchema, LearningObservationSchema } from "./learning.js";
 import { ImportedProvenanceSchema } from "./local-import.js";
 import {
+  McpCredentialFlagsSchema,
   McpHeadersSchema,
   McpRemoteEndpointSchema,
   McpTransportSchema,
@@ -774,6 +775,7 @@ export const McpServerSchema = z.object({
   args: z.array(z.string()),
   envKeys: z.array(z.string()),
   headerKeys: z.array(z.string()),
+  credentialFlags: McpCredentialFlagsSchema.optional(),
   hasSecret: z.boolean(),
   /** A stored credential from before one was enforced still holds a token and a header. */
   credentialConflict: z.boolean().optional(),
@@ -862,6 +864,8 @@ export const ComputerStatusSchema = z.object({
   mode: ComputerModeSchema,
   kind: SandboxKind,
   state: z.enum(["stopped", "booting", "running", "suspended", "error"]),
+  imagePulling: z.boolean().optional(),
+  imagePullPercent: z.number().int().min(0).max(100).nullable().optional(),
   controlHolder: z.enum(["bot", "user", "none"]),
   controlBotId: Id.nullable(),
   takeoverRequested: z.boolean(),

@@ -2,7 +2,11 @@ import { containsSecret } from "@ardurbot/core";
 import { redactSensitiveText } from "@ardurbot/logging";
 
 export class MemoryRedactionError extends Error {
-  constructor() {
+  constructor(
+    readonly proposalId?: string,
+    readonly lineNumber?: number,
+    readonly maskedLine?: string,
+  ) {
     super("Remove credentials from this memory before saving.");
   }
 }

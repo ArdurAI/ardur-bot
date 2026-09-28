@@ -8,8 +8,32 @@ import {
   HostRuntimeEventSchema,
   hostSocketUrl,
 } from "./host-bridge.js";
+import { RuntimeKindSchema } from "./runtime-pins.js";
 
 describe("host protocol", () => {
+  it("round-trips a Hermes terminal problem without adding a product runtime kind", () => {
+    const frame = {
+      v: 1 as const,
+      type: "end" as const,
+      id: "hermes-run",
+      problem: {
+        kind: "problem" as const,
+        code: "runtime-unavailable" as const,
+        pin: {
+          runtimeKind: "hermes" as const,
+          provider: "fixture",
+          modelId: "fixture-model",
+          effort: "high",
+          credentialId: "fixture-credential",
+          revision: 1,
+        },
+        reason: "Pinned install is unavailable.",
+        actions: ["change-pin" as const],
+      },
+    };
+    expect(decodeHostFrame(encodeHostFrame(frame))).toEqual(frame);
+    expect(RuntimeKindSchema.safeParse("hermes").success).toBe(false);
+  });
   it("carries numeric usage receipts across the strict host boundary and rejects raw payloads", () => {
     const event = {
       type: "usage",

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { argumentSecrets, McpLogBuffer, redactMcpArguments } from "./mcp-diagnostics.js";
+import {
+  argumentSecrets,
+  McpLogBuffer,
+  mcpTextContainsSecret,
+  redactMcpArguments,
+  redactMcpText,
+} from "./mcp-diagnostics.js";
 
 describe("MCP diagnostics", () => {
   it("redacts split chunks before storage, retaining only the last 200 lines", () => {
@@ -33,5 +39,16 @@ describe("MCP diagnostics", () => {
       "--port",
       "9000",
     ]);
+  });
+  it("matches the same credential spellings that text redaction masks", () => {
+    for (const [value, secret] of [
+      ["synthetic-credential", "synthetic-credential"],
+      ["synthetic%2Fcredential", "synthetic/credential"],
+      ['synthetic\\"credential', 'synthetic"credential'],
+    ] as const) {
+      expect(mcpTextContainsSecret(value, secret)).toBe(true);
+      expect(redactMcpText(value, [secret])).toBe("[redacted]");
+    }
+    expect(mcpTextContainsSecret("unrelated", "synthetic-credential")).toBe(false);
   });
 });

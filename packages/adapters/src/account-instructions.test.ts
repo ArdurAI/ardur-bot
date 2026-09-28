@@ -5,8 +5,8 @@ import { loadAccountInstructionContext } from "./account-instructions.js";
 
 it("resumes a bounded input after redaction expands the saved snapshot", async () => {
   const context = {
-    displayName: redactSecrets("x".repeat(60), ["x"]),
-    instructions: redactSecrets("x".repeat(4000), ["x"]),
+    displayName: redactSecrets("abcdefgh ".repeat(6), ["abcdefgh"]),
+    instructions: redactSecrets("abcdefgh ".repeat(444), ["abcdefgh"]),
     workType: "",
     revision: 1,
     actorId: "owner",

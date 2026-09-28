@@ -38,6 +38,7 @@ export class HostClient {
     operation: HostOperation,
     context: Partial<AdapterContext>,
     callback?: (frame: CallbackFrame) => Promise<unknown>,
+    operationId = randomUUID(),
   ): AsyncIterable<HostStreamFrame> {
     if (
       !context.runId &&
@@ -49,7 +50,7 @@ export class HostClient {
     const request: HostRequest = {
       v: 1,
       type: "request",
-      id: randomUUID(),
+      id: operationId,
       scope: HostScopeSchema.parse({
         userId: context.userId,
         spaceId: context.spaceId,

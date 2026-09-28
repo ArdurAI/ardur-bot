@@ -6,6 +6,7 @@ import {
   type McpTransport,
   McpTransportSchema,
   mcpCredentialConflict,
+  mcpCredentialFlagsForEntries,
 } from "@ardurbot/contracts";
 import { deriveMcpSlug } from "@ardurbot/core";
 import { toStringRecord } from "./memory-provider-factory.js";
@@ -110,6 +111,9 @@ export function buildMcpCredentialBlob(parsed: {
     secret: parsed.secret,
     env,
     headers,
+    ...(Object.keys(env).length || Object.keys(headers).length
+      ? { credentialFlags: mcpCredentialFlagsForEntries({}, { env, headers }) }
+      : {}),
   });
 }
 

@@ -1,7 +1,9 @@
 import type { PrismaClient } from "@ardurbot/db";
+import type { OAuthMaterial } from "./mcp-oauth.js";
+import { oauthMaterialSecrets } from "./mcp-oauth.js";
 import type { EncryptedSecretStore } from "./secrets.js";
 
-/** Decrypt only inside the review boundary; these values never leave the redactor. */
+/** Only encrypted credential slots enter the shared exact-match redactor. */
 export async function learningSecrets(
   prisma: PrismaClient,
   store: EncryptedSecretStore,
@@ -10,7 +12,7 @@ export async function learningSecrets(
   const [secrets, botSecrets] = await Promise.all([
     prisma.secret.findMany({
       where: { OR: [{ spaceId: scope.spaceId }, { userId: scope.userId, spaceId: null }] },
-      select: { id: true, ciphertext: true },
+      select: { id: true, kind: true, ciphertext: true },
     }),
     prisma.botSecret.findMany({
       where: { spaceId: scope.spaceId, userId: scope.userId, botId: scope.botId },
@@ -18,19 +20,67 @@ export async function learningSecrets(
     }),
   ]);
   const values = new Set<string>();
-  function collect(value: unknown) {
-    if (typeof value === "string" && value.length >= 4) values.add(value);
-    else if (Array.isArray(value)) value.forEach(collect);
-    else if (value && typeof value === "object") Object.values(value).forEach(collect);
-  }
-  for (const secret of [...secrets, ...botSecrets]) {
+  const add = (value: unknown) => {
+    if (typeof value === "string" && value.length > 0) values.add(value);
+  };
+  const record = (value: unknown): Record<string, unknown> =>
+    value && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  for (const secret of secrets) {
     const plaintext = store.load(secret.ciphertext, secret.id);
-    values.add(plaintext);
+    if (
+      secret.kind === "agent-environment" ||
+      secret.kind === "webhook" ||
+      secret.kind?.startsWith("run-secret:")
+    ) {
+      add(plaintext);
+      continue;
+    }
+    let parsed: unknown;
     try {
-      collect(JSON.parse(plaintext));
+      parsed = JSON.parse(plaintext);
     } catch {
-      /* Plain credentials need no decoding. */
+      add(plaintext);
+      continue;
+    }
+    if (typeof parsed === "string") {
+      add(parsed);
+      continue;
+    }
+    if (parsed === null || typeof parsed !== "object") {
+      add(plaintext);
+      continue;
+    }
+    const data = record(parsed);
+    if (secret.kind === "mcp") {
+      for (const value of oauthMaterialSecrets(data as OAuthMaterial)) add(value);
+    } else if (secret.kind === "model") {
+      // A raw key, an OAuth object, or a compatible connection object.
+      add(data.access);
+      add(data.refresh);
+      add(data.apiKey);
+      add(data.key);
+      const credential = record(data.credential);
+      add(credential.access);
+      add(credential.refresh);
+      add(credential.value);
+    } else if (secret.kind === "memory-provider") {
+      // This record is already a credential map; keys are names, values are credentials.
+      for (const value of Object.values(data)) add(value);
+    } else if (secret.kind === "memory-git") {
+      add(data.value);
+    } else if (secret.kind === "computer") {
+      add(data.inline);
+    } else {
+      // Other structured secret records use explicit credential slots.
+      add(data.secret);
+      add(data.token);
+      add(data.apiKey);
+      add(data.password);
+      add(record(data.credential).value);
     }
   }
-  return [...values].filter(Boolean);
+  for (const secret of botSecrets) add(store.load(secret.ciphertext, secret.id));
+  return [...values];
 }

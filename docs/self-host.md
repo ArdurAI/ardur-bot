@@ -61,7 +61,7 @@ optional providers before startup, run `bash install-images.sh --prepare-only`, 
 run `bash install-images.sh`. Flags may be combined in either order: `--prepare-only`, `--local`.
 
 `SANDBOX_PROVIDER` defaults to `docker`. The images Compose file runs a sandbox supervisor
-(from the app image, on the internal network only) and pulls `ghcr.io/ardurai/ardur-bot/computer`.
+(from the app image, on the internal network only). It downloads the computer image when a Docker bot first needs it.
 Signup and local Docker computers work without an E2B account. Optional remote providers: set
 `SANDBOX_PROVIDER` to `e2b`, `daytona`, or `box` and add the matching API key. The published-images
 Compose stack requires `SANDBOX_SUPERVISOR_TOKEN` for every provider; leave it empty and `compose up` fails closed.
@@ -123,7 +123,7 @@ supervisor at startup naming the variable, rather than surfacing later as a fail
 
 On Windows, if an older clone with `core.autocrlf=true` leaves the computer pane hung on boot (`bash\r` in sandbox logs): from a clean worktree, set `git config core.autocrlf false`, run `git add --renormalize . && git checkout -- .`, then rebuild with `pnpm sandbox:build`.
 
-Compose runs Postgres, the sandbox supervisor (Docker socket), API, worker, and a Vite preview of the web app. Bot computers are sibling containers (`ardurbot/computer:local`) on separate per-bot networks; only the supervisor and screen proxy join each one. The API process does not get an unrestricted Docker socket; the supervisor owns the lifecycle.
+Compose runs Postgres, the sandbox supervisor (Docker socket), API, worker, and a Vite preview of the web app. Bot computers are sibling containers on separate per-bot networks; only the supervisor and screen proxy join each one. A local `pnpm build:computers` build provides `ardurbot/computer:local`; otherwise the supervisor pulls `ghcr.io/ardurai/ardur-bot/computer:dev` for a prerelease app or the matching version tag for a release app on first use. The API process does not get an unrestricted Docker socket; the supervisor owns the lifecycle.
 
 Postgres stays on the Compose network only (not published on the host), matching the images
 compose. Credentials come from `.env` (`POSTGRES_PASSWORD` is required). Prefer a URI-safe value
@@ -575,7 +575,7 @@ application traffic queued indefinitely.
 ### Published images and tags
 
 `.github/workflows/publish-server-image.yml` publishes to `ghcr.io/<owner>/<repo>/…`, derived from
-`${{ github.repository }}` rather than hardcoded, so a fork's CI fills the fork's own namespace. For
+`${{ github.repository }}` and lowercased rather than hardcoded, so a fork's CI fills the fork's own namespace. For
 this repository that is:
 
 | Image | Contents |
@@ -584,26 +584,45 @@ this repository that is:
 | `ghcr.io/ardurai/ardur-bot/computer` | Linux desktop used as each bot computer |
 | `ghcr.io/ardurai/ardur-bot/updater` | the updater sidecar, plus the Docker CLI |
 
-`infra/compose/docker-compose.images.yml` is the no-checkout path for those app and computer tags
-plus Postgres. The supervisor runs from the app image on the internal network only (not a separate
+`infra/compose/docker-compose.images.yml` is the no-checkout path for the app image plus Postgres;
+the computer image is pulled on first use. The supervisor runs from the app image on the internal network only (not a separate
 published supervisor image, and no host port). Production Compose (`docker-compose.prod.yml`) can
 also pull the same app tags once `ARDURBOT_IMAGE_TAG` is set to a published value.
 
-If you deploy from your own fork, set `ARDURBOT_IMAGE` and `ARDURBOT_UPDATER_IMAGE` to your namespace —
-your CI cannot publish into someone else's.
+The installer and desktop launcher render `docker compose config` to resolve the selected computer
+image from the app version and stack settings before startup. For a direct `docker compose`
+invocation, set `ARDURBOT_COMPUTER_IMAGE_REF` to the image selected for the
+running app: `ghcr.io/ardurai/ardur-bot/computer:dev` for a prerelease, or the exact version
+tag (for example, `ghcr.io/ardurai/ardur-bot/computer:1.2.3`) for a release. If you set
+`ARDURBOT_COMPUTER_IMAGE` to an explicit image reference, Compose uses that instead; the optional
+legacy `ARDURBOT_COMPUTER_IMAGE_TAG` appends a tag to an untagged image name.
+
+The organization owner must set the `computer` GHCR package visibility to **public** after its first
+publish so Docker can pull it anonymously. The workflow cannot make that org setting. The Docker
+supervisor prefers `ARDURBOT_COMPUTER_IMAGE` when set, then a locally built
+`ardurbot/computer:local`, then `ghcr.io/ardurai/ardur-bot/computer:<app version>` for a release
+or `:dev` for a prerelease. Set `ARDURBOT_COMPUTER_CHANNEL=dev|release` to select the channel
+explicitly. On a missing image, the first bot waits for one shared pull and shows download progress.
+You can pre-pull the resolved name into Docker or Podman. Kubernetes provisioning keeps its
+profile tag, so load or retag the same image under that tag in the node image store.
+
+If you deploy from your own fork, set `ARDURBOT_IMAGE`, `ARDURBOT_UPDATER_IMAGE`, and
+`ARDURBOT_COMPUTER_IMAGE` to your namespace — your CI cannot publish into someone else's.
 
 | Tag | Published on | Moves? |
 | --- | --- | --- |
 | `local` | nothing — built locally by `up --build` | rebuilt in place |
 | `local-<full-commit>` | nothing — built on the server by a fork update | never |
 | `vX.Y.Z`, `vX.Y` | release tags | conventionally no / on patch releases |
+| `X.Y.Z` | release tags, computer image only | conventionally no; matches the running app version |
 | `latest` | stable `vX.Y.Z` tags only (not prereleases) | yes, to the newest stable release |
-| `sha-<full-commit>` | every push and manual run | source-addressed; used by the updater sidecar |
-| `edge` | pushes to main | yes, to the newest main build |
+| `sha-<full-commit>` | release tags and manual runs for all images; dev pushes for computer only | source-addressed; used by the updater sidecar |
+| `dev` | pushes to dev, computer image only | yes, to the newest dev build |
+| `edge` | manual runs on main | yes, to the newest manual main build |
 
-Every publish, including `edge` from main merges, is multi-arch (`amd64` + `arm64`): each
+Every publish is multi-arch (`amd64` + `arm64`): each
 architecture builds natively on its own runner and one manifest is assembled per image. Until a
-stable `vX.Y.Z` has been published, GHCR may only have `edge` and `sha-*` tags; do not pin
+stable `vX.Y.Z` has been published, GHCR may only have `dev` and `sha-*` computer tags; do not pin
 `latest` unless that tag exists in the registry.
 
 Building the images yourself does not need QEMU. `docker compose up --build` builds for the host's
