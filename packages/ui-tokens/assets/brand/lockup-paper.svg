@@ -1,0 +1,7 @@
+<svg viewBox="0 0 200 50" width="200" height="50" aria-hidden="true" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <g transform="translate(0, 8) scale(0.085)">
+    <path stroke="#FFFFFF" stroke-width="32" stroke-linecap="round" d="M 322 100 A 150 150 0 1 0 334 296"></path>
+    <rect x="324" y="118" width="36" height="232" rx="18" fill="#FFFFFF"></rect>
+  </g>
+  <text x="44" y="40" font-family="'Instrument Serif', Georgia, serif" font-size="44px" fill="#FFFFFF" letter-spacing="-0.02em">Ardur</text>
+</svg>
