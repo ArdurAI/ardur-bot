@@ -34,13 +34,17 @@ it("opens the language picker over the portalled Select, dismisses it and restor
   const listbox = document.querySelector('[role="listbox"]');
   expect(listbox).toBeTruthy();
   // Dismiss with Escape and confirm focus returns to the trigger.
+  // After opening, Base UI focuses the selected option inside the portal,
+  // which can land a tick later under parallel workers, so wait for it.
+  await vi.waitFor(() => expect(document.activeElement).not.toBe(trigger));
   await act(async () => {
-    trigger.dispatchEvent(
+    document.activeElement?.dispatchEvent(
       new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }),
     );
   });
-  await act(async () => Promise.resolve());
-  expect(document.querySelector('[role="listbox"]')).toBeNull();
+  // jsdom never fires the animationend that unmounts the exit-transition
+  // clone, so assert the interactive state instead of portal node absence.
+  await vi.waitFor(() => expect(trigger.getAttribute("aria-expanded")).toBe("false"));
   expect(document.activeElement).toBe(trigger);
 });
 
