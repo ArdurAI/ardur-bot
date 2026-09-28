@@ -43,6 +43,7 @@ import {
   BotSchema,
   BotSectionSchema,
   CapabilityInstallSchema,
+  ClearGroupMemberModelPinInput,
   ComputerModeSchema,
   ComputerReleaseReasonSchema,
   ComputerStatusSchema,
@@ -80,6 +81,7 @@ import {
   ServerUpdateRequestSchema,
   ServerUpdateRunSchema,
   ServerUpdateStatusSchema,
+  SetGroupMemberModelPinInput,
   SkillPlaybookSchema,
   SpaceMemoryConfigSchema,
   SpaceNavigationSchema,
@@ -100,7 +102,14 @@ import {
 } from "./domain.js";
 import { ProductEventSchema } from "./events.js";
 import { featuresContract } from "./features.js";
-import { FleetSchema, FleetTargetSchema, PlacementSettingsSchema } from "./fleet.js";
+import {
+  FleetConnectionDetailsSchema,
+  FleetSchema,
+  FleetTargetSchema,
+  FleetTestResultSchema,
+  FleetUpdateResultSchema,
+  PlacementSettingsSchema,
+} from "./fleet.js";
 import { goalsContract } from "./goal.js";
 import { HostStatusSchema } from "./host-bridge.js";
 import {
@@ -150,7 +159,7 @@ import {
   LocalImportSelectionSchema,
   LocalImportStatusSchema,
 } from "./local-import.js";
-import { McpHeadersSchema } from "./mcp.js";
+import { McpCredentialFlagsSchema, McpHeadersSchema } from "./mcp.js";
 import {
   MemoryBundleSchema,
   MemoryDocumentHeadSchema,
@@ -287,7 +296,19 @@ function createFleetContract() {
   return {
     list: oc.output(FleetSchema),
     discover: oc.output(FleetTargetSchema.array()),
-    test: oc.input(z.object({ connectionId: Id.nullable() })).output(FleetTargetSchema.array()),
+    test: oc.input(z.object({ connectionId: Id.nullable() })).output(FleetTestResultSchema),
+    details: oc.input(z.object({ connectionId: Id })).output(FleetConnectionDetailsSchema),
+    update: oc
+      .input(
+        z.object({
+          connectionId: Id,
+          connection: ComputerConnectionInputSchema,
+          revision: z.iso.datetime(),
+          confirmActive: z.boolean().default(false),
+        }),
+      )
+      .output(FleetUpdateResultSchema),
+    remove: oc.input(z.object({ connectionId: Id })).output(z.object({ ok: z.literal(true) })),
     placement: oc.input(PlacementSettingsSchema).output(PlacementSettingsSchema),
     bot: oc
       .input(
@@ -530,6 +551,8 @@ export const appContract = {
     get: oc.input(groupId).output(GroupDetailSchema),
     duplicate: oc.input(groupId).output(GroupSchema),
     update: oc.input(UpdateGroupInput).output(GroupSchema),
+    setMemberModelPin: oc.input(SetGroupMemberModelPinInput).output(GroupSchema),
+    clearMemberModelPin: oc.input(ClearGroupMemberModelPinInput).output(GroupSchema),
     archive: oc.input(groupId).output(z.object({ ok: z.literal(true) })),
     restore: oc.input(groupId).output(z.object({ ok: z.literal(true) })),
     remove: oc.input(groupId).output(z.object({ ok: z.literal(true) })),
@@ -1170,6 +1193,7 @@ export const appContract = {
             // header's value can never be shown back for a person to retype.
             z.object({ id: Id, secret: z.string().min(1).max(16384).nullable() }),
             z.object({ id: Id, headers: McpHeadersSchema }),
+            z.object({ id: Id, credentialFlags: McpCredentialFlagsSchema }),
             z.object({ id: Id, enabled: z.boolean() }),
           ]),
         )

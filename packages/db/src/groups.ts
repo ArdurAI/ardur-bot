@@ -32,11 +32,20 @@ type GroupRecord = {
     messages: Array<{ blocks: unknown }>;
   } | null;
   members: Array<{
+    id?: string;
+    runtimePin?: unknown;
+    modelPinRevision?: number;
     bot: {
       id: string;
       name: string;
       color: string;
       runs: Array<{ status: string }>;
+      runtimeKind?: string;
+      modelProvider?: string | null;
+      modelId?: string | null;
+      thinkingLevel?: string | null;
+      modelCredentialId?: string | null;
+      modelPinRevision?: number;
     };
   }>;
 };
@@ -51,13 +60,41 @@ type SpaceGroupRecord = Pick<
   } | null;
 };
 
-function mapGroupMembers(members: GroupRecord["members"]): GroupMember[] {
-  return members.map((member) => ({
-    botId: member.bot.id,
-    name: member.bot.name,
-    color: member.bot.color,
-    status: member.bot.runs[0]?.status ?? "idle",
-  }));
+export function mapGroupMembers(members: GroupRecord["members"]): GroupMember[] {
+  return members.map((member) => {
+    const explicit = RuntimePinSchema.safeParse(member.runtimePin).data ?? null;
+    const bot = member.bot;
+    const botPin =
+      bot.modelProvider && bot.modelId && bot.modelCredentialId
+        ? RuntimePinSchema.parse({
+            runtimeKind: bot.runtimeKind ?? "pi",
+            provider: bot.modelProvider,
+            modelId: bot.modelId,
+            effort: bot.thinkingLevel ?? null,
+            credentialId: bot.modelCredentialId,
+            revision: bot.modelPinRevision ?? 0,
+          })
+        : null;
+    return {
+      botId: bot.id,
+      name: bot.name,
+      color: bot.color,
+      status: bot.runs[0]?.status ?? "idle",
+      ...(member.id
+        ? {
+            memberId: member.id,
+            modelPinRevision: member.modelPinRevision ?? 0,
+            runtimePin: explicit,
+            effectiveRuntimePin: explicit ?? botPin,
+            effectivePinSource: explicit
+              ? ("group-member" as const)
+              : botPin
+                ? ("bot" as const)
+                : ("space-default" as const),
+          }
+        : {}),
+    };
+  });
 }
 
 function mapGroup(group: GroupRecord): Group {
@@ -142,6 +179,12 @@ const groupInclude = {
           id: true,
           name: true,
           color: true,
+          runtimeKind: true,
+          modelProvider: true,
+          modelId: true,
+          thinkingLevel: true,
+          modelCredentialId: true,
+          modelPinRevision: true,
           runs: activeRunSelection,
         },
       },
@@ -160,6 +203,12 @@ const groupTargetInclude = {
           id: true,
           name: true,
           color: true,
+          runtimeKind: true,
+          modelProvider: true,
+          modelId: true,
+          thinkingLevel: true,
+          modelCredentialId: true,
+          modelPinRevision: true,
           runs: activeRunSelection,
         },
       },

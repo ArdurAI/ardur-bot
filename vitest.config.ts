@@ -1,6 +1,20 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
+const root = path.dirname(fileURLToPath(import.meta.url));
+
 export default defineConfig({
+  resolve: {
+    alias: {
+      "@ardurbot/ui-web/components/guided-setup": path.join(
+        root,
+        "packages/ui-web/src/components/guided-setup.tsx",
+      ),
+      react: path.join(root, "packages/ui-web/node_modules/react"),
+      "react-dom": path.join(root, "packages/ui-web/node_modules/react-dom"),
+    },
+  },
   test: {
     environment: "node",
     // Bound concurrent module graphs so full runs fit worker startup and test budgets.

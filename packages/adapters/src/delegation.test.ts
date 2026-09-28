@@ -68,6 +68,70 @@ it("inherits the exact resolved snapshot including connection and runtime withou
     }),
   );
 });
+it("freezes a room recipient's selection and provenance at admission", async () => {
+  const pin = {
+    runtimeKind: "pi" as const,
+    provider: "scripted",
+    modelId: "scripted",
+    effort: "off",
+    credentialId: "scripted",
+    revision: 6,
+  };
+  const source = {
+    kind: "group-member" as const,
+    groupId: "group",
+    memberId: "member",
+    botId: "recipient",
+  };
+  const tx = {
+    run: {
+      findUniqueOrThrow: vi.fn(async () => ({ id: "parent", botId: "sender" })),
+      findUnique: vi.fn(async () => ({ taskId: "root" })),
+    },
+    bot: {
+      findFirstOrThrow: vi.fn(async () => ({ id: "recipient", computerId: null, computer: null })),
+    },
+  } as unknown as Prisma.TransactionClient;
+  const resolve = vi.fn(async () => ({
+    kind: "resolved" as const,
+    pin,
+    runtimePin: pin,
+    provider: "scripted",
+    id: "scripted",
+    thinkingLevel: "off" as const,
+    pinSource: source,
+    usageGroupId: "group",
+  }));
+  const result = await prepareDelegation(
+    tx,
+    {
+      parentRunId: "parent",
+      actingBotId: "recipient",
+      actingName: "Recipient",
+      spaceId: "space",
+      userId: "owner",
+      kind: "message",
+      admissionKey: "room-recipient",
+      prompt: "Continue",
+      targetThreadId: "room",
+    },
+    resolve,
+  );
+  expect(resolve).toHaveBeenCalledWith(expect.objectContaining({ id: "recipient" }), {
+    tx,
+    targetThreadId: "room",
+    userId: "owner",
+    spaceId: "space",
+  });
+  expect(result).toMatchObject({
+    ok: true,
+    runData: { runtimePin: pin, runtimePinSource: source, usageGroupId: "group" },
+  });
+  expect(admitDelegation).toHaveBeenCalledWith(
+    tx,
+    expect.objectContaining({ snapshot: expect.objectContaining({ pin, pinSource: source }) }),
+  );
+});
 it("blocks a recipient connector its requester lacks after route resolution", async () => {
   const prisma = {
     run: {

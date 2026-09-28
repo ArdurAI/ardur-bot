@@ -383,7 +383,14 @@ it("updates a worker card quietly, redacts it, checks bounds and keeps acceptanc
 });
 it("returns a completed card for rework with one more hop and a fresh bounded reservation", async () => {
   const f = fixture();
-  const row = await f.admit();
+  const source = {
+    kind: "group-member" as const,
+    groupId: "room",
+    memberId: "membership",
+    botId: "worker",
+  };
+  const row = await f.admit({ snapshot: { ...snapshot, pinSource: source } });
+  f.state().runs.find((run) => run.id === row.runId).usageGroupId = "room";
   const db = f.worker();
   await db.$transaction((tx) => finishDelegation(tx, row.id, "completed", "First pass"));
   f.state().runs.find((run) => run.id === row.runId).status = "completed";
@@ -397,6 +404,11 @@ it("returns a completed card for rework with one more hop and a fresh bounded re
     ),
   );
   expect(result.runId).toBe("rework-run");
+  expect(f.state().runs.find((run) => run.id === result.runId)).toMatchObject({
+    runtimePin: snapshot.pin,
+    runtimePinSource: source,
+    usageGroupId: "room",
+  });
   expect(f.state().rows[0]).toMatchObject({ status: "queued", hop: 2, runId: "rework-run" });
   expect(f.state().root).toMatchObject({
     activeDescendants: 1,

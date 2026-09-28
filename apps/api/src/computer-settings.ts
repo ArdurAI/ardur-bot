@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { homedir } from "node:os";
 import path from "node:path";
 import type { AdapterContext } from "@ardurbot/adapter-kit";
@@ -8,14 +9,15 @@ import {
   ComputerConnectionInputSchema,
   ComputerConnectionSettingsSchema,
   ComputerEngineUnavailableError,
+  FLEET_ACTIVE_RUN_CONFLICT_CODE,
   HOST_MOVE_UNAVAILABLE_CODE,
   HOST_MOVE_UNAVAILABLE_MESSAGE,
 } from "@ardurbot/contracts";
-import { sandboxKindForBot } from "@ardurbot/core";
+import { ACTIVE_RUN_STATUSES, sandboxKindForBot } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import { ORPCError } from "@orpc/server";
 import type { z } from "zod";
-import { importFleetSecret } from "./fleet.js";
+import { cleanupFleetSecret, importFleetSecret } from "./fleet.js";
 import type { HostBridge } from "./host-bridge.js";
 
 export async function listComputerConnections(prisma: PrismaClient, spaceId: string) {
@@ -33,6 +35,8 @@ export async function saveComputerConnection(
   context: AdapterContext,
 ) {
   const input = ComputerConnectionInputSchema.parse(raw);
+  delete input.settings.hostSecretId;
+  const importedIds: string[] = [];
   if (input.settings.dockerContext && !input.settings.endpoint)
     throw new Error("Choose the saved context endpoint.");
   let source = { inline: input.kubeconfig, path: input.kubeconfigPath };
@@ -62,6 +66,7 @@ export async function saveComputerConnection(
     source = { inline: snapshot.inline, path: snapshot.path };
     if (process.env.ARDURBOT_HOST_BRIDGE === "api" && source.inline) {
       const stored = await importFleetSecret(deps, { kubeconfig: source.inline }, context);
+      importedIds.push(stored.id);
       input.settings.hostSecretId = stored.id;
     }
     const contexts = await kubernetesContexts(source);
@@ -81,6 +86,7 @@ export async function saveComputerConnection(
       { privateKeyPath: input.privateKeyPath, tlsPaths: input.tlsPaths },
       context,
     );
+    importedIds.push(imported.id);
     input.settings.hostSecretId = imported.id;
   }
   if (input.settings.ssh?.authentication === "private-key" && !input.settings.hostSecretId)
@@ -102,7 +108,7 @@ export async function saveComputerConnection(
           userId: context.userId,
         },
       });
-    return tx.connection.create({
+    const created = await tx.connection.create({
       data: {
         spaceId: context.spaceId,
         userId: context.userId,
@@ -114,8 +120,267 @@ export async function saveComputerConnection(
         secretId: secret?.id,
       },
     });
+    if (importedIds.length)
+      await tx.fleetSecretCleanup.deleteMany({ where: { hostSecretId: { in: importedIds } } });
+    return created;
   });
   return { id: row.id, name: row.displayName, settings: input.settings };
+}
+export async function updateComputerConnection(
+  deps: { prisma: PrismaClient; secrets: EncryptedSecretStore; hostBridge?: HostBridge },
+  connectionId: string,
+  raw: z.infer<typeof ComputerConnectionInputSchema>,
+  revision: string,
+  confirmActive: boolean,
+  context: AdapterContext,
+) {
+  const input = ComputerConnectionInputSchema.parse(raw);
+  delete input.settings.hostSecretId;
+  const previous = await deps.prisma.connection.findFirstOrThrow({
+    where: {
+      id: connectionId,
+      spaceId: context.spaceId,
+      userId: context.userId,
+      connectorId: "computer",
+    },
+  });
+  if (previous.updatedAt.toISOString() !== revision)
+    throw new ORPCError("CONFLICT", { message: "This computer changed. Reload and try again." });
+  const oldSettings = ComputerConnectionSettingsSchema.parse(previous.metadata);
+  const { hostSecretId: _oldSecret, ...oldConnection } = oldSettings;
+  const { hostSecretId: _newSecret, ...newConnection } = input.settings;
+  const hasNewMaterial = Boolean(
+    input.kubeconfig || input.kubeconfigPath || input.privateKeyPath || input.tlsPaths,
+  );
+  const changed = JSON.stringify(oldConnection) !== JSON.stringify(newConnection) || hasNewMaterial;
+  if (!changed) {
+    const saved = await deps.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM connections WHERE id = ${connectionId} AND "spaceId" = ${context.spaceId} AND "userId" = ${context.userId} AND "connectorId" = 'computer' FOR UPDATE`;
+      const current = await tx.connection.findFirstOrThrow({
+        where: {
+          id: connectionId,
+          spaceId: context.spaceId,
+          userId: context.userId,
+          connectorId: "computer",
+        },
+      });
+      if (current.updatedAt.toISOString() !== revision)
+        throw new ORPCError("CONFLICT", {
+          message: "This computer changed. Reload and try again.",
+        });
+      const updated = await tx.connection.update({
+        where: { id: connectionId },
+        data: { displayName: input.name },
+      });
+      await tx.fleetAudit.create({
+        data: { spaceId: context.spaceId, userId: context.userId, connectionId, action: "renamed" },
+      });
+      return updated;
+    });
+    return { changed: false, revision: saved.updatedAt.toISOString() };
+  }
+  if (
+    changed &&
+    !confirmActive &&
+    (await deps.prisma.run.findFirst({
+      where: {
+        spaceId: context.spaceId,
+        userId: context.userId,
+        status: { in: [...ACTIVE_RUN_STATUSES] },
+        bot: { computer: { connectionId } },
+      },
+      select: { id: true },
+    }))
+  )
+    throw new ORPCError("CONFLICT", {
+      message: "Runs are active on this computer. Confirm the connection change.",
+      data: { code: FLEET_ACTIVE_RUN_CONFLICT_CODE },
+    });
+
+  if (input.settings.dockerContext && !input.settings.endpoint)
+    throw new Error("Choose the saved context endpoint.");
+  if (input.settings.engine === "ssh" && !input.settings.ssh)
+    throw new Error("Choose an SSH host and user.");
+  if (input.settings.engine !== "kubernetes" && (input.kubeconfig || input.kubeconfigPath))
+    throw new Error("Kubeconfig is only used by Kubernetes.");
+
+  const importedIds: string[] = [];
+  const importNewSecret = async (material: Parameters<typeof importFleetSecret>[1]) => {
+    const secretId = randomUUID();
+    importedIds.push(secretId);
+    return importFleetSecret(deps, material, context, secretId);
+  };
+  try {
+    let newSecret: Awaited<ReturnType<EncryptedSecretStore["put"]>> | undefined;
+    let source: { inline?: string; path?: string } = {};
+    let sourceChanged = false;
+    if (input.settings.engine === "kubernetes") {
+      if (input.kubeconfig && input.kubeconfigPath)
+        throw new Error("Choose either a kubeconfig path or its contents.");
+      if (input.kubeconfig || input.kubeconfigPath) {
+        source = { inline: input.kubeconfig, path: input.kubeconfigPath };
+        sourceChanged = true;
+      } else if (previous.secretId) {
+        const stored = await deps.prisma.secret.findFirstOrThrow({
+          where: { id: previous.secretId, spaceId: context.spaceId, userId: context.userId },
+        });
+        source = JSON.parse(deps.secrets.load(stored.ciphertext, stored.id)) as typeof source;
+      } else {
+        source = { path: path.join(homedir(), ".kube", "config") };
+        sourceChanged = true;
+      }
+      if (
+        process.env.ARDURBOT_HOST_BRIDGE === "api" &&
+        deps.hostBridge &&
+        !input.kubeconfig &&
+        source.path
+      ) {
+        source = {
+          inline: (await deps.hostBridge.fleetResult(
+            {
+              op: "computer.remote.kubeconfig",
+              context: input.settings.context!,
+              path: source.path,
+            },
+            context,
+          )) as string,
+        };
+        sourceChanged = true;
+      }
+      source = await snapshotKubeconfig(source);
+      const contexts = await kubernetesContexts(source);
+      if (!contexts.some((entry) => entry.name === input.settings.context))
+        throw new Error("Choose a Kubernetes context.");
+      if (sourceChanged || !previous.secretId)
+        newSecret = await deps.secrets.put(JSON.stringify(source), context);
+      if (
+        process.env.ARDURBOT_HOST_BRIDGE === "api" &&
+        source.inline &&
+        (newSecret || !oldSettings.hostSecretId)
+      ) {
+        const imported = await importNewSecret({ kubeconfig: source.inline });
+        input.settings.hostSecretId = imported.id;
+      } else if (oldSettings.engine === "kubernetes")
+        input.settings.hostSecretId = oldSettings.hostSecretId;
+    } else if (input.privateKeyPath || input.tlsPaths) {
+      const imported = await importNewSecret({
+        privateKeyPath: input.privateKeyPath,
+        tlsPaths: input.tlsPaths,
+      });
+      input.settings.hostSecretId = imported.id;
+    } else if (
+      oldSettings.engine === input.settings.engine &&
+      (input.settings.ssh?.authentication === "private-key" ||
+        input.settings.endpoint?.startsWith("tcp://"))
+    ) {
+      input.settings.hostSecretId = oldSettings.hostSecretId;
+    }
+    if (input.settings.ssh?.authentication === "private-key" && !input.settings.hostSecretId)
+      throw new Error("Choose an SSH key on this computer.");
+    if (input.settings.endpoint?.startsWith("tcp://") && !input.settings.hostSecretId)
+      throw new Error("Choose client TLS certificates on this computer.");
+    if (
+      input.settings.engine !== "kubernetes" &&
+      input.settings.engine !== "ssh" &&
+      input.settings.socket &&
+      !/^(?:unix:\/\/)?\//.test(input.settings.socket)
+    )
+      throw new Error("Choose a local engine socket.");
+
+    const saved = await deps.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM connections WHERE id = ${connectionId} AND "spaceId" = ${context.spaceId} AND "userId" = ${context.userId} AND "connectorId" = 'computer' FOR UPDATE`;
+      const current = await tx.connection.findFirstOrThrow({
+        where: {
+          id: connectionId,
+          spaceId: context.spaceId,
+          userId: context.userId,
+          connectorId: "computer",
+        },
+      });
+      if (current.updatedAt.toISOString() !== revision)
+        throw new ORPCError("CONFLICT", {
+          message: "This computer changed. Reload and try again.",
+        });
+      if (newSecret)
+        await tx.secret.create({
+          data: {
+            id: newSecret.id,
+            ciphertext: newSecret.ciphertext,
+            kind: "computer",
+            spaceId: context.spaceId,
+            userId: context.userId,
+          },
+        });
+      const updated = await tx.connection.update({
+        where: { id: connectionId },
+        data: {
+          displayName: input.name,
+          provider: input.settings.engine,
+          metadata: input.settings,
+          ...(newSecret
+            ? { secretId: newSecret.id }
+            : input.settings.engine !== "kubernetes"
+              ? { secretId: null }
+              : {}),
+        },
+      });
+      if (previous.secretId && (newSecret || input.settings.engine !== "kubernetes"))
+        await tx.secret.deleteMany({
+          where: { id: previous.secretId, spaceId: context.spaceId, userId: context.userId },
+        });
+      await tx.fleetAudit.create({
+        data: {
+          spaceId: context.spaceId,
+          userId: context.userId,
+          connectionId,
+          action: changed ? "connection-updated" : "renamed",
+        },
+      });
+      if (importedIds.length)
+        await tx.fleetSecretCleanup.deleteMany({ where: { hostSecretId: { in: importedIds } } });
+      if (oldSettings.hostSecretId && oldSettings.hostSecretId !== input.settings.hostSecretId)
+        await tx.fleetSecretCleanup.create({
+          data: {
+            hostSecretId: oldSettings.hostSecretId,
+            spaceId: context.spaceId,
+            userId: context.userId,
+          },
+        });
+      return updated;
+    });
+    if (oldSettings.hostSecretId && oldSettings.hostSecretId !== input.settings.hostSecretId) {
+      await cleanupFleetSecret(deps.prisma, deps.hostBridge, context, oldSettings.hostSecretId);
+    }
+    return { changed, revision: saved.updatedAt.toISOString() };
+  } catch (error) {
+    for (const hostSecretId of importedIds) {
+      try {
+        const [current, intent] = await Promise.all([
+          deps.prisma.connection.findFirstOrThrow({
+            where: {
+              id: connectionId,
+              spaceId: context.spaceId,
+              userId: context.userId,
+              connectorId: "computer",
+            },
+          }),
+          deps.prisma.fleetSecretCleanup.findUnique({ where: { hostSecretId } }),
+        ]);
+        if (
+          ComputerConnectionSettingsSchema.parse(current.metadata).hostSecretId === hostSecretId ||
+          !intent
+        )
+          continue;
+        await deps.prisma.fleetSecretCleanup.updateMany({
+          where: { hostSecretId, spaceId: context.spaceId, userId: context.userId },
+          data: { nextAttemptAt: new Date() },
+        });
+      } catch {
+        // A failed read leaves the durable intent for the reconciler; deletion is unsafe.
+      }
+    }
+    throw error;
+  }
 }
 export async function validateComputerConfiguration(
   prisma: PrismaClient,

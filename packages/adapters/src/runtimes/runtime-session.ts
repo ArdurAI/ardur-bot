@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { RuntimePin } from "@ardurbot/contracts";
+import type { RuntimePin, RuntimePinSource } from "@ardurbot/contracts";
 import { RuntimeInfoSchema } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
 import { Prisma } from "@ardurbot/db";
@@ -16,6 +16,7 @@ export async function runtimeSession(
     instructions: string;
     historyGeneration?: number;
     pin: RuntimePin;
+    pinSource?: RuntimePinSource | null;
   },
 ) {
   const binding = createHash("sha256")
@@ -28,6 +29,7 @@ export async function runtimeSession(
         input.computerId,
         input.instructions,
         input.pin,
+        input.pinSource ?? null,
         ...(input.historyGeneration ? [input.historyGeneration] : []),
       ]),
     )

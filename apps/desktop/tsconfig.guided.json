@@ -1,0 +1,19 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "paths": {
+      "react": ["../web/node_modules/@types/react/index.d.ts"],
+      "react/jsx-runtime": ["../web/node_modules/@types/react/jsx-runtime.d.ts"],
+      "react-dom/client": ["../web/node_modules/@types/react-dom/client.d.ts"],
+      "@ardurbot/ui-web/components/guided-setup": [
+        "../../packages/ui-web/src/components/guided-setup.tsx"
+      ]
+    }
+  },
+  "include": ["src/guided-setup/renderer.tsx"]
+}

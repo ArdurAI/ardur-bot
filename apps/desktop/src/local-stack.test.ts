@@ -1,3 +1,5 @@
+import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -10,6 +12,7 @@ import {
   initialStackState,
   LocalStackController,
   type LocalStackDeps,
+  parseComposeImageSettings,
   readStackToken,
   reduceStackState,
   renderStackEnv,
@@ -27,6 +30,104 @@ import {
 
 const COMPOSE_DIR = path.resolve(import.meta.dirname, "..", "..", "..", "infra", "compose");
 const fakeHex = (bytes: number) => "ab".repeat(bytes);
+
+describe("Compose deployment settings", () => {
+  const fixture = readFileSync(path.join(COMPOSE_DIR, "computer-config.fixture.json"), "utf8");
+
+  it("extracts the computer image and selection from recorded Compose JSON", () => {
+    expect(parseComposeImageSettings(fixture)).toEqual({
+      image: "ghcr.io/ardurai/ardur-bot/computer:1.2.3",
+      channel: "release",
+      imageTag: "v1.2.3",
+      appVersion: "1.2.3",
+      explicitImage: "",
+      explicitRef: "",
+    });
+    expect(() => parseComposeImageSettings("not json")).toThrow("invalid configuration JSON");
+    expect(() => parseComposeImageSettings('{"services":{}}')).toThrow(
+      "omitted the computer image settings",
+    );
+  });
+
+  const composeAvailable =
+    spawnSync("docker", ["compose", "version", "--short"], {
+      env: { PATH: process.env.PATH ?? "" },
+      stdio: "ignore",
+    }).status === 0;
+  (composeAvailable ? it : it.skip)(
+    composeAvailable
+      ? "renders the shared dotenv table with Docker Compose"
+      : "renders the shared dotenv table with Docker Compose (skipped: Compose CLI unavailable)",
+    async () => {
+      const table = await readFile(
+        path.join(COMPOSE_DIR, "deployment-settings.fixtures.tsv"),
+        "utf8",
+      );
+      const dir = await mkdtemp(path.join(tmpdir(), "ardurbot-compose-fixture-"));
+      try {
+        for (const row of table.split("\n")) {
+          if (!row || row.startsWith("#")) continue;
+          const [name, key, encoded, expected, reference] = row.split("|");
+          const envFile = path.join(dir, ".env");
+          await writeFile(
+            envFile,
+            [
+              "POSTGRES_PASSWORD=fake",
+              "BETTER_AUTH_SECRET=fake",
+              "ENCRYPTION_KEY=fake",
+              "SCREEN_PROXY_SECRET=fake",
+              "SANDBOX_SUPERVISOR_TOKEN=fake",
+              "ARDURBOT_APP_VERSION=0.1.0-alpha.1",
+              encoded!.replaceAll("\\n", "\n"),
+            ].join("\n"),
+          );
+          const render = (ref: string) =>
+            spawnSync(
+              "docker",
+              [
+                "compose",
+                // The stack runs beside its .env; resolve env_file entries against this copy.
+                "--project-directory",
+                dir,
+                "--env-file",
+                envFile,
+                "-f",
+                path.join(COMPOSE_DIR, STACK_COMPOSE_FILE),
+                "--profile",
+                "computer",
+                "config",
+                "--no-env-resolution",
+                "--format",
+                "json",
+              ],
+              {
+                env: {
+                  PATH: process.env.PATH ?? "",
+                  FIXTURE_CHANNEL: "release",
+                  ARDURBOT_COMPUTER_IMAGE_REF_BOOTSTRAP: ref,
+                },
+                encoding: "utf8",
+              },
+            );
+          const initial = render("ghcr.io/ardurai/ardur-bot/computer:dev");
+          expect(initial.status, `${name}: Compose render failed: ${initial.stderr}`).toBe(0);
+          const selected = parseComposeImageSettings(initial.stdout);
+          const field = {
+            ARDURBOT_COMPUTER_CHANNEL: selected.channel,
+            ARDURBOT_IMAGE_TAG: selected.imageTag,
+            ARDURBOT_COMPUTER_IMAGE_REF: selected.explicitRef,
+          }[key!];
+          expect(field, name).toBe(expected);
+          const final = render(reference!);
+          expect(final.status, `${name}: final Compose render failed: ${final.stderr}`).toBe(0);
+          expect(parseComposeImageSettings(final.stdout).image, name).toBe(reference);
+        }
+      } finally {
+        await rm(dir, { recursive: true, force: true });
+      }
+    },
+  );
+});
 
 describe("stack locations", () => {
   it("keeps the compose project under user data", () => {
@@ -84,8 +185,9 @@ describe("renderStackEnv", () => {
     }
     expect(lines.some((line) => line.startsWith("ARDURBOT_IMAGE_TAG="))).toBe(false);
     expect(lines.some((line) => line.startsWith("ARDURBOT_COMPUTER_IMAGE_TAG="))).toBe(false);
-    // Everything else, including the image names and empty optional keys, stays verbatim.
+    // Everything else, including the app image and empty optional keys, stays verbatim.
     expect(lines).toContain("ARDURBOT_IMAGE=ghcr.io/ardurai/ardur-bot/app");
+    expect(lines).toContain("ARDURBOT_COMPUTER_IMAGE=");
     expect(lines).toContain("SANDBOX_PROVIDER=docker");
     expect(lines).toContain("OPENROUTER_API_KEY=");
     expect(rendered.endsWith("\n")).toBe(template.endsWith("\n"));
@@ -118,6 +220,41 @@ describe("ensureStackEnv", () => {
     await writeFile(path.join(dir, STACK_ENV_FILE), "sentinel\n", "utf8");
     await expect(ensureStackEnv(dir, "POSTGRES_PASSWORD=\n", fakeHex)).resolves.toBe("kept");
     await expect(readFile(path.join(dir, STACK_ENV_FILE), "utf8")).resolves.toBe("sentinel\n");
+  });
+
+  it("upgrades the previous launcher's generated image setting to automatic selection", async () => {
+    // The previous launcher removed both image-tag lines and supplied the tag per invocation.
+    const previousGenerated =
+      "ARDURBOT_IMAGE=ghcr.io/ardurai/ardur-bot/app\n" +
+      "ARDURBOT_COMPUTER_IMAGE=ghcr.io/ardurai/ardur-bot/computer\n" +
+      "POSTGRES_PASSWORD=fixture-only\n";
+    await writeFile(path.join(dir, STACK_ENV_FILE), previousGenerated, "utf8");
+
+    await expect(ensureStackEnv(dir, "unused template\n", fakeHex)).resolves.toBe("kept");
+    await expect(readFile(path.join(dir, STACK_ENV_FILE), "utf8")).resolves.toBe(
+      previousGenerated.replace(
+        "ARDURBOT_COMPUTER_IMAGE=ghcr.io/ardurai/ardur-bot/computer",
+        "ARDURBOT_COMPUTER_IMAGE=",
+      ),
+    );
+  });
+
+  it("preserves an existing image override and its explicit tag", async () => {
+    const custom =
+      "ARDURBOT_COMPUTER_IMAGE=ghcr.io/ardurai/ardur-bot/computer\n" +
+      "ARDURBOT_COMPUTER_IMAGE_TAG=chosen\n";
+    await writeFile(path.join(dir, STACK_ENV_FILE), custom, "utf8");
+    await expect(ensureStackEnv(dir, "unused template\n", fakeHex)).resolves.toBe("kept");
+    await expect(readFile(path.join(dir, STACK_ENV_FILE), "utf8")).resolves.toBe(custom);
+  });
+
+  it("keeps oversized existing settings intact when migration cannot inspect them", async () => {
+    const oversized = `ARDURBOT_COMPUTER_IMAGE=ghcr.io/ardurai/ardur-bot/computer\n${"x".repeat(64 * 1024)}`;
+    await writeFile(path.join(dir, STACK_ENV_FILE), oversized, "utf8");
+    await expect(ensureStackEnv(dir, "replacement\n", fakeHex)).rejects.toThrow(
+      "could not be checked",
+    );
+    await expect(readFile(path.join(dir, STACK_ENV_FILE), "utf8")).resolves.toBe(oversized);
   });
 
   it.runIf(process.platform !== "win32")(
@@ -286,23 +423,40 @@ interface RecordedCall {
 
 type Script = (
   args: string[],
+  options: Parameters<RunDocker>[2],
 ) => Partial<RunDockerResult> & { lines?: string[]; wait?: Promise<void> };
 
 function fakeRun(calls: RecordedCall[], script: Script): RunDocker {
   return async (binary, args, options) => {
     calls.push({ binary, args, cwd: options.cwd, env: options.env });
-    const { lines = [], wait, ...reply } = script(args);
+    const { lines = [], wait, ...reply } = script(args, options);
     for (const line of lines) options.onLine?.(line);
     await wait;
     return { code: 0, stdout: "", stderr: "", ...reply };
   };
 }
 
-const ok: Script = (args) => {
+const ok: Script = (args, options) => {
   if (args[0] === "compose" && args[1] === "version") return { stdout: "2.29.0\n" };
   if (args[0] === "info") return { stdout: "27.1.1\n" };
+  if (args.includes("config")) {
+    const config = JSON.parse(
+      readFileSync(path.join(COMPOSE_DIR, "computer-config.fixture.json"), "utf8"),
+    );
+    const settings = readFileSync(path.join(options.cwd, STACK_ENV_FILE), "utf8");
+    config["x-ardurbot-image-selection"].channel = settings.includes(
+      "ARDURBOT_COMPUTER_CHANNEL=invalid",
+    )
+      ? "invalid"
+      : settings.includes("ARDURBOT_COMPUTER_CHANNEL=release")
+        ? "release"
+        : "";
+    config.services.computer.image =
+      options.env.ARDURBOT_COMPUTER_IMAGE_REF ?? "ghcr.io/ardurai/ardur-bot/computer:dev";
+    return { stdout: JSON.stringify(config) };
+  }
   const subcommand = args[7];
-  if (subcommand === "pull") return { lines: ["app Pulled", "computer Pulled"] };
+  if (subcommand === "pull") return { lines: ["app Pulled"] };
   if (subcommand === "up") return { lines: ["Container ardurbot-web-1 Started"] };
   return {};
 };
@@ -333,6 +487,7 @@ describe("LocalStackController", () => {
       resourceDir: COMPOSE_DIR,
       localWebUrl: "http://127.0.0.1:5173",
       imageTag: "v1.2.3",
+      appVersion: "1.2.3",
       randomHex: fakeHex,
       sleep: async () => undefined,
       healthTimeoutMs: 50,
@@ -359,7 +514,6 @@ describe("LocalStackController", () => {
     expect(pushed).toEqual([
       "checking-docker",
       "preparing",
-      "pulling",
       "pulling",
       "pulling",
       "starting",
@@ -405,14 +559,12 @@ describe("LocalStackController", () => {
 
     const state = await stack.start();
     expect(state).toMatchObject({ phase: "ready", message: null, imageTag: "v1.2.3" });
-    expect(state.output).toEqual([
-      "app Pulled",
-      "computer Pulled",
-      "Container ardurbot-web-1 Started",
-    ]);
+    expect(state.output).toEqual(["app Pulled", "Container ardurbot-web-1 Started"]);
     expect(phases).toEqual([
       "checking-docker",
       "checking-docker",
+      "preparing",
+      "preparing",
       "pulling",
       "starting",
       "waiting-healthy",
@@ -431,20 +583,28 @@ describe("LocalStackController", () => {
     expect(calls.map((call) => call.args)).toEqual([
       ["compose", "version", "--short"],
       ["info", "--format", "{{.ServerVersion}}"],
+      [...compose.slice(0, 7), "--profile", "computer", "config", "--format", "json"],
+      [...compose.slice(0, 7), "--profile", "computer", "config", "--format", "json"],
       [...compose, "pull"],
       [...compose, "up", "-d", "--wait", "--wait-timeout", String(COMPOSE_WAIT_TIMEOUT_S)],
     ]);
-    for (const call of calls) {
+    for (const [index, call] of calls.entries()) {
       expect(call.binary).toBe("/usr/bin/docker");
       expect(call.cwd).toBe(stackPath);
       expect(call.env).toMatchObject({
         ARDURBOT_IMAGE_TAG: "v1.2.3",
-        ARDURBOT_COMPUTER_IMAGE_TAG: "v1.2.3",
         COMPOSE_PROGRESS: "plain",
         // Tells the API that this stack runs on the owner's own computer.
         ARDURBOT_DESKTOP_STACK: "1",
         HOME: "/home/me",
       });
+      if (index < 3) {
+        expect(call.env).not.toHaveProperty("ARDURBOT_COMPUTER_IMAGE_REF");
+      } else {
+        expect(call.env.ARDURBOT_COMPUTER_IMAGE_REF).toBe(
+          "ghcr.io/ardurai/ardur-bot/computer:1.2.3",
+        );
+      }
       expect(call.env).not.toHaveProperty("OPENROUTER_API_KEY");
     }
     expect(calls.at(-1)?.env.ARDURBOT_DESKTOP_STACK_TOKEN).toBe("ab".repeat(32));
@@ -461,18 +621,117 @@ describe("LocalStackController", () => {
     }
   });
 
+  it("passes the selected channel's version-derived computer reference to Compose", async () => {
+    const dir = path.join(root, "stack");
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, STACK_ENV_FILE), "ARDURBOT_COMPUTER_CHANNEL=release\n");
+    await controller({ appVersion: "0.1.0-alpha.1" }).start();
+    expect(calls.at(-1)?.env.ARDURBOT_COMPUTER_IMAGE_REF).toBe(
+      "ghcr.io/ardurai/ardur-bot/computer:0.1.0-alpha.1",
+    );
+  });
+
+  it("uses the final Compose image when an explicit image has a legacy tag", async () => {
+    const stack = controller({}, (args, options) => {
+      if (!args.includes("config")) return ok(args, options);
+      const config = JSON.parse(
+        readFileSync(path.join(COMPOSE_DIR, "computer-config.fixture.json"), "utf8"),
+      );
+      config["x-ardurbot-image-selection"].explicit_image = "registry.example.test/computer";
+      config.services.computer.image = "registry.example.test/computer:release";
+      return { stdout: JSON.stringify(config) };
+    });
+    expect((await stack.start()).phase).toBe("ready");
+    expect(calls.at(-1)?.env.ARDURBOT_COMPUTER_IMAGE_REF).toBe(
+      "registry.example.test/computer:release",
+    );
+  });
+
+  it("accepts a channel with an inline comment", async () => {
+    const dir = path.join(root, "stack");
+    await mkdir(dir, { recursive: true });
+    await writeFile(
+      path.join(dir, STACK_ENV_FILE),
+      "ARDURBOT_COMPUTER_CHANNEL=release # pin the release\n",
+    );
+    expect((await controller({ appVersion: "0.1.0-alpha.1" }).start()).phase).toBe("ready");
+    expect(calls.at(-1)?.env.ARDURBOT_COMPUTER_IMAGE_REF).toBe(
+      "ghcr.io/ardurai/ardur-bot/computer:0.1.0-alpha.1",
+    );
+  });
+
+  it("re-reads a corrected channel on Retry using the same controller", async () => {
+    const dir = path.join(root, "stack");
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, STACK_ENV_FILE), "ARDURBOT_COMPUTER_CHANNEL=invalid\n");
+    const stack = controller({ appVersion: "0.1.0-alpha.1" });
+    expect((await stack.start()).phase).toBe("failed");
+    expect(calls.map((call) => call.args[1])).toEqual(["version", "--format", "--env-file"]);
+
+    await writeFile(path.join(dir, STACK_ENV_FILE), "ARDURBOT_COMPUTER_CHANNEL=release\n");
+    expect((await stack.start()).phase).toBe("ready");
+    expect(calls.at(-1)?.env.ARDURBOT_COMPUTER_IMAGE_REF).toBe(
+      "ghcr.io/ardurai/ardur-bot/computer:0.1.0-alpha.1",
+    );
+  });
+
+  it("fails closed on a Compose render error, then retries without affecting Stop", async () => {
+    let renderFails = true;
+    const stack = controller({}, (args, options) =>
+      args.includes("config") && renderFails
+        ? { code: 1, stderr: "private-setting=fake" }
+        : ok(args, options),
+    );
+    expect(await stack.start()).toMatchObject({
+      phase: "failed",
+      message:
+        "Could not prepare the local stack. Retry. Docker Compose could not render the settings.",
+    });
+    expect(calls.some((call) => call.args.includes("pull"))).toBe(false);
+    expect(calls.some((call) => call.args.includes("up"))).toBe(false);
+    expect((await stack.stop()).phase).toBe("idle");
+    expect(calls.at(-1)?.args.at(-1)).toBe("stop");
+    renderFails = false;
+    expect((await stack.start()).phase).toBe("ready");
+  });
+
+  it("does not pull when the second Compose render fails", async () => {
+    let renders = 0;
+    const stack = controller({}, (args, options) => {
+      if (args.includes("config") && ++renders === 2) return { code: 1, stderr: "private=fake" };
+      return ok(args, options);
+    });
+    expect(await stack.start()).toMatchObject({
+      phase: "failed",
+      message:
+        "Could not prepare the local stack. Retry. Docker Compose could not render the settings.",
+    });
+    expect(calls.some((call) => call.args.includes("pull"))).toBe(false);
+  });
+
+  it("stops after an invalid channel without resolving the image", async () => {
+    const dir = path.join(root, "stack");
+    await mkdir(dir, { recursive: true });
+    await writeFile(path.join(dir, STACK_ENV_FILE), "ARDURBOT_COMPUTER_CHANNEL=invalid\n");
+    const stack = controller();
+    expect((await stack.start()).phase).toBe("failed");
+    await expect(stack.stop()).resolves.toMatchObject({ phase: "idle" });
+    expect(calls.at(-1)?.args.slice(7)).toEqual(["stop"]);
+  });
+
   it("keeps lifecycle commands off the standalone project despite environment overrides", async () => {
     const dir = path.join(root, "stack");
     await mkdir(dir, { recursive: true });
     await writeFile(path.join(dir, STACK_ENV_FILE), "COMPOSE_PROJECT_NAME=ardurbot\n");
-    const stack = controller({ env: { COMPOSE_PROJECT_NAME: "ardurbot" } }, (args) =>
-      args[7] === "up" ? { code: 1, stderr: "port is already allocated" } : ok(args),
+    const stack = controller({ env: { COMPOSE_PROJECT_NAME: "ardurbot" } }, (args, options) =>
+      args[7] === "up" ? { code: 1, stderr: "port is already allocated" } : ok(args, options),
     );
     expect((await stack.start()).phase).toBe("failed");
     // A fresh process must stop the same desktop project without discovering or adopting ardurbot.
     expect((await controller().stop()).phase).toBe("idle");
     const commands = calls.filter(
-      (call) => call.args[0] === "compose" && call.args[1] !== "version",
+      (call) =>
+        call.args[0] === "compose" && call.args[1] !== "version" && !call.args.includes("config"),
     );
     expect(commands.map((call) => call.args[7])).toEqual([
       "pull",
@@ -521,8 +780,8 @@ describe("LocalStackController", () => {
   });
 
   it("uses a plain up -d for Compose plugins older than 2.17", async () => {
-    const stack = controller({}, (args) =>
-      args[1] === "version" ? { stdout: "2.12.2\n" } : ok(args),
+    const stack = controller({}, (args, options) =>
+      args[1] === "version" ? { stdout: "2.12.2\n" } : ok(args, options),
     );
     await stack.start();
     expect(calls.at(-1)?.args.slice(7)).toEqual(["up", "-d"]);
@@ -540,10 +799,10 @@ describe("LocalStackController", () => {
   });
 
   it("reports a missing Compose plugin as docker-missing", async () => {
-    const stack = controller({}, (args) =>
+    const stack = controller({}, (args, options) =>
       args[1] === "version"
         ? { code: 1, stderr: "docker: 'compose' is not a docker command" }
-        : ok(args),
+        : ok(args, options),
     );
     const state = await stack.start();
     expect(state.phase).toBe("docker-missing");
@@ -552,10 +811,10 @@ describe("LocalStackController", () => {
   });
 
   it("waits for the daemon when docker info fails", async () => {
-    const stack = controller({}, (args) =>
+    const stack = controller({}, (args, options) =>
       args[0] === "info"
         ? { code: 1, stderr: "Cannot connect to the Docker daemon at unix:///var/run/docker.sock" }
-        : ok(args),
+        : ok(args, options),
     );
     const state = await stack.start();
     expect(state).toMatchObject({
@@ -566,10 +825,10 @@ describe("LocalStackController", () => {
   });
 
   it("explains the docker group when the socket is not accessible", async () => {
-    const stack = controller({}, (args) =>
+    const stack = controller({}, (args, options) =>
       args[0] === "info"
         ? { code: 1, stderr: "permission denied while trying to connect to the Docker daemon" }
-        : ok(args),
+        : ok(args, options),
     );
     const state = await stack.start();
     expect(state.phase).toBe("docker-not-running");
@@ -577,14 +836,14 @@ describe("LocalStackController", () => {
   });
 
   it("fails with a tag-specific message when the images are not published", async () => {
-    const stack = controller({}, (args) =>
+    const stack = controller({}, (args, options) =>
       args[7] === "pull"
         ? {
             code: 1,
             stderr: "Error response from daemon: manifest unknown",
             lines: ["Error response from daemon: manifest unknown"],
           }
-        : ok(args),
+        : ok(args, options),
     );
     const state = await stack.start();
     expect(state).toMatchObject({
@@ -592,12 +851,18 @@ describe("LocalStackController", () => {
       message: "Images for v1.2.3 are not published yet. Try again in a few minutes.",
       output: ["Error response from daemon: manifest unknown"],
     });
-    expect(calls.map((call) => call.args[7] ?? call.args[0])).toEqual(["compose", "info", "pull"]);
+    expect(calls.map((call) => call.args[7] ?? call.args[0])).toEqual([
+      "compose",
+      "info",
+      "--profile",
+      "--profile",
+      "pull",
+    ]);
   });
 
   it("reports interruption instead of a pull failure when docker returns 130", async () => {
-    const stack = controller({}, (args) =>
-      args[7] === "pull" ? { code: 130, stderr: "got 3 SIGTERM" } : ok(args),
+    const stack = controller({}, (args, options) =>
+      args[7] === "pull" ? { code: 130, stderr: "got 3 SIGTERM" } : ok(args, options),
     );
     const state = await stack.start();
     expect(state).toMatchObject({
@@ -616,10 +881,10 @@ describe("LocalStackController", () => {
           return "v1.2.3";
         },
       },
-      (args) => {
+      (args, options) => {
         if (args[7] === "up" && starts++ === 0)
           return { code: 1, stderr: "port is already allocated" };
-        return ok(args);
+        return ok(args, options);
       },
     );
     expect((await stack.start()).phase).toBe("ready");
@@ -644,8 +909,8 @@ describe("LocalStackController", () => {
   });
 
   it("bounds retries when another process repeatedly takes the selected port", async () => {
-    const stack = controller({}, (args) =>
-      args[7] === "up" ? { code: 1, stderr: "port is already allocated" } : ok(args),
+    const stack = controller({}, (args, options) =>
+      args[7] === "up" ? { code: 1, stderr: "port is already allocated" } : ok(args, options),
     );
     expect(await stack.start()).toMatchObject({
       phase: "failed",
@@ -656,22 +921,17 @@ describe("LocalStackController", () => {
   });
 
   it("collects service logs when up fails", async () => {
-    const stack = controller({}, (args) => {
+    const stack = controller({}, (args, options) => {
       if (args[7] === "up") {
         return { code: 1, stderr: "service exited", lines: ["web Error"] };
       }
       if (args[7] === "logs") return { lines: ["web-1 | EADDRINUSE"] };
-      return ok(args);
+      return ok(args, options);
     });
     const state = await stack.start();
     expect(state.phase).toBe("failed");
     expect(state.message).toContain("did not start");
-    expect(state.output).toEqual([
-      "app Pulled",
-      "computer Pulled",
-      "web Error",
-      "web-1 | EADDRINUSE",
-    ]);
+    expect(state.output).toEqual(["app Pulled", "web Error", "web-1 | EADDRINUSE"]);
     expect(calls.at(-1)?.args.slice(7)).toEqual(["logs", "--tail", "30", "--no-color"]);
   });
 
@@ -679,7 +939,7 @@ describe("LocalStackController", () => {
     "explains exhausted address pools from %s and can retry after recovery",
     async (stream) => {
       let exhausted = true;
-      const stack = controller({}, (args) => {
+      const stack = controller({}, (args, options) => {
         if (args[7] === "up" && exhausted) {
           return {
             code: 1,
@@ -687,7 +947,7 @@ describe("LocalStackController", () => {
               "failed to create network ardurbot-desktop_data: Error response from daemon: all predefined address pools have been fully subnetted",
           };
         }
-        return ok(args);
+        return ok(args, options);
       });
       expect(await stack.start()).toMatchObject({
         phase: "failed",
@@ -719,12 +979,12 @@ describe("LocalStackController", () => {
 
   it("returns the same attempt while one is in flight and restarts after failure", async () => {
     let attempts = 0;
-    const stack = controller({}, (args) => {
+    const stack = controller({}, (args, options) => {
       if (args[7] === "pull") {
         attempts += 1;
-        return attempts === 1 ? { code: 1, stderr: "no such host" } : ok(args);
+        return attempts === 1 ? { code: 1, stderr: "no such host" } : ok(args, options);
       }
-      return ok(args);
+      return ok(args, options);
     });
     const first = stack.start();
     expect(stack.start()).toBe(first);
@@ -738,8 +998,8 @@ describe("LocalStackController", () => {
   });
 
   it("does not leak randomness or docker output into the message", async () => {
-    const stack = controller({}, (args) =>
-      args[7] === "pull" ? { code: 1, stderr: "/Users/me/secret-path: boom" } : ok(args),
+    const stack = controller({}, (args, options) =>
+      args[7] === "pull" ? { code: 1, stderr: "private-path: boom" } : ok(args, options),
     );
     const state = await stack.start();
     expect(state.message).not.toContain("/Users/me");
@@ -767,10 +1027,10 @@ describe("LocalStackController", () => {
   });
 
   it("reports a stop that docker refused instead of pretending the stack is down", async () => {
-    const stack = controller({}, (args) =>
+    const stack = controller({}, (args, options) =>
       args[7] === "stop"
         ? { code: 1, stderr: "/Users/me/secret-path: Cannot connect to the Docker daemon" }
-        : ok(args),
+        : ok(args, options),
     );
     await stack.start();
     expect(stack.state().phase).toBe("ready");
@@ -790,9 +1050,9 @@ describe("LocalStackController", () => {
     const stopGate = new Promise<void>((resolve) => {
       releaseStop = resolve;
     });
-    const stack = controller({}, (args) => {
+    const stack = controller({}, (args, options) => {
       if (args[7] === "stop") return { wait: stopGate };
-      return ok(args);
+      return ok(args, options);
     });
     await stack.start();
     const stopping = stack.stop();
@@ -826,7 +1086,7 @@ describe("LocalStackController", () => {
           return new Promise((resolve) => signal.addEventListener("abort", () => resolve(null)));
         },
       },
-      (args) => (args[7] === "stop" ? { wait: stopGate } : ok(args)),
+      (args, options) => (args[7] === "stop" ? { wait: stopGate } : ok(args, options)),
     );
     const first = stack.start();
     await probeStarted;
@@ -848,8 +1108,8 @@ describe("LocalStackController", () => {
       releaseStop = resolve;
     });
     let stops = 0;
-    const stack = controller({}, (args) => {
-      if (args[7] !== "stop") return ok(args);
+    const stack = controller({}, (args, options) => {
+      if (args[7] !== "stop") return ok(args, options);
       stops += 1;
       return stops === 1 ? { wait: stopGate } : {};
     });

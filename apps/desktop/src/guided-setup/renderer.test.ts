@@ -1,0 +1,143 @@
+// @vitest-environment jsdom
+import type { ArdurBotSetup } from "@ardurbot/contracts";
+import type { SetupSnapshot, SetupStepId } from "@ardurbot/contracts/desktop-setup";
+import { act, createElement } from "react";
+import { createRoot } from "react-dom/client";
+import { describe, expect, it, vi } from "vitest";
+import { SetupDocument } from "./renderer.js";
+
+const ids: SetupStepId[] = [
+  "prerequisites",
+  "database",
+  "migrations",
+  "command",
+  "services",
+  "engines",
+  "model",
+  "first-bot",
+  "finish",
+];
+
+function snapshot(status: "pending" | "running" | "succeeded" | "failed"): SetupSnapshot {
+  return {
+    schemaVersion: 1,
+    planVersion: 1,
+    runId: "00000000-0000-4000-8000-000000000001",
+    sequence: 1,
+    mode: "local",
+    currentStep: status === "running" ? "database" : null,
+    machineReady: false,
+    accountReady: false,
+    complete: false,
+    interrupted: false,
+    blocked: false,
+    steps: ids.map((id, index) => ({
+      id,
+      available: index < 4,
+      revision: index < 4 ? 1 : 0,
+      attempt: index < 4 && status !== "pending" ? 1 : 0,
+      status: index < 4 ? status : "pending",
+      activeElapsedMs: 0,
+      waitingElapsedMs: 0,
+      verifiedAt: index < 4 && status === "succeeded" ? 100 : null,
+      reasonCode: null,
+      details: [],
+    })),
+  };
+}
+
+function fakeBridge(initial: SetupSnapshot) {
+  const started = Promise.withResolvers<SetupSnapshot>();
+  let publish: (value: SetupSnapshot) => void = () => undefined;
+  const guided = {
+    snapshot: vi.fn(async () => initial),
+    start: vi.fn(() => started.promise),
+    retry: vi.fn(() => started.promise),
+    skip: vi.fn(async () => initial),
+    cancel: vi.fn(async () => ({ ...initial, sequence: 2 })),
+    resume: vi.fn(() => started.promise),
+    onChange: vi.fn((listener: (value: SetupSnapshot) => void) => {
+      publish = listener;
+      return vi.fn();
+    }),
+  };
+  const bridge = {
+    platform: "test",
+    guidedSetup: guided,
+    quit: vi.fn(async () => undefined),
+    test: vi.fn(async () => ({ ok: false })),
+    save: vi.fn(async () => ({ ok: true })),
+    stack: { start: vi.fn(async () => ({ phase: "idle" })) },
+  } as unknown as ArdurBotSetup;
+  return { bridge, guided, started, publish: (value: SetupSnapshot) => publish(value) };
+}
+
+async function mount(bridge: ArdurBotSetup) {
+  const host = document.createElement("div");
+  document.body.append(host);
+  const root = createRoot(host);
+  await act(async () => root.render(createElement(SetupDocument, { setupBridge: bridge })));
+  return {
+    host,
+    cleanup: async () => {
+      await act(async () => root.unmount());
+      host.remove();
+    },
+  };
+}
+
+describe("guided setup document", () => {
+  it.each(["Start setup", "Retry", "Resume"])(
+    "sends Cancel while %s is still pending",
+    async (label) => {
+      const initial = snapshot(label === "Retry" ? "failed" : "pending");
+      if (label === "Resume") initial.interrupted = true;
+      const fake = fakeBridge(initial);
+      const view = await mount(fake.bridge);
+      try {
+        const start = [...view.host.querySelectorAll("button")].find(
+          (button) => button.textContent === label,
+        );
+        expect(start).toBeDefined();
+        await act(async () => start?.click());
+        expect(
+          label === "Retry"
+            ? fake.guided.retry
+            : label === "Resume"
+              ? fake.guided.resume
+              : fake.guided.start,
+        ).toHaveBeenCalledOnce();
+        // An event from the main process exposes Cancel while the start promise is pending.
+        await act(async () => fake.publish(snapshot("running")));
+        const cancel = [...view.host.querySelectorAll("button")].find(
+          (button) => button.textContent === "Cancel",
+        );
+        expect(cancel).toBeDefined();
+        await act(async () => cancel?.click());
+        expect(fake.guided.cancel).toHaveBeenCalledOnce();
+      } finally {
+        fake.started.resolve(snapshot("succeeded"));
+        await view.cleanup();
+      }
+    },
+  );
+
+  it.each(["completed", "cancelled"])(
+    "unlocks the server choice for a %s reopened journal",
+    async (state) => {
+      const initial = snapshot("succeeded");
+      if (state === "cancelled") initial.steps[3]!.status = "cancelled";
+      const fake = fakeBridge(initial);
+      const view = await mount(fake.bridge);
+      try {
+        const server = view.host.querySelectorAll<HTMLInputElement>('input[name="mode"]')[1];
+        expect(view.host.querySelector("fieldset")?.disabled).toBe(false);
+        await act(async () => server?.click());
+        expect(server?.checked).toBe(true);
+        expect(view.host.textContent).toContain("Server address");
+      } finally {
+        await view.cleanup();
+      }
+    },
+  );
+});

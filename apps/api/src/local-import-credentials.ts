@@ -1,5 +1,6 @@
 import type { EncryptedSecretStore, ImportOwner } from "@ardurbot/adapters";
 import { assertLocalImportOwner, bumpMcpServerRevision } from "@ardurbot/adapters";
+import { mcpCredentialFlagsForEntries } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
 import { IsolationError } from "@ardurbot/db";
 
@@ -39,7 +40,15 @@ export async function saveImportedServerCredentials(
       ? object(JSON.parse(secrets.load(previous.ciphertext, previous.id)))
       : {};
     const stored = await secrets.put(
-      JSON.stringify({ ...material, env: input.env, headers: input.headers }),
+      JSON.stringify({
+        ...material,
+        env: input.env,
+        headers: input.headers,
+        credentialFlags: mcpCredentialFlagsForEntries(
+          material as { env?: Record<string, string>; headers?: Record<string, string> },
+          input,
+        ),
+      }),
       {
         ...owner,
         operationId: "local-import.credentials",

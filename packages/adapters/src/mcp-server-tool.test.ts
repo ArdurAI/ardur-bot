@@ -108,8 +108,17 @@ describe("buildMcpCredentialBlob", () => {
       JSON.stringify({ secret: "tok", env: {}, headers: {} }),
     );
     expect(buildMcpCredentialBlob({ headers: { "X-Api-Key": "key" }, env: { A: "b" } })).toEqual(
-      JSON.stringify({ env: { A: "b" }, headers: { "X-Api-Key": "key" } }),
+      JSON.stringify({
+        env: { A: "b" },
+        headers: { "X-Api-Key": "key" },
+        credentialFlags: { env: { A: true }, headers: { "X-Api-Key": true } },
+      }),
     );
+    expect(
+      JSON.parse(
+        buildMcpCredentialBlob({ env: { LOG_LEVEL: "info", PGPASSWORD: "bluebird-42" } })!,
+      ),
+    ).toMatchObject({ credentialFlags: { env: { LOG_LEVEL: false, PGPASSWORD: true } } });
   });
 });
 

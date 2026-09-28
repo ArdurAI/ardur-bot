@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
-import { mkdir, open, readFile, realpath, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, realpath, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { AdapterContext, ComputerRef, SandboxProvider } from "@ardurbot/adapter-kit";
 import type {
@@ -15,6 +15,8 @@ import { HostKubernetesConnection } from "./kubernetes.js";
 import { fleetComputerKey, LinuxFleetSandbox } from "./linux-sandbox.js";
 import { EncryptedSecretStore } from "./secret-store.js";
 import { SshSandboxProvider } from "./ssh-sandbox.js";
+
+const DELETED_SECRET = "deleted";
 
 export class FleetService {
   private sessions = new Map<
@@ -40,6 +42,9 @@ export class FleetService {
     operation: Extract<HostOperation, { op: "computer.remote.secret" }>,
     context: AdapterContext,
   ) {
+    if (!/^[a-f0-9-]{36}$/.test(operation.secretId))
+      throw new Error("Computer credential id is invalid.");
+    context.signal.throwIfAborted();
     const boundedFile = async (file: string) => {
       if (!path.isAbsolute(file) || file.includes("\0"))
         throw new Error("Choose an absolute certificate or key path on this computer.");
@@ -64,13 +69,46 @@ export class FleetService {
             }
           : null;
     if (!value) throw new Error("Choose a key or TLS certificates.");
-    const secret = await this.secrets.put(JSON.stringify(value), context, randomUUID());
+    context.signal.throwIfAborted();
+    const secret = await this.secrets.put(JSON.stringify(value), context, operation.secretId);
     await mkdir(path.join(this.root, "fleet-secrets"), { recursive: true, mode: 0o700 });
-    await writeFile(path.join(this.root, "fleet-secrets", secret.id), secret.ciphertext, {
-      mode: 0o600,
-      flag: "wx",
-    });
+    context.signal.throwIfAborted();
+    const destination = path.join(this.root, "fleet-secrets", secret.id);
+    try {
+      await writeFile(destination, secret.ciphertext, { mode: 0o600, flag: "wx" });
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      const existing = await open(destination, constants.O_RDONLY | constants.O_NOFOLLOW);
+      let stored: string;
+      try {
+        if (!(await existing.stat()).isFile()) throw new Error("Computer credential is invalid.");
+        stored = await existing.readFile("utf8");
+      } finally {
+        await existing.close();
+      }
+      if (stored === DELETED_SECRET) throw new Error("Computer credential was deleted.");
+      if (this.secrets.load(stored, secret.id) !== JSON.stringify(value))
+        throw new Error("Computer credential import conflicts with an existing secret.");
+    }
+    context.signal.throwIfAborted();
     return { id: secret.id };
+  }
+  async deleteSecret(secretId: string) {
+    if (!/^[a-f0-9-]{36}$/.test(secretId)) throw new Error("Computer credential id is invalid.");
+    const directory = path.join(this.root, "fleet-secrets");
+    await mkdir(directory, { recursive: true, mode: 0o700 });
+    const tombstone = path.join(directory, `.deleted-${secretId}-${randomUUID()}`);
+    try {
+      await writeFile(tombstone, DELETED_SECRET, { mode: 0o600, flag: "wx" });
+      // Rename replaces an import that won the create race, while later creates see EEXIST.
+      await rename(tombstone, path.join(directory, secretId));
+    } finally {
+      await unlink(tombstone).catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== "ENOENT") throw error;
+      });
+    }
+    for (const key of this.providers.keys()) if (key.includes(secretId)) this.providers.delete(key);
+    return { ok: true as const };
   }
   private async load(
     settings: ComputerConnectionSettings,

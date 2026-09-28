@@ -43,7 +43,7 @@
       "id": "choose",
       "eyebrow": "CHOICE",
       "title": "Choose each bot's model",
-      "body": "Choose each bot's runtime and model, including experimental Antigravity text conversations on a connected computer.",
+      "body": "Choose each bot's runtime, model and thinking level, including experimental Antigravity text conversations on a connected computer, with a separate model and thinking choice for that bot in each group room.",
       "source": "README.md#What you get today"
     },
     {
@@ -415,7 +415,6 @@
         "pnpm install",
         "pnpm db:generate",
         "pnpm db:migrate",
-        "pnpm sandbox:build",
         "pnpm dev"
       ],
       "note": "In .env, set POSTGRES_PASSWORD to a random value (for example, openssl rand -hex 16) and use it in DATABASE_URL; set BETTER_AUTH_SECRET, ENCRYPTION_KEY, SCREEN_PROXY_SECRET and SANDBOX_SUPERVISOR_TOKEN to separate long random values (for example, openssl rand -hex 32); add model credentials in the app or set OPENROUTER_API_KEY.",
@@ -833,7 +832,7 @@
     {
       "id": "group-chat",
       "file": "screenshots/group-chat.png",
-      "alt": "Operations huddle group conversation where Chief of Staff, Inbox Manager, and Release Captain coordinate a weekly update and hand off a release check.",
+      "alt": "Operations huddle group conversation showing each participant's model as the bots coordinate a weekly update and hand off a release check.",
       "width": 2880,
       "height": 1800,
       "theme": "light"

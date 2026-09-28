@@ -1,9 +1,17 @@
 import { expect, it } from "vitest";
 import {
+  inheritedOllamaEffort,
   modelPinOptionKey,
   parseModelPinOptionKey,
   spaceDefaultEffort,
 } from "./model-pin-choice.js";
+
+it("records inherited local effort in the run pin representation", () => {
+  expect(inheritedOllamaEffort(null, false)).toBeNull();
+  expect(inheritedOllamaEffort("off", false)).toBeNull();
+  expect(inheritedOllamaEffort("off", true)).toBe("none");
+  expect(inheritedOllamaEffort(null, true)).toBe("medium");
+});
 
 it("retains the displayed inherited effort when a model does not support medium", () => {
   expect(spaceDefaultEffort(true, ["off", "high"])).toBe("high");

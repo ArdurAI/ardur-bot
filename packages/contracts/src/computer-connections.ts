@@ -71,6 +71,8 @@ export class HostMoveUnavailableError extends Error {
  */
 export const ENGINE_MISSING_CODE = "engine-missing";
 export const HOST_MOVE_UNAVAILABLE_CODE = "host-move-unavailable";
+export const FLEET_ACTIVE_RUN_CONFLICT_CODE = "fleet-active-runs";
+export const FLEET_PINNED_BOTS_CONFLICT_CODE = "fleet-pinned-bots";
 const ComputerConfigurationFieldsSchema = z.object({
   botId: z.string().min(1),
   imageProfile: ComputerProfileSchema.optional(),

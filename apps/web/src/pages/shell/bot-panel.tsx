@@ -2,6 +2,7 @@ import type {
   AgentSkillCatalogEntry,
   Bot,
   ComputerMode,
+  Group,
   ModelCatalogEntry,
   RuntimeKind,
   ThinkingLevel,
@@ -26,19 +27,19 @@ import {
   Textarea,
   Toggle,
 } from "@ardurbot/ui-web";
-import { Trans, useLingui } from "@lingui/react/macro";
+import { Plural, Trans, useLingui } from "@lingui/react/macro";
 import { X } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useId, useRef, useState } from "react";
 import { BotContext } from "../../components/ContextEntry";
 import { ShowAllModels } from "../../components/ShowAllModels";
 import { modelUnavailable, spaceDefaultUnavailable } from "../../lib/model-availability";
-import { availableProviderModels, unavailableSubscriptionModel } from "../../lib/model-options";
+import { unavailableSubscriptionModel } from "../../lib/model-options";
 import { rpc } from "../../lib/rpc";
-import { thinkingLevelDescription } from "../../lib/thinking-level-options";
 import type { ModelSettings } from "../../lib/use-model-settings";
 import { useModelSettings } from "../../lib/use-model-settings";
 import { ModelDestinations } from "../ModelDestinations";
 import { AvatarStudioPopover } from "./avatar-studio-popover";
+import { ModelEffortSelect, ModelPinSelect } from "./model-pin-select";
 import { RuntimeSettings } from "./runtime-settings";
 
 const ScratchpadSection = lazy(() =>
@@ -208,6 +209,8 @@ export function BotSettings({
   onSave,
   onExport,
   onClear,
+  overrideGroups = [],
+  onOpenGroup,
 }: {
   bot: Bot;
   modelFocusRequest?: number;
@@ -235,6 +238,8 @@ export function BotSettings({
   }) => Promise<void>;
   onExport: () => Promise<void>;
   onClear: () => void;
+  overrideGroups?: Group[];
+  onOpenGroup?: (groupId: string) => void;
 }) {
   const { t } = useLingui();
   const [advancedOpened, setAdvancedOpened] = useState(false);
@@ -313,64 +318,6 @@ export function BotSettings({
       .catch(() => setVoices([]));
   }, []);
 
-  const connectedOptions: Array<{
-    key: string;
-    provider: string;
-    modelId: string;
-    label: string;
-  }> = [];
-  const seenOptions = new Set<string>();
-  for (const credential of credentials) {
-    const providerModels = availableProviderModels(
-      catalog,
-      credential.provider,
-      showAllModels,
-    ).filter(
-      (entry) =>
-        !entry.placeholder && (!entry.credentialId || entry.credentialId === credential.id),
-    );
-    const credentialInCatalog = Boolean(
-      credential.modelId &&
-        catalog.some(
-          (entry) =>
-            entry.provider === credential.provider &&
-            entry.id === credential.modelId &&
-            !entry.placeholder,
-        ),
-    );
-    // Catalog providers expand to every model for that connection. Free-form
-    // credentials (model id not in the catalog) stay a single connected pair.
-    const options =
-      credential.provider !== "ollama" &&
-      credential.modelId &&
-      !credentialInCatalog &&
-      (showAllModels ||
-        !unavailableSubscriptionModel(catalog, credential.provider, credential.modelId))
-        ? [
-            {
-              key: modelOptionKey(credential.provider, credential.modelId, credential.id),
-              provider: credential.provider,
-              modelId: credential.modelId,
-              label: `${credential.label} · ${credential.modelId}`,
-            },
-          ]
-        : providerModels.map((entry) => ({
-            key: modelOptionKey(entry.provider, entry.id, credential.id),
-            provider: entry.provider,
-            modelId: entry.id,
-            label: `${
-              credentials.filter((item) => item.provider === credential.provider).length > 1
-                ? credential.label
-                : (entry.providerName ?? entry.provider)
-            } · ${entry.label}`,
-          }));
-    for (const option of options) {
-      if (seenOptions.has(option.key)) continue;
-      seenOptions.add(option.key);
-      connectedOptions.push(option);
-    }
-  }
-
   const effectiveProvider = modelKey
     ? parseModelOptionKey(modelKey)?.provider
     : (me?.defaultProvider ?? null);
@@ -392,9 +339,6 @@ export function BotSettings({
   const supportedThinking =
     effectiveCredential?.thinkingLevels ?? effectiveEntry?.thinkingLevels ?? [];
   const isOllama = effectiveProvider === "ollama";
-  const thinkingOptions: ThinkingLevel[] = supportedThinking.filter((level) =>
-    isOllama ? level === "off" || level === "medium" : level !== "off",
-  );
   const defaultThinkingLevel =
     effectiveCredential?.thinkingLevel ?? spaceDefaultEffort(undefined, supportedThinking);
   const unavailableDefault = metadata ? spaceDefaultUnavailable(metadata) : false;
@@ -569,60 +513,24 @@ export function BotSettings({
         <>
           <label htmlFor={`${ids}-model`} className={fieldLabelClass}>
             <Trans>Model</Trans>
-            <NativeSelect
-              ref={attachModelRef}
+            <ModelPinSelect
+              inputRef={attachModelRef}
               id={`${ids}-model`}
-              className="mt-2 w-full"
+              settings={metadata}
+              showAll={showAllModels}
+              unavailableSelection={unavailableSelection}
+              needsConnection={needsConnection}
               value={modelKey}
-              onChange={(event) => {
-                setModelKey(event.target.value);
+              onChange={(value) => {
+                setModelKey(value);
                 setThinkingLevel("");
               }}
-            >
-              <NativeSelectOption value="">
-                {t`Space default`}
-                {me?.defaultModel
-                  ? ` (${catalogLabel(catalog, me.defaultProvider, me.defaultModel) ?? me.defaultModel}${
-                      unavailableDefault ? t` — not available on your account` : ""
-                    })`
-                  : ""}
-              </NativeSelectOption>
-              {modelKey && !connectedOptions.some((option) => option.key === modelKey) ? (
-                <NativeSelectOption
-                  value={modelKey}
-                  className={unavailableSelection ? "text-muted-foreground" : undefined}
-                >
-                  {needsConnection ? `${selectedModel?.provider} · ` : ""}
-                  {parseModelOptionKey(modelKey)?.modelId ?? modelKey}
-                  {unavailableSelection ? t` (not available on your account)` : ""}
-                </NativeSelectOption>
-              ) : null}
-              {([false, true] as const).map((local) => (
-                <optgroup key={String(local)} label={local ? t`Local` : t`Hosted providers`}>
-                  {connectedOptions
-                    .filter(
-                      (option) =>
-                        (option.provider === "ollama" || option.provider === "local") === local,
-                    )
-                    .map((option) => (
-                      <NativeSelectOption
-                        key={option.key}
-                        value={option.key}
-                        className={
-                          unavailableSubscriptionModel(catalog, option.provider, option.modelId)
-                            ? "text-muted-foreground"
-                            : undefined
-                        }
-                      >
-                        {option.label}
-                        {unavailableSubscriptionModel(catalog, option.provider, option.modelId)
-                          ? t` — May not be available on your plan`
-                          : ""}
-                      </NativeSelectOption>
-                    ))}
-                </optgroup>
-              ))}
-            </NativeSelect>
+              defaultLabel={`${t`Space default`}${
+                me?.defaultModel
+                  ? ` (${catalogLabel(catalog, me.defaultProvider, me.defaultModel) ?? me.defaultModel}${unavailableDefault ? t` — not available on your account` : ""})`
+                  : ""
+              }`}
+            />
           </label>
           {catalog.some(
             (entry) =>
@@ -636,52 +544,45 @@ export function BotSettings({
               <Trans>This model is not available on your account. Choose another model.</Trans>
             </p>
           ) : null}
-          {isOllama && effectiveEntry?.reasoning === false ? (
-            <p className="mt-2 text-sm text-muted-foreground">
-              <Trans>Effort: not applicable</Trans>
-            </p>
-          ) : thinkingOptions.length || thinkingLevel ? (
-            <label htmlFor={`${ids}-thinking`} className={fieldLabelClass}>
-              <Trans>Thinking</Trans>
-              <NativeSelect
-                id={`${ids}-thinking`}
-                className="mt-2 w-full"
-                value={
-                  isOllama && ["", "low", "medium", "high"].includes(thinkingLevel)
-                    ? "medium"
-                    : thinkingLevel
-                }
-                onChange={(event) => setThinkingLevel(event.target.value)}
-              >
-                {!isOllama ? (
-                  <NativeSelectOption value="">
-                    {t`Default (${thinkingLevelDescription(defaultThinkingLevel)})`}
-                  </NativeSelectOption>
-                ) : null}
-                {thinkingLevel &&
-                !(isOllama && ["low", "medium", "high"].includes(thinkingLevel)) &&
-                !thinkingOptions.includes(thinkingLevel as ThinkingLevel) ? (
-                  <NativeSelectOption value={thinkingLevel}>
-                    {isOllama
-                      ? thinkingLevel === "off"
-                        ? t`Off`
-                        : t`On`
-                      : thinkingLevelDescription(thinkingLevel as ThinkingLevel)}
-                  </NativeSelectOption>
-                ) : null}
-                {thinkingOptions.map((level) => (
-                  <NativeSelectOption key={level} value={level}>
-                    {isOllama
-                      ? level === "off"
-                        ? t`Off`
-                        : t`On`
-                      : thinkingLevelDescription(level)}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
-            </label>
-          ) : null}
+          <ModelEffortSelect
+            id={`${ids}-thinking`}
+            value={thinkingLevel}
+            onChange={setThinkingLevel}
+            supported={supportedThinking}
+            isOllama={isOllama}
+            defaultLevel={defaultThinkingLevel}
+            notApplicable={isOllama && effectiveEntry?.reasoning === false}
+          />
         </>
+      ) : null}
+      {(bot.groupModelOverrideCount ?? 0) > 0 ? (
+        <details className="mt-3 text-sm text-muted-foreground">
+          <summary className="cursor-pointer">
+            <Plural
+              value={bot.groupModelOverrideCount ?? 0}
+              one="Also set differently in # group"
+              other="Also set differently in # groups"
+            />
+          </summary>
+          <div className="mt-1 flex flex-wrap gap-2">
+            {overrideGroups
+              .filter((group) =>
+                group.members.some(
+                  (member) => member.botId === bot.id && member.runtimePin != null,
+                ),
+              )
+              .map((group) => (
+                <button
+                  key={group.id}
+                  type="button"
+                  className="underline"
+                  onClick={() => onOpenGroup?.(group.id)}
+                >
+                  {group.name}
+                </button>
+              ))}
+          </div>
+        </details>
       ) : null}
       <details
         data-testid="bot-settings-advanced"

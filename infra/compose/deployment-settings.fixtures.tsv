@@ -1,0 +1,14 @@
+# name|key|dotenv lines (literal \n separates lines)|expected value|expected computer reference
+channel-comment|ARDURBOT_COMPUTER_CHANNEL|ARDURBOT_COMPUTER_CHANNEL=release # pin the release|release|ghcr.io/ardurai/ardur-bot/computer:0.1.0-alpha.1
+tag-spaces|ARDURBOT_IMAGE_TAG|ARDURBOT_IMAGE_TAG = v1.2.3|v1.2.3|ghcr.io/ardurai/ardur-bot/computer:1.2.3
+channel-space|ARDURBOT_COMPUTER_CHANNEL|  ARDURBOT_COMPUTER_CHANNEL = release  |release|ghcr.io/ardurai/ardur-bot/computer:0.1.0-alpha.1
+double-quoted|ARDURBOT_COMPUTER_CHANNEL|ARDURBOT_COMPUTER_CHANNEL = "release" # note|release|ghcr.io/ardurai/ardur-bot/computer:0.1.0-alpha.1
+single-quoted|ARDURBOT_COMPUTER_CHANNEL|ARDURBOT_COMPUTER_CHANNEL='release' # note|release|ghcr.io/ardurai/ardur-bot/computer:0.1.0-alpha.1
+single-quoted-reference|ARDURBOT_COMPUTER_IMAGE_REF|ARDURBOT_COMPUTER_IMAGE_REF='registry.example.test/computer:release'|registry.example.test/computer:release|registry.example.test/computer:release
+environment-interpolation|ARDURBOT_COMPUTER_CHANNEL|ARDURBOT_COMPUTER_CHANNEL=${FIXTURE_CHANNEL} # note|release|ghcr.io/ardurai/ardur-bot/computer:0.1.0-alpha.1
+file-interpolation|ARDURBOT_COMPUTER_CHANNEL|FILE_CHANNEL=release\nARDURBOT_COMPUTER_CHANNEL="${FILE_CHANNEL}"|release|ghcr.io/ardurai/ardur-bot/computer:0.1.0-alpha.1
+default-interpolation|ARDURBOT_COMPUTER_CHANNEL|ARDURBOT_COMPUTER_CHANNEL=${CHANNEL:-release}|release|ghcr.io/ardurai/ardur-bot/computer:0.1.0-alpha.1
+bare-interpolation|ARDURBOT_COMPUTER_CHANNEL|CHANNEL=release\nARDURBOT_COMPUTER_CHANNEL=$CHANNEL|release|ghcr.io/ardurai/ardur-bot/computer:0.1.0-alpha.1
+quoted-adjacent-comment|ARDURBOT_COMPUTER_CHANNEL|ARDURBOT_COMPUTER_CHANNEL="release"# note|release|ghcr.io/ardurai/ardur-bot/computer:0.1.0-alpha.1
+comments-and-blank|ARDURBOT_COMPUTER_CHANNEL|# ignored\n  \nARDURBOT_COMPUTER_CHANNEL=release # note|release|ghcr.io/ardurai/ardur-bot/computer:0.1.0-alpha.1
+explicit-ref|ARDURBOT_COMPUTER_IMAGE_REF|ARDURBOT_COMPUTER_IMAGE_REF = "registry.example.test/computer:v1.2.3" # note|registry.example.test/computer:v1.2.3|registry.example.test/computer:v1.2.3

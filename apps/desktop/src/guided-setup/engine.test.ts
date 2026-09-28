@@ -50,6 +50,30 @@ function step(overrides: Partial<SetupStep> = {}): SetupStep {
 const clock = { monotonic: () => 10, wall: () => 100 };
 
 describe("SetupEngine", () => {
+  it("requires fresh checks before handing a saved pilot to local services", async () => {
+    const files = memoryStore();
+    const satisfied = async () => ({
+      kind: "satisfied" as const,
+      checkedAt: 100,
+      evidence: "ready",
+    });
+    const steps = [
+      step({ id: "prerequisites", check: satisfied }),
+      step({ id: "database", requires: ["prerequisites"], check: satisfied }),
+      step({ id: "migrations", requires: ["database"], check: satisfied }),
+      step({ id: "command", requires: ["migrations"], canSkip: true }),
+    ];
+    const first = await SetupEngine.open(files.store, steps, clock);
+    expect(first.pilotReady()).toBe(false);
+    await first.start();
+    expect(first.pilotReady()).toBe(false);
+    await first.skip("command");
+    expect(first.pilotReady()).toBe(true);
+    const reopened = await SetupEngine.open(files.store, steps, clock);
+    expect(reopened.pilotReady()).toBe(false);
+    await reopened.start();
+    expect(reopened.pilotReady()).toBe(true);
+  });
   it("persists active and waiting durations without carrying monotonic time across restart", async () => {
     const files = memoryStore();
     let tick = 1;
@@ -175,6 +199,118 @@ describe("SetupEngine", () => {
     gate.resolve({ kind: "verified", proof: "checked" });
     await first;
     expect(run).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["retry", "start"] as const)(
+    "joins Retry followed by %s before the command recheck settles and keeps cancellation ownership",
+    async (next) => {
+      const gate = deferred<void>();
+      const check = vi.fn(async () => ({
+        kind: "satisfied" as const,
+        checkedAt: 100,
+        evidence: "ready",
+      }));
+      const commandCheck = vi.fn(async () => {
+        if (commandCheck.mock.calls.length > 1) await gate.promise;
+        return { kind: "needed" as const, reasonCode: "command-absent" };
+      });
+      const run = vi.fn(async () => ({ kind: "verified" as const, proof: "command" }));
+      const cancel = vi.fn(async () => undefined);
+      const engine = await SetupEngine.open(
+        memoryStore().store,
+        [
+          step({ check }),
+          step({
+            id: "command",
+            requires: ["prerequisites"],
+            canSkip: true,
+            check: commandCheck,
+            run,
+            cancel,
+          }),
+        ],
+        clock,
+      );
+      await engine.start();
+      const first = engine.retry("command");
+      const second = next === "retry" ? engine.retry("command") : engine.start();
+      expect(engine.running()).toBe(true);
+      await vi.waitFor(() => expect(commandCheck).toHaveBeenCalledTimes(2));
+      const stopping = engine.cancel();
+      gate.resolve();
+      await Promise.all([first, second, stopping]);
+
+      expect(second).toBe(first);
+      expect(commandCheck).toHaveBeenCalledTimes(2);
+      expect(run).not.toHaveBeenCalled();
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(engine.snapshot().steps[3]?.status).toBe("cancelled");
+    },
+  );
+
+  it("joins Retry and Start while a saved prerequisite is rechecked and cancelled", async () => {
+    const files = memoryStore();
+    const gate = deferred<void>();
+    const prerequisiteCheck = vi.fn(async () => {
+      if (prerequisiteCheck.mock.calls.length > 1) await gate.promise;
+      return { kind: "satisfied" as const, checkedAt: 100, evidence: "ready" };
+    });
+    const prerequisiteCancel = vi.fn(async () => undefined);
+    const commandCheck = vi.fn(async () => ({
+      kind: "needed" as const,
+      reasonCode: "command-absent",
+    }));
+    const commandRun = vi.fn(async () => ({ kind: "verified" as const, proof: "command" }));
+    const commandCancel = vi.fn(async () => undefined);
+    const steps = [
+      step({ check: prerequisiteCheck, cancel: prerequisiteCancel }),
+      step({
+        id: "command",
+        requires: ["prerequisites"],
+        canSkip: true,
+        check: commandCheck,
+        run: commandRun,
+        cancel: commandCancel,
+      }),
+    ];
+    const firstEngine = await SetupEngine.open(files.store, steps, clock);
+    await firstEngine.start();
+    expect(firstEngine.snapshot().steps[3]?.status).toBe("waiting-input");
+
+    const reopened = await SetupEngine.open(files.store, steps, clock);
+    const first = reopened.retry("command");
+    await vi.waitFor(() => expect(prerequisiteCheck).toHaveBeenCalledTimes(2));
+    const second = reopened.retry("command");
+    const third = reopened.start();
+    expect(reopened.running()).toBe(true);
+    expect(reopened.snapshot().steps[0]?.status).toBe("checking");
+    expect(reopened.snapshot().steps[3]?.status).toBe("waiting-input");
+    expect(commandCheck).toHaveBeenCalledOnce();
+    expect(commandRun).not.toHaveBeenCalled();
+
+    const stopping = reopened.cancel();
+    await vi.waitFor(() => expect(reopened.snapshot().steps[0]?.status).toBe("cancelling"));
+    gate.resolve();
+    await Promise.all([first, second, third, stopping]);
+
+    expect(second).toBe(first);
+    expect(third).toBe(first);
+    expect(prerequisiteCheck).toHaveBeenCalledTimes(2);
+    expect(prerequisiteCancel).toHaveBeenCalledOnce();
+    expect(commandCheck).toHaveBeenCalledOnce();
+    expect(commandRun).not.toHaveBeenCalled();
+    expect(commandCancel).not.toHaveBeenCalled();
+    expect(reopened.running()).toBe(false);
+    expect(reopened.snapshot()).toMatchObject({
+      currentStep: null,
+      interrupted: false,
+      blocked: false,
+    });
+    expect(reopened.snapshot().steps[0]?.status).toBe("cancelled");
+    expect(reopened.snapshot().steps[3]?.status).toBe("waiting-input");
+    const saved = JSON.parse(files.raw()!);
+    expect(saved.pending).toBeNull();
+    expect(saved.snapshot).toEqual(reopened.snapshot());
   });
 
   it.each(["check", "run", "verify"] as const)(
@@ -326,13 +462,91 @@ describe("SetupEngine", () => {
 
   it("does not trust saved success to authorize a dependent skip before recheck", async () => {
     const files = memoryStore();
+    const check = vi.fn(async () => ({
+      kind: "satisfied" as const,
+      checkedAt: clock.wall(),
+      evidence: "ready",
+    }));
     const command = step({ id: "command", canSkip: true, requires: ["prerequisites"] });
-    const first = await SetupEngine.open(files.store, [step(), command], clock);
+    const steps = [step({ check }), command];
+    const first = await SetupEngine.open(files.store, steps, clock);
     await first.start();
-    const reopened = await SetupEngine.open(files.store, [step(), command], clock);
+    const reopened = await SetupEngine.open(files.store, steps, clock);
     expect(reopened.snapshot().steps[0]?.status).toBe("succeeded");
     await reopened.skip("command");
-    expect(reopened.snapshot().steps[3]?.status).toBe("waiting-input");
+    expect(check).toHaveBeenCalledTimes(2);
+    expect(reopened.snapshot().steps[3]?.status).toBe("skipped");
+  });
+
+  it.each(["retry", "skip"] as const)(
+    "rechecks a reopened command prompt before %s",
+    async (action) => {
+      const files = memoryStore();
+      const checks = vi.fn(async () => ({
+        kind: "satisfied" as const,
+        checkedAt: clock.wall(),
+        evidence: "ready",
+      }));
+      const run = vi.fn(async () => ({ kind: "verified" as const, proof: "command" }));
+      const steps = [
+        step({ check: checks }),
+        step({ id: "command", requires: ["prerequisites"], canSkip: true, run }),
+      ];
+      await (await SetupEngine.open(files.store, steps, clock)).start();
+      const reopened = await SetupEngine.open(files.store, steps, clock);
+      expect(reopened.snapshot().steps[3]?.status).toBe("waiting-input");
+      const result = await reopened[action]("command");
+      expect(checks).toHaveBeenCalledTimes(2);
+      expect(result.steps[3]?.status).toBe(action === "retry" ? "succeeded" : "skipped");
+      expect(run).toHaveBeenCalledTimes(action === "retry" ? 1 : 0);
+    },
+  );
+
+  it.each(["retry", "skip"] as const)(
+    "keeps %s blocked when a saved prerequisite fails its fresh check",
+    async (action) => {
+      const files = memoryStore();
+      let available = true;
+      const run = vi.fn(async () => ({ kind: "verified" as const, proof: "command" }));
+      const prerequisites = step({
+        check: async () =>
+          available
+            ? { kind: "satisfied", checkedAt: clock.wall(), evidence: "ready" }
+            : { kind: "blocked", reasonCode: "no-longer-ready" },
+      });
+      const steps = [
+        prerequisites,
+        step({ id: "command", requires: ["prerequisites"], canSkip: true, run }),
+      ];
+      await (await SetupEngine.open(files.store, steps, clock)).start();
+      available = false;
+      const reopened = await SetupEngine.open(files.store, steps, clock);
+      const result = await reopened[action]("command");
+      expect(result.steps[0]?.status).toBe("failed");
+      expect(result.steps[3]?.status).toBe("waiting-input");
+      expect(run).not.toHaveBeenCalled();
+    },
+  );
+
+  it("starts a fresh checked attempt after a successful stop", async () => {
+    const files = memoryStore();
+    const checks = vi.fn(async () => ({
+      kind: "satisfied" as const,
+      checkedAt: clock.wall(),
+      evidence: "ready",
+    }));
+    const steps = [
+      step({ check: checks }),
+      step({ id: "command", requires: ["prerequisites"], canSkip: true }),
+    ];
+    const engine = await SetupEngine.open(files.store, steps, clock);
+    await engine.start();
+    await engine.cancel();
+    expect(engine.snapshot().steps[3]?.status).toBe("cancelled");
+    const reopened = await SetupEngine.open(files.store, steps, clock);
+    const restarted = await reopened.start();
+    expect(checks).toHaveBeenCalledTimes(2);
+    expect(restarted.steps[3]?.status).toBe("waiting-input");
   });
 
   it("stops before mutation when the pending journal write fails", async () => {
