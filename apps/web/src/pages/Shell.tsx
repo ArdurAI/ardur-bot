@@ -464,6 +464,7 @@ export function ShellPage({
         event.target.closest("[data-workspace-chrome]")
       ) {
         event.preventDefault();
+        setWorkspaceExpanded(false);
         setPanel(null);
         paneReturnFocus.current?.focus();
         return;
@@ -485,6 +486,7 @@ export function ShellPage({
       if (!activeBotId.current) return;
       event.preventDefault();
       if (panel === "computer") {
+        setWorkspaceExpanded(false);
         setPanel(null);
         paneReturnFocus.current?.focus();
       } else {
@@ -2593,6 +2595,7 @@ export function ShellPage({
       setScreenUrl(targetScreen);
     }
     setComputerOpen(true);
+    setWorkspaceExpanded(false);
     computerVisible.current = true;
     const needsTakeover = !userHoldsComputerControl(targetComputer, id);
     const blocked = computerTakeoverBlocked(targetComputer, snapshot?.run?.status);
