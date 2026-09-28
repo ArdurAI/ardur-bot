@@ -90,11 +90,22 @@ describe("narrationBubbleBlocks", () => {
     expect(narrationBubbleBlocks(old)).toEqual(old);
   });
 
+  it("folds narration flushed to text before tool activity into the record", () => {
+    const flushed: MessageBlock = { kind: "text", text: "Let me check." };
+    const reply: MessageBlock = { kind: "text", text: "Here is the answer." };
+    const blocks: MessageBlock[] = [
+      flushed,
+      { kind: "steps", steps: [{ label: "Browser", count: 1 }] },
+      reply,
+    ];
+    expect(narrationBubbleBlocks(blocks)).toEqual([reply]);
+  });
+
   it("keeps tool activity out of the bubble", () => {
     const blocks: MessageBlock[] = [
-      { kind: "text", text: "Here is the answer." },
       { kind: "progress", text: "Using browser", activity: true },
       { kind: "steps", steps: [{ label: "Browser", count: 1 }] },
+      { kind: "text", text: "Here is the answer." },
     ];
     expect(narrationBubbleBlocks(blocks)).toEqual([{ kind: "text", text: "Here is the answer." }]);
   });

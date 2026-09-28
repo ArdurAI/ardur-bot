@@ -191,37 +191,57 @@ export type LiveMessageUpdate =
   | { type: "progress"; payload: Record<string, unknown> | undefined }
   | { type: "tool"; name: string };
 
+type LiveBlockCategory = "activity" | "reasoning" | "narration";
+
+function progressCategory(block: { activity?: true; reasoning?: true }): LiveBlockCategory {
+  if (block.activity === true) return "activity";
+  if (block.reasoning === true) return "reasoning";
+  return "narration";
+}
+
 export function reduceLiveMessageBlocks(
   blocks: readonly MessageBlock[],
   update: LiveMessageUpdate,
 ): MessageBlock[] {
   const tail = blocks.at(-1);
-  const segments = tail?.kind === "progress" ? blocks.slice(0, -1) : blocks;
+  const tailProgress = tail?.kind === "progress" ? tail : null;
+  const updateCategory =
+    update.type === "progress"
+      ? progressCategory({
+          activity: update.payload?.activity === true ? true : undefined,
+          reasoning: update.payload?.reasoning === true ? true : undefined,
+        })
+      : null;
+  // A progress update whose category differs from the tail's starts a new
+  // block; reasoning and narration never merge into one block.
+  const sealed =
+    tailProgress !== null &&
+    updateCategory !== null &&
+    progressCategory(tailProgress) !== updateCategory;
+  const segments = tailProgress && !sealed ? blocks.slice(0, -1) : blocks;
   const priorText = liveMessageText(blocks);
   const flushedLength =
-    tail?.kind === "progress" ? priorText.length - tail.text.length : priorText.length;
+    tailProgress && !sealed && progressCategory(tailProgress) === "narration"
+      ? Math.max(0, priorText.length - tailProgress.text.length)
+      : priorText.length;
   const tailText =
     update.type === "progress"
       ? progressMessageText(update.payload, priorText).slice(flushedLength)
-      : tail?.kind === "progress"
-        ? tail.text
+      : tailProgress
+        ? tailProgress.text
         : "";
   const pendingToolNames = [
-    ...(tail?.kind === "progress" ? (tail.pendingToolNames ?? []) : []),
+    ...(tailProgress && !sealed ? (tailProgress.pendingToolNames ?? []) : []),
     ...(update.type === "tool" ? [update.name] : []),
   ];
-  const activity =
-    update.type === "progress"
-      ? update.payload?.activity === true
-      : tail?.kind === "progress" && tail.activity === true;
-  const reasoning =
-    update.type === "progress"
-      ? update.payload?.reasoning === true
-      : tail?.kind === "progress" && tail.reasoning === true;
+  const category = updateCategory ?? (tailProgress ? progressCategory(tailProgress) : "narration");
 
   if (pendingToolNames.length > 0 && endsSentence(tailText)) {
     // Activity and reasoning tails never flush into durable reply text.
-    let next = activity || reasoning ? [...segments] : appendTextSegment(segments, tailText);
+    let next =
+      category === "activity" || category === "reasoning"
+        ? [...segments]
+        : appendTextSegment(segments, tailText);
     for (const name of pendingToolNames) next = appendToolCallSegment(next, name);
     return next;
   }
@@ -231,18 +251,22 @@ export function reduceLiveMessageBlocks(
     {
       kind: "progress",
       text: tailText,
-      ...(activity ? { activity: true as const } : {}),
-      ...(reasoning ? { reasoning: true as const } : {}),
+      ...(category === "activity" ? { activity: true as const } : {}),
+      ...(category === "reasoning" ? { reasoning: true as const } : {}),
       ...(pendingToolNames.length > 0 ? { pendingToolNames } : {}),
     },
   ];
 }
 
+/** Only narration participates in delta chaining; activity and reasoning text stay out. */
 function liveMessageText(blocks: readonly MessageBlock[]): string {
-  return blocks
-    .filter((block) => block.kind === "text" || block.kind === "progress")
-    .map((block) => block.text)
-    .join("");
+  let text = "";
+  for (const block of blocks) {
+    if (block.kind === "text") text += block.text;
+    else if (block.kind === "progress" && progressCategory(block) === "narration")
+      text += block.text;
+  }
+  return text;
 }
 
 export type ToolStep = { label: string; count: number };

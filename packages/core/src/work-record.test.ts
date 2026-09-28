@@ -147,11 +147,11 @@ describe("workRecordEntries", () => {
 
   it("keeps only tool activity and reasoning; peer and delegation blocks stay inline", () => {
     const entries = workRecordEntries([
-      { kind: "text", text: "Reply" },
       { kind: "progress", text: "Using browser", activity: true },
       { kind: "handoff", fromBotId: "a", toBotId: "b", text: "Go" },
       { kind: "bot_message_sent", toBotId: "b", toBotName: "Research", text: "Go" },
       { kind: "meta", text: "meta" } as MessageBlock,
+      { kind: "text", text: "Reply" },
     ]);
 
     expect(entries.map((entry) => entry.evidence.label)).toEqual(["tool-activity"]);

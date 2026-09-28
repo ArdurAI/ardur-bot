@@ -89,6 +89,19 @@ describe("mobile message presentation", () => {
     ]);
   });
 
+  it("folds narration flushed to text before tool activity into the record", () => {
+    const flushed = { kind: "text", text: "Let me check." } as const;
+    const steps = {
+      kind: "steps",
+      steps: [{ label: "Browser", count: 1 }],
+    } satisfies MessageBlock;
+    const reply = { kind: "text", text: "Here is the answer." } as const;
+
+    expect(messagePresentationSegments([flushed, steps, reply])).toEqual([
+      { kind: "content", blocks: [reply] },
+    ]);
+  });
+
   it("renders old stored messages without the flag as narration", () => {
     const old = [
       { kind: "progress", text: "Checking that now." },
@@ -105,12 +118,13 @@ describe("mobile message presentation", () => {
     expect(hasVisibleMessagePresentation(stepsOnly)).toBe(true);
   });
 
-  it("keeps only response content around tool activity", () => {
+  it("keeps only the trailing response content around tool activity", () => {
     const tool: Extract<MessageBlock, { kind: "steps" }> = {
       kind: "steps",
       steps: [{ label: "Read file", count: 1 }],
     };
 
+    // The interim note folds into the work record; the answer stays in the bubble.
     expect(
       messagePresentationSegments([
         { kind: "text", text: "Checking." },
@@ -120,10 +134,7 @@ describe("mobile message presentation", () => {
     ).toEqual([
       {
         kind: "content",
-        blocks: [
-          { kind: "text", text: "Checking." },
-          { kind: "text", text: "Done." },
-        ],
+        blocks: [{ kind: "text", text: "Done." }],
       },
     ]);
 

@@ -44,6 +44,7 @@ import {
   groupBotsForSidebar,
   inferAttachmentMimeType,
   isActive,
+  isInterimNarrationAt,
   isPeerReceiptBlocks,
   isReasoningSummaryBlock,
   isRunTerminalEvent,
@@ -133,6 +134,7 @@ import { ArtifactFileCard } from "../components/ArtifactFileCard";
 import { AskCard } from "../components/AskCard";
 import { ActiveBotGlyph } from "../components/ai/CollaborationMarker";
 import { CompactWorkRecord } from "../components/ai/CompactWorkRecord";
+import { NarrationBlocks } from "../components/ai/NarrationBlocks";
 import { CloudAgentCard } from "../components/CloudAgentCard";
 import { ComputerMaintenanceActions } from "../components/ComputerMaintenanceActions";
 import {
@@ -6362,16 +6364,7 @@ const MessageView = memo(function MessageView({
               className="max-w-full space-y-2.5 rounded-[20px] bg-muted px-[18px] py-3 text-[15.5px] leading-[1.5] text-foreground/90"
               dir="auto"
             >
-              {visibleNarrationBlocks.map((block, i) => {
-                if (block.kind === "text") {
-                  return (
-                    <div key={i} data-quote-message-id={quoteMessageId}>
-                      <ChatMarkdown>{block.text}</ChatMarkdown>
-                    </div>
-                  );
-                }
-                return null;
-              })}
+              <NarrationBlocks blocks={visibleNarrationBlocks} quoteMessageId={quoteMessageId} />
               {!isLive && voiceReady && message.blocks.some((block) => block.kind === "text") ? (
                 <button
                   type="button"
@@ -6396,9 +6389,23 @@ const MessageView = memo(function MessageView({
         if (
           block.kind === "command" ||
           isToolActivityBlock(block) ||
-          isReasoningSummaryBlock(block)
+          isReasoningSummaryBlock(block) ||
+          isInterimNarrationAt(message.blocks, i)
         ) {
           return null;
+        }
+        if (block.kind === "progress") {
+          return (
+            <div key={i} className="flex w-fit max-w-full justify-start">
+              <div
+                data-testid="message-bot-bubble"
+                className="max-w-full rounded-[20px] bg-muted px-[18px] py-3 text-[15.5px] leading-[1.5] text-foreground/90"
+                dir="auto"
+              >
+                <ChatMarkdown streaming>{block.text}</ChatMarkdown>
+              </div>
+            </div>
+          );
         }
         if (block.kind === "handoff") {
           const from = memberName?.(block.fromBotId) ?? t`bot`;

@@ -18,6 +18,8 @@ import {
   trackToolNameStreak,
 } from "./events.js";
 import { redactLearningText } from "./learning-signals.js";
+import { isInterimNarrationAt } from "./tool-activity.js";
+import { workRecordEntries } from "./work-record.js";
 
 describe("containsSecret", () => {
   it("detects secrets that JSON escaping changes", () => {
@@ -95,6 +97,48 @@ describe("reduceLiveMessageBlocks", () => {
     expect(reduceLiveMessageBlocks(narration, { type: "tool", name: "shell" })).toEqual([
       { kind: "text", text: "Let me check." },
       { kind: "steps", steps: [{ label: "Shell", count: 1 }] },
+    ]);
+  });
+
+  it("starts a new block when a narration delta follows a reasoning tail", () => {
+    const reasoning = reduceLiveMessageBlocks([], {
+      type: "progress",
+      payload: { text: "Weighing options.", reasoning: true },
+    });
+    const next = reduceLiveMessageBlocks(reasoning, {
+      type: "progress",
+      payload: { delta: "The answer", streaming: true },
+    });
+
+    // Two blocks with correct markers; the thought never merges into the reply.
+    expect(next).toEqual([
+      { kind: "progress", text: "Weighing options.", reasoning: true },
+      { kind: "progress", text: "The answer" },
+    ]);
+
+    // The reply keeps streaming into its own block.
+    expect(
+      reduceLiveMessageBlocks(next, {
+        type: "progress",
+        payload: { delta: " is four.", streaming: true },
+      }),
+    ).toEqual([
+      { kind: "progress", text: "Weighing options.", reasoning: true },
+      { kind: "progress", text: "The answer is four." },
+    ]);
+  });
+
+  it("folds narration flushed to text before a tool call into the record", () => {
+    const streamed = reduceLiveMessageBlocks([], {
+      type: "progress",
+      payload: { text: "Let me check." },
+    });
+    const blocks = reduceLiveMessageBlocks(streamed, { type: "tool", name: "shell" });
+
+    expect(isInterimNarrationAt(blocks, 0)).toBe(true);
+    expect(workRecordEntries(blocks).map((entry) => entry.evidence.label)).toEqual([
+      "narration",
+      "tool-activity",
     ]);
   });
 });

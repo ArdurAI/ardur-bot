@@ -164,7 +164,10 @@ export function CompactWorkRecord({
                 </View>
               );
             }
-            if (m.block.kind === "progress" && m.block.activity !== true) {
+            if (
+              m.block.kind === "text" ||
+              (m.block.kind === "progress" && m.block.activity !== true)
+            ) {
               // Reasoning summaries and interim notes render in full, as
               // Markdown, and update as the text streams. They never appear
               // in the reply bubble.

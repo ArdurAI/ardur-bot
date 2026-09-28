@@ -71,4 +71,15 @@ describe("tool activity", () => {
     // A reply with no tools at all is never interim.
     expect(isInterimNarrationAt([trailing], 0)).toBe(false);
   });
+
+  it("folds text flushed before a tool call into the record", () => {
+    const flushed: MessageBlock = { kind: "text", text: "Let me check." };
+    const steps: MessageBlock = { kind: "steps", steps: [{ label: "Shell", count: 1 }] };
+    const reply: MessageBlock = { kind: "text", text: "Here is the answer." };
+    const blocks = [flushed, steps, reply];
+
+    expect(isInterimNarrationAt(blocks, 0)).toBe(true);
+    expect(isInterimNarrationAt(blocks, 2)).toBe(false);
+    expect(isInterimNarrationAt([flushed], 0)).toBe(false);
+  });
 });
