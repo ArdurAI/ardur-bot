@@ -27,11 +27,11 @@ describe("site asset publication", () => {
       JSON.parse(await readFile(path.join(root, "site/data/feature-docs.json"), "utf8")),
     );
     const docs = publishedDocumentation(manifest)!;
-    expect(docs.features).toHaveLength(5);
+    expect(docs.features).toHaveLength(10);
     const withDocs = SiteProductSchema.parse({ ...product, documentation: docs });
     const staged = expectedAssetFiles(withDocs).filter((file) => file.startsWith("docs/"));
     expect(staged).toEqual(manifest.screenshots.map((shot) => shot.file).sort());
-    expect(staged).toHaveLength(14);
+    expect(staged).toHaveLength(35);
     expect(docs.screenshots.every((shot) => shot.crop != null)).toBe(true);
     expect(
       SiteProductSchema.safeParse({

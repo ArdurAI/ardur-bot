@@ -38,7 +38,18 @@ updates mobile-pairing mobile-consent mobile-files mobile-overview ide ide-hando
   .trim()
   .split(/\s+/);
 
-const firstFive = new Set(["sign-in", "onboarding", "bots-create", "models", "chat-approvals"]);
+const firstTen = new Set([
+  "sign-in",
+  "onboarding",
+  "bots-create",
+  "models",
+  "chat-approvals",
+  "routines",
+  "memory-documents",
+  "computers",
+  "integrations",
+  "group-goals",
+]);
 
 async function validateFixtureDocs(
   manifest: FeatureDocumentationManifest,
@@ -46,7 +57,6 @@ async function validateFixtureDocs(
   readCapture: (file: string, context: string) => Promise<Buffer> = async () => png,
 ) {
   for (const shot of manifest.screenshots) {
-    if (!firstFive.has(shot.feature)) continue;
     shot.width = 1;
     shot.height = 1;
     shot.crop = { x: 0, y: 0, width: 1, height: 1 };
@@ -74,29 +84,29 @@ describe("feature documentation inventory", () => {
     const { manifest, evidence } = await data();
     expect(manifest.features.map((feature) => feature.id)).toEqual(expectedIds);
     await expect(validateFixtureDocs(manifest, evidence)).resolves.toBeDefined();
-    expect(featureDocsReport(manifest)).toContain("Total: 91 features, 86 draft, 3 internal");
+    expect(featureDocsReport(manifest)).toContain("Total: 91 features, 81 draft, 3 internal");
     expect(featureDocsReport(manifest)).toContain(
-      "memory-and-learning: 13 total, 13 draft, 0 internal",
+      "memory-and-learning: 13 total, 12 draft, 0 internal",
     );
     expect(featureDocsReport(manifest)).toContain(
       "Verify: 3 candidates — space-members, computer-edit-remove, performance",
     );
     expect(() => assertFeatureDocsComplete(manifest)).toThrow(
-      "83 verified user-facing documentation pages are still draft",
+      "78 verified user-facing documentation pages are still draft",
     );
   });
 
-  it("binds the first five published pages to labels, real errors, and captures", async () => {
+  it("binds the first ten published pages to labels, real errors, and captures", async () => {
     const { manifest, evidence } = await data();
     await expect(validateFixtureDocs(manifest, evidence)).resolves.toBeDefined();
     const published = publishedDocumentation(manifest)!;
-    expect(new Set(published.features.map((feature) => feature.id))).toEqual(firstFive);
-    expect(published.screenshots).toHaveLength(14);
+    expect(new Set(published.features.map((feature) => feature.id))).toEqual(firstTen);
+    expect(published.screenshots).toHaveLength(35);
     for (const feature of published.features) {
       expect(feature.availableSince).toBe("0.1.0-alpha.1");
       expect(feature.steps.length).toBeGreaterThan(0);
       expect(feature.troubleshooting.length).toBeGreaterThan(0);
-      expect(feature.related.every((id) => firstFive.has(id))).toBe(true);
+      expect(feature.related.every((id) => firstTen.has(id))).toBe(true);
       const binding = evidence.features.find((item) => item.id === feature.id)!;
       expect(binding.sources.length).toBeGreaterThan(0);
       expect(binding.tests).toContain("apps/web/e2e/feature-docs.spec.ts");
@@ -487,7 +497,7 @@ describe("feature documentation inventory", () => {
     });
     await expect(validateFixtureDocs(manifest, evidence, async () => png)).resolves.toBeDefined();
     const docs = publishedDocumentation(manifest)!;
-    expect(docs.features).toHaveLength(6);
+    expect(docs.features).toHaveLength(11);
     const publicGeneral = docs.features.find((item) => item.id === "general")!;
     const generalShot = manifest.screenshots.find((item) => item.id === "docs-general-open")!;
     const publicShot = docs.screenshots.find((item) => item.id === "docs-general-open")!;
@@ -529,7 +539,7 @@ describe("feature documentation inventory", () => {
     feature.troubleshooting[0]!.message = "Could not save settings. Try again.";
     await expect(validateFixtureDocs(manifest, evidence, async () => png)).resolves.toBeDefined();
     shotEvidence.sha256 = "0".repeat(64);
-    await expect(validateFixtureDocs(manifest, evidence, async () => png)).rejects.toThrow(
+    await expect(validateFeatureDocs(manifest, evidence, root, async () => png)).rejects.toThrow(
       "evidence SHA-256",
     );
     shotEvidence.sha256 = createHash("sha256").update(png).digest("hex");
@@ -537,7 +547,7 @@ describe("feature documentation inventory", () => {
       validateFixtureDocs(manifest, evidence, async () => Buffer.alloc(250_001)),
     ).rejects.toThrow("250 KB");
     generalShot.crop.x = 1;
-    await expect(validateFixtureDocs(manifest, evidence, async () => png)).rejects.toThrow(
+    await expect(validateFeatureDocs(manifest, evidence, root, async () => png)).rejects.toThrow(
       "crop is outside",
     );
   });

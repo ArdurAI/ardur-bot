@@ -473,7 +473,17 @@
         "docs/goals.md"
       ],
       "tests": [
-        "packages/db/src/delegation-approval.test.ts"
+        "packages/db/src/delegation-approval.test.ts",
+        "apps/web/e2e/bot-comms.spec.ts",
+        "apps/web/e2e/feature-docs.spec.ts"
+      ],
+      "errors": [
+        {
+          "id": "goal-start",
+          "text": "Could not start goal. Check the deadline and try again.",
+          "source": "apps/web/src/pages/GoalForm.tsx",
+          "catalog": "apps/web/src/locales/en/messages.po"
+        }
       ]
     },
     {
@@ -516,10 +526,22 @@
         "apps/mobile/app/routine.tsx",
         "apps/mobile/app/thread.tsx",
         "packages/contracts/src/rpc.ts",
-        "docs/site-assets.md"
+        "docs/site-assets.md",
+        "apps/web/src/pages/RoutineHistory.tsx",
+        "apps/web/e2e/site-screenshots.spec.ts"
       ],
       "tests": [
-        "apps/api/src/system/routines.test.ts"
+        "apps/api/src/system/routines.test.ts",
+        "apps/web/e2e/routine-crud.spec.ts",
+        "apps/web/e2e/feature-docs.spec.ts"
+      ],
+      "errors": [
+        {
+          "id": "routine-save",
+          "text": "Could not save routine",
+          "source": "apps/web/src/pages/Shell.tsx",
+          "catalog": "apps/web/src/locales/en/messages.po"
+        }
       ]
     },
     {
@@ -583,10 +605,21 @@
         "apps/mobile/app/memory.tsx",
         "packages/contracts/src/rpc.ts",
         "docs/learning.md",
-        "docs/memory/git-repository.md"
+        "docs/memory/git-repository.md",
+        "apps/web/src/pages/memory/MemoryDocuments.tsx"
       ],
       "tests": [
-        "packages/memory/src/conformance.test.ts"
+        "packages/memory/src/conformance.test.ts",
+        "apps/web/e2e/capabilities-memory.spec.ts",
+        "apps/web/e2e/feature-docs.spec.ts"
+      ],
+      "errors": [
+        {
+          "id": "memory-load",
+          "text": "Could not load memory.",
+          "source": "apps/web/src/pages/memory/MemoryPage.tsx",
+          "catalog": "apps/web/src/locales/en/messages.po"
+        }
       ]
     },
     {
@@ -793,10 +826,21 @@
         "apps/mobile/app/capabilities.tsx",
         "packages/contracts/src/rpc.ts",
         "docs/fleet.md",
-        "docs/compute-profiles.md"
+        "docs/compute-profiles.md",
+        "apps/web/src/pages/ComputerProfilesSettings.tsx"
       ],
       "tests": [
-        "packages/contracts/src/fleet.test.ts"
+        "packages/contracts/src/fleet.test.ts",
+        "apps/web/e2e/fleet.spec.ts",
+        "apps/web/e2e/feature-docs.spec.ts"
+      ],
+      "errors": [
+        {
+          "id": "computer-unreachable",
+          "text": "Engine not reachable",
+          "source": "apps/web/src/pages/fleet/FleetSettings.tsx",
+          "catalog": "apps/web/src/locales/en/messages.po"
+        }
       ]
     },
     {
@@ -886,10 +930,21 @@
         "packages/contracts/src/rpc.ts",
         "README.md",
         "docs/settings-shell.md",
-        "docs/decisions/integration-lifecycle.md"
+        "docs/decisions/integration-lifecycle.md",
+        "apps/web/src/components/integrations/catalog/ToolPicker.tsx"
       ],
       "tests": [
-        "apps/api/src/integration-router.test.ts"
+        "apps/api/src/integration-router.test.ts",
+        "apps/web/e2e/integration-catalog.spec.ts",
+        "apps/web/e2e/feature-docs.spec.ts"
+      ],
+      "errors": [
+        {
+          "id": "integration-access",
+          "text": "Could not save or load access.",
+          "source": "apps/web/src/components/integrations/catalog/IntegrationManage.tsx",
+          "catalog": "apps/web/src/locales/en/messages.po"
+        }
       ]
     },
     {

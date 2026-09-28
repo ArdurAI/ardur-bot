@@ -121,7 +121,7 @@ describe("site facts", () => {
     );
     expect(product.schemaVersion).toBe(1);
     const generated = await generatedProduct(root);
-    expect(generated.documentation?.features).toHaveLength(5);
+    expect(generated.documentation?.features).toHaveLength(10);
     await expect(validateReferences(generated, root)).resolves.toBeUndefined();
     expect(SiteProductSchema.safeParse(product).success).toBe(true);
     const emptyBlock = { manifestVersion: 1, locale: "en", features: [], screenshots: [] };
