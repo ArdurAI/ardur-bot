@@ -22,9 +22,11 @@ import {
   RoutineSchema,
   SpaceMemoryConfigSchema,
 } from "../packages/contracts/src/domain.ts";
+import { FeatureDocumentationEvidenceSchema } from "../packages/contracts/src/feature-documentation.ts";
 import { type SiteProduct, SiteProductSchema } from "../packages/contracts/src/site-product.ts";
 import { POPULAR_MODEL_PROVIDER_IDS } from "../packages/core/src/model-providers.ts";
 import { loadValidatedFeatureDocs, publishedDocumentation } from "./feature-docs";
+import { createFeatureDocsLinks } from "./feature-docs-links";
 
 type Provider = SiteProduct["providers"][number];
 type ProviderMetadata = Pick<Provider, "name" | "access" | "status" | "accountHint">;
@@ -720,7 +722,40 @@ export async function runSiteFacts(
   await validateReferences(product, rootDir);
   const expectedProduct = `${JSON.stringify(product, null, 2)}\n`;
   const expectedReadme = generatedReadme(currentReadme, product);
-  const stale = currentProduct !== expectedProduct || currentReadme !== expectedReadme;
+  const links = createFeatureDocsLinks(
+    await loadValidatedFeatureDocs(docsRoot),
+    FeatureDocumentationEvidenceSchema.parse(
+      JSON.parse(
+        await readFile(path.join(docsRoot, "site/data/feature-docs-evidence.json"), "utf8"),
+      ),
+    ),
+    product.product.docsUrl,
+  );
+  const linksPath = path.join(rootDir, "packages/core/src/feature-docs-links.json");
+  const expectedLinks = `${JSON.stringify(links, null, 2)}\n`;
+  const currentLinks = await readFile(linksPath, "utf8").catch(() => "");
+  const runtimePath = path.join(rootDir, "packages/core/src/feature-docs-runtime.json");
+  const runtime = {
+    docsUrl: links.docsUrl,
+    features: Object.fromEntries(
+      Object.entries(links.features).map(([id, feature]) => [
+        id,
+        [`|${feature.steps.join("|")}|`, `|${feature.errors.join("|")}|`],
+      ]),
+    ),
+    settings: links.settings,
+  };
+  const expectedRuntime = `${JSON.stringify(runtime, null, 2)}\n`;
+  const currentRuntime = await readFile(runtimePath, "utf8").catch(() => "");
+  const mobilePath = path.join(rootDir, "packages/core/src/feature-docs-mobile.json");
+  const expectedMobile = `${JSON.stringify(links.mobileEntries, null, 2)}\n`;
+  const currentMobile = await readFile(mobilePath, "utf8").catch(() => "");
+  const stale =
+    currentProduct !== expectedProduct ||
+    currentReadme !== expectedReadme ||
+    currentLinks !== expectedLinks ||
+    currentRuntime !== expectedRuntime ||
+    currentMobile !== expectedMobile;
   if (mode === "check") {
     if (currentProduct !== expectedProduct)
       throw new Error(
@@ -730,11 +765,22 @@ export async function runSiteFacts(
       throw new Error(
         "README.md site facts blocks are stale. Run `pnpm site:facts` and commit the result. Curated text lives in site/data/product.json.",
       );
+    if (
+      currentLinks !== expectedLinks ||
+      currentRuntime !== expectedRuntime ||
+      currentMobile !== expectedMobile
+    )
+      throw new Error(
+        "Feature documentation links are stale. Run `pnpm site:facts` and commit the result.",
+      );
   } else if (stale) {
     if (currentProduct !== expectedProduct)
       await writeFile(path.join(rootDir, productPath), expectedProduct);
     if (currentReadme !== expectedReadme)
       await writeFile(path.join(rootDir, readmePath), expectedReadme);
+    if (currentLinks !== expectedLinks) await writeFile(linksPath, expectedLinks);
+    if (currentRuntime !== expectedRuntime) await writeFile(runtimePath, expectedRuntime);
+    if (currentMobile !== expectedMobile) await writeFile(mobilePath, expectedMobile);
   }
   return stale;
 }

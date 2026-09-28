@@ -21,6 +21,7 @@ import {
 import { Trans, useLingui } from "@lingui/react/macro";
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
+import { FeatureDocsLink } from "../../components/FeatureDocsLink";
 import { rpc } from "../../lib/rpc";
 import { useTargetName } from "./target-name";
 
@@ -672,6 +673,9 @@ function AddComputer({
           <DialogTitle id="add-computer-dialog-title">
             {details ? <Trans>Edit computer</Trans> : <Trans>Add computer</Trans>}
           </DialogTitle>
+          {!details ? (
+            <FeatureDocsLink featureId="computers" title={t`Computers`} step="open-add-computer" />
+          ) : null}
         </DialogHeader>
         <form onSubmit={(event) => void save(event)} className="space-y-3">
           <NativeSelect

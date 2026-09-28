@@ -399,6 +399,10 @@ test("captures bot chat, group collaboration, and routines from seeded demo data
   const settings = page.getByTestId("user-settings");
   await settings.getByTestId("settings-nav-memory").click();
   await expect(settings.getByTestId("memory-settings-page")).toBeVisible();
+  await expect(settings.getByRole("link", { name: "Learn more about Memory" })).toHaveAttribute(
+    "href",
+    "https://ardur.ai/docs/features/memory-documents/",
+  );
   await settings
     .getByRole("group", { name: "Memory storage", exact: true })
     .getByRole("button", { name: "Manage", exact: true })

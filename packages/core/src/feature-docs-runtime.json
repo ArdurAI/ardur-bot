@@ -1,0 +1,51 @@
+{
+  "docsUrl": "https://ardur.ai/docs/features/",
+  "features": {
+    "sign-in": [
+      "|open-sign-in|show-connection-error|open-password-recovery|",
+      "|auth-unreachable|"
+    ],
+    "onboarding": [
+      "|open-model-connection|enter-connection-key|",
+      "|onboarding-save|"
+    ],
+    "bots-create": [
+      "|open-new-bot-menu|open-new-bot-form|choose-private-computer|open-created-bot|",
+      "|bot-create|"
+    ],
+    "chat-approvals": [
+      "|review-pending-action|see-denied-action|",
+      "|approval-submit|"
+    ],
+    "group-goals": [
+      "|open-start-goal|fill-goal-form|watch-goal-progress|stop-running-goal|",
+      "|goal-start|"
+    ],
+    "routines": [
+      "|open-scheduled-routines|edit-routine-instruction|save-routine|inspect-run-result|",
+      "|routine-save|"
+    ],
+    "memory-documents": [
+      "|find-memory-document|open-document-detail|inspect-document-history|approve-reviewed-change|",
+      "|memory-load|"
+    ],
+    "models": [
+      "|open-model-settings|choose-default-model|open-connection-form|",
+      "|models-load|models-catalog-unavailable|"
+    ],
+    "computers": [
+      "|inspect-computer-capacity|open-add-computer|inspect-refused-test|retry-computer-test|",
+      "|computer-unreachable|"
+    ],
+    "integrations": [
+      "|browse-integration-catalog|review-tool-access|allow-read-tool|remove-tool-access|open-connection-form|",
+      "|integration-access|"
+    ]
+  },
+  "settings": {
+    "memory": "memory-documents",
+    "models": "models",
+    "computer": "computers",
+    "integrations": "integrations"
+  }
+}

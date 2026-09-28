@@ -24,6 +24,7 @@ import { t } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { ChevronLeft, Clock, GitBranch, Globe, MessageSquare, Pause, Plus, X } from "lucide-react";
 import { useId } from "react";
+import { FeatureDocsLink } from "../components/FeatureDocsLink";
 import { RoutineHistory } from "./RoutineHistory";
 import { RoutineSchedule } from "./RoutineSchedule";
 
@@ -265,6 +266,7 @@ export function RoutineEditor({
         <div className="text-[15.5px] font-medium text-foreground">
           <Trans>Routine</Trans>
         </div>
+        <FeatureDocsLink featureId="routines" title={t`Routines`} step="edit-routine-instruction" />
         <Button
           variant="ghost"
           size="icon-sm"

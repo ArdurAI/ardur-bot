@@ -5,6 +5,7 @@ import { Button, Input } from "@ardurbot/ui-web";
 import { t } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useState } from "react";
+import { FeatureDocsLink } from "./FeatureDocsLink";
 
 export type AskBlock = Extract<ThreadMessage["blocks"][number], { kind: "ask" }>;
 
@@ -88,6 +89,15 @@ export function AskCard({
       data-testid={secretInput ? "secret-ask-card" : undefined}
       className="max-w-[74%] rounded-2xl border border-border bg-card px-5 py-4"
     >
+      {approvalActions && block.status !== "answered" ? (
+        <div className="mb-2 flex justify-end">
+          <FeatureDocsLink
+            featureId="chat-approvals"
+            title={t`Review approval`}
+            step="review-pending-action"
+          />
+        </div>
+      ) : null}
       {block.preformatted && !secretInput ? (
         <details open className="text-foreground">
           <summary className="cursor-pointer text-sm">

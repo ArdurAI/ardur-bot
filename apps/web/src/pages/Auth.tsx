@@ -4,6 +4,7 @@ import { Trans, useLingui } from "@lingui/react/macro";
 import { Eye, EyeOff } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { FeatureDocsLink } from "../components/FeatureDocsLink";
 import { authClient } from "../lib/auth";
 import { authReturnPath } from "../lib/auth-return-path";
 import { clearSpaceSelection } from "../lib/rpc";
@@ -336,6 +337,7 @@ function AuthFrame({
   onSubmit: (event: React.FormEvent) => void;
   children: React.ReactNode;
 }) {
+  const { t } = useLingui();
   return (
     <div className="flex min-h-full items-center justify-center bg-background px-6 py-16 text-foreground">
       <form onSubmit={onSubmit} className="flex w-[460px] flex-col items-center">
@@ -346,6 +348,9 @@ function AuthFrame({
         <h1 aria-live="polite" className="mb-9 mt-7 text-4xl font-medium tracking-tight">
           {title}
         </h1>
+        <div className="mb-5">
+          <FeatureDocsLink featureId="sign-in" title={t`Sign in to Ardur`} />
+        </div>
         {children}
       </form>
     </div>
