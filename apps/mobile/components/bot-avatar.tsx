@@ -2,6 +2,7 @@ import type { AvatarStyle } from "@ardurbot/contracts";
 import {
   ACTIVE_RUN_STATUSES,
   avatarIdentitySeed,
+  avatarInitial,
   organicAvatarPath,
   resolvePersonaColorDef,
   SHIPPED_BOT_AVATAR_CENTER,
@@ -77,7 +78,7 @@ export const BotAvatar = memo(function BotAvatar({
     effectiveId,
     parsed.kind === "shape" || parsed.kind === "color" ? parsed.color : color,
   );
-  const initial = (label?.trim() || effectiveId || "A")[0]!.toUpperCase();
+  const initial = avatarInitial(label ?? effectiveId);
 
   const reducedMotion = useReducedMotion();
   const progress = useSharedValue(0);
@@ -115,6 +116,7 @@ export const BotAvatar = memo(function BotAvatar({
           cx="28"
           cy="28"
           r="26"
+          fill="none"
           stroke={tokens.foreground}
           strokeWidth="2"
           strokeLinecap="round"
@@ -232,6 +234,7 @@ export const BotAvatar = memo(function BotAvatar({
           />
         </Svg>
         <Text
+          accessible={false}
           style={{
             color: colorDef.eyeColor,
             fontFamily: "Georgia",

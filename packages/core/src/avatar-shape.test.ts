@@ -1,5 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { avatarIdentitySeed, organicAvatarPath } from "./avatar-shape.js";
+import { avatarIdentitySeed, avatarInitial, organicAvatarPath } from "./avatar-shape.js";
+
+describe("avatarInitial", () => {
+  it("uppercases the first grapheme of the trimmed label", () => {
+    expect(avatarInitial("maya")).toBe("M");
+    expect(avatarInitial("  research bot ")).toBe("R");
+  });
+
+  it("keeps emoji and composed characters intact", () => {
+    expect(avatarInitial("🧪 Lab")).toBe("🧪");
+    expect(avatarInitial("🇫🇮 Finland")).toBe("🇫🇮");
+    expect(avatarInitial("éclair")).toBe("É");
+  });
+
+  it("falls back to A for empty labels", () => {
+    expect(avatarInitial("")).toBe("A");
+    expect(avatarInitial("   ")).toBe("A");
+  });
+});
 
 describe("organic avatar geometry", () => {
   it("is stable for an identity and changes across identities", () => {

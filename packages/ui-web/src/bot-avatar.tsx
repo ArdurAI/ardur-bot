@@ -2,6 +2,7 @@ import type { GrokColorDef } from "@ardurbot/core";
 import {
   ACTIVE_RUN_STATUSES,
   avatarIdentitySeed,
+  avatarInitial,
   DEFAULT_GROK_BOT_COLOR,
   GROK_BOT_COLORS,
   GROK_COLOR_LIST,
@@ -118,7 +119,7 @@ export const BotAvatar = memo(function BotAvatar({
     return resolvePersonaShape(effectiveId);
   }, [parsed.shapeIndex, effectiveId]);
 
-  const initial = (label?.trim() || effectiveId || "A")[0]!.toUpperCase();
+  const initial = avatarInitial(label ?? effectiveId);
 
   const reducedMotion = useSyncExternalStore(
     subscribeToReducedMotion,
@@ -445,7 +446,7 @@ export function GrokShapePreview({
 }) {
   const colorDef = resolvePersonaColorDef("preview", color);
   const effectiveId = identity || color || "agent";
-  const initial = (label?.trim() || effectiveId || "A")[0]!.toUpperCase();
+  const initial = avatarInitial(label ?? effectiveId);
 
   return (
     <button

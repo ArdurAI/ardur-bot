@@ -76,7 +76,6 @@ import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-  resolvePersonaColorDef,
   SlidingPanel,
 } from "@ardurbot/ui-web";
 import { i18n } from "@lingui/core";
@@ -6257,17 +6256,12 @@ const MessageView = memo(function MessageView({
   const visibleNarrationBlocks = message.blocks.filter((block) => !isToolActivityBlock(block));
   const parentJumpId = replyPreview?.id ?? replyToMessageId;
   const speakerBot = message.botId ? peerBot?.(message.botId) : undefined;
-  const speakerColorDef = useMemo(
-    () => resolvePersonaColorDef(message.botId ?? "bot", speakerBot?.color),
-    [message.botId, speakerBot?.color],
-  );
   const messageContext = (
     <>
       {speakerName ? (
         <div
-          className="mb-1.5 flex items-center gap-2 text-[13px] font-semibold tracking-tight"
+          className="mb-1.5 flex items-center gap-2 text-[13px] font-semibold tracking-tight text-foreground"
           dir="auto"
-          style={{ color: speakerColorDef.light }}
         >
           <BotAvatar
             color={speakerBot?.color ?? FALLBACK_BOT_COLOR}
