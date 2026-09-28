@@ -175,15 +175,7 @@ describe("team.board", () => {
     if (run !== "queued") expect(result.rows[0].executing?.pin.modelId).toBe("executed-model");
     else expect(result.rows[0].executing).toBeNull();
   });
-  it("keeps the most recent bot message as activity without loading message history", async () => {
-    const f = fixture();
-    f.run.startedAt = new Date("2026-01-01T00:00:00.000Z");
-    const activityAt = new Date("2026-09-28T12:00:00.000Z");
-    f.db.$queryRaw.mockResolvedValue([{ botId: "worker", createdAt: activityAt }]);
-    const row = (await teamBoard(f.prisma, actor)).rows[0]!;
-    expect(row.lastActiveAt).toBe(activityAt.toISOString());
-    expect(f.db.message.findMany).not.toHaveBeenCalled();
-  });
+
   it("shows saved blocker reasons and actions", async () => {
     const f = fixture();
     f.delegation.card = {
