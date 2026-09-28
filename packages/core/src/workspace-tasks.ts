@@ -34,3 +34,12 @@ export function workspaceStopTarget(run: Run, selectedBotId: string) {
 export function workspaceSteerThread(run: Run, selectedBotId: string): string | null {
   return run.botId === selectedBotId ? run.threadId : run.coordinatorThreadId;
 }
+
+export function workspaceStopStillPending(snapshot: WorkspaceTasks, id: string): boolean {
+  const run = snapshot.runs.find((item) => item.runId === id);
+  if (run) return workspaceRunActive(run) || workspaceRunQueued(run);
+  const delegation = snapshot.delegations.find((item) => item.id === id);
+  return Boolean(
+    delegation && ["queued", "running", "cancel-requested"].includes(delegation.status),
+  );
+}

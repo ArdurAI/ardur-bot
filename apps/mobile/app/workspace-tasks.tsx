@@ -3,6 +3,7 @@ import {
   workspaceRunActive,
   workspaceRunQueued,
   workspaceSteerThread,
+  workspaceStopStillPending,
   workspaceStopTarget,
   workspaceTaskBuckets,
 } from "@ardurbot/core";
@@ -22,6 +23,7 @@ export default function WorkspaceTasksScreen() {
   const [snapshot, setSnapshot] = useState<WorkspaceTasks | null>(null);
   const [error, setError] = useState(false);
   const [pending, setPending] = useState<string | null>(null);
+  const [stopping, setStopping] = useState<Set<string>>(new Set());
   const [steering, setSteering] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const currentBot = useRef(botId);
@@ -29,6 +31,7 @@ export default function WorkspaceTasksScreen() {
   useEffect(() => {
     setSnapshot(null);
     setError(false);
+    setStopping(new Set());
   }, [botId]);
   const refresh = useCallback(async () => {
     if (!botId) return;
@@ -36,6 +39,9 @@ export default function WorkspaceTasksScreen() {
       const result = await rpc<WorkspaceTasks>("workspace/tasks", { botId });
       if (currentBot.current === botId) {
         setSnapshot(result);
+        setStopping(
+          (current) => new Set([...current].filter((id) => workspaceStopStillPending(result, id))),
+        );
         setError(false);
       }
     } catch {
@@ -64,11 +70,18 @@ export default function WorkspaceTasksScreen() {
       await refresh();
       setSteering(null);
       setMessage("");
+      return true;
     } catch {
       setError(true);
+      return false;
     } finally {
       setPending(null);
     }
+  }
+  async function stop(id: string, operation: () => Promise<unknown>) {
+    setStopping((current) => new Set(current).add(id));
+    if (!(await act(id, operation)))
+      setStopping((current) => new Set([...current].filter((item) => item !== id)));
   }
   function confirmStop(id: string, delegated: boolean, operation: () => Promise<unknown>) {
     Alert.alert(
@@ -76,7 +89,7 @@ export default function WorkspaceTasksScreen() {
       delegated ? t("This stops the delegated task tree.") : t("This can stop more than one run."),
       [
         { text: t("Cancel"), style: "cancel" },
-        { text: t("Stop"), style: "destructive", onPress: () => void act(id, operation) },
+        { text: t("Stop"), style: "destructive", onPress: () => void stop(id, operation) },
       ],
     );
   }
@@ -112,8 +125,9 @@ export default function WorkspaceTasksScreen() {
           {(run.routineId && routineNames.get(run.routineId)) || run.promptSnippet || run.botName}
         </Text>
         <Text style={{ color: tokens.mutedForeground }}>
-          {run.botName} · {pending === run.runId ? t("Stopping") : activityStatusLabel(run.status)}{" "}
-          · {formatActivityRelativeTime(run.startedAt ?? run.createdAt ?? run.updatedAt)}
+          {run.botName} ·{" "}
+          {stopping.has(run.runId) ? t("Stopping") : activityStatusLabel(run.status)} ·{" "}
+          {formatActivityRelativeTime(run.startedAt ?? run.createdAt ?? run.updatedAt)}
         </Text>
         {run.externalThread ? (
           <Text style={{ color: tokens.mutedForeground }}>
@@ -140,7 +154,7 @@ export default function WorkspaceTasksScreen() {
                     ? t("Stop delegated work")
                     : t("Stop work in this conversation")
                 }
-                disabled={pending === run.runId}
+                disabled={stopping.has(run.runId)}
                 onPress={() =>
                   confirmStop(run.runId, stopTarget.kind === "delegation", () =>
                     stopTarget.kind === "delegation"
@@ -240,12 +254,14 @@ export default function WorkspaceTasksScreen() {
                 </Text>
                 <Text style={{ color: tokens.mutedForeground }}>
                   {item.actingName} ·{" "}
-                  {item.status === "cancel-requested" ? t("Stopping") : item.status}
+                  {stopping.has(item.id) || item.status === "cancel-requested"
+                    ? t("Stopping")
+                    : item.status}
                 </Text>
                 {["queued", "running", "cancel-requested"].includes(item.status) ? (
                   <Button
                     title={t("Stop delegated work")}
-                    disabled={pending === item.id}
+                    disabled={stopping.has(item.id)}
                     onPress={() =>
                       confirmStop(item.id, true, () =>
                         rpc("delegations/cancel", { rootTaskId: item.rootTaskId }),

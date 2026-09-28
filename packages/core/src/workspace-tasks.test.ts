@@ -2,6 +2,7 @@ import type { WorkspaceTasks } from "@ardurbot/contracts";
 import { describe, expect, it } from "vitest";
 import {
   workspaceSteerThread,
+  workspaceStopStillPending,
   workspaceStopTarget,
   workspaceTaskBuckets,
 } from "./workspace-tasks.js";
@@ -37,5 +38,12 @@ describe("workspace task targets", () => {
     expect(workspaceSteerThread(helper, "bot")).toBe("coordinator-thread");
     expect(workspaceStopTarget({ ...helper, rootTaskId: undefined }, "bot")).toBeNull();
     expect(workspaceSteerThread({ ...helper, coordinatorThreadId: null }, "bot")).toBeNull();
+    expect(workspaceStopStillPending(snapshot, "helper")).toBe(true);
+    expect(
+      workspaceStopStillPending(
+        { ...snapshot, runs: [{ ...helper, status: "cancelled" }] },
+        "helper",
+      ),
+    ).toBe(false);
   });
 });
