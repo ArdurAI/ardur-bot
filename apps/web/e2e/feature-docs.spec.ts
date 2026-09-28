@@ -53,6 +53,7 @@ async function expectModelReady(page: Page) {
 
 type DocsScenario = {
   botCount?: number;
+  botNames?: string[];
   groups?: Record<string, unknown>[];
   routines?: Record<string, unknown>[];
   rpc?: (procedure: string, input?: Record<string, unknown>) => unknown;
@@ -105,8 +106,9 @@ async function useDashboard(page: Page, scenario: DocsScenario = {}) {
   };
   const bots = [
     initialBot,
-    ...(base.bots as Record<string, unknown>[]).slice(1).map((bot) => ({
+    ...(base.bots as Record<string, unknown>[]).slice(1).map((bot, index) => ({
       ...bot,
+      name: scenario.botNames?.[index] ?? bot.name,
       modelProvider: connected.provider,
       modelId: connected.id,
       modelCredentialId: credential.id,
@@ -424,7 +426,12 @@ test("integrations: inspect the catalog, tool access, and connection form", asyn
 
 test("group-goals: start a goal in a room and stop it", async ({ page }) => {
   const state = groupGoalDocsFixture();
-  await useDashboard(page, { botCount: 2, groups: [state.group], rpc: state.rpc });
+  await useDashboard(page, {
+    botCount: 2,
+    botNames: ["Planner"],
+    groups: [state.group],
+    rpc: state.rpc,
+  });
   await page.goto("/app/g/operations-group");
   await expect(page.getByTestId("group-participant-models")).toBeVisible();
   await page.getByTestId("bot-settings-trigger").click();

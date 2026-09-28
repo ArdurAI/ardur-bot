@@ -1,3 +1,9 @@
+import {
+  GOAL_DEFAULT_MAX_DESCENDANTS,
+  GOAL_DEFAULT_PER_WORKER_TOKENS,
+  GOAL_MAX_DEPTH,
+  GOAL_MAX_HOPS,
+} from "@ardurbot/contracts";
 import { integrationCatalog } from "../../../packages/adapters/src/integration-catalog";
 
 const now = "2026-09-24T12:00:00.000Z";
@@ -257,11 +263,11 @@ export function groupGoalDocsFixture() {
           rootTaskId: "sample-task",
           status: "running",
           usedTokens: 0,
-          perWorkerTokens: 1000,
+          perWorkerTokens: GOAL_DEFAULT_PER_WORKER_TOKENS,
           maxConcurrent: 2,
-          maxDescendants: 2,
-          maxDepth: 2,
-          maxHops: 2,
+          maxDescendants: GOAL_DEFAULT_MAX_DESCENDANTS,
+          maxDepth: GOAL_MAX_DEPTH,
+          maxHops: GOAL_MAX_HOPS,
           untilAt: "2026-09-24T20:00:00.000Z",
           createdAt: now,
           stoppedAt: null,
