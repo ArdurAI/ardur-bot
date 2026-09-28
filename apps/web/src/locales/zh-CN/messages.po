@@ -700,6 +700,10 @@ msgstr ""
 msgid "Allow once"
 msgstr "允许一次"
 
+#: src/components/AskCard.tsx
+msgid "Allow preparation"
+msgstr "允许准备"
+
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Allow purchase actions without asking"
 msgstr "允许购买操作，无需询问"
@@ -1448,6 +1452,7 @@ msgid "cancelled"
 msgstr "已取消"
 
 #: src/components/AskCard.tsx
+#: src/components/PeerMessageReceipt.tsx
 #: src/lib/run-status-label.ts
 #: src/lib/team-delivery-text.ts
 #: src/pages/ComparePanel.tsx
@@ -2587,6 +2592,10 @@ msgstr "无法加载技能"
 msgid "Could not load sync status. Retry."
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
+msgid "Could not load team message controls"
+msgstr "无法加载团队消息控制项"
+
 #: src/pages/TeamBoard.tsx
 msgid "Could not load Team; retry."
 msgstr ""
@@ -2933,6 +2942,10 @@ msgstr ""
 #: src/pages/Shell.tsx
 msgid "Could not update reaction"
 msgstr "无法更新反应"
+
+#: src/pages/GroupPanel.tsx
+msgid "Could not update team messages"
+msgstr "无法更新团队消息"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Could not update the computer. Check its settings and try again."
@@ -5676,6 +5689,7 @@ msgstr ""
 msgid "None yet"
 msgstr "暂无"
 
+#: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts
 msgid "Not approved"
 msgstr "未获批准"
@@ -6149,6 +6163,14 @@ msgid "Paste your API key"
 msgstr "粘贴你的 API 密钥"
 
 #: src/pages/GroupPanel.tsx
+msgid "Pause group messages"
+msgstr "暂停群组消息"
+
+#: src/pages/GroupPanel.tsx
+msgid "Pause team messages"
+msgstr "暂停团队消息"
+
+#: src/pages/GroupPanel.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Paused"
 msgstr "已暂停"
@@ -6238,6 +6260,10 @@ msgstr ""
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Preferred computer"
 msgstr ""
+
+#: src/components/AskCard.tsx
+msgid "Preparation allowed"
+msgstr "已允许准备"
 
 #: src/pages/Shell.tsx
 msgid "Preparing the bot computer…"
@@ -6806,6 +6832,10 @@ msgstr ""
 msgid "Repository URL"
 msgstr ""
 
+#: src/components/AskCard.tsx
+msgid "Request expired"
+msgstr "请求已过期"
+
 #: src/pages/ComparePanel.tsx
 #: src/pages/shell/bot-model-chip.tsx
 #: src/pages/TeamBoard.tsx
@@ -6921,6 +6951,14 @@ msgstr ""
 #: src/pages/system/SystemPage.tsx
 msgid "Restricted"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Resume group messages"
+msgstr "恢复群组消息"
+
+#: src/pages/GroupPanel.tsx
+msgid "Resume team messages"
+msgstr "恢复团队消息"
 
 #: src/components/Context.tsx
 #: src/components/integrations/DirectMcpSearch.tsx
@@ -8089,6 +8127,11 @@ msgstr "团队电脑"
 msgid "Team conversations"
 msgstr ""
 
+#: src/pages/dashboard/NowPanel.tsx
+#: src/pages/TeamBoard.tsx
+msgid "Team messages paused"
+msgstr "团队消息已暂停"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Teams message"
 msgstr "Teams 消息"
@@ -8833,6 +8876,8 @@ msgstr "等待登录…"
 msgid "Waiting for the API to come back…"
 msgstr "正在等待 API 恢复…"
 
+#: src/components/PeerMessageReceipt.tsx
+#: src/lib/team-delivery-text.ts
 #: src/pages/dashboard/NowPanel.tsx
 msgid "Waiting for your approval"
 msgstr ""
@@ -9061,47 +9106,3 @@ msgstr "你的一支随时在线的 Agent 团队<0/>可以交给它们真正的�
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
-
-#: src/pages/GroupPanel.tsx
-msgid "Allow preparation"
-msgstr "允许准备"
-
-#: src/pages/GroupPanel.tsx
-msgid "Preparation allowed"
-msgstr "已允许准备"
-
-#: src/pages/GroupPanel.tsx
-msgid "Request expired"
-msgstr "请求已过期"
-
-#: src/pages/GroupPanel.tsx
-msgid "Pause team messages"
-msgstr "暂停团队消息"
-
-#: src/pages/GroupPanel.tsx
-msgid "Resume team messages"
-msgstr "恢复团队消息"
-
-#: src/pages/GroupPanel.tsx
-msgid "Pause group messages"
-msgstr "暂停群组消息"
-
-#: src/pages/GroupPanel.tsx
-msgid "Resume group messages"
-msgstr "恢复群组消息"
-
-#: src/pages/GroupPanel.tsx
-msgid "Team messages paused"
-msgstr "团队消息已暂停"
-
-#: src/pages/GroupPanel.tsx
-msgid "Resume at home"
-msgstr "在主设备上恢复"
-
-#: src/pages/GroupPanel.tsx
-msgid "Could not load team message controls"
-msgstr "无法加载团队消息控制项"
-
-#: src/pages/GroupPanel.tsx
-msgid "Could not update team messages"
-msgstr "无法更新团队消息"

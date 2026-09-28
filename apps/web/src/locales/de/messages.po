@@ -700,6 +700,10 @@ msgstr ""
 msgid "Allow once"
 msgstr "Einmal erlauben"
 
+#: src/components/AskCard.tsx
+msgid "Allow preparation"
+msgstr "Vorbereitung erlauben"
+
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Allow purchase actions without asking"
 msgstr "Kaufaktionen ohne Nachfrage erlauben"
@@ -1448,6 +1452,7 @@ msgid "cancelled"
 msgstr "abgebrochen"
 
 #: src/components/AskCard.tsx
+#: src/components/PeerMessageReceipt.tsx
 #: src/lib/run-status-label.ts
 #: src/lib/team-delivery-text.ts
 #: src/pages/ComparePanel.tsx
@@ -2587,6 +2592,10 @@ msgstr "Skill konnte nicht geladen werden"
 msgid "Could not load sync status. Retry."
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
+msgid "Could not load team message controls"
+msgstr "Steuerung für Teamnachrichten konnte nicht geladen werden"
+
 #: src/pages/TeamBoard.tsx
 msgid "Could not load Team; retry."
 msgstr ""
@@ -2933,6 +2942,10 @@ msgstr ""
 #: src/pages/Shell.tsx
 msgid "Could not update reaction"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Could not update team messages"
+msgstr "Teamnachrichten konnten nicht aktualisiert werden"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Could not update the computer. Check its settings and try again."
@@ -5676,6 +5689,7 @@ msgstr ""
 msgid "None yet"
 msgstr "Noch keine"
 
+#: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts
 msgid "Not approved"
 msgstr "Nicht genehmigt"
@@ -6149,6 +6163,14 @@ msgid "Paste your API key"
 msgstr "Füge deinen API-Schlüssel ein"
 
 #: src/pages/GroupPanel.tsx
+msgid "Pause group messages"
+msgstr "Gruppennachrichten pausieren"
+
+#: src/pages/GroupPanel.tsx
+msgid "Pause team messages"
+msgstr "Teamnachrichten pausieren"
+
+#: src/pages/GroupPanel.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Paused"
 msgstr "Pausiert"
@@ -6238,6 +6260,10 @@ msgstr ""
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Preferred computer"
 msgstr ""
+
+#: src/components/AskCard.tsx
+msgid "Preparation allowed"
+msgstr "Vorbereitung erlaubt"
 
 #: src/pages/Shell.tsx
 msgid "Preparing the bot computer…"
@@ -6806,6 +6832,10 @@ msgstr ""
 msgid "Repository URL"
 msgstr ""
 
+#: src/components/AskCard.tsx
+msgid "Request expired"
+msgstr "Anfrage abgelaufen"
+
 #: src/pages/ComparePanel.tsx
 #: src/pages/shell/bot-model-chip.tsx
 #: src/pages/TeamBoard.tsx
@@ -6921,6 +6951,14 @@ msgstr ""
 #: src/pages/system/SystemPage.tsx
 msgid "Restricted"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Resume group messages"
+msgstr "Gruppennachrichten fortsetzen"
+
+#: src/pages/GroupPanel.tsx
+msgid "Resume team messages"
+msgstr "Teamnachrichten fortsetzen"
 
 #: src/components/Context.tsx
 #: src/components/integrations/DirectMcpSearch.tsx
@@ -8089,6 +8127,11 @@ msgstr "Team-Computer"
 msgid "Team conversations"
 msgstr ""
 
+#: src/pages/dashboard/NowPanel.tsx
+#: src/pages/TeamBoard.tsx
+msgid "Team messages paused"
+msgstr "Teamnachrichten pausiert"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Teams message"
 msgstr ""
@@ -8833,6 +8876,8 @@ msgstr "Warten auf Anmeldung…"
 msgid "Waiting for the API to come back…"
 msgstr ""
 
+#: src/components/PeerMessageReceipt.tsx
+#: src/lib/team-delivery-text.ts
 #: src/pages/dashboard/NowPanel.tsx
 msgid "Waiting for your approval"
 msgstr ""
@@ -9061,47 +9106,3 @@ msgstr "Dein Team aus jederzeit verfügbaren Agents<0/>für echte Aufgaben."
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
-
-#: src/pages/GroupPanel.tsx
-msgid "Allow preparation"
-msgstr "Vorbereitung erlauben"
-
-#: src/pages/GroupPanel.tsx
-msgid "Preparation allowed"
-msgstr "Vorbereitung erlaubt"
-
-#: src/pages/GroupPanel.tsx
-msgid "Request expired"
-msgstr "Anfrage abgelaufen"
-
-#: src/pages/GroupPanel.tsx
-msgid "Pause team messages"
-msgstr "Teamnachrichten pausieren"
-
-#: src/pages/GroupPanel.tsx
-msgid "Resume team messages"
-msgstr "Teamnachrichten fortsetzen"
-
-#: src/pages/GroupPanel.tsx
-msgid "Pause group messages"
-msgstr "Gruppennachrichten pausieren"
-
-#: src/pages/GroupPanel.tsx
-msgid "Resume group messages"
-msgstr "Gruppennachrichten fortsetzen"
-
-#: src/pages/GroupPanel.tsx
-msgid "Team messages paused"
-msgstr "Teamnachrichten pausiert"
-
-#: src/pages/GroupPanel.tsx
-msgid "Resume at home"
-msgstr "Zu Hause fortsetzen"
-
-#: src/pages/GroupPanel.tsx
-msgid "Could not load team message controls"
-msgstr "Steuerung für Teamnachrichten konnte nicht geladen werden"
-
-#: src/pages/GroupPanel.tsx
-msgid "Could not update team messages"
-msgstr "Teamnachrichten konnten nicht aktualisiert werden"

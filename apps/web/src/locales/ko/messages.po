@@ -700,6 +700,10 @@ msgstr ""
 msgid "Allow once"
 msgstr "한 번 허용"
 
+#: src/components/AskCard.tsx
+msgid "Allow preparation"
+msgstr "준비 허용"
+
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Allow purchase actions without asking"
 msgstr "확인 없이 결제 동작 허용"
@@ -1448,6 +1452,7 @@ msgid "cancelled"
 msgstr "취소됨"
 
 #: src/components/AskCard.tsx
+#: src/components/PeerMessageReceipt.tsx
 #: src/lib/run-status-label.ts
 #: src/lib/team-delivery-text.ts
 #: src/pages/ComparePanel.tsx
@@ -2587,6 +2592,10 @@ msgstr "스킬을 불러오지 못했습니다"
 msgid "Could not load sync status. Retry."
 msgstr ""
 
+#: src/pages/GroupPanel.tsx
+msgid "Could not load team message controls"
+msgstr "팀 메시지 설정을 불러올 수 없음"
+
 #: src/pages/TeamBoard.tsx
 msgid "Could not load Team; retry."
 msgstr ""
@@ -2933,6 +2942,10 @@ msgstr ""
 #: src/pages/Shell.tsx
 msgid "Could not update reaction"
 msgstr "반응을 업데이트할 수 없습니다"
+
+#: src/pages/GroupPanel.tsx
+msgid "Could not update team messages"
+msgstr "팀 메시지를 업데이트할 수 없음"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Could not update the computer. Check its settings and try again."
@@ -5676,6 +5689,7 @@ msgstr ""
 msgid "None yet"
 msgstr "아직 없음"
 
+#: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts
 msgid "Not approved"
 msgstr "승인되지 않음"
@@ -6149,6 +6163,14 @@ msgid "Paste your API key"
 msgstr "API 키를 붙여넣으세요"
 
 #: src/pages/GroupPanel.tsx
+msgid "Pause group messages"
+msgstr "그룹 메시지 일시 중지"
+
+#: src/pages/GroupPanel.tsx
+msgid "Pause team messages"
+msgstr "팀 메시지 일시 중지"
+
+#: src/pages/GroupPanel.tsx
 #: src/pages/RoutineEditor.tsx
 msgid "Paused"
 msgstr "일시 중지됨"
@@ -6238,6 +6260,10 @@ msgstr ""
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Preferred computer"
 msgstr ""
+
+#: src/components/AskCard.tsx
+msgid "Preparation allowed"
+msgstr "준비가 허용됨"
 
 #: src/pages/Shell.tsx
 msgid "Preparing the bot computer…"
@@ -6806,6 +6832,10 @@ msgstr ""
 msgid "Repository URL"
 msgstr ""
 
+#: src/components/AskCard.tsx
+msgid "Request expired"
+msgstr "요청이 만료됨"
+
 #: src/pages/ComparePanel.tsx
 #: src/pages/shell/bot-model-chip.tsx
 #: src/pages/TeamBoard.tsx
@@ -6921,6 +6951,14 @@ msgstr ""
 #: src/pages/system/SystemPage.tsx
 msgid "Restricted"
 msgstr ""
+
+#: src/pages/GroupPanel.tsx
+msgid "Resume group messages"
+msgstr "그룹 메시지 다시 시작"
+
+#: src/pages/GroupPanel.tsx
+msgid "Resume team messages"
+msgstr "팀 메시지 다시 시작"
 
 #: src/components/Context.tsx
 #: src/components/integrations/DirectMcpSearch.tsx
@@ -8089,6 +8127,11 @@ msgstr "팀 컴퓨터"
 msgid "Team conversations"
 msgstr ""
 
+#: src/pages/dashboard/NowPanel.tsx
+#: src/pages/TeamBoard.tsx
+msgid "Team messages paused"
+msgstr "팀 메시지가 일시 중지됨"
+
 #: src/pages/RoutineEditor.tsx
 msgid "Teams message"
 msgstr "Teams 메시지"
@@ -8833,6 +8876,8 @@ msgstr "로그인 완료를 기다리는 중…"
 msgid "Waiting for the API to come back…"
 msgstr "API가 다시 작동하기를 기다리는 중…"
 
+#: src/components/PeerMessageReceipt.tsx
+#: src/lib/team-delivery-text.ts
 #: src/pages/dashboard/NowPanel.tsx
 msgid "Waiting for your approval"
 msgstr ""
@@ -9061,47 +9106,3 @@ msgstr "언제든 실제 작업을 맡길 수 있는<0/>나만의 Agent 팀"
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
-
-#: src/pages/GroupPanel.tsx
-msgid "Allow preparation"
-msgstr "준비 허용"
-
-#: src/pages/GroupPanel.tsx
-msgid "Preparation allowed"
-msgstr "준비가 허용됨"
-
-#: src/pages/GroupPanel.tsx
-msgid "Request expired"
-msgstr "요청이 만료됨"
-
-#: src/pages/GroupPanel.tsx
-msgid "Pause team messages"
-msgstr "팀 메시지 일시 중지"
-
-#: src/pages/GroupPanel.tsx
-msgid "Resume team messages"
-msgstr "팀 메시지 다시 시작"
-
-#: src/pages/GroupPanel.tsx
-msgid "Pause group messages"
-msgstr "그룹 메시지 일시 중지"
-
-#: src/pages/GroupPanel.tsx
-msgid "Resume group messages"
-msgstr "그룹 메시지 다시 시작"
-
-#: src/pages/GroupPanel.tsx
-msgid "Team messages paused"
-msgstr "팀 메시지가 일시 중지됨"
-
-#: src/pages/GroupPanel.tsx
-msgid "Resume at home"
-msgstr "홈에서 다시 시작"
-
-#: src/pages/GroupPanel.tsx
-msgid "Could not load team message controls"
-msgstr "팀 메시지 설정을 불러올 수 없음"
-
-#: src/pages/GroupPanel.tsx
-msgid "Could not update team messages"
-msgstr "팀 메시지를 업데이트할 수 없음"
