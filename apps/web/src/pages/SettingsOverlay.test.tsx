@@ -252,12 +252,41 @@ it("loads the registered pages without duplicate navigation", async () => {
   }
   expect(container.querySelector('[data-testid="settings-nav-local-api"]')).toBeNull();
 });
+it("gives every settings nav group an accessible name free of id whitespace", async () => {
+  const container = await render(true);
+  const groups = [...container.querySelectorAll<HTMLDivElement>('nav div[role="group"]')];
+  expect(groups.length).toBeGreaterThanOrEqual(3);
+  for (const group of groups) {
+    const labelledBy = group.getAttribute("aria-labelledby");
+    expect(labelledBy).toBeTruthy();
+    // aria-labelledby is a whitespace-separated id list; the id itself must not
+    // contain whitespace or the reference splits and the name is lost.
+    expect(labelledBy).toBe(labelledBy!.trim());
+    expect(labelledBy!.split(/\s+/)).toHaveLength(1);
+    const heading = group.querySelector(`[id="${CSS.escape(labelledBy!)}"]`);
+    expect(heading, `heading for ${labelledBy}`).toBeTruthy();
+    expect(
+      group.getAttribute("aria-label") ?? heading?.textContent,
+      "the labelled-by id resolves to the heading",
+    ).toBeTruthy();
+  }
+  const names = groups.map((group) => {
+    const heading = group.querySelector(
+      `[id="${CSS.escape(group.getAttribute("aria-labelledby")!)}"]`,
+    );
+    return heading?.textContent;
+  });
+  expect(names).toContain("Desktop app");
+  expect(names).toContain("Customize");
+});
 it("keeps Import under Customize for the owner and hides it from other members", async () => {
   const owner = await render();
+  const navGroup = (label: string) =>
+    [...owner.querySelectorAll("nav div[role=group]")].find(
+      (node) => node.querySelector(":scope > div[id]")?.textContent === label,
+    );
   expect(
-    owner.querySelector(
-      'div[aria-labelledby="settings-group-Customize"] [data-testid="settings-nav-import"]',
-    ),
+    navGroup("Customize")?.querySelector('[data-testid="settings-nav-import"]'),
   ).not.toBeNull();
   const { container } = await renderSettings(
     <PreferencesProvider userId="test">

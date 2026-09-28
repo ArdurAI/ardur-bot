@@ -1,7 +1,7 @@
 import { Button, Dialog, DialogClose, DialogContent, DialogTitle, Input } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
 import { XIcon } from "lucide-react";
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useId, useRef, useState } from "react";
 import { LoadingState } from "../components/ai/primitives";
 import { FeatureDocsLink } from "../components/FeatureDocsLink";
 import {
@@ -28,6 +28,7 @@ export function SettingsOverlay({
 }: Props) {
   const { t, i18n } = useLingui();
   const panelRef = useRef<HTMLDivElement>(null);
+  const navGroupId = useId();
   const [section, setSection] = useState<SettingsSection>(initialSection);
   const [initialItem, setInitialItem] = useState<string | undefined>(props.initialIntegration);
   const [mcpFocusRequest, setMcpFocusRequest] = useState(
@@ -139,16 +140,14 @@ export function SettingsOverlay({
             {SETTINGS_GROUPS.map((group) => {
               const items = visible.filter((item) => item.group === group);
               if (!items.length) return null;
+              // `useId` output has no whitespace; group labels like "Desktop app" do,
+              // and aria-labelledby is a whitespace-separated id list.
+              const headingId = `${navGroupId}-${group.replace(/\s+/g, "-")}`;
               return (
                 // biome-ignore lint/a11y/useSemanticElements: A fieldset legend would duplicate the nav group label read by aria-labelledby.
-                <div
-                  key={group}
-                  role="group"
-                  className="min-w-0"
-                  aria-labelledby={`settings-group-${group}`}
-                >
+                <div key={group} role="group" className="min-w-0" aria-labelledby={headingId}>
                   <div
-                    id={`settings-group-${group}`}
+                    id={headingId}
                     className="px-2 font-mono text-[11px] uppercase tracking-[0.1em] text-muted-foreground pb-1"
                   >
                     {i18n._(settingsGroupLabels[group])}
