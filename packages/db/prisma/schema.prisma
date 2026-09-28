@@ -938,8 +938,10 @@ model Connection {
   secretId    String?
   providerRef String?
   metadata    Json     @default("{}")
+  homePlacementAllowed Boolean @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  runners     Runner[]
 
   @@index([spaceId, userId, connectorId])
   @@map("connections")
@@ -2524,4 +2526,168 @@ model BotBrief {
   @@index([threadId, leaseExpiresAt])
   @@index([spaceId, userId, botId])
   @@map("bot_briefs")
+}
+
+model Runner {
+  id String @id @default(cuid())
+  spaceId String
+  ownerUserId String
+  name String
+  kind String
+  connectionId String
+  connection Connection @relation(fields: [connectionId], references: [id], onDelete: Restrict)
+  admissionState String
+  capabilities Json
+  capabilitiesObservedAt DateTime?
+  capabilityRevision Int @default(0)
+  reachability String
+  lastProbeAt DateTime?
+  probeExpiresAt DateTime?
+  lastProbeCode String?
+  policyRevision Int @default(0)
+  sharingEnabled Boolean @default(false)
+  defaultAccess String @default("deny")
+  protected Boolean @default(true)
+  limits Json
+  notes String @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  retiredAt DateTime?
+
+  @@unique([spaceId, ownerUserId, connectionId])
+  @@map("runners")
+}
+
+model RunnerAccessRule {
+  id String @id @default(cuid())
+  runnerId String
+  spaceId String
+  ownerUserId String
+  subjectKind String
+  subjectId String
+  effect String
+
+  @@unique([runnerId, subjectKind, subjectId])
+  @@map("runner_access_rules")
+}
+
+model RunnerEnvironment {
+  id String @id @default(cuid())
+  runnerId String
+  name String
+  kind String
+  profileId String?
+  requestedImage String?
+  resolvedImageId String?
+  resolvedDigest String?
+  os String
+  architecture String
+  tools Json
+  dependencyManifestHash String?
+  lockfileHash String?
+  setupArgv Json?
+  networkMode String
+  revision Int @default(0)
+  verifiedAt DateTime?
+
+  @@map("runner_environments")
+}
+
+model RunnerJob {
+  id String @id @default(cuid())
+  runnerId String
+  spaceId String
+  userId String
+  botId String
+  threadId String
+  runId String
+  goalId String?
+  delegationId String?
+  operationKey String @unique
+  requestHash String
+  request Json
+  placementSnapshot Json
+  policySnapshot Json
+  environmentSnapshot Json
+  state String
+  phase String
+  approvalEffectId String?
+  providerRef String?
+  providerUid String?
+  executionFence Int @default(0)
+  leaseOwner String?
+  leaseExpiresAt DateTime?
+  queuedAt DateTime @default(now())
+  startedAt DateTime?
+  commandFinishedAt DateTime?
+  finishedAt DateTime?
+  deadlineAt DateTime?
+  cancelRequestedAt DateTime?
+  cancelConfirmedAt DateTime?
+  exitCode Int?
+  failureCode String?
+  cleanupState String
+  cleanupConfirmedAt DateTime?
+  outputTruncated Boolean @default(false)
+  usedRunnerMillis Int @default(0)
+  reservedRunnerMillis Int @default(0)
+
+  @@index([spaceId, userId, botId])
+  @@map("runner_jobs")
+}
+
+model RunnerJobEvent {
+  jobId String
+  seq Int
+  executionFence Int
+  kind String
+  stream String?
+  redactedPayload String
+  createdAt DateTime @default(now())
+
+  @@id([jobId, seq])
+  @@map("runner_job_events")
+}
+
+model RunnerJobArtifact {
+  jobId String
+  artifactId String
+  relativePath String
+  sha256 String
+  size Int
+  collectionState String
+
+  @@id([jobId, artifactId])
+  @@map("runner_job_artifacts")
+}
+
+model RunnerAuditEvent {
+  id String @id @default(cuid())
+  runnerId String
+  jobId String?
+  spaceId String
+  userId String
+  actorKind String
+  actorId String
+  action String
+  reasonCode String
+  policyRevision Int
+  requestHash String?
+  createdAt DateTime @default(now())
+
+  @@map("runner_audit_events")
+}
+
+model RunnerUsage {
+  jobId String @id
+  spaceId String
+  ownerUserId String
+  reservedRunnerMillis Int
+  usedRunnerMillis Int
+  costEstimate Json?
+  settlementState String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("runner_usage")
 }

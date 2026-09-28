@@ -7,3 +7,4 @@ export * from "./registry.js";
 export * from "./terminal.js";
 export * from "./types.js";
 export * from "./usage-collection.js";
+export * from "./runner.js";
