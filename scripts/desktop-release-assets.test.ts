@@ -1,9 +1,45 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { expect, it } from "vitest";
+
+// electron-builder's ${arch} is target-specific on Linux: the x64 AppImage is
+// x86_64 and the x64 deb is amd64. Every other platform keeps one arch label.
+const INSTALLERS = [
+  {
+    directory: "mac-arm64",
+    files: ["mac-arm64.dmg", "mac-arm64.zip"],
+    feed: "latest-mac.yml",
+    feedAsset: "mac-arm64.zip",
+  },
+  {
+    directory: "mac-x64",
+    files: ["mac-x64.dmg", "mac-x64.zip"],
+    feed: "latest-mac.yml",
+    feedAsset: "mac-x64.zip",
+  },
+  {
+    directory: "linux-x64",
+    files: ["linux-x86_64.AppImage", "linux-amd64.deb"],
+    feed: "latest-linux.yml",
+    feedAsset: "linux-amd64.deb",
+  },
+  { directory: "win-x64", files: ["win-x64.exe"], feed: "latest.yml", feedAsset: "win-x64.exe" },
+] as const;
+
+async function stageSource(source: string, version: string) {
+  for (const { directory, files, feed, feedAsset } of INSTALLERS) {
+    const target = path.join(source, directory);
+    await mkdir(target, { recursive: true });
+    for (const file of files) await writeFile(path.join(target, `ardur-${version}-${file}`), file);
+    await writeFile(
+      path.join(target, feed),
+      `version: ${version}\nfiles:\n  - url: ardur-${version}-${feedAsset}\n    sha512: fixture\n`,
+    );
+  }
+}
 
 it("assembles required installers, merges both Mac architectures, and refuses missing feeds", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "release-assets-"));
@@ -11,24 +47,7 @@ it("assembles required installers, merges both Mac architectures, and refuses mi
   const output = path.join(dir, "output");
   const version = "0.1.0-alpha.1";
   try {
-    for (const [platform, arch, extensions, feed] of [
-      ["mac", "arm64", ["dmg", "zip"], "latest-mac.yml"],
-      ["mac", "x64", ["dmg", "zip"], "latest-mac.yml"],
-      ["linux", "x64", ["AppImage", "deb"], "latest-linux.yml"],
-      ["win", "x64", ["exe"], "latest.yml"],
-    ] as const) {
-      const target = path.join(source, `${platform}-${arch}`);
-      await mkdir(target, { recursive: true });
-      for (const extension of extensions)
-        await writeFile(
-          path.join(target, `ardur-${version}-${platform}-${arch}.${extension}`),
-          `${platform}-${arch}`,
-        );
-      await writeFile(
-        path.join(target, feed),
-        `version: ${version}\nfiles:\n  - url: ardur-${version}-${platform}-${arch}.${extensions.at(-1)}\n    sha512: fixture\n`,
-      );
-    }
+    await stageSource(source, version);
     execFileSync(
       process.execPath,
       ["scripts/desktop-release-assets.mjs", version, source, output],
@@ -57,6 +76,29 @@ it("assembles required installers, merges both Mac architectures, and refuses mi
         { stdio: "pipe" },
       ),
     ).toThrow();
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+it("accepts the produced Linux names without the retired linux-x64 ones", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "release-assets-linux-"));
+  const source = path.join(dir, "source");
+  const output = path.join(dir, "output");
+  const version = "0.1.0-alpha.1";
+  try {
+    await stageSource(source, version);
+    const staged = await readdir(path.join(source, "linux-x64"));
+    expect(staged.some((file: string) => file.includes("-linux-x64."))).toBe(false);
+    execFileSync(
+      process.execPath,
+      ["scripts/desktop-release-assets.mjs", version, source, output],
+      { stdio: "pipe" },
+    );
+    const published = await readdir(output);
+    expect(published).toContain(`ardur-${version}-linux-x86_64.AppImage`);
+    expect(published).toContain(`ardur-${version}-linux-amd64.deb`);
+    expect(published.some((file: string) => file.includes("-linux-x64."))).toBe(false);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
