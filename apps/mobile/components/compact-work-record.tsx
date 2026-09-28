@@ -1,9 +1,11 @@
+import { ChatMarkdown } from "@ardurbot/chat-ui/native";
 import type { MessageBlock } from "@ardurbot/contracts";
-import { mapMessageBlockToActivity } from "@ardurbot/core";
+import { workRecordEntries } from "@ardurbot/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AccessibilityInfo, Animated, Pressable, Text, View } from "react-native";
 import { mobileTokens } from "../lib/appearance";
 import { useI18n } from "../lib/i18n";
+import { useResolvedAppearance } from "../lib/native";
 import { NativeCommandBlock } from "./command-block";
 import { NativeSymbol } from "./native-symbol";
 
@@ -15,6 +17,7 @@ export function CompactWorkRecord({
   renderBlock?: (block: MessageBlock, i: number) => React.ReactNode;
 }) {
   const tokens = mobileTokens();
+  const colorScheme = useResolvedAppearance();
   const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
 
@@ -44,20 +47,19 @@ export function CompactWorkRecord({
     };
   }, [pulseAnim]);
 
-  const mapped = useMemo(
-    () => blocks.map((b) => ({ block: b, evidence: mapMessageBlockToActivity(b) })),
-    [blocks],
-  );
-  const nonNarration = mapped.filter(
-    (m) => m.evidence.label !== "narration" && m.evidence.label !== "unavailable",
-  );
+  const entries = useMemo(() => workRecordEntries(blocks), [blocks]);
 
-  if (nonNarration.length === 0) return null;
+  if (entries.length === 0) return null;
 
-  const active = nonNarration.filter((m) => m.evidence.outcome === "pending");
+  const active = entries.filter((m) => m.evidence.outcome === "pending");
   const isDone = active.length === 0;
-  const currentState =
-    active.length > 0 ? active[active.length - 1] : nonNarration[nonNarration.length - 1];
+  const currentState = active.length > 0 ? active[active.length - 1] : entries[entries.length - 1];
+  // Reasoning summaries render only as full expanded rows; the collapsed
+  // status line falls back to the generic label rather than a clipped copy.
+  const headerTitle =
+    currentState && currentState.evidence.label !== "reasoning"
+      ? currentState.evidence.title
+      : undefined;
 
   return (
     <View style={{ marginVertical: 8, width: "100%" }}>
@@ -112,7 +114,7 @@ export function CompactWorkRecord({
             numberOfLines={1}
             ellipsizeMode="tail"
           >
-            {currentState?.evidence.title ?? (isDone ? t("Done") : t("Working"))}
+            {headerTitle ?? (isDone ? t("Done") : t("Working"))}
             {currentState?.evidence.outcome === "pending" && " ..."}
           </Text>
         </View>
@@ -144,7 +146,7 @@ export function CompactWorkRecord({
             marginTop: 8,
           }}
         >
-          {nonNarration.map((m, i) => {
+          {entries.map((m, i) => {
             const customRender = renderBlock?.(m.block, i);
             if (customRender) {
               return <View key={i}>{customRender}</View>;
@@ -153,6 +155,21 @@ export function CompactWorkRecord({
               return (
                 <View key={i} style={{ marginTop: 4 }}>
                   <NativeCommandBlock block={m.block.command} />
+                </View>
+              );
+            }
+            if (m.evidence.label === "reasoning" && m.block.kind === "progress") {
+              // Reasoning summaries render in full, as Markdown, and update as
+              // the text streams. They never appear in the reply bubble.
+              return (
+                <View key={i} testID="work-record-reasoning">
+                  <ChatMarkdown
+                    palette={tokens}
+                    colorScheme={colorScheme}
+                    streaming={m.evidence.outcome === "pending"}
+                  >
+                    {m.block.text}
+                  </ChatMarkdown>
                 </View>
               );
             }

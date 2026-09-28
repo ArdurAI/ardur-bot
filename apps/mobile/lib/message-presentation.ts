@@ -1,5 +1,5 @@
 import type { MessageBlock } from "@ardurbot/contracts";
-import { isToolActivityBlock } from "@ardurbot/core";
+import { isReasoningSummaryBlock, isToolActivityBlock } from "@ardurbot/core";
 
 export function isCenteredAgentEvent(blocks: readonly MessageBlock[]): boolean {
   return blocks.some(
@@ -19,8 +19,12 @@ export type MessagePresentationSegment = {
 export function messagePresentationSegments(
   blocks: readonly MessageBlock[],
 ): MessagePresentationSegment[] {
+  // Reasoning summaries and tool activity live in the compact work record, not the bubble.
   const content = blocks.filter(
-    (block) => block.kind !== "app_connect" && !isToolActivityBlock(block),
+    (block) =>
+      block.kind !== "app_connect" &&
+      !isToolActivityBlock(block) &&
+      !isReasoningSummaryBlock(block),
   );
   return content.length > 0 ? [{ kind: "content", blocks: content }] : [];
 }

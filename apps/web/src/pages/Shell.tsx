@@ -45,6 +45,7 @@ import {
   inferAttachmentMimeType,
   isActive,
   isPeerReceiptBlocks,
+  isReasoningSummaryBlock,
   isRunTerminalEvent,
   isToolActivityBlock,
   latestAnswerableAskMessageId,
@@ -172,7 +173,7 @@ import { desktopBridge } from "../lib/desktop";
 import { scheduleFocusPrompt } from "../lib/focus-prompt";
 import { INSIGHT_ACTION_EVENT } from "../lib/insight-actions";
 import { localTimezone } from "../lib/local-timezone";
-import { copyableMessageText } from "../lib/message-text";
+import { copyableMessageText, narrationBubbleBlocks } from "../lib/message-text";
 import { messageProviderLabel } from "../lib/messaging";
 import {
   isFileDrag,
@@ -6237,7 +6238,7 @@ const MessageView = memo(function MessageView({
     );
   const isLive = message.id.startsWith("progress:");
   const quoteMessageId = message.id.includes(":") ? undefined : message.id;
-  const visibleNarrationBlocks = message.blocks.filter((block) => !isToolActivityBlock(block));
+  const visibleNarrationBlocks = narrationBubbleBlocks(message.blocks);
   const parentJumpId = replyPreview?.id ?? replyToMessageId;
   const speakerBot = message.botId ? peerBot?.(message.botId) : undefined;
   const speakerColorDef = useMemo(
@@ -6279,7 +6280,6 @@ const MessageView = memo(function MessageView({
     </>
   );
   if (isNarration) {
-    if (visibleNarrationBlocks.length === 0) return null;
     return (
       <>
         {messageContext}
@@ -6358,37 +6358,36 @@ const MessageView = memo(function MessageView({
             return null;
           }}
         />
-        <div className="flex w-fit max-w-full justify-start">
-          <div
-            data-testid="message-bot-bubble"
-            className="max-w-full space-y-2.5 rounded-[20px] bg-muted px-[18px] py-3 text-[15.5px] leading-[1.5] text-foreground/90"
-            dir="auto"
-          >
-            {visibleNarrationBlocks.map((block, i) => {
-              if (block.kind === "text" || block.kind === "progress") {
-                return (
-                  <div
-                    key={i}
-                    data-quote-message-id={block.kind === "text" ? quoteMessageId : undefined}
-                  >
-                    <ChatMarkdown streaming={block.kind === "progress"}>{block.text}</ChatMarkdown>
-                  </div>
-                );
-              }
-              return null;
-            })}
-            {!isLive && voiceReady && message.blocks.some((block) => block.kind === "text") ? (
-              <button
-                type="button"
-                aria-label={speaking ? t`Stop speaking` : t`Speak this reply`}
-                onClick={onSpeak}
-                className="text-[12px] text-muted-foreground hover:text-foreground"
-              >
-                {speaking ? <Trans>Stop</Trans> : <Trans>Speak</Trans>}
-              </button>
-            ) : null}
+        {visibleNarrationBlocks.length > 0 ? (
+          <div className="flex w-fit max-w-full justify-start">
+            <div
+              data-testid="message-bot-bubble"
+              className="max-w-full space-y-2.5 rounded-[20px] bg-muted px-[18px] py-3 text-[15.5px] leading-[1.5] text-foreground/90"
+              dir="auto"
+            >
+              {visibleNarrationBlocks.map((block, i) => {
+                if (block.kind === "text") {
+                  return (
+                    <div key={i} data-quote-message-id={quoteMessageId}>
+                      <ChatMarkdown>{block.text}</ChatMarkdown>
+                    </div>
+                  );
+                }
+                return null;
+              })}
+              {!isLive && voiceReady && message.blocks.some((block) => block.kind === "text") ? (
+                <button
+                  type="button"
+                  aria-label={speaking ? t`Stop speaking` : t`Speak this reply`}
+                  onClick={onSpeak}
+                  className="text-[12px] text-muted-foreground hover:text-foreground"
+                >
+                  {speaking ? <Trans>Stop</Trans> : <Trans>Speak</Trans>}
+                </button>
+              ) : null}
+            </div>
           </div>
-        </div>
+        ) : null}
       </>
     );
   }
@@ -6474,6 +6473,7 @@ const MessageView = memo(function MessageView({
         if (
           block.kind === "command" ||
           isToolActivityBlock(block) ||
+          isReasoningSummaryBlock(block) ||
           block.kind === "handoff" ||
           block.kind === "subagent" ||
           block.kind === "bot_message_sent" ||
@@ -6502,19 +6502,6 @@ const MessageView = memo(function MessageView({
             >
               <span className="text-warning">◷</span>
               <span>{block.text}</span>
-            </div>
-          );
-        }
-        if (block.kind === "progress") {
-          return (
-            <div key={i} className="flex w-fit max-w-full justify-start">
-              <div
-                data-testid="message-bot-bubble"
-                className="max-w-full rounded-[20px] bg-muted px-[18px] py-3 text-[15.5px] leading-[1.5] text-foreground/90"
-                dir="auto"
-              >
-                <ChatMarkdown streaming>{block.text}</ChatMarkdown>
-              </div>
             </div>
           );
         }

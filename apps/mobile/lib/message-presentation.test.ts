@@ -56,20 +56,21 @@ describe("mobile message presentation", () => {
     ).toBe(false);
   });
 
-  it("hides marked activity without treating Using narration as a tool", () => {
+  it("hides marked activity and moves reasoning summaries to the record", () => {
     const activity = { kind: "progress", text: "Using browser", activity: true } as const;
-    const narration = { kind: "progress", text: "Using browser is optional." } as const;
+    const reasoning = { kind: "progress", text: "Using browser is optional." } as const;
 
-    expect(messagePresentationSegments([activity, narration])).toEqual([
-      { kind: "content", blocks: [narration] },
-    ]);
+    expect(messagePresentationSegments([activity, reasoning])).toEqual([]);
+    // A reasoning-only message stays visible: the record renders it.
+    expect(hasVisibleMessagePresentation([reasoning])).toBe(true);
 
     const mixed: Extract<MessageBlock, { kind: "progress" }> = {
       kind: "progress",
       text: "Let me check",
       pendingToolNames: ["browser"],
     };
-    expect(messagePresentationSegments([mixed])).toEqual([{ kind: "content", blocks: [mixed] }]);
+    expect(messagePresentationSegments([mixed])).toEqual([]);
+    expect(hasVisibleMessagePresentation([mixed])).toBe(true);
   });
 
   it("keeps only response content around tool activity", () => {

@@ -30,15 +30,32 @@ describe("CompactWorkRecord", () => {
     container.remove();
   });
 
-  it("keeps reasoning summaries out of the record", () => {
-    // Reasoning narration is rendered once, in full, by the message bubble;
-    // the compact record must not repeat it as a truncated line.
-    const blocks: MessageBlock[] = [
-      {
-        kind: "progress",
-        text: "Thinking through the options before answering",
-      },
-    ];
+  it("shows a reasoning summary exactly once, in full, in the expanded record", () => {
+    const summary =
+      "Weighing two approaches before answering, with a deliberately long explanation that must never be truncated.";
+    const blocks: MessageBlock[] = [{ kind: "progress", text: summary }];
+
+    act(() => {
+      root.render(<CompactWorkRecord blocks={blocks} />);
+    });
+
+    // Collapsed: the status line falls back to the generic label instead of a
+    // clipped copy of the summary.
+    expect(container.textContent).not.toContain(summary);
+    expect(container.textContent).toContain("Working");
+
+    act(() => {
+      container.querySelector("button")?.click();
+    });
+
+    // Expanded: the summary appears exactly once, with its complete text.
+    expect(container.querySelectorAll('[data-testid="work-record-reasoning"]')).toHaveLength(1);
+    expect(container.textContent).toContain(summary);
+    expect(container.textContent?.split(summary).length).toBe(2);
+  });
+
+  it("renders nothing when narration has no record entries", () => {
+    const blocks: MessageBlock[] = [{ kind: "text", text: "Here is the answer." }];
 
     act(() => {
       root.render(<CompactWorkRecord blocks={blocks} />);

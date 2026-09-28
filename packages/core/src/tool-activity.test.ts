@@ -1,6 +1,6 @@
 import type { MessageBlock } from "@ardurbot/contracts";
 import { describe, expect, it } from "vitest";
-import { isToolActivityBlock } from "./tool-activity.js";
+import { isReasoningSummaryBlock, isToolActivityBlock } from "./tool-activity.js";
 
 describe("tool activity", () => {
   it.each<MessageBlock>([
@@ -37,5 +37,21 @@ describe("tool activity", () => {
       }),
     ).toBe(false);
     expect(isToolActivityBlock({ kind: "text", text: "Done." })).toBe(false);
+  });
+
+  it("treats progress beats without activity as reasoning summaries", () => {
+    expect(isReasoningSummaryBlock({ kind: "progress", text: "Thinking…" })).toBe(true);
+    expect(
+      isReasoningSummaryBlock({
+        kind: "progress",
+        text: "Let me check",
+        pendingToolNames: ["browser"],
+      }),
+    ).toBe(true);
+    expect(
+      isReasoningSummaryBlock({ kind: "progress", text: "Using browser", activity: true }),
+    ).toBe(false);
+    expect(isReasoningSummaryBlock({ kind: "text", text: "Done." })).toBe(false);
+    expect(isReasoningSummaryBlock({ kind: "steps", steps: [] })).toBe(false);
   });
 });

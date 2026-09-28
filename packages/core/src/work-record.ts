@@ -2,6 +2,7 @@ import type { CommandBlock, MessageBlock } from "@ardurbot/contracts";
 
 export type ActivityLabel =
   | "narration"
+  | "reasoning"
   | "tool-activity"
   | "peer-delivery"
   | "delegation"
@@ -30,7 +31,7 @@ export function mapMessageBlockToActivity(block: MessageBlock): ActivityEvidence
         outcome: "pending",
       };
     }
-    return { label: "narration", title: block.text, outcome: "pending" };
+    return { label: "reasoning", title: block.text, outcome: "pending" };
   }
 
   if (block.kind === "steps") {
@@ -75,6 +76,24 @@ export function mapMessageBlockToActivity(block: MessageBlock): ActivityEvidence
   }
 
   return { label: "unavailable", title: "Unavailable", outcome: "unknown" };
+}
+
+export interface WorkRecordEntry {
+  block: MessageBlock;
+  evidence: ActivityEvidence;
+}
+
+/**
+ * Blocks that belong in the compact work record, in order. Narration (reply
+ * text) and unavailable blocks stay out; reasoning summaries stay in and are
+ * rendered in full by the record, never by the reply bubble.
+ */
+export function workRecordEntries(blocks: readonly MessageBlock[]): WorkRecordEntry[] {
+  return blocks
+    .map((block) => ({ block, evidence: mapMessageBlockToActivity(block) }))
+    .filter(
+      (entry) => entry.evidence.label !== "narration" && entry.evidence.label !== "unavailable",
+    );
 }
 
 function mapCommandOutcome(command: CommandBlock): ActivityOutcome {
