@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, type Page, test } from "@playwright/test";
+import { listPiCatalog } from "../../../packages/adapters/src/pi-models";
 import { dashboardFixture } from "./dashboard-fixture";
 
 const captureRoot = process.env.FEATURE_DOCS_DIR
@@ -18,6 +19,8 @@ test.use({
 });
 
 async function capture(page: Page, id: string): Promise<void> {
+  await expect(page.getByText("Loading…", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Loading model catalog…", { exact: true })).toHaveCount(0);
   const directory = path.join(await captureRoot, "docs");
   await mkdir(directory, { recursive: true });
   const file = path.join(directory, `${id}.png`);
@@ -31,9 +34,36 @@ async function capture(page: Page, id: string): Promise<void> {
 async function useDashboard(page: Page) {
   const fixture = dashboardFixture();
   const base = fixture.rpc("bootstrap") as Record<string, unknown>;
-  const initialBot = (base.bots as Record<string, unknown>[])[0]!;
+  const catalog = listPiCatalog();
+  const connected = catalog.find(
+    (entry) => entry.provider === "openrouter" && entry.auth !== "oauth",
+  );
+  const unconnected = catalog.find(
+    (entry) => entry.provider !== connected?.provider && entry.auth === "api-key",
+  );
+  if (!connected || !unconnected) throw new Error("Bundled connection fixtures are unavailable.");
+  const credential = {
+    id: "docs-connection",
+    provider: connected.provider,
+    label: "Personal connection",
+    hasKey: true,
+    isDefault: true,
+    modelId: connected.id,
+  };
+  const me = {
+    ...(base.me as Record<string, unknown>),
+    defaultProvider: connected.provider,
+    defaultModel: connected.id,
+  };
+  const initialBot = {
+    ...(base.bots as Record<string, unknown>[])[0]!,
+    modelProvider: connected.provider,
+    modelId: connected.id,
+    modelCredentialId: credential.id,
+    thinkingLevel: "medium",
+  };
   const bots = [initialBot];
-  let answered = false;
+  const space = { ...(base.spaces as Record<string, unknown>[])[0]!, bots };
   await page.clock.setFixedTime(fixtureTime);
   await page.route("**/api/auth/get-session*", (route) => route.fulfill({ json: fixture.session }));
   await page.route("**/rpc/**", async (route) => {
@@ -42,26 +72,35 @@ async function useDashboard(page: Page) {
       return route.fulfill({ contentType: "text/event-stream", body: "" });
     const input = route.request().postDataJSON()?.json as Record<string, unknown> | undefined;
     let value: unknown;
-    if (procedure === "models/list" || procedure === "models/credentials") value = [];
+    if (procedure === "models/list") value = catalog;
+    else if (procedure === "models/credentials") value = [credential];
+    else if (procedure === "me") value = me;
     else if (procedure === "bots/create") {
       value = { ...initialBot, ...input, id: "new-bot", name: "Planner", threadId: "new-thread" };
       bots.unshift(value as Record<string, unknown>);
     } else if (procedure === "bots/list") value = bots;
     else if (procedure === "bots/get")
       value = bots.find((bot) => bot.id === input?.botId) ?? bots[0];
-    else if (procedure === "bootstrap") value = { ...base, bots };
+    else if (procedure === "bootstrap") value = { ...base, me, bots, spaces: [space] };
+    else if (procedure === "spaces/list") value = { current: space, spaces: [space] };
+    else if (
+      (procedure === "threads/get" || procedure === "threads/head") &&
+      input?.botId === "new-bot"
+    )
+      value = {
+        botId: "new-bot",
+        threadId: "new-thread",
+        cursor: 0,
+        olderCursor: null,
+        run: null,
+        messages: [],
+      };
     else if (procedure === "threads/answer") {
-      answered = true;
-      value = { ok: true };
+      value = fixture.rpc("threads/answer", input);
     } else value = fixture.rpc(procedure, input);
     await route.fulfill({ json: { json: value } });
   });
-  return {
-    fixture,
-    get answered() {
-      return answered;
-    },
-  };
+  return { fixture, catalog, connected, unconnected };
 }
 
 test("sign-in: open the form and recovery route", async ({ page }) => {
@@ -75,6 +114,12 @@ test("sign-in: open the form and recovery route", async ({ page }) => {
   await expect(page.getByRole("textbox", { name: "Email" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Continue with email" })).toBeVisible();
   await capture(page, "docs-sign-in-open");
+  await page.route("**/api/auth/sign-in/email", (route) => route.abort());
+  await page.getByRole("textbox", { name: "Email" }).fill("reader@example.test");
+  await page.getByLabel("Password", { exact: true }).fill("fixture-password");
+  await page.getByRole("button", { name: "Continue with email" }).click();
+  await expect(page.getByRole("alert")).toHaveText("Could not reach the server");
+  await capture(page, "docs-sign-in-error");
   const recovery = page.getByRole("link", { name: "Forgot password?" });
   await expect(recovery).toBeVisible();
   await recovery.click();
@@ -83,27 +128,18 @@ test("sign-in: open the form and recovery route", async ({ page }) => {
   await capture(page, "docs-sign-in-recovery");
 });
 
-test("onboarding: inspect the required connection", async ({ page }) => {
-  const { fixture } = await useDashboard(page);
+test("onboarding: prepare a required connection", async ({ page }) => {
+  const { fixture, connected } = await useDashboard(page);
   const me = fixture.rpc("me") as Record<string, unknown>;
   await page.route("**/rpc/me", (route) =>
-    route.fulfill({ json: { json: { ...me, needsModel: true } } }),
-  );
-  await page.route("**/rpc/models/list", (route) =>
     route.fulfill({
       json: {
-        json: [
-          {
-            provider: "fixture",
-            providerName: "Local connection",
-            id: "local",
-            label: "Local model",
-            auth: "api-key",
-            billing: "",
-            reasoning: false,
-            thinkingLevels: [],
-          },
-        ],
+        json: {
+          ...me,
+          needsModel: true,
+          defaultProvider: "openrouter",
+          defaultModel: connected.id,
+        },
       },
     }),
   );
@@ -112,6 +148,7 @@ test("onboarding: inspect the required connection", async ({ page }) => {
   await expect(page.getByRole("combobox", { name: "Provider" })).toBeVisible();
   const key = page.getByLabel("API key", { exact: true });
   await expect(key).toBeVisible();
+  await expect(page.getByRole("button", { name: "Continue", exact: true })).toBeDisabled();
   await capture(page, "docs-onboarding-open");
   await key.fill("fixture-key");
   const next = page.getByRole("button", { name: "Continue", exact: true });
@@ -140,10 +177,15 @@ test("bots-create: select a computer mode before creating", async ({ page }) => 
   await privateMode.click();
   await expect(privateMode).toHaveAttribute("aria-pressed", "true");
   await capture(page, "docs-bots-create-private");
+  await form.getByRole("button", { name: "Create", exact: true }).click();
+  await expect(page).toHaveURL(/\/app\/new-bot$/);
+  await expect(page.getByPlaceholder("Message Planner")).toBeVisible();
+  await expect(form).toBeHidden();
+  await capture(page, "docs-bots-create-ready");
 });
 
-test("models: open settings and inspect the empty catalog", async ({ page }) => {
-  await useDashboard(page);
+test("models: inspect a connection, default control, and connection form", async ({ page }) => {
+  const { connected, unconnected } = await useDashboard(page);
   await page.goto("/app/bot");
   const settings = page
     .locator("header.app-drag")
@@ -153,11 +195,30 @@ test("models: open settings and inspect the empty catalog", async ({ page }) => 
   const panel = page.getByTestId("user-settings");
   const models = panel.getByTestId("settings-nav-models");
   await expect(models).toBeVisible();
-  await capture(page, "docs-models-open");
   await models.click();
   await expect(panel.getByRole("heading", { name: "Models", exact: true })).toBeVisible();
-  await expect(panel.getByText("No model catalog is available.")).toBeVisible();
-  await capture(page, "docs-models-empty");
+  await expect(panel.getByText("Connected · Personal connection")).toBeVisible();
+  await expect(panel.getByText(connected.label, { exact: true }).first()).toBeVisible();
+  await capture(page, "docs-models-open");
+  const otherModel = panel.getByRole("combobox", { name: "Model", exact: true });
+  await otherModel.click();
+  const alternate = listPiCatalog().find(
+    (entry) => entry.provider === connected.provider && entry.id !== connected.id,
+  );
+  if (!alternate) throw new Error("Bundled default-choice fixture is unavailable.");
+  await panel.getByRole("option", { name: alternate.label }).first().click();
+  const useThisModel = panel.getByRole("button", { name: "Use this model" });
+  await expect(useThisModel).toBeVisible();
+  await useThisModel.scrollIntoViewIfNeeded();
+  await capture(page, "docs-models-default");
+  await panel
+    .getByRole("button", { name: unconnected.providerName ?? unconnected.provider })
+    .click();
+  const connectKey = panel.getByRole("button", { name: "Connect API key" });
+  await expect(connectKey).toBeVisible();
+  await expect(panel.getByLabel("API key", { exact: true })).toBeVisible();
+  await connectKey.scrollIntoViewIfNeeded();
+  await capture(page, "docs-models-add");
 });
 
 test("chat-approvals: inspect and deny a pending action", async ({ page }) => {
@@ -168,7 +229,10 @@ test("chat-approvals: inspect and deny a pending action", async ({ page }) => {
   await expect(deny).toBeVisible();
   await capture(page, "docs-chat-approvals-pending");
   await deny.click();
-  await expect.poll(() => state.answered).toBe(true);
+  await expect.poll(() => state.fixture.approvedInput).toMatchObject({ answer: "deny" });
+  await expect.poll(() => (state.fixture.rpc("threads/head") as { run: unknown }).run).toBeNull();
+  await expect(page.getByText("Denied", { exact: true })).toBeVisible();
   await expect(deny).toBeHidden();
+  await expect(page.getByRole("button", { name: "Sending…" })).toBeHidden();
   await capture(page, "docs-chat-approvals-denied");
 });

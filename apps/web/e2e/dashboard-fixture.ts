@@ -110,30 +110,29 @@ export function dashboardFixture(botCount = 1) {
           createdAt: now,
           updatedAt: now,
         },
-    messages: answered
-      ? []
-      : [
+    messages: [
+      {
+        id: "message",
+        threadId: "thread",
+        runId: "run",
+        seq: 1,
+        role: "bot",
+        createdAt: now,
+        blocks: [
           {
-            id: "message",
-            threadId: "thread",
-            runId: "run",
-            seq: 1,
-            role: "bot",
-            createdAt: now,
-            blocks: [
-              {
-                kind: "ask",
-                text: "Send the draft?",
-                status: "pending",
-                approvalEffectId: "effect",
-                actions: [
-                  { id: "allow", label: "Allow once" },
-                  { id: "deny", label: "Deny" },
-                ],
-              },
+            kind: "ask",
+            text: "Send the draft?",
+            status: answered ? "answered" : "pending",
+            ...(answered ? { answer: (approvedInput as { answer: string }).answer } : {}),
+            approvalEffectId: "effect",
+            actions: [
+              { id: "allow", label: "Allow once" },
+              { id: "deny", label: "Deny" },
             ],
           },
         ],
+      },
+    ],
   });
   const boardWorkspace = {
     id: "board",
@@ -332,7 +331,9 @@ export function dashboardFixture(botCount = 1) {
         rows,
         ...(values["runs/list"] as { runs: unknown[] }),
         approvals: snapshot().messages.flatMap((message) =>
-          message.blocks.map((block) => ({ runId: message.runId, messageId: message.id, block })),
+          message.blocks
+            .filter((block) => block.kind === "ask" && block.status === "pending")
+            .map((block) => ({ runId: message.runId, messageId: message.id, block })),
         ),
       };
       if (procedure === "threads/answer") {

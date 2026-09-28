@@ -307,7 +307,8 @@
         "apps/mobile/app/thread.tsx",
         "packages/contracts/src/rpc.ts",
         "packages/core/src/action-approval.ts",
-        "docs/governance.md"
+        "docs/governance.md",
+        "apps/web/src/pages/TeamBoard.tsx"
       ],
       "tests": [
         "packages/core/src/action-approval.test.ts",
@@ -679,7 +680,8 @@
         "apps/web/src/pages/ModelSettingsOverlay.tsx",
         "apps/mobile/app/models.tsx",
         "packages/contracts/src/rpc.ts",
-        "README.md"
+        "README.md",
+        "packages/adapters/src/pi-models.ts"
       ],
       "tests": [
         "packages/core/src/model-providers.test.ts",
@@ -690,6 +692,12 @@
         {
           "id": "models-load",
           "text": "Could not load model settings",
+          "source": "apps/web/src/pages/ModelSettingsOverlay.tsx",
+          "catalog": "apps/web/src/locales/en/messages.po"
+        },
+        {
+          "id": "models-catalog-unavailable",
+          "text": "No model catalog is available.",
           "source": "apps/web/src/pages/ModelSettingsOverlay.tsx",
           "catalog": "apps/web/src/locales/en/messages.po"
         }
