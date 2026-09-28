@@ -63,6 +63,11 @@ msgstr "{0} सक्रिय कार्य"
 msgid "{0} bytes"
 msgstr ""
 
+#. placeholder {0}: runtimeNames[coordinatorRuntime]
+#: src/pages/GroupPanel.tsx
+msgid "{0} can't use Ardur tools — a coordinator needs tools to hand off work."
+msgstr "{0} Ardur टूल उपयोग नहीं कर सकता — कोऑर्डिनेटर को काम सौंपने के लिए टूल चाहिए।"
+
 #. placeholder {0}: block.name
 #: src/pages/shell/message-cards.tsx
 msgid "{0} connection"

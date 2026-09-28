@@ -147,6 +147,47 @@ it("warns only while the picked coordinator's runtime can't use Ardur tools", as
   expect(warning()).toBeNull();
 });
 
+it("clears the tools warning when the coordinator leaves the member selection", async () => {
+  const onSave = vi.fn(async () => undefined);
+  const runtimeBots = [
+    { id: "a", name: "a", color: "#111", runtimeKind: "antigravity" },
+    { id: "b", name: "b", color: "#111", runtimeKind: "codex-app-server" },
+    { id: "c", name: "c", color: "#111", runtimeKind: "codex-app-server" },
+  ] as Bot[];
+  await act(async () =>
+    root.render(
+      <GroupSettings
+        group={group("Team", ["a", "b", "c"], "a")}
+        bots={runtimeBots}
+        goal={null}
+        canManageGoal={false}
+        onStartGoal={vi.fn()}
+        onSave={onSave}
+        onModelPin={vi.fn()}
+        modelSettings={null}
+        onRemove={vi.fn()}
+      />,
+    ),
+  );
+  const warning = () => node.querySelector('[data-testid="coordinator-tools-warning"]');
+  expect(warning()?.textContent).toContain("Antigravity");
+  const select = node.querySelector("select")!;
+  expect(select.value).toBe("a");
+
+  // Uncheck the coordinator in the member list: the dropdown falls back to None.
+  const memberA = [...node.querySelectorAll<HTMLButtonElement>('button[aria-pressed="true"]')].find(
+    (button) => button.textContent?.trim() === "a",
+  )!;
+  await act(async () => memberA.click());
+  expect(select.value).toBe("");
+  expect(warning()).toBeNull();
+
+  await act(async () => saveButton().click());
+  expect(onSave).toHaveBeenCalledWith(
+    expect.objectContaining({ coordinatorBotId: null, botIds: ["b", "c"] }),
+  );
+});
+
 it("judges the coordinator by the member's effective pin, not the bot default", async () => {
   const runtimeBots = [
     { id: "a", name: "a", color: "#111", runtimeKind: "antigravity" },

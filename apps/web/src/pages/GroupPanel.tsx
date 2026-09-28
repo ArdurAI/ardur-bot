@@ -327,12 +327,13 @@ export function GroupSettings({
     });
   }
 
-  const coordinatorRuntime = coordinator
-    ? (group.members.find((member) => member.botId === coordinator)?.effectiveRuntimePin
-        ?.runtimeKind ??
-      bots.find((bot) => bot.id === coordinator)?.runtimeKind ??
-      "pi")
-    : null;
+  const coordinatorRuntime =
+    coordinator && selected.includes(coordinator)
+      ? (group.members.find((member) => member.botId === coordinator)?.effectiveRuntimePin
+          ?.runtimeKind ??
+        bots.find((bot) => bot.id === coordinator)?.runtimeKind ??
+        "pi")
+      : null;
 
   return (
     <div>

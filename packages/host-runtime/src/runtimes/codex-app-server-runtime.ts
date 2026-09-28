@@ -563,7 +563,10 @@ export class CodexAppServerRuntime implements AgentRuntime {
               rpc.send({ id: event.id, result: { action: "decline" } });
               queue.push({
                 type: "ask",
-                text: "Codex requested input for another MCP server — continue using Ardur tools.",
+                text:
+                  params.serverName === "ardur"
+                    ? "Codex asked Ardur to collect form input — Ardur doesn't take forms, so it was declined."
+                    : "Codex requested input for another MCP server — continue using Ardur tools.",
                 actions: [{ id: "continue", label: "Continue" }],
               });
               void interrupt();

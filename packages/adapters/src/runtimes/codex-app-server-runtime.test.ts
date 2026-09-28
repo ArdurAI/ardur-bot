@@ -546,7 +546,11 @@ describe("Codex app-server protocol", () => {
   it("declines a tool-call approval from any other MCP server, with the card", async () => {
     const f = fixture("mcp-approval-other");
     expect((await f.collect()).filter((event) => event.type !== "usage")).toEqual([
-      expect.objectContaining({ type: "ask" }),
+      {
+        type: "ask",
+        text: "Codex requested input for another MCP server — continue using Ardur tools.",
+        actions: [{ id: "continue", label: "Continue" }],
+      },
     ]);
     expect(f.messages).toContainEqual({ id: "elicit", result: { action: "decline" } });
     expect(f.messages.some((event) => event.method === "turn/interrupt")).toBe(true);
@@ -554,7 +558,11 @@ describe("Codex app-server protocol", () => {
   it("declines an ardur elicitation that is not a marked tool-call approval", async () => {
     const f = fixture("mcp-form");
     expect((await f.collect()).filter((event) => event.type !== "usage")).toEqual([
-      expect.objectContaining({ type: "ask" }),
+      {
+        type: "ask",
+        text: "Codex asked Ardur to collect form input — Ardur doesn't take forms, so it was declined.",
+        actions: [{ id: "continue", label: "Continue" }],
+      },
     ]);
     expect(f.messages).toContainEqual({ id: "elicit", result: { action: "decline" } });
     expect(f.messages.some((event) => event.method === "turn/interrupt")).toBe(true);
