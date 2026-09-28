@@ -8,7 +8,7 @@ import {
   type SpaceBot,
 } from "@ardurbot/contracts";
 import type { HistoricalHermesRuntimeConfig } from "@ardurbot/contracts/runtime-config";
-import { sandboxKindForBot, userVisibleMessages } from "@ardurbot/core";
+import { defaultComputerKindForNewBot, userVisibleMessages } from "@ardurbot/core";
 import { decodeHistoricalHermesRuntimeConfig } from "@ardurbot/core/runtime-config";
 import { Prisma, type PrismaClient } from "./client.js";
 import { type ComputerMode, ensureComputerRecord, parseComputerMode } from "./computers.js";
@@ -482,9 +482,10 @@ export function createRepos(prisma: PrismaClient) {
         if (thinkingLevel == null) thinkingLevel = parent.thinkingLevel ?? null;
       }
       const settings = await prisma.deploymentSettings.findUnique({ where: { id: "default" } });
-      const kind = sandboxKindForBot(
+      const kind = defaultComputerKindForNewBot(
         process.env.SANDBOX_PROVIDER ?? "docker",
         settings?.computerHost,
+        runtimeKind,
       );
       const insertBot = () =>
         prisma.$transaction(async (tx) => {

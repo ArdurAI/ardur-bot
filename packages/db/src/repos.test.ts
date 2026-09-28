@@ -467,7 +467,7 @@ describe("createRepos.reorderBots", () => {
 });
 
 describe("createRepos.createBot computer kind", () => {
-  async function createdKind(computerHost: string | null) {
+  async function createdKind(computerHost: string | null, runtimeKind?: string) {
     const upsert = vi.fn(async (_args: { create: { kind: string } }) => ({ id: "computer" }));
     const tx = {
       $queryRaw: vi.fn(async () => []),
@@ -495,23 +495,28 @@ describe("createRepos.createBot computer kind", () => {
       instructions: "",
       color: baseBot.color,
       notifyOnFinish: false,
+      ...(runtimeKind ? { runtimeKind } : {}),
     });
     return upsert.mock.calls[0]?.[0].create.kind;
   }
 
   afterEach(() => vi.unstubAllEnvs());
 
-  // Existing behaviour: the deployment's provider and the saved host choice decide the kind.
+  // The deployment's provider and the saved host choice decide the kind; when the choice is
+  // This Mac, a new bot on the built-in runtime still starts on Docker (native runtimes are
+  // host-only, so a pinned bot keeps the host).
   it.each([
-    ["desktop", null, "desktop"],
-    ["docker", null, "docker"],
-    ["docker", "this-mac", "desktop"],
-    ["docker", "docker", "docker"],
+    ["desktop", null, undefined, "desktop"],
+    ["docker", null, undefined, "docker"],
+    ["docker", "this-mac", undefined, "docker"],
+    ["docker", "this-mac", "pi", "docker"],
+    ["docker", "this-mac", "claude-code", "desktop"],
+    ["docker", "docker", undefined, "docker"],
   ])(
-    "on a %s deployment with host choice %s starts a new computer on %s",
-    async (provider, computerHost, kind) => {
+    "on a %s deployment with host choice %s and runtime %s starts a new computer on %s",
+    async (provider, computerHost, runtimeKind, kind) => {
       vi.stubEnv("SANDBOX_PROVIDER", provider);
-      expect(await createdKind(computerHost)).toBe(kind);
+      expect(await createdKind(computerHost, runtimeKind)).toBe(kind);
     },
   );
 });

@@ -145,7 +145,7 @@ function deployment(sandboxProvider: string, computerHost: string | null) {
     /** Disconnect called by a user who holds no registration of their own. */
     disconnectAs: (userId: string) => bridge.disconnect(userId),
     /** The kind a new bot's computer starts on. */
-    async newBotKind() {
+    async newBotKind(runtimeKind?: string) {
       prisma.computer.upsert.mockClear();
       await createRepos(prisma as unknown as PrismaClient).createBot(owner, {
         name: "New",
@@ -154,6 +154,7 @@ function deployment(sandboxProvider: string, computerHost: string | null) {
         instructions: "",
         color: "#000",
         notifyOnFinish: false,
+        ...(runtimeKind ? { runtimeKind } : {}),
       });
       return prisma.computer.upsert.mock.calls[0]?.[0].create.kind;
     },
@@ -217,18 +218,20 @@ it.each(["api", ""])(
   },
 );
 
-it("on the desktop app's own Compose stack returns new bots to Docker when this computer is disconnected", async () => {
+it("on the desktop app's own Compose stack, paired bots on the built-in runtime stay on Docker and only native-runtime bots use this computer", async () => {
   desktopStack();
   const stack = deployment("docker", null);
   expect(await stack.newBotKind()).toBe("docker");
   await stack.pair();
-  expect(await stack.newBotKind()).toBe("desktop");
+  expect(await stack.newBotKind()).toBe("docker");
+  // Host-only runtimes still start on this computer once it is paired.
+  expect(await stack.newBotKind("claude-code")).toBe("desktop");
   await stack.disconnect();
   expect(await stack.hostChoice()).toEqual({ canChooseHostComputer: false, computerHost: null });
   expect(await stack.newBotKind()).toBe("docker");
-  // Set up picks this computer again.
+  // Set up pairs this computer again for native-runtime bots.
   await stack.pair();
-  expect(await stack.newBotKind()).toBe("desktop");
+  expect(await stack.newBotKind("claude-code")).toBe("desktop");
 });
 
 it("on the desktop app's own Compose stack, a Disconnect that finds no registration of its own leaves the choice unchanged", async () => {
