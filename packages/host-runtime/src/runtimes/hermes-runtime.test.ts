@@ -105,10 +105,12 @@ describe("HermesRuntime M0 ACP seam", () => {
         message.method === "initialize" ? { protocolVersion: 1 } : { sessionId: "fixture-session" };
       stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id: message.id, result })}\n`);
     });
+    const finished = vi.fn();
     const adapter = new HermesRuntime({
       command: "fixture",
       pinned: true,
       launch: async () => ({ child, teardown: async () => undefined }),
+      onTurnFinished: finished,
     });
     const base = request();
     const run = request({
@@ -133,9 +135,11 @@ describe("HermesRuntime M0 ACP seam", () => {
         settled = true;
       });
       await prompted;
-      await vi.advanceTimersByTimeAsync(180_001);
+      await vi.advanceTimersByTimeAsync(181_000);
+      await vi.advanceTimersByTimeAsync(1_000);
       expect(settled).toBe(false);
-      await vi.advanceTimersByTimeAsync(425_200);
+      expect(finished).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(423_200);
       await expect(completion).rejects.toThrow("Hermes could not complete this turn.");
     } finally {
       vi.useRealTimers();
