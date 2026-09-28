@@ -2,6 +2,14 @@ import type { ContextAggregate, ContextSnapshot } from "@ardurbot/contracts";
 import { ContextSnapshotSchema } from "@ardurbot/contracts";
 import type { RecordedContextUsage } from "../run-usage.js";
 
+/** A broker receipt is already deduplicated and lease-fenced by the ledger. */
+export async function forwardRecordedBrokerUsage(
+  usage: RecordedContextUsage | null,
+  sink?: (usage: RecordedContextUsage) => Promise<void>,
+): Promise<void> {
+  if (usage) await sink?.(usage);
+}
+
 /** Apply the ledger's accepted delta, never the raw runtime observation. */
 export function recordContextUsage(
   snapshot: ContextSnapshot,

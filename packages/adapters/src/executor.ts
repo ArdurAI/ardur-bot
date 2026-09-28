@@ -257,7 +257,11 @@ import { checkpointRunComputerWorkspace, isRemoteHostAbsolutePath } from "./comp
 import { sanitizeConnectorError } from "./connector-safety.js";
 import { assembleTurnContext } from "./context/assemble.js";
 import { claimBotRun } from "./context/concurrency.js";
-import { recordContextUsage, resumeContextSnapshot } from "./context/metrics.js";
+import {
+  forwardRecordedBrokerUsage,
+  recordContextUsage,
+  resumeContextSnapshot,
+} from "./context/metrics.js";
 import { fitContextRecall, recallLocalDocuments } from "./context/recall.js";
 import { formatCurrentTimeInstruction } from "./current-time.js";
 import type { DelegationResolver } from "./delegation.js";
@@ -1175,7 +1179,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
         expiresAt: Date.now() + config.timeoutMs,
         active,
         record: async (usage) => {
-          await recordBrokerRunUsage(
+          const recorded = await recordBrokerRunUsage(
             deps,
             { ...source, delegationId: source.delegationId },
             usage,
@@ -1186,6 +1190,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               ...(summary ? { briefAttemptedAt: brief!.attemptedAt! } : {}),
             },
           );
+          await forwardRecordedBrokerUsage(recorded, request.onBrokerContextUsage);
         },
         observed: async (model, wireEffort) =>
           request.onBrokerRuntimeInfo?.(brokerObservedRuntimeInfo(pin.effort, model, wireEffort)),
@@ -5679,6 +5684,11 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   data: { runtimeInfo },
                 });
                 if (saved.count !== 1) throw new Error("Provider evidence ownership was lost.");
+              },
+              onBrokerContextUsage: async (usage) => {
+                if (comparisonRun || selected.pin.runtimeKind !== "hermes") return;
+                recordContextUsage(turnContext.snapshot, usage);
+                await saveContextSnapshot();
               },
               script,
               allowSilentEmpty: allowSilentEmptyRun,
