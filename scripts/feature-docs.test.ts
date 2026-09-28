@@ -309,6 +309,16 @@ describe("feature documentation inventory", () => {
     expect(() => assertDocumentationPng(png, 2, 1, "docs/broken.png")).toThrow("must be a 2x1 PNG");
   });
 
+  it("rejects an indexed pixel without a palette entry", () => {
+    const missingPaletteColor = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAMAAAAoyzS7AAAAA1BMVEUAAACnej3aAAAACklEQVR4nGNgBAAAAwACS/Xd6gAAAABJRU5ErkJggg==",
+      "base64",
+    );
+    expect(() => assertDocumentationPng(missingPaletteColor, 1, 1, "docs/indexed.png")).toThrow(
+      "must be a 1x1 PNG",
+    );
+  });
+
   it("keeps public copy plain and neutral", async () => {
     const { manifest, evidence } = await data();
     manifest.features[0]!.summary = "The best <b>sign in</b> option.";
