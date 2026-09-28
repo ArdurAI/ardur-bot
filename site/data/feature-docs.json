@@ -12,7 +12,7 @@
       "internal": false,
       "internalReason": null,
       "status": "published",
-      "availableSince": "0.1.0-alpha.1",
+      "availableSince": "0.1.0-alpha.2",
       "platforms": {
         "web": "configure",
         "desktop": "configure",
@@ -61,7 +61,7 @@
           ],
           "screenshotId": "docs-sign-in-open",
           "expected": "The email form is ready.",
-          "availableSince": "0.1.0-alpha.1"
+          "availableSince": "0.1.0-alpha.2"
         },
         {
           "id": "show-connection-error",
@@ -77,7 +77,7 @@
           ],
           "screenshotId": "docs-sign-in-error",
           "expected": "The form shows a server connection error.",
-          "availableSince": "0.1.0-alpha.1"
+          "availableSince": "0.1.0-alpha.2"
         },
         {
           "id": "open-password-recovery",
@@ -91,7 +91,7 @@
           ],
           "screenshotId": "docs-sign-in-recovery",
           "expected": "The reset-link form opens.",
-          "availableSince": "0.1.0-alpha.1"
+          "availableSince": "0.1.0-alpha.2"
         }
       ],
       "boundaries": [
@@ -118,7 +118,7 @@
       "internal": false,
       "internalReason": null,
       "status": "published",
-      "availableSince": "0.1.0-alpha.1",
+      "availableSince": "0.1.0-alpha.2",
       "platforms": {
         "web": "configure",
         "desktop": "configure",
@@ -158,7 +158,7 @@
           ],
           "screenshotId": "docs-onboarding-open",
           "expected": "The selected connection and required fields are visible.",
-          "availableSince": "0.1.0-alpha.1"
+          "availableSince": "0.1.0-alpha.2"
         },
         {
           "id": "enter-connection-key",
@@ -172,7 +172,7 @@
           ],
           "screenshotId": "docs-onboarding-connect",
           "expected": "Continue is enabled after a key is entered.",
-          "availableSince": "0.1.0-alpha.1"
+          "availableSince": "0.1.0-alpha.2"
         }
       ],
       "boundaries": [
@@ -501,7 +501,7 @@
       "internal": false,
       "internalReason": null,
       "status": "published",
-      "availableSince": "0.1.0-alpha.1",
+      "availableSince": "0.1.0-alpha.2",
       "platforms": {
         "web": "configure",
         "desktop": "configure",
@@ -531,7 +531,7 @@
           ],
           "screenshotId": "docs-bots-create-open",
           "expected": "The new bot choice is visible.",
-          "availableSince": "0.1.0-alpha.1"
+          "availableSince": "0.1.0-alpha.2"
         },
         {
           "id": "open-new-bot-form",
@@ -546,7 +546,7 @@
           ],
           "screenshotId": "docs-bots-create-form",
           "expected": "Name and computer mode controls are visible.",
-          "availableSince": "0.1.0-alpha.1"
+          "availableSince": "0.1.0-alpha.2"
         },
         {
           "id": "choose-private-computer",
@@ -560,7 +560,7 @@
           ],
           "screenshotId": "docs-bots-create-private",
           "expected": "Private is selected before creation.",
-          "availableSince": "0.1.0-alpha.1"
+          "availableSince": "0.1.0-alpha.2"
         },
         {
           "id": "open-created-bot",
@@ -573,7 +573,7 @@
           ],
           "screenshotId": "docs-bots-create-ready",
           "expected": "The Planner conversation opens.",
-          "availableSince": "0.1.0-alpha.1"
+          "availableSince": "0.1.0-alpha.2"
         }
       ],
       "boundaries": [
@@ -858,7 +858,7 @@
       "internal": false,
       "internalReason": null,
       "status": "published",
-      "availableSince": "0.1.0-alpha.1",
+      "availableSince": "0.1.0-alpha.2",
       "platforms": {
         "web": "configure",
         "desktop": "configure",
@@ -878,7 +878,7 @@
           ],
           "screenshotId": "docs-chat-approvals-pending",
           "expected": "Both responses are available.",
-          "availableSince": "0.1.0-alpha.1"
+          "availableSince": "0.1.0-alpha.2"
         },
         {
           "id": "see-denied-action",
@@ -891,7 +891,7 @@
           ],
           "screenshotId": "docs-chat-approvals-denied",
           "expected": "Denied is visible and the pending response controls close.",
-          "availableSince": "0.1.0-alpha.1"
+          "availableSince": "0.1.0-alpha.2"
         }
       ],
       "boundaries": [
@@ -1127,7 +1127,7 @@
       "internal": false,
       "internalReason": null,
       "status": "published",
-      "availableSince": "0.1.0-alpha.1",
+      "availableSince": "0.1.0-alpha.2",
       "platforms": {
         "web": "configure",
         "desktop": "configure",
@@ -1145,7 +1145,7 @@
           ],
           "screenshotId": "docs-group-goals-ready",
           "expected": "The goal form appears for the group coordinator.",
-          "availableSince": "0.1.0-alpha.1"
+          "availableSince": "0.1.0-alpha.2"
         },
         {
           "id": "fill-goal-form",
@@ -1158,7 +1158,7 @@
           ],
           "screenshotId": "docs-group-goals-form",
           "expected": "Start goal is ready to submit.",
-          "availableSince": "0.1.0-alpha.1"
+          "availableSince": "0.1.0-alpha.2"
         },
         {
           "id": "watch-goal-progress",
@@ -1171,7 +1171,7 @@
           ],
           "screenshotId": "docs-group-goals-progress",
           "expected": "The room shows the working goal.",
-          "availableSince": "0.1.0-alpha.1"
+          "availableSince": "0.1.0-alpha.2"
         },
         {
           "id": "stop-running-goal",
@@ -1183,7 +1183,7 @@
           ],
           "screenshotId": "docs-group-goals-stopped",
           "expected": "The room shows the stopped goal.",
-          "availableSince": "0.1.0-alpha.1"
+          "availableSince": "0.1.0-alpha.2"
         }
       ],
       "boundaries": [
@@ -1296,7 +1296,7 @@
       "internal": false,
       "internalReason": null,
       "status": "published",
-      "availableSince": "0.1.0-alpha.1",
+      "availableSince": "0.1.0-alpha.2",
       "platforms": {
         "web": "configure",
         "desktop": "configure",
@@ -1313,7 +1313,7 @@
           ],
           "screenshotId": "docs-routines-open",
           "expected": "The scheduled routine appears.",
-          "availableSince": "0.1.0-alpha.1"
+          "availableSince": "0.1.0-alpha.2"
         },
         {
           "id": "edit-routine-instruction",
@@ -1325,7 +1325,7 @@
           ],
           "screenshotId": "docs-routines-edit",
           "expected": "The revised instruction appears in the editor.",
-          "availableSince": "0.1.0-alpha.1"
+          "availableSince": "0.1.0-alpha.2"
         },
         {
           "id": "save-routine",
@@ -1337,7 +1337,7 @@
           ],
           "screenshotId": "docs-routines-saved",
           "expected": "The Test run button is available after saving.",
-          "availableSince": "0.1.0-alpha.1"
+          "availableSince": "0.1.0-alpha.2"
         },
         {
           "id": "inspect-run-result",
@@ -1350,7 +1350,7 @@
           ],
           "screenshotId": "docs-routines-result",
           "expected": "Run history shows the test run as Done.",
-          "availableSince": "0.1.0-alpha.1"
+          "availableSince": "0.1.0-alpha.2"
         }
       ],
       "boundaries": [
@@ -1508,7 +1508,7 @@
       "internal": false,
       "internalReason": null,
       "status": "published",
-      "availableSince": "0.1.0-alpha.1",
+      "availableSince": "0.1.0-alpha.2",
       "platforms": {
         "web": "configure",
         "desktop": "configure",
@@ -1548,7 +1548,7 @@
           ],
           "screenshotId": "docs-memory-documents-open",
           "expected": "Preferences appears in the document list.",
-          "availableSince": "0.1.0-alpha.1"
+          "availableSince": "0.1.0-alpha.2"
         },
         {
           "id": "open-document-detail",
@@ -1560,7 +1560,7 @@
           ],
           "screenshotId": "docs-memory-documents-detail",
           "expected": "The document content appears in its detail.",
-          "availableSince": "0.1.0-alpha.1"
+          "availableSince": "0.1.0-alpha.2"
         },
         {
           "id": "inspect-document-history",
@@ -1571,7 +1571,7 @@
           ],
           "screenshotId": "docs-memory-documents-history",
           "expected": "The first saved revision appears.",
-          "availableSince": "0.1.0-alpha.1"
+          "availableSince": "0.1.0-alpha.2"
         },
         {
           "id": "approve-reviewed-change",
@@ -1584,7 +1584,7 @@
           ],
           "screenshotId": "docs-memory-documents-change",
           "expected": "The approved content appears in the document.",
-          "availableSince": "0.1.0-alpha.1"
+          "availableSince": "0.1.0-alpha.2"
         }
       ],
       "boundaries": [
@@ -2133,7 +2133,7 @@
       "internal": false,
       "internalReason": null,
       "status": "published",
-      "availableSince": "0.1.0-alpha.1",
+      "availableSince": "0.1.0-alpha.2",
       "platforms": {
         "web": "configure",
         "desktop": "configure",
@@ -2184,7 +2184,7 @@
           ],
           "screenshotId": "docs-models-open",
           "expected": "The Models heading and connected credential are visible.",
-          "availableSince": "0.1.0-alpha.1"
+          "availableSince": "0.1.0-alpha.2"
         },
         {
           "id": "choose-default-model",
@@ -2198,7 +2198,7 @@
           ],
           "screenshotId": "docs-models-default",
           "expected": "The Use this model button appears for the selected model.",
-          "availableSince": "0.1.0-alpha.1"
+          "availableSince": "0.1.0-alpha.2"
         },
         {
           "id": "open-connection-form",
@@ -2212,7 +2212,7 @@
           ],
           "screenshotId": "docs-models-add",
           "expected": "The connection form is ready for a key.",
-          "availableSince": "0.1.0-alpha.1"
+          "availableSince": "0.1.0-alpha.2"
         }
       ],
       "boundaries": [
@@ -2328,7 +2328,7 @@
       "internal": false,
       "internalReason": null,
       "status": "published",
-      "availableSince": "0.1.0-alpha.1",
+      "availableSince": "0.1.0-alpha.2",
       "platforms": {
         "web": "configure",
         "desktop": "configure",
@@ -2368,7 +2368,7 @@
           ],
           "screenshotId": "docs-computers-open",
           "expected": "The computer state and free memory appear.",
-          "availableSince": "0.1.0-alpha.1"
+          "availableSince": "0.1.0-alpha.2"
         },
         {
           "id": "open-add-computer",
@@ -2381,7 +2381,7 @@
           ],
           "screenshotId": "docs-computers-add",
           "expected": "The connection form opens.",
-          "availableSince": "0.1.0-alpha.1"
+          "availableSince": "0.1.0-alpha.2"
         },
         {
           "id": "inspect-refused-test",
@@ -2393,7 +2393,7 @@
           ],
           "screenshotId": "docs-computers-refused",
           "expected": "The row shows the reachability refusal.",
-          "availableSince": "0.1.0-alpha.1"
+          "availableSince": "0.1.0-alpha.2"
         },
         {
           "id": "retry-computer-test",
@@ -2405,7 +2405,7 @@
           ],
           "screenshotId": "docs-computers-tested",
           "expected": "The row shows a running connection.",
-          "availableSince": "0.1.0-alpha.1"
+          "availableSince": "0.1.0-alpha.2"
         }
       ],
       "boundaries": [
@@ -2679,7 +2679,7 @@
       "internal": false,
       "internalReason": null,
       "status": "published",
-      "availableSince": "0.1.0-alpha.1",
+      "availableSince": "0.1.0-alpha.2",
       "platforms": {
         "web": "configure",
         "desktop": "configure",
@@ -2721,7 +2721,7 @@
           ],
           "screenshotId": "docs-integrations-open",
           "expected": "The integration table appears.",
-          "availableSince": "0.1.0-alpha.1"
+          "availableSince": "0.1.0-alpha.2"
         },
         {
           "id": "review-tool-access",
@@ -2733,7 +2733,7 @@
           ],
           "screenshotId": "docs-integrations-access",
           "expected": "The read tool permission is Ask.",
-          "availableSince": "0.1.0-alpha.1"
+          "availableSince": "0.1.0-alpha.2"
         },
         {
           "id": "allow-read-tool",
@@ -2744,7 +2744,7 @@
           ],
           "screenshotId": "docs-integrations-allow",
           "expected": "The read tool shows Allow.",
-          "availableSince": "0.1.0-alpha.1"
+          "availableSince": "0.1.0-alpha.2"
         },
         {
           "id": "remove-tool-access",
@@ -2756,7 +2756,7 @@
           ],
           "screenshotId": "docs-integrations-block",
           "expected": "The saved read tool permission is Block.",
-          "availableSince": "0.1.0-alpha.1"
+          "availableSince": "0.1.0-alpha.2"
         },
         {
           "id": "open-connection-form",
@@ -2771,7 +2771,7 @@
           ],
           "screenshotId": "docs-integrations-connect",
           "expected": "The token entry field appears.",
-          "availableSince": "0.1.0-alpha.1"
+          "availableSince": "0.1.0-alpha.2"
         }
       ],
       "boundaries": [

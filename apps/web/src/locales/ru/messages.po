@@ -8684,6 +8684,10 @@ msgstr ""
 msgid "Voice"
 msgstr "Голос"
 
+#: src/pages/CallView.tsx
+msgid "Voice failed"
+msgstr "Ошибка голоса"
+
 #: src/pages/system/SystemPage.tsx
 msgid "Voice shortcut"
 msgstr ""

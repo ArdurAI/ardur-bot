@@ -103,7 +103,7 @@ describe("feature documentation inventory", () => {
     expect(new Set(published.features.map((feature) => feature.id))).toEqual(firstTen);
     expect(published.screenshots).toHaveLength(35);
     for (const feature of published.features) {
-      expect(feature.availableSince).toBe("0.1.0-alpha.1");
+      expect(feature.availableSince).toBe("0.1.0-alpha.2");
       expect(feature.steps.length).toBeGreaterThan(0);
       expect(feature.troubleshooting.length).toBeGreaterThan(0);
       expect(feature.related.every((id) => firstTen.has(id))).toBe(true);

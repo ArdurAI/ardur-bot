@@ -3,7 +3,7 @@ import { runtimeLabels } from "@ardurbot/contracts";
 import { spaceDefaultEffort } from "@ardurbot/core";
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, Text } from "react-native";
-import type { MobileGroup, MobileModel, MobileModelCredential } from "../lib/api";
+import type { MobileBot, MobileGroup, MobileModel, MobileModelCredential } from "../lib/api";
 import { rpc } from "../lib/api";
 import { useI18n } from "../lib/i18n";
 import { presentMessageActionSheet } from "../lib/message-action-sheet";
@@ -28,6 +28,8 @@ export function GroupMemberModelControl({
   member,
   catalog,
   credentials,
+  botRuntimeKind,
+  bot,
   experimental,
   onSaved,
   onError,
@@ -36,6 +38,8 @@ export function GroupMemberModelControl({
   member: GroupMember;
   catalog: MobileModel[];
   credentials: MobileModelCredential[];
+  botRuntimeKind?: RuntimeKind;
+  bot?: MobileBot;
   experimental?: boolean;
   onSaved: (group: MobileGroup) => void;
   onError: (message: string) => void;
@@ -45,13 +49,25 @@ export function GroupMemberModelControl({
   const colorScheme = useResolvedAppearance();
   const [pending, setPending] = useState(false);
   const [activeMember, setActiveMember] = useState(member);
-  const [draftKind, setDraftKind] = useState<RuntimeKind>(member.runtimePin?.runtimeKind ?? "pi");
+  const initialKind =
+    member.runtimePin?.runtimeKind ??
+    botRuntimeKind ??
+    bot?.runtimeKind ??
+    member.effectiveRuntimePin?.runtimeKind ??
+    "pi";
+  const [draftKind, setDraftKind] = useState<RuntimeKind>(initialKind);
   const connectionKind = draftKind === "hermes" ? "hermes" : "pi";
 
   useEffect(() => {
     setActiveMember(member);
-    setDraftKind(member.runtimePin?.runtimeKind ?? "pi");
-  }, [member]);
+    setDraftKind(
+      member.runtimePin?.runtimeKind ??
+        botRuntimeKind ??
+        bot?.runtimeKind ??
+        member.effectiveRuntimePin?.runtimeKind ??
+        "pi",
+    );
+  }, [member, botRuntimeKind, bot?.runtimeKind]);
 
   const choices = useMemo<Choice[]>(() => {
     const currentPin = activeMember.runtimePin;
@@ -145,12 +161,20 @@ export function GroupMemberModelControl({
         resolvedPin ? "groups/setMemberModelPin" : "groups/clearMemberModelPin",
         resolvedPin ? { ...target, pin: resolvedPin } : target,
       );
-      setActiveMember(
+      const updatedMember =
         group.members.find(
           (item) => item.memberId === activeMember.memberId || item.botId === activeMember.botId,
-        ) ?? activeMember,
+        ) ?? activeMember;
+      setActiveMember(updatedMember);
+      setDraftKind(
+        resolvedPin
+          ? resolvedPin.runtimeKind
+          : (updatedMember.runtimePin?.runtimeKind ??
+              botRuntimeKind ??
+              bot?.runtimeKind ??
+              updatedMember.effectiveRuntimePin?.runtimeKind ??
+              "pi"),
       );
-      if (resolvedPin) setDraftKind(resolvedPin.runtimeKind);
       onSaved(group);
     } catch (error: unknown) {
       const isConflict =
@@ -162,6 +186,7 @@ export function GroupMemberModelControl({
         (error instanceof Error &&
           error.message.includes("This member's model changed. Reload the group."));
       if (isConflict) {
+        let refreshedMember: GroupMember | undefined;
         try {
           const groups = await rpc<MobileGroup[]>("groups/list");
           const refreshed = Array.isArray(groups)
@@ -174,6 +199,7 @@ export function GroupMemberModelControl({
             );
             if (reloadedMember) {
               setActiveMember(reloadedMember);
+              refreshedMember = reloadedMember;
             }
             onSaved(refreshed);
           }
@@ -184,8 +210,23 @@ export function GroupMemberModelControl({
           error instanceof Error && error.message
             ? error.message
             : "This member's model changed. Reload the group.";
+        const confirmed = refreshedMember ?? activeMember;
+        setDraftKind(
+          confirmed.runtimePin?.runtimeKind ??
+            botRuntimeKind ??
+            bot?.runtimeKind ??
+            confirmed.effectiveRuntimePin?.runtimeKind ??
+            "pi",
+        );
         onError(t(message));
       } else {
+        setDraftKind(
+          activeMember.runtimePin?.runtimeKind ??
+            botRuntimeKind ??
+            bot?.runtimeKind ??
+            activeMember.effectiveRuntimePin?.runtimeKind ??
+            "pi",
+        );
         onError(t("Could not save group model."));
       }
     } finally {
@@ -193,9 +234,21 @@ export function GroupMemberModelControl({
     }
   }
 
+  const inheritedPin =
+    activeMember.effectiveRuntimePin ??
+    (bot?.modelProvider && bot.modelId && bot.modelCredentialId
+      ? {
+          runtimeKind: bot.runtimeKind ?? "pi",
+          provider: bot.modelProvider,
+          modelId: bot.modelId,
+          credentialId: bot.modelCredentialId,
+          effort: bot.thinkingLevel ?? null,
+        }
+      : null);
+
   function changeRuntime(next: "pi" | "hermes") {
     setDraftKind(next);
-    const pin = activeMember.runtimePin;
+    const pin = activeMember.runtimePin ?? inheritedPin;
     if (
       !pin ||
       pin.runtimeKind === next ||
@@ -211,7 +264,7 @@ export function GroupMemberModelControl({
       provider: pin.provider,
       modelId: pin.modelId,
       credentialId: pin.credentialId,
-      effort: pin.effort,
+      effort: pin.effort ?? null,
     });
   }
 
@@ -265,13 +318,19 @@ export function GroupMemberModelControl({
           choice.pin.credentialId === activePin.credentialId,
       )?.label ?? activePin.modelId)
     : t("Same as bot");
+  const currentOrInheritedPin = activePin ?? inheritedPin;
   const incompatibleHermes =
     draftKind === "hermes" &&
-    activePin != null &&
-    Boolean(activePin.provider && !["openai-compatible", "ollama"].includes(activePin.provider));
+    currentOrInheritedPin != null &&
+    Boolean(
+      currentOrInheritedPin.provider &&
+        !["openai-compatible", "ollama"].includes(currentOrInheritedPin.provider),
+    );
   return (
     <>
-      {experimental || draftKind !== "pi" ? (
+      {experimental ||
+      draftKind !== "pi" ||
+      (activeMember.runtimePin?.runtimeKind && activeMember.runtimePin.runtimeKind !== "pi") ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`${t("Runtime")} · ${activeMember.name}`}
@@ -327,7 +386,7 @@ export function GroupMemberModelControl({
       </Pressable>
       {incompatibleHermes ? (
         <Text style={{ color: tokens.mutedForeground }}>
-          {activePin?.provider === "anthropic"
+          {currentOrInheritedPin?.provider === "anthropic"
             ? t("Hermes does not yet support Anthropic connections.")
             : t("Hermes does not yet support this connection.")}
         </Text>

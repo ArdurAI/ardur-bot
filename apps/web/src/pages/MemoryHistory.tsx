@@ -93,7 +93,7 @@ export function MemoryHistory({
     );
   return (
     <div
-      className="h-80 overflow-auto motion-safe:animate-in motion-safe:fade-in duration-100 motion-reduce:animate-none"
+      className="h-80 overflow-auto motion-safe:animate-in motion-safe:fade-in duration-[240ms] ease-[cubic-bezier(0.2,0.7,0.2,1)] motion-reduce:animate-none"
       data-testid="memory-history"
     >
       {error ? (
