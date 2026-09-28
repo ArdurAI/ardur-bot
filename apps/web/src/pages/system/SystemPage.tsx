@@ -48,6 +48,7 @@ export function SystemPage({ bridge = systemBridge() }: { bridge?: SystemBridge 
   const [state, setState] = useState<SystemState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [setupRetry, setSetupRetry] = useState(false);
   const [browsers, setBrowsers] = useState<ReturnType<typeof connectedBrowsers>>([]);
   const [browserError, setBrowserError] = useState(false);
   const revision = useRef(0);
@@ -96,6 +97,7 @@ export function SystemPage({ bridge = systemBridge() }: { bridge?: SystemBridge 
     revision.current += 1;
     setBusy(true);
     setError(null);
+    setSetupRetry(false);
     try {
       const next = await work();
       if (next) setState(next);
@@ -107,6 +109,20 @@ export function SystemPage({ bridge = systemBridge() }: { bridge?: SystemBridge 
       );
     } finally {
       revision.current += 1;
+      setBusy(false);
+    }
+  }
+  async function openSetupAgain() {
+    if (!bridge?.runSetupAgain || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await bridge.runSetupAgain();
+      setSetupRetry(false);
+    } catch {
+      setError(t`Could not open setup. Try again.`);
+      setSetupRetry(true);
+    } finally {
       setBusy(false);
     }
   }
@@ -173,7 +189,7 @@ export function SystemPage({ bridge = systemBridge() }: { bridge?: SystemBridge 
           <Button
             variant="outline"
             disabled={busy}
-            onClick={() => void act(() => bridge.state())}
+            onClick={() => void (setupRetry ? openSetupAgain() : act(() => bridge.state()))}
           >{t`Retry`}</Button>
         </div>
       ) : null}
@@ -188,6 +204,16 @@ export function SystemPage({ bridge = systemBridge() }: { bridge?: SystemBridge 
               t`Automatically start when you log in to your computer.`,
             )
           : null}
+        {state.mode === "new" && bridge.runSetupAgain ? (
+          <div className="border-b border-border py-4">
+            <Button
+              id="system-run-setup-again"
+              variant="outline"
+              disabled={busy}
+              onClick={() => void openSetupAgain()}
+            >{t`Run setup again`}</Button>
+          </div>
+        ) : null}
         {shortcut(
           "quickAccess",
           t`Quick access shortcut`,

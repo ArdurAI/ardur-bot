@@ -98,6 +98,37 @@ function fixture(platform = "darwin", mode: "new" | "existing" = "new") {
 }
 
 describe("desktop system rows", () => {
+  it("shows Run setup again only when the shell supplies the method", async () => {
+    const older = fixture();
+    const oldPage = await render(<SystemPage bridge={older.bridge} />);
+    expect(oldPage.querySelector("#system-run-setup-again")).toBeNull();
+    const current = fixture();
+    const open = vi.fn(async () => undefined);
+    current.bridge.runSetupAgain = open;
+    const page = await render(<SystemPage bridge={current.bridge} />);
+    const button = page.querySelector<HTMLButtonElement>("button#system-run-setup-again");
+    expect(button?.textContent).toBe("Run setup again");
+    await act(async () => button?.click());
+    expect(open).toHaveBeenCalledOnce();
+  });
+  it("retries opening setup after the bridge rejects", async () => {
+    const current = fixture();
+    const open = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("unavailable"))
+      .mockResolvedValue(undefined);
+    current.bridge.runSetupAgain = open;
+    const page = await render(<SystemPage bridge={current.bridge} />);
+    await act(async () =>
+      page.querySelector<HTMLButtonElement>("button#system-run-setup-again")?.click(),
+    );
+    expect(page.textContent).toContain("Could not open setup. Try again.");
+    const retry = [...page.querySelectorAll<HTMLButtonElement>("button")].find(
+      (button) => button.textContent === "Retry",
+    );
+    await act(async () => retry?.click());
+    expect(open).toHaveBeenCalledTimes(2);
+  });
   it("shows a restart hint in a browser or older desktop without the bridge", async () => {
     const c = await render(<SystemPage />);
     expect(c.textContent).toBe("Restart the desktop app to update it.");

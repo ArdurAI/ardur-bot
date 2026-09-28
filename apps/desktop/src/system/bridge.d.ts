@@ -34,6 +34,7 @@ export interface SystemState {
   shortcutOptions: Record<ShortcutAction, readonly Shortcut[]>;
 }
 export interface SystemBridge {
+  runSetupAgain?(): Promise<void>;
   onShortcut?(listener: (action: "voice" | "dictation") => void): () => void;
   quickBot?(identity: { userId: string; spaceId: string }, botId?: string): Promise<string | null>;
   closeQuick?(): Promise<void>;

@@ -85,4 +85,6 @@ export const GUIDED_SETUP_CHANNELS = {
   cancel: "desktop.guidedSetup.cancel",
   resume: "desktop.guidedSetup.resume",
   changed: "desktop.guidedSetup.changed",
+  startup: "desktop.guidedSetup.startup",
+  openAgain: "desktop.guidedSetup.openAgain",
 };

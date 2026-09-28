@@ -7,6 +7,78 @@ import type { JournalFileBoundary } from "./store.js";
 import { SetupJournalStore } from "./store.js";
 
 describe("guided setup IPC", () => {
+  it("surfaces startup read-back failure without failing services", async () => {
+    const files: JournalFileBoundary = {
+      read: async () => null,
+      write: async () => undefined,
+      exists: async () => false,
+      ensure: async () => undefined,
+    };
+    const ready = async () => ({ kind: "satisfied" as const, checkedAt: 1, evidence: "ready" });
+    const engine = await SetupEngine.open(new SetupJournalStore("/fixture", files), [
+      {
+        id: "prerequisites",
+        revision: 1,
+        requires: [],
+        canSkip: false,
+        check: ready,
+        run: async () => ({ kind: "verified", proof: "ready" }),
+        verify: ready,
+        cancel: async () => undefined,
+      },
+      {
+        id: "services",
+        revision: 1,
+        requires: ["prerequisites"],
+        canSkip: false,
+        waitForInput: true,
+        check: async () => ({ kind: "needed", reasonCode: "services-not-ready" }),
+        run: async () => ({ kind: "owned", proof: "folder-fingerprint" }),
+        verify: ready,
+        cancel: async () => undefined,
+      },
+    ]);
+    const handlers = new Map<string, (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown>();
+    const frame = { url: "file:///fixture/guided-setup.html" };
+    const webContents = { mainFrame: frame, send: vi.fn() };
+    const window = { isDestroyed: () => false, webContents } as unknown as BrowserWindow;
+    const cleanup = installGuidedSetupIpc({
+      ipc: {
+        handle: (
+          name: string,
+          handler: (event: IpcMainInvokeEvent, ...args: unknown[]) => unknown,
+        ) => {
+          handlers.set(name, handler);
+        },
+        removeHandler: (name: string) => {
+          handlers.delete(name);
+        },
+      } as unknown as IpcMain,
+      window: () => window,
+      engine,
+      startup: {
+        supported: () => true,
+        enabled: () => false,
+        set: () => {
+          throw new Error("Allow startup in your system settings, then try again.");
+        },
+      },
+    });
+    const call = (name: string, ...args: unknown[]) =>
+      handlers.get(name)!(
+        { sender: webContents, senderFrame: frame } as IpcMainInvokeEvent,
+        ...args,
+      );
+    await call(GUIDED_SETUP_CHANNELS.start);
+    expect(engine.snapshot().steps[4]?.status).toBe("waiting-input");
+    expect(call(GUIDED_SETUP_CHANNELS.startup, true)).toEqual({
+      ok: false,
+      error: "Allow startup in your system settings, then try again.",
+    });
+    await call(GUIDED_SETUP_CHANNELS.retry, "services");
+    expect(engine.snapshot().steps[4]?.status).toBe("succeeded");
+    cleanup();
+  });
   it("accepts only the setup main frame, validates inputs, sequences snapshots, and cleans up", async () => {
     let raw: string | null = null;
     const files: JournalFileBoundary = {
@@ -45,11 +117,16 @@ describe("guided setup IPC", () => {
         handlers.delete(name);
       },
     } as unknown as IpcMain;
-    const frame = {};
+    const frame = { url: "file:///fixture/guided-setup.html" };
     const send = vi.fn();
     const webContents = { mainFrame: frame, send };
     const window = { isDestroyed: () => false, webContents } as unknown as BrowserWindow;
-    const cleanup = installGuidedSetupIpc({ ipc, window: () => window, engine });
+    const cleanup = installGuidedSetupIpc({
+      ipc,
+      window: () => window,
+      engine,
+      startup: { supported: () => true, enabled: () => false, set: vi.fn() },
+    });
     const call = (
       name: string,
       sender: unknown = webContents,
