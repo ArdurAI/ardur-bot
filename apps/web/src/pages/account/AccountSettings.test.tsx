@@ -251,7 +251,7 @@ it("keeps the instructions card visible under the real search stylesheet rule", 
       node.textContent?.includes("Instructions for all bots"),
     );
     expect(group).toBeDefined();
-    const row = group!.querySelector("[data-settings-row]");
+    const row = group!.querySelector<HTMLElement>("[data-settings-row]");
     expect(row?.hidden ?? false).toBe(false);
     // The real rule in styles.css hides a group without a visible row; the
     // instructions card must keep a registered row so it stays on screen.
