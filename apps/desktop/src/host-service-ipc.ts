@@ -19,6 +19,18 @@ import { updateHostTray } from "./tray.js";
 const FOLDER_NOTICE =
   "Bots can read and change files in the folders you add here. Avoid adding folders on shared computers.";
 
+function secureHostTarget(target: string) {
+  try {
+    const url = new URL(target);
+    return (
+      url.protocol === "https:" ||
+      (url.protocol === "http:" && ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))
+    );
+  } catch {
+    return false;
+  }
+}
+
 /** Registered folders that are not a folder right now; commands skip them until they return. */
 export async function unavailableFolders(roots: string[]): Promise<string[]> {
   const present = await Promise.all(
@@ -121,11 +133,7 @@ export function installHostService(options: {
   register("setup", async (event) => {
     const { window, target } = trusted(event);
     if (options.local.owns(target)) throw new Error("Host service is unavailable here.");
-    if (
-      new URL(target).protocol !== "https:" &&
-      !["localhost", "127.0.0.1", "[::1]"].includes(new URL(target).hostname)
-    )
-      throw new Error("Connect through HTTPS first.");
+    if (!secureHostTarget(target)) throw new Error("Connect through HTTPS first.");
     if (!hostStorageAvailable(safeStorage))
       throw new Error("Unlock secure storage, then try again.");
     const existing = await store.read();
@@ -211,10 +219,33 @@ export function installHostService(options: {
       if (!lifecycle.keepRunning) supervisor.stop();
     },
     async activate(target: string) {
-      await ready;
-      const config = options.local.owns(target) ? null : await store.read();
-      if (config?.apiUrl === target) supervisor.start(config);
-      else supervisor.stop();
+      const result = tail.then(async () => {
+        await ready;
+        if (
+          target !== options.target() ||
+          !options.window() ||
+          options.local.owns(target) ||
+          !secureHostTarget(target) ||
+          !hostStorageAvailable(safeStorage)
+        ) {
+          supervisor.stop();
+          return;
+        }
+        const config = await store.read();
+        if (
+          target === options.target() &&
+          options.window() &&
+          !options.local.owns(target) &&
+          config?.apiUrl === target
+        )
+          supervisor.start(config);
+        else supervisor.stop();
+      });
+      tail = result.then(
+        () => undefined,
+        () => undefined,
+      );
+      await result;
     },
     stop() {
       supervisor.stop();

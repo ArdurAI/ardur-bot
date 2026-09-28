@@ -1139,6 +1139,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           });
           const available = Boolean(
             owner &&
+              host?.connected &&
               (!bot || bot.computer?.kind === "desktop") &&
               health?.capabilities?.providerRelay === 1 &&
               health.hermes?.available,
@@ -1153,9 +1154,11 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
                     ? NATIVE_HOST_OWNER_MESSAGE
                     : bot && bot.computer?.kind !== "desktop"
                       ? "Choose a host computer for Hermes."
-                      : health?.capabilities?.providerRelay !== 1
-                        ? "Update Ardur on the connected computer for the provider relay."
-                        : (health?.hermes?.reason ?? "Hermes is not installed on this computer."),
+                      : !host?.connected || !health
+                        ? "Host service is not running — open the desktop app."
+                        : health.capabilities?.providerRelay !== 1
+                          ? "Update Ardur on the connected computer for the provider relay."
+                          : (health?.hermes?.reason ?? "Hermes is not installed on this computer."),
                 }
               : {}),
           };
