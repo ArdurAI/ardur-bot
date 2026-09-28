@@ -6985,6 +6985,7 @@ msgstr "팀 메시지 다시 시작"
 
 #: src/components/Context.tsx
 #: src/components/integrations/DirectMcpSearch.tsx
+#: src/pages/account/AccountProfile.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -7327,13 +7328,13 @@ msgstr ""
 msgid "Saved locally. Sync pending."
 msgstr ""
 
-#: src/pages/account/AccountProfile.tsx
-msgid "Saved, but not applied everywhere."
-msgstr "저장했지만 모든 곳에 적용되지 않았습니다."
-
 #: src/pages/ScratchpadSection.tsx
 msgid "Saved, but list refresh failed"
 msgstr "저장했지만 목록을 새로고침하지 못했습니다."
+
+#: src/pages/account/AccountProfile.tsx
+msgid "Saved, but not applied everywhere."
+msgstr "저장했지만 모든 곳에 적용되지 않았습니다."
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Saved."

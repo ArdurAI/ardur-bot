@@ -6985,6 +6985,7 @@ msgstr "恢复团队消息"
 
 #: src/components/Context.tsx
 #: src/components/integrations/DirectMcpSearch.tsx
+#: src/pages/account/AccountProfile.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -7327,13 +7328,13 @@ msgstr ""
 msgid "Saved locally. Sync pending."
 msgstr ""
 
-#: src/pages/account/AccountProfile.tsx
-msgid "Saved, but not applied everywhere."
-msgstr "已保存，但未在所有位置应用。"
-
 #: src/pages/ScratchpadSection.tsx
 msgid "Saved, but list refresh failed"
 msgstr "已保存，但列表刷新失败"
+
+#: src/pages/account/AccountProfile.tsx
+msgid "Saved, but not applied everywhere."
+msgstr "已保存，但未在所有位置应用。"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Saved."

@@ -6985,6 +6985,7 @@ msgstr "टीम संदेश फिर शुरू करें"
 
 #: src/components/Context.tsx
 #: src/components/integrations/DirectMcpSearch.tsx
+#: src/pages/account/AccountProfile.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -7327,13 +7328,13 @@ msgstr ""
 msgid "Saved locally. Sync pending."
 msgstr ""
 
-#: src/pages/account/AccountProfile.tsx
-msgid "Saved, but not applied everywhere."
-msgstr "सहेजा गया, लेकिन हर जगह लागू नहीं हुआ।"
-
 #: src/pages/ScratchpadSection.tsx
 msgid "Saved, but list refresh failed"
 msgstr "सहेजा गया, लेकिन सूची रिफ़्रेश विफल रही"
+
+#: src/pages/account/AccountProfile.tsx
+msgid "Saved, but not applied everywhere."
+msgstr "सहेजा गया, लेकिन हर जगह लागू नहीं हुआ।"
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Saved."

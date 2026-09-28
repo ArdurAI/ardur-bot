@@ -6985,6 +6985,7 @@ msgstr "Reanudar mensajes del equipo"
 
 #: src/components/Context.tsx
 #: src/components/integrations/DirectMcpSearch.tsx
+#: src/pages/account/AccountProfile.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -7327,13 +7328,13 @@ msgstr ""
 msgid "Saved locally. Sync pending."
 msgstr ""
 
-#: src/pages/account/AccountProfile.tsx
-msgid "Saved, but not applied everywhere."
-msgstr "Guardado, pero no se aplicó en todas partes."
-
 #: src/pages/ScratchpadSection.tsx
 msgid "Saved, but list refresh failed"
 msgstr "Guardado, pero falló la actualización de la lista"
+
+#: src/pages/account/AccountProfile.tsx
+msgid "Saved, but not applied everywhere."
+msgstr "Guardado, pero no se aplicó en todas partes."
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Saved."

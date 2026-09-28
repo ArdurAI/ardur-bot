@@ -6985,6 +6985,7 @@ msgstr "Resume team messages"
 
 #: src/components/Context.tsx
 #: src/components/integrations/DirectMcpSearch.tsx
+#: src/pages/account/AccountProfile.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -7327,13 +7328,13 @@ msgstr "Saved locally. Indexing pending."
 msgid "Saved locally. Sync pending."
 msgstr "Saved locally. Sync pending."
 
-#: src/pages/account/AccountProfile.tsx
-msgid "Saved, but not applied everywhere."
-msgstr "Saved, but not applied everywhere."
-
 #: src/pages/ScratchpadSection.tsx
 msgid "Saved, but list refresh failed"
 msgstr "Saved, but list refresh failed"
+
+#: src/pages/account/AccountProfile.tsx
+msgid "Saved, but not applied everywhere."
+msgstr "Saved, but not applied everywhere."
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Saved."
