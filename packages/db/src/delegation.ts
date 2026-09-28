@@ -522,11 +522,16 @@ export async function finishDelegation(
   if (expectedRunId !== undefined && row.runId !== expectedRunId) return;
   if (row.status === "cancel-requested" && status !== "cancelled") return;
   const redactedText = redactTaskValue(text);
+  // A runtime that cannot be stopped mid-step still records overspend on the finished card.
+  const resultText =
+    status === "completed" && row.hop <= 1 && row.usedTokens > row.reservedTokens
+      ? `${redactedText ? `${redactedText}\n` : ""}Overspent its token budget by ${row.usedTokens - row.reservedTokens} tokens.`
+      : redactedText;
   const changed = await tx.delegation.updateMany({
     where: { id, status: { in: ACTIVE_DELEGATIONS } },
     data: {
       status,
-      result: redactedText.slice(0, PEER_RECEIPT_MAX_LENGTH),
+      result: resultText.slice(0, PEER_RECEIPT_MAX_LENGTH),
       completedAt: new Date(),
       ...(status === "cancelled" ? { cancelConfirmedAt: new Date() } : {}),
     },
@@ -587,7 +592,7 @@ export async function finishDelegation(
             kind: "text",
             text: goalRoomAssignment
               ? `${row.actingName}: ${status === "completed" ? "completed, awaiting acceptance" : status}.`
-              : `${row.requesterName} → ${row.actingName}: ${status === "completed" ? "completed, awaiting acceptance" : status}.\n${redactedText.slice(0, 2000)}${row.card && TaskCardSchema.parse(row.card).doneWhen.length ? `\n${taskCardChecklist(TaskCardSchema.parse(row.card))}` : ""}`,
+              : `${row.requesterName} → ${row.actingName}: ${status === "completed" ? "completed, awaiting acceptance" : status}.\n${resultText.slice(0, 2000)}${row.card && TaskCardSchema.parse(row.card).doneWhen.length ? `\n${taskCardChecklist(TaskCardSchema.parse(row.card))}` : ""}`,
           },
         ];
   const message = row.summaryMessageId

@@ -1548,4 +1548,127 @@ postgres("request ledger on disposable PostgreSQL", () => {
       await db.prisma.requestUsageObservation.count({ where: { usageRecordId: row.id } }),
     ).toBe(0);
   });
+
+  it("reserves one realistic request, refuses small budgets early, and names budget stops", async () => {
+    const f = await fixture();
+    const snapshot = {
+      pin: f.pin,
+      computer: { id: null, mode: "team" as const, kind: null },
+      destination: { host: null, local: true },
+    };
+    const admit = (key: string, patch: Record<string, unknown> = {}) =>
+      db.prisma.$transaction((tx) =>
+        admitDelegation(tx, {
+          spaceId: f.id,
+          userId: f.run.userId,
+          parentRunId: f.id,
+          actingBotId: f.id,
+          actingName: "Fixture",
+          kind: "helper",
+          admissionKey: key,
+          prompt: "Synthetic helper",
+          snapshot,
+          ...patch,
+        }),
+      );
+    // A caller that did not choose a budget gets one realistic request, not the old 10000.
+    const row = await admit(`${f.id}-default`);
+    expect(row.reservedTokens).toBe(DELEGATION_LIMITS.reservationTokens);
+    expect(row.reservedTokens).toBeGreaterThan(16_734);
+    expect(await f.root()).toMatchObject({ reservedTokens: DELEGATION_LIMITS.reservationTokens });
+    // An explicit budget below the caller's one-request floor refuses before anything starts.
+    await expect(
+      admit(`${f.id}-small`, { tokens: 10_000, minimumTokens: 36_864 }),
+    ).rejects.toMatchObject({ problem: { code: "budget-too-small" } });
+    expect(await db.prisma.delegation.count({ where: { admissionKey: `${f.id}-small` } })).toBe(0);
+    expect(await f.root()).toMatchObject({
+      reservedTokens: DELEGATION_LIMITS.reservationTokens,
+      usedTokens: 0,
+    });
+    const startWorker = async (delegationId: string, suffix: string) => {
+      const workerTask = await db.prisma.task.create({
+        data: {
+          id: `${f.id}-${suffix}`,
+          spaceId: f.id,
+          userId: f.run.userId,
+          botId: f.id,
+          threadId: f.id,
+          prompt: "Synthetic helper",
+          status: "running",
+        },
+      });
+      const workerRun = await db.prisma.run.create({
+        data: {
+          id: `${f.id}-${suffix}`,
+          spaceId: f.id,
+          userId: f.run.userId,
+          botId: f.id,
+          threadId: f.id,
+          taskId: workerTask.id,
+          delegationId,
+          delegationRootTaskId: f.id,
+          status: "running",
+          trigger: "bot_message",
+          runtimePin: f.pin,
+        },
+      });
+      await db.prisma.delegation.update({
+        where: { id: delegationId },
+        data: { runId: workerRun.id, status: "running" },
+      });
+      return workerRun;
+    };
+    const settle = (runId: string, delegationId: string, input: number, output: number) =>
+      recordRunUsage(
+        { prisma: db.prisma, events: f.events },
+        {
+          id: runId,
+          spaceId: f.id,
+          userId: f.run.userId,
+          botId: f.id,
+          threadId: f.id,
+          taskId: runId,
+          delegationId,
+        },
+        f.usage({
+          requestId: `request-${runId}`,
+          categories: {
+            logicalInput: input,
+            uncachedInput: input,
+            cacheReadInput: 0,
+            cacheWriteInput: 0,
+            output,
+            reasoning: 0,
+          },
+        }),
+      );
+    // A runtime that cannot be stopped mid-step still records its overspend truthfully.
+    const overRun = await startWorker(row.id, "over");
+    await settle(overRun.id, row.id, 36_000, DELEGATION_LIMITS.reservationTokens - 36_000 + 100);
+    expect(await f.root()).toMatchObject({
+      reservedTokens: 0,
+      usedTokens: DELEGATION_LIMITS.reservationTokens + 100,
+    });
+    await db.prisma.$transaction((tx) => finishDelegation(tx, row.id, "completed", "Done"));
+    expect(
+      (await db.prisma.delegation.findUniqueOrThrow({ where: { id: row.id } })).result,
+    ).toContain("Overspent its token budget by 100 tokens.");
+    await db.prisma.run.update({ where: { id: overRun.id }, data: { status: "completed" } });
+    // A worker stopped for budget names the reason on its card.
+    const stopped = await admit(`${f.id}-stopped`);
+    const stoppedRun = await startWorker(stopped.id, "stopped");
+    await settle(stoppedRun.id, stopped.id, 36_000, DELEGATION_LIMITS.reservationTokens - 36_000);
+    await db.prisma.run.update({
+      where: { id: stoppedRun.id },
+      data: { cancelRequestedAt: new Date() },
+    });
+    expect(await confirmDispatchStop(db.prisma, stoppedRun.id)).toBe(true);
+    expect(
+      (await db.prisma.delegation.findUniqueOrThrow({ where: { id: stopped.id } })).result,
+    ).toContain("used its token budget");
+    expect(await f.root()).toMatchObject({
+      reservedTokens: 0,
+      usedTokens: 2 * DELEGATION_LIMITS.reservationTokens + 100,
+    });
+  });
 });

@@ -543,3 +543,23 @@ it("ignores a late completion from an attempt superseded by rework", async () =>
   expect(f.state().rows[0].status).toBe("queued");
   expect(f.state().rows[0].result).toBeNull();
 });
+it("records overspend on the card when a worker finishes over its reservation", async () => {
+  const f = fixture();
+  const row = await f.admit();
+  f.state().rows[0].usedTokens = row.reservedTokens + 100;
+  await f.worker().$transaction((tx) => finishDelegation(tx, row.id, "completed", "Done"));
+  expect(f.state().rows[0].result).toContain("Overspent its token budget by 100 tokens.");
+  expect(f.tx.message.create.mock.calls[0]![0].data.blocks).toEqual([
+    expect.objectContaining({
+      kind: "text",
+      text: expect.stringContaining("Overspent its token budget by 100 tokens."),
+    }),
+  ]);
+});
+it("keeps the card clean when a worker finishes within its reservation", async () => {
+  const f = fixture();
+  const row = await f.admit();
+  f.state().rows[0].usedTokens = row.reservedTokens - 1;
+  await f.worker().$transaction((tx) => finishDelegation(tx, row.id, "completed", "Done"));
+  expect(f.state().rows[0].result).toBe("Done");
+});
