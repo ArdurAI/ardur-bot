@@ -994,6 +994,9 @@ export function buildApprovalContinuation(
 }
 
 export function createRunExecutor(deps: ExecutorDeps) {
+  // The injected runtime is fixed for this executor. Admission must use its
+  // startup capability, not a later descriptor read during run execution.
+  const scriptedRuntimeAvailable = Boolean(deps.runtime?.describe().capabilities.scripted);
   const runtimeRegistry = deps.runtimeRegistry ?? createRuntimeRegistry(deps.runtime);
   const web = deps.web ?? createWebProvider();
   const browser = deps.browser ?? createBrowserProvider(undefined, { sandbox: deps.sandbox });
@@ -1059,7 +1062,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
       scope,
       bot,
       snapshot,
-      scripted: Boolean(deps.runtime?.describe().capabilities.scripted),
+      scripted: scriptedRuntimeAvailable,
       loadKey: async (credential, pin, selectDefaultEffort) => {
         const key = await resolveModelKey(
           deps,

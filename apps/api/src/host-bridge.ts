@@ -8,8 +8,11 @@ import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
 import type { BoardRun, BoardRunResult } from "@ardurbot/contracts/board";
 import { BoardError, BoardRunResultSchema } from "@ardurbot/contracts/board";
 import type { HostOperation, HostRequest } from "@ardurbot/contracts/host-bridge";
-import { HOST_WRITE_FRAME_BYTES, HostOperationSchema } from "@ardurbot/contracts/host-bridge";
-import { RuntimePinSchema } from "@ardurbot/contracts/runtime-pins";
+import {
+  HOST_WRITE_FRAME_BYTES,
+  HostOperationSchema,
+  HostRuntimePinSchema,
+} from "@ardurbot/contracts/host-bridge";
 import { isDesktopComposeStack } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import { requireMembership } from "@ardurbot/db";
@@ -449,12 +452,16 @@ export class HostBridge {
       return false;
     if (request.operation.op === "runtime.turn") {
       const turn = request.operation.request;
+      const grant = turn.providerBroker;
       if (
         turn.runId !== run.id ||
         turn.botId !== run.botId ||
         turn.threadId !== run.threadId ||
-        JSON.stringify(RuntimePinSchema.parse(turn.model.runtimePin)) !==
-          JSON.stringify(RuntimePinSchema.parse(run.runtimePin))
+        (turn.model.runtimePin.runtimeKind === "hermes") !== Boolean(grant) ||
+        (grant !== undefined &&
+          (grant.expiresAt <= Date.now() || grant.expiresAt > Date.now() + 600_000)) ||
+        JSON.stringify(HostRuntimePinSchema.parse(turn.model.runtimePin)) !==
+          JSON.stringify(HostRuntimePinSchema.parse(run.runtimePin))
       )
         return false;
     }

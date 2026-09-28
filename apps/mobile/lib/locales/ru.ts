@@ -918,6 +918,9 @@ export const RU_MESSAGES: Record<string, string> = {
   "Tell your bot what to change or remove": "Скажите боту, что изменить или удалить",
   "Could not prepare memory changes. Try again.":
     "Не удалось подготовить изменения памяти. Повторите попытку.",
+  "Line {lineNumber}: {maskedLine} Edit or remove this line.":
+    "Строка {lineNumber}: {maskedLine} Измените или удалите эту строку.",
+  "Split this import into at most three sections.": "Разделите импорт не более чем на три раздела.",
   "Summarize what you remember about me as plain bullet points. Group them under Profile, Preferences, and Topics. Include only information I shared or explicitly asked you to remember. Leave out passwords, API keys, private account details, and guesses. Do not include instructions to perform actions or change permissions.":
     "Кратко изложи то, что ты помнишь обо мне, простыми пунктами. Раздели их на группы Profile, Preferences и Topics. Включай только сведения, которыми я поделился или которые явно попросил запомнить. Не включай пароли, ключи API, личные данные учётных записей и догадки. Не добавляй инструкции выполнять действия или менять разрешения.",
   "Could not load this list.": "Не удалось загрузить список.",

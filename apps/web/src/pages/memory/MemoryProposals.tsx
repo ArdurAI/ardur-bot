@@ -1,5 +1,5 @@
 import type { LearningProposal } from "@ardurbot/contracts";
-import { learningApprovalBlock } from "@ardurbot/contracts";
+import { errorDataCode, learningApprovalBlock } from "@ardurbot/contracts";
 import { Button } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useRef, useState } from "react";
@@ -15,21 +15,45 @@ export function MemoryProposals({
   const { t } = useLingui();
   const locked = useRef(false);
   const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   async function act(proposal: LearningProposal, action: "approve" | "reject" | "revert") {
     if (locked.current || proposal.type !== "memory") return;
     locked.current = true;
     setBusy(proposal.id);
-    setError(null);
+    setErrors((current) => ({ ...current, [proposal.id]: "" }));
     try {
       const result = await rpc.learning[action]({ proposalId: proposal.id });
       onChange(result.proposal);
       if (result.conflict)
-        setError(t`The memory changed since this suggestion. Open History before trying again.`);
+        setErrors((current) => ({
+          ...current,
+          [proposal.id]: t`The memory changed since this suggestion. Open History before trying again.`,
+        }));
       window.dispatchEvent(new Event("learning-changed"));
-    } catch {
-      setError(t`Could not update this suggestion. Try again.`);
+    } catch (error) {
+      const data = error && typeof error === "object" && "data" in error ? error.data : null;
+      if (
+        errorDataCode(error) === "MEMORY_CREDENTIAL_LINE" &&
+        data &&
+        typeof data === "object" &&
+        "proposalId" in data &&
+        data.proposalId === proposal.id &&
+        "lineNumber" in data &&
+        typeof data.lineNumber === "number" &&
+        "maskedLine" in data &&
+        typeof data.maskedLine === "string"
+      ) {
+        setErrors((current) => ({
+          ...current,
+          [proposal.id]: t`Line ${data.lineNumber}: ${data.maskedLine} Edit or reject this line.`,
+        }));
+      } else {
+        setErrors((current) => ({
+          ...current,
+          [proposal.id]: t`Could not update this suggestion. Try again.`,
+        }));
+      }
     } finally {
       locked.current = false;
       setBusy(null);
@@ -53,6 +77,11 @@ export function MemoryProposals({
                     : t`Memory`}
             </p>
             <p className="whitespace-pre-wrap break-words text-sm">{proposal.proposedContent}</p>
+            {errors[proposal.id] ? (
+              <p role="alert" className="whitespace-pre-wrap break-words text-sm text-destructive">
+                {errors[proposal.id]}
+              </p>
+            ) : null}
             <details open={proposal.memoryAction === "delete" || undefined}>
               <summary className="cursor-pointer text-sm">
                 <Trans>Details</Trans>
@@ -104,11 +133,6 @@ export function MemoryProposals({
           </article>
         );
       })}
-      {error ? (
-        <p role="alert" className="text-sm text-destructive">
-          {error}
-        </p>
-      ) : null}
     </section>
   );
 }

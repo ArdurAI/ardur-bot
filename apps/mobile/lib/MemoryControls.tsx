@@ -1,5 +1,6 @@
 import type { LearningProposal, SpaceLearningConfig } from "@ardurbot/contracts";
 import {
+  errorDataCode,
   MEMORY_IMPORT_PROMPT,
   MEMORY_REVIEW_UNAVAILABLE_MESSAGE,
   MODEL_LOCALITY_DENIED_MESSAGE,
@@ -83,7 +84,7 @@ export function MemoryIntentControls() {
   const [instruction, setInstruction] = useState("");
   const [items, setItems] = useState<LearningProposal[]>([]);
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<"runtime" | "locality" | "request" | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const locked = useRef(false);
   const ticket = useRef(0);
   useFocusEffect(
@@ -113,14 +114,32 @@ export function MemoryIntentControls() {
       if (intent === "import") setText("");
       else setInstruction("");
     } catch (error) {
-      if (ticket.current === current)
+      if (ticket.current !== current) return;
+      const data = error && typeof error === "object" && "data" in error ? error.data : null;
+      if (
+        errorDataCode(error) === "MEMORY_CREDENTIAL_LINE" &&
+        data &&
+        typeof data === "object" &&
+        "lineNumber" in data &&
+        Number.isInteger(data.lineNumber) &&
+        "maskedLine" in data &&
+        typeof data.maskedLine === "string"
+      ) {
         setError(
-          error instanceof Error && error.message === MEMORY_REVIEW_UNAVAILABLE_MESSAGE
-            ? "runtime"
-            : error instanceof Error && error.message === MODEL_LOCALITY_DENIED_MESSAGE
-              ? "locality"
-              : "request",
+          t("Line {lineNumber}: {maskedLine} Edit or remove this line.", {
+            lineNumber: data.lineNumber as number,
+            maskedLine: data.maskedLine,
+          }),
         );
+      } else if (errorDataCode(error) === "MEMORY_IMPORT_SECTION_LIMIT") {
+        setError(t("Split this import into at most three sections."));
+      } else if (error instanceof Error && error.message === MEMORY_REVIEW_UNAVAILABLE_MESSAGE) {
+        setError(t(MEMORY_REVIEW_UNAVAILABLE_MESSAGE));
+      } else if (error instanceof Error && error.message === MODEL_LOCALITY_DENIED_MESSAGE) {
+        setError(t(MODEL_LOCALITY_DENIED_MESSAGE));
+      } else {
+        setError(t("Could not prepare memory changes. Try again."));
+      }
     } finally {
       locked.current = false;
       setBusy(false);
@@ -139,7 +158,7 @@ export function MemoryIntentControls() {
             title={t("Copy prompt")}
             onPress={() =>
               void Clipboard.setStringAsync(t(MEMORY_IMPORT_PROMPT)).catch(() =>
-                setError("request"),
+                setError(t("Could not prepare memory changes. Try again.")),
               )
             }
           />
@@ -197,13 +216,7 @@ export function MemoryIntentControls() {
       />
       {error ? (
         <Text accessibilityRole="alert" style={styles.error}>
-          {error === "runtime"
-            ? t(
-                "Memory review is not available with Claude Code or Codex yet; import memory or edit a document directly.",
-              )
-            : error === "locality"
-              ? t("This bot may only run locally — change the pin or the space policy")
-              : t("Could not prepare memory changes. Try again.")}
+          {error}
         </Text>
       ) : null}
     </View>

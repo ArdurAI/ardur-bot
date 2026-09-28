@@ -23,6 +23,22 @@ const config = {
 afterEach(() => vi.useRealTimers());
 
 describe("desktop host service", () => {
+  it("passes only a valid absolute Hermes install path to the host process", () => {
+    const valid = process.platform === "win32" ? "C:\\fixture\\hermes" : "/fixture/hermes";
+    expect(hostServiceEnvironment({ ARDUR_HERMES_INSTALL: valid }).ARDUR_HERMES_INSTALL).toBe(
+      valid,
+    );
+    for (const value of [
+      "relative/hermes",
+      "/fixture/hermes\ninvalid",
+      "/fixture/hermes\0invalid",
+    ]) {
+      expect(
+        hostServiceEnvironment({ ARDUR_HERMES_INSTALL: value }).ARDUR_HERMES_INSTALL,
+      ).toBeUndefined();
+    }
+    expect(hostServiceEnvironment({}).ARDUR_HERMES_INSTALL).toBeUndefined();
+  });
   it("identifies an existing pairing without exposing its token or host verifier", () => {
     const registrationId = hostServiceIdentity({ ...config, token: "fixture-pairing-token" });
     expect(registrationId).toBe("abec6392afbdae15f7d66b9ef0b06fb1b36fff3dcd9d8ae47ddc5c4dabcfd2f3");

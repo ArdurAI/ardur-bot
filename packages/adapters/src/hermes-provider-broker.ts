@@ -200,6 +200,7 @@ function admittedBody(
       "stream",
       "stream_options",
       "max_tokens",
+      "max_completion_tokens",
       "reasoning_effort",
       "temperature",
       "top_p",
@@ -256,7 +257,13 @@ function admittedBody(
     )
   )
     denied();
-  if (body.max_tokens !== undefined && !bounded(body.max_tokens, connection.maxOutputTokens))
+  const hasMaxTokens = Object.hasOwn(body, "max_tokens");
+  const hasMaxCompletionTokens = Object.hasOwn(body, "max_completion_tokens");
+  if (
+    (hasMaxTokens && hasMaxCompletionTokens) ||
+    (hasMaxTokens && !bounded(body.max_tokens, connection.maxOutputTokens)) ||
+    (hasMaxCompletionTokens && !bounded(body.max_completion_tokens, connection.maxOutputTokens))
+  )
     denied();
   if (body.tools !== undefined) {
     if (!Array.isArray(body.tools) || body.tools.length > allowed.size) return denied();
@@ -313,7 +320,7 @@ function admittedBody(
   return {
     ...body,
     tools: selected,
-    max_tokens: body.max_tokens ?? connection.maxOutputTokens,
+    ...(!hasMaxTokens && !hasMaxCompletionTokens ? { max_tokens: connection.maxOutputTokens } : {}),
     ...(body.stream ? { stream_options: { include_usage: true } } : {}),
     ...(connection.effort.field === "reasoning_effort" ? { reasoning_effort: wireEffort } : {}),
   };

@@ -4,6 +4,7 @@ import type {
   HostScope,
 } from "@ardurbot/contracts/host-bridge";
 import { HostMcpRegistrationSchema } from "@ardurbot/contracts/host-bridge";
+import { mcpEntryIsSecret } from "@ardurbot/contracts/mcp";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { argumentSecrets, McpLogBuffer, redactMcpValue } from "./mcp-diagnostics.js";
@@ -33,7 +34,9 @@ export class HostMcpServers {
   private secrets(registration: HostMcpRegistration) {
     return [
       ...registration.redactions,
-      ...Object.values(registration.env),
+      ...Object.entries(registration.env)
+        .filter(([name]) => mcpEntryIsSecret(registration.credentialFlags, "env", name))
+        .map(([, value]) => value),
       ...argumentSecrets(registration.args),
     ];
   }

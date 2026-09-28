@@ -132,6 +132,20 @@ describe("memory settings lifecycle views", () => {
       expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ revision: 3 }));
     });
   });
+  it("keeps a failed history fetch inline and retries without losing the surrounding screen", async () => {
+    api.history
+      .mockRejectedValueOnce(new Error("History unavailable"))
+      .mockResolvedValueOnce({ items: [doc], nextCursor: null });
+    await mounted(<MemoryHistory document={doc} onChange={vi.fn()} />, async (container) => {
+      expect(container.querySelector('[role="alert"]')?.textContent).toBe(
+        "Could not load history. Retry.",
+      );
+      expect(container.textContent).not.toContain("History unavailable");
+      await act(async () => button(container, "Retry").click());
+      expect(api.history).toHaveBeenCalledTimes(2);
+      expect(container.textContent).toContain("Revision 2");
+    });
+  });
   it("previews an import without writes, then confirms the exact preview hash", async () => {
     const revision = {
       documentId: doc.id,

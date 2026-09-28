@@ -24,6 +24,7 @@ import {
 } from "../packages/contracts/src/domain.ts";
 import { type SiteProduct, SiteProductSchema } from "../packages/contracts/src/site-product.ts";
 import { POPULAR_MODEL_PROVIDER_IDS } from "../packages/core/src/model-providers.ts";
+import { runFeatureDocs } from "./feature-docs";
 
 type Provider = SiteProduct["providers"][number];
 type ProviderMetadata = Pick<Provider, "name" | "access" | "status" | "accountHint">;
@@ -709,6 +710,7 @@ export async function runSiteFacts(mode: "write" | "check", rootDir = root): Pro
       throw new Error(
         "README.md site facts blocks are stale. Run `pnpm site:facts` and commit the result. Curated text lives in site/data/product.json.",
       );
+    await runFeatureDocs(rootDir);
   } else if (stale) {
     if (currentProduct !== expectedProduct)
       await writeFile(path.join(rootDir, productPath), expectedProduct);

@@ -1,26 +1,43 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { AdapterContext } from "@ardurbot/adapter-kit";
 import type { EncryptedSecretStore } from "@ardurbot/adapters";
-import { McpConnector } from "@ardurbot/adapters";
-import type { Actor, LocalServerConfig, ManagedServerInputSchema } from "@ardurbot/contracts";
-import { LocalServerConfigSchema, McpDiagnosticsSchema } from "@ardurbot/contracts";
+import { lockMcpServerRevision, McpConnector } from "@ardurbot/adapters";
+import type {
+  Actor,
+  LocalServerConfig,
+  ManagedServerInputSchema,
+  McpCredentialFlags,
+} from "@ardurbot/contracts";
+import {
+  LocalServerConfigSchema,
+  McpDiagnosticsSchema,
+  mcpCredentialFlagsForEntries,
+  mcpEntryIsSecret,
+} from "@ardurbot/contracts";
 import type { McpServer, Prisma, PrismaClient } from "@ardurbot/db";
 import { IsolationError } from "@ardurbot/db";
-import { redactMcpArguments, redactMcpText } from "@ardurbot/host-runtime/mcp-diagnostics";
+import {
+  mcpTextContainsSecret,
+  redactMcpArguments,
+  redactMcpText,
+} from "@ardurbot/host-runtime/mcp-diagnostics";
 import { ORPCError } from "@orpc/server";
 import type * as z from "zod";
 import type { HostBridge } from "./host-bridge.js";
+import { independentMcpRedactions } from "./mcp-material.js";
 import { mcpServerDto } from "./mcp-server-dto.js";
 import { createOwnerPreviews } from "./pending-previews.js";
 
 type Owner = Pick<Actor, "spaceId" | "userId">;
 type Material = {
   redactions?: string[];
+  argumentRedactions?: string[];
   command?: string;
   args?: string[];
   env?: Record<string, string>;
   cwd?: string;
   secret?: string;
+  credentialFlags?: McpCredentialFlags;
 };
 type ManagedInput = z.infer<typeof ManagedServerInputSchema>;
 const saved = "[saved]";
@@ -113,6 +130,7 @@ export function createMcpSettings(deps: {
     revision: string;
     config: LocalServerConfig;
     redactions: Record<string, string[]>;
+    argumentRedactions: Record<string, string[]>;
     expires: number;
   }>();
   async function requireHostOwner(owner: Owner) {
@@ -163,6 +181,7 @@ export function createMcpSettings(deps: {
           const env = stored.env ?? {};
           const secrets = [
             ...(stored.redactions ?? []),
+            ...(stored.argumentRedactions ?? []),
             ...Object.values(env),
             ...(stored.secret ? [stored.secret] : []),
           ];
@@ -185,7 +204,13 @@ export function createMcpSettings(deps: {
     return { mcpServers: Object.fromEntries(entries) };
   }
   async function store(owner: Owner, value: Material, tx: Prisma.TransactionClient) {
-    const secret = await deps.secrets.put(JSON.stringify(value), context(owner));
+    const secret = await deps.secrets.put(
+      JSON.stringify({
+        ...value,
+        credentialFlags: value.credentialFlags ?? mcpCredentialFlagsForEntries({}, value),
+      }),
+      context(owner),
+    );
     await tx.secret.create({
       data: { ...scope(owner), id: secret.id, kind: "mcp", ciphertext: secret.ciphertext },
     });
@@ -203,19 +228,28 @@ export function createMcpSettings(deps: {
       const row = await deps.prisma.$transaction(async (tx) => {
         const lock = `${owner.spaceId}:${owner.userId}:${input.managedBy}:${input.managedId}`;
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('managed-mcp'), hashtext(${lock}))`;
-        const existing = await tx.mcpServer.findFirst({
+        const candidate = await tx.mcpServer.findFirst({
           where: { ...scope(owner), managedBy: input.managedBy, managedId: input.managedId },
         });
+        if (candidate) await lockMcpServerRevision(tx, candidate.id, owner);
+        const existing = candidate
+          ? await tx.mcpServer.findFirst({ where: { ...scope(owner), id: candidate.id } })
+          : null;
+        const previous = existing ? await material(existing, tx) : {};
         const value: Material = {
           command: input.command,
           args: input.args,
           env: input.env,
+          credentialFlags: mcpCredentialFlagsForEntries(previous, { env: input.env }),
           cwd: input.cwd,
-          redactions: input.secretValues,
+          redactions: independentMcpRedactions({
+            redactions: input.secretValues,
+            env: input.env,
+          }),
         };
         if (
           existing &&
-          JSON.stringify(await material(existing, tx)) === JSON.stringify(value) &&
+          JSON.stringify(previous) === JSON.stringify(value) &&
           existing.name === input.name &&
           existing.description === input.description &&
           existing.placement === input.placement
@@ -243,7 +277,11 @@ export function createMcpSettings(deps: {
         };
         const updated = existing
           ? await tx.mcpServer.update({
-              where: { id: existing.id },
+              where: {
+                id: existing.id,
+                revision: existing.revision,
+                secretId: existing.secretId,
+              },
               data: { ...data, revision: { increment: 1 } },
             })
           : await tx.mcpServer.create({
@@ -322,22 +360,26 @@ export function createMcpSettings(deps: {
         });
       const config = parseServerConfig(input.json);
       const before = await configuration(rows, true);
+      const storedMaterials = await Promise.all(
+        rows.map(async (row) => ({ slug: row.slug, stored: await material(row) })),
+      );
       const redactions = Object.fromEntries(
-        await Promise.all(
-          rows.map(async (row) => {
-            const stored = await material(row);
-            return [
-              row.slug,
-              [
-                ...new Set([
-                  ...(stored.redactions ?? []),
-                  ...Object.values(stored.env ?? {}),
-                  ...(stored.secret ? [stored.secret] : []),
-                ]),
-              ],
-            ];
-          }),
-        ),
+        storedMaterials.map(({ slug, stored }) => [slug, independentMcpRedactions(stored)]),
+      );
+      const argumentRedactions = Object.fromEntries(
+        storedMaterials.map(({ slug, stored }) => {
+          const launch = before.mcpServers[slug];
+          const legacyLaunchRedactions = independentMcpRedactions(stored).filter(
+            (value) =>
+              value !== stored.secret &&
+              launch &&
+              [launch.command, ...launch.args].some((part) => mcpTextContainsSecret(part, value)),
+          );
+          return [
+            slug,
+            [...new Set([...(stored.argumentRedactions ?? []), ...legacyLaunchRedactions])],
+          ];
+        }),
       );
       for (const [slug, server] of Object.entries(config.mcpServers)) {
         if (rows.some((row) => row.slug === slug && (row.managedBy || row.catalogId)))
@@ -378,9 +420,21 @@ export function createMcpSettings(deps: {
         revision: input.revision,
         config,
         redactions,
+        argumentRedactions,
         expires: Date.now() + 10 * 60_000,
       });
-      return { id, changes: configDiff(before, config, redactions) };
+      const previewValues = Object.fromEntries(
+        Object.entries(before.mcpServers).map(([slug, server]) => [
+          slug,
+          [
+            ...(redactions[slug] ?? []),
+            ...(argumentRedactions[slug] ?? []),
+            ...Object.values(server.env),
+            ...(server.secret ? [server.secret] : []),
+          ],
+        ]),
+      );
+      return { id, changes: configDiff(before, config, previewValues) };
     },
     async apply(owner: Owner, previewId: string, placement: "host" | "worker" = "worker") {
       if (placement === "host") await requireHostOwner(owner);
@@ -443,6 +497,36 @@ export function createMcpSettings(deps: {
             );
             for (const [slug, server] of Object.entries(preview.config.mcpServers)) {
               const existing = editable.find((row) => row.slug === slug);
+              const previous = existing ? await material(existing, tx) : {};
+              const flags = mcpCredentialFlagsForEntries(previous, { env: server.env });
+              const envValues = Object.values(server.env);
+              const launchParts = [server.command, ...server.args];
+              const namedSecrets = new Set([
+                ...(server.secret ? [server.secret] : []),
+                ...Object.entries(server.env).flatMap(([key, value]) =>
+                  mcpEntryIsSecret(flags, "env", key) ? [value] : [],
+                ),
+              ]);
+              const redactions = independentMcpRedactions({
+                redactions: preview.redactions[slug],
+                env: server.env,
+              });
+              // Retain old argument credentials after their named entry is removed or rotated.
+              // An ordinary named value cannot replace that independent protection.
+              const removedCredentials = [
+                ...(previous.secret ? [previous.secret] : []),
+                ...Object.entries(previous.env ?? {}).flatMap(([key, value]) =>
+                  mcpEntryIsSecret(previous.credentialFlags, "env", key) ? [value] : [],
+                ),
+              ].filter((value) => !namedSecrets.has(value));
+              const argumentRedactions = [
+                ...new Set(
+                  [...(preview.argumentRedactions[slug] ?? []), ...removedCredentials].filter(
+                    (value) =>
+                      value && launchParts.some((part) => mcpTextContainsSecret(part, value)),
+                  ),
+                ),
+              ];
               const secretId = await store(
                 owner,
                 {
@@ -450,7 +534,9 @@ export function createMcpSettings(deps: {
                   args: server.args,
                   env: server.env,
                   secret: server.secret,
-                  redactions: preview.redactions[slug] ?? [],
+                  redactions,
+                  argumentRedactions,
+                  credentialFlags: flags,
                 },
                 tx,
               );
@@ -463,13 +549,15 @@ export function createMcpSettings(deps: {
                 placement,
                 transport: "stdio",
                 command: redactMcpText(server.command, [
-                  ...(preview.redactions[slug] ?? []),
-                  ...Object.values(server.env),
+                  ...redactions,
+                  ...argumentRedactions,
+                  ...envValues,
                   ...(server.secret ? [server.secret] : []),
                 ]),
                 args: redactMcpArguments(server.args, [
-                  ...(preview.redactions[slug] ?? []),
-                  ...Object.values(server.env),
+                  ...redactions,
+                  ...argumentRedactions,
+                  ...envValues,
                   ...(server.secret ? [server.secret] : []),
                 ]),
                 env: Object.fromEntries(Object.keys(server.env).map((key) => [key, true])),
