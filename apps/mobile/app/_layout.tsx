@@ -1,7 +1,8 @@
+import { featureDocsForMobileEntry, featureDocsLink, featureDocsLinks } from "@ardurbot/core";
 import { DarkTheme, Stack, ThemeProvider } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useMemo, useState } from "react";
-import { View } from "react-native";
+import { Alert, Pressable, Text, View } from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
 import { AvatarStyleProvider } from "../components/avatar-style";
@@ -14,7 +15,7 @@ import {
   configureForegroundNotifications,
   resumeLiveNotifications,
 } from "../lib/live-notifications";
-import { native, useResolvedAppearance } from "../lib/native";
+import { native, openDocumentationUrl, useResolvedAppearance } from "../lib/native";
 
 configureForegroundNotifications();
 
@@ -63,16 +64,38 @@ export default function Layout() {
             <ThemeProvider value={navigationTheme}>
               <StatusBar style={resolved === "light" ? "dark" : "light"} />
               <Stack
-                screenOptions={{
+                screenOptions={({ route }) => ({
                   headerStyle: { backgroundColor: navigationTheme.colors.background },
                   headerTintColor: navigationTheme.colors.text,
                   headerShadowVisible: false,
                   headerBackButtonDisplayMode: "minimal",
                   contentStyle: { backgroundColor: String(native.page) },
-                }}
+                  headerRight: () => {
+                    const featureId = featureDocsForMobileEntry(route.name);
+                    const url = featureId ? featureDocsLink(featureId) : null;
+                    if (!url) return null;
+                    const title =
+                      featureDocsLinks.features[featureId as keyof typeof featureDocsLinks.features]
+                        .title;
+                    return (
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={t("Learn more about {title}", { title: t(title) })}
+                        hitSlop={10}
+                        onPress={() =>
+                          void openDocumentationUrl(url).catch(() =>
+                            Alert.alert(t("Could not open help. Try again.")),
+                          )
+                        }
+                      >
+                        <Text style={{ color: navigationTheme.colors.text, fontSize: 20 }}>ⓘ</Text>
+                      </Pressable>
+                    );
+                  },
+                })}
               >
                 <Stack.Screen name="index" options={{ headerShown: false, title: "Ardur" }} />
-                <Stack.Screen name="sign-in" options={{ headerShown: false }} />
+                <Stack.Screen name="sign-in" options={{ title: t("Sign in") }} />
                 <Stack.Screen
                   name="integration-setup"
                   options={{ title: t("Server integrations") }}

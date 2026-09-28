@@ -1,0 +1,155 @@
+{
+  "docsUrl": "https://ardur.ai/docs/features/",
+  "features": {
+    "sign-in": {
+      "id": "sign-in",
+      "title": "Sign in to Ardur",
+      "url": "https://ardur.ai/docs/features/sign-in/",
+      "steps": [
+        "open-sign-in",
+        "show-connection-error",
+        "open-password-recovery"
+      ],
+      "errors": [
+        "auth-unreachable"
+      ]
+    },
+    "onboarding": {
+      "id": "onboarding",
+      "title": "Connect a model",
+      "url": "https://ardur.ai/docs/features/onboarding/",
+      "steps": [
+        "open-model-connection",
+        "enter-connection-key"
+      ],
+      "errors": [
+        "onboarding-save"
+      ]
+    },
+    "bots-create": {
+      "id": "bots-create",
+      "title": "New bot",
+      "url": "https://ardur.ai/docs/features/bots-create/",
+      "steps": [
+        "open-new-bot-menu",
+        "open-new-bot-form",
+        "choose-private-computer",
+        "open-created-bot"
+      ],
+      "errors": [
+        "bot-create"
+      ]
+    },
+    "chat-approvals": {
+      "id": "chat-approvals",
+      "title": "Review approval",
+      "url": "https://ardur.ai/docs/features/chat-approvals/",
+      "steps": [
+        "review-pending-action",
+        "see-denied-action"
+      ],
+      "errors": [
+        "approval-submit"
+      ]
+    },
+    "group-goals": {
+      "id": "group-goals",
+      "title": "Start goal",
+      "url": "https://ardur.ai/docs/features/group-goals/",
+      "steps": [
+        "open-start-goal",
+        "fill-goal-form",
+        "watch-goal-progress",
+        "stop-running-goal"
+      ],
+      "errors": [
+        "goal-start"
+      ]
+    },
+    "routines": {
+      "id": "routines",
+      "title": "Routines",
+      "url": "https://ardur.ai/docs/features/routines/",
+      "steps": [
+        "open-scheduled-routines",
+        "edit-routine-instruction",
+        "save-routine",
+        "inspect-run-result"
+      ],
+      "errors": [
+        "routine-save"
+      ]
+    },
+    "memory-documents": {
+      "id": "memory-documents",
+      "title": "Memory",
+      "url": "https://ardur.ai/docs/features/memory-documents/",
+      "steps": [
+        "find-memory-document",
+        "open-document-detail",
+        "inspect-document-history",
+        "approve-reviewed-change"
+      ],
+      "errors": [
+        "memory-load"
+      ]
+    },
+    "models": {
+      "id": "models",
+      "title": "Models",
+      "url": "https://ardur.ai/docs/features/models/",
+      "steps": [
+        "open-model-settings",
+        "choose-default-model",
+        "open-connection-form"
+      ],
+      "errors": [
+        "models-load",
+        "models-catalog-unavailable"
+      ]
+    },
+    "computers": {
+      "id": "computers",
+      "title": "Computers",
+      "url": "https://ardur.ai/docs/features/computers/",
+      "steps": [
+        "inspect-computer-capacity",
+        "open-add-computer",
+        "inspect-refused-test",
+        "retry-computer-test"
+      ],
+      "errors": [
+        "computer-unreachable"
+      ]
+    },
+    "integrations": {
+      "id": "integrations",
+      "title": "Integrations",
+      "url": "https://ardur.ai/docs/features/integrations/",
+      "steps": [
+        "browse-integration-catalog",
+        "review-tool-access",
+        "allow-read-tool",
+        "remove-tool-access",
+        "open-connection-form"
+      ],
+      "errors": [
+        "integration-access"
+      ]
+    }
+  },
+  "settings": {
+    "memory": "memory-documents",
+    "models": "models",
+    "computer": "computers",
+    "integrations": "integrations"
+  },
+  "mobileEntries": {
+    "sign-in": "sign-in",
+    "memory": "memory-documents",
+    "models": "models",
+    "integrations": "integrations",
+    "new": "bots-create",
+    "routine": "routines"
+  }
+}

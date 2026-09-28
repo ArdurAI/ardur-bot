@@ -30,6 +30,7 @@ import {
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { FeatureDocsLink } from "../components/FeatureDocsLink";
 import { IntegrationSetup } from "../components/integrations/IntegrationSetup";
 import { OllamaSettings } from "../components/OllamaSettings";
 import type { ModelCatalogEntry } from "../lib/model-auth";
@@ -341,6 +342,11 @@ export function OnboardingPage() {
   return (
     <div className="min-h-full bg-background px-6 py-12">
       <div className="mx-auto w-full max-w-[560px]">
+        {step !== "loading" ? (
+          <div className="mb-4 flex justify-end">
+            <FeatureDocsLink featureId="onboarding" title={t`Connect a model`} />
+          </div>
+        ) : null}
         {step === "loading" ? (
           <p className="text-muted-foreground">
             <Trans>Loading…</Trans>

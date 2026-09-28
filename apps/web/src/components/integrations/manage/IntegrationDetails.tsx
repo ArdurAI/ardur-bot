@@ -2,6 +2,7 @@ import type { IntegrationConnection, IntegrationDescriptor } from "@ardurbot/con
 import { Button } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
 import { useState } from "react";
+import { FeatureDocsLink } from "../../../components/FeatureDocsLink";
 import { mcpFailureSentence } from "../../../lib/mcp-sign-in";
 import { rpc } from "../../../lib/rpc";
 import { IntegrationManage } from "../catalog/IntegrationManage";
@@ -36,6 +37,13 @@ export function IntegrationDetails({
   };
   return (
     <div className="space-y-5">
+      <div className="flex justify-end">
+        <FeatureDocsLink
+          featureId="integrations"
+          title={t`Integrations`}
+          step="review-tool-access"
+        />
+      </div>
       <div className="flex flex-wrap gap-2">
         <Button variant="outline" disabled={testing} onClick={() => void test()}>{t`Test`}</Button>
         <Button variant="outline" disabled={testing} onClick={onReconnect}>{t`Reconnect`}</Button>
