@@ -3,6 +3,7 @@ import { isDeepStrictEqual } from "node:util";
 import type { AgentUsage, UsagePurpose } from "@ardurbot/adapter-kit";
 import { RequestUsageCollector } from "@ardurbot/adapter-kit";
 import { chatCompletionsUsage } from "./openai-chat-usage.js";
+import { requestReservationTokens } from "./request-usage.js";
 import {
   assertAllowedOpenAiCompatibleUrl,
   assertHttpsForKeyedOpenAiCompatibleUrl,
@@ -451,7 +452,8 @@ export class HermesProviderBroker {
       const encoded = JSON.stringify(body);
       if (Buffer.byteLength(encoded) > MAX_REQUEST_BYTES) denied();
       await active();
-      const reservedTokens = connection.contextWindow + connection.maxOutputTokens;
+      const outputCap = Number(body.max_tokens ?? body.max_completion_tokens);
+      const reservedTokens = requestReservationTokens(encoded, connection.contextWindow, outputCap);
       if (!bounded(reservedTokens, MAX_TOKEN)) denied();
       const collector = new RequestUsageCollector({
         provider: connection.provider,

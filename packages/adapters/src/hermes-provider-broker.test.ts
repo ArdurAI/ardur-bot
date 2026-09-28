@@ -89,6 +89,36 @@ function fixture(patch: Partial<BrokerOptions> = {}) {
 }
 
 describe("worker provider broker", () => {
+  it("admits a small delegated request under a 10,000-token allowance and settles it", async () => {
+    const records: AgentUsage[] = [];
+    const base = fixture();
+    const f = fixture({
+      connection: { ...base.options.connection, contextWindow: 32_768, maxOutputTokens: 4_096 },
+      maxReservedTokens: 2 * (32_768 + 4_096),
+      record: async (usage) => {
+        if (usage.request?.collection?.outcome === "started" &&
+          (usage.request.admission?.reservedTokens ?? 0) > 10_000)
+          throw new Error("Broker delegation allowance exhausted");
+        records.push(usage);
+      },
+    });
+    expect((await f.broker.open(f.request())).ok).toBe(true);
+    expect(records[0]?.request?.admission?.reservedTokens).toBeLessThan(10_000);
+    expect(records.at(-1)?.request?.collection?.outcome).toBe("success");
+    expect(f.fetch).toHaveBeenCalledOnce();
+
+    const oversized = { ...f.body, messages: [{ role: "user", content: "x".repeat(12_000) }] };
+    await expect(f.broker.open(f.request({ body: oversized })))
+      .rejects.toThrow("Provider request could not be admitted.");
+    expect(f.fetch).toHaveBeenCalledOnce();
+
+    const main = fixture({
+      connection: { ...base.options.connection, contextWindow: 32_768, maxOutputTokens: 4_096 },
+      maxReservedTokens: 16 * (32_768 + 4_096),
+    });
+    expect((await main.broker.open(main.request({ body: oversized }))).ok).toBe(true);
+    expect(main.fetch).toHaveBeenCalledOnce();
+  });
   it("records model evidence only from a validated response", async () => {
     const observed = vi.fn(async (_model: string | undefined, _effort: string | undefined) => {});
     const matching = fixture({ observed });
@@ -308,7 +338,7 @@ describe("worker provider broker", () => {
     expect(JSON.stringify(f.records)).not.toContain(f.broker.grant.token);
   });
 
-  it("forwards a gpt-4.1 completion limit without changing its parameter or reservation", async () => {
+  it("forwards a gpt-4.1 completion limit and reserves its actual output cap", async () => {
     const base = fixture();
     const provider = vi.fn<typeof globalThis.fetch>(async () =>
       json({ model: "gpt-4.1", usage: { prompt_tokens: 3, completion_tokens: 2 } }),
@@ -334,7 +364,7 @@ describe("worker provider broker", () => {
     const sent = JSON.parse(String(provider.mock.calls[0]?.[1]?.body));
     expect(sent.max_completion_tokens).toBe(12);
     expect(sent).not.toHaveProperty("max_tokens");
-    expect(f.records[0]?.request?.admission?.reservedTokens).toBe(100);
+    expect(f.records[0]?.request?.admission?.reservedTokens).toBe(80 + 12);
     expect(f.records.at(-1)?.request?.collection?.outcome).toBe("success");
   });
 
