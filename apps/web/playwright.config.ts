@@ -31,7 +31,10 @@ export default defineConfig({
   webServer: {
     command: "pnpm dev",
     url: baseURL,
-    reuseExistingServer: !process.env.CI,
+    // Reusing a running server is opt-in: a developer's dev stack may be on this port, and web e2e
+    // signs up test accounts in whatever database that server uses. Without PLAYWRIGHT_REUSE_SERVER=1,
+    // Playwright starts its own server and stops if the port is already taken.
+    reuseExistingServer: process.env.PLAYWRIGHT_REUSE_SERVER === "1",
     timeout: 120_000,
   },
 });

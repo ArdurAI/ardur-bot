@@ -3828,6 +3828,7 @@ export function ShellPage({
                 canManageGoal={Boolean(bootstrapMe?.isDeploymentOwner)}
                 onStartGoal={async (input) => {
                   setGoal(await rpc.goals.start(input));
+                  setPanel(null);
                 }}
                 onSave={async (input) => {
                   const updated = await rpc.groups.update({ groupId: activeGroup.id, ...input });

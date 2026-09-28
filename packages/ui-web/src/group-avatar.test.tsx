@@ -29,6 +29,7 @@ describe("GroupAvatar", () => {
     );
     const count = (html.match(/ardurbot-bot-avatar/g) || []).length;
     expect(count).toBe(2);
+    expect(html).toContain('aria-hidden="true"');
   });
 
   it("renders a working member inside a group avatar", () => {

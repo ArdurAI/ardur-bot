@@ -1,6 +1,6 @@
 import type { GroupMember, RuntimeKind, SetGroupMemberModelPinInput } from "@ardurbot/contracts";
 import { runtimeLabels } from "@ardurbot/contracts";
-import { spaceDefaultEffort } from "@ardurbot/core";
+import { rpcErrorMessage, spaceDefaultEffort } from "@ardurbot/core";
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, Text } from "react-native";
 import type { MobileBot, MobileGroup, MobileModel, MobileModelCredential } from "../lib/api";
@@ -228,7 +228,10 @@ export function GroupMemberModelControl({
             activeMember.effectiveRuntimePin?.runtimeKind ??
             "pi",
         );
-        onError(t("Could not save group model."));
+        // Say why the server refused the choice (for example a runtime this host cannot run); other
+        // failures keep the generic sentence.
+        const fallback = t("Could not save group model.");
+        onError(error instanceof RpcError ? rpcErrorMessage(error, fallback) : fallback);
       }
     } finally {
       setPending(false);

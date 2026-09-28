@@ -2944,6 +2944,13 @@ describeJourneys("required product journeys", () => {
     const forgedMessages = await prisma.message.findMany({ where: { runId: forged.runId } });
     expect(JSON.stringify(forgedMessages)).not.toContain('"kind":"app_connect"');
 
+    // The earlier request and result pairs have already been verified. Move their
+    // admission times beyond S4's rolling pair window before exercising another card.
+    await prisma.botMessageDelivery.updateMany({
+      where: { goalId: goal.id },
+      data: { createdAt: new Date(Date.now() - 2 * 60_000) },
+    });
+
     const document = await prisma.memoryDocument.create({
       data: {
         spaceId: startRun.spaceId,
@@ -2973,7 +2980,8 @@ describeJourneys("required product journeys", () => {
         deliveryKey: `card-read:${readRun.id}`,
       },
     );
-    if (!read.ok || !read.runId) throw new Error("The card read fixture was not admitted.");
+    if (!read.ok || !read.runId)
+      throw new Error(`The card read fixture was not admitted: ${read.ok ? "no run" : read.error}`);
     const readSpy = vi.spyOn(prisma.memoryRevision, "findFirst");
     const readRuntime = vi
       .spyOn(ScriptedAgentRuntime.prototype, "run")

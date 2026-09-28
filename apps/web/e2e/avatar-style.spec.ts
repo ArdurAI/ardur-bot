@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { captureScreenshot, completeOnboarding, openUserSettings, signup } from "./helpers";
 
-test("account settings avatar style previews differ for robot and organic", async ({
+test("account settings show seal and organic previews and persist the selected style", async ({
   page,
 }, testInfo) => {
   const stamp = Date.now();
@@ -16,20 +16,14 @@ test("account settings avatar style previews differ for robot and organic", asyn
   await expect(robot).toBeVisible();
   await expect(organic).toBeVisible();
   await expect(robot).toHaveAttribute("aria-pressed", "true");
-  await expect(robot.locator(".ardurbot-bot-avatar")).toBeVisible();
+  const seal = robot.locator(".ardurbot-bot-avatar");
+  await expect(seal).toBeVisible();
+  await expect(seal).toContainText("A");
+  await expect(seal).toHaveAttribute("aria-hidden", "true");
+  await expect(seal.locator("svg")).toHaveCount(0);
   await expect(organic.locator(".ardurbot-organic-avatar")).toBeVisible();
   await expect(robot.locator(".ardurbot-organic-avatar")).toHaveCount(0);
   await expect(organic.locator(".ardurbot-bot-avatar")).toHaveCount(0);
-
-  const robotMarkup = await robot
-    .locator("svg")
-    .first()
-    .evaluate((el) => el.outerHTML);
-  const organicMarkup = await organic
-    .locator("svg")
-    .first()
-    .evaluate((el) => el.outerHTML);
-  expect(robotMarkup).not.toBe(organicMarkup);
 
   await captureScreenshot(page, testInfo, "account-avatars-style-previews");
   await settings.getByRole("textbox", { name: "What should your bots call you?" }).fill("Captain");
