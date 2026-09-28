@@ -89,8 +89,17 @@ it("routes the advertised peer conversation with its participant and room", asyn
   threadCalls.rpc.mockResolvedValue({
     messages: [
       {
+        id: "sent",
+        role: "bot",
+        botId: "coordinator",
+        blocks: [
+          { kind: "bot_message_sent", toBotId: "worker", toBotName: "Worker", text: "Request" },
+        ],
+      },
+      {
         id: "message",
         role: "bot",
+        replyToMessageId: "sent",
         blocks: [
           {
             kind: "bot_message_received",
@@ -144,6 +153,87 @@ it("routes the advertised peer conversation with its participant and room", asyn
     expect(node.textContent).toContain("Selected exchange");
   } finally {
     await act(async () => root.unmount());
+  }
+});
+
+it("shows only the selected coordinator's room exchange with a worker", async () => {
+  threadCalls.rpc.mockResolvedValue({
+    messages: [
+      {
+        id: "a-sent",
+        role: "bot",
+        botId: "a",
+        blocks: [
+          {
+            kind: "bot_message_sent",
+            toBotId: "w",
+            toBotName: "Worker",
+            text: "A request",
+            deliveryId: "a-delivery",
+          },
+        ],
+      },
+      {
+        id: "a-reply",
+        role: "user",
+        replyToMessageId: "a-sent",
+        blocks: [
+          {
+            kind: "bot_message_received",
+            fromBotId: "w",
+            fromBotName: "Worker",
+            text: "A reply",
+            deliveryId: "a-reply-delivery",
+          },
+        ],
+      },
+      {
+        id: "b-sent",
+        role: "bot",
+        botId: "b",
+        blocks: [
+          {
+            kind: "bot_message_sent",
+            toBotId: "w",
+            toBotName: "Worker",
+            text: "B request",
+            deliveryId: "b-delivery",
+          },
+        ],
+      },
+      {
+        id: "b-reply",
+        role: "user",
+        replyToMessageId: "b-sent",
+        blocks: [
+          {
+            kind: "bot_message_received",
+            fromBotId: "w",
+            fromBotName: "Worker",
+            text: "B reply",
+            deliveryId: "b-reply-delivery",
+          },
+        ],
+      },
+    ],
+    olderCursor: null,
+  });
+  for (const [botId, botName, own, other] of [
+    ["a", "Coordinator A", "A", "B"],
+    ["b", "Coordinator B", "B", "A"],
+  ] as const) {
+    navigation.params = { botId, botName, groupId: "room", peerBotId: "w", peerName: "Worker" };
+    const node = document.createElement("div");
+    const root = createRoot(node);
+    try {
+      await act(async () => root.render(createElement(PeerConversationRoute)));
+      expect(node.textContent).toContain(`${botName}${own} request`);
+      expect(node.textContent).toContain(`Worker${own} reply`);
+      expect(node.textContent).not.toContain(`${other} request`);
+      expect(node.textContent).not.toContain(`${other} reply`);
+    } finally {
+      await act(async () => root.unmount());
+    }
   }
 });
 

@@ -19,8 +19,7 @@ it("extracts Team presence and delivery labels into every web catalog", () => {
     for (const message of messages) {
       const entry = catalog.split(`msgid "${message}"\nmsgstr "`)[1];
       expect(entry, `${locale}: ${message}`).toBeDefined();
-      if (locale === "ru" || locale === "zh-CN")
-        expect(entry?.split('"')[0], `${locale}: ${message}`).not.toBe("");
+      if (locale !== "en") expect(entry?.split('"')[0], `${locale}: ${message}`).not.toBe("");
     }
   }
 });

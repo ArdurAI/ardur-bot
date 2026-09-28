@@ -56,7 +56,7 @@ msgstr "{0} {unitLabel}"
 #. placeholder {0}: row.activeRunCount
 #: src/pages/TeamBoard.tsx
 msgid "{0} active tasks"
-msgstr ""
+msgstr "{0} सक्रिय कार्य"
 
 #. placeholder {0}: file.size
 #: src/pages/settings/UploadedFiles.tsx
@@ -125,7 +125,7 @@ msgstr "{0} MB"
 #. placeholder {0}: row.pendingPeerCount
 #: src/pages/TeamBoard.tsx
 msgid "{0} peer messages waiting"
-msgstr ""
+msgstr "{0} बॉट संदेश प्रतीक्षारत"
 
 #. placeholder {0}: grant.limits.maxPerDay
 #: src/pages/LearningInbox.tsx
@@ -2177,7 +2177,7 @@ msgstr ""
 #. placeholder {0}: row.latestPeerBotName ?? "Bot"
 #: src/pages/TeamBoard.tsx
 msgid "Conversation with {0}"
-msgstr ""
+msgstr "{0} के साथ बातचीत"
 
 #: src/pages/GroupPanel.tsx
 msgid "Coordinator"
@@ -3233,7 +3233,7 @@ msgstr "डिलीट किया जा रहा है…"
 
 #: src/lib/team-delivery-text.ts
 msgid "Delivered"
-msgstr ""
+msgstr "पहुँचा दिया गया"
 
 #: src/components/PeerMessageReceipt.tsx
 msgid "Delivered from {peer}"
@@ -4611,7 +4611,7 @@ msgstr ""
 
 #: src/pages/TeamBoard.tsx
 msgid "Latest message"
-msgstr ""
+msgstr "नवीनतम संदेश"
 
 #: src/components/FeatureDocsLink.tsx
 msgid "Learn more"
@@ -5633,7 +5633,7 @@ msgstr "अभी तक कोई नहीं"
 
 #: src/lib/team-delivery-text.ts
 msgid "Not approved"
-msgstr ""
+msgstr "स्वीकृत नहीं"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "not available"
@@ -7814,7 +7814,7 @@ msgstr ""
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/TeamBoard.tsx
 msgid "Status unavailable"
-msgstr ""
+msgstr "स्थिति उपलब्ध नहीं है"
 
 #: src/pages/LearningObservation.tsx
 msgid "Steering corrections"
@@ -8552,7 +8552,7 @@ msgstr ""
 
 #: src/pages/TeamBoard.tsx
 msgid "Updated 1m ago"
-msgstr ""
+msgstr "1 मिनट पहले अपडेट किया गया"
 
 #: src/pages/settings-sections.ts
 msgid "Updates"

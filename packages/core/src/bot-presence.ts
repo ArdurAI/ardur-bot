@@ -33,7 +33,7 @@ type Run = {
   updatedAt: Date;
   goalId: string | null;
   delegationId: string | null;
-  thread?: { groupId: string | null } | null;
+  thread?: { id?: string; groupId: string | null } | null;
 };
 type Card = {
   id: string;
@@ -80,6 +80,7 @@ export function projectBotPresence(input: {
   computerDisplayName?: string;
   observedAt: Date;
   callerBotId?: string;
+  callerThreadId?: string;
   canSend?: boolean;
   visibleGroupId?: string;
 }): BotPresence {
@@ -130,12 +131,13 @@ export function projectBotPresence(input: {
   // A peer may see advisory availability, but task context requires a shared room.
   // A personal desk thread has no room and cannot grant another bot access.
   const runTaskVisible = (run: Run | undefined) => {
-    if (!input.callerBotId || input.callerBotId === bot.id)
-      return (
-        !input.visibleGroupId ||
-        !run?.thread?.groupId ||
-        run.thread.groupId === input.visibleGroupId
-      );
+    if (!input.callerBotId) return true;
+    if (
+      input.callerBotId === bot.id &&
+      input.callerThreadId &&
+      run?.thread?.id === input.callerThreadId
+    )
+      return true;
     const roomId = run?.thread?.groupId;
     return Boolean(
       roomId &&

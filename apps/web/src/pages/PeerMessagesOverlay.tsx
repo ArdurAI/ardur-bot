@@ -1,5 +1,6 @@
 import { ChatMarkdown } from "@ardurbot/chat-ui/web";
 import type { ThreadMessage } from "@ardurbot/contracts";
+import { selectPeerTranscript } from "@ardurbot/core";
 import {
   BotAvatar,
   Button,
@@ -11,7 +12,6 @@ import {
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useMemo, useState } from "react";
 import { loadPeerHistory } from "../lib/peer-history";
-import { peerConversations } from "../lib/peer-messages";
 import { rpc } from "../lib/rpc";
 
 /**
@@ -45,10 +45,10 @@ export function PeerMessagesOverlay({
   const [historyFailed, setHistoryFailed] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const conversation = useMemo(() => {
-    if (!historyReady) return null;
-    return peerConversations(messages).find((entry) => entry.peerBotId === peerBotId) ?? null;
-  }, [historyReady, messages, peerBotId]);
-  const peerBotName = conversation?.peerBotName ?? initialPeerBotName;
+    if (!historyReady) return [];
+    return selectPeerTranscript(messages, botId, peerBotId, Boolean(groupId));
+  }, [historyReady, messages, botId, peerBotId, groupId]);
+  const peerBotName = initialPeerBotName;
 
   useEffect(() => {
     const abort = new AbortController();
@@ -124,7 +124,7 @@ export function PeerMessagesOverlay({
               </Button>
             </div>
           </div>
-        ) : !conversation || conversation.messages.length === 0 ? (
+        ) : conversation.length === 0 ? (
           <div className="grid flex-1 place-items-center px-8 text-center text-[13.5px] text-muted-foreground/80">
             <Trans>No messages with {peerBotName} yet.</Trans>
           </div>
@@ -133,7 +133,7 @@ export function PeerMessagesOverlay({
             data-testid="peer-conversation-transcript"
             className="rk-scroll flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-4 py-5 md:px-7 md:py-6"
           >
-            {conversation.messages.map((peerMessage, index) => {
+            {conversation.map((peerMessage, index) => {
               const sent = peerMessage.direction === "sent";
               return (
                 <div
@@ -146,7 +146,7 @@ export function PeerMessagesOverlay({
                     }`}
                   >
                     <div className="mb-1 text-[12px] text-muted-foreground/70" dir="auto">
-                      {sent ? botName : peerBotName}
+                      {peerMessage.authorBotId === botId ? botName : peerBotName}
                     </div>
                     <div className="text-[14.5px] leading-[1.5] text-foreground/90" dir="auto">
                       <ChatMarkdown>{peerMessage.text}</ChatMarkdown>
