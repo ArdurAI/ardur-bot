@@ -226,3 +226,33 @@ it("shows unknown and stale presence honestly, and returns from a peer conversat
   expect(node.textContent).not.toContain("Idle");
   await act(async () => root.unmount());
 });
+
+it.each([
+  ["working", "Working", "Working on Review sources for"],
+  ["blocked", "Blocked — The task needs attention", "Status unavailable"],
+] as const)("keeps %s status readable without a requester", async (state, expected, absent) => {
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  await act(async () =>
+    root.render(
+      <MemoryRouter>
+        <TeamBoardRow
+          row={{
+            ...row,
+            state,
+            requesterName: null,
+            sentence: null,
+            currentTaskTitle: state === "working" ? "Review sources" : undefined,
+            reason: state === "blocked" ? "The task needs attention" : null,
+            availability: state === "blocked" ? "unavailable" : "busy",
+            observedAt: new Date().toISOString(),
+          }}
+          refresh={async () => {}}
+        />
+      </MemoryRouter>,
+    ),
+  );
+  expect(node.textContent).toContain(expected);
+  expect(node.textContent).not.toContain(absent);
+  await act(async () => root.unmount());
+});

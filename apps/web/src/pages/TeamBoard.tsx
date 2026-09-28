@@ -409,9 +409,11 @@ export function TeamBoardRow({
 }
 function TeamStatus({ row, now }: { row: TeamRow; now: number }) {
   if (
-    row.availability === "unknown" ||
-    row.availability === "unavailable" ||
-    (row.observedAt && presenceFreshness(row.observedAt, now) === "unavailable")
+    row.state !== "blocked" &&
+    row.state !== "waiting-approval" &&
+    (row.availability === "unknown" ||
+      row.availability === "unavailable" ||
+      (row.observedAt && presenceFreshness(row.observedAt, now) === "unavailable"))
   )
     return <Trans>Status unavailable</Trans>;
   switch (row.state) {
@@ -420,7 +422,7 @@ function TeamStatus({ row, now }: { row: TeamRow; now: number }) {
     case "queued":
       return <Trans>Queued</Trans>;
     case "working":
-      return row.currentTaskTitle || row.sentence ? (
+      return (row.currentTaskTitle || row.sentence) && row.requesterName ? (
         <Trans>
           Working on {row.currentTaskTitle ?? row.sentence} for {row.requesterName}
         </Trans>

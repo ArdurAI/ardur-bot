@@ -73,7 +73,8 @@ export default function NowPanel({
                 <Trans>Needs takeover</Trans>
               </span>
             ) : null}
-            {presenceUnavailable(run.botId) ? (
+            {!["waiting_input", "waiting_takeover"].includes(run.status) &&
+            presenceUnavailable(run.botId) ? (
               <span className="text-muted-foreground">
                 <Trans>Status unavailable</Trans>
               </span>
