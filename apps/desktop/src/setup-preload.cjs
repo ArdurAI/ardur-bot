@@ -9,6 +9,7 @@ const guidedSetup = process.argv?.includes("--ardurbot-guided-setup")
       cancel: () => ipcRenderer.invoke("desktop.guidedSetup.cancel"),
       resume: () => ipcRenderer.invoke("desktop.guidedSetup.resume"),
       setStartup: (enabled) => ipcRenderer.invoke("desktop.guidedSetup.startup", enabled),
+      getStartup: () => ipcRenderer.invoke("desktop.guidedSetup.startupState"),
       onChange: (listener) => {
         const handler = (_event, snapshot) => listener(snapshot);
         ipcRenderer.on("desktop.guidedSetup.changed", handler);

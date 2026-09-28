@@ -99,6 +99,12 @@ export function installGuidedSetupIpc(input: {
       }
     },
   );
+  input.ipc.handle(GUIDED_SETUP_CHANNELS.startupState, (event, ...args: unknown[]) => {
+    guard(event);
+    SetupNoInputSchema.parse(args);
+    const supported = input.startup.supported();
+    return { supported, enabled: supported && input.startup.enabled() };
+  });
   input.ipc.handle(GUIDED_SETUP_CHANNELS.resume, async (event, ...args: unknown[]) => {
     guard(event);
     SetupNoInputSchema.parse(args);

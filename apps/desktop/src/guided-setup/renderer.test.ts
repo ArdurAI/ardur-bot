@@ -46,15 +46,24 @@ function snapshot(status: "pending" | "running" | "succeeded" | "failed"): Setup
   };
 }
 
-function fakeBridge(initial: SetupSnapshot) {
+function fakeBridge(initial: SetupSnapshot, platform = "test", initiallyEnabled = false) {
   const started = Promise.withResolvers<SetupSnapshot>();
+  let nativeStartup = initiallyEnabled;
   let publish: (value: SetupSnapshot) => void = () => undefined;
   const guided = {
     snapshot: vi.fn(async () => initial),
     start: vi.fn(() => started.promise),
     retry: vi.fn(() => started.promise),
     skip: vi.fn(async () => initial),
-    cancel: vi.fn(async () => ({ ...initial, sequence: 2 })),
+    cancel: vi.fn(async () => {
+      nativeStartup = initiallyEnabled;
+      return { ...initial, sequence: 2 };
+    }),
+    getStartup: vi.fn(async () => ({ supported: true, enabled: nativeStartup })),
+    setStartup: vi.fn(async (enabled: boolean) => {
+      nativeStartup = enabled;
+      return { ok: true, enabled };
+    }),
     resume: vi.fn(() => started.promise),
     onChange: vi.fn((listener: (value: SetupSnapshot) => void) => {
       publish = listener;
@@ -62,14 +71,22 @@ function fakeBridge(initial: SetupSnapshot) {
     }),
   };
   const bridge = {
-    platform: "test",
+    platform,
     guidedSetup: guided,
     quit: vi.fn(async () => undefined),
     test: vi.fn(async () => ({ ok: false })),
     save: vi.fn(async () => ({ ok: true })),
     stack: { start: vi.fn(async () => ({ phase: "idle" })) },
   } as unknown as ArdurBotSetup;
-  return { bridge, guided, started, publish: (value: SetupSnapshot) => publish(value) };
+  return {
+    bridge,
+    guided,
+    started,
+    restoreStartup: () => {
+      nativeStartup = initiallyEnabled;
+    },
+    publish: (value: SetupSnapshot) => publish(value),
+  };
 }
 
 async function mount(bridge: ArdurBotSetup) {
@@ -87,6 +104,57 @@ async function mount(bridge: ArdurBotSetup) {
 }
 
 describe("guided setup document", () => {
+  it("initializes the startup choice from the enabled native preference", async () => {
+    const initial = snapshot("succeeded");
+    initial.currentStep = "services";
+    initial.steps[4]!.available = true;
+    initial.steps[4]!.status = "waiting-input";
+    const fake = fakeBridge(initial, "darwin", true);
+    const view = await mount(fake.bridge);
+    try {
+      expect(fake.guided.getStartup).toHaveBeenCalledOnce();
+      expect(view.host.querySelector<HTMLInputElement>('input[type="checkbox"]')?.checked).toBe(true);
+    } finally {
+      await view.cleanup();
+    }
+  });
+
+  it("refreshes the restored startup preference after Cancel and Start", async () => {
+    const initial = snapshot("succeeded");
+    initial.currentStep = "services";
+    initial.steps[4]!.available = true;
+    initial.steps[4]!.status = "waiting-input";
+    const stopped = structuredClone(initial);
+    stopped.sequence = 2;
+    stopped.currentStep = null;
+    stopped.steps[4]!.status = "cancelled";
+    const restarted = structuredClone(initial);
+    restarted.sequence = 3;
+    const fake = fakeBridge(initial, "darwin");
+    fake.guided.cancel.mockImplementation(async () => {
+      fake.restoreStartup();
+      return stopped;
+    });
+    fake.guided.start.mockResolvedValue(restarted);
+    const view = await mount(fake.bridge);
+    try {
+      const choice = view.host.querySelector<HTMLInputElement>('input[type="checkbox"]')!;
+      await act(async () => choice.click());
+      expect(choice.checked).toBe(true);
+      const cancel = [...view.host.querySelectorAll("button")].find(
+        (button) => button.textContent === "Cancel",
+      );
+      await act(async () => cancel?.click());
+      const start = [...view.host.querySelectorAll("button")].find(
+        (button) => button.textContent === "Start setup",
+      );
+      await act(async () => start?.click());
+      expect(fake.guided.getStartup).toHaveBeenCalledTimes(2);
+      expect(view.host.querySelector<HTMLInputElement>('input[type="checkbox"]')?.checked).toBe(false);
+    } finally {
+      await view.cleanup();
+    }
+  });
   it("rechecks a saved ready journal before handoff", async () => {
     const initial = snapshot("succeeded");
     for (const row of initial.steps.slice(0, 6)) {

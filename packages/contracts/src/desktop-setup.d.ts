@@ -84,6 +84,7 @@ export const GUIDED_SETUP_CHANNELS: {
   readonly resume: "desktop.guidedSetup.resume";
   readonly changed: "desktop.guidedSetup.changed";
   readonly startup: "desktop.guidedSetup.startup";
+  readonly startupState: "desktop.guidedSetup.startupState";
   readonly openAgain: "desktop.guidedSetup.openAgain";
 };
 
@@ -95,5 +96,6 @@ export interface GuidedSetupBridge {
   cancel(): Promise<SetupSnapshot>;
   resume(): Promise<SetupSnapshot>;
   setStartup(enabled: boolean): Promise<{ ok: boolean; enabled?: boolean; error?: string }>;
+  getStartup(): Promise<{ supported: boolean; enabled: boolean }>;
   onChange(listener: (snapshot: SetupSnapshot) => void): () => void;
 }

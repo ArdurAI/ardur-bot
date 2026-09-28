@@ -194,9 +194,11 @@ describe("setup preload bridge", () => {
     expect(bridge.guidedSetup).toBeDefined();
     await bridge.guidedSetup!.snapshot();
     await bridge.guidedSetup!.retry("database");
+    await bridge.guidedSetup!.getStartup();
     expect(invoke.mock.calls.map(([channel]) => channel)).toEqual([
       "desktop.guidedSetup.snapshot",
       "desktop.guidedSetup.retry",
+      "desktop.guidedSetup.startupState",
     ]);
     const unsubscribe = bridge.guidedSetup!.onChange(() => undefined);
     expect(on).toHaveBeenCalledWith("desktop.guidedSetup.changed", expect.any(Function));

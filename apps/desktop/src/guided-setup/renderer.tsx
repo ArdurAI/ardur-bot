@@ -19,7 +19,7 @@ export function SetupDocument({ setupBridge = bridge }: { setupBridge?: ArdurBot
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
   const [cancelBusy, setCancelBusy] = useState(false);
-  const [startupChoice, setStartupChoice] = useState(false);
+  const [startupChoice, setStartupChoice] = useState<boolean | null>(null);
   const [startupError, setStartupError] = useState("");
 
   useEffect(() => {
@@ -37,6 +37,16 @@ export function SetupDocument({ setupBridge = bridge }: { setupBridge?: ArdurBot
       .catch(() => {
         if (mounted) setStatus(guidedSetupText.loadFailed);
       });
+    if (bridge?.platform === "darwin" || bridge?.platform === "win32") {
+      void guided
+        .getStartup()
+        .then((state) => {
+          if (mounted) setStartupChoice(state.supported ? state.enabled : null);
+        })
+        .catch(() => {
+          if (mounted) setStatus(guidedSetupText.loadFailed);
+        });
+    }
     return () => {
       mounted = false;
       unsubscribe();
@@ -65,6 +75,10 @@ export function SetupDocument({ setupBridge = bridge }: { setupBridge?: ArdurBot
     try {
       const next = await guided.cancel();
       setSnapshot((old) => (old && old.sequence > next.sequence ? old : next));
+      if (bridge?.platform === "darwin" || bridge?.platform === "win32") {
+        const state = await guided.getStartup();
+        setStartupChoice(state.supported ? state.enabled : null);
+      }
     } catch {
       setStatus(guidedSetupText.updateFailed);
     } finally {
@@ -174,8 +188,8 @@ export function SetupDocument({ setupBridge = bridge }: { setupBridge?: ArdurBot
         ) : snapshot && guided ? (
           <GuidedSetupView
             snapshot={snapshot}
-            startupSupported={bridge.platform === "darwin" || bridge.platform === "win32"}
-            startupChoice={startupChoice}
+            startupSupported={startupChoice !== null}
+            startupChoice={startupChoice ?? false}
             startupError={startupError}
             onStartupChoice={(enabled) => {
               setStartupError("");

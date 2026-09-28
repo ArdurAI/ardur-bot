@@ -86,5 +86,6 @@ export const GUIDED_SETUP_CHANNELS = {
   resume: "desktop.guidedSetup.resume",
   changed: "desktop.guidedSetup.changed",
   startup: "desktop.guidedSetup.startup",
+  startupState: "desktop.guidedSetup.startupState",
   openAgain: "desktop.guidedSetup.openAgain",
 };
