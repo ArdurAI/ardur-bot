@@ -139,13 +139,8 @@ function fixture(runStatus = "running", delegationStatus = "running") {
     teamGoal: { findMany: scoped([]) },
     task: { findMany: scoped([]) },
     connection: { findMany: scoped([]) },
-    message: {
-      findMany: vi.fn(async ({ select, where }) => {
-        expect(where.thread).toEqual({ spaceId: "space", userId: "owner" });
-        expect(select).toEqual({ botId: true, createdAt: true });
-        return [];
-      }),
-    },
+    message: { findMany: vi.fn() },
+    $queryRaw: vi.fn(async () => []),
   };
   return { db, prisma: db as unknown as PrismaClient, delegation, run };
 }
@@ -173,12 +168,14 @@ describe("team.board", () => {
     const result = TeamBoardSchema.parse(await teamBoard(f.prisma, actor));
     expect(result.rows[0].state).toBe(state);
     expect(result.rows[1].state).toBe("idle");
-    expect(f.db.message.findMany).toHaveBeenCalled();
+    expect(f.db.message.findMany).not.toHaveBeenCalled();
+    expect(f.db.$queryRaw).toHaveBeenCalledOnce();
     expect(result.rows[0].usage).toEqual({ tokens: 150, costs: [] });
     expect(result.rows[0].sentence).not.toContain("narration");
     if (run !== "queued") expect(result.rows[0].executing?.pin.modelId).toBe("executed-model");
     else expect(result.rows[0].executing).toBeNull();
   });
+
   it("shows saved blocker reasons and actions", async () => {
     const f = fixture();
     f.delegation.card = {
@@ -197,6 +194,21 @@ describe("team.board", () => {
       state: "blocked",
       reason: "Source unavailable",
       action: "Choose a source",
+    });
+  });
+  it.each(["error", "failed"])("shows a %s computer as blocked", async (computerState) => {
+    const f = fixture("completed", "completed");
+    Object.assign(f.db, {
+      hostRegistration: { findUnique: vi.fn(async () => ({ platform: "linux" })) },
+    });
+    const bots = await f.db.bot.findMany({ where: { spaceId: "space", userId: "owner" } });
+    f.db.bot.findMany.mockResolvedValue([
+      { ...bots[0], computer: { id: "computer", kind: "docker", state: computerState } },
+      bots[1],
+    ]);
+    expect((await teamBoard(f.prisma, actor)).rows[0]).toMatchObject({
+      state: "blocked",
+      reason: "The task needs attention",
     });
   });
   it("names each computer by its connection, else by the engine of its kind", async () => {

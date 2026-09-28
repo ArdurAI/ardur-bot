@@ -114,32 +114,6 @@ export function CommandPalette({
             <Trans>No bots</Trans>
           </CommandEmpty>
           <CommandGroup>
-            {workspaceTabs
-              .filter((tab) => tab.label.toLowerCase().includes(search.trim().toLowerCase()))
-              .map((tab) => (
-                <CommandItem
-                  key={tab.id}
-                  value={`workspace-${tab.id}`}
-                  onSelect={() => {
-                    onOpenWorkspaceTab?.(tab.id);
-                    onOpenChange(false);
-                  }}
-                >
-                  {tab.label}
-                </CommandItem>
-              ))}
-            {onOpenTerminal &&
-            t`Open terminal`.toLowerCase().includes(search.trim().toLowerCase()) ? (
-              <CommandItem
-                value="open-terminal"
-                onSelect={() => {
-                  onOpenTerminal();
-                  onOpenChange(false);
-                }}
-              >
-                <Trans>Open terminal</Trans>
-              </CommandItem>
-            ) : null}
             {filteredBots.map((bot, index) => {
               const subtitle = botSubtitle(bot);
               const titleTag = botTitleTag(bot);
@@ -190,6 +164,32 @@ export function CommandPalette({
                 </CommandItem>
               );
             })}
+            {workspaceTabs
+              .filter((tab) => tab.label.toLowerCase().includes(search.trim().toLowerCase()))
+              .map((tab) => (
+                <CommandItem
+                  key={tab.id}
+                  value={`workspace-${tab.id}`}
+                  onSelect={() => {
+                    onOpenWorkspaceTab?.(tab.id);
+                    onOpenChange(false);
+                  }}
+                >
+                  {tab.label}
+                </CommandItem>
+              ))}
+            {onOpenTerminal &&
+            t`Open terminal`.toLowerCase().includes(search.trim().toLowerCase()) ? (
+              <CommandItem
+                value="open-terminal"
+                onSelect={() => {
+                  onOpenTerminal();
+                  onOpenChange(false);
+                }}
+              >
+                <Trans>Open terminal</Trans>
+              </CommandItem>
+            ) : null}
           </CommandGroup>
         </CommandList>
       </Command>

@@ -35,6 +35,20 @@ describe("approved effect replay", () => {
     expect(queue.take("destination.write")).toBeUndefined();
   });
 
+  it("leaves approved peer holds out of the tool replay order", () => {
+    const queue = createApprovedEffectReplayQueue([
+      { kind: "peer_hold", request: { deliveryId: "delivery-1" } },
+      { kind: "destination.write", request: { sequence: 1 } },
+    ]);
+
+    expect(queue.nextToolName()).toBe("destination.write");
+    expect(queue.take("destination.write")).toEqual({ sequence: 1 });
+    expect(queue.assertDrained).not.toThrow();
+    expect(
+      createApprovedEffectReplayQueue([{ kind: "peer_hold", request: {} }]).assertDrained,
+    ).not.toThrow();
+  });
+
   it("keeps independently approved calls in creation order", () => {
     const queue = createApprovedEffectReplayQueue([
       { kind: "destination.write", request: { sequence: 1 } },

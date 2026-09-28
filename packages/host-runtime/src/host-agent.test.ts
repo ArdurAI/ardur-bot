@@ -150,6 +150,21 @@ it("keeps ordinary host operations available to a server with the pre-relay stri
   expect(runner).toHaveBeenCalledOnce();
   expect(frames).toContainEqual(expect.objectContaining({ channel: "result", data: { ok: true } }));
 });
+
+it.each([undefined, "providerRelay,hermes"])(
+  "negotiates requested health for acceptance %s",
+  async (advertisement) => {
+    const { agent, frames, completed } = await fixture();
+    agent.setAcceptedHealth(advertisement);
+    await agent.receive(request({ op: "host.health", refreshSignIn: true }));
+    await completed("req");
+    const result = frames.find((frame) => frame.type === "stream" && frame.channel === "result");
+    if (result?.type !== "stream") throw new Error("Missing health result");
+    expect(HostHealthSchema.parse(result.data).capabilities).toEqual(
+      advertisement ? { providerRelay: 1 } : undefined,
+    );
+  },
+);
 const request = (operation: HostOperation): HostRequest => ({
   v: 1,
   type: "request",
