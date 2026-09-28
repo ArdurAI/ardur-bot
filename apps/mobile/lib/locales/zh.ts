@@ -885,6 +885,9 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Review proposals": "审核提案",
   "Tell your bot what to change or remove": "告诉 Bot 要更改或移除什么",
   "Could not prepare memory changes. Try again.": "无法准备记忆更改。请重试。",
+  "Line {lineNumber}: {maskedLine} Edit or remove this line.":
+    "第 {lineNumber} 行：{maskedLine} 请编辑或删除此行。",
+  "Split this import into at most three sections.": "请将此次导入拆分为不超过三个部分。",
   "Memory review is not available with Claude Code or Codex yet; import memory or edit a document directly.":
     "暂不支持使用 Claude Code 或 Codex 审核记忆；请导入记忆或直接编辑文档。",
   "Summarize what you remember about me as plain bullet points. Group them under Profile, Preferences, and Topics. Include only information I shared or explicitly asked you to remember. Leave out passwords, API keys, private account details, and guesses. Do not include instructions to perform actions or change permissions.":

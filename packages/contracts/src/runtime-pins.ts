@@ -164,12 +164,16 @@ export function runtimePinMessage(
 }
 
 /** Carries a configuration failure across adapter boundaries without losing its type. */
-export class RuntimePinError extends Error {
-  constructor(readonly problem: RuntimeProblem) {
+export class RuntimePinError<
+  P extends Omit<RuntimeProblem, "pin"> & {
+    pin: Omit<RuntimePin, "runtimeKind"> & { runtimeKind: string };
+  } = RuntimeProblem,
+> extends Error {
+  constructor(readonly problem: P) {
     super(
       problem.pin.runtimeKind !== "pi" || problem.code !== "pin-credential-missing"
         ? problem.reason
-        : runtimePinMessage(problem.pin),
+        : runtimePinMessage({ ...problem.pin, runtimeKind: "pi" }),
     );
     this.name = "RuntimePinError";
   }

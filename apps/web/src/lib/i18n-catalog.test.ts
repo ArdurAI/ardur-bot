@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { i18n } from "@lingui/core";
+import { formatter } from "@lingui/format-po";
 import { beforeEach, describe, expect, it } from "vitest";
 import de from "../../scripts/translations-de.json";
 import es from "../../scripts/translations-es.json";
@@ -15,6 +16,35 @@ describe("lingui catalogs", () => {
     i18n.load("en", {});
     i18n.activate("en");
   });
+
+  it.each([
+    ["en", "Line 2: - [redacted] Edit or reject this line."],
+    ["de", "Zeile 2: - [redacted] Diese Zeile bearbeiten oder ablehnen."],
+    ["es", "Línea 2: - [redacted] Edita o rechaza esta línea."],
+    ["hi", "पंक्ति 2: - [redacted] इस पंक्ति को संपादित करें या अस्वीकार करें।"],
+    ["ko", "줄 2: - [redacted] 이 줄을 수정하거나 거부하세요."],
+    ["pt-BR", "Linha 2: - [redacted] Edite ou rejeite esta linha."],
+    ["ru", "Строка 2: - [redacted] Измените или отклоните эту строку."],
+    ["tr", "Satır 2: - [redacted] Bu satırı düzenleyin veya reddedin."],
+    ["zh-CN", "第 2 行：- [redacted] 请编辑或拒绝此行。"],
+  ] as const)(
+    "formats the credential message from the checked-in %s catalog",
+    async (locale, expected) => {
+      const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));
+      const catalog = await formatter().parse(readFileSync(filename, "utf8"), {
+        locale,
+        sourceLocale: "en",
+        filename,
+      });
+      const entry = Object.entries(catalog).find(
+        ([, value]) => value.message === "Line {0}: {1} Edit or reject this line.",
+      );
+      expect(entry?.[1].translation).toBeTruthy();
+      i18n.load(locale, { [entry![0]]: entry![1].translation! });
+      i18n.activate(locale);
+      expect(i18n._({ id: entry![0], values: { 0: 2, 1: "- [redacted]" } })).toBe(expected);
+    },
+  );
 
   it("falls back to the English source message when a translation is missing", () => {
     i18n.load("de", {});
@@ -259,6 +289,27 @@ describe("lingui catalogs", () => {
     );
   });
 
+  it.each(["de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"])(
+    "translates credential classification controls in %s",
+    async (locale) => {
+      const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));
+      const catalog = await formatter().parse(readFileSync(filename, "utf8"), {
+        locale,
+        sourceLocale: "en",
+        filename,
+      });
+      for (const message of [
+        "Credential fields",
+        "Secret",
+        "Secret for {key}",
+        "Could not update this field. Retry.",
+      ]) {
+        const entry = Object.values(catalog).find((value) => value.message === message);
+        expect(entry?.translation, `${locale}: ${message}`).toBeTruthy();
+      }
+    },
+  );
+
   it("catalogs each failed board close sentence once, from its one shared definition", () => {
     const sentences = [
       "A board item filed by a bot could not be closed.",
@@ -348,6 +399,20 @@ describe("lingui catalogs", () => {
         expect(at, `${locale}: ${sentence} missing from catalog`).toBeGreaterThanOrEqual(0);
         const translated = catalog.slice(at + key.length, catalog.indexOf('"', at + key.length));
         expect(translated.trim(), `${locale}: ${sentence} must not be empty`).toBeTruthy();
+      }
+    }
+  });
+
+  it("ships both computer preparation messages in every catalog", () => {
+    const sentences = ["Preparing the bot computer…", "Preparing the bot computer… {percent}%"];
+    for (const locale of ["en", "de", "ko", "tr", "hi", "pt-BR", "zh-CN", "es", "ru"]) {
+      const catalog = readFileSync(
+        fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url)),
+        "utf8",
+      );
+      for (const sentence of sentences) {
+        expect(catalog).toContain(`#: src/pages/Shell.tsx\nmsgid ${JSON.stringify(sentence)}`);
+        expect(catalog).not.toContain(`msgid ${JSON.stringify(sentence)}\nmsgstr ""`);
       }
     }
   });

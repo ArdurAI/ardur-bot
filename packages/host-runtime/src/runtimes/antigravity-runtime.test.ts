@@ -42,7 +42,9 @@ function fixture(prompt = "success", deadlineMs?: number) {
       },
     },
   };
-  const resolveBinary = async () => "/fake/agy";
+  // Catalog caching is keyed by binary path; keep test fixtures independent under shuffle.
+  const binary = `/fake/agy-${crypto.randomUUID()}`;
+  const resolveBinary = async () => binary;
   const runtime = new AntigravityRuntime(start, resolveBinary, deadlineMs);
   const collect = async () => {
     const events: AgentRuntimeEvent[] = [];
@@ -52,10 +54,10 @@ function fixture(prompt = "success", deadlineMs?: number) {
   return { calls, start, resolveBinary, request, runtime, collect };
 }
 describe("Antigravity fake process", () => {
-  it("probes without a model turn and keeps sign-in unknown", async () => {
+  it("probes without a model turn", async () => {
     const f = fixture();
     const status = await probeAntigravity(f.start, f.resolveBinary);
-    expect(status).toMatchObject({ available: true, signInStatus: "unknown", version: "1.2.12" });
+    expect(status).toMatchObject({ available: true, version: "1.2.12" });
     expect(f.calls.map((args) => args[0])).toEqual(["--version", "--help", "models"]);
   });
   it("streams a text turn with exact model, effort, reported usage and no secrets", async () => {

@@ -21,9 +21,9 @@
     {
       "id": "remember",
       "eyebrow": "MEMORY",
-      "title": "Memory that persists",
-      "body": "Bots keep memory alongside their conversation and history.",
-      "source": "README.md#What you get today"
+      "title": "Memory you can inspect",
+      "body": "Keep documents in the built-in database, or connect a Git repository for a space's shared notes.",
+      "source": "README.md#Memory"
     },
     {
       "id": "routine",
@@ -415,7 +415,6 @@
         "pnpm install",
         "pnpm db:generate",
         "pnpm db:migrate",
-        "pnpm sandbox:build",
         "pnpm dev"
       ],
       "note": "In .env, set POSTGRES_PASSWORD to a random value (for example, openssl rand -hex 16) and use it in DATABASE_URL; set BETTER_AUTH_SECRET, ENCRYPTION_KEY, SCREEN_PROXY_SECRET and SANDBOX_SUPERVISOR_TOKEN to separate long random values (for example, openssl rand -hex 32); add model credentials in the app or set OPENROUTER_API_KEY.",
@@ -700,6 +699,111 @@
       }
     ]
   },
+  "memory": {
+    "headline": "Shared memory, in a Git repository you control.",
+    "storage": [
+      {
+        "id": "database",
+        "name": "Built-in database",
+        "detail": "Keeps documents in Ardur's built-in database.",
+        "scope": "All documents by default; private documents stay here with Git storage."
+      },
+      {
+        "id": "git",
+        "name": "Git repository",
+        "detail": "Keeps shared notes and their revision history in a connected repository.",
+        "scope": "Space-shared documents and their revision history."
+      },
+      {
+        "id": "obsidian",
+        "name": "Local memory folder",
+        "detail": "Keeps selected documents as files in a dedicated folder.",
+        "scope": "Space-shared documents and the connected owner's documents."
+      }
+    ],
+    "publishModes": [
+      {
+        "id": "direct",
+        "name": "Publish directly"
+      },
+      {
+        "id": "proposal",
+        "name": "Propose on a branch"
+      }
+    ],
+    "sections": [
+      {
+        "id": "own-repository",
+        "title": "Your shared memory, in a repository you own",
+        "body": "Choose Git storage for your space's shared notes. Ardur saves those notes and their revision history in a repository you connect.",
+        "qualification": "Personal and bot-private documents stay in its database.",
+        "source": "README.md#What is stored where"
+      },
+      {
+        "id": "read-and-edit",
+        "title": "Readable on GitHub, editable anywhere",
+        "body": "Shared notes are Markdown files you can read in your connected GitHub repository after they sync.",
+        "qualification": "Edit an existing note in a Git checkout or on GitHub, keep its frontmatter, and commit it back to the repository; Ardur incorporates the edit when it next fetches that branch.",
+        "source": "README.md#Edit a note in GitHub"
+      },
+      {
+        "id": "offline",
+        "title": "Works offline, syncs when you are back",
+        "body": "After setup, shared-memory saves create local Git commits even when the repository is unreachable.",
+        "qualification": "With Ardur's server and storage available, you can keep using the last local copy; its background worker retries synchronization, and a failed sync offers Retry.",
+        "source": "README.md#Work offline and resolve conflicts"
+      }
+    ],
+    "proofPoints": [
+      {
+        "id": "own-repo-branch",
+        "text": "Connect your own GitHub repository and choose its branch.",
+        "source": "README.md#Connect a repository"
+      },
+      {
+        "id": "shared-only",
+        "text": "Send only space-shared documents to Git storage.",
+        "source": "README.md#What is stored where"
+      },
+      {
+        "id": "markdown-history",
+        "text": "Read shared notes as Markdown, with their revision history beside them.",
+        "source": "README.md#Edit a note in GitHub"
+      },
+      {
+        "id": "local-first",
+        "text": "Save locally before the background sync is queued.",
+        "source": "README.md#Work offline and resolve conflicts"
+      },
+      {
+        "id": "conflict-copies",
+        "text": "Preserve both versions when shared edits conflict.",
+        "source": "README.md#Work offline and resolve conflicts"
+      },
+      {
+        "id": "publication-choice",
+        "text": "Choose direct publication or a proposal branch for review.",
+        "source": "README.md#Connect a repository"
+      }
+    ],
+    "settingsPath": {
+      "steps": [
+        "Settings",
+        "Memory",
+        "Memory storage",
+        "Manage",
+        "Git repository"
+      ],
+      "uiLabels": [
+        "Settings",
+        "Memory",
+        "Memory storage",
+        "Manage",
+        "Git repository"
+      ],
+      "screenshot": "memory-git"
+    }
+  },
   "videos": [
     {
       "id": "routines-demo",
@@ -737,6 +841,14 @@
       "id": "routines",
       "file": "screenshots/routines.png",
       "alt": "Chief of Staff bot conversation with the computer side panel and three scheduled routines: Morning brief, Inbox triage, and Evening wrap-up.",
+      "width": 2880,
+      "height": 1800,
+      "theme": "light"
+    },
+    {
+      "id": "memory-git",
+      "file": "screenshots/memory-git.png",
+      "alt": "Memory settings showing the Git repository option, branch, publication mode, and repository authentication controls.",
       "width": 2880,
       "height": 1800,
       "theme": "light"

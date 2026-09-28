@@ -391,4 +391,22 @@ test("captures bot chat, group collaboration, and routines from seeded demo data
   await expect(page.getByText("Every day at 4:00 PM")).toBeVisible();
   await expect(page.getByTestId("computer-preview")).toBeVisible();
   await captureSiteScreenshot(page, "routines");
+
+  await page
+    .locator("header.app-drag")
+    .getByRole("button", { name: "Settings", exact: true })
+    .click();
+  const settings = page.getByTestId("user-settings");
+  await settings.getByTestId("settings-nav-memory").click();
+  await expect(settings.getByTestId("memory-settings-page")).toBeVisible();
+  await settings
+    .getByRole("group", { name: "Memory storage", exact: true })
+    .getByRole("button", { name: "Manage", exact: true })
+    .click();
+  const memory = settings.getByTestId("memory-settings");
+  await expect(memory.getByLabel("Memory location")).toHaveValue("postgres");
+  await memory.getByLabel("Memory location").selectOption("git");
+  await expect(memory.getByLabel("Repository URL")).toBeVisible();
+  await expect(memory.getByLabel("Publication mode")).toHaveValue("publish");
+  await captureSiteScreenshot(page, "memory-git");
 });

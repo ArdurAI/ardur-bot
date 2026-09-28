@@ -1,4 +1,5 @@
 import type { LearningProposal } from "@ardurbot/contracts";
+import { errorDataCode } from "@ardurbot/contracts";
 import { Button, Textarea } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useId, useRef, useState } from "react";
@@ -40,11 +41,26 @@ export function MemoryImport({
     setBusy(true);
     setError(null);
     try {
-      onProposals(await propose(text.trim()));
+      onProposals(await propose(text));
       setText("");
       setOpen(false);
-    } catch {
-      setError(t`Could not prepare the import. Try again.`);
+    } catch (cause) {
+      const data = cause && typeof cause === "object" && "data" in cause ? cause.data : null;
+      if (
+        errorDataCode(cause) === "MEMORY_CREDENTIAL_LINE" &&
+        data &&
+        typeof data === "object" &&
+        "lineNumber" in data &&
+        typeof data.lineNumber === "number" &&
+        "maskedLine" in data &&
+        typeof data.maskedLine === "string"
+      ) {
+        setError(t`Line ${data.lineNumber}: ${data.maskedLine} Edit or remove this line.`);
+      } else if (errorDataCode(cause) === "MEMORY_IMPORT_SECTION_LIMIT") {
+        setError(t`Split this import into at most three sections.`);
+      } else {
+        setError(t`Could not prepare the import. Try again.`);
+      }
     } finally {
       locked.current = false;
       setBusy(false);

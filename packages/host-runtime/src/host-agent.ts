@@ -41,6 +41,13 @@ import { createLocalImportScanner, LocalImportRescanError } from "./import/scann
 import { AntigravityRuntime, probeAntigravity } from "./runtimes/antigravity-runtime.js";
 import { ClaudeCodeRuntime, probeClaude } from "./runtimes/claude-code-runtime.js";
 import { CodexAppServerRuntime, probeCodex } from "./runtimes/codex-app-server-runtime.js";
+import {
+  pinnedHermesLaunch,
+  probeHermesInstall,
+  resolveHermesLauncherAsset,
+} from "./runtimes/hermes-install.js";
+import { startHermesProviderRelay } from "./runtimes/hermes-provider-relay.js";
+import { HermesRuntime } from "./runtimes/hermes-runtime.js";
 import type { NativeSpawn } from "./runtimes/native-process.js";
 import { spawnNative } from "./runtimes/native-process.js";
 
@@ -70,7 +77,7 @@ export class HostAgent {
     },
     private readonly wire: HostWire,
     private readonly runtimes: Partial<
-      Record<"claude-code" | "codex-app-server" | "antigravity", AgentRuntime>
+      Record<"claude-code" | "codex-app-server" | "antigravity" | "hermes", AgentRuntime>
     > = {
       "claude-code": new ClaudeCodeRuntime(),
       "codex-app-server": new CodexAppServerRuntime(),
@@ -109,6 +116,7 @@ export class HostAgent {
       inspectHostIntegrations(),
     ]);
     return {
+      capabilities: { providerRelay: 1 },
       platform: process.platform as HostHealth["platform"],
       name: hostname().slice(0, 80),
       roots: this.roots,
@@ -375,8 +383,8 @@ export class HostAgent {
       state.abort.signal.throwIfAborted();
       await this.wire.send({ v: 1, type: "end", id: request.id });
     } catch (error) {
-      await this.wire
-        .send({
+      try {
+        await this.wire.send({
           v: 1,
           type: "end",
           id: request.id,
@@ -387,8 +395,18 @@ export class HostAgent {
                   request,
                   "Host operation could not finish — check registered folders and the runtime.",
                 ),
-        })
-        .catch(() => this.wire.close());
+        });
+      } catch {
+        // A malformed or oversized operation error must not disconnect other host operations.
+        await this.wire
+          .send({
+            v: 1,
+            type: "end",
+            id: request.id,
+            problem: hostLostProblem(request, "Host operation could not finish."),
+          })
+          .catch(() => undefined);
+      }
     } finally {
       clearTimeout(timeout);
       state.abort.abort();
@@ -431,6 +449,8 @@ export class HostAgent {
     )
       throw new Error("Runtime pin mismatch.");
     if (kind === "pi") throw new Error("Runtime is not a host runtime.");
+    if ((kind === "hermes") !== Boolean(turn.providerBroker))
+      throw new Error("Provider grant does not match the runtime.");
     const callback = async (
       method:
         | "authorizeTool"
@@ -438,7 +458,10 @@ export class HostAgent {
         | "onToolCompleted"
         | "onRuntimeInfo"
         | "acknowledgeInput"
-        | "claimSteering",
+        | "claimSteering"
+        | "provider.open"
+        | "provider.read"
+        | "provider.cancel",
       args: unknown[],
     ) => {
       state.abort.signal.throwIfAborted();
@@ -469,9 +492,24 @@ export class HostAgent {
       computer.providerRef,
       ...this.roots,
     ]);
+    let hermes: HermesRuntime | undefined;
+    const relay = turn.providerBroker
+      ? await startHermesProviderRelay(
+          turn.providerBroker,
+          (method, args) => callback(method, args),
+          () => {
+            void hermes?.fail(turn.runId);
+          },
+        )
+      : undefined;
     const local: AgentRunRequest = {
       ...turn,
       nativeCwd,
+      model: {
+        ...turn.model,
+        runtimePin: turn.model.runtimePin as AgentRunRequest["model"]["runtimePin"],
+        ...(relay ? { baseUrl: relay.url, apiKey: turn.providerBroker!.token } : {}),
+      },
       tools: turn.tools as AgentRunRequest["tools"],
       currentTurnImages: turn.currentTurnImages?.map((image) => ({
         ...image,
@@ -498,9 +536,35 @@ export class HostAgent {
           ReturnType<NonNullable<AgentRunRequest["claimSteering"]>>
         >,
     };
-    const runtime = this.runtimes[kind];
-    if (!runtime) throw new Error("Host runtime is unavailable.");
-    for await (const event of runtime.run(local, context))
-      await send("event", HostRuntimeEventSchema.parse(event));
+    try {
+      let runtime = this.runtimes[kind];
+      if (kind === "hermes") {
+        const install = process.env.ARDUR_HERMES_INSTALL;
+        if (!install || !relay) throw new Error("Pinned Hermes install is unavailable.");
+        const qualified = probeHermesInstall(install);
+        const staging = await realpath(this.config.root);
+        const overlap = path.relative(qualified.root, staging);
+        if (
+          overlap === "" ||
+          (overlap !== ".." && !overlap.startsWith(`..${path.sep}`) && !path.isAbsolute(overlap))
+        )
+          throw new Error("Hermes staging cannot overlap its install.");
+        const launcher = resolveHermesLauncherAsset(process.argv[1] ?? "", import.meta.url);
+        hermes = new HermesRuntime({
+          command: qualified.python,
+          args: [launcher],
+          launch: pinnedHermesLaunch(qualified.root, launcher),
+          pinned: true,
+          stagingParent: this.config.root,
+          onTurnFinished: () => relay.close(),
+        });
+        runtime = hermes;
+      }
+      if (!runtime) throw new Error("Host runtime is unavailable.");
+      for await (const event of runtime.run(local, context))
+        await send("event", HostRuntimeEventSchema.parse(event));
+    } finally {
+      relay?.close();
+    }
   }
 }

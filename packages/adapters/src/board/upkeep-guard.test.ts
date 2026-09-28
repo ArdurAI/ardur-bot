@@ -375,12 +375,12 @@ it("redacts run secrets from titles, bodies and comments and marks bot filings",
     {
       workspaceId: "workspace",
       item: {
-        title: "Rotate sk-test",
-        description: "token sk-test",
-        acceptanceCriteria: "sk-test",
+        title: "Rotate sk-test-long-fixture-value",
+        description: "token sk-test-long-fixture-value",
+        acceptanceCriteria: "sk-test-long-fixture-value",
       },
     },
-    { upkeep: true, secrets: ["sk-test"] },
+    { upkeep: true, secrets: ["sk-test-long-fixture-value"] },
   );
   expect(provider.create).toHaveBeenCalledWith(
     expect.objectContaining({
@@ -403,8 +403,8 @@ it("redacts run secrets from titles, bodies and comments and marks bot filings",
     board,
     scope,
     "board_comment",
-    { workspaceId: "workspace", id: "board-a", text: "used sk-test" },
-    { upkeep: true, secrets: ["sk-test"] },
+    { workspaceId: "workspace", id: "board-a", text: "used sk-test-long-fixture-value" },
+    { upkeep: true, secrets: ["sk-test-long-fixture-value"] },
   );
   expect(provider.comment).toHaveBeenCalledWith("board-a", "used [redacted]");
 });
@@ -457,12 +457,12 @@ it("redacts run secrets from a board create and comment when upkeep is off", asy
     {
       workspaceId: "workspace",
       item: {
-        title: "Rotate sk-test",
-        description: "token sk-test",
-        acceptanceCriteria: "sk-test",
+        title: "Rotate sk-test-long-fixture-value",
+        description: "token sk-test-long-fixture-value",
+        acceptanceCriteria: "sk-test-long-fixture-value",
       },
     },
-    { upkeep: false, secrets: ["sk-test"] },
+    { upkeep: false, secrets: ["sk-test-long-fixture-value"] },
   );
   expect(provider.create).toHaveBeenCalledWith(
     expect.objectContaining({
@@ -475,16 +475,16 @@ it("redacts run secrets from a board create and comment when upkeep is off", asy
     board,
     scope,
     "board_comment",
-    { workspaceId: "workspace", id: "board-a", text: "used sk-test" },
-    { upkeep: false, secrets: ["sk-test"] },
+    { workspaceId: "workspace", id: "board-a", text: "used sk-test-long-fixture-value" },
+    { upkeep: false, secrets: ["sk-test-long-fixture-value"] },
   );
   expect(provider.comment).toHaveBeenCalledWith("board-a", "used [redacted]");
   await executeBoardTool(
     board,
     scope,
     "board_close",
-    { workspaceId: "workspace", ids: ["board-a"], reason: "done sk-test" },
-    { upkeep: false, secrets: ["sk-test"] },
+    { workspaceId: "workspace", ids: ["board-a"], reason: "done sk-test-long-fixture-value" },
+    { upkeep: false, secrets: ["sk-test-long-fixture-value"] },
   );
   expect(provider.close).toHaveBeenCalledWith(["board-a"], "done [redacted]");
 });
@@ -594,11 +594,11 @@ it("files learning proposals through redaction, dedupe and the hourly cap", asyn
     learningScope,
     "proposal",
     {
-      title: "Rotate sk-test",
-      description: "Remove sk-test",
-      acceptanceCriteria: "sk-test is gone",
+      title: "Rotate sk-test-long-fixture-value",
+      description: "Remove sk-test-long-fixture-value",
+      acceptanceCriteria: "sk-test-long-fixture-value is gone",
     },
-    ["sk-test"],
+    ["sk-test-long-fixture-value"],
   );
   expect(redacted.provider.create).toHaveBeenCalledWith({
     title: "Rotate [redacted]",
@@ -853,8 +853,11 @@ it("leaves board tools unchanged when upkeep is off", async () => {
     board,
     scope,
     "board_create",
-    { workspaceId: "workspace", item: { title: "Task", description: "sk-test" } },
-    { upkeep: false, secrets: ["sk-test"] },
+    {
+      workspaceId: "workspace",
+      item: { title: "Task", description: "sk-test-long-fixture-value" },
+    },
+    { upkeep: false, secrets: ["sk-test-long-fixture-value"] },
   );
   expect(provider.create).toHaveBeenCalledWith(
     expect.objectContaining({ title: "Task", description: "[redacted]" }),
@@ -874,12 +877,12 @@ it.each([true, false])(
         workspaceId: "workspace",
         item: {
           title: "Task",
-          labels: ["ops", "key-sk-test"],
-          assignee: "sk-test",
-          externalRef: "https://tracker.example/sk-test",
+          labels: ["ops", "key-sk-test-long-fixture-value"],
+          assignee: "sk-test-long-fixture-value",
+          externalRef: "https://tracker.example/sk-test-long-fixture-value",
         },
       },
-      { upkeep, secrets: ["sk-test"] },
+      { upkeep, secrets: ["sk-test-long-fixture-value"] },
     );
     expect(provider.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -895,9 +898,13 @@ it.each([true, false])(
       {
         workspaceId: "workspace",
         id: "board-a",
-        patch: { labels: ["sk-test"], assignee: "owner sk-test", externalRef: "sk-test" },
+        patch: {
+          labels: ["sk-test-long-fixture-value"],
+          assignee: "owner sk-test-long-fixture-value",
+          externalRef: "sk-test-long-fixture-value",
+        },
       },
-      { upkeep, secrets: ["sk-test"] },
+      { upkeep, secrets: ["sk-test-long-fixture-value"] },
     );
     expect(provider.update).toHaveBeenCalledWith("board-a", {
       labels: ["[redacted]"],

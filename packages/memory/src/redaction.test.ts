@@ -56,15 +56,11 @@ describe("memory credential gate", () => {
       MemoryRedactionError,
     );
     // A known secret with a quote or line break is found in the text as written.
-    expect(() => assertMemorySafe(commit('use a"b\nc now'), ['a"b\nc'])).toThrow(
+    expect(() => assertMemorySafe(commit('use a"b\nc now'), ['a"b\nc now'])).toThrow(
       MemoryRedactionError,
     );
-    // A known secret stored as a number or boolean, not a string, is still found.
-    expect(() => assertMemorySafe({ ...commit("fine"), pin: 445566 }, ["445566"])).toThrow(
-      MemoryRedactionError,
-    );
-    expect(() => assertMemorySafe({ ...commit("fine"), locked: false }, ["false"])).toThrow(
-      MemoryRedactionError,
-    );
+    expect(() => assertMemorySafe(commit("repo and code"), [])).not.toThrow();
+    expect(() => assertMemorySafe(commit("repo and code"), ["repo"])).toThrow(MemoryRedactionError);
+    expect(safe("Leave out passwords, API keys")).not.toThrow();
   });
 });

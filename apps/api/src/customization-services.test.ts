@@ -3,9 +3,15 @@ import { randomUUID } from "node:crypto";
 import { mkdtemp, readdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { EncryptedSecretStore } from "@ardurbot/adapters";
+import { EncryptedSecretStore, oauthMaterialSecrets } from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
 import { ManagedServerInputSchema } from "@ardurbot/contracts";
+import {
+  McpLogBuffer,
+  redactMcpText,
+  redactMcpValue,
+} from "@ardurbot/host-runtime/mcp-diagnostics";
+import { assertMemorySafe } from "@ardurbot/memory";
 import { memoryServiceFixture } from "@ardurbot/testkit/memory-fakes";
 import { RPCHandler } from "@orpc/server/fetch";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -15,6 +21,7 @@ import { createCustomizationSkills, customizationCatalog } from "./customization
 import { authorizeHostMcp } from "./host-mcp-authorization.js";
 import { configDiff, createMcpSettings, parseServerConfig } from "./mcp-settings.js";
 import type { RouterDeps } from "./router.js";
+import { createRouter } from "./router.js";
 
 const actor: Actor = {
   spaceId: "space",
@@ -40,6 +47,13 @@ function matches(row: Row, where: Row): boolean {
     }
     return row[key] === value;
   });
+}
+function signal() {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
 }
 async function fixture() {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), "ardur-customization-test-"));
@@ -470,6 +484,173 @@ describe("customization service boundaries", () => {
     expect(f.tables.mcpServer).toHaveLength(0);
     expect(f.tables.secret).toHaveLength(0);
   });
+  it("keeps a managed server's owner classification when its registration refreshes", async () => {
+    const f = await fixture();
+    const input = ManagedServerInputSchema.parse({
+      managedId: "fixture",
+      managedBy: "plugin",
+      name: "Fixture",
+      description: "",
+      placement: "worker",
+      command: "node",
+      args: ["server.js"],
+      env: { ROOT_DIR: "/workspace" },
+      secretValues: ["/workspace"],
+      cwd: "/fixture",
+    });
+    await f.mcp.register(actor, input);
+    const row = f.tables.mcpServer![0]!;
+    const original = f.tables.secret![0]!;
+    const material = JSON.parse(
+      f.deps.secrets.load(String(original.ciphertext), String(original.id)),
+    );
+    const corrected = await f.deps.secrets.put(
+      JSON.stringify({
+        ...material,
+        redactions: [],
+        credentialFlags: { env: { ROOT_DIR: false }, headers: {} },
+      }),
+      {
+        spaceId: actor.spaceId,
+        userId: actor.userId,
+        operationId: "fixture",
+        traceId: "fixture",
+        signal: AbortSignal.timeout(10_000),
+      },
+    );
+    Object.assign(original, corrected);
+    row.secretId = corrected.id;
+    await f.mcp.register(actor, { ...input, description: "Updated" });
+    const encrypted = f.tables.secret!.find((entry) => entry.id === row.secretId)!;
+    const saved = JSON.parse(
+      f.deps.secrets.load(String(encrypted.ciphertext), String(encrypted.id)),
+    );
+    expect(saved.credentialFlags.env.ROOT_DIR).toBe(false);
+    expect(saved.redactions).not.toContain("/workspace");
+    const protectedValues = oauthMaterialSecrets(saved);
+    expect(redactMcpText("/workspace/report.txt", protectedValues)).toBe("/workspace/report.txt");
+    expect(() => assertMemorySafe("/workspace/report.txt", protectedValues)).not.toThrow();
+  });
+  it.each(["registration first", "classification first"])(
+    "serializes managed registration and owner classification: %s",
+    async (order) => {
+      const f = await fixture();
+      const initial = ManagedServerInputSchema.parse({
+        managedId: "fixture",
+        managedBy: "extension",
+        name: "Fixture",
+        description: "",
+        placement: "worker",
+        command: "node",
+        args: ["server.js"],
+        env: { TOKEN: "synthetic-initial" },
+        secretValues: ["synthetic-initial"],
+        cwd: "/fixture",
+      });
+      await f.mcp.register(actor, initial);
+      const row = f.tables.mcpServer![0]!;
+      const db = f.deps.prisma;
+      Object.assign(db, { spaceMember: { findUnique: vi.fn(async () => ({ role: "owner" })) } });
+      Object.assign(db.mcpServer, {
+        findFirstOrThrow: vi.fn(async ({ where }: { where: Row }) => {
+          const found = f.tables.mcpServer!.find((entry) => matches(entry, where));
+          if (!found) throw new Error("Missing row");
+          return { ...found };
+        }),
+      });
+
+      // Each fake transaction owns advisory locks until its callback finishes.
+      const held = new Set<string>();
+      const waiters = new Map<string, Array<() => void>>();
+      const blocked = signal();
+      Object.assign(db, {
+        $transaction: async (callback: (tx: unknown) => Promise<unknown>) => {
+          const releases: Array<() => void> = [];
+          const tx = Object.assign(Object.create(db), {
+            $executeRaw: async (parts: TemplateStringsArray, ...values: unknown[]) => {
+              const kind = parts[0]?.match(/hashtext\('([^']+)'\)/)?.[1];
+              const key = `${kind}:${String(values[0])}`;
+              if (held.has(key)) {
+                blocked.resolve();
+                await new Promise<void>((resume) => {
+                  waiters.set(key, [...(waiters.get(key) ?? []), resume]);
+                });
+              }
+              held.add(key);
+              releases.push(() => {
+                const next = waiters.get(key)?.shift();
+                if (next) next();
+                else held.delete(key);
+              });
+              return 1;
+            },
+          });
+          try {
+            return await callback(tx);
+          } finally {
+            for (const release of releases.reverse()) release();
+          }
+        },
+      });
+      const handler = new RPCHandler(
+        createRouter({
+          ...f.deps,
+          mcpOAuth: { statusFor: vi.fn(async () => "none") } as RouterDeps["mcpOAuth"],
+        }),
+      );
+      const classify = async () => {
+        const { response } = await handler.handle(
+          new Request("https://app.example.test/rpc/mcp/servers/update", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              json: { id: row.id, credentialFlags: { env: { TOKEN: false }, headers: {} } },
+            }),
+          }),
+          { prefix: "/rpc", context: { actor } },
+        );
+        expect(response?.status).toBe(200);
+      };
+      const refresh = () =>
+        f.mcp.register(actor, {
+          ...initial,
+          args: ["server.js", "--mode=refreshed"],
+          env: { TOKEN: "synthetic-rotated" },
+          secretValues: ["synthetic-rotated"],
+        });
+      const firstAtPut = signal();
+      const secondAtPut = signal();
+      const releaseFirst = signal();
+      const put = f.deps.secrets.put.bind(f.deps.secrets);
+      let puts = 0;
+      vi.spyOn(f.deps.secrets, "put").mockImplementation(async (...args) => {
+        puts++;
+        if (puts === 1) {
+          firstAtPut.resolve();
+          await releaseFirst.promise;
+        } else secondAtPut.resolve();
+        return put(...args);
+      });
+      const first = order === "registration first" ? refresh() : classify();
+      await firstAtPut.promise;
+      const second = order === "registration first" ? classify() : refresh();
+      const progress = await Promise.race([
+        blocked.promise.then(() => "blocked"),
+        secondAtPut.promise.then(() => "wrote"),
+      ]);
+      if (progress === "wrote") await second;
+      releaseFirst.resolve();
+      await first;
+      await second;
+      const stored = f.tables.secret!.find((entry) => entry.id === row.secretId)!;
+      const material = JSON.parse(
+        f.deps.secrets.load(String(stored.ciphertext), String(stored.id)),
+      );
+      expect(material.env).toEqual({ TOKEN: "synthetic-rotated" });
+      expect(material.args).toEqual(["server.js", "--mode=refreshed"]);
+      expect(material.credentialFlags.env.TOKEN).toBe(false);
+    },
+  );
   it("validates and previews config without leaking secrets, and fences stale applies", async () => {
     const f = await fixture();
     const initial = await f.mcp.config(actor);
@@ -509,6 +690,330 @@ describe("customization service boundaries", () => {
     expect(() => parseServerConfig('{"mcpServers":{"../bad":{"command":"node"}}}')).toThrow();
     const before = parseServerConfig(json);
     expect(configDiff(before, before)).toEqual([]);
+  });
+  it.each([
+    {
+      name: "removed positional secret",
+      credential: { secret: "synthetic-credential" },
+      value: "synthetic-credential",
+      argument: "synthetic-credential",
+      remove: (server: Row) => {
+        delete server.secret;
+      },
+    },
+    {
+      name: "removed URL-encoded environment credential",
+      credential: { env: { TOKEN: "synthetic/credential?" } },
+      value: "synthetic/credential?",
+      argument: "--token=synthetic%2Fcredential%3F",
+      remove: (server: Row) => {
+        server.env = {};
+      },
+    },
+    {
+      name: "removed secret also entered as an ordinary environment value",
+      credential: { secret: "synthetic-credential" },
+      value: "synthetic-credential",
+      argument: "synthetic-credential",
+      remove: (server: Row) => {
+        delete server.secret;
+        server.env = { LOG_LEVEL: "synthetic-credential" };
+      },
+    },
+  ])(
+    "keeps a $name protected after its named entry is removed",
+    async ({ name, credential, value, argument, remove }) => {
+      const f = await fixture();
+      const assertProtected = async () => {
+        expect(JSON.stringify(f.tables.mcpServer)).not.toContain(argument);
+        expect((await f.mcp.list(actor))[0]?.args).toEqual([
+          "server.js",
+          argument.startsWith("--token=") ? "--token=[redacted]" : "[redacted]",
+        ]);
+        expect((await f.mcp.config(actor)).json).not.toContain(argument);
+        const row = f.tables.mcpServer![0]!;
+        const encrypted = f.tables.secret!.find((entry) => entry.id === row.secretId)!;
+        const material = JSON.parse(
+          f.deps.secrets.load(String(encrypted.ciphertext), String(encrypted.id)),
+        );
+        const runtimeSecrets = oauthMaterialSecrets(material);
+        expect(runtimeSecrets).toContain(value);
+        const logs = new McpLogBuffer(runtimeSecrets);
+        logs.append(`diagnostic ${value}\n`);
+        expect(JSON.stringify(logs.snapshot())).not.toContain(value);
+        expect(redactMcpValue({ result: value }, runtimeSecrets)).toEqual({
+          result: "[redacted]",
+        });
+        return material;
+      };
+      const initial = await f.mcp.config(actor);
+      const created = await f.mcp.preview(actor, {
+        revision: initial.revision,
+        json: JSON.stringify({
+          mcpServers: {
+            fixture: {
+              name: "Fixture",
+              command: "node",
+              args: ["server.js", argument],
+              ...credential,
+            },
+          },
+        }),
+      });
+      await f.mcp.apply(actor, created.id);
+      const current = await f.mcp.config(actor);
+      const changed = JSON.parse(current.json);
+      remove(changed.mcpServers.fixture);
+      const removal = await f.mcp.preview(actor, {
+        revision: current.revision,
+        json: JSON.stringify(changed),
+      });
+      await f.mcp.apply(actor, removal.id);
+      const material = await assertProtected();
+      expect(material.argumentRedactions).toContain(value);
+      if (name === "removed secret also entered as an ordinary environment value") {
+        const exported = await f.mcp.config(actor);
+        const renamed = await f.mcp.preview(actor, {
+          revision: exported.revision,
+          json: exported.json.replace('"Fixture"', '"Updated"'),
+        });
+        await f.mcp.apply(actor, renamed.id);
+        const afterRename = await assertProtected();
+        expect(afterRename.credentialFlags.env.LOG_LEVEL).toBe(false);
+        expect(afterRename.argumentRedactions).toContain(value);
+
+        const current = await f.mcp.config(actor);
+        const withoutEnvironment = JSON.parse(current.json);
+        withoutEnvironment.mcpServers.fixture.env = {};
+        const removedEnvironment = await f.mcp.preview(actor, {
+          revision: current.revision,
+          json: JSON.stringify(withoutEnvironment),
+        });
+        await f.mcp.apply(actor, removedEnvironment.id);
+        const afterEnvironmentRemoval = await assertProtected();
+        expect(afterEnvironmentRemoval.env).toEqual({});
+        expect(afterEnvironmentRemoval.argumentRedactions).toContain(value);
+
+        const finalConfig = await f.mcp.config(actor);
+        const withoutArgument = JSON.parse(finalConfig.json);
+        withoutArgument.mcpServers.fixture.args = ["server.js"];
+        const removedArgument = await f.mcp.preview(actor, {
+          revision: finalConfig.revision,
+          json: JSON.stringify(withoutArgument),
+        });
+        await f.mcp.apply(actor, removedArgument.id);
+        const finalRow = f.tables.mcpServer![0]!;
+        const finalSecret = f.tables.secret!.find((entry) => entry.id === finalRow.secretId)!;
+        const finalMaterial = JSON.parse(
+          f.deps.secrets.load(String(finalSecret.ciphertext), String(finalSecret.id)),
+        );
+        expect(finalMaterial.argumentRedactions).not.toContain(value);
+        expect(oauthMaterialSecrets(finalMaterial)).not.toContain(value);
+      }
+    },
+  );
+  it.each([
+    { name: "absent", argumentRedactions: undefined, otherArgument: undefined },
+    { name: "empty", argumentRedactions: [], otherArgument: undefined },
+    {
+      name: "already covered",
+      argumentRedactions: ["synthetic-credential"],
+      otherArgument: undefined,
+    },
+    {
+      name: "covering another launch credential",
+      argumentRedactions: ["other-credential"],
+      otherArgument: "other-credential",
+    },
+  ])(
+    "promotes legacy launch redactions with $name argument redactions",
+    async ({ argumentRedactions, otherArgument }) => {
+      const f = await fixture();
+      const value = "synthetic-credential";
+      const args = ["server.js", value, ...(otherArgument ? [otherArgument] : [])];
+      const redactedArgs = ["server.js", "[redacted]", ...(otherArgument ? ["[redacted]"] : [])];
+      const initial = await f.mcp.config(actor);
+      const created = await f.mcp.preview(actor, {
+        revision: initial.revision,
+        json: JSON.stringify({
+          mcpServers: {
+            fixture: {
+              name: "Fixture",
+              command: "node",
+              args,
+              secret: value,
+            },
+          },
+        }),
+      });
+      await f.mcp.apply(actor, created.id);
+      const row = f.tables.mcpServer![0]!;
+      const encrypted = f.tables.secret![0]!;
+      const legacy = await f.deps.secrets.put(
+        JSON.stringify({
+          command: "node",
+          args,
+          env: {},
+          redactions: [value],
+          ...(argumentRedactions ? { argumentRedactions } : {}),
+        }),
+        {
+          spaceId: actor.spaceId,
+          userId: actor.userId,
+          operationId: "fixture",
+          traceId: "fixture",
+          signal: AbortSignal.timeout(10_000),
+        },
+      );
+      Object.assign(encrypted, legacy);
+      row.secretId = legacy.id;
+
+      const current = await f.mcp.config(actor);
+      const withEnvironment = JSON.parse(current.json);
+      withEnvironment.mcpServers.fixture.env = { LOG_LEVEL: value };
+      const added = await f.mcp.preview(actor, {
+        revision: current.revision,
+        json: JSON.stringify(withEnvironment),
+      });
+      expect(JSON.stringify(added)).not.toContain(value);
+      await f.mcp.apply(actor, added.id);
+      expect((await f.mcp.list(actor))[0]?.args).toEqual(redactedArgs);
+      const saved = f.tables.secret!.find((entry) => entry.id === row.secretId)!;
+      const material = JSON.parse(f.deps.secrets.load(String(saved.ciphertext), String(saved.id)));
+      expect(material.argumentRedactions).toEqual(otherArgument ? [otherArgument, value] : [value]);
+      expect(oauthMaterialSecrets(material)).toContain(value);
+      const logs = new McpLogBuffer(oauthMaterialSecrets(material));
+      logs.append(`diagnostic ${value}\n`);
+      expect(JSON.stringify(logs.snapshot())).not.toContain(value);
+      expect(redactMcpValue({ result: value }, oauthMaterialSecrets(material))).toEqual({
+        result: "[redacted]",
+      });
+
+      const exported = await f.mcp.config(actor);
+      const withoutEnvironment = JSON.parse(exported.json);
+      withoutEnvironment.mcpServers.fixture.env = {};
+      const removed = await f.mcp.preview(actor, {
+        revision: exported.revision,
+        json: JSON.stringify(withoutEnvironment),
+      });
+      await f.mcp.apply(actor, removed.id);
+      expect(JSON.stringify(f.tables.mcpServer)).not.toContain(value);
+      expect((await f.mcp.list(actor))[0]?.args).toEqual(redactedArgs);
+      expect((await f.mcp.config(actor)).json).not.toContain(value);
+    },
+  );
+  it("lets an owner mark a still-named launch value non-secret after a config save", async () => {
+    const f = await fixture();
+    const credential = "synthetic-credential";
+    const namedCredential = "named-credential";
+    const initial = await f.mcp.config(actor);
+    const created = await f.mcp.preview(actor, {
+      revision: initial.revision,
+      json: JSON.stringify({
+        mcpServers: {
+          fixture: {
+            name: "Fixture",
+            command: "node",
+            args: ["server.js", "--root", "/workspace", credential, namedCredential],
+            env: { ROOT_DIR: "/workspace" },
+            secret: namedCredential,
+          },
+        },
+      }),
+    });
+    await f.mcp.apply(actor, created.id);
+    const row = f.tables.mcpServer![0]!;
+    const encrypted = f.tables.secret!.find((entry) => entry.id === row.secretId)!;
+    const legacy = await f.deps.secrets.put(
+      JSON.stringify({
+        command: "node",
+        args: ["server.js", "--root", "/workspace", credential, namedCredential],
+        env: { ROOT_DIR: "/workspace" },
+        secret: namedCredential,
+        redactions: ["/workspace", credential, namedCredential],
+      }),
+      {
+        spaceId: actor.spaceId,
+        userId: actor.userId,
+        operationId: "fixture",
+        traceId: "fixture",
+        signal: AbortSignal.timeout(10_000),
+      },
+    );
+    Object.assign(encrypted, legacy);
+    row.secretId = legacy.id;
+    const current = await f.mcp.config(actor);
+    const renamed = await f.mcp.preview(actor, {
+      revision: current.revision,
+      json: current.json.replace('"Fixture"', '"Updated"'),
+    });
+    await f.mcp.apply(actor, renamed.id);
+    const db = f.deps.prisma;
+    Object.assign(db, { spaceMember: { findUnique: vi.fn(async () => ({ role: "owner" })) } });
+    Object.assign(db.mcpServer, {
+      findFirstOrThrow: vi.fn(async ({ where }: { where: Row }) => {
+        const found = f.tables.mcpServer!.find((entry) => matches(entry, where));
+        if (!found) throw new Error("Missing row");
+        return { ...found };
+      }),
+    });
+    const handler = new RPCHandler(
+      createRouter({
+        ...f.deps,
+        mcpOAuth: { statusFor: vi.fn(async () => "none") } as RouterDeps["mcpOAuth"],
+      }),
+    );
+    const { response } = await handler.handle(
+      new Request("https://app.example.test/rpc/mcp/servers/update", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          json: { id: row.id, credentialFlags: { env: { ROOT_DIR: false }, headers: {} } },
+        }),
+      }),
+      { prefix: "/rpc", context: { actor } },
+    );
+    expect(response?.status).toBe(200);
+    const currentSecret = f.tables.secret!.find((entry) => entry.id === row.secretId)!;
+    const material = JSON.parse(
+      f.deps.secrets.load(String(currentSecret.ciphertext), String(currentSecret.id)),
+    );
+    expect(material.credentialFlags.env.ROOT_DIR).toBe(false);
+    expect(material.argumentRedactions).toEqual([credential]);
+    const runtimeSecrets = oauthMaterialSecrets(material);
+    expect(redactMcpValue({ result: "/workspace/report.txt" }, runtimeSecrets)).toEqual({
+      result: "/workspace/report.txt",
+    });
+    expect(redactMcpValue({ result: credential }, runtimeSecrets)).toEqual({
+      result: "[redacted]",
+    });
+  });
+  it("does not persist an ordinary environment value as a redaction after a config edit", async () => {
+    const f = await fixture();
+    const initial = await f.mcp.config(actor);
+    const created = await f.mcp.preview(actor, {
+      revision: initial.revision,
+      json: JSON.stringify({
+        mcpServers: { fixture: { name: "Fixture", command: "node", env: { LOG_LEVEL: "info" } } },
+      }),
+    });
+    await f.mcp.apply(actor, created.id);
+    const current = await f.mcp.config(actor);
+    const edited = await f.mcp.preview(actor, {
+      revision: current.revision,
+      json: current.json.replace('"Fixture"', '"Updated"'),
+    });
+    await f.mcp.apply(actor, edited.id);
+    const row = f.tables.mcpServer![0]!;
+    const encrypted = f.tables.secret!.find((entry) => entry.id === row.secretId)!;
+    const material = JSON.parse(
+      f.deps.secrets.load(String(encrypted.ciphertext), String(encrypted.id)),
+    );
+    expect(material.credentialFlags.env.LOG_LEVEL).toBe(false);
+    expect(material.redactions).not.toContain("info");
+    const protectedValues = oauthMaterialSecrets(material);
+    expect(redactMcpText("information", protectedValues)).toBe("information");
+    expect(() => assertMemorySafe("information", protectedValues)).not.toThrow();
   });
   it("imports file skills and lists file, taught and learned kinds with runtime enablement", async () => {
     const f = await fixture();

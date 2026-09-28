@@ -1599,6 +1599,31 @@ describe("computer event reduction", () => {
     ).toBe(prev);
   });
 
+  it("updates one computer progress line and clears it after boot", () => {
+    const initial = computer({ state: "booting" });
+    const preparing = reduceComputerStatus(
+      initial,
+      event({
+        type: "computer.status",
+        payload: { status: "booting", imagePulling: true, imagePullPercent: null },
+      }),
+    );
+    const downloading = reduceComputerStatus(
+      preparing,
+      event({
+        type: "computer.status",
+        payload: { status: "booting", imagePulling: true, imagePullPercent: 45 },
+      }),
+    );
+    expect(downloading).toMatchObject({ imagePulling: true, imagePullPercent: 45 });
+    expect(
+      reduceComputerStatus(
+        downloading,
+        event({ type: "computer.status", payload: { status: "running" } }),
+      ),
+    ).toMatchObject({ imagePulling: false, state: "running" });
+  });
+
   it("marks takeover requested and clears control unless the lease was retained", () => {
     const busy = computer({ state: "running", busyBotName: "Writer", controlHolder: "bot" });
     expect(

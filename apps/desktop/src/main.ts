@@ -12,10 +12,20 @@ import { DesktopUpdateController, LAUNCH_CHECK_DELAY_MS } from "./auto-update.js
 import { openBrowserAuth } from "./browser-auth.js";
 import { capDiskCacheSize, clearAppCaches, clearOversizedCache } from "./cache-limits.js";
 import { cliVersion } from "./cli.js";
-import { applySqlMigrationsToDatabase, ensureApplicationDatabase } from "./db-migrate.js";
+import {
+  applicationDatabaseReady,
+  applySqlMigrationsToDatabase,
+  ensureApplicationDatabase,
+  sqlMigrationsReady,
+} from "./db-migrate.js";
 import { installDevices } from "./devices-ipc.js";
 import { DOCKER_INSTALL_LINKS, isDesktopSetupLink, runDocker } from "./docker-cli.js";
 import { installCustomizationIpc } from "./extensions/ipc.js";
+import { ArdurCommandInstaller, realCommandBoundary } from "./guided-setup/command.js";
+import { SetupEngine } from "./guided-setup/engine.js";
+import { installGuidedSetupIpc } from "./guided-setup/ipc.js";
+import { firstGuidedSteps, systemPrerequisites } from "./guided-setup/steps.js";
+import { SetupJournalStore } from "./guided-setup/store.js";
 import { installHostService } from "./host-service-ipc.js";
 import {
   focusIntegration,
@@ -95,6 +105,7 @@ if (versionOutput !== null) {
 
 const PERFORMANCE_USER_DATA =
   process.env.ARDURBOT_USER_DATA_DIR || process.env.ARDURBOT_PERFORMANCE_USER_DATA;
+const GUIDED_SETUP_ENABLED = process.env.ARDURBOT_GUIDED_SETUP === "1";
 /** Test hook: where the app-managed stack answers. Mode `new` still requires loopback. */
 const LOCAL_WEB_URL = process.env.ARDURBOT_LOCAL_WEB_URL?.trim() || DEFAULT_LOCAL_WEB_URL;
 const PROBE_TIMEOUT_MS = 8_000;
@@ -152,6 +163,8 @@ const desktopUpdater = new DesktopUpdateController(
 let launchUpdateCheckScheduled = false;
 let localStack: LocalStackController;
 let localMode: LocalModeController;
+let guidedEngine: SetupEngine | null = null;
+let guidedIpcCleanup: (() => void) | null = null;
 let legacyCompose = false;
 let localShutdown: Promise<void> | null = null;
 const remoteListener = new RemoteListener();
@@ -691,6 +704,7 @@ function createSetupWindow() {
     ...(icon ? { icon } : {}),
     webPreferences: {
       preload: path.join(import.meta.dirname, "setup-preload.cjs"),
+      ...(guidedEngine ? { additionalArguments: ["--ardurbot-guided-setup"] } : {}),
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,
@@ -702,6 +716,7 @@ function createSetupWindow() {
   win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   win.once("closed", () => {
     if (setupWindow === win) setupWindow = null;
+    if (guidedEngine?.running()) void guidedEngine.cancel();
     // Closing setup without saving restores a connected session (Change Server cancel).
     restoreAppWindowAfterSetup();
   });
@@ -1356,6 +1371,7 @@ app.whenReady().then(async () => {
       packaged: app.isPackaged,
       override: process.env.ARDURBOT_IMAGE_TAG,
     }),
+    appVersion: app.getVersion(),
     probe: (url, signal, token) => probeManagedStack(url, token, signal),
     randomHex: (bytes) => randomBytes(bytes).toString("hex"),
     onState: (state) => {
@@ -1385,8 +1401,20 @@ app.whenReady().then(async () => {
     env: process.env,
     spawn,
     fetch: (url, init) => net.fetch(url, init),
-    migrate: async ({ adminUrl, databaseUrl, signal }) => {
-      await ensureApplicationDatabase({ adminUrl, databaseUrl, signal });
+    prepareApplicationDatabase: ensureApplicationDatabase,
+    applicationDatabaseReady: ({ databaseUrl, signal }) =>
+      applicationDatabaseReady({ connectionString: databaseUrl, signal }),
+    migrationsReady: ({ databaseUrl, signal }) =>
+      sqlMigrationsReady({
+        connectionString: databaseUrl,
+        signal,
+        migrationsDir: migrationsDir({
+          packaged: app.isPackaged,
+          resourcesPath: process.resourcesPath,
+          appPath: app.getAppPath(),
+        }),
+      }),
+    migrate: async ({ databaseUrl, signal }) => {
       await applySqlMigrationsToDatabase({
         connectionString: databaseUrl,
         signal,
@@ -1414,6 +1442,32 @@ app.whenReady().then(async () => {
       showServiceFailure(message, offerReset);
     },
   });
+  if (GUIDED_SETUP_ENABLED && !legacyCompose) {
+    guidedEngine = await SetupEngine.open(
+      new SetupJournalStore(userDataDir),
+      firstGuidedSteps({
+        prerequisites: systemPrerequisites({
+          platform: process.platform,
+          arch: process.arch,
+          packaged: app.isPackaged,
+          userDataDir,
+          binaries: postgresBinaries,
+        }),
+        localMode,
+        command: new ArdurCommandInstaller(
+          process.execPath,
+          app.getVersion(),
+          userDataDir,
+          realCommandBoundary(),
+        ),
+      }),
+    );
+    guidedIpcCleanup = installGuidedSetupIpc({
+      ipc: ipcMain,
+      window: () => setupWindow,
+      engine: guidedEngine,
+    });
+  }
   currentSetup = await readSetup(userDataDir);
   const target = resolveStartupTarget({
     envUrl: process.env.ARDURBOT_WEB_URL,
@@ -1700,6 +1754,10 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle("desktop.setup.stack.start", (event) => {
     if (!fromSetupWindow(event)) return null;
+    if (guidedEngine) {
+      void guidedEngine.start();
+      return localMode.state();
+    }
     // Respond right away; the setup window polls `stack.state` until a terminal phase.
     if (legacyCompose) {
       void localStack.start();
@@ -1784,7 +1842,8 @@ app.whenReady().then(async () => {
 
   if (target.kind === "setup") {
     showSetupWindow();
-    if (!legacyCompose && process.env.ARDURBOT_FORCE_SETUP !== "1") void localMode.start();
+    if (!legacyCompose && !GUIDED_SETUP_ENABLED && process.env.ARDURBOT_FORCE_SETUP !== "1")
+      void localMode.start();
   } else if (target.source === "saved") {
     if (currentSetup?.mode === "new" && !legacyCompose) {
       showSetupWindow(null, { resume: true });
@@ -1869,6 +1928,11 @@ app.on("before-quit", (event) => {
  * is still open and usable.
  */
 app.on("will-quit", (event) => {
+  if (guidedEngine?.running()) {
+    event.preventDefault();
+    void guidedEngine.cancel().finally(() => app.quit());
+    return;
+  }
   if (!legacyCompose && (localShutdown !== null || localMode?.running())) {
     event.preventDefault();
     quitting = false;
@@ -1881,6 +1945,8 @@ app.on("will-quit", (event) => {
     return;
   }
   hostService?.stop();
+  guidedIpcCleanup?.();
+  guidedIpcCleanup = null;
   desktopTray?.destroy();
   desktopTray = null;
   clearTimeout(warmWindowTimer);

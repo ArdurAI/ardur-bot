@@ -1,4 +1,4 @@
-import type { McpServer } from "@ardurbot/contracts";
+import type { McpCredentialFlags, McpServer } from "@ardurbot/contracts";
 import { SpaceToolPoliciesSchema } from "@ardurbot/contracts";
 import { ImportedProvenanceSchema } from "@ardurbot/contracts/local-import";
 import { redactMcpArguments } from "@ardurbot/host-runtime/mcp-diagnostics";
@@ -35,6 +35,7 @@ export function mcpServerDto(
   },
   oauthStatus: McpServer["oauthStatus"] = "none",
   credentialConflict = false,
+  credentialFlags?: McpCredentialFlags,
 ): McpServer {
   const args = Array.isArray(row.args)
     ? row.args.filter((item): item is string => typeof item === "string")
@@ -71,6 +72,7 @@ export function mcpServerDto(
     lastError: row.lastError ?? null,
     envKeys,
     headerKeys,
+    ...(credentialFlags ? { credentialFlags } : {}),
     hasSecret: row.secretId !== null,
     ...(credentialConflict ? { credentialConflict } : {}),
     ...(row.imported ? { imported: ImportedProvenanceSchema.parse(row.imported) } : {}),

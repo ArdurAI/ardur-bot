@@ -10,6 +10,8 @@ import {
   WEBHOOK_MATCHING_ROUTINES_LIMIT,
   WEBHOOK_MAX_BODY_BYTES,
 } from "../apps/api/src/limits";
+import { DOCUMENT_STORE_KINDS } from "../packages/adapters/src/memory/document-store-factory";
+import { GIT_PUBLISH_MODES } from "../packages/adapters/src/memory/git-store";
 import { SUBSCRIPTION_SIGN_IN_PROVIDERS } from "../packages/adapters/src/pi-oauth";
 import {
   MIN_ONE_SHOT_LEAD_SECONDS,
@@ -20,7 +22,9 @@ import { CreateRoutineInput } from "../packages/contracts/src/domain";
 import { SiteProductSchema } from "../packages/contracts/src/site-product";
 import { POPULAR_MODEL_PROVIDER_IDS } from "../packages/core/src/model-providers";
 import {
+  generatedProduct,
   generatedReadme,
+  memoryFromCode,
   providersFromCatalog,
   routinesFromCode,
   runSiteFacts,
@@ -76,6 +80,122 @@ describe("site facts", () => {
       "choose",
       "approve",
     ]);
+  });
+
+  it("omits the documentation block while no page is published and rejects an empty one", async () => {
+    const product = await generatedProduct(sourceRoot);
+    expect(product.schemaVersion).toBe(1);
+    expect(product.documentation).toBeUndefined();
+    expect(SiteProductSchema.safeParse(product).success).toBe(true);
+    const emptyBlock = { manifestVersion: 1, locale: "en", features: [], screenshots: [] };
+    expect(SiteProductSchema.safeParse({ ...product, documentation: emptyBlock }).success).toBe(
+      false,
+    );
+    expect(
+      SiteProductSchema.safeParse({
+        ...product,
+        documentation: { ...emptyBlock, manifestVersion: 2 },
+      }).success,
+    ).toBe(false);
+    const ninth = { ...product, screenshots: [...product.screenshots, product.screenshots[0]] };
+    while (ninth.screenshots.length <= 8) ninth.screenshots.push(product.screenshots[0]!);
+    expect(SiteProductSchema.safeParse(ninth).success).toBe(false);
+  });
+
+  it("derives memory storage and publication choices from shipped code", async () => {
+    const root = await fixture();
+    const product = SiteProductSchema.parse(
+      JSON.parse(await readFile(path.join(root, "site/data/product.json"), "utf8")),
+    );
+    expect(DOCUMENT_STORE_KINDS).toEqual(["postgres", "git", "obsidian"]);
+    expect(GIT_PUBLISH_MODES).toEqual(["publish", "propose"]);
+    expect(memoryFromCode().storage.map((entry) => entry.id)).toEqual([
+      "database",
+      "git",
+      "obsidian",
+    ]);
+    expect(memoryFromCode().publishModes.map((entry) => entry.id)).toEqual(["direct", "proposal"]);
+    expect(product.memory?.storage).toEqual(memoryFromCode().storage);
+    expect(product.memory?.publishModes).toEqual(memoryFromCode().publishModes);
+    await expect(validateReferences(product, root)).resolves.toBeUndefined();
+    product.memory!.storage[0]!.detail = "Stale curated storage text.";
+    await writeFile(path.join(root, "site/data/product.json"), `${JSON.stringify(product)}\n`);
+    await expect(runSiteFacts("check", root, sourceRoot)).rejects.toThrow("is stale");
+  });
+
+  it("requires every memory source to name an existing README heading", async () => {
+    const root = await fixture();
+    const product = SiteProductSchema.parse(
+      JSON.parse(await readFile(path.join(root, "site/data/product.json"), "utf8")),
+    );
+    await expect(validateReferences(product, root)).resolves.toBeUndefined();
+    product.memory!.sections[0]!.source = "README.md#Missing heading";
+    await expect(validateReferences(product, root)).rejects.toThrow("missing README heading");
+    product.memory!.sections[0]!.source = "README.md#What is stored where";
+    product.memory!.proofPoints[0]!.source = "docs/memory/git-repository.md#Connect a test space";
+    await expect(validateReferences(product, root)).rejects.toThrow("missing README heading");
+  });
+
+  it("requires a non-empty qualification on every memory section", async () => {
+    const root = await fixture();
+    const product = SiteProductSchema.parse(
+      JSON.parse(await readFile(path.join(root, "site/data/product.json"), "utf8")),
+    );
+    expect(product.memory!.sections.every((section) => section.qualification.length > 0)).toBe(
+      true,
+    );
+    product.memory!.sections[0]!.qualification = " ";
+    expect(SiteProductSchema.safeParse(product).success).toBe(false);
+    await expect(validateReferences(product, root)).rejects.toThrow("needs a qualification");
+  });
+
+  it("checks memory settings labels and screenshot against the catalog and capture spec", async () => {
+    const root = await fixture();
+    const product = SiteProductSchema.parse(
+      JSON.parse(await readFile(path.join(root, "site/data/product.json"), "utf8")),
+    );
+    await expect(validateReferences(product, root)).resolves.toBeUndefined();
+    product.memory!.settingsPath.uiLabels[0] = "Missing control";
+    await expect(validateReferences(product, root)).rejects.toThrow(
+      "missing from the English message catalog",
+    );
+    product.memory!.settingsPath.uiLabels[0] = "Settings";
+    product.memory!.settingsPath.steps[0] = "Open settings";
+    await expect(validateReferences(product, root)).rejects.toThrow(
+      "must appear in settingsPath.steps",
+    );
+    product.memory!.settingsPath.steps[0] = "Settings";
+    product.memory!.settingsPath.screenshot = "missing-capture";
+    await expect(validateReferences(product, root)).rejects.toThrow("is not in screenshots");
+    product.memory!.settingsPath.screenshot = "memory-git";
+    const spec = path.join(root, "apps/web/e2e/site-screenshots.spec.ts");
+    await writeFile(
+      spec,
+      (await readFile(spec, "utf8")).replace(
+        'captureSiteScreenshot(page, "memory-git")',
+        'captureSiteScreenshot(page, "other")',
+      ),
+    );
+    await expect(validateReferences(product, root)).rejects.toThrow("has no capture");
+  });
+
+  it.each([
+    "every memory",
+    "instant sync",
+    "works with any repo",
+    "edits in every app automatically sync",
+    "secrets can never leak",
+    "tamper-proof",
+    "private folders inside a shared repo",
+    "all your skills and plugins travel with memory",
+  ])("rejects denied memory phrase %s", async (phrase) => {
+    const root = await fixture();
+    const product = SiteProductSchema.parse(
+      JSON.parse(await readFile(path.join(root, "site/data/product.json"), "utf8")),
+    );
+    await expect(validateReferences(product, root)).resolves.toBeUndefined();
+    product.memory!.proofPoints[0]!.text = `Claim: ${phrase.toUpperCase()}.`;
+    await expect(validateReferences(product, root)).rejects.toThrow(`denied phrase "${phrase}"`);
   });
 
   it("lists featured providers first, in the app picker's order", () => {
@@ -548,16 +668,16 @@ describe("site facts", () => {
 
   it("is idempotent and regenerates changed README blocks", async () => {
     const root = await fixture();
-    expect(await runSiteFacts("write", root)).toBe(false);
-    expect(await runSiteFacts("write", root)).toBe(false);
+    expect(await runSiteFacts("write", root, sourceRoot)).toBe(false);
+    expect(await runSiteFacts("write", root, sourceRoot)).toBe(false);
     const readmePath = path.join(root, "README.md");
     const original = await readFile(readmePath, "utf8");
     const stale = original.replace("- Providers:", "- Old providers:");
     await writeFile(readmePath, stale);
-    await expect(runSiteFacts("check", root)).rejects.toThrow(
+    await expect(runSiteFacts("check", root, sourceRoot)).rejects.toThrow(
       "README.md site facts blocks are stale. Run `pnpm site:facts`",
     );
-    expect(await runSiteFacts("write", root)).toBe(true);
+    expect(await runSiteFacts("write", root, sourceRoot)).toBe(true);
     expect(await readFile(readmePath, "utf8")).toBe(original);
   });
 
@@ -567,7 +687,7 @@ describe("site facts", () => {
     const product = JSON.parse(await readFile(productPath, "utf8"));
     product.providers.pop();
     await writeFile(productPath, `${JSON.stringify(product, null, 2)}\n`);
-    await expect(runSiteFacts("check", root)).rejects.toThrow(
+    await expect(runSiteFacts("check", root, sourceRoot)).rejects.toThrow(
       "site/data/product.json is stale. Run `pnpm site:facts` and commit the result.",
     );
   });
@@ -579,10 +699,10 @@ describe("site facts", () => {
     product.generatedAt = "2026-09-27T00:00:00.000Z";
     product.source = { repo: "ArdurAI/ardur-bot", ref: "dev", commit: "a".repeat(40) };
     await writeFile(productPath, `${JSON.stringify(product, null, 2)}\n`);
-    await expect(runSiteFacts("check", root)).rejects.toThrow(
+    await expect(runSiteFacts("check", root, sourceRoot)).rejects.toThrow(
       "site/data/product.json must omit generatedAt and source",
     );
-    expect(await runSiteFacts("write", root)).toBe(true);
+    expect(await runSiteFacts("write", root, sourceRoot)).toBe(true);
     expect(JSON.parse(await readFile(productPath, "utf8"))).not.toHaveProperty("generatedAt");
   });
 
