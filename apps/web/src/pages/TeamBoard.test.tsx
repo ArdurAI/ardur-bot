@@ -33,6 +33,7 @@ vi.mock("@lingui/react/macro", () => ({
       "id" in parts ? parts.id : parts.join(""),
   }),
 }));
+vi.mock("@lingui/core/macro", () => ({ t: (parts: TemplateStringsArray) => parts.join("") }));
 vi.mock("@ardurbot/ui-web", () => ({
   Button: ({
     variant: _v,
@@ -181,7 +182,9 @@ it("shows unknown and stale presence honestly, and returns from a peer conversat
   );
   await act(async () => open!.click());
   expect(node.querySelector('[data-testid="peer-sheet"]')).toBeTruthy();
-  expect(node.querySelector('[data-testid="peer-sheet"]')?.getAttribute("data-group-id")).toBe("goal-room");
+  expect(node.querySelector('[data-testid="peer-sheet"]')?.getAttribute("data-group-id")).toBe(
+    "goal-room",
+  );
   await act(async () =>
     node.querySelector<HTMLButtonElement>('[data-testid="peer-sheet"] button')!.click(),
   );

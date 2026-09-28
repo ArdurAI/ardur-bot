@@ -1,11 +1,12 @@
 import type { RunActivityRow, TeamRow } from "@ardurbot/contracts";
-import { presenceFreshness, teamDeliveryText } from "@ardurbot/core";
+import { presenceFreshness } from "@ardurbot/core";
 import { i18n } from "@lingui/core";
 import { t } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useState } from "react";
 import { rpc } from "../lib/rpc";
 import { statusLabel } from "../lib/run-status-label";
+import { localizedTeamDeliveryText } from "../lib/team-delivery-text";
 import { ChatTaskReview } from "./ChatTaskReview";
 import { DelegationLines } from "./DelegationLines";
 
@@ -162,7 +163,7 @@ function ActivityRow({
             ) : null}
             {team?.activeRunIds?.includes(run.runId) && team.latestDeliveryState ? (
               <span className="text-xs text-muted-foreground">
-                {teamDeliveryText(team.latestDeliveryState, (value) => t({ id: value }))}
+                {localizedTeamDeliveryText(team.latestDeliveryState)}
               </span>
             ) : null}
             <span className={`ms-auto shrink-0 text-xs ${tone}`}>{label}</span>

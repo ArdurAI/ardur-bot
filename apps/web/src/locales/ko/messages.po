@@ -53,6 +53,11 @@ msgstr "{0, plural, one {#개 그룹에서 다르게 설정됨} other {#개 그�
 msgid "{0} {unitLabel}"
 msgstr "{0} {unitLabel}"
 
+#. placeholder {0}: row.activeRunCount
+#: src/pages/TeamBoard.tsx
+msgid "{0} active tasks"
+msgstr ""
+
 #. placeholder {0}: file.size
 #: src/pages/settings/UploadedFiles.tsx
 msgid "{0} bytes"
@@ -116,6 +121,11 @@ msgstr "{0} KB"
 #: src/components/ArtifactFileCard.tsx
 msgid "{0} MB"
 msgstr "{0} MB"
+
+#. placeholder {0}: row.pendingPeerCount
+#: src/pages/TeamBoard.tsx
+msgid "{0} peer messages waiting"
+msgstr ""
 
 #. placeholder {0}: grant.limits.maxPerDay
 #: src/pages/LearningInbox.tsx
@@ -1431,6 +1441,7 @@ msgstr "취소됨"
 
 #: src/components/AskCard.tsx
 #: src/lib/run-status-label.ts
+#: src/lib/team-delivery-text.ts
 #: src/pages/ComparePanel.tsx
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
@@ -2161,6 +2172,11 @@ msgstr ""
 
 #: src/pages/LearningInsights.tsx
 msgid "conversation"
+msgstr ""
+
+#. placeholder {0}: row.latestPeerBotName ?? "Bot"
+#: src/pages/TeamBoard.tsx
+msgid "Conversation with {0}"
 msgstr ""
 
 #: src/pages/GroupPanel.tsx
@@ -3215,6 +3231,10 @@ msgstr "삭제됨"
 msgid "Deleting…"
 msgstr "삭제 중…"
 
+#: src/lib/team-delivery-text.ts
+msgid "Delivered"
+msgstr ""
+
 #: src/components/PeerMessageReceipt.tsx
 msgid "Delivered from {peer}"
 msgstr "{peer}에게서 전달됨"
@@ -3734,6 +3754,7 @@ msgid "Experimental"
 msgstr ""
 
 #: src/components/PeerMessageReceipt.tsx
+#: src/lib/team-delivery-text.ts
 #: src/pages/LearningInbox.tsx
 #: src/pages/memory/MemoryProposals.tsx
 msgid "Expired"
@@ -3795,6 +3816,7 @@ msgstr "실패"
 
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/run-status-label.ts
+#: src/lib/team-delivery-text.ts
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/DelegationLines.tsx
 msgid "Failed"
@@ -4587,6 +4609,10 @@ msgstr ""
 msgid "Later edits overlap this change. Review both versions in History."
 msgstr ""
 
+#: src/pages/TeamBoard.tsx
+msgid "Latest message"
+msgstr ""
+
 #: src/components/FeatureDocsLink.tsx
 msgid "Learn more"
 msgstr "자세히 알아보기"
@@ -5323,6 +5349,7 @@ msgid "Needs sign-in on this computer"
 msgstr ""
 
 #: src/lib/run-status-label.ts
+#: src/pages/dashboard/NowPanel.tsx
 msgid "Needs takeover"
 msgstr "인수 필요"
 
@@ -5603,6 +5630,10 @@ msgstr ""
 #: src/pages/ScratchpadSection.tsx
 msgid "None yet"
 msgstr "아직 없음"
+
+#: src/lib/team-delivery-text.ts
+msgid "Not approved"
+msgstr ""
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "not available"
@@ -6333,6 +6364,7 @@ msgstr "반응"
 
 #: src/components/integrations/catalog/ToolPicker.tsx
 #: src/components/PeerMessageReceipt.tsx
+#: src/lib/team-delivery-text.ts
 msgid "Read"
 msgstr "읽음"
 
@@ -6649,6 +6681,7 @@ msgid "Replace key"
 msgstr "키 교체"
 
 #: src/components/PeerMessageReceipt.tsx
+#: src/lib/team-delivery-text.ts
 msgid "Replied"
 msgstr "답장 받음"
 
@@ -7776,6 +7809,13 @@ msgstr "시작하는 중…"
 msgid "Status"
 msgstr ""
 
+#: src/lib/team-delivery-text.ts
+#: src/pages/ActivityList.tsx
+#: src/pages/dashboard/NowPanel.tsx
+#: src/pages/TeamBoard.tsx
+msgid "Status unavailable"
+msgstr ""
+
 #: src/pages/LearningObservation.tsx
 msgid "Steering corrections"
 msgstr ""
@@ -8510,6 +8550,10 @@ msgstr ""
 msgid "Updated"
 msgstr "업데이트됨"
 
+#: src/pages/TeamBoard.tsx
+msgid "Updated 1m ago"
+msgstr ""
+
 #: src/pages/settings-sections.ts
 msgid "Updates"
 msgstr "업데이트"
@@ -8645,6 +8689,7 @@ msgid "Voice shortcut"
 msgstr ""
 
 #: src/components/PeerMessageReceipt.tsx
+#: src/lib/team-delivery-text.ts
 msgid "Waiting for a turn"
 msgstr "차례 기다리는 중"
 
@@ -8800,7 +8845,7 @@ msgstr "진행 중"
 msgid "Working from the last copy"
 msgstr ""
 
-#. placeholder {0}: row.sentence
+#. placeholder {0}: row.currentTaskTitle ?? row.sentence
 #. placeholder {1}: row.requesterName
 #: src/pages/TeamBoard.tsx
 msgid "Working on {0} for {1}"

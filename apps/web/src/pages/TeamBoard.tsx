@@ -4,7 +4,6 @@ import {
   runtimeEffortLabel,
   sortTeamRows,
   TEAM_REFRESH_MS,
-  teamDeliveryText,
 } from "@ardurbot/core";
 import { Button } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
@@ -13,6 +12,7 @@ import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useSta
 import { Link, useNavigate } from "react-router-dom";
 import { decodeArtifactBase64, downloadArtifactBytes } from "../lib/artifact-open";
 import { rpc } from "../lib/rpc";
+import { localizedTeamDeliveryText } from "../lib/team-delivery-text";
 import { ComparisonList } from "./ComparePanel";
 import { CompareStart } from "./CompareStart";
 import { useThreadRefresh } from "./dashboard/use-thread-refresh";
@@ -204,8 +204,7 @@ export function TeamBoardRow({
             ) : null}
             {row.latestDeliveryState ? (
               <p>
-                <Trans>Latest message</Trans>:{" "}
-                {teamDeliveryText(row.latestDeliveryState, (value) => t({ id: value }))}
+                <Trans>Latest message</Trans>: {localizedTeamDeliveryText(row.latestDeliveryState)}
               </p>
             ) : null}
             {row.latestPeerBotId ? (
