@@ -105,7 +105,9 @@ function mapBot(
     modelPinRevision: bot.modelPinRevision ?? 0,
     runtimeKind: RuntimeKindSchema.parse(bot.runtimeKind ?? "pi"),
     runtimeConfig:
-      bot.runtimeConfig == null ? null : HermesRuntimeConfigSchema.parse(bot.runtimeConfig),
+      bot.runtimeConfig == null || bot.runtimeConfig === Prisma.DbNull
+        ? null
+        : HermesRuntimeConfigSchema.parse(bot.runtimeConfig),
     runtimeExperimental: bot.runtimeExperimental ?? false,
     teamChatAmbientEnabled: bot.teamChatAmbientEnabled ?? false,
     teamChatRules: bot.teamChatRules ?? "",
