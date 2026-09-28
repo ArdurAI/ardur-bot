@@ -1,4 +1,6 @@
 export const ZH_MESSAGES: Record<string, string> = {
+  "Learn more about {title}": "了解更多：{title}",
+  "Could not open help. Try again.": "无法打开帮助。请重试。",
   "This group's model is blocked by the bot or space settings. Change the destination policy or choose another group model.":
     "群组模型被 Bot 或空间设置阻止。请更改目标位置策略，或选择其他群组模型。",
   "{botName} couldn't use the model set for this group. Reconnect it or change the group model.":
