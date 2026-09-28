@@ -229,6 +229,88 @@ describe("worker-owned remote runtime callbacks", () => {
     await expect(collect(remote.run(request()))).rejects.toThrow("pinned provider relay");
     expect(broker).not.toHaveBeenCalled();
   });
+  it.each(["health", "broker"] as const)(
+    "cancels Hermes during %s setup before a host turn or provider call",
+    async (stage) => {
+      let release!: () => void;
+      const pending = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const generation = crypto.randomUUID();
+      const requestHost = vi.fn();
+      const open = vi.fn();
+      const revoke = vi.fn();
+      const broker = {
+        grant: { id: crypto.randomUUID(), token: "a".repeat(43), expiresAt: Date.now() + 60_000 },
+        open,
+        revoke,
+      } as unknown as HermesProviderBroker;
+      const health = vi.fn(async () => {
+        if (stage === "health") await pending;
+        return { capabilities: { providerRelay: 1 }, generation };
+      });
+      const brokerForTurn = vi.fn(
+        async (_run, _context, fence: { operationId: string; hostGeneration: string }) => {
+          if (stage === "broker") await pending;
+          return {
+            broker,
+            scope: {
+              runId: "run",
+              botId: "bot",
+              userId: "owner",
+              spaceId: "space",
+              operationId: fence.operationId,
+              leaseOwner: "worker",
+              leaseFence: 1,
+              hostGeneration: createHash("sha256")
+                .update(fence.hostGeneration)
+                .digest()
+                .readUIntBE(0, 6),
+              configurationHash: "fixture",
+              pin: {
+                credentialId: "credential",
+                provider: "fixture",
+                modelId: "fixture-model",
+                effort: "high",
+              },
+            } satisfies BrokerScope,
+          };
+        },
+      );
+      const remote = new RemoteHostRuntime(
+        { health, request: requestHost } as unknown as HostClient,
+        "hermes",
+        brokerForTurn,
+      );
+      const base = request();
+      const run = {
+        ...base,
+        model: {
+          ...base.model,
+          provider: "fixture",
+          id: "fixture-model",
+          thinkingLevel: "high",
+          runtimePin: {
+            ...base.model.runtimePin!,
+            runtimeKind: "hermes" as const,
+            provider: "fixture",
+            modelId: "fixture-model",
+            effort: "high",
+          },
+        },
+      };
+      const result = collect(remote.run(run, { userId: "owner", spaceId: "space" }));
+      await vi.waitFor(() =>
+        expect(stage === "health" ? health : brokerForTurn).toHaveBeenCalledOnce(),
+      );
+      await remote.abort("run");
+      release();
+      await expect(result).rejects.toThrow();
+      expect(requestHost).not.toHaveBeenCalled();
+      expect(open).not.toHaveBeenCalled();
+      expect(revoke).toHaveBeenCalledTimes(stage === "broker" ? 1 : 0);
+    },
+  );
   it("binds provider callbacks to the negotiated host operation without a provider key", async () => {
     const generation = crypto.randomUUID();
     const grant = {
