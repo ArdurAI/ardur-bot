@@ -15,6 +15,8 @@ export function SetupDocument({ setupBridge = bridge }: { setupBridge?: ArdurBot
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
   const [cancelBusy, setCancelBusy] = useState(false);
+  const [startupChoice, setStartupChoice] = useState(false);
+  const [startupError, setStartupError] = useState("");
 
   useEffect(() => {
     const guided = bridge?.guidedSetup;
@@ -97,13 +99,6 @@ export function SetupDocument({ setupBridge = bridge }: { setupBridge?: ArdurBot
     setBusy(true);
     setStatus("");
     try {
-      const checked = await guided.start();
-      setSnapshot((old) => (old && old.sequence > checked.sequence ? old : checked));
-      const prepared = checked.steps.slice(0, 3).every((row) => row.status === "succeeded");
-      const commandDone = ["succeeded", "skipped", "not-applicable"].includes(
-        checked.steps[3]?.status ?? "",
-      );
-      if (!prepared || !commandDone) return;
       const state = await bridge.stack.start();
       if (!state) throw new Error("Setup handoff is unavailable.");
       window.location.assign("setup.html");
@@ -172,6 +167,19 @@ export function SetupDocument({ setupBridge = bridge }: { setupBridge?: ArdurBot
         ) : snapshot && guided ? (
           <GuidedSetupView
             snapshot={snapshot}
+            startupSupported={bridge.platform === "darwin" || bridge.platform === "win32"}
+            startupChoice={startupChoice}
+            startupError={startupError}
+            onStartupChoice={(enabled) => {
+              setStartupError("");
+              void guided
+                .setStartup(enabled)
+                .then((result) => {
+                  if (result.ok) setStartupChoice(result.enabled ?? false);
+                  else setStartupError(result.error ?? "Could not change startup. Try again.");
+                })
+                .catch(() => setStartupError("Could not change startup. Try again."));
+            }}
             onStart={() => void run(() => guided.start())}
             onRetry={(id: SetupStepId) => void run(() => guided.retry(id))}
             onSkip={(id: SetupStepId) => void run(() => guided.skip(id))}
