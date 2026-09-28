@@ -307,6 +307,64 @@ export function BotSettings({
       : "",
   );
   const [thinkingLevel, setThinkingLevel] = useState(bot.thinkingLevel ?? "");
+
+  const [seededBot, setSeededBot] = useState(bot);
+  const [draftPinRevision, setDraftPinRevision] = useState(bot.modelPinRevision ?? 0);
+
+  useEffect(() => {
+    const currentRev = bot.modelPinRevision ?? 0;
+    if (currentRev > draftPinRevision) {
+      const isClean =
+        runtimeKind === (seededBot.runtimeKind ?? "pi") &&
+        JSON.stringify(runtimeConfig) === JSON.stringify(seededBot.runtimeConfig ?? null) &&
+        runtimeExperimental === (seededBot.runtimeExperimental ?? false) &&
+        modelKey ===
+          (seededBot.modelProvider && seededBot.modelId
+            ? modelOptionKey(
+                seededBot.modelProvider,
+                seededBot.modelId,
+                seededBot.modelCredentialId,
+              )
+            : "") &&
+        thinkingLevel === (seededBot.thinkingLevel ?? "") &&
+        title === (seededBot.title ?? "") &&
+        name === (seededBot.name ?? "");
+      const draftMatchesIncoming =
+        runtimeKind === (bot.runtimeKind ?? "pi") &&
+        JSON.stringify(runtimeConfig) === JSON.stringify(bot.runtimeConfig ?? null) &&
+        runtimeExperimental === (bot.runtimeExperimental ?? false) &&
+        modelKey ===
+          (bot.modelProvider && bot.modelId
+            ? modelOptionKey(bot.modelProvider, bot.modelId, bot.modelCredentialId)
+            : "") &&
+        thinkingLevel === (bot.thinkingLevel ?? "") &&
+        title === (bot.title ?? "") &&
+        name === (bot.name ?? "");
+
+      if (isClean || draftMatchesIncoming) {
+        setRuntimeKind(bot.runtimeKind ?? "pi");
+        setRuntimeConfig(bot.runtimeConfig ?? null);
+        setRuntimeExperimental(bot.runtimeExperimental ?? false);
+        setModelKey(
+          bot.modelProvider && bot.modelId
+            ? modelOptionKey(bot.modelProvider, bot.modelId, bot.modelCredentialId)
+            : "",
+        );
+        setThinkingLevel(bot.thinkingLevel ?? "");
+        setDraftPinRevision(currentRev);
+        setSeededBot(bot);
+      }
+    }
+  }, [
+    bot,
+    draftPinRevision,
+    runtimeKind,
+    runtimeConfig,
+    runtimeExperimental,
+    modelKey,
+    thinkingLevel,
+    seededBot,
+  ]);
   const loadedSettings = useModelSettings(undefined, false, modelSettings === undefined);
   const metadata = modelSettings === undefined ? loadedSettings : modelSettings;
   const credentials = metadata?.credentials ?? [];
@@ -315,6 +373,7 @@ export function BotSettings({
   const modelMetaReady = metadata !== null;
   const [showAllModels, setShowAllModels] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const saveQueueRef = useRef(Promise.resolve());
   const executeSaveRef = useRef<
@@ -370,6 +429,7 @@ export function BotSettings({
     color?: string;
     notifyOnFinish?: boolean;
   }) {
+    if (validationError) return;
     const selected = modelKey ? parseModelOptionKey(modelKey) : null;
     const nextName = (patchOverrides?.name !== undefined ? patchOverrides.name : name).trim();
     const nextTitle = (patchOverrides?.title !== undefined ? patchOverrides.title : title).trim();
@@ -400,7 +460,7 @@ export function BotSettings({
         autoSpeak,
         voiceId: voiceId || null,
         runtimeKind,
-        expectedModelPinRevision: bot.modelPinRevision ?? 0,
+        expectedModelPinRevision: draftPinRevision,
         ...(runtimeKind === "hermes" && runtimeConfig?.version === 2 ? { runtimeConfig } : {}),
         runtimeExperimental,
         modelProvider: selected?.provider ?? null,
@@ -592,7 +652,11 @@ export function BotSettings({
                 </p>
               ) : null}
               <Suspense fallback={null}>
-                <HermesLimits value={runtimeConfig} onChange={setRuntimeConfig} />
+                <HermesLimits
+                  value={runtimeConfig}
+                  onChange={setRuntimeConfig}
+                  onError={setValidationError}
+                />
               </Suspense>
             </>
           ) : null}
@@ -706,7 +770,11 @@ export function BotSettings({
           </label>
         ) : null}
       </details>
-      {error ? <p className="mt-2 text-[13px] text-destructive">{error}</p> : null}
+      {validationError ? (
+        <p className="mt-2 text-[13px] text-destructive">{validationError}</p>
+      ) : error ? (
+        <p className="mt-2 text-[13px] text-destructive">{error}</p>
+      ) : null}
       {needsConnection ? (
         <p className="mt-2 text-[12px] text-muted-foreground">
           <Trans>This bot's connection needs to be chosen. Pick the connection to use.</Trans>
@@ -714,7 +782,7 @@ export function BotSettings({
       ) : null}
       <div className="mt-5 flex flex-col items-start gap-3">
         <Button
-          disabled={saving}
+          disabled={saving || !!validationError}
           onClick={() => {
             void enqueueSave({
               name,

@@ -1,5 +1,7 @@
 import type { AgentRunModel } from "@ardurbot/adapter-kit";
+import { effectiveRuntimeConfigHash } from "@ardurbot/core/node/runtime-config-hash";
 import type { PrismaClient } from "@ardurbot/db";
+import { compileHermesRuntimeConfig } from "@ardurbot/host-runtime/runtimes/hermes-config";
 import { describe, expect, it, vi } from "vitest";
 import { effectiveHermesConfig, hermesConfigHash } from "./hermes-compatibility.js";
 import { resolveModelApiKey } from "./pi-oauth.js";
@@ -553,4 +555,109 @@ it("blocks a native room selection when the bot requires local execution", async
     }),
   ).toMatchObject({ kind: "problem", code: "locality-denied", pin: native });
   expect(f.loadKey).not.toHaveBeenCalled();
+});
+
+it("an unchanged connection resolves without a mismatch (executor delegation / brief maintenance)", async () => {
+  const f = fixture();
+  f.findCredential.mockResolvedValue({ ...credential, provider: "openai-compatible" });
+  const connectionModel = {
+    provider: "openai-compatible",
+    id: "deepseek-v3",
+    baseUrl: "https://api.example.com",
+    apiKey: "test",
+    maxTokens: 16384, // True connection capability
+    contextWindow: 32768,
+    thinkingLevel: "off" as const,
+    reasoning: false,
+    acceptsImages: false,
+  };
+  f.loadKey.mockResolvedValue(connectionModel);
+
+  const config = effectiveHermesConfig(null);
+  const compiled = compileHermesRuntimeConfig(config, connectionModel as any);
+
+  const pinParent = {
+    ...pin,
+    provider: "openai-compatible",
+    modelId: "deepseek-v3",
+    effort: "off" as const,
+    runtimeKind: "hermes" as const,
+    runtimeConfig: config,
+    runtimeConfigHash: hermesConfigHash(config),
+    effectiveRuntimeConfig: compiled.manifest,
+    effectiveRuntimeConfigHash: effectiveRuntimeConfigHash(compiled.manifest),
+  };
+
+  // Delegated run resolving with a lower caller allowance (10000 max tokens)
+  const resolvedDelegated = await resolveRunModelPin({
+    ...f,
+    maxOutputTokens: 10000,
+    snapshot: pinParent,
+    bot: { modelPinRevision: 2, runtimeKind: "hermes" as const },
+  });
+
+  expect(resolvedDelegated.kind).toBe("resolved");
+  if (resolvedDelegated.kind === "resolved") {
+    expect(resolvedDelegated.maxTokens).toBe(16384);
+  }
+
+  // Brief maintenance resolving without caller allowance
+  const resolvedBrief = await resolveRunModelPin({
+    ...f,
+    snapshot: pinParent,
+    bot: { modelPinRevision: 2, runtimeKind: "hermes" as const },
+  });
+  expect(resolvedBrief.kind).toBe("resolved");
+});
+
+it("a genuinely reduced connection still fails closed", async () => {
+  const f = fixture();
+  f.findCredential.mockResolvedValue({ ...credential, provider: "openai-compatible" });
+  const originalConnectionModel = {
+    provider: "openai-compatible",
+    id: "deepseek-v3",
+    baseUrl: "https://api.example.com",
+    apiKey: "test",
+    maxTokens: 16384,
+    contextWindow: 32768,
+    thinkingLevel: "off" as const,
+    reasoning: false,
+    acceptsImages: false,
+  };
+  const config = effectiveHermesConfig(null);
+  const compiled = compileHermesRuntimeConfig(config, originalConnectionModel as any);
+
+  const pinParent = {
+    ...pin,
+    provider: "openai-compatible",
+    modelId: "deepseek-v3",
+    effort: "off" as const,
+    runtimeKind: "hermes" as const,
+    runtimeConfig: config,
+    runtimeConfigHash: hermesConfigHash(config),
+    effectiveRuntimeConfig: compiled.manifest,
+    effectiveRuntimeConfigHash: effectiveRuntimeConfigHash(compiled.manifest),
+  };
+
+  // The connection NOW reports a smaller maxTokens capability than the captured one
+  f.loadKey.mockResolvedValue({
+    provider: "openai-compatible",
+    id: "deepseek-v3",
+    baseUrl: "https://api.example.com",
+    apiKey: "test",
+    maxTokens: 8192,
+    contextWindow: 32768,
+    thinkingLevel: "off" as const,
+  });
+
+  const resolved = await resolveRunModelPin({
+    ...f,
+    maxOutputTokens: 10000,
+    snapshot: pinParent,
+    bot: { modelPinRevision: 2, runtimeKind: "hermes" as const },
+  });
+  expect(resolved.kind).toBe("problem");
+  if (resolved.kind === "problem") {
+    expect(resolved.code).toBe("runtime-configuration-invalid");
+  }
 });

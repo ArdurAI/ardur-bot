@@ -4,17 +4,20 @@ import type {
 } from "@ardurbot/contracts/runtime-config";
 import { effectiveHermesRuntimeConfigV2 } from "@ardurbot/core/runtime-config";
 import { Input } from "@ardurbot/ui-web";
-import { Trans } from "@lingui/react/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useId, useState } from "react";
 
 export function HermesLimits({
   value,
   onChange,
+  onError,
 }: {
   value: HistoricalHermesRuntimeConfig | null;
   onChange: (value: HermesRuntimeConfigV2) => void;
+  onError?: (error: string | null) => void;
 }) {
   const id = useId();
+  const { t } = useLingui();
   const settings = effectiveHermesRuntimeConfigV2(value);
 
   const [calls, setCalls] = useState(String(settings.limits.maxProviderRequests));
@@ -45,6 +48,9 @@ export function HermesLimits({
             const num = Number(val);
             if (Number.isInteger(num) && num >= 1 && num <= 64) {
               onChange({ ...settings, limits: { ...settings.limits, maxProviderRequests: num } });
+              onError?.(null);
+            } else {
+              onError?.(t`Enter a whole number between 1 and 64 for model calls per turn.`);
             }
           }}
         />
@@ -64,6 +70,9 @@ export function HermesLimits({
             const num = Number(val);
             if (Number.isInteger(num) && num >= 1 && num <= 600) {
               onChange({ ...settings, limits: { ...settings.limits, timeoutMs: num * 1_000 } });
+              onError?.(null);
+            } else {
+              onError?.(t`Enter a whole number between 1 and 600 for the time limit.`);
             }
           }}
         />

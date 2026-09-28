@@ -274,7 +274,7 @@ export async function resolveRunModelPin(input: {
       if (
         captured.id !== resolved.id ||
         captured.contextWindow !== resolved.contextWindow ||
-        captured.maxTokens !== resolved.maxTokens ||
+        (model.maxTokens ?? 4096) < captured.maxTokens ||
         captured.reasoning !== (resolved.reasoning ?? false) ||
         captured.acceptsImages !== (resolved.acceptsImages ?? false) ||
         captured.thinkingLevel !== ThinkingLevelSchema.parse(resolved.thinkingLevel ?? "off")
@@ -284,6 +284,7 @@ export async function resolveRunModelPin(input: {
           "runtime-configuration-invalid",
           "The connection's model capabilities changed. Start a new run.",
         );
+      resolved.maxTokens = captured.maxTokens;
       validateHermesExecutionEnvelope({
         runtimeKind: "hermes",
         runtimeConfig: pin.runtimeConfig,
