@@ -1,4 +1,4 @@
-import { darkTokens } from "@ardurbot/ui-tokens";
+import { darkTokens, botColors as sharedBotColors } from "@ardurbot/ui-tokens";
 import { describe, expect, it } from "vitest";
 import { botColors, tokens } from "./theme.js";
 
@@ -9,6 +9,6 @@ describe("mobile theme tokens", () => {
 
   it("re-exports botColors for identity accents", () => {
     expect(botColors.length).toBeGreaterThan(0);
-    expect(botColors[0]).toBe("#3EC5A8");
+    expect(botColors).toBe(sharedBotColors);
   });
 });
