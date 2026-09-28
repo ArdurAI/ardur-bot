@@ -24,6 +24,9 @@ describe("LocalHermesRuntime", () => {
     vi.stubEnv("ARDURBOT_APP_DATA", root);
     await mkdir(join(installDir, ".venv", "bin"), { recursive: true });
     await writeFile(join(installDir, ".venv", "bin", "python"), "fixture");
+    await writeFile(join(installDir, "pyproject.toml"), "hermes-agent");
+    await writeFile(join(installDir, "uv.lock"), "hermes-agent");
+    await import("node:fs/promises").then(fs => fs.chmod(join(installDir, ".venv", "bin", "python"), 0o755));
   });
 
   afterEach(async () => {
@@ -116,5 +119,27 @@ describe("LocalHermesRuntime", () => {
     // fake-acp returns "first " and "second" or for "tool" it emits tool output
     expect(result).toContainEqual(expect.objectContaining({ type: "done" }));
   });
-});
+
+  it("refuses relay after turn end", async () => {
+    const fakeAcp = fileURLToPath(new URL("../../../host-runtime/src/runtimes/fixtures/fake-acp.mjs", import.meta.url));
+    await writeFile(
+      join(root, "install", ".venv", "bin", "python"),
+      `#!/usr/bin/env node\nimport ${JSON.stringify(fakeAcp)};\n`
+    );
+    const fs = await import("node:fs/promises");
+    await fs.chmod(join(root, "install", ".venv", "bin", "python"), 0o755);
+
+    const brokerMethod = vi.fn(async () => ({ result: { foo: "bar" } }));
+    const broker = { grant: { port: 0, runId: "123", timeoutSeconds: 5, relayToken: "token" } };
+    const runtime = new LocalHermesRuntime(vi.fn().mockImplementation(async () => {
+      // In the real code, we get the grant back
+      return { broker, scope: { executeTool: brokerMethod } };
+    }));
+
+    const req = request();
+    req.prompt = "redact";
+
+    const result = await collect(runtime.run(req));
+    expect(result).toContainEqual(expect.objectContaining({ type: "done" }));
+  });
 });
