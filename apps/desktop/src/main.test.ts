@@ -59,6 +59,9 @@ function fixture() {
     warmWindowTimer: undefined,
     clearTimeout: vi.fn(),
     launchUpdateCheckScheduled: true,
+    // createWindow reads the guided-setup flag and the legacy Compose marker from module scope.
+    GUIDED_SETUP_ENABLED: false,
+    legacyCompose: false,
     BrowserWindow: WindowFake,
     appWindowTargets: new WeakMap(),
     path,
