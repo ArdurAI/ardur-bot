@@ -3778,7 +3778,7 @@ msgstr "Expandir {0}"
 
 #: src/pages/Shell.tsx
 msgid "Expand workspace"
-msgstr ""
+msgstr "Expandir espacio de trabajo"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Experimental"
@@ -3890,7 +3890,7 @@ msgstr ""
 #: src/pages/workspace/WorkspaceFiles.tsx
 #: src/pages/workspace/WorkspacePane.tsx
 msgid "Files"
-msgstr ""
+msgstr "Archivos"
 
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Files are unavailable on this computer."
@@ -4844,7 +4844,7 @@ msgstr ""
 
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Loading tasks…"
-msgstr ""
+msgstr "Cargando tareas…"
 
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "Loading the extension catalogue…"
@@ -5795,7 +5795,7 @@ msgstr ""
 
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Nothing running or queued"
-msgstr ""
+msgstr "Nada en ejecución o en cola"
 
 #: src/pages/LearningInbox.tsx
 msgid "Nothing to review."
@@ -5970,7 +5970,7 @@ msgstr ""
 
 #: src/pages/workspace/WorkspaceScreen.tsx
 msgid "Open screen"
-msgstr ""
+msgstr "Abrir pantalla"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Open Screen recording settings"
@@ -5978,7 +5978,7 @@ msgstr ""
 
 #: src/pages/workspace/WorkspaceScreen.tsx
 msgid "Open screen to view this computer."
-msgstr ""
+msgstr "Abra la pantalla para ver esta computadora."
 
 #: src/components/composer/command-description.ts
 msgid "Open Settings"
@@ -7005,7 +7005,7 @@ msgstr "Volver a Ardur"
 
 #: src/pages/Shell.tsx
 msgid "Return to conversation"
-msgstr ""
+msgstr "Volver a la conversación"
 
 #: src/pages/GuidedOnboarding.tsx
 msgid "Return to setup"
@@ -7346,7 +7346,7 @@ msgstr ""
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/workspace/WorkspacePane.tsx
 msgid "Screen"
-msgstr ""
+msgstr "Pantalla"
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Screen and terminal: Not available on this computer"
@@ -8075,7 +8075,7 @@ msgstr "Sistema"
 #: src/pages/ide/terminal.tsx
 #: src/pages/shell/computer-terminal.tsx
 msgid "Take control"
-msgstr ""
+msgstr "Tomar el control"
 
 #: src/pages/ide/terminal.tsx
 #: src/pages/shell/computer-terminal.tsx
@@ -8098,7 +8098,7 @@ msgstr ""
 #: src/pages/Shell.tsx
 #: src/pages/workspace/WorkspacePane.tsx
 msgid "Tasks"
-msgstr ""
+msgstr "Tareas"
 
 #: src/pages/customize/SkillsPage.tsx
 msgid "Taught skills"
@@ -9023,7 +9023,7 @@ msgstr "Trabajando…"
 #: src/components/integrations/manage/IntegrationDetails.tsx
 #: src/pages/Shell.tsx
 msgid "Workspace"
-msgstr ""
+msgstr "Espacio de trabajo"
 
 #: src/pages/ChannelPairingSettings.tsx
 msgid "Workspace or server ID"

@@ -57,10 +57,7 @@ export function WorkspacePane({
       : null;
   const filesAvailable = currentContext?.files !== "unavailable" && currentContext?.computerId;
   const selected =
-    tab === "tasks" ||
-    tab === "routines" ||
-    (tab === "files" && filesAvailable) ||
-    tab === "screen"
+    tab === "tasks" || tab === "routines" || (tab === "files" && filesAvailable) || tab === "screen"
       ? tab
       : "tasks";
   const tabs = [

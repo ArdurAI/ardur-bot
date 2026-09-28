@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { Bot, ComputerStatus, RunActivityRow } from "@ardurbot/contracts";
+import type { Bot, ComputerStatus } from "@ardurbot/contracts";
 import type { ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";

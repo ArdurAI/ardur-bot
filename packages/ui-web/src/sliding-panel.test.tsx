@@ -58,7 +58,7 @@ it("sets max-width appropriately for panel types", async () => {
     const aside = host.querySelector("aside");
     expect(aside?.className).toContain("max-w-[384px]");
     expect(aside?.className).not.toContain("max-w-full");
-    
+
     await act(async () =>
       root.render(
         <SlidingPanel open panel="computer" workspace expanded>

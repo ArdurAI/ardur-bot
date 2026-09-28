@@ -132,6 +132,10 @@ import { AskCard } from "../components/AskCard";
 import { ActiveBotGlyph } from "../components/ai/CollaborationMarker";
 import { CloudAgentCard } from "../components/CloudAgentCard";
 import { ComputerMaintenanceActions } from "../components/ComputerMaintenanceActions";
+import {
+  ComputersUnavailableHint,
+  computersAreUnavailable,
+} from "../components/ComputersUnavailableHint";
 import { ComputerUpdateProgress } from "../components/ComputerUpdateProgress";
 import { RunContext } from "../components/ContextEntry";
 import type { PendingAttachment } from "../components/composer/attachments";
@@ -235,7 +239,6 @@ import {
   visibleComputerError,
 } from "./shell/computer-error-state";
 import { ComputerScreenError } from "./shell/computer-screen-error";
-import { ComputersUnavailableHint, computersAreUnavailable } from "../components/ComputersUnavailableHint";
 import { useComputerTerminal } from "./shell/computer-terminal";
 import {
   AppConnectCard,
@@ -2574,7 +2577,8 @@ export function ShellPage({
 
   useEffect(() => {
     const heartbeatBotId = computerBot?.id ?? active?.id;
-    if ((!computerOpen && panel !== "computer") || !heartbeatBotId || computer?.state !== "running") return;
+    if ((!computerOpen && panel !== "computer") || !heartbeatBotId || computer?.state !== "running")
+      return;
     const ping = () =>
       void rpc.computer.heartbeat({ botId: heartbeatBotId }).catch(() => undefined);
     ping();
@@ -3750,8 +3754,9 @@ export function ShellPage({
                     computer,
                     open: computerOpen,
                     url: embeddedScreenUrl,
-                    error: computerScreenError ?? (
-                      !embeddedScreenUrl || computer?.state !== "running" ? (
+                    error:
+                      computerScreenError ??
+                      (!embeddedScreenUrl || computer?.state !== "running" ? (
                         computersAreUnavailable(bootstrapMe?.sandboxProvider) ? (
                           <ComputersUnavailableHint />
                         ) : (
@@ -3759,11 +3764,10 @@ export function ShellPage({
                             computer?.state,
                             booting,
                             computerLabel(computer?.mode, active.name),
-                            computer?.imagePulling ? computer.imagePullPercent : undefined
+                            computer?.imagePulling ? computer.imagePullPercent : undefined,
                           )
                         )
-                      ) : null
-                    ),
+                      ) : null),
                     onOpen: () => void openComputer(undefined, true),
                   }}
                   routines={
@@ -3954,7 +3958,10 @@ export function ShellPage({
                 saving={savingRoutine}
                 running={runningRoutine}
                 error={routineError}
-                onBack={() => { setWorkspaceTab("routines"); setPanel("computer"); }}
+                onBack={() => {
+                  setWorkspaceTab("routines");
+                  setPanel("computer");
+                }}
                 onClose={() => setPanel(null)}
                 onEnsureWebhook={async () => {
                   await ensureWebhookSecret(active.id);
@@ -6706,7 +6713,7 @@ function computerPlaceholder(
   state: ComputerStatus["state"] | undefined,
   booting: boolean,
   label: string,
-  imagePullPercent?: number | null
+  imagePullPercent?: number | null,
 ) {
   if (imagePullPercent !== undefined) return computerPullLabel(imagePullPercent);
   if (state === "booting" || booting) return t`Booting live desktop…`;
