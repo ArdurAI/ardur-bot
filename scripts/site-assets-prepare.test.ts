@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { FeatureDocumentationManifestSchema } from "../packages/contracts/src/feature-documentation";
 import { SiteProductSchema } from "../packages/contracts/src/site-product";
 import {
   contentDigest,
@@ -55,8 +56,8 @@ describe("site asset publication", () => {
       width: 1,
       height: 1,
       crop: { x: 0, y: 0, width: 1, height: 1 },
-      platform: "web",
-      theme: "light",
+      platform: "web" as const,
+      theme: "light" as const,
       feature: "general",
       step: "open",
     };
@@ -95,6 +96,10 @@ describe("site asset publication", () => {
         screenshots: [shot],
       },
     });
+    const manifest = FeatureDocumentationManifestSchema.parse(
+      JSON.parse(await readFile(path.join(root, "site/data/feature-docs.json"), "utf8")),
+    );
+    manifest.screenshots.push({ ...shot, locale: "en" });
     expect(
       SiteProductSchema.safeParse({
         ...withDocs,
@@ -105,7 +110,7 @@ describe("site asset publication", () => {
       }).success,
     ).toBe(false);
     const png = Buffer.from(
-      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL/nwAAAABJRU5ErkJggg==",
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGP4z8DwHwAFAAH/iZk9HQAAAABJRU5ErkJggg==",
       "base64",
     );
     const hashes = new Map([[shot.id, createHash("sha256").update(png).digest("hex")]]);
@@ -127,20 +132,44 @@ describe("site asset publication", () => {
     try {
       await mkdir(path.join(siteRoot, "docs"));
       await writeFile(path.join(siteRoot, shot.file), png);
-      await expect(loadDocumentationAssets(withDocs, siteRoot, hashes)).resolves.toEqual(
+      await expect(loadDocumentationAssets(withDocs, siteRoot, hashes, manifest)).resolves.toEqual(
         new Map([[shot.file, png]]),
       );
       await expect(
-        loadDocumentationAssets(withDocs, siteRoot, new Map([[shot.id, "0".repeat(64)]])),
+        loadDocumentationAssets(withDocs, siteRoot, new Map([[shot.id, "0".repeat(64)]]), manifest),
       ).rejects.toThrow("evidence SHA-256");
+      const draftShot = {
+        ...shot,
+        id: "docs-draft-open",
+        file: "docs/docs-draft-open.png",
+        feature: "privacy",
+      };
+      const draftFeature = manifest.features.find((feature) => feature.id === "privacy")!;
+      expect(draftFeature.status).toBe("draft");
+      draftFeature.steps = [
+        {
+          id: "open",
+          aliases: [],
+          text: "Open privacy settings.",
+          uiLabels: [],
+          screenshotId: draftShot.id,
+          expected: "Privacy settings are visible.",
+          availableSince: null,
+        },
+      ];
+      manifest.screenshots.push({ ...draftShot, locale: "en" });
+      await writeFile(path.join(siteRoot, draftShot.file), png);
+      await expect(loadDocumentationAssets(withDocs, siteRoot, hashes, manifest)).resolves.toEqual(
+        new Map([[shot.file, png]]),
+      );
       await writeFile(path.join(siteRoot, "docs/unused.png"), png);
-      await expect(loadDocumentationAssets(withDocs, siteRoot, hashes)).rejects.toThrow(
+      await expect(loadDocumentationAssets(withDocs, siteRoot, hashes, manifest)).rejects.toThrow(
         "unreferenced",
       );
       await rm(path.join(siteRoot, "docs/unused.png"));
       await rm(path.join(siteRoot, shot.file));
       await symlink(path.join(root, "README.md"), path.join(siteRoot, shot.file));
-      await expect(loadDocumentationAssets(withDocs, siteRoot, hashes)).rejects.toThrow(
+      await expect(loadDocumentationAssets(withDocs, siteRoot, hashes, manifest)).rejects.toThrow(
         "outside site/docs",
       );
     } finally {

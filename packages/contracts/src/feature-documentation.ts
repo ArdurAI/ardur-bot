@@ -40,6 +40,8 @@ const feature = z.strictObject({
   aliases: z.array(slug).default([]),
   /** Exact visible UI text when the feature has a named control or page. */
   title: plainText,
+  /** An explicitly cited Markdown heading for a guide without a named UI entry. */
+  titleSource: z.literal("guide").optional(),
   summary: plainText,
   /** Task-oriented tree group; records are ordered within their area. */
   area: slug,
@@ -107,6 +109,7 @@ export const FeatureDocumentationEvidenceSchema = z.strictObject({
       id: slug,
       sources: z.array(z.string().min(1)),
       tests: z.array(z.string().min(1)),
+      titleSource: z.string().min(1).optional(),
       errors: z
         .array(z.strictObject({ id: slug, text: plainText, source: z.string().min(1) }))
         .optional(),

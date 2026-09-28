@@ -1,4 +1,4 @@
-# Self-hosting Ardur
+# Self-hosting
 
 The signed-in product is a long-running API, a Graphile Worker, and Postgres. It uses the computer it is installed on by default. Docker, Podman, Kubernetes, and SSH are optional added computers. It is not a static site. The marketing site in `apps/www` can be hosted separately.
 

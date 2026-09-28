@@ -1070,6 +1070,7 @@
     },
     {
       "id": "self-host",
+      "titleSource": "docs/self-host.md",
       "sources": [
         "README.md",
         "docs/self-host.md",

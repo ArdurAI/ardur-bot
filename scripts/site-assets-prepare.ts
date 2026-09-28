@@ -3,7 +3,10 @@ import { createHash } from "node:crypto";
 import { appendFile, mkdir, readdir, readFile, realpath, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { FeatureDocumentationEvidenceSchema } from "../packages/contracts/src/feature-documentation.ts";
+import {
+  FeatureDocumentationEvidenceSchema,
+  type FeatureDocumentationManifest,
+} from "../packages/contracts/src/feature-documentation.ts";
 import { type SiteProduct, SiteProductSchema } from "../packages/contracts/src/site-product.ts";
 import {
   assertDocumentationPng,
@@ -54,14 +57,15 @@ export async function loadDocumentationAssets(
   product: SiteProduct,
   siteRoot: string,
   hashes: ReadonlyMap<string, string>,
+  manifest: FeatureDocumentationManifest,
 ): Promise<Map<string, Buffer>> {
   const docsDir = path.join(siteRoot, "docs");
   const listed = await readdir(docsDir).catch((error: NodeJS.ErrnoException) => {
-    if (error.code === "ENOENT" && !product.documentation?.screenshots.length) return [];
+    if (error.code === "ENOENT" && !manifest.screenshots.length) return [];
     throw error;
   });
   const shots = product.documentation?.screenshots ?? [];
-  const expected = shots.map((shot) => path.basename(shot.file)).sort();
+  const expected = manifest.screenshots.map((shot) => path.basename(shot.file)).sort();
   if (listed.sort().join("\n") !== expected.join("\n"))
     throw new Error("site/docs contains missing or unreferenced documentation captures.");
   const canonicalRoot = await realpath(siteRoot);
@@ -185,7 +189,7 @@ async function prepare(): Promise<void> {
   for (const video of product.videos ?? [])
     for (const file of Object.values(video.files))
       media.set(file, await readFile(path.join(root, "site", file)));
-  const docs = await loadDocumentationAssets(product, path.join(root, "site"), hashes);
+  const docs = await loadDocumentationAssets(product, path.join(root, "site"), hashes, manifest);
   validateAssetSnapshot(product, new Map([...screenshots, ...media, ...docs]));
   const digest = contentDigest(product, screenshots, media, docs);
   const old = await existingAssets();

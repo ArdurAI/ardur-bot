@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { inflateSync } from "node:zlib";
 import type {
   FeatureDocumentationEvidence,
   FeatureDocumentationManifest,
@@ -133,23 +134,130 @@ async function existingRelativeFile(
   return (await existingRelativeBytes(rootDir, file, context)).toString("utf8");
 }
 
+function pngCrc(bytes: Buffer): number {
+  let crc = 0xffffffff;
+  for (const byte of bytes) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+  }
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
+function pngRows(width: number, height: number, bitsPerPixel: number, interlace: number) {
+  const passes = interlace
+    ? [
+        [0, 0, 8, 8],
+        [4, 0, 8, 8],
+        [0, 4, 4, 8],
+        [2, 0, 4, 4],
+        [0, 2, 2, 4],
+        [1, 0, 2, 2],
+        [0, 1, 1, 2],
+      ]
+    : [[0, 0, 1, 1]];
+  return passes.flatMap(([x, y, dx, dy]) => {
+    const columns = Math.max(0, Math.ceil((width - x!) / dx!));
+    const rows = Math.max(0, Math.ceil((height - y!) / dy!));
+    return columns && rows
+      ? [{ size: 1 + Math.ceil((columns * bitsPerPixel) / 8), count: rows }]
+      : [];
+  });
+}
+
 export function assertDocumentationPng(
   bytes: Buffer,
   width: number,
   height: number,
   file: string,
 ): void {
+  const invalid = () => {
+    throw new Error(`${file} must be a ${width}x${height} PNG no larger than 250 KB.`);
+  };
   if (
     bytes.length < 45 ||
     bytes.length > 250_000 ||
-    bytes.subarray(0, 8).toString("hex") !== "89504e470d0a1a0a" ||
-    bytes.readUInt32BE(8) !== 13 ||
-    bytes.toString("ascii", 12, 16) !== "IHDR" ||
-    bytes.subarray(-8, -4).toString("ascii") !== "IEND" ||
-    bytes.readUInt32BE(16) !== width ||
-    bytes.readUInt32BE(20) !== height
-  ) {
-    throw new Error(`${file} must be a ${width}x${height} PNG no larger than 250 KB.`);
+    bytes.subarray(0, 8).toString("hex") !== "89504e470d0a1a0a"
+  )
+    invalid();
+  let offset = 8;
+  let bitDepth = 0;
+  let colorType = 0;
+  let interlace = 0;
+  let seenHeader = false;
+  let seenData = false;
+  let dataEnded = false;
+  let seenEnd = false;
+  let seenPalette = false;
+  const idat: Buffer[] = [];
+  while (offset < bytes.length) {
+    if (offset + 12 > bytes.length) invalid();
+    const length = bytes.readUInt32BE(offset);
+    const end = offset + 12 + length;
+    if (end > bytes.length) invalid();
+    const type = bytes.toString("ascii", offset + 4, offset + 8);
+    const chunk = bytes.subarray(offset + 4, offset + 8 + length);
+    if (pngCrc(chunk) !== bytes.readUInt32BE(end - 4)) invalid();
+    const payload = bytes.subarray(offset + 8, end - 4);
+    if (!seenHeader && (type !== "IHDR" || length !== 13)) invalid();
+    if (type === "IHDR") {
+      if (seenHeader || length !== 13) invalid();
+      seenHeader = true;
+      if (
+        payload.readUInt32BE(0) !== width ||
+        payload.readUInt32BE(4) !== height ||
+        !width ||
+        !height
+      )
+        invalid();
+      bitDepth = payload[8]!;
+      colorType = payload[9]!;
+      interlace = payload[12]!;
+      const allowedDepths: Record<number, number[]> = {
+        0: [1, 2, 4, 8, 16],
+        2: [8, 16],
+        3: [1, 2, 4, 8],
+        4: [8, 16],
+        6: [8, 16],
+      };
+      if (
+        !allowedDepths[colorType]?.includes(bitDepth) ||
+        payload[10] !== 0 ||
+        payload[11] !== 0 ||
+        interlace > 1
+      )
+        invalid();
+    } else if (type === "PLTE") {
+      if (seenData || seenPalette || !length || length % 3 || length > 768) invalid();
+      seenPalette = true;
+    } else if (type === "IDAT") {
+      if (dataEnded || (colorType === 3 && !seenPalette) || !length) invalid();
+      seenData = true;
+      idat.push(payload);
+    } else if (type === "IEND") {
+      if (length !== 0 || !seenData || end !== bytes.length) invalid();
+      seenEnd = true;
+    } else if (type.charCodeAt(0) >= 65 && type.charCodeAt(0) <= 90) {
+      invalid();
+    }
+    if (seenData && type !== "IDAT") dataEnded = true;
+    offset = end;
+  }
+  if (!seenEnd) invalid();
+  const channels = colorType === 2 ? 3 : colorType === 4 ? 2 : colorType === 6 ? 4 : 1;
+  const rows = pngRows(width, height, bitDepth * channels, interlace);
+  const expectedLength = rows.reduce((sum, row) => sum + row.size * row.count, 0);
+  if (expectedLength > 50_000_000) invalid();
+  try {
+    const pixels = inflateSync(Buffer.concat(idat), { maxOutputLength: expectedLength + 1 });
+    if (pixels.length !== expectedLength) invalid();
+    let rowStart = 0;
+    for (const row of rows)
+      for (let index = 0; index < row.count; index++) {
+        if (pixels[rowStart]! > 4) invalid();
+        rowStart += row.size;
+      }
+  } catch {
+    invalid();
   }
 }
 
@@ -324,12 +432,28 @@ export async function validateFeatureDocs(
       feature.status === "draft" || feature.settingsPath.mobile
         ? await nativeLabel(feature.title)
         : false;
-    if (
-      !feature.internal &&
-      (feature.id !== "self-host" || feature.status === "published") &&
-      !labels.has(feature.title) &&
-      !titleInNative
-    )
+    if (feature.titleSource === "guide") {
+      if (
+        feature.internal ||
+        Object.values(feature.settingsPath).some(Boolean) ||
+        !binding.titleSource?.endsWith(".md") ||
+        !binding.sources.includes(binding.titleSource)
+      )
+        throw new Error(`${context} guide title needs a cited Markdown source and no UI path.`);
+      const guide = await existingRelativeFile(
+        rootDir,
+        binding.titleSource,
+        `${context} guide title`,
+      );
+      if (
+        !guide
+          .split(/\r?\n/)
+          .some((line) => /^#{1,6} /.test(line) && line.replace(/^#{1,6} /, "") === feature.title)
+      )
+        throw new Error(`${context} title "${feature.title}" does not match its cited heading.`);
+    } else if (binding.titleSource) {
+      throw new Error(`${context} title source requires an explicit guide title.`);
+    } else if (!feature.internal && !labels.has(feature.title) && !titleInNative)
       throw new Error(`${context} title "${feature.title}" is not a current UI label.`);
     for (const alias of feature.aliases) {
       if (allNames.has(alias))
@@ -463,6 +587,10 @@ export async function validateFeatureDocs(
   }
   for (const shot of manifest.screenshots) {
     if (!usedScreenshots.has(shot.id)) throw new Error(`Screenshot "${shot.id}" is unused.`);
+    if (shot.locale !== manifest.locale)
+      throw new Error(
+        `Screenshot "${shot.id}" locale "${shot.locale}" differs from manifest locale "${manifest.locale}".`,
+      );
     assertPlain(shot.alt, `Screenshot "${shot.id}" alt`);
     if (shot.file !== `docs/${shot.id}.png`)
       throw new Error(`Screenshot "${shot.id}" has an invalid file name.`);
