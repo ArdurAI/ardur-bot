@@ -371,8 +371,7 @@ export class SetupEngine {
         if (signal.aborted || this.cancelling) break;
         if (!this.dependenciesMet(step)) break;
         const row = this.row(step.id);
-        if (!explicit && row.status === "succeeded" && this.freshlyVerified.has(step.id))
-          continue;
+        if (!explicit && row.status === "succeeded" && this.freshlyVerified.has(step.id)) continue;
         const savedSuccess = row.status === "succeeded";
         const previouslySkipped = row.status === "skipped" && !explicit;
         this.journal.snapshot.currentStep = step.id;

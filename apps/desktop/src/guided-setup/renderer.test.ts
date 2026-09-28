@@ -113,7 +113,9 @@ describe("guided setup document", () => {
     const view = await mount(fake.bridge);
     try {
       expect(fake.guided.getStartup).toHaveBeenCalledOnce();
-      expect(view.host.querySelector<HTMLInputElement>('input[type="checkbox"]')?.checked).toBe(true);
+      expect(view.host.querySelector<HTMLInputElement>('input[type="checkbox"]')?.checked).toBe(
+        true,
+      );
     } finally {
       await view.cleanup();
     }
@@ -150,7 +152,9 @@ describe("guided setup document", () => {
       );
       await act(async () => start?.click());
       expect(fake.guided.getStartup).toHaveBeenCalledTimes(2);
-      expect(view.host.querySelector<HTMLInputElement>('input[type="checkbox"]')?.checked).toBe(false);
+      expect(view.host.querySelector<HTMLInputElement>('input[type="checkbox"]')?.checked).toBe(
+        false,
+      );
     } finally {
       await view.cleanup();
     }

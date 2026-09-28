@@ -6,14 +6,18 @@ const root = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
   resolve: {
-    alias: {
-      "@ardurbot/ui-web/components/guided-setup": path.join(
-        root,
-        "packages/ui-web/src/components/guided-setup.tsx",
-      ),
-      react: path.join(root, "packages/ui-web/node_modules/react"),
-      "react-dom": path.join(root, "packages/ui-web/node_modules/react-dom"),
-    },
+    alias: [
+      {
+        find: /^\.\.\/fleet-discovery\.js$/,
+        replacement: path.join(root, "apps/desktop/scripts/fleet-discovery-entry.ts"),
+      },
+      {
+        find: "@ardurbot/ui-web/components/guided-setup",
+        replacement: path.join(root, "packages/ui-web/src/components/guided-setup.tsx"),
+      },
+      { find: "react", replacement: path.join(root, "packages/ui-web/node_modules/react") },
+      { find: "react-dom", replacement: path.join(root, "packages/ui-web/node_modules/react-dom") },
+    ],
   },
   test: {
     environment: "node",

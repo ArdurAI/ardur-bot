@@ -17,8 +17,11 @@ while (pending.length) {
   }
   const source = readFileSync(file, "utf8");
   const imports = [
-    ...source.matchAll(/(?:^|\n)\s*(?:import|export)\s+(?!type\b)[\s\S]*?\sfrom\s+["']([^"']+)["']/g),
+    ...source.matchAll(
+      /(?:^|\n)\s*(?:import|export)\s+(?!type\b)[\s\S]*?\sfrom\s+["']([^"']+)["']/g,
+    ),
     ...source.matchAll(/(?:^|\n)\s*import\s*["']([^"']+)["']/g),
+    ...source.matchAll(/\bimport\s*\(\s*["']([^"']+)["']\s*\)/g),
   ];
   for (const match of imports) {
     const specifier = match[1];

@@ -57,7 +57,7 @@ const snapshot: SetupSnapshot = {
               ? "succeeded"
               : index === 5 && fixtureCase === "engines-failed"
                 ? "failed"
-              : "pending",
+                : "pending",
     activeElapsedMs: index === 0 ? 26 : index === 1 ? 19_800 : index === 2 ? 64_000 : 0,
     waitingElapsedMs: 0,
     verifiedAt: index < 4 ? 1 : null,
