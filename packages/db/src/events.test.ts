@@ -1575,6 +1575,7 @@ describe("answerRunInput", () => {
       },
       run: {
         findFirst: vi.fn().mockResolvedValue({ botId: "bot-1" }),
+        findUnique: vi.fn().mockResolvedValue({ botId: "bot-1" }),
         updateMany: vi.fn(),
       },
       externalEffect: { findFirst: vi.fn().mockResolvedValue(null) },
