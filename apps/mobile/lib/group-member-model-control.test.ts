@@ -742,3 +742,140 @@ it("translates an off effort in the thinking row", async () => {
   expect(node.textContent).not.toContain("Off");
   await act(async () => root.unmount());
 });
+
+it("displays an inherited Hermes runtime initially and persists a runtime-only switch for an inherited member", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const inheritedHermesMember: GroupMember = {
+    ...member,
+    runtimePin: null,
+    effectiveRuntimePin: {
+      runtimeKind: "hermes",
+      provider: "openai-compatible",
+      modelId: "valid",
+      credentialId: "connection",
+      effort: "high",
+      revision: 2,
+    },
+  };
+  const node = document.createElement("div");
+  const root = createRoot(node);
+  await act(async () =>
+    root.render(
+      createElement(GroupMemberModelControl, {
+        groupId: "room",
+        member: inheritedHermesMember,
+        botRuntimeKind: "hermes",
+        experimental: true,
+        catalog: [
+          {
+            provider: "openai-compatible",
+            id: "valid",
+            label: "Valid",
+            reasoning: true,
+            thinkingLevels: ["high"],
+          },
+        ],
+        credentials: [
+          {
+            id: "connection",
+            provider: "openai-compatible",
+            label: "Connection",
+            thinkingLevel: "high",
+          },
+        ],
+        onSaved: vi.fn(),
+        onError: vi.fn(),
+      } as never),
+    ),
+  );
+  expect(node.querySelector('button[aria-label="Runtime · Worker"]')?.textContent).toContain(
+    "Hermes",
+  );
+
+  const inheritedPiMember: GroupMember = {
+    ...member,
+    runtimePin: null,
+    effectiveRuntimePin: {
+      runtimeKind: "pi",
+      provider: "openai-compatible",
+      modelId: "valid",
+      credentialId: "connection",
+      effort: "high",
+      revision: 2,
+    },
+  };
+  const savedGroup = {
+    id: "room",
+    members: [
+      {
+        ...member,
+        modelPinRevision: 3,
+        runtimePin: {
+          runtimeKind: "hermes",
+          provider: "openai-compatible",
+          modelId: "valid",
+          credentialId: "connection",
+          effort: "high",
+          revision: 3,
+        },
+      },
+    ],
+  };
+  vi.mocked(rpc).mockResolvedValueOnce(savedGroup);
+  await act(async () =>
+    root.render(
+      createElement(GroupMemberModelControl, {
+        groupId: "room",
+        member: inheritedPiMember,
+        botRuntimeKind: "pi",
+        experimental: true,
+        catalog: [
+          {
+            provider: "openai-compatible",
+            id: "valid",
+            label: "Valid",
+            reasoning: true,
+            thinkingLevels: ["high"],
+          },
+        ],
+        credentials: [
+          {
+            id: "connection",
+            provider: "openai-compatible",
+            label: "Connection",
+            thinkingLevel: "high",
+          },
+        ],
+        onSaved: vi.fn(),
+        onError: vi.fn(),
+      } as never),
+    ),
+  );
+  expect(node.querySelector('button[aria-label="Runtime · Worker"]')?.textContent).toContain(
+    "Ardur (built-in)",
+  );
+  await act(async () =>
+    (node.querySelector('button[aria-label="Runtime · Worker"]') as HTMLButtonElement).click(),
+  );
+  await act(async () =>
+    vi
+      .mocked(presentMessageActionSheet)
+      .mock.calls.at(-1)![0]
+      .actions.find((action) => action.text === "Hermes")!
+      .onPress(),
+  );
+  expect(rpc).toHaveBeenCalledWith("groups/setMemberModelPin", {
+    groupId: "room",
+    botId: "worker",
+    memberId: "member",
+    expectedRevision: 2,
+    pin: {
+      runtimeKind: "hermes",
+      provider: "openai-compatible",
+      modelId: "valid",
+      credentialId: "connection",
+      effort: "high",
+    },
+  });
+  await act(async () => root.unmount());
+});
