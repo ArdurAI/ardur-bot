@@ -65,6 +65,7 @@ const NATIVE_TOOLSETS = [
   "delegate_task",
   "cronjob",
 ];
+const ACP_TEARDOWN_GRACE_MS = 5_000;
 
 export function hermesConfig(request: AgentRunRequest, pinned = false) {
   if (pinned && (!request.model.maxTokens || !request.model.contextWindow))
@@ -460,7 +461,7 @@ export class HermesRuntime implements AgentRuntime {
       }
       const child = result.child;
       const client = new AcpClient(child, {
-        timeoutMs: 90_000,
+        timeoutMs: limits.timeoutMs + ACP_TEARDOWN_GRACE_MS,
         onPermissionAttempt: () => {
           if (turn.active) {
             enqueue({
@@ -546,7 +547,6 @@ export class HermesRuntime implements AgentRuntime {
               sessionId: created.sessionId,
               prompt,
             },
-            180_000,
           );
           if (!turn.active) return;
           if (response.stopReason !== "end_turn")

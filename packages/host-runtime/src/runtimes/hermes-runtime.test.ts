@@ -1,4 +1,7 @@
 import { spawn } from "node:child_process";
+import type { ChildProcessWithoutNullStreams } from "node:child_process";
+import { EventEmitter } from "node:events";
+import { PassThrough } from "node:stream";
 import { fileURLToPath } from "node:url";
 import type { AgentRunRequest, AgentRuntimeEvent } from "@ardurbot/adapter-kit";
 import { describe, expect, it, vi } from "vitest";
@@ -69,6 +72,48 @@ function turnFinishSignal(runId: string) {
 }
 
 describe("HermesRuntime M0 ACP seam", () => {
+  it("uses a 600-second pinned ACP prompt deadline with bounded teardown grace", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    let promptStarted!: () => void;
+    const prompted = new Promise<void>((resolve) => { promptStarted = resolve; });
+    const stdout = new PassThrough();
+    const stderr = new PassThrough();
+    const stdin = new PassThrough();
+    const child = Object.assign(new EventEmitter(), {
+      stdout, stderr, stdin, pid: undefined, exitCode: null, signalCode: null,
+      kill: vi.fn(() => { child.exitCode = 0; child.emit("close", 0); return true; }),
+    }) as unknown as ChildProcessWithoutNullStreams;
+    stdin.on("data", (chunk: Buffer) => {
+      const message = JSON.parse(chunk.toString()) as { id: number; method: string };
+      if (message.method === "session/prompt") { promptStarted(); return; }
+      const result = message.method === "initialize"
+        ? { protocolVersion: 1 }
+        : { sessionId: "fixture-session" };
+      stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id: message.id, result })}\n`);
+    });
+    const adapter = new HermesRuntime({
+      command: "fixture", pinned: true,
+      launch: async () => ({ child, teardown: async () => undefined }),
+    });
+    const base = request();
+    const run = request({ model: {
+      ...base.model, maxTokens: 1_024, contextWindow: 32_768,
+      runtimePin: { runtimeKind: "hermes", provider: "openai-compatible",
+        modelId: "fixture-model", effort: "high", credentialId: "fixture-connection",
+        revision: 1, runtimeConfig: { version: 1, maxProviderRequests: 4, timeoutMs: 600_000 } },
+    } });
+    try {
+      let settled = false;
+      const completion = collect(adapter, run).finally(() => { settled = true; });
+      await prompted;
+      await vi.advanceTimersByTimeAsync(180_001);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(425_200);
+      await expect(completion).rejects.toThrow("Hermes could not complete this turn.");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it("keeps instructions and the newest quoted history within the pinned context budget", () => {
     const history = Array.from({ length: 18 }, (_, index) => ({
       role: "user" as const,
