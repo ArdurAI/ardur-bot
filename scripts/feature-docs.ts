@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readdir, readFile, realpath, stat } from "node:fs/promises";
+import { mkdir, readdir, readFile, realpath, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type {
@@ -16,6 +16,7 @@ import { validatePngScreenshot } from "../packages/testkit/src/png-validation";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const manifestFile = "site/data/feature-docs.json";
 const evidenceFile = "site/data/feature-docs-evidence.json";
+const firstFive = new Set(["sign-in", "onboarding", "bots-create", "models", "chat-approvals"]);
 const settingsFile = "apps/web/src/pages/settings-sections.ts";
 const webRoutesFile = "apps/web/src/App.tsx";
 const mobileLayoutFile = "apps/mobile/app/_layout.tsx";
@@ -600,8 +601,78 @@ export async function loadValidatedFeatureDocs(
   return validateFeatureDocs(manifest, evidence, rootDir);
 }
 
+export async function prepareFeatureDocCaptureImport(
+  inputManifest: unknown,
+  inputEvidence: unknown,
+  directory: string,
+) {
+  const manifest = FeatureDocumentationManifestSchema.parse(inputManifest);
+  const evidence = FeatureDocumentationEvidenceSchema.parse(inputEvidence);
+  const shots = manifest.screenshots.filter((shot) => firstFive.has(shot.feature));
+  const expected = new Set(shots.map((shot) => `${shot.id}.png`));
+  const docsDir = path.join(directory, "docs");
+  const entries = await readdir(docsDir, { withFileTypes: true });
+  for (const entry of entries)
+    if (!expected.has(entry.name) || !entry.isFile())
+      throw new Error(`Unexpected documentation capture: ${entry.name}.`);
+  const captures = new Map<string, Buffer>();
+  for (const shot of shots) {
+    const name = `${shot.id}.png`;
+    if (!entries.some((entry) => entry.name === name))
+      throw new Error(`Missing documentation capture: docs/${name}.`);
+    if (shot.file !== `docs/${name}`) throw new Error(`Invalid manifest file for ${shot.id}.`);
+    const bytes = await readFile(path.join(docsDir, name));
+    assertDocumentationPng(bytes, shot.width, shot.height, shot.file);
+    const width = bytes.readUInt32BE(16);
+    const height = bytes.readUInt32BE(20);
+    shot.width = width;
+    shot.height = height;
+    shot.crop = { x: 0, y: 0, width, height };
+    captures.set(shot.id, bytes);
+    const digest = createHash("sha256").update(bytes).digest("hex");
+    const existing = evidence.screenshots.find((item) => item.id === shot.id);
+    if (existing) existing.sha256 = digest;
+    else evidence.screenshots.push({ id: shot.id, sha256: digest });
+  }
+  return { manifest, evidence, captures };
+}
+
+async function writeIfChanged(file: string, bytes: Buffer | string): Promise<void> {
+  const next = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
+  if ((await readFile(file).catch(() => null))?.equals(next)) return;
+  await writeFile(file, next);
+}
+
+export async function importFeatureDocCaptures(directory: string, rootDir = root): Promise<void> {
+  const inputManifest = JSON.parse(await readFile(path.join(rootDir, manifestFile), "utf8"));
+  const inputEvidence = JSON.parse(await readFile(path.join(rootDir, evidenceFile), "utf8"));
+  const { manifest, evidence, captures } = await prepareFeatureDocCaptureImport(
+    inputManifest,
+    inputEvidence,
+    directory,
+  );
+  await validateFeatureDocs(manifest, evidence, rootDir, (file, context) => {
+    const id = path.basename(file, ".png");
+    return captures.get(id) ?? existingRelativeBytes(rootDir, file, context);
+  });
+  await mkdir(path.join(rootDir, "site/docs"), { recursive: true });
+  for (const [id, bytes] of captures)
+    await writeIfChanged(path.join(rootDir, "site/docs", `${id}.png`), bytes);
+  await writeIfChanged(path.join(rootDir, manifestFile), `${JSON.stringify(manifest, null, 2)}\n`);
+  await writeIfChanged(path.join(rootDir, evidenceFile), `${JSON.stringify(evidence, null, 2)}\n`);
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  loadValidatedFeatureDocs()
+  const command = process.argv[2];
+  const operation =
+    command === "--import-captures"
+      ? (async () => {
+          if (!process.argv[3]) throw new Error("Usage: pnpm feature-docs:import-captures <dir>");
+          await importFeatureDocCaptures(process.argv[3]);
+          return loadValidatedFeatureDocs();
+        })()
+      : loadValidatedFeatureDocs();
+  operation
     .then((manifest) => {
       console.log(featureDocsReport(manifest));
       if (process.argv.includes("--complete")) assertFeatureDocsComplete(manifest);

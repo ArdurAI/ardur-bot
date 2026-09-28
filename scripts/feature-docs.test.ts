@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -10,6 +11,7 @@ import {
   assertDocumentationPng,
   assertFeatureDocsComplete,
   featureDocsReport,
+  prepareFeatureDocCaptureImport,
   publishedDocumentation,
   validateFeatureDocs,
 } from "./feature-docs";
@@ -317,6 +319,58 @@ describe("feature documentation inventory", () => {
     expect(() => assertDocumentationPng(missingPaletteColor, 1, 1, "docs/indexed.png")).toThrow(
       "must be a 1x1 PNG",
     );
+  });
+
+  it("preflights capture imports before changing metadata", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "feature-docs-import-"));
+    try {
+      const docsDir = path.join(directory, "docs");
+      await mkdir(docsDir);
+      const { manifest, evidence } = await data();
+      manifest.screenshots.push({
+        id: "docs-sign-in-open",
+        file: "docs/docs-sign-in-open.png",
+        alt: "Sign-in form.",
+        width: 1,
+        height: 1,
+        crop: { x: 0, y: 0, width: 1, height: 1 },
+        platform: "web",
+        locale: "en",
+        theme: "light",
+        feature: "sign-in",
+        step: "open",
+      });
+      const file = path.join(docsDir, "docs-sign-in-open.png");
+      await expect(prepareFeatureDocCaptureImport(manifest, evidence, directory)).rejects.toThrow(
+        "Missing documentation capture",
+      );
+      await writeFile(file, png);
+      await writeFile(path.join(docsDir, "extra.png"), png);
+      await expect(prepareFeatureDocCaptureImport(manifest, evidence, directory)).rejects.toThrow(
+        "Unexpected documentation capture",
+      );
+      await rm(path.join(docsDir, "extra.png"));
+      await writeFile(file, Buffer.alloc(250_001));
+      await expect(prepareFeatureDocCaptureImport(manifest, evidence, directory)).rejects.toThrow(
+        "250 KB",
+      );
+      await writeFile(file, png);
+      manifest.screenshots[0]!.width = 2;
+      await expect(prepareFeatureDocCaptureImport(manifest, evidence, directory)).rejects.toThrow(
+        "2x1 PNG",
+      );
+      manifest.screenshots[0]!.width = 1;
+      const once = await prepareFeatureDocCaptureImport(manifest, evidence, directory);
+      const twice = await prepareFeatureDocCaptureImport(once.manifest, once.evidence, directory);
+      expect(twice.manifest).toEqual(once.manifest);
+      expect(twice.evidence).toEqual(once.evidence);
+      expect(twice.manifest.screenshots[0]!.crop).toEqual({ x: 0, y: 0, width: 1, height: 1 });
+      expect(twice.evidence.screenshots[0]!.sha256).toBe(
+        createHash("sha256").update(png).digest("hex"),
+      );
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 
   it("keeps public copy plain and neutral", async () => {
