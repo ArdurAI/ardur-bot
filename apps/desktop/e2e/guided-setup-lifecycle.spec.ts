@@ -2,6 +2,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { _electron as electron, expect, test } from "@playwright/test";
+import { GUIDED_SETUP_FIXTURE_REQUEST_CHANNELS } from "./guided-setup-fixture-channels.js";
 
 test("cancel settles during services start and re-check preserves the owned receipt", async () => {
   test.setTimeout(60_000);
@@ -21,7 +22,7 @@ test("cancel settles during services start and re-check preserves the owned rece
   try {
     const setup = await desktop.firstWindow();
     await expect(setup.getByRole("heading", { name: "Set up Ardur" })).toBeVisible();
-    await desktop.evaluate(async ({ app, BrowserWindow, ipcMain }) => {
+    await desktop.evaluate(async ({ app, BrowserWindow, ipcMain }, requestChannels) => {
       const { join } = await import("node:path");
       const { pathToFileURL } = await import("node:url");
       const moduleUrl = (name: string) =>
@@ -29,7 +30,6 @@ test("cancel settles during services start and re-check preserves the owned rece
       const { SetupEngine } = await import(moduleUrl("engine.js"));
       const { SetupJournalStore } = await import(moduleUrl("store.js"));
       const { installGuidedSetupIpc } = await import(moduleUrl("ipc.js"));
-      const { GUIDED_SETUP_CHANNELS } = await import("@ardurbot/contracts/desktop-setup");
       let raw: string | null = null;
       let healthy = false;
       let serviceRuns = 0;
@@ -133,8 +133,7 @@ test("cancel settles during services start and re-check preserves the owned rece
           },
         ],
       );
-      for (const name of ["snapshot", "start", "retry", "skip", "cancel", "resume", "startup"])
-        ipcMain.removeHandler(GUIDED_SETUP_CHANNELS[name as keyof typeof GUIDED_SETUP_CHANNELS]);
+      for (const channel of requestChannels) ipcMain.removeHandler(channel);
       installGuidedSetupIpc({
         ipc: ipcMain,
         window: () =>
@@ -151,7 +150,7 @@ test("cancel settles during services start and re-check preserves the owned rece
         },
         state: () => ({ raw, serviceRuns }),
       };
-    });
+    }, GUIDED_SETUP_FIXTURE_REQUEST_CHANNELS);
     await setup.reload();
     const services = setup.locator(".guided-step").filter({ hasText: "Start Ardur services" });
     await setup.getByRole("button", { name: "Start setup" }).click();
