@@ -73,7 +73,10 @@ export function CommandBlock({
         }}
       >
         <span aria-hidden="true">{expanded ? "−" : "+"}</span>
-        <span className="min-w-0 flex-1 truncate font-mono text-xs" title={commandSummary(block)}>
+        <span
+          className="min-w-0 flex-1 truncate font-mono text-[13px] normal-case"
+          title={commandSummary(block)}
+        >
           {commandSummary(block)}
         </span>
         <span className="shrink-0 text-xs text-muted-foreground">{block.outcome}</span>
@@ -88,7 +91,7 @@ export function CommandBlock({
         id={id}
         inert={!expanded}
         aria-hidden={!expanded}
-        className="grid transition-[grid-template-rows] duration-200 ease-out motion-reduce:transition-none"
+        className="grid transition-[grid-template-rows] duration-[240ms] ease-[cubic-bezier(0.2,0.7,0.2,1)] motion-reduce:transition-none"
         style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}
       >
         <div className="min-h-0 overflow-hidden">
@@ -100,7 +103,7 @@ export function CommandBlock({
               <pre
                 // biome-ignore lint/a11y/noNoninteractiveTabindex: The output scroller must be keyboard accessible.
                 tabIndex={0}
-                className="max-h-80 overflow-auto whitespace-pre-wrap break-all font-mono text-xs"
+                className="max-h-80 overflow-auto whitespace-pre-wrap break-all font-mono text-[13px] normal-case"
               >
                 {commandOutput(block)}
               </pre>

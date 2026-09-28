@@ -148,10 +148,14 @@ export function GroupModelControl({
           showAll={showAll}
           value={inherit ? "" : key}
           disabled={!member?.memberId || saving}
-          defaultLabel={kind === "hermes" ? t`Choose a model` : t`Same as bot`}
+          defaultLabel={kind === "hermes" && !inherit && !key ? t`Choose a model` : t`Same as bot`}
           allowedProviders={kind === "hermes" ? ["openai-compatible", "ollama"] : undefined}
           onChange={(value) => {
-            setInherit(!value);
+            const nextInherit = !value;
+            setInherit(nextInherit);
+            if (nextInherit) {
+              setKind("pi");
+            }
             setKey(value);
             setEffort("");
           }}
@@ -231,7 +235,7 @@ export function GroupModelControl({
           saving ||
           (!inherit && !key) ||
           incompatibleHermes ||
-          (kind !== "pi" && !bot.runtimeExperimental)
+          (!inherit && kind !== "pi" && !bot.runtimeExperimental)
         }
         onClick={() => void save()}
       >
