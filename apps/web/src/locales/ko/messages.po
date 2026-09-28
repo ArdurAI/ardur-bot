@@ -22,6 +22,7 @@ msgid " — not available on your account"
 msgstr ""
 
 #: src/pages/shell/bot-model-chip.tsx
+#: src/pages/shell/group-participants.tsx
 msgid " · not available"
 msgstr ""
 
@@ -386,7 +387,6 @@ msgid "Accessibility"
 msgstr ""
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
-#: src/pages/account/AccountSettings.tsx
 #: src/pages/settings-sections.ts
 msgid "Account"
 msgstr "계정"
@@ -1264,6 +1264,10 @@ msgstr "보드"
 msgid "Booting"
 msgstr ""
 
+#: src/pages/Shell.tsx
+msgid "Booting live desktop…"
+msgstr "라이브 데스크톱 부팅 중…"
+
 #. placeholder {0}: computerBot?.name ?? active?.name
 #: src/pages/Shell.tsx
 msgid "Booting up {0}’s computer"
@@ -1901,6 +1905,7 @@ msgstr ""
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/TeamBoard.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Computer"
 msgstr "컴퓨터"
 
@@ -1916,6 +1921,10 @@ msgstr ""
 msgid "Computer engine is unavailable."
 msgstr ""
 
+#: src/pages/Shell.tsx
+msgid "Computer failed to boot"
+msgstr "컴퓨터 부팅 실패"
+
 #: src/pages/storage/StorageSettings.tsx
 msgid "Computer homes"
 msgstr ""
@@ -1923,6 +1932,10 @@ msgstr ""
 #: src/pages/Shell.tsx
 msgid "Computer is asleep"
 msgstr "컴퓨터가 절전 상태입니다"
+
+#: src/pages/Shell.tsx
+msgid "Computer is asleep. Open it to wake."
+msgstr "컴퓨터가 절전 모드입니다. 깨우려면 여세요."
 
 #: src/pages/system/SystemPage.tsx
 msgid "Computer use"
@@ -3381,6 +3394,10 @@ msgstr ""
 msgid "Devices"
 msgstr ""
 
+#: src/pages/account/AccountSettings.tsx
+msgid "Devices and sessions"
+msgstr "기기 및 세션"
+
 #: src/pages/DevicesSettings.tsx
 msgid "Devices are unavailable; reconnect to your home."
 msgstr ""
@@ -3615,7 +3632,6 @@ msgid "Effort: not applicable"
 msgstr ""
 
 #: src/pages/Auth.tsx
-#: src/pages/settings-sections.ts
 msgid "Email"
 msgstr "이메일"
 
@@ -3665,6 +3681,14 @@ msgstr ""
 
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "Enter a valid token."
+msgstr ""
+
+#: src/pages/shell/hermes-limits.tsx
+msgid "Enter a whole number between 1 and 600 for the time limit."
+msgstr ""
+
+#: src/pages/shell/hermes-limits.tsx
+msgid "Enter a whole number between 1 and 64 for model calls per turn."
 msgstr ""
 
 #: src/pages/ModelSettingsOverlay.tsx
@@ -3778,7 +3802,7 @@ msgstr "{0} 펼치기"
 
 #: src/pages/Shell.tsx
 msgid "Expand workspace"
-msgstr ""
+msgstr "작업 공간 확장"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Experimental"
@@ -3890,7 +3914,7 @@ msgstr ""
 #: src/pages/workspace/WorkspaceFiles.tsx
 #: src/pages/workspace/WorkspacePane.tsx
 msgid "Files"
-msgstr ""
+msgstr "파일"
 
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Files are unavailable on this computer."
@@ -4844,7 +4868,7 @@ msgstr ""
 
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Loading tasks…"
-msgstr ""
+msgstr "작업 불러오는 중…"
 
 #: src/pages/customize/ExtensionsPage.tsx
 msgid "Loading the extension catalogue…"
@@ -5475,6 +5499,7 @@ msgid "Next"
 msgstr ""
 
 #: src/pages/shell/bot-model-chip.tsx
+#: src/pages/shell/group-participants.tsx
 msgid "Next run"
 msgstr "다음 실행"
 
@@ -5795,7 +5820,7 @@ msgstr ""
 
 #: src/pages/workspace/WorkspaceTasks.tsx
 msgid "Nothing running or queued"
-msgstr ""
+msgstr "실행 중이거나 대기 중인 작업 없음"
 
 #: src/pages/LearningInbox.tsx
 msgid "Nothing to review."
@@ -5970,7 +5995,7 @@ msgstr ""
 
 #: src/pages/workspace/WorkspaceScreen.tsx
 msgid "Open screen"
-msgstr ""
+msgstr "화면 열기"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Open Screen recording settings"
@@ -5978,7 +6003,7 @@ msgstr ""
 
 #: src/pages/workspace/WorkspaceScreen.tsx
 msgid "Open screen to view this computer."
-msgstr ""
+msgstr "이 컴퓨터를 보려면 화면을 여세요."
 
 #: src/components/composer/command-description.ts
 msgid "Open Settings"
@@ -6838,6 +6863,7 @@ msgstr "요청이 만료됨"
 
 #: src/pages/ComparePanel.tsx
 #: src/pages/shell/bot-model-chip.tsx
+#: src/pages/shell/group-participants.tsx
 #: src/pages/TeamBoard.tsx
 msgid "requested"
 msgstr "요청됨"
@@ -6962,6 +6988,7 @@ msgstr "팀 메시지 다시 시작"
 
 #: src/components/Context.tsx
 #: src/components/integrations/DirectMcpSearch.tsx
+#: src/pages/account/AccountProfile.tsx
 #: src/pages/account/AccountSettings.tsx
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
@@ -7005,7 +7032,7 @@ msgstr "Ardur로 돌아가기"
 
 #: src/pages/Shell.tsx
 msgid "Return to conversation"
-msgstr ""
+msgstr "대화로 돌아가기"
 
 #: src/pages/GuidedOnboarding.tsx
 msgid "Return to setup"
@@ -7262,6 +7289,10 @@ msgstr "그래도 저장"
 msgid "Save credentials"
 msgstr ""
 
+#: src/pages/account/AccountProfile.tsx
+msgid "Save instructions"
+msgstr "지침 저장"
+
 #: src/pages/group-model-control.tsx
 msgid "Save model"
 msgstr "모델 저장"
@@ -7303,6 +7334,10 @@ msgstr ""
 #: src/pages/ScratchpadSection.tsx
 msgid "Saved, but list refresh failed"
 msgstr "저장했지만 목록을 새로고침하지 못했습니다."
+
+#: src/pages/account/AccountProfile.tsx
+msgid "Saved, but not applied everywhere."
+msgstr "저장했지만 모든 곳에 적용되지 않았습니다."
 
 #: src/pages/ModelSettingsOverlay.tsx
 msgid "Saved."
@@ -7346,7 +7381,7 @@ msgstr ""
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/workspace/WorkspacePane.tsx
 msgid "Screen"
-msgstr ""
+msgstr "화면"
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Screen and terminal: Not available on this computer"
@@ -7695,6 +7730,10 @@ msgstr ""
 #: src/pages/Welcome.tsx
 msgid "Sign up"
 msgstr "가입하기"
+
+#: src/pages/account/AccountSettings.tsx
+msgid "Sign-in and security"
+msgstr "로그인 및 보안"
 
 #: src/lib/mcp-sign-in.ts
 msgid "Sign-in did not finish. Try again."
@@ -8073,9 +8112,10 @@ msgid "System"
 msgstr "시스템"
 
 #: src/pages/ide/terminal.tsx
+#: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 msgid "Take control"
-msgstr ""
+msgstr "제어 가져오기"
 
 #: src/pages/ide/terminal.tsx
 #: src/pages/shell/computer-terminal.tsx
@@ -8098,7 +8138,7 @@ msgstr ""
 #: src/pages/Shell.tsx
 #: src/pages/workspace/WorkspacePane.tsx
 msgid "Tasks"
-msgstr ""
+msgstr "작업"
 
 #: src/pages/customize/SkillsPage.tsx
 msgid "Taught skills"
@@ -8806,6 +8846,7 @@ msgid "User"
 msgstr ""
 
 #: src/pages/shell/bot-model-chip.tsx
+#: src/pages/shell/group-participants.tsx
 msgid "Using {currentId}"
 msgstr "{currentId} 사용 중"
 
@@ -9008,11 +9049,14 @@ msgstr "진행 중"
 msgid "Working from the last copy"
 msgstr ""
 
-#. placeholder {0}: row.currentTaskTitle ?? row.sentence
-#. placeholder {1}: row.requesterName
 #: src/pages/TeamBoard.tsx
-msgid "Working on {0} for {1}"
-msgstr ""
+msgid "Working on {task}"
+msgstr "{task} 작업 중"
+
+#. placeholder {0}: row.requesterName
+#: src/pages/TeamBoard.tsx
+msgid "Working on {task} for {0}"
+msgstr "{0}님을 위해 {task} 작업 중"
 
 #: src/pages/Auth.tsx
 #: src/pages/CallView.tsx
@@ -9023,7 +9067,7 @@ msgstr "처리 중…"
 #: src/components/integrations/manage/IntegrationDetails.tsx
 #: src/pages/Shell.tsx
 msgid "Workspace"
-msgstr ""
+msgstr "작업 공간"
 
 #: src/pages/ChannelPairingSettings.tsx
 msgid "Workspace or server ID"

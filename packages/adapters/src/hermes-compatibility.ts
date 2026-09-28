@@ -1,25 +1,25 @@
-import { createHash } from "node:crypto";
 import type { AgentRunModel } from "@ardurbot/adapter-kit";
-import type { HermesRuntimeConfig, RuntimePin, RuntimeProblem } from "@ardurbot/contracts";
+import type { RuntimePin, RuntimeProblem } from "@ardurbot/contracts";
 import {
   DEFAULT_MODEL_CONTEXT_WINDOW,
   DEFAULT_MODEL_MAX_TOKENS,
   HERMES_HOST_MAX_OUTPUT_TOKENS,
-  HERMES_RUNTIME_DEFAULTS,
-  HermesRuntimeConfigSchema,
   normalizedThinkingLevel,
   runtimePinProblem,
 } from "@ardurbot/contracts";
+import type { HistoricalHermesRuntimeConfig } from "@ardurbot/contracts/runtime-config";
+import {
+  legacyHermesRuntimeConfigHash,
+  runtimeConfigV2Hash,
+} from "@ardurbot/core/node/runtime-config-hash";
+import { effectiveHermesRuntimeConfigV2 } from "@ardurbot/core/runtime-config";
 
-export function effectiveHermesConfig(value: unknown): HermesRuntimeConfig {
-  return value == null ? HERMES_RUNTIME_DEFAULTS : HermesRuntimeConfigSchema.parse(value);
+export function effectiveHermesConfig(value: unknown) {
+  return effectiveHermesRuntimeConfigV2(value);
 }
 
-export function hermesConfigHash(config: HermesRuntimeConfig): string {
-  // Historical pins retain the exact B11 ordered-array identity.
-  return createHash("sha256")
-    .update(JSON.stringify([config.version, config.maxProviderRequests, config.timeoutMs]))
-    .digest("hex");
+export function hermesConfigHash(config: HistoricalHermesRuntimeConfig): string {
+  return config.version === 1 ? legacyHermesRuntimeConfigHash(config) : runtimeConfigV2Hash(config);
 }
 
 /** Provider wire observations are requests, not attested provider behavior. */

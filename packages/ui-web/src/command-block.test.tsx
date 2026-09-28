@@ -22,6 +22,17 @@ const labels = {
 describe("web command block", () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 
+  it("shows the command line in monospace without markdown backticks", () => {
+    const html = renderToString(
+      <CommandBlock
+        block={commandBlock({ command: "cat planning/release-checklist.md" })}
+        labels={labels}
+      />,
+    );
+    expect(html).toContain("Ran cat planning/release-checklist.md in /workspace");
+    expect(html).not.toContain("`");
+    expect(html).toContain("font-mono");
+  });
   it("folds output without loading/layout expansion and escapes terminal text", () => {
     const html = renderToString(
       <CommandBlock

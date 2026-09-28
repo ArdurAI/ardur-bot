@@ -42,6 +42,7 @@ import {
   computerCapabilities,
   computerProfileNote,
   DEFAULT_MODEL_MAX_TOKENS,
+  DELEGATION_LIMITS,
   DelegationSnapshotSchema,
   isAttachmentImageMimeType,
   ListBotsInputSchema,
@@ -285,7 +286,11 @@ import {
   hermesCompatibility,
   hermesConfigHash,
 } from "./hermes-compatibility.js";
-import { HermesProviderBroker } from "./hermes-provider-broker.js";
+import {
+  HermesProviderBroker,
+  summaryOperationHash,
+  summaryOperationManifest,
+} from "./hermes-provider-broker.js";
 import {
   LEGACY_HISTORY_WINDOW_SIZE,
   MAX_RECALLED_MEMORIES,
@@ -1074,6 +1079,29 @@ export function createRunExecutor(deps: ExecutorDeps) {
         select: { id: true },
       });
       if (!secret) throw new Error("The pinned connection was removed.");
+      if (summary && request.tools !== "none")
+        throw new Error("Summary maintenance cannot use tools.");
+      const operationManifest = summary
+        ? summaryOperationManifest(pin, request.model.maxTokens ?? DEFAULT_MODEL_MAX_TOKENS)
+        : null;
+      const operationHash = operationManifest ? summaryOperationHash(operationManifest) : null;
+      if (operationManifest && operationHash) {
+        await deps.prisma.$transaction(async (tx) => {
+          await appendEventInTransaction(tx, {
+            spaceId: source.spaceId,
+            threadId: source.threadId,
+            botId: source.botId,
+            type: "run.configurationApplied",
+            runId: source.id,
+            payload: {
+              operationId: hostFence.operationId,
+              sourceRunId: source.id,
+              manifest: operationManifest,
+              hash: operationHash,
+            },
+          });
+        });
+      }
       const scope = {
         runId: request.runId,
         botId: request.botId,
@@ -1088,7 +1116,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
           .update(hostFence.hostGeneration)
           .digest()
           .readUIntBE(0, 6),
-        configurationHash: pin.runtimeConfigHash,
+        configurationHash: operationHash ?? pin.effectiveRuntimeConfigHash ?? pin.runtimeConfigHash,
         ...(summary ? { briefAttemptedAt: brief!.attemptedAt!.toISOString() } : {}),
         pin: {
           credentialId: pin.credentialId!,
@@ -1174,11 +1202,14 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   parameters: tool.inputSchema as Record<string, unknown>,
                 })),
         purpose: request.providerPurpose ?? "unknown",
-        maxRequests: config.maxProviderRequests,
+        maxRequests: config.limits.maxProviderRequests,
         maxReservedTokens:
           sourceAllowance ??
-          Math.min(2_147_483_647, config.maxProviderRequests * (contextWindow + runOutputTokens)),
-        expiresAt: Date.now() + config.timeoutMs,
+          Math.min(
+            2_147_483_647,
+            config.limits.maxProviderRequests * (contextWindow + runOutputTokens),
+          ),
+        expiresAt: Date.now() + config.limits.timeoutMs,
         active,
         record: async (usage) => {
           await recordAndForwardBrokerUsage(
@@ -1196,7 +1227,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
         },
         observed: async (model, wireEffort) =>
           request.onBrokerRuntimeInfo?.(brokerObservedRuntimeInfo(pin.effort, model, wireEffort)),
-        requiredContext: hermesContextDocument(request),
+        requiredContext: hermesContextDocument(request, config.context),
       });
       return { broker, scope };
     });
@@ -1258,12 +1289,16 @@ export function createRunExecutor(deps: ExecutorDeps) {
     bot: Parameters<typeof resolveRunModelPin>[0]["bot"],
     snapshot?: unknown,
     registerSecrets?: (values: string[]) => void,
+    newAdmission = false,
+    maxOutputTokens?: number,
   ) =>
     resolveRunModelPin({
       prisma: deps.prisma,
       scope,
       bot,
       snapshot,
+      newAdmission,
+      maxOutputTokens,
       scripted: scriptedRuntimeAvailable,
       loadKey: async (credential, pin, selectDefaultEffort) => {
         const key = await resolveModelKey(
@@ -1305,7 +1340,15 @@ export function createRunExecutor(deps: ExecutorDeps) {
     target: Parameters<DelegationResolver>[0],
     context: Parameters<DelegationResolver>[1],
   ) => {
-    if (!context) return resolvePin(scope, target);
+    if (!context)
+      return resolvePin(
+        scope,
+        target,
+        undefined,
+        undefined,
+        true,
+        DELEGATION_LIMITS.reservationTokens,
+      );
     const candidate = await selectRunPinSource({
       prisma: context.tx as unknown as PrismaClient,
       scope,
@@ -1316,7 +1359,14 @@ export function createRunExecutor(deps: ExecutorDeps) {
       savedSource: null,
       savedUsageGroupId: null,
     });
-    const selected = await resolvePin(scope, target, candidate.snapshot);
+    const selected = await resolvePin(
+      scope,
+      target,
+      candidate.snapshot,
+      undefined,
+      true,
+      DELEGATION_LIMITS.reservationTokens,
+    );
     return selected.kind === "resolved"
       ? { ...selected, pinSource: candidate.source, usageGroupId: candidate.usageGroupId }
       : selected;
@@ -1383,13 +1433,23 @@ export function createRunExecutor(deps: ExecutorDeps) {
       return run ? resolveBriefRuntime(run, run.bot, [...deps.secrets]) : null;
     },
     resolveConnectedModel,
-    async resolveModel(scope: { userId: string; spaceId: string; botId?: string }) {
+    async resolveModel(
+      scope: { userId: string; spaceId: string; botId?: string },
+      newAdmission = false,
+    ) {
       const bot = scope.botId
         ? await deps.prisma.bot.findFirst({
             where: { id: scope.botId, userId: scope.userId, spaceId: scope.spaceId },
           })
         : null;
-      return resolvePin(scope, bot);
+      return resolvePin(
+        scope,
+        bot,
+        undefined,
+        undefined,
+        newAdmission,
+        newAdmission ? DELEGATION_LIMITS.reservationTokens : undefined,
+      );
     },
 
     async wakeRoutine(routineId: string, scheduledFor: string) {
@@ -1936,8 +1996,13 @@ export function createRunExecutor(deps: ExecutorDeps) {
             savedUsageGroupId: run.usageGroupId,
             comparisonId: run.comparisonId,
           });
-          selected = await resolvePin(run, bot, candidate.snapshot, (values) =>
-            runSecrets.push(...values),
+          selected = await resolvePin(
+            run,
+            bot,
+            candidate.snapshot,
+            (values) => runSecrets.push(...values),
+            run.runtimePin == null,
+            run.delegationId ? DELEGATION_LIMITS.reservationTokens : undefined,
           );
           if (selected.kind === "problem" && candidate.source.kind !== "group-member")
             throw new RuntimePinError(selected);
@@ -2059,7 +2124,10 @@ export function createRunExecutor(deps: ExecutorDeps) {
           ...(selected.pin.runtimeKind === "hermes"
             ? {
                 historyMode: "quoted-system-context" as const,
-                configurationHash: selected.pin.runtimeConfigHash,
+                configurationHash:
+                  selected.pin.effectiveRuntimeConfigHash ?? selected.pin.runtimeConfigHash,
+                effectiveRuntimeConfig: selected.pin.effectiveRuntimeConfig,
+                effectiveRuntimeConfigHash: selected.pin.effectiveRuntimeConfigHash,
               }
             : {}),
           ...(["claude-code", "antigravity"].includes(selected.pin.runtimeKind)
@@ -2078,7 +2146,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             startDelegation(tx, run.delegationId!, `${run.id}:${fence}`),
           );
         const resolved =
-          delegatedTokens === undefined
+          delegatedTokens === undefined || selected.pin.runtimeKind === "hermes"
             ? selected
             : {
                 ...selected,
@@ -4931,7 +4999,18 @@ export function createRunExecutor(deps: ExecutorDeps) {
             const card = TaskCardRequestSchema.safeParse(args.card);
             if (!card.success) return finish({ error: "assign requires a valid task card" });
             const result = await handoffToGroupBot(
-              { ...deps, resolveDelegationPin: (target) => resolvePin(run, target) },
+              {
+                ...deps,
+                resolveDelegationPin: (target) =>
+                  resolvePin(
+                    run,
+                    target,
+                    undefined,
+                    undefined,
+                    true,
+                    DELEGATION_LIMITS.reservationTokens,
+                  ),
+              },
               run,
               thread.groupId,
               {

@@ -1,6 +1,8 @@
+import type { TeamRow } from "@ardurbot/contracts";
 import { describe, expect, it } from "vitest";
 import { renderBotPresenceDirectory } from "./bot-messages.js";
 import { presenceFreshness, presenceText, projectBotPresence } from "./bot-presence.js";
+import { teamRowText } from "./team-board.js";
 
 const now = new Date("2026-09-28T12:00:00.000Z");
 const bot = {
@@ -30,13 +32,12 @@ function run(
     thread: { groupId },
   };
 }
-function project(runs: ReturnType<typeof run>[], approvals = new Set<string>()) {
+function project(runs: ReturnType<typeof run>[]) {
   return projectBotPresence({
     bot,
     groupIds: ["room"],
     runs,
     cards: [],
-    pendingApprovalRunIds: approvals,
     pendingPeerCount: 0,
     observedAt: now,
   });
@@ -58,12 +59,20 @@ describe("derived bot presence", () => {
     expect(project([run("c", "queued", null)]).availability).toBe("queued");
   });
 
-  it("reports unknown for an expired lease and waiting-owner only with a pending approval", () => {
+  it("reports owner pauses regardless of approval rows or a held control lease", () => {
     expect(project([run("a", "running", now)]).availability).toBe("unknown");
-    expect(project([run("a", "waiting_input", null)]).availability).toBe("unavailable");
-    expect(project([run("a", "waiting_input", null)], new Set(["a"])).availability).toBe(
-      "waiting-owner",
-    );
+    expect(project([run("a", "waiting_input", null)]).availability).toBe("waiting-owner");
+    expect(project([run("a", "waiting_takeover", null)]).availability).toBe("waiting-owner");
+  });
+
+  it("keeps a blocked Team row readable even when presence is unavailable", () => {
+    expect(
+      teamRowText({
+        state: "blocked",
+        availability: "unavailable",
+        reason: "Computer stopped",
+      } as TeamRow),
+    ).toBe("Blocked — Computer stopped");
   });
 
   it("bounds role and task text and escapes injected directory delimiters", () => {
@@ -88,7 +97,6 @@ describe("derived bot presence", () => {
       runs: [run("a", "running", new Date(now.getTime() + 1_000), "other")],
       cards: [],
       goalTitle: "Other-room task",
-      pendingApprovalRunIds: new Set<string>(),
       pendingPeerCount: 0,
       observedAt: now,
     };
@@ -119,7 +127,6 @@ describe("derived bot presence", () => {
       runs: [run("private-run", "running", new Date(now.getTime() + 1_000))],
       cards: [],
       taskTitle: "Private desk prompt",
-      pendingApprovalRunIds: new Set(),
       pendingPeerCount: 0,
       observedAt: now,
       callerBotId: "restricted-peer",
@@ -147,7 +154,6 @@ describe("derived bot presence", () => {
       ],
       cards: [],
       taskTitle: "Private messaging task",
-      pendingApprovalRunIds: new Set(),
       pendingPeerCount: 0,
       observedAt: now,
       callerBotId: bot.id,
@@ -170,7 +176,6 @@ describe("derived bot presence", () => {
       groupIds: ["room"],
       runs: [],
       cards: [],
-      pendingApprovalRunIds: new Set(),
       pendingPeerCount: 0,
       observedAt: now,
       latestDelivery: {

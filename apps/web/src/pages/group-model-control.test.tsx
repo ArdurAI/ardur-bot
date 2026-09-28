@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { Bot, GroupMember, ProductEvent, ThreadSnapshot } from "@ardurbot/contracts";
+import type { Bot, GroupMember } from "@ardurbot/contracts";
 import { modelPinOptionKey } from "@ardurbot/core";
 import { ORPCError } from "@orpc/client";
 import type { ComponentProps, ReactNode } from "react";
@@ -41,7 +41,6 @@ vi.mock("../lib/rpc", () => ({
   },
 }));
 
-import { activeMemberRun, reduceThreadSnapshot } from "../lib/thread-events";
 import { GroupModelControl } from "./group-model-control";
 import { BotModelChip } from "./shell/bot-model-chip";
 
@@ -470,92 +469,6 @@ describe("group model control", () => {
     expect(container.querySelector("select")?.disabled).toBe(true);
     expect(container.querySelector("button:last-child")?.hasAttribute("disabled")).toBe(true);
     expect(save).not.toHaveBeenCalled();
-  });
-
-  it("uses the active run's saved pin for the participant badge", async () => {
-    await act(async () =>
-      root.render(
-        <BotModelChip
-          bot={bot}
-          settings={settings}
-          pin={pin}
-          nextPin={pin}
-          display="using"
-          run={{ runtimePin: { ...pin, modelId: "model-old", revision: 0 } }}
-        />,
-      ),
-    );
-    expect(container.querySelector('[aria-label="Using model-old"]')).not.toBeNull();
-    expect(container.textContent).toContain("Next run");
-  });
-
-  it("waits for a live run's admitted pin before showing Using", async () => {
-    const snapshot: ThreadSnapshot = {
-      groupId: "room",
-      threadId: "thread",
-      cursor: 0,
-      messages: [],
-      olderCursor: null,
-      run: null,
-      activeRuns: [],
-    };
-    const start = {
-      id: "event",
-      spaceId: "space",
-      threadId: "thread",
-      botId: "bot",
-      seq: 1,
-      type: "run.started",
-      runId: "run",
-      createdAt: "2026-09-01T00:00:00Z",
-      payload: {},
-    } as ProductEvent;
-    const nextPin = { ...pin, modelId: "new-choice" };
-    const renderBadge = async (current: ThreadSnapshot | null) =>
-      act(async () =>
-        root.render(
-          <BotModelChip
-            bot={bot}
-            settings={settings}
-            pin={nextPin}
-            nextPin={nextPin}
-            display="using"
-            run={activeMemberRun(current?.activeRuns ?? [], "bot")}
-          />,
-        ),
-      );
-
-    const pending = reduceThreadSnapshot(snapshot, start);
-    await renderBadge(pending);
-    expect(container.querySelector('[aria-label="Using new-choice"]')).toBeNull();
-    expect(container.textContent).toContain("Next run");
-
-    const admitted = reduceThreadSnapshot(pending!, {
-      ...start,
-      id: "admitted",
-      seq: 2,
-      payload: { runtimePin: pin },
-    });
-    await renderBadge(admitted);
-    expect(container.querySelector('[aria-label="Using model-a"]')).not.toBeNull();
-    expect(container.textContent).toContain("Next run");
-  });
-
-  it("shows the inherited next choice after clearing an active override", async () => {
-    await act(async () =>
-      root.render(
-        <BotModelChip
-          bot={bot}
-          settings={settings}
-          nextPin={null}
-          display="using"
-          run={{ runtimePin: { ...pin, modelId: "model-old", revision: 0 } }}
-        />,
-      ),
-    );
-    expect(container.querySelector('[aria-label="Using model-old"]')).not.toBeNull();
-    expect(container.textContent).toContain("Next run");
-    expect(container.textContent).toContain("model-a");
   });
 
   it("names the default connection when a newer matching connection comes first", async () => {

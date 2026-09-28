@@ -10,6 +10,7 @@ import {
   GROK_BOT_COLORS,
   GrokShapePreview,
   parseBotAvatar,
+  resolvePersonaColorDef,
 } from "@ardurbot/ui-web";
 import { t } from "@lingui/core/macro";
 import { Trans } from "@lingui/react/macro";
@@ -19,6 +20,8 @@ import { type ClipboardEvent, type DragEvent, useRef, useState } from "react";
 export interface AvatarStudioPopoverProps {
   value: string;
   identity?: string;
+  /** Bot display name; used for the seal initial in previews. */
+  label?: string;
   status?: string;
   size?: number;
   onChange: (value: string) => void;
@@ -28,6 +31,7 @@ export interface AvatarStudioPopoverProps {
 export function AvatarStudioPopover({
   value,
   identity,
+  label,
   status,
   size = 72,
   onChange,
@@ -40,18 +44,22 @@ export function AvatarStudioPopover({
 
   const parsed = parseBotAvatar(value, identity);
   const currentColor = parsed.color || DEFAULT_GROK_BOT_COLOR;
-  const currentShape = parsed.shapeIndex ?? 0;
+  // Undefined when the avatar is a plain seal (no shape suffix) — the seal is a
+  // real choice in the picker, so do not coerce it to shape 0.
+  const currentShape = parsed.shapeIndex;
+  const resolvedColorHex = resolvePersonaColorDef(identity ?? "", currentColor).hex;
 
   function selectShape(shapeIndex: number) {
     onChange(`${currentColor}::shape_${shapeIndex}`);
   }
 
   function selectColor(color: string) {
-    onChange(`${color}::shape_${currentShape}`);
+    // Keep a seal a seal: only carry the shape suffix when one is already set.
+    onChange(currentShape === undefined ? color : `${color}::shape_${currentShape}`);
   }
 
   function resetAvatar() {
-    onChange(`${DEFAULT_GROK_BOT_COLOR}::shape_0`);
+    onChange(DEFAULT_GROK_BOT_COLOR);
   }
 
   function processImageFile(file: File) {
@@ -117,7 +125,7 @@ export function AvatarStudioPopover({
         aria-label={t`Customize bot avatar`}
         data-testid="avatar-studio-trigger"
       >
-        <BotAvatar color={value} identity={identity} size={size} status={status} />
+        <BotAvatar color={value} identity={identity} label={label} size={size} status={status} />
         <div className="absolute -right-1 -bottom-1 flex size-6 items-center justify-center rounded-full border-2 border-background bg-secondary text-foreground shadow-md transition-transform group-hover:scale-110">
           <Pencil size={12} strokeWidth={2.2} />
         </div>
@@ -147,7 +155,7 @@ export function AvatarStudioPopover({
           </DialogHeader>
 
           <div className="flex flex-col items-center justify-center py-2">
-            <BotAvatar color={value} identity={identity} size={78} status={status} />
+            <BotAvatar color={value} identity={identity} label={label} size={78} status={status} />
           </div>
 
           <div className="flex items-center justify-between border-b border-border pb-1">
@@ -209,6 +217,7 @@ export function AvatarStudioPopover({
                         shapeIndex === -1 ? onChange(currentColor) : selectShape(shapeIndex)
                       }
                       identity={identity}
+                      label={label}
                     />
                   ))}
                 </div>
@@ -220,8 +229,10 @@ export function AvatarStudioPopover({
                 </div>
                 <div className="grid grid-cols-6 place-items-center gap-2">
                   {GROK_BOT_COLORS.map((color) => {
+                    // Compare the resolved pigment, not the raw stored value, so
+                    // legacy hexes still mark the swatch they render as.
                     const selected =
-                      currentColor.toLowerCase() === color.toLowerCase() && !parsed.isImage;
+                      !parsed.isImage && resolvedColorHex.toLowerCase() === color.toLowerCase();
                     return (
                       <button
                         key={color}

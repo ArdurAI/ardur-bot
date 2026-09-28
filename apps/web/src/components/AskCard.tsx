@@ -91,7 +91,7 @@ export function AskCard({
 
   return (
     <div
-      data-testid={secretInput ? "secret-ask-card" : undefined}
+      data-testid={secretInput ? "secret-ask-card" : "ask-card"}
       className="max-w-[74%] rounded-2xl border border-border bg-card px-5 py-4"
     >
       {approvalActions && block.status !== "answered" ? (

@@ -26,7 +26,9 @@ const choice = {
   credentialId: "scripted",
 };
 
-function fixture(runtimeConfig: unknown = null, runtimeExperimental = false) {
+function fixture(initialConfig: unknown = null, runtimeExperimental = false) {
+  let runtimeConfig = initialConfig;
+  let botRevision = 1;
   let revision = 0;
   let pin: (typeof choice & { revision: number }) | null = null;
   let memberId = "member";
@@ -36,7 +38,13 @@ function fixture(runtimeConfig: unknown = null, runtimeExperimental = false) {
     botId: "bot",
     modelPinRevision: revision,
     runtimePin: pin,
-    bot: { userId: "owner", spaceId: "space", archivedAt: null, runtimeConfig },
+    bot: {
+      userId: "owner",
+      spaceId: "space",
+      archivedAt: null,
+      runtimeConfig,
+      modelPinRevision: botRevision,
+    },
   });
   const groupRecord = () => ({
     id: "group",
@@ -135,6 +143,10 @@ function fixture(runtimeConfig: unknown = null, runtimeExperimental = false) {
     setMemberId: (id: string) => {
       memberId = id;
     },
+    setBotConfig: (value: unknown) => {
+      runtimeConfig = value;
+      botRevision++;
+    },
   };
 }
 
@@ -156,12 +168,58 @@ describe("group model owner mutation", () => {
           runtimePin: expect.objectContaining({
             runtimeKind: "hermes",
             credentialId: "selected",
-            runtimeConfig: config,
+            runtimeConfig: expect.objectContaining({
+              version: 2,
+              limits: { maxProviderRequests: 4, timeoutMs: 90_000 },
+            }),
             runtimeConfigHash: expect.stringMatching(/^[a-f0-9]{64}$/),
           }),
         }),
       }),
     );
+  });
+
+  it("keeps a captured group setting until an explicit revision-fenced refresh", async () => {
+    const f = fixture({ version: 1, maxProviderRequests: 4, timeoutMs: 90_000 }, true);
+    const selected = {
+      ...choice,
+      runtimeKind: "hermes" as const,
+      provider: "openai-compatible",
+      modelId: "fixture-model",
+      credentialId: "selected",
+    };
+    await updateGroupMemberModelPin(f.deps, actor, target, selected);
+    const first = f.update.mock.calls[0]?.[0].data.runtimePin;
+    f.setBotConfig({ version: 1, maxProviderRequests: 8, timeoutMs: 90_000 });
+    await expect(
+      updateGroupMemberModelPin(
+        f.deps,
+        actor,
+        { ...target, expectedRevision: 1, expectedBotModelPinRevision: undefined },
+        selected,
+      ),
+    ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    await expect(
+      updateGroupMemberModelPin(
+        f.deps,
+        actor,
+        { ...target, expectedRevision: 1, expectedBotModelPinRevision: 1 },
+        selected,
+      ),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(f.update).toHaveBeenCalledTimes(1);
+    await updateGroupMemberModelPin(
+      f.deps,
+      actor,
+      { ...target, expectedRevision: 1, expectedBotModelPinRevision: 2 },
+      selected,
+    );
+    expect(f.update).toHaveBeenCalledTimes(2);
+    expect(f.update.mock.calls[1]?.[0].data.runtimePin).toMatchObject({
+      runtimeConfig: { limits: { maxProviderRequests: 8, timeoutMs: 90_000 } },
+      revision: 2,
+    });
+    expect(first).toMatchObject({ runtimeConfig: { limits: { maxProviderRequests: 4 } } });
   });
 
   it("sets once, replays exactly, and clears once with durable events", async () => {

@@ -409,9 +409,11 @@ export function TeamBoardRow({
 }
 function TeamStatus({ row, now }: { row: TeamRow; now: number }) {
   if (
-    row.availability === "unknown" ||
-    row.availability === "unavailable" ||
-    (row.observedAt && presenceFreshness(row.observedAt, now) === "unavailable")
+    row.state !== "blocked" &&
+    row.state !== "waiting-approval" &&
+    (row.availability === "unknown" ||
+      row.availability === "unavailable" ||
+      (row.observedAt && presenceFreshness(row.observedAt, now) === "unavailable"))
   )
     return <Trans>Status unavailable</Trans>;
   switch (row.state) {
@@ -419,14 +421,20 @@ function TeamStatus({ row, now }: { row: TeamRow; now: number }) {
       return <Trans>Idle</Trans>;
     case "queued":
       return <Trans>Queued</Trans>;
-    case "working":
-      return row.currentTaskTitle || row.sentence ? (
-        <Trans>
-          Working on {row.currentTaskTitle ?? row.sentence} for {row.requesterName}
-        </Trans>
-      ) : (
-        <Trans>Working</Trans>
-      );
+    case "working": {
+      const task = row.currentTaskTitle || row.sentence;
+      if (task && row.requesterName) {
+        return (
+          <Trans>
+            Working on {task} for {row.requesterName}
+          </Trans>
+        );
+      }
+      if (task) {
+        return <Trans>Working on {task}</Trans>;
+      }
+      return <Trans>Working</Trans>;
+    }
     case "waiting-approval":
       return <Trans>Waiting for approval</Trans>;
     case "blocked":

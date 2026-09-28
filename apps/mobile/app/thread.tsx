@@ -570,6 +570,7 @@ function Thread() {
             <BotAvatar
               color={currentBot.color}
               identity={currentBot.id}
+              label={currentBot.name}
               size={34}
               status={currentBotStatus}
               muted={!currentBot.notifyOnFinish}
@@ -1567,6 +1568,7 @@ function Thread() {
             <BotAvatar
               color={activityBot?.color ?? tokens.mutedForeground}
               identity={activityBotId}
+              label={activityBot?.name}
               size={inGroup ? 20 : 28}
               status={activityStatus}
             />
@@ -1662,6 +1664,7 @@ function Thread() {
         <BotAvatar
           color={currentBot.color}
           identity={currentBot.id}
+          label={currentBot.name}
           size={28}
           status={currentBotStatus}
         />
@@ -1690,7 +1693,13 @@ function Thread() {
                 zIndex: workingGroupBots.length - index,
               }}
             >
-              <BotAvatar color={bot.color} identity={bot.botId} size={28} status={bot.status} />
+              <BotAvatar
+                color={bot.color}
+                identity={bot.botId}
+                label={bot.name}
+                size={28}
+                status={bot.status}
+              />
             </View>
           ))}
         </View>
