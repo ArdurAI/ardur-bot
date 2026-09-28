@@ -72,6 +72,7 @@ describe("account guided steps", () => {
     let model: "missing" | "saved" = "missing";
     let firstBot = false;
     let scope = "account-a";
+    let mounted = true;
     const files: JournalFileBoundary = {
       read: async () => raw,
       write: async (_file, value) => {
@@ -103,7 +104,7 @@ describe("account guided steps", () => {
       read: async () => ({ scope, model, firstBot }),
       target: () => "target-a",
       machineReady: async () => true,
-      appMounted: async () => true,
+      appMounted: async () => mounted,
       now: () => 100,
     });
     const engine = await SetupEngine.open(new SetupJournalStore("/fixture", files), [
@@ -127,6 +128,11 @@ describe("account guided steps", () => {
     expect(noRun).not.toHaveBeenCalled();
     expect((await engine.recheckAll()).complete).toBe(true);
     expect(noRun).not.toHaveBeenCalled();
+    mounted = false;
+    const unmounted = await engine.recheckAll();
+    expect(unmounted.steps[8]?.status).toBe("failed");
+    expect(unmounted.complete).toBe(false);
+    mounted = true;
     scope = "account-b";
     const stale = await engine.recheckAccount();
     expect(stale.steps[6]).toMatchObject({

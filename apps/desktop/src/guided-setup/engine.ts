@@ -570,7 +570,16 @@ export class SetupEngine {
       row.reasonCode = null;
       row.details = [];
     }
-    this.journal.snapshot.machineReady = false;
+    this.journal.snapshot.machineReady = [
+      "prerequisites",
+      "database",
+      "migrations",
+      "services",
+    ].every(
+      (id) =>
+        this.row(id as SetupStepId).status === "succeeded" &&
+        this.freshlyVerified.has(id as SetupStepId),
+    );
     this.journal.snapshot.complete = false;
   }
   private cleanupPending(): boolean {
@@ -590,6 +599,16 @@ export class SetupEngine {
       else if (row.status === "waiting-input") row.waitingElapsedMs += delta;
     }
     row.status = status;
+    if (id !== "finish" && status !== "succeeded" && this.row("finish").status === "succeeded")
+      this.invalidate(["finish"]);
+    if (
+      ["prerequisites", "database", "migrations", "services"].includes(id) &&
+      status !== "succeeded"
+    ) {
+      this.journal.snapshot.machineReady = false;
+      this.journal.snapshot.complete = false;
+    }
+    if (id === "finish" && status !== "succeeded") this.journal.snapshot.complete = false;
     if ((id === "model" || id === "first-bot") && status !== "succeeded") {
       this.journal.snapshot.accountReady = false;
       this.journal.snapshot.complete = false;

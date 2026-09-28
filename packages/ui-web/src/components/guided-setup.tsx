@@ -126,6 +126,12 @@ function rowState(row: SetupStepSnapshot): string {
     case "waiting-input":
       return guidedSetupText.waiting;
     case "succeeded":
+      if (row.id === "model") {
+        const connection = row.details.find(
+          (detail) => detail.code === "connection-saved" || detail.code === "connection-checked",
+        );
+        if (connection) return connection.text;
+      }
       return row.reasonCode === "already-ready" ? guidedSetupText.ready : guidedSetupText.done;
     case "not-applicable":
       return guidedSetupText.notNeeded;
@@ -294,22 +300,6 @@ export function GuidedSetupView(props: GuidedSetupViewProps) {
                   {row.status === "waiting-input" && row.reasonCode === "add-folder-to-path" && (
                     <p>{guidedSetupText.path}</p>
                   )}
-                  {row.id === "model" &&
-                    row.status === "succeeded" &&
-                    row.details.find(
-                      (detail) =>
-                        detail.code === "connection-saved" || detail.code === "connection-checked",
-                    ) && (
-                      <p>
-                        {
-                          row.details.find(
-                            (detail) =>
-                              detail.code === "connection-saved" ||
-                              detail.code === "connection-checked",
-                          )?.text
-                        }
-                      </p>
-                    )}
                   {row.id === "finish" && row.status === "succeeded" && (
                     <div className="guided-summary">
                       <p>
