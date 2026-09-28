@@ -1,3 +1,4 @@
+import { CheckIcon } from "lucide-react";
 import type { Me, ThinkingLevel } from "@ardurbot/contracts";
 import {
   DEFAULT_MODEL_CONTEXT_WINDOW,
