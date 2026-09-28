@@ -365,7 +365,8 @@ export function createLearningService(deps: {
         if (pin.revision <= storedPin.revision) {
           pin = storedPin;
         } else if (validateModelPin) {
-          pin = await validateModelPin(pin);
+          const validated = await validateModelPin(pin);
+          pin = RuntimePinSchema.parse({ ...validated, revision: pin.revision });
         }
       }
 

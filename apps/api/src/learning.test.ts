@@ -690,7 +690,10 @@ it("configure a higher revision is validated and saved", async () => {
       upsert,
     },
   };
-  const validateModelPin = vi.fn(async (pin: any) => pin);
+  const validateModelPin = vi.fn(async (pin: any) => {
+    const { revision, ...rest } = pin;
+    return rest;
+  });
   const service = createLearningService({ prisma: prisma as never, jobs: {} as never });
   await service.configure(
     actor,
