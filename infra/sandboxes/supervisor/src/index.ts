@@ -1,3 +1,4 @@
+import { runnerJobsRouter } from "./runner-jobs.js";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -184,6 +185,7 @@ const limitSupervisorRequestBody: MiddlewareHandler = async (c, next) => {
 const app = new Hono();
 
 export { app as supervisorApp };
+app.route("/runner-jobs", runnerJobsRouter);
 
 app.use("*", requestLogging());
 
@@ -1628,3 +1630,4 @@ async function writeContainerFile(
     throw new Error(output.stderr || output.stdout || "file write failed");
   }
 }
+export { runnerJobsRouter };

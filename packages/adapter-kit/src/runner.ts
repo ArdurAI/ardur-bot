@@ -1,4 +1,4 @@
-import { RunnerJobRequest } from "@ardurbot/contracts";
+import type { RunnerJobRequest } from "@ardurbot/contracts";
 
 export interface RunnerJobProvider {
   probe(): Promise<boolean>;

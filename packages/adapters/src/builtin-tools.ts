@@ -26,7 +26,9 @@ export const DELEGATION_TOOL_NAMES = new Set([
   "message_bot",
 ]);
 
+import { runnerTools } from "./runner-tools.js";
 export const builtinAgentTools: ConnectorTool[] = [
+  ...runnerTools,
   ...boardTools,
   {
     name: "search_connectors",
