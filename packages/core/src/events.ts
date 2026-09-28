@@ -214,9 +214,14 @@ export function reduceLiveMessageBlocks(
     update.type === "progress"
       ? update.payload?.activity === true
       : tail?.kind === "progress" && tail.activity === true;
+  const reasoning =
+    update.type === "progress"
+      ? update.payload?.reasoning === true
+      : tail?.kind === "progress" && tail.reasoning === true;
 
   if (pendingToolNames.length > 0 && endsSentence(tailText)) {
-    let next = activity ? [...segments] : appendTextSegment(segments, tailText);
+    // Activity and reasoning tails never flush into durable reply text.
+    let next = activity || reasoning ? [...segments] : appendTextSegment(segments, tailText);
     for (const name of pendingToolNames) next = appendToolCallSegment(next, name);
     return next;
   }
@@ -227,6 +232,7 @@ export function reduceLiveMessageBlocks(
       kind: "progress",
       text: tailText,
       ...(activity ? { activity: true as const } : {}),
+      ...(reasoning ? { reasoning: true as const } : {}),
       ...(pendingToolNames.length > 0 ? { pendingToolNames } : {}),
     },
   ];

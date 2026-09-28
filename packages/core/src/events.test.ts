@@ -69,6 +69,34 @@ describe("reduceLiveMessageBlocks", () => {
       { kind: "steps", steps: [{ label: "Shell", count: 1 }] },
     ]);
   });
+
+  it("carries the reasoning marker and never flushes it into reply text", () => {
+    expect(
+      reduceLiveMessageBlocks([], {
+        type: "progress",
+        payload: { text: "Weighing options.", reasoning: true },
+      }),
+    ).toEqual([{ kind: "progress", text: "Weighing options.", reasoning: true }]);
+
+    // A tool call after a punctuated reasoning summary keeps it out of the
+    // durable text segments, unlike ordinary narration.
+    const reasoning = reduceLiveMessageBlocks([], {
+      type: "progress",
+      payload: { text: "Weighing options.", reasoning: true },
+    });
+    expect(reduceLiveMessageBlocks(reasoning, { type: "tool", name: "shell" })).toEqual([
+      { kind: "steps", steps: [{ label: "Shell", count: 1 }] },
+    ]);
+
+    const narration = reduceLiveMessageBlocks([], {
+      type: "progress",
+      payload: { text: "Let me check." },
+    });
+    expect(reduceLiveMessageBlocks(narration, { type: "tool", name: "shell" })).toEqual([
+      { kind: "text", text: "Let me check." },
+      { kind: "steps", steps: [{ label: "Shell", count: 1 }] },
+    ]);
+  });
 });
 
 describe("runFailureError", () => {

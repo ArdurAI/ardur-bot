@@ -59,6 +59,7 @@ import {
   serializeComposerPrompt,
   speechFromBlocks,
   userVisibleMessages,
+  workRecordEntries,
 } from "@ardurbot/core";
 import type { GroupAvatarMember } from "@ardurbot/ui-web";
 import {
@@ -5078,7 +5079,12 @@ const Transcript = memo(function Transcript({
           </button>
         ) : null}
         {reactionView.visibleMessages.map((message) => {
-          if (!message.blocks.some((block) => !isToolActivityBlock(block))) return null;
+          // Tool-only and reasoning-only messages still show their compact work record.
+          if (
+            !message.blocks.some((block) => !isToolActivityBlock(block)) &&
+            workRecordEntries(message.blocks).length === 0
+          )
+            return null;
           const peerReceipt = isPeerReceiptBlocks(message.blocks);
           const messageReactions = reactionView.reactions.get(message.id);
           return (
@@ -6348,7 +6354,7 @@ const MessageView = memo(function MessageView({
     return (
       <>
         {messageContext}
-        <CompactWorkRecord blocks={message.blocks} />
+        <CompactWorkRecord blocks={message.blocks} live={isLive} />
         {visibleNarrationBlocks.length > 0 ? (
           <div className="flex w-fit max-w-full justify-start">
             <div
@@ -6385,7 +6391,7 @@ const MessageView = memo(function MessageView({
   return (
     <>
       {messageContext}
-      <CompactWorkRecord blocks={message.blocks} />
+      <CompactWorkRecord blocks={message.blocks} live={isLive} />
       {message.blocks.map((block, i) => {
         if (
           block.kind === "command" ||

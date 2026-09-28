@@ -2,23 +2,31 @@ import { ChatMarkdown } from "@ardurbot/chat-ui/web";
 import type { MessageBlock } from "@ardurbot/contracts";
 import { workRecordEntries } from "@ardurbot/core";
 import { Trans } from "@lingui/react/macro";
-import { Check, ChevronDown, ChevronRight } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { ThreadCommandBlock } from "../ThreadCommandBlock";
 
-export function CompactWorkRecord({ blocks }: { blocks: MessageBlock[] }) {
+export function CompactWorkRecord({
+  blocks,
+  live = false,
+}: {
+  blocks: MessageBlock[];
+  /** True for the in-flight turn's streaming message. */
+  live?: boolean;
+}) {
   const [expanded, setExpanded] = useState(false);
 
-  const entries = useMemo(() => workRecordEntries(blocks), [blocks]);
+  const entries = useMemo(() => workRecordEntries(blocks, live), [blocks, live]);
 
   if (entries.length === 0) return null;
 
   const active = entries.filter((m) => m.evidence.outcome === "pending");
   const isDone = active.length === 0;
+  const failed = isDone && entries.some((m) => m.evidence.outcome === "failure");
   const currentState = active.length > 0 ? active[active.length - 1] : entries[entries.length - 1];
-  // Collapsed, the status line previews the current activity (a streaming
-  // reasoning summary included). Expanded, it steps back to the generic label
-  // so the full row below is the single copy of that text.
+  // Collapsed, the status line previews the current activity. Expanded, it
+  // steps back to the generic label so the full row below is the single copy
+  // of that text.
   const headerTitle = expanded ? undefined : currentState?.evidence.title;
 
   return (
@@ -36,7 +44,8 @@ export function CompactWorkRecord({ blocks }: { blocks: MessageBlock[] }) {
               <div className="h-[2px] border-t-2 border-dotted border-border w-[50px]"></div>
             </div>
           )}
-          {isDone && <Check className="w-3.5 h-3.5 text-success shrink-0" />}
+          {isDone && failed && <X className="w-3.5 h-3.5 text-destructive shrink-0" />}
+          {isDone && !failed && <Check className="w-3.5 h-3.5 text-success shrink-0" />}
           <div className="truncate">
             {headerTitle ?? (isDone ? <Trans>Done</Trans> : <Trans>Working</Trans>)}
             {currentState?.evidence.outcome === "pending" && " ..."}
@@ -55,9 +64,10 @@ export function CompactWorkRecord({ blocks }: { blocks: MessageBlock[] }) {
             if (m.block.kind === "command") {
               return <ThreadCommandBlock key={i} block={m.block.command} />;
             }
-            if (m.evidence.label === "reasoning" && m.block.kind === "progress") {
-              // Reasoning summaries render in full, as Markdown, and update as
-              // the text streams. They never appear in the reply bubble.
+            if (m.block.kind === "progress" && m.block.activity !== true) {
+              // Reasoning summaries and interim notes render in full, as
+              // Markdown, and update as the text streams. They never appear
+              // in the reply bubble.
               return (
                 <div
                   key={i}

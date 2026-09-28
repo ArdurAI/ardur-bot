@@ -58,14 +58,44 @@ describe("copyableMessageText", () => {
 });
 
 describe("narrationBubbleBlocks", () => {
-  it("keeps reasoning summaries and tool activity out of the reply bubble", () => {
+  it("keeps a plain reply with no tools in the bubble", () => {
+    const blocks: MessageBlock[] = [{ kind: "progress", text: "On it, one moment." }];
+    expect(narrationBubbleBlocks(blocks)).toEqual(blocks);
+  });
+
+  it("keeps reasoning summaries out of the bubble", () => {
+    const blocks: MessageBlock[] = [
+      { kind: "progress", text: "Weighing two approaches.", reasoning: true },
+      { kind: "text", text: "Here is the answer." },
+    ];
+    expect(narrationBubbleBlocks(blocks)).toEqual([{ kind: "text", text: "Here is the answer." }]);
+  });
+
+  it("folds interim narration into the record and keeps trailing narration in the bubble", () => {
+    const interim: MessageBlock = { kind: "progress", text: "Let me check." };
+    const trailing: MessageBlock = { kind: "progress", text: "Here is the answer." };
+    const blocks: MessageBlock[] = [
+      interim,
+      { kind: "steps", steps: [{ label: "Browser", count: 1 }] },
+      trailing,
+    ];
+    expect(narrationBubbleBlocks(blocks)).toEqual([trailing]);
+  });
+
+  it("renders old stored messages without the flag as narration", () => {
+    const old: MessageBlock[] = [
+      { kind: "progress", text: "Checking that now." },
+      { kind: "text", text: "Done." },
+    ];
+    expect(narrationBubbleBlocks(old)).toEqual(old);
+  });
+
+  it("keeps tool activity out of the bubble", () => {
     const blocks: MessageBlock[] = [
       { kind: "text", text: "Here is the answer." },
-      { kind: "progress", text: "Weighing two approaches before answering." },
       { kind: "progress", text: "Using browser", activity: true },
       { kind: "steps", steps: [{ label: "Browser", count: 1 }] },
     ];
-
     expect(narrationBubbleBlocks(blocks)).toEqual([{ kind: "text", text: "Here is the answer." }]);
   });
 });

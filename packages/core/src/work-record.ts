@@ -1,4 +1,5 @@
 import type { CommandBlock, MessageBlock } from "@ardurbot/contracts";
+import { isInterimNarrationAt } from "./tool-activity.js";
 
 export type ActivityLabel =
   | "narration"
@@ -18,7 +19,7 @@ export interface ActivityEvidence {
   outcome?: ActivityOutcome;
 }
 
-export function mapMessageBlockToActivity(block: MessageBlock): ActivityEvidence {
+export function mapMessageBlockToActivity(block: MessageBlock, live = false): ActivityEvidence {
   if (block.kind === "text") {
     return { label: "narration", title: block.text, outcome: "success" };
   }
@@ -28,10 +29,14 @@ export function mapMessageBlockToActivity(block: MessageBlock): ActivityEvidence
       return {
         label: "tool-activity",
         title: block.text,
-        outcome: "pending",
+        outcome: live ? "pending" : "unknown",
       };
     }
-    return { label: "reasoning", title: block.text, outcome: "pending" };
+    if (block.reasoning === true) {
+      return { label: "reasoning", title: block.text, outcome: live ? "pending" : "success" };
+    }
+    // A plain progress block is assistant-authored narration.
+    return { label: "narration", title: block.text, outcome: live ? "pending" : "success" };
   }
 
   if (block.kind === "steps") {
@@ -40,7 +45,8 @@ export function mapMessageBlockToActivity(block: MessageBlock): ActivityEvidence
       label: "tool-activity",
       title,
       durationMs: block.durationMs,
-      outcome: block.durationMs !== undefined ? "success" : "pending",
+      // Durable steps carry no durationMs; only a live message may report pending.
+      outcome: block.durationMs !== undefined ? "success" : live ? "pending" : "unknown",
     };
   }
 
@@ -84,17 +90,25 @@ export interface WorkRecordEntry {
 }
 
 /**
- * Blocks that belong in the compact work record, in order: tool activity and
- * reasoning summaries. Reply text (narration) stays in the bubble; peer
- * deliveries, delegations, and unavailable blocks render inline as their own
- * cards, so they stay out of the record too.
+ * Blocks that belong in the compact work record, in order: tool activity,
+ * supplied reasoning summaries, and interim narration (notes that later tool
+ * activity interrupts). Reply text and trailing narration stay in the bubble;
+ * peer deliveries, delegations, and unavailable blocks render inline as their
+ * own cards, so they stay out of the record too.
  */
-export function workRecordEntries(blocks: readonly MessageBlock[]): WorkRecordEntry[] {
+export function workRecordEntries(
+  blocks: readonly MessageBlock[],
+  live = false,
+): WorkRecordEntry[] {
   return blocks
-    .map((block) => ({ block, evidence: mapMessageBlockToActivity(block) }))
+    .map((block, index) => ({ block, evidence: mapMessageBlockToActivity(block, live), index }))
     .filter(
-      (entry) => entry.evidence.label === "tool-activity" || entry.evidence.label === "reasoning",
-    );
+      (entry) =>
+        entry.evidence.label === "tool-activity" ||
+        entry.evidence.label === "reasoning" ||
+        isInterimNarrationAt(blocks, entry.index),
+    )
+    .map(({ block, evidence }) => ({ block, evidence }));
 }
 
 function mapCommandOutcome(command: CommandBlock): ActivityOutcome {

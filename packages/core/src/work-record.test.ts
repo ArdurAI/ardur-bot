@@ -7,16 +7,29 @@ describe("mapMessageBlockToActivity", () => {
     expect(mapMessageBlockToActivity({ kind: "text", text: "Hello" }).label).toBe("narration");
   });
 
-  it("maps progress without activity to reasoning", () => {
-    expect(mapMessageBlockToActivity({ kind: "progress", text: "Thinking..." }).label).toBe(
-      "reasoning",
-    );
+  it("maps plain progress to narration, including old stored messages", () => {
+    expect(mapMessageBlockToActivity({ kind: "progress", text: "On it." }).label).toBe("narration");
+  });
+
+  it("maps explicitly marked progress to reasoning", () => {
+    expect(
+      mapMessageBlockToActivity({ kind: "progress", text: "Thinking...", reasoning: true }).label,
+    ).toBe("reasoning");
   });
 
   it("maps progress with activity to tool-activity", () => {
     expect(
       mapMessageBlockToActivity({ kind: "progress", text: "Using tool", activity: true }).label,
     ).toBe("tool-activity");
+  });
+
+  it("reports pending only for a live message", () => {
+    const steps: MessageBlock = { kind: "steps", steps: [{ label: "Browser", count: 1 }] };
+    expect(mapMessageBlockToActivity(steps).outcome).toBe("unknown");
+    expect(mapMessageBlockToActivity(steps, true).outcome).toBe("pending");
+    const reasoning: MessageBlock = { kind: "progress", text: "Thinking...", reasoning: true };
+    expect(mapMessageBlockToActivity(reasoning).outcome).toBe("success");
+    expect(mapMessageBlockToActivity(reasoning, true).outcome).toBe("pending");
   });
 
   it("maps steps to tool-activity", () => {
@@ -123,7 +136,7 @@ describe("workRecordEntries", () => {
     const summary =
       "Weighing **two** approaches before answering, with a deliberately long explanation that must never be truncated.";
     const entries = workRecordEntries([
-      { kind: "progress", text: summary },
+      { kind: "progress", text: summary, reasoning: true },
       { kind: "text", text: "Here is the answer." },
     ]);
 
@@ -142,5 +155,20 @@ describe("workRecordEntries", () => {
     ]);
 
     expect(entries.map((entry) => entry.evidence.label)).toEqual(["tool-activity"]);
+  });
+
+  it("folds interim narration into the record and leaves trailing narration out", () => {
+    const entries = workRecordEntries([
+      { kind: "progress", text: "Let me check." },
+      { kind: "steps", steps: [{ label: "Browser", count: 1 }] },
+      { kind: "progress", text: "Here is the answer." },
+    ]);
+
+    expect(entries.map((entry) => entry.evidence.label)).toEqual(["narration", "tool-activity"]);
+    expect(entries[0]?.evidence.title).toBe("Let me check.");
+  });
+
+  it("keeps a plain reply with no tools out of the record", () => {
+    expect(workRecordEntries([{ kind: "progress", text: "On it." }])).toEqual([]);
   });
 });

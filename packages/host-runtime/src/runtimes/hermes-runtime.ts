@@ -544,6 +544,10 @@ export class HermesRuntime implements AgentRuntime {
           const kind = update.sessionUpdate;
           if (kind === "agent_message_chunk") {
             emitText(textFromUpdate(update));
+          } else if (kind === "agent_thought_chunk") {
+            // Supplied reasoning summaries collapse into the work record.
+            const thought = textFromUpdate(update);
+            if (thought) enqueue({ type: "progress", text: thought, reasoning: true });
           } else if (kind === "tool_call") {
             const title = typeof update.title === "string" ? update.title : "";
             // The pinned adapter's generic MCP fallback uses the exact tool name as title;

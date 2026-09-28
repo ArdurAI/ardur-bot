@@ -9,14 +9,27 @@ import { useResolvedAppearance } from "../lib/native";
 import { NativeCommandBlock } from "./command-block";
 import { NativeSymbol } from "./native-symbol";
 
-export function CompactWorkRecord({ blocks }: { blocks: MessageBlock[] }) {
+export function CompactWorkRecord({
+  blocks,
+  live = false,
+}: {
+  blocks: MessageBlock[];
+  /** True for the in-flight turn's streaming message. */
+  live?: boolean;
+}) {
   const tokens = mobileTokens();
   const colorScheme = useResolvedAppearance();
   const { t } = useI18n();
   const [expanded, setExpanded] = useState(false);
 
+  const entries = useMemo(() => workRecordEntries(blocks, live), [blocks, live]);
+  const active = entries.filter((m) => m.evidence.outcome === "pending");
+  const isDone = active.length === 0;
+
   const pulseAnim = useRef(new Animated.Value(1)).current;
   useEffect(() => {
+    // Only an active record pulses; idle and completed records stay still.
+    if (isDone) return;
     let isActive = true;
     AccessibilityInfo.isReduceMotionEnabled().then((reduceMotion) => {
       if (!isActive || reduceMotion) return;
@@ -39,14 +52,11 @@ export function CompactWorkRecord({ blocks }: { blocks: MessageBlock[] }) {
       isActive = false;
       pulseAnim.stopAnimation();
     };
-  }, [pulseAnim]);
-
-  const entries = useMemo(() => workRecordEntries(blocks), [blocks]);
+  }, [pulseAnim, isDone]);
 
   if (entries.length === 0) return null;
 
-  const active = entries.filter((m) => m.evidence.outcome === "pending");
-  const isDone = active.length === 0;
+  const failed = isDone && entries.some((m) => m.evidence.outcome === "failure");
   const currentState = active.length > 0 ? active[active.length - 1] : entries[entries.length - 1];
   // Collapsed, the status line previews the current activity (a streaming
   // reasoning summary included). Expanded, it steps back to the generic label
@@ -89,7 +99,15 @@ export function CompactWorkRecord({ blocks }: { blocks: MessageBlock[] }) {
               />
             </View>
           )}
-          {isDone && (
+          {isDone && failed && (
+            <NativeSymbol
+              ios="xmark"
+              android="close-outline"
+              size={14}
+              color={tokens.destructive}
+            />
+          )}
+          {isDone && !failed && (
             <NativeSymbol
               ios="checkmark"
               android="checkmark-outline"
@@ -146,9 +164,10 @@ export function CompactWorkRecord({ blocks }: { blocks: MessageBlock[] }) {
                 </View>
               );
             }
-            if (m.evidence.label === "reasoning" && m.block.kind === "progress") {
-              // Reasoning summaries render in full, as Markdown, and update as
-              // the text streams. They never appear in the reply bubble.
+            if (m.block.kind === "progress" && m.block.activity !== true) {
+              // Reasoning summaries and interim notes render in full, as
+              // Markdown, and update as the text streams. They never appear
+              // in the reply bubble.
               return (
                 <View key={i} testID="work-record-reasoning">
                   <ChatMarkdown

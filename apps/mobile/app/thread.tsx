@@ -2964,7 +2964,7 @@ const MessageBubble = memo(function MessageBubble({
   const firstContent = segments.findIndex((segment) => segment.kind === "content");
   return (
     <View style={{ gap: 8, width: "100%" }}>
-      <CompactWorkRecord blocks={message.blocks} />
+      <CompactWorkRecord blocks={message.blocks} live={message.id.startsWith("progress:")} />
       {segments.map((segment, index) => (
         <MessageTextCard
           key={`${message.id}-content-${index}`}

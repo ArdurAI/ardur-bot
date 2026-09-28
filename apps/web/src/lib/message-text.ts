@@ -1,13 +1,20 @@
 import type { MessageBlock, ThreadMessage } from "@ardurbot/contracts";
-import { isReasoningSummaryBlock, isToolActivityBlock } from "@ardurbot/core";
+import { isInterimNarrationAt, isReasoningSummaryBlock, isToolActivityBlock } from "@ardurbot/core";
 import { messageProviderLabel } from "./messaging";
 
 /**
- * Blocks shown inside the reply bubble. Tool activity and reasoning summaries
- * are excluded — both live in the compact work record, each exactly once.
+ * Blocks shown inside the reply bubble. Tool activity, supplied reasoning
+ * summaries, and interim narration (notes interrupted by later tool activity)
+ * live in the compact work record instead. Plain narration — including old
+ * stored messages with no reasoning flag — streams and stays here.
  */
 export function narrationBubbleBlocks(blocks: readonly MessageBlock[]): MessageBlock[] {
-  return blocks.filter((block) => !isToolActivityBlock(block) && !isReasoningSummaryBlock(block));
+  return blocks.filter(
+    (block, index) =>
+      !isToolActivityBlock(block) &&
+      !isReasoningSummaryBlock(block) &&
+      !isInterimNarrationAt(blocks, index),
+  );
 }
 
 /** Plain message text for clipboard copy — text/ask/progress only, no chrome. */

@@ -5978,6 +5978,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 payload: {
                   text: redactSecrets(event.text, runSecrets),
                   ...(event.activity ? { activity: true } : {}),
+                  ...(event.reasoning ? { reasoning: true } : {}),
                 },
               });
             } else if (event.type === "ask") {

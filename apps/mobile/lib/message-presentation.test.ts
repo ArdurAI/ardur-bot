@@ -49,16 +49,20 @@ describe("mobile message presentation", () => {
         blocks: [{ kind: "bot_message_sent", toBotId: "b", toBotName: "Research", text: "Go" }],
       },
     ]);
-    expect(
-      hasVisibleMessagePresentation([
-        { kind: "steps", steps: [{ label: "Message bot", count: 1 }] },
-      ]),
-    ).toBe(false);
   });
 
-  it("hides marked activity and moves reasoning summaries to the record", () => {
+  it("keeps a plain reply with no tools in the bubble", () => {
+    const reply = { kind: "progress", text: "On it, one moment." } as const;
+    expect(messagePresentationSegments([reply])).toEqual([{ kind: "content", blocks: [reply] }]);
+  });
+
+  it("moves only marked reasoning summaries to the record", () => {
     const activity = { kind: "progress", text: "Using browser", activity: true } as const;
-    const reasoning = { kind: "progress", text: "Using browser is optional." } as const;
+    const reasoning = {
+      kind: "progress",
+      text: "Using browser is optional.",
+      reasoning: true,
+    } as const;
 
     expect(messagePresentationSegments([activity, reasoning])).toEqual([]);
     // A reasoning-only message stays visible: the record renders it.
@@ -69,8 +73,36 @@ describe("mobile message presentation", () => {
       text: "Let me check",
       pendingToolNames: ["browser"],
     };
-    expect(messagePresentationSegments([mixed])).toEqual([]);
-    expect(hasVisibleMessagePresentation([mixed])).toBe(true);
+    expect(messagePresentationSegments([mixed])).toEqual([{ kind: "content", blocks: [mixed] }]);
+  });
+
+  it("folds interim narration into the record and keeps trailing narration in the bubble", () => {
+    const interim = { kind: "progress", text: "Let me check." } as const;
+    const steps = {
+      kind: "steps",
+      steps: [{ label: "Browser", count: 1 }],
+    } satisfies MessageBlock;
+    const trailing = { kind: "progress", text: "Here is the answer." } as const;
+
+    expect(messagePresentationSegments([interim, steps, trailing])).toEqual([
+      { kind: "content", blocks: [trailing] },
+    ]);
+  });
+
+  it("renders old stored messages without the flag as narration", () => {
+    const old = [
+      { kind: "progress", text: "Checking that now." },
+      { kind: "text", text: "Done." },
+    ] as MessageBlock[];
+    expect(messagePresentationSegments(old)).toEqual([{ kind: "content", blocks: old }]);
+  });
+
+  it("keeps tool-only messages visible for the record", () => {
+    const stepsOnly = [
+      { kind: "steps", steps: [{ label: "Browser", count: 1 }] },
+    ] as MessageBlock[];
+    expect(messagePresentationSegments(stepsOnly)).toEqual([]);
+    expect(hasVisibleMessagePresentation(stepsOnly)).toBe(true);
   });
 
   it("keeps only response content around tool activity", () => {

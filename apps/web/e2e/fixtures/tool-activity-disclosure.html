@@ -32,7 +32,7 @@
             },
           ];
 
-      const record = h(CompactWorkRecord, { blocks });
+      const record = h(CompactWorkRecord, { blocks, live });
       const response = h(
         "div",
         { "data-testid": "response" },

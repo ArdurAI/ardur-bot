@@ -33,10 +33,10 @@ describe("CompactWorkRecord", () => {
   it("shows a reasoning summary exactly once, in full, in the expanded record", () => {
     const summary =
       "Weighing two approaches before answering, with a deliberately long explanation that must never be truncated.";
-    const blocks: MessageBlock[] = [{ kind: "progress", text: summary }];
+    const blocks: MessageBlock[] = [{ kind: "progress", text: summary, reasoning: true }];
 
     act(() => {
-      root.render(<CompactWorkRecord blocks={blocks} />);
+      root.render(<CompactWorkRecord blocks={blocks} live />);
     });
 
     // Collapsed: the status line previews the streaming summary, exactly once,
@@ -56,11 +56,14 @@ describe("CompactWorkRecord", () => {
     expect(container.textContent?.split(summary).length).toBe(2);
   });
 
-  it("renders nothing when narration has no record entries", () => {
-    const blocks: MessageBlock[] = [{ kind: "text", text: "Here is the answer." }];
+  it("renders nothing for a plain reply with no record entries", () => {
+    const blocks: MessageBlock[] = [
+      { kind: "text", text: "Here is the answer." },
+      { kind: "progress", text: "On it, one moment." },
+    ];
 
     act(() => {
-      root.render(<CompactWorkRecord blocks={blocks} />);
+      root.render(<CompactWorkRecord blocks={blocks} live />);
     });
 
     expect(container.textContent).toBe("");
@@ -77,7 +80,7 @@ describe("CompactWorkRecord", () => {
     ];
 
     act(() => {
-      root.render(<CompactWorkRecord blocks={blocks} />);
+      root.render(<CompactWorkRecord blocks={blocks} live />);
     });
 
     expect(container.textContent).toContain("Checking status");
@@ -98,6 +101,18 @@ describe("CompactWorkRecord", () => {
     expect(container.textContent).not.toContain("running");
   });
 
+  it("treats durable steps without a duration as complete, not running", () => {
+    const blocks: MessageBlock[] = [{ kind: "steps", steps: [{ label: "Browser", count: 1 }] }];
+
+    act(() => {
+      root.render(<CompactWorkRecord blocks={blocks} />);
+    });
+
+    expect(container.textContent).toContain("Browser (1)");
+    expect(container.textContent).not.toContain("...");
+    expect(container.querySelector(".motion-safe\\:animate-pulse")).toBeNull();
+  });
+
   it("preserves focus when expanded via keyboard", () => {
     const blocks: MessageBlock[] = [
       {
@@ -108,7 +123,7 @@ describe("CompactWorkRecord", () => {
     ];
 
     act(() => {
-      root.render(<CompactWorkRecord blocks={blocks} />);
+      root.render(<CompactWorkRecord blocks={blocks} live />);
     });
 
     const button = container.querySelector("button")!;
@@ -135,7 +150,7 @@ describe("CompactWorkRecord", () => {
     ];
 
     act(() => {
-      root.render(<CompactWorkRecord blocks={blocks} />);
+      root.render(<CompactWorkRecord blocks={blocks} live />);
     });
 
     // Check for the motion-safe:animate-pulse
