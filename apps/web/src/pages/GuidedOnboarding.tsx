@@ -1,5 +1,5 @@
 import { Button } from "@ardurbot/ui-web";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { desktopBridge } from "../lib/desktop";
 import { rpc } from "../lib/rpc";
@@ -18,8 +18,22 @@ export function GuidedOnboardingPage() {
     firstBot: boolean;
   } | null>(null);
   const stopped = useRef(false);
+  const saveWait = useRef<Promise<void> | null>(null);
+  const settleSave = useRef<(() => void) | null>(null);
   const bridge = desktopBridge()?.guidedSetup;
   const step = params.get("step");
+
+  const onSavePendingChange = useCallback((pending: boolean) => {
+    if (pending && saveWait.current === null) {
+      saveWait.current = new Promise<void>((resolve) => {
+        settleSave.current = resolve;
+      });
+    } else if (!pending) {
+      settleSave.current?.();
+      settleSave.current = null;
+      saveWait.current = null;
+    }
+  }, []);
 
   useEffect(() => {
     return bridge?.onChange((snapshot) => {
@@ -27,7 +41,10 @@ export function GuidedOnboardingPage() {
         (row) => row.status === "cancelling" || row.status === "cancelled",
       );
       if (stopped.current) {
-        navigate("/guided-onboarding?step=finish", { replace: true });
+        void (async () => {
+          await saveWait.current;
+          navigate("/guided-onboarding?step=finish", { replace: true });
+        })();
       }
     });
   }, [bridge, navigate]);
@@ -49,6 +66,7 @@ export function GuidedOnboardingPage() {
   }, [step]);
 
   async function returnToSetup() {
+    await saveWait.current;
     if (!stopped.current) await bridge?.refreshAccount();
     await bridge?.returnToSetup();
   }
@@ -91,7 +109,11 @@ export function GuidedOnboardingPage() {
         {step === "model" ? (
           <>
             <h1 className="text-2xl font-medium">Connect a model</h1>
-            <ModelSettingsOverlay embedded onClose={() => void returnToSetup()} />
+            <ModelSettingsOverlay
+              embedded
+              onClose={() => void returnToSetup()}
+              onSavePendingChange={onSavePendingChange}
+            />
           </>
         ) : step === "bot" ? (
           <>

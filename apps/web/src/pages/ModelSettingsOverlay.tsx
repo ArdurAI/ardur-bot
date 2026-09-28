@@ -48,6 +48,7 @@ export function ModelSettingsOverlay({
   localOwner = false,
   initialProvider,
   onOpenBotRuntime,
+  onSavePendingChange,
 }: {
   onClose: () => void;
   /** Render panel body only for the shared Settings shell. */
@@ -55,6 +56,7 @@ export function ModelSettingsOverlay({
   localOwner?: boolean;
   initialProvider?: string;
   onOpenBotRuntime?: () => void;
+  onSavePendingChange?: (pending: boolean) => void;
 }) {
   const { t } = useLingui();
   const [catalog, setCatalog] = useState<ModelCatalogEntry[]>([]);
@@ -83,6 +85,10 @@ export function ModelSettingsOverlay({
   const refreshRevisionRef = useRef(0);
   const selectionRevisionRef = useRef(0);
   const selectedLabelRef = useRef<string | undefined>(undefined);
+
+  useEffect(() => {
+    onSavePendingChange?.(pending !== null);
+  }, [onSavePendingChange, pending]);
 
   const {
     oauth,
