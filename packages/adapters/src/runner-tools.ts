@@ -1,4 +1,4 @@
-import { ConnectorTool } from "@ardurbot/adapter-kit";
+import type { ConnectorTool } from "@ardurbot/adapter-kit";
 
 export const runnerTools: ConnectorTool[] = [
   {
