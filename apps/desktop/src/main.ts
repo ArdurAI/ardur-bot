@@ -1527,6 +1527,12 @@ app.whenReady().then(async () => {
       ...accountGuidedSteps({
         read: () => readGuidedAccountStatus(mainWindow, currentTargetUrl),
         target: () => (currentSetup?.mode === "new" ? targetProof(currentSetup.serverUrl) : null),
+        persistedTarget: async () => {
+          const saved = await readSetup(userDataDir);
+          return (
+            saved?.mode === "new" && targetProof(saved.serverUrl) === targetProof(currentTargetUrl)
+          );
+        },
         machineReady: async (signal) =>
           (await localMode.databaseReady(signal)) &&
           (await localMode.migrationsReady(signal)) &&

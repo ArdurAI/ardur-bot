@@ -13,6 +13,7 @@ describe("account guided steps", () => {
     const steps = accountGuidedSteps({
       read: async () => ({ scope: "account-a", model, firstBot: false }),
       target: () => "target-a",
+      persistedTarget: async () => true,
       machineReady: async () => true,
       appMounted: async () => true,
       now: () => 100,
@@ -34,6 +35,7 @@ describe("account guided steps", () => {
     const steps = accountGuidedSteps({
       read: async () => ({ scope, model: "missing", firstBot: false }),
       target: () => target,
+      persistedTarget: async () => true,
       machineReady: async () => true,
       appMounted: async () => true,
       now: () => 100,
@@ -53,14 +55,20 @@ describe("account guided steps", () => {
 
   it("requires a mounted document, saved target, and current machine health before finish", async () => {
     let mounted = false;
+    let persisted = false;
     const machineReady = vi.fn(async () => true);
     const steps = accountGuidedSteps({
       read: async () => null,
       target: () => "target-a",
+      persistedTarget: async () => persisted,
       machineReady,
       appMounted: async () => mounted,
       now: () => 100,
     });
+    expect(await steps[2]!.check(context, signal)).toMatchObject({
+      reasonCode: "target-not-saved",
+    });
+    persisted = true;
     expect(await steps[2]!.check(context, signal)).toMatchObject({ reasonCode: "app-not-mounted" });
     mounted = true;
     expect(await steps[2]!.check(context, signal)).toMatchObject({ kind: "satisfied" });
@@ -103,6 +111,7 @@ describe("account guided steps", () => {
     const account = accountGuidedSteps({
       read: async () => ({ scope, model, firstBot }),
       target: () => "target-a",
+      persistedTarget: async () => true,
       machineReady: async () => true,
       appMounted: async () => mounted,
       now: () => 100,

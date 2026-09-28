@@ -5,6 +5,7 @@ import type { StepReceipt } from "./store.js";
 export interface GuidedAccountBoundary {
   read(): Promise<GuidedAccountStatus | null>;
   target(): string | null;
+  persistedTarget(): Promise<boolean>;
   machineReady(signal: AbortSignal): Promise<boolean>;
   appMounted(): Promise<boolean>;
   now(): number;
@@ -53,7 +54,8 @@ export function accountGuidedSteps(deps: GuidedAccountBoundary): SetupStep[] {
       : { kind: "needed", reasonCode: "first-bot-not-created" };
   };
   const verifyFinish = async (signal: AbortSignal): Promise<StepVerification> => {
-    if (!deps.target()) return { kind: "blocked", reasonCode: "target-not-saved" };
+    if (!deps.target() || !(await deps.persistedTarget()))
+      return { kind: "blocked", reasonCode: "target-not-saved" };
     if (!(await deps.machineReady(signal)))
       return { kind: "blocked", reasonCode: "services-not-ready" };
     if (!(await deps.appMounted())) return { kind: "blocked", reasonCode: "app-not-mounted" };
