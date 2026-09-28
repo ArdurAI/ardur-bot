@@ -1342,7 +1342,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
     target: Parameters<DelegationResolver>[0],
     context: Parameters<DelegationResolver>[1],
   ) => {
-    if (!context) return resolvePin(scope, target);
+    if (!context) return resolvePin(scope, target, undefined, undefined, true);
     const candidate = await selectRunPinSource({
       prisma: context.tx as unknown as PrismaClient,
       scope,
@@ -1353,7 +1353,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
       savedSource: null,
       savedUsageGroupId: null,
     });
-    const selected = await resolvePin(scope, target, candidate.snapshot);
+    const selected = await resolvePin(scope, target, candidate.snapshot, undefined, true);
     return selected.kind === "resolved"
       ? { ...selected, pinSource: candidate.source, usageGroupId: candidate.usageGroupId }
       : selected;
@@ -4975,7 +4975,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             const card = TaskCardRequestSchema.safeParse(args.card);
             if (!card.success) return finish({ error: "assign requires a valid task card" });
             const result = await handoffToGroupBot(
-              { ...deps, resolveDelegationPin: (target) => resolvePin(run, target) },
+              { ...deps, resolveDelegationPin: (target) => resolvePin(run, target, undefined, undefined, true) },
               run,
               thread.groupId,
               {
