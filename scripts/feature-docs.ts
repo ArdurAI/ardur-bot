@@ -595,10 +595,20 @@ export async function loadValidatedFeatureDocs(
   rootDir = root,
 ): Promise<FeatureDocumentationManifest> {
   const manifest = JSON.parse(await readFile(path.join(rootDir, manifestFile), "utf8")) as unknown;
+  const parsed = FeatureDocumentationManifestSchema.parse(manifest);
+  const missing = [];
+  for (const shot of parsed.screenshots) {
+    if (!(await stat(path.join(rootDir, "site", shot.file)).catch(() => null))?.isFile())
+      missing.push(shot.file);
+  }
+  if (missing.length)
+    throw new Error(
+      `Documentation captures are missing: ${missing.join(", ")}. Run pnpm feature-docs:import-captures <dir> after capturing the pages.`,
+    );
   const evidence = FeatureDocumentationEvidenceSchema.parse(
     JSON.parse(await readFile(path.join(rootDir, evidenceFile), "utf8")),
   );
-  return validateFeatureDocs(manifest, evidence, rootDir);
+  return validateFeatureDocs(parsed, evidence, rootDir);
 }
 
 export async function prepareFeatureDocCaptureImport(

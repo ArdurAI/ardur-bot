@@ -1,5 +1,4 @@
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -22,6 +21,7 @@ import {
 import { CreateRoutineInput } from "../packages/contracts/src/domain";
 import { SiteProductSchema } from "../packages/contracts/src/site-product";
 import { POPULAR_MODEL_PROVIDER_IDS } from "../packages/core/src/model-providers";
+import { flatPngScreenshot } from "../packages/testkit/src/png-validation";
 import {
   generatedProduct,
   generatedReadme,
@@ -34,23 +34,40 @@ import {
 } from "./site-facts";
 
 const sourceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const capturesImported = existsSync(path.join(sourceRoot, "site/docs/docs-sign-in-open.png"));
 const temporary: string[] = [];
+const documentationPng = flatPngScreenshot(1280, 800);
 
 async function fixture() {
   const root = await mkdtemp(path.join(os.tmpdir(), "site-facts-"));
   temporary.push(root);
+  const manifest = JSON.parse(
+    await readFile(path.join(sourceRoot, "site/data/feature-docs.json"), "utf8"),
+  );
+  const evidence = JSON.parse(
+    await readFile(path.join(sourceRoot, "site/data/feature-docs-evidence.json"), "utf8"),
+  );
+  const documentationFiles = evidence.features.flatMap(
+    (entry: { sources: string[]; tests: string[] }) => [...entry.sources, ...entry.tests],
+  );
+  const mobileEntries = (await readdir(path.join(sourceRoot, "apps/mobile/app")))
+    .filter((name) => name.endsWith(".tsx"))
+    .map((name) => `apps/mobile/app/${name}`);
   // Copy whatever cask ships, as the generator does, so a cask rename cannot break the fixture.
   const casks = (await readdir(path.join(sourceRoot, "homebrew/Casks"))).filter((name) =>
     name.endsWith(".rb"),
   );
-  for (const file of [
+  for (const file of new Set([
     "site/data/product.json",
+    "site/data/feature-docs.json",
     "README.md",
     ...casks.map((cask) => `homebrew/Casks/${cask}`),
     "apps/web/e2e/site-screenshots.spec.ts",
     "apps/web/src/locales/en/messages.po",
-  ]) {
+    "apps/web/src/pages/settings-sections.ts",
+    "apps/web/src/App.tsx",
+    ...mobileEntries,
+    ...documentationFiles,
+  ])) {
     await mkdir(path.dirname(path.join(root, file)), { recursive: true });
     let content = await readFile(path.join(sourceRoot, file), "utf8");
     if (file === "site/data/product.json") {
@@ -59,6 +76,19 @@ async function fixture() {
       content = `${JSON.stringify(parsed, null, 2)}\n`;
     }
     await writeFile(path.join(root, file), content);
+  }
+  evidence.screenshots = manifest.screenshots.map((shot: { id: string; file: string }) => ({
+    id: shot.id,
+    sha256: createHash("sha256").update(documentationPng).digest("hex"),
+  }));
+  await writeFile(
+    path.join(root, "site/data/feature-docs-evidence.json"),
+    `${JSON.stringify(evidence, null, 2)}\n`,
+  );
+  for (const shot of manifest.screenshots) {
+    const file = path.join(root, "site", shot.file);
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeFile(file, documentationPng);
   }
   return root;
 }
@@ -84,16 +114,15 @@ describe("site facts", () => {
     ]);
   });
 
-  it("requires captures before adding the documentation block and rejects an empty one", async () => {
+  it("validates the committed documentation inputs with complete temporary captures", async () => {
+    const root = await fixture();
     const product = SiteProductSchema.parse(
       JSON.parse(await readFile(path.join(sourceRoot, "site/data/product.json"), "utf8")),
     );
     expect(product.schemaVersion).toBe(1);
-    if (capturesImported) {
-      expect((await generatedProduct(sourceRoot)).documentation?.features).toHaveLength(5);
-    } else {
-      await expect(generatedProduct(sourceRoot)).rejects.toThrow("missing file");
-    }
+    const generated = await generatedProduct(root);
+    expect(generated.documentation?.features).toHaveLength(5);
+    await expect(validateReferences(generated, root)).resolves.toBeUndefined();
     expect(SiteProductSchema.safeParse(product).success).toBe(true);
     const emptyBlock = { manifestVersion: 1, locale: "en", features: [], screenshots: [] };
     expect(SiteProductSchema.safeParse({ ...product, documentation: emptyBlock }).success).toBe(
@@ -110,32 +139,27 @@ describe("site facts", () => {
     expect(SiteProductSchema.safeParse(ninth).success).toBe(false);
   });
 
-  it.skipIf(!capturesImported)(
-    "derives memory storage and publication choices from shipped code",
-    async () => {
-      const root = await fixture();
-      const product = SiteProductSchema.parse(
-        JSON.parse(await readFile(path.join(root, "site/data/product.json"), "utf8")),
-      );
-      expect(DOCUMENT_STORE_KINDS).toEqual(["postgres", "git", "obsidian"]);
-      expect(GIT_PUBLISH_MODES).toEqual(["publish", "propose"]);
-      expect(memoryFromCode().storage.map((entry) => entry.id)).toEqual([
-        "database",
-        "git",
-        "obsidian",
-      ]);
-      expect(memoryFromCode().publishModes.map((entry) => entry.id)).toEqual([
-        "direct",
-        "proposal",
-      ]);
-      expect(product.memory?.storage).toEqual(memoryFromCode().storage);
-      expect(product.memory?.publishModes).toEqual(memoryFromCode().publishModes);
-      await expect(validateReferences(product, root)).resolves.toBeUndefined();
-      product.memory!.storage[0]!.detail = "Stale curated storage text.";
-      await writeFile(path.join(root, "site/data/product.json"), `${JSON.stringify(product)}\n`);
-      await expect(runSiteFacts("check", root, sourceRoot)).rejects.toThrow("is stale");
-    },
-  );
+  it("derives memory storage and publication choices from shipped code", async () => {
+    const root = await fixture();
+    await runSiteFacts("write", root);
+    const product = SiteProductSchema.parse(
+      JSON.parse(await readFile(path.join(root, "site/data/product.json"), "utf8")),
+    );
+    expect(DOCUMENT_STORE_KINDS).toEqual(["postgres", "git", "obsidian"]);
+    expect(GIT_PUBLISH_MODES).toEqual(["publish", "propose"]);
+    expect(memoryFromCode().storage.map((entry) => entry.id)).toEqual([
+      "database",
+      "git",
+      "obsidian",
+    ]);
+    expect(memoryFromCode().publishModes.map((entry) => entry.id)).toEqual(["direct", "proposal"]);
+    expect(product.memory?.storage).toEqual(memoryFromCode().storage);
+    expect(product.memory?.publishModes).toEqual(memoryFromCode().publishModes);
+    await expect(validateReferences(product, root)).resolves.toBeUndefined();
+    product.memory!.storage[0]!.detail = "Stale curated storage text.";
+    await writeFile(path.join(root, "site/data/product.json"), `${JSON.stringify(product)}\n`);
+    await expect(runSiteFacts("check", root)).rejects.toThrow("is stale");
+  });
 
   it("requires every memory source to name an existing README heading", async () => {
     const root = await fixture();
@@ -680,51 +704,47 @@ describe("site facts", () => {
     );
   });
 
-  it.skipIf(!capturesImported)("is idempotent and regenerates changed README blocks", async () => {
+  it("is idempotent and regenerates changed README blocks", async () => {
     const root = await fixture();
-    expect(await runSiteFacts("write", root, sourceRoot)).toBe(false);
-    expect(await runSiteFacts("write", root, sourceRoot)).toBe(false);
+    await runSiteFacts("write", root);
+    expect(await runSiteFacts("write", root)).toBe(false);
     const readmePath = path.join(root, "README.md");
     const original = await readFile(readmePath, "utf8");
     const stale = original.replace("- Providers:", "- Old providers:");
     await writeFile(readmePath, stale);
-    await expect(runSiteFacts("check", root, sourceRoot)).rejects.toThrow(
+    await expect(runSiteFacts("check", root)).rejects.toThrow(
       "README.md site facts blocks are stale. Run `pnpm site:facts`",
     );
-    expect(await runSiteFacts("write", root, sourceRoot)).toBe(true);
+    expect(await runSiteFacts("write", root)).toBe(true);
     expect(await readFile(readmePath, "utf8")).toBe(original);
   });
 
-  it.skipIf(!capturesImported)(
-    "reports a stale generated product file with a repair command",
-    async () => {
-      const root = await fixture();
-      const productPath = path.join(root, "site/data/product.json");
-      const product = JSON.parse(await readFile(productPath, "utf8"));
-      product.providers.pop();
-      await writeFile(productPath, `${JSON.stringify(product, null, 2)}\n`);
-      await expect(runSiteFacts("check", root, sourceRoot)).rejects.toThrow(
-        "site/data/product.json is stale. Run `pnpm site:facts` and commit the result.",
-      );
-    },
-  );
+  it("reports a stale generated product file with a repair command", async () => {
+    const root = await fixture();
+    await runSiteFacts("write", root);
+    const productPath = path.join(root, "site/data/product.json");
+    const product = JSON.parse(await readFile(productPath, "utf8"));
+    product.providers.pop();
+    await writeFile(productPath, `${JSON.stringify(product, null, 2)}\n`);
+    await expect(runSiteFacts("check", root)).rejects.toThrow(
+      "site/data/product.json is stale. Run `pnpm site:facts` and commit the result.",
+    );
+  });
 
-  it.skipIf(!capturesImported)(
-    "keeps publication metadata out of the committed source",
-    async () => {
-      const root = await fixture();
-      const productPath = path.join(root, "site/data/product.json");
-      const product = JSON.parse(await readFile(productPath, "utf8"));
-      product.generatedAt = "2026-09-27T00:00:00.000Z";
-      product.source = { repo: "ArdurAI/ardur-bot", ref: "dev", commit: "a".repeat(40) };
-      await writeFile(productPath, `${JSON.stringify(product, null, 2)}\n`);
-      await expect(runSiteFacts("check", root, sourceRoot)).rejects.toThrow(
-        "site/data/product.json must omit generatedAt and source",
-      );
-      expect(await runSiteFacts("write", root, sourceRoot)).toBe(true);
-      expect(JSON.parse(await readFile(productPath, "utf8"))).not.toHaveProperty("generatedAt");
-    },
-  );
+  it("keeps publication metadata out of the committed source", async () => {
+    const root = await fixture();
+    await runSiteFacts("write", root);
+    const productPath = path.join(root, "site/data/product.json");
+    const product = JSON.parse(await readFile(productPath, "utf8"));
+    product.generatedAt = "2026-09-27T00:00:00.000Z";
+    product.source = { repo: "ArdurAI/ardur-bot", ref: "dev", commit: "a".repeat(40) };
+    await writeFile(productPath, `${JSON.stringify(product, null, 2)}\n`);
+    await expect(runSiteFacts("check", root)).rejects.toThrow(
+      "site/data/product.json must omit generatedAt and source",
+    );
+    expect(await runSiteFacts("write", root)).toBe(true);
+    expect(JSON.parse(await readFile(productPath, "utf8"))).not.toHaveProperty("generatedAt");
+  });
 
   it("checks feature source sections and screenshot capture IDs", async () => {
     const root = await fixture();

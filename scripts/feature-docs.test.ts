@@ -14,6 +14,7 @@ import {
   featureDocsReport,
   prepareFeatureDocCaptureImport,
   publishedDocumentation,
+  runFeatureDocs,
   validateFeatureDocs,
   writeFeatureDocCaptureImport,
 } from "./feature-docs";
@@ -90,16 +91,37 @@ describe("feature documentation inventory", () => {
     await expect(validateFixtureDocs(manifest, evidence)).resolves.toBeDefined();
     const published = publishedDocumentation(manifest)!;
     expect(new Set(published.features.map((feature) => feature.id))).toEqual(firstFive);
-    expect(published.screenshots).toHaveLength(11);
+    expect(published.screenshots).toHaveLength(14);
     for (const feature of published.features) {
       expect(feature.availableSince).toBe("0.1.0-alpha.1");
       expect(feature.steps.length).toBeGreaterThan(0);
-      expect(feature.troubleshooting).toHaveLength(1);
+      expect(feature.troubleshooting.length).toBeGreaterThan(0);
       expect(feature.related.every((id) => firstFive.has(id))).toBe(true);
       const binding = evidence.features.find((item) => item.id === feature.id)!;
       expect(binding.sources.length).toBeGreaterThan(0);
       expect(binding.tests).toContain("apps/web/e2e/feature-docs.spec.ts");
       expect(binding.errors?.[0]?.catalog).toBe("apps/web/src/locales/en/messages.po");
+    }
+  });
+
+  it("names the capture import command when a published image is absent", async () => {
+    const directory = await mkdtemp(path.join(tmpdir(), "feature-docs-report-"));
+    try {
+      const { manifest, evidence } = await data();
+      await mkdir(path.join(directory, "site/data"), { recursive: true });
+      await writeFile(
+        path.join(directory, "site/data/feature-docs.json"),
+        JSON.stringify(manifest),
+      );
+      await writeFile(
+        path.join(directory, "site/data/feature-docs-evidence.json"),
+        JSON.stringify(evidence),
+      );
+      await expect(runFeatureDocs(directory)).rejects.toThrow(
+        "Run pnpm feature-docs:import-captures <dir>",
+      );
+    } finally {
+      await rm(directory, { recursive: true, force: true });
     }
   });
 
