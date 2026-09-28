@@ -1,0 +1,1191 @@
+{
+  "features": [
+    {
+      "id": "sign-in",
+      "sources": [
+        "apps/web/src/App.tsx",
+        "apps/web/src/pages/Auth.tsx",
+        "apps/mobile/app/sign-in.tsx",
+        "packages/contracts/src/rpc.ts",
+        "README.md",
+        "docs/self-host.md"
+      ],
+      "tests": [
+        "packages/auth/src/index.test.ts"
+      ]
+    },
+    {
+      "id": "onboarding",
+      "sources": [
+        "apps/web/src/pages/Onboarding.tsx",
+        "apps/mobile/app/new.tsx",
+        "packages/contracts/src/rpc.ts",
+        "README.md"
+      ],
+      "tests": [
+        "apps/api/src/onboarding.test.ts"
+      ]
+    },
+    {
+      "id": "spaces",
+      "sources": [
+        "apps/web/src/pages/shell/dialogs.tsx",
+        "apps/web/src/pages/Shell.tsx",
+        "apps/mobile/app/new-space.tsx",
+        "apps/mobile/app/index.tsx",
+        "packages/contracts/src/rpc.ts",
+        "apps/api/src/router.ts"
+      ],
+      "tests": [
+        "packages/db/src/space-membership.postgres.test.ts"
+      ]
+    },
+    {
+      "id": "space-members",
+      "sources": [
+        "apps/api/src/router.ts",
+        "packages/contracts/src/rpc.ts",
+        "VISION.md"
+      ],
+      "tests": [
+        "packages/db/src/space-membership.postgres.test.ts"
+      ]
+    },
+    {
+      "id": "navigation",
+      "sources": [
+        "apps/web/src/pages/shell/top-nav.ts",
+        "apps/web/src/pages/shell/ide-nav.ts",
+        "apps/web/src/pages/Shell.tsx",
+        "apps/web/src/pages/SpaceSearch.tsx",
+        "apps/mobile/app/index.tsx",
+        "packages/contracts/src/rpc.ts"
+      ],
+      "tests": []
+    },
+    {
+      "id": "dashboard",
+      "sources": [
+        "apps/web/src/pages/dashboard/DashboardPage.tsx",
+        "apps/mobile/app/overview.tsx",
+        "packages/contracts/src/rpc.ts"
+      ],
+      "tests": [
+        "apps/api/src/dashboard-now.test.ts"
+      ]
+    },
+    {
+      "id": "settings",
+      "sources": [
+        "apps/web/src/pages/SettingsOverlay.tsx",
+        "apps/web/src/pages/settings-sections.ts",
+        "apps/mobile/app/_layout.tsx",
+        "docs/settings-shell.md",
+        "docs/settings-shell-copy.md"
+      ],
+      "tests": []
+    },
+    {
+      "id": "general",
+      "sources": [
+        "apps/web/src/pages/settings/GeneralSettings.tsx",
+        "apps/web/src/pages/shell/OpenToSetting.tsx",
+        "packages/contracts/src/rpc.ts",
+        "docs/settings-shell-copy.md"
+      ],
+      "tests": []
+    },
+    {
+      "id": "account-profile",
+      "sources": [
+        "apps/web/src/pages/account/AccountProfile.tsx",
+        "apps/web/src/pages/account/AccountLanguage.tsx",
+        "apps/web/src/pages/account/AccountSignIn.tsx",
+        "apps/mobile/app/account.tsx",
+        "apps/mobile/app/change-password.tsx",
+        "packages/contracts/src/rpc.ts",
+        "packages/contracts/src/account.ts",
+        "docs/memory/chief-of-staff-context.md"
+      ],
+      "tests": []
+    },
+    {
+      "id": "account-access",
+      "sources": [
+        "apps/web/src/pages/account/AccountSettings.tsx",
+        "packages/contracts/src/rpc.ts"
+      ],
+      "tests": [
+        "packages/auth/src/account-sessions.test.ts"
+      ]
+    },
+    {
+      "id": "privacy",
+      "sources": [
+        "apps/web/src/pages/settings/PrivacySettings.tsx",
+        "apps/web/src/pages/settings/UploadedFiles.tsx",
+        "packages/contracts/src/rpc.ts",
+        "docs/settings-shell.md",
+        "docs/settings-shell-copy.md"
+      ],
+      "tests": []
+    },
+    {
+      "id": "bots-create",
+      "sources": [
+        "apps/web/src/pages/shell/bot-panel.tsx",
+        "apps/web/src/pages/Shell.tsx",
+        "apps/mobile/app/new.tsx",
+        "packages/contracts/src/rpc.ts",
+        "README.md"
+      ],
+      "tests": [
+        "apps/api/src/bot-update.test.ts"
+      ]
+    },
+    {
+      "id": "bot-profile",
+      "sources": [
+        "apps/web/src/pages/shell/bot-panel.tsx",
+        "apps/web/src/pages/shell/avatar-studio-popover.tsx",
+        "apps/mobile/app/bot-settings.tsx",
+        "packages/contracts/src/rpc.ts"
+      ],
+      "tests": [
+        "packages/contracts/src/bot-avatar.test.ts"
+      ]
+    },
+    {
+      "id": "bot-instructions",
+      "sources": [
+        "apps/web/src/pages/shell/bot-panel.tsx",
+        "apps/web/src/pages/KnowledgeSection.tsx",
+        "apps/web/src/components/Context.tsx",
+        "packages/contracts/src/rpc.ts",
+        "docs/memory/chief-of-staff-context.md",
+        "docs/learning.md",
+        "apps/mobile/app/bot-settings.tsx"
+      ],
+      "tests": []
+    },
+    {
+      "id": "bot-pins",
+      "sources": [
+        "apps/web/src/pages/shell/bot-panel.tsx",
+        "apps/mobile/app/bot-settings.tsx",
+        "packages/contracts/src/runtime-pins.ts",
+        "packages/core/src/model-pin-choice.ts",
+        "README.md",
+        "docs/decisions/ADR-002-runtime-pins.md"
+      ],
+      "tests": [
+        "apps/api/src/bot-model-pin.test.ts"
+      ]
+    },
+    {
+      "id": "bot-runtime",
+      "sources": [
+        "apps/web/src/pages/shell/runtime-settings.tsx",
+        "packages/contracts/src/rpc.ts",
+        "docs/decisions/ADR-002-native-runtimes.md",
+        "apps/mobile/app/bot-settings.tsx"
+      ],
+      "tests": []
+    },
+    {
+      "id": "bot-computer",
+      "sources": [
+        "apps/web/src/pages/shell/bot-panel.tsx",
+        "apps/web/src/pages/Shell.tsx",
+        "apps/web/src/pages/ComputerProfilesSettings.tsx",
+        "apps/mobile/app/bot-settings.tsx",
+        "packages/contracts/src/rpc.ts",
+        "docs/computer-runtime.md"
+      ],
+      "tests": [
+        "packages/contracts/src/computer-profiles.test.ts"
+      ]
+    },
+    {
+      "id": "bot-organize",
+      "sources": [
+        "apps/web/src/pages/shell/dialogs.tsx",
+        "apps/web/src/pages/Shell.tsx",
+        "apps/mobile/app/index.tsx",
+        "apps/mobile/app/account.tsx",
+        "apps/mobile/app/thread.tsx",
+        "packages/contracts/src/rpc.ts"
+      ],
+      "tests": [
+        "packages/core/src/bot-sections.test.ts"
+      ]
+    },
+    {
+      "id": "chat-compose",
+      "sources": [
+        "apps/web/src/pages/Shell.tsx",
+        "apps/mobile/app/thread.tsx",
+        "packages/contracts/src/rpc.ts",
+        "README.md"
+      ],
+      "tests": [
+        "packages/core/src/bot-messages.test.ts"
+      ]
+    },
+    {
+      "id": "chat-attachments",
+      "sources": [
+        "apps/web/src/components/composer/attachments.ts",
+        "apps/web/src/pages/Shell.tsx",
+        "apps/web/src/components/ArtifactFileCard.tsx",
+        "apps/mobile/app/thread.tsx",
+        "packages/contracts/src/attachments.ts",
+        "docs/settings-shell-copy.md",
+        "docs/mobile-release.md"
+      ],
+      "tests": []
+    },
+    {
+      "id": "chat-shortcuts",
+      "sources": [
+        "apps/web/src/components/composer/ComposerMenu.tsx",
+        "apps/web/src/components/composer/SlashPicker.tsx",
+        "apps/web/src/components/composer/composer-actions.ts",
+        "apps/mobile/app/thread.tsx",
+        "packages/core/src/composer-commands.ts",
+        "packages/core/src/composer-mentions.ts"
+      ],
+      "tests": []
+    },
+    {
+      "id": "chat-voice",
+      "sources": [
+        "apps/web/src/pages/CallView.tsx",
+        "apps/web/src/pages/shell/bot-panel.tsx",
+        "apps/mobile/app/voice.tsx",
+        "packages/contracts/src/rpc.ts",
+        "apps/web/src/pages/VoiceSettingsOverlay.tsx",
+        "README.md"
+      ],
+      "tests": []
+    },
+    {
+      "id": "chat-approvals",
+      "sources": [
+        "apps/web/src/components/AskCard.tsx",
+        "apps/web/src/pages/Shell.tsx",
+        "apps/mobile/app/thread.tsx",
+        "packages/contracts/src/rpc.ts",
+        "packages/core/src/action-approval.ts",
+        "docs/governance.md"
+      ],
+      "tests": [
+        "packages/core/src/action-approval.test.ts"
+      ]
+    },
+    {
+      "id": "bot-secrets",
+      "sources": [
+        "apps/web/src/components/AskCard.tsx",
+        "apps/mobile/app/thread.tsx",
+        "packages/contracts/src/rpc.ts",
+        "packages/contracts/src/bot-secrets.ts",
+        "docs/bot-secrets.md"
+      ],
+      "tests": [
+        "packages/contracts/src/bot-secrets.test.ts"
+      ]
+    },
+    {
+      "id": "chat-computer",
+      "sources": [
+        "apps/web/src/pages/Shell.tsx",
+        "apps/mobile/app/computer.tsx",
+        "packages/contracts/src/rpc.ts",
+        "docs/computer-runtime.md",
+        "docs/terminal/docker-terminal.md"
+      ],
+      "tests": []
+    },
+    {
+      "id": "chat-commands",
+      "sources": [
+        "apps/web/src/components/ThreadCommandBlock.tsx",
+        "apps/web/src/App.tsx",
+        "packages/contracts/src/rpc.ts",
+        "packages/contracts/src/command-blocks.ts",
+        "apps/web/e2e/site-screenshots.spec.ts"
+      ],
+      "tests": []
+    },
+    {
+      "id": "chat-receipts",
+      "sources": [
+        "apps/web/src/components/PeerMessageReceipt.tsx",
+        "apps/web/src/pages/PeerMessagesOverlay.tsx",
+        "apps/mobile/components/peer-message-receipt.tsx",
+        "packages/core/src/bot-message-receipt.ts",
+        "docs/goals.md"
+      ],
+      "tests": []
+    },
+    {
+      "id": "chat-feedback",
+      "sources": [
+        "apps/web/src/components/MessageFeedback.tsx",
+        "apps/web/src/pages/Shell.tsx",
+        "apps/mobile/app/thread.tsx",
+        "packages/contracts/src/rpc.ts",
+        "packages/contracts/src/reactions.ts",
+        "docs/learning.md"
+      ],
+      "tests": []
+    },
+    {
+      "id": "chat-activity",
+      "sources": [
+        "apps/web/src/pages/ActivityList.tsx",
+        "apps/web/src/components/Context.tsx",
+        "packages/contracts/src/rpc.ts",
+        "docs/memory/chief-of-staff-context.md"
+      ],
+      "tests": []
+    },
+    {
+      "id": "groups",
+      "sources": [
+        "apps/web/src/pages/GroupPanel.tsx",
+        "apps/mobile/app/new-group.tsx",
+        "apps/mobile/app/group-settings.tsx",
+        "packages/contracts/src/rpc.ts",
+        "README.md",
+        "docs/goals.md"
+      ],
+      "tests": [
+        "packages/db/src/group-model-pins.postgres.test.ts"
+      ]
+    },
+    {
+      "id": "group-goals",
+      "sources": [
+        "apps/web/src/pages/GoalForm.tsx",
+        "apps/web/src/pages/GroupPanel.tsx",
+        "apps/web/src/pages/Shell.tsx",
+        "packages/contracts/src/rpc.ts",
+        "docs/goals.md"
+      ],
+      "tests": [
+        "packages/db/src/delegation-approval.test.ts"
+      ]
+    },
+    {
+      "id": "delegation-tasks",
+      "sources": [
+        "apps/web/src/pages/TeamBoard.tsx",
+        "apps/web/src/pages/ChatTaskReview.tsx",
+        "apps/mobile/app/team.tsx",
+        "packages/contracts/src/rpc.ts",
+        "docs/delegation/README.md"
+      ],
+      "tests": []
+    },
+    {
+      "id": "delegation-policy",
+      "sources": [
+        "apps/web/src/pages/ModelDestinations.tsx",
+        "apps/web/src/pages/shell/bot-panel.tsx",
+        "packages/core/src/delegation-policy.ts",
+        "docs/delegation/README.md"
+      ],
+      "tests": []
+    },
+    {
+      "id": "comparisons",
+      "sources": [
+        "apps/web/src/pages/CompareStart.tsx",
+        "apps/web/src/pages/ComparePanel.tsx",
+        "apps/mobile/app/comparisons.tsx",
+        "packages/contracts/src/rpc.ts",
+        "docs/delegation/README.md"
+      ],
+      "tests": []
+    },
+    {
+      "id": "routines",
+      "sources": [
+        "apps/web/src/pages/RoutineEditor.tsx",
+        "apps/web/src/pages/Shell.tsx",
+        "apps/mobile/app/routine.tsx",
+        "apps/mobile/app/thread.tsx",
+        "packages/contracts/src/rpc.ts",
+        "docs/site-assets.md"
+      ],
+      "tests": [
+        "apps/api/src/system/routines.test.ts"
+      ]
+    },
+    {
+      "id": "routine-triggers",
+      "sources": [
+        "apps/web/src/pages/RoutineEditor.tsx",
+        "apps/web/src/pages/RoutineSchedule.tsx",
+        "packages/contracts/src/rpc.ts",
+        "scripts/site-facts.ts"
+      ],
+      "tests": []
+    },
+    {
+      "id": "routine-history",
+      "sources": [
+        "apps/web/src/pages/RoutineHistory.tsx",
+        "apps/web/src/pages/RoutineEditor.tsx",
+        "apps/mobile/app/routine.tsx",
+        "packages/contracts/src/rpc.ts",
+        "scripts/site-facts.ts"
+      ],
+      "tests": [
+        "apps/api/src/routine-history.test.ts"
+      ]
+    },
+    {
+      "id": "boards",
+      "sources": [
+        "apps/web/src/pages/dashboard/DashboardPage.tsx",
+        "apps/web/src/pages/board/Board.tsx",
+        "apps/web/src/pages/board/Graph.tsx",
+        "apps/mobile/app/board.tsx",
+        "packages/contracts/src/rpc.ts",
+        "packages/contracts/src/board.ts",
+        "docs/board.md",
+        "docs/board-verification.md"
+      ],
+      "tests": [
+        "apps/api/src/board.test.ts"
+      ]
+    },
+    {
+      "id": "boards-settings",
+      "sources": [
+        "apps/web/src/pages/settings-sections.ts",
+        "apps/web/src/pages/board/BoardsSettings.tsx",
+        "apps/mobile/app/boards-settings.tsx",
+        "docs/board.md"
+      ],
+      "tests": [
+        "packages/contracts/src/board.test.ts"
+      ]
+    },
+    {
+      "id": "memory-documents",
+      "sources": [
+        "apps/web/src/pages/memory/MemoryPage.tsx",
+        "apps/web/src/pages/memory/MemorySettings.tsx",
+        "apps/web/src/pages/KnowledgeSection.tsx",
+        "apps/web/src/pages/MemoryHistory.tsx",
+        "apps/mobile/app/memory.tsx",
+        "packages/contracts/src/rpc.ts",
+        "docs/learning.md",
+        "docs/memory/git-repository.md"
+      ],
+      "tests": [
+        "packages/memory/src/conformance.test.ts"
+      ]
+    },
+    {
+      "id": "memory-import-export",
+      "sources": [
+        "apps/web/src/pages/MemoryImportExport.tsx",
+        "apps/web/src/pages/memory/MemoryImport.tsx",
+        "packages/contracts/src/rpc.ts",
+        "docs/memory/git-repository.md",
+        "docs/memory/semantic-providers.md"
+      ],
+      "tests": []
+    },
+    {
+      "id": "memory-storage",
+      "sources": [
+        "apps/web/src/pages/memory/MemorySettings.tsx",
+        "apps/web/src/pages/MemorySettingsOverlay.tsx",
+        "packages/contracts/src/rpc.ts"
+      ],
+      "tests": [
+        "apps/api/src/memory-location.test.ts"
+      ]
+    },
+    {
+      "id": "memory-git",
+      "sources": [
+        "apps/web/src/pages/GitMemorySettings.tsx",
+        "apps/web/src/pages/MemorySettingsOverlay.tsx",
+        "packages/contracts/src/rpc.ts",
+        "docs/memory/git-repository.md"
+      ],
+      "tests": [
+        "apps/api/src/memory-git-location.test.ts"
+      ]
+    },
+    {
+      "id": "memory-vault",
+      "sources": [
+        "apps/web/src/pages/MemorySettingsOverlay.tsx",
+        "apps/desktop/src/memory-folders.ts",
+        "docs/memory/git-repository.md",
+        "docs/memory/semantic-providers.md"
+      ],
+      "tests": []
+    },
+    {
+      "id": "memory-service",
+      "sources": [
+        "apps/web/src/pages/MemorySettingsOverlay.tsx",
+        "apps/web/src/pages/MemoryDeliveryProgress.tsx",
+        "apps/web/src/pages/memory-providers/registry.ts",
+        "packages/contracts/src/rpc.ts",
+        "docs/memory/semantic-providers.md"
+      ],
+      "tests": []
+    },
+    {
+      "id": "learning-review",
+      "sources": [
+        "apps/web/src/pages/LearningInbox.tsx",
+        "apps/mobile/app/learning.tsx",
+        "packages/contracts/src/rpc.ts",
+        "docs/learning.md"
+      ],
+      "tests": [
+        "apps/api/src/learning.test.ts"
+      ]
+    },
+    {
+      "id": "learning-insights",
+      "sources": [
+        "apps/web/src/pages/LearningInsights.tsx",
+        "docs/learning.md",
+        "apps/mobile/app/learning.tsx",
+        "packages/core/src/learning-insights.ts"
+      ],
+      "tests": [
+        "packages/core/src/learning-insights.test.ts"
+      ]
+    },
+    {
+      "id": "learning-history",
+      "sources": [
+        "apps/web/src/pages/LearningTimeline.tsx",
+        "apps/web/src/pages/LearningObservation.tsx",
+        "apps/web/src/pages/LearningCurator.tsx",
+        "apps/mobile/app/learning.tsx",
+        "apps/mobile/app/memory.tsx",
+        "packages/contracts/src/rpc.ts",
+        "docs/learning.md"
+      ],
+      "tests": [
+        "packages/core/src/learning-journey.test.ts"
+      ]
+    },
+    {
+      "id": "skills",
+      "sources": [
+        "apps/web/src/pages/customize/SkillsPage.tsx",
+        "apps/mobile/app/skills.tsx",
+        "apps/mobile/components/customization-list.tsx",
+        "packages/contracts/src/customization.ts",
+        "packages/contracts/src/rpc.ts",
+        "docs/learning.md",
+        "docs/local-import.md"
+      ],
+      "tests": [
+        "apps/api/src/agent-skills.test.ts"
+      ]
+    },
+    {
+      "id": "teach-skills",
+      "sources": [
+        "apps/web/src/components/teach/TeachComputerOverlay.tsx",
+        "apps/web/src/components/teach/TeachCaptureOverlay.tsx",
+        "apps/web/src/components/teach/SkillDraftCard.tsx",
+        "packages/contracts/src/rpc.ts",
+        "packages/core/src/teach-recording.ts",
+        "docs/learning.md"
+      ],
+      "tests": [
+        "apps/api/src/taught-skills.test.ts"
+      ]
+    },
+    {
+      "id": "scratchpad",
+      "sources": [
+        "apps/web/src/pages/ScratchpadSection.tsx",
+        "apps/web/src/pages/shell/bot-panel.tsx",
+        "packages/contracts/src/rpc.ts"
+      ],
+      "tests": []
+    },
+    {
+      "id": "local-import",
+      "sources": [
+        "apps/web/src/pages/import/LocalImportPage.tsx",
+        "apps/web/src/pages/import/ImportedServerCredentials.tsx",
+        "apps/mobile/app/import.tsx",
+        "packages/contracts/src/rpc.ts",
+        "docs/local-import.md"
+      ],
+      "tests": []
+    },
+    {
+      "id": "models",
+      "sources": [
+        "apps/web/src/pages/ModelSettingsOverlay.tsx",
+        "apps/mobile/app/models.tsx",
+        "packages/contracts/src/rpc.ts",
+        "README.md"
+      ],
+      "tests": [
+        "packages/core/src/model-providers.test.ts"
+      ]
+    },
+    {
+      "id": "model-server",
+      "sources": [
+        "apps/web/src/pages/Onboarding.tsx",
+        "apps/web/src/pages/ModelSettingsOverlay.tsx",
+        "apps/mobile/app/models.tsx",
+        "packages/contracts/src/rpc.ts",
+        "docs/self-host.md"
+      ],
+      "tests": [
+        "packages/core/src/model-probe.test.ts"
+      ]
+    },
+    {
+      "id": "models-local",
+      "sources": [
+        "apps/mobile/app/models.tsx",
+        "packages/contracts/src/rpc.ts",
+        "docs/self-host.md"
+      ],
+      "tests": [
+        "packages/adapters/src/pi-local-provider.test.ts"
+      ]
+    },
+    {
+      "id": "computers",
+      "sources": [
+        "apps/web/src/pages/AccountSettingsOverlay.tsx",
+        "apps/web/src/pages/fleet/FleetSettings.tsx",
+        "apps/mobile/app/capabilities.tsx",
+        "packages/contracts/src/rpc.ts",
+        "docs/fleet.md",
+        "docs/compute-profiles.md"
+      ],
+      "tests": [
+        "packages/contracts/src/fleet.test.ts"
+      ]
+    },
+    {
+      "id": "computer-engines",
+      "sources": [
+        "apps/web/src/pages/fleet/FleetSettings.tsx",
+        "apps/web/src/pages/ComputerProfilesSettings.tsx",
+        "packages/contracts/src/computer-connections.ts",
+        "scripts/site-facts.ts",
+        "docs/compute-profiles.md",
+        "docs/fleet.md",
+        "docs/self-host-sandbox-providers.md"
+      ],
+      "tests": [
+        "apps/api/src/fleet-probes.test.ts"
+      ]
+    },
+    {
+      "id": "computer-placement",
+      "sources": [
+        "apps/web/src/pages/fleet/FleetSettings.tsx",
+        "packages/contracts/src/fleet.ts",
+        "docs/fleet.md"
+      ],
+      "tests": [
+        "apps/api/src/fleet-preference.test.ts"
+      ]
+    },
+    {
+      "id": "computer-edit-remove",
+      "sources": [
+        "apps/web/src/pages/fleet/FleetSettings.tsx",
+        "apps/web/src/pages/ComputerProfilesSettings.tsx",
+        "packages/contracts/src/rpc.ts"
+      ],
+      "tests": [
+        "apps/api/src/computer-settings.test.ts"
+      ]
+    },
+    {
+      "id": "host-computer",
+      "sources": [
+        "apps/web/src/pages/HostComputerSettings.tsx",
+        "apps/web/src/pages/system/SystemPage.tsx",
+        "apps/desktop/src/host-service.ts",
+        "packages/contracts/src/rpc.ts",
+        "packages/contracts/src/host-bridge.ts",
+        "docs/host-service.md",
+        "docs/ide.md",
+        "docs/self-host.md"
+      ],
+      "tests": [
+        "apps/api/src/computer-host.test.ts"
+      ]
+    },
+    {
+      "id": "computer-maintenance",
+      "sources": [
+        "apps/web/src/components/ComputerMaintenanceActions.tsx",
+        "apps/web/src/components/ComputerUpdateProgress.tsx",
+        "packages/contracts/src/rpc.ts",
+        "docs/computer-runtime.md"
+      ],
+      "tests": [
+        "apps/api/src/computer-maintenance.test.ts"
+      ]
+    },
+    {
+      "id": "capabilities",
+      "sources": [
+        "apps/web/src/pages/capabilities/CapabilitiesPage.tsx",
+        "apps/mobile/app/capabilities.tsx",
+        "packages/contracts/src/rpc.ts",
+        "packages/contracts/src/capability-settings.ts",
+        "docs/settings-shell.md"
+      ],
+      "tests": [
+        "apps/api/src/capability-settings.test.ts"
+      ]
+    },
+    {
+      "id": "integrations",
+      "sources": [
+        "apps/web/src/pages/settings/IntegrationsSection.tsx",
+        "apps/web/src/components/integrations/catalog/IntegrationManage.tsx",
+        "apps/mobile/app/integrations.tsx",
+        "packages/contracts/src/rpc.ts",
+        "README.md",
+        "docs/settings-shell.md",
+        "docs/decisions/integration-lifecycle.md"
+      ],
+      "tests": [
+        "apps/api/src/integration-router.test.ts"
+      ]
+    },
+    {
+      "id": "mcp",
+      "sources": [
+        "apps/web/src/pages/McpServersOverlay.tsx",
+        "apps/web/src/pages/customize/McpCredentialFix.tsx",
+        "apps/web/src/components/integrations/catalog/McpToolReview.tsx",
+        "apps/web/src/App.tsx",
+        "apps/mobile/app/mcp.tsx",
+        "apps/mobile/components/customization-list.tsx",
+        "packages/contracts/src/rpc.ts",
+        "docs/settings-shell-copy.md",
+        "docs/settings-shell.md"
+      ],
+      "tests": [
+        "apps/api/src/host-mcp-authorization.test.ts"
+      ]
+    },
+    {
+      "id": "integration-setup",
+      "sources": [
+        "apps/web/src/pages/IntegrationSetup.tsx",
+        "apps/web/src/components/integrations/IntegrationSetup.tsx",
+        "apps/mobile/app/integration-setup.tsx",
+        "packages/contracts/src/rpc.ts",
+        "docs/self-host-secrets.md"
+      ],
+      "tests": []
+    },
+    {
+      "id": "plugins",
+      "sources": [
+        "apps/web/src/pages/customize/PluginsPage.tsx",
+        "apps/mobile/app/plugins.tsx",
+        "apps/mobile/components/customization-list.tsx",
+        "packages/contracts/src/customization.ts",
+        "docs/local-import.md"
+      ],
+      "tests": [
+        "apps/api/src/integration-catalog.test.ts"
+      ]
+    },
+    {
+      "id": "approval-rules",
+      "sources": [
+        "apps/web/src/pages/account/AccountMore.tsx",
+        "apps/web/src/components/ApprovalRulesSettings.tsx",
+        "packages/contracts/src/rpc.ts",
+        "docs/settings-shell.md",
+        "docs/governance.md",
+        "docs/self-host/cloud-agents.md"
+      ],
+      "tests": [
+        "packages/core/src/action-approval.test.ts"
+      ]
+    },
+    {
+      "id": "voice-settings",
+      "sources": [
+        "apps/web/src/pages/VoiceSettingsOverlay.tsx",
+        "apps/mobile/app/voice.tsx",
+        "packages/contracts/src/rpc.ts",
+        "README.md"
+      ],
+      "tests": []
+    },
+    {
+      "id": "notifications",
+      "sources": [
+        "apps/web/src/pages/settings/GeneralSettings.tsx",
+        "apps/web/src/pages/shell/bot-panel.tsx",
+        "packages/contracts/src/rpc.ts",
+        "docs/settings-shell.md",
+        "docs/settings-shell-copy.md"
+      ],
+      "tests": []
+    },
+    {
+      "id": "devices",
+      "sources": [
+        "apps/web/src/pages/DevicesSettings.tsx",
+        "apps/mobile/app/pair.tsx",
+        "packages/contracts/src/rpc.ts",
+        "docs/desktop-release.md"
+      ],
+      "tests": [
+        "apps/api/src/remote-devices.test.ts"
+      ]
+    },
+    {
+      "id": "chat-pairing",
+      "sources": [
+        "apps/web/src/pages/ChannelPairingSettings.tsx",
+        "packages/contracts/src/rpc.ts",
+        "docs/dispatch-messaging.md"
+      ],
+      "tests": []
+    },
+    {
+      "id": "messaging",
+      "sources": [
+        "apps/web/src/pages/MessagingSettingsOverlay.tsx",
+        "apps/web/src/pages/Shell.tsx",
+        "packages/contracts/src/rpc.ts",
+        "docs/dispatch-messaging.md"
+      ],
+      "tests": []
+    },
+    {
+      "id": "usage",
+      "sources": [
+        "apps/web/src/pages/AccountSettingsOverlay.tsx",
+        "apps/web/src/pages/dashboard/UsagePanel.tsx",
+        "apps/web/src/components/composer/composer-actions.ts",
+        "apps/mobile/app/account.tsx",
+        "packages/contracts/src/rpc.ts",
+        "packages/contracts/src/request-usage.ts",
+        "docs/request-usage.md"
+      ],
+      "tests": []
+    },
+    {
+      "id": "performance",
+      "sources": [
+        "apps/web/src/App.tsx",
+        "apps/web/src/pages/settings-sections.ts",
+        "docs/trace-spans.md",
+        "packages/testkit/src/performance-report.ts",
+        "docs/performance.md",
+        "docs/request-usage.md"
+      ],
+      "tests": []
+    },
+    {
+      "id": "desktop-setup",
+      "sources": [
+        "apps/desktop/src/setup.html",
+        "apps/desktop/src/setup.js",
+        "apps/desktop/src/main.ts",
+        "README.md",
+        "docs/self-host.md"
+      ],
+      "tests": []
+    },
+    {
+      "id": "desktop-system",
+      "sources": [
+        "apps/web/src/pages/system/SystemPage.tsx",
+        "apps/web/src/pages/system/bridge.ts",
+        "docs/settings-shell.md",
+        "apps/web/src/pages/system/INTEGRATION.md"
+      ],
+      "tests": [
+        "apps/desktop/src/local-settings.test.ts"
+      ]
+    },
+    {
+      "id": "desktop-quick-access",
+      "sources": [
+        "apps/web/src/App.tsx",
+        "apps/web/src/pages/system/QuickComposer.tsx",
+        "apps/web/src/pages/system/SystemDictation.tsx"
+      ],
+      "tests": []
+    },
+    {
+      "id": "desktop-storage",
+      "sources": [
+        "apps/web/src/pages/storage/StorageSettings.tsx",
+        "apps/web/src/pages/storage/bridge.ts",
+        "apps/desktop/src/storage-usage.ts",
+        "docs/self-host.md"
+      ],
+      "tests": [
+        "apps/desktop/src/storage-usage.test.ts"
+      ]
+    },
+    {
+      "id": "desktop-extensions",
+      "sources": [
+        "apps/web/src/pages/customize/ExtensionsPage.tsx",
+        "packages/contracts/src/desktop-extensions.ts",
+        "docs/local-import.md"
+      ],
+      "tests": []
+    },
+    {
+      "id": "desktop-developer",
+      "sources": [
+        "apps/web/src/pages/customize/DeveloperPage.tsx",
+        "apps/web/src/pages/customize/McpConfigEditor.tsx",
+        "apps/web/src/pages/customize/McpDiagnostics.tsx",
+        "apps/web/src/pages/settings-sections.ts",
+        "packages/contracts/src/customization.ts",
+        "docs/settings-shell.md"
+      ],
+      "tests": []
+    },
+    {
+      "id": "updates",
+      "sources": [
+        "apps/web/src/pages/AccountSettingsOverlay.tsx",
+        "apps/web/src/components/DesktopUpdates.tsx",
+        "apps/web/src/components/SoftwareUpdateSection.tsx",
+        "apps/desktop/src/auto-update.ts",
+        "packages/contracts/src/rpc.ts",
+        "README.md",
+        "docs/desktop-release.md",
+        "docs/self-host.md"
+      ],
+      "tests": []
+    },
+    {
+      "id": "mobile-pairing",
+      "sources": [
+        "apps/mobile/app/pair.tsx",
+        "apps/mobile/app/sign-in.tsx",
+        "packages/contracts/src/rpc.ts",
+        "docs/desktop-release.md",
+        "docs/mobile-release.md",
+        "docs/self-host.md"
+      ],
+      "tests": []
+    },
+    {
+      "id": "mobile-consent",
+      "sources": [
+        "apps/mobile/app/ai-data-sharing.tsx",
+        "apps/mobile/app/_layout.tsx",
+        "packages/contracts/src/rpc.ts",
+        "docs/ai-data-sharing-review.md"
+      ],
+      "tests": []
+    },
+    {
+      "id": "mobile-files",
+      "sources": [
+        "apps/mobile/app/ide.tsx",
+        "packages/contracts/src/rpc.ts",
+        "docs/ide.md"
+      ],
+      "tests": []
+    },
+    {
+      "id": "mobile-overview",
+      "sources": [
+        "apps/mobile/app/overview.tsx",
+        "apps/mobile/app/board.tsx",
+        "apps/mobile/app/team.tsx",
+        "docs/board.md"
+      ],
+      "tests": []
+    },
+    {
+      "id": "ide",
+      "sources": [
+        "apps/web/src/pages/shell/ide-nav.ts",
+        "apps/web/src/pages/ide/IdePage.tsx",
+        "packages/contracts/src/rpc.ts",
+        "packages/contracts/src/ide.ts",
+        "docs/ide.md"
+      ],
+      "tests": [
+        "apps/api/src/ide-files.test.ts"
+      ]
+    },
+    {
+      "id": "ide-handoff",
+      "sources": [
+        "apps/web/src/pages/ide/IdePage.tsx",
+        "apps/web/src/pages/ide/changes.tsx",
+        "packages/contracts/src/ide-handoff.ts",
+        "docs/ide.md"
+      ],
+      "tests": [
+        "apps/api/src/ide-changes.test.ts"
+      ]
+    },
+    {
+      "id": "terminal",
+      "sources": [
+        "apps/web/src/pages/shell/computer-terminal.tsx",
+        "apps/web/src/pages/shell/terminal-session.tsx",
+        "apps/web/src/pages/ide/terminal.tsx",
+        "packages/contracts/src/rpc.ts",
+        "docs/terminal/docker-terminal.md",
+        "docs/ide.md"
+      ],
+      "tests": [
+        "apps/api/src/terminal-routes.test.ts"
+      ]
+    },
+    {
+      "id": "self-host",
+      "sources": [
+        "README.md",
+        "docs/self-host.md",
+        "infra/compose/docker-compose.images.yml",
+        "packages/contracts/src/rpc.ts",
+        "docs/self-host-secrets.md",
+        "docs/self-host-sandbox-providers.md",
+        "docs/self-host-restricted-network.md"
+      ],
+      "tests": []
+    },
+    {
+      "id": "admin-recovery",
+      "sources": [
+        "scripts/backup.sh",
+        "scripts/restore.sh",
+        "docs/self-host.md",
+        "packages/contracts/src/rpc.ts",
+        "docs/self-host-secrets.md"
+      ],
+      "tests": []
+    },
+    {
+      "id": "cloud-work",
+      "sources": [
+        "apps/web/src/components/CloudAgentCard.tsx",
+        "docs/self-host/cloud-agents.md"
+      ],
+      "tests": []
+    }
+  ],
+  "coverage": {
+    "settings": {
+      "general": "general",
+      "account": "account-profile",
+      "privacy": "privacy",
+      "capabilities": "capabilities",
+      "memory": "memory-documents",
+      "models": "models",
+      "computer": "computers",
+      "devices": "devices",
+      "voice": "voice-settings",
+      "usage": "usage",
+      "learning": "learning-review",
+      "system": "desktop-system",
+      "storage": "desktop-storage",
+      "extensions": "desktop-extensions",
+      "developer": "desktop-developer",
+      "skills": "skills",
+      "import": "local-import",
+      "integrations": "integrations",
+      "boards": "boards-settings",
+      "mcp": "mcp",
+      "plugins": "plugins",
+      "updates": "updates"
+    },
+    "webRoutes": {
+      "/desktop/quick-access": "desktop-quick-access",
+      "/commands/:runId/:commandId": "chat-commands",
+      "/": "sign-in",
+      "/sign-in": "sign-in",
+      "/sign-up": "sign-in",
+      "/forgot-password": "sign-in",
+      "/reset-password": "sign-in",
+      "/onboarding": "onboarding",
+      "/integrations/setup": "integration-setup",
+      "/app/board": "boards",
+      "/app/ide": "ide",
+      "/app/team": "delegation-tasks",
+      "/app": "dashboard",
+      "/app/bots": "navigation",
+      "/app/g/:groupId": "groups",
+      "/app/:botId": "chat-compose"
+    },
+    "mobileEntries": {
+      "index": "navigation",
+      "sign-in": "sign-in",
+      "integration-setup": "integration-setup",
+      "ai-data-sharing": "mobile-consent",
+      "account": "account-profile",
+      "change-password": "account-profile",
+      "learning": "learning-review",
+      "capabilities": "capabilities",
+      "memory": "memory-documents",
+      "import": "local-import",
+      "models": "models",
+      "voice": "voice-settings",
+      "integrations": "integrations",
+      "new": "bots-create",
+      "new-group": "groups",
+      "new-space": "spaces",
+      "group-thread": "groups",
+      "group-settings": "groups",
+      "bot-settings": "bot-profile",
+      "thread": "chat-compose",
+      "routine": "routines",
+      "computer": "chat-computer",
+      "pair": "mobile-pairing",
+      "overview": "mobile-overview",
+      "ide": "mobile-files",
+      "mcp": "mcp",
+      "plugins": "plugins",
+      "skills": "skills",
+      "team": "delegation-tasks",
+      "comparisons": "comparisons",
+      "boards-settings": "boards-settings"
+    }
+  },
+  "exemptions": {
+    "webRoutes": {
+      "/mcp/oauth/callback": "Authentication handoff returns to the registered connection flow.",
+      "*": "Unknown-route fallback is navigation recovery, not a feature."
+    },
+    "mobileEntries": {
+      "board": "Legacy redirect to the overview Board mode.",
+      "connectors": "Legacy redirect to Integrations."
+    }
+  }
+}

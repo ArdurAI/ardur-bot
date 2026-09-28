@@ -1,0 +1,3210 @@
+{
+  "manifestVersion": 1,
+  "locale": "en",
+  "features": [
+    {
+      "id": "sign-in",
+      "aliases": [],
+      "title": "Sign in to Ardur",
+      "summary": "Sign in with email and password or create an account when the server permits it.",
+      "area": "getting-started",
+      "order": 10,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "configure"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "Sign in to Ardur"
+          ],
+          "entry": {
+            "kind": "route",
+            "route": "/sign-in"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "Sign in to Ardur"
+          ],
+          "entry": {
+            "kind": "route",
+            "route": "/sign-in"
+          }
+        },
+        "mobile": {
+          "uiLabels": [
+            "Sign in to Ardur"
+          ],
+          "entry": {
+            "kind": "route",
+            "route": "/sign-in"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "onboarding",
+      "aliases": [],
+      "title": "Connect a model",
+      "summary": "Choose a connection, complete its supported sign-in or enter a key, and save it.",
+      "area": "getting-started",
+      "order": 20,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "unavailable"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "Connect a model"
+          ],
+          "entry": {
+            "kind": "route",
+            "route": "/onboarding"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "Connect a model"
+          ],
+          "entry": {
+            "kind": "route",
+            "route": "/onboarding"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "spaces",
+      "aliases": [],
+      "title": "Spaces",
+      "summary": "Create and select a private workspace with its own bots and groups.",
+      "area": "getting-started",
+      "order": 30,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "configure"
+      },
+      "settingsPath": {
+        "mobile": {
+          "uiLabels": [
+            "New space"
+          ],
+          "entry": {
+            "kind": "route",
+            "route": "/new-space"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "space-members",
+      "aliases": [],
+      "title": "Space members",
+      "summary": "Member management has no verified user entry.",
+      "area": "getting-started",
+      "order": 40,
+      "internal": true,
+      "internalReason": "No verified member invitation or role editor in the route and settings registries or spaces contract.",
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "unavailable",
+        "desktop": "unavailable",
+        "mobile": "unavailable"
+      },
+      "settingsPath": {},
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "navigation",
+      "aliases": [],
+      "title": "Dashboard",
+      "summary": "Switch among registered top-level destinations and use available numbered navigation shortcuts.",
+      "area": "getting-started",
+      "order": 50,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "read-only"
+      },
+      "settingsPath": {},
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "dashboard",
+      "aliases": [],
+      "title": "Dashboard",
+      "summary": "Review current work, connections, usage and other registered panels.",
+      "area": "getting-started",
+      "order": 60,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "read-only"
+      },
+      "settingsPath": {},
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "settings",
+      "aliases": [],
+      "title": "Settings",
+      "summary": "Search section and row labels; open the matching section.",
+      "area": "getting-started",
+      "order": 70,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "unavailable"
+      },
+      "settingsPath": {},
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "general",
+      "aliases": [],
+      "title": "General",
+      "summary": "Set Theme, Chat font, Motion and the initial destination through Open to.",
+      "area": "getting-started",
+      "order": 80,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "unavailable"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "Settings",
+            "General"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "general"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "Settings",
+            "General"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "general"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "account-profile",
+      "aliases": [],
+      "title": "Account",
+      "summary": "Edit profile, avatar, preferred name and account instructions for bots.",
+      "area": "getting-started",
+      "order": 90,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "configure"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "Settings",
+            "Account"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "account"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "Settings",
+            "Account"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "account"
+          }
+        },
+        "mobile": {
+          "uiLabels": [
+            "Account"
+          ],
+          "entry": {
+            "kind": "route",
+            "route": "/account"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "account-access",
+      "aliases": [],
+      "title": "Local devices",
+      "summary": "Review and revoke sessions, including other sessions.",
+      "area": "getting-started",
+      "order": 100,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "unavailable"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "Settings",
+            "Account"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "account"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "Settings",
+            "Account"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "account"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "privacy",
+      "aliases": [],
+      "title": "Privacy",
+      "summary": "Export account data or memory.",
+      "area": "getting-started",
+      "order": 110,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "unavailable"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "Settings",
+            "Privacy"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "privacy"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "Settings",
+            "Privacy"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "privacy"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "bots-create",
+      "aliases": [],
+      "title": "New bot",
+      "summary": "Set Name, Title and Description.",
+      "area": "bots-and-conversations",
+      "order": 10,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "configure"
+      },
+      "settingsPath": {
+        "mobile": {
+          "uiLabels": [
+            "New bot"
+          ],
+          "entry": {
+            "kind": "route",
+            "route": "/new"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "bot-profile",
+      "aliases": [],
+      "title": "Name",
+      "summary": "Edit the bot's identity and avatar.",
+      "area": "bots-and-conversations",
+      "order": 20,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "configure"
+      },
+      "settingsPath": {
+        "mobile": {
+          "uiLabels": [
+            "Chat settings"
+          ],
+          "entry": {
+            "kind": "route",
+            "route": "/bot-settings"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "bot-instructions",
+      "aliases": [],
+      "title": "Description",
+      "summary": "Edit Description, which the save handler also persists as bot instructions; inspect/edit related knowledge documents.",
+      "area": "bots-and-conversations",
+      "order": 30,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "configure"
+      },
+      "settingsPath": {},
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "bot-pins",
+      "aliases": [],
+      "title": "Model",
+      "summary": "Select a model connection or Space default and choose a supported thinking setting.",
+      "area": "bots-and-conversations",
+      "order": 40,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "configure"
+      },
+      "settingsPath": {},
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "bot-runtime",
+      "aliases": [],
+      "title": "Runs on",
+      "summary": "Choose the built-in runtime or an installed native runtime and explicitly enable experimental use.",
+      "area": "bots-and-conversations",
+      "order": 50,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "configure"
+      },
+      "settingsPath": {},
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "bot-computer",
+      "aliases": [],
+      "title": "Computer",
+      "summary": "Select shared or dedicated computer mode.",
+      "area": "bots-and-conversations",
+      "order": 60,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "configure"
+      },
+      "settingsPath": {},
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "bot-organize",
+      "aliases": [],
+      "title": "New section",
+      "summary": "Organize bots into sections and duplicate, archive or restore bots/groups.",
+      "area": "bots-and-conversations",
+      "order": 70,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "read-only"
+      },
+      "settingsPath": {},
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "chat-compose",
+      "aliases": [],
+      "title": "Stop",
+      "summary": "Send messages, follow up during work, and stop an active run.",
+      "area": "bots-and-conversations",
+      "order": 80,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "configure"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "Stop"
+          ],
+          "entry": {
+            "kind": "route",
+            "route": "/app/:botId"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "Stop"
+          ],
+          "entry": {
+            "kind": "route",
+            "route": "/app/:botId"
+          }
+        },
+        "mobile": {
+          "uiLabels": [
+            "Thread"
+          ],
+          "entry": {
+            "kind": "route",
+            "route": "/thread"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "chat-attachments",
+      "aliases": [],
+      "title": "Add files or photos",
+      "summary": "Attach files to a message before sending.",
+      "area": "bots-and-conversations",
+      "order": 90,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "configure"
+      },
+      "settingsPath": {},
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "chat-shortcuts",
+      "aliases": [],
+      "title": "Commands",
+      "summary": "Select bots, groups, routines, integrations and other allowed targets from composer tools.",
+      "area": "bots-and-conversations",
+      "order": 100,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "read-only"
+      },
+      "settingsPath": {},
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "chat-voice",
+      "aliases": [],
+      "title": "Voice",
+      "summary": "Enter the call interface and receive spoken replies using a configured voice service.",
+      "area": "bots-and-conversations",
+      "order": 110,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "read-only"
+      },
+      "settingsPath": {},
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "chat-approvals",
+      "aliases": [],
+      "title": "Allow once",
+      "summary": "Answer an approval card or a request for more information.",
+      "area": "bots-and-conversations",
+      "order": 120,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "configure"
+      },
+      "settingsPath": {},
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "bot-secrets",
+      "aliases": [],
+      "title": "API key",
+      "summary": "Submit a requested credential through the protected input after inspecting the service destination.",
+      "area": "bots-and-conversations",
+      "order": 130,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "configure"
+      },
+      "settingsPath": {},
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "chat-computer",
+      "aliases": [],
+      "title": "Screen",
+      "summary": "Open the bot computer screen and request control.",
+      "area": "bots-and-conversations",
+      "order": 140,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "configure"
+      },
+      "settingsPath": {
+        "mobile": {
+          "uiLabels": [
+            "Computer"
+          ],
+          "entry": {
+            "kind": "route",
+            "route": "/computer"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "chat-commands",
+      "aliases": [],
+      "title": "Copy command",
+      "summary": "Inspect recorded output and export command evidence.",
+      "area": "bots-and-conversations",
+      "order": 150,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "read-only"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "Copy command"
+          ],
+          "entry": {
+            "kind": "route",
+            "route": "/commands/:runId/:commandId"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "Copy command"
+          ],
+          "entry": {
+            "kind": "route",
+            "route": "/commands/:runId/:commandId"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "chat-receipts",
+      "aliases": [],
+      "title": "Read",
+      "summary": "Inspect peer-message delivery status.",
+      "area": "bots-and-conversations",
+      "order": 160,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "read-only"
+      },
+      "settingsPath": {},
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "chat-feedback",
+      "aliases": [],
+      "title": "What was good?",
+      "summary": "React to replies and provide a reason.",
+      "area": "bots-and-conversations",
+      "order": 170,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "configure"
+      },
+      "settingsPath": {},
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "chat-activity",
+      "aliases": [],
+      "title": "Context",
+      "summary": "Browse recorded runs for a bot.",
+      "area": "bots-and-conversations",
+      "order": 180,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "unavailable"
+      },
+      "settingsPath": {},
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "groups",
+      "aliases": [],
+      "title": "New group",
+      "summary": "Create a shared conversation with selected bots and edit its name/member selection.",
+      "area": "team-work",
+      "order": 10,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "configure"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "New group"
+          ],
+          "entry": {
+            "kind": "route",
+            "route": "/app/g/:groupId"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "New group"
+          ],
+          "entry": {
+            "kind": "route",
+            "route": "/app/g/:groupId"
+          }
+        },
+        "mobile": {
+          "uiLabels": [
+            "New group"
+          ],
+          "entry": {
+            "kind": "route",
+            "route": "/new-group"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "group-goals",
+      "aliases": [],
+      "title": "Start goal",
+      "summary": "Start an objective with completion conditions, a deadline and token limit.",
+      "area": "team-work",
+      "order": 20,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "read-only"
+      },
+      "settingsPath": {},
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "delegation-tasks",
+      "aliases": [],
+      "title": "Team",
+      "summary": "Review delegated task cards, artifacts and completion state.",
+      "area": "team-work",
+      "order": 30,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "configure"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "Team"
+          ],
+          "entry": {
+            "kind": "route",
+            "route": "/app/team"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "Team"
+          ],
+          "entry": {
+            "kind": "route",
+            "route": "/app/team"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "delegation-policy",
+      "aliases": [],
+      "title": "Allowed model destinations",
+      "summary": "Inspect the current delegation policy.",
+      "area": "team-work",
+      "order": 40,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "unavailable"
+      },
+      "settingsPath": {},
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "comparisons",
+      "aliases": [],
+      "title": "Compare with…",
+      "summary": "Create a comparison from selected bots and shared inputs; preview its setup.",
+      "area": "team-work",
+      "order": 50,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "read-only"
+      },
+      "settingsPath": {},
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "routines",
+      "aliases": [],
+      "title": "Routines",
+      "summary": "Create/edit a routine's Name and Instruction and set it Active or paused.",
+      "area": "routines-and-boards",
+      "order": 10,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "read-only"
+      },
+      "settingsPath": {
+        "mobile": {
+          "uiLabels": [
+            "Routine"
+          ],
+          "entry": {
+            "kind": "route",
+            "route": "/routine"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "routine-triggers",
+      "aliases": [],
+      "title": "When to run",
+      "summary": "Add scheduled runs, choose timezone/schedule fields, or use advanced cron.",
+      "area": "routines-and-boards",
+      "order": 20,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "unavailable"
+      },
+      "settingsPath": {},
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "routine-history",
+      "aliases": [],
+      "title": "Run history",
+      "summary": "Inspect recent routine executions and their status.",
+      "area": "routines-and-boards",
+      "order": 30,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "unavailable"
+      },
+      "settingsPath": {},
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "boards",
+      "aliases": [],
+      "title": "Board",
+      "summary": "Create/update work, follow it, claim it, send it to a bot or close it.",
+      "area": "routines-and-boards",
+      "order": 40,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "read-only"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "Board"
+          ],
+          "entry": {
+            "kind": "route",
+            "route": "/app/board"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "Board"
+          ],
+          "entry": {
+            "kind": "route",
+            "route": "/app/board"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "boards-settings",
+      "aliases": [],
+      "title": "Boards",
+      "summary": "Register/start a board for a folder and choose a default board or archive/restore it.",
+      "area": "routines-and-boards",
+      "order": 50,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "configure"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "Settings",
+            "Customize",
+            "Boards"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "boards"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "Settings",
+            "Customize",
+            "Boards"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "boards"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "memory-documents",
+      "aliases": [],
+      "title": "Memory",
+      "summary": "Browse authorized documents and inspect their revisions/history.",
+      "area": "memory-and-learning",
+      "order": 10,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "read-only"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "Settings",
+            "Memory"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "memory"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "Settings",
+            "Memory"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "memory"
+          }
+        },
+        "mobile": {
+          "uiLabels": [
+            "Memory"
+          ],
+          "entry": {
+            "kind": "route",
+            "route": "/memory"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "memory-import-export",
+      "aliases": [],
+      "title": "Export memory",
+      "summary": "Preview a portable import and map its scopes to the destination.",
+      "area": "memory-and-learning",
+      "order": 20,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "unavailable"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "Settings",
+            "Memory"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "memory"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "Settings",
+            "Memory"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "memory"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "memory-storage",
+      "aliases": [],
+      "title": "Memory storage",
+      "summary": "Open storage settings from Memory and inspect the current destination.",
+      "area": "memory-and-learning",
+      "order": 30,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "read-only"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "Settings",
+            "Memory"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "memory"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "Settings",
+            "Memory"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "memory"
+          }
+        }
+      },
+      "steps": [
+        {
+          "id": "open",
+          "aliases": [],
+          "text": "Open Settings, then Memory.",
+          "uiLabels": [
+            "Settings",
+            "Memory"
+          ],
+          "screenshotId": null,
+          "expected": "Memory storage is visible.",
+          "availableSince": null
+        },
+        {
+          "id": "manage",
+          "aliases": [],
+          "text": "Choose Manage beside Memory storage.",
+          "uiLabels": [
+            "Manage",
+            "Memory storage"
+          ],
+          "screenshotId": null,
+          "expected": "The location controls are visible.",
+          "availableSince": null
+        }
+      ],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "memory-git",
+      "aliases": [],
+      "title": "Git repository",
+      "summary": "Test a repository configuration and preview migration before confirming shared-document storage.",
+      "area": "memory-and-learning",
+      "order": 40,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "read-only"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "Settings",
+            "Memory"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "memory"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "Settings",
+            "Memory"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "memory"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "memory-vault",
+      "aliases": [],
+      "title": "Obsidian vault",
+      "summary": "Choose a memory folder, with a native folder selector when the desktop bridge provides it.",
+      "area": "memory-and-learning",
+      "order": 50,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "read-only"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "Settings",
+            "Memory"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "memory"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "Settings",
+            "Memory"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "memory"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "memory-service",
+      "aliases": [],
+      "title": "Another service",
+      "summary": "Choose/test a supported service and preview document migration before saving the connection.",
+      "area": "memory-and-learning",
+      "order": 60,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "read-only"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "Settings",
+            "Memory"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "memory"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "Settings",
+            "Memory"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "memory"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "learning-review",
+      "aliases": [],
+      "title": "Learning",
+      "summary": "Enable/configure review and inspect proposed changes with evidence.",
+      "area": "memory-and-learning",
+      "order": 70,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "configure"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "Settings",
+            "Learning"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "learning"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "Settings",
+            "Learning"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "learning"
+          }
+        },
+        "mobile": {
+          "uiLabels": [
+            "Learning"
+          ],
+          "entry": {
+            "kind": "route",
+            "route": "/learning"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "learning-insights",
+      "aliases": [],
+      "title": "Insights",
+      "summary": "Inspect a suggestion and the evidence window/counts behind it.",
+      "area": "memory-and-learning",
+      "order": 80,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "read-only"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "Settings",
+            "Learning"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "learning"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "Settings",
+            "Learning"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "learning"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "learning-history",
+      "aliases": [],
+      "title": "Timeline",
+      "summary": "Review revision-linked observations and the learning journey.",
+      "area": "memory-and-learning",
+      "order": 90,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "read-only"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "Settings",
+            "Learning"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "learning"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "Settings",
+            "Learning"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "learning"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "skills",
+      "aliases": [],
+      "title": "Skills",
+      "summary": "Browse/import a skill and inspect its content.",
+      "area": "memory-and-learning",
+      "order": 100,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "read-only"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "Settings",
+            "Customize",
+            "Skills"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "skills"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "Settings",
+            "Customize",
+            "Skills"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "skills"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "teach-skills",
+      "aliases": [],
+      "title": "Teach a task",
+      "summary": "Start a computer teaching session and capture interaction through the teaching overlay.",
+      "area": "memory-and-learning",
+      "order": 110,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "unavailable"
+      },
+      "settingsPath": {},
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "scratchpad",
+      "aliases": [],
+      "title": "Open work",
+      "summary": "Create an item in the bot scratchpad.",
+      "area": "memory-and-learning",
+      "order": 120,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "unavailable"
+      },
+      "settingsPath": {},
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "local-import",
+      "aliases": [],
+      "title": "Import",
+      "summary": "Scan and preview supported host tool data before importing all or selected categories.",
+      "area": "memory-and-learning",
+      "order": 130,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "configure"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "Settings",
+            "Customize",
+            "Import"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "import"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "Settings",
+            "Customize",
+            "Import"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "import"
+          }
+        },
+        "mobile": {
+          "uiLabels": [
+            "Import"
+          ],
+          "entry": {
+            "kind": "route",
+            "route": "/import"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "models",
+      "aliases": [],
+      "title": "Models",
+      "summary": "Browse the catalog and configured credentials; connect using supported account or key flows.",
+      "area": "connections-and-computers",
+      "order": 10,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "configure"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "Settings",
+            "Models"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "models"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "Settings",
+            "Models"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "models"
+          }
+        },
+        "mobile": {
+          "uiLabels": [
+            "Models"
+          ],
+          "entry": {
+            "kind": "route",
+            "route": "/models"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "model-server",
+      "aliases": [],
+      "title": "Server URL",
+      "summary": "Probe a compatible endpoint and select a returned model or enter an explicit identifier.",
+      "area": "connections-and-computers",
+      "order": 20,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "configure"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "Settings",
+            "Models"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "models"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "Settings",
+            "Models"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "models"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "models-local",
+      "aliases": [],
+      "title": "Models",
+      "summary": "Test a local connection and select an available option.",
+      "area": "connections-and-computers",
+      "order": 30,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "read-only"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "Settings",
+            "Models"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "models"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "Settings",
+            "Models"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "models"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "computers",
+      "aliases": [],
+      "title": "Computers",
+      "summary": "Inspect connected/discovered targets, capacity and assigned bots.",
+      "area": "connections-and-computers",
+      "order": 40,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "read-only"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "Settings",
+            "Computers"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "computer"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "Settings",
+            "Computers"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "computer"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "computer-engines",
+      "aliases": [],
+      "title": "Docker",
+      "summary": "Enter a connection for a supported engine or add a discovered SSH target.",
+      "area": "connections-and-computers",
+      "order": 50,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "read-only"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "Settings",
+            "Computers"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "computer"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "Settings",
+            "Computers"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "computer"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "computer-placement",
+      "aliases": [],
+      "title": "Placement",
+      "summary": "Configure placement policy and eligible destinations.",
+      "area": "connections-and-computers",
+      "order": 60,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "read-only"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "Settings",
+            "Computers"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "computer"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "Settings",
+            "Computers"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "computer"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "computer-edit-remove",
+      "aliases": [],
+      "title": "Edit",
+      "summary": "Saved computer connection editing is not on this checkout.",
+      "area": "connections-and-computers",
+      "order": 70,
+      "internal": true,
+      "internalReason": "Saved connection edit and remove controls exist only on the separate fleet branch, not this checkout.",
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "unavailable",
+        "desktop": "unavailable",
+        "mobile": "unavailable"
+      },
+      "settingsPath": {},
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "host-computer",
+      "aliases": [],
+      "title": "This computer",
+      "summary": "Inspect host-service status and disconnect its connection where permitted.",
+      "area": "connections-and-computers",
+      "order": 80,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "read-only"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "Settings",
+            "Computers"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "computer"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "Settings",
+            "Computers"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "computer"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "computer-maintenance",
+      "aliases": [],
+      "title": "More computer actions",
+      "summary": "Request a computer reset with the existing confirmation flow.",
+      "area": "connections-and-computers",
+      "order": 90,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "read-only"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "Settings",
+            "Computers"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "computer"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "Settings",
+            "Computers"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "computer"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "capabilities",
+      "aliases": [],
+      "title": "Capabilities",
+      "summary": "Select Tool access mode and Connector search behavior.",
+      "area": "connections-and-computers",
+      "order": 100,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "configure"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "Settings",
+            "Capabilities"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "capabilities"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "Settings",
+            "Capabilities"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "capabilities"
+          }
+        },
+        "mobile": {
+          "uiLabels": [
+            "Capabilities"
+          ],
+          "entry": {
+            "kind": "route",
+            "route": "/capabilities"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "integrations",
+      "aliases": [],
+      "title": "Integrations",
+      "summary": "Discover supported integrations, start connection/sign-in and inspect connection details.",
+      "area": "connections-and-computers",
+      "order": 110,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "configure"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "Settings",
+            "Customize",
+            "Integrations"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "integrations"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "Settings",
+            "Customize",
+            "Integrations"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "integrations"
+          }
+        },
+        "mobile": {
+          "uiLabels": [
+            "Integrations"
+          ],
+          "entry": {
+            "kind": "route",
+            "route": "/integrations"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "mcp",
+      "aliases": [],
+      "title": "MCP",
+      "summary": "Add a server, inspect its tools, update authentication or remove it.",
+      "area": "connections-and-computers",
+      "order": 120,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "read-only"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "Settings",
+            "Customize",
+            "MCP"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "mcp"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "Settings",
+            "Customize",
+            "MCP"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "mcp"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "integration-setup",
+      "aliases": [],
+      "title": "Server integrations",
+      "summary": "Inspect the server integration setup and available connection choices.",
+      "area": "connections-and-computers",
+      "order": 130,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "configure"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "Server integrations"
+          ],
+          "entry": {
+            "kind": "route",
+            "route": "/integrations/setup"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "Server integrations"
+          ],
+          "entry": {
+            "kind": "route",
+            "route": "/integrations/setup"
+          }
+        },
+        "mobile": {
+          "uiLabels": [
+            "Server integrations"
+          ],
+          "entry": {
+            "kind": "route",
+            "route": "/integration-setup"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "plugins",
+      "aliases": [],
+      "title": "Plugins",
+      "summary": "Add a marketplace and preview a plugin before installation.",
+      "area": "connections-and-computers",
+      "order": 140,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "read-only"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "Settings",
+            "Customize",
+            "Plugins"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "plugins"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "Settings",
+            "Customize",
+            "Plugins"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "plugins"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "approval-rules",
+      "aliases": [],
+      "title": "Action confirmations",
+      "summary": "Add or remove scoped approval rules.",
+      "area": "connections-and-computers",
+      "order": 150,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "unavailable"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "Settings",
+            "Account"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "account"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "Settings",
+            "Account"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "account"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "voice-settings",
+      "aliases": [],
+      "title": "Voice",
+      "summary": "Connect/disconnect a voice credential and inspect service status.",
+      "area": "connections-and-computers",
+      "order": 160,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "configure"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "Settings",
+            "Voice"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "voice"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "Settings",
+            "Voice"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "voice"
+          }
+        },
+        "mobile": {
+          "uiLabels": [
+            "Voice"
+          ],
+          "entry": {
+            "kind": "route",
+            "route": "/voice"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "notifications",
+      "aliases": [],
+      "title": "Notifications",
+      "summary": "Request notification permission and choose Response completions, Routines, Approvals needed and Dispatch messages.",
+      "area": "connections-and-computers",
+      "order": 170,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "read-only"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "Settings",
+            "General"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "general"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "Settings",
+            "General"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "general"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "devices",
+      "aliases": [],
+      "title": "Devices",
+      "summary": "Start a pairing, confirm its code and inspect connected devices.",
+      "area": "connections-and-computers",
+      "order": 180,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "configure"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "Settings",
+            "Devices"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "devices"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "Settings",
+            "Devices"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "devices"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "chat-pairing",
+      "aliases": [],
+      "title": "Pair a chat account",
+      "summary": "Configure a supported messaging installation and choose its bot.",
+      "area": "connections-and-computers",
+      "order": 190,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "unavailable"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "Settings",
+            "Devices"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "devices"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "Settings",
+            "Devices"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "devices"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "messaging",
+      "aliases": [],
+      "title": "Messaging",
+      "summary": "Link/unlink identities, accept/decline channel invitations and leave channels.",
+      "area": "connections-and-computers",
+      "order": 200,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "read-only"
+      },
+      "settingsPath": {},
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "usage",
+      "aliases": [],
+      "title": "Usage",
+      "summary": "Read the available run and token totals in settings or the dashboard.",
+      "area": "connections-and-computers",
+      "order": 210,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "read-only"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "Settings",
+            "Usage"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "usage"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "Settings",
+            "Usage"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "usage"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "performance",
+      "aliases": [],
+      "title": "Performance",
+      "summary": "A user performance page has no verified entry.",
+      "area": "connections-and-computers",
+      "order": 220,
+      "internal": true,
+      "internalReason": "No user Performance route or settings registration; only maintainer benchmark tooling is present.",
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "unavailable",
+        "desktop": "unavailable",
+        "mobile": "unavailable"
+      },
+      "settingsPath": {},
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "desktop-setup",
+      "aliases": [],
+      "title": "This computer",
+      "summary": "Start an app-managed local database and services on first launch.",
+      "area": "desktop",
+      "order": 10,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "unavailable",
+        "desktop": "configure",
+        "mobile": "unavailable"
+      },
+      "settingsPath": {},
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "desktop-system",
+      "aliases": [],
+      "title": "System",
+      "summary": "Configure supported startup, menu bar, sleep and keyboard-shortcut behavior.",
+      "area": "desktop",
+      "order": 20,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "unavailable",
+        "desktop": "configure",
+        "mobile": "unavailable"
+      },
+      "settingsPath": {
+        "desktop": {
+          "uiLabels": [
+            "Settings",
+            "Desktop app",
+            "System"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "system"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "desktop-quick-access",
+      "aliases": [],
+      "title": "Quick access shortcut",
+      "summary": "Open a compact composer and send to a chosen bot from the desktop shortcut.",
+      "area": "desktop",
+      "order": 30,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "unavailable",
+        "desktop": "configure",
+        "mobile": "unavailable"
+      },
+      "settingsPath": {
+        "desktop": {
+          "uiLabels": [
+            "Quick access shortcut"
+          ],
+          "entry": {
+            "kind": "route",
+            "route": "/desktop/quick-access"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "desktop-storage",
+      "aliases": [],
+      "title": "Storage",
+      "summary": "Inspect categorized disk use and location availability/approximation.",
+      "area": "desktop",
+      "order": 40,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "unavailable",
+        "desktop": "configure",
+        "mobile": "unavailable"
+      },
+      "settingsPath": {
+        "desktop": {
+          "uiLabels": [
+            "Settings",
+            "Desktop app",
+            "Storage"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "storage"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "desktop-extensions",
+      "aliases": [],
+      "title": "Extensions",
+      "summary": "Browse compatible local extensions or prepare an uploaded bundle for review.",
+      "area": "desktop",
+      "order": 50,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "unavailable",
+        "desktop": "configure",
+        "mobile": "unavailable"
+      },
+      "settingsPath": {
+        "desktop": {
+          "uiLabels": [
+            "Settings",
+            "Desktop app",
+            "Extensions"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "extensions"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "desktop-developer",
+      "aliases": [],
+      "title": "Developer",
+      "summary": "Preview local server configuration changes before applying them.",
+      "area": "desktop",
+      "order": 60,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "unavailable",
+        "desktop": "configure",
+        "mobile": "unavailable"
+      },
+      "settingsPath": {
+        "desktop": {
+          "uiLabels": [
+            "Settings",
+            "Desktop app",
+            "Developer"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "developer"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "updates",
+      "aliases": [],
+      "title": "Updates",
+      "summary": "Check the update state exposed by the installed desktop app or an owner-managed server updater.",
+      "area": "desktop",
+      "order": 70,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "unavailable"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "Settings",
+            "Platform",
+            "Updates"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "updates"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "Settings",
+            "Platform",
+            "Updates"
+          ],
+          "entry": {
+            "kind": "settings",
+            "sectionId": "updates"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "mobile-pairing",
+      "aliases": [],
+      "title": "Pair device",
+      "summary": "Scan/enter a home pairing address and complete the pairing flow.",
+      "area": "mobile",
+      "order": 10,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "read-only",
+        "desktop": "unavailable",
+        "mobile": "configure"
+      },
+      "settingsPath": {
+        "mobile": {
+          "uiLabels": [
+            "Pair"
+          ],
+          "entry": {
+            "kind": "route",
+            "route": "/pair"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "mobile-consent",
+      "aliases": [],
+      "title": "AI data sharing",
+      "summary": "Review recipient permissions on mobile.",
+      "area": "mobile",
+      "order": 20,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "unavailable",
+        "desktop": "unavailable",
+        "mobile": "configure"
+      },
+      "settingsPath": {
+        "mobile": {
+          "uiLabels": [
+            "AI data sharing"
+          ],
+          "entry": {
+            "kind": "route",
+            "route": "/ai-data-sharing"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "mobile-files",
+      "aliases": [],
+      "title": "Files",
+      "summary": "Browse available roots/directories and read a text preview.",
+      "area": "mobile",
+      "order": 30,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "unavailable",
+        "desktop": "unavailable",
+        "mobile": "read-only"
+      },
+      "settingsPath": {
+        "mobile": {
+          "uiLabels": [
+            "Files"
+          ],
+          "entry": {
+            "kind": "route",
+            "route": "/ide"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "mobile-overview",
+      "aliases": [],
+      "title": "Overview",
+      "summary": "Review current work, filing outcomes, connections and usage using native panels.",
+      "area": "mobile",
+      "order": 40,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "unavailable",
+        "desktop": "unavailable",
+        "mobile": "read-only"
+      },
+      "settingsPath": {
+        "mobile": {
+          "uiLabels": [
+            "Overview"
+          ],
+          "entry": {
+            "kind": "route",
+            "route": "/overview"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "ide",
+      "aliases": [],
+      "title": "IDE",
+      "summary": "Browse accessible computer/host roots and open text files in the editor.",
+      "area": "ide-and-operations",
+      "order": 10,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "unavailable"
+      },
+      "settingsPath": {
+        "web": {
+          "uiLabels": [
+            "IDE"
+          ],
+          "entry": {
+            "kind": "route",
+            "route": "/app/ide"
+          }
+        },
+        "desktop": {
+          "uiLabels": [
+            "IDE"
+          ],
+          "entry": {
+            "kind": "route",
+            "route": "/app/ide"
+          }
+        }
+      },
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "ide-handoff",
+      "aliases": [],
+      "title": "Ask a bot",
+      "summary": "Send selected text, path and an instruction to the selected bot.",
+      "area": "ide-and-operations",
+      "order": 20,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "unavailable"
+      },
+      "settingsPath": {},
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "terminal",
+      "aliases": [],
+      "title": "Terminal",
+      "summary": "Open a human terminal on a supported computer after explicit takeover.",
+      "area": "ide-and-operations",
+      "order": 30,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "unavailable"
+      },
+      "settingsPath": {},
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "self-host",
+      "aliases": [],
+      "title": "Self-hosting",
+      "summary": "Set up a server and connect supported clients.",
+      "area": "ide-and-operations",
+      "order": 40,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "unavailable",
+        "desktop": "unavailable",
+        "mobile": "unavailable"
+      },
+      "settingsPath": {},
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "admin-recovery",
+      "aliases": [],
+      "title": "Restore",
+      "summary": "Follow the documented server backup and restore procedure.",
+      "area": "ide-and-operations",
+      "order": 50,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "unavailable",
+        "desktop": "unavailable",
+        "mobile": "unavailable"
+      },
+      "settingsPath": {},
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    },
+    {
+      "id": "cloud-work",
+      "aliases": [],
+      "title": "Work",
+      "summary": "Inspect optional hosted work status in a conversation.",
+      "area": "ide-and-operations",
+      "order": 60,
+      "internal": false,
+      "internalReason": null,
+      "status": "draft",
+      "availableSince": null,
+      "platforms": {
+        "web": "configure",
+        "desktop": "configure",
+        "mobile": "unavailable"
+      },
+      "settingsPath": {},
+      "steps": [],
+      "boundaries": [],
+      "troubleshooting": [],
+      "related": []
+    }
+  ],
+  "screenshots": []
+}

@@ -244,6 +244,46 @@ describe("worker provider broker", () => {
     expect(JSON.stringify(f.records)).not.toContain(f.broker.grant.token);
   });
 
+  it("forwards a gpt-4.1 completion limit without changing its parameter or reservation", async () => {
+    const base = fixture();
+    const provider = vi.fn<typeof globalThis.fetch>(async () =>
+      json({ model: "gpt-4.1", usage: { prompt_tokens: 3, completion_tokens: 2 } }),
+    );
+    const f = fixture({
+      scope: {
+        ...base.options.scope,
+        pin: { ...base.options.scope.pin, modelId: "gpt-4.1" },
+      },
+      connection: {
+        ...base.options.connection,
+        modelId: "gpt-4.1",
+      },
+      fetch: provider,
+    });
+    const response = await f.broker.open(
+      f.request({
+        scope: f.options.scope,
+        body: { ...f.body, model: "gpt-4.1", max_completion_tokens: 12 },
+      }),
+    );
+    expect(response.ok).toBe(true);
+    const sent = JSON.parse(String(provider.mock.calls[0]?.[1]?.body));
+    expect(sent.max_completion_tokens).toBe(12);
+    expect(sent).not.toHaveProperty("max_tokens");
+    expect(f.records[0]?.request?.admission?.reservedTokens).toBe(100);
+    expect(f.records.at(-1)?.request?.collection?.outcome).toBe("success");
+  });
+
+  it.each([
+    ["over cap", { max_completion_tokens: 21 }],
+    ["both names", { max_tokens: 12, max_completion_tokens: 12 }],
+  ])("rejects %s before provider I/O", async (_reason, fields) => {
+    const f = fixture();
+    await expect(f.broker.open(f.request({ body: { ...f.body, ...fields } }))).rejects.toThrow();
+    expect(f.fetch).not.toHaveBeenCalled();
+    expect(f.records).toHaveLength(0);
+  });
+
   it("pins the connection and tool schema when the grant is created", async () => {
     const f = fixture();
     const savedScope = structuredClone(f.options.scope);
