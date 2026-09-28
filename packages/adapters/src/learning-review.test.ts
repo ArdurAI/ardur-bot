@@ -1,4 +1,5 @@
-import type { AgentRunRequest, AgentRuntime, BackgroundJobPayloads } from "@ardurbot/adapter-kit";
+import type { AgentRunRequest, AgentRuntime, AgentUsage, BackgroundJobPayloads } from "@ardurbot/adapter-kit";
+import { CodexUsageCollector } from "@ardurbot/host-runtime/runtimes/codex-usage";
 import type { LearningCandidate, RuntimePin } from "@ardurbot/contracts";
 import { runtimePinProblem } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
@@ -444,6 +445,87 @@ describe("proposal-only learning review", () => {
     await reviewLearning(f.deps, payload);
     expect(f.runtimeRun).not.toHaveBeenCalled();
     expect(f.records.reviews[0]?.status).toBe("no-change");
+  });
+});
+
+describe("reviewer runtime resolution", () => {
+  const codexPin: RuntimePin = {
+    runtimeKind: "codex-app-server",
+    provider: "openai-codex",
+    modelId: "gpt-6-astra",
+    effort: "high",
+    credentialId: "native:codex-app-server",
+    revision: 1,
+  };
+  function codexReviewFixture() {
+    const f = fixture();
+    f.config.reviewerPin = codexPin;
+    f.deps.resolvePin = vi.fn(async () => ({
+      kind: "resolved" as const,
+      pin: codexPin,
+      runtimePin: codexPin,
+      provider: codexPin.provider!,
+      id: codexPin.modelId!,
+      thinkingLevel: "high" as const,
+    }));
+    return f;
+  }
+  const totals = (inputTokens: number, outputTokens: number) => ({
+    inputTokens,
+    outputTokens,
+    cachedInputTokens: Math.floor(inputTokens / 2),
+    cacheWriteInputTokens: Math.floor(inputTokens / 10),
+    reasoningOutputTokens: Math.floor(outputTokens / 2),
+    totalTokens: inputTokens + outputTokens,
+  });
+  it("runs a native reviewer pin on its own runtime and records real tokens", async () => {
+    const f = codexReviewFixture();
+    const collector = new CodexUsageCollector("openai-codex", "gpt-6-astra", false);
+    const nativeRun = vi.fn(async function* (_request: AgentRunRequest) {
+      yield collector.start();
+      const first = collector.update(totals(3000, 200));
+      if (first) yield first;
+      const second = collector.update(totals(3400, 260));
+      if (second) yield second;
+      yield collector.finish("success");
+      yield { type: "done", text: JSON.stringify({ proposals: [] }) };
+    });
+    const nativeRuntime = {
+      run: nativeRun,
+      describe: () => ({ capabilities: { scripted: false } }),
+    } as unknown as AgentRuntime;
+    const resolveRuntime = vi.fn(async () => ({ runtime: nativeRuntime }));
+    const recorded: AgentUsage[] = [];
+    const recordUsage = vi.fn(async (_sourceRunId: string, usage: AgentUsage) => {
+      recorded.push(usage);
+    });
+    await reviewLearning({ ...f.deps, resolveRuntime, recordUsage }, await f.payload());
+    expect(resolveRuntime).toHaveBeenCalledWith(codexPin);
+    expect(nativeRun).toHaveBeenCalledOnce();
+    expect(f.runtimeRun).not.toHaveBeenCalled();
+    const final = recorded.at(-1)!;
+    expect(final.request?.purpose).toBe("detached-learning");
+    expect(final.request?.categories).toMatchObject({
+      logicalInput: 3400,
+      output: 260,
+      cacheReadInput: 1700,
+      cacheWriteInput: 340,
+    });
+    expect(f.records.reviews[0]).toMatchObject({ status: "no-change", tokens: 3660 });
+  });
+  it("pauses without a model call or usage row when the reviewer runtime is unavailable", async () => {
+    const f = codexReviewFixture();
+    const resolveRuntime = vi.fn(async () =>
+      runtimePinProblem(codexPin, "runtime-unavailable", "Codex is not installed."),
+    );
+    const recordUsage = vi.fn(async () => undefined);
+    await reviewLearning({ ...f.deps, resolveRuntime, recordUsage }, await f.payload());
+    expect(f.records.reviews[0]).toMatchObject({
+      status: "paused",
+      reason: "Codex is not installed.",
+    });
+    expect(recordUsage).not.toHaveBeenCalled();
+    expect(f.records.usage).toEqual([]);
   });
 });
 
