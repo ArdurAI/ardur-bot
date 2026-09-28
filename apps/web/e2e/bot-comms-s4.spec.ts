@@ -43,7 +43,7 @@ test("holds a peer ask and lets the owner pause group and space traffic", async 
       tokenLimit: 100_000,
       untilAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
     });
-    await expect(page.getByText("Coordinator wants Worker to prepare a team request.")).toBeVisible(
+    await expect(page.getByTestId("ask-card").getByText("Coordinator wants Worker to prepare a team request.")).toBeVisible(
       { timeout: 60_000 },
     );
     await expect(
