@@ -836,6 +836,39 @@ it("approves a user import with its kind and requires approval before deleting a
   });
 });
 
+it("identifies a masked credential line while leaving other imports approvable", async () => {
+  const f = fixture();
+  const secret = "T4h7K0m3P8q2R5s9V1x6Y3z8B4c7D2f5";
+  f.db.secret.findMany.mockResolvedValue([{ id: "stored", ciphertext: "fixture" }]);
+  f.deps.secretStore = { load: () => secret } as never;
+  f.db.reviewExecution.findFirst.mockResolvedValue({
+    reviewerPin: pin,
+    policyVersion: "memory-settings-v1",
+    userId: actor.userId,
+    botId: "bot",
+    completedAt: new Date(),
+  } as never);
+  const blocked = await f.proposal(undefined, {
+    scope: actor,
+    operation: "memory-import",
+    proposedContent: `- Ordinary text.\n- Key ${secret} in prose.`,
+  });
+  await expect(f.apply.approve(blocked.id, actor)).rejects.toMatchObject({
+    proposalId: blocked.id,
+    lineNumber: 2,
+    maskedLine: "- Key [redacted] in prose.",
+  });
+  const safe = await f.proposal(undefined, {
+    scope: actor,
+    operation: "memory-import",
+    proposedContent: "- Keep reports and projects.",
+  });
+  const approved = await f.apply.approve(safe.id, actor);
+  expect((await f.service.read(approved.proposal.documentId!, f.context))?.content).toBe(
+    "- Keep reports and projects.",
+  );
+});
+
 it.each([undefined, "profile"] as const)(
   "preserves citations when applying a proposal with category %s",
   async (documentKind) => {

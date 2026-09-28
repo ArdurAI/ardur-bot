@@ -1,11 +1,17 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import http from "node:http";
 import { cpus, freemem, loadavg, totalmem } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { ComputerProfileSchema, computerImage } from "@ardurbot/contracts";
+import {
+  COMPUTER_IMAGE_DOWNLOAD_FAILED_CODE,
+  ComputerImageDownloadError,
+  ComputerProfileSchema,
+  computerImage,
+} from "@ardurbot/contracts";
 import {
   boundedSandboxCommandTimeoutMs,
   COMMAND_OUTPUT_LIMIT,
@@ -18,10 +24,13 @@ import { createRootLogger } from "@ardurbot/logging/axiom";
 import { requestLogging } from "@ardurbot/logging/hono";
 import { serve } from "@hono/node-server";
 import Docker from "dockerode";
-import { Hono, type MiddlewareHandler } from "hono";
+import type { MiddlewareHandler } from "hono";
+import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
 import { createDockerCommandOutput } from "./command-output.js";
+import type { ImagePullProgress } from "./computer-image-pull.js";
+import { ensureDockerComputerImage } from "./computer-image-pull.js";
 import {
   assertVolumeSubpathSupport,
   COMPUTER_GID,
@@ -37,9 +46,11 @@ import {
   controlPortPublicationMatches,
   homeVolumeMatches,
   hostComputerUser,
+  LOCAL_COMPUTER_IMAGE,
   legacyNetworkOwnedSolelyBy,
   publishedLoopbackControlHostPort,
   resolveComputerControlEndpoint,
+  resolveComputerImage,
   resolveScreenNetworkMode,
   resolveScreenPublishTarget,
   resolveSpaceComputerLimit,
@@ -113,6 +124,33 @@ const docker = new Proxy(defaultDocker, {
 });
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..");
 const dataDir = path.resolve(repositoryRoot, process.env.DATA_DIR ?? "./data");
+const appVersion = (
+  JSON.parse(readFileSync(path.join(repositoryRoot, "package.json"), "utf8")) as {
+    version: string;
+  }
+).version;
+let lastResolvedComputerImage = COMPUTER_IMAGE;
+async function resolvedComputerImage(
+  engine = engineScope.getStore() ?? defaultDocker,
+): Promise<string> {
+  let localPresent = false;
+  if (!process.env.ARDURBOT_COMPUTER_IMAGE) {
+    try {
+      await engine.getImage(LOCAL_COMPUTER_IMAGE).inspect();
+      localPresent = true;
+    } catch (error) {
+      if ((error as { statusCode?: number }).statusCode !== 404) throw error;
+    }
+  }
+  const image = resolveComputerImage({
+    override: process.env.ARDURBOT_COMPUTER_IMAGE,
+    localPresent,
+    appVersion,
+    channel: process.env.ARDURBOT_COMPUTER_CHANNEL,
+  });
+  lastResolvedComputerImage = image;
+  return image;
+}
 
 const supervisorContainers = new WeakMap<Docker, Docker.ContainerInspectInfo>();
 const supervisorToken = resolveSupervisorToken(process.env);
@@ -159,7 +197,7 @@ export function resolveDockerSocketPath(
   );
 }
 
-app.get("/health", (c) => c.json({ ok: true, image: COMPUTER_IMAGE }));
+app.get("/health", (c) => c.json({ ok: true, image: lastResolvedComputerImage }));
 
 app.use("/computers", async (c, next) => {
   if (!hasValidBearerToken(c.req.header("authorization"), supervisorToken)) {
@@ -238,146 +276,183 @@ app.post("/computers", async (c) => {
       networkEgress: z.boolean().default(true),
     })
     .parse(await c.req.json());
-  try {
-    assertRequestIdentity(c.req.header("x-ardurbot-bot-id"), c.req.header("x-ardurbot-space-id"), {
-      botId: body.botId,
-      spaceId: body.spaceId,
-    });
-    return await withBotLifecycleLock(body.botId, async () => {
-      const image =
-        body.imageProfile === "base" && process.env.ARDURBOT_COMPUTER_IMAGE
-          ? COMPUTER_IMAGE
-          : computerImage(body.imageProfile);
-      await ensureComputerImage(image);
-      const engine = engineFromResponses(await docker.version(), await docker.info());
-      const expectedEngine = c.req.header("x-ardurbot-engine");
-      if (expectedEngine && expectedEngine !== engine.name)
-        throw new Error("The selected engine does not match this connection.");
-      const runtimeInfo = await inspectSupervisorContainer();
-      const networkMode = body.networkEgress
-        ? computerNetworkName(body.botId, runtimeInfo)
-        : "none";
-      const serviceHomePath = path.resolve(body.homePath);
-      assertBotHomePath(serviceHomePath, body.botId);
-      const hostUid = process.getuid?.();
-      const hostGid = process.getgid?.();
-      // The API normally creates the home. A non-root standalone supervisor may
-      // do so as the same user, but a root supervisor must never create or chown
-      // user-controlled paths at runtime; Compose data-init handles legacy data.
-      if (hostUid !== 0) await mkdir(serviceHomePath, { recursive: true });
-      const storage = computerHomeStorage(serviceHomePath, dataDir, runtimeInfo);
-      if (storage.homeVolume && engine.name === "podman")
-        throw new Error(
-          "Podman computers require a host-run supervisor and a bind-mounted data directory.",
-        );
-      if (storage.homeVolume) {
-        assertVolumeSubpathSupport((await docker.version()).ApiVersion);
-      }
-      const computerUser = engineUser(
-        engine,
-        runtimeInfo ? COMPUTER_USER : hostComputerUser(hostUid, hostGid),
+  const provision = async (onProgress?: ImagePullProgress): Promise<Response> => {
+    try {
+      assertRequestIdentity(
+        c.req.header("x-ardurbot-bot-id"),
+        c.req.header("x-ardurbot-space-id"),
+        {
+          botId: body.botId,
+          spaceId: body.spaceId,
+        },
       );
-      const existing = await findBotContainer(body.botId, body.spaceId);
-      if (existing) {
-        const info = await existing.inspect();
-        const desired = await docker.getImage(image).inspect();
-        const controlPublishOk = controlPortPublicationMatches(
-          info.HostConfig.PortBindings,
-          body.networkEgress && controlViaLoopback,
-        );
-        if (
-          info.Image === desired.Id &&
-          (!networkMode || info.HostConfig.NetworkMode === networkMode) &&
-          info.Config.User === computerUser &&
-          controlPublishOk &&
-          (!storage.homeVolume || homeVolumeMatches(info.HostConfig.Mounts, storage.homeVolume))
-        ) {
-          if (!info.State.Running) await existing.start();
-          return c.json({
-            id: existing.id,
-            image,
-            resumed: true,
-          });
-        }
-      }
-
-      // Under a space cap, serialize count+create and incompatible replace (remove+create)
-      // per space inside the bot lock. Replacements skip the admission check but still
-      // take the lock so a temporary free slot cannot be stolen by another bot's create.
-      // Lock order is always bot → space; never take a bot lock while holding a space lock.
-      const spaceComputerLimit = resolveSpaceComputerLimit();
-      const createComputer = async () => {
-        if (!existing && spaceComputerLimit > 0) {
-          const currentCount = await countSpaceContainers(body.spaceId);
-          if (currentCount >= spaceComputerLimit) {
-            return c.json(
-              { error: `Computer limit reached for space (max: ${spaceComputerLimit})` },
-              429,
-            );
-          }
-        }
-
-        // Existing containers with the current image already use the selected user.
-        // Before replacing or creating a container, validate its home without
-        // privileged filesystem mutations that could escape via concurrent renames.
-        // Match hostComputerUser(): missing/root host identity falls back to 1000:1000.
-        const effectiveUid =
-          runtimeInfo || hostUid === undefined || hostGid === undefined || hostUid === 0
-            ? COMPUTER_UID
-            : hostUid;
-        const effectiveGid =
-          runtimeInfo || hostUid === undefined || hostGid === undefined || hostUid === 0
-            ? COMPUTER_GID
-            : hostGid;
-        await assertComputerHomeWritable(serviceHomePath, effectiveUid, effectiveGid);
-        const name = containerNameFor(body.botId);
-        const createdNetwork =
-          networkMode === "none" || screenNetworkMode === "internal"
-            ? undefined
-            : await ensureBotNetwork(body.botId);
-        let container: Docker.Container | undefined;
-        try {
-          if (existing) {
-            await existing.remove({ force: true }).catch(() => undefined);
-          }
-          container = await docker.createContainer(
-            containerCreateOptions({
-              name,
-              image,
-              botId: body.botId,
-              spaceId: body.spaceId,
-              ...storage,
-              user: computerUser,
-              engine,
-              networkMode,
-              controlToken: randomUUID(),
-              publishControlPort: body.networkEgress && controlViaLoopback,
-            }),
+      return await withBotLifecycleLock(body.botId, async () => {
+        const image =
+          body.imageProfile === "base"
+            ? await resolvedComputerImage()
+            : computerImage(body.imageProfile);
+        const engine = engineFromResponses(await docker.version(), await docker.info());
+        const expectedEngine = c.req.header("x-ardurbot-engine");
+        if (expectedEngine && expectedEngine !== engine.name)
+          throw new Error("The selected engine does not match this connection.");
+        await ensureComputerImage(image, engine.name, onProgress);
+        const runtimeInfo = await inspectSupervisorContainer();
+        const networkMode = body.networkEgress
+          ? computerNetworkName(body.botId, runtimeInfo)
+          : "none";
+        const serviceHomePath = path.resolve(body.homePath);
+        assertBotHomePath(serviceHomePath, body.botId);
+        const hostUid = process.getuid?.();
+        const hostGid = process.getgid?.();
+        // The API normally creates the home. A non-root standalone supervisor may
+        // do so as the same user, but a root supervisor must never create or chown
+        // user-controlled paths at runtime; Compose data-init handles legacy data.
+        if (hostUid !== 0) await mkdir(serviceHomePath, { recursive: true });
+        const storage = computerHomeStorage(serviceHomePath, dataDir, runtimeInfo);
+        if (storage.homeVolume && engine.name === "podman")
+          throw new Error(
+            "Podman computers require a host-run supervisor and a bind-mounted data directory.",
           );
-          await container.start();
-        } catch (error) {
-          // Never force removal: a lost start response may hide a running computer.
-          // Docker also refuses network removal while any endpoint is attached.
-          await container?.remove().catch(() => undefined);
-          await createdNetwork?.remove().catch(() => undefined);
-          throw error;
+        if (storage.homeVolume) {
+          assertVolumeSubpathSupport((await docker.version()).ApiVersion);
         }
-        return c.json({
-          id: container.id,
-          image,
-          resumed: false,
-        });
-      };
+        const computerUser = engineUser(
+          engine,
+          runtimeInfo ? COMPUTER_USER : hostComputerUser(hostUid, hostGid),
+        );
+        const existing = await findBotContainer(body.botId, body.spaceId);
+        if (existing) {
+          const info = await existing.inspect();
+          const desired = await docker.getImage(image).inspect();
+          const controlPublishOk = controlPortPublicationMatches(
+            info.HostConfig.PortBindings,
+            body.networkEgress && controlViaLoopback,
+          );
+          if (
+            info.Image === desired.Id &&
+            (!networkMode || info.HostConfig.NetworkMode === networkMode) &&
+            info.Config.User === computerUser &&
+            controlPublishOk &&
+            (!storage.homeVolume || homeVolumeMatches(info.HostConfig.Mounts, storage.homeVolume))
+          ) {
+            if (!info.State.Running) await existing.start();
+            return c.json({
+              id: existing.id,
+              image,
+              resumed: true,
+            });
+          }
+        }
 
-      if (spaceComputerLimit > 0) {
-        return await withSpaceComputerLock(body.spaceId, createComputer);
+        // Under a space cap, serialize count+create and incompatible replace (remove+create)
+        // per space inside the bot lock. Replacements skip the admission check but still
+        // take the lock so a temporary free slot cannot be stolen by another bot's create.
+        // Lock order is always bot → space; never take a bot lock while holding a space lock.
+        const spaceComputerLimit = resolveSpaceComputerLimit();
+        const createComputer = async () => {
+          if (!existing && spaceComputerLimit > 0) {
+            const currentCount = await countSpaceContainers(body.spaceId);
+            if (currentCount >= spaceComputerLimit) {
+              return c.json(
+                { error: `Computer limit reached for space (max: ${spaceComputerLimit})` },
+                429,
+              );
+            }
+          }
+
+          // Existing containers with the current image already use the selected user.
+          // Before replacing or creating a container, validate its home without
+          // privileged filesystem mutations that could escape via concurrent renames.
+          // Match hostComputerUser(): missing/root host identity falls back to 1000:1000.
+          const effectiveUid =
+            runtimeInfo || hostUid === undefined || hostGid === undefined || hostUid === 0
+              ? COMPUTER_UID
+              : hostUid;
+          const effectiveGid =
+            runtimeInfo || hostUid === undefined || hostGid === undefined || hostUid === 0
+              ? COMPUTER_GID
+              : hostGid;
+          await assertComputerHomeWritable(serviceHomePath, effectiveUid, effectiveGid);
+          const name = containerNameFor(body.botId);
+          const createdNetwork =
+            networkMode === "none" || screenNetworkMode === "internal"
+              ? undefined
+              : await ensureBotNetwork(body.botId);
+          let container: Docker.Container | undefined;
+          try {
+            if (existing) {
+              await existing.remove({ force: true }).catch(() => undefined);
+            }
+            container = await docker.createContainer(
+              containerCreateOptions({
+                name,
+                image,
+                botId: body.botId,
+                spaceId: body.spaceId,
+                ...storage,
+                user: computerUser,
+                engine,
+                networkMode,
+                controlToken: randomUUID(),
+                publishControlPort: body.networkEgress && controlViaLoopback,
+              }),
+            );
+            await container.start();
+          } catch (error) {
+            // Never force removal: a lost start response may hide a running computer.
+            // Docker also refuses network removal while any endpoint is attached.
+            await container?.remove().catch(() => undefined);
+            await createdNetwork?.remove().catch(() => undefined);
+            throw error;
+          }
+          return c.json({
+            id: container.id,
+            image,
+            resumed: false,
+          });
+        };
+
+        if (spaceComputerLimit > 0) {
+          return await withSpaceComputerLock(body.spaceId, createComputer);
+        }
+        return await createComputer();
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return c.json(
+        error instanceof ComputerImageDownloadError
+          ? { error: message, code: COMPUTER_IMAGE_DOWNLOAD_FAILED_CODE, reason: error.reason }
+          : { error: message },
+        500,
+      );
+    }
+  };
+  if (c.req.header("accept") !== "application/x-ndjson") return provision();
+  const bodyStream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const encoder = new TextEncoder();
+      const write = (frame: object) =>
+        controller.enqueue(encoder.encode(`${JSON.stringify(frame)}\n`));
+      try {
+        const response = await provision(async (percent) => write({ type: "progress", percent }));
+        const result = (await response.json()) as {
+          error?: string;
+          code?: string;
+          reason?: string;
+        };
+        write(
+          response.ok
+            ? { type: "result", value: result }
+            : { type: "error", error: result.error, code: result.code, reason: result.reason },
+        );
+      } catch {
+        write({ type: "error", error: "Computer provisioning failed." });
+      } finally {
+        controller.close();
       }
-      return await createComputer();
-    });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return c.json({ error: message }, 500);
-  }
+    },
+  });
+  return new Response(bodyStream, { headers: { "content-type": "application/x-ndjson" } });
 });
 
 app.get("/computers/:id", async (c) => {
@@ -906,6 +981,9 @@ function startSupervisor() {
   // and pass its healthcheck, then fail the first POST /computers with a 500 that reads like a
   // Docker problem. Failing here names the variable while the deployment is still coming up.
   computerResourceLimits();
+  void resolvedComputerImage()
+    .then((image) => logger.info("computer image resolved", { image }))
+    .catch((error) => logger.error("computer image resolution failed", { error }));
   const port = Number(process.env.SUPERVISOR_PORT ?? 7091);
   const hostname = process.env.SUPERVISOR_HOST ?? "127.0.0.1";
   const server = serve({ fetch: app.fetch, hostname, port }, () => {
@@ -938,8 +1016,20 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
   startSupervisor();
 }
 
-async function ensureComputerImage(image: string) {
-  // Explicit local builds or pulls only: never silently rebuild a pinned computer.
+async function ensureComputerImage(
+  image: string,
+  engineName: "docker" | "podman",
+  onProgress?: ImagePullProgress,
+) {
+  if (
+    engineName === "docker" &&
+    image !== LOCAL_COMPUTER_IMAGE &&
+    image !== computerImage("developer")
+  ) {
+    await ensureDockerComputerImage(engineScope.getStore() ?? defaultDocker, image, onProgress);
+    return;
+  }
+  // Preserve Podman and explicitly selected local/profile images as inspect-only.
   try {
     await docker.getImage(image).inspect();
   } catch {

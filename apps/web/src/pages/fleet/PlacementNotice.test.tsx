@@ -45,7 +45,7 @@ it("names a Docker move by Fleet's own translated label, even without a server h
     hostLabel: "This Mac",
     onOpen: () => {},
   });
-  expect(node.textContent).toContain("Docker on this Mac");
+  expect(node.textContent).toContain("Docker engine on this Mac");
   expect(node.textContent).not.toContain("local-docker");
   await unmount();
   node.remove();

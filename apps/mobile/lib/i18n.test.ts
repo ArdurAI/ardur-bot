@@ -89,6 +89,25 @@ describe("mobile i18n", () => {
     }
   });
 
+  it("translates structured group failure notices in each mobile catalog", async () => {
+    const { resetI18nForTests } = await import("./i18n");
+    const { groupModelNoticeText } = await import("./group-model-notice");
+    for (const locale of ["zh-CN", "ru"] as const) {
+      resetI18nForTests(locale);
+      const notice = groupModelNoticeText({
+        id: "group-model-credential-missing",
+        botName: "Worker",
+      });
+      expect(notice).toContain("Worker");
+      expect(notice).not.toContain("couldn't use the model");
+      const locality = groupModelNoticeText({
+        id: "group-model-locality-denied",
+        botName: "Worker",
+      });
+      expect(locality).not.toContain("blocked by the bot or space settings");
+    }
+  });
+
   it("translates seeded Chinese chrome and keeps interpolations", async () => {
     const { resetI18nForTests, t } = await import("./i18n");
     resetI18nForTests("zh-CN");

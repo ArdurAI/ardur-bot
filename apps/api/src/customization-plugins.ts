@@ -3,7 +3,11 @@ import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { BUILTIN_AGENT_SKILLS, McpConnector, skillDocumentContext } from "@ardurbot/adapters";
 import type { Actor, PluginInstall, PluginSummary } from "@ardurbot/contracts";
-import { McpRemoteEndpointSchema, PluginSummarySchema } from "@ardurbot/contracts";
+import {
+  McpRemoteEndpointSchema,
+  mcpCredentialFlagsForEntries,
+  PluginSummarySchema,
+} from "@ardurbot/contracts";
 import type { BundleFile } from "@ardurbot/contracts/bundles/files";
 import { bundleDocument, writeBundleFiles } from "@ardurbot/contracts/bundles/files";
 import {
@@ -433,7 +437,14 @@ export function createCustomizationPlugins(deps: RouterDeps) {
             Object.entries(server.headers ?? {}).map(([key, value]) => [key, resolve(value)]),
           );
           const secret = await deps.secrets.put(
-            JSON.stringify({ command, args, env, headers, cwd: directory }),
+            JSON.stringify({
+              command,
+              args,
+              env,
+              headers,
+              credentialFlags: mcpCredentialFlagsForEntries({}, { env, headers }),
+              cwd: directory,
+            }),
             operationContext(actor),
           );
           await deps.prisma.$transaction(async (tx) => {

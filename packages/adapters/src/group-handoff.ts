@@ -208,6 +208,7 @@ export async function handoffToGroupBot(
                 ),
               )
             : undefined,
+          targetThreadId: run.threadId,
         },
         deps.resolveDelegationPin,
       );

@@ -139,6 +139,21 @@ vi.mock("@ardurbot/ui-web", () => {
         {...props}
       />
     ),
+    Switch: ({
+      checked,
+      onCheckedChange,
+      ...props
+    }: Omit<ComponentProps<"button">, "onClick"> & {
+      checked: boolean;
+      onCheckedChange: (checked: boolean) => void;
+    }) => (
+      <button
+        {...props}
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onCheckedChange(!checked)}
+      />
+    ),
   };
 });
 
@@ -496,6 +511,38 @@ describe("Settings integration catalog", () => {
     await click(button("Back"));
     await click(button("Manage"));
     expect(approval().value).toBe("ask");
+  });
+  it("lets an owner correct a catalog connection's field classification", async () => {
+    connections = [{ ...connected }];
+    let secret = true;
+    api.servers.mockImplementation(async () => [
+      {
+        id: "connection",
+        name: "Fixture",
+        catalogId: "github",
+        transport: "stdio",
+        hasSecret: true,
+        envKeys: ["ROOT_DIR"],
+        headerKeys: [],
+        credentialFlags: { env: { ROOT_DIR: secret }, headers: {} },
+      },
+    ]);
+    api.update.mockImplementationOnce(async ({ credentialFlags }) => {
+      secret = credentialFlags.env.ROOT_DIR;
+      return {};
+    });
+    await mount();
+    await click(button("Manage"));
+    const control = () =>
+      container.querySelector<HTMLButtonElement>('[aria-label="Secret for ROOT_DIR"]')!;
+    expect(control()).not.toBeNull();
+    expect(control().getAttribute("aria-checked")).toBe("true");
+    await click(control());
+    expect(api.update).toHaveBeenCalledExactlyOnceWith({
+      id: "connection",
+      credentialFlags: { env: { ROOT_DIR: false }, headers: {} },
+    });
+    expect(control().getAttribute("aria-checked")).toBe("false");
   });
   it("omits an archived bot's hidden removal from Manage saves", async () => {
     connections = [{ ...connected }];

@@ -38,7 +38,22 @@ export async function memoryRpc<T>(action: () => Promise<T>): Promise<T> {
     if (error instanceof MemoryConflictError || error instanceof MemoryGenerationError)
       throw new ORPCError("CONFLICT", { message: error.message });
     if (error instanceof MemoryRedactionError)
-      throw new ORPCError("BAD_REQUEST", { message: error.message });
+      throw new ORPCError("BAD_REQUEST", {
+        message: error.message,
+        data: {
+          code: "MEMORY_CREDENTIAL_LINE",
+          lineNumber: error.lineNumber,
+          maskedLine: error.maskedLine,
+        },
+      });
+    if (
+      error instanceof Error &&
+      error.message === "Split this import into at most three sections."
+    )
+      throw new ORPCError("BAD_REQUEST", {
+        message: error.message,
+        data: { code: "MEMORY_IMPORT_SECTION_LIMIT" },
+      });
     // Filenames, content, credentials, and provider responses never reach RPC errors.
     throw new ORPCError("BAD_REQUEST", {
       message: "Could not complete this memory operation. Check the document and try again.",

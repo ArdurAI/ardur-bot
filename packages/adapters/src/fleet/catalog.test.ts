@@ -26,7 +26,7 @@ import { KubernetesSandboxProvider } from "../kubernetes-sandbox.js";
 import { FakeKubernetesApi } from "../kubernetes-test-api.js";
 import { RemoteHostSandboxProvider } from "../remote-host-sandbox.js";
 import { createSandboxProvider } from "../sandbox-factory.js";
-import { FleetCatalog } from "./catalog.js";
+import { FleetCatalog, projectedEngineName } from "./catalog.js";
 import { placeRunComputer } from "./placement.js";
 
 function storedComputer(overrides: Record<string, unknown> = {}) {
@@ -60,6 +60,59 @@ function storedComputer(overrides: Record<string, unknown> = {}) {
     }),
   };
 }
+
+it("keeps an explicit failed Test ahead of cached healthy capacity", async () => {
+  const capacity = {
+    ...unknownCapacity(),
+    source: "docker" as const,
+    memoryFree: 8 * 1024 ** 3,
+    memoryTotal: 16 * 1024 ** 3,
+  };
+  const prisma = {
+    connection: {
+      findMany: async () => [
+        {
+          id: "saved",
+          displayName: "Docker",
+          status: "connected",
+          metadata: { engine: "docker", endpoint: "unix:///fixture/docker.sock" },
+        },
+      ],
+    },
+    bot: { findMany: async () => [] },
+    space: { findUniqueOrThrow: async () => ({ placement: { mode: "free-memory" } }) },
+    deploymentSettings: { findUnique: async () => null },
+    hostRegistration: { findUnique: async () => null },
+  } as unknown as PrismaClient;
+  const fallback = {
+    describe: () => ({ id: "docker", kind: "docker" }),
+    capacity: async () => capacity,
+  } as unknown as SandboxProvider;
+  const catalog = new FleetCatalog(prisma, { load: () => "" }, {}, fallback);
+  vi.spyOn(catalog.connections, "resolve").mockResolvedValue({
+    capacity: async () => capacity,
+  } as never);
+  catalog.recordTest("saved", {
+    reachability: {
+      status: "installed-not-running",
+      reason: "engine-not-running",
+      checkedAt: new Date().toISOString(),
+    },
+  });
+  const context: AdapterContext = {
+    userId: "owner",
+    spaceId: "space",
+    operationId: "test",
+    traceId: "test",
+    signal: new AbortController().signal,
+  };
+  const fleet = await catalog.list(context);
+  expect(fleet.targets.find((target) => target.id === "saved")).toMatchObject({
+    state: "unavailable",
+    reachability: { status: "installed-not-running" },
+    capacity: { memoryFree: null },
+  });
+});
 
 function localDocker(ref: Partial<ComputerRef> = {}) {
   return {
@@ -1604,7 +1657,7 @@ it("keys the built-in rows and labels the host from the paired desktop, else the
     {
       id: "default",
       builtin: "local-docker",
-      name: "Docker on this Mac",
+      name: "Docker engine on this Mac",
       kind: "docker",
       bots: [],
     },
@@ -1614,11 +1667,44 @@ it("keys the built-in rows and labels the host from the paired desktop, else the
   expect(rows(onLinux).map(({ id, builtin, name }) => ({ id, builtin, name }))).toEqual([
     { id: "host", builtin: "host", name: "This computer" },
     { id: "default", builtin: "default", name: "Default computer" },
-    { id: "docker", builtin: "local-docker", name: "Docker on this computer" },
+    { id: "docker", builtin: "local-docker", name: "Docker engine on this computer" },
   ]);
   expect((await list(provider("docker"), null)).hostLabel).toBe(
     process.platform === "darwin" ? "This Mac" : "This computer",
   );
+});
+
+it("clarifies old generated engine names without changing owner names", () => {
+  const settings = (endpoint: string) =>
+    ComputerConnectionSettingsSchema.parse({ engine: "docker", endpoint });
+  expect(
+    projectedEngineName(
+      "Docker on this Mac",
+      settings("unix:///fixture/.docker/run/docker.sock"),
+      "This Mac",
+    ),
+  ).toBe("Docker Desktop on this Mac");
+  expect(
+    projectedEngineName(
+      "Docker on this Mac",
+      settings("unix:///fixture/.orbstack/run/docker.sock"),
+      "This Mac",
+    ),
+  ).toBe("OrbStack on this Mac");
+  expect(
+    projectedEngineName(
+      "Docker on this Mac",
+      settings("unix:///fixture/.colima/atrium-beta/docker.sock"),
+      "This Mac",
+    ),
+  ).toBe("Colima (atrium-beta) on this Mac");
+  expect(
+    projectedEngineName(
+      "My build engine",
+      settings("unix:///fixture/.docker/run/docker.sock"),
+      "This Mac",
+    ),
+  ).toBe("My build engine");
 });
 
 it.each([

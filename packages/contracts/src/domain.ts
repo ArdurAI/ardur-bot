@@ -11,6 +11,7 @@ import { SpaceToolPoliciesSchema } from "./integration-catalog.js";
 import { LearningJourneyEntrySchema, LearningObservationSchema } from "./learning.js";
 import { ImportedProvenanceSchema } from "./local-import.js";
 import {
+  McpCredentialFlagsSchema,
   McpHeadersSchema,
   McpRemoteEndpointSchema,
   McpTransportSchema,
@@ -101,6 +102,7 @@ export const BotSchema = z.object({
   runtimeConfig: HermesRuntimeConfigSchema.nullable().optional(),
   runtimeExperimental: z.boolean().optional(),
   modelPinRevision: z.number().int().nonnegative().optional(),
+  groupModelOverrideCount: z.number().int().nonnegative().optional(),
   teamChatAmbientEnabled: z.boolean(),
   teamChatRules: z.string(),
   webhookConfigured: z.boolean(),
@@ -119,6 +121,11 @@ export type ReorderBotsInput = z.infer<typeof ReorderBotsInput>;
 
 export const GroupMemberSchema = z.object({
   botId: Id,
+  memberId: Id.optional(),
+  modelPinRevision: z.number().int().nonnegative().optional(),
+  runtimePin: RuntimePinSchema.nullable().optional(),
+  effectiveRuntimePin: RuntimePinSchema.nullable().optional(),
+  effectivePinSource: z.enum(["group-member", "bot", "space-default"]).optional(),
   name: z.string(),
   color: z.string(),
   status: z.string().optional(),
@@ -169,6 +176,29 @@ export const UpdateGroupInput = z.object({
   sectionId: Id.nullable().optional(),
 });
 export type UpdateGroupInput = z.infer<typeof UpdateGroupInput>;
+
+const GroupMemberModelPinTarget = z
+  .object({
+    groupId: Id,
+    botId: Id,
+    memberId: Id,
+    expectedRevision: z.number().int().nonnegative(),
+  })
+  .strict();
+export const SetGroupMemberModelPinInput = GroupMemberModelPinTarget.extend({
+  pin: z
+    .object({
+      runtimeKind: RuntimeKindSchema,
+      provider: z.string().min(1),
+      modelId: z.string().min(1),
+      effort: z.string().nullable(),
+      credentialId: z.string().min(1),
+    })
+    .strict(),
+}).strict();
+export type SetGroupMemberModelPinInput = z.infer<typeof SetGroupMemberModelPinInput>;
+export const ClearGroupMemberModelPinInput = GroupMemberModelPinTarget;
+export type ClearGroupMemberModelPinInput = z.infer<typeof ClearGroupMemberModelPinInput>;
 
 export const GroupDetailSchema = GroupSchema.extend({
   messages: z.array(ThreadMessageSchema).optional(),
@@ -777,6 +807,7 @@ export const McpServerSchema = z.object({
   args: z.array(z.string()),
   envKeys: z.array(z.string()),
   headerKeys: z.array(z.string()),
+  credentialFlags: McpCredentialFlagsSchema.optional(),
   hasSecret: z.boolean(),
   /** A stored credential from before one was enforced still holds a token and a header. */
   credentialConflict: z.boolean().optional(),
@@ -865,6 +896,8 @@ export const ComputerStatusSchema = z.object({
   mode: ComputerModeSchema,
   kind: SandboxKind,
   state: z.enum(["stopped", "booting", "running", "suspended", "error"]),
+  imagePulling: z.boolean().optional(),
+  imagePullPercent: z.number().int().min(0).max(100).nullable().optional(),
   controlHolder: z.enum(["bot", "user", "none"]),
   controlBotId: Id.nullable(),
   takeoverRequested: z.boolean(),

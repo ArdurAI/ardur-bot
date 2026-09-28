@@ -1,0 +1,211 @@
+import type { PrismaClient } from "@ardurbot/db";
+import { describe, expect, it, vi } from "vitest";
+import { updateGroupMemberModelPin } from "./group-model-pin.js";
+import type { RouterDeps } from "./router.js";
+
+vi.mock("@ardurbot/adapters", async (original) => ({
+  ...(await original<object>()),
+  nativeHostOwner: vi.fn(async () => true),
+}));
+vi.mock("./model-pin-validation.js", () => ({
+  validateModelPinSelection: vi.fn(async (_deps, _actor, pin) => pin),
+}));
+
+const actor = {
+  userId: "owner",
+  spaceId: "space",
+  email: "owner@example.test",
+  isDeploymentOwner: true,
+};
+const target = { groupId: "group", botId: "bot", memberId: "member", expectedRevision: 0 };
+const choice = {
+  runtimeKind: "pi" as const,
+  provider: "scripted",
+  modelId: "scripted",
+  effort: "off",
+  credentialId: "scripted",
+};
+
+function fixture(runtimeConfig: unknown = null, runtimeExperimental = false) {
+  let revision = 0;
+  let pin: (typeof choice & { revision: number }) | null = null;
+  let memberId = "member";
+  const memberRow = () => ({
+    id: memberId,
+    groupId: "group",
+    botId: "bot",
+    modelPinRevision: revision,
+    runtimePin: pin,
+    bot: { userId: "owner", spaceId: "space", archivedAt: null, runtimeConfig },
+  });
+  const groupRecord = () => ({
+    id: "group",
+    userId: "owner",
+    spaceId: "space",
+    name: "Group",
+    coordinatorBotId: null,
+    pinned: false,
+    sectionId: null,
+    archivedAt: null,
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
+    thread: { id: "room", unread: false, messages: [] },
+    members: [
+      {
+        ...memberRow(),
+        bot: {
+          id: "bot",
+          name: "Bot",
+          color: "#111",
+          runs: [],
+          ...memberRow().bot,
+          modelProvider: "scripted",
+          modelId: "scripted",
+          modelCredentialId: "scripted",
+          modelPinRevision: 1,
+          thinkingLevel: "off",
+          runtimeKind: "pi",
+        },
+      },
+      {
+        id: "other-member",
+        botId: "other-bot",
+        runtimePin: null,
+        modelPinRevision: 0,
+        bot: { id: "other-bot", name: "Other", color: "#222", runs: [] },
+      },
+    ],
+  });
+  const findFirst = vi.fn(
+    async (query: {
+      include?: unknown;
+      select?: unknown;
+      where?: { userId?: string; spaceId?: string };
+    }) =>
+      query.include
+        ? groupRecord()
+        : query.select && "members" in query.select
+          ? {
+              members:
+                query.where?.userId === "owner" &&
+                query.where?.spaceId === "space" &&
+                memberId === "member"
+                  ? [
+                      {
+                        id: memberId,
+                        bot: { runtimeExperimental, computer: { kind: "desktop" } },
+                      },
+                    ]
+                  : [],
+            }
+          : { thread: { id: "room" } },
+  );
+  const update = vi.fn(
+    async ({ data }: { data: { modelPinRevision: number; runtimePin: unknown } }) => {
+      revision = data.modelPinRevision;
+      pin =
+        typeof data.runtimePin === "object" &&
+        data.runtimePin !== null &&
+        "revision" in data.runtimePin
+          ? (data.runtimePin as typeof pin)
+          : null;
+      return memberRow();
+    },
+  );
+  const eventCreate = vi.fn(async () => ({ seq: 4 }));
+  const tx = {
+    $queryRaw: vi.fn(async () => [{ id: "group" }]),
+    chatGroup: { findFirst, update: vi.fn(async () => groupRecord()) },
+    chatGroupMember: { findUnique: vi.fn(async () => memberRow()), update },
+    thread: { update: vi.fn(async () => ({ nextEventSeq: 4 })) },
+    event: { create: eventCreate },
+  };
+  const prisma = {
+    ...tx,
+    $transaction: vi.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn(tx)),
+  } as unknown as PrismaClient;
+  const notify = vi.fn(async () => undefined);
+  const deps = { prisma, events: { notify } } as unknown as RouterDeps;
+  return {
+    deps,
+    tx,
+    notify,
+    update,
+    eventCreate,
+    setMemberId: (id: string) => {
+      memberId = id;
+    },
+  };
+}
+
+describe("group model owner mutation", () => {
+  it("snapshots bot-owned Hermes limits with the admitted group connection", async () => {
+    const config = { version: 1, maxProviderRequests: 4, timeoutMs: 90_000 };
+    const f = fixture(config, true);
+    await updateGroupMemberModelPin(f.deps, actor, target, {
+      runtimeKind: "hermes",
+      provider: "openai-compatible",
+      modelId: "fixture-model",
+      effort: "off",
+      credentialId: "selected",
+      runtimeConfig: { version: 1, maxProviderRequests: 64, timeoutMs: 600_000 },
+    });
+    expect(f.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          runtimePin: expect.objectContaining({
+            runtimeKind: "hermes",
+            credentialId: "selected",
+            runtimeConfig: config,
+            runtimeConfigHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it("sets once, replays exactly, and clears once with durable events", async () => {
+    const f = fixture();
+    const first = await updateGroupMemberModelPin(f.deps, actor, target, choice);
+    expect(first.members[0]).toMatchObject({
+      memberId: "member",
+      modelPinRevision: 1,
+      runtimePin: { ...choice, revision: 1 },
+      effectivePinSource: "group-member",
+    });
+    expect(f.eventCreate).toHaveBeenCalledTimes(1);
+    await updateGroupMemberModelPin(f.deps, actor, target, choice);
+    expect(f.eventCreate).toHaveBeenCalledTimes(1);
+    const cleared = await updateGroupMemberModelPin(
+      f.deps,
+      actor,
+      { ...target, expectedRevision: 1 },
+      null,
+    );
+    expect(cleared.members[0]).toMatchObject({ runtimePin: null, modelPinRevision: 2 });
+    expect(f.eventCreate).toHaveBeenCalledTimes(2);
+    expect(f.notify).toHaveBeenCalledTimes(2);
+  });
+
+  it("rejects a differing stale revision", async () => {
+    const f = fixture();
+    await updateGroupMemberModelPin(f.deps, actor, target, choice);
+    await expect(
+      updateGroupMemberModelPin(f.deps, actor, target, { ...choice, modelId: "different" }),
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(f.eventCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects replaced members and wrong-space callers before validating a choice", async () => {
+    const f = fixture();
+    f.setMemberId("replacement");
+    await expect(updateGroupMemberModelPin(f.deps, actor, target, choice)).rejects.toThrow();
+    await expect(
+      updateGroupMemberModelPin(f.deps, { ...actor, spaceId: "other" }, target, choice),
+    ).rejects.toThrow();
+    await expect(
+      updateGroupMemberModelPin(f.deps, { ...actor, userId: "other" }, target, choice),
+    ).rejects.toThrow();
+    expect(f.update).not.toHaveBeenCalled();
+  });
+});

@@ -99,6 +99,7 @@ import { backfillRuntimePins } from "./backfill-runtime-pins.js";
 import { boardCloseRetry } from "./board.js";
 import type { AppEnv } from "./env.js";
 import { loadEnv } from "./env.js";
+import { reconcileFleetSecretCleanup } from "./fleet.js";
 import { HostBridge } from "./host-bridge.js";
 import { mountHostMcpRoutes } from "./host-mcp-routes.js";
 import { sourceHostStatus } from "./host-status.js";
@@ -538,6 +539,17 @@ export async function createApp(
     hostBridge,
   });
   boardCloses?.start();
+  let fleetCleanupTask: Promise<void> | undefined;
+  const sweepFleetSecrets = () => {
+    if (fleetCleanupTask) return;
+    fleetCleanupTask = reconcileFleetSecretCleanup(prisma, hostBridge)
+      .catch((error) => logger.error("fleet credential cleanup failed", error))
+      .finally(() => {
+        fleetCleanupTask = undefined;
+      });
+  };
+  sweepFleetSecrets();
+  const fleetCleanupTimer = setInterval(sweepFleetSecrets, 30_000);
 
   const terminals = createTerminalRoutes({
     prisma,
@@ -1092,6 +1104,7 @@ export async function createApp(
       // Abort in-flight continueRun boot waits before draining jobs so stop() cannot sit
       // on waitForComputerReady for the full boot-wait window during shared Postgres journeys.
       stopIntegrationHealth();
+      clearInterval(fleetCleanupTimer);
       hostBridge.hub.detach();
       await terminals.gateway?.stop();
       shutdown.abort();
@@ -1113,6 +1126,7 @@ export async function createApp(
       await email?.drain?.();
       await reconciler?.stop();
       await boardCloses?.stop();
+      await settleWithTimeout(fleetCleanupTask, TEAM_CHAT_STARTUP_SHUTDOWN_MS);
       await jobs.close();
       await realtime.close();
       await connector.stop();

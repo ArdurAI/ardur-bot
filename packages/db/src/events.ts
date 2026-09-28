@@ -7,6 +7,7 @@ import {
   type MessageBlock,
   MessageBlock as MessageBlockSchema,
   type ProductEvent,
+  RuntimePinSourceSchema,
 } from "@ardurbot/contracts";
 import {
   blocksToAgentHistoryText,
@@ -47,6 +48,32 @@ import { withTransactionRetry } from "./transaction-retry.js";
 const EVENT_BATCH_SIZE = 200;
 const PUSH_CATCH_UP_MS = 30_000;
 const POLL_ONLY_CATCH_UP_MS = 400;
+
+export function groupModelFailureNotice(
+  code: string,
+  name: string | null,
+): Extract<MessageBlock, { kind: "text" }> {
+  const botName = name ?? "This bot";
+  if (code === "locality-denied") {
+    return {
+      kind: "text",
+      text: "This group's model is blocked by the bot or space settings. Change the destination policy or choose another group model.",
+      notice: { id: "group-model-locality-denied", botName },
+    };
+  }
+  if (code === "pin-credential-missing") {
+    return {
+      kind: "text",
+      text: `${botName} couldn't use the model set for this group. Reconnect it or change the group model.`,
+      notice: { id: "group-model-credential-missing", botName },
+    };
+  }
+  return {
+    kind: "text",
+    text: `${botName} couldn't use the model set for this group. Change the group model or check this bot's settings.`,
+    notice: { id: "group-model-unavailable", botName },
+  };
+}
 
 export interface AppendEventInput {
   spaceId: string;
@@ -1361,6 +1388,39 @@ async function finalizeRunOnce(
     });
     if (task.count !== 1) throw new Error("Run task was not available to finalize");
 
+    const pinProblem = input.outcome === "failed" ? input.runtimeProblem : undefined;
+    const recordedSource = pinProblem
+      ? (
+          await tx.run.findUnique({
+            where: { id: input.runId },
+            select: { runtimePinSource: true },
+          })
+        )?.runtimePinSource
+      : null;
+    const groupSource = RuntimePinSourceSchema.safeParse(recordedSource).data;
+    const failedGroupPin = pinProblem && groupSource?.kind === "group-member";
+    if (failedGroupPin) {
+      const bot = await tx.bot.findUnique({ where: { id: input.botId }, select: { name: true } });
+      const blocks = [groupModelFailureNotice(pinProblem.code, bot?.name ?? null)];
+      const notice = await createThreadMessageInTransaction(tx, {
+        threadId: input.threadId,
+        role: "system",
+        blocks,
+        botId: input.botId,
+        runId: input.runId,
+        clientNonce: `group-model-failed:${input.runId}`,
+        markUnread: true,
+      });
+      await appendEventInTransaction(tx, {
+        spaceId: input.spaceId,
+        threadId: input.threadId,
+        botId: input.botId,
+        type: "thread.message.created",
+        runId: input.runId,
+        payload: { messageId: notice.id, role: "system", blocks },
+      });
+    }
+
     let finalMessageId: string | null = null;
     const delegation =
       writableRun?.delegationId && writableRun.delegationRootTaskId
@@ -1614,7 +1674,13 @@ async function finalizeRunOnce(
           : {
               error: input.error,
               ...(input.providerErrorKind ? { providerErrorKind: input.providerErrorKind } : {}),
-              ...(input.runtimeProblem ? { runtimeProblem: input.runtimeProblem } : {}),
+              ...(input.runtimeProblem
+                ? {
+                    runtimeProblem: groupSource
+                      ? { ...input.runtimeProblem, source: groupSource }
+                      : input.runtimeProblem,
+                  }
+                : {}),
             },
     });
     await tx.event.deleteMany({ where: { runId: input.runId, type: "thread.progress" } });

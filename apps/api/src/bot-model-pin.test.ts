@@ -2,6 +2,7 @@ import { listOllamaModels, nativeRuntimeAvailability, showOllamaModel } from "@a
 import type { Actor, RuntimeAvailability } from "@ardurbot/contracts";
 import { describe, expect, it, vi } from "vitest";
 import { botModelPinUpdate } from "./bot-model-pin.js";
+import { validateModelPinSelection } from "./model-pin-validation.js";
 import type { RouterDeps } from "./router.js";
 
 vi.mock("@ardurbot/adapters", async (original) => ({
@@ -115,6 +116,21 @@ describe("bot pin editing", () => {
         thinkingLevel: "high",
       }),
     ).resolves.toMatchObject({ runtimeKind: "hermes", thinkingLevel: "high" });
+    await expect(
+      validateModelPinSelection(deps, actor, {
+        runtimeKind: "hermes",
+        provider: "openai-compatible",
+        modelId: "fixture-model",
+        credentialId: "selected",
+        effort: "high",
+      }),
+    ).resolves.toEqual({
+      runtimeKind: "hermes",
+      provider: "openai-compatible",
+      modelId: "fixture-model",
+      credentialId: "selected",
+      effort: "high",
+    });
   });
   it("preserves the exact connected model when switching between Pi and Hermes", async () => {
     const { deps, findFirst } = fixture();
@@ -387,6 +403,24 @@ describe("bot pin editing", () => {
       ),
     ).toMatchObject({ modelProvider: null, modelId: null, modelCredentialId: null });
   });
+});
+
+it("accepts a no-effort native model for a group member choice", async () => {
+  const { deps, findFirst } = fixture();
+  vi.mocked(nativeRuntimeAvailability).mockResolvedValue({
+    runtimeKind: "antigravity",
+    available: false,
+    models: [{ id: "claude-sonnet-4-6", label: "Sonnet", efforts: [], effortMode: "none" }],
+  });
+  const choice = {
+    runtimeKind: "antigravity" as const,
+    provider: "antigravity",
+    modelId: "claude-sonnet-4-6",
+    effort: null,
+    credentialId: "native:antigravity",
+  };
+  expect(await validateModelPinSelection(deps, actor, choice)).toEqual(choice);
+  expect(findFirst).not.toHaveBeenCalled();
 });
 
 it("refuses an explicitly selected hosted credential for a native pin", async () => {

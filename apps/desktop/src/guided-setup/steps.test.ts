@@ -126,4 +126,20 @@ describe("first guided steps", () => {
       kind: "notApplicable",
     });
   });
+
+  it("describes available actions for a command owned by another app", async () => {
+    const f = fixture();
+    f.deps.command.check = async () => "collision";
+    const command = firstGuidedSteps(f.deps)[3]!;
+    expect(await command.check(context, new AbortController().signal)).toEqual({
+      kind: "blocked",
+      reasonCode: "command-collision",
+      details: [
+        {
+          code: "command-collision",
+          text: "Another app owns the ardur command. Skip this step, or remove or rename that command and retry.",
+        },
+      ],
+    });
+  });
 });

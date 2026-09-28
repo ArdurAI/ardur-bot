@@ -327,15 +327,32 @@ export function subagentBlockFromPayload(
   };
 }
 
+function secretAt(value: string, secret: string, index: number): boolean {
+  return value.startsWith(secret, index);
+}
+
+function hasSecret(value: string, secrets: string[]): boolean {
+  return secrets.some((secret) => secret.length > 0 && value.includes(secret));
+}
+
 export function redactSecrets(value: string, secrets: string[]): string {
-  return secrets.reduce((acc, secret) => {
-    if (!secret) return acc;
-    return acc.split(secret).join("[redacted]");
-  }, value);
+  const active = [...new Set(secrets.filter(Boolean))].sort((a, b) => b.length - a.length);
+  let output = "";
+  for (let index = 0; index < value.length; ) {
+    const secret = active.find((candidate) => secretAt(value, candidate, index));
+    if (secret) {
+      output += "[redacted]";
+      index += secret.length;
+    } else {
+      output += value[index]!;
+      index++;
+    }
+  }
+  return output;
 }
 
 export function containsSecret(value: unknown, secrets: string[]): boolean {
-  const active = secrets.filter((secret) => secret.length > 0);
+  const active = secrets.filter(Boolean);
   if (active.length === 0) return false;
   const serialized = JSON.stringify(value);
   if (serialized === undefined) return false;
@@ -343,12 +360,12 @@ export function containsSecret(value: unknown, secrets: string[]): boolean {
   while (pending.length > 0) {
     const current = pending.pop();
     if (typeof current === "string") {
-      if (active.some((secret) => current.includes(secret))) return true;
+      if (hasSecret(current, active)) return true;
       continue;
     }
     if (current === null || typeof current === "number" || typeof current === "boolean") {
       const primitive = String(current);
-      if (active.some((secret) => primitive.includes(secret))) return true;
+      if (hasSecret(primitive, active)) return true;
       continue;
     }
     if (Array.isArray(current)) {
@@ -357,7 +374,7 @@ export function containsSecret(value: unknown, secrets: string[]): boolean {
     }
     if (current && typeof current === "object") {
       for (const [key, nested] of Object.entries(current)) {
-        if (active.some((secret) => key.includes(secret))) return true;
+        if (hasSecret(key, active)) return true;
         pending.push(nested);
       }
     }
@@ -438,11 +455,13 @@ export function createStreamingRedactor(secrets: string[]) {
       output = buffer;
       buffer = "";
     } else {
-      const safeStartLimit = final ? buffer.length : Math.max(0, buffer.length - maxLength + 1);
+      const safeStartLimit = final ? buffer.length : Math.max(0, buffer.length - maxLength);
       let offset = 0;
       output = "";
       while (offset < safeStartLimit) {
-        const secret = values.find((value) => buffer.startsWith(value, offset));
+        const secret = values.find((value) => {
+          return secretAt(buffer, value, offset);
+        });
         if (secret) {
           output += "[redacted]";
           offset += secret.length;

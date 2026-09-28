@@ -153,6 +153,7 @@ export const RuntimeProblemSchema = z.object({
     "local-import-item",
   ]),
   pin: RuntimePinSchema,
+  source: RuntimePinSourceSchema.optional(),
   reason: z.string(),
   reasonId: z.string().optional(),
   actions: z.array(z.enum(["connect", "change-pin", "open-docs"])),

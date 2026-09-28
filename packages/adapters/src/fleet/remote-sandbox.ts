@@ -129,7 +129,17 @@ export class RemoteFleetSandbox implements SandboxProvider {
     );
   }
   async test(context: AdapterContext) {
-    return this.result("capacity", { type: "test" }, context);
+    const result = await this.result("capacity", { type: "test" }, context);
+    if (
+      result &&
+      typeof result === "object" &&
+      "error" in result &&
+      result.error === "engine-probe-failed" &&
+      "reason" in result &&
+      typeof result.reason === "string"
+    )
+      throw new Error(result.reason);
+    return result;
   }
   async supportsNetworkEgress() {
     return this.settings.engine === "docker" || this.settings.engine === "podman";

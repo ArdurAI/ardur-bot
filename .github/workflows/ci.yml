@@ -61,6 +61,7 @@ jobs:
           DATABASE_URL: postgres://ardurbot:ardurbot@127.0.0.1:5433/ardurbot
       - run: pnpm check
       - run: pnpm site:facts:check
+      - run: pnpm feature-docs:report
 
   build:
     name: Production builds
@@ -188,6 +189,7 @@ jobs:
         env:
           DATABASE_URL: postgres://ardurbot:ardurbot@127.0.0.1:5433/ardurbot
       - run: pnpm site:facts:check
+      - run: pnpm feature-docs:report
       - name: Install Playwright Chromium
         run: pnpm --filter @ardurbot/web exec playwright install --with-deps chromium
       - name: Capture product screenshots
@@ -201,11 +203,13 @@ jobs:
           set -euo pipefail
           git switch --orphan site-assets-publish
           # switch --orphan already empties the index; clear same-named build leftovers before copying.
-          rm -rf product.json screenshots media
+          rm -rf product.json screenshots media docs
           cp "${SITE_ASSETS_STAGE}/product.json" product.json
           cp -R "${SITE_ASSETS_STAGE}/screenshots" screenshots
+          if [ -d "${SITE_ASSETS_STAGE}/docs" ]; then cp -R "${SITE_ASSETS_STAGE}/docs" docs; fi
           if [ -d "${SITE_ASSETS_STAGE}/media" ]; then cp -R "${SITE_ASSETS_STAGE}/media" media; fi
           git add product.json screenshots
+          if [ -d docs ]; then git add docs; fi
           if [ -d media ]; then git add media; fi
           git -c commit.gpgsign=false -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m 'Publish site assets'
           git push --force origin HEAD:refs/heads/site-assets

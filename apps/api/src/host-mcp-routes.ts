@@ -1,4 +1,5 @@
 import type { EncryptedSecretStore } from "@ardurbot/adapters";
+import { oauthMaterialSecrets } from "@ardurbot/adapters";
 import { HostMcpRegistrationSchema } from "@ardurbot/contracts/host-bridge";
 import type { PrismaClient } from "@ardurbot/db";
 import type { Hono } from "hono";
@@ -54,8 +55,9 @@ export function mountHostMcpRoutes(
         command: material.command ?? row.command,
         args: material.args ?? row.args,
         env: material.env ?? {},
+        credentialFlags: material.credentialFlags,
         cwd: material.cwd ?? ".",
-        redactions: material.redactions ?? [],
+        redactions: oauthMaterialSecrets(material),
       });
     });
     c.header("cache-control", "no-store");

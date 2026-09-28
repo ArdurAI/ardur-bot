@@ -729,11 +729,7 @@ export class McpConnector implements ConnectorProvider {
       }
       const loaded = { material, ...(secret ? { secretId: secret.id } : {}) };
       const args = material.args ?? (Array.isArray(server.args) ? server.args.map(String) : []);
-      diagnostics.setSecrets([
-        ...oauthMaterialSecrets(material),
-        ...argumentSecrets(args),
-        ...Object.values(material.env ?? {}),
-      ]);
+      diagnostics.setSecrets([...oauthMaterialSecrets(material), ...argumentSecrets(args)]);
       const env = { ...(material.env ?? {}) };
       if (server.transport === "stdio") {
         if (!this.options.stdioEnabled) throw new Error("MCP stdio is disabled");

@@ -111,6 +111,7 @@ import { confirmDeleteBot } from "../lib/bot-lifecycle";
 import type { ComposerMenuOption } from "../lib/composer-menu";
 import { COMPOSER_MENU_OPTIONS } from "../lib/composer-menu";
 import { cancelFocusPrompt, focusPromptThreadActive } from "../lib/focus-prompt";
+import { groupModelNoticeText } from "../lib/group-model-notice";
 import { dateLocaleForUi, t, useI18n } from "../lib/i18n";
 import { saveLastBotId } from "../lib/last-bot";
 import {
@@ -1387,15 +1388,22 @@ function Thread() {
   }
 
   const answerableAskMessageId = latestAnswerableAskMessageId(snap);
+  const pinRecovery = snap?.run?.runtimeProblem
+    ? runtimePinRecovery(snap.run.runtimeProblem, snap.run.botId ?? botId ?? "")
+    : null;
   const runError =
     snap?.run?.status === "failed"
       ? snap.run.runtimeProblem
-        ? snap.run.runtimeProblem.pin.runtimeKind !== "pi" ||
-          snap.run.runtimeProblem.code !== "pin-credential-missing"
+        ? pinRecovery?.message
           ? snap.run.runtimeProblem.pin.runtimeKind === "antigravity"
-            ? antigravityProblemMessage(snap.run.runtimeProblem)
-            : snap.run.runtimeProblem.reason
-          : runtimePinMessage(snap.run.runtimeProblem.pin)
+            ? `${antigravityProblemMessage(snap.run.runtimeProblem)} ${t(pinRecovery.message)}`
+            : t(pinRecovery.message)
+          : snap.run.runtimeProblem.pin.runtimeKind !== "pi" ||
+              snap.run.runtimeProblem.code !== "pin-credential-missing"
+            ? snap.run.runtimeProblem.pin.runtimeKind === "antigravity"
+              ? antigravityProblemMessage(snap.run.runtimeProblem)
+              : snap.run.runtimeProblem.reason
+            : runtimePinMessage(snap.run.runtimeProblem.pin)
         : (snap.run.error ?? null)
       : null;
   const liveMessages = useMemo(() => [...visibleMessages].reverse(), [visibleMessages]);
@@ -1708,12 +1716,7 @@ function Thread() {
                 <Text
                   accessibilityRole="button"
                   style={{ color: tokens.destructive }}
-                  onPress={() =>
-                    router.push(
-                      runtimePinRecovery(snap.run!.runtimeProblem!, snap.run?.botId ?? botId ?? "")
-                        .connect,
-                    )
-                  }
+                  onPress={() => pinRecovery && router.push(pinRecovery.connect)}
                 >
                   {t("Connect")}
                 </Text>
@@ -1721,14 +1724,13 @@ function Thread() {
               <Text
                 accessibilityRole="button"
                 style={{ color: tokens.destructive }}
-                onPress={() =>
-                  router.push(
-                    runtimePinRecovery(snap.run!.runtimeProblem!, snap.run?.botId ?? botId ?? "")
-                      .changePin,
-                  )
-                }
+                onPress={() => pinRecovery && router.push(pinRecovery.changePin)}
               >
-                {t("Change pin")}
+                {t(
+                  snap.run.runtimeProblem.source?.kind === "group-member"
+                    ? "Group settings"
+                    : "Change pin",
+                )}
               </Text>
             </View>
           ) : null}
@@ -2985,7 +2987,8 @@ function MessageTextCard({
 }) {
   const colorScheme = useResolvedAppearance();
   const tokens = mobileTokens();
-  const contentText = blockText(message);
+  useI18n();
+  const contentText = blockText(message, groupModelNoticeText);
   if (!contentText) return null;
   return (
     <Pressable

@@ -15,7 +15,7 @@ import {
   runtimePinProblem,
   ThinkingLevelSchema,
 } from "@ardurbot/contracts";
-import { spaceDefaultEffort } from "@ardurbot/core";
+import { inheritedOllamaEffort, spaceDefaultEffort } from "@ardurbot/core";
 import type { findDefaultModelCredential, PrismaClient } from "@ardurbot/db";
 import { findDefaultModelCredential as findSpaceDefault } from "@ardurbot/db";
 import { hermesCompatibility, hermesConfigHash } from "./hermes-compatibility.js";
@@ -90,7 +90,7 @@ export async function resolveRunModelPin(input: {
       modelId: credential?.defaultModel ?? (input.scripted ? "scripted" : null),
       effort:
         credential?.provider === "ollama" && bot?.thinkingLevel === "off"
-          ? "none"
+          ? inheritedOllamaEffort(bot.thinkingLevel, entry?.reasoning)
           : (bot?.thinkingLevel ??
             spaceDefaultEffort(entry?.reasoning ?? false, entry?.thinkingLevels)),
       credentialId: credential?.id ?? (input.scripted ? "scripted" : null),
@@ -105,9 +105,7 @@ export async function resolveRunModelPin(input: {
         loadedModel = await input.loadKey(credential, pin, credential.provider === "ollama");
         pin.effort =
           credential.provider === "ollama"
-            ? loadedModel.reasoning
-              ? "medium"
-              : null
+            ? inheritedOllamaEffort(null, loadedModel.reasoning)
             : (loadedModel.thinkingLevel ?? (loadedModel.reasoning ? "medium" : "off"));
       } catch (error) {
         if (error instanceof RuntimePinError) return error.problem;
@@ -154,16 +152,14 @@ export async function resolveRunModelPin(input: {
         "pin-effort-unsupported",
         "The pinned effort is unavailable in this runtime.",
       );
-    if (pin.runtimeKind === "antigravity") {
-      const space = await input.prisma.space.findUnique({ where: { id: input.scope.spaceId } });
-      if (
-        !modelLocalityAllowed([bot?.allowedModelDestinations, space?.allowedModelDestinations], {
-          provider,
-          id: pin.modelId,
-        } as AgentRunModel)
-      )
-        return runtimePinProblem(pin, "locality-denied", MODEL_LOCALITY_DENIED_MESSAGE);
-    }
+    const space = await input.prisma.space.findUnique({ where: { id: input.scope.spaceId } });
+    if (
+      !modelLocalityAllowed([bot?.allowedModelDestinations, space?.allowedModelDestinations], {
+        provider,
+        id: pin.modelId,
+      } as AgentRunModel)
+    )
+      return runtimePinProblem(pin, "locality-denied", MODEL_LOCALITY_DENIED_MESSAGE);
     return {
       kind: "resolved",
       pin,
@@ -194,6 +190,10 @@ export async function resolveRunModelPin(input: {
   const selected = selectConfiguredModel({ pin, credential });
   if (selected.kind === "problem") return selected;
   try {
+    if (input.snapshot == null && pin.provider === "ollama" && bot?.thinkingLevel === "off") {
+      const discovered = await input.loadKey(credential, pin, true);
+      pin.effort = inheritedOllamaEffort(bot.thinkingLevel, discovered.reasoning);
+    }
     const model = loadedModel ?? (await input.loadKey(credential, pin));
     const resolved = { ...model, runtimePin: pin, thinkingLevel: selected.thinkingLevel };
     const space = await input.prisma.space.findUnique({ where: { id: input.scope.spaceId } });
@@ -210,7 +210,7 @@ export async function resolveRunModelPin(input: {
     if (error instanceof AnthropicOAuthUnavailableError) {
       return runtimePinProblem(pin, "pin-credential-missing", error.message);
     }
-    if (error instanceof RuntimePinError) return error.problem;
+    if (error instanceof RuntimePinError) return { ...error.problem, pin };
     throw error;
   }
 }

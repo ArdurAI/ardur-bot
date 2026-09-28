@@ -22,7 +22,7 @@ Inherited from Rakazo and working:
 
 - Persistent bots with their own conversation, memory, routines and history
 - Group chats and delegation between bots, plus short-lived subagents
-- A provider, model and thinking level per bot
+- A provider, model and thinking level per bot, with a separate model and thinking choice for each bot in a group room
 <!-- site-facts:providers:start -->
 <!-- Generated from site/data/product.json by pnpm site:facts; edit that file. -->
 - Providers: OpenRouter, OpenAI Codex (ChatGPT account), Anthropic (API key),
@@ -32,7 +32,8 @@ Inherited from Rakazo and working:
 <!-- site-facts:providers:end -->
 - Computers: the computer Ardur is installed on, plus Docker, Podman, Kubernetes or SSH
   machines you add, and E2B, Daytona or Box on a server, with a browser, terminal, files and a
-  graphical desktop ([where bots run](docs/self-host.md#where-bots-run))
+  graphical desktop. Test, edit, and remove saved computer connections in Settings
+  ([where bots run](docs/self-host.md#where-bots-run)).
 - Connectors: MCP servers, OpenAPI documents, Composio, Pipedream Connect
 - Approvals before consequential actions, voice mode, and web, Electron desktop and Expo
   mobile clients of the same API
@@ -152,13 +153,15 @@ docker compose --env-file .env \
 pnpm install
 pnpm db:generate
 pnpm db:migrate
-pnpm sandbox:build
 pnpm dev
 ```
 <!-- site-facts:from-source:end -->
 
 Open [http://127.0.0.1:5173](http://127.0.0.1:5173), create an account, connect a model, and
 create your first bot. Local Docker computers are on by default.
+The first Docker bot downloads its computer image when no local build exists. The organization
+owner must make the GHCR computer package public for that download; `pnpm build:computers`
+builds a local fallback.
 
 Postgres stays network-internal in the default Compose file; the `postgres-host` overlay
 publishes loopback `127.0.0.1:5433` for host-side `pnpm` and database tools. `docker compose

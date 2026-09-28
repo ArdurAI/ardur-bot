@@ -15,9 +15,11 @@ export function RuntimeSettings({
   onEffort,
   experimental,
   onExperimental,
+  experimentalReadOnly = false,
 }: {
   experimental: boolean;
   onExperimental: (enabled: boolean) => void;
+  experimentalReadOnly?: boolean;
   kind: RuntimeKind;
   onKind: (kind: RuntimeKind) => void;
   modelKey: string;
@@ -85,7 +87,7 @@ export function RuntimeSettings({
         value={kind}
         onChange={(event) => {
           onKind(event.target.value as RuntimeKind);
-          onExperimental(false);
+          if (!experimentalReadOnly) onExperimental(false);
           onModel("");
           onEffort("");
           setError(null);
@@ -99,15 +101,17 @@ export function RuntimeSettings({
       </NativeSelect>
       {kind !== "pi" ? (
         <>
-          <label htmlFor={`${id}-experimental`} className="flex items-center gap-2">
-            <Switch
-              id={`${id}-experimental`}
-              checked={experimental}
-              onCheckedChange={onExperimental}
-              aria-label={t`Experimental`}
-            />
-            <Trans>Experimental</Trans>
-          </label>
+          {!experimentalReadOnly ? (
+            <label htmlFor={`${id}-experimental`} className="flex items-center gap-2">
+              <Switch
+                id={`${id}-experimental`}
+                checked={experimental}
+                onCheckedChange={onExperimental}
+                aria-label={t`Experimental`}
+              />
+              <Trans>Experimental</Trans>
+            </label>
+          ) : null}
           {availability ? (
             <p role="status" className="text-sm text-muted-foreground">
               {[

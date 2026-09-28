@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 
+import type { FleetTarget } from "@ardurbot/contracts";
 import { unknownCapacity } from "@ardurbot/contracts/fleet";
 import type { ComponentProps, ReactNode } from "react";
-import { act, useEffect } from "react";
+import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, expect, it, vi } from "vitest";
 
@@ -13,6 +14,9 @@ const api = vi.hoisted(() => ({
   placement: vi.fn(),
   bot: vi.fn(),
   connect: vi.fn(),
+  details: vi.fn(),
+  update: vi.fn(),
+  remove: vi.fn(),
 }));
 vi.mock("../../lib/rpc", () => ({ rpc: { fleet: api, computer: { connect: api.connect } } }));
 const catalog = vi.hoisted(() => new Map<string, string>());
@@ -45,13 +49,399 @@ vi.mock("@ardurbot/ui-web", async (importOriginal) => {
 });
 
 import { Dialog, DialogContent } from "@ardurbot/ui-web";
-import { FleetSettings } from "./FleetSettings";
+import { discoveredFormKind, FleetSettings } from "./FleetSettings";
 import { PlacementNotice } from "./PlacementNotice";
 
 afterEach(() => {
   catalog.clear();
   vi.clearAllMocks();
+  api.discover.mockResolvedValue([]);
   vi.unstubAllGlobals();
+});
+it("maps each discovered kind into the right connection form", () => {
+  const target = { endpoint: "unix:///fixture/docker.sock" } as FleetTarget;
+  expect(discoveredFormKind({ ...target, kind: "docker" })).toBe("docker");
+  expect(discoveredFormKind({ ...target, kind: "podman" })).toBe("docker");
+  expect(
+    discoveredFormKind({ ...target, kind: "podman", endpoint: "unix:///fixture/podman.sock" }),
+  ).toBe("podman");
+  expect(discoveredFormKind({ ...target, kind: "kubernetes" })).toBe("kubernetes");
+  expect(discoveredFormKind({ ...target, kind: "ssh" })).toBe("ssh");
+  expect(discoveredFormKind({ ...target, kind: "tailscale" })).toBe("ssh");
+  expect(
+    discoveredFormKind({
+      ...target,
+      kind: "docker",
+      endpoint: "unix:///fixture/.colima/default/docker.sock",
+    }),
+  ).toBe("docker");
+});
+
+it("confirms removal, shows pinned-bot refusal, and leaves discovered rows without Remove", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const saved = {
+    id: "saved",
+    name: "Office",
+    kind: "docker",
+    connectionId: "saved",
+    state: "connected",
+    capacity: unknownCapacity(),
+    bots: [{ id: "example", name: "Example" }],
+  };
+  api.list.mockResolvedValue({
+    targets: [saved],
+    bots: [],
+    placement: { mode: "manual", preferredTargetId: "host", minimumFreeGb: 4 },
+  });
+  api.discover.mockResolvedValue([
+    { ...saved, id: "found", state: "discovered", connectionId: null, bots: [] },
+  ] as never);
+  api.remove.mockRejectedValue({
+    data: { code: "fleet-pinned-bots", botNames: ["Example\nOne"], count: 1 },
+    message: "server English",
+  });
+  catalog.set("Move bots first: Example\nOne", "Переместите бота: Example\nOne");
+  const element = document.createElement("div");
+  document.body.appendChild(element);
+  const root = createRoot(element);
+  try {
+    await act(async () => root.render(<FleetSettings />));
+    expect(element.querySelector('[data-fleet-target="found"]')?.textContent).not.toContain(
+      "Remove",
+    );
+    await act(async () =>
+      element
+        .querySelector<HTMLButtonElement>('[data-fleet-target="saved"] button:last-child')!
+        .click(),
+    );
+    expect(document.body.textContent).toContain(
+      "Its saved connection and credentials will be deleted. Past run history remains.",
+    );
+    expect(document.body.textContent).toContain("Bots on this computer: Example");
+    const dialog = document.body.querySelector('[aria-label="Remove computer"]')!;
+    const remove = [...dialog.querySelectorAll("button")].find(
+      (button) => button.textContent === "Remove",
+    )!;
+    await act(async () => remove.click());
+    expect(api.remove).toHaveBeenCalledWith({ connectionId: "saved" });
+    expect(dialog.textContent).toContain("Переместите бота: Example\nOne");
+  } finally {
+    await act(async () => root.unmount());
+    element.remove();
+  }
+});
+
+it("prefills Edit and saves a renamed target through fleet.update", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const saved = {
+    id: "saved",
+    name: "Office",
+    kind: "docker",
+    connectionId: "saved",
+    state: "connected",
+    endpoint: "unix:///fixture/docker.sock",
+    capacity: unknownCapacity(),
+    bots: [],
+  };
+  api.list.mockResolvedValue({
+    targets: [saved],
+    bots: [],
+    placement: { mode: "manual", preferredTargetId: "host", minimumFreeGb: 4 },
+  });
+  api.details.mockResolvedValue({
+    id: "saved",
+    name: "Office",
+    revision: "2026-09-27T00:00:00.000Z",
+    settings: {
+      engine: "docker",
+      endpoint: "unix:///fixture/docker.sock",
+      namespace: "ardurbot",
+      storageSize: "10Gi",
+      cpuRequest: "250m",
+      cpuLimit: "4",
+      memoryRequest: "256Mi",
+      memoryLimit: "8Gi",
+    },
+    hasCredential: false,
+    activeRuns: false,
+  });
+  api.update.mockResolvedValue({ ok: true, checkedAt: new Date().toISOString(), targets: [] });
+  const element = document.createElement("div");
+  document.body.appendChild(element);
+  const root = createRoot(element);
+  try {
+    await act(async () => root.render(<FleetSettings />));
+    const edit = [
+      ...element.querySelectorAll<HTMLButtonElement>('[data-fleet-target="saved"] button'),
+    ].find((button) => button.textContent === "Edit")!;
+    await act(async () => edit.click());
+    const dialog = document.body.querySelector('[aria-label="Edit computer"]')!;
+    expect(dialog.querySelector<HTMLInputElement>('[aria-label="Name"]')?.value).toBe("Office");
+    expect(dialog.querySelector<HTMLInputElement>('[aria-label="Engine endpoint"]')?.value).toBe(
+      "unix:///fixture/docker.sock",
+    );
+    const name = dialog.querySelector<HTMLInputElement>('[aria-label="Name"]')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+        name,
+        "Workshop",
+      );
+      name.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () =>
+      dialog
+        .querySelector("form")!
+        .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    expect(api.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        connectionId: "saved",
+        revision: "2026-09-27T00:00:00.000Z",
+        connection: expect.objectContaining({
+          name: "Workshop",
+          settings: expect.objectContaining({ cpuLimit: "4", memoryLimit: "8Gi" }),
+        }),
+      }),
+    );
+  } finally {
+    await act(async () => root.unmount());
+    element.remove();
+  }
+});
+it("uses the committed revision when correcting an endpoint after a failed probe", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const saved = {
+    id: "saved",
+    name: "Office",
+    kind: "docker",
+    connectionId: "saved",
+    state: "connected",
+    endpoint: "unix:///fixture/docker.sock",
+    capacity: unknownCapacity(),
+    bots: [],
+  };
+  api.list.mockResolvedValue({
+    targets: [saved],
+    bots: [],
+    placement: { mode: "manual", preferredTargetId: "host", minimumFreeGb: 4 },
+  });
+  api.details.mockResolvedValue({
+    id: "saved",
+    name: "Office",
+    revision: "2026-09-27T00:00:00.000Z",
+    settings: { engine: "docker", endpoint: saved.endpoint },
+    hasCredential: false,
+    activeRuns: false,
+  });
+  api.update
+    .mockResolvedValueOnce({
+      ok: false,
+      reason: "socket-missing",
+      revision: "2026-09-27T00:00:01.000Z",
+      targets: [],
+    })
+    .mockResolvedValueOnce({
+      ok: true,
+      revision: "2026-09-27T00:00:02.000Z",
+      targets: [],
+    });
+  const element = document.createElement("div");
+  document.body.appendChild(element);
+  const root = createRoot(element);
+  try {
+    await act(async () => root.render(<FleetSettings />));
+    const edit = [
+      ...element.querySelectorAll<HTMLButtonElement>('[data-fleet-target="saved"] button'),
+    ].find((button) => button.textContent === "Edit")!;
+    await act(async () => edit.click());
+    const dialog = document.body.querySelector('[aria-label="Edit computer"]')!;
+    const endpoint = dialog.querySelector<HTMLInputElement>('[aria-label="Engine endpoint"]')!;
+    const changeEndpoint = async (value: string) => {
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+          endpoint,
+          value,
+        );
+        endpoint.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+    };
+    const submit = async () =>
+      act(async () =>
+        dialog
+          .querySelector("form")!
+          .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+      );
+    await changeEndpoint("unix:///fixture/missing.sock");
+    await submit();
+    expect(api.update).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ revision: "2026-09-27T00:00:00.000Z" }),
+    );
+    await changeEndpoint("unix:///fixture/correct.sock");
+    await submit();
+    expect(api.update).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        revision: "2026-09-27T00:00:01.000Z",
+        connection: expect.objectContaining({
+          settings: expect.objectContaining({ endpoint: "unix:///fixture/correct.sock" }),
+        }),
+      }),
+    );
+  } finally {
+    await act(async () => root.unmount());
+    element.remove();
+  }
+});
+it("warns before changing a connection with an active run", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const saved = {
+    id: "saved",
+    name: "Office",
+    kind: "docker",
+    connectionId: "saved",
+    state: "connected",
+    endpoint: "unix:///fixture/docker.sock",
+    capacity: unknownCapacity(),
+    bots: [],
+  };
+  api.list.mockResolvedValue({
+    targets: [saved],
+    bots: [],
+    placement: { mode: "manual", preferredTargetId: "host", minimumFreeGb: 4 },
+  });
+  api.details.mockResolvedValue({
+    id: "saved",
+    name: "Office",
+    revision: "2026-09-27T00:00:00.000Z",
+    settings: {
+      engine: "docker",
+      endpoint: "unix:///fixture/docker.sock",
+      namespace: "ardurbot",
+      storageSize: "10Gi",
+      cpuRequest: "250m",
+      cpuLimit: "2",
+      memoryRequest: "256Mi",
+      memoryLimit: "2Gi",
+    },
+    hasCredential: false,
+    activeRuns: true,
+  });
+  api.update.mockResolvedValue({ ok: true, checkedAt: new Date().toISOString(), targets: [] });
+  const element = document.createElement("div");
+  document.body.appendChild(element);
+  const root = createRoot(element);
+  try {
+    await act(async () => root.render(<FleetSettings />));
+    const edit = [
+      ...element.querySelectorAll<HTMLButtonElement>('[data-fleet-target="saved"] button'),
+    ].find((button) => button.textContent === "Edit")!;
+    await act(async () => edit.click());
+    const dialog = document.body.querySelector('[aria-label="Edit computer"]')!;
+    const endpoint = dialog.querySelector<HTMLInputElement>('[aria-label="Engine endpoint"]')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+        endpoint,
+        "unix:///fixture/new.sock",
+      );
+      endpoint.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await act(async () =>
+      dialog
+        .querySelector("form")!
+        .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    expect(dialog.textContent).toContain("Saving this connection change may interrupt them");
+    expect(api.update).not.toHaveBeenCalled();
+    await act(async () =>
+      dialog
+        .querySelector("form")!
+        .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })),
+    );
+    expect(api.update).toHaveBeenCalledWith(expect.objectContaining({ confirmActive: true }));
+  } finally {
+    await act(async () => root.unmount());
+    element.remove();
+  }
+});
+it("offers Save anyway when a run starts after the editor opens, keeping the edit", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  api.list.mockResolvedValue({
+    targets: [
+      {
+        id: "saved",
+        name: "Office",
+        kind: "docker",
+        connectionId: "saved",
+        state: "connected",
+        capacity: unknownCapacity(),
+        bots: [],
+      },
+    ],
+    bots: [],
+    placement: { mode: "manual", preferredTargetId: "host", minimumFreeGb: 4 },
+  });
+  api.details.mockResolvedValue({
+    id: "saved",
+    name: "Office",
+    revision: "2026-09-27T00:00:00.000Z",
+    settings: {
+      engine: "docker",
+      endpoint: "unix:///fixture/docker.sock",
+      namespace: "ardurbot",
+      storageSize: "10Gi",
+      cpuRequest: "250m",
+      cpuLimit: "2",
+      memoryRequest: "256Mi",
+      memoryLimit: "2Gi",
+    },
+    hasCredential: false,
+    activeRuns: false,
+  });
+  api.update.mockRejectedValueOnce({ data: { code: "fleet-active-runs" } });
+  api.update.mockResolvedValueOnce({ ok: true, checkedAt: new Date().toISOString(), targets: [] });
+  const element = document.createElement("div");
+  document.body.appendChild(element);
+  const root = createRoot(element);
+  try {
+    await act(async () => root.render(<FleetSettings />));
+    const edit = [
+      ...element.querySelectorAll<HTMLButtonElement>('[data-fleet-target="saved"] button'),
+    ].find((button) => button.textContent === "Edit")!;
+    await act(async () => edit.click());
+    const dialog = document.body.querySelector('[aria-label="Edit computer"]')!;
+    const endpoint = dialog.querySelector<HTMLInputElement>('[aria-label="Engine endpoint"]')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(
+        endpoint,
+        "unix:///fixture/new.sock",
+      );
+      endpoint.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    const submit = () =>
+      dialog
+        .querySelector("form")!
+        .dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    await act(async () => {
+      submit();
+    });
+    expect(api.update).toHaveBeenLastCalledWith(expect.objectContaining({ confirmActive: false }));
+    expect(dialog.textContent).toContain("Save anyway");
+    await act(async () => {
+      submit();
+    });
+    expect(api.update).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        confirmActive: true,
+        connection: expect.objectContaining({
+          settings: expect.objectContaining({ endpoint: "unix:///fixture/new.sock" }),
+        }),
+      }),
+    );
+  } finally {
+    await act(async () => root.unmount());
+    element.remove();
+  }
 });
 it("renders capacity and assignments, applies placement, and requests explicit move consent", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -113,7 +503,7 @@ it("renders capacity and assignments, applies placement, and requests explicit m
 it("names built-in rows by their key and the API's host label, and saved connections as named", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   catalog.set("This Mac", "Этот Mac");
-  catalog.set("Docker on this Mac", "Docker на этом Mac");
+  catalog.set("Docker engine on this Mac", "Docker на этом Mac");
   catalog.set("Default computer", "Компьютер по умолчанию");
   const row = {
     kind: "docker",
@@ -146,6 +536,66 @@ it("names built-in rows by their key and the API's host label, and saved connect
       '[aria-label="Preferred computer"]',
     )!;
     expect([...preferred.options].map((option) => option.textContent)).toEqual(translated);
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+it("shows probe reasons and checks without reporting memory for unreachable engines", async () => {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const checkedAt = "2026-09-27T18:00:00.000Z";
+  const base = { kind: "docker" as const, capacity: unknownCapacity(), bots: [] };
+  api.list.mockResolvedValue({
+    targets: [
+      {
+        ...base,
+        id: "saved",
+        name: "Docker Desktop on this Mac",
+        connectionId: "saved",
+        state: "unavailable",
+        reachability: { status: "installed-not-running", reason: "engine-not-running", checkedAt },
+      },
+      {
+        ...base,
+        id: "remote",
+        name: "Remote engine",
+        connectionId: "remote",
+        state: "unavailable",
+        reachability: { status: "not-reachable", reason: "timed-out", checkedAt },
+      },
+      {
+        ...base,
+        id: "running",
+        name: "Running engine",
+        connectionId: "running",
+        state: "connected",
+        reachability: { status: "running", checkedAt },
+      },
+    ],
+    bots: [],
+    placement: { mode: "manual", preferredTargetId: "host", minimumFreeGb: 4 },
+  });
+  api.discover.mockResolvedValue([
+    {
+      ...base,
+      id: "found",
+      name: "OrbStack on this Mac",
+      connectionId: null,
+      state: "discovered",
+      reachability: { status: "installed-not-running", reason: "socket-missing", checkedAt },
+    },
+  ] as never);
+  const element = document.createElement("div"),
+    root = createRoot(element);
+  try {
+    await act(async () => root.render(<FleetSettings />));
+    const row = (id: string) =>
+      element.querySelector(`[data-fleet-target="${id}"]`)?.textContent ?? "";
+    expect(row("saved")).toContain("Installed, not running · Engine not running");
+    expect(row("saved")).toContain("Checked");
+    expect(row("remote")).toContain("Not reachable · Timed out");
+    expect(row("found")).toContain("Socket missing");
+    expect(row("saved")).not.toContain("Memory not reported");
+    expect(row("running")).toContain("Memory not reported");
   } finally {
     await act(async () => root.unmount());
   }
@@ -266,11 +716,11 @@ it("opens Add computer dialog with prefilled engine from discovered row, and Esc
   api.discover.mockResolvedValue([
     {
       id: "docker-engine",
-      name: "Docker on this Mac",
+      name: "Docker Desktop on this Mac",
       kind: "docker",
       connectionId: null,
       state: "discovered",
-      endpoint: "/var/run/docker.sock",
+      endpoint: "/fixture/docker-desktop.sock",
       capacity: unknownCapacity(),
       bots: [],
     },
@@ -311,11 +761,11 @@ it("opens Add computer dialog with prefilled engine from discovered row, and Esc
       document.body.querySelector<HTMLSelectElement>('[aria-label="Connection type"]')?.value,
     ).toBe("docker");
     expect(document.body.querySelector<HTMLInputElement>('[aria-label="Name"]')?.value).toBe(
-      "Docker on this Mac",
+      "Docker Desktop on this Mac",
     );
     expect(
       document.body.querySelector<HTMLInputElement>('[aria-label="Engine endpoint"]')?.value,
-    ).toBe("/var/run/docker.sock");
+    ).toBe("/fixture/docker-desktop.sock");
 
     // Pressing Escape closes only the nested Add dialog, not Settings, and restores focus
     await act(async () => {

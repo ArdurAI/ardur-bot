@@ -628,6 +628,38 @@ it.each([
   ).toBe(false);
 });
 
+it.each([
+  ["extension", { managedBy: "extension" as const, catalogId: null }],
+  ["plugin", { managedBy: "plugin" as const, catalogId: null }],
+])("lets an owner correct a %s server's field classification", async (_, source) => {
+  fake.list.mockResolvedValue([
+    {
+      id: "reports",
+      name: "Reports",
+      transport: "stdio",
+      oauthStatus: "none",
+      connectionState: "connected",
+      command: "node",
+      enabled: true,
+      hasSecret: true,
+      envKeys: ["ROOT_DIR"],
+      headerKeys: [],
+      credentialFlags: { env: { ROOT_DIR: true }, headers: {} },
+      ...source,
+    } as unknown as McpServer,
+  ]);
+  fake.update.mockResolvedValue({});
+  const container = await mount();
+  const control = container.querySelector<HTMLElement>('[aria-label="Secret for ROOT_DIR"]');
+  expect(control).not.toBeNull();
+  expect(control?.hasAttribute("disabled")).toBe(false);
+  await act(async () => control!.click());
+  expect(fake.update).toHaveBeenCalledExactlyOnceWith({
+    id: "reports",
+    credentialFlags: { env: { ROOT_DIR: false }, headers: {} },
+  });
+});
+
 it("opens the credential control already focused when Reconnect needs a credential", async () => {
   HTMLElement.prototype.scrollIntoView = vi.fn();
   const server = {

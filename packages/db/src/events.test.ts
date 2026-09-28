@@ -19,6 +19,7 @@ import {
   finalizeComputerControlRelease,
   finalizeRun,
   followThreadEvents,
+  groupModelFailureNotice,
   pauseRunForInput,
   pauseRunForTakeover,
   sendUserMessage,
@@ -68,6 +69,18 @@ function event(seq: number) {
 }
 
 describe("finalizeRun", () => {
+  it("persists translatable group failure identifiers with actionable fallback text", () => {
+    expect(groupModelFailureNotice("pin-credential-missing", "Worker")).toEqual({
+      kind: "text",
+      text: "Worker couldn't use the model set for this group. Reconnect it or change the group model.",
+      notice: { id: "group-model-credential-missing", botName: "Worker" },
+    });
+    expect(groupModelFailureNotice("locality-denied", "Worker")).toEqual({
+      kind: "text",
+      text: "This group's model is blocked by the bot or space settings. Change the destination policy or choose another group model.",
+      notice: { id: "group-model-locality-denied", botName: "Worker" },
+    });
+  });
   it("stamps the final steps block with wall-clock run duration", () => {
     const blocks = [
       { kind: "steps" as const, steps: [{ label: "Read file", count: 1 }] },

@@ -32,11 +32,33 @@ test("Computers shows fleet capacity, placement and move consent", async ({ page
       bots: [{ id: "builder", name: "Builder" }],
     },
     {
+      id: "refused-engine",
+      name: "Docker Desktop on this Mac",
+      kind: "docker",
+      connectionId: "refused-engine",
+      state: "unavailable",
+      endpoint: "unix:///fixture/refused.sock",
+      reachability: {
+        status: "installed-not-running",
+        reason: "engine-not-running",
+        checkedAt: new Date().toISOString(),
+      },
+      capacity: { ...capacity, memoryFree: null, memoryTotal: null, source: "not-reported" },
+      bots: [],
+    },
+    {
       id: "remote",
       name: "Linux computer",
       kind: "ssh",
       connectionId: "remote",
       state: "connected",
+      ssh: {
+        host: "fixture.example.invalid",
+        user: "runner",
+        port: 22,
+        authentication: "agent",
+        baseDirectory: "~/.ardurbot/computers",
+      },
       capacity,
       bots: [],
     },
@@ -65,13 +87,63 @@ test("Computers shows fleet capacity, placement and move consent", async ({ page
       },
     }),
   );
+  await page.route("**/rpc/fleet/test", (route) =>
+    route.fulfill({
+      json: {
+        json: {
+          ok: false,
+          reason: "engine-not-running",
+          checkedAt: new Date().toISOString(),
+          targets: [targets[1]],
+        },
+      },
+    }),
+  );
+  await page.route("**/rpc/fleet/details", (route) =>
+    route.fulfill({
+      json: {
+        json: {
+          id: "remote",
+          name: targets[2]!.name,
+          settings: {
+            engine: "ssh",
+            ssh: targets[2]!.ssh,
+            namespace: "ardurbot",
+            storageSize: "10Gi",
+            cpuRequest: "250m",
+            cpuLimit: "2",
+            memoryRequest: "256Mi",
+            memoryLimit: "2Gi",
+          },
+          hasCredential: false,
+          activeRuns: false,
+        },
+      },
+    }),
+  );
+  await page.route("**/rpc/fleet/update", async (route) => {
+    const request = route.request().postDataJSON() as { json: { connection: { name: string } } };
+    targets[2]!.name = request.json.connection.name;
+    await route.fulfill({
+      json: { json: { ok: true, checkedAt: new Date().toISOString(), targets: [targets[2]] } },
+    });
+  });
+  await page.route("**/rpc/fleet/remove", async (route) => {
+    targets.splice(2, 1);
+    await route.fulfill({ json: { json: { ok: true } } });
+  });
   const discovered = [
     {
       id: "discovered-docker",
-      name: "Docker on this Mac",
+      name: "Docker Desktop on this Mac",
       kind: "docker",
       connectionId: null,
       state: "discovered",
+      reachability: {
+        status: "installed-not-running",
+        reason: "engine-not-running",
+        checkedAt: new Date().toISOString(),
+      },
       endpoint: "/var/run/docker.sock",
       capacity: {
         cpuCount: null,
@@ -94,6 +166,11 @@ test("Computers shows fleet capacity, placement and move consent", async ({ page
   await expect(fleet).toContainText("24.0 GB free");
   await expect(fleet.getByLabel("Placement", { exact: true })).toHaveValue("free-memory");
   await expect(fleet.getByRole("button", { name: "Move", exact: true })).toBeVisible();
+  const refusedRow = fleet.locator('[data-fleet-target="refused-engine"]');
+  await expect(refusedRow).toContainText("Installed, not running · Engine not running");
+  await expect(refusedRow).not.toContainText("Memory not reported");
+  await refusedRow.getByRole("button", { name: "Test" }).click();
+  await expect(refusedRow).toContainText("Engine not running");
   await captureScreenshot(page, testInfo, "fleet-placement");
 
   const discoveredRow = fleet.locator('[data-fleet-target="discovered-docker"]');
@@ -102,12 +179,27 @@ test("Computers shows fleet capacity, placement and move consent", async ({ page
   const addDialog = page.getByRole("dialog", { name: "Add computer" });
   await expect(addDialog).toBeVisible();
   await expect(addDialog.getByLabel("Connection type")).toHaveValue("docker");
-  await expect(addDialog.getByLabel("Name")).toHaveValue("Docker on this Mac");
+  await expect(addDialog.getByLabel("Name")).toHaveValue("Docker Desktop on this Mac");
   await expect(addDialog.getByLabel("Engine endpoint")).toHaveValue("/var/run/docker.sock");
   await captureScreenshot(page, testInfo, "fleet-add-dialog");
 
   await addDialog.getByRole("button", { name: "Cancel" }).click();
   await expect(addDialog).not.toBeVisible();
+
+  const remoteRow = fleet.locator('[data-fleet-target="remote"]');
+  await remoteRow.getByRole("button", { name: "Edit" }).click();
+  const editDialog = page.getByRole("dialog", { name: "Edit computer" });
+  await expect(editDialog.getByLabel("Name")).toHaveValue("Linux computer");
+  await editDialog.getByLabel("Name").fill("Workshop computer");
+  await editDialog.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(remoteRow).toContainText("Workshop computer");
+  await captureScreenshot(page, testInfo, "fleet-edited-target");
+  await remoteRow.getByRole("button", { name: "Remove" }).click();
+  const removeDialog = page.getByRole("dialog", { name: "Remove computer" });
+  await expect(removeDialog).toContainText("Past run history remains.");
+  await removeDialog.getByRole("button", { name: "Remove", exact: true }).click();
+  await expect(remoteRow).toHaveCount(0);
+  await captureScreenshot(page, testInfo, "fleet-removed-target");
 
   await fleet.getByRole("button", { name: "Add computer", exact: true }).click();
   await expect(addDialog).toBeVisible();

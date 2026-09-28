@@ -20,9 +20,15 @@ import type { SandboxProviderOptions } from "./sandbox-factory.js";
 
 export type ComputerSecretLoader = { load(ciphertext: string, id: string): string };
 
-/** Immutable connection rows keep every operation on the computer's saved destination. */
+/** Saved connection rows keep every operation on the computer's chosen destination. */
 export class ComputerConnections {
-  private readonly providers = new Map<string, Promise<SandboxProvider>>();
+  private readonly providers = new Map<
+    string,
+    { revision: string; provider: Promise<SandboxProvider> }
+  >();
+  invalidate(id: string, spaceId: string) {
+    this.providers.delete(`${spaceId}:${id}`);
+  }
   constructor(
     private readonly prisma: PrismaClient,
     private readonly secrets: ComputerSecretLoader,
@@ -35,9 +41,10 @@ export class ComputerConnections {
     if (!row)
       throw new Error("The computer connection is unavailable; choose a connection in Settings.");
     const key = `${context.spaceId}:${id}`;
-    let provider = this.providers.get(key);
-    if (!provider) {
-      provider = (async () => {
+    const revision = JSON.stringify([row.updatedAt?.getTime() ?? 0, row.metadata, row.secretId]);
+    let cached = this.providers.get(key);
+    if (!cached || cached.revision !== revision) {
+      const provider = (async () => {
         const settings = ComputerConnectionSettingsSchema.parse(row.metadata);
         if (settings.engine === "kubernetes" && settings.hostSecretId && usesHostBridge())
           return new HostKubernetesSandboxProvider(
@@ -68,10 +75,13 @@ export class ComputerConnections {
           settings,
         );
       })();
-      this.providers.set(key, provider);
-      provider.catch(() => this.providers.delete(key));
+      cached = { revision, provider };
+      this.providers.set(key, cached);
+      provider.catch(() => {
+        if (this.providers.get(key)?.provider === provider) this.providers.delete(key);
+      });
     }
-    return provider;
+    return cached.provider;
   }
 }
 
