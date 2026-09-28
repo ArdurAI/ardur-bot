@@ -89,7 +89,6 @@ import {
   promptInvokesSkill,
   redactSecrets,
   redactTaskValue,
-  renderBotPresenceDirectory,
   renderGoalContext,
   resolveActionApprovalDetail,
   runNotificationCategory,
@@ -201,6 +200,7 @@ import { applyBoardToolAccess, botUpkeepPrompt, resolveBoardAccess } from "./boa
 import { attachedImageArtifactIds, resolveUpdateBotAvatar } from "./bot-avatar.js";
 import { acknowledgeBotMessageReceipt } from "./bot-comms.js";
 import { loadBotMessageContext, messageBot, returnBotMessageOutcome } from "./bot-messages.js";
+import { loadRunBotDirectory } from "./bot-presence-directory.js";
 import {
   findBotSecret,
   forgetBotSecret,
@@ -713,7 +713,6 @@ export function isProtectedComputerLifecycleCommand(command: string): boolean {
 }
 
 /** Cap the roster so a large Space cannot flood the prompt. */
-const BOT_DIRECTORY_LIMIT = 40;
 export interface ExecutorDeps {
   placement?: (runId: string, signal: AbortSignal) => Promise<boolean>;
   prisma: PrismaClient;
@@ -5115,21 +5114,12 @@ export function createRunExecutor(deps: ExecutorDeps) {
         const prompt = [replyContext, basePrompt, takeoverResume?.promptNote, approvalContinuation]
           .filter(Boolean)
           .join("\n\n");
-        const botDirectory = renderBotPresenceDirectory(
-          (
-            await loadBotPresence(
-              deps.prisma,
-              { spaceId: run.spaceId, userId: run.userId },
-              {
-                callerBotId: bot.id,
-                canSend: !thread.groupId || Boolean(goalRoom),
-                visibleGroupId: thread.groupId ?? undefined,
-                limit: BOT_DIRECTORY_LIMIT,
-              },
-            )
-          ).bots,
+        const botDirectory = await loadRunBotDirectory(
+          deps.prisma,
+          { spaceId: run.spaceId, userId: run.userId },
           bot.id,
           thread.groupId ?? undefined,
+          !thread.groupId || Boolean(goalRoom),
         );
 
         if (heldForTakeover) {

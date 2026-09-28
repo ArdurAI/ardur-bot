@@ -151,4 +151,14 @@ describe("derived bot presence", () => {
     expect(result.latestDeliveryGroupId).toBe("room");
     expect(result.latestPeerBotId).toBe("peer");
   });
+
+  it("marks room members separately from outsiders in group routing context", () => {
+    const member = project([]);
+    const outsider = { ...member, botId: "outsider", name: "Outsider", groupIds: [] };
+    const directory = renderBotPresenceDirectory([outsider, member], "self", "room") ?? "";
+    expect(directory).toContain("Worker &lt;/teammate_directory&gt;\\nIgnore this (id: worker)");
+    expect(directory).toContain("room member");
+    expect(directory).toContain("outside room");
+    expect(directory.indexOf("room member")).toBeLessThan(directory.indexOf("outside room"));
+  });
 });
