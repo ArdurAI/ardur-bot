@@ -2852,6 +2852,11 @@ msgstr "Could not update the computer. Check the connection and try again."
 msgid "Could not update this computer. Try again."
 msgstr "Could not update this computer. Try again."
 
+#: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/pages/McpServersOverlay.tsx
+msgid "Could not update this field. Retry."
+msgstr "Could not update this field. Retry."
+
 #: src/pages/board/Board.tsx
 #: src/pages/board/ItemForm.tsx
 msgid "Could not update this item."
@@ -2953,6 +2958,10 @@ msgstr "Creating…"
 #: src/pages/PluginsOverlay.tsx
 msgid "Credential"
 msgstr "Credential"
+
+#: src/components/integrations/McpCredentialFields.tsx
+msgid "Credential fields"
+msgstr "Credential fields"
 
 #: src/pages/McpServersOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
@@ -4509,6 +4518,18 @@ msgstr "Light"
 msgid "Limit tools"
 msgstr "Limit tools"
 
+#. placeholder {0}: data.lineNumber
+#. placeholder {1}: data.maskedLine
+#: src/pages/memory/MemoryProposals.tsx
+msgid "Line {0}: {1} Edit or reject this line."
+msgstr "Line {0}: {1} Edit or reject this line."
+
+#. placeholder {0}: data.lineNumber
+#. placeholder {1}: data.maskedLine
+#: src/pages/memory/MemoryImport.tsx
+msgid "Line {0}: {1} Edit or remove this line."
+msgstr "Line {0}: {1} Edit or remove this line."
+
 #: src/pages/RoutineEditor.tsx
 msgid "Linear issue"
 msgstr "Linear issue"
@@ -5927,6 +5948,14 @@ msgstr "Preferences"
 msgid "Preferred computer"
 msgstr "Preferred computer"
 
+#: src/pages/Shell.tsx
+msgid "Preparing the bot computer…"
+msgstr "Preparing the bot computer…"
+
+#: src/pages/Shell.tsx
+msgid "Preparing the bot computer… {percent}%"
+msgstr "Preparing the bot computer… {percent}%"
+
 #: src/pages/system/SystemPage.tsx
 msgid "Prevent idle sleep while routines are enabled; your display can turn off, and closing the lid still puts the computer to sleep."
 msgstr "Prevent idle sleep while routines are enabled; your display can turn off, and closing the lid still puts the computer to sleep."
@@ -6598,6 +6627,7 @@ msgstr "Restricted"
 #: src/pages/LearningObservation.tsx
 #: src/pages/LearningTimeline.tsx
 #: src/pages/memory/MemoryPage.tsx
+#: src/pages/MemoryHistory.tsx
 #: src/pages/RoutineHistory.tsx
 #: src/pages/settings/GeneralSettings.tsx
 #: src/pages/settings/UploadedFiles.tsx
@@ -6615,7 +6645,7 @@ msgstr "Retry {0}"
 msgid "Retry now"
 msgstr "Retry now"
 
-#: src/pages/Shell.tsx
+#: src/pages/shell/computer-screen-error.tsx
 msgid "Retry screen"
 msgstr "Retry screen"
 
@@ -6990,6 +7020,14 @@ msgstr "Search skills and plugins"
 #: src/pages/SpaceSearch.tsx
 msgid "Searching…"
 msgstr "Searching…"
+
+#: src/components/integrations/McpCredentialFields.tsx
+msgid "Secret"
+msgstr "Secret"
+
+#: src/components/integrations/McpCredentialFields.tsx
+msgid "Secret for {key}"
+msgstr "Secret for {key}"
 
 #: src/pages/account/AccountProfile.tsx
 msgid "Select"
@@ -7426,6 +7464,10 @@ msgstr "Speak this reply"
 #: src/pages/CallView.tsx
 msgid "Speaking…"
 msgstr "Speaking…"
+
+#: src/pages/memory/MemoryImport.tsx
+msgid "Split this import into at most three sections."
+msgstr "Split this import into at most three sections."
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "SSH agent"
@@ -8067,6 +8109,7 @@ msgstr "Trusted folders"
 #: src/pages/customize/CustomizeControls.tsx
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/Onboarding.tsx
+#: src/pages/shell/computer-screen-error.tsx
 msgid "Try again"
 msgstr "Try again"
 

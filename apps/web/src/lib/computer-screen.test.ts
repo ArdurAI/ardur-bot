@@ -43,9 +43,11 @@ describe("computer screen requests", () => {
       });
       let current = 1;
       const commit = vi.fn();
+      const observe = vi.fn();
       const stale = loadComputerScreen({
         load: () => deferred,
         isCurrent: () => current === 1,
+        observe,
         commit,
         fallbackError: "Could not connect",
       });
@@ -61,6 +63,11 @@ describe("computer screen requests", () => {
       if (outcome === "success") finish({ url: "https://stale.example/vnc.html" });
       else fail(new Error("Stale connection failed"));
       await expect(stale).resolves.toBeNull();
+      expect(observe).toHaveBeenCalledExactlyOnceWith(
+        outcome === "success"
+          ? { url: "https://stale.example/vnc.html", error: null }
+          : { url: null, error: "Stale connection failed" },
+      );
       expect(commit).toHaveBeenCalledExactlyOnceWith({
         url: null,
         error: "Latest connection failed",

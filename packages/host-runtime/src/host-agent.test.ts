@@ -1,11 +1,16 @@
+import { EventEmitter } from "node:events";
 import { mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import type { AgentRuntime, AgentRuntimeEvent } from "@ardurbot/adapter-kit";
 import type { HostFrame, HostOperation, HostRequest } from "@ardurbot/contracts/host-bridge";
 import { decodeHostFrame, encodeHostFrame, HOST_WINDOW } from "@ardurbot/contracts/host-bridge";
+import { RuntimePinError, runtimePinProblem } from "@ardurbot/contracts/runtime-pins";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type WebSocket from "ws";
 import { BoardRunner } from "./board/runner.js";
+import type { HostWire } from "./bridge-wire.js";
+import { wsWire } from "./bridge-wire.js";
 import { DesktopSandboxProvider } from "./desktop-sandbox.js";
 import { HostAgent } from "./host-agent.js";
 import { HostMcpServers } from "./host-mcp.js";
@@ -110,7 +115,7 @@ const turn: HostOperation = {
     },
   },
 };
-async function fixture(runtime?: AgentRuntime, acknowledge = false) {
+async function fixture(runtime?: AgentRuntime, acknowledge = false, wire?: HostWire) {
   const root = await realpath(await mkdtemp(path.join(tmpdir(), "host-agent-")));
   roots.push(root);
   const frames: HostFrame[] = [];
@@ -121,7 +126,7 @@ async function fixture(runtime?: AgentRuntime, acknowledge = false) {
   }
   const agent = new HostAgent(
     { root, hostRoots: [root] },
-    {
+    wire ?? {
       send: async (frame) => {
         frames.push(decodeHostFrame(encodeHostFrame(frame)));
         if (acknowledge && frame.type === "stream")
@@ -156,6 +161,76 @@ function fakeRuntime(events: number): AgentRuntime {
   };
 }
 describe("host process operations", () => {
+  it("sends a Hermes failure on the real wire and keeps the host available for another operation", async () => {
+    const frames: HostFrame[] = [];
+    const socket = Object.assign(new EventEmitter(), {
+      readyState: 1,
+      bufferedAmount: 0,
+      close: vi.fn(),
+      send: vi.fn((data: string, callback: () => void) => {
+        frames.push(decodeHostFrame(data));
+        callback();
+      }),
+    });
+    const { agent } = await fixture(undefined, false, wsWire(socket as unknown as WebSocket));
+    const hermes = {
+      ...turn,
+      request: {
+        ...turn.request,
+        model: {
+          ...turn.request.model,
+          runtimePin: {
+            ...turn.request.model.runtimePin,
+            runtimeKind: "hermes" as const,
+          },
+        },
+      },
+    } satisfies HostOperation;
+    await agent.receive(request(hermes));
+    await vi.waitFor(() =>
+      expect(frames).toContainEqual(
+        expect.objectContaining({
+          type: "end",
+          id: "req",
+          problem: expect.objectContaining({
+            pin: expect.objectContaining({ runtimeKind: "hermes" }),
+          }),
+        }),
+      ),
+    );
+    const runner = vi
+      .spyOn(BoardRunner.prototype, "run")
+      .mockResolvedValue({ ok: true, stdout: "" });
+    const board: HostOperation = {
+      op: "board.run",
+      request: { action: "command", actor: "Owner", workspace: { kind: "space" }, argv: ["ready"] },
+    };
+    await agent.receive({
+      ...request(board),
+      id: "next",
+    });
+    await vi.waitFor(() => expect(frames.at(-1)).toMatchObject({ type: "end", id: "next" }));
+    runner.mockRejectedValueOnce(
+      new RuntimePinError(
+        runtimePinProblem(
+          { ...turn.request.model.runtimePin, runtimeKind: "claude-code" },
+          "runtime-unavailable",
+          "x".repeat(256 * 1024),
+        ),
+      ),
+    );
+    await agent.receive({ ...request(board), id: "oversized-error" });
+    await vi.waitFor(() =>
+      expect(frames.at(-1)).toMatchObject({
+        type: "end",
+        id: "oversized-error",
+        problem: { reason: "Host operation could not finish." },
+      }),
+    );
+    await agent.receive({ ...request(board), id: "after-error" });
+    await vi.waitFor(() => expect(frames.at(-1)).toMatchObject({ type: "end", id: "after-error" }));
+    expect(socket.close).not.toHaveBeenCalled();
+  });
   it("streams a metadata manifest in bounded frames and reads a scanned item without provisioning a computer", async () => {
     const { agent, frames, root: home, completed } = await fixture(undefined, true);
     const folder = path.join(home, ".claude/projects/fixture/memory");

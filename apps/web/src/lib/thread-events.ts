@@ -635,12 +635,30 @@ export function reduceComputerStatus(
   }
   const status = event.payload.status;
   if (!isComputerState(status)) return prev;
+  const imagePulling = status === "booting" && event.payload.imagePulling === true;
+  const imagePullPercent =
+    imagePulling &&
+    (event.payload.imagePullPercent === null ||
+      (typeof event.payload.imagePullPercent === "number" &&
+        Number.isInteger(event.payload.imagePullPercent) &&
+        event.payload.imagePullPercent >= 0 &&
+        event.payload.imagePullPercent <= 100))
+      ? (event.payload.imagePullPercent as number | null)
+      : undefined;
   const screenAvailable = status === "running" || status === "booting" || prev.screenAvailable;
-  if (status === prev.state && screenAvailable === prev.screenAvailable) return prev;
+  if (
+    status === prev.state &&
+    screenAvailable === prev.screenAvailable &&
+    imagePulling === prev.imagePulling &&
+    imagePullPercent === prev.imagePullPercent
+  )
+    return prev;
   return {
     ...prev,
     state: status,
     screenAvailable,
+    imagePulling,
+    imagePullPercent,
   };
 }
 

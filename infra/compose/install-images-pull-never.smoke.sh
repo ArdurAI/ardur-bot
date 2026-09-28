@@ -26,6 +26,26 @@ tmp="$(mktemp -d "${TMPDIR:-/tmp}/install-images-smoke.XXXXXX")"
 cleanup_tmp() { rm -rf "$tmp"; }
 trap cleanup_tmp EXIT
 
+# Exercise the POSIX JSON-field fallback with only awk on PATH, so it runs even where jq is installed.
+mkdir -p "$tmp/fallback-bin"
+ln -s "$(command -v awk)" "$tmp/fallback-bin/awk"
+(
+  eval "$(sed -n '/^compose_field() {/,/^}/p' "$src")"
+  image=$(PATH="$tmp/fallback-bin" compose_field computer image < "$root/computer-config.fixture.json")
+  channel=$(PATH="$tmp/fallback-bin" compose_field selection channel < "$root/computer-config.fixture.json")
+  [[ "$image" == "ghcr.io/ardurai/ardur-bot/computer:1.2.3" && "$channel" == release ]] \
+    || fail "POSIX Compose JSON extraction disagreed with the recorded config"
+
+  # A host without jq must drain large configurations without SIGPIPE (141) under pipefail.
+  large_config=$(
+    sed '$d' "$root/computer-config.fixture.json"
+    printf ',\n  "x-trailing": {\n    "data": "%200000s"\n  }\n}\n' ' '
+  )
+  image_large=$(printf '%s\n' "$large_config" | PATH="$tmp/fallback-bin" compose_field computer image)
+  [[ "$image_large" == "ghcr.io/ardurai/ardur-bot/computer:1.2.3" ]] \
+      || fail "POSIX Compose JSON extraction failed to drain large configuration"
+)
+
 write_stubs() {
   local bin="$1"
   mkdir -p "$bin"
@@ -63,8 +83,9 @@ for a in "$@"; do
 done
 
 echo "VERB=${verb:-none}" >> "$log"
+echo "COMPUTER_REF=${ARDURBOT_COMPUTER_IMAGE_REF:-}" >> "$log"
 
-if [[ "$verb" == config ]]; then
+if [[ "$verb" == config && " $* " != *" --format json "* ]]; then
   cat >/dev/null || true
 fi
 
@@ -88,6 +109,29 @@ case "$verb" in
     fi
     ;;
   config)
+    if [[ " $* " == *" --format json "* ]]; then
+      if [[ -n "${STUB_REAL_DOCKER:-}" ]]; then
+        exec "$STUB_REAL_DOCKER" compose "$@"
+      fi
+      image="${STUB_CONFIG_EXPLICIT_IMAGE:-${ARDURBOT_COMPUTER_IMAGE_REF:-${STUB_CONFIG_EXPLICIT_REF:-${ARDURBOT_COMPUTER_IMAGE_REF_BOOTSTRAP:-}}}}"
+      cat <<EOF
+{
+  "services": {
+    "computer": {
+      "image": "$image"
+    }
+  },
+  "x-ardurbot-image-selection": {
+    "app_version": "${STUB_CONFIG_APP_VERSION:-0.1.0-alpha.1}",
+    "image_tag": "${STUB_CONFIG_IMAGE_TAG:-}",
+    "channel": "${STUB_CONFIG_CHANNEL:-}",
+    "explicit_image": "${STUB_CONFIG_EXPLICIT_IMAGE:-}",
+    "explicit_ref": "${STUB_CONFIG_EXPLICIT_REF:-}"
+  }
+}
+EOF
+      exit 0
+    fi
     cat <<'EOF'
 POSTGRES_PASSWORD=test-postgres
 BETTER_AUTH_SECRET=test-auth-secret
@@ -128,7 +172,11 @@ for a in "$@"; do
   prev="$a"
 done
 if [[ -n "$out" ]]; then
-  printf 'stub-download\n' > "$out"
+  if [[ " $* " == *".env.images.example"* ]]; then
+    printf 'ARDURBOT_APP_VERSION=0.1.0-alpha.1\n' > "$out"
+  else
+    printf 'stub-download\n' > "$out"
+  fi
   exit 0
 fi
 exit 1
@@ -141,7 +189,7 @@ setup_work() {
   mkdir -p "$work/cwd"
   write_stubs "$work/bin"
   : > "$work/cwd/docker-compose.images.yml"
-  : > "$work/cwd/.env.images.example"
+  printf 'ARDURBOT_APP_VERSION=0.1.0-alpha.1\n' > "$work/cwd/.env.images.example"
   cat > "$work/cwd/.env" <<'EOF'
 POSTGRES_PASSWORD=test-postgres
 BETTER_AUTH_SECRET=test-auth-secret
@@ -151,14 +199,18 @@ SANDBOX_SUPERVISOR_TOKEN=test-supervisor-token
 EOF
   : > "$work/docker.log"
   : > "$work/curl.log"
+  : > "$work/stub-config"
 }
 
 run_install() {
   local work="$1"
   shift
   (
+    unset ARDURBOT_IMAGE_TAG ARDURBOT_COMPUTER_IMAGE ARDURBOT_COMPUTER_IMAGE_TAG ARDURBOT_COMPUTER_CHANNEL ARDURBOT_COMPUTER_IMAGE_REF
+    export FIXTURE_CHANNEL=release
     export STUB_DOCKER_LOG="$work/docker.log"
     export STUB_CURL_LOG="$work/curl.log"
+    source "$work/stub-config"
     export PATH="$work/bin:$PATH"
     cd "$work/cwd"
     bash "$src" "$@"
@@ -189,6 +241,50 @@ set -e
 [[ ! -s "$tmp/offline/curl.log" ]] || fail "--offline should not curl when files are local: $(cat "$tmp/offline/curl.log")"
 has_compose_pull "$tmp/offline" && fail "--offline should not run compose pull"
 has_up_pull_never "$tmp/offline" || fail "--offline should pass --pull never to compose up: $(cat "$tmp/offline/docker.log")"
+grep -Fx 'COMPUTER_REF=ghcr.io/ardurai/ardur-bot/computer:dev' "$tmp/offline/docker.log" >/dev/null \
+  || fail "the default computer reference did not use the prerelease channel"
+
+setup_work "$tmp/release"
+printf 'ARDURBOT_APP_VERSION=1.2.3\n' > "$tmp/release/cwd/.env.images.example"
+printf 'export STUB_CONFIG_APP_VERSION=1.2.3\n' > "$tmp/release/stub-config"
+run_install "$tmp/release" --offline >/dev/null
+grep -Fx 'COMPUTER_REF=ghcr.io/ardurai/ardur-bot/computer:1.2.3' "$tmp/release/docker.log" >/dev/null \
+  || fail "the release computer reference did not use the exact app version"
+
+setup_work "$tmp/pinned-release"
+printf 'ARDURBOT_IMAGE_TAG=v1.2.3\n' >> "$tmp/pinned-release/cwd/.env"
+printf 'export STUB_CONFIG_IMAGE_TAG=v1.2.3\n' > "$tmp/pinned-release/stub-config"
+run_install "$tmp/pinned-release" --offline >/dev/null
+grep -Fx 'COMPUTER_REF=ghcr.io/ardurai/ardur-bot/computer:1.2.3' "$tmp/pinned-release/docker.log" >/dev/null \
+  || fail "the pinned release computer reference did not use the exact app version"
+
+# The desktop unit test runs this table through the real Compose CLI when available.
+while IFS='|' read -r name key encoded expected reference; do
+  [[ "$name" == \#* || -z "$name" ]] && continue
+  setup_work "$tmp/setting-$name"
+  printf '%b\n' "$encoded" >> "$tmp/setting-$name/cwd/.env"
+  case "$key" in
+    ARDURBOT_COMPUTER_CHANNEL) printf 'export STUB_CONFIG_CHANNEL=%q\n' "$expected" > "$tmp/setting-$name/stub-config" ;;
+    ARDURBOT_IMAGE_TAG) printf 'export STUB_CONFIG_IMAGE_TAG=%q\n' "$expected" > "$tmp/setting-$name/stub-config" ;;
+    ARDURBOT_COMPUTER_IMAGE_REF) printf 'export STUB_CONFIG_EXPLICIT_REF=%q\n' "$expected" > "$tmp/setting-$name/stub-config" ;;
+  esac
+  run_install "$tmp/setting-$name" --offline >/dev/null
+  grep -Fx "COMPUTER_REF=$reference" "$tmp/setting-$name/docker.log" >/dev/null \
+    || fail "$name selected a different computer reference"
+done < "$root/deployment-settings.fixtures.tsv"
+
+# The real CLI renders image selection without contacting the daemon. Other
+# lifecycle verbs remain stubbed, so this case cannot pull or start an image.
+if command -v docker >/dev/null 2>&1 && docker compose version --short >/dev/null 2>&1; then
+  setup_work "$tmp/real-config"
+  cp "$root/docker-compose.images.yml" "$tmp/real-config/cwd/docker-compose.images.yml"
+  printf 'ARDURBOT_COMPUTER_CHANNEL=${CHANNEL:-release}\n' >> "$tmp/real-config/cwd/.env"
+  STUB_REAL_DOCKER="$(command -v docker)" run_install "$tmp/real-config" --offline >/dev/null
+  grep -Fx 'COMPUTER_REF=ghcr.io/ardurai/ardur-bot/computer:0.1.0-alpha.1' "$tmp/real-config/docker.log" >/dev/null \
+    || fail "real Compose selected a different computer reference"
+else
+  echo "skip: Docker Compose CLI unavailable for the rendered-config smoke" >&2
+fi
 
 # --pull-never is accepted and skips pull (may still download Compose files).
 setup_work "$tmp/pull-never"

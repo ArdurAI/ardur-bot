@@ -1,5 +1,9 @@
 import type { ProcessEvent } from "@ardurbot/adapter-kit";
-import { ComputerEngineUnavailableError } from "@ardurbot/contracts";
+import {
+  COMPUTER_IMAGE_DOWNLOAD_FAILED_CODE,
+  ComputerEngineUnavailableError,
+  ComputerImageDownloadError,
+} from "@ardurbot/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   DockerSandboxProvider,
@@ -23,6 +27,60 @@ describe("Docker sandbox", () => {
   afterEach(() => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
+  });
+
+  it("forwards streamed image progress before returning the provisioned computer", async () => {
+    const progress = vi.fn();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            new ReadableStream({
+              start(controller) {
+                const encoder = new TextEncoder();
+                controller.enqueue(
+                  encoder.encode(
+                    '{"type":"progress","percent":null}\n{"type":"progress","percent":',
+                  ),
+                );
+                controller.enqueue(
+                  encoder.encode('45}\n{"type":"result","value":{"id":"computer"}}\n'),
+                );
+                controller.close();
+              },
+            }),
+            { headers: { "content-type": "application/x-ndjson" } },
+          ),
+      ),
+    );
+    const provider = new DockerSandboxProvider("http://supervisor.test", "test-token");
+    const computer = await provider.provision(
+      { botId: "bot", homePath: "/tmp/bot" },
+      { ...context, onComputerImageProgress: progress },
+    );
+    expect(progress.mock.calls).toEqual([[null], [45]]);
+    expect(computer.providerRef).toBe("computer");
+  });
+
+  it("surfaces a streamed pull failure without accepting a computer", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            `{"type":"error","code":"${COMPUTER_IMAGE_DOWNLOAD_FAILED_CODE}","reason":"network error","error":"registry diagnostic detail"}\n`,
+            { headers: { "content-type": "application/x-ndjson" } },
+          ),
+      ),
+    );
+    const provider = new DockerSandboxProvider("http://supervisor.test", "test-token");
+    const failure = await provider
+      .provision({ botId: "bot", homePath: "/tmp/bot" }, context)
+      .catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(ComputerImageDownloadError);
+    expect(failure).toMatchObject({ reason: "network error" });
+    expect((failure as Error).message).not.toContain("diagnostic detail");
   });
 
   it("sends the bounded timeout to the supervisor and preserves its honest result", async () => {
