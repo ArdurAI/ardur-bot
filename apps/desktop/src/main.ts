@@ -1560,6 +1560,15 @@ app.whenReady().then(async () => {
       },
       openAccount: async (step) => {
         if (step === "finish" && guidedEngine?.snapshot().accountReady) {
+          if (
+            mainWindow &&
+            !mainWindow.isDestroyed() &&
+            currentTargetUrl &&
+            new URL(mainWindow.webContents.getURL()).pathname === "/guided-onboarding"
+          ) {
+            await mainWindow.loadURL(new URL("/app", currentTargetUrl).href);
+            await waitForMountedAppDocument(mainWindow.webContents);
+          }
           setupWindow?.hide();
           mainWindow?.show();
           mainWindow?.focus();

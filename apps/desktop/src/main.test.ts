@@ -128,6 +128,35 @@ describe("first-launch setup dispatch", () => {
 });
 
 describe("guided setup service handoff", () => {
+  it("leaves the guided form when opening an already complete account", async () => {
+    const source = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
+    const start = source.indexOf("openAccount: async (step) => {");
+    const end = source.indexOf("\n      },", start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const loadURL = vi.fn(async () => undefined);
+    const mainWindow = {
+      webContents: { getURL: () => "http://127.0.0.1:3333/guided-onboarding?step=model" },
+      loadURL,
+      isDestroyed: () => false,
+      show: vi.fn(),
+      focus: vi.fn(),
+    };
+    const context = {
+      guidedEngine: { snapshot: () => ({ accountReady: true }) },
+      setupWindow: { hide: vi.fn() },
+      mainWindow,
+      currentTargetUrl: "http://127.0.0.1:3333",
+      openGuidedAccount: vi.fn(),
+      waitForMountedAppDocument: vi.fn(async () => undefined),
+      URL,
+    };
+    vm.runInNewContext(`this.openAccount = async (step) => {${source.slice(start + "openAccount: async (step) => {".length, end)}\n}`, context);
+    await (context as typeof context & { openAccount: (step: string) => Promise<void> }).openAccount("finish");
+    expect(loadURL).toHaveBeenCalledWith("http://127.0.0.1:3333/app");
+    expect(mainWindow.show).toHaveBeenCalledOnce();
+    expect(context.openGuidedAccount).not.toHaveBeenCalled();
+  });
   it.each([
     { resume: true, document: "setup.html" },
     { resume: false, document: "guided-setup.html" },
