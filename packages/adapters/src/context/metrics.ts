@@ -1,6 +1,7 @@
 import type { ContextAggregate, ContextSnapshot } from "@ardurbot/contracts";
 import { ContextSnapshotSchema } from "@ardurbot/contracts";
 import type { RecordedContextUsage } from "../run-usage.js";
+import { recordBrokerRunUsage } from "../run-usage.js";
 
 /** A broker receipt is already deduplicated and lease-fenced by the ledger. */
 export async function forwardRecordedBrokerUsage(
@@ -8,6 +9,28 @@ export async function forwardRecordedBrokerUsage(
   sink?: (usage: RecordedContextUsage) => Promise<void>,
 ): Promise<void> {
   if (usage) await sink?.(usage);
+}
+
+/** Bridge the durable broker ledger to the primary run's context callback. */
+export async function recordAndForwardBrokerUsage(
+  deps: Parameters<typeof recordBrokerRunUsage>[0],
+  run: Parameters<typeof recordBrokerRunUsage>[1],
+  usage: Parameters<typeof recordBrokerRunUsage>[2],
+  fence: Parameters<typeof recordBrokerRunUsage>[3],
+  sink?: (usage: RecordedContextUsage) => Promise<void>,
+): Promise<void> {
+  const recorded = await recordBrokerRunUsage(deps, run, usage, fence);
+  await forwardRecordedBrokerUsage(recorded, sink);
+}
+
+/** Persist only an accepted measurement; absent usage leaves coverage unknown. */
+export async function persistBrokerContextUsage(
+  snapshot: ContextSnapshot,
+  usage: RecordedContextUsage,
+  save: () => Promise<void>,
+): Promise<void> {
+  recordContextUsage(snapshot, usage);
+  await save();
 }
 
 /** Apply the ledger's accepted delta, never the raw runtime observation. */
