@@ -1033,7 +1033,21 @@ export async function drainParkedPeerRuns(
   afterId?: string,
 ): Promise<{ runIds: string[]; cursor: string | null }> {
   const candidates = await prisma.run.findMany({
-    where: { status: "peer_ready", ...(afterId ? { id: { gt: afterId } } : {}) },
+    where: {
+      OR: [
+        { status: "peer_ready" },
+        {
+          status: "peer_paused",
+          OR: [
+            { goal: null },
+            { goal: { is: { status: { not: "running" } } } },
+            { goal: { is: { untilAt: { lte: new Date() } } } },
+            { cancelRequestedAt: { not: null } },
+          ],
+        },
+      ],
+      ...(afterId ? { id: { gt: afterId } } : {}),
+    },
     orderBy: { id: "asc" },
     take: limit,
     select: { id: true },
@@ -1043,7 +1057,12 @@ export async function drainParkedPeerRuns(
     const released = await withTransactionRetry(() =>
       prisma.$transaction(async (tx) => {
         const initial = await tx.run.findUnique({ where: { id: candidate.id } });
-        if (!initial || initial.status !== "peer_ready" || !initial.delegationId) return null;
+        if (
+          !initial ||
+          !["peer_ready", "peer_paused"].includes(initial.status) ||
+          !initial.delegationId
+        )
+          return null;
         const initialDelivery = await tx.botMessageDelivery.findFirst({
           where: { delegationId: initial.delegationId },
         });
@@ -1063,8 +1082,8 @@ export async function drainParkedPeerRuns(
           await tx.$queryRaw`SELECT id FROM threads WHERE id = ${threadId} FOR UPDATE`;
         if (root) await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${root.rootTaskId} FOR UPDATE`;
         const run = await tx.run.findUniqueOrThrow({ where: { id: candidate.id } });
-        if (run.status !== "peer_ready") return null;
-        if (paused) {
+        if (!["peer_ready", "peer_paused"].includes(run.status)) return null;
+        if (paused && run.status === "peer_ready") {
           await tx.run.update({ where: { id: run.id }, data: { status: "peer_paused" } });
           return null;
         }
@@ -1496,9 +1515,25 @@ export async function refreshBoundBotMessageWakeRun(
         select: { id: true, taskId: true, cancelRequestedAt: true },
       });
       if (!run) return false;
-      if (run.cancelRequestedAt) return false;
       const wake = await tx.botMessageWake.findUniqueOrThrow({ where: { id: candidate.id } });
       if (wake.state !== "bound" || wake.runId !== run.id) return false;
+      const confirmCancelledWake = async () => {
+        const now = new Date();
+        await finishWake(tx, wake, "cancelled", "peer-paused", false, "cancelled");
+        await tx.run.update({
+          where: { id: run.id },
+          data: {
+            status: "cancelled",
+            leaseOwner: null,
+            leaseExpiresAt: null,
+            cancelConfirmedAt: now,
+            completedAt: now,
+          },
+        });
+        await tx.task.update({ where: { id: run.taskId }, data: { status: "cancelled" } });
+        return false;
+      };
+      if (run.cancelRequestedAt) return confirmCancelledWake();
       const goal = wake.goalId
         ? await tx.teamGoal.findFirst({
             where: {
@@ -1518,11 +1553,7 @@ export async function refreshBoundBotMessageWakeRun(
           groupId: goal.groupId,
         }))
       ) {
-        await tx.run.updateMany({
-          where: { id: run.id, cancelRequestedAt: null },
-          data: { cancelRequestedAt: new Date() },
-        });
-        return false;
+        return confirmCancelledWake();
       }
       if (!goal || !(await currentCoordinatorGroup(tx, wake, goal))) {
         await finishWake(tx, wake, "cancelled", "group-unavailable", true);

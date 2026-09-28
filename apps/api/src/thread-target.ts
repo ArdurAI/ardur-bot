@@ -627,7 +627,11 @@ function mapRun(run: {
     botId: run.botId,
     threadId: run.threadId,
     taskId: run.taskId,
-    status: run.status as never,
+    // Peer parking is an internal queue distinction; the public run contract
+    // presents both waiting states as queued until the request is released.
+    status: (run.status === "peer_paused" || run.status === "peer_ready"
+      ? "queued"
+      : run.status) as never,
     trigger: RunTriggerSchema.parse(run.trigger),
     routineId: run.routineId ?? null,
     contextSnapshot: ContextSnapshotSchema.safeParse(run.contextSnapshot).data ?? null,

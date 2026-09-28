@@ -109,7 +109,10 @@ export async function checkPeerWakeLimits(
   const wakeWhere = {
     ...base,
     createdAt: { gt: hour },
-    clientNonce: { startsWith: "peer-wake:" },
+    OR: [
+      { clientNonce: { startsWith: "peer-wake:" } },
+      { clientNonce: { startsWith: "goal-wake:" } },
+    ],
   };
   const directWhere = {
     ...base,
@@ -454,7 +457,9 @@ export async function setBotCommunicationPaused(
             goalId: { in: eligibleGoals },
             state: "paused",
           },
-          data: { state: "pending", nextAttemptAt: null },
+          // Sealed batches remain dispatchable without claiming the one pending
+          // slot for a key shared by several parked generations.
+          data: { state: "sealed", nextAttemptAt: null },
         });
         await tx.run.updateMany({
           where: {

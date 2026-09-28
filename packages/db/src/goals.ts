@@ -8,7 +8,12 @@ import {
   GOAL_MAX_HOPS,
   GoalStartInputSchema,
 } from "@ardurbot/contracts";
-import { peerTrafficPaused } from "./bot-comms-policy.js";
+import {
+  checkPeerWakeLimits,
+  lockPeerTrafficPolicy,
+  peerTrafficPaused,
+  recordPeerTrafficBlock,
+} from "./bot-comms-policy.js";
 import type { Prisma, PrismaClient, TeamGoal } from "./client.js";
 import { requestCancel, requestCancelInTransaction } from "./delegation.js";
 import { appendEventInTransaction } from "./events.js";
@@ -277,9 +282,15 @@ export async function wakeGoalCoordinatorForDelegation(prisma: PrismaClient, del
       if (!initial) return null;
       const candidateGoal = await tx.teamGoal.findUnique({
         where: { rootTaskId: initial.rootTaskId },
-        select: { threadId: true },
+        select: { threadId: true, spaceId: true, userId: true },
       });
       if (!candidateGoal) return null;
+      // Match message admission's policy-before-thread lock order.
+      if (initial.kind === "message")
+        await lockPeerTrafficPolicy(tx, {
+          spaceId: candidateGoal.spaceId,
+          userId: candidateGoal.userId,
+        });
       // Canonical order: coordinator thread, then root task. Finalization uses the same order.
       await tx.$queryRaw`SELECT id FROM threads WHERE id = ${candidateGoal.threadId} FOR UPDATE`;
       await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${initial.rootTaskId} FOR UPDATE`;
@@ -342,6 +353,26 @@ export async function wakeGoalCoordinatorForDelegation(prisma: PrismaClient, del
       // A completion may not steer an unrelated or approval-held turn.
       // Leave the claim open so reconciliation can dispatch after that turn ends.
       if (active) return null;
+      if (row.kind === "message") {
+        const limit = await checkPeerWakeLimits(tx, {
+          spaceId: goal.spaceId,
+          userId: goal.userId,
+          goalId: goal.id,
+          now,
+        });
+        if (limit) {
+          await recordPeerTrafficBlock(tx, {
+            spaceId: goal.spaceId,
+            userId: goal.userId,
+            groupId: goal.groupId,
+            goalId: goal.id,
+            reason: limit,
+            now,
+          });
+          await tx.delegation.update({ where: { id: row.id }, data: { coordinatorWokenAt: now } });
+          return null;
+        }
+      }
       let runId: string | null = null;
       {
         const task = await tx.task.create({

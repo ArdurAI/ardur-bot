@@ -1,6 +1,7 @@
 import type { SandboxProvider } from "@ardurbot/adapter-kit";
 import { startScoreboardTrace } from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
+import { ThreadSnapshotSchema } from "@ardurbot/contracts";
 import type { PrismaClient } from "@ardurbot/db";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -153,6 +154,47 @@ describe("reaction messages", () => {
 });
 
 describe("threadSnapshot", () => {
+  it.each(["peer_paused", "peer_ready"])(
+    "returns a valid desk snapshot while a peer request is %s",
+    async (status) => {
+      const run = {
+        id: "parked-run",
+        botId: "bot-1",
+        threadId: "thread-1",
+        taskId: "task-1",
+        status,
+        trigger: "bot_message",
+        modelProvider: null,
+        modelId: null,
+        error: null,
+        startedAt: null,
+        completedAt: null,
+        createdAt: new Date("2026-08-23T00:00:00.000Z"),
+      };
+      const tx = {
+        $queryRaw: vi.fn().mockResolvedValue([{ id: "thread-1" }]),
+        message: { findMany: vi.fn().mockResolvedValue([]) },
+        event: {
+          findFirst: vi.fn().mockResolvedValue(null),
+          findMany: vi.fn().mockResolvedValue([]),
+        },
+        run: { findFirst: botRunFindFirst([run]) },
+      };
+      const prisma = {
+        $transaction: vi.fn(async (callback: (client: typeof tx) => unknown) => callback(tx)),
+      } as unknown as PrismaClient;
+      const target = {
+        kind: "bot",
+        botId: "bot-1",
+        threadId: "thread-1",
+        bot: { name: "Worker", computer: null },
+      } as ThreadTarget;
+      const snapshot = await threadSnapshot({ prisma }, target);
+      expect(ThreadSnapshotSchema.safeParse(snapshot).success).toBe(true);
+      expect(snapshot.contextRun).toMatchObject({ id: run.id, status: "queued" });
+    },
+  );
+
   it("reloads tool-only live messages for an active run", async () => {
     const run = {
       id: "run-1",
