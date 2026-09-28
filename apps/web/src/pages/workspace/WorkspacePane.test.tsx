@@ -192,7 +192,7 @@ describe("WorkspacePane tab selection and content rendering", () => {
     expect(activeTab?.textContent).toBe("Screen");
   });
 
-  it("activates Screen tab when Screen is chosen on non-graphical computers", async () => {
+  it("falls back to Tasks tab when Screen is chosen on non-graphical computers", async () => {
     const nonGraphical = {
       ...graphicalComputer,
       capabilities: { graphical: false, interactiveTerminal: false },
@@ -217,7 +217,37 @@ describe("WorkspacePane tab selection and content rendering", () => {
       ),
     );
     const activeTab = container.querySelector('[role="tab"][data-active]');
-    expect(activeTab?.textContent).toBe("Screen");
+    expect(activeTab?.textContent).toBe("Tasks");
+    expect(container.querySelector('[role="tablist"]')?.textContent).not.toContain("Screen");
+    expect(container.querySelector('[role="tablist"]')?.textContent).toContain("Computer");
+  });
+
+  it("activates Computer tab when Computer is chosen on non-graphical computers", async () => {
+    const nonGraphical = {
+      ...graphicalComputer,
+      capabilities: { graphical: false, interactiveTerminal: false },
+    };
+    await act(async () =>
+      root.render(
+        <WorkspacePane
+          bot={bot}
+          computer={nonGraphical}
+          tab="computer"
+          onTabChange={vi.fn()}
+          onOpenRun={vi.fn()}
+          routines={<div>Routines content</div>}
+          screen={{
+            computer: nonGraphical,
+            open: false,
+            url: null,
+            error: null,
+            onOpen: vi.fn(),
+          }}
+        />,
+      ),
+    );
+    const activeTab = container.querySelector('[role="tab"][data-active]');
+    expect(activeTab?.textContent).toBe("Computer");
   });
 
   it("activates Files tab when files are available and tab is files", async () => {

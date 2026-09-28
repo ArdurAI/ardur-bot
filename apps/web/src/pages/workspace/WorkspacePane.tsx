@@ -30,6 +30,7 @@ export function WorkspacePane({
     open: boolean;
     url: string | null;
     error: ReactNode;
+    status?: ReactNode;
     onOpen(): void;
   };
   onOpenRun(run: RunActivityRow): void;
@@ -57,7 +58,11 @@ export function WorkspacePane({
       : null;
   const filesAvailable = currentContext?.files !== "unavailable" && currentContext?.computerId;
   const selected =
-    tab === "tasks" || tab === "routines" || (tab === "files" && filesAvailable) || tab === "screen"
+    tab === "tasks" ||
+    tab === "routines" ||
+    (tab === "files" && filesAvailable) ||
+    (tab === "screen" && computer?.capabilities?.graphical === true) ||
+    (tab === "computer" && computer?.capabilities?.graphical !== true)
       ? tab
       : "tasks";
   const tabs = [
@@ -103,7 +108,17 @@ export function WorkspacePane({
             ),
           },
         ]
-      : []),
+      : [
+          {
+            id: "computer",
+            label: t`Computer`,
+            content: (
+              <Suspense fallback={null}>
+                <WorkspaceScreen {...screen} />
+              </Suspense>
+            ),
+          },
+        ]),
   ];
   return <WorkspaceTabs tabs={tabs} value={selected} onChange={onTabChange} />;
 }
