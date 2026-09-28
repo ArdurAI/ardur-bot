@@ -38,23 +38,29 @@ export function PeerMessageReceipt({
   const receipt = botMessageReceiptKind(block);
   const recipient = sent ? peer : (block.recipientBotName ?? recipientName);
   const label =
-    receipt === "waiting"
-      ? t("Waiting for a turn")
-      : receipt === "read"
-        ? recipient
-          ? t("Read by {recipient}", { recipient })
-          : t("Read")
-        : receipt === "replied"
-          ? t("Replied")
-          : receipt === "expired"
-            ? t("Expired")
-            : receipt === "failed"
-              ? t("Failed")
-              : receipt === "delivered"
-                ? sent
-                  ? t("Delivered to {peer}", { peer })
-                  : t("Delivered from {peer}", { peer })
-                : t("Sent");
+    receipt === "held"
+      ? t("Waiting for your approval")
+      : receipt === "denied"
+        ? t("Not approved")
+        : receipt === "cancelled"
+          ? t("Cancelled")
+          : receipt === "waiting"
+            ? t("Waiting for a turn")
+            : receipt === "read"
+              ? recipient
+                ? t("Read by {recipient}", { recipient })
+                : t("Read")
+              : receipt === "replied"
+                ? t("Replied")
+                : receipt === "expired"
+                  ? t("Expired")
+                  : receipt === "failed"
+                    ? t("Failed")
+                    : receipt === "delivered"
+                      ? sent
+                        ? t("Delivered to {peer}", { peer })
+                        : t("Delivered from {peer}", { peer })
+                      : t("Sent");
   const accessibleLabel =
     receipt === "sent"
       ? sent

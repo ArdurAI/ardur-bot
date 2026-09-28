@@ -107,6 +107,9 @@ export default function TeamScreen() {
                   {t("Latest message")}: {teamDeliveryText(row.latestDeliveryState, t)}
                 </Text>
               ) : null}
+              {row.trafficPaused ? (
+                <Text style={{ color: tokens.mutedForeground }}>{t("Team messages paused")}</Text>
+              ) : null}
               {row.pendingPeerCount ? (
                 <Text style={{ color: tokens.mutedForeground }}>
                   {t("{count} peer messages waiting", { count: row.pendingPeerCount })}

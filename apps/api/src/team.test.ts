@@ -134,6 +134,7 @@ function fixture(runStatus = "running", delegationStatus = "running") {
     },
     event: { findMany: vi.fn(async () => []) },
     botMessageDelivery: { findMany: scoped([]), groupBy: scoped([]) },
+    botCommunicationPolicy: { findMany: scoped([]) },
     botBrief: { findMany: scoped([]) },
     teamGoal: { findMany: scoped([]) },
     task: { findMany: scoped([]) },

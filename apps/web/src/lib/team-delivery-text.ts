@@ -5,6 +5,7 @@ import { t } from "@lingui/core/macro";
 export function localizedTeamDeliveryText(state: string): string {
   const labels: Record<string, string> = {
     "Waiting for a turn": t`Waiting for a turn`,
+    "Waiting for your approval": t`Waiting for your approval`,
     Delivered: t`Delivered`,
     Read: t`Read`,
     Replied: t`Replied`,

@@ -1,27 +1,34 @@
 import { randomUUID } from "node:crypto";
 import type { JobPublisher } from "@ardurbot/adapter-kit";
-import { botMessageReceiptKind, buildBotMessageWakePrompt } from "@ardurbot/core";
+import { botMessageReceiptKind, buildBotMessageWakePrompt, peerPairKey } from "@ardurbot/core";
 import {
   acknowledgeBotMessageInput,
   appendBotMessageWakeInTransaction,
+  checkPeerTrafficLimits,
   claimQuietBotMessages,
   claimSteering,
   createDb,
   createThreadEvents,
   createThreadMessage,
   dispatchBotMessageWake,
+  expireHeldBotMessages,
   expireQuietBotMessages,
   finalizeRun,
+  getBotCommunicationPolicy,
   goalBotAuthorityFingerprint,
+  listBotCommunicationDeliveries,
   loadBotPresence,
+  lockPeerTrafficPolicy,
   noteBotMessageReadUnconfirmed,
   type PrismaClient,
   reconcileQuietBotMessageClaims,
   refreshBoundBotMessageWakeRun,
+  setBotCommunicationPaused,
 } from "@ardurbot/db";
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { acknowledgeBotMessageReceipt, replyToBotDelivery } from "./bot-comms.js";
 import { messageBot } from "./bot-messages.js";
+import { checkDelegationExecution } from "./delegation-execution.js";
 import { wakeGoalAfterDelegation } from "./goal-wake.js";
 import { createJobReconciler } from "./job-reconciler.js";
 import { recordRunUsage } from "./run-usage.js";
@@ -55,6 +62,19 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
     });
     await prisma.space.create({
       data: { id: spaceId, organizationId, name: "Fixture space", createdByUserId: userId },
+    });
+  });
+
+  beforeEach(async () => {
+    // Cases share a synthetic space. Keep each case's ledger inside its own rolling window.
+    const outsideWindow = new Date(Date.now() - 3_600_001);
+    await prisma.botMessageDelivery.updateMany({
+      where: { spaceId, userId, createdAt: { gt: outsideWindow } },
+      data: { createdAt: outsideWindow },
+    });
+    await prisma.botMessageWake.updateMany({
+      where: { spaceId, userId, createdAt: { gt: outsideWindow } },
+      data: { createdAt: outsideWindow },
     });
   });
 
@@ -2534,5 +2554,372 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
         where: { rootTaskId: f.rootTask.id, intent: "fyi", state: "expired" },
       }),
     ).toBe(20);
+  });
+
+  it("S4 holds a requested effect once and releases no work after denial", async () => {
+    const f = await fixture();
+    await prisma.instanceIdentity.create({
+      data: {
+        id: "home",
+        instanceId: `s4-home-${f.goal.id}`,
+        publicKey: "fixture",
+        fingerprint: "fixture",
+        certificate: "fixture",
+        certificateFingerprint: "fixture",
+        privateKeyCiphertext: "fixture",
+        scopes: [],
+      },
+    });
+    const pin = {
+      runtimeKind: "pi" as const,
+      provider: "fixture",
+      modelId: "fixture",
+      effort: "off",
+      credentialId: "fixture",
+      revision: 0,
+    };
+    await prisma.run.update({
+      where: { id: f.coordinatorRun.id },
+      data: { status: "running", runtimePin: pin },
+    });
+    const deps = {
+      ...f.deps,
+      resolveDelegationPin: async () =>
+        ({
+          kind: "resolved",
+          pin,
+          provider: "fixture",
+          id: "fixture",
+          thinkingLevel: "off",
+        }) as never,
+    };
+    const input = {
+      bot_id: f.worker.id,
+      message: "Prepare the draft for review.",
+      intent: "request" as const,
+      card: {
+        goal: "Prepare a draft",
+        inputs: [{ type: "text", text: "Public fixture" }],
+        doneWhen: ["Draft is ready"],
+        deadlineAt: null,
+      },
+      requested_effects: [{ kind: "publish" as const }],
+      deliveryKey: `s4-hold:${f.goal.id}`,
+    };
+    const sent = await messageBot(deps, f.coordinatorRun, f.coordinator, input);
+    expect(sent.ok).toBe(true);
+    const replay = await messageBot(deps, f.coordinatorRun, f.coordinator, input);
+    expect(replay).toMatchObject({ ok: true, replayed: true });
+    const delivery = await prisma.botMessageDelivery.findFirstOrThrow({
+      where: { idempotencyKey: `bot-message:${input.deliveryKey}` },
+    });
+    expect(delivery.state).toBe("held");
+    expect(delivery.approvalEffectId).toBeTruthy();
+    expect(await prisma.externalEffect.count({ where: { id: delivery.approvalEffectId! } })).toBe(
+      1,
+    );
+    expect(
+      await prisma.deviceApprovalBinding.count({ where: { effectId: delivery.approvalEffectId! } }),
+    ).toBe(1);
+    const child = await prisma.run.findFirstOrThrow({
+      where: { delegationId: delivery.delegationId! },
+    });
+    expect(child.status).toBe("waiting_input");
+    expect(f.enqueued).not.toContain(child.id);
+    const ask = await prisma.message.findFirstOrThrow({
+      where: { threadId: f.room.id, runId: child.id, role: "bot" },
+    });
+    expect(
+      await prisma.message.count({
+        where: { threadId: f.room.id, clientNonce: `peer-hold:bot-message:${input.deliveryKey}` },
+      }),
+    ).toBe(1);
+    expect((ask.blocks as Array<{ peerHold?: boolean }>).some((block) => block.peerHold)).toBe(
+      true,
+    );
+    expect(
+      await f.deps.events.answerRunInput({
+        spaceId,
+        threadId: f.room.id,
+        runId: child.id,
+        messageId: ask.id,
+        answeredByUserId: userId,
+        answer: "deny",
+      }),
+    ).toBe(true);
+    expect(
+      await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id: delivery.id } }),
+    ).toMatchObject({ state: "denied", outcome: "denied" });
+    expect((await prisma.run.findUniqueOrThrow({ where: { id: child.id } })).status).toBe(
+      "cancelled",
+    );
+    expect(
+      await f.deps.events.answerRunInput({
+        spaceId,
+        threadId: f.room.id,
+        runId: child.id,
+        messageId: ask.id,
+        answeredByUserId: userId,
+        answer: "allow",
+      }),
+    ).toBe(false);
+  });
+
+  it("S4 revalidates a held approval after pause, resume and authority change", async () => {
+    const f = await fixture();
+    const pin = {
+      runtimeKind: "pi" as const,
+      provider: "fixture",
+      modelId: "fixture",
+      effort: "off",
+      credentialId: "fixture",
+      revision: 0,
+    };
+    await prisma.run.update({
+      where: { id: f.coordinatorRun.id },
+      data: { status: "running", runtimePin: pin },
+    });
+    const deps = {
+      ...f.deps,
+      resolveDelegationPin: async () =>
+        ({
+          kind: "resolved",
+          pin,
+          provider: "fixture",
+          id: "fixture",
+          thinkingLevel: "off",
+        }) as never,
+    };
+    const sent = await messageBot(deps, f.coordinatorRun, f.coordinator, {
+      bot_id: f.worker.id,
+      message: "Prepare a public draft",
+      intent: "request",
+      card: { goal: "Prepare a public draft", inputs: [], doneWhen: [], deadlineAt: null },
+      requested_effects: [{ kind: "publish" }],
+      deliveryKey: `s4-revalidate:${f.goal.id}`,
+    });
+    expect(sent.ok).toBe(true);
+    const delivery = await prisma.botMessageDelivery.findFirstOrThrow({
+      where: { idempotencyKey: `bot-message:s4-revalidate:${f.goal.id}` },
+    });
+    const child = await prisma.run.findFirstOrThrow({
+      where: { delegationId: delivery.delegationId! },
+    });
+    const ask = await prisma.message.findFirstOrThrow({
+      where: { threadId: f.room.id, runId: child.id, role: "bot" },
+    });
+    const answer = () =>
+      f.deps.events.answerRunInput({
+        spaceId,
+        threadId: f.room.id,
+        runId: child.id,
+        messageId: ask.id,
+        answeredByUserId: userId,
+        answer: "allow",
+      });
+    const actor = { userId, spaceId, email: `${scopeId}@ardurbot.test`, isDeploymentOwner: true };
+    const paused = await setBotCommunicationPaused(prisma, actor, {
+      scope: "group",
+      groupId: f.goal.groupId,
+      paused: true,
+      expectedRevision: 1,
+    });
+    expect(await answer()).toBe(false);
+    await setBotCommunicationPaused(prisma, actor, {
+      scope: "group",
+      groupId: f.goal.groupId,
+      paused: false,
+      expectedRevision: paused.revision,
+    });
+    await prisma.botMessageDelivery.update({
+      where: { id: delivery.id },
+      data: { authorityFingerprint: "revoked" },
+    });
+    expect(await answer()).toBe(false);
+    expect((await prisma.run.findUniqueOrThrow({ where: { id: child.id } })).status).toBe(
+      "waiting_input",
+    );
+    expect(
+      (await prisma.externalEffect.findUniqueOrThrow({ where: { id: delivery.approvalEffectId! } }))
+        .status,
+    ).toBe("intended");
+    await prisma.botMessageDelivery.update({
+      where: { id: delivery.id },
+      data: { authorityFingerprint: delivery.authorityFingerprint },
+    });
+    expect(await answer()).toBe(true);
+    expect((await prisma.run.findUniqueOrThrow({ where: { id: child.id } })).status).toBe("queued");
+    expect(
+      (await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id: delivery.id } })).state,
+    ).toBe("delivered");
+    await prisma.run.update({ where: { id: child.id }, data: { status: "running" } });
+    await prisma.delegation.update({
+      where: { id: delivery.delegationId! },
+      data: { status: "running" },
+    });
+    expect(await checkDelegationExecution(prisma, child.id, "shell")).toContain("read-only");
+  });
+
+  it("S4 expires only its held delivery and closes the owner card", async () => {
+    const f = await fixture();
+    const pin = {
+      runtimeKind: "pi" as const,
+      provider: "fixture",
+      modelId: "fixture",
+      effort: "off",
+      credentialId: "fixture",
+      revision: 0,
+    };
+    await prisma.run.update({
+      where: { id: f.coordinatorRun.id },
+      data: { status: "running", runtimePin: pin },
+    });
+    const deps = {
+      ...f.deps,
+      resolveDelegationPin: async () =>
+        ({
+          kind: "resolved",
+          pin,
+          provider: "fixture",
+          id: "fixture",
+          thinkingLevel: "off",
+        }) as never,
+    };
+    const sent = await messageBot(deps, f.coordinatorRun, f.coordinator, {
+      bot_id: f.worker.id,
+      message: "Prepare an expiring draft",
+      intent: "request",
+      card: { goal: "Prepare an expiring draft", inputs: [], doneWhen: [], deadlineAt: null },
+      requested_effects: [{ kind: "unknown" }],
+      deliveryKey: `s4-expire:${f.goal.id}`,
+    });
+    expect(sent.ok).toBe(true);
+    const delivery = await prisma.botMessageDelivery.findFirstOrThrow({
+      where: { idempotencyKey: `bot-message:s4-expire:${f.goal.id}` },
+    });
+    await prisma.botMessageDelivery.update({
+      where: { id: delivery.id },
+      data: { expiresAt: new Date(0) },
+    });
+    expect(await expireHeldBotMessages(prisma)).toBe(1);
+    expect(
+      (await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id: delivery.id } })).state,
+    ).toBe("expired");
+    const ask = await prisma.message.findFirstOrThrow({
+      where: { threadId: f.room.id, clientNonce: `peer-hold:bot-message:s4-expire:${f.goal.id}` },
+    });
+    expect(ask.blocks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ answer: "expired", status: "answered" })]),
+    );
+  });
+
+  it("S4 pauses peer runs without cancelling unrelated owner work and refuses held approval", async () => {
+    const f = await fixture("owner");
+    const actor = { userId, spaceId, email: `${scopeId}@ardurbot.test`, isDeploymentOwner: true };
+    const policy = await setBotCommunicationPaused(prisma, actor, {
+      scope: "group",
+      groupId: f.goal.groupId,
+      paused: true,
+      expectedRevision: 1,
+    });
+    expect(policy.effectivePaused).toBe(true);
+    expect(
+      (await prisma.run.findUniqueOrThrow({ where: { id: f.workerRun.id } })).cancelRequestedAt,
+    ).not.toBeNull();
+    expect(
+      (await prisma.run.findUniqueOrThrow({ where: { id: f.activeRun!.id } })).cancelRequestedAt,
+    ).toBeNull();
+    const blocked = await replyToBotDelivery(f.deps, f.workerRun, f.worker, {
+      inReplyToDeliveryId: f.parent.id,
+      message: "Another question",
+      intent: "question",
+      deliveryKey: `s4-paused:${f.goal.id}`,
+    });
+    expect(blocked).toMatchObject({ ok: false });
+    const resumed = await setBotCommunicationPaused(prisma, actor, {
+      scope: "group",
+      groupId: f.goal.groupId,
+      paused: false,
+      expectedRevision: policy.revision,
+    });
+    expect(resumed.effectivePaused).toBe(false);
+  });
+
+  it("S4 serializes a rolling pair limit across roots", async () => {
+    const f = await fixture();
+    const now = new Date();
+    const pairKey = peerPairKey(f.coordinator.id, f.worker.id);
+    const base = {
+      spaceId,
+      userId,
+      goalId: f.goal.id,
+      senderBotId: f.coordinator.id,
+      recipientBotId: f.worker.id,
+      pairKey,
+      senderThreadId: f.room.id,
+      recipientThreadId: f.workerThread.id,
+      sourceRunId: f.coordinatorRun.id,
+      intent: "request",
+      outboundMessageId: f.parent.outboundMessageId,
+      inboundMessageId: f.parent.inboundMessageId,
+      state: "delivered",
+      hop: 1,
+      authorityFingerprint: "fixture",
+      expiresAt: f.goal.untilAt,
+    };
+    for (let index = 0; index < 3; index++)
+      await prisma.botMessageDelivery.create({
+        data: {
+          ...base,
+          rootTaskId: `other-root-${index}`,
+          conversationId: randomUUID(),
+          requestFingerprint: `s4-pair-${index}`,
+          idempotencyKey: `s4-pair-${f.goal.id}-${index}`,
+          createdAt: new Date(now.getTime() - 30_000),
+        },
+      });
+    const admitted = await Promise.all(
+      [0, 1].map((index) =>
+        prisma.$transaction(async (tx) => {
+          await lockPeerTrafficPolicy(tx, { spaceId, userId, groupId: f.goal.groupId });
+          const limit = await checkPeerTrafficLimits(tx, {
+            spaceId,
+            userId,
+            groupId: f.goal.groupId,
+            goalId: f.goal.id,
+            senderBotId: f.coordinator.id,
+            recipientBotId: f.worker.id,
+            wakes: true,
+            now: new Date(),
+          });
+          if (limit) return false;
+          await tx.botMessageDelivery.create({
+            data: {
+              ...base,
+              rootTaskId: `concurrent-root-${index}`,
+              conversationId: randomUUID(),
+              requestFingerprint: `s4-concurrent-${index}`,
+              idempotencyKey: `s4-concurrent-${f.goal.id}-${index}`,
+            },
+          });
+          return true;
+        }),
+      ),
+    );
+    expect(admitted.filter(Boolean)).toHaveLength(1);
+  });
+
+  it("S4 keeps policy and delivery reads owner-only", async () => {
+    const f = await fixture();
+    const member = { userId, spaceId, email: `${scopeId}@ardurbot.test`, isDeploymentOwner: false };
+    await expect(getBotCommunicationPolicy(prisma, member, f.goal.groupId)).rejects.toThrow();
+    await expect(
+      setBotCommunicationPaused(prisma, member, {
+        scope: "space",
+        paused: true,
+        expectedRevision: 1,
+      }),
+    ).rejects.toThrow();
+    await expect(listBotCommunicationDeliveries(prisma, member, { limit: 10 })).rejects.toThrow();
   });
 });

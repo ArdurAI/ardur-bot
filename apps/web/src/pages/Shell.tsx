@@ -4956,7 +4956,13 @@ const Transcript = memo(function Transcript({
                   <MessageView
                     artifactTarget={artifactTarget}
                     message={message}
-                    canAnswer={message.id === answerableAskMessageId}
+                    canAnswer={
+                      message.id === answerableAskMessageId ||
+                      message.blocks.some(
+                        (block) =>
+                          block.kind === "ask" && block.peerHold && block.status === "pending",
+                      )
+                    }
                     onOpenBot={onOpenBot}
                     onOpenPeerMessages={onOpenPeerMessages}
                     onAnswer={onAnswer}

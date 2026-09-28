@@ -189,6 +189,31 @@ export function inferScript(
     }
   }
   const lower = prompt.toLowerCase();
+  if (lower.includes("s4 held ask fixture")) {
+    return [
+      {
+        assistant: "I requested preparation from Worker.",
+        toolCalls: [
+          {
+            name: "message_bot",
+            args: {
+              confirm_name: "Worker",
+              message: "Prepare the public draft for review; do not publish it.",
+              intent: "request",
+              card: {
+                goal: "Prepare a public draft",
+                inputs: [{ type: "text", text: "Public fixture draft" }],
+                doneWhen: ["Draft is ready for owner review"],
+                deadlineAt: null,
+              },
+              requested_effects: [{ kind: "publish" }],
+            },
+          },
+        ],
+        complete: true,
+      },
+    ];
+  }
   const firstLoopFixture = "Results show newest first; sort results by createdAt ascending";
   const correctedFixture = "Results show oldest first; sort results by createdAt ascending.";
   if (prompt.includes(firstLoopFixture) && lower.includes("you coordinate this goal")) {

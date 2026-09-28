@@ -1,5 +1,6 @@
 import {
   type Bot,
+  type BotCommunicationPolicy,
   type Goal,
   GROUP_MEMBER_MAX,
   GROUP_MEMBER_MIN,
@@ -10,8 +11,18 @@ import {
 import { BotAvatar, Button, Input, NativeSelect, NativeSelectOption } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { Check, X } from "lucide-react";
-import { lazy, Suspense, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { BotContext } from "../components/ContextEntry";
+import { rpc } from "../lib/rpc";
 import type { ModelSettings } from "../lib/use-model-settings";
 import { GroupModelControl } from "./group-model-control";
 
@@ -95,7 +106,6 @@ export function CreateGroupForm({
   const [selected, setSelected] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
   async function create() {
     if (submitting || !validSelection(name, selected)) return;
     setSubmitting(true);
@@ -207,6 +217,51 @@ export function GroupSettings({
   const baseline = useRef(group);
   const [pending, setPending] = useState<"save" | "remove" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [spaceTraffic, setSpaceTraffic] = useState<BotCommunicationPolicy | null>(null);
+  const [groupTraffic, setGroupTraffic] = useState<BotCommunicationPolicy | null>(null);
+  const [trafficBusy, setTrafficBusy] = useState(false);
+
+  useEffect(() => {
+    if (!canManageGoal) return;
+    let active = true;
+    void Promise.all([rpc.botComms.getPolicy({}), rpc.botComms.getPolicy({ groupId: group.id })])
+      .then(([space, groupPolicy]) => {
+        if (active) {
+          setSpaceTraffic(space);
+          setGroupTraffic(groupPolicy);
+        }
+      })
+      .catch(() => {
+        if (active) setError(t`Could not load team message controls`);
+      });
+    return () => {
+      active = false;
+    };
+  }, [canManageGoal, group.id, t]);
+
+  async function setTrafficPaused(policy: BotCommunicationPolicy, paused: boolean) {
+    if (trafficBusy) return;
+    setTrafficBusy(true);
+    setError(null);
+    try {
+      await rpc.botComms.setPaused({
+        scope: policy.scope,
+        ...(policy.groupId ? { groupId: policy.groupId } : {}),
+        paused,
+        expectedRevision: policy.revision,
+      });
+      const [space, groupPolicy] = await Promise.all([
+        rpc.botComms.getPolicy({}),
+        rpc.botComms.getPolicy({ groupId: group.id }),
+      ]);
+      setSpaceTraffic(space);
+      setGroupTraffic(groupPolicy);
+    } catch {
+      setError(t`Could not update team messages`);
+    } finally {
+      setTrafficBusy(false);
+    }
+  }
 
   useLayoutEffect(() => {
     const previous = baseline.current;
@@ -343,6 +398,34 @@ export function GroupSettings({
         <Suspense fallback={null}>
           <StartGoalForm groupId={group.id} onStart={onStartGoal} />
         </Suspense>
+      ) : null}
+      {canManageGoal && spaceTraffic && groupTraffic ? (
+        <div className="mt-5 space-y-2" data-testid="peer-traffic-controls">
+          <Button
+            variant="outline"
+            className="w-full"
+            disabled={trafficBusy}
+            onClick={() => void setTrafficPaused(spaceTraffic, !spaceTraffic.paused)}
+          >
+            {spaceTraffic.paused ? (
+              <Trans>Resume team messages</Trans>
+            ) : (
+              <Trans>Pause team messages</Trans>
+            )}
+          </Button>
+          <Button
+            variant="outline"
+            className="w-full"
+            disabled={trafficBusy}
+            onClick={() => void setTrafficPaused(groupTraffic, !groupTraffic.paused)}
+          >
+            {groupTraffic.paused ? (
+              <Trans>Resume group messages</Trans>
+            ) : (
+              <Trans>Pause group messages</Trans>
+            )}
+          </Button>
+        </div>
       ) : null}
       <div className="mt-4 text-sm text-muted-foreground">
         <Trans>Context</Trans>

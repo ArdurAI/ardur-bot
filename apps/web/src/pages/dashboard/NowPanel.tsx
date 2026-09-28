@@ -78,6 +78,11 @@ export default function NowPanel({
                 <Trans>Status unavailable</Trans>
               </span>
             ) : null}
+            {data.rows.find((row) => row.botId === run.botId)?.trafficPaused ? (
+              <span className="text-muted-foreground">
+                <Trans>Team messages paused</Trans>
+              </span>
+            ) : null}
             {seconds !== null ? (
               <span className="tabular-nums text-muted-foreground">{t`${seconds}s`}</span>
             ) : null}

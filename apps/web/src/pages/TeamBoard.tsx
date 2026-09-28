@@ -207,6 +207,11 @@ export function TeamBoardRow({
                 <Trans>Latest message</Trans>: {localizedTeamDeliveryText(row.latestDeliveryState)}
               </p>
             ) : null}
+            {row.trafficPaused ? (
+              <p>
+                <Trans>Team messages paused</Trans>
+              </p>
+            ) : null}
             {row.latestPeerBotId ? (
               <Button size="sm" variant="outline" onClick={() => setPeerOpen(true)}>
                 <Trans>Conversation with {row.latestPeerBotName ?? "Bot"}</Trans>

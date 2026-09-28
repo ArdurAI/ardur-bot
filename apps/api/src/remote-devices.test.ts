@@ -28,6 +28,11 @@ function fixture() {
       findFirst: vi.fn(async () => (grant.revokedAt ? null : grant)),
       updateMany: vi.fn(async () => ({ count: 1 })),
     },
+    deploymentSettings: { findUnique: vi.fn(async () => ({ ownerUserId: "owner" })) },
+    botCommunicationPolicy: {
+      findUnique: vi.fn(async () => null),
+      findMany: vi.fn(async () => []),
+    },
     spaceMember: { findUnique: vi.fn(async () => ({ id: "member" })) },
     deviceNonce: {
       updateMany: vi.fn(async () => {
@@ -65,6 +70,24 @@ function fixture() {
   return { app, deps, grant, read, signed, call, tx };
 }
 describe("isolated device routes", () => {
+  it("allows an owner policy read and requires stop scope and owner identity for pause", async () => {
+    const read = fixture();
+    const policy = await read.call(read.signed("team-policy", {}));
+    expect(policy.status).toBe(200);
+    expect(await policy.json()).toMatchObject({ scope: "space", paused: false });
+    const noScope = fixture();
+    expect(
+      (await noScope.call(noScope.signed("team-pause", { scope: "space", expectedRevision: 1 })))
+        .status,
+    ).toBe(403);
+    const nonOwner = fixture();
+    nonOwner.grant.scopes.push("stop");
+    nonOwner.tx.deploymentSettings.findUnique.mockResolvedValue({ ownerUserId: "another-user" });
+    expect(
+      (await nonOwner.call(nonOwner.signed("team-pause", { scope: "space", expectedRevision: 1 })))
+        .status,
+    ).toBe(403);
+  });
   it.each(["board/workspaces", "board/snapshot", "board/show", "board/view", "board/work"])(
     "allows the signed read-only Board procedure %s",
     async (procedure) => {

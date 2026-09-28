@@ -62,34 +62,40 @@ export async function teamBoard(
 ): Promise<{ rows: TeamRow[]; hostLabel: HostLabel }> {
   await requireMember(prisma, actor);
   const scope = { spaceId: actor.spaceId, userId: actor.userId };
-  const [bots, activeRuns, latestRuns, openCards, latestCards, directory] = await Promise.all([
-    prisma.bot.findMany({
-      where: { ...scope, archivedAt: null },
-      include: { thread: true, computer: true },
-      orderBy: { name: "asc" },
-    }),
-    prisma.run.findMany({
-      where: { ...scope, status: { in: active } },
-      include: { thread: { select: { groupId: true } } },
-      orderBy: { createdAt: "desc" },
-    }),
-    prisma.run.findMany({
-      where: scope,
-      distinct: ["botId"],
-      include: { thread: { select: { groupId: true } } },
-      orderBy: { createdAt: "desc" },
-    }),
-    prisma.delegation.findMany({
-      where: { ...scope, status: { in: ["queued", "running", "cancel-requested", "completed"] } },
-      orderBy: { createdAt: "desc" },
-    }),
-    prisma.delegation.findMany({
-      where: scope,
-      distinct: ["actingBotId"],
-      orderBy: { createdAt: "desc" },
-    }),
-    loadBotPresence(prisma, scope),
-  ]);
+  const [bots, activeRuns, latestRuns, openCards, latestCards, directory, policies] =
+    await Promise.all([
+      prisma.bot.findMany({
+        where: { ...scope, archivedAt: null },
+        include: { thread: true, computer: true },
+        orderBy: { name: "asc" },
+      }),
+      prisma.run.findMany({
+        where: { ...scope, status: { in: active } },
+        include: { thread: { select: { groupId: true } } },
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.run.findMany({
+        where: scope,
+        distinct: ["botId"],
+        include: { thread: { select: { groupId: true } } },
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.delegation.findMany({
+        where: { ...scope, status: { in: ["queued", "running", "cancel-requested", "completed"] } },
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.delegation.findMany({
+        where: scope,
+        distinct: ["actingBotId"],
+        orderBy: { createdAt: "desc" },
+      }),
+      loadBotPresence(prisma, scope),
+      prisma.botCommunicationPolicy.findMany({
+        where: { ...scope, OR: [{ paused: true }, { enabled: false }] },
+        select: { scopeKey: true },
+      }),
+    ]);
+  const pausedScopes = new Set(policies.map((policy) => policy.scopeKey));
   const presenceByBot = new Map(directory.bots.map((item) => [item.botId, item]));
   const runs = [...new Map([...activeRuns, ...latestRuns].map((run) => [run.id, run])).values()];
   const delegations = [
@@ -205,6 +211,12 @@ export async function teamBoard(
       latestPeerBotColor: bots.find((peer) => peer.id === presence?.latestPeerBotId)?.color,
       goalId: presence?.goalId,
       reviewState: presence?.reviewState,
+      trafficPaused:
+        pausedScopes.has("space") ||
+        Boolean(
+          (presence?.latestDeliveryGroupId ?? run?.thread?.groupId) &&
+            pausedScopes.has(`group:${presence?.latestDeliveryGroupId ?? run?.thread?.groupId}`),
+        ),
       computerName: bot.computer?.connectionId
         ? (computers.find((connection) => connection.id === bot.computer?.connectionId)
             ?.displayName ?? null)
