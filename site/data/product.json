@@ -425,16 +425,32 @@
       "releasesUrl": "https://github.com/ArdurAI/ardur-bot/releases",
       "platforms": [
         {
-          "os": "macOS",
-          "assetPattern": "\\.dmg$"
+          "os": "macOS Apple silicon",
+          "assetPattern": "-mac-arm64\\.dmg$"
+        },
+        {
+          "os": "macOS Intel",
+          "assetPattern": "-mac-x64\\.dmg$"
         },
         {
           "os": "Windows",
-          "assetPattern": "\\.exe$"
+          "assetPattern": "-win-x64\\.exe$"
         },
         {
-          "os": "Linux",
-          "assetPattern": "\\.AppImage$"
+          "os": "Linux x86_64 AppImage",
+          "assetPattern": "-linux-x86_64\\.AppImage$"
+        },
+        {
+          "os": "Linux x86_64 deb",
+          "assetPattern": "-linux-amd64\\.deb$"
+        },
+        {
+          "os": "Linux arm64 AppImage",
+          "assetPattern": "-linux-arm64\\.AppImage$"
+        },
+        {
+          "os": "Linux arm64 deb",
+          "assetPattern": "-linux-arm64\\.deb$"
         }
       ]
     },
