@@ -1,6 +1,6 @@
 import type { Actor } from "@ardurbot/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { PrismaClient } from "./client.js";
+import { Prisma, type PrismaClient } from "./client.js";
 import { createRepos } from "./repos.js";
 import { IsolationError } from "./scope.js";
 
@@ -97,6 +97,19 @@ function reposFor(memoryScope: string | null) {
 }
 
 describe("createRepos.listBots", () => {
+  it("maps a legacy bot row without a runtime configuration", async () => {
+    const bots = await reposFor(null).listBots(actor);
+    expect(bots[0]?.runtimeConfig).toBeNull();
+  });
+
+  it("maps the create result's database-null marker as default limits", async () => {
+    const prisma = {
+      bot: { findMany: vi.fn(async () => [{ ...baseBot, runtimeConfig: Prisma.DbNull }]) },
+      run: { findMany: vi.fn(async () => []) },
+    };
+    const bots = await createRepos(prisma as unknown as PrismaClient).listBots(actor);
+    expect(bots[0]?.runtimeConfig).toBeNull();
+  });
   it("passes memoryScope through as null when unset", async () => {
     await expect(reposFor(null).listBots(actor)).resolves.toEqual([
       expect.objectContaining({ memoryScope: null }),

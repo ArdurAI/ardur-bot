@@ -1,6 +1,7 @@
 import type { AgentRunModel } from "@ardurbot/adapter-kit";
 import type { PrismaClient } from "@ardurbot/db";
 import { describe, expect, it, vi } from "vitest";
+import { effectiveHermesConfig, hermesConfigHash } from "./hermes-compatibility.js";
 import { resolveModelApiKey } from "./pi-oauth.js";
 import { resolveRunModelPin } from "./run-model-pin.js";
 
@@ -37,6 +38,51 @@ function fixture() {
 }
 
 describe("run pin snapshots", () => {
+  it("keeps a Hermes connection and limits immutable across bot edits", async () => {
+    const f = fixture();
+    f.findCredential.mockResolvedValue({ ...credential, provider: "openai-compatible" });
+    f.loadKey.mockResolvedValue({
+      provider: "openai-compatible",
+      id: "same-model",
+      baseUrl: "http://127.0.0.1:8080/v1",
+      thinkingLevel: "off",
+    });
+    const runtimeConfig = effectiveHermesConfig({
+      version: 1,
+      maxProviderRequests: 7,
+      timeoutMs: 42_000,
+    });
+    const snapshot = {
+      ...pin,
+      runtimeKind: "hermes" as const,
+      provider: "openai-compatible",
+      modelId: "same-model",
+      effort: "off",
+      runtimeConfig,
+      runtimeConfigHash: hermesConfigHash(runtimeConfig),
+    };
+    expect(
+      await resolveRunModelPin({
+        ...f,
+        snapshot,
+        bot: { runtimeKind: "pi", modelCredentialId: "other", runtimeConfig: null },
+      }),
+    ).toMatchObject({ kind: "resolved", pin: snapshot });
+    expect(f.findCredential).toHaveBeenCalledWith({
+      where: { id: "connection", userId: "user", provider: "openai-compatible" },
+    });
+    f.findCredential.mockResolvedValue(null!);
+    expect(await resolveRunModelPin({ ...f, snapshot, bot: {} })).toMatchObject({
+      code: "pin-credential-missing",
+    });
+    expect(
+      await resolveRunModelPin({
+        ...f,
+        snapshot: { ...snapshot, runtimeConfigHash: "0".repeat(64) },
+        bot: {},
+      }),
+    ).toMatchObject({ code: "runtime-configuration-invalid" });
+  });
   it("keeps an Anthropic pin and returns a reconnect action for legacy OAuth", async () => {
     const f = fixture();
     f.findCredential.mockResolvedValue({ ...credential, provider: "anthropic" });

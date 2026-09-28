@@ -1,4 +1,7 @@
+import type { ChildProcessWithoutNullStreams } from "node:child_process";
 import { spawn } from "node:child_process";
+import { EventEmitter } from "node:events";
+import { PassThrough } from "node:stream";
 import { fileURLToPath } from "node:url";
 import type { AgentRunRequest, AgentRuntimeEvent } from "@ardurbot/adapter-kit";
 import { describe, expect, it, vi } from "vitest";
@@ -6,6 +9,7 @@ import { createArdurToolBridge } from "./claude-mcp-bridge.js";
 import {
   createHermesTextRedactor,
   HermesRuntime,
+  hermesContextDocument,
   launchUnconfinedProcess,
 } from "./hermes-runtime.js";
 import { stopNative } from "./native-process.js";
@@ -68,6 +72,147 @@ function turnFinishSignal(runId: string) {
 }
 
 describe("HermesRuntime M0 ACP seam", () => {
+  it("uses a 600-second pinned ACP prompt deadline with bounded teardown grace", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    let promptStarted!: () => void;
+    const prompted = new Promise<void>((resolve) => {
+      promptStarted = resolve;
+    });
+    const stdout = new PassThrough();
+    const stderr = new PassThrough();
+    const stdin = new PassThrough();
+    const fakeChild = Object.assign(new EventEmitter(), {
+      stdout,
+      stderr,
+      stdin,
+      pid: undefined,
+      exitCode: null as number | null,
+      signalCode: null,
+      kill: vi.fn(() => {
+        fakeChild.exitCode = 0;
+        fakeChild.emit("close", 0);
+        return true;
+      }),
+    });
+    const child = fakeChild as unknown as ChildProcessWithoutNullStreams;
+    stdin.on("data", (chunk: Buffer) => {
+      const message = JSON.parse(chunk.toString()) as { id: number; method: string };
+      if (message.method === "session/prompt") {
+        promptStarted();
+        return;
+      }
+      const result =
+        message.method === "initialize" ? { protocolVersion: 1 } : { sessionId: "fixture-session" };
+      stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id: message.id, result })}\n`);
+    });
+    const finished = vi.fn();
+    const adapter = new HermesRuntime({
+      command: "fixture",
+      pinned: true,
+      launch: async () => ({ child, teardown: async () => undefined }),
+      onTurnFinished: finished,
+    });
+    const base = request();
+    const run = request({
+      model: {
+        ...base.model,
+        maxTokens: 1_024,
+        contextWindow: 32_768,
+        runtimePin: {
+          runtimeKind: "hermes",
+          provider: "openai-compatible",
+          modelId: "fixture-model",
+          effort: "high",
+          credentialId: "fixture-connection",
+          revision: 1,
+          runtimeConfig: { version: 1, maxProviderRequests: 4, timeoutMs: 600_000 },
+        },
+      },
+    });
+    try {
+      let settled = false;
+      const completion = collect(adapter, run).finally(() => {
+        settled = true;
+      });
+      await prompted;
+      await vi.advanceTimersByTimeAsync(181_000);
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(settled).toBe(false);
+      expect(finished).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(423_200);
+      await expect(completion).rejects.toThrow("Hermes could not complete this turn.");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it("keeps instructions and the newest quoted history within the pinned context budget", () => {
+    const history = Array.from({ length: 18 }, (_, index) => ({
+      role: "user" as const,
+      content: `turn-${index} ${"x".repeat(2_000)}`,
+    }));
+    const document = hermesContextDocument(
+      request({
+        instructions: "Required owner instruction",
+        history,
+      }),
+    );
+    expect(Buffer.byteLength(document)).toBeLessThanOrEqual(16 * 1024);
+    expect(document).toContain("Required owner instruction");
+    expect(document).toContain("turn-17");
+    expect(document).not.toContain("turn-0");
+    expect(document).toContain("[truncated]");
+  });
+  it("refuses required instructions alone above the pinned context budget", () => {
+    expect(() =>
+      hermesContextDocument(request({ instructions: "x".repeat(16 * 1024 + 1) })),
+    ).toThrow("Hermes instructions exceed the context limit. Shorten the bot instructions.");
+  });
+  it("refuses a pinned turn without validated limits before launch", async () => {
+    const launch = vi.fn(launchUnconfinedProcess);
+    const adapter = new HermesRuntime({ command: process.execPath, pinned: true, launch });
+    const base = request();
+    await expect(
+      collect(
+        adapter,
+        request({
+          model: { ...base.model, maxTokens: 1_024, contextWindow: 32_768 },
+        }),
+      ),
+    ).rejects.toThrow("The recorded Hermes limits are missing or invalid. Change the pin.");
+    expect(launch).not.toHaveBeenCalled();
+  });
+  it("passes snapshot limits to the pinned launcher through a synthetic turn", async () => {
+    let env: Record<string, string> | undefined;
+    const adapter = new HermesRuntime({
+      command: process.execPath,
+      args: [fixture, "text"],
+      pinned: true,
+      launch: async (spec) => {
+        env = spec.env;
+        return launchUnconfinedProcess(spec);
+      },
+    });
+    const base = request();
+    const run = request({
+      model: {
+        ...base.model,
+        maxTokens: 1_024,
+        contextWindow: 32_768,
+        runtimePin: {
+          runtimeKind: "hermes",
+          provider: "openai-compatible",
+          modelId: "fixture-model",
+          effort: "high",
+          credentialId: "fixture-connection",
+          revision: 2,
+          runtimeConfig: { version: 1, maxProviderRequests: 7, timeoutMs: 42_000 },
+        },
+      },
+    });
+    expect((await collect(adapter, run)).at(-1)).toEqual({ type: "done" });
+    expect(env?.ARDUR_HERMES_MAX_ITERATIONS).toBe("7");
+    expect(env?.ARDUR_HERMES_RUN_BUDGET_SECONDS).toBe("42");
+  });
   it("requires an explicit launcher at construction", () => {
     expect(
       () =>

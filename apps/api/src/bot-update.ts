@@ -15,6 +15,7 @@ export async function commitBotUpdate(
     spaceId: string;
     threadId: string;
     botId: string;
+    expectedModelPinRevision?: number;
     data: Prisma.BotUncheckedUpdateInput;
     emitBotUpdated: boolean;
   },
@@ -22,7 +23,12 @@ export async function commitBotUpdate(
 ): Promise<{ id: string; name: string; title: string; description: string }> {
   if (!options.emitBotUpdated) {
     return options.prisma.bot.update({
-      where: { id: options.botId },
+      where: {
+        id: options.botId,
+        ...(options.expectedModelPinRevision === undefined
+          ? {}
+          : { modelPinRevision: options.expectedModelPinRevision }),
+      },
       data: options.data,
       select: { id: true, name: true, title: true, description: true },
     });
@@ -30,7 +36,12 @@ export async function commitBotUpdate(
 
   const committed = await options.prisma.$transaction(async (tx) => {
     const updated = await tx.bot.update({
-      where: { id: options.botId },
+      where: {
+        id: options.botId,
+        ...(options.expectedModelPinRevision === undefined
+          ? {}
+          : { modelPinRevision: options.expectedModelPinRevision }),
+      },
       data: options.data,
       select: { id: true, name: true, title: true, description: true },
     });

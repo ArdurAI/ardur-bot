@@ -7,10 +7,16 @@ import type {
   RuntimeProblem,
   ThinkingLevel,
 } from "@ardurbot/contracts";
-import { runtimePinProblem, ThinkingLevelSchema, usableModelId } from "@ardurbot/contracts";
+import {
+  normalizedThinkingLevel,
+  runtimePinProblem,
+  ThinkingLevelSchema,
+  usableModelId,
+} from "@ardurbot/contracts";
 import type { findDefaultModelCredential, PrismaClient } from "@ardurbot/db";
 import { findBoundModelCredential } from "@ardurbot/db";
 import { getSupportedThinkingLevels } from "@earendil-works/pi-ai";
+import { effectiveHermesConfig, hermesConfigHash } from "./hermes-compatibility.js";
 import { listPiCatalog } from "./pi-models.js";
 import { modelsForRequest } from "./pi-runtime.js";
 
@@ -59,9 +65,7 @@ export function selectConfiguredModel(input: {
     );
   }
   const effort = ThinkingLevelSchema.safeParse(
-    pin.provider === "ollama" && (pin.effort === null || pin.effort === "none")
-      ? "off"
-      : pin.effort,
+    pin.provider === "ollama" ? normalizedThinkingLevel(pin.effort) : pin.effort,
   );
   const supported = scripted
     ? ["off"]
@@ -125,9 +129,12 @@ export type BotPinFields = {
   modelCredentialId?: string | null;
   modelPinRevision?: number;
   runtimeKind?: RuntimeKind | string;
+  runtimeConfig?: unknown;
 };
 
 export function requestedBotPin(bot: BotPinFields): RuntimePin {
+  const config =
+    bot.runtimeKind === "hermes" ? effectiveHermesConfig(bot.runtimeConfig) : undefined;
   return {
     runtimeKind: (bot.runtimeKind ?? "pi") as RuntimeKind,
     provider: bot.modelProvider ?? null,
@@ -138,6 +145,7 @@ export function requestedBotPin(bot: BotPinFields): RuntimePin {
         : (bot.thinkingLevel ?? null),
     credentialId: bot.modelCredentialId ?? null,
     revision: bot.modelPinRevision ?? 0,
+    ...(config ? { runtimeConfig: config, runtimeConfigHash: hermesConfigHash(config) } : {}),
   };
 }
 
@@ -156,7 +164,10 @@ export async function credentialForPin(
   scope: Pick<Actor, "userId" | "spaceId">,
   pin: RuntimePin,
 ) {
-  return pin.runtimeKind === "pi" && pin.provider && pin.credentialId && pin.provider !== "scripted"
+  return (pin.runtimeKind === "pi" || pin.runtimeKind === "hermes") &&
+    pin.provider &&
+    pin.credentialId &&
+    pin.provider !== "scripted"
     ? findBoundModelCredential(prisma, scope, pin.provider, pin.credentialId)
     : null;
 }

@@ -113,6 +113,12 @@ if (versionOutput !== null) {
 const PERFORMANCE_USER_DATA =
   process.env.ARDURBOT_USER_DATA_DIR || process.env.ARDURBOT_PERFORMANCE_USER_DATA;
 const GUIDED_SETUP_ENABLED = process.env.ARDURBOT_GUIDED_SETUP === "1";
+// The Electron lifecycle spec drives a scripted setup engine inside the running main process, and
+// Playwright's evaluate cannot import modules there; expose the loaded ones only when asked.
+if (process.env.ARDURBOT_GUIDED_SETUP_TEST_HOOK === "1")
+  Object.assign(globalThis, {
+    __ardurGuidedSetupTest: { SetupEngine, SetupJournalStore, installGuidedSetupIpc },
+  });
 /** Test hook: where the app-managed stack answers. Mode `new` still requires loopback. */
 const LOCAL_WEB_URL = process.env.ARDURBOT_LOCAL_WEB_URL?.trim() || DEFAULT_LOCAL_WEB_URL;
 const PROBE_TIMEOUT_MS = 8_000;

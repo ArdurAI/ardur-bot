@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import type { AgentRunRequest, AgentRuntimeEvent } from "@ardurbot/adapter-kit";
+import { HermesRuntimeConfigSchema } from "@ardurbot/contracts/runtime-pins";
 import {
   hermesLauncherAsset,
   pinnedHermesLaunch,
@@ -86,8 +87,8 @@ if (!qualified) {
           parameters: { type: "object", properties: { value: { type: "string" } } },
         },
       ],
-      maxRequests: 16,
-      maxReservedTokens: 16 * (65_536 + 1024),
+      maxRequests: 4,
+      maxReservedTokens: 4 * (65_536 + 1024),
       expiresAt: Date.now() + 180_000,
       active: async () => true,
       record: async (item) => {
@@ -162,6 +163,7 @@ if (!qualified) {
     const launcher = path.resolve("packages/host-runtime/python/hermes_launcher.py");
     let home = "";
     let diagnostics = "";
+    let launchEnv: Record<string, string> | undefined;
     const launched = pinnedHermesLaunch(trusted.root, launcher);
     const runtime = new HermesRuntime({
       command: trusted.python,
@@ -169,6 +171,7 @@ if (!qualified) {
       pinned: true,
       launch: async (spec) => {
         home = spec.env.HERMES_HOME ?? "";
+        launchEnv = spec.env;
         const result = await launched(spec);
         result.child.stderr.on("data", (chunk: Buffer) => {
           diagnostics = (diagnostics + chunk.toString()).slice(-4096);
@@ -218,6 +221,19 @@ if (!qualified) {
         maxTokens: 1024,
         acceptsImages: true,
         reasoning: true,
+        runtimePin: {
+          runtimeKind: "hermes",
+          provider: "fixture",
+          modelId,
+          effort: "high",
+          credentialId: "fixture-connection",
+          revision: 1,
+          runtimeConfig: HermesRuntimeConfigSchema.parse({
+            version: 1,
+            maxProviderRequests: 4,
+            timeoutMs: 90_000,
+          }),
+        },
       },
       executeTool: async (name) => {
         called.push(name);
@@ -228,14 +244,17 @@ if (!qualified) {
     try {
       try {
         for await (const event of runtime.run(request)) events.push(event);
-      } catch {
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
         throw new Error(
-          diagnostics
+          `${detail}\n${diagnostics}`
             .replaceAll(trusted.root, "<install>")
             .replaceAll(broker.grant.token, "<grant>")
-            .replaceAll(home, "<home>"),
+            .replaceAll(home || "<unset-home>", "<home>"),
         );
       }
+      expect(launchEnv?.ARDUR_HERMES_MAX_ITERATIONS).toBe("4");
+      expect(launchEnv?.ARDUR_HERMES_RUN_BUDGET_SECONDS).toBe("90");
       expect(events.at(-1)).toEqual({ type: "done" });
       expect(requests, `${JSON.stringify(events)}; broker: ${brokerError}`).toHaveLength(2);
       expect(requests.map((body) => body.tools)).toEqual([

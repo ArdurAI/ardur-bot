@@ -1,4 +1,4 @@
-import type { AgentRuntime } from "@ardurbot/adapter-kit";
+import type { AdapterContext, AgentRunRequest, AgentRuntime } from "@ardurbot/adapter-kit";
 import type {
   RuntimeAvailability,
   RuntimeKind,
@@ -11,6 +11,7 @@ import {
   runtimePinProblem,
   validateAntigravityPin,
 } from "@ardurbot/contracts";
+import type { BrokerScope, HermesProviderBroker } from "./hermes-provider-broker.js";
 import { RemoteHostRuntime } from "./remote-host-runtime.js";
 import { createHostClient, usesHostBridge } from "./remote-host-sandbox.js";
 import { AntigravityRuntime, probeAntigravity } from "./runtimes/antigravity-runtime.js";
@@ -24,6 +25,7 @@ export class RuntimeRegistry {
     pin: RuntimePin,
     computerKind?: string,
     experimental = false,
+    connection?: { credentialId: string; provider: string; modelId: string; effort: string },
   ): Promise<{ runtime: AgentRuntime; availability: RuntimeAvailability } | RuntimeProblem> {
     const entry = this.entries[pin.runtimeKind];
     if (!entry)
@@ -66,7 +68,20 @@ export class RuntimeRegistry {
         availability.reason ?? "The pinned runtime is unavailable — change the pin.",
         availability.reasonId,
       );
-    if (pin.runtimeKind !== "pi") {
+    if (pin.runtimeKind === "hermes") {
+      if (
+        !connection ||
+        connection.credentialId !== pin.credentialId ||
+        connection.provider !== pin.provider ||
+        connection.modelId !== pin.modelId ||
+        connection.effort !== pin.effort
+      )
+        return runtimePinProblem(
+          pin,
+          "pin-credential-missing",
+          "The pinned Hermes connection changed.",
+        );
+    } else if (pin.runtimeKind !== "pi") {
       const model = availability.models.find((entry) => entry.id === pin.modelId);
       if (!model)
         return runtimePinProblem(
@@ -88,7 +103,14 @@ export class RuntimeRegistry {
   }
 }
 
-export function createRuntimeRegistry(pi: AgentRuntime) {
+export function createRuntimeRegistry(
+  pi: AgentRuntime,
+  brokerForTurn?: (
+    request: AgentRunRequest,
+    context: Partial<AdapterContext>,
+    fence: { operationId: string; hostGeneration: string },
+  ) => Promise<{ broker: HermesProviderBroker; scope: BrokerScope }>,
+) {
   const client = usesHostBridge() ? createHostClient() : undefined;
   const claude = client ? new RemoteHostRuntime(client, "claude-code") : new ClaudeCodeRuntime();
   const codex = client
@@ -97,6 +119,7 @@ export function createRuntimeRegistry(pi: AgentRuntime) {
   const antigravity = client
     ? new RemoteHostRuntime(client, "antigravity")
     : new AntigravityRuntime();
+  const hermes = client ? new RemoteHostRuntime(client, "hermes", brokerForTurn) : undefined;
   return new RuntimeRegistry({
     pi: {
       factory: () => pi,
@@ -115,6 +138,13 @@ export function createRuntimeRegistry(pi: AgentRuntime) {
     antigravity: {
       factory: () => antigravity,
       probe: () => nativeRuntimeAvailability("antigravity"),
+    },
+    hermes: {
+      factory: () => {
+        if (!hermes) throw new Error("Hermes needs a connected host.");
+        return hermes;
+      },
+      probe: () => nativeRuntimeAvailability("hermes"),
     },
   });
 }
@@ -138,6 +168,13 @@ export async function nativeRuntimeAvailability(
       }
     );
   }
+  if (kind === "hermes")
+    return {
+      runtimeKind: kind,
+      available: false,
+      models: [],
+      reason: "Hermes needs a connected host.",
+    };
   return kind === "claude-code"
     ? probeClaude()
     : kind === "codex-app-server"

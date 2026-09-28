@@ -470,7 +470,13 @@ export const appContract = {
   },
   runtimes: {
     availability: oc
-      .input(z.object({ runtimeKind: RuntimeKindSchema, refresh: z.boolean().optional() }))
+      .input(
+        z.object({
+          runtimeKind: RuntimeKindSchema,
+          botId: Id.optional(),
+          refresh: z.boolean().optional(),
+        }),
+      )
       .output(RuntimeAvailabilitySchema),
     connectCodex: oc.output(ModelOAuthBeginSchema),
     connectStatus: oc

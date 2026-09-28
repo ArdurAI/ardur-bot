@@ -432,6 +432,7 @@ model Bot {
   modelCredentialId String?
   modelPinRevision  Int @default(0)
   runtimeKind       String @default("pi")
+  runtimeConfig     Json?
   runtimeExperimental Boolean @default(false)
   webhookSecretId   String?
   teamChatAmbientEnabled Boolean @default(false)

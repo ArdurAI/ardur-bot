@@ -23,6 +23,13 @@ describe("effort evidence labels", () => {
       effortAttested ? "high" : "high · requested",
     );
   });
+  it("treats absent Hermes evidence as requested-only", () => {
+    const hermes = { runtimeKind: "hermes" as const, effort: "high" };
+    expect(runtimeEffortLabel(hermes, null, "requested")).toBe("high · requested");
+    expect(runtimeEffortLabel(hermes, { effortAttested: false }, "requested")).toBe(
+      "high · requested",
+    );
+  });
   it("preserves legacy labels on other runtimes and never invents an effort", () => {
     expect(runtimeEffortLabel({ ...pin, runtimeKind: "pi" }, null, "requested")).toBe("high");
     expect(

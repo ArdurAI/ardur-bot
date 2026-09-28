@@ -18,6 +18,7 @@ import {
 import { inheritedOllamaEffort, spaceDefaultEffort } from "@ardurbot/core";
 import type { findDefaultModelCredential, PrismaClient } from "@ardurbot/db";
 import { findDefaultModelCredential as findSpaceDefault } from "@ardurbot/db";
+import { hermesCompatibility, hermesConfigHash } from "./hermes-compatibility.js";
 import { modelLocalityAllowed } from "./model-locality.js";
 import { listPiCatalog } from "./pi-models.js";
 import { AnthropicOAuthUnavailableError } from "./pi-oauth.js";
@@ -112,7 +113,7 @@ export async function resolveRunModelPin(input: {
       }
     }
   }
-  if (pin.runtimeKind !== "pi") {
+  if (pin.runtimeKind !== "pi" && pin.runtimeKind !== "hermes") {
     if (!(pin.runtimeKind in nativeRuntimeProviders))
       return runtimePinProblem(
         pin,
@@ -169,6 +170,15 @@ export async function resolveRunModelPin(input: {
         pin.runtimeKind === "antigravity" ? (pin.effort as ThinkingLevel | null) : effort.data!,
     };
   }
+  if (
+    pin.runtimeKind === "hermes" &&
+    (!pin.runtimeConfig || pin.runtimeConfigHash !== hermesConfigHash(pin.runtimeConfig))
+  )
+    return runtimePinProblem(
+      pin,
+      "runtime-configuration-invalid",
+      "The recorded Hermes limits are invalid.",
+    );
   if (input.snapshot != null || hasBotPin(bot))
     credential = await credentialForPin(input.prisma, input.scope, pin);
   if (pin.provider === "scripted" && !input.scripted)
@@ -195,7 +205,7 @@ export async function resolveRunModelPin(input: {
     )
       return runtimePinProblem(pin, "locality-denied", MODEL_LOCALITY_DENIED_MESSAGE);
     const problem = validateRuntimePin(resolved, pin);
-    return problem ?? { ...resolved, kind: "resolved", pin };
+    return problem ?? hermesCompatibility(pin, resolved) ?? { ...resolved, kind: "resolved", pin };
   } catch (error) {
     if (error instanceof AnthropicOAuthUnavailableError) {
       return runtimePinProblem(pin, "pin-credential-missing", error.message);

@@ -6,7 +6,7 @@ import { HostProviderOpenSchema, HostProviderReadSchema } from "@ardurbot/contra
 
 type ProviderMethod = "provider.open" | "provider.read" | "provider.cancel";
 const REQUEST_BYTES = 256 * 1024;
-const RESPONSE_BYTES = 8 * 1024 * 1024;
+const RESPONSE_BYTES = 4 * 1024 * 1024;
 const DISCONNECTED = Symbol("provider client disconnected");
 
 function waitForDrain(res: ServerResponse): Promise<void> {

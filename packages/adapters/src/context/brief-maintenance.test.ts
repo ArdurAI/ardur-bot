@@ -148,6 +148,7 @@ it("marks a changed group pending and rewrites after the turn with the selected 
   await refreshRunBrief(f.deps, "run");
   expect(f.requests[0]).toMatchObject({
     tools: "none",
+    providerRunMaxOutputTokens: 4_096,
     model: { id: "pinned", thinkingLevel: "high", maxTokens: 2000 },
   });
   expect(f.requests[0]?.prompt).toContain('"acceptedAt":null');
@@ -162,6 +163,65 @@ it("marks a changed group pending and rewrites after the turn with the selected 
   expect(f.requests).toHaveLength(attempts + 1);
   expect(f.state.lastMessageSeq).toBe(2);
 });
+it("carries the shared desktop home in the maintenance request", async () => {
+  const f = fixture();
+  f.tx.bot.findUniqueOrThrow.mockResolvedValue({
+    id: "chief",
+    concurrentRuns: 3,
+    space: { concurrentRuns: 3 },
+    computer: {
+      kind: "desktop",
+      scope: "team",
+      homeKey: "team-space",
+      providerRef: "host:team-space",
+    },
+  } as never);
+  await refreshRunBrief(f.deps, "run");
+  expect(f.requests[0]).toMatchObject({
+    botId: "chief",
+    runId: "brief-run",
+    nativeCwd: "host:team-space",
+  });
+});
+it.each([false, true])(
+  "does not recount broker-owned brief usage when ACP reports it: %s",
+  async (reported) => {
+    const f = fixture();
+    f.resolve.mockResolvedValue({
+      model: { provider: "fixture", id: "pinned", thinkingLevel: "high" },
+      runtime: {
+        ...f.runtime,
+        describe: () => ({
+          id: "hermes",
+          contractVersion: "1",
+          adapterVersion: "1",
+          capabilities: {
+            scripted: false,
+            streaming: true,
+            compaction: false,
+            tools: false,
+            usageAccounting: "external" as const,
+          },
+        }),
+        async *run() {
+          if (reported)
+            yield {
+              type: "usage" as const,
+              provider: "fixture",
+              model: "pinned",
+              inputTokens: 10,
+              outputTokens: 2,
+              reported: true,
+            };
+          yield { type: "done" as const, text: "## Goal\nCoordinate" };
+        },
+      },
+    });
+    await refreshRunBrief(f.deps, "run");
+    expect(f.recordUsage).not.toHaveBeenCalled();
+    expect(f.commit).toHaveBeenCalledOnce();
+  },
+);
 
 it("keeps an expired quiet receipt out of brief refresh evidence", async () => {
   const f = fixture();

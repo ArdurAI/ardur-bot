@@ -14,7 +14,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { aggregateContext, recordContextUsage, resumeContextSnapshot } from "./context/metrics.js";
 import { loadLearningRecords } from "./learning-records.js";
 import type { RecordedContextUsage } from "./run-usage.js";
-import { recordBrokerRunUsage, recordRunUsage } from "./run-usage.js";
+import { brokerRunAllowance, recordBrokerRunUsage, recordRunUsage } from "./run-usage.js";
 import { accountRuntimeUsage } from "./runtime-usage.js";
 
 const databaseUrl =
@@ -211,6 +211,128 @@ postgres("request ledger on disposable PostgreSQL", () => {
     await expect(record(make().start(), peer.prisma, { ...fence, leaseFence: 3 })).rejects.toThrow(
       "admission is stale",
     );
+  });
+  it("accounts a summary against its finished source run only under the brief lease", async () => {
+    const f = await fixture();
+    await db.prisma.run.update({ where: { id: f.id }, data: { status: "completed" } });
+    const attemptedAt = new Date();
+    await db.prisma.botBrief.create({
+      data: {
+        spaceId: f.id,
+        userId: "fixture-user",
+        botId: f.id,
+        threadId: f.id,
+        groupKey: "direct",
+        pendingRunId: f.id,
+        attemptedAt,
+        leaseExpiresAt: new Date(attemptedAt.getTime() + 60_000),
+      },
+    });
+    const collector = new RequestUsageCollector({
+      provider: "fixture",
+      model: "fixture",
+      purpose: "summary",
+      mappingVersion: "broker-chat-completions-v1",
+      inputSemantics: "total-with-cache-subsets",
+      admission: {
+        kind: "worker-provider-broker",
+        reservedTokens: 500,
+        maxRequests: 2,
+        maxReservedTokens: 1_000,
+      },
+    });
+    const fence = {
+      leaseOwner: "brief",
+      leaseFence: 0,
+      runtimePin: f.pin,
+      briefAttemptedAt: attemptedAt,
+    };
+    const record = (usage: AgentUsage, candidate = fence) =>
+      recordBrokerRunUsage({ prisma: db.prisma, events: f.events }, f.run, usage, candidate);
+    await record(collector.start());
+    await record(collector.snapshot({ input: 90, output: 10 }));
+    await record(collector.finish("success"));
+    expect((await f.rows())[0]).toMatchObject({
+      purpose: "summary",
+      runId: f.id,
+      inputTokens: 90,
+      outputTokens: 10,
+    });
+    expect(await f.root()).toMatchObject({ usedTokens: 100, reservedTokens: 0 });
+    const next = new RequestUsageCollector({
+      provider: "fixture",
+      model: "fixture",
+      purpose: "summary",
+      mappingVersion: "broker-chat-completions-v1",
+      inputSemantics: "total-with-cache-subsets",
+      admission: {
+        kind: "worker-provider-broker",
+        reservedTokens: 100,
+        maxRequests: 2,
+        maxReservedTokens: 1_000,
+      },
+    });
+    await db.prisma.botBrief.update({
+      where: { botId_threadId: { botId: f.id, threadId: f.id } },
+      data: { leaseExpiresAt: null },
+    });
+    await expect(record(next.start())).rejects.toThrow("admission is stale");
+  });
+  it("admits a brief refresh after a main broker turn with the same source allowance", async () => {
+    const f = await fixture();
+    await db.prisma.run.update({
+      where: { id: f.id },
+      data: { leaseOwner: "worker", leaseFence: 2 },
+    });
+    const make = (purpose: "main" | "summary", reservedTokens: number) =>
+      new RequestUsageCollector({
+        provider: "fixture",
+        model: "fixture",
+        purpose,
+        mappingVersion: "broker-chat-completions-v1",
+        inputSemantics: "total-with-cache-subsets",
+        admission: {
+          kind: "worker-provider-broker",
+          reservedTokens,
+          maxRequests: 4,
+          maxReservedTokens: 4 * (32_768 + 4_096),
+        },
+      });
+    const main = make("main", 4_300);
+    const record = (usage: AgentUsage, briefAttemptedAt?: Date) =>
+      recordBrokerRunUsage(
+        { prisma: db.prisma, events: f.events },
+        f.run,
+        usage,
+        briefAttemptedAt
+          ? { leaseOwner: "brief", leaseFence: 0, runtimePin: f.pin, briefAttemptedAt }
+          : { leaseOwner: "worker", leaseFence: 2, runtimePin: f.pin },
+      );
+    await record(main.start());
+    await record(main.snapshot({ input: 100, output: 20 }));
+    await record(main.finish("success"));
+    expect(await brokerRunAllowance(db.prisma, f.id)).toBe(4 * (32_768 + 4_096));
+    await db.prisma.run.update({ where: { id: f.id }, data: { status: "completed" } });
+    const attemptedAt = new Date();
+    await db.prisma.botBrief.create({
+      data: {
+        spaceId: f.id,
+        userId: "fixture-user",
+        botId: f.id,
+        threadId: f.id,
+        groupKey: "direct",
+        pendingRunId: f.id,
+        attemptedAt,
+        leaseExpiresAt: new Date(attemptedAt.getTime() + 60_000),
+      },
+    });
+    const summary = make("summary", 2_200);
+    await record(summary.start(), attemptedAt);
+    await record(summary.snapshot({ input: 80, output: 10 }), attemptedAt);
+    await record(summary.finish("success"), attemptedAt);
+    expect(await brokerRunAllowance(db.prisma, f.id)).toBe(4 * (32_768 + 4_096));
+    expect(await f.rows()).toHaveLength(2);
+    expect(await f.root()).toMatchObject({ usedTokens: 210, reservedTokens: 0 });
   });
   it("rejects a broker reservation beyond the persisted root token limit", async () => {
     const f = await fixture();
@@ -558,12 +680,13 @@ postgres("request ledger on disposable PostgreSQL", () => {
       });
     const fourthRequest = make(9990, 20_000);
     await fourthRecord(fourthRequest.start());
-    await fourthRecord(fourthRequest.snapshot({ input: 0, output: 0 }));
+    await fourthRecord(fourthRequest.snapshot({ input: 9980, output: 0 }));
     await fourthRecord(fourthRequest.finish("success"));
+    expect(await f.root()).toMatchObject({ reservedTokens: 20, usedTokens: 10_020 });
     await db.prisma.$transaction((tx) =>
       finishDelegation(tx, delegation.id, "completed", "Final result", fourth.runId),
     );
-    expect(await f.root()).toMatchObject({ reservedTokens: 0, usedTokens: 40 });
+    expect(await f.root()).toMatchObject({ reservedTokens: 0, usedTokens: 10_020 });
   });
 
   it("rechecks the broker lease after waiting for the root lock", async () => {

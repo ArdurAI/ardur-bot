@@ -65,10 +65,14 @@ def main() -> None:
     route = os.environ["ARDUR_HERMES_RELAY_URL"]
     model = os.environ["ARDUR_HERMES_MODEL"]
     max_tokens = int(os.environ["ARDUR_HERMES_MAX_TOKENS"])
+    max_iterations = int(os.environ["ARDUR_HERMES_MAX_ITERATIONS"])
+    run_budget_seconds = int(os.environ["ARDUR_HERMES_RUN_BUDGET_SECONDS"])
     token = os.environ.pop("ARDUR_HERMES_PROVIDER_KEY")
     require(route.startswith("http://127.0.0.1:") and route.endswith("/v1"), "Relay must be loopback")
     require(bool(token) and bool(model), "Broker grant and model are required")
     require(1 <= max_tokens <= 65536, "Model output limit is invalid")
+    require(1 <= max_iterations <= 64, "Provider call limit is invalid")
+    require(1 <= run_budget_seconds <= 600, "Run time limit is invalid")
     require(os.environ.get("PYTHONDONTWRITEBYTECODE") == "1", "Bytecode writes are forbidden")
     check_install(root, home)
     sys.path.insert(0, str(root))
@@ -88,7 +92,7 @@ def main() -> None:
                 require(api_mode in (None, "chat_completions"), "ACP API override refused")
                 agent = run_agent.AIAgent(
                     base_url=route, api_key=token, provider="custom", api_mode="chat_completions",
-                    model=expected_model, max_iterations=16, run_budget_seconds=180,
+                    model=expected_model, max_iterations=max_iterations, run_budget_seconds=run_budget_seconds,
                     max_tokens=max_tokens,
                     enabled_toolsets=["mcp-ardur"], disabled_toolsets=["hermes-acp"],
                     save_trajectories=False, skip_context_files=True, load_soul_identity=True,

@@ -9,6 +9,15 @@ const categoriesSchema = UsageCategoriesSchema;
 export const REQUEST_USAGE_CATEGORIES = categoriesSchema.keyof().options;
 export type CategoryCoverage = Record<keyof UsageCategories, "complete" | "partial" | "unknown">;
 
+/** UTF-8 bytes upper-bound ordinary BPE input tokens; never reserve an unused context window. */
+export function requestReservationTokens(
+  encodedRequest: string,
+  contextWindow: number,
+  outputCap: number,
+): number {
+  return Math.min(contextWindow, Math.max(1, Buffer.byteLength(encodedRequest))) + outputCap;
+}
+
 /** Strictly whitelist metadata: provider responses, prompts and credentials do not belong here. */
 export const requestUsageSchema =
   RequestUsageObservationSchema satisfies z.ZodType<RequestUsageObservation>;

@@ -3,6 +3,8 @@ import {
   BOT_COLORS,
   type Bot,
   type BotSection,
+  type HermesRuntimeConfig,
+  HermesRuntimeConfigSchema,
   type MessageBlock,
   RuntimeKindSchema,
   type SpaceBot,
@@ -56,6 +58,7 @@ function mapBot(
     modelCredentialId?: string | null;
     modelPinRevision?: number;
     runtimeKind?: string;
+    runtimeConfig?: unknown;
     runtimeExperimental?: boolean;
     modelProvider?: string | null;
     modelId?: string | null;
@@ -103,6 +106,10 @@ function mapBot(
     modelPinRevision: bot.modelPinRevision ?? 0,
     ...(groupModelOverrideCount > 0 ? { groupModelOverrideCount } : {}),
     runtimeKind: RuntimeKindSchema.parse(bot.runtimeKind ?? "pi"),
+    runtimeConfig:
+      bot.runtimeConfig == null || bot.runtimeConfig === Prisma.DbNull
+        ? null
+        : HermesRuntimeConfigSchema.parse(bot.runtimeConfig),
     runtimeExperimental: bot.runtimeExperimental ?? false,
     teamChatAmbientEnabled: bot.teamChatAmbientEnabled ?? false,
     teamChatRules: bot.teamChatRules ?? "",
@@ -427,6 +434,7 @@ export function createRepos(prisma: PrismaClient) {
         modelCredentialId?: string | null;
         modelPinRevision?: number;
         runtimeKind?: string;
+        runtimeConfig?: HermesRuntimeConfig | null;
         runtimeExperimental?: boolean;
         initialMessage?: {
           role: "user" | "bot" | "system";
@@ -448,6 +456,7 @@ export function createRepos(prisma: PrismaClient) {
       let modelCredentialId = input.modelCredentialId ?? null;
       let modelPinRevision = input.modelPinRevision ?? 0;
       let runtimeKind = input.runtimeKind ?? "pi";
+      let runtimeConfig = input.runtimeConfig ?? null;
       let runtimeExperimental = input.runtimeExperimental ?? false;
       if (input.parentBotId) {
         const parent = await prisma.bot.findFirst({
@@ -460,6 +469,10 @@ export function createRepos(prisma: PrismaClient) {
         if (!parent) throw new IsolationError();
         if (!modelId) {
           runtimeKind = parent.runtimeKind ?? "pi";
+          runtimeConfig =
+            parent.runtimeConfig == null
+              ? null
+              : HermesRuntimeConfigSchema.parse(parent.runtimeConfig);
           runtimeExperimental = parent.runtimeExperimental ?? false;
           modelProvider = parent.modelProvider ?? null;
           modelCredentialId = parent.modelCredentialId ?? null;
@@ -509,6 +522,7 @@ export function createRepos(prisma: PrismaClient) {
               modelCredentialId,
               modelPinRevision,
               runtimeKind,
+              runtimeConfig: runtimeConfig ?? Prisma.DbNull,
               runtimeExperimental,
             },
           });

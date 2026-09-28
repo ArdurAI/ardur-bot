@@ -18,6 +18,8 @@ type Pending = {
   ack: number;
   bytes: number;
   workerBytes: number;
+  providerBytes: number;
+  otherWorkerBytes: number;
   calls: Map<string, Extract<HostFrame, { type: "callback" }>["method"]>;
   timer: ReturnType<typeof setTimeout>;
 };
@@ -141,6 +143,8 @@ export class HostHub {
       ack: -1,
       bytes: 0,
       workerBytes: 0,
+      providerBytes: 0,
+      otherWorkerBytes: 0,
       calls: new Map(),
       timer: setTimeout(() => this.cancel(request.id, worker), 15 * 60_000),
     };
@@ -242,8 +246,20 @@ export class HostHub {
           throw new Error("Unexpected provider cancellation value.");
       }
       pending.calls.delete(frame.callId);
-      pending.workerBytes += Buffer.byteLength(encodeHostFrame(frame));
-      if (pending.workerBytes > HOST_TOTAL_BYTES) {
+      const frameBytes = Buffer.byteLength(encodeHostFrame(frame));
+      const hermes =
+        pending.request.operation.op === "runtime.turn" &&
+        pending.request.operation.request.model.runtimePin.runtimeKind === "hermes";
+      if (hermes) {
+        if (method.startsWith("provider.")) pending.providerBytes += frameBytes;
+        else pending.otherWorkerBytes += frameBytes;
+      }
+      pending.workerBytes += frameBytes;
+      if (
+        pending.workerBytes > HOST_TOTAL_BYTES ||
+        (hermes &&
+          (pending.providerBytes > 6 * 1024 * 1024 || pending.otherWorkerBytes > 2 * 1024 * 1024))
+      ) {
         this.cancel(frame.id, worker);
         return;
       }

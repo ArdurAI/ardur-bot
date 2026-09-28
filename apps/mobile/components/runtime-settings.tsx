@@ -95,17 +95,19 @@ export function RuntimeSettings({
           presentMessageActionSheet({
             ...sheet,
             title: t("Runs on"),
-            actions: (Object.keys(runtimeLabels) as RuntimeKind[]).map((value) => ({
-              text: t(runtimeLabels[value]),
-              onPress: () => {
-                onKind(value);
-                onExperimental(false);
-                onModel("");
-                onEffort("");
-                setLogin(null);
-                setError(null);
-              },
-            })),
+            actions: (Object.keys(runtimeLabels) as RuntimeKind[])
+              .filter((value) => value !== "hermes")
+              .map((value) => ({
+                text: t(runtimeLabels[value]),
+                onPress: () => {
+                  onKind(value);
+                  onExperimental(false);
+                  onModel("");
+                  onEffort("");
+                  setLogin(null);
+                  setError(null);
+                },
+              })),
           })
         }
       >

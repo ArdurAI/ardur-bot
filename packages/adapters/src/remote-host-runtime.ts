@@ -54,57 +54,65 @@ export class RemoteHostRuntime implements AgentRuntime {
     request: AgentRunRequest,
     context: Partial<AdapterContext> = {},
   ): AsyncIterable<AgentRuntimeEvent> {
-    if (request.model.apiKey || request.model.oauth)
+    if (this.kind !== "hermes" && (request.model.apiKey || request.model.oauth))
       throw new Error("Native host runtimes use their own sign-in.");
-    const health = this.kind === "hermes" ? await this.client.health() : null;
-    if (this.kind === "hermes") {
-      if (!this.brokerForTurn || health?.capabilities?.providerRelay !== 1 || !health.generation)
-        throw new Error("This host cannot run the pinned provider relay.");
-    }
-    const operationId = randomUUID();
-    const brokerSession =
-      this.kind === "hermes"
-        ? await this.brokerForTurn?.(request, context, {
-            operationId,
-            hostGeneration: health!.generation!,
-          })
-        : undefined;
-    if (brokerSession) {
-      const { scope } = brokerSession;
-      const generationFence = createHash("sha256")
-        .update(health!.generation!)
-        .digest()
-        .readUIntBE(0, 6);
-      const pin = request.model.runtimePin;
-      if (
-        scope.operationId !== operationId ||
-        scope.hostGeneration !== generationFence ||
-        scope.runId !== request.runId ||
-        scope.botId !== request.botId ||
-        scope.userId !== context.userId ||
-        scope.spaceId !== context.spaceId ||
-        scope.pin.credentialId !== pin?.credentialId ||
-        scope.pin.provider !== request.model.provider ||
-        scope.pin.modelId !== request.model.id ||
-        scope.pin.effort !== request.model.thinkingLevel
-      ) {
-        brokerSession.broker.revoke();
-        throw new Error("Provider broker scope does not match this host turn.");
-      }
-    }
-    let response: Buffer | undefined;
-    let responseStatus = 200;
-    let responseType: "application/json" | "text/event-stream" = "application/json";
-    let readSequence = 0;
-    let opening = false;
     const abort = new AbortController();
     const stop = () => abort.abort();
-    const homeKey = request.nativeCwd?.startsWith("host:")
-      ? request.nativeCwd.slice(5)
-      : request.botId;
-    let turn: ReturnType<typeof HostTurnSchema.parse>;
+    this.active.set(request.runId, abort);
+    context.signal?.addEventListener("abort", stop, { once: true });
+    if (context.signal?.aborted) stop();
+    let brokerSession: { broker: HermesProviderBroker; scope: BrokerScope } | undefined;
     try {
-      turn = HostTurnSchema.parse({
+      abort.signal.throwIfAborted();
+      const health = this.kind === "hermes" ? await this.client.health() : null;
+      abort.signal.throwIfAborted();
+      if (this.kind === "hermes") {
+        if (!this.brokerForTurn || health?.capabilities?.providerRelay !== 1 || !health.generation)
+          throw new Error("This host cannot run the pinned provider relay.");
+      }
+      const operationId = randomUUID();
+      brokerSession =
+        this.kind === "hermes"
+          ? await this.brokerForTurn?.(request, context, {
+              operationId,
+              hostGeneration: health!.generation!,
+            })
+          : undefined;
+      abort.signal.throwIfAborted();
+      if (brokerSession) {
+        const { scope } = brokerSession;
+        const generationFence = createHash("sha256")
+          .update(health!.generation!)
+          .digest()
+          .readUIntBE(0, 6);
+        const pin = request.model.runtimePin;
+        if (
+          scope.operationId !== operationId ||
+          scope.hostGeneration !== generationFence ||
+          scope.runId !== request.runId ||
+          scope.botId !== request.botId ||
+          scope.userId !== context.userId ||
+          scope.spaceId !== context.spaceId ||
+          scope.pin.credentialId !== pin?.credentialId ||
+          scope.pin.provider !== request.model.provider ||
+          scope.pin.modelId !== request.model.id ||
+          scope.pin.effort !== request.model.thinkingLevel ||
+          (pin?.runtimeConfigHash !== undefined &&
+            scope.configurationHash !== pin.runtimeConfigHash)
+        ) {
+          brokerSession.broker.revoke();
+          throw new Error("Provider broker scope does not match this host turn.");
+        }
+      }
+      let response: Buffer | undefined;
+      let responseStatus = 200;
+      let responseType: "application/json" | "text/event-stream" = "application/json";
+      let readSequence = 0;
+      let opening = false;
+      const homeKey = request.nativeCwd?.startsWith("host:")
+        ? request.nativeCwd.slice(5)
+        : request.botId;
+      const turn = HostTurnSchema.parse({
         providerBroker: brokerSession
           ? { protocol: 1, ...brokerSession.broker.grant, hostGeneration: health!.generation }
           : undefined,
@@ -112,6 +120,9 @@ export class RemoteHostRuntime implements AgentRuntime {
         botId: request.botId,
         threadId: request.threadId,
         runId: request.runId,
+        providerSourceRunId: request.providerSourceRunId,
+        providerPurpose: request.providerPurpose === "summary" ? "summary" : undefined,
+        providerBriefAttemptedAt: brokerSession?.scope.briefAttemptedAt,
         prompt: request.prompt,
         instructions: request.instructions,
         history: request.history,
@@ -123,8 +134,12 @@ export class RemoteHostRuntime implements AgentRuntime {
           runtimePin: request.model.runtimePin,
           provider: request.model.provider,
           id: request.model.id,
-          maxTokens: request.model.maxTokens,
-          contextWindow: request.model.contextWindow,
+          maxTokens:
+            this.kind === "hermes" ? (request.model.maxTokens ?? 4_096) : request.model.maxTokens,
+          contextWindow:
+            this.kind === "hermes"
+              ? (request.model.contextWindow ?? 32_768)
+              : request.model.contextWindow,
           acceptsImages: request.model.acceptsImages,
           reasoning: request.model.reasoning,
           thinkingLevel: request.model.thinkingLevel,
@@ -136,19 +151,12 @@ export class RemoteHostRuntime implements AgentRuntime {
         allowSilentEmpty: request.allowSilentEmpty,
         emptyResponseText: request.emptyResponseText,
       });
-    } catch (error) {
-      brokerSession?.broker.revoke();
-      throw error;
-    }
-    this.active.set(request.runId, abort);
-    context.signal?.addEventListener("abort", stop, { once: true });
-    if (context.signal?.aborted) stop();
-    const tools = request.tools === "none" ? [] : request.tools;
-    const executions = new Map<string, { name: string; result?: unknown; error?: unknown }>();
-    const seenExecutions = new Set<string>();
-    const authorizations = new Map<string, unknown>();
-    const requestFence: [] | [typeof operationId] = this.kind === "hermes" ? [operationId] : [];
-    try {
+      abort.signal.throwIfAborted();
+      const tools = request.tools === "none" ? [] : request.tools;
+      const executions = new Map<string, { name: string; result?: unknown; error?: unknown }>();
+      const seenExecutions = new Set<string>();
+      const authorizations = new Map<string, unknown>();
+      const requestFence: [] | [typeof operationId] = this.kind === "hermes" ? [operationId] : [];
       for await (const frame of this.client.request(
         { op: "runtime.turn", homeKey, request: turn },
         { ...context, botId: request.botId, runId: request.runId, signal: abort.signal },

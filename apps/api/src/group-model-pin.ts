@@ -1,4 +1,9 @@
-import { NATIVE_HOST_OWNER_MESSAGE, nativeHostOwner } from "@ardurbot/adapters";
+import {
+  effectiveHermesConfig,
+  hermesConfigHash,
+  NATIVE_HOST_OWNER_MESSAGE,
+  nativeHostOwner,
+} from "@ardurbot/adapters";
 import type { Actor, RuntimePin } from "@ardurbot/contracts";
 import { RuntimePinSchema } from "@ardurbot/contracts";
 import {
@@ -26,7 +31,8 @@ function sameChoice(left: RuntimePin | null, right: Choice | null) {
         left.provider === right.provider &&
         left.modelId === right.modelId &&
         left.effort === right.effort &&
-        left.credentialId === right.credentialId,
+        left.credentialId === right.credentialId &&
+        left.runtimeConfigHash === right.runtimeConfigHash,
     ) ||
     (left === null && right === null)
   );
@@ -95,7 +101,9 @@ export async function updateGroupMemberModelPin(
     });
     const member = await tx.chatGroupMember.findUnique({
       where: { id: target.memberId },
-      include: { bot: { select: { userId: true, spaceId: true, archivedAt: true } } },
+      include: {
+        bot: { select: { userId: true, spaceId: true, archivedAt: true, runtimeConfig: true } },
+      },
     });
     if (
       !group?.thread ||
@@ -107,8 +115,16 @@ export async function updateGroupMemberModelPin(
       member.bot.archivedAt
     )
       throw new IsolationError();
+    const storedConfig: unknown = member.bot.runtimeConfig;
+    const config =
+      choice?.runtimeKind === "hermes"
+        ? effectiveHermesConfig(storedConfig === Prisma.DbNull ? null : storedConfig)
+        : null;
+    const selectedChoice = config
+      ? { ...choice!, runtimeConfig: config, runtimeConfigHash: hermesConfigHash(config) }
+      : choice;
     const oldPin = member.runtimePin == null ? null : RuntimePinSchema.parse(member.runtimePin);
-    if (sameChoice(oldPin, choice)) return { threadId: group.thread.id, seq: null };
+    if (sameChoice(oldPin, selectedChoice)) return { threadId: group.thread.id, seq: null };
     if (member.modelPinRevision !== target.expectedRevision)
       throw new ORPCError("CONFLICT", {
         message: "This member's model changed. Reload the group.",
@@ -116,7 +132,7 @@ export async function updateGroupMemberModelPin(
     if (member.modelPinRevision >= 2_147_483_647)
       throw new ORPCError("CONFLICT", { message: "This member's model revision cannot advance." });
     const revision = member.modelPinRevision + 1;
-    const nextPin = choice ? RuntimePinSchema.parse({ ...choice, revision }) : null;
+    const nextPin = selectedChoice ? RuntimePinSchema.parse({ ...selectedChoice, revision }) : null;
     await tx.chatGroupMember.update({
       where: { id: member.id },
       data: { modelPinRevision: revision, runtimePin: nextPin ?? Prisma.DbNull },

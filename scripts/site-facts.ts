@@ -709,6 +709,13 @@ export async function runSiteFacts(
       `${productPath} must omit generatedAt and source. Run \`pnpm site:facts\` and commit the result.`,
     );
   }
+  if (mode === "check") {
+    const manifest = JSON.parse(
+      await readFile(path.join(docsRoot, "site/data/feature-docs.json"), "utf8"),
+    ) as { features?: { status?: string; internal?: boolean }[] };
+    if (!manifest.features?.some((feature) => feature.status === "published" && !feature.internal))
+      throw new Error("Feature documentation needs at least one published page.");
+  }
   const product = await generatedProduct(rootDir, docsRoot);
   await validateReferences(product, rootDir);
   const expectedProduct = `${JSON.stringify(product, null, 2)}\n`;

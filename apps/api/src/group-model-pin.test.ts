@@ -3,6 +3,10 @@ import { describe, expect, it, vi } from "vitest";
 import { updateGroupMemberModelPin } from "./group-model-pin.js";
 import type { RouterDeps } from "./router.js";
 
+vi.mock("@ardurbot/adapters", async (original) => ({
+  ...(await original<object>()),
+  nativeHostOwner: vi.fn(async () => true),
+}));
 vi.mock("./model-pin-validation.js", () => ({
   validateModelPinSelection: vi.fn(async (_deps, _actor, pin) => pin),
 }));
@@ -22,7 +26,7 @@ const choice = {
   credentialId: "scripted",
 };
 
-function fixture() {
+function fixture(runtimeConfig: unknown = null, runtimeExperimental = false) {
   let revision = 0;
   let pin: (typeof choice & { revision: number }) | null = null;
   let memberId = "member";
@@ -32,7 +36,7 @@ function fixture() {
     botId: "bot",
     modelPinRevision: revision,
     runtimePin: pin,
-    bot: { userId: "owner", spaceId: "space", archivedAt: null },
+    bot: { userId: "owner", spaceId: "space", archivedAt: null, runtimeConfig },
   });
   const groupRecord = () => ({
     id: "group",
@@ -89,7 +93,7 @@ function fixture() {
                   ? [
                       {
                         id: memberId,
-                        bot: { runtimeExperimental: false, computer: { kind: "desktop" } },
+                        bot: { runtimeExperimental, computer: { kind: "desktop" } },
                       },
                     ]
                   : [],
@@ -135,6 +139,31 @@ function fixture() {
 }
 
 describe("group model owner mutation", () => {
+  it("snapshots bot-owned Hermes limits with the admitted group connection", async () => {
+    const config = { version: 1, maxProviderRequests: 4, timeoutMs: 90_000 };
+    const f = fixture(config, true);
+    await updateGroupMemberModelPin(f.deps, actor, target, {
+      runtimeKind: "hermes",
+      provider: "openai-compatible",
+      modelId: "fixture-model",
+      effort: "off",
+      credentialId: "selected",
+      runtimeConfig: { version: 1, maxProviderRequests: 64, timeoutMs: 600_000 },
+    });
+    expect(f.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          runtimePin: expect.objectContaining({
+            runtimeKind: "hermes",
+            credentialId: "selected",
+            runtimeConfig: config,
+            runtimeConfigHash: expect.stringMatching(/^[a-f0-9]{64}$/),
+          }),
+        }),
+      }),
+    );
+  });
+
   it("sets once, replays exactly, and clears once with durable events", async () => {
     const f = fixture();
     const first = await updateGroupMemberModelPin(f.deps, actor, target, choice);

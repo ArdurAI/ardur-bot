@@ -89,6 +89,110 @@ function fixture(patch: Partial<BrokerOptions> = {}) {
 }
 
 describe("worker provider broker", () => {
+  it("admits a small delegated request under a 10,000-token allowance and settles it", async () => {
+    const records: AgentUsage[] = [];
+    const base = fixture();
+    const f = fixture({
+      connection: { ...base.options.connection, contextWindow: 32_768, maxOutputTokens: 4_096 },
+      maxReservedTokens: 2 * (32_768 + 4_096),
+      record: async (usage) => {
+        if (
+          usage.request?.collection?.outcome === "started" &&
+          (usage.request.admission?.reservedTokens ?? 0) > 10_000
+        )
+          throw new Error("Broker delegation allowance exhausted");
+        records.push(usage);
+      },
+    });
+    expect((await f.broker.open(f.request())).ok).toBe(true);
+    expect(records[0]?.request?.admission?.reservedTokens).toBeLessThan(10_000);
+    expect(records.at(-1)?.request?.collection?.outcome).toBe("success");
+    expect(f.fetch).toHaveBeenCalledOnce();
+
+    const oversized = { ...f.body, messages: [{ role: "user", content: "x".repeat(12_000) }] };
+    await expect(f.broker.open(f.request({ body: oversized }))).rejects.toThrow(
+      "Provider request could not be admitted.",
+    );
+    expect(f.fetch).toHaveBeenCalledOnce();
+
+    const main = fixture({
+      connection: { ...base.options.connection, contextWindow: 32_768, maxOutputTokens: 4_096 },
+      maxReservedTokens: 16 * (32_768 + 4_096),
+    });
+    expect((await main.broker.open(main.request({ body: oversized }))).ok).toBe(true);
+    expect(main.fetch).toHaveBeenCalledOnce();
+  });
+  it("records model evidence only from a validated response", async () => {
+    const observed = vi.fn(async (_model: string | undefined, _effort: string | undefined) => {});
+    const matching = fixture({ observed });
+    await matching.broker.open(matching.request());
+    expect(observed).toHaveBeenCalledWith("fixture-model", "high");
+
+    observed.mockClear();
+    const absent = fixture({
+      observed,
+      connection: { ...matching.options.connection, reportedModel: "if-present" },
+      fetch: vi.fn(async () => json({ usage: { prompt_tokens: 1 } })),
+    });
+    await absent.broker.open(absent.request());
+    expect(observed).toHaveBeenCalledWith(undefined, "high");
+
+    observed.mockClear();
+    const substituted = fixture({
+      observed,
+      fetch: vi.fn(async () => json({ model: "different-model" })),
+    });
+    await expect(substituted.broker.open(substituted.request())).rejects.toThrow(
+      "Provider request failed.",
+    );
+    expect(observed).not.toHaveBeenCalled();
+
+    const failed = fixture({
+      observed,
+      fetch: vi.fn(async () => {
+        throw new Error("offline");
+      }),
+    });
+    await expect(failed.broker.open(failed.request())).rejects.toThrow();
+    expect(observed).not.toHaveBeenCalled();
+  });
+  it("refuses a provider request that dropped required Ardur context", async () => {
+    const f = fixture({ requiredContext: "Required Ardur instruction" });
+    await expect(f.broker.open(f.request())).rejects.toThrow();
+    expect(f.fetch).not.toHaveBeenCalled();
+    expect(f.records).toHaveLength(0);
+    const delivered = {
+      ...f.body,
+      messages: [{ role: "system", content: "Required Ardur instruction" }, ...f.body.messages],
+    };
+    expect((await f.broker.open(f.request({ body: delivered }))).ok).toBe(true);
+  });
+  it("accepts the raw response boundary and rejects the next byte before recording success", async () => {
+    const prefix = JSON.stringify({ model: "fixture-model", padding: "" });
+    const body = (bytes: number) =>
+      json({ model: "fixture-model", padding: "x".repeat(bytes - Buffer.byteLength(prefix)) });
+    const f = fixture({ maxRequests: 2, maxReservedTokens: 200 });
+    f.fetch.mockResolvedValueOnce(body(4 * 1024 * 1024));
+    expect((await f.broker.open(f.request())).ok).toBe(true);
+    f.fetch.mockResolvedValueOnce(body(100));
+    await expect(f.broker.open(f.request())).rejects.toThrow("Provider request failed");
+    expect(f.records.filter((row) => row.request?.collection?.outcome === "success")).toHaveLength(
+      1,
+    );
+  });
+
+  it("applies the response allowance across provider calls in one turn", async () => {
+    const f = fixture();
+    const body = (padding: number) =>
+      json({ model: "fixture-model", padding: "x".repeat(padding) });
+    f.fetch.mockResolvedValueOnce(body(2 * 1024 * 1024));
+    f.fetch.mockResolvedValueOnce(body(2 * 1024 * 1024));
+    expect((await f.broker.open(f.request())).ok).toBe(true);
+    await expect(f.broker.open(f.request())).rejects.toThrow("Provider request failed");
+    expect(f.records.filter((row) => row.request?.collection?.outcome === "success")).toHaveLength(
+      1,
+    );
+  });
   it("owns a grant before the first asynchronous active check", async () => {
     let release!: (value: boolean) => void;
     const active = vi
@@ -244,7 +348,7 @@ describe("worker provider broker", () => {
     expect(JSON.stringify(f.records)).not.toContain(f.broker.grant.token);
   });
 
-  it("forwards a gpt-4.1 completion limit without changing its parameter or reservation", async () => {
+  it("forwards a gpt-4.1 completion limit and reserves its actual output cap", async () => {
     const base = fixture();
     const provider = vi.fn<typeof globalThis.fetch>(async () =>
       json({ model: "gpt-4.1", usage: { prompt_tokens: 3, completion_tokens: 2 } }),
@@ -270,7 +374,7 @@ describe("worker provider broker", () => {
     const sent = JSON.parse(String(provider.mock.calls[0]?.[1]?.body));
     expect(sent.max_completion_tokens).toBe(12);
     expect(sent).not.toHaveProperty("max_tokens");
-    expect(f.records[0]?.request?.admission?.reservedTokens).toBe(100);
+    expect(f.records[0]?.request?.admission?.reservedTokens).toBe(80 + 12);
     expect(f.records.at(-1)?.request?.collection?.outcome).toBe("success");
   });
 

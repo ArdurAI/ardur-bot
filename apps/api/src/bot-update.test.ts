@@ -128,6 +128,7 @@ describe("commitBotUpdate", () => {
           threadId: "thread-1",
           botId: "bot-1",
           data: { pinned: true },
+          expectedModelPinRevision: 3,
           emitBotUpdated: false,
         },
         appendEvent,
@@ -138,5 +139,8 @@ describe("commitBotUpdate", () => {
     expect(notify).not.toHaveBeenCalled();
     expect(appendEvent).not.toHaveBeenCalled();
     expect(update).toHaveBeenCalledOnce();
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: "bot-1", modelPinRevision: 3 } }),
+    );
   });
 });

@@ -1,4 +1,5 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import type {
   AdapterContext,
   AgentHomeStore,
@@ -40,6 +41,7 @@ import {
   ContextBudgetsSchema,
   computerCapabilities,
   computerProfileNote,
+  DEFAULT_MODEL_MAX_TOKENS,
   DelegationSnapshotSchema,
   isAttachmentImageMimeType,
   mcpCredentialConflict,
@@ -113,6 +115,7 @@ import {
   createSpaceForMember,
   createThreadMessageInTransaction,
   effectiveMemoryScope,
+  findBoundModelCredential,
   findModelCredential,
   finishedCommandIds,
   getUserPreferences,
@@ -136,6 +139,7 @@ import {
   type ThreadEvents,
 } from "@ardurbot/db";
 import { redactMcpArguments } from "@ardurbot/host-runtime/mcp-diagnostics";
+import { hermesContextDocument } from "@ardurbot/host-runtime/runtimes/hermes-runtime";
 import { getLogger } from "@ardurbot/logging";
 import type { BriefMaintenanceDeps, MemoryOperationContext, MemoryService } from "@ardurbot/memory";
 import {
@@ -269,6 +273,12 @@ import { wakeGoalAfterDelegation } from "./goal-wake.js";
 import { handoffToGroupBot, loadGroupContext } from "./group-handoff.js";
 import { captureRunModelPin, selectRunPinSource } from "./group-model-pin.js";
 import {
+  effectiveHermesConfig,
+  hermesCompatibility,
+  hermesConfigHash,
+} from "./hermes-compatibility.js";
+import { HermesProviderBroker } from "./hermes-provider-broker.js";
+import {
   LEGACY_HISTORY_WINDOW_SIZE,
   MAX_RECALLED_MEMORIES,
   scheduleCompactionAfterTurn,
@@ -355,7 +365,7 @@ import {
   secretPausedToolResult,
   tryCompleteConnectionWithCode,
 } from "./run-secret.js";
-import { recordRunUsage } from "./run-usage.js";
+import { brokerRunAllowance, recordBrokerRunUsage, recordRunUsage } from "./run-usage.js";
 import type { RuntimeRegistry } from "./runtime-registry.js";
 import { createRuntimeRegistry } from "./runtime-registry.js";
 import { reportRuntimeWaits, withRuntimeCleanup } from "./runtime-stream.js";
@@ -1002,10 +1012,191 @@ export function buildApprovalContinuation(
 }
 
 export function createRunExecutor(deps: ExecutorDeps) {
-  // The injected runtime is fixed for this executor. Admission must use its
-  // startup capability, not a later descriptor read during run execution.
+  // Capture the injected runtime capability once for stable peer admission.
   const scriptedRuntimeAvailable = Boolean(deps.runtime?.describe().capabilities.scripted);
-  const runtimeRegistry = deps.runtimeRegistry ?? createRuntimeRegistry(deps.runtime);
+  const runtimeRegistry =
+    deps.runtimeRegistry ??
+    createRuntimeRegistry(deps.runtime, async (request, context, hostFence) => {
+      const pin = request.model.runtimePin;
+      if (
+        pin?.runtimeKind !== "hermes" ||
+        !pin.runtimeConfig ||
+        pin.runtimeConfigHash !== hermesConfigHash(pin.runtimeConfig)
+      )
+        throw new Error("The Hermes run pin is incomplete.");
+      const problem = hermesCompatibility(pin, request.model);
+      if (problem) throw new RuntimePinError(problem);
+      const sourceRunId = request.providerSourceRunId ?? request.runId;
+      const source = await deps.prisma.run.findUnique({ where: { id: sourceRunId } });
+      const summary = request.providerPurpose === "summary" && sourceRunId !== request.runId;
+      const brief = summary
+        ? await deps.prisma.botBrief.findUnique({
+            where: { botId_threadId: { botId: request.botId, threadId: request.threadId } },
+          })
+        : null;
+      if (
+        !source ||
+        source.userId !== context.userId ||
+        source.spaceId !== context.spaceId ||
+        source.botId !== request.botId ||
+        source.threadId !== request.threadId ||
+        (summary
+          ? !["completed", "failed", "cancelled", "waiting_input", "waiting_takeover"].includes(
+              source.status,
+            ) ||
+            brief?.spaceId !== source.spaceId ||
+            brief.userId !== source.userId ||
+            brief.pendingRunId !== source.id ||
+            !brief.attemptedAt ||
+            !brief.leaseExpiresAt ||
+            brief.leaseExpiresAt <= new Date()
+          : source.status !== "running" || !source.leaseOwner || source.leaseFence == null) ||
+        !isDeepStrictEqual(source.runtimePin, pin)
+      )
+        throw new Error("The Hermes source run changed.");
+      const owner = { userId: source.userId, spaceId: source.spaceId };
+      const credential = await findBoundModelCredential(
+        deps.prisma,
+        owner,
+        pin.provider!,
+        pin.credentialId!,
+      );
+      if (!credential) throw new Error("The pinned connection was removed.");
+      const secret = await deps.prisma.secret.findFirst({
+        where: { id: credential.secretId, userId: owner.userId, spaceId: null },
+        select: { id: true },
+      });
+      if (!secret) throw new Error("The pinned connection was removed.");
+      const scope = {
+        runId: request.runId,
+        botId: request.botId,
+        userId: source.userId,
+        spaceId: source.spaceId,
+        operationId: hostFence.operationId,
+        leaseOwner: summary
+          ? `brief:${brief!.id}:${brief!.attemptedAt!.getTime()}`
+          : source.leaseOwner!,
+        leaseFence: summary ? 0 : source.leaseFence!,
+        hostGeneration: createHash("sha256")
+          .update(hostFence.hostGeneration)
+          .digest()
+          .readUIntBE(0, 6),
+        configurationHash: pin.runtimeConfigHash,
+        ...(summary ? { briefAttemptedAt: brief!.attemptedAt!.toISOString() } : {}),
+        pin: {
+          credentialId: pin.credentialId!,
+          provider: pin.provider!,
+          modelId: pin.modelId!,
+          effort: request.model.thinkingLevel ?? "off",
+        },
+      };
+      const active = async () => {
+        const [current, bound, currentSecret, currentBrief] = await Promise.all([
+          deps.prisma.run.findUnique({
+            where: { id: sourceRunId },
+            select: { status: true, leaseOwner: true, leaseFence: true, runtimePin: true },
+          }),
+          findBoundModelCredential(deps.prisma, owner, pin.provider!, pin.credentialId!),
+          deps.prisma.secret.findFirst({
+            where: { id: credential.secretId, userId: owner.userId, spaceId: null },
+            select: { id: true },
+          }),
+          summary
+            ? deps.prisma.botBrief.findUnique({
+                where: { botId_threadId: { botId: request.botId, threadId: request.threadId } },
+              })
+            : Promise.resolve(null),
+        ]);
+        return Boolean(
+          (summary
+            ? current &&
+              ["completed", "failed", "cancelled", "waiting_input", "waiting_takeover"].includes(
+                current.status,
+              ) &&
+              currentBrief?.pendingRunId === sourceRunId &&
+              currentBrief.attemptedAt?.getTime() === brief!.attemptedAt!.getTime() &&
+              currentBrief.leaseExpiresAt &&
+              currentBrief.leaseExpiresAt > new Date()
+            : current?.status === "running" &&
+              current.leaseOwner === scope.leaseOwner &&
+              current.leaseFence === scope.leaseFence) &&
+            current &&
+            isDeepStrictEqual(current.runtimePin, pin) &&
+            bound?.id === pin.credentialId &&
+            bound.secretId === credential.secretId &&
+            bound.updatedAt.getTime() === credential.updatedAt.getTime() &&
+            currentSecret?.id === credential.secretId,
+        );
+      };
+      const config = effectiveHermesConfig(pin.runtimeConfig);
+      const contextWindow = request.model.contextWindow ?? 32_768;
+      const maxOutputTokens = request.model.maxTokens ?? DEFAULT_MODEL_MAX_TOKENS;
+      const runOutputTokens = request.providerRunMaxOutputTokens ?? maxOutputTokens;
+      if (!Number.isSafeInteger(runOutputTokens) || runOutputTokens < maxOutputTokens)
+        throw new Error("The Hermes run model limits are invalid.");
+      const sourceAllowance = await brokerRunAllowance(deps.prisma, sourceRunId);
+      const broker = new HermesProviderBroker({
+        scope,
+        credentialId: pin.credentialId!,
+        pinnedEffort: request.model.thinkingLevel ?? "off",
+        connection: {
+          credentialId: pin.credentialId!,
+          provider: pin.provider!,
+          modelId: pin.modelId!,
+          baseUrl: request.model.baseUrl!,
+          apiKey: request.model.apiKey,
+          route: "openai-completions",
+          contextWindow,
+          maxOutputTokens,
+          acceptsImages: Boolean(request.model.acceptsImages),
+          supportsDeveloperRole: false,
+          effort: {
+            field: request.model.reasoning ? "reasoning_effort" : "none",
+            supported: request.model.reasoning ? [request.model.thinkingLevel ?? "off"] : ["off"],
+          },
+          reportedModel: "required",
+        },
+        tools:
+          request.tools === "none"
+            ? []
+            : request.tools
+                .filter((tool) => tool.name !== "run_subagent")
+                .map((tool) => ({
+                  name: tool.name,
+                  description: tool.description,
+                  parameters: tool.inputSchema as Record<string, unknown>,
+                })),
+        purpose: request.providerPurpose ?? "unknown",
+        maxRequests: config.maxProviderRequests,
+        maxReservedTokens:
+          sourceAllowance ??
+          Math.min(2_147_483_647, config.maxProviderRequests * (contextWindow + runOutputTokens)),
+        expiresAt: Date.now() + config.timeoutMs,
+        active,
+        record: async (usage) => {
+          await recordBrokerRunUsage(
+            deps,
+            { ...source, delegationId: source.delegationId },
+            usage,
+            {
+              leaseOwner: scope.leaseOwner,
+              leaseFence: scope.leaseFence,
+              runtimePin: pin,
+              ...(summary ? { briefAttemptedAt: brief!.attemptedAt! } : {}),
+            },
+          );
+        },
+        observed: async (model, wireEffort) =>
+          request.onBrokerRuntimeInfo?.({
+            ...(model ? { reportedModel: model } : {}),
+            requestedEffort: pin.effort!,
+            wireEffort,
+            effortMappingVersion: "broker-chat-completions-v1",
+          }),
+        requiredContext: hermesContextDocument(request),
+      });
+      return { broker, scope };
+    });
   const web = deps.web ?? createWebProvider();
   const browser = deps.browser ?? createBrowserProvider(undefined, { sandbox: deps.sandbox });
   const cloudAgent = deps.cloudAgent;
@@ -1139,6 +1330,14 @@ export function createRunExecutor(deps: ExecutorDeps) {
       selected.pin,
       bot.computer?.kind,
       bot.runtimeExperimental,
+      selected.pin.runtimeKind === "hermes"
+        ? {
+            credentialId: selected.pin.credentialId!,
+            provider: selected.provider,
+            modelId: selected.id,
+            effort: selected.pin.effort!,
+          }
+        : undefined,
     );
     if ("kind" in selection) return null;
     if (selected.pin.runtimeKind !== "pi" && !(await nativeHostOwner(deps.prisma, run.userId)))
@@ -1811,6 +2010,14 @@ export function createRunExecutor(deps: ExecutorDeps) {
           selected.pin,
           bot.computer?.kind,
           bot.runtimeExperimental,
+          selected.pin.runtimeKind === "hermes"
+            ? {
+                credentialId: selected.pin.credentialId!,
+                provider: selected.provider,
+                modelId: selected.id,
+                effort: selected.pin.effort!,
+              }
+            : undefined,
         );
         if ("kind" in runtimeSelection) throw new RuntimePinError(runtimeSelection);
         const accountContext = messagingChannelRun
@@ -1846,6 +2053,12 @@ export function createRunExecutor(deps: ExecutorDeps) {
           runtimeKind: selected.pin.runtimeKind,
           version: runtimeSelection.availability.version,
           binding: native?.binding,
+          ...(selected.pin.runtimeKind === "hermes"
+            ? {
+                historyMode: "quoted-system-context" as const,
+                configurationHash: selected.pin.runtimeConfigHash,
+              }
+            : {}),
           ...(["claude-code", "antigravity"].includes(selected.pin.runtimeKind)
             ? { effortAttested: false, effortAttestationReason: null }
             : {}),
@@ -5416,6 +5629,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               threadId: thread.id,
               runId,
               inputReceipt: { leaseFence: fence, deliveryIds: initialReceiptIds },
+              providerPurpose: run.delegationId ? "delegated" : "main",
               acknowledgeInput: async (input) => {
                 if (!scripted && selected.pin.runtimeKind !== "pi")
                   throw new Error("Input acknowledgement is unsupported by this runtime.");
@@ -5444,12 +5658,31 @@ export function createRunExecutor(deps: ExecutorDeps) {
               nativeSession: undefined,
               nativeCwd: computer.kind === "desktop" ? computer.providerRef : undefined,
               onRuntimeInfo: async (info) => {
-                runtimeInfo = { ...runtimeInfo, ...info };
+                runtimeInfo =
+                  selected.pin.runtimeKind === "hermes"
+                    ? {
+                        ...runtimeInfo,
+                        sessionId: info.sessionId,
+                        version: info.version,
+                        binding: info.binding,
+                        historyMode: "quoted-system-context" as const,
+                        effortAttested: false,
+                      }
+                    : { ...runtimeInfo, ...info };
                 const saved = await deps.prisma.run.updateMany({
                   where: { id: runId, leaseOwner: workerId, leaseFence: fence },
                   data: { runtimeInfo },
                 });
                 if (saved.count !== 1) throw new Error("Runtime session ownership was lost.");
+              },
+              onBrokerRuntimeInfo: async (info) => {
+                if (selected.pin.runtimeKind !== "hermes") return;
+                runtimeInfo = { ...runtimeInfo, ...info, effortAttested: false };
+                const saved = await deps.prisma.run.updateMany({
+                  where: { id: runId, leaseOwner: workerId, leaseFence: fence },
+                  data: { runtimeInfo },
+                });
+                if (saved.count !== 1) throw new Error("Provider evidence ownership was lost.");
               },
               script,
               allowSilentEmpty: allowSilentEmptyRun,

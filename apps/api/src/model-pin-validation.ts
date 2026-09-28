@@ -1,4 +1,5 @@
 import {
+  hermesCompatibility,
   listOllamaModels,
   listPiCatalog,
   modelCredentialDto,
@@ -11,6 +12,7 @@ import {
 import type { Actor, RuntimeKind, RuntimePin, UpdateBotInput } from "@ardurbot/contracts";
 import {
   nativeRuntimeProviders,
+  normalizedThinkingLevel,
   ollamaThink,
   RuntimePinSchema,
   ThinkingLevelSchema,
@@ -54,7 +56,7 @@ export async function normalizeModelPinUpdate(
   const provider = input.modelProvider === undefined ? existing.modelProvider : input.modelProvider;
   const modelId = input.modelId === undefined ? existing.modelId : input.modelId;
   const runtimeKind = input.runtimeKind ?? existing.runtimeKind ?? "pi";
-  if (runtimeKind !== "pi") {
+  if (runtimeKind !== "pi" && runtimeKind !== "hermes") {
     if (!(runtimeKind in nativeRuntimeProviders))
       throw new ORPCError("BAD_REQUEST", { message: "Choose a runtime." });
     const nativeProvider =
@@ -90,6 +92,8 @@ export async function normalizeModelPinUpdate(
       modelPinRevision: { increment: 1 },
     };
   }
+  if (!provider && !modelId && runtimeKind === "hermes")
+    throw new ORPCError("BAD_REQUEST", { message: "Choose a connected model for Hermes." });
   if (!provider && !modelId)
     return {
       runtimeKind: "pi",
@@ -103,11 +107,15 @@ export async function normalizeModelPinUpdate(
     throw new ORPCError("BAD_REQUEST", { message: "Choose a provider and model." });
   const unchanged = provider === existing.modelProvider && modelId === existing.modelId;
   const credentialId = input.modelCredentialId ?? (unchanged ? existing.modelCredentialId : null);
+  if (runtimeKind === "hermes" && (!credentialId || credentialId.startsWith("native:")))
+    throw new ORPCError("BAD_REQUEST", { message: "Choose a connected model for Hermes." });
   if (unchanged && !credentialId)
     throw new ORPCError("BAD_REQUEST", { message: "Choose the connection to use." });
   const credential = credentialId
     ? await findBoundModelCredential(deps.prisma, actor, provider, credentialId)
-    : await findModelCredential(deps.prisma, actor, provider, modelId);
+    : runtimeKind === "hermes"
+      ? null
+      : await findModelCredential(deps.prisma, actor, provider, modelId);
   if (!credential)
     throw new ORPCError("BAD_REQUEST", { message: "Connect that model provider first" });
   if (provider === "ollama") {
@@ -129,8 +137,29 @@ export async function normalizeModelPinUpdate(
         ? (input.thinkingLevel ?? (unchanged ? existing.thinkingLevel : null) ?? "medium")
         : null;
       ollamaThink(effort, model);
+      if (runtimeKind === "hermes") {
+        const problem = hermesCompatibility(
+          {
+            runtimeKind,
+            provider,
+            modelId,
+            effort: effort === "off" ? "none" : effort,
+            credentialId: credential.id,
+            revision: 0,
+          },
+          {
+            provider,
+            id: modelId,
+            baseUrl: `${connection.baseUrl}/v1`,
+            contextWindow: model.contextWindow,
+            maxTokens: Math.max(1, Math.min(4096, Math.floor(model.contextWindow / 4))),
+            thinkingLevel: ThinkingLevelSchema.parse(normalizedThinkingLevel(effort)),
+          },
+        );
+        if (problem) throw new ORPCError("BAD_REQUEST", { message: problem.reason });
+      }
       return {
-        runtimeKind: "pi",
+        runtimeKind,
         modelProvider: provider,
         modelId,
         modelCredentialId: credential.id,
@@ -149,6 +178,7 @@ export async function normalizeModelPinUpdate(
   }
   let levels = entry?.thinkingLevels ?? ["off" as const];
   let suggested = suggestedModelEffort(levels);
+  let compatible: ReturnType<typeof modelCredentialDto> | undefined;
   if (provider === "openai-compatible") {
     const secret = await deps.prisma.secret.findFirst({
       where: { id: credential.secretId, userId: actor.userId, spaceId: null },
@@ -159,6 +189,7 @@ export async function normalizeModelPinUpdate(
       credential,
       deps.secrets.load(secret.ciphertext, secret.id),
     );
+    compatible = metadata;
     levels = metadata.thinkingLevels ?? ["off"];
     suggested = metadata.thinkingLevel ?? suggestedModelEffort(levels);
   }
@@ -170,8 +201,22 @@ export async function normalizeModelPinUpdate(
     throw new ORPCError("BAD_REQUEST", {
       message: `Thinking level must be one of: ${levels.join(", ")}`,
     });
+  if (runtimeKind === "hermes") {
+    const problem = hermesCompatibility(
+      { runtimeKind, provider, modelId, effort, credentialId: credential.id, revision: 0 },
+      {
+        provider,
+        id: modelId,
+        baseUrl: compatible?.baseUrl,
+        contextWindow: compatible?.contextWindow,
+        maxTokens: compatible?.maxTokens,
+        thinkingLevel: ThinkingLevelSchema.parse(effort),
+      },
+    );
+    if (problem) throw new ORPCError("BAD_REQUEST", { message: problem.reason });
+  }
   return {
-    runtimeKind: "pi",
+    runtimeKind,
     modelProvider: provider,
     modelId,
     modelCredentialId: credential.id,

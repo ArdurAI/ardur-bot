@@ -8,9 +8,12 @@ import {
   assertHttpsForKeyedOpenAiCompatibleUrl,
 } from "./openai-compatible-url.js";
 import { createOpenAiCompatibleFetch } from "./pi-openai-compatible-provider.js";
+import { requestReservationTokens } from "./request-usage.js";
 
 const MAX_REQUEST_BYTES = 256 * 1024;
-const MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
+// Four raw MiB encode below the hub's six MiB provider-frame allowance.
+// The remainder covers frame overhead and bounded non-provider callbacks.
+const MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
 const MAX_EVENT_BYTES = 512 * 1024;
 const MAX_TOKEN = 2_147_483_647;
 
@@ -37,6 +40,7 @@ export type BrokerScope = {
   leaseFence: number;
   hostGeneration: number;
   configurationHash: string;
+  briefAttemptedAt?: string;
   pin: { credentialId: string; provider: string; modelId: string; effort: string };
 };
 
@@ -92,6 +96,8 @@ export type BrokerOptions = {
   active: () => Promise<boolean>;
   /** A started observation must commit before the provider transport is called. */
   record: (usage: AgentUsage) => Promise<void>;
+  observed?: (model: string | undefined, effort: string | undefined) => Promise<void>;
+  requiredContext?: string;
   fetch?: typeof globalThis.fetch;
 };
 
@@ -328,6 +334,7 @@ function admittedBody(
 
 /** Dormant worker-only broker. The host relay is composed in a later stream. */
 export class HermesProviderBroker {
+  private deliveredBytes = 0;
   readonly grant: BrokerGrant;
   private readonly options: BrokerOptions;
   private readonly allowed: Map<string, JsonObject>;
@@ -426,10 +433,27 @@ export class HermesProviderBroker {
     try {
       const { connection } = this.options;
       const body = admittedBody(request.body, connection, this.options.pinnedEffort, this.allowed);
+      if (this.options.requiredContext) {
+        const text = (body.messages as Array<{ content?: unknown }>)
+          .map((message) =>
+            typeof message.content === "string"
+              ? message.content
+              : Array.isArray(message.content)
+                ? message.content
+                    .map((part: { text?: unknown }) =>
+                      typeof part.text === "string" ? part.text : "",
+                    )
+                    .join("\n")
+                : "",
+          )
+          .join("\n");
+        if (!text.includes(this.options.requiredContext)) denied();
+      }
       const encoded = JSON.stringify(body);
       if (Buffer.byteLength(encoded) > MAX_REQUEST_BYTES) denied();
       await active();
-      const reservedTokens = connection.contextWindow + connection.maxOutputTokens;
+      const outputCap = Number(body.max_tokens ?? body.max_completion_tokens);
+      const reservedTokens = requestReservationTokens(encoded, connection.contextWindow, outputCap);
       if (!bounded(reservedTokens, MAX_TOKEN)) denied();
       const collector = new RequestUsageCollector({
         provider: connection.provider,
@@ -569,11 +593,21 @@ export class HermesProviderBroker {
           await finish("failed");
           throw new Error("Provider model identity is unavailable.");
         }
+        if (this.deliveredBytes + size > MAX_RESPONSE_BYTES) {
+          await finish("failed");
+          throw new Error("Provider response exceeded the turn limit.");
+        }
         if (controller.signal.aborted || this.revoked || Date.now() >= this.grant.expiresAt) {
           await finish(Date.now() >= this.grant.expiresAt ? "timed-out" : "cancelled");
           throw new Error("Provider request was cancelled.");
         }
+        if (response.ok)
+          await this.options.observed?.(
+            observedModel ? connection.modelId : undefined,
+            typeof body.reasoning_effort === "string" ? body.reasoning_effort : undefined,
+          );
         await finish(response.ok ? "success" : "failed");
+        if (response.ok) this.deliveredBytes += size;
         return new Response(response.ok ? bytes : "Provider request failed.", {
           status: response.status,
           headers: { "content-type": response.ok ? mime : "text/plain" },

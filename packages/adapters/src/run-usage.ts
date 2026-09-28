@@ -32,10 +32,30 @@ export type BrokerRunFence = {
   leaseOwner: string;
   leaseFence: number;
   runtimePin: unknown;
+  briefAttemptedAt?: Date;
 };
 
 /** Only newly persisted primary-call measurements belong in the run's context metrics. */
 export type RecordedContextUsage = { inputTokens: number; cachedTokens: number | null };
+
+/** The first durable broker admission fixes this source run's allowance across later turns. */
+export async function brokerRunAllowance(
+  prisma: Pick<PrismaClient, "usageRecord">,
+  runId: string,
+): Promise<number | null> {
+  const rows = await prisma.usageRecord.findMany({
+    where: { runId, observations: { some: { sequence: 0 } } },
+    orderBy: { createdAt: "asc" },
+    select: {
+      observations: { where: { sequence: 0 }, take: 1, select: { observation: true } },
+    },
+  });
+  return (
+    rows
+      .map((row) => parseRequestUsage(row.observations[0]?.observation).admission)
+      .find((admission) => admission?.kind === "worker-provider-broker")?.maxReservedTokens ?? null
+  );
+}
 
 export async function recordRunUsage(
   deps: UsageDependencies,
@@ -79,8 +99,8 @@ export async function recordRunUsage(
     ? await deps.prisma.$transaction(async (tx) => {
         await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${rootTaskId} FOR UPDATE`;
         const tokens = usage.inputTokens + usage.outputTokens;
-        await updateUsageBudget(tx, rootTaskId, delegation?.id, tokens);
         const persisted = await tx.usageRecord.create({ data });
+        await updateUsageBudget(tx, rootTaskId, delegation?.id, run.id, tokens);
         await refreshBotMessageUsageProjectionInTransaction(tx, run.id);
         return persisted;
       })
@@ -225,6 +245,21 @@ async function recordRequestUsage(
           throw new Error("Usage run changed while locking");
         if (delegation)
           delegation = await tx.delegation.findUniqueOrThrow({ where: { id: delegation.id } });
+        let briefLeaseValid = false;
+        if (brokerFence?.briefAttemptedAt && request.purpose === "summary") {
+          await tx.$queryRaw`SELECT id FROM bot_briefs WHERE "botId" = ${run.botId} AND "threadId" = ${run.threadId} FOR NO KEY UPDATE`;
+          const brief = await tx.botBrief.findUnique({
+            where: { botId_threadId: { botId: run.botId, threadId: run.threadId } },
+          });
+          briefLeaseValid = Boolean(
+            brief?.spaceId === run.spaceId &&
+              brief.userId === run.userId &&
+              brief.pendingRunId === run.id &&
+              brief.attemptedAt?.getTime() === brokerFence.briefAttemptedAt.getTime() &&
+              brief.leaseExpiresAt &&
+              brief.leaseExpiresAt > new Date(),
+          );
+        }
         const identity = {
           delegationId: delegation?.id ?? null,
           rootTaskId,
@@ -290,9 +325,14 @@ async function recordRequestUsage(
             !brokerFence ||
             request.counter.sequence !== 0 ||
             request.collection?.outcome !== "started" ||
-            lockedRun.status !== "running" ||
-            lockedRun.leaseOwner !== brokerFence.leaseOwner ||
-            lockedRun.leaseFence !== brokerFence.leaseFence ||
+            !(brokerFence.briefAttemptedAt
+              ? briefLeaseValid &&
+                ["completed", "failed", "cancelled", "waiting_input", "waiting_takeover"].includes(
+                  lockedRun.status,
+                )
+              : lockedRun.status === "running" &&
+                lockedRun.leaseOwner === brokerFence.leaseOwner &&
+                lockedRun.leaseFence === brokerFence.leaseFence) ||
             !isDeepStrictEqual(lockedRun.runtimePin, brokerFence.runtimePin)
           )
             throw new Error("Broker run admission is stale");
@@ -472,6 +512,7 @@ async function recordRequestUsage(
             tx,
             rootTaskId,
             delegation?.id,
+            run.id,
             inputDelta + outputDelta,
             Boolean(historicalBrokerReceipt),
           );
@@ -547,6 +588,7 @@ async function updateUsageBudget(
   tx: Prisma.TransactionClient,
   rootTaskId: string,
   delegationId: string | undefined,
+  runId: string,
   tokens: number,
   retainedPriorAttempt = false,
 ) {
@@ -559,7 +601,27 @@ async function updateUsageBudget(
   }
   const current = await tx.delegation.findUniqueOrThrow({ where: { id: delegationId } });
   const active =
-    !retainedPriorAttempt && ["queued", "running", "cancel-requested"].includes(current.status);
+    !retainedPriorAttempt &&
+    (current.runId === runId || (current.hop === 1 && current.runId === null)) &&
+    ["queued", "running", "cancel-requested"].includes(current.status);
+  const attemptSpent =
+    active && current.hop > 1
+      ? await tx.usageRecord.aggregate({
+          where: {
+            delegationId: current.id,
+            runId,
+            purpose: { not: "detached-learning" },
+          },
+          _sum: { inputTokens: true, outputTokens: true },
+        })
+      : null;
+  // The current observation is already stored; subtract its delta to get the
+  // attempt-local balance immediately before this settlement.
+  const priorAttemptTokens = attemptSpent
+    ? (attemptSpent._sum.inputTokens ?? 0) + (attemptSpent._sum.outputTokens ?? 0) - tokens
+    : current.usedTokens;
+  const attemptLimit =
+    current.hop > 1 ? DELEGATION_LIMITS.reservationTokens : current.reservedTokens;
   await tx.delegation.update({
     where: { id: current.id },
     data: { usedTokens: { increment: tokens } },
@@ -569,9 +631,7 @@ async function updateUsageBudget(
     data: {
       usedTokens: { increment: tokens },
       reservedTokens: {
-        decrement: active
-          ? Math.min(tokens, Math.max(0, current.reservedTokens - current.usedTokens))
-          : 0,
+        decrement: active ? Math.min(tokens, Math.max(0, attemptLimit - priorAttemptTokens)) : 0,
       },
     },
   });
