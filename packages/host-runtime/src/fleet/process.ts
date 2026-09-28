@@ -36,8 +36,10 @@ export const systemFleetProcess: FleetProcess = {
     let size = 0;
     return new Promise((resolve, reject) => {
       const abort = () => {
-        void stopNative(child);
-        reject(new Error("Computer operation stopped."));
+        void stopNative(child).then(
+          () => reject(new Error("Computer operation stopped.")),
+          () => reject(new Error("Computer operation could not stop.")),
+        );
       };
       signal.addEventListener("abort", abort, { once: true });
       const collect = (target: Buffer[], bytes: Buffer) => {
@@ -53,7 +55,12 @@ export const systemFleetProcess: FleetProcess = {
       child.stdin.on("error", () => undefined);
       child.once("close", (code) => {
         signal.removeEventListener("abort", abort);
-        resolve({ stdout: Buffer.concat(stdout), stderr: Buffer.concat(stderr), code: code ?? 1 });
+        if (!signal.aborted)
+          resolve({
+            stdout: Buffer.concat(stdout),
+            stderr: Buffer.concat(stderr),
+            code: code ?? 1,
+          });
       });
       child.stdin.end(input);
       if (signal.aborted) abort();

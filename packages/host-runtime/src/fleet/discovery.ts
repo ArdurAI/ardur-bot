@@ -43,7 +43,11 @@ export function parseDockerContexts(output: string): FleetTarget[] {
   });
 }
 
-export function parseTailscalePeers(output: string, currentUser: string): FleetTarget[] {
+export function parseTailscalePeers(
+  output: string,
+  currentUser: string,
+  includeUnavailable = false,
+): FleetTarget[] {
   const status = JSON.parse(output) as {
     BackendState?: string;
     Peer?: Record<
@@ -64,7 +68,12 @@ export function parseTailscalePeers(output: string, currentUser: string): FleetT
   return Object.values(status.Peer ?? {})
     .slice(0, 512)
     .flatMap((peer) => {
-      if (!peer.Online || peer.OS !== "linux" || !peer.TailscaleIPs?.length) return [];
+      if (
+        (!peer.Online && !includeUnavailable) ||
+        peer.OS !== "linux" ||
+        !peer.TailscaleIPs?.length
+      )
+        return [];
       const host = peer.DNSName?.replace(/\.$/, "") || peer.TailscaleIPs[0];
       // Tags describe ACL roles, not POSIX login names. Only the explicit opt-in convention is used.
       const user =
@@ -83,7 +92,7 @@ export function parseTailscalePeers(output: string, currentUser: string): FleetT
           name: host!,
           kind: "tailscale" as const,
           connectionId: null,
-          state: "discovered" as const,
+          state: peer.Online ? ("discovered" as const) : ("unavailable" as const),
           endpoint: peer.TailscaleIPs[0],
           ssh: ssh.data,
           capacity: unknownCapacity(),
@@ -93,9 +102,18 @@ export function parseTailscalePeers(output: string, currentUser: string): FleetT
     });
 }
 
-export async function discoverFleet(
+export interface FleetDiscoveryReport {
+  targets: FleetTarget[];
+  timedOut: boolean;
+  failed: boolean;
+}
+
+/** Reads local configuration only; the optional signal stops CLI work on cancel. */
+export async function discoverFleetReport(
   processes: FleetProcess = systemFleetProcess,
-): Promise<FleetTarget[]> {
+  signal?: AbortSignal,
+  socketExists: (path: string) => boolean = existsSync,
+): Promise<FleetDiscoveryReport> {
   const targets: FleetTarget[] = [];
   for (const [name, socket, kind] of [
     ["Docker on this Mac", path.join(homedir(), ".docker/run/docker.sock"), "docker"],
@@ -108,7 +126,7 @@ export async function discoverFleet(
       "podman",
     ],
   ] as const)
-    if (existsSync(socket))
+    if (socketExists(socket))
       targets.push({
         id: `socket:${socket}`,
         name,
@@ -119,15 +137,12 @@ export async function discoverFleet(
         capacity: unknownCapacity(),
         bots: [],
       });
+  const deadlines = Array.from({ length: 4 }, () => AbortSignal.timeout(5000));
+  const probeSignal = (index: number) =>
+    signal ? AbortSignal.any([signal, deadlines[index]!]) : deadlines[index]!;
   const results = await Promise.allSettled([
     processes
-      .run(
-        "kubectl",
-        ["config", "view", "--output=json"],
-        AbortSignal.timeout(5000),
-        undefined,
-        1024 * 1024,
-      )
+      .run("kubectl", ["config", "view", "--output=json"], probeSignal(0), undefined, 1024 * 1024)
       .then((result): FleetTarget[] => {
         if (result.code !== 0) return [];
         const config = JSON.parse(result.stdout.toString()) as {
@@ -148,21 +163,17 @@ export async function discoverFleet(
           }));
       }),
     processes
-      .run(
-        "docker",
-        ["context", "ls", "--format", "json"],
-        AbortSignal.timeout(5000),
-        undefined,
-        512 * 1024,
-      )
+      .run("docker", ["context", "ls", "--format", "json"], probeSignal(1), undefined, 512 * 1024)
       .then((result) => (result.code === 0 ? parseDockerContexts(result.stdout.toString()) : [])),
     processes
-      .run("tailscale", ["status", "--json"], AbortSignal.timeout(5000), undefined, 1024 * 1024)
+      .run("tailscale", ["status", "--json"], probeSignal(2), undefined, 1024 * 1024)
       .then((result) =>
-        result.code === 0 ? parseTailscalePeers(result.stdout.toString(), userInfo().username) : [],
+        result.code === 0
+          ? parseTailscalePeers(result.stdout.toString(), userInfo().username, true)
+          : [],
       ),
     processes
-      .run("podman", ["machine", "inspect"], AbortSignal.timeout(5000), undefined, 512 * 1024)
+      .run("podman", ["machine", "inspect"], probeSignal(3), undefined, 512 * 1024)
       .then((result): FleetTarget[] => {
         if (result.code !== 0) return [];
         const machines = JSON.parse(result.stdout.toString()) as {
@@ -171,16 +182,14 @@ export async function discoverFleet(
         }[];
         return machines.flatMap((machine) => {
           const socket = machine.ConnectionInfo?.PodmanSocket?.Path;
-          return machine.State === "running" &&
-            socket &&
-            EngineEndpointSchema.safeParse(socket).success
+          return socket && EngineEndpointSchema.safeParse(socket).success
             ? [
                 {
                   id: `socket:${socket}`,
                   name: "Podman",
                   kind: "podman",
                   connectionId: null,
-                  state: "discovered",
+                  state: machine.State === "running" ? "discovered" : "unavailable",
                   endpoint: socket.startsWith("unix://") ? socket : `unix://${socket}`,
                   capacity: unknownCapacity(),
                   bots: [],
@@ -190,8 +199,9 @@ export async function discoverFleet(
         });
       }),
   ]);
+  signal?.throwIfAborted();
   for (const result of results) if (result.status === "fulfilled") targets.push(...result.value);
-  return targets.filter(
+  const filtered = targets.filter(
     (target, index) =>
       targets.findIndex(
         (other) =>
@@ -199,4 +209,22 @@ export async function discoverFleet(
           (target.endpoint && other.kind === target.kind && other.endpoint === target.endpoint),
       ) === index,
   );
+  return {
+    targets: filtered,
+    timedOut: results.some(
+      (result, index) => result.status === "rejected" && deadlines[index]?.aborted,
+    ),
+    failed: results.some(
+      (result, index) =>
+        result.status === "rejected" &&
+        !deadlines[index]?.aborted &&
+        !(result.reason instanceof Error && result.reason.message.startsWith("Install ")),
+    ),
+  };
+}
+
+export async function discoverFleet(
+  processes: FleetProcess = systemFleetProcess,
+): Promise<FleetTarget[]> {
+  return (await discoverFleetReport(processes)).targets;
 }

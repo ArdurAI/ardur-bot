@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@ardurbot/contracts": "workspace:*",
+    "@ardurbot/host-runtime": "workspace:*",
     "electron-updater": "6.8.9",
     "embedded-postgres": "16.14.0-beta.17",
     "pg": "8.23.0"

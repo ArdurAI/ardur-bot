@@ -1,6 +1,11 @@
 import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
 import { expect, it, vi } from "vitest";
-import { discoverFleet, parseDockerContexts, parseTailscalePeers } from "./discovery.js";
+import {
+  discoverFleet,
+  discoverFleetReport,
+  parseDockerContexts,
+  parseTailscalePeers,
+} from "./discovery.js";
 import { engineCommand } from "./docker-sandbox.js";
 import type { FleetProcess } from "./process.js";
 
@@ -23,6 +28,72 @@ it("reads JSON-lines Docker contexts and preserves every Kubernetes context", as
       .filter((target) => target.kind === "kubernetes")
       .map((target) => target.context),
   ).toEqual(["kind-test", "cluster-test"]);
+});
+
+it("distinguishes empty local discovery from timeout and never probes a Tailscale peer", async () => {
+  const output: Record<string, string> = {
+    kubectl: '{"contexts":[]}',
+    docker: "",
+    tailscale: JSON.stringify({
+      BackendState: "Running",
+      Peer: {
+        one: {
+          ID: "peer",
+          Online: true,
+          OS: "linux",
+          DNSName: "peer.invalid",
+          TailscaleIPs: ["100.64.0.2"],
+        },
+        two: {
+          ID: "offline-peer",
+          Online: false,
+          OS: "linux",
+          DNSName: "offline.invalid",
+          TailscaleIPs: ["100.64.0.3"],
+        },
+      },
+    }),
+    podman: "[]",
+  };
+  const processes: FleetProcess = {
+    start: vi.fn(),
+    run: vi.fn(async (name) => ({
+      code: 0,
+      stdout: Buffer.from(output[name] ?? ""),
+      stderr: Buffer.alloc(0),
+    })),
+  };
+  const report = await discoverFleetReport(processes, new AbortController().signal, () => false);
+  expect(report).toMatchObject({ timedOut: false, failed: false });
+  expect(report.targets.map((target) => target.state)).toEqual(["discovered", "unavailable"]);
+  expect(vi.mocked(processes.run).mock.calls.map(([name]) => name)).toEqual([
+    "kubectl",
+    "docker",
+    "tailscale",
+    "podman",
+  ]);
+  output.tailscale = '{"BackendState":"Stopped"}';
+  const empty = await discoverFleetReport(processes, new AbortController().signal, () => false);
+  expect(empty).toMatchObject({ targets: [], timedOut: false, failed: false });
+
+  vi.useFakeTimers();
+  try {
+    const slow: FleetProcess = {
+      start: vi.fn(),
+      run: vi.fn(async (name, _argv, signal) =>
+        name === "kubectl"
+          ? new Promise<never>((_, reject) =>
+              signal.addEventListener("abort", () => reject(new Error("timeout")), { once: true }),
+            )
+          : { code: 0, stdout: Buffer.from(output[name] ?? ""), stderr: Buffer.alloc(0) },
+      ),
+    };
+    const pending = discoverFleetReport(slow, new AbortController().signal, () => false);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(await pending).toMatchObject({ timedOut: true });
+  } finally {
+    vi.useRealTimers();
+  }
 });
 it("lists only online Linux peers, with MagicDNS, IP and advertised Tailscale SSH", () => {
   const peers = parseTailscalePeers(
