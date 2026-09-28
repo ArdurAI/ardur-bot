@@ -1356,10 +1356,10 @@
           "uiLabels": [
             "Test run",
             "Run history",
-            "Completed"
+            "Done"
           ],
           "screenshotId": "docs-routines-result",
-          "expected": "Run history shows the completed test run.",
+          "expected": "Run history shows the test run as Done.",
           "availableSince": "0.1.0-alpha.1"
         }
       ],

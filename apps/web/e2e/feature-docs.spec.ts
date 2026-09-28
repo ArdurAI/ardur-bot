@@ -233,6 +233,7 @@ test("bots-create: select a computer mode before creating", async ({ page }) => 
   await expect(page).toHaveURL(/\/app\/new-bot$/);
   await expect(page.getByPlaceholder("Message Planner")).toBeVisible();
   await expect(form).toBeHidden();
+  await expectModelReady(page);
   await capture(page, "docs-bots-create-ready");
 });
 
@@ -350,7 +351,7 @@ test("memory-documents: inspect history and approve a reviewed change", async ({
   await suggestions.getByRole("button", { name: "Approve" }).click();
   await expect.poll(() => state.approved).toBe(true);
   await expect(
-    document.getByText("Use concise answers and cite sources.", { exact: true }),
+    document.getByText("Use concise answers and cite sources.", { exact: true }).first(),
   ).toBeVisible();
   await capture(page, "docs-memory-documents-change");
 });
@@ -462,7 +463,9 @@ test("group-goals: start a goal in a room and stop it", async ({ page }) => {
   await expect(page.getByText("Goal: Working", { exact: false })).toBeVisible();
   await panel.getByRole("button", { name: "Close panel" }).click();
   await capture(page, "docs-group-goals-progress");
-  await page.getByRole("button", { name: "Stop", exact: true }).click();
+  await page.getByTestId("bot-settings-trigger").click();
+  await expect(panel).toHaveAttribute("data-panel", "group-settings");
+  await panel.getByRole("button", { name: "Stop", exact: true }).click();
   await expect.poll(() => state.goal?.status, { timeout: 3_000 }).toBe("stopped");
   await expect(page.getByText("Goal: Stopped", { exact: false })).toBeVisible();
   await capture(page, "docs-group-goals-stopped");
