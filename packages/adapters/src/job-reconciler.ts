@@ -4,7 +4,9 @@ import type { MessageBlock } from "@ardurbot/contracts";
 import type { Pool, PrismaClient, ThreadEvents } from "@ardurbot/db";
 import {
   dispatchBotMessageWake,
+  drainParkedPeerRuns,
   expireHeldBotMessages,
+  expireParkedBotMessageWakes,
   expireQuietBotMessages,
   goalExhaustionReason,
   reconcileGoalExhaustion,
@@ -127,6 +129,7 @@ export function createJobReconciler(
   let runCursor: Cursor | undefined;
   let routineCursor: Cursor | undefined;
   let controlCursor: ControlCursor | undefined;
+  let parkedCursor: string | undefined;
   let controlScanDeadline: Date | undefined;
   let nextBriefMaintenanceAt = 0;
   let board: { done: Promise<void>; stop: AbortController } | undefined;
@@ -404,6 +407,22 @@ export function createJobReconciler(
       await reconcileQuietBotMessageClaims(deps.prisma, batchSize).catch((error) =>
         getLogger().error("quiet message claim reconciliation", error),
       );
+      await expireParkedBotMessageWakes(deps.prisma, now, batchSize).catch((error) =>
+        getLogger().error("parked peer wake expiry", error),
+      );
+      const parked = await drainParkedPeerRuns(deps.prisma, batchSize, parkedCursor).catch(
+        (error) => {
+          getLogger().error("parked peer request reconciliation", error);
+          return null;
+        },
+      );
+      if (parked) {
+        parkedCursor = parked.cursor ?? undefined;
+        for (const runId of parked.runIds)
+          await deps.jobs
+            .enqueue(runContinueJob(runId))
+            .catch((error) => getLogger().error("peer request enqueue", error));
+      }
     }
     const pendingPeerWakes = deps.prisma.botMessageWake
       ? await deps.prisma.botMessageWake.findMany({

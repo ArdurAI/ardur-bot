@@ -6,14 +6,53 @@ import {
   canAppendBotMessageToBatch,
 } from "@ardurbot/contracts";
 import { buildBotMessageWakePrompt } from "@ardurbot/core";
-import { lockPeerTrafficPolicy, peerTrafficPaused } from "./bot-comms-policy.js";
+import {
+  checkPeerWakeLimits,
+  lockPeerTrafficPolicy,
+  peerTrafficPaused,
+  recordPeerTrafficBlock,
+} from "./bot-comms-policy.js";
 import type { Prisma, PrismaClient } from "./client.js";
+import { finishDelegation } from "./delegation.js";
 import { appendEventInTransaction } from "./events.js";
 import { createThreadMessageInTransaction } from "./messages.js";
 import { withTransactionRetry } from "./transaction-retry.js";
 
 const RETRY_DELAYS_MS = [30_000, 120_000, 300_000] as const;
 type ThreadCursor = { threadId: string; seq: number };
+
+/** Audits contain durable identifiers and state only; message text stays in scoped threads. */
+export async function appendBotMessageAuditInTransaction(
+  tx: Prisma.TransactionClient,
+  delivery: {
+    id: string;
+    spaceId: string;
+    senderThreadId: string;
+    senderBotId: string;
+    recipientBotId: string;
+    goalId: string | null;
+    rootTaskId: string;
+    intent: string;
+    hop: number;
+  },
+  state: "queued" | "delivered" | "read" | "replied" | "held" | "denied" | "expired",
+) {
+  return appendEventInTransaction(tx, {
+    spaceId: delivery.spaceId,
+    threadId: delivery.senderThreadId,
+    botId: delivery.senderBotId,
+    type: `bot.message.${state}`,
+    payload: {
+      deliveryId: delivery.id,
+      senderBotId: delivery.senderBotId,
+      recipientBotId: delivery.recipientBotId,
+      goalId: delivery.goalId,
+      rootTaskId: delivery.rootTaskId,
+      intent: delivery.intent,
+      hop: delivery.hop,
+    },
+  });
+}
 
 /** Completion orchestration never interpolates the sender's editable display name. */
 export function buildCompletionReviewPrompt(body: string) {
@@ -23,7 +62,7 @@ export function buildCompletionReviewPrompt(body: string) {
 async function projectDeliveryState(
   tx: Prisma.TransactionClient,
   deliveryId: string,
-  state: "read" | "expired" | "failed" | null,
+  state: "read" | "expired" | "failed" | "cancelled" | null,
 ): Promise<ThreadCursor[]> {
   const delivery = await tx.botMessageDelivery.findUniqueOrThrow({ where: { id: deliveryId } });
   const cursors: ThreadCursor[] = [];
@@ -177,6 +216,7 @@ export async function acknowledgeBotMessageInput(
         if (result.count) {
           changed++;
           updatedThreads.push(...(await projectDeliveryState(tx, delivery.id, "read")));
+          await appendBotMessageAuditInTransaction(tx, delivery, "read");
         }
         if (
           delivery.quietClaimRunId === run.id &&
@@ -239,15 +279,16 @@ async function finishWake(
   state: "cancelled" | "failed",
   failureCode: string,
   notice: boolean,
+  receiptState: "failed" | "cancelled" = "failed",
 ): Promise<ThreadCursor[]> {
   await tx.botMessageWake.update({ where: { id: wake.id }, data: { state, nextAttemptAt: null } });
   const updatedThreads: ThreadCursor[] = [];
   for (const id of wake.deliveryIds) {
     const changed = await tx.botMessageDelivery.updateMany({
       where: { id, state: { in: ["queued", "delivered", "read"] }, outcome: null },
-      data: { state: "failed", failureCode, outcome: "failed" },
+      data: { state: receiptState, failureCode, outcome: receiptState },
     });
-    if (changed.count) updatedThreads.push(...(await projectDeliveryState(tx, id, "failed")));
+    if (changed.count) updatedThreads.push(...(await projectDeliveryState(tx, id, receiptState)));
   }
   if (!notice) return updatedThreads;
   const root = await tx.delegationRoot.findUnique({
@@ -421,17 +462,25 @@ export async function appendBotMessageWakeInTransaction(
     recipientThreadId: delivery.recipientThreadId,
     authorityFingerprint: delivery.authorityFingerprint,
   };
-  let open = await tx.botMessageWake.findFirst({ where: { ...key, state: "pending" } });
+  const goal = delivery.goalId
+    ? await tx.teamGoal.findUnique({ where: { id: delivery.goalId }, select: { groupId: true } })
+    : null;
+  const paused = await peerTrafficPaused(tx, {
+    spaceId: delivery.spaceId,
+    userId: delivery.userId,
+    groupId: goal?.groupId,
+  });
+  let open = await tx.botMessageWake.findFirst({
+    where: { ...key, state: paused ? "paused" : "pending" },
+  });
   const queuedRunIds: string[] = [];
   if (
     open &&
     (admissionProblem ||
       !canAppendBotMessageToBatch(open.deliveryIds.length, open.promptCharacters, promptCharacters))
   ) {
-    if (!admissionProblem) {
-      const { runId } = await bindBotMessageWakeInTransaction(tx, open.id);
-      if (runId) queuedRunIds.push(runId);
-    }
+    // Binding takes the shared quota lock before thread locks. The reconciler
+    // performs that admission after this transaction commits.
     const sealed = await tx.botMessageWake.findUniqueOrThrow({ where: { id: open.id } });
     if (sealed.state === "pending")
       await tx.botMessageWake.update({ where: { id: open.id }, data: { state: "sealed" } });
@@ -465,6 +514,7 @@ export async function appendBotMessageWakeInTransaction(
       deliveryIds: [delivery.id],
       promptCharacters,
       clientNonce: `peer-wake:${id}:${generation}`,
+      state: paused ? "paused" : "pending",
       nextAttemptAt: admissionProblem ? new Date(Date.now() + RETRY_DELAYS_MS[0]) : null,
     },
   });
@@ -498,7 +548,9 @@ export async function backfillAutomaticBotMessageWake(prisma: PrismaClient, deli
             where: { id: delivery.sourceDelegationId, coordinatorWokenAt: null },
             data: { coordinatorWokenAt: new Date() },
           });
-        return ["pending", "sealed", "retry_wait"].includes(existing.state) ? existing.id : null;
+        return ["pending", "sealed", "retry_wait", "paused"].includes(existing.state)
+          ? existing.id
+          : null;
       }
       if (!delivery.inboundMessageId) return null;
       const receipt = await tx.message.findUnique({
@@ -551,6 +603,7 @@ async function wakePrompt(tx: Prisma.TransactionClient, deliveryIds: string[], n
           where: { id },
           data: { state: "expired", outcome: "expired" },
         });
+        await appendBotMessageAuditInTransaction(tx, delivery, "expired");
         updatedThreads.push(...(await projectDeliveryState(tx, id, "expired")));
       }
       continue;
@@ -605,14 +658,6 @@ async function bindBotMessageWakeInTransaction(
   const root = await tx.delegationRoot.findUnique({ where: { rootTaskId: wake.rootTaskId } });
   const now = new Date();
   if (
-    await peerTrafficPaused(tx, {
-      spaceId: wake.spaceId,
-      userId: wake.userId,
-      groupId: goal?.groupId,
-    })
-  )
-    return { runId: null, updatedThreads };
-  if (
     !goal ||
     !root ||
     goal.untilAt <= now ||
@@ -621,6 +666,16 @@ async function bindBotMessageWakeInTransaction(
     root.usedTokens >= Math.min(goal.tokenLimit, root.tokenLimit)
   ) {
     updatedThreads.push(...(await finishWake(tx, wake, "cancelled", "goal-unavailable", true)));
+    return { runId: null, updatedThreads };
+  }
+  if (
+    await peerTrafficPaused(tx, {
+      spaceId: wake.spaceId,
+      userId: wake.userId,
+      groupId: goal.groupId,
+    })
+  ) {
+    await tx.botMessageWake.update({ where: { id: wake.id }, data: { state: "paused" } });
     return { runId: null, updatedThreads };
   }
   const thread = await tx.thread.findUnique({
@@ -658,7 +713,9 @@ async function bindBotMessageWakeInTransaction(
     botId: wake.recipientBotId,
   });
   if (authorityFingerprint !== wake.authorityFingerprint) {
-    updatedThreads.push(...(await finishWake(tx, wake, "cancelled", "authority-changed", true)));
+    updatedThreads.push(
+      ...(await finishWake(tx, wake, "cancelled", "authority-changed", true, "cancelled")),
+    );
     return { runId: null, updatedThreads };
   }
   const deferred = await tx.botMessageDelivery.findMany({
@@ -789,6 +846,27 @@ async function bindBotMessageWakeInTransaction(
     });
     return { runId: null, updatedThreads };
   }
+  const limit = await checkPeerWakeLimits(tx, {
+    spaceId: wake.spaceId,
+    userId: wake.userId,
+    goalId: goal.id,
+    now,
+  });
+  if (limit) {
+    await recordPeerTrafficBlock(tx, {
+      spaceId: wake.spaceId,
+      userId: wake.userId,
+      groupId: goal.groupId,
+      goalId: goal.id,
+      reason: limit,
+      now,
+    });
+    await tx.botMessageWake.update({
+      where: { id: wake.id },
+      data: { nextAttemptAt: new Date(now.getTime() + 60_000) },
+    });
+    return { runId: null, updatedThreads };
+  }
   return { runId: await createWakeRunInTransaction(tx, wake, updatedThreads), updatedThreads };
 }
 
@@ -878,6 +956,7 @@ export async function dispatchBotMessageWake(prisma: PrismaClient, wakeId: strin
         return { runId: null, updatedThreads: [] };
       if (candidate.nextAttemptAt && candidate.nextAttemptAt > new Date())
         return { runId: null, updatedThreads: [] };
+      await lockPeerTrafficPolicy(tx, { spaceId: candidate.spaceId, userId: candidate.userId });
       const root = await tx.delegationRoot.findUnique({
         where: { rootTaskId: candidate.rootTaskId },
         select: { coordinatorThreadId: true },
@@ -901,6 +980,213 @@ export async function dispatchBotMessageWake(prisma: PrismaClient, wakeId: strin
       return bindBotMessageWakeInTransaction(tx, wakeId);
     }),
   );
+}
+
+/** Parked coordinator replies leave the normal scan, but still expire on time. */
+export async function expireParkedBotMessageWakes(
+  prisma: PrismaClient,
+  now = new Date(),
+  limit = 100,
+) {
+  const unavailable = await prisma.teamGoal.findMany({
+    where: { OR: [{ status: { not: "running" } }, { untilAt: { lte: now } }] },
+    select: { id: true },
+  });
+  if (!unavailable.length) return 0;
+  const wakes = await prisma.botMessageWake.findMany({
+    where: { state: "paused", goalId: { in: unavailable.map((goal) => goal.id) } },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    take: limit,
+    select: { id: true },
+  });
+  let expired = 0;
+  for (const candidate of wakes)
+    await withTransactionRetry(() =>
+      prisma.$transaction(async (tx) => {
+        const wake = await tx.botMessageWake.findUnique({ where: { id: candidate.id } });
+        if (!wake || wake.state !== "paused") return;
+        const goal = wake.goalId
+          ? await tx.teamGoal.findUnique({ where: { id: wake.goalId } })
+          : null;
+        if (goal?.status === "running" && goal.untilAt > now) return;
+        const root = await tx.delegationRoot.findUnique({
+          where: { rootTaskId: wake.rootTaskId },
+          select: { coordinatorThreadId: true },
+        });
+        for (const threadId of [
+          root?.coordinatorThreadId ?? wake.recipientThreadId,
+          ...[wake.recipientThreadId].filter((id) => id !== root?.coordinatorThreadId),
+        ])
+          await tx.$queryRaw`SELECT id FROM threads WHERE id = ${threadId} FOR UPDATE`;
+        if (root) await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${wake.rootTaskId} FOR UPDATE`;
+        await finishWake(tx, wake, "cancelled", "goal-unavailable", true, "cancelled");
+        expired++;
+      }),
+    );
+  return expired;
+}
+
+/** Release one validated direct request per recipient; later requests wait for that turn. */
+export async function drainParkedPeerRuns(
+  prisma: PrismaClient,
+  limit = 100,
+  afterId?: string,
+): Promise<{ runIds: string[]; cursor: string | null }> {
+  const candidates = await prisma.run.findMany({
+    where: { status: "peer_ready", ...(afterId ? { id: { gt: afterId } } : {}) },
+    orderBy: { id: "asc" },
+    take: limit,
+    select: { id: true },
+  });
+  const runIds: string[] = [];
+  for (const candidate of candidates) {
+    const released = await withTransactionRetry(() =>
+      prisma.$transaction(async (tx) => {
+        const initial = await tx.run.findUnique({ where: { id: candidate.id } });
+        if (!initial || initial.status !== "peer_ready" || !initial.delegationId) return null;
+        const initialDelivery = await tx.botMessageDelivery.findFirst({
+          where: { delegationId: initial.delegationId },
+        });
+        const paused = await lockPeerTrafficPolicy(tx, {
+          spaceId: initial.spaceId,
+          userId: initial.userId,
+          groupId: initialDelivery?.sourceGroupId,
+        });
+        const rootTaskId = initialDelivery?.rootTaskId ?? initial.delegationRootTaskId;
+        const root = rootTaskId
+          ? await tx.delegationRoot.findUnique({ where: { rootTaskId } })
+          : null;
+        for (const threadId of [
+          root?.coordinatorThreadId ?? initial.threadId,
+          ...[initial.threadId].filter((id) => id !== root?.coordinatorThreadId),
+        ])
+          await tx.$queryRaw`SELECT id FROM threads WHERE id = ${threadId} FOR UPDATE`;
+        if (root) await tx.$queryRaw`SELECT id FROM tasks WHERE id = ${root.rootTaskId} FOR UPDATE`;
+        const run = await tx.run.findUniqueOrThrow({ where: { id: candidate.id } });
+        if (run.status !== "peer_ready") return null;
+        if (paused) {
+          await tx.run.update({ where: { id: run.id }, data: { status: "peer_paused" } });
+          return null;
+        }
+        const delivery = await tx.botMessageDelivery.findFirst({
+          where: { delegationId: run.delegationId! },
+        });
+        const goal = delivery?.goalId
+          ? await tx.teamGoal.findFirst({
+              where: {
+                id: delivery.goalId,
+                rootTaskId: delivery.rootTaskId,
+                spaceId: run.spaceId,
+                userId: run.userId,
+                status: "running",
+              },
+            })
+          : null;
+        const delegation = await tx.delegation.findUnique({ where: { id: run.delegationId! } });
+        const group = goal
+          ? await tx.chatGroup.findFirst({
+              where: {
+                id: goal.groupId,
+                spaceId: run.spaceId,
+                userId: run.userId,
+                archivedAt: null,
+                coordinatorBotId: goal.coordinatorBotId,
+                AND: [
+                  { members: { some: { botId: run.botId, bot: { archivedAt: null } } } },
+                  {
+                    members: {
+                      some: { botId: goal.coordinatorBotId, bot: { archivedAt: null } },
+                    },
+                  },
+                ],
+              },
+              select: { id: true },
+            })
+          : null;
+        const now = new Date();
+        const valid = Boolean(
+          delivery &&
+            goal &&
+            group &&
+            root &&
+            delegation?.status === "queued" &&
+            delegation.rootTaskId === root.rootTaskId &&
+            delegation.actingBotId === run.botId &&
+            run.goalId === goal.id &&
+            delivery.sourceGroupId === goal.groupId &&
+            delivery.state === "delivered" &&
+            !delivery.outcome &&
+            delivery.expiresAt > now &&
+            delegation.deadlineAt > now &&
+            goal.untilAt > now &&
+            root.deadlineAt > now &&
+            !root.cancelRequestedAt &&
+            root.usedTokens < Math.min(root.tokenLimit, goal.tokenLimit) &&
+            root.usedTokens + root.reservedTokens <= Math.min(root.tokenLimit, goal.tokenLimit) &&
+            root.activeDescendants <= Math.min(root.maxConcurrent, goal.maxConcurrent) &&
+            delegation.reservedTokens <= goal.perWorkerTokens &&
+            delegation.usedTokens < delegation.reservedTokens &&
+            !run.cancelRequestedAt,
+        );
+        const fingerprint = valid
+          ? await goalBotAuthorityFingerprint(tx, {
+              spaceId: run.spaceId,
+              userId: run.userId,
+              goalId: goal!.id,
+              rootTaskId: root!.rootTaskId,
+              botId: run.botId,
+            })
+          : null;
+        if (!valid || fingerprint !== delivery!.authorityFingerprint) {
+          if (delegation && root) {
+            await finishDelegation(tx, delegation.id, "cancelled", "Peer request no longer valid.");
+            await tx.delegation.update({
+              where: { id: delegation.id },
+              data: { coordinatorWokenAt: now },
+            });
+          }
+          await tx.run.update({
+            where: { id: run.id },
+            data: { status: "cancelled", completedAt: now, cancelConfirmedAt: now },
+          });
+          await tx.task.update({ where: { id: run.taskId }, data: { status: "cancelled" } });
+          if (delivery) {
+            await tx.botMessageDelivery.update({
+              where: { id: delivery.id },
+              data: { state: "cancelled", outcome: "cancelled" },
+            });
+            await projectDeliveryState(tx, delivery.id, "cancelled");
+          }
+          return null;
+        }
+        const active = await tx.run.findFirst({
+          where: {
+            id: { not: run.id },
+            threadId: run.threadId,
+            status: { in: ["queued", "leased", "running", "waiting_input", "waiting_takeover"] },
+          },
+          select: { id: true },
+        });
+        if (active) return null;
+        const limitReason = await checkPeerWakeLimits(tx, {
+          spaceId: run.spaceId,
+          userId: run.userId,
+          goalId: goal!.id,
+          now,
+          excludeDeliveryId: delivery!.id,
+        });
+        if (limitReason) return null;
+        await tx.botMessageDelivery.update({
+          where: { id: delivery!.id },
+          data: { wakeAdmittedAt: now },
+        });
+        await tx.run.update({ where: { id: run.id }, data: { status: "queued" } });
+        return run.id;
+      }),
+    );
+    if (released) runIds.push(released);
+  }
+  return { runIds, cursor: candidates.at(-1)?.id ?? null };
 }
 
 /** Quiet receipts do not have a wake; expiry must still release inbox capacity. */
@@ -929,7 +1215,11 @@ export async function expireQuietBotMessages(prisma: PrismaClient, now = new Dat
         },
         data: { state: "expired", outcome: "expired" },
       });
-      if (changed.count) await projectDeliveryState(tx, row.id, "expired");
+      if (changed.count) {
+        const delivery = await tx.botMessageDelivery.findUniqueOrThrow({ where: { id: row.id } });
+        await appendBotMessageAuditInTransaction(tx, delivery, "expired");
+        await projectDeliveryState(tx, row.id, "expired");
+      }
     });
   return stale.length;
 }
@@ -945,7 +1235,10 @@ export async function expireHeldBotMessages(prisma: PrismaClient, now = new Date
   let expired = 0;
   for (const row of stale)
     await prisma.$transaction(async (tx) => {
-      for (const threadId of [...new Set([row.senderThreadId, row.recipientThreadId])].sort())
+      for (const threadId of [
+        row.senderThreadId,
+        ...[row.recipientThreadId].filter((id) => id !== row.senderThreadId),
+      ])
         await tx.$queryRaw`SELECT id FROM threads WHERE id = ${threadId} FOR UPDATE`;
       const delivery = await tx.botMessageDelivery.findUnique({ where: { id: row.id } });
       if (delivery?.state !== "held" || delivery.expiresAt > now) return;
@@ -953,6 +1246,7 @@ export async function expireHeldBotMessages(prisma: PrismaClient, now = new Date
         where: { id: delivery.id },
         data: { state: "expired", outcome: "expired" },
       });
+      await appendBotMessageAuditInTransaction(tx, delivery, "expired");
       await projectDeliveryState(tx, delivery.id, "expired");
       if (delivery.approvalEffectId)
         await tx.externalEffect.updateMany({
@@ -965,6 +1259,7 @@ export async function expireHeldBotMessages(prisma: PrismaClient, now = new Date
           select: { id: true, taskId: true },
         });
         if (run) {
+          await finishDelegation(tx, delivery.delegationId, "cancelled", "Peer request expired.");
           await tx.run.update({
             where: { id: run.id },
             data: { status: "cancelled", completedAt: now },
@@ -1198,9 +1493,10 @@ export async function refreshBoundBotMessageWakeRun(
           leaseFence: input.leaseFence,
           status: "leased",
         },
-        select: { id: true, taskId: true },
+        select: { id: true, taskId: true, cancelRequestedAt: true },
       });
       if (!run) return false;
+      if (run.cancelRequestedAt) return false;
       const wake = await tx.botMessageWake.findUniqueOrThrow({ where: { id: candidate.id } });
       if (wake.state !== "bound" || wake.runId !== run.id) return false;
       const goal = wake.goalId
@@ -1230,6 +1526,33 @@ export async function refreshBoundBotMessageWakeRun(
       }
       if (!goal || !(await currentCoordinatorGroup(tx, wake, goal))) {
         await finishWake(tx, wake, "cancelled", "group-unavailable", true);
+        await tx.run.update({
+          where: { id: run.id },
+          data: { status: "cancelled", leaseOwner: null, leaseExpiresAt: null },
+        });
+        await tx.task.update({ where: { id: run.taskId }, data: { status: "cancelled" } });
+        return false;
+      }
+      const currentRoot = await tx.delegationRoot.findUnique({
+        where: { rootTaskId: wake.rootTaskId },
+      });
+      const now = new Date();
+      const fingerprint = await goalBotAuthorityFingerprint(tx, {
+        spaceId: wake.spaceId,
+        userId: wake.userId,
+        goalId: goal.id,
+        rootTaskId: wake.rootTaskId,
+        botId: wake.recipientBotId,
+      });
+      if (
+        !currentRoot ||
+        goal.untilAt <= now ||
+        currentRoot.deadlineAt <= now ||
+        currentRoot.cancelRequestedAt ||
+        currentRoot.usedTokens >= Math.min(goal.tokenLimit, currentRoot.tokenLimit) ||
+        fingerprint !== wake.authorityFingerprint
+      ) {
+        await finishWake(tx, wake, "cancelled", "authority-or-goal-changed", true, "cancelled");
         await tx.run.update({
           where: { id: run.id },
           data: { status: "cancelled", leaseOwner: null, leaseExpiresAt: null },
@@ -1273,7 +1596,6 @@ export async function settleBotMessageWakesInTransaction(
   runtimeProblemCode?: string,
 ): Promise<{ continuationRunId: string | null; updatedThreads: ThreadCursor[] }> {
   const wakes = await tx.botMessageWake.findMany({ where: { runId, state: "bound" } });
-  let interrupted = false;
   const updatedThreads: ThreadCursor[] = [];
   for (const wake of wakes) {
     const claimed = wake.steeringMessageId
@@ -1295,7 +1617,6 @@ export async function settleBotMessageWakesInTransaction(
         updatedThreads.push(...(await projectDeliveryState(tx, id, null)));
       continue;
     }
-    interrupted = true;
     if (wake.steeringMessageId)
       await tx.steeringMessage.deleteMany({
         where: {
@@ -1336,30 +1657,7 @@ export async function settleBotMessageWakesInTransaction(
       },
     });
   }
-  if (completed && !interrupted) {
-    const run = await tx.run.findUnique({
-      where: { id: runId },
-      select: { botId: true, threadId: true, delegationRootTaskId: true },
-    });
-    if (run?.delegationRootTaskId) {
-      const pending = await tx.botMessageWake.findFirst({
-        where: {
-          rootTaskId: run.delegationRootTaskId,
-          recipientBotId: run.botId,
-          recipientThreadId: run.threadId,
-          state: { in: ["pending", "sealed"] },
-        },
-        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
-        select: { id: true },
-      });
-      if (pending) {
-        const binding = await bindBotMessageWakeInTransaction(tx, pending.id);
-        return {
-          continuationRunId: binding.runId,
-          updatedThreads: [...updatedThreads, ...binding.updatedThreads],
-        };
-      }
-    }
-  }
+  // Subsequent wakes bind through the independent drain, which takes the
+  // shared quota lock before any thread or root lock.
   return { continuationRunId: null, updatedThreads };
 }

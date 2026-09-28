@@ -17,6 +17,7 @@ import {
   isSecretAskBlock,
   LEGACY_RESTART_SUMMARY,
   messagingChannelId,
+  peerPairKey,
   RECEIPT_FILTERED_SUMMARY_MARKER,
   redactTaskValue,
   resolveAskChoice,
@@ -24,13 +25,20 @@ import {
 } from "@ardurbot/core";
 import { getLogger } from "@ardurbot/logging";
 import {
+  appendBotMessageAuditInTransaction,
   appendBotMessageWakeInTransaction,
   buildCompletionReviewPrompt,
+  dispatchBotMessageWake,
   goalBotAuthorityFingerprint,
   settleBotMessageWakesInTransaction,
   settleQuietBotMessageClaimsInTransaction,
 } from "./bot-comms.js";
-import { peerTrafficPaused } from "./bot-comms-policy.js";
+import {
+  checkPeerWakeLimits,
+  lockPeerTrafficPolicy,
+  peerTrafficPaused,
+  recordPeerTrafficBlock,
+} from "./bot-comms-policy.js";
 import { cancelRunsInTransaction } from "./cancel-runs.js";
 import type { Prisma, PrismaClient } from "./client.js";
 import { materializeCommandEvent } from "./command-blocks.js";
@@ -752,6 +760,26 @@ async function commitAnswerRunInput(
   input: AnswerRunInput,
   runSecretWriter?: RunSecretWriter,
 ): Promise<{ threadId: string; seq: number } | null> {
+  // A held peer approval releases a paid turn. Serialize it with sends and wake
+  // binding before taking any thread/root lock, even when the answer is stale.
+  if (input.answer === "allow") {
+    const candidate = await tx.run.findUnique({
+      where: { id: input.runId },
+      select: { delegationId: true },
+    });
+    if (candidate?.delegationId) {
+      const held = await tx.botMessageDelivery.findFirst({
+        where: { delegationId: candidate.delegationId, state: "held" },
+        select: { spaceId: true, userId: true, sourceGroupId: true },
+      });
+      if (held)
+        await lockPeerTrafficPolicy(tx, {
+          spaceId: held.spaceId,
+          userId: held.userId,
+          groupId: held.sourceGroupId,
+        });
+    }
+  }
   // Thread row first, then run and task rows — the same order as clearThread and finalizeRun, so a
   // concurrent clear cannot deadlock against this transaction.
   await tx.$queryRaw`SELECT id FROM threads WHERE id = ${input.threadId} FOR UPDATE`;
@@ -858,6 +886,25 @@ async function commitAnswerRunInput(
             },
           })
         : null;
+      const wakeLimit = goal
+        ? await checkPeerWakeLimits(tx, {
+            spaceId: peerHold.spaceId,
+            userId: peerHold.userId,
+            goalId: goal.id,
+            now: new Date(),
+          })
+        : null;
+      if (wakeLimit) {
+        await recordPeerTrafficBlock(tx, {
+          spaceId: peerHold.spaceId,
+          userId: peerHold.userId,
+          groupId: goal?.groupId,
+          goalId: goal?.id,
+          reason: wakeLimit,
+          now: new Date(),
+        });
+        return null;
+      }
       if (
         !goal ||
         !root ||
@@ -883,6 +930,8 @@ async function commitAnswerRunInput(
     }
   }
 
+  if (peerHold && input.answer === "deny" && peerHold.delegationId)
+    await finishDelegation(tx, peerHold.delegationId, "cancelled", "Peer request denied.");
   const queued = await tx.run.updateMany({
     where: {
       id: input.runId,
@@ -903,9 +952,12 @@ async function commitAnswerRunInput(
       where: { id: peerHold.id },
       data: {
         state: deliveryState,
-        ...(deliveryState === "delivered" ? { deliveredAt: new Date() } : { outcome: "denied" }),
+        ...(deliveryState === "delivered"
+          ? { deliveredAt: new Date(), wakeAdmittedAt: new Date() }
+          : { outcome: "denied" }),
       },
     });
+    await appendBotMessageAuditInTransaction(tx, peerHold, deliveryState);
     await tx.task.update({
       where: { id: run.taskId },
       data: { status: deliveryState === "denied" ? "cancelled" : "queued" },
@@ -1372,6 +1424,36 @@ export async function finalizeRun(
 ): Promise<FinalizeRunResult | false> {
   const committed = await withTransactionRetry(() => finalizeRunOnce(prisma, input));
   if (!committed) return false;
+  let continuationRunId = committed.continuationRunId;
+  if (input.outcome === "completed" && !continuationRunId) {
+    const run = await prisma.run.findUnique({
+      where: { id: input.runId },
+      select: { delegationRootTaskId: true },
+    });
+    const pending = run?.delegationRootTaskId
+      ? await prisma.botMessageWake.findFirst({
+          where: {
+            rootTaskId: run.delegationRootTaskId,
+            recipientBotId: input.botId,
+            recipientThreadId: input.threadId,
+            state: { in: ["pending", "sealed", "retry_wait"] },
+            OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: new Date() } }],
+          },
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+          select: { id: true },
+        })
+      : null;
+    if (pending) {
+      const dispatched = await dispatchBotMessageWake(prisma, pending.id).catch((error) => {
+        getLogger().error("peer wake admission after finalization", error);
+        return null;
+      });
+      if (dispatched) {
+        continuationRunId = dispatched.runId;
+        committed.updatedThreads.push(...dispatched.updatedThreads);
+      }
+    }
+  }
   try {
     input.onCommitted?.();
   } catch {
@@ -1382,7 +1464,7 @@ export async function finalizeRun(
     await notifyRealtime(realtime, committed.summary.threadId, committed.summary.seq);
   for (const update of committed.updatedThreads)
     await notifyRealtime(realtime, update.threadId, update.seq);
-  return { continuationRunId: committed.continuationRunId };
+  return { continuationRunId };
 }
 
 /** Stamps one turn-level wall-clock duration on the final tool block. */
@@ -1655,6 +1737,7 @@ async function finalizeRunOnce(
                 inReplyToDeliveryId: parent.id,
                 senderBotId: input.botId,
                 recipientBotId: parent.senderBotId,
+                pairKey: peerPairKey(input.botId, parent.senderBotId),
                 senderThreadId: input.threadId,
                 recipientThreadId: parent.senderThreadId,
                 sourceRunId: input.runId,
@@ -1673,6 +1756,8 @@ async function finalizeRunOnce(
                 deliveredAt: now,
               },
             });
+            await appendBotMessageAuditInTransaction(tx, automaticReply, "queued");
+            await appendBotMessageAuditInTransaction(tx, automaticReply, "delivered");
             await tx.botMessageDelivery.update({
               where: { id: parent.id },
               data: {
@@ -1682,6 +1767,7 @@ async function finalizeRunOnce(
                 outcome: "completed",
               },
             });
+            await appendBotMessageAuditInTransaction(tx, parent, "replied");
             const receipt = await tx.message.findUniqueOrThrow({
               where: { id: result.summaryMessageId! },
             });

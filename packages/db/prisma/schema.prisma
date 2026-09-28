@@ -2197,6 +2197,7 @@ model BotMessageDelivery {
   createdAt DateTime @default(now())
   expiresAt DateTime
   deliveredAt DateTime?
+  wakeAdmittedAt DateTime?
   readAt DateTime?
   repliedAt DateTime?
   outcome String?
@@ -2216,6 +2217,7 @@ model BotMessageDelivery {
   @@index([spaceId, userId, pairKey, createdAt])
   @@index([spaceId, userId, createdAt])
   @@index([goalId, createdAt])
+  @@index([spaceId, userId, wakeAdmittedAt])
   @@index([inReplyToDeliveryId])
   @@index([quietClaimRunId, quietClaimLeaseFence])
   @@map("bot_message_deliveries")

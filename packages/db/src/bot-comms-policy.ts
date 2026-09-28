@@ -1,6 +1,7 @@
 import type { Actor, BotCommunicationPolicy, PeerEffectDescriptor } from "@ardurbot/contracts";
 import { PeerEffectDescriptorsSchema } from "@ardurbot/contracts";
 import {
+  effectiveRemoteAuthority,
   PEER_GOAL_SENDS_PER_HOUR,
   PEER_GOAL_WAKES_PER_HOUR,
   PEER_PAIR_PER_MINUTE,
@@ -10,6 +11,9 @@ import {
   peerPairKey,
 } from "@ardurbot/core";
 import type { Prisma, PrismaClient } from "./client.js";
+import { DeviceRequestError } from "./device-grants.js";
+import { loadRemoteAuthority } from "./dispatch.js";
+import { appendEventInTransaction } from "./events.js";
 import { IsolationError } from "./scope.js";
 import { withTransactionRetry } from "./transaction-retry.js";
 
@@ -86,30 +90,40 @@ export async function checkPeerTrafficLimits(
   ]);
   if (goalSends >= PEER_GOAL_SENDS_PER_HOUR) return "goal-traffic";
   if (spaceSends >= PEER_SPACE_SENDS_PER_HOUR) return "space-traffic";
-  if (input.wakes) {
-    const wakeWhere = {
-      ...base,
-      createdAt: { gt: hour },
-      state: { in: ["bound", "consumed"] },
-      runId: { not: null },
-    };
-    const [goalWakes, spaceWakes] = await Promise.all([
-      tx.botMessageWake.count({ where: { ...wakeWhere, goalId: input.goalId } }),
-      tx.botMessageWake.count({ where: wakeWhere }),
-    ]);
-    const directWhere = {
-      ...base,
-      createdAt: { gt: hour },
-      delegationId: { not: null },
-      state: { in: ["delivered", "read", "replied"] },
-    };
-    const [goalDirect, spaceDirect] = await Promise.all([
-      tx.botMessageDelivery.count({ where: { ...directWhere, goalId: input.goalId } }),
-      tx.botMessageDelivery.count({ where: directWhere }),
-    ]);
-    if (goalWakes + goalDirect >= PEER_GOAL_WAKES_PER_HOUR) return "goal-wakes";
-    if (spaceWakes + spaceDirect >= PEER_SPACE_WAKES_PER_HOUR) return "space-wakes";
-  }
+  if (input.wakes) return checkPeerWakeLimits(tx, input);
+  return null;
+}
+
+/** Count actual admitted turns, including later failures and retries, by admission time. */
+export async function checkPeerWakeLimits(
+  tx: Tx,
+  input: Pick<
+    Parameters<typeof checkPeerTrafficLimits>[1],
+    "spaceId" | "userId" | "goalId" | "now"
+  > & {
+    excludeDeliveryId?: string;
+  },
+): Promise<"goal-wakes" | "space-wakes" | null> {
+  const base = { spaceId: input.spaceId, userId: input.userId };
+  const hour = new Date(input.now.getTime() - 3_600_000);
+  const wakeWhere = {
+    ...base,
+    createdAt: { gt: hour },
+    clientNonce: { startsWith: "peer-wake:" },
+  };
+  const directWhere = {
+    ...base,
+    wakeAdmittedAt: { gt: hour },
+    ...(input.excludeDeliveryId ? { id: { not: input.excludeDeliveryId } } : {}),
+  };
+  const [goalWakes, spaceWakes, goalDirect, spaceDirect] = await Promise.all([
+    tx.run.count({ where: { ...wakeWhere, goalId: input.goalId } }),
+    tx.run.count({ where: wakeWhere }),
+    tx.botMessageDelivery.count({ where: { ...directWhere, goalId: input.goalId } }),
+    tx.botMessageDelivery.count({ where: directWhere }),
+  ]);
+  if (goalWakes + goalDirect >= PEER_GOAL_WAKES_PER_HOUR) return "goal-wakes";
+  if (spaceWakes + spaceDirect >= PEER_SPACE_WAKES_PER_HOUR) return "space-wakes";
   return null;
 }
 
@@ -141,6 +155,20 @@ export async function recordPeerTrafficBlock(
   const existing = await tx.peerTrafficBlock.findUnique({
     where: { spaceId_userId_scopeKey_reason_windowKey: key },
   });
+  const goal = input.goalId
+    ? await tx.teamGoal.findFirst({
+        where: { id: input.goalId, spaceId: input.spaceId, userId: input.userId },
+        select: { threadId: true, coordinatorBotId: true },
+      })
+    : null;
+  if (goal)
+    await appendEventInTransaction(tx, {
+      spaceId: input.spaceId,
+      threadId: goal.threadId,
+      botId: goal.coordinatorBotId,
+      type: "bot.traffic.limited",
+      payload: { goalId: input.goalId, scopeKey, reason: input.reason, windowKey },
+    });
   if (existing) {
     await tx.peerTrafficBlock.update({
       where: { id: existing.id },
@@ -196,6 +224,7 @@ export async function setBotCommunicationPaused(
   prisma: PrismaClient,
   actor: Actor,
   input: { scope: "space" | "group"; groupId?: string; paused: boolean; expectedRevision: number },
+  remoteGrant?: { id: string; instanceId: string },
 ) {
   if (!actor.isDeploymentOwner) throw new IsolationError();
   if ((input.scope === "group") !== Boolean(input.groupId))
@@ -203,6 +232,47 @@ export async function setBotCommunicationPaused(
   return withTransactionRetry(() =>
     prisma.$transaction(async (tx) => {
       await scopedGroup(tx, { ...actor, groupId: input.groupId });
+      if (remoteGrant) {
+        if (!input.paused) throw new DeviceRequestError("Resume at home.");
+        await tx.$queryRaw`SELECT id FROM device_grants WHERE id = ${remoteGrant.id} FOR UPDATE`;
+        const liveGrant = await tx.deviceGrant.findFirst({
+          where: {
+            id: remoteGrant.id,
+            instanceId: remoteGrant.instanceId,
+            spaceId: actor.spaceId,
+            userId: actor.userId,
+            revokedAt: null,
+          },
+        });
+        const owner = await tx.deploymentSettings.findUnique({
+          where: { id: "default" },
+          select: { ownerUserId: true },
+        });
+        if (!liveGrant || owner?.ownerUserId !== actor.userId)
+          throw new DeviceRequestError("This action is unavailable from this device.");
+        const affectedBots = await tx.bot.findMany({
+          where: {
+            spaceId: actor.spaceId,
+            userId: actor.userId,
+            archivedAt: null,
+            ...(input.groupId ? { groupMembers: { some: { groupId: input.groupId } } } : {}),
+          },
+          select: { id: true },
+        });
+        if (
+          !affectedBots.length ||
+          !(
+            await Promise.all(
+              affectedBots.map(async (bot) =>
+                effectiveRemoteAuthority(await loadRemoteAuthority(tx, liveGrant, bot.id)).includes(
+                  "stop",
+                ),
+              ),
+            )
+          ).every(Boolean)
+        )
+          throw new DeviceRequestError("This action is unavailable from this device.");
+      }
       // The space row is always first, including group mutations, so admission
       // and pause cannot cross between policy inspection and run creation.
       await lockPeerTrafficPolicy(tx, { spaceId: actor.spaceId, userId: actor.userId });
@@ -234,25 +304,65 @@ export async function setBotCommunicationPaused(
                 pausedByUserId: input.paused ? actor.userId : null,
               },
             });
+      if (current.paused !== input.paused) {
+        const thread = input.groupId
+          ? await tx.thread.findFirst({
+              where: { groupId: input.groupId, spaceId: actor.spaceId, userId: actor.userId },
+              select: { id: true, botId: true },
+            })
+          : await tx.thread.findFirst({
+              where: { spaceId: actor.spaceId, userId: actor.userId, botId: { not: null } },
+              select: { id: true, botId: true },
+            });
+        const group = input.groupId
+          ? await tx.chatGroup.findUnique({
+              where: { id: input.groupId },
+              select: { coordinatorBotId: true },
+            })
+          : null;
+        const botId = group?.coordinatorBotId ?? thread?.botId;
+        if (thread && botId)
+          await appendEventInTransaction(tx, {
+            spaceId: actor.spaceId,
+            threadId: thread.id,
+            botId,
+            type: input.paused ? "bot.traffic.paused" : "bot.traffic.resumed",
+            payload: {
+              scope: input.scope,
+              groupId: input.groupId ?? null,
+              revision: row.revision,
+              actorUserId: actor.userId,
+            },
+          });
+      }
       if (input.paused && !current.paused) {
+        const goals = await tx.teamGoal.findMany({
+          where: {
+            spaceId: actor.spaceId,
+            userId: actor.userId,
+            ...(input.groupId ? { groupId: input.groupId } : {}),
+          },
+          select: { id: true },
+        });
+        const goalIds = goals.map((goal) => goal.id);
         const deliveries = await tx.botMessageDelivery.findMany({
           where: {
             spaceId: actor.spaceId,
             userId: actor.userId,
-            ...(input.groupId ? { sourceGroupId: input.groupId } : {}),
-            state: { in: ["queued", "delivered", "read"] },
-            outcome: null,
+            ...(input.groupId
+              ? { OR: [{ sourceGroupId: input.groupId }, { targetGroupId: input.groupId }] }
+              : {}),
+            delegationId: { not: null },
           },
           select: { id: true, delegationId: true, inboundMessageId: true },
         });
-        const ids = deliveries.map((delivery) => delivery.id);
-        const wakes = ids.length
+        const wakes = goalIds.length
           ? await tx.botMessageWake.findMany({
               where: {
-                deliveryIds: { hasSome: ids },
+                goalId: { in: goalIds },
                 state: { in: ["pending", "sealed", "retry_wait", "bound"] },
               },
-              select: { id: true, runId: true, steeringMessageId: true },
+              select: { id: true, runId: true, steeringMessageId: true, deliveryIds: true },
             })
           : [];
         const directRuns = await tx.run.findMany({
@@ -260,10 +370,18 @@ export async function setBotCommunicationPaused(
             delegationId: {
               in: deliveries.flatMap((d) => (d.delegationId ? [d.delegationId] : [])),
             },
-            status: { in: ["queued", "leased", "running"] },
+            status: { in: ["queued", "peer_ready", "leased", "running"] },
           },
-          select: { id: true },
+          select: { id: true, status: true },
         });
+        const parked = directRuns
+          .filter((run) => run.status === "queued" || run.status === "peer_ready")
+          .map((run) => run.id);
+        if (parked.length)
+          await tx.run.updateMany({
+            where: { id: { in: parked }, status: { in: ["queued", "peer_ready"] } },
+            data: { status: "peer_paused" },
+          });
         const affected = [
           ...new Set([
             ...wakes.flatMap((wake) => (wake.runId && !wake.steeringMessageId ? [wake.runId] : [])),
@@ -272,15 +390,31 @@ export async function setBotCommunicationPaused(
         ];
         if (affected.length)
           await tx.run.updateMany({
-            where: { id: { in: affected }, status: { in: ["queued", "leased", "running"] } },
+            where: { id: { in: affected }, status: { in: ["leased", "running"] } },
             data: { cancelRequestedAt: new Date() },
           });
-        if (wakes.length)
-          await tx.botMessageWake.updateMany({
-            where: { id: { in: wakes.map((wake) => wake.id) } },
-            data: { nextAttemptAt: null },
+        const queuedWakes = wakes.flatMap((wake) =>
+          wake.runId && !wake.steeringMessageId ? [wake.runId] : [],
+        );
+        if (queuedWakes.length)
+          await tx.run.updateMany({
+            where: { id: { in: queuedWakes }, status: "queued" },
+            data: { cancelRequestedAt: new Date() },
           });
-        const messageIds = deliveries.flatMap((delivery) =>
+        const pendingWakes = wakes.filter((wake) => !wake.runId).map((wake) => wake.id);
+        if (pendingWakes.length)
+          await tx.botMessageWake.updateMany({
+            where: { id: { in: pendingWakes } },
+            data: { state: "paused", nextAttemptAt: null },
+          });
+        const wakeDeliveries = wakes.flatMap((wake) => wake.deliveryIds);
+        const inbound = wakeDeliveries.length
+          ? await tx.botMessageDelivery.findMany({
+              where: { id: { in: wakeDeliveries } },
+              select: { inboundMessageId: true },
+            })
+          : [];
+        const messageIds = [...deliveries, ...inbound].flatMap((delivery) =>
           delivery.inboundMessageId ? [delivery.inboundMessageId] : [],
         );
         if (messageIds.length)
@@ -297,14 +431,40 @@ export async function setBotCommunicationPaused(
           },
           select: { id: true },
         });
+        const eligibleGoals: string[] = [];
+        for (const goal of goals) {
+          const row = await tx.teamGoal.findUnique({
+            where: { id: goal.id },
+            select: { groupId: true },
+          });
+          if (
+            row &&
+            !(await peerTrafficPaused(tx, {
+              spaceId: actor.spaceId,
+              userId: actor.userId,
+              groupId: row.groupId,
+            }))
+          )
+            eligibleGoals.push(goal.id);
+        }
         await tx.botMessageWake.updateMany({
           where: {
             spaceId: actor.spaceId,
             userId: actor.userId,
-            goalId: { in: goals.map((goal) => goal.id) },
-            state: { in: ["pending", "sealed", "retry_wait"] },
+            goalId: { in: eligibleGoals },
+            state: "paused",
           },
-          data: { nextAttemptAt: null },
+          data: { state: "pending", nextAttemptAt: null },
+        });
+        await tx.run.updateMany({
+          where: {
+            spaceId: actor.spaceId,
+            userId: actor.userId,
+            goalId: { in: eligibleGoals },
+            status: "peer_paused",
+            delegationId: { not: null },
+          },
+          data: { status: "peer_ready" },
         });
       }
       const effectivePaused = await peerTrafficPaused(tx, { ...actor, groupId: input.groupId });

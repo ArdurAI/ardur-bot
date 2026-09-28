@@ -4,10 +4,12 @@ import type { MessageBlock } from "@ardurbot/contracts";
 import { BOT_MESSAGE_MAX_HOPS, buildBotMessageWakePrompt, peerPairKey } from "@ardurbot/core";
 import {
   acknowledgeBotMessageInput,
+  appendBotMessageAuditInTransaction,
   appendBotMessageWakeInTransaction,
   appendEventInTransaction,
   BotInboxFullError,
   checkPeerTrafficLimits,
+  checkPeerWakeLimits,
   createThreadMessageInTransaction,
   dispatchBotMessageWake,
   goalBotAuthorityFingerprint,
@@ -323,11 +325,15 @@ export async function replyToBotDelivery(
             deliveredAt: now,
           },
         });
+        await appendBotMessageAuditInTransaction(tx, delivery, "queued");
+        await appendBotMessageAuditInTransaction(tx, delivery, "delivered");
         if (input.intent === "result")
           await tx.botMessageDelivery.update({
             where: { id: parent.id },
             data: { replyDeliveryId: delivery.id, state: "replied", repliedAt: now },
           });
+        if (input.intent === "result")
+          await appendBotMessageAuditInTransaction(tx, parent, "replied");
         if (input.intent === "result") {
           for (const messageId of [parent.outboundMessageId, parent.inboundMessageId]) {
             if (!messageId) continue;
@@ -354,12 +360,37 @@ export async function replyToBotDelivery(
             where: { id: parent.delegationId, coordinatorWokenAt: null },
             data: { coordinatorWokenAt: now },
           });
-        const queuedRunIds = await appendBotMessageWakeInTransaction(
-          tx,
-          delivery,
-          buildBotMessageWakePrompt({ from: sender, text: input.message, intent: input.intent })
-            .length,
-        );
+        const resultLimit =
+          input.intent === "result"
+            ? await checkPeerWakeLimits(tx, {
+                spaceId: run.spaceId,
+                userId: run.userId,
+                goalId: goal.id,
+                now,
+              })
+            : null;
+        if (resultLimit) {
+          await recordPeerTrafficBlock(tx, {
+            spaceId: run.spaceId,
+            userId: run.userId,
+            groupId: goal.groupId,
+            goalId: goal.id,
+            reason: resultLimit,
+            now,
+          });
+          await tx.botMessageDelivery.update({
+            where: { id: delivery.id },
+            data: { outcome: "non-waking" },
+          });
+        }
+        const queuedRunIds = resultLimit
+          ? []
+          : await appendBotMessageWakeInTransaction(
+              tx,
+              delivery,
+              buildBotMessageWakePrompt({ from: sender, text: input.message, intent: input.intent })
+                .length,
+            );
         const inboundEvent = await appendEventInTransaction(tx, {
           spaceId: run.spaceId,
           threadId: parent.senderThreadId,

@@ -8,6 +8,7 @@ import {
   GOAL_MAX_HOPS,
   GoalStartInputSchema,
 } from "@ardurbot/contracts";
+import { peerTrafficPaused } from "./bot-comms-policy.js";
 import type { Prisma, PrismaClient, TeamGoal } from "./client.js";
 import { requestCancel, requestCancelInTransaction } from "./delegation.js";
 import { appendEventInTransaction } from "./events.js";
@@ -291,6 +292,22 @@ export async function wakeGoalCoordinatorForDelegation(prisma: PrismaClient, del
         return null;
       const goal = await tx.teamGoal.findUnique({ where: { rootTaskId: row.rootTaskId } });
       if (!goal || goal.spaceId !== row.spaceId || goal.userId !== row.userId) return null;
+      if (row.kind === "message" && row.status === "cancelled") {
+        await tx.delegation.update({
+          where: { id: row.id },
+          data: { coordinatorWokenAt: new Date() },
+        });
+        return null;
+      }
+      if (
+        row.kind === "message" &&
+        (await peerTrafficPaused(tx, {
+          spaceId: goal.spaceId,
+          userId: goal.userId,
+          groupId: goal.groupId,
+        }))
+      )
+        return null;
       const root = await tx.delegationRoot.findUniqueOrThrow({
         where: { rootTaskId: row.rootTaskId },
       });

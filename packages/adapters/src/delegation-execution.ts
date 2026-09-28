@@ -31,7 +31,13 @@ export async function checkDelegationExecution(
       where: { runId, state: "bound" },
       select: { id: true },
     });
-    if (peerDelegation || peerWake) {
+    const peerCoordinatorWake = run.clientNonce?.startsWith("goal-wake:")
+      ? await prisma.delegation.findFirst({
+          where: { id: run.clientNonce.slice("goal-wake:".length), kind: "message" },
+          select: { id: true },
+        })
+      : null;
+    if (peerDelegation || peerWake || peerCoordinatorWake) {
       const goal = await prisma.teamGoal.findUnique({
         where: { id: run.goalId },
         select: { groupId: true },

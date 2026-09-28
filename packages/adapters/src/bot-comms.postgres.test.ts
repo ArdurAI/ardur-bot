@@ -7,11 +7,14 @@ import {
   checkPeerTrafficLimits,
   claimQuietBotMessages,
   claimSteering,
+  confirmDispatchStop,
   createDb,
   createThreadEvents,
   createThreadMessage,
   dispatchBotMessageWake,
+  drainParkedPeerRuns,
   expireHeldBotMessages,
+  expireParkedBotMessageWakes,
   expireQuietBotMessages,
   finalizeRun,
   getBotCommunicationPolicy,
@@ -75,6 +78,19 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
     });
     await prisma.botMessageWake.updateMany({
       where: { spaceId, userId, createdAt: { gt: outsideWindow } },
+      data: { createdAt: outsideWindow },
+    });
+    await prisma.botMessageDelivery.updateMany({
+      where: { spaceId, userId, wakeAdmittedAt: { gt: outsideWindow } },
+      data: { wakeAdmittedAt: outsideWindow },
+    });
+    await prisma.run.updateMany({
+      where: {
+        spaceId,
+        userId,
+        clientNonce: { startsWith: "peer-wake:" },
+        createdAt: { gt: outsideWindow },
+      },
       data: { createdAt: outsideWindow },
     });
   });
@@ -405,6 +421,39 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
     });
   }
 
+  async function fillWakeQuota(f: Awaited<ReturnType<typeof fixture>>, count = 12) {
+    await prisma.botMessageDelivery.createMany({
+      data: Array.from({ length: count }, (_, index) => {
+        const id = randomUUID();
+        return {
+          id,
+          spaceId,
+          userId,
+          goalId: f.goal.id,
+          rootTaskId: f.rootTask.id,
+          conversationId: id,
+          senderBotId: f.coordinator.id,
+          recipientBotId: f.worker.id,
+          senderThreadId: f.room.id,
+          recipientThreadId: f.workerThread.id,
+          sourceRunId: f.coordinatorRun.id,
+          delegationId: `quota-${id}`,
+          intent: "request",
+          outboundMessageId: f.parent.outboundMessageId,
+          inboundMessageId: f.parent.inboundMessageId,
+          state: "delivered",
+          hop: 1,
+          authorityFingerprint: "fixture",
+          requestFingerprint: id,
+          idempotencyKey: `quota-${index}-${id}`,
+          expiresAt: f.goal.untilAt,
+          deliveredAt: new Date(),
+          wakeAdmittedAt: new Date(),
+        };
+      }),
+    });
+  }
+
   it("scopes a two-room directory and rechecks a send after membership changes", async () => {
     const f = await fixture("compatible");
     await prisma.run.update({
@@ -669,6 +718,7 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
     const delivery = await prisma.botMessageDelivery.findFirstOrThrow({
       where: { idempotencyKey: `auto-result:${delegation.id}` },
     });
+    expect(delivery.pairKey).toBe(peerPairKey(f.worker.id, f.coordinator.id));
     const wake = await prisma.botMessageWake.findFirstOrThrow({
       where: { deliveryIds: { has: delivery.id } },
     });
@@ -2655,6 +2705,9 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
 
   it("S4 holds a requested effect once and releases no work after denial", async () => {
     const f = await fixture();
+    const rootBefore = await prisma.delegationRoot.findUniqueOrThrow({
+      where: { rootTaskId: f.rootTask.id },
+    });
     await prisma.instanceIdentity.create({
       data: {
         id: "home",
@@ -2722,6 +2775,10 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
       where: { delegationId: delivery.delegationId! },
     });
     expect(child.status).toBe("waiting_input");
+    expect(
+      (await prisma.delegationRoot.findUniqueOrThrow({ where: { rootTaskId: f.rootTask.id } }))
+        .activeDescendants,
+    ).toBe(rootBefore.activeDescendants + 1);
     expect(f.enqueued).not.toContain(child.id);
     const ask = await prisma.message.findFirstOrThrow({
       where: { threadId: f.room.id, runId: child.id, role: "bot" },
@@ -2749,6 +2806,25 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
     ).toMatchObject({ state: "denied", outcome: "denied" });
     expect((await prisma.run.findUniqueOrThrow({ where: { id: child.id } })).status).toBe(
       "cancelled",
+    );
+    expect(
+      await prisma.delegation.findUniqueOrThrow({ where: { id: delivery.delegationId! } }),
+    ).toMatchObject({ status: "cancelled" });
+    expect(
+      await prisma.delegationRoot.findUniqueOrThrow({ where: { rootTaskId: f.rootTask.id } }),
+    ).toMatchObject({
+      activeDescendants: rootBefore.activeDescendants,
+      reservedTokens: rootBefore.reservedTokens,
+    });
+    const audit = await prisma.event.findMany({
+      where: { threadId: f.room.id, type: { startsWith: "bot.message." } },
+      select: { type: true, payload: true },
+    });
+    expect(audit.map((event) => event.type)).toEqual(
+      expect.arrayContaining(["bot.message.queued", "bot.message.held", "bot.message.denied"]),
+    );
+    expect(JSON.stringify(audit.map((event) => event.payload))).not.toContain(
+      "Prepare the draft for review.",
     );
     expect(
       await f.deps.events.answerRunInput({
@@ -2792,7 +2868,14 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
       message: "Prepare a public draft",
       intent: "request",
       card: { goal: "Prepare a public draft", inputs: [], doneWhen: [], deadlineAt: null },
-      requested_effects: [{ kind: "publish" }],
+      requested_effects: [
+        {
+          kind: "publish",
+          toolName: "publish_public_draft",
+          resourceRef: "public-draft",
+          argsDigest: "a".repeat(64),
+        },
+      ],
       deliveryKey: `s4-revalidate:${f.goal.id}`,
     });
     expect(sent.ok).toBe(true);
@@ -2844,8 +2927,25 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
       where: { id: delivery.id },
       data: { authorityFingerprint: delivery.authorityFingerprint },
     });
+    await fillWakeQuota(f);
+    expect(await answer()).toBe(false);
+    expect(
+      await prisma.event.count({
+        where: { threadId: f.room.id, type: "bot.traffic.limited" },
+      }),
+    ).toBeGreaterThan(0);
+    expect((await prisma.run.findUniqueOrThrow({ where: { id: child.id } })).status).toBe(
+      "waiting_input",
+    );
+    await prisma.botMessageDelivery.updateMany({
+      where: { goalId: f.goal.id, idempotencyKey: { startsWith: "quota-" } },
+      data: { wakeAdmittedAt: new Date(Date.now() - 3_600_001) },
+    });
     expect(await answer()).toBe(true);
     expect((await prisma.run.findUniqueOrThrow({ where: { id: child.id } })).status).toBe("queued");
+    expect(
+      (await prisma.delegation.findUniqueOrThrow({ where: { id: delivery.delegationId! } })).card,
+    ).toMatchObject({ peerMode: "read-only" });
     expect(
       (await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id: delivery.id } })).state,
     ).toBe("delivered");
@@ -2859,6 +2959,9 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
 
   it("S4 expires only its held delivery and closes the owner card", async () => {
     const f = await fixture();
+    const rootBefore = await prisma.delegationRoot.findUniqueOrThrow({
+      where: { rootTaskId: f.rootTask.id },
+    });
     const pin = {
       runtimeKind: "pi" as const,
       provider: "fixture",
@@ -2902,6 +3005,12 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
     expect(
       (await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id: delivery.id } })).state,
     ).toBe("expired");
+    expect(
+      await prisma.delegationRoot.findUniqueOrThrow({ where: { rootTaskId: f.rootTask.id } }),
+    ).toMatchObject({
+      activeDescendants: rootBefore.activeDescendants,
+      reservedTokens: rootBefore.reservedTokens,
+    });
     const ask = await prisma.message.findFirstOrThrow({
       where: { threadId: f.room.id, clientNonce: `peer-hold:bot-message:s4-expire:${f.goal.id}` },
     });
@@ -2940,6 +3049,326 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
       expectedRevision: policy.revision,
     });
     expect(resumed.effectivePaused).toBe(false);
+    expect(
+      (
+        await prisma.event.findMany({
+          where: { threadId: f.room.id, type: { startsWith: "bot.traffic." } },
+          select: { type: true },
+        })
+      ).map((event) => event.type),
+    ).toEqual(expect.arrayContaining(["bot.traffic.paused", "bot.traffic.resumed"]));
+  });
+
+  it("S4 confirms a running peer cancellation without creating a coordinator wake during pause", async () => {
+    const f = await fixture();
+    const actor = { userId, spaceId, email: `${scopeId}@ardurbot.test`, isDeploymentOwner: true };
+    const paused = await setBotCommunicationPaused(prisma, actor, {
+      scope: "group",
+      groupId: f.goal.groupId,
+      paused: true,
+      expectedRevision: 1,
+    });
+    expect(paused.effectivePaused).toBe(true);
+    expect(await confirmDispatchStop(prisma, f.workerRun.id)).toBe(true);
+    await wakeGoalAfterDelegation(f.deps, f.parent.delegationId);
+    expect(
+      await prisma.run.count({
+        where: { goalId: f.goal.id, clientNonce: { startsWith: "goal-wake:" } },
+      }),
+    ).toBe(0);
+    expect(
+      await prisma.delegationRoot.findUniqueOrThrow({ where: { rootTaskId: f.rootTask.id } }),
+    ).toMatchObject({ activeDescendants: 0 });
+  });
+
+  it("S4 fences an incoming reply wake on group pause and rejects changed bound authority", async () => {
+    const f = await fixture();
+    const reply = await replyToBotDelivery(f.deps, f.workerRun, f.worker, {
+      inReplyToDeliveryId: f.parent.id,
+      message: "Draft is ready for review.",
+      intent: "result",
+      deliveryKey: `pause-reply-${f.parent.id}`,
+    });
+    if (!reply.ok) throw new Error(reply.error);
+    const wake = await prisma.botMessageWake.findFirstOrThrow({
+      where: { deliveryIds: { has: reply.deliveryId } },
+    });
+    expect(wake.state).toBe("bound");
+    const actor = { userId, spaceId, email: `${scopeId}@ardurbot.test`, isDeploymentOwner: true };
+    const paused = await setBotCommunicationPaused(prisma, actor, {
+      scope: "group",
+      groupId: f.goal.groupId,
+      paused: true,
+      expectedRevision: 1,
+    });
+    expect(
+      (await prisma.run.findUniqueOrThrow({ where: { id: wake.runId! } })).cancelRequestedAt,
+    ).not.toBeNull();
+    await prisma.remoteAuthorityPolicy.upsert({
+      where: { layer_subjectId: { layer: "bot", subjectId: f.coordinator.id } },
+      create: { layer: "bot", subjectId: f.coordinator.id, scopes: ["read"] },
+      update: { scopes: ["read"] },
+    });
+    await setBotCommunicationPaused(prisma, actor, {
+      scope: "group",
+      groupId: f.goal.groupId,
+      paused: false,
+      expectedRevision: paused.revision,
+    });
+    // A leased executor may reach the pre-input boundary after the owner resumes.
+    await prisma.run.update({
+      where: { id: wake.runId! },
+      data: { status: "leased", leaseOwner: "stale-peer", leaseFence: 1, cancelRequestedAt: null },
+    });
+    expect(
+      await refreshBoundBotMessageWakeRun(prisma, {
+        runId: wake.runId!,
+        leaseOwner: "stale-peer",
+        leaseFence: 1,
+      }),
+    ).toBe(false);
+  });
+
+  it("S4 limits coordinator wake admission even for an already recorded result", async () => {
+    const f = await fixture();
+    await fillWakeQuota(f);
+    const reply = await replyToBotDelivery(f.deps, f.workerRun, f.worker, {
+      inReplyToDeliveryId: f.parent.id,
+      message: "The answer is ready.",
+      intent: "result",
+      deliveryKey: `limited-result-${f.parent.id}`,
+    });
+    if (!reply.ok) throw new Error(reply.error);
+    expect(
+      await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id: reply.deliveryId } }),
+    ).toMatchObject({ outcome: "non-waking" });
+    expect(
+      await prisma.botMessageWake.count({ where: { deliveryIds: { has: reply.deliveryId } } }),
+    ).toBe(0);
+  });
+
+  it("S4 enforces the wake limit when a pending automatic reply is bound", async () => {
+    const f = await fixture();
+    await fillWakeQuota(f);
+    expect(await completeWorker(f, "The draft is ready.")).not.toBe(false);
+    const automatic = await prisma.botMessageDelivery.findFirstOrThrow({
+      where: { idempotencyKey: `auto-result:${f.parent.delegationId}` },
+    });
+    const wake = await prisma.botMessageWake.findFirstOrThrow({
+      where: { deliveryIds: { has: automatic.id } },
+    });
+    expect((await dispatchBotMessageWake(prisma, wake.id)).runId).toBeNull();
+    expect(await prisma.botMessageWake.findUniqueOrThrow({ where: { id: wake.id } })).toMatchObject(
+      {
+        state: "pending",
+        runId: null,
+      },
+    );
+    await prisma.botMessageDelivery.updateMany({
+      where: { goalId: f.goal.id, idempotencyKey: { startsWith: "quota-" } },
+      data: { wakeAdmittedAt: new Date(Date.now() - 3_600_001) },
+    });
+    await prisma.botMessageWake.update({
+      where: { id: wake.id },
+      data: { nextAttemptAt: new Date(0) },
+    });
+    expect((await dispatchBotMessageWake(prisma, wake.id)).runId).toBeTruthy();
+  });
+
+  it("S4 parks paused wake batches outside the eligible scan and expires them separately", async () => {
+    const pausedGoal = await fixture();
+    const liveGoal = await fixture();
+    const fingerprint = await prisma.$transaction((tx) =>
+      goalBotAuthorityFingerprint(tx, {
+        spaceId,
+        userId,
+        goalId: pausedGoal.goal.id,
+        rootTaskId: pausedGoal.rootTask.id,
+        botId: pausedGoal.coordinator.id,
+      }),
+    );
+    await prisma.botMessageWake.createMany({
+      data: Array.from({ length: 101 }, (_, index) => ({
+        spaceId,
+        userId,
+        goalId: pausedGoal.goal.id,
+        rootTaskId: pausedGoal.rootTask.id,
+        recipientBotId: pausedGoal.coordinator.id,
+        recipientThreadId: pausedGoal.room.id,
+        authorityFingerprint: fingerprint,
+        generation: index + 1,
+        deliveryIds: [pausedGoal.parent.id],
+        promptCharacters: 10,
+        clientNonce: `paused-fair-${pausedGoal.goal.id}-${index}`,
+        state: "sealed",
+        createdAt: new Date(Date.now() - 30_000),
+      })),
+    });
+    const live = await prisma.botMessageWake.create({
+      data: {
+        spaceId,
+        userId,
+        goalId: liveGoal.goal.id,
+        rootTaskId: liveGoal.rootTask.id,
+        recipientBotId: liveGoal.coordinator.id,
+        recipientThreadId: liveGoal.room.id,
+        authorityFingerprint: await prisma.$transaction((tx) =>
+          goalBotAuthorityFingerprint(tx, {
+            spaceId,
+            userId,
+            goalId: liveGoal.goal.id,
+            rootTaskId: liveGoal.rootTask.id,
+            botId: liveGoal.coordinator.id,
+          }),
+        ),
+        generation: 1,
+        deliveryIds: [liveGoal.parent.id],
+        promptCharacters: 10,
+        clientNonce: `live-fair-${liveGoal.goal.id}`,
+      },
+    });
+    const actor = { userId, spaceId, email: `${scopeId}@ardurbot.test`, isDeploymentOwner: true };
+    await setBotCommunicationPaused(prisma, actor, {
+      scope: "group",
+      groupId: pausedGoal.goal.groupId,
+      paused: true,
+      expectedRevision: 1,
+    });
+    const eligible = await prisma.botMessageWake.findMany({
+      where: {
+        state: { in: ["pending", "sealed", "retry_wait"] },
+        OR: [{ nextAttemptAt: null }, { nextAttemptAt: { lte: new Date() } }],
+      },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      take: 100,
+      select: { id: true },
+    });
+    expect(eligible.map((item) => item.id)).toContain(live.id);
+    await prisma.teamGoal.update({
+      where: { id: pausedGoal.goal.id },
+      data: { untilAt: new Date(0) },
+    });
+    expect(await expireParkedBotMessageWakes(prisma, new Date(), 1)).toBe(1);
+    expect(
+      await prisma.botMessageWake.count({
+        where: { goalId: pausedGoal.goal.id, state: "cancelled" },
+      }),
+    ).toBe(1);
+  });
+
+  it("S4 resumes only one parked direct request per recipient and settles stale authority", async () => {
+    const f = await fixture();
+    const pin = {
+      runtimeKind: "pi" as const,
+      provider: "fixture",
+      modelId: "fixture",
+      effort: "off",
+      credentialId: "fixture",
+      revision: 0,
+    };
+    await prisma.run.update({
+      where: { id: f.coordinatorRun.id },
+      data: { status: "running", runtimePin: pin },
+    });
+    await prisma.delegationRoot.update({
+      where: { rootTaskId: f.rootTask.id },
+      data: { maxConcurrent: 4 },
+    });
+    await prisma.delegation.update({
+      where: { id: f.parent.delegationId! },
+      data: { parentRunId: f.workerRun.id },
+    });
+    const deps = {
+      ...f.deps,
+      resolveDelegationPin: async () =>
+        ({
+          kind: "resolved",
+          pin,
+          provider: "fixture",
+          id: "fixture",
+          thinkingLevel: "off",
+        }) as never,
+    };
+    const send = (suffix: string) =>
+      messageBot(deps, f.coordinatorRun, f.coordinator, {
+        bot_id: f.worker.id,
+        message: `Prepare public draft ${suffix}`,
+        intent: "request",
+        card: {
+          goal: `Prepare public draft ${suffix}`,
+          inputs: [],
+          doneWhen: [],
+          deadlineAt: null,
+        },
+        requested_effects: [],
+        deliveryKey: `resume-${suffix}-${f.goal.id}`,
+      });
+    expect((await send("a")).ok).toBe(true);
+    expect((await send("b")).ok).toBe(true);
+    const direct = await prisma.botMessageDelivery.findMany({
+      where: { goalId: f.goal.id, idempotencyKey: { startsWith: "bot-message:resume-" } },
+      orderBy: { id: "asc" },
+    });
+    expect(direct).toHaveLength(2);
+    const actor = { userId, spaceId, email: `${scopeId}@ardurbot.test`, isDeploymentOwner: true };
+    const paused = await setBotCommunicationPaused(prisma, actor, {
+      scope: "group",
+      groupId: f.goal.groupId,
+      paused: true,
+      expectedRevision: 1,
+    });
+    expect(
+      await prisma.run.count({
+        where: {
+          delegationId: { in: direct.map((item) => item.delegationId!) },
+          status: "peer_paused",
+        },
+      }),
+    ).toBe(2);
+    expect(await confirmDispatchStop(prisma, f.workerRun.id)).toBe(true);
+    await setBotCommunicationPaused(prisma, actor, {
+      scope: "group",
+      groupId: f.goal.groupId,
+      paused: false,
+      expectedRevision: paused.revision,
+    });
+    const first = await drainParkedPeerRuns(prisma);
+    expect(first.runIds).toHaveLength(1);
+    expect(
+      await prisma.run.count({
+        where: {
+          delegationId: { in: direct.map((item) => item.delegationId!) },
+          status: "peer_ready",
+        },
+      }),
+    ).toBe(1);
+    const remaining = await prisma.run.findFirstOrThrow({
+      where: {
+        delegationId: { in: direct.map((item) => item.delegationId!) },
+        status: "peer_ready",
+      },
+    });
+    const rootBefore = await prisma.delegationRoot.findUniqueOrThrow({
+      where: { rootTaskId: f.rootTask.id },
+    });
+    await prisma.remoteAuthorityPolicy.upsert({
+      where: { layer_subjectId: { layer: "bot", subjectId: f.worker.id } },
+      create: { layer: "bot", subjectId: f.worker.id, scopes: ["read"] },
+      update: { scopes: ["read"] },
+    });
+    await drainParkedPeerRuns(prisma);
+    expect((await prisma.run.findUniqueOrThrow({ where: { id: remaining.id } })).status).toBe(
+      "cancelled",
+    );
+    expect(
+      await prisma.botMessageDelivery.findFirstOrThrow({
+        where: { delegationId: remaining.delegationId! },
+      }),
+    ).toMatchObject({ state: "cancelled", outcome: "cancelled" });
+    expect(
+      (await prisma.delegationRoot.findUniqueOrThrow({ where: { rootTaskId: f.rootTask.id } }))
+        .activeDescendants,
+    ).toBe(rootBefore.activeDescendants - 1);
   });
 
   it("S4 serializes a rolling pair limit across roots", async () => {

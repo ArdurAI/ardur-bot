@@ -21,6 +21,7 @@ import {
 } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import {
+  appendBotMessageAuditInTransaction,
   appendEventInTransaction,
   BotInboxFullError,
   checkPeerTrafficLimits,
@@ -583,7 +584,7 @@ export async function messageBot(
             goalId: goal.id,
             senderBotId: run.botId,
             recipientBotId: target.id,
-            wakes: intent === "request" || intent === "question",
+            wakes: !held && (intent === "request" || intent === "question"),
             now,
           });
           if (turnCount >= 2 || limit) {
@@ -749,7 +750,7 @@ export async function messageBot(
             clientNonce: deliveryKey,
             markUnread: false,
           });
-          await tx.botMessageDelivery.create({
+          const delivery = await tx.botMessageDelivery.create({
             data: {
               id: deliveryId!,
               spaceId: run.spaceId,
@@ -779,6 +780,8 @@ export async function messageBot(
               deliveredAt: now,
             },
           });
+          await appendBotMessageAuditInTransaction(tx, delivery, "queued");
+          await appendBotMessageAuditInTransaction(tx, delivery, "delivered");
           const inboundEvent = await appendEventInTransaction(tx, {
             spaceId: run.spaceId,
             threadId: targetThreadId,
@@ -814,6 +817,8 @@ export async function messageBot(
             card: input.card,
             ...(goal
               ? {
+                  // A complete descriptor is still only an intent to prepare in S4.
+                  // Exact write authority needs its own effect-bound card and gate.
                   peerMode: "read-only" as const,
                   tokens: goal.perWorkerTokens,
                   deadlineAt: new Date(
@@ -943,7 +948,7 @@ export async function messageBot(
         await tx.message.update({ where: { id: inbound.id }, data: { runId: nextRun.id } });
         if (goal && deliveryId) {
           const now = new Date();
-          await tx.botMessageDelivery.create({
+          const delivery = await tx.botMessageDelivery.create({
             data: {
               id: deliveryId,
               spaceId: run.spaceId,
@@ -964,6 +969,7 @@ export async function messageBot(
               inboundMessageId: inbound.id,
               delegationId: admitted.record.id,
               state: held ? "held" : "delivered",
+              wakeAdmittedAt: held ? null : now,
               requestedEffects: effects.data,
               hop,
               authorityFingerprint: authorityFingerprint!,
@@ -973,6 +979,8 @@ export async function messageBot(
               deliveredAt: held ? null : now,
             },
           });
+          await appendBotMessageAuditInTransaction(tx, delivery, "queued");
+          await appendBotMessageAuditInTransaction(tx, delivery, held ? "held" : "delivered");
           if (held) {
             const approvalRequest = {
               deliveryId,
