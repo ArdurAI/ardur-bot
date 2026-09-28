@@ -140,6 +140,95 @@ it("persists runtime-only switches before screen Save and after reload in both d
   await act(async () => root.unmount());
 });
 
+it.each([
+  { kind: "claude-code", label: "Claude Code (your claude sign-in)", provider: "anthropic" },
+  { kind: "codex-app-server", label: "Codex (your ChatGPT sign-in)", provider: "openai-codex" },
+  { kind: "antigravity", label: "Antigravity", provider: "antigravity" },
+] as const)(
+  "recovers a $kind native override through an ordinary connection with Experimental off",
+  async ({ kind, label, provider }) => {
+    vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+    const nativeMember: GroupMember = {
+      ...member,
+      runtimePin: {
+        runtimeKind: kind,
+        provider,
+        modelId: "native-model",
+        credentialId: `native:${kind}`,
+        effort: kind === "antigravity" ? null : "high",
+        revision: 2,
+      },
+    };
+    const updated = {
+      ...member,
+      modelPinRevision: 3,
+      runtimePin: {
+        runtimeKind: "pi" as const,
+        provider: "openai-compatible",
+        modelId: "ordinary-model",
+        credentialId: "connection",
+        effort: "high",
+        revision: 3,
+      },
+    };
+    vi.mocked(rpc).mockResolvedValueOnce({ id: "room", members: [updated] });
+    const node = document.createElement("div");
+    const root = createRoot(node);
+    await act(async () =>
+      root.render(
+        createElement(GroupMemberModelControl, {
+          groupId: "room",
+          member: nativeMember,
+          experimental: false,
+          catalog: [
+            {
+              provider: "openai-compatible",
+              id: "ordinary-model",
+              label: "Ordinary",
+              reasoning: true,
+              thinkingLevels: ["high"],
+            },
+          ],
+          credentials: [
+            {
+              id: "connection",
+              provider: "openai-compatible",
+              label: "Connection",
+              thinkingLevel: "high",
+            },
+          ],
+          onSaved: vi.fn(),
+          onError: vi.fn(),
+        } as never),
+      ),
+    );
+    expect(node.querySelector('button[aria-label="Runtime · Worker"]')).not.toBeNull();
+    expect(node.textContent).toContain(label);
+    await act(async () =>
+      (
+        node.querySelector('button[aria-label="Model in this group · Worker"]') as HTMLButtonElement
+      ).click(),
+    );
+    const sheet = vi.mocked(presentMessageActionSheet).mock.calls.at(-1)![0];
+    await act(async () =>
+      sheet.actions.find((action) => action.text === "openai-compatible · Ordinary")!.onPress(),
+    );
+    expect(rpc).toHaveBeenCalledWith(
+      "groups/setMemberModelPin",
+      expect.objectContaining({
+        pin: expect.objectContaining({
+          runtimeKind: "pi",
+          provider: "openai-compatible",
+          credentialId: "connection",
+        }),
+      }),
+    );
+    expect(node.querySelector('button[aria-label="Runtime · Worker"]')).toBeNull();
+    expect(node.textContent).toContain("openai-compatible · Ordinary");
+    await act(async () => root.unmount());
+  },
+);
+
 it("chooses a compatible Hermes group connection, reads it back, and keeps it on Pi", async () => {
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
   const saved = {

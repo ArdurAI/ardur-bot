@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { runtimeLabels } from "@ardurbot/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("expo-localization", () => ({
@@ -30,6 +31,14 @@ function collectSourceFiles(dir: string): string[] {
 }
 
 describe("mobile i18n", () => {
+  it("translates every shared runtime label in both mobile catalogs", async () => {
+    const { ZH_MESSAGES } = await import("./locales/zh");
+    const { RU_MESSAGES } = await import("./locales/ru");
+    for (const label of Object.values(runtimeLabels)) {
+      expect(RU_MESSAGES[label]).toBeTruthy();
+      expect(ZH_MESSAGES[label]).toBeTruthy();
+    }
+  });
   beforeEach(async () => {
     vi.resetModules();
     const { getItemAsync, setItemAsync } = await import("expo-secure-store");

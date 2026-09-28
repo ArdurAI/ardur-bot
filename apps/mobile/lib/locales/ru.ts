@@ -8,6 +8,8 @@ export const RU_MESSAGES: Record<string, string> = {
   Antigravity: "Antigravity",
   Hermes: "Hermes",
   "Ardur (built-in)": "Ardur (встроенная)",
+  "Claude Code (your claude sign-in)": "Claude Code (вход через ваш аккаунт Claude)",
+  "Codex (your ChatGPT sign-in)": "Codex (вход через ваш аккаунт ChatGPT)",
   Runtime: "Среда выполнения",
   "Model calls per turn": "Вызовы модели за ход",
   "Time limit": "Ограничение времени",

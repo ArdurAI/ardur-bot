@@ -1,4 +1,5 @@
 import type { GroupMember, RuntimeKind, SetGroupMemberModelPinInput } from "@ardurbot/contracts";
+import { runtimeLabels } from "@ardurbot/contracts";
 import { spaceDefaultEffort } from "@ardurbot/core";
 import { useEffect, useMemo, useState } from "react";
 import { Pressable, Text } from "react-native";
@@ -45,6 +46,7 @@ export function GroupMemberModelControl({
   const [pending, setPending] = useState(false);
   const [activeMember, setActiveMember] = useState(member);
   const [draftKind, setDraftKind] = useState<RuntimeKind>(member.runtimePin?.runtimeKind ?? "pi");
+  const connectionKind = draftKind === "hermes" ? "hermes" : "pi";
 
   useEffect(() => {
     setActiveMember(member);
@@ -55,7 +57,10 @@ export function GroupMemberModelControl({
     const currentPin = activeMember.runtimePin;
     const result: Choice[] = [];
     for (const credential of credentials) {
-      if (draftKind === "hermes" && !["openai-compatible", "ollama"].includes(credential.provider))
+      if (
+        connectionKind === "hermes" &&
+        !["openai-compatible", "ollama"].includes(credential.provider)
+      )
         continue;
       const hasSeveralConnections = credentials.some(
         (item) => item.id !== credential.id && item.provider === credential.provider,
@@ -83,7 +88,7 @@ export function GroupMemberModelControl({
         result.push({
           label: `${hasSeveralConnections ? credential.label : (entry.providerName ?? entry.provider)} · ${entry.label}`,
           pin: {
-            runtimeKind: draftKind,
+            runtimeKind: connectionKind,
             provider: entry.provider,
             modelId: entry.id,
             credentialId: credential.id,
@@ -103,7 +108,7 @@ export function GroupMemberModelControl({
         result.push({
           label: `${credential.label} · ${credential.modelId}`,
           pin: {
-            runtimeKind: draftKind,
+            runtimeKind: connectionKind,
             provider: credential.provider,
             modelId: credential.modelId,
             credentialId: credential.id,
@@ -113,7 +118,7 @@ export function GroupMemberModelControl({
       }
     }
     return result;
-  }, [catalog, credentials, activeMember.runtimePin, draftKind]);
+  }, [catalog, credentials, activeMember.runtimePin, connectionKind]);
 
   async function choose(pin: Choice["pin"] | null, preserveCurrentEffort = true) {
     if (!activeMember.memberId || activeMember.modelPinRevision == null || pending) return;
@@ -266,7 +271,7 @@ export function GroupMemberModelControl({
     Boolean(activePin.provider && !["openai-compatible", "ollama"].includes(activePin.provider));
   return (
     <>
-      {experimental || draftKind === "hermes" ? (
+      {experimental || draftKind !== "pi" ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`${t("Runtime")} · ${activeMember.name}`}
@@ -288,9 +293,7 @@ export function GroupMemberModelControl({
           style={{ paddingVertical: 12 }}
         >
           <Text style={{ color: tokens.mutedForeground }}>{t("Runtime")}</Text>
-          <Text style={{ color: tokens.foreground }}>
-            {draftKind === "hermes" ? t("Hermes") : t("Ardur (built-in)")}
-          </Text>
+          <Text style={{ color: tokens.foreground }}>{t(runtimeLabels[draftKind])}</Text>
         </Pressable>
       ) : null}
       <Pressable

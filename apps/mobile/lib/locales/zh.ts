@@ -8,6 +8,8 @@ export const ZH_MESSAGES: Record<string, string> = {
   Antigravity: "Antigravity",
   Hermes: "Hermes",
   "Ardur (built-in)": "Ardur（内置）",
+  "Claude Code (your claude sign-in)": "Claude Code（使用您的 Claude 登录）",
+  "Codex (your ChatGPT sign-in)": "Codex（使用您的 ChatGPT 登录）",
   Runtime: "运行环境",
   "Model calls per turn": "每轮模型调用次数",
   "Time limit": "时间限制",
