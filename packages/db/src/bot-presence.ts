@@ -16,6 +16,21 @@ export async function loadBotPresence(
   } = {},
 ): Promise<{ bots: BotPresence[]; observedAt: string; nextCursor?: string }> {
   const observedAt = new Date();
+  const callerGroups = options.callerBotId
+    ? new Set(
+        (
+          await prisma.chatGroupMember.findMany({
+            where: {
+              botId: options.callerBotId,
+              group: { ...scope, archivedAt: null },
+            },
+            select: { groupId: true },
+          })
+        ).map((member) => member.groupId),
+      )
+    : null;
+  if (options.groupId && callerGroups && !callerGroups.has(options.groupId))
+    return { bots: [], observedAt: observedAt.toISOString() };
   if (options.groupId) {
     const group = await prisma.chatGroup.findFirst({
       where: { id: options.groupId, ...scope, archivedAt: null },
@@ -176,7 +191,9 @@ export async function loadBotPresence(
     );
     return projectBotPresence({
       bot,
-      groupIds: bot.groupMembers.map((member) => member.groupId),
+      groupIds: bot.groupMembers
+        .map((member) => member.groupId)
+        .filter((groupId) => !callerGroups || callerGroups.has(groupId)),
       runs: [
         ...new Map(
           ownRuns.map((run) => [
@@ -205,7 +222,13 @@ export async function loadBotPresence(
         ?.displayName,
       observedAt,
       callerBotId: options.callerBotId,
-      canSend: options.canSend,
+      canSend:
+        options.canSend !== false &&
+        (!options.callerBotId ||
+          !options.visibleGroupId ||
+          options.visibleGroupId === "__desk__" ||
+          (callerGroups?.has(options.visibleGroupId) &&
+            bot.groupMembers.some((member) => member.groupId === options.visibleGroupId))),
       visibleGroupId: options.visibleGroupId ?? options.groupId,
     });
   });

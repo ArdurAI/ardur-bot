@@ -434,6 +434,36 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
     const worker = [...visible.bots, ...next.bots].find((bot) => bot.botId === f.worker.id);
     expect(worker).toMatchObject({ availability: "busy", activeRunCount: 2 });
     expect(worker?.groupIds).toEqual(expect.arrayContaining([f.room.groupId, second.id]));
+    const peerView = await loadBotPresence(
+      prisma,
+      { spaceId, userId },
+      { callerBotId: f.coordinator.id, groupId: f.room.groupId! },
+    );
+    expect(peerView.bots.find((bot) => bot.botId === f.worker.id)?.groupIds).toEqual([
+      f.room.groupId,
+    ]);
+    expect(
+      (
+        await loadBotPresence(
+          prisma,
+          { spaceId, userId },
+          {
+            callerBotId: f.coordinator.id,
+            groupId: second.id,
+          },
+        )
+      ).bots,
+    ).toEqual([]);
+    const secondView = await loadBotPresence(
+      prisma,
+      { spaceId, userId },
+      {
+        callerBotId: f.worker.id,
+        visibleGroupId: second.id,
+        canSend: true,
+      },
+    );
+    expect(secondView.bots.find((bot) => bot.botId === f.coordinator.id)?.canMessage).toBe(false);
     expect((await loadBotPresence(prisma, { spaceId, userId: "other-owner" })).bots).toEqual([]);
     const before = await prisma.botMessageDelivery.count({ where: { spaceId, userId } });
     await prisma.chatGroupMember.delete({
