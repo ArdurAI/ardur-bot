@@ -1757,6 +1757,7 @@ export function ShellPage({
         setEditingRoutine(routine);
         setPanel("routine");
       } else {
+        setWorkspaceTab("routines");
         setPanel("computer");
       }
       const next = new URLSearchParams(searchParams);
@@ -3953,7 +3954,7 @@ export function ShellPage({
                 saving={savingRoutine}
                 running={runningRoutine}
                 error={routineError}
-                onBack={() => setPanel("computer")}
+                onBack={() => { setWorkspaceTab("routines"); setPanel("computer"); }}
                 onClose={() => setPanel(null)}
                 onEnsureWebhook={async () => {
                   await ensureWebhookSecret(active.id);
@@ -4083,6 +4084,7 @@ export function ShellPage({
                     setDeleteRoutineTarget(editingRoutine);
                     return;
                   }
+                  setWorkspaceTab("routines");
                   setPanel("computer");
                 }}
               />
@@ -4485,7 +4487,10 @@ export function ShellPage({
                 setEditingRoutine((current) => (current?.id === target.id ? null : current));
                 if (activeBotId.current !== target.botId) return;
                 await refreshThread(target.botId);
-                if (activeBotId.current === target.botId) setPanel("computer");
+                if (activeBotId.current === target.botId) {
+                  setWorkspaceTab("routines");
+                  setPanel("computer");
+                }
               }}
             />
           </Suspense>
