@@ -32,3 +32,4 @@ export function matchAppShortcut(event: AppShortcutKeys, apple: boolean): AppSho
 export function appShortcutLabel(id: AppShortcutId, apple: boolean): string;
 export function appShortcutAria(id: AppShortcutId, apple: boolean): string;
 export function appShortcutAccelerator(id: AppShortcutId): string;
+export function appShortcutsEnabled(url: string): boolean;

@@ -1,5 +1,9 @@
 import type { AppShortcutId } from "@ardurbot/contracts/app-shortcuts";
-import { APP_SHORTCUTS, appShortcutAccelerator } from "@ardurbot/contracts/app-shortcuts";
+import {
+  APP_SHORTCUTS,
+  appShortcutAccelerator,
+  appShortcutsEnabled,
+} from "@ardurbot/contracts/app-shortcuts";
 import type { BrowserWindow, MenuItemConstructorOptions, WebContents } from "electron";
 
 export const APP_SHORTCUT_CHANNEL = "desktop.shortcuts.run";
@@ -34,18 +38,16 @@ export function appShortcutMenuItem(
   };
 }
 
-/** Brings the app window forward and runs the shortcut there, as its keys would. */
+/**
+ * Runs the shortcut in the app window, only when it is the focused window.
+ * Other windows (in-app sign-in pop-up, Local Server Settings, setup) must not
+ * have their focused actions intercepted by main-window menu shortcuts.
+ */
 export function runAppShortcut(
-  window: Pick<
-    BrowserWindow,
-    "isDestroyed" | "isMinimized" | "restore" | "show" | "focus" | "webContents"
-  > | null,
+  window: Pick<BrowserWindow, "isDestroyed" | "isFocused" | "webContents"> | null,
   id: AppShortcutId,
 ) {
-  if (!window || window.isDestroyed()) return;
-  if (window.isMinimized()) window.restore();
-  window.show();
-  window.focus();
+  if (!window || window.isDestroyed() || !window.isFocused()) return;
   window.webContents.send(APP_SHORTCUT_CHANNEL, id);
 }
 
@@ -110,15 +112,7 @@ export function applicationMenuTemplate(
   ];
 }
 
-/** Shell shortcuts stay off on the IDE page so the editor, including indent, receives the key. */
-export function appShortcutsEnabled(url: string): boolean {
-  try {
-    const pathname = new URL(url, "https://ardurbot.local").pathname.replace(/\/+$/, "") || "/";
-    return pathname !== "/app/ide";
-  } catch {
-    return true;
-  }
-}
+export { appShortcutsEnabled };
 
 type AppShortcutMenu = {
   getMenuItemById(id: string): { enabled: boolean } | null;

@@ -92,7 +92,17 @@ vi.mock("./editor", () => ({
   },
 }));
 
+import { useAppShortcuts } from "../../lib/app-shortcuts";
 import IdePage from "./IdePage";
+
+function IdePageWithShortcuts() {
+  useAppShortcuts({
+    back: vi.fn(),
+    forward: vi.fn(),
+    find: vi.fn(),
+  });
+  return <IdePage />;
+}
 
 let host: HTMLDivElement, renderer: ReturnType<typeof createRoot>;
 const tick = () =>
@@ -170,7 +180,7 @@ beforeEach(async () => {
     renderer.render(
       <BrowserRouter>
         <Routes>
-          <Route path="/app/ide" element={<IdePage />} />
+          <Route path="/app/ide" element={<IdePageWithShortcuts />} />
           <Route path="/app/bots" element={<p>Bots page</p>} />
         </Routes>
       </BrowserRouter>,

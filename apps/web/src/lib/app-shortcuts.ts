@@ -2,6 +2,7 @@ import type { AppShortcutId } from "@ardurbot/contracts/app-shortcuts";
 import {
   appShortcutAria,
   appShortcutLabel,
+  appShortcutsEnabled,
   isAppShortcutId,
   matchAppShortcut,
 } from "@ardurbot/contracts/app-shortcuts";
@@ -75,13 +76,14 @@ export function useAppShortcuts(handlers: AppShortcutHandlers) {
     }
     function onKey(event: KeyboardEvent) {
       if (event.defaultPrevented || event.repeat || event.isComposing) return;
+      if (typeof window !== "undefined" && !appShortcutsEnabled(window.location.href)) return;
       const shortcut = matchAppShortcut(event, apple);
       if (!shortcut) return;
       const target = event.target instanceof Element ? event.target : null;
       const inTerminal = target?.closest("[data-terminal-root]");
       // Swallowed so neither the browser nor the desktop menu leaves the draft.
-      // The terminal is excluded: it keeps the key, including on a Mac where the
-      // menu would otherwise claim a key the page did not cancel.
+      // On a Mac the page sees the key first; xterm leaves Command chords unhandled,
+      // so the menu then runs, and run() refuses it while the terminal has focus.
       if (!inTerminal && !shortcut.typing && target && isTextField(target)) {
         event.preventDefault();
         return;
@@ -93,6 +95,7 @@ export function useAppShortcuts(handlers: AppShortcutHandlers) {
     }
     window.addEventListener("keydown", onKey);
     const stopMenu = desktopBridge()?.shortcuts?.onRun((id) => {
+      if (typeof window !== "undefined" && !appShortcutsEnabled(window.location.href)) return;
       if (isAppShortcutId(id)) run(id, document.activeElement);
     });
     return () => {

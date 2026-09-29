@@ -274,4 +274,20 @@ describe("useAppShortcuts", () => {
     expect(first).not.toHaveBeenCalled();
     expect(second).toHaveBeenCalledOnce();
   });
+
+  it("leaves indent keys and shell shortcuts alone on the IDE route", async () => {
+    setPlatform("MacIntel");
+    window.history.replaceState(null, "", "/app/ide");
+    await act(async () => root.render(<Harness />));
+    const msg = field("Message");
+    // Indent keys Mod-[ and Mod-] on text fields are not swallowed/prevented on /app/ide
+    expect(press(msg, "back", true).defaultPrevented).toBe(false);
+    expect(press(msg, "forward", true).defaultPrevented).toBe(false);
+    expect(handlers.back).not.toHaveBeenCalled();
+    expect(handlers.forward).not.toHaveBeenCalled();
+    // Shortcuts are not run on /app/ide
+    expect(press(document.body, "commandPalette", true).defaultPrevented).toBe(false);
+    expect(handlers.commandPalette).not.toHaveBeenCalled();
+    window.history.replaceState(null, "", "/app/bots");
+  });
 });

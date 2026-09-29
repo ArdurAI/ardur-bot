@@ -112,29 +112,35 @@ describe("desktop application menu", () => {
     ]);
   });
 
-  it("brings the app window forward and hands the shortcut to the page", () => {
+  it("acts only when the focused window is the main window", () => {
     const send = vi.fn();
-    const window = {
+    const focusedWindow = {
       isDestroyed: () => false,
-      isMinimized: () => true,
-      restore: vi.fn(),
-      show: vi.fn(),
-      focus: vi.fn(),
+      isFocused: () => true,
       webContents: { send },
     };
-    runAppShortcut(window as unknown as Parameters<typeof runAppShortcut>[0], "newBot");
-    expect(window.restore).toHaveBeenCalledOnce();
-    expect(window.show).toHaveBeenCalledOnce();
-    expect(window.focus).toHaveBeenCalledOnce();
+    runAppShortcut(focusedWindow as unknown as Parameters<typeof runAppShortcut>[0], "newBot");
     expect(send).toHaveBeenCalledWith(APP_SHORTCUT_CHANNEL, "newBot" satisfies AppShortcutId);
     expect(readFileSync(new URL("./preload.cjs", import.meta.url), "utf8")).toContain(
       `ipcRenderer.on("${APP_SHORTCUT_CHANNEL}"`,
     );
 
     send.mockClear();
+    const unfocusedWindow = {
+      isDestroyed: () => false,
+      isFocused: () => false,
+      webContents: { send },
+    };
+    // While another window (sign-in popup, Local Server Settings, setup) is focused,
+    // a menu shortcut must not act on the main window.
+    runAppShortcut(unfocusedWindow as unknown as Parameters<typeof runAppShortcut>[0], "newBot");
+    expect(send).not.toHaveBeenCalled();
+
     runAppShortcut(null, "back");
     runAppShortcut(
-      { ...window, isDestroyed: () => true } as unknown as Parameters<typeof runAppShortcut>[0],
+      { ...focusedWindow, isDestroyed: () => true } as unknown as Parameters<
+        typeof runAppShortcut
+      >[0],
       "back",
     );
     expect(send).not.toHaveBeenCalled();

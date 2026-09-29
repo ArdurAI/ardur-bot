@@ -80,3 +80,16 @@ export function appShortcutAccelerator(id) {
   const { key, shift } = appShortcut(id);
   return `CmdOrCtrl+${shift ? "Shift+" : ""}${key.toUpperCase()}`;
 }
+
+/**
+ * Shell shortcuts stay off on the IDE page so the editor, including indent, receives the key.
+ * @param {string} url
+ */
+export function appShortcutsEnabled(url) {
+  try {
+    const pathname = new URL(url, "https://ardurbot.local").pathname.replace(/\/+$/, "") || "/";
+    return pathname !== "/app/ide";
+  } catch {
+    return true;
+  }
+}
