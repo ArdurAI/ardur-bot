@@ -2,10 +2,11 @@ import { ChatMarkdown } from "@ardurbot/chat-ui/native";
 import type { MessageBlock } from "@ardurbot/contracts";
 import { workRecordEntries } from "@ardurbot/core";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AccessibilityInfo, Animated, Pressable, Text, View } from "react-native";
+import { Animated, Pressable, Text, View } from "react-native";
 import { mobileTokens } from "../lib/appearance";
 import { useI18n } from "../lib/i18n";
 import { useResolvedAppearance } from "../lib/native";
+import { watchMotionAllowed, workRecordLabel } from "../lib/work-record";
 import { NativeCommandBlock } from "./command-block";
 import { NativeSymbol } from "./native-symbol";
 
@@ -27,32 +28,35 @@ export function CompactWorkRecord({
   const isDone = active.length === 0;
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const [motionAllowed, setMotionAllowed] = useState(false);
+  // Only an active record pulses, and only while Reduce Motion is off; idle
+  // and completed records stay still.
   useEffect(() => {
-    // Only an active record pulses; idle and completed records stay still.
     if (isDone) return;
-    let isActive = true;
-    AccessibilityInfo.isReduceMotionEnabled().then((reduceMotion) => {
-      if (!isActive || reduceMotion) return;
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 0.5,
-            duration: 600,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 1,
-            duration: 600,
-            useNativeDriver: true,
-          }),
-        ]),
-      ).start();
-    });
+    return watchMotionAllowed(setMotionAllowed);
+  }, [isDone]);
+  useEffect(() => {
+    if (isDone || !motionAllowed) return;
+    const pulse = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 0.5,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 600,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    pulse.start();
     return () => {
-      isActive = false;
-      pulseAnim.stopAnimation();
+      pulse.stop();
+      pulseAnim.setValue(1);
     };
-  }, [pulseAnim, isDone]);
+  }, [pulseAnim, isDone, motionAllowed]);
 
   if (entries.length === 0) return null;
 
@@ -62,6 +66,7 @@ export function CompactWorkRecord({
   // reasoning summary included). Expanded, it steps back to the generic label
   // so the full row below is the single copy of that text.
   const headerTitle = expanded ? undefined : currentState?.evidence.title;
+  const status = !isDone ? "working" : failed ? "failed" : "done";
 
   return (
     <View style={{ marginVertical: 8, width: "100%" }}>
@@ -74,6 +79,7 @@ export function CompactWorkRecord({
           minHeight: 44,
         }}
         accessibilityRole="button"
+        accessibilityLabel={workRecordLabel(status, currentState?.evidence.title ?? "")}
         accessibilityState={{ expanded }}
       >
         <View style={{ flex: 1, flexDirection: "row", alignItems: "center", gap: 8 }}>
@@ -127,7 +133,7 @@ export function CompactWorkRecord({
             numberOfLines={1}
             ellipsizeMode="tail"
           >
-            {headerTitle ?? (isDone ? t("Done") : t("Working"))}
+            {headerTitle ?? (!isDone ? t("Working") : failed ? t("Failed") : t("Done"))}
             {currentState?.evidence.outcome === "pending" && " ..."}
           </Text>
         </View>

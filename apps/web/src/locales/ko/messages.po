@@ -3543,6 +3543,10 @@ msgstr ""
 msgid "Done when (one per line)"
 msgstr "완료 조건 (한 줄에 하나씩)"
 
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Done: {title}"
+msgstr "완료: {title}"
+
 #. placeholder {0}: props.name
 #: src/components/ArtifactFileCard.tsx
 msgid "Download {0}"
@@ -3859,6 +3863,7 @@ msgstr ""
 msgid "failed"
 msgstr "실패"
 
+#: src/components/ai/CompactWorkRecord.tsx
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/run-status-label.ts
 #: src/lib/team-delivery-text.ts
@@ -3883,6 +3888,10 @@ msgstr "메시지를 보내지 못했습니다."
 #: src/pages/Shell.tsx
 msgid "Failed to stop"
 msgstr "작업을 중지하지 못했습니다."
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Failed: {title}"
+msgstr "실패: {title}"
 
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Failure handling"
@@ -9033,6 +9042,10 @@ msgstr "{task} 작업 중"
 #: src/pages/TeamBoard.tsx
 msgid "Working on {task} for {0}"
 msgstr "{0}님을 위해 {task} 작업 중"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Working: {title}"
+msgstr "진행 중: {title}"
 
 #: src/pages/Auth.tsx
 #: src/pages/CallView.tsx

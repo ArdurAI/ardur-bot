@@ -553,6 +553,7 @@ export const RU_MESSAGES: Record<string, string> = {
   "Describe what this bot does": "Опишите, что делает этот бот",
   "Don’t have an account?": "Нет аккаунта?",
   Done: "Готово",
+  "Done: {title}": "Готово: {title}",
   Disconnect: "Отключить",
   "Disconnecting…": "Отключение…",
   Email: "Электронная почта",
@@ -565,6 +566,7 @@ export const RU_MESSAGES: Record<string, string> = {
   "Enter this code in your browser:": "Введите этот код в браузере:",
   "Executor token": "Токен Executor",
   Failed: "Ошибка",
+  "Failed: {title}": "Ошибка: {title}",
   "Failed to refresh": "Не удалось обновить",
   "Failed to send message": "Не удалось отправить сообщение",
   "Failed to stop work": "Не удалось остановить работу",
@@ -790,6 +792,7 @@ export const RU_MESSAGES: Record<string, string> = {
   "What this bot is for": "Для чего нужен этот бот",
   "While agents are working": "Пока агенты работают",
   Working: "Выполняется",
+  "Working: {title}": "Выполняется: {title}",
   "Working…": "Выполняется…",
   "Work stopped, but the thread could not refresh: {detail}":
     "Работа остановлена, но диалог не удалось обновить: {detail}",

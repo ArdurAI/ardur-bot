@@ -268,11 +268,14 @@ export function reduceLiveMessageBlocks(
   const category = updateCategory ?? (tailProgress ? progressCategory(tailProgress) : "narration");
 
   if (pendingToolNames.length > 0 && endsSentence(tailText)) {
-    // Activity and reasoning tails never flush into durable reply text.
-    let next =
-      category === "activity" || category === "reasoning"
-        ? [...segments]
-        : appendTextSegment(segments, tailText);
+    // Activity and reasoning tails never flush into durable reply text. A
+    // generated activity title is redundant once its step lands, so the step
+    // replaces it; a reasoning summary stays whole ahead of the step.
+    let next: MessageBlock[];
+    if (category === "narration") next = appendTextSegment(segments, tailText);
+    else if (category === "reasoning" && tailText.trim())
+      next = [...segments, { kind: "progress", text: tailText, reasoning: true }];
+    else next = [...segments];
     for (const name of pendingToolNames) next = appendToolCallSegment(next, name);
     return next;
   }

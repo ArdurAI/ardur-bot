@@ -78,6 +78,7 @@ import {
   inferAttachmentMimeType,
   isMessagingChannelRun,
   isOneShotRoutineCrons,
+  isReasoningSummaryBlock,
   isTerminal,
   messagingChannelId,
   messagingChannelPrivacyBlock,
@@ -5969,6 +5970,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 pendingProgress = "";
                 lastProgressAt = Date.now();
               }
+              const safeText = redactSecrets(event.text, runSecrets);
               await deps.events.append({
                 spaceId: run.spaceId,
                 threadId: thread.id,
@@ -5976,11 +5978,20 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 type: run.delegationId ? "delegation.progress" : "thread.progress",
                 runId,
                 payload: {
-                  text: redactSecrets(event.text, runSecrets),
+                  text: safeText,
                   ...(event.activity ? { activity: true } : {}),
                   ...(event.reasoning ? { reasoning: true } : {}),
                 },
               });
+              // The live beat clears when the run finishes, so the finished work record
+              // keeps the summary itself. The record renders apart from the bubble, so
+              // reply text streaming around it stays one block.
+              if (event.reasoning && !event.activity && safeText.trim()) {
+                messageSegments = [
+                  ...messageSegments,
+                  { kind: "progress", text: safeText, reasoning: true },
+                ];
+              }
             } else if (event.type === "ask") {
               if (!(await renewRunLease(deps, runId, workerId, fence))) return;
               const safeText = redactSecrets(event.text, runSecrets);
@@ -6814,7 +6825,8 @@ export function completionMessageSegments(
 ): MessageBlock[] {
   if (options?.suppressOutput) return [];
   const fallback = options?.emptyResponseText?.trim() || "done.";
-  if (segments.length > 0) {
+  // A reasoning summary annotates work; on its own the turn produced nothing.
+  if (segments.some((segment) => !isReasoningSummaryBlock(segment))) {
     if (
       !options?.allowSilentEmpty &&
       options?.emptyResponseText !== undefined &&
@@ -6825,7 +6837,7 @@ export function completionMessageSegments(
     return segments;
   }
   if (options?.allowSilentEmpty || options?.skipEmptyFallback) return [];
-  return [{ kind: "text", text: fallback }];
+  return [...segments, { kind: "text", text: fallback }];
 }
 
 /** User-facing text for completion notifications; empty when only tool/step activity remains. */
@@ -6984,7 +6996,13 @@ function redactBlocks(blocks: MessageBlock[], secrets: string[]): MessageBlock[]
     if (block.kind === "text") {
       return { kind: "text" as const, text: redactSecrets(block.text, secrets) };
     }
-    if (block.kind === "bot_message_sent" || block.kind === "bot_message_received") {
+    // A kept reasoning summary was redacted when it streamed; a secret added later in
+    // the run is still caught here, as it is for text.
+    if (
+      block.kind === "progress" ||
+      block.kind === "bot_message_sent" ||
+      block.kind === "bot_message_received"
+    ) {
       return { ...block, text: redactSecrets(block.text, secrets) };
     }
     return block;

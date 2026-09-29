@@ -1,4 +1,6 @@
+import type { MessageBlock } from "@ardurbot/contracts";
 import { describe, expect, it } from "vitest";
+import type { LiveMessageUpdate } from "./events.js";
 import {
   appendTextSegment,
   appendToolCallSegment,
@@ -18,7 +20,7 @@ import {
   trackToolNameStreak,
 } from "./events.js";
 import { redactLearningText } from "./learning-signals.js";
-import { isInterimNarrationAt } from "./tool-activity.js";
+import { isInterimNarrationAt, isReasoningSummaryBlock } from "./tool-activity.js";
 import { workRecordEntries } from "./work-record.js";
 
 describe("containsSecret", () => {
@@ -81,12 +83,14 @@ describe("reduceLiveMessageBlocks", () => {
     ).toEqual([{ kind: "progress", text: "Weighing options.", reasoning: true }]);
 
     // A tool call after a punctuated reasoning summary keeps it out of the
-    // durable text segments, unlike ordinary narration.
+    // durable text segments, unlike ordinary narration, and keeps the summary
+    // itself ahead of the step instead of replacing it.
     const reasoning = reduceLiveMessageBlocks([], {
       type: "progress",
       payload: { text: "Weighing options.", reasoning: true },
     });
     expect(reduceLiveMessageBlocks(reasoning, { type: "tool", name: "shell" })).toEqual([
+      { kind: "progress", text: "Weighing options.", reasoning: true },
       { kind: "steps", steps: [{ label: "Shell", count: 1 }] },
     ]);
 
@@ -411,6 +415,80 @@ describe("reduceLiveMessageBlocks transition matrix", () => {
         .filter((step) => step.label === "Shell")
         .reduce((total, step) => total + step.count, 0);
       expect(shells).toBe(1);
+      expect(
+        closed.some((block) => "pendingToolNames" in block && block.pendingToolNames?.length),
+      ).toBe(false);
+    },
+  );
+
+  // A punctuated tail, then a tool call. Narration flushes into reply text and
+  // a reasoning summary stays whole, both ahead of the step; only a generated
+  // activity title is redundant once its step lands, so the step replaces it.
+  // Held names sit on the tail until a same-category delta ends its sentence
+  // ("held"), or ride across a category seal onto the punctuated tail
+  // ("carried").
+  const pendingKinds = ["none", "held", "carried"] as const;
+  const sealedBy = (category: LiveCategory): LiveCategory =>
+    category === "narration" ? "activity" : "narration";
+  const toolCases = categories.flatMap((tail) =>
+    pendingKinds.map((pending) => {
+      const tailText = pending === "held" ? "Alpha beta." : "Alpha.";
+      const kept =
+        tail === "narration"
+          ? [{ kind: "text" as const, text: tailText }]
+          : tail === "reasoning"
+            ? [progressBlock("reasoning", tailText)]
+            : [];
+      const head = pending === "carried" ? [progressBlock(sealedBy(tail), "Intro")] : [];
+      const steps =
+        pending === "none"
+          ? [{ label: "Shell", count: 1 }]
+          : [
+              { label: "Read file", count: 1 },
+              { label: "Shell", count: 1 },
+            ];
+      return { tail, pending, expected: [...head, ...kept, { kind: "steps" as const, steps }] };
+    }),
+  );
+
+  it.each(toolCases)(
+    "punctuated $tail tail then a tool call ($pending pending names) loses no block",
+    (entry) => {
+      const progress = (category: LiveCategory, text: string, delta: boolean) => ({
+        type: "progress" as const,
+        payload: categoryPayload(category, text, delta),
+      });
+      const updates: LiveMessageUpdate[] =
+        entry.pending === "carried"
+          ? [
+              progress(sealedBy(entry.tail), "Intro", false),
+              { type: "tool", name: "read_file" },
+              progress(entry.tail, "Alpha.", false),
+            ]
+          : entry.pending === "held"
+            ? [
+                progress(entry.tail, "Alpha", false),
+                { type: "tool", name: "read_file" },
+                progress(entry.tail, " beta.", true),
+              ]
+            : [progress(entry.tail, "Alpha.", false)];
+      const before = updates.reduce<MessageBlock[]>(reduceLiveMessageBlocks, []);
+      const closed = reduceLiveMessageBlocks(before, { type: "tool", name: "shell" });
+      expect(closed).toEqual(entry.expected);
+
+      // The summary survives with its marker, every name became a step exactly
+      // once, and nothing still holds a name.
+      expect(closed.filter(isReasoningSummaryBlock)).toHaveLength(
+        entry.tail === "reasoning" ? 1 : 0,
+      );
+      const counts: Record<string, number> = {};
+      for (const block of closed) {
+        if (block.kind !== "steps") continue;
+        for (const step of block.steps) counts[step.label] = (counts[step.label] ?? 0) + step.count;
+      }
+      expect(counts).toEqual(
+        entry.pending === "none" ? { Shell: 1 } : { "Read file": 1, Shell: 1 },
+      );
       expect(
         closed.some((block) => "pendingToolNames" in block && block.pendingToolNames?.length),
       ).toBe(false);

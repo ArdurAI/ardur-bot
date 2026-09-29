@@ -3543,6 +3543,10 @@ msgstr ""
 msgid "Done when (one per line)"
 msgstr "पूर्ण होने की शर्तें (प्रति पंक्ति एक)"
 
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Done: {title}"
+msgstr "पूर्ण: {title}"
+
 #. placeholder {0}: props.name
 #: src/components/ArtifactFileCard.tsx
 msgid "Download {0}"
@@ -3859,6 +3863,7 @@ msgstr ""
 msgid "failed"
 msgstr "असफल"
 
+#: src/components/ai/CompactWorkRecord.tsx
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/run-status-label.ts
 #: src/lib/team-delivery-text.ts
@@ -3883,6 +3888,10 @@ msgstr "संदेश भेजने में विफल"
 #: src/pages/Shell.tsx
 msgid "Failed to stop"
 msgstr "रोकने में विफल"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Failed: {title}"
+msgstr "विफल: {title}"
 
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Failure handling"
@@ -9033,6 +9042,10 @@ msgstr "{task} पर काम कर रहा है"
 #: src/pages/TeamBoard.tsx
 msgid "Working on {task} for {0}"
 msgstr "{0} के लिए {task} पर काम कर रहा है"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Working: {title}"
+msgstr "काम जारी है: {title}"
 
 #: src/pages/Auth.tsx
 #: src/pages/CallView.tsx

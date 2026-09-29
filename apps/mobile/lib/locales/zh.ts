@@ -520,6 +520,7 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Describe what this bot does": "描述这个 Bot 的工作",
   "Don’t have an account?": "还没有账户？",
   Done: "完成",
+  "Done: {title}": "完成：{title}",
   Disconnect: "断开",
   "Disconnecting…": "正在断开…",
   Email: "邮箱",
@@ -532,6 +533,7 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Enter this code in your browser:": "请在浏览器中输入此代码：",
   "Executor token": "Executor 令牌",
   Failed: "失败",
+  "Failed: {title}": "失败：{title}",
   "Failed to refresh": "刷新失败",
   "Failed to send message": "发送消息失败",
   "Failed to stop work": "停止工作失败",
@@ -756,6 +758,7 @@ export const ZH_MESSAGES: Record<string, string> = {
   "What this bot is for": "这个 Bot 的用途",
   "While agents are working": "智能体工作时",
   Working: "工作中",
+  "Working: {title}": "工作中：{title}",
   "Working…": "处理中…",
   "Work stopped, but the thread could not refresh: {detail}":
     "工作已停止，但线程无法刷新：{detail}",

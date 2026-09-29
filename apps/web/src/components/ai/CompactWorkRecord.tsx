@@ -1,7 +1,7 @@
 import { ChatMarkdown } from "@ardurbot/chat-ui/web";
 import type { MessageBlock } from "@ardurbot/contracts";
 import { workRecordEntries } from "@ardurbot/core";
-import { Trans } from "@lingui/react/macro";
+import { Trans, useLingui } from "@lingui/react/macro";
 import { Check, ChevronDown, ChevronRight, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { ThreadCommandBlock } from "../ThreadCommandBlock";
@@ -14,6 +14,7 @@ export function CompactWorkRecord({
   /** True for the in-flight turn's streaming message. */
   live?: boolean;
 }) {
+  const { t } = useLingui();
   const [expanded, setExpanded] = useState(false);
 
   const entries = useMemo(() => workRecordEntries(blocks, live), [blocks, live]);
@@ -28,6 +29,19 @@ export function CompactWorkRecord({
   // steps back to the generic label so the full row below is the single copy
   // of that text.
   const headerTitle = expanded ? undefined : currentState?.evidence.title;
+  // The status icons are visual only, so the name carries the outcome too.
+  const title = currentState?.evidence.title.trim() ?? "";
+  const accessibleName = !isDone
+    ? title
+      ? t`Working: ${title}`
+      : t`Working`
+    : failed
+      ? title
+        ? t`Failed: ${title}`
+        : t`Failed`
+      : title
+        ? t`Done: ${title}`
+        : t`Done`;
 
   return (
     <div className="flex flex-col gap-2 my-2 w-full max-w-full">
@@ -36,6 +50,7 @@ export function CompactWorkRecord({
         className="flex items-center gap-3 cursor-pointer select-none font-mono text-[12px] text-muted-foreground w-full text-left"
         onClick={() => setExpanded(!expanded)}
         aria-expanded={expanded}
+        aria-label={accessibleName}
       >
         <div className="flex items-center gap-2 flex-grow min-w-0">
           {!isDone && (
@@ -47,7 +62,14 @@ export function CompactWorkRecord({
           {isDone && failed && <X className="w-3.5 h-3.5 text-destructive shrink-0" />}
           {isDone && !failed && <Check className="w-3.5 h-3.5 text-success shrink-0" />}
           <div className="truncate">
-            {headerTitle ?? (isDone ? <Trans>Done</Trans> : <Trans>Working</Trans>)}
+            {headerTitle ??
+              (!isDone ? (
+                <Trans>Working</Trans>
+              ) : failed ? (
+                <Trans>Failed</Trans>
+              ) : (
+                <Trans>Done</Trans>
+              ))}
             {currentState?.evidence.outcome === "pending" && " ..."}
           </div>
         </div>

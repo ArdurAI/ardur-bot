@@ -3543,6 +3543,10 @@ msgstr ""
 msgid "Done when (one per line)"
 msgstr "Tamamlanma koşulları (her satıra bir tane)"
 
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Done: {title}"
+msgstr "Bitti: {title}"
+
 #. placeholder {0}: props.name
 #: src/components/ArtifactFileCard.tsx
 msgid "Download {0}"
@@ -3859,6 +3863,7 @@ msgstr ""
 msgid "failed"
 msgstr "başarısız"
 
+#: src/components/ai/CompactWorkRecord.tsx
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/run-status-label.ts
 #: src/lib/team-delivery-text.ts
@@ -3883,6 +3888,10 @@ msgstr "Mesaj gönderilemedi"
 #: src/pages/Shell.tsx
 msgid "Failed to stop"
 msgstr "Durdurulamadı"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Failed: {title}"
+msgstr "Başarısız: {title}"
 
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Failure handling"
@@ -9033,6 +9042,10 @@ msgstr "{task} üzerinde çalışıyor"
 #: src/pages/TeamBoard.tsx
 msgid "Working on {task} for {0}"
 msgstr "{0} için {task} üzerinde çalışıyor"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Working: {title}"
+msgstr "Çalışıyor: {title}"
 
 #: src/pages/Auth.tsx
 #: src/pages/CallView.tsx

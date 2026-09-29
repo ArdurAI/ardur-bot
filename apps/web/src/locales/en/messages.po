@@ -3543,6 +3543,10 @@ msgstr "Done — waiting for your OK"
 msgid "Done when (one per line)"
 msgstr "Done when (one per line)"
 
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Done: {title}"
+msgstr "Done: {title}"
+
 #. placeholder {0}: props.name
 #: src/components/ArtifactFileCard.tsx
 msgid "Download {0}"
@@ -3859,6 +3863,7 @@ msgstr "External conversation"
 msgid "failed"
 msgstr "failed"
 
+#: src/components/ai/CompactWorkRecord.tsx
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/run-status-label.ts
 #: src/lib/team-delivery-text.ts
@@ -3883,6 +3888,10 @@ msgstr "Failed to send message"
 #: src/pages/Shell.tsx
 msgid "Failed to stop"
 msgstr "Failed to stop"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Failed: {title}"
+msgstr "Failed: {title}"
 
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Failure handling"
@@ -9033,6 +9042,10 @@ msgstr "Working on {task}"
 #: src/pages/TeamBoard.tsx
 msgid "Working on {task} for {0}"
 msgstr "Working on {task} for {0}"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Working: {title}"
+msgstr "Working: {title}"
 
 #: src/pages/Auth.tsx
 #: src/pages/CallView.tsx

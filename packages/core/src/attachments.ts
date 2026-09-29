@@ -6,6 +6,7 @@ import {
   isAttachmentImageMimeType,
   type MessageBlock,
 } from "@ardurbot/contracts";
+import { isReasoningSummaryBlock } from "./tool-activity.js";
 
 export class AttachmentValidationError extends Error {
   constructor(message: string) {
@@ -114,6 +115,8 @@ export function blocksToAgentHistoryText(
         excludedDeliveryIds.has(block.deliveryId)
       )
         return "";
+      // A reasoning summary is work-record detail, never something the bot said.
+      if (isReasoningSummaryBlock(block)) return "";
       if (block.kind === "text") return block.text;
       if (block.kind === "chart") return `[chart: ${block.name}]`;
       if (block.kind === "image") return `[image: ${block.name}]`;

@@ -13,6 +13,37 @@ vi.mock("@lingui/react/macro", () => ({
   Trans: ({ children }: any) => <>{children}</>,
 }));
 
+vi.mock("../ThreadCommandBlock", () => ({
+  ThreadCommandBlock: () => <div data-testid="command-card" />,
+}));
+
+function commandBlock(command: string, exitCode: number): MessageBlock {
+  return {
+    kind: "command",
+    command: {
+      commandId: "c1",
+      runId: "r1",
+      attemptId: "a1",
+      executionId: "e1",
+      command,
+      cwd: "/",
+      computerId: "m1",
+      computer: "local",
+      startedAt: "2026-09-28T00:00:00Z",
+      durationMs: 1200,
+      exitCode,
+      outcome: "completed",
+      stdout: "",
+      stderr: "",
+      error: null,
+      redacted: false,
+      truncated: false,
+      replayOf: null,
+      rerunDisabledReason: null,
+    },
+  };
+}
+
 describe("CompactWorkRecord", () => {
   let container: HTMLDivElement;
   let root: ReturnType<typeof createRoot>;
@@ -138,6 +169,47 @@ describe("CompactWorkRecord", () => {
 
     expect(container.textContent).toContain("running");
     expect(document.activeElement).toBe(button);
+  });
+
+  it("names the disclosure with the outcome as well as the current title", () => {
+    const button = () => container.querySelector("button")!;
+
+    act(() => {
+      root.render(
+        <CompactWorkRecord
+          blocks={[{ kind: "progress", text: "Checking status", activity: true }]}
+          live
+        />,
+      );
+    });
+    expect(button().getAttribute("aria-label")).toBe("Working: Checking status");
+    // Expanding keeps the outcome and title in the name.
+    act(() => {
+      button().click();
+    });
+    expect(button().getAttribute("aria-label")).toBe("Working: Checking status");
+
+    act(() => {
+      root.render(<CompactWorkRecord blocks={[commandBlock("pnpm build", 0)]} />);
+    });
+    expect(button().getAttribute("aria-label")).toBe("Done: pnpm build");
+
+    act(() => {
+      root.render(<CompactWorkRecord blocks={[commandBlock("pnpm test", 1)]} />);
+    });
+    expect(button().getAttribute("aria-label")).toBe("Failed: pnpm test");
+  });
+
+  it("labels an expanded failed record as failed, not done", () => {
+    act(() => {
+      root.render(<CompactWorkRecord blocks={[commandBlock("pnpm test", 1)]} />);
+    });
+    const button = container.querySelector("button")!;
+    act(() => {
+      button.click();
+    });
+
+    expect(button.textContent).toBe("Failed");
   });
 
   it("shows reduced motion styles", () => {
