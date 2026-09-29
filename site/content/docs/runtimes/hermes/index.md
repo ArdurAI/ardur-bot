@@ -7,11 +7,11 @@ source_path: "docs/runtimes/hermes.md"
 > [Source: docs/runtimes/hermes.md](https://github.com/ArdurAI/ardur-bot/blob/__ARDUR_BOT_SOURCE_REF__/docs/runtimes/hermes.md). Edit the source file, then run `python3 site/scripts/sync_docs.py` to refresh this page.
 
 Hermes is a selectable bot runtime for an owner with a pinned, qualified Hermes
-installation on a paired macOS or Linux host. Windows is unavailable until its
+installation on a paired macOS or Linux host, or running Ardur natively on this computer in local mode or the dev stack. Windows is unavailable until its
 native acceptance lane passes. Selecting Hermes reuses the bot's existing Ardur
 connection, model, effort, computer, integrations, connectors, MCP assignments,
 skills and plugins. It does not import local configuration or ask for a Hermes
-account. A missing install, unsupported connection, non-host computer or old host
+account. A missing install, unsupported connection, non-host computer (unless running locally) or old host
 relay protocol blocks execution without changing the saved pin.
 
 ## Install a pinned source checkout
@@ -34,6 +34,12 @@ On both macOS and Linux desktop, the managed install root is
 the host service's `workspaces` directory). To keep a qualified checkout in a
 different absolute location, set `ARDUR_HERMES_INSTALL=<install-root>` in the
 desktop or host-service launch environment; that explicit path takes priority.
+When running locally (local mode or the dev stack), the local Hermes root is
+`<DATA_DIR>/hermes`, with per-turn staging at `<DATA_DIR>/hermes/staging` and
+the managed install at `<DATA_DIR>/hermes/runtimes/hermes-agent`. A relative
+`DATA_DIR` resolves against each process's working directory, so set
+`ARDUR_HERMES_INSTALL` or a shared absolute `DATA_DIR` to keep one install
+path across the stack.
 The host probes no other location, including `PATH`, pipx, Homebrew or a
 personal Hermes directory. Restart the desktop app or host service after
 installing or changing the selector. Until qualification passes, settings show
