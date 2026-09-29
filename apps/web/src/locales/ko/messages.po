@@ -4026,6 +4026,10 @@ msgstr "MCP 연결을 마무리하는 중…"
 msgid "First bot not created"
 msgstr "첫 번째 봇이 아직 생성되지 않았습니다"
 
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Fix the configuration JSON to edit these settings."
+msgstr "이 설정을 편집하려면 구성 JSON을 수정하세요."
+
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Flag unexpected actions"
 msgstr "예상하지 못한 작업 표시"

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
+import type { HermesRuntimeConfigV2 } from "@ardurbot/contracts/runtime-config";
 import type { ComponentProps, ReactNode } from "react";
-import { act } from "react";
+import { act, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -92,6 +93,42 @@ async function changeInput(input: HTMLInputElement, value: string) {
     input.dispatchEvent(new Event("input", { bubbles: true }));
     input.dispatchEvent(new Event("change", { bubbles: true }));
   });
+}
+
+async function changeTextarea(textarea: HTMLTextAreaElement, value: string) {
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, "value")?.set?.call(
+      textarea,
+      value,
+    );
+    textarea.dispatchEvent(new Event("input", { bubbles: true }));
+    textarea.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+}
+
+function ControlledHarness({ onError }: { onError: (error: string | null) => void }) {
+  const [value, setValue] = useState<HermesRuntimeConfigV2 | null>(null);
+  return (
+    <RuntimeConfigPanel
+      value={value}
+      onChange={setValue}
+      onError={onError}
+      onOpenLearning={() => {}}
+    />
+  );
+}
+
+async function openAdvanced() {
+  const details = container.querySelector("details")!;
+  expect(details).not.toBeNull();
+  await act(async () => {
+    details.open = true;
+    details.dispatchEvent(new Event("toggle"));
+  });
+  await vi.waitFor(() => {
+    expect(container.querySelector("textarea")).not.toBeNull();
+  });
+  return { details, textarea: container.querySelector("textarea")! };
 }
 
 describe("RuntimeConfigPanel", () => {
@@ -230,5 +267,45 @@ describe("RuntimeConfigPanel", () => {
       expect(advancedText).toContain("Configuration (JSON)");
       expect(advancedText).toContain("Effective configuration");
     });
+  });
+
+  it("disables short-panel inputs with a hint while the Advanced JSON is invalid", async () => {
+    const onError = vi.fn();
+    await act(async () => {
+      root.render(<ControlledHarness onError={onError} />);
+    });
+    const { textarea } = await openAdvanced();
+    const [callsInput, timeInput, contextInput] = Array.from(
+      container.querySelectorAll("input"),
+    ) as [HTMLInputElement, HTMLInputElement, HTMLInputElement];
+
+    expect(callsInput.disabled).toBe(false);
+
+    await changeTextarea(textarea, "{ not valid json");
+
+    // While the JSON is invalid the short panel cannot be edited, and says why.
+    expect(callsInput.disabled).toBe(true);
+    expect(timeInput.disabled).toBe(true);
+    expect(contextInput.disabled).toBe(true);
+    expect(container.textContent).toContain("Fix the configuration JSON to edit these settings.");
+
+    // Fixing the JSON re-enables the inputs with the parsed values; no edit is lost.
+    await changeTextarea(
+      textarea,
+      JSON.stringify({
+        version: 2,
+        runtimeKind: "hermes",
+        limits: { maxProviderRequests: 32, timeoutMs: 60_000 },
+      }),
+    );
+
+    expect(callsInput.disabled).toBe(false);
+    expect(timeInput.disabled).toBe(false);
+    expect(contextInput.disabled).toBe(false);
+    expect(container.textContent).not.toContain(
+      "Fix the configuration JSON to edit these settings.",
+    );
+    expect(callsInput.value).toBe("32");
+    expect(timeInput.value).toBe("60");
   });
 });

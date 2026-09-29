@@ -4026,6 +4026,10 @@ msgstr "正在完成 MCP 连接…"
 msgid "First bot not created"
 msgstr "尚未创建第一个机器人"
 
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Fix the configuration JSON to edit these settings."
+msgstr "请先修复配置 JSON，再编辑这些设置。"
+
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Flag unexpected actions"
 msgstr "标记异常操作"

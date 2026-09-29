@@ -38,6 +38,7 @@ export function RuntimeConfigPanel({
   const [contextError, setContextError] = useState<string | null>(null);
   const [advancedError, setAdvancedError] = useState<string | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [advancedInvalid, setAdvancedInvalid] = useState(false);
 
   useEffect(() => {
     setCalls(String(settings.limits.maxProviderRequests));
@@ -133,6 +134,7 @@ export function RuntimeConfigPanel({
             max={64}
             step={1}
             value={calls}
+            disabled={advancedInvalid}
             onChange={(e) => handleCallsChange(e.target.value)}
           />
         </label>
@@ -145,6 +147,7 @@ export function RuntimeConfigPanel({
             max={600}
             step={1}
             value={time}
+            disabled={advancedInvalid}
             onChange={(e) => handleTimeChange(e.target.value)}
           />
         </label>
@@ -157,10 +160,20 @@ export function RuntimeConfigPanel({
             max={64}
             step={1}
             value={contextKib}
+            disabled={advancedInvalid}
             onChange={(e) => handleContextChange(e.target.value)}
           />
         </label>
       </div>
+
+      {advancedInvalid ? (
+        <p
+          data-testid="runtime-config-panel-advanced-hint"
+          className="text-xs text-muted-foreground"
+        >
+          <Trans>Fix the configuration JSON to edit these settings.</Trans>
+        </p>
+      ) : null}
 
       {fieldError ? (
         <p
@@ -213,6 +226,7 @@ export function RuntimeConfigPanel({
                 const active = callsError || timeError || contextError || err || null;
                 onError?.(active);
               }}
+              onInvalidChange={setAdvancedInvalid}
               onReset={() => {
                 const defaults = effectiveHermesRuntimeConfigV2(null);
                 setCalls(String(defaults.limits.maxProviderRequests));

@@ -70,6 +70,7 @@ export interface RuntimeConfigAdvancedProps {
   onChange: (value: HermesRuntimeConfigV2) => void;
   onError: (error: string | null) => void;
   onReset: () => void;
+  onInvalidChange?: (invalid: boolean) => void;
 }
 
 export function RuntimeConfigAdvanced({
@@ -78,6 +79,7 @@ export function RuntimeConfigAdvanced({
   onChange,
   onError,
   onReset,
+  onInvalidChange,
 }: RuntimeConfigAdvancedProps) {
   const { t } = useLingui();
   const id = useId();
@@ -133,15 +135,15 @@ export function RuntimeConfigAdvanced({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Sync incoming value from short-panel when editor text is valid
+  // Sync incoming value from short-panel when editor text is valid. While the
+  // text is invalid the editor owns the draft: skip the update without advancing
+  // lastSyncValue so a later fix cannot silently replace an intervening change.
   const lastSyncValue = useRef(value);
   useEffect(() => {
+    if (localError !== null) return;
     if (JSON.stringify(lastSyncValue.current) === JSON.stringify(value)) return;
     lastSyncValue.current = value;
-    if (localError === null) {
-      const nextFormatted = JSON.stringify(value, null, 2);
-      setText(nextFormatted);
-    }
+    setText(JSON.stringify(value, null, 2));
   }, [value, localError]);
 
   // Initial preview fetch or when pin changes
@@ -158,10 +160,12 @@ export function RuntimeConfigAdvanced({
     if (!parsed.success) {
       const msg = runtimeConfigIssueMessage(parsed.issues[0]!);
       setLocalError(msg);
+      onInvalidChange?.(true);
       onError(msg);
       return;
     }
     setLocalError(null);
+    onInvalidChange?.(false);
     const normalized = normalizeHermesRuntimeConfig(parsed.document);
     lastSyncValue.current = normalized;
     onChange(normalized);
@@ -174,6 +178,7 @@ export function RuntimeConfigAdvanced({
     const formatted = JSON.stringify(defaults, null, 2);
     setText(formatted);
     setLocalError(null);
+    onInvalidChange?.(false);
     setPreviewError(null);
     lastSyncValue.current = defaults;
     onReset();

@@ -4026,6 +4026,10 @@ msgstr "Finalizando conexión MCP…"
 msgid "First bot not created"
 msgstr "El primer bot aún no se ha creado"
 
+#: src/pages/shell/runtime-config-panel.tsx
+msgid "Fix the configuration JSON to edit these settings."
+msgstr "Corrige el JSON de configuración para editar estos ajustes."
+
 #: src/components/ApprovalRulesSettings.tsx
 msgid "Flag unexpected actions"
 msgstr "Marcar acciones inesperadas"
