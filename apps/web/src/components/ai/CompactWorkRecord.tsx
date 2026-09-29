@@ -33,14 +33,24 @@ export function CompactWorkRecord({
   const title = currentState?.evidence.title.trim() ?? "";
   const accessibleName =
     status === "working"
-      ? title ? t`Working: ${title}` : t`Working`
+      ? title
+        ? t`Working: ${title}`
+        : t`Working`
       : status === "failed"
-        ? title ? t`Failed: ${title}` : t`Failed`
+        ? title
+          ? t`Failed: ${title}`
+          : t`Failed`
         : status === "interrupted"
-          ? title ? t`Interrupted: ${title}` : t`Interrupted`
+          ? title
+            ? t`Interrupted: ${title}`
+            : t`Interrupted`
           : status === "unknown"
-            ? title ? t`Unknown: ${title}` : t`Unknown`
-            : title ? t`Done: ${title}` : t`Done`;
+            ? title
+              ? t`Unknown: ${title}`
+              : t`Unknown`
+            : title
+              ? t`Done: ${title}`
+              : t`Done`;
 
   return (
     <div className="flex flex-col gap-2 my-2 w-full max-w-full">

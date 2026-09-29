@@ -1,7 +1,6 @@
+import type { WorkRecordStatus } from "@ardurbot/core";
 import { AccessibilityInfo } from "react-native";
 import { t } from "./i18n";
-
-import type { WorkRecordStatus } from "@ardurbot/core";
 
 /**
  * Spoken name for the record's disclosure. Its status symbols are visual only,
@@ -11,7 +10,8 @@ export function workRecordLabel(status: WorkRecordStatus, title: string): string
   const shown = title.trim();
   if (status === "working") return shown ? t("Working: {title}", { title: shown }) : t("Working");
   if (status === "failed") return shown ? t("Failed: {title}", { title: shown }) : t("Failed");
-  if (status === "interrupted") return shown ? t("Interrupted: {title}", { title: shown }) : t("Interrupted");
+  if (status === "interrupted")
+    return shown ? t("Interrupted: {title}", { title: shown }) : t("Interrupted");
   if (status === "unknown") return shown ? t("Unknown: {title}", { title: shown }) : t("Unknown");
   return shown ? t("Done: {title}", { title: shown }) : t("Done");
 }

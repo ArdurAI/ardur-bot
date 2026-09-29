@@ -106,7 +106,6 @@ import {
   subscribeThread,
 } from "../lib/api";
 import { mobileTokens } from "../lib/appearance";
-import { shouldRenderSpeakerContext } from "../lib/message-context";
 import { type MobileArtifactTarget, openMobileArtifact } from "../lib/artifact-open";
 import { confirmDeleteBot } from "../lib/bot-lifecycle";
 import type { ComposerMenuOption } from "../lib/composer-menu";
@@ -121,6 +120,7 @@ import {
   setOpenNotificationThread,
 } from "../lib/live-notifications";
 import { presentMessageActionSheet } from "../lib/message-action-sheet";
+import { shouldRenderSpeakerContext } from "../lib/message-context";
 import {
   hasVisibleMessagePresentation,
   isCenteredAgentEvent,
@@ -2963,8 +2963,10 @@ const MessageBubble = memo(function MessageBubble({
   const speaker =
     message.role === "bot" ? (memberName(members, message.botId) ?? botName) : undefined;
   const firstContent = segments.findIndex((segment) => segment.kind === "content");
-  const showContext = shouldRenderSpeakerContext(message, members);
-  const contextBot = showContext && message.botId ? bots.find(b => b.id === message.botId) : undefined;
+  // Only a group row with no reply bubble needs its own header; otherwise the bubble names the bot.
+  const showContext = firstContent === -1 && shouldRenderSpeakerContext(message, members);
+  const contextBot =
+    showContext && message.botId ? bots.find((b) => b.id === message.botId) : undefined;
 
   return (
     <View style={{ gap: 8, width: "100%" }}>
@@ -2975,7 +2977,13 @@ const MessageBubble = memo(function MessageBubble({
             identity={message.botId}
             size={22}
           />
-          <Text style={{ color: contextBot?.color ?? tokens.mutedForeground, fontSize: 13, fontWeight: "600" }}>
+          <Text
+            style={{
+              color: contextBot?.color ?? tokens.mutedForeground,
+              fontSize: 13,
+              fontWeight: "600",
+            }}
+          >
             {speaker}
           </Text>
         </View>
@@ -2985,7 +2993,7 @@ const MessageBubble = memo(function MessageBubble({
         <MessageTextCard
           key={`${message.id}-content-${index}`}
           message={{ ...message, blocks: segment.blocks }}
-          speaker={index === firstContent && !showContext ? speaker : undefined}
+          speaker={index === firstContent ? speaker : undefined}
           replyPreview={index === firstContent ? replyPreview : undefined}
           actionProps={actionProps}
         />

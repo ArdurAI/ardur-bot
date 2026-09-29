@@ -1,4 +1,4 @@
-import type { MobileSnapshot, MobileMessage } from "./api";
+import type { MobileMessage, MobileSnapshot } from "./api";
 
 export function shouldRenderSpeakerContext(
   message: MobileMessage,

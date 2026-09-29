@@ -140,7 +140,16 @@ export function CompactWorkRecord({
             numberOfLines={1}
             ellipsizeMode="tail"
           >
-            {headerTitle ?? (status === "working" ? t("Working") : status === "failed" ? t("Failed") : status === "interrupted" ? t("Interrupted") : status === "unknown" ? t("Unknown") : t("Done"))}
+            {headerTitle ??
+              (status === "working"
+                ? t("Working")
+                : status === "failed"
+                  ? t("Failed")
+                  : status === "interrupted"
+                    ? t("Interrupted")
+                    : status === "unknown"
+                      ? t("Unknown")
+                      : t("Done"))}
             {currentState?.evidence.outcome === "pending" && " ..."}
           </Text>
         </View>

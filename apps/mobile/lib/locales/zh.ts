@@ -1225,7 +1225,7 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Same as bot": "与 Bot 相同",
   "Could not save group model.": "无法保存群组模型。",
   "This member's model changed. Reload the group.": "此成员的模型已更改。请重新加载群组。",
-  "Interrupted": "已中断",
+  Interrupted: "已中断",
   "Interrupted: {title}": "已中断: {title}",
-  "Unknown: {title}": "未知: {title}"
+  "Unknown: {title}": "未知: {title}",
 };
