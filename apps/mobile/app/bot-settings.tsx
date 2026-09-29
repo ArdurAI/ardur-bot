@@ -25,6 +25,7 @@ import { RuntimeSettings } from "../components/runtime-settings";
 import type { MobileBot, MobileMe, MobileModel, MobileModelCredential } from "../lib/api";
 import { rpc } from "../lib/api";
 import { COMPUTER_LIFECYCLE_TIMEOUT_MS } from "../lib/computer";
+import { hermesRefusalMessage } from "../lib/hermes-refusal";
 import { useI18n } from "../lib/i18n";
 import { loadLearning } from "../lib/learning";
 import { presentMessageActionSheet } from "../lib/message-action-sheet";
@@ -588,15 +589,7 @@ export default function BotSettingsScreen() {
             </Pressable>
             {hermesRefusal ? (
               <Text style={{ color: tokens.mutedForeground, marginTop: 8 }}>
-                {hermesRefusal === "claude-subscription"
-                  ? t(
-                      "Claude subscriptions only work in Anthropic's own apps; add an Anthropic API key to use Claude with Hermes.",
-                    )
-                  : hermesRefusal === "chatgpt-sign-in"
-                    ? t(
-                        "ChatGPT sign-ins only work inside Codex; add an OpenAI API key to use GPT models with Hermes.",
-                      )
-                    : t("Add an API key connection to use this provider with Hermes.")}
+                {hermesRefusalMessage(hermesRefusal, t)}
               </Text>
             ) : null}
             {isOllama && effectiveEntry?.reasoning === false ? (

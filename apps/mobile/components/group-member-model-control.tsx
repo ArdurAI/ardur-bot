@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Pressable, Text } from "react-native";
 import type { MobileBot, MobileGroup, MobileModel, MobileModelCredential } from "../lib/api";
 import { rpc } from "../lib/api";
+import { hermesRefusalMessage } from "../lib/hermes-refusal";
 import { useI18n } from "../lib/i18n";
 import { presentMessageActionSheet } from "../lib/message-action-sheet";
 import { useMobileTokens, useResolvedAppearance } from "../lib/native";
@@ -413,15 +414,7 @@ export function GroupMemberModelControl({
       </Pressable>
       {hermesRefusal ? (
         <Text style={{ color: tokens.mutedForeground }}>
-          {hermesRefusal === "claude-subscription"
-            ? t(
-                "Claude subscriptions only work in Anthropic's own apps; add an Anthropic API key to use Claude with Hermes.",
-              )
-            : hermesRefusal === "chatgpt-sign-in"
-              ? t(
-                  "ChatGPT sign-ins only work inside Codex; add an OpenAI API key to use GPT models with Hermes.",
-                )
-              : t("Add an API key connection to use this provider with Hermes.")}
+          {hermesRefusalMessage(hermesRefusal, t)}
         </Text>
       ) : null}
       {pinnedChoice && effortChoices.length ? (
