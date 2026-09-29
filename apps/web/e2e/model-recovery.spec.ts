@@ -447,7 +447,8 @@ test("Hermes picker keeps the Ardur connection and shows only its limits", async
   await expect(model).toHaveValue(original);
   await expect(settings.getByText("Hermes is not installed on this computer.")).toBeVisible();
   await expect(settings.getByLabel("Model calls per turn")).toHaveValue("16");
-  await expect(settings.getByLabel("Time limit")).toHaveValue("180");
+  await expect(settings.getByLabel("Time limit (seconds)")).toHaveValue("180");
+  await expect(settings.getByLabel("Context limit (KiB)")).toHaveValue("16");
   await expect(settings.getByText("Connect Hermes")).toHaveCount(0);
   await captureScreenshot(page, testInfo, "hermes-runtime-picker");
 });
