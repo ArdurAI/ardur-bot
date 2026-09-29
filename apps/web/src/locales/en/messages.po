@@ -154,11 +154,6 @@ msgstr "{0} runs · {1} tokens"
 msgid "{0} runs at these pins; hosted providers may bill per run"
 msgstr "{0} runs at these pins; hosted providers may bill per run"
 
-#. placeholder {0}: counts.pendingCount
-#: src/pages/LearningInbox.tsx
-msgid "{0} suggestions to review"
-msgstr "{0} suggestions to review"
-
 #. placeholder {0}: bot.name
 #: src/pages/ExternalConversationSettings.tsx
 msgid "{0} will still respond to direct mentions."
@@ -253,6 +248,10 @@ msgstr "{failed} failed"
 msgid "{hours}h ago"
 msgstr "{hours}h ago"
 
+#: src/pages/LearningInbox.tsx
+msgid "{learned, plural, one {learned # thing this week} other {learned # things this week}}"
+msgstr "{learned, plural, one {learned # thing this week} other {learned # things this week}}"
+
 #: src/pages/storage/StorageSettings.tsx
 msgid "{location} · Docker not running"
 msgstr "{location} · Docker not running"
@@ -276,13 +275,17 @@ msgstr "{name} finished"
 msgid "{name} needs your input"
 msgstr "{name} needs your input"
 
+#: src/pages/LearningInbox.tsx
+msgid "{pending, plural, one {# suggestion to review} other {# suggestions to review}}"
+msgstr "{pending, plural, one {# suggestion to review} other {# suggestions to review}}"
+
 #: src/components/composer/ComposerMenu.tsx
 msgid "{reconnectCount} need reconnection"
 msgstr "{reconnectCount} need reconnection"
 
 #: src/pages/dashboard/UsagePanel.tsx
-msgid "{records} usage records"
-msgstr "{records} usage records"
+msgid "{records, plural, one {# usage record} other {# usage records}}"
+msgstr "{records, plural, one {# usage record} other {# usage records}}"
 
 #: src/components/teach/TeachRecordingChrome.tsx
 msgid "{remaining} left · bot is watching, not acting"
@@ -309,8 +312,8 @@ msgid "{title}, {label}"
 msgstr "{title}, {label}"
 
 #: src/pages/dashboard/UsagePanel.tsx
-msgid "{tokens} tokens"
-msgstr "{tokens} tokens"
+msgid "{tokens, plural, one {# token} other {# tokens}}"
+msgstr "{tokens, plural, one {# token} other {# tokens}}"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "{toolCount, plural, one {# tool} other {# tools}}"
@@ -4790,11 +4793,6 @@ msgstr "Learn more"
 msgid "Learn more about {title}"
 msgstr "Learn more about {title}"
 
-#. placeholder {0}: counts.appliedThisWeek
-#: src/pages/LearningInbox.tsx
-msgid "learned {0} things this week"
-msgstr "learned {0} things this week"
-
 #: src/pages/customize/SkillsPage.tsx
 msgid "Learned skills"
 msgstr "Learned skills"
@@ -4802,7 +4800,6 @@ msgstr "Learned skills"
 #: src/pages/dashboard/LearningDialog.tsx
 #: src/pages/dashboard/panels.ts
 #: src/pages/KnowledgeSection.tsx
-#: src/pages/LearningInbox.tsx
 #: src/pages/settings-sections.ts
 #: src/pages/shell/runtime-config-panel.tsx
 msgid "Learning"
@@ -4812,6 +4809,10 @@ msgstr "Learning"
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Learning consent"
 msgstr "Learning consent"
+
+#: src/pages/LearningInbox.tsx
+msgid "Learning for this space"
+msgstr "Learning for this space"
 
 #: src/pages/MemoryHistory.tsx
 msgid "Learning grant"
@@ -6400,6 +6401,7 @@ msgstr "Policy version"
 msgid "Port"
 msgstr "Port"
 
+#: src/pages/dashboard/LearningPanel.tsx
 #: src/pages/LearningInbox.tsx
 msgid "Possible regression — review undo"
 msgstr "Possible regression — review undo"
@@ -6532,6 +6534,7 @@ msgstr "Propose consolidation"
 msgid "Propose on a branch"
 msgstr "Propose on a branch"
 
+#: src/pages/dashboard/LearningPanel.tsx
 #: src/pages/LearningInbox.tsx
 msgid "Proposed consolidation"
 msgstr "Proposed consolidation"
