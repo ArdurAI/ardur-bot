@@ -95,6 +95,8 @@ export interface BotAvatarProps {
   phase?: SealPhase;
   /** A run status, mapped to a phase when `phase` is not given. */
   status?: string;
+  /** Draws the phase's still pose even when motion is allowed. */
+  still?: boolean;
   identity?: string;
   /** Display name used for the seal initial; identity stays the hash seed. */
   label?: string;
@@ -120,6 +122,7 @@ export const BotAvatar = memo(function BotAvatar({
   size = 36,
   phase: phaseProp,
   status,
+  still = false,
   identity = "",
   label,
   className,
@@ -154,7 +157,7 @@ export const BotAvatar = memo(function BotAvatar({
   const layers = organic
     ? []
     : sealLayers(pack, phase, size, picture ? SEAL_PICTURE_BANDS : undefined);
-  const moving = !reducedMotion && layers.some((layer) => sealMotions(layer).length > 0);
+  const moving = !still && !reducedMotion && layers.some((layer) => sealMotions(layer).length > 0);
   const rootRef = usePauseOffscreen(moving);
   const colors = sealWebColors(colorDef.hex);
   const scene = (bands: readonly string[], inset?: number) => {

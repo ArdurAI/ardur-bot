@@ -104,6 +104,14 @@ test("production shell startup, fake-provider first token, and three motions", a
         );
       });
       await page.screenshot({ path: testInfo.outputPath("first-token.png") });
+      if (sample === 4) {
+        // The sent run's seal is playing its scene; measure a second of it.
+        const movingLayers = await page.evaluate(
+          () => document.querySelectorAll('.ardurbot-bot-avatar [class^="ardurbot-seal-"]').length,
+        );
+        if (movingLayers === 0) warnings.push("No seal was moving during the seal-motion sample.");
+        await traceFrames(page, "seal-motion", () => page.waitForTimeout(1000));
+      }
       const overhead = await page.evaluate(
         () =>
           performance.getEntriesByName("perf:first-token")[0]!.startTime -
@@ -122,7 +130,13 @@ test("production shell startup, fake-provider first token, and three motions", a
       });
       if (sample === 4) {
         const events = JSON.parse(trace).traceEvents as { name: string; ts: number; ph: string }[];
-        for (const motion of ["panel-open", "panel-close", "bot-switch", "message-arrival"]) {
+        for (const motion of [
+          "panel-open",
+          "panel-close",
+          "bot-switch",
+          "message-arrival",
+          "seal-motion",
+        ]) {
           const frames = events
             .filter((event) => event.name === `perf:motion:${motion}` && event.ph !== "e")
             .map((event) => event.ts / 1000)

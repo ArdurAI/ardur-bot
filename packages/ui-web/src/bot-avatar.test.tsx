@@ -133,6 +133,12 @@ describe("BotAvatar", () => {
     expect(html).toContain('class="ardurbot-seal-landscapes-wonders-thinking-ring"');
   });
 
+  it("draws the still pose without motion classes when asked to hold still", () => {
+    const html = renderToString(<BotAvatar color="#2F4A7A" phase="searching" size={112} still />);
+    expect(html).toContain('transform="rotate(-40 50 50)"');
+    expect(html).not.toContain("ardurbot-seal-");
+  });
+
   it("shows the scene from 40 px and the small-only layers below it", () => {
     const large = renderToString(<BotAvatar color="#2F4A7A" phase="waiting" size={40} />);
     expect(large).toContain("<line");
