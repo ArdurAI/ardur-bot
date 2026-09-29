@@ -833,9 +833,21 @@ describe("merged behavior of reasoning, narration and streaming", () => {
       type: "tool",
       name: "run_command",
     });
-    // The narration is sealed. It should lose the streaming flag.
+    // A finished sentence is sealed as text and the step follows, without a cursor.
     expect(tool).toEqual([
-      { kind: "progress", text: "Here is the plan...", pendingToolNames: ["run_command"] },
+      { kind: "text", text: "Here is the plan..." },
+      { kind: "steps", steps: [{ label: "Run command", count: 1 }] },
+    ]);
+  });
+
+  it("holds a tool name on unfinished narration without keeping its cursor", () => {
+    const narration = reduceLiveMessageBlocks([], {
+      type: "progress",
+      payload: { text: "Here is the plan", streaming: true },
+    });
+    const tool = reduceLiveMessageBlocks(narration, { type: "tool", name: "run_command" });
+    expect(tool).toEqual([
+      { kind: "progress", text: "Here is the plan", pendingToolNames: ["run_command"] },
     ]);
   });
 
