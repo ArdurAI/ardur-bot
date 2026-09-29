@@ -19,6 +19,11 @@ import {
 } from "./mcp.js";
 import { ProviderErrorKindSchema } from "./provider-errors.js";
 import {
+  ROOM_POLICY_MAX_CONCURRENT_RUNS_MAX,
+  ROOM_POLICY_MAX_CONCURRENT_RUNS_MIN,
+  RoomPolicyV1Schema,
+} from "./room-policy.js";
+import {
   HermesRuntimeConfigV2DraftSchema,
   HistoricalHermesRuntimeConfigSchema,
 } from "./runtime-config.js";
@@ -153,6 +158,8 @@ export const GroupSchema = z.object({
   threadId: Id,
   preview: z.string(),
   unread: z.boolean(),
+  /** Effective room policy; absent only from older servers, which applied the defaults. */
+  roomPolicy: RoomPolicyV1Schema.optional(),
   updatedAt: z.string(),
   createdAt: z.string(),
 });
@@ -177,6 +184,12 @@ export const UpdateGroupInput = z.object({
   botIds: GroupBotIds.optional(),
   pinned: z.boolean().optional(),
   sectionId: Id.nullable().optional(),
+  maxConcurrentRuns: z
+    .number()
+    .int()
+    .min(ROOM_POLICY_MAX_CONCURRENT_RUNS_MIN)
+    .max(ROOM_POLICY_MAX_CONCURRENT_RUNS_MAX)
+    .optional(),
 });
 export type UpdateGroupInput = z.infer<typeof UpdateGroupInput>;
 
