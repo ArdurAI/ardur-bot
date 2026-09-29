@@ -4,6 +4,7 @@ import type { PrismaClient } from "@ardurbot/db";
 import { Prisma, withTransactionRetry } from "@ardurbot/db";
 import type { MemoryOperationContext } from "@ardurbot/memory";
 import { LifecycleMemoryStore, MemoryService } from "@ardurbot/memory";
+import { sharedMemoryRecallIndex } from "@ardurbot/memory/node/recall-index";
 import { SpaceMemoryProviderResolver, selectDocumentStore } from "../memory-provider-factory.js";
 import type { EncryptedSecretStore } from "../secrets.js";
 import type { ListIdSelector } from "./document-store-factory.js";
@@ -51,6 +52,7 @@ export interface MemoryLifecycleDependencies {
 }
 export function createMemoryLifecycle(deps: MemoryLifecycleDependencies) {
   const service = new MemoryService({
+    recallIndex: sharedMemoryRecallIndex,
     open: (context, action) => {
       const open = async (tx: Prisma.TransactionClient) => {
         if (context.memorySessionStart) await tx.$executeRaw`SET LOCAL lock_timeout = '500ms'`;
