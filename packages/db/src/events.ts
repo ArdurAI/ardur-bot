@@ -2113,9 +2113,7 @@ async function createSteeringContinuation(
     data: {
       ...(await inheritedRemoteOrigin(tx, input.runId)),
       ...(source.goalId ? { goalId: source.goalId } : {}),
-      ...(source.delegationRootTaskId
-        ? { delegationRootTaskId: source.delegationRootTaskId }
-        : {}),
+      ...(source.delegationRootTaskId ? { delegationRootTaskId: source.delegationRootTaskId } : {}),
 
       spaceId: input.spaceId,
       botId: input.botId,
