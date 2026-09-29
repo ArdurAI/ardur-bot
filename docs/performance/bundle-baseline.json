@@ -1,281 +1,659 @@
 {
   "initial": {
     "files": {
-      "assets/async-CU0Z_3ZN.js": 164,
-      "assets/check-CYzq7BcH.js": 168,
-      "assets/chunk-BV7QT456-CVQN-0K5.js": 14333,
-      "assets/createLucideIcon-BgzzVMGK.js": 1511,
-      "assets/desktop-D56m0QQL.js": 275,
-      "assets/dist-11zqWHgS.js": 4370,
+      "assets/action-approval-DmU2SiDF.js": 211,
+      "assets/chunk-BV7QT456-DtGl5NnD.js": 13842,
+      "assets/desktop-p6-OSDP5.js": 274,
+      "assets/dist-B5h4z_oe.js": 1655,
       "assets/dist-x2jm9RvA.js": 1960,
-      "assets/index-BwuuDkJ0.js": 202992,
-      "assets/input-B3uatZMi.js": 18611,
-      "assets/mcp-connect-YuyjWt-V.js": 516,
-      "assets/rolldown-runtime-hePW80VL.js": 430,
-      "assets/rpc-O4dQA2Xx.js": 4476,
-      "assets/src-CL3RVlPv.js": 90273,
-      "assets/src-DVsxFq4O.js": 44674,
-      "assets/src-zftwNtz1.js": 11035,
-      "assets/use-model-oauth-signin-Cf1BX7jy.js": 1983
+      "assets/index-C5xOTm2u.js": 204204,
+      "assets/input-DEJbove2.js": 15814,
+      "assets/jsx-runtime-BqfDQeLH.js": 3274,
+      "assets/preload-helper-BZ1Pz5am.js": 691,
+      "assets/response-bytes-DfEBCeUT.js": 346,
+      "assets/rpc-DuI5mpLO.js": 6042,
+      "assets/src-B1IzWkDW.js": 92508,
+      "assets/src-CbaIj3gQ.js": 12731,
+      "assets/src-Dg2sXyVr.js": 54014,
+      "assets/thinking-level-options-CO8isvoL.js": 420
     },
-    "gzipBytes": 397771
+    "gzipBytes": 407986
   },
   "chunks": {
     "../../packages/core/src/plot/plot-spec.ts": {
-      "file": "assets/plot-spec-DaUSB5_l.js",
+      "file": "assets/plot-spec-BpDavyL3.js",
       "lazy": true,
       "dynamic": true
     },
-    "../../packages/ui-web/src/terminal/index.tsx": {
-      "file": "assets/terminal-tQtth-F8.js",
+    "chunk:ChatTaskReview": {
+      "file": "assets/ChatTaskReview-BGF2On-I.js",
       "lazy": true,
-      "dynamic": true
+      "dynamic": false
+    },
+    "chunk:CustomizeControls": {
+      "file": "assets/CustomizeControls-BliMnQWk.js",
+      "lazy": true,
+      "dynamic": false
+    },
+    "chunk:DirectMcpSearch": {
+      "file": "assets/DirectMcpSearch-5yqtzOPH.js",
+      "lazy": true,
+      "dynamic": false
+    },
+    "chunk:FiledBy": {
+      "file": "assets/FiledBy-CIOMEKp7.js",
+      "lazy": true,
+      "dynamic": false
+    },
+    "chunk:ImportedServerCredentials": {
+      "file": "assets/ImportedServerCredentials-iu-jomjV.js",
+      "lazy": true,
+      "dynamic": false
+    },
+    "_IntegrationSetup.js": {
+      "file": "assets/IntegrationSetup-BKq6vp-Z.js",
+      "lazy": true,
+      "dynamic": false
+    },
+    "chunk:KnowledgeSection": {
+      "file": "assets/KnowledgeSection-B9uOAxJX.js",
+      "lazy": true,
+      "dynamic": false
+    },
+    "chunk:LearningInbox": {
+      "file": "assets/LearningInbox-4QGkbwkR.js",
+      "lazy": true,
+      "dynamic": false
+    },
+    "chunk:LearningObservation": {
+      "file": "assets/LearningObservation-Be67qOMy.js",
+      "lazy": true,
+      "dynamic": false
+    },
+    "chunk:MemoryHistory": {
+      "file": "assets/MemoryHistory-BWBgFWpU.js",
+      "lazy": true,
+      "dynamic": false
+    },
+    "chunk:ModelDestinations": {
+      "file": "assets/ModelDestinations-DvzAJIKb.js",
+      "lazy": true,
+      "dynamic": false
+    },
+    "chunk:ModelSettingsOverlay": {
+      "file": "assets/ModelSettingsOverlay-COGdz783.js",
+      "lazy": true,
+      "dynamic": false
+    },
+    "chunk:OpenToSetting": {
+      "file": "assets/OpenToSetting-D4_IkzZU.js",
+      "lazy": true,
+      "dynamic": false
+    },
+    "chunk:SettingsRow": {
+      "file": "assets/SettingsRow-D-DiyNAZ.js",
+      "lazy": true,
+      "dynamic": false
+    },
+    "chunk:ToolPermissions": {
+      "file": "assets/ToolPermissions-DekAdg6H.js",
+      "lazy": true,
+      "dynamic": false
+    },
+    "chunk:action-approval": {
+      "file": "assets/action-approval-DmU2SiDF.js",
+      "lazy": false,
+      "dynamic": false
+    },
+    "chunk:approval-policy-copy": {
+      "file": "assets/approval-policy-copy-DKRYFTLr.js",
+      "lazy": true,
+      "dynamic": false
+    },
+    "chunk:chunk-BV7QT456": {
+      "file": "assets/chunk-BV7QT456-DtGl5NnD.js",
+      "lazy": false,
+      "dynamic": false
+    },
+    "chunk:connect-remote-mcp": {
+      "file": "assets/connect-remote-mcp-DH5FMhBK.js",
+      "lazy": true,
+      "dynamic": false
+    },
+    "chunk:dashboard": {
+      "file": "assets/dashboard-BT5Tq5Fo.js",
+      "lazy": true,
+      "dynamic": false
+    },
+    "chunk:desktop": {
+      "file": "assets/desktop-p6-OSDP5.js",
+      "lazy": false,
+      "dynamic": false
     },
     "_dist.js": {
       "file": "assets/dist-x2jm9RvA.js",
       "lazy": false,
       "dynamic": false
     },
-    "_src.js": {
-      "file": "assets/src-zftwNtz1.js",
-      "lazy": false,
-      "dynamic": false
-    },
-    "chunk:KnowledgeSection": {
-      "file": "assets/KnowledgeSection-cVpn1PDz.js",
+    "chunk:file-tree": {
+      "file": "assets/file-tree-BmL3Xvef.js",
       "lazy": true,
       "dynamic": false
     },
-    "chunk:async": {
-      "file": "assets/async-CU0Z_3ZN.js",
-      "lazy": false,
+    "chunk:folder": {
+      "file": "assets/folder-MSENz0rs.js",
+      "lazy": true,
       "dynamic": false
     },
-    "chunk:check": {
-      "file": "assets/check-CYzq7BcH.js",
-      "lazy": false,
-      "dynamic": false
-    },
-    "chunk:chunk-BV7QT456": {
-      "file": "assets/chunk-BV7QT456-CVQN-0K5.js",
-      "lazy": false,
-      "dynamic": false
-    },
-    "chunk:createLucideIcon": {
-      "file": "assets/createLucideIcon-BgzzVMGK.js",
-      "lazy": false,
-      "dynamic": false
-    },
-    "chunk:desktop": {
-      "file": "assets/desktop-D56m0QQL.js",
-      "lazy": false,
+    "chunk:ide-codemirror": {
+      "file": "assets/ide-codemirror-C5e0snCm.js",
+      "lazy": true,
       "dynamic": false
     },
     "chunk:input": {
-      "file": "assets/input-B3uatZMi.js",
+      "file": "assets/input-DEJbove2.js",
+      "lazy": false,
+      "dynamic": false
+    },
+    "chunk:integration-catalog-query": {
+      "file": "assets/integration-catalog-query-wJX6rXXs.js",
+      "lazy": true,
+      "dynamic": false
+    },
+    "chunk:jsx-runtime": {
+      "file": "assets/jsx-runtime-BqfDQeLH.js",
       "lazy": false,
       "dynamic": false
     },
     "chunk:mcp-connect": {
-      "file": "assets/mcp-connect-YuyjWt-V.js",
+      "file": "assets/mcp-connect-Dp6Vc98Q.js",
+      "lazy": true,
+      "dynamic": false
+    },
+    "chunk:mcp-oauth-channel": {
+      "file": "assets/mcp-oauth-channel-7Ml4Gh6b.js",
+      "lazy": true,
+      "dynamic": false
+    },
+    "chunk:native": {
+      "file": "assets/native-KKyt65Du.js",
+      "lazy": true,
+      "dynamic": false
+    },
+    "chunk:preload-helper": {
+      "file": "assets/preload-helper-BZ1Pz5am.js",
       "lazy": false,
       "dynamic": false
     },
-    "chunk:rolldown-runtime": {
-      "file": "assets/rolldown-runtime-hePW80VL.js",
+    "chunk:response-bytes": {
+      "file": "assets/response-bytes-DfEBCeUT.js",
       "lazy": false,
       "dynamic": false
     },
     "chunk:rpc": {
-      "file": "assets/rpc-O4dQA2Xx.js",
+      "file": "assets/rpc-DuI5mpLO.js",
       "lazy": false,
+      "dynamic": false
+    },
+    "_src.js": {
+      "file": "assets/src-Dg2sXyVr.js",
+      "lazy": false,
+      "dynamic": false
+    },
+    "chunk:state-classes": {
+      "file": "assets/state-classes-D981k4JH.js",
+      "lazy": true,
+      "dynamic": false
+    },
+    "chunk:target-name": {
+      "file": "assets/target-name-o_8a-bai.js",
+      "lazy": true,
+      "dynamic": false
+    },
+    "chunk:team-delivery-text": {
+      "file": "assets/team-delivery-text-BY35lQ4O.js",
+      "lazy": true,
+      "dynamic": false
+    },
+    "chunk:thinking-level-options": {
+      "file": "assets/thinking-level-options-CO8isvoL.js",
+      "lazy": false,
+      "dynamic": false
+    },
+    "chunk:use-first-bot-setup": {
+      "file": "assets/use-first-bot-setup-C1Hg8MGl.js",
+      "lazy": true,
       "dynamic": false
     },
     "chunk:use-model-oauth-signin": {
-      "file": "assets/use-model-oauth-signin-Cf1BX7jy.js",
-      "lazy": false,
+      "file": "assets/use-model-oauth-signin-BzAiFPiA.js",
+      "lazy": true,
+      "dynamic": false
+    },
+    "chunk:users": {
+      "file": "assets/users-aX1WrH_J.js",
+      "lazy": true,
       "dynamic": false
     },
     "index.html": {
-      "file": "assets/index-BwuuDkJ0.js",
+      "file": "assets/index-C5xOTm2u.js",
       "lazy": false,
       "dynamic": false
     },
+    "src/components/Context.tsx": {
+      "file": "assets/Context-Ck06eXXa.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/components/composer/ComposerMenu.tsx": {
+      "file": "assets/ComposerMenu-BD7z0fgl.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/components/composer/RoutinesPanel.tsx": {
+      "file": "assets/RoutinesPanel-dFpsGZ7t.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/components/composer/SlashPicker.tsx": {
+      "file": "assets/SlashPicker--q9btnUI.js",
+      "lazy": true,
+      "dynamic": true
+    },
     "src/components/integrations/catalog/IntegrationCatalog.tsx": {
-      "file": "assets/IntegrationCatalog-bNtoDJJi.js",
+      "file": "assets/IntegrationCatalog-vhAXlHeI.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/lib/scoreboard-trace.ts": {
+      "file": "assets/scoreboard-trace-DQqxxjOk.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/lib/tts.ts": {
+      "file": "assets/tts-DZ4_zB2C.js",
       "lazy": true,
       "dynamic": true
     },
     "src/locales/de/messages.po": {
-      "file": "assets/messages-BUoaiqsR.js",
+      "file": "assets/messages-DQHPg9hK.js",
       "lazy": true,
       "dynamic": true
     },
     "src/locales/en/messages.po": {
-      "file": "assets/messages-BxSu4Wqu.js",
+      "file": "assets/messages-Bz5xSZap.js",
       "lazy": true,
       "dynamic": true
     },
     "src/locales/es/messages.po": {
-      "file": "assets/messages-CIdU30SI.js",
+      "file": "assets/messages-BPIefxp_.js",
       "lazy": true,
       "dynamic": true
     },
     "src/locales/hi/messages.po": {
-      "file": "assets/messages-Bt2QSeye.js",
+      "file": "assets/messages-D1JcH4uW.js",
       "lazy": true,
       "dynamic": true
     },
     "src/locales/ko/messages.po": {
-      "file": "assets/messages-D9p4B0Yz.js",
+      "file": "assets/messages-0mGljMpK.js",
       "lazy": true,
       "dynamic": true
     },
     "src/locales/pt-BR/messages.po": {
-      "file": "assets/messages-CiTGCe8N.js",
+      "file": "assets/messages-CN7-A0An.js",
       "lazy": true,
       "dynamic": true
     },
     "src/locales/ru/messages.po": {
-      "file": "assets/messages-DWOHrsFh.js",
+      "file": "assets/messages-BKQNOWkx.js",
       "lazy": true,
       "dynamic": true
     },
     "src/locales/tr/messages.po": {
-      "file": "assets/messages-Bv7-CTtX.js",
+      "file": "assets/messages-D3kl3OS_.js",
       "lazy": true,
       "dynamic": true
     },
     "src/locales/zh-CN/messages.po": {
-      "file": "assets/messages-C0PkScaL.js",
+      "file": "assets/messages-BPbOu5Kg.js",
       "lazy": true,
       "dynamic": true
     },
     "src/pages/AccountSettingsOverlay.tsx": {
-      "file": "assets/AccountSettingsOverlay-D5GHdTyE.js",
+      "file": "assets/AccountSettingsOverlay-D5ScWLad.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/ActivityList.tsx": {
+      "file": "assets/ActivityList-BaTvvG9E.js",
       "lazy": true,
       "dynamic": true
     },
     "src/pages/Auth.tsx": {
-      "file": "assets/Auth-Cfqc6rQE.js",
+      "file": "assets/Auth-DUe1DpA5.js",
       "lazy": true,
       "dynamic": true
     },
     "src/pages/BotContextMenu.tsx": {
-      "file": "assets/BotContextMenu-CrMlzI0I.js",
+      "file": "assets/BotContextMenu-Ciw1KsVI.js",
       "lazy": true,
       "dynamic": true
     },
     "src/pages/CallView.tsx": {
-      "file": "assets/CallView-Cg4WeRKe.js",
+      "file": "assets/CallView-nHYuu5DI.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/CompareStart.tsx": {
+      "file": "assets/CompareStart-DiNf9xi6.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/GoalForm.tsx": {
+      "file": "assets/GoalForm-p6RFvmYe.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/GuidedOnboarding.tsx": {
+      "file": "assets/GuidedOnboarding-jxdMV8Do.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/IntegrationSetup.tsx": {
+      "file": "assets/IntegrationSetup-B3DUKW7e.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/LearningInsights.tsx": {
+      "file": "assets/LearningInsights-CLdAehuQ.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/LocalSettings.tsx": {
+      "file": "assets/LocalSettings-BYZHXhNS.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/McpOAuthCallback.tsx": {
+      "file": "assets/McpOAuthCallback-B7fSErYv.js",
       "lazy": true,
       "dynamic": true
     },
     "src/pages/McpServersOverlay.tsx": {
-      "file": "assets/McpServersOverlay-BEGNgIkD.js",
+      "file": "assets/McpServersOverlay-B8CFSiXH.js",
       "lazy": true,
       "dynamic": true
     },
     "src/pages/MessagingSettingsOverlay.tsx": {
-      "file": "assets/MessagingSettingsOverlay-pVPFyNZB.js",
+      "file": "assets/MessagingSettingsOverlay-DToGOMx3.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/NotFound.tsx": {
+      "file": "assets/NotFound-C3Hv0EIG.js",
       "lazy": true,
       "dynamic": true
     },
     "src/pages/Onboarding.tsx": {
-      "file": "assets/Onboarding-TzB_iewV.js",
+      "file": "assets/Onboarding-Cj_2Ul65.js",
       "lazy": true,
       "dynamic": true
     },
     "src/pages/PeerMessagesOverlay.tsx": {
-      "file": "assets/PeerMessagesOverlay-BUTfZvIh.js",
+      "file": "assets/PeerMessagesOverlay-CzAE5NlM.js",
       "lazy": true,
       "dynamic": true
     },
     "src/pages/ScratchpadSection.tsx": {
-      "file": "assets/ScratchpadSection-IGW0bo44.js",
+      "file": "assets/ScratchpadSection-V4d_7ZGk.js",
       "lazy": true,
       "dynamic": true
     },
     "src/pages/SettingsOverlay.tsx": {
-      "file": "assets/SettingsOverlay-CTEtV2XK.js",
+      "file": "assets/SettingsOverlay-WidAGs7M.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/SharedCommand.tsx": {
+      "file": "assets/SharedCommand-BWOVoab8.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/TeamBoard.tsx": {
+      "file": "assets/TeamBoard-DBAn4nsB.js",
       "lazy": true,
       "dynamic": true
     },
     "src/pages/Welcome.tsx": {
-      "file": "assets/Welcome-C836Kr5I.js",
+      "file": "assets/Welcome-B3Uj4nuo.js",
       "lazy": true,
       "dynamic": true
     },
-    "src/pages/settings/DevicesSection.tsx": {
-      "file": "assets/DevicesSection-C-bclcqU.js",
+    "src/pages/account/AccountSettings.tsx": {
+      "file": "assets/AccountSettings-_E-J6rd5.js",
       "lazy": true,
       "dynamic": true
     },
-    "src/pages/settings/GeneralSettings.tsx": {
-      "file": "assets/GeneralSettings-C9fGc9Us.js",
+    "src/pages/board/Board.tsx": {
+      "file": "assets/Board-CgoqBkNj.js",
       "lazy": true,
       "dynamic": true
     },
-    "src/pages/settings/IntegrationsSection.tsx": {
-      "file": "assets/IntegrationsSection-BiSPUzH9.js",
+    "src/pages/board/BoardsSettings.tsx": {
+      "file": "assets/BoardsSettings-AzwD4k_L.js",
       "lazy": true,
       "dynamic": true
     },
-    "src/pages/settings/LearningSection.tsx": {
-      "file": "assets/LearningSection-BR9O2Bu-.js",
-      "lazy": true,
-      "dynamic": true
-    },
-    "src/pages/settings/McpSection.tsx": {
-      "file": "assets/McpSection-Dxcq4P2S.js",
-      "lazy": true,
-      "dynamic": true
-    },
-    "src/pages/settings/MemorySection.tsx": {
-      "file": "assets/MemorySection-BseBQvRZ.js",
-      "lazy": true,
-      "dynamic": true
-    },
-    "src/pages/settings/ModelsSection.tsx": {
-      "file": "assets/ModelsSection-BCfCulG5.js",
-      "lazy": true,
-      "dynamic": true
-    },
-    "src/pages/settings/PrivacySettings.tsx": {
-      "file": "assets/PrivacySettings-V9BhTEHz.js",
-      "lazy": true,
-      "dynamic": true
-    },
-    "src/pages/settings/VoiceSection.tsx": {
-      "file": "assets/VoiceSection-BovxZIcN.js",
+    "src/pages/capabilities/CapabilitiesSettings.tsx": {
+      "file": "assets/CapabilitiesSettings-BAO2_3rl.js",
       "lazy": true,
       "dynamic": true
     },
     "src/pages/customize/DeveloperPage.tsx": {
-      "file": "assets/DeveloperPage-Bezl47ec.js",
-      "lazy": true,
-      "dynamic": true
-    },
-    "src/pages/customize/SkillsPage.tsx": {
-      "file": "assets/SkillsPage-DW5blpWt.js",
-      "lazy": true,
-      "dynamic": true
-    },
-    "src/pages/customize/PluginsPage.tsx": {
-      "file": "assets/PluginsPage-DXgr2xpm.js",
+      "file": "assets/DeveloperPage-Df1xvxpG.js",
       "lazy": true,
       "dynamic": true
     },
     "src/pages/customize/ExtensionsPage.tsx": {
-      "file": "assets/ExtensionsPage-BNW9BpE2.js",
+      "file": "assets/ExtensionsPage-MfI4hMWF.js",
       "lazy": true,
       "dynamic": true
     },
-    "chunk:ToolPermissions": {
-      "file": "assets/ToolPermissions-CmC4EzP3.js",
+    "src/pages/customize/PluginsPage.tsx": {
+      "file": "assets/PluginsPage-DmZcU1KF.js",
       "lazy": true,
-      "dynamic": false
+      "dynamic": true
+    },
+    "src/pages/customize/SkillsPage.tsx": {
+      "file": "assets/SkillsPage-D_41Yiyo.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/dashboard/ComputersPanel.tsx": {
+      "file": "assets/ComputersPanel-Bom3oWRk.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/dashboard/ConnectionsPanel.tsx": {
+      "file": "assets/ConnectionsPanel-Do7LZ0lO.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/dashboard/GovernancePanel.tsx": {
+      "file": "assets/GovernancePanel-CnfAF1FB.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/dashboard/LearningDialog.tsx": {
+      "file": "assets/LearningDialog-Dphurqq3.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/dashboard/LearningPanel.tsx": {
+      "file": "assets/LearningPanel-1OngbR0S.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/dashboard/NowPanel.tsx": {
+      "file": "assets/NowPanel-D98XrPGr.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/dashboard/RoutinesPanel.tsx": {
+      "file": "assets/RoutinesPanel-Bl5Fuojk.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/dashboard/UsagePanel.tsx": {
+      "file": "assets/UsagePanel-CIHNZIOz.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/dashboard/WorkPanel.tsx": {
+      "file": "assets/WorkPanel-DixPCTNP.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/fleet/PlacementNotice.tsx": {
+      "file": "assets/PlacementNotice-BqwTy2IF.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/ide/IdePage.tsx": {
+      "file": "assets/IdePage-NL5QIU9F.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/ide/diff.tsx": {
+      "file": "assets/diff-CBHCT_qy.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/ide/editor.tsx": {
+      "file": "assets/editor-Dsx3JNUP.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/import/LocalImportPage.tsx": {
+      "file": "assets/LocalImportPage-CadZjOa_.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/memory/MemorySettings.tsx": {
+      "file": "assets/MemorySettings-C3x12Rw0.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/settings/DevicesSection.tsx": {
+      "file": "assets/DevicesSection-Dfeix_1a.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/settings/GeneralSettings.tsx": {
+      "file": "assets/GeneralSettings-DdmfLcwJ.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/settings/IntegrationsSection.tsx": {
+      "file": "assets/IntegrationsSection-BLOmRsRz.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/settings/LearningSection.tsx": {
+      "file": "assets/LearningSection-CONqMOLC.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/settings/McpSection.tsx": {
+      "file": "assets/McpSection-CX3mRrj5.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/settings/MemorySection.tsx": {
+      "file": "assets/MemorySection-DyUsG2_U.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/settings/ModelsSection.tsx": {
+      "file": "assets/ModelsSection-Bh54H_Sz.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/settings/PrivacySettings.tsx": {
+      "file": "assets/PrivacySettings-CRcuCj-K.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/settings/VoiceSection.tsx": {
+      "file": "assets/VoiceSection-DUtNURwr.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/shell/bot-panel.tsx": {
+      "file": "assets/bot-panel-B5LrrLkD.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/shell/bot-picker.tsx": {
+      "file": "assets/bot-picker-J9l7R7cW.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/shell/command-palette.tsx": {
+      "file": "assets/command-palette-BEhTseAz.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/shell/dialogs.tsx": {
+      "file": "assets/dialogs-C2ZzxcKS.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/shell/hermes-limits.tsx": {
+      "file": "assets/hermes-limits-DWFuHJbF.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/shell/terminal-session.tsx": {
+      "file": "assets/terminal-session-CXKohK5Z.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/storage/StorageSettings.tsx": {
+      "file": "assets/StorageSettings-DIYHh6sw.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/system/QuickComposer.tsx": {
+      "file": "assets/QuickComposer-CQn9g_Dq.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/system/SystemPage.tsx": {
+      "file": "assets/SystemPage-C8D2d0aW.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/workspace/WorkspaceFiles.tsx": {
+      "file": "assets/WorkspaceFiles-DMNSQ-xd.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/workspace/WorkspacePane.tsx": {
+      "file": "assets/WorkspacePane-D9ua8cAD.js",
+      "lazy": true,
+      "dynamic": true
+    },
+    "src/pages/workspace/WorkspaceScreen.tsx": {
+      "file": "assets/WorkspaceScreen-CTt6piyw.js",
+      "lazy": true,
+      "dynamic": true
     }
   },
-  "warnings": []
+  "totals": {
+    "renderer-assets": 4681997,
+    "css": 167623,
+    "fonts": 259100
+  }
 }

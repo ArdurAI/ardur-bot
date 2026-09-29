@@ -9,6 +9,9 @@ async function addHostRoot(path) {
 
 contextBridge.exposeInMainWorld("ardurbotDesktop", {
   platform: process.platform,
+  boot: {
+    save: (snapshot) => ipcRenderer.invoke("desktop.boot.save", snapshot),
+  },
   customization: {
     info: (...args) => ipcRenderer.invoke("desktop.customization.info", ...args),
     list: (...args) => ipcRenderer.invoke("desktop.customization.list", ...args),
@@ -38,6 +41,9 @@ contextBridge.exposeInMainWorld("ardurbotDesktop", {
   notifications: {
     supported: () => ipcRenderer.invoke("desktop.notifications.supported"),
     show: (message) => ipcRenderer.invoke("desktop.notifications.show", message),
+  },
+  dock: {
+    setWaitingCount: (count) => ipcRenderer.invoke("desktop.dock.waiting", count),
   },
   system: {
     ...(process.argv?.includes("--ardurbot-guided-setup")
@@ -128,6 +134,15 @@ contextBridge.exposeInMainWorld("ardurbotDesktop", {
       ipcRenderer.on("desktop.integrations.return", handler);
       void ipcRenderer.invoke("desktop.integrations.ready").catch(() => undefined);
       return () => ipcRenderer.off("desktop.integrations.return", handler);
+    },
+  },
+  shortcuts: {
+    onRun: (listener) => {
+      const handler = (_event, id) => {
+        if (typeof id === "string") listener(id);
+      };
+      ipcRenderer.on("desktop.shortcuts.run", handler);
+      return () => ipcRenderer.off("desktop.shortcuts.run", handler);
     },
   },
   oauth: {

@@ -9,7 +9,7 @@ import { createAgentSkillsService } from "./agent-skills.js";
 const actor: Actor = {
   spaceId: "space-1",
   userId: "user-1",
-  email: "user@ardurbot.test",
+  email: "user@example.test",
   isDeploymentOwner: true,
 };
 

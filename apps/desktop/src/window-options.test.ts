@@ -5,6 +5,7 @@ import {
   developmentIconFile,
   setupWindowOptions,
   warmWindowTtlMs,
+  windowBackgroundColor,
 } from "./window-options.js";
 
 describe("desktop window chrome", () => {
@@ -84,6 +85,22 @@ describe("window background", () => {
     for (const platform of ["darwin", "win32", "linux"] as const) {
       expect(browserWindowOptions(platform).backgroundColor).toBe(darkTokens.background);
       expect(setupWindowOptions(platform).backgroundColor).toBe(darkTokens.background);
+    }
+  });
+
+  it("follows the saved theme, whichever way the system is set", async () => {
+    const { darkTokens, lightTokens } = await import("@ardurbot/ui-tokens");
+    for (const systemDark of [true, false]) {
+      expect(windowBackgroundColor({ theme: "light" }, systemDark)).toBe(lightTokens.background);
+      expect(windowBackgroundColor({ theme: "dark" }, systemDark)).toBe(darkTokens.background);
+    }
+  });
+
+  it("follows the system theme when the saved theme is System or nothing is saved", async () => {
+    const { darkTokens, lightTokens } = await import("@ardurbot/ui-tokens");
+    for (const snapshot of [{ theme: "system" as const }, undefined]) {
+      expect(windowBackgroundColor(snapshot, true)).toBe(darkTokens.background);
+      expect(windowBackgroundColor(snapshot, false)).toBe(lightTokens.background);
     }
   });
 });

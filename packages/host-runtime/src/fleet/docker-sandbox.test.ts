@@ -1,7 +1,10 @@
 import type { AdapterContext } from "@ardurbot/adapter-kit";
 import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
+import { COMPUTER_IMAGE_PINS } from "@ardurbot/contracts/computer-image";
 import { expect, it, vi } from "vitest";
+import { connectionComputerImage } from "./computer-image.js";
 import { engineCommand, engineLimits, FleetDockerSandboxProvider } from "./docker-sandbox.js";
+import { fleetComputerKey } from "./linux-sandbox.js";
 import type { FleetProcess } from "./process.js";
 
 const context: AdapterContext = {
@@ -161,4 +164,150 @@ it("uses the successful Test response after a failed capacity sample was cached"
   running = true;
   const tested = await provider.test(context);
   expect(tested.capacity).toMatchObject({ source: "docker", memoryTotal: 8 * 1024 ** 3 });
+});
+it("uses the connection's image and names a missing one instead of pulling", async () => {
+  const image = "registry.example/private/computer:1";
+  let present = true;
+  const run = vi.fn(async (_name: string, args: string[]) => ({
+    code: args.includes("image") && !present ? 1 : 0,
+    stdout: Buffer.alloc(0),
+    stderr: Buffer.from(args.includes("image") && !present ? `Error: No such image: ${image}` : ""),
+  }));
+  const provider = new FleetDockerSandboxProvider(
+    ComputerConnectionSettingsSchema.parse({
+      engine: "docker",
+      endpoint: "unix:///fixture/engine.sock",
+      standardImage: image,
+    }),
+    { run, start: vi.fn() } as FleetProcess,
+  );
+  await provider.provision({ botId: "bot", homePath: "/ignored" }, context);
+  expect(run.mock.calls.find(([, args]) => args.includes("inspect"))?.[1]).toContain(image);
+  expect(run.mock.calls.find(([, args]) => args.includes("--cap-drop"))?.[1]).toContain(image);
+  present = false;
+  run.mockClear();
+  await expect(
+    provider.provision({ botId: "other", homePath: "/ignored" }, context),
+  ).rejects.toThrow(`Pull ${image} into this engine, then try again.`);
+  expect(run.mock.calls.some(([, args]) => args.includes("create") || args.includes("pull"))).toBe(
+    false,
+  );
+});
+
+function mockEngineWithContainer(existingImage: string, running = true) {
+  const name = `ardurbot-${fleetComputerKey(context.spaceId, "bot").slice(0, 40)}`;
+  const volume = `${name}-home`;
+  const run = vi.fn(async (_cmd: string, args: string[]) => {
+    if (
+      args.includes("container") &&
+      args.includes("ls") &&
+      args.some((a) => a.includes(`label=ardurbot.com/computer=${name}`))
+    ) {
+      return { code: 0, stdout: Buffer.from("existing-id\n"), stderr: Buffer.alloc(0) };
+    }
+    if (args.includes("inspect") && args.includes("--type") && args.includes("container")) {
+      return {
+        code: 0,
+        stdout: Buffer.from(
+          JSON.stringify([
+            {
+              Config: {
+                Image: existingImage,
+                Labels: {
+                  "ardurbot.com/computer": name,
+                  "ardurbot.com/space": context.spaceId,
+                },
+              },
+              State: { Running: running },
+              HostConfig: { NetworkMode: "bridge" },
+            },
+          ]),
+        ),
+        stderr: Buffer.alloc(0),
+      };
+    }
+    if (args.includes("volume") && args.includes("ls")) {
+      return { code: 0, stdout: Buffer.from(`${volume}\n`), stderr: Buffer.alloc(0) };
+    }
+    if (args.includes("volume") && args.includes("inspect")) {
+      return {
+        code: 0,
+        stdout: Buffer.from(
+          JSON.stringify([
+            {
+              Labels: {
+                "ardurbot.com/computer": name,
+                "ardurbot.com/space": context.spaceId,
+              },
+            },
+          ]),
+        ),
+        stderr: Buffer.alloc(0),
+      };
+    }
+    return { code: 0, stdout: Buffer.alloc(0), stderr: Buffer.alloc(0) };
+  });
+  return { name, volume, run };
+}
+
+it("recreates a legacy-tag container and keeps its home volume", async () => {
+  const legacyImage = COMPUTER_IMAGE_PINS.base.tag;
+  const defaultImage = connectionComputerImage("base", {});
+  const { name, run } = mockEngineWithContainer(legacyImage, false);
+  const provider = new FleetDockerSandboxProvider(
+    ComputerConnectionSettingsSchema.parse({
+      engine: "docker",
+      endpoint: "unix:///fixture/engine.sock",
+    }),
+    { run, start: vi.fn() } as FleetProcess,
+  );
+  const computer = await provider.provision({ botId: "bot", homePath: "/ignored" }, context);
+  expect(computer.fresh).toBe(true);
+  const rmCall = run.mock.calls.find(([, args]) => args.includes("rm") && args.includes("-f"));
+  expect(rmCall?.[1]).toContain(name);
+  const createCall = run.mock.calls.find(
+    ([, args]) => args.includes("create") && args.includes("--name"),
+  );
+  expect(createCall?.[1]).toContain(defaultImage);
+  expect(createCall?.[1]).toContain(`type=volume,src=${name}-home,dst=/home/ardurbot`);
+  expect(
+    run.mock.calls.some(([, args]) => args.includes("volume") && args.includes("create")),
+  ).toBe(false);
+  expect(run.mock.calls.some(([, args]) => args.includes("volume") && args.includes("rm"))).toBe(
+    false,
+  );
+});
+
+it("throws when an existing container has a user-changed image", async () => {
+  const { run } = mockEngineWithContainer("registry.example/custom:v1");
+  const provider = new FleetDockerSandboxProvider(
+    ComputerConnectionSettingsSchema.parse({
+      engine: "docker",
+      endpoint: "unix:///fixture/engine.sock",
+      standardImage: "registry.example/custom:v2",
+    }),
+    { run, start: vi.fn() } as FleetProcess,
+  );
+  await expect(provider.provision({ botId: "bot", homePath: "/ignored" }, context)).rejects.toThrow(
+    "The computer image differs from its saved profile; confirm an update in Computers.",
+  );
+  expect(run.mock.calls.some(([, args]) => args.includes("rm"))).toBe(false);
+  expect(run.mock.calls.some(([, args]) => args.includes("create"))).toBe(false);
+});
+
+it("leaves a matching image alone", async () => {
+  const defaultImage = connectionComputerImage("base", {});
+  const { run } = mockEngineWithContainer(defaultImage, true);
+  const provider = new FleetDockerSandboxProvider(
+    ComputerConnectionSettingsSchema.parse({
+      engine: "docker",
+      endpoint: "unix:///fixture/engine.sock",
+    }),
+    { run, start: vi.fn() } as FleetProcess,
+  );
+  const computer = await provider.provision({ botId: "bot", homePath: "/ignored" }, context);
+  expect(computer.fresh).toBe(false);
+  expect(run.mock.calls.some(([, args]) => args.includes("rm"))).toBe(false);
+  expect(run.mock.calls.some(([, args]) => args.includes("create"))).toBe(false);
+  expect(run.mock.calls.some(([, args]) => args.includes("start"))).toBe(false);
 });

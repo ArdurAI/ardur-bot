@@ -191,10 +191,59 @@ export type LiveMessageUpdate =
   | { type: "progress"; payload: Record<string, unknown> | undefined }
   | { type: "tool"; name: string };
 
+function replyText(blocks: readonly MessageBlock[]): string {
+  let text = "";
+  for (const block of blocks) {
+    if (block.kind === "text" || (block.kind === "progress" && block.activity !== true)) {
+      text += block.text;
+    }
+  }
+  return text;
+}
+
+/** Seal an open reply tail so a following activity line cannot replace it. */
+function sealOpenReply(blocks: readonly MessageBlock[]): MessageBlock[] {
+  const tail = blocks.at(-1);
+  if (tail?.kind !== "progress" || tail.activity === true) return [...blocks];
+  return appendTextSegment(blocks.slice(0, -1), tail.text);
+}
+
 export function reduceLiveMessageBlocks(
   blocks: readonly MessageBlock[],
   update: LiveMessageUpdate,
 ): MessageBlock[] {
+  // Pi (and Hermes) post the tool's activity line before the narration is saved.
+  // The line replaces only a previous activity line. Reply text stays, so the draft
+  // keeps the place the saved narration fills.
+  if (update.type === "progress" && update.payload?.activity === true) {
+    const sealed = sealOpenReply(blocks).filter(
+      (block) => !(block.kind === "progress" && block.activity === true),
+    );
+    const activityText = String(update.payload.text ?? "");
+    if (!activityText) return sealed;
+    return [...sealed, { kind: "progress", text: activityText, activity: true as const }];
+  }
+
+  // A later reply segment sends its own text, not a suffix of the narration already sealed.
+  // Slicing that text by the sealed length would drop it. Steps from the earlier segment stay.
+  if (update.type === "progress" && typeof update.payload?.delta !== "string") {
+    const incoming = String(update.payload?.text ?? "");
+    const soFar = replyText(blocks);
+    if (soFar.length > 0 && !incoming.startsWith(soFar)) {
+      const kept = blocks.filter((block) => block.kind !== "text" && block.kind !== "progress");
+      if (!incoming) return kept;
+      const streaming = update.payload?.streaming === true;
+      return [
+        ...kept,
+        {
+          kind: "progress",
+          text: incoming,
+          ...(streaming ? { streaming: true as const } : {}),
+        },
+      ];
+    }
+  }
+
   const tail = blocks.at(-1);
   const segments = tail?.kind === "progress" ? blocks.slice(0, -1) : blocks;
   const priorText = liveMessageText(blocks);
@@ -214,6 +263,9 @@ export function reduceLiveMessageBlocks(
     update.type === "progress"
       ? update.payload?.activity === true
       : tail?.kind === "progress" && tail.activity === true;
+  // The cursor follows the reply's text, not the run: only a freshly streamed delta
+  // marks the draft as still growing; tool calls and activity lines leave it off.
+  const streaming = update.type === "progress" && update.payload?.streaming === true && !activity;
 
   if (pendingToolNames.length > 0 && endsSentence(tailText)) {
     let next = activity ? [...segments] : appendTextSegment(segments, tailText);
@@ -227,6 +279,7 @@ export function reduceLiveMessageBlocks(
       kind: "progress",
       text: tailText,
       ...(activity ? { activity: true as const } : {}),
+      ...(streaming ? { streaming: true as const } : {}),
       ...(pendingToolNames.length > 0 ? { pendingToolNames } : {}),
     },
   ];

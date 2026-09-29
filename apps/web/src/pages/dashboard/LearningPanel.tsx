@@ -1,6 +1,7 @@
 import { Button } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { rpc } from "../../lib/rpc";
+import { learningItemTitle } from "../learning-item-text";
 import type { PanelActions, PanelContext } from "./panels";
 
 export async function load(context: PanelContext) {
@@ -13,6 +14,7 @@ export default function LearningPanel({
   const { t } = useLingui();
   const count = data.pendingCount;
   const insights = data.insightCount;
+  const waiting = data.proposals.filter((proposal) => proposal.status === "pending");
   return (
     <div className="space-y-3 text-sm">
       <div className="flex gap-4">
@@ -29,21 +31,34 @@ export default function LearningPanel({
           >{t`Insights (${insights})`}</Button>
         ) : null}
       </div>
-      {!data.proposals.length ? (
+      {!waiting.length && count === 0 ? (
         <p className="text-muted-foreground">
           <Trans>No proposals</Trans>
         </p>
       ) : null}
-      {data.proposals.slice(0, 3).map((proposal) => (
-        <Button
-          key={proposal.id}
-          variant="ghost"
-          className="h-auto w-full justify-start whitespace-normal text-start"
-          onClick={openLearning}
-        >
-          {proposal.rationale}
-        </Button>
-      ))}
+      {waiting.slice(0, 3).map((proposal) => {
+        const title =
+          proposal.operation === "revert-suggestion"
+            ? t`Possible regression — review undo`
+            : proposal.operation === "consolidation"
+              ? t`Proposed consolidation`
+              : learningItemTitle(proposal);
+        return (
+          <Button
+            key={proposal.id}
+            variant="ghost"
+            className="h-auto w-full min-w-0 flex-col items-stretch justify-start whitespace-normal text-start"
+            onClick={openLearning}
+          >
+            <span className="block w-full min-w-0 break-words font-medium">{title}</span>
+            {proposal.rationale !== title ? (
+              <span className="mt-1 block w-full min-w-0 break-words text-xs text-muted-foreground">
+                {proposal.rationale}
+              </span>
+            ) : null}
+          </Button>
+        );
+      })}
     </div>
   );
 }

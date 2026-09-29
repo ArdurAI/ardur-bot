@@ -23,6 +23,7 @@
     "pg": "8.23.0"
   },
   "devDependencies": {
+    "@ardurbot/core": "workspace:*",
     "@ardurbot/db": "workspace:*",
     "@ardurbot/ui-tokens": "workspace:*",
     "@playwright/test": "1.63.0",

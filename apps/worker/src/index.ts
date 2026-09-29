@@ -7,6 +7,7 @@ import {
   placeRunComputer,
 } from "@ardurbot/adapters";
 import { loadRootEnv } from "@ardurbot/core/node/load-root-env";
+import { secretEnvironment } from "@ardurbot/core/node/service-secrets";
 import { createMessagingReceivers } from "./messaging-receivers.js";
 
 loadRootEnv();
@@ -72,7 +73,8 @@ import { createRootLogger } from "@ardurbot/logging/axiom";
 const logger = createRootLogger(SERVICE_NAMES.worker);
 
 async function main() {
-  const databaseUrl = process.env.DATABASE_URL;
+  const env = secretEnvironment();
+  const databaseUrl = env.DATABASE_URL;
   if (!databaseUrl) throw new Error("DATABASE_URL is required");
   // Shared by Prisma, graphile-worker, and reconciliation — one pool instead of
   // separate ones. Keep this modest: graphile holds a LISTEN client, and the
@@ -83,36 +85,36 @@ async function main() {
   // writes it protects. A larger shared max just competes for Postgres
   // max_connections (53300).
   const { prisma, pool } = createDb(databaseUrl, {
-    poolMax: parsePositiveInteger(process.env.DB_POOL_MAX, 8),
+    poolMax: parsePositiveInteger(env.DB_POOL_MAX, 8),
     applicationName: "ardurbot-worker",
   });
   const lockPool = createFilingLockPool(databaseUrl, { applicationName: "ardurbot-worker" });
   const realtime = new PostgresRealtimeFanout({
-    connectionString: process.env.REALTIME_DATABASE_URL ?? databaseUrl,
+    connectionString: env.REALTIME_DATABASE_URL ?? databaseUrl,
     publisher: pool,
   });
-  const secrets = new EncryptedSecretStore(resolveEncryptionKey(process.env));
+  const secrets = new EncryptedSecretStore(resolveEncryptionKey(env));
   await backfillRuntimePins({ prisma, secrets, logger });
   const events = createThreadEvents(prisma, realtime, {
     runSecretWriter: createRunSecretWriter(secrets),
   });
-  const dataDir = process.env.DATA_DIR ?? "./data";
+  const dataDir = env.DATA_DIR ?? "./data";
   const runtime =
-    process.env.AGENT_RUNTIME === "scripted"
+    env.AGENT_RUNTIME === "scripted"
       ? new ScriptedAgentRuntime()
       : new PiAgentRuntime({ sessionRoot: resolvePiSessionRoot(dataDir) });
   // Same resolver the API uses, so both processes agree on provider, model and key.
-  const { key: deploymentModelKey } = resolveDeploymentModel();
-  const sandboxProvider = resolveSandboxProvider(process.env);
+  const { key: deploymentModelKey } = resolveDeploymentModel(env);
+  const sandboxProvider = resolveSandboxProvider(env);
   const sandbox = createRunSandbox(sandboxProvider, {
-    supervisorUrl: process.env.SANDBOX_SUPERVISOR_URL ?? "http://127.0.0.1:7091",
-    supervisorToken: sandboxProvider === "docker" ? resolveSupervisorToken(process.env) : undefined,
-    e2bApiKey: process.env.E2B_API_KEY,
-    daytonaApiKey: process.env.DAYTONA_API_KEY,
-    daytonaApiUrl: process.env.DAYTONA_API_URL,
-    daytonaTarget: process.env.DAYTONA_TARGET,
-    boxApiKey: process.env.BOX_API_KEY,
-    boxApiUrl: process.env.BOX_API_URL ?? process.env.BOX_BASE_URL,
+    supervisorUrl: env.SANDBOX_SUPERVISOR_URL ?? "http://127.0.0.1:7091",
+    supervisorToken: sandboxProvider === "docker" ? resolveSupervisorToken(env) : undefined,
+    e2bApiKey: env.E2B_API_KEY,
+    daytonaApiKey: env.DAYTONA_API_KEY,
+    daytonaApiUrl: env.DAYTONA_API_URL,
+    daytonaTarget: env.DAYTONA_TARGET,
+    boxApiKey: env.BOX_API_KEY,
+    boxApiUrl: env.BOX_API_URL ?? env.BOX_BASE_URL,
     dataDir,
     prisma,
     secrets,
@@ -124,8 +126,8 @@ async function main() {
     {
       sandbox,
       hostMcp: createHostClient(),
-      stdioEnabled: process.env.MCP_STDIO_ENABLED === "true",
-      allowedCommands: (process.env.MCP_STDIO_ALLOWED_COMMANDS ?? "")
+      stdioEnabled: env.MCP_STDIO_ENABLED === "true",
+      allowedCommands: (env.MCP_STDIO_ALLOWED_COMMANDS ?? "")
         .split(",")
         .map((v) => v.trim())
         .filter(Boolean),
@@ -134,30 +136,30 @@ async function main() {
     mcpOAuth,
   );
   const pipedreamConfig = pipedreamConfigFromEnv({
-    pipedreamClientId: process.env.PIPEDREAM_CLIENT_ID,
-    pipedreamClientSecret: process.env.PIPEDREAM_CLIENT_SECRET,
-    pipedreamProjectId: process.env.PIPEDREAM_PROJECT_ID,
-    pipedreamEnvironment: process.env.PIPEDREAM_ENVIRONMENT,
-    encryptionKey: resolveEncryptionKey(process.env),
+    pipedreamClientId: env.PIPEDREAM_CLIENT_ID,
+    pipedreamClientSecret: env.PIPEDREAM_CLIENT_SECRET,
+    pipedreamProjectId: env.PIPEDREAM_PROJECT_ID,
+    pipedreamEnvironment: env.PIPEDREAM_ENVIRONMENT,
+    encryptionKey: resolveEncryptionKey(env),
   });
   const pipedream = isPipedreamEnabled(pipedreamConfig)
     ? new PipedreamConnector(pipedreamConfig)
     : undefined;
   // Legacy delivery stays passive; Dispatch receivers below own outbound connections.
-  const messagingPlatforms = messagingPlatformsFromEnv(messagingEnvFromProcess(process.env));
+  const messagingPlatforms = messagingPlatformsFromEnv(messagingEnvFromProcess(env));
   const messaging = isMessagingSurfaceEnabled(messagingPlatforms, {
     deploymentModelKey,
-    openSignup: process.env.MESSAGING_OPEN_SIGNUP === "true",
+    openSignup: env.MESSAGING_OPEN_SIGNUP === "true",
   })
     ? new ChatSdkMessagingSurface(messagingPlatforms)
     : undefined;
   const integrationSettings = new IntegrationProviderSettings(
     prisma,
     secrets,
-    resolveEncryptionKey(process.env),
+    resolveEncryptionKey(env),
     {
-      composio: isComposioEnabled(process.env.COMPOSIO_API_KEY)
-        ? new ComposioConnector(process.env.COMPOSIO_API_KEY)
+      composio: isComposioEnabled(env.COMPOSIO_API_KEY)
+        ? new ComposioConnector(env.COMPOSIO_API_KEY)
         : undefined,
       pipedream,
     },
@@ -176,18 +178,18 @@ async function main() {
     prisma,
     secrets,
     {
-      supervisorUrl: process.env.SANDBOX_SUPERVISOR_URL,
-      supervisorToken: process.env.SANDBOX_SUPERVISOR_TOKEN,
+      supervisorUrl: env.SANDBOX_SUPERVISOR_URL,
+      supervisorToken: env.SANDBOX_SUPERVISOR_TOKEN,
     },
     sandbox,
   );
   const artifacts = new LocalArtifactStore(dataDir);
-  const inMemoryJobs = process.env.WAKEUP_DRIVER === "memory" ? new InMemoryJobQueue() : undefined;
+  const inMemoryJobs = env.WAKEUP_DRIVER === "memory" ? new InMemoryJobQueue() : undefined;
   const jobs: JobPublisher = inMemoryJobs ?? new GraphileJobPublisher(pool);
   const jobHost: JobWorkerHost =
     inMemoryJobs ??
     new GraphileJobWorkerHost(pool, {
-      concurrency: parsePositiveInteger(process.env.GRAPHILE_WORKER_CONCURRENCY, 4),
+      concurrency: parsePositiveInteger(env.GRAPHILE_WORKER_CONCURRENCY, 4),
     });
   // One provider instance so emulator launches and polls share the same Map.
   const cloudAgent = createCloudAgentConnection();
@@ -218,9 +220,9 @@ async function main() {
     },
     secrets: [
       deploymentModelKey ?? "",
-      process.env.COMPOSIO_API_KEY ?? "",
-      process.env.CURSOR_API_KEY ?? "",
-      process.env.TYPESAFE_API_KEY ?? "",
+      env.COMPOSIO_API_KEY ?? "",
+      env.CURSOR_API_KEY ?? "",
+      env.TYPESAFE_API_KEY ?? "",
     ].filter(Boolean),
     placement: (runId, signal) =>
       placeRunComputer(
@@ -252,9 +254,9 @@ async function main() {
     events,
     workerId: process.pid.toString(),
     localImport: {
-      apiUrl: process.env.API_INTERNAL_URL ?? process.env.API_URL ?? "http://127.0.0.1:3100",
-      encryptionKey: resolveEncryptionKey(process.env),
-      packaged: process.env.ARDURBOT_HOST_BRIDGE === "api",
+      apiUrl: env.API_INTERNAL_URL ?? env.API_URL ?? "http://127.0.0.1:3100",
+      encryptionKey: resolveEncryptionKey(env),
+      packaged: env.ARDURBOT_HOST_BRIDGE === "api",
     },
     runtime,
     secretStore: secrets,

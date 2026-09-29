@@ -40,7 +40,7 @@ describeRunsList("runs.list activity tracker", () => {
   });
 
   it("lists active runs from two bots and keeps completed runs under recent", async () => {
-    const cookie = await signup(app, `runs-${stamp}@ardurbot.test`, "Runs User");
+    const cookie = await signup(app, `runs-${stamp}@example.test`, "Runs User");
     const alpha = await rpc<{ id: string }>(app, cookie, "bots/create", {
       name: "Alpha",
       title: "Alpha",
@@ -78,7 +78,7 @@ describeRunsList("runs.list activity tracker", () => {
   });
 
   it("never returns runs from another workspace", async () => {
-    const ownerCookie = await signup(app, `runs-owner-${stamp}@ardurbot.test`, "Owner");
+    const ownerCookie = await signup(app, `runs-owner-${stamp}@example.test`, "Owner");
     const ownerBot = await rpc<{ id: string }>(app, ownerCookie, "bots/create", {
       name: "OwnerBot",
       title: "OwnerBot",
@@ -88,7 +88,7 @@ describeRunsList("runs.list activity tracker", () => {
     });
     await seedRun(prisma, ownerBot.id, "running", "owner active run");
 
-    const intruderCookie = await signup(app, `runs-intruder-${stamp}@ardurbot.test`, "Intruder");
+    const intruderCookie = await signup(app, `runs-intruder-${stamp}@example.test`, "Intruder");
     const active = await rpc<{ runs: RunActivityRow[] }>(app, intruderCookie, "runs/list", {
       filter: "active",
     });
@@ -96,7 +96,7 @@ describeRunsList("runs.list activity tracker", () => {
   });
 
   it("excludes archived bots from recent before applying the limit", async () => {
-    const cookie = await signup(app, `runs-archived-${stamp}@ardurbot.test`, "Archive User");
+    const cookie = await signup(app, `runs-archived-${stamp}@example.test`, "Archive User");
     const archivedBot = await rpc<{ id: string }>(app, cookie, "bots/create", {
       name: "Archived",
       title: "Archived",
@@ -133,7 +133,7 @@ describeRunsList("runs.list activity tracker", () => {
   });
 
   it("returns group runs with groupId for navigation", async () => {
-    const cookie = await signup(app, `runs-group-${stamp}@ardurbot.test`, "Group User");
+    const cookie = await signup(app, `runs-group-${stamp}@example.test`, "Group User");
     const botA = await rpc<{ id: string }>(app, cookie, "bots/create", {
       name: "Worker",
       title: "Worker",

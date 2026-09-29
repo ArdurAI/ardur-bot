@@ -36,6 +36,8 @@ vi.mock("@lingui/core/macro", () => ({
   msg: (parts: TemplateStringsArray) => ({ id: parts.join(""), message: parts.join("") }),
 }));
 vi.mock("@lingui/react/macro", () => ({
+  Plural: ({ value, one, other }: { value: number; one: string; other: string }) =>
+    (value === 1 ? one : other).replaceAll("#", String(value)),
   Trans: ({ children }: { children: ReactNode }) => {
     if (typeof children !== "string" || i18n.locale === "en") return children;
     const text = children.replace(/\s+/g, " ").trim();
@@ -141,6 +143,40 @@ beforeEach(() => {
   api.observation.mockResolvedValue(observation);
   api.proposal.mockResolvedValue(proposal);
 });
+it("does not show a markdown list marker at the start of an item title", async () => {
+  api.list.mockResolvedValue({
+    reviews: [],
+    proposals: [{ ...proposal, proposedContent: "- Helm chart release mechanics and gotchas" }],
+    pendingCount: 1,
+    appliedThisWeek: 0,
+  });
+  await act(async () => root.render(<LearningInbox />));
+  expect(container.querySelector('[data-testid="learning-item-title"]')?.textContent).toBe(
+    "Helm chart release mechanics and gotchas",
+  );
+});
+it("wraps item text inside the dialog instead of clipping it", async () => {
+  api.list.mockResolvedValue({
+    reviews: [],
+    proposals: [
+      {
+        ...proposal,
+        proposedContent: "For conversation, a long model finished as often as another model.",
+      },
+    ],
+    pendingCount: 1,
+    appliedThisWeek: 0,
+  });
+  await act(async () => root.render(<LearningInbox />));
+  const title = container.querySelector('[data-testid="learning-item-title"]');
+  expect(title?.textContent).toContain("For conversation, a long model finished");
+  expect(title?.className).toContain("break-words");
+  expect(title?.className).not.toContain("truncate");
+  expect(title?.className).not.toContain("whitespace-nowrap");
+  const section = container.querySelector('[data-testid="learning-inbox"]');
+  expect(section?.className).toContain("min-w-0");
+  expect(section?.className).toContain("max-w-full");
+});
 it("opens an older timeline proposal even when it is outside the inbox page", async () => {
   api.list.mockResolvedValue({ reviews: [], proposals: [], pendingCount: 0, appliedThisWeek: 0 });
   api.journey.mockResolvedValue([
@@ -189,11 +225,10 @@ async function click(label: string) {
   expect(button).toBeDefined();
   await act(async () => button!.click());
 }
-it("separates pending copy from applied copy, approves without removing the card, and undoes", async () => {
+it("separates pending copy from applied copy, moves an approval to the timeline, and undoes", async () => {
   await act(async () => root.render(<LearningInbox botId="bot" />));
   expect(container.textContent).toContain("3 suggestions to review");
   expect(container.textContent).not.toContain("learned 3 things");
-  const card = container.querySelector("article");
   const applied = {
     ...proposal,
     status: "applied",
@@ -211,8 +246,11 @@ it("separates pending copy from applied copy, approves without removing the card
   });
   await click("Approve");
   expect(api.approve).toHaveBeenCalledWith({ proposalId: "proposal" });
-  expect(container.querySelector("article")).toBe(card);
-  expect(container.textContent).toContain("learned 1 things this week");
+  expect(container.querySelector('[data-testid="learning-waiting"] article')).toBeNull();
+  expect(container.querySelector('[data-testid="learning-decided"]')?.textContent).toContain(
+    "Applied",
+  );
+  expect(container.textContent).toContain("learned 1 thing this week");
   expect(container.textContent).toContain("Applied");
   await act(async () => {
     const details = container.querySelector("article details")! as HTMLDetailsElement;
@@ -761,6 +799,31 @@ it("disables display-only approval with a sentence and does not fetch evidence u
   await click("Evidence source");
   expect(api.evidence).toHaveBeenCalledWith({ proposalId: "proposal", evidenceId: "source" });
 });
+it("uses the singular when one suggestion is waiting or one change was learned", async () => {
+  api.list.mockResolvedValue({
+    reviews: [],
+    proposals: [proposal],
+    pendingCount: 1,
+    appliedThisWeek: 1,
+  });
+  await act(async () => root.render(<LearningInbox />));
+  const text = container.textContent ?? "";
+  expect(text).toContain("1 suggestion to review");
+  expect(text).not.toContain("1 suggestions to review");
+  expect(text).toContain("learned 1 thing this week");
+  expect(text).not.toContain("learned 1 things this week");
+});
+it("does not call the inbox empty while a suggestion is still waiting", async () => {
+  api.list.mockResolvedValue({
+    reviews: [],
+    proposals: [{ ...proposal, status: "rejected", proposedContent: "Already decided." }],
+    pendingCount: 1,
+    appliedThisWeek: 0,
+  });
+  await act(async () => root.render(<LearningInbox />));
+  expect(container.textContent).toMatch(/1 suggestions? to review/);
+  expect(container.textContent).not.toContain("Nothing to review.");
+});
 it("shows the empty state and permits only the owner to enable learning", async () => {
   api.list.mockResolvedValue({ reviews: [], proposals: [], pendingCount: 0, appliedThisWeek: 0 });
   api.settings.mockResolvedValue({ enabled: false, canConfigure: false });
@@ -795,6 +858,75 @@ it("lets only the owner turn insights off, keeping the rest of the learning sett
   api.settings.mockResolvedValue({ ...settings, canConfigure: false });
   await act(async () => root.render(<LearningInbox botId="other" />));
   expect(container.textContent).not.toContain("Show insights");
+});
+it("names the learning switch for what it turns on", async () => {
+  api.settings.mockResolvedValue({
+    enabled: true,
+    consolidationEnabled: false,
+    insightsEnabled: true,
+    canConfigure: true,
+    reviewerPin: null,
+    destination: null,
+    budgets: { botDailyTokens: 1 },
+  });
+  await act(async () => root.render(<LearningInbox />));
+  const toggle = container.querySelector(
+    'input[aria-label="Learning for this space"]',
+  ) as HTMLInputElement;
+  expect(toggle).toBeTruthy();
+  expect(toggle.checked).toBe(true);
+  expect(container.textContent).toContain("Learning for this space");
+  expect(container.textContent).not.toContain("Learning is off for this space.");
+});
+it("keeps decided items out of the inbox and shows them on the timeline", async () => {
+  const waitingItem = {
+    ...proposal,
+    id: "wait",
+    proposedContent: "Still waiting.",
+    status: "pending",
+  };
+  const rejectedItem = {
+    ...proposal,
+    id: "no",
+    proposedContent: "Already rejected.",
+    status: "rejected",
+  };
+  api.list.mockResolvedValue({
+    reviews: [],
+    proposals: [waitingItem, rejectedItem],
+    pendingCount: 1,
+    appliedThisWeek: 0,
+  });
+  await act(async () => root.render(<LearningInbox />));
+  const waiting = container.querySelector('[data-testid="learning-waiting"]');
+  const decided = container.querySelector('[data-testid="learning-decided"]');
+  expect(waiting).toBeTruthy();
+  expect(decided).toBeTruthy();
+  expect(waiting?.textContent).toContain("Still waiting.");
+  expect(waiting?.textContent).not.toContain("Already rejected.");
+  expect(decided?.textContent).toContain("Already rejected.");
+  expect(decided?.textContent).toContain("Rejected");
+  api.reject.mockImplementation(async () => {
+    api.list.mockResolvedValue({
+      reviews: [],
+      proposals: [{ ...waitingItem, status: "rejected" }, rejectedItem],
+      pendingCount: 0,
+      appliedThisWeek: 0,
+    });
+    return {
+      proposal: { ...waitingItem, status: "rejected" },
+      conflict: { before: "before", applied: "applied", current: "current", expectedRevision: 0 },
+    };
+  });
+  await click("Reject");
+  const waitingAfter = container.querySelector('[data-testid="learning-waiting"]');
+  const decidedAfter = container.querySelector('[data-testid="learning-decided"]');
+  expect(waitingAfter?.textContent).toContain("Nothing to review.");
+  expect(waitingAfter?.textContent).not.toContain("Still waiting.");
+  expect(waitingAfter?.textContent).not.toContain("Already rejected.");
+  expect(decidedAfter?.querySelector("[role=alert]")?.textContent).toContain(
+    "Later edits overlap this change. Review both versions in History.",
+  );
 });
 it("sends edited content for a server diff before approval", async () => {
   await act(async () => root.render(<LearningInbox />));

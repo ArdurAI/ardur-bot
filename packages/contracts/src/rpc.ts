@@ -514,6 +514,9 @@ export const appContract = {
     cancelConnect: oc
       .input(z.object({ loginId: z.string() }))
       .output(z.object({ ok: z.literal(true) })),
+    installHermes: oc
+      .input(z.strictObject({}).optional())
+      .output(z.object({ ok: z.literal(true) })),
   },
   runtimeConfig: {
     preview: oc

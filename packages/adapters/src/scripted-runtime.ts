@@ -216,7 +216,15 @@ export function inferScript(
   }
   const firstLoopFixture = "Results show newest first; sort results by createdAt ascending";
   const correctedFixture = "Results show oldest first; sort results by createdAt ascending.";
-  if (prompt.includes(firstLoopFixture) && lower.includes("you coordinate this goal")) {
+  const isGoalWake =
+    lower.includes("review worker's completed assignment") ||
+    lower.includes("review the completed assignment");
+
+  if (
+    prompt.includes(firstLoopFixture) &&
+    lower.includes("you coordinate this goal") &&
+    !isGoalWake
+  ) {
     return [
       {
         assistant: "I asked Worker to check the fixture.",

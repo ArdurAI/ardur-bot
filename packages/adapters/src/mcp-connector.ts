@@ -195,8 +195,10 @@ export class McpConnector implements ConnectorProvider {
       select: { id: true, computer: { select: { kind: true } } },
     });
     if (!bot) return [];
+    // Tool definitions lead every request, so a fixed order keeps the prompt cache reusable.
     const servers = await this.prisma.mcpServer.findMany({
       where: { spaceId: context.spaceId, userId: context.userId, enabled: true },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       include: {
         assignments: {
           where: { botId: context.botId, spaceId: context.spaceId, userId: context.userId },
