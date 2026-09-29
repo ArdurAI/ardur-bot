@@ -386,6 +386,41 @@ describe("composer controls", () => {
     await click(button("Remove skill Daily review"));
     expect(document.querySelector('[data-testid="composer-chips"]')).toBeNull();
   });
+  it("keeps the keyboard highlight when a parked cursor ends up over an option", async () => {
+    await mount({
+      mentionTargets: [
+        { kind: "bot", id: "researcher", name: "Researcher" },
+        { kind: "bot", id: "writer", name: "Research Writer" },
+      ],
+    });
+    await type("@Res");
+    const options = () => [
+      ...document.querySelectorAll('[data-testid="mention-picker"] [role="option"]'),
+    ];
+    expect(options()[0]?.getAttribute("aria-selected")).toBe("true");
+    // Removing a chip collapses the chip row, which can open the picker under a cursor
+    // that never moved. That boundary mouseover must not steal the keyboard highlight.
+    await act(async () => {
+      options()[1]?.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+    });
+    expect(options()[0]?.getAttribute("aria-selected")).toBe("true");
+    await key(document.querySelector("textarea")!, "Tab");
+    expect(document.querySelector('[data-testid="mention-chip"]')?.textContent).toContain(
+      "Researcher",
+    );
+    // Actually moving the pointer onto the second option still highlights it.
+    await type("@Res");
+    await act(async () => {
+      options()[1]?.dispatchEvent(new MouseEvent("mousemove", { bubbles: true }));
+    });
+    expect(options()[1]?.getAttribute("aria-selected")).toBe("true");
+    await key(document.querySelector("textarea")!, "Tab");
+    expect(
+      [...document.querySelectorAll('[data-testid="mention-chip"] button')].map((chip) =>
+        chip.getAttribute("aria-label"),
+      ),
+    ).toEqual(["Remove mention Researcher", "Remove mention Research Writer"]);
+  });
   it("has a reduced-motion rule for menu and drag animations", () => {
     const css = readFileSync(path.join(import.meta.dirname, "composer.css"), "utf8");
     expect(css).toContain("prefers-reduced-motion: reduce");

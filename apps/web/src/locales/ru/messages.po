@@ -1150,6 +1150,7 @@ msgstr ""
 #: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
+#: src/pages/Shell.tsx
 msgid "Back"
 msgstr "Назад"
 
@@ -4081,6 +4082,10 @@ msgstr "Для {task} {better} на этом компьютере справил
 msgid "Forgot password?"
 msgstr "Забыли пароль?"
 
+#: src/pages/Shell.tsx
+msgid "Forward"
+msgstr "Вперёд"
+
 #: src/pages/import/LocalImportPage.tsx
 msgid "Found on this computer"
 msgstr ""
@@ -5548,6 +5553,7 @@ msgstr ""
 msgid "New access token"
 msgstr "Новый токен доступа"
 
+#: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "New bot"
 msgstr "Новый бот"
@@ -6246,6 +6252,10 @@ msgstr ""
 #: src/pages/ScratchpadSection.tsx
 msgid "Park"
 msgstr "Приостановить"
+
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Partially reported"
+msgstr "Частично зафиксировано"
 
 #: src/components/AskCard.tsx
 #: src/pages/account/AccountSignIn.tsx
@@ -8239,8 +8249,8 @@ msgid "System"
 msgstr "Системная"
 
 #: src/pages/ide/terminal.tsx
-#: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
+#: src/pages/shell/take-control-button.tsx
 msgid "Take control"
 msgstr "Взять под контроль"
 

@@ -1150,8 +1150,9 @@ msgstr ""
 #: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
+#: src/pages/Shell.tsx
 msgid "Back"
-msgstr ""
+msgstr "Voltar"
 
 #: src/pages/capabilities/CapabilitiesSettings.tsx
 msgid "Back to capabilities"
@@ -4081,6 +4082,10 @@ msgstr ""
 msgid "Forgot password?"
 msgstr "Esqueceu a senha?"
 
+#: src/pages/Shell.tsx
+msgid "Forward"
+msgstr "Avançar"
+
 #: src/pages/import/LocalImportPage.tsx
 msgid "Found on this computer"
 msgstr ""
@@ -4275,7 +4280,7 @@ msgstr "Olá, é assim que vou soar quando ler as respostas em voz alta."
 
 #: src/pages/Shell.tsx
 msgid "Hide bots"
-msgstr ""
+msgstr "Ocultar bots"
 
 #: src/pages/customize/McpDiagnostics.tsx
 msgid "Hide logs"
@@ -5548,6 +5553,7 @@ msgstr ""
 msgid "New access token"
 msgstr ""
 
+#: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "New bot"
 msgstr "Novo bot"
@@ -6246,6 +6252,10 @@ msgstr ""
 #: src/pages/ScratchpadSection.tsx
 msgid "Park"
 msgstr "Suspender"
+
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Partially reported"
+msgstr "Parcialmente reportado"
 
 #: src/components/AskCard.tsx
 #: src/pages/account/AccountSignIn.tsx
@@ -7782,7 +7792,7 @@ msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Show bots"
-msgstr ""
+msgstr "Mostrar bots"
 
 #: src/pages/shell/settings-chrome.tsx
 msgid "Show computer"
@@ -8239,8 +8249,8 @@ msgid "System"
 msgstr "Sistema"
 
 #: src/pages/ide/terminal.tsx
-#: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
+#: src/pages/shell/take-control-button.tsx
 msgid "Take control"
 msgstr "Assumir o controle"
 

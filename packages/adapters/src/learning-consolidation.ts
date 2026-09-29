@@ -149,6 +149,7 @@ export async function consolidateLearning(
       prompt,
       history: [],
       tools: "none",
+      singleRequest: true,
       model: {
         ...resolved,
         maxTokens: Math.min(resolved.maxTokens ?? config.maxOutputTokens, config.maxOutputTokens),

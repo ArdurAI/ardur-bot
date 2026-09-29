@@ -21,7 +21,12 @@ import {
 import { HermesProviderBroker } from "./hermes-provider-broker.js";
 import { loadLearningRecords } from "./learning-records.js";
 import type { RecordedContextUsage } from "./run-usage.js";
-import { brokerRunAllowance, recordBrokerRunUsage, recordRunUsage } from "./run-usage.js";
+import {
+  brokerRunAllowance,
+  recordBrokerRunUsage,
+  recordRunUsage,
+  recordStandaloneUsage,
+} from "./run-usage.js";
 import { accountRuntimeUsage } from "./runtime-usage.js";
 
 const databaseUrl =
@@ -1709,6 +1714,76 @@ postgres("request ledger on disposable PostgreSQL", () => {
           row.cost === null,
       ),
     ).toBe(true);
+  });
+  it("records run-less usage through the shared ledger without run, budget or event effects", async () => {
+    const f = await fixture();
+    const scope = {
+      spaceId: f.id,
+      userId: f.run.userId,
+      botId: f.id,
+      threadId: `judge:${f.id}`,
+      purpose: "helper" as const,
+      runtimePin: f.pin,
+    };
+    const record = (usage: AgentUsage) =>
+      recordStandaloneUsage({ prisma: db.prisma }, scope, usage);
+    const cumulative = (sequence: number, input: number, output: number) =>
+      f.usage({
+        purpose: "helper",
+        counter: { mode: "cumulative", epochId: "epoch", sequence },
+        categories: {
+          logicalInput: input,
+          uncachedInput: null,
+          cacheReadInput: input / 2,
+          cacheWriteInput: null,
+          output,
+          reasoning: null,
+        },
+      });
+    await record(cumulative(0, 40, 10));
+    await record(cumulative(1, 100, 30));
+    await record(cumulative(1, 100, 30));
+    await expect(record(cumulative(1, 90, 30))).rejects.toThrow("Conflicting usage observation");
+    const admitted = cumulative(2, 120, 40);
+    admitted.request!.admission = {
+      kind: "worker-provider-broker",
+      reservedTokens: 10,
+      maxRequests: 1,
+      maxReservedTokens: 10,
+    };
+    await expect(record(admitted)).rejects.toThrow("broker admission");
+    const legacy = { provider: "fixture", model: "fixture", inputTokens: 7, outputTokens: 3 };
+    await record(legacy);
+    await record({ ...legacy, inputTokens: 0, outputTokens: 0, reported: false });
+    const rows = await f.rows();
+    const measured = rows.find((row) => row.requestKey !== null)!;
+    expect(measured).toMatchObject({
+      runId: null,
+      threadId: scope.threadId,
+      purpose: "helper",
+      runtimePin: f.pin,
+      inputTokens: 100,
+      outputTokens: 30,
+      logicalInputTokens: 100,
+      cacheReadInputTokens: 50,
+      cacheWriteInputTokens: null,
+      lastSequence: 1,
+    });
+    expect(measured.observations).toHaveLength(2);
+    const legacyRows = rows.filter((row) => row.requestKey === null);
+    expect(legacyRows).toHaveLength(2);
+    for (const row of legacyRows)
+      expect(row).toMatchObject({ purpose: "legacy", coverage: "partial", runId: null });
+    expect(legacyRows.find((row) => row.categoryCoverage !== null)?.categoryCoverage).toEqual({
+      logicalInput: "unknown",
+      uncachedInput: "unknown",
+      cacheReadInput: "unknown",
+      cacheWriteInput: "unknown",
+      output: "unknown",
+      reasoning: "unknown",
+    });
+    expect(await f.root()).toMatchObject({ usedTokens: 0, reservedTokens: 0 });
+    expect(await db.prisma.event.count({ where: { spaceId: f.id } })).toBe(0);
   });
   it("keeps spend and pins after run deletion, and removes receipts on space deletion", async () => {
     const f = await fixture();

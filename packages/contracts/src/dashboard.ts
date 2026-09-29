@@ -11,6 +11,9 @@ export const UsagePeriodSchema = z.object({
   outputTokens: z.number().nonnegative(),
   // Null when any usage record lacks a reported cost with pricing provenance.
   cost: z.number().nullable(),
+  // True when a record in the period has input or output totals its provider did not
+  // fully report; the token sums then cover the known part only. Older servers omit it.
+  incomplete: z.boolean().optional(),
 });
 export type UsagePeriod = z.infer<typeof UsagePeriodSchema>;
 export const UsageSummarySchema = z.object({

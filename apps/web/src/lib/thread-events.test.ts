@@ -3,6 +3,7 @@ import type {
   CommandBlock as FixtureCommandBlock,
   ProductEvent as FixtureProductEvent,
   ProductEvent,
+  Run,
   ThreadMessage,
   ThreadSnapshot,
 } from "@ardurbot/contracts";
@@ -616,9 +617,9 @@ describe("thread event reduction", () => {
 
     expect(reconciled.snapshot.run?.status).toBe("waiting_takeover");
     expect(reconciled.computer?.busyBotName).toBeNull();
-    expect(computerTakeoverBlocked(reconciled.computer, reconciled.snapshot.run?.status)).toBe(
-      false,
-    );
+    expect(
+      computerTakeoverBlocked(reconciled.computer, activeThreadRuns(reconciled.snapshot), "bot-1"),
+    ).toBe(false);
   });
 
   it("ignores a refresh whose cursor is behind the event-sourced snapshot", () => {
@@ -729,9 +730,9 @@ describe("thread event reduction", () => {
     expect(reconciled.snapshot.run).toBeNull();
     expect(reconciled.snapshot.activeRuns).toEqual([]);
     expect(reconciled.computer?.busyBotName).toBeNull();
-    expect(computerTakeoverBlocked(reconciled.computer, reconciled.snapshot.run?.status)).toBe(
-      false,
-    );
+    expect(
+      computerTakeoverBlocked(reconciled.computer, activeThreadRuns(reconciled.snapshot), "bot-1"),
+    ).toBe(false);
   });
 
   it("always replaces the snapshot when switching to a different thread", () => {
@@ -1565,14 +1566,36 @@ describe("computer event reduction", () => {
   });
 
   it("treats a busy bot name as a blocked takeover", () => {
-    expect(computerTakeoverBlocked(computer({ busyBotName: "Writer" }), "running")).toBe(true);
-    expect(computerTakeoverBlocked(computer({ busyBotName: "Writer" }))).toBe(false);
-    expect(computerTakeoverBlocked(computer({ busyBotName: null }), "running")).toBe(false);
-    expect(computerTakeoverBlocked(null, "running")).toBe(false);
-    expect(computerTakeoverBlocked(computer({ busyBotName: "Writer" }), "waiting_takeover")).toBe(
+    const busy = computer({ busyBotName: "Writer" });
+    const runs = (status: Run["status"]) => [{ ...threadRun("run-1"), status }];
+    expect(computerTakeoverBlocked(busy, runs("running"), "bot-1")).toBe(true);
+    expect(computerTakeoverBlocked(busy, [], "bot-1")).toBe(false);
+    expect(computerTakeoverBlocked(computer({ busyBotName: null }), runs("running"), "bot-1")).toBe(
       false,
     );
-    expect(computerTakeoverBlocked(computer({ busyBotName: "Writer" }), "completed")).toBe(false);
+    expect(computerTakeoverBlocked(null, runs("running"), "bot-1")).toBe(false);
+    expect(computerTakeoverBlocked(busy, runs("waiting_takeover"), "bot-1")).toBe(false);
+    expect(computerTakeoverBlocked(busy, runs("completed"), "bot-1")).toBe(false);
+  });
+
+  it("blocks a group member's takeover on that member's own run, not the headline run", () => {
+    // The headline run is Writer's failed or waiting run while Chief still works on its computer.
+    const chief = threadRun("run-chief", "bot-chief");
+    const writer = threadRun("run-writer", "bot-writer");
+    const busyChief = computer({ botId: "bot-chief", busyBotName: "Chief" });
+    for (const headline of [
+      { ...writer, status: "failed" as const },
+      { ...writer, status: "waiting_takeover" as const },
+    ]) {
+      const group: ThreadSnapshot = {
+        ...snapshot([]),
+        botId: undefined,
+        groupId: "group-1",
+        run: headline,
+        activeRuns: headline.status === "failed" ? [chief] : [headline, chief],
+      };
+      expect(computerTakeoverBlocked(busyChief, activeThreadRuns(group), "bot-chief")).toBe(true);
+    }
   });
 
   it("ignores computer events that belong to a different bot", () => {
@@ -1681,19 +1704,22 @@ describe("computer event reduction", () => {
     expect(computerPanelAutoUsesBoot("wait")).toBe(false);
   });
 
-  it("shows maintenance only after a stopped or errored computer finishes booting", () => {
-    expect(computerPanelNeedsMaintenance("error", false)).toBe(true);
-    expect(computerPanelNeedsMaintenance("stopped", false)).toBe(true);
-    expect(computerPanelNeedsMaintenance("error", true)).toBe(false);
-    expect(computerPanelNeedsMaintenance("running", false)).toBe(false);
-    expect(computerPanelNeedsMaintenance(undefined, false)).toBe(false);
+  it("shows maintenance for an errored computer or a stopped one whose boot failed", () => {
+    expect(computerPanelNeedsMaintenance("error", false, false)).toBe(true);
+    expect(computerPanelNeedsMaintenance("stopped", false, true)).toBe(true);
+    expect(computerPanelNeedsMaintenance("stopped", false, false)).toBe(false);
+    expect(computerPanelNeedsMaintenance("error", true, false)).toBe(false);
+    expect(computerPanelNeedsMaintenance("running", false, true)).toBe(false);
+    expect(computerPanelNeedsMaintenance(undefined, false, false)).toBe(false);
   });
 
   it("hides side-panel maintenance while the computer overlay is open", () => {
     const panel = "computer";
     const booting = false;
     const showInSidePanel = (computerOpen: boolean) =>
-      panel === "computer" && !computerOpen && computerPanelNeedsMaintenance("stopped", booting);
+      panel === "computer" &&
+      !computerOpen &&
+      computerPanelNeedsMaintenance("error", booting, false);
 
     expect(showInSidePanel(false)).toBe(true);
     expect(showInSidePanel(true)).toBe(false);
