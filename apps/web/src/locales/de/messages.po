@@ -1048,6 +1048,11 @@ msgstr "um {0}"
 msgid "at {timeSelect}"
 msgstr "um {timeSelect}"
 
+#. placeholder {0}: row.usage.tokens
+#: src/pages/TeamBoard.tsx
+msgid "at least {0}"
+msgstr "mindestens {0}"
+
 #: src/pages/storage/StorageSettings.tsx
 msgid "at least {size}"
 msgstr ""

@@ -367,7 +367,12 @@ export function TeamBoardRow({
               </details>
             ) : null}
             <p>
-              <Trans>Tokens</Trans>: {row.usage.tokens}
+              <Trans>Tokens</Trans>:{" "}
+              {row.usage.tokens === null
+                ? t`Unavailable`
+                : row.usage.partial
+                  ? t`at least ${row.usage.tokens}`
+                  : row.usage.tokens}
             </p>
             {row.usage.costs.map((cost, index) => (
               <p key={`${index}:${cost.amount}`}>

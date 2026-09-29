@@ -170,12 +170,50 @@ describe("team.board", () => {
     expect(result.rows[1].state).toBe("idle");
     expect(f.db.message.findMany).not.toHaveBeenCalled();
     expect(f.db.$queryRaw).toHaveBeenCalledOnce();
-    expect(result.rows[0].usage).toEqual({ tokens: 150, costs: [] });
+    expect(result.rows[0].usage).toEqual({ tokens: 150, partial: false, costs: [] });
     expect(result.rows[0].sentence).not.toContain("narration");
     if (run !== "queued") expect(result.rows[0].executing?.pin.modelId).toBe("executed-model");
     else expect(result.rows[0].executing).toBeNull();
   });
 
+  it("keeps unavailable usage off the card instead of showing zero", async () => {
+    const f = fixture();
+    f.db.usageRecord.findMany.mockResolvedValue([
+      {
+        runId: "run",
+        delegationId: "handoff",
+        inputTokens: 0,
+        outputTokens: 0,
+        cost: null,
+        pricingProvenance: null,
+        categoryCoverage: { logicalInput: "unknown", output: "unknown" },
+      },
+    ]);
+    expect(TeamBoardSchema.parse(await teamBoard(f.prisma, actor)).rows[0]!.usage).toEqual({
+      tokens: null,
+      partial: false,
+      costs: [],
+    });
+  });
+  it("marks a partial measurement as a lower bound", async () => {
+    const f = fixture();
+    f.db.usageRecord.findMany.mockResolvedValue([
+      {
+        runId: "run",
+        delegationId: "handoff",
+        inputTokens: 100,
+        outputTokens: 40,
+        cost: null,
+        pricingProvenance: null,
+        categoryCoverage: { logicalInput: "complete", output: "partial" },
+      },
+    ]);
+    expect(TeamBoardSchema.parse(await teamBoard(f.prisma, actor)).rows[0]!.usage).toEqual({
+      tokens: 140,
+      partial: true,
+      costs: [],
+    });
+  });
   it("shows saved blocker reasons and actions", async () => {
     const f = fixture();
     f.delegation.card = {
