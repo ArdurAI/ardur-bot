@@ -535,7 +535,7 @@ describe("coordination round recording", () => {
     ...patch,
   });
 
-  it("marks a failed member with one plain reason, never the raw error", async () => {
+  it("marks a failed member with a reason code, never an English sentence or the raw error", async () => {
     const h = messageHarness();
     const recorded = await recordGroupAskOutcomeInTransaction(h.tx as never, {
       ...scope,
@@ -551,16 +551,48 @@ describe("coordination round recording", () => {
     expect(recorded).toEqual({ threadId: "room", seq: 6 });
     const blocks = h.messageUpdate.mock.calls[0]?.[0].data.blocks;
     const ada = blocks?.[0]?.members?.find((row) => row.botId === "ada");
-    expect(ada).toMatchObject({
-      outcome: "failed",
-      reason: "Ada couldn't answer: its model account needs attention",
-    });
+    expect(ada).toMatchObject({ outcome: "failed", reasonCode: "auth" });
+    expect(ada?.reason).toBeUndefined();
     expect(JSON.stringify(blocks)).not.toContain("403");
+    expect(JSON.stringify(blocks)).not.toContain("couldn't answer");
     expect(h.eventCreate.mock.calls[0]?.[0].data).toMatchObject({
       type: "thread.message.updated",
       botId: "chief",
       threadId: "room",
     });
+  });
+
+  it("stores the reason code classified from each providerErrorKind", async () => {
+    const cases = [
+      { providerErrorKind: "auth", error: "403", reasonCode: "auth" },
+      { providerErrorKind: "rate-limit", error: "429", reasonCode: "rate-limit" },
+      {
+        providerErrorKind: "model-unavailable",
+        error: "no such model",
+        reasonCode: "model-unavailable",
+      },
+      { providerErrorKind: undefined, error: "boom", reasonCode: "other" },
+    ] as const;
+    for (const entry of cases) {
+      const h = messageHarness();
+      await recordGroupAskOutcomeInTransaction(h.tx as never, {
+        ...scope,
+        threadId: "room",
+        delegation: delegation(),
+        delegationStatus: "failed",
+        runStatus: "failed",
+        error: entry.error,
+        providerErrorKind: entry.providerErrorKind,
+        now,
+      });
+      const blocks = h.messageUpdate.mock.calls[0]?.[0].data.blocks;
+      const ada = blocks?.[0]?.members?.find((row) => row.botId === "ada");
+      expect(ada, entry.providerErrorKind ?? "no-kind").toMatchObject({
+        outcome: "failed",
+        reasonCode: entry.reasonCode,
+      });
+      expect(ada?.reason).toBeUndefined();
+    }
   });
 
   it("marks answered, stopped and waiting members from their records", async () => {

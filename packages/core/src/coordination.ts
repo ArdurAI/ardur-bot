@@ -8,6 +8,9 @@ export type CoordinationMember = CoordinationBlock["members"][number];
 /** A member outcome as recorded in the coordination block. */
 export type CoordinationOutcome = CoordinationMember["outcome"];
 
+/** Why a failed member could not answer; each screen translates the code. */
+export type CoordinationFailureCode = NonNullable<CoordinationMember["reasonCode"]>;
+
 /** Find the coordination block of a message, if it carries one. */
 export function coordinationBlock(blocks: readonly MessageBlock[]): CoordinationBlock | null {
   return blocks.find((block): block is CoordinationBlock => block.kind === "coordination") ?? null;
@@ -33,20 +36,21 @@ export function withCoordinationOutcome(
   block: CoordinationBlock,
   member: { botId: string; name: string },
   outcome: CoordinationOutcome,
-  reason?: string,
+  reasonCode?: CoordinationFailureCode,
   updatedAt?: string,
 ): CoordinationBlock {
   const settled: CoordinationOutcome[] = ["answered", "failed", "stopped"];
   const existing = block.members.find((candidate) => candidate.botId === member.botId);
   if (existing) {
     if (settled.includes(existing.outcome) && outcome !== "waiting") return block;
-    if (existing.outcome === outcome && (reason ?? undefined) === existing.reason) return block;
+    if (existing.outcome === outcome && (reasonCode ?? undefined) === existing.reasonCode)
+      return block;
   }
   const row: CoordinationMember = {
     botId: member.botId,
     name: member.name,
     outcome,
-    ...(reason?.trim() ? { reason: reason.trim() } : {}),
+    ...(reasonCode ? { reasonCode } : {}),
   };
   return {
     ...block,
@@ -74,38 +78,61 @@ export function withCoordinationUpdate(
   return { ...block, updates, ...(updatedAt ? { updatedAt } : {}) };
 }
 
-/** Whether the collapsed line should offer a fix for a failed member. */
-export function fixableFailure(member: CoordinationMember): boolean {
-  return member.outcome === "failed" && FIXABLE_REASON.test(member.reason ?? "");
-}
-
-// Causes the owner can act on from the failed member's own model settings:
-// account or access problems with the member's model. The writer keeps the
-// reason in plain words; this recognizes those plain words.
-const FIXABLE_REASON =
-  /model account|sign in|subscription|credits|api key|not connected|model set for this group|rate limit|model may not be available|quota/i;
-
 /**
- * The plain sentence a failed member's row shows, from the classified provider
- * failure. Raw provider text never reaches the room; the owner can ask the
- * coordinator (or expand the round) for more.
+ * The failure code a failed member's row is stored with, from the classified
+ * provider failure. Raw provider text never reaches the room; the owner can
+ * ask the coordinator (or expand the round) for more.
  */
-export function coordinationFailureReason(input: {
-  botName: string;
+export function coordinationFailureCode(input: {
   providerErrorKind?: string;
   error?: string;
-}): string | undefined {
-  const name = input.botName.trim() || "This member";
+}): CoordinationFailureCode | undefined {
   switch (input.providerErrorKind) {
     case "auth":
-      return `${name} couldn't answer: its model account needs attention`;
+      return "auth";
     case "rate-limit":
-      return `${name} couldn't answer: its model account hit a rate limit`;
+      return "rate-limit";
     case "model-unavailable":
-      return `${name} couldn't answer: its model is unavailable`;
+      return "model-unavailable";
     default:
-      return input.error?.trim() ? `${name} couldn't answer` : undefined;
+      return input.error?.trim() ? "other" : undefined;
   }
+}
+
+// Early rounds stored the reason as an English sentence. Reading maps those
+// known sentences back to their code so old rounds render translated text.
+const LEGACY_REASON_CODES: [RegExp, CoordinationFailureCode][] = [
+  [/model account needs attention/i, "auth"],
+  [/hit a rate limit/i, "rate-limit"],
+  [/model is unavailable/i, "model-unavailable"],
+  [/stopped before answering/i, "stopped"],
+  [/couldn't answer/i, "other"],
+];
+
+function legacyReasonCode(reason: string | undefined): CoordinationFailureCode | undefined {
+  const text = reason?.trim();
+  if (!text) return undefined;
+  for (const [pattern, code] of LEGACY_REASON_CODES) if (pattern.test(text)) return code;
+  return undefined;
+}
+
+/**
+ * The code a failed member renders with: its stored code, or the code its old
+ * English sentence maps to. Anything unrecognised shows the generic line.
+ */
+export function coordinationMemberFailureCode(member: CoordinationMember): CoordinationFailureCode {
+  return member.reasonCode ?? legacyReasonCode(member.reason) ?? "other";
+}
+
+/** Whether the collapsed line should offer a fix for a failed member. */
+export function fixableFailure(member: CoordinationMember): boolean {
+  // Causes the owner can act on from the failed member's own model settings:
+  // account or access problems with the member's model, or switching the model
+  // after a rate limit. Derived from the code, never from wording.
+  const FIXABLE_CODES: CoordinationFailureCode[] = ["auth", "rate-limit", "model-unavailable"];
+  return (
+    member.outcome === "failed" && FIXABLE_CODES.includes(coordinationMemberFailureCode(member))
+  );
 }
 
 /**

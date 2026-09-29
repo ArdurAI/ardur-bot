@@ -4,7 +4,8 @@ import {
   type CoordinationBlock,
   coordinationBlock,
   coordinationCounts,
-  coordinationFailureReason,
+  coordinationFailureCode,
+  coordinationMemberFailureCode,
   fixableFailure,
   outstandingMembers,
   withCoordinationOutcome,
@@ -40,7 +41,7 @@ describe("coordinationCounts", () => {
     const round = block({
       members: [
         { botId: "ada", name: "Ada", outcome: "answered" },
-        { botId: "ben", name: "Ben", outcome: "failed", reason: "Ben couldn't answer" },
+        { botId: "ben", name: "Ben", outcome: "failed", reasonCode: "other" },
         { botId: "cy", name: "Cy", outcome: "pending" },
       ],
     });
@@ -74,7 +75,7 @@ describe("withCoordinationOutcome", () => {
       block(),
       { botId: "ada", name: "Ada" },
       "failed",
-      "Ada couldn't answer",
+      "auth",
     );
     expect(withCoordinationOutcome(failed, { botId: "ada", name: "Ada" }, "answered")).toBe(failed);
     const waiting = withCoordinationOutcome(block(), { botId: "ada", name: "Ada" }, "waiting");
@@ -82,21 +83,18 @@ describe("withCoordinationOutcome", () => {
     expect(answered.members.find((member) => member.botId === "ada")?.outcome).toBe("answered");
   });
 
+  it("stores the failure as a reason code, not an English sentence", () => {
+    const next = withCoordinationOutcome(block(), { botId: "ada", name: "Ada" }, "failed", "auth");
+    const ada = next.members.find((member) => member.botId === "ada");
+    expect(ada).toEqual({ botId: "ada", name: "Ada", outcome: "failed", reasonCode: "auth" });
+    expect(ada && "reason" in ada ? ada.reason : undefined).toBeUndefined();
+  });
+
   it("returns the same block when nothing changes", () => {
-    const round = withCoordinationOutcome(
-      block(),
-      { botId: "ada", name: "Ada" },
-      "failed",
-      "Ada couldn't answer",
+    const round = withCoordinationOutcome(block(), { botId: "ada", name: "Ada" }, "failed", "auth");
+    expect(withCoordinationOutcome(round, { botId: "ada", name: "Ada" }, "failed", "auth")).toBe(
+      round,
     );
-    expect(
-      withCoordinationOutcome(
-        round,
-        { botId: "ada", name: "Ada" },
-        "failed",
-        "Ada couldn't answer",
-      ),
-    ).toBe(round);
   });
 });
 
@@ -116,40 +114,85 @@ describe("withCoordinationUpdate", () => {
   });
 });
 
-describe("coordinationFailureReason", () => {
-  it("classifies provider failures into plain sentences", () => {
+describe("coordinationFailureCode", () => {
+  it("classifies each provider failure kind into its reason code", () => {
     expect(
-      coordinationFailureReason({
-        botName: "Radiant",
+      coordinationFailureCode({
         providerErrorKind: "auth",
         error: "xai API error (403): credits",
       }),
-    ).toBe("Radiant couldn't answer: its model account needs attention");
-    expect(coordinationFailureReason({ botName: "Radiant", providerErrorKind: "rate-limit" })).toBe(
-      "Radiant couldn't answer: its model account hit a rate limit",
+    ).toBe("auth");
+    expect(coordinationFailureCode({ providerErrorKind: "rate-limit" })).toBe("rate-limit");
+    expect(coordinationFailureCode({ providerErrorKind: "model-unavailable" })).toBe(
+      "model-unavailable",
     );
-    expect(
-      coordinationFailureReason({ botName: "Radiant", providerErrorKind: "model-unavailable" }),
-    ).toBe("Radiant couldn't answer: its model is unavailable");
   });
 
-  it("never leaks raw provider text", () => {
-    const reason = coordinationFailureReason({
-      botName: "Radiant",
-      providerErrorKind: "auth",
-      error: "xai API error (403): You have run out of credits",
-    });
-    expect(reason).not.toContain("403");
-    expect(reason).not.toContain("xai");
-    expect(coordinationFailureReason({ botName: "Radiant", error: "boom" })).toBe(
-      "Radiant couldn't answer",
+  it("maps an unclassified failure to other and stays silent without one", () => {
+    expect(coordinationFailureCode({ error: "boom" })).toBe("other");
+    expect(coordinationFailureCode({ providerErrorKind: "unknown-kind", error: "boom" })).toBe(
+      "other",
     );
-    expect(coordinationFailureReason({ botName: "Radiant" })).toBeUndefined();
+    expect(coordinationFailureCode({})).toBeUndefined();
+  });
+});
+
+describe("coordinationMemberFailureCode", () => {
+  const member = (patch: Record<string, unknown>) => ({
+    botId: "ada",
+    name: "Ada",
+    outcome: "failed" as const,
+    ...patch,
+  });
+
+  it("prefers the stored reason code", () => {
+    expect(
+      coordinationMemberFailureCode(member({ reasonCode: "auth", reason: "Ada couldn't answer" })),
+    ).toBe("auth");
+  });
+
+  it("maps rounds stored with an English reason to their code", () => {
+    expect(
+      coordinationMemberFailureCode(
+        member({ reason: "Ada couldn't answer: its model account needs attention" }),
+      ),
+    ).toBe("auth");
+    expect(
+      coordinationMemberFailureCode(
+        member({ reason: "Ada couldn't answer: its model account hit a rate limit" }),
+      ),
+    ).toBe("rate-limit");
+    expect(
+      coordinationMemberFailureCode(
+        member({ reason: "Ada couldn't answer: its model is unavailable" }),
+      ),
+    ).toBe("model-unavailable");
+    expect(coordinationMemberFailureCode(member({ reason: "Ada stopped before answering" }))).toBe(
+      "stopped",
+    );
+    expect(coordinationMemberFailureCode(member({ reason: "Ada couldn't answer" }))).toBe("other");
+  });
+
+  it("falls back to the generic code for unknown or missing reasons", () => {
+    expect(coordinationMemberFailureCode(member({ reason: "Ada froze mid-reply" }))).toBe("other");
+    expect(coordinationMemberFailureCode(member({}))).toBe("other");
   });
 });
 
 describe("fixableFailure", () => {
-  it("offers a fix only for failed members with an owner-actionable cause", () => {
+  it("offers a fix only for failed members whose code is owner-actionable", () => {
+    for (const reasonCode of ["auth", "rate-limit", "model-unavailable"] as const)
+      expect(fixableFailure({ botId: "ada", name: "Ada", outcome: "failed", reasonCode })).toBe(
+        true,
+      );
+    for (const reasonCode of ["stopped", "other"] as const)
+      expect(fixableFailure({ botId: "ada", name: "Ada", outcome: "failed", reasonCode })).toBe(
+        false,
+      );
+    expect(fixableFailure({ botId: "ada", name: "Ada", outcome: "answered" })).toBe(false);
+  });
+
+  it("reads old English reasons so their fix link still follows the code", () => {
     expect(
       fixableFailure({
         botId: "ada",
@@ -166,6 +209,6 @@ describe("fixableFailure", () => {
         reason: "Ada couldn't answer",
       }),
     ).toBe(false);
-    expect(fixableFailure({ botId: "ada", name: "Ada", outcome: "answered" })).toBe(false);
+    expect(fixableFailure({ botId: "ada", name: "Ada", outcome: "failed" })).toBe(false);
   });
 });

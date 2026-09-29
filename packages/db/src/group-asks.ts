@@ -8,7 +8,7 @@ import {
   blocksToAgentHistoryText,
   type CoordinationOutcome,
   coordinationBlock,
-  coordinationFailureReason,
+  coordinationFailureCode,
   GROUP_ASK_KEY_PREFIX,
   type GroupAsk,
   groupAskPrefix,
@@ -275,10 +275,9 @@ export async function recordGroupAskOutcomeInTransaction(
           : outcome === "waiting"
             ? "waiting"
             : "pending";
-  const reason =
+  const reasonCode =
     mapped === "failed"
-      ? coordinationFailureReason({
-          botName: input.delegation.actingName,
+      ? coordinationFailureCode({
           providerErrorKind: input.providerErrorKind,
           error: input.error,
         })
@@ -287,7 +286,7 @@ export async function recordGroupAskOutcomeInTransaction(
     block,
     { botId: input.delegation.actingBotId, name: input.delegation.actingName },
     mapped,
-    reason,
+    reasonCode,
     now,
   );
   if (next === block) return null;

@@ -386,7 +386,11 @@ export const MessageBlock = z.discriminatedUnion("kind", [
         botId: Id,
         name: z.string(),
         outcome: z.enum(["pending", "answered", "failed", "stopped", "waiting"]),
-        /** Plain cause kept for a failed or stopped member, when one is known. */
+        /** Why a failed member could not answer, as a code each screen translates. */
+        reasonCode: z
+          .enum(["auth", "rate-limit", "model-unavailable", "stopped", "other"])
+          .optional(),
+        /** Legacy plain cause; early rounds stored an English sentence here. */
         reason: z.string().optional(),
       }),
     ),
