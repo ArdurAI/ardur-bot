@@ -1159,9 +1159,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
           }
 
           const available = Boolean(
-            owner &&
-              (!bot || bot.computer?.kind === "desktop") &&
-              healthAvailable,
+            owner && (!bot || bot.computer?.kind === "desktop") && healthAvailable,
           );
           return {
             runtimeKind: "hermes" as const,

@@ -110,9 +110,9 @@ describe("LocalHermesRuntime", () => {
     req.prompt = "text";
     
     // Test context config default (which provides node mcp config so fake-acp.mjs doesn't crash if it tries)
-    req.context = { agentInstall: { hostRoot: "something", version: "1" }, mcpConfig: { command: "node", args: ["-e", "setInterval(() => {}, 1000)"], env: {} } };
+    const context: any = { agentInstall: { hostRoot: "something", version: "1" }, mcpConfig: { command: "node", args: ["-e", "setInterval(() => {}, 1000)"], env: {} } };
 
-    const result = await collect(runtime.run(req));
+    const result = await collect(runtime.run(req, context));
     expect(result).toContainEqual(expect.objectContaining({ type: "done" }));
     expect(broker.revoke).toHaveBeenCalled();
   });
@@ -127,9 +127,9 @@ describe("LocalHermesRuntime", () => {
     const req = request();
     await import("node:fs/promises").then(m => m.writeFile(join(root, "scenario.txt"), "inspect"));
     req.prompt = "inspect";
-    req.context = { agentInstall: { hostRoot: "something", version: "1" }, mcpConfig: { command: "node", args: ["-e", "setInterval(() => {}, 1000)"], env: {} } };
+    const context: any = { agentInstall: { hostRoot: "something", version: "1" }, mcpConfig: { command: "node", args: ["-e", "setInterval(() => {}, 1000)"], env: {} } };
 
-    const result = await collect(runtime.run(req));
+    const result = await collect(runtime.run(req, context));
     const textEvent = result.find(e => e.type === "text");
     const data = JSON.parse(textEvent.text);
     
@@ -156,9 +156,9 @@ describe("LocalHermesRuntime", () => {
     req.tools = [{ name: "fixture_echo", description: "Echo", inputSchema: { type: "object" } }];
     await import("node:fs/promises").then(m => m.writeFile(join(root, "scenario.txt"), "custom-tool-error"));
     req.prompt = "custom-tool-error";
-    req.context = { agentInstall: { hostRoot: "something", version: "1" } };
+    const context: any = { agentInstall: { hostRoot: "something", version: "1" } };
 
-    const result = await collect(runtime.run(req));
+    const result = await collect(runtime.run(req, context));
     expect(result).not.toContainEqual(expect.objectContaining({ text: expect.stringContaining("fixture-provider-key") }));
     expect(result).toContainEqual(expect.objectContaining({ text: expect.stringContaining("Provider request failed with key [redacted]") }));
     expect(broker.revoke).toHaveBeenCalled();
@@ -176,9 +176,9 @@ describe("LocalHermesRuntime", () => {
     const req = request();
     await import("node:fs/promises").then(m => m.writeFile(join(root, "scenario.txt"), "text"));
     req.prompt = "text";
-    req.context = { agentInstall: { hostRoot: "something", version: "1" }, mcpConfig: { command: "node", args: ["-e", "setInterval(() => {}, 1000)"], env: {} } };
+    const context: any = { agentInstall: { hostRoot: "something", version: "1" }, mcpConfig: { command: "node", args: ["-e", "setInterval(() => {}, 1000)"], env: {} } };
 
-    await collect(runtime.run(req));
+    await collect(runtime.run(req, context));
     
     // Relay should be closed
     await expect(fetch(relayUrl + "/chat/completions", {

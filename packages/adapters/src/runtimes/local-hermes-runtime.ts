@@ -130,8 +130,8 @@ export class LocalHermesRuntime implements AgentRuntime {
             }
           : undefined,
       };
-      delete localRequest.model.oauth;
-      delete localRequest.model.headers;
+      delete (localRequest.model as any).oauth;
+      delete (localRequest.model as any).headers;
       yield* runtime.run(localRequest, context);
     } finally {
       this.running.delete(request.runId);
