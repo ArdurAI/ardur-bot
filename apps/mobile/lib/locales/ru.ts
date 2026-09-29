@@ -48,6 +48,9 @@ export const RU_MESSAGES: Record<string, string> = {
   "Model calls per turn": "Вызовы модели за ход",
   "Time limit": "Ограничение времени",
   "Hermes is not installed on this computer.": "Hermes не установлен на этом компьютере.",
+  "The Hermes install on this computer failed its safety check.":
+    "Установка Hermes на этом компьютере не прошла проверку безопасности.",
+  "Hermes isn't available on Windows yet.": "Hermes пока недоступен в Windows.",
   "Hermes does not yet support Anthropic connections.":
     "Hermes пока не поддерживает подключения Anthropic.",
   "Hermes does not yet support this connection.": "Hermes пока не поддерживает это подключение.",
@@ -73,6 +76,7 @@ export const RU_MESSAGES: Record<string, string> = {
   "Antigravity could not run this turn: {reason}.":
     "Antigravity не смог выполнить этот запрос: {reason}.",
   "Cost unavailable": "Стоимость недоступна",
+  "Partially reported": "Частично зафиксировано",
   "Antigravity is installed (version {version})": "Antigravity установлен (версия {version})",
   "Sign-in unknown until the first run": "Статус входа неизвестен до первого запуска",
   "Antigravity is not installed on this computer. Install it and sign in there, then check again.":

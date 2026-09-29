@@ -43,7 +43,7 @@ describeWithDatabase("structured @ mention targets", () => {
   });
 
   it("starts a routine test run on the owning bot", async () => {
-    const cookie = await signup(app, `mention-routine-${stamp}@ardurbot.test`, "Routine Owner");
+    const cookie = await signup(app, `mention-routine-${stamp}@example.test`, "Routine Owner");
     const bot = await rpc<{ id: string }>(app, cookie, "bots/create", {
       name: "Chief",
       title: "",
@@ -71,7 +71,7 @@ describeWithDatabase("structured @ mention targets", () => {
   it("replays routine testRun with the same clientNonce", async () => {
     const cookie = await signup(
       app,
-      `mention-routine-replay-${stamp}@ardurbot.test`,
+      `mention-routine-replay-${stamp}@example.test`,
       "Replay Owner",
     );
     const bot = await rpc<{ id: string }>(app, cookie, "bots/create", {
@@ -108,7 +108,7 @@ describeWithDatabase("structured @ mention targets", () => {
   });
 
   it("includes connector intent on a 1:1 send prompt", async () => {
-    const cookie = await signup(app, `mention-connector-${stamp}@ardurbot.test`, "Connector Owner");
+    const cookie = await signup(app, `mention-connector-${stamp}@example.test`, "Connector Owner");
     const bot = await rpc<{ id: string }>(app, cookie, "bots/create", {
       name: "Chief",
       title: "",
@@ -135,7 +135,7 @@ describeWithDatabase("structured @ mention targets", () => {
   });
 
   it("lands a group-targeted send in the group transcript, not the 1:1 bot thread", async () => {
-    const cookie = await signup(app, `mention-group-${stamp}@ardurbot.test`, "Group Owner");
+    const cookie = await signup(app, `mention-group-${stamp}@example.test`, "Group Owner");
     const botA = await rpc<{ id: string }>(app, cookie, "bots/create", {
       name: "BotA",
       title: "",
@@ -178,7 +178,7 @@ describeWithDatabase("structured @ mention targets", () => {
   it("wakes exactly one bot on an unmentioned group send", async () => {
     const cookie = await signup(
       app,
-      `mention-group-default-${stamp}@ardurbot.test`,
+      `mention-group-default-${stamp}@example.test`,
       "Group Default",
     );
     const botA = await rpc<{ id: string }>(app, cookie, "bots/create", {
@@ -210,7 +210,7 @@ describeWithDatabase("structured @ mention targets", () => {
   });
 
   it("wakes a mentioned group member from typed bot chips and ignores non-members", async () => {
-    const cookie = await signup(app, `mention-out-${stamp}@ardurbot.test`, "Out Of Chat");
+    const cookie = await signup(app, `mention-out-${stamp}@example.test`, "Out Of Chat");
     const botA = await rpc<{ id: string }>(app, cookie, "bots/create", {
       name: "MemberA",
       title: "",
@@ -253,8 +253,8 @@ describeWithDatabase("structured @ mention targets", () => {
   });
 
   it("rejects another user's routine, connection, and group mentions", async () => {
-    const ada = await signup(app, `mention-auth-ada-${stamp}@ardurbot.test`, "Ada Auth");
-    const bob = await signup(app, `mention-auth-bob-${stamp}@ardurbot.test`, "Bob Auth");
+    const ada = await signup(app, `mention-auth-ada-${stamp}@example.test`, "Ada Auth");
+    const bob = await signup(app, `mention-auth-bob-${stamp}@example.test`, "Bob Auth");
     const adaBot = await rpc<{ id: string }>(app, ada, "bots/create", {
       name: "AdaBot",
       title: "",

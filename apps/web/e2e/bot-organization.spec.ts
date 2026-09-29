@@ -3,7 +3,7 @@ import { activeBotId, captureScreenshot, completeOnboarding, rpc, signup } from 
 
 test("pinned bots and sidebar sections persist", async ({ page }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `bot-organize-${stamp}@ardurbot.test`, "password12", "Test User");
+  await signup(page, `bot-organize-${stamp}@example.test`, "password12", "Test User");
   await completeOnboarding(page);
   await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
 
@@ -62,7 +62,7 @@ test("pinned bots and sidebar sections persist", async ({ page }, testInfo) => {
 
 test("bots can be reordered by drag or keyboard and keep that order", async ({ page }) => {
   const stamp = Date.now();
-  await signup(page, `bot-reorder-${stamp}@ardurbot.test`, "password12", "Bot Order");
+  await signup(page, `bot-reorder-${stamp}@example.test`, "password12", "Bot Order");
   await completeOnboarding(page);
   await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
 
@@ -176,7 +176,7 @@ test("bots can be reordered by drag or keyboard and keep that order", async ({ p
 
 test("chat composer controls are vertically centered", async ({ page }) => {
   const stamp = Date.now();
-  await signup(page, `composer-layout-${stamp}@ardurbot.test`, "password12", "Composer Layout");
+  await signup(page, `composer-layout-${stamp}@example.test`, "password12", "Composer Layout");
   await completeOnboarding(page);
 
   const centers = await page.getByTestId("composer-bar").evaluate((composer) =>
@@ -193,7 +193,7 @@ test("chat composer controls are vertically centered", async ({ page }) => {
 
 test("group chats share every context-menu action", async ({ page }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `group-organize-${stamp}@ardurbot.test`, "password12", "Group Menu");
+  await signup(page, `group-organize-${stamp}@example.test`, "password12", "Group Menu");
   await completeOnboarding(page);
   await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
 

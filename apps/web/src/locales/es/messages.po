@@ -1153,6 +1153,7 @@ msgstr ""
 #: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
+#: src/pages/Shell.tsx
 msgid "Back"
 msgstr "Atrás"
 
@@ -1320,8 +1321,9 @@ msgid "Bot screen preview"
 msgstr "Vista previa de la pantalla del bot"
 
 #: src/pages/BotContextMenu.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Bot settings"
-msgstr ""
+msgstr "Configuración del bot"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Bot to link"
@@ -1912,10 +1914,10 @@ msgstr ""
 msgid "Compare bots"
 msgstr ""
 
+#: src/components/composer/ComposerMenu.tsx
 #: src/pages/CompareStart.tsx
-#: src/pages/Shell.tsx
 msgid "Compare with…"
-msgstr ""
+msgstr "Comparar con…"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Complete"
@@ -2936,7 +2938,7 @@ msgstr ""
 
 #: src/pages/CompareStart.tsx
 msgid "Could not start comparison; retry."
-msgstr ""
+msgstr "No se pudo iniciar la comparación; inténtalo de nuevo."
 
 #: src/pages/CompareStart.tsx
 msgid "Could not start comparison; review the pins and retry."
@@ -3423,6 +3425,10 @@ msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Developer (git, GitHub and GitLab CLIs, node, jq)"
+msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Developer image"
 msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
@@ -4079,6 +4085,10 @@ msgstr ""
 msgid "Forgot password?"
 msgstr "¿Olvidaste la contraseña?"
 
+#: src/pages/Shell.tsx
+msgid "Forward"
+msgstr "Adelante"
+
 #: src/pages/import/LocalImportPage.tsx
 msgid "Found on this computer"
 msgstr ""
@@ -4186,6 +4196,7 @@ msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Group"
 msgstr "Grupo"
 
@@ -4193,7 +4204,7 @@ msgstr "Grupo"
 msgid "Group brief"
 msgstr "Resumen del grupo"
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Group settings"
 msgstr "Configuración del grupo"
 
@@ -4258,6 +4269,10 @@ msgstr "Hermes aún no admite esta conexión."
 msgid "Hermes is not installed on this computer."
 msgstr "Hermes no está instalado en este equipo."
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Hermes isn't available on Windows yet."
+msgstr "Hermes todavía no está disponible en Windows."
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Hermes runs with this computer's access."
 msgstr "Hermes se ejecuta con los permisos de este equipo."
@@ -4268,7 +4283,7 @@ msgstr "Hola, así sonaré cuando lea las respuestas en voz alta."
 
 #: src/pages/Shell.tsx
 msgid "Hide bots"
-msgstr ""
+msgstr "Ocultar bots"
 
 #: src/pages/customize/McpDiagnostics.tsx
 msgid "Hide logs"
@@ -4356,6 +4371,10 @@ msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Image profile"
+msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Image pull secret"
 msgstr ""
 
 #: src/pages/shell/avatar-studio-popover.tsx
@@ -5005,6 +5024,11 @@ msgstr ""
 msgid "low — quick, with a little checking"
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/HostComputerPrompt.tsx
+msgid "macOS will not ask for extra permission if you let bots run on this Mac. They run as you."
+msgstr "MacOS no pedirá permisos extra si dejas que los bots se ejecuten en esta Mac: se ejecutan como tú."
+
 #: src/pages/board/BoardsSettings.tsx
 msgid "Make default"
 msgstr "Usar como predeterminado"
@@ -5130,6 +5154,7 @@ msgstr ""
 #: src/pages/memory/MemoryProposals.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/settings-sections.ts
+#: src/pages/shell/bot-panel.tsx
 msgid "Memory"
 msgstr "Memoria"
 
@@ -5529,6 +5554,7 @@ msgstr ""
 msgid "New access token"
 msgstr ""
 
+#: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "New bot"
 msgstr "Nuevo bot"
@@ -6228,6 +6254,10 @@ msgstr ""
 msgid "Park"
 msgstr "Aparcar"
 
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Partially reported"
+msgstr "Parcialmente reportado"
+
 #: src/components/AskCard.tsx
 #: src/pages/account/AccountSignIn.tsx
 #: src/pages/Auth.tsx
@@ -6448,8 +6478,9 @@ msgstr ""
 #: src/pages/account/AccountProfile.tsx
 #: src/pages/memory/MemoryDocuments.tsx
 #: src/pages/memory/MemoryProposals.tsx
+#: src/pages/shell/bot-panel.tsx
 msgid "Profile"
-msgstr ""
+msgstr "Perfil"
 
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Project ID"
@@ -7022,6 +7053,10 @@ msgstr "Restablece tu contraseña"
 #: src/components/ComputerMaintenanceActions.tsx
 msgid "Resetting…"
 msgstr "Restableciendo…"
+
+#: src/pages/Shell.tsx
+msgid "Resize pane"
+msgstr "Cambiar tamaño del panel"
 
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Resources"
@@ -7716,6 +7751,7 @@ msgstr ""
 #: src/pages/settings-sections.ts
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Settings"
 msgstr "Configuración"
 
@@ -7759,11 +7795,11 @@ msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Show bots"
-msgstr ""
+msgstr "Mostrar bots"
 
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Show computer"
-msgstr ""
+msgstr "Mostrar computadora"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Show in the menu bar."
@@ -7781,7 +7817,7 @@ msgstr "Mostrar más"
 msgid "Show password"
 msgstr "Mostrar contraseña"
 
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Show settings"
 msgstr "Mostrar configuración"
 
@@ -8021,6 +8057,10 @@ msgstr ""
 msgid "Standard"
 msgstr ""
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Standard image"
+msgstr ""
+
 #: src/components/composer/command-description.ts
 msgid "Start a new chat"
 msgstr ""
@@ -8212,8 +8252,8 @@ msgid "System"
 msgstr "Sistema"
 
 #: src/pages/ide/terminal.tsx
-#: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
+#: src/pages/shell/take-control-button.tsx
 msgid "Take control"
 msgstr "Tomar el control"
 
@@ -8351,6 +8391,10 @@ msgstr "No se pudo crear el primer bot. Inténtalo de nuevo."
 msgid "The group model choice was reloaded. Pick again."
 msgstr "Se volvió a cargar la selección de modelo del grupo. Elige de nuevo."
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "The Hermes install on this computer failed its safety check."
+msgstr "La instalación de Hermes en este equipo no superó la comprobación de seguridad."
+
 #: src/pages/memory/MemoryProposals.tsx
 msgid "The memory changed since this suggestion. Open History before trying again."
 msgstr ""
@@ -8455,6 +8499,7 @@ msgstr "Este chat es de solo lectura"
 msgid "This command is not available to this account."
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"
 msgstr "esta computadora"
@@ -8502,6 +8547,7 @@ msgstr ""
 msgid "This group's model is blocked by the bot or space settings. Change the destination policy or choose another group model."
 msgstr "La configuración del bot o del espacio bloquea el modelo del grupo. Cambia la política de destino o elige otro modelo para el grupo."
 
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this Mac"
 msgstr "esta Mac"
@@ -9235,7 +9281,7 @@ msgid "Working…"
 msgstr "Trabajando…"
 
 #: src/components/integrations/manage/IntegrationDetails.tsx
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Workspace"
 msgstr "Espacio de trabajo"
 
@@ -9308,6 +9354,11 @@ msgstr "Tu dirección de correo"
 #: src/pages/Auth.tsx
 msgid "Your name"
 msgstr "Tu nombre"
+
+#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/HostComputerPrompt.tsx
+msgid "Your OS will not ask for extra permission if you let bots run on {hostLabel}. They run as you."
+msgstr "Tu sistema operativo no pedirá permisos extra si dejas que los bots se ejecuten en {hostLabel}: se ejecutan como tú."
 
 #: src/pages/DevicesSettings.tsx
 msgid "Your phone can reach this Mac on your network."

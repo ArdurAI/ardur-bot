@@ -127,3 +127,49 @@ it("translates token counts for Spanish and Portuguese", () => {
     expect(i18n._(TOKENS, { tokens: 5 })).toBe("5 símbolos");
   }
 });
+
+const period = {
+  records: 1,
+  inputTokens: 120,
+  outputTokens: 1,
+  cost: null,
+};
+const partialSummary = (incomplete: boolean | undefined): UsageSummary => ({
+  inputTokens: 120,
+  outputTokens: 1,
+  runs: 1,
+  dayStart: "2026-09-24T00:00:00Z",
+  weekStart: "2026-09-21T00:00:00Z",
+  asOf: "2026-09-24T12:00:00Z",
+  providers: [
+    {
+      provider: "anthropic",
+      today: { ...period, ...(incomplete === undefined ? {} : { incomplete }) },
+      week: { ...period, incomplete: false },
+      daily: [{ date: "2026-09-24", records: 1, tokens: 121 }],
+    },
+  ],
+});
+
+async function render(data: UsageSummary) {
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  await act(async () => root.render(<UsagePanel data={data} />));
+  return { container, root };
+}
+
+it("shows Partially reported when a period's totals are only a lower bound", async () => {
+  const { container, root } = await render(partialSummary(true));
+  expect(container.textContent).toContain("Partially reported");
+  expect(container.textContent).toContain("121 tokens");
+  await act(async () => root.unmount());
+});
+
+it("omits the marker when every period total was fully reported", async () => {
+  for (const incomplete of [false, undefined] as const) {
+    const { container, root } = await render(partialSummary(incomplete));
+    expect(container.textContent).not.toContain("Partially reported");
+    await act(async () => root.unmount());
+  }
+});

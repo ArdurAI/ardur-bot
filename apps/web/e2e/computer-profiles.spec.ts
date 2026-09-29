@@ -16,7 +16,7 @@ test("computer profiles require confirmation before replacement", async ({ page 
       json: { json: { ...body.json, me: { ...body.json.me, isDeploymentOwner: true } } },
     });
   });
-  await signup(page, `profiles-${Date.now()}@ardurbot.test`, "password12", "Builder");
+  await signup(page, `profiles-${Date.now()}@example.test`, "password12", "Builder");
   await completeOnboarding(page);
   const botId = activeBotId(page);
   await page.route("**/rpc/computer/list", (route) =>

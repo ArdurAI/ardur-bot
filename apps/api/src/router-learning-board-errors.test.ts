@@ -31,7 +31,7 @@ async function routerFixture(learningStub: LearningStub) {
   const actor = {
     spaceId: "space-1",
     userId: "user-1",
-    email: "user@ardurbot.test",
+    email: "user@example.test",
     isDeploymentOwner: true,
   } satisfies Actor;
   const handler = new RPCHandler(createRouter(deps));

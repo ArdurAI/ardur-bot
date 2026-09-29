@@ -5,6 +5,7 @@ import { mkdir, realpath, rm } from "node:fs/promises";
 import path from "node:path";
 import { filterHostEnvironment } from "@ardurbot/contracts/host-environment";
 import { hostRegistrationIdentityText } from "@ardurbot/contracts/host-registration-identity";
+import { GUARDED_DATA_DIR_CHILDREN } from "@ardurbot/host-runtime/host-guardrails";
 import { readPrivateFile, writePrivateFile } from "./setup-store.js";
 
 export interface HostServiceConfig {
@@ -12,6 +13,28 @@ export interface HostServiceConfig {
   token: string;
   root: string;
   hostRoots: string[];
+  guardPaths?: string[];
+  guardPorts?: number[];
+}
+
+/**
+ * Ardur's control-plane files on this computer, in every desktop mode: the local-mode
+ * secrets and Postgres cluster, the compose stack's env and token, the pairing store, the
+ * app-managed state under the data folder, and the local-data reset backups — a reset moves
+ * the old secrets.env, cluster and data aside, and the moved copies must stay denied too.
+ * Computed here, never hardcoded in the guardrail itself; a missing path is still denied as
+ * written.
+ */
+export function hostGuardPaths(userDataDir: string): string[] {
+  return [
+    path.join(userDataDir, "secrets.env"),
+    path.join(userDataDir, "postgres"),
+    path.join(userDataDir, "backups"),
+    path.join(userDataDir, "stack", ".env"),
+    path.join(userDataDir, "stack", ".desktop-stack-token"),
+    path.join(userDataDir, "host-service", "host-service.enc"),
+    ...GUARDED_DATA_DIR_CHILDREN.map((child) => path.join(userDataDir, "data", child)),
+  ];
 }
 
 export class HostLifecyclePreferences {
@@ -164,11 +187,14 @@ export class HostServiceSupervisor {
     private readonly launch: ReturnType<typeof hostServiceLaunch>,
     private readonly changed: (connected: boolean) => void,
     private readonly startChild: HostServiceSpawn = spawn,
+    /** Adds the guardrail fields to every configuration, including restored pairings. */
+    private readonly augment: (config: HostServiceConfig) => HostServiceConfig = (config) => config,
   ) {}
   start(config: HostServiceConfig) {
-    if (!this.stopped && JSON.stringify(this.config) === JSON.stringify(config)) return;
+    const augmented = this.augment(config);
+    if (!this.stopped && JSON.stringify(this.config) === JSON.stringify(augmented)) return;
     this.stop();
-    this.config = config;
+    this.config = augmented;
     this.stopped = false;
     this.spawn();
   }

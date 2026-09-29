@@ -7,6 +7,12 @@ import { HostMcpRegistrationSchema } from "@ardurbot/contracts/host-bridge";
 import { mcpEntryIsSecret } from "@ardurbot/contracts/mcp";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import {
+  type HostGuardrailConfig,
+  resolveGuardrailPathsSync,
+  seatbeltArgv,
+  seatbeltProfile,
+} from "./host-guardrails.js";
 import { argumentSecrets, McpLogBuffer, redactMcpValue } from "./mcp-diagnostics.js";
 
 type McpOperation = Extract<HostOperation, { serverId: string }>;
@@ -20,7 +26,20 @@ type Entry = {
 /** Only the paired host's configuration channel can populate this process allowlist. */
 export class HostMcpServers {
   private readonly entries = new Map<string, Entry>();
-  constructor(registrations: readonly HostMcpRegistration[] = []) {
+  private profile?: string;
+  constructor(
+    registrations: readonly HostMcpRegistration[] = [],
+    /**
+     * The host command guardrail. A server the owner registered runs with the owner's full
+     * access too — without the wrap it could read Ardur's own secrets even though every
+     * other host command path is sandboxed. On macOS each server process therefore starts
+     * under the same Seatbelt profile as host commands; a profile that cannot be built
+     * refuses the server with a clear message instead of running it unsandboxed. Off macOS
+     * servers start unwrapped, as native runtimes do — no protection is implied there.
+     */
+    private readonly guard?: HostGuardrailConfig,
+    private readonly platform: NodeJS.Platform = process.platform,
+  ) {
     if (registrations.length > 200) throw new Error("Too many local servers.");
     for (const value of registrations) {
       const registration = HostMcpRegistrationSchema.parse(value);
@@ -44,7 +63,7 @@ export class HostMcpServers {
     return this.entries.get(serverId)?.registration.revision === revision;
   }
   async replace(registrations: readonly HostMcpRegistration[]) {
-    const next = new HostMcpServers(registrations);
+    const next = new HostMcpServers(registrations, this.guard, this.platform);
     for (const [id, entry] of this.entries) {
       const replacement = next.entries.get(id);
       if (
@@ -61,14 +80,44 @@ export class HostMcpServers {
     this.entries.clear();
     for (const [id, entry] of next.entries) this.entries.set(id, entry);
   }
+  /**
+   * The server launch, wrapped in the host command guardrail on macOS. The profile builds
+   * once, lazily; a build failure refuses the server closed — it never runs unsandboxed.
+   */
+  private launch(registration: HostMcpRegistration): { command: string; args: string[] } {
+    const guard = this.guard;
+    if (
+      this.platform !== "darwin" ||
+      !guard ||
+      (!guard.paths.length && !guard.ports.length && !guard.sockets.length)
+    )
+      return { command: registration.command, args: registration.args };
+    let profile: string;
+    try {
+      profile = this.profile ??= seatbeltProfile({
+        paths: resolveGuardrailPathsSync(guard.paths),
+        ports: guard.ports,
+        sockets: resolveGuardrailPathsSync(guard.sockets),
+      });
+    } catch (error) {
+      throw new Error(
+        `This local server cannot start inside the host guardrail: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+    const wrapped = seatbeltArgv([registration.command, ...registration.args], profile);
+    return { command: wrapped[0]!, args: wrapped.slice(1) };
+  }
   private async client(entry: Entry, signal: AbortSignal) {
     if (entry.client) return entry.client;
     if (entry.connecting) return entry.connecting;
     const registration = entry.registration;
+    const launch = this.launch(registration);
     const client = new Client({ name: "ardurbot-host", version: "0.1.0" });
     const transport = new StdioClientTransport({
-      command: registration.command,
-      args: registration.args,
+      command: launch.command,
+      args: launch.args,
       env: registration.env,
       cwd: registration.cwd,
       stderr: "pipe",

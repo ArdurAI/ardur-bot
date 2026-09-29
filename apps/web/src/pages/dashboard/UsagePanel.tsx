@@ -66,6 +66,12 @@ function Period({ value, provider }: { value: UsagePeriod; provider: string }) {
           · <Trans>Cost unavailable</Trans>
         </>
       ) : null}
+      {value.incomplete ? (
+        <>
+          {" "}
+          · <Trans>Partially reported</Trans>
+        </>
+      ) : null}
     </p>
   );
 }

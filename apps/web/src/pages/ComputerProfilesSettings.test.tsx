@@ -145,6 +145,7 @@ it("keeps a connectionless computer on its engine and does not offer deployment 
   expect(element.textContent).toContain("Engine: Docker");
   expect(element.textContent).not.toContain("Deployment default");
   expect(element.textContent).not.toContain("Add a computer");
+  expect(element.textContent).not.toContain("They run as you.");
   // Local Docker still answers the engine check, so a stopped engine can say so.
   expect(api.engine).toHaveBeenCalledExactlyOnceWith({ connectionId: null });
   await act(async () => root.unmount());
@@ -167,6 +168,9 @@ it("shows a desktop computer with the host label from the API and hides image pr
     ),
   );
   expect(element.textContent).toContain("Engine: This computer");
+  expect(element.textContent).toContain(
+    "Your OS will not ask for extra permission if you let bots run on this computer. They run as you.",
+  );
   expect(element.textContent).not.toContain("Deployment default");
   expect(element.querySelector('[aria-label="Connection"]')).toBeNull();
   expect(api.engine).not.toHaveBeenCalled();

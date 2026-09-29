@@ -17,7 +17,7 @@ test("Team Computer gives bots a home folder plus shared space while Private sta
   const sharedMarker = `shared-${stamp}`;
   const privateMarker = `private-${stamp}`;
 
-  await signup(page, `team-computer-${stamp}@ardurbot.test`, "password12", "Team Computer");
+  await signup(page, `team-computer-${stamp}@example.test`, "password12", "Team Computer");
   await completeOnboarding(page);
   const chiefId = activeBotId(page);
 
@@ -85,7 +85,7 @@ test("user control leaves another Team bot's screen available", async ({ page },
   const stamp = Date.now();
   const marker = `after-release-${stamp}`;
 
-  await signup(page, `team-control-${stamp}@ardurbot.test`, "password12", "Team Control");
+  await signup(page, `team-control-${stamp}@example.test`, "password12", "Team Control");
   await completeOnboarding(page);
   const chiefId = activeBotId(page);
   const workerId = await createBot(page, "Worker", "team");
@@ -96,6 +96,8 @@ test("user control leaves another Team bot's screen available", async ({ page },
   await page.getByTestId("computer-preview").hover();
   await page.getByTestId("computer-preview-open").click();
   await expect(page.getByRole("button", { name: "Close computer" })).toBeVisible();
+  // The workspace opens the screen to watch; taking control is its own step.
+  await page.getByTestId("computer-chrome").getByRole("button", { name: "Take control" }).click();
   await expect
     .poll(() => rpc(page, "computer/status", { botId: chiefId }))
     .toMatchObject({
@@ -133,13 +135,14 @@ test("user control leaves another Team bot's screen available", async ({ page },
 });
 
 test("a failed control release keeps the computer open for retry", async ({ page }, testInfo) => {
-  await signup(page, `team-release-${Date.now()}@ardurbot.test`, "password12", "Team Release");
+  await signup(page, `team-release-${Date.now()}@example.test`, "password12", "Team Release");
   await completeOnboarding(page);
   await page.getByTitle("Agent computer").click();
   await page.getByTestId("side-panel").getByRole("tab", { name: "Screen", exact: true }).click();
   await page.getByTestId("computer-preview").hover();
   await page.getByTestId("computer-preview-open").click();
   const chrome = page.getByTestId("computer-chrome");
+  await chrome.getByRole("button", { name: "Take control" }).click();
   const release = chrome.getByRole("button", { name: "Release", exact: true });
   await expect(release).toBeVisible();
   await page.route("**/rpc/computer/release", (route) =>
@@ -159,7 +162,7 @@ test("an active Team bot must be stopped before user takeover", async ({ page },
 
   await signup(
     page,
-    `active-team-control-${stamp}@ardurbot.test`,
+    `active-team-control-${stamp}@example.test`,
     "password12",
     "Active Team Control",
   );
@@ -226,10 +229,11 @@ test("an active Team bot must be stopped before user takeover", async ({ page },
     )
     .toBeNull();
 
-  // After stop, Open via hover is the takeover path (no Take control button).
+  // Once the bot has stopped, the open screen offers Take control.
   await page.getByTestId("computer-preview").hover();
   await page.getByTestId("computer-preview-open").click();
   await expect(page.getByRole("button", { name: "Close computer" })).toBeVisible();
+  await chrome.getByRole("button", { name: "Take control" }).click();
   await expect(chrome.getByText("You have control", { exact: true })).toBeVisible();
   await expect(chrome.getByRole("button", { name: /Take control/i })).toHaveCount(0);
   await expect(chrome.getByRole("button", { name: "Release", exact: true })).toBeVisible();

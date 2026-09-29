@@ -162,6 +162,26 @@ describe("MCP connector session cache", () => {
     );
     await connector.close();
   });
+  it("lists servers in creation order so tool definitions repeat byte for byte", async () => {
+    const findMany = vi.fn(async () => []);
+    const connector = fixtureConnector(
+      {
+        bot: { findFirst: vi.fn(async () => ({ id: "bot-1", computer: { kind: "docker" } })) },
+        mcpServer: { findMany },
+      },
+      new EncryptedSecretStore("fixture-encryption-material"),
+    );
+    await connector.discoverTools({
+      spaceId: "w1",
+      userId: "u1",
+      botId: "bot-1",
+      signal: new AbortController().signal,
+    } as never);
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
+    );
+    await connector.close();
+  });
   it("requires sign-in after a personal token is rejected without a refresh mechanism", async () => {
     vi.stubGlobal(
       "fetch",

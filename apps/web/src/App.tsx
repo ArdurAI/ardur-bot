@@ -8,6 +8,7 @@ import { PreferencesProvider } from "./components/PreferencesProvider";
 import { ShellSkeleton } from "./components/ShellSkeleton";
 import { authClient } from "./lib/auth";
 import { authReturnPath } from "./lib/auth-return-path";
+import { publishDockWaitingCount } from "./lib/dock-badge";
 import { markAfterPaint, markOnce } from "./lib/performance";
 import { resetPreferences } from "./lib/preferences";
 import {
@@ -78,7 +79,10 @@ function SessionApp() {
   const session = authClient.useSession();
   const gate = sessionGate(session);
   useEffect(() => {
-    if (gate === "anonymous") resetPreferences();
+    if (gate === "anonymous") {
+      resetPreferences();
+      publishDockWaitingCount(0);
+    }
   }, [gate]);
   const [holdingUnreachable, setHoldingUnreachable] = useState(false);
   const nextHolding = holdUnreachableGate(gate, holdingUnreachable);
@@ -99,7 +103,7 @@ function SessionApp() {
     ) : (
       <div
         className="grid h-full place-items-center text-muted-foreground/80"
-        data-ardurbot-app-state="session-pending"
+        data-ardur-app-state="session-pending"
       >
         <Trans>Loading…</Trans>
       </div>
@@ -108,7 +112,7 @@ function SessionApp() {
 
   const user = session.data?.user;
   const content = (
-    <div className="h-full" data-ardurbot-app-state="ready">
+    <div className="h-full" data-ardur-app-state="ready">
       <Suspense fallback={<div className="h-full bg-background" />}>
         <Routes>
           <Route

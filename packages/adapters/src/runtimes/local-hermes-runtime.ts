@@ -6,6 +6,7 @@ import type {
   AgentRuntimeEvent,
 } from "@ardurbot/adapter-kit";
 import { validateHermesExecutionEnvelope } from "@ardurbot/core/node/runtime-config-hash";
+import { guardrailConfigFromEnv } from "@ardurbot/host-runtime/host-guardrails";
 import {
   buildHermesRuntime,
   localHermesStaging,
@@ -122,6 +123,7 @@ export class LocalHermesRuntime implements AgentRuntime {
         explicitInstall: install,
         bundleFile: process.argv[1] ?? "",
         moduleUrl: import.meta.url,
+        guard: guardrailConfigFromEnv(),
         executionEnvelope,
         onProfileAcknowledged: () => {
           profileAcknowledged = true;

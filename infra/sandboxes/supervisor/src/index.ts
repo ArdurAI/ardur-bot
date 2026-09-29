@@ -6,12 +6,13 @@ import http from "node:http";
 import { cpus, freemem, loadavg, totalmem } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import type { ComputerProfileId } from "@ardurbot/contracts";
 import {
   COMPUTER_IMAGE_DOWNLOAD_FAILED_CODE,
   ComputerImageDownloadError,
   ComputerProfileSchema,
-  computerImage,
 } from "@ardurbot/contracts";
+import { localComputerImage } from "@ardurbot/contracts/computer-image";
 import {
   boundedSandboxCommandTimeoutMs,
   COMMAND_OUTPUT_LIMIT,
@@ -46,7 +47,6 @@ import {
   controlPortPublicationMatches,
   homeVolumeMatches,
   hostComputerUser,
-  LOCAL_COMPUTER_IMAGE,
   legacyNetworkOwnedSolelyBy,
   publishedLoopbackControlHostPort,
   resolveComputerControlEndpoint,
@@ -131,24 +131,28 @@ const appVersion = (
 ).version;
 let lastResolvedComputerImage = COMPUTER_IMAGE;
 async function resolvedComputerImage(
+  profile: ComputerProfileId = "base",
   engine = engineScope.getStore() ?? defaultDocker,
 ): Promise<string> {
+  // ARDURBOT_COMPUTER_IMAGE names the Standard image; Developer has no deployment override.
+  const override = profile === "base" ? process.env.ARDURBOT_COMPUTER_IMAGE : undefined;
   let localPresent = false;
-  if (!process.env.ARDURBOT_COMPUTER_IMAGE) {
+  if (!override) {
     try {
-      await engine.getImage(LOCAL_COMPUTER_IMAGE).inspect();
+      await engine.getImage(localComputerImage(profile)).inspect();
       localPresent = true;
     } catch (error) {
       if ((error as { statusCode?: number }).statusCode !== 404) throw error;
     }
   }
   const image = resolveComputerImage({
-    override: process.env.ARDURBOT_COMPUTER_IMAGE,
+    profile,
+    override,
     localPresent,
     appVersion,
     channel: process.env.ARDURBOT_COMPUTER_CHANNEL,
   });
-  lastResolvedComputerImage = image;
+  if (profile === "base") lastResolvedComputerImage = image;
   return image;
 }
 
@@ -287,10 +291,7 @@ app.post("/computers", async (c) => {
         },
       );
       return await withBotLifecycleLock(body.botId, async () => {
-        const image =
-          body.imageProfile === "base"
-            ? await resolvedComputerImage()
-            : computerImage(body.imageProfile);
+        const image = await resolvedComputerImage(body.imageProfile);
         const engine = engineFromResponses(await docker.version(), await docker.info());
         const expectedEngine = c.req.header("x-ardurbot-engine");
         if (expectedEngine && expectedEngine !== engine.name)
@@ -1023,8 +1024,8 @@ async function ensureComputerImage(
 ) {
   if (
     engineName === "docker" &&
-    image !== LOCAL_COMPUTER_IMAGE &&
-    image !== computerImage("developer")
+    image !== localComputerImage("base") &&
+    image !== localComputerImage("developer")
   ) {
     await ensureDockerComputerImage(engineScope.getStore() ?? defaultDocker, image, onProgress);
     return;
