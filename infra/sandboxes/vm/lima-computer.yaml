@@ -4,7 +4,7 @@
 # https://github.com/lima-vm/lima/blob/v2.2.0/templates/default.yaml
 #
 # Ardur uses this file unchanged and sets the per-computer values with `limactl create --set`:
-# vmType, cpus, memory, disk and the two param labels. The values below are the defaults.
+# vmType, cpus, memory, disk and the three params. The values below are the defaults.
 # Never put a secret in this file or in a param: the guest can read both.
 
 minimumLimaVersion: "2.2.0"
@@ -52,7 +52,9 @@ ssh:
   forwardX11Trusted: false
   overVsock: false
 
-# DNS for the guest comes from Lima's resolver at 192.168.5.3; the guest firewall allows only that.
+# The guest's nameserver is the gateway 192.168.5.2 on vz, whatever this setting says, and
+# 192.168.5.3 on qemu, where this setting keeps the host's own nameservers out of the guest.
+# The guest firewall allows DNS only to that address.
 hostResolver:
   enabled: true
 # Do not copy the host's proxy variables, and any credentials in them, into the guest.
@@ -72,6 +74,9 @@ param:
   # Labels for crash recovery and orphan cleanup. Ardur sets both for each computer.
   ArdurComputer: "000000000000000000000000"
   ArdurDeployment: "0000000000000000"
+  # The same value as vmType, which decides where the guest's nameserver is. Lima asks
+  # provisioning scripts not to read its internal LIMA_CIDATA variables, so Ardur passes it.
+  ArdurVmType: vz
 
 # No readiness probe: `limactl start` already waits until this boot's provisioning script has
 # finished, and the script records its own outcome in /run (see docs/vm-computers.md).
@@ -87,8 +92,10 @@ provision:
       # Commands resolve only from system directories.
       export PATH=/usr/sbin:/usr/bin:/sbin:/bin
 
-      # This boot's outcome. /run starts empty at every boot and only root can write to it, so the
-      # bot cannot fake either marker. Any non-zero exit, explicit or not, records its reason.
+      # This boot's outcome, as files directly in /run (root-owned, mode 755, empty at every boot).
+      # It is a readiness signal for Ardur, not a safety gate: the firewall never depends on it.
+      # Any non-zero exit records a reason. The reason is a hint: for a failing pipeline,
+      # $BASH_COMMAND names the pipeline's last command, not the one that failed.
       reason=""
       fail() {
         reason="$*"
@@ -103,7 +110,52 @@ provision:
       }
       trap record_outcome EXIT
       rm -f /run/ardur-ready /run/ardur-failed
-      install -d -m 0755 /var/lib/ardur
+      install -d -m 0755 /var/lib/ardur /etc/ardur
+
+      # Every file root writes goes through write_file. Its input goes to a temporary file in the
+      # target's own root-owned directory, which is flushed, checked by the optional command, and
+      # renamed over the target only when the content changed. A failed write never replaces the
+      # target. An unchanged target keeps its inode and only gets the requested mode.
+      write_file() {
+        local path="$1" mode="$2" tmp
+        shift 2
+        tmp="$(mktemp "$path.XXXXXX")"
+        cat >"$tmp"
+        chmod "$mode" "$tmp"
+        sync "$tmp"
+        if [ "$#" -gt 0 ] && ! "$@" "$tmp"; then
+          rm -f "$tmp"
+          fail "Refused the new content of $path"
+        fi
+        if cmp -s "$tmp" "$path"; then
+          rm -f "$tmp"
+          chmod "$mode" "$path"
+        else
+          mv -f "$tmp" "$path"
+        fi
+      }
+
+      # apt, only on boots that install packages. An install that a Quit or a crash interrupted is
+      # finished first, because apt refuses to run until it is. Installs wait up to five minutes
+      # for the dpkg lock that Ubuntu's own apt jobs may hold; `apt-get update` takes a lock that
+      # does not wait, so it is retried.
+      apt_update() {
+        local attempt
+        for attempt in 1 2 3 4 5 6; do
+          if apt-get update; then
+            return 0
+          fi
+          echo >&2 "apt-get update failed (attempt $attempt of 6)"
+          sleep 10
+        done
+        fail "apt-get update failed"
+      }
+      apt_install() {
+        if [ -n "$(ls -A /var/lib/dpkg/updates)" ]; then
+          dpkg --configure -a
+        fi
+        apt-get -o DPkg::Lock::Timeout=300 install -y "$@"
+      }
 
       BOT_USER=bot
       BOT_UID=2000
@@ -130,50 +182,101 @@ provision:
       esac
       PINS="docker=$DOCKER_VERSION containerd=$CONTAINERD_VERSION buildx=$BUILDX_VERSION compose=$COMPOSE_VERSION kind=$KIND_VERSION kubernetes=$KUBERNETES_VERSION"
       BOT_KEYS=/etc/ssh/ardur/bot_authorized_keys
+      BOT_DOCKER_HOST="unix:///run/user/$BOT_UID/docker.sock"
 
       # 0. Labels, and a stable SSH host key. Lima gives cloud-init a new instance id at every boot,
       # and cloud-init deletes and regenerates the host keys for each new instance unless told not
       # to (lima-vm/lima#678). Ardur pins the host key, so it must survive reboots.
-      printf 'computer=%s\ndeployment=%s\n' "$PARAM_ArdurComputer" "$PARAM_ArdurDeployment" \
-        >/etc/ardur-labels
+      write_file /etc/ardur-labels 0644 \
+        < <(printf 'computer=%s\ndeployment=%s\n' "$PARAM_ArdurComputer" "$PARAM_ArdurDeployment")
       install -d -m 0755 /etc/cloud/cloud.cfg.d
-      printf '%s\n' "ssh_deletekeys: false" >/etc/cloud/cloud.cfg.d/90-ardur-keep-host-keys.cfg
+      write_file /etc/cloud/cloud.cfg.d/90-ardur-keep-host-keys.cfg 0644 \
+        < <(printf '%s\n' "ssh_deletekeys: false")
 
-      # 1. Guest firewall, owned by root and loaded early at every later boot. IPv4: it blocks the
-      # host's loopback (192.168.5.2), private and link-local ranges, and Tailscale addresses, and
-      # allows DNS through Lima's resolver and the public internet. IPv6 is allowed only on the
-      # guest's own loopback: QEMU's user network maps its IPv6 prefix to the host's ::1.
+      # 1. Guest firewall. Lima's user-mode network maps the gateway, 192.168.5.2, to the host's
+      # loopback. The guest's nameserver is the gateway itself on vz, where the network's own DNS
+      # server answers on port 53, and 192.168.5.3 on qemu; the nameserver the guest received
+      # must be exactly that one, or provisioning stops. The rules reject outbound IPv4 to the
+      # host's loopback, private, link-local, carrier-grade NAT, multicast and reserved ranges
+      # (255.255.255.255 included: QEMU's user network also sends it to the host's loopback),
+      # except DNS to that nameserver and DHCP to the gateway. Replies on connections the host
+      # opened, such as SSH, pass; packets of connections the guest opened never skip a reject.
+      # IPv6 works only on the guest's own loopback.
+      gateway=192.168.5.2
+      case "$PARAM_ArdurVmType" in
+        vz) nameserver=192.168.5.2 ;;
+        qemu) nameserver=192.168.5.3 ;;
+        *) fail "Unknown VM type: $PARAM_ArdurVmType" ;;
+      esac
+      received="$(awk '$1 == "nameserver" { print $2 }' /run/systemd/resolve/resolv.conf 2>/dev/null |
+        sort -u || true)"
+      [ "$received" = "$nameserver" ] ||
+        fail "The guest's nameserver is ${received:-missing}, not $nameserver"
       if ! command -v nft >/dev/null 2>&1; then
-        apt-get update
-        apt-get install -y nftables
+        apt_update
+        apt_install nftables
       fi
-      cat >/etc/nftables.conf <<'EOF'
+      write_file /etc/ardur/firewall.nft 0644 nft -c -f <<EOF
       #!/usr/sbin/nft -f
       flush ruleset
       table inet ardur {
         chain output {
           type filter hook output priority filter; policy accept;
           oifname "lo" accept
-          ct state established,related accept
           meta nfproto ipv6 reject
-          ip daddr 192.168.5.3 meta l4proto { tcp, udp } th dport 53 accept
+          ct state established,related ct direction reply accept
+          ip daddr $nameserver meta l4proto { tcp, udp } th dport 53 accept
+          ip daddr $gateway udp dport 67 accept
           ip daddr { 0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.0.0.0/24, 192.168.0.0/16, 198.18.0.0/15, 224.0.0.0/3 } reject
         }
       }
       EOF
-      systemctl enable nftables.service
-      nft -f /etc/nftables.conf
+      # The rules load from their own unit, before the network starts. It has no ExecStop, so a
+      # stop or restart never leaves the guest without rules, and a reload replaces them in one
+      # transaction. systemd-networkd requires it, so a guest whose rules fail to load gets no
+      # network at all. The nftables package's own unit is masked: its ExecStop flushes every
+      # rule, and the /etc/nftables.conf it loads starts with `flush ruleset`.
+      write_file /etc/systemd/system/ardur-firewall.service 0644 <<'EOF'
+      [Unit]
+      Description=Ardur guest firewall
+      DefaultDependencies=no
+      Wants=network-pre.target
+      Before=network-pre.target systemd-networkd.service shutdown.target
+      Conflicts=shutdown.target
+
+      [Service]
+      Type=oneshot
+      RemainAfterExit=yes
+      StandardInput=null
+      ProtectSystem=full
+      ProtectHome=true
+      ExecStart=/usr/sbin/nft -f /etc/ardur/firewall.nft
+      ExecStartPost=/usr/sbin/nft list table inet ardur
+      ExecReload=/usr/sbin/nft -f /etc/ardur/firewall.nft
+
+      [Install]
+      WantedBy=sysinit.target
+      RequiredBy=systemd-networkd.service
+      EOF
+      systemctl mask nftables.service
+      systemctl daemon-reload
+      systemctl enable ardur-firewall.service
+      # Starts the unit on the first boot and reloads it on later ones; it never restarts it.
+      systemctl reload-or-restart ardur-firewall.service
+      nft list table inet ardur >/dev/null || fail "The guest firewall is not loaded"
 
       # 2. The bot account, and how it logs in, before anything can log in as the bot. sshd takes
       # the bot's key from a root-owned file (Match User), so root never writes into the bot's
       # home and the bot cannot add keys. The key is the one Lima installed for its admin user;
-      # the private half never enters the guest.
+      # the private half never enters the guest. DOCKER_HOST is set for the bot's SSH sessions
+      # only: /etc/environment would also reach root through sudo.
       admin_home="$(getent passwd lima | cut -d: -f6)"
       chmod 0750 "$admin_home"
       install -d -m 0755 -o root -g root /etc/ssh/ardur
-      install -m 0644 -o root -g root "$admin_home/.ssh/authorized_keys" "$BOT_KEYS"
-      printf '%s\n' "Match User $BOT_USER" "    AuthorizedKeysFile $BOT_KEYS" \
-        >/etc/ssh/sshd_config.d/10-ardur-bot.conf
+      write_file "$BOT_KEYS" 0644 <"$admin_home/.ssh/authorized_keys"
+      write_file /etc/ssh/sshd_config.d/10-ardur-bot.conf 0644 \
+        < <(printf '%s\n' "Match User $BOT_USER" "    AuthorizedKeysFile $BOT_KEYS" \
+          "    SetEnv DOCKER_HOST=$BOT_DOCKER_HOST")
       if ! id -u "$BOT_USER" >/dev/null 2>&1; then
         useradd --create-home --uid "$BOT_UID" --user-group --shell /bin/bash "$BOT_USER"
       fi
@@ -185,30 +288,37 @@ provision:
       effective="$(sshd -T -C "user=$BOT_USER,host=localhost,addr=127.0.0.1")"
       grep -qx "authorizedkeysfile $BOT_KEYS" <<<"$effective" ||
         fail "sshd does not read the bot's key from $BOT_KEYS"
+      grep -qx "setenv DOCKER_HOST=$BOT_DOCKER_HOST" <<<"$effective" ||
+        fail "sshd does not set DOCKER_HOST for the bot"
       systemctl try-reload-or-restart ssh.service
 
       # 3. Pinned software, installed once, in a directory only root can write.
       if [ "$(cat /var/lib/ardur/provisioned 2>/dev/null || true)" != "$PINS" ]; then
-        apt-get update
-        apt-get install -y ca-certificates curl gnupg uidmap dbus-user-session slirp4netns
+        apt_update
+        apt_install ca-certificates curl gnupg uidmap dbus-user-session slirp4netns
         work=/var/lib/ardur/work
         rm -rf "$work"
         install -d -m 0700 "$work" "$work/gnupg"
 
-        # Docker's apt repository, trusted only when the key file holds exactly one primary key
-        # and that key has the pinned fingerprint: apt accepts a signature from any key in it.
+        # Docker's apt repository, signed by the pinned key only. apt accepts a signature from any
+        # key in a Signed-By file, and reads an .asc file with its own parser rather than GnuPG's,
+        # so the downloaded file is never installed. The pinned key alone is exported from a
+        # scratch keyring into a binary keyring, which is checked again before apt uses it.
         curl -fsSLo "$work/docker.asc" https://download.docker.com/linux/ubuntu/gpg
-        primary_keys="$(gpg --homedir "$work/gnupg" --show-keys --with-colons "$work/docker.asc" |
+        gpg --homedir "$work/gnupg" --batch --quiet --import "$work/docker.asc"
+        gpg --homedir "$work/gnupg" --batch --export "$DOCKER_KEY_FINGERPRINT" >"$work/docker.gpg"
+        primary_keys="$(gpg --homedir "$work/gnupg" --batch --show-keys --with-colons "$work/docker.gpg" |
           awk -F: '$1 == "pub" { primary = 1; next } primary && $1 == "fpr" { print $10; primary = 0 }')"
         [ "$primary_keys" = "$DOCKER_KEY_FINGERPRINT" ] ||
-          fail "Docker's key file does not hold exactly the pinned key"
+          fail "The exported Docker keyring does not hold exactly the pinned key"
         install -m 0755 -d /etc/apt/keyrings
-        install -m 0644 "$work/docker.asc" /etc/apt/keyrings/docker.asc
-        printf '%s\n' "Types: deb" "URIs: https://download.docker.com/linux/ubuntu" "Suites: noble" \
-          "Components: stable" "Architectures: $ARCH" "Signed-By: /etc/apt/keyrings/docker.asc" \
-          >/etc/apt/sources.list.d/docker.sources
-        apt-get update
-        apt-get install -y "docker-ce=$DOCKER_VERSION" "docker-ce-cli=$DOCKER_VERSION" \
+        write_file /etc/apt/keyrings/docker.gpg 0644 <"$work/docker.gpg"
+        write_file /etc/apt/sources.list.d/docker.sources 0644 \
+          < <(printf '%s\n' "Types: deb" "URIs: https://download.docker.com/linux/ubuntu" \
+            "Suites: noble" "Components: stable" "Architectures: $ARCH" \
+            "Signed-By: /etc/apt/keyrings/docker.gpg")
+        apt_update
+        apt_install "docker-ce=$DOCKER_VERSION" "docker-ce-cli=$DOCKER_VERSION" \
           "docker-ce-rootless-extras=$DOCKER_VERSION" "containerd.io=$CONTAINERD_VERSION" \
           "docker-buildx-plugin=$BUILDX_VERSION" "docker-compose-plugin=$COMPOSE_VERSION"
         apt-mark hold docker-ce docker-ce-cli docker-ce-rootless-extras containerd.io \
@@ -230,29 +340,28 @@ provision:
         rm -rf "$work"
 
         # Limits kind documents for clusters, and the modules rootless kind needs.
-        printf '%s\n' "fs.inotify.max_user_watches = 524288" "fs.inotify.max_user_instances = 512" \
-          >/etc/sysctl.d/90-ardur-kind.conf
+        write_file /etc/sysctl.d/90-ardur-kind.conf 0644 \
+          < <(printf '%s\n' "fs.inotify.max_user_watches = 524288" "fs.inotify.max_user_instances = 512")
         sysctl --system >/dev/null
-        printf '%s\n' ip6_tables ip6table_nat ip_tables iptable_nat >/etc/modules-load.d/ardur-kind.conf
+        write_file /etc/modules-load.d/ardur-kind.conf 0644 \
+          < <(printf '%s\n' ip6_tables ip6table_nat ip_tables iptable_nat)
         systemctl restart systemd-modules-load.service
 
         # The bot's own rootless Docker: no sudo, no docker group. The setup tool runs as the bot.
         grep -q "^$BOT_USER:" /etc/subuid || usermod --add-subuids 300000-365535 "$BOT_USER"
         grep -q "^$BOT_USER:" /etc/subgid || usermod --add-subgids 300000-365535 "$BOT_USER"
         loginctl enable-linger "$BOT_USER"
-        grep -q '^DOCKER_HOST=' /etc/environment ||
-          echo "DOCKER_HOST=unix:///run/user/$BOT_UID/docker.sock" >>/etc/environment
         systemctl start "user@$BOT_UID.service"
         runuser -u "$BOT_USER" -- env HOME="/home/$BOT_USER" XDG_RUNTIME_DIR="/run/user/$BOT_UID" \
           DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$BOT_UID/bus" \
           dockerd-rootless-setuptool.sh install
 
-        printf '%s\n' "$PINS" >/var/lib/ardur/provisioned
+        write_file /var/lib/ardur/provisioned 0644 < <(printf '%s\n' "$PINS")
       fi
 
       # 4. Every boot: ready once the bot's Docker answers. The command runs as the bot.
       runuser -u "$BOT_USER" -- env HOME="/home/$BOT_USER" XDG_RUNTIME_DIR="/run/user/$BOT_UID" \
-        DOCKER_HOST="unix:///run/user/$BOT_UID/docker.sock" \
+        DOCKER_HOST="$BOT_DOCKER_HOST" \
         timeout 60 sh -c 'until docker version >/dev/null 2>&1; do sleep 2; done' ||
         fail "The bot's Docker did not start"
       touch /run/ardur-ready
