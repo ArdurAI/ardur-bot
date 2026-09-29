@@ -132,12 +132,13 @@ test("a group shows captured runtime settings and refreshes them from the bot", 
   };
   const patchBot = (bots: Bot[]) =>
     bots.map((bot) => (bot.id === botId ? { ...bot, ...hermesBot } : bot));
-  const patchGroup = (entry: Group): Group => ({
-    ...entry,
-    members: entry.members.map((item) =>
+  let groupState: Group = {
+    ...group,
+    members: group.members.map((item) =>
       item.botId === botId ? { ...item, modelPinRevision: 1, runtimePin: hermesPin } : item,
     ),
-  });
+  };
+  const patchGroup = (entry: Group): Group => (entry.id === group.id ? groupState : entry);
   await page.route("**/rpc/bootstrap", async (route) => {
     const response = await route.fetch();
     const body = (await response.json()) as { json: AppBootstrap };
@@ -167,6 +168,29 @@ test("a group shows captured runtime settings and refreshes them from the bot", 
   await expect(control.getByText("Context limit (KiB): 16")).toBeVisible();
   await expect(control.getByText("Captured for this group.")).toBeVisible();
   await captureScreenshot(page, testInfo, "runtime-config-group-captured");
+
+  await page.route("**/rpc/groups/setMemberModelPin", async (route) => {
+    groupState = {
+      ...group,
+      members: group.members.map((item) =>
+        item.botId === botId
+          ? {
+              ...item,
+              modelPinRevision: 3,
+              runtimePin: {
+                ...hermesPin,
+                revision: 3,
+                runtimeConfig: botConfig,
+              },
+            }
+          : item,
+      ),
+    };
+    await route.fulfill({
+      status: 200,
+      json: { json: groupState },
+    });
+  });
 
   const refresh = page.waitForRequest(
     (request) =>
@@ -200,6 +224,9 @@ test("a group shows captured runtime settings and refreshes them from the bot", 
     provider: "openai-compatible",
     modelId: "fixture-model",
   });
-  await expect(control.getByText("Captured for this group.")).toBeVisible();
+  await expect(control.getByText("Model calls per turn: 10")).toBeVisible();
+  await expect(control.getByText("Time limit (seconds): 60")).toBeVisible();
+  await expect(control.getByText("Context limit (KiB): 32")).toBeVisible();
+  await expect(control.getByRole("button", { name: "Use bot runtime settings" })).toHaveCount(0);
   await page.unrouteAll({ behavior: "ignoreErrors" });
 });
