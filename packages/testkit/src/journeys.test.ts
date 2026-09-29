@@ -5992,15 +5992,20 @@ describeJourneys("required product journeys", () => {
     expect(askMessages[0]).toMatchObject({
       botId: chief.id,
       runId: intro.runId,
-      blocks: [
-        {
-          kind: "text",
-          text: expect.stringMatching(
-            /^(@(Ada|Ben|Cy) ){3}Introduce yourself to the room in one sentence\.$/,
-          ),
-        },
-      ],
     });
+    // The ask stores as one coordination block the room collapses to a line;
+    // every asked member ends recorded as answered on it.
+    const askBlock = (askMessages[0]!.blocks as Array<Record<string, unknown>>)[0]!;
+    expect(askBlock).toMatchObject({
+      kind: "coordination",
+      round: 1,
+      text: "Introduce yourself to the room in one sentence.",
+    });
+    const askedMembers = askBlock.members as Array<{ botId: string; outcome: string }>;
+    expect(askedMembers.map((member) => member.botId).sort()).toEqual(
+      [ada.id, ben.id, cy.id].sort(),
+    );
+    expect(askedMembers.every((member) => member.outcome === "answered")).toBe(true);
     for (const row of asked)
       expect(
         roomMessages.some(

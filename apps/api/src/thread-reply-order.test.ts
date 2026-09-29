@@ -245,6 +245,12 @@ describe("thread reply order", () => {
     const coordinator = { coordinatorThreadId: "thread-coord", coordinatorBotId: "bot-coord" };
     Object.assign(tx, {
       delegation: {
+        findUnique: vi.fn(async () => ({
+          id: "delegation-1",
+          actingBotId: "bot-chief",
+          actingName: "Chief",
+          admissionKey: "message:1",
+        })),
         findUniqueOrThrow: vi.fn(async () => ({
           id: "delegation-1",
           kind: "message",
