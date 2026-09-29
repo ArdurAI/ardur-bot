@@ -428,6 +428,7 @@ import {
   skillUpdateFromTool,
 } from "./skill-tools.js";
 import {
+  ATTACHMENT_UNAVAILABLE_NOTE,
   fitInitialSteering,
   splitInitialReceipt,
   withoutSteeringMessages,
@@ -535,8 +536,7 @@ const READ_ONLY_AGENT_TOOLS = new Set([
   "cloud_agent_status",
 ]);
 const MAX_MODEL_FILE_BYTES = 250_000;
-const TURN_ATTACHMENT_UNAVAILABLE =
-  "An attachment in this message could not be loaded. Tell the user the attachment was unavailable and do not guess its contents.";
+const TURN_ATTACHMENT_UNAVAILABLE = ATTACHMENT_UNAVAILABLE_NOTE;
 const STEERING_ATTACHMENT_UNAVAILABLE = TURN_ATTACHMENT_UNAVAILABLE;
 const BUILTIN_AGENT_TOOL_NAMES = new Set(builtinAgentTools.map((tool) => tool.name));
 

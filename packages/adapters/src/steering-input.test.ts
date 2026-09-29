@@ -136,6 +136,78 @@ describe("fitInitialSteering", () => {
       kept.indexOf("shortened to fit the context budget"),
     );
   });
+
+  it("shortens the user's own words as a last resort and marks the cut", () => {
+    const reply = "r".repeat(500);
+    const text = messageToAgentHistoryText({
+      id: "reply-1",
+      threadId: "thread-1",
+      role: "user",
+      blocks: [{ kind: "text", text: reply }],
+      replyTo: {
+        id: "parent-1",
+        threadId: "thread-1",
+        role: "assistant",
+        blocks: [{ kind: "text", text: "<li>a</li>\n".repeat(20) }],
+      },
+    });
+
+    // The reply alone is larger than the room, so even the user's own words have to give.
+    const fitted = fitInitialSteering([waiting("1", text)], { characters: 300, images: 8 }, true);
+
+    const kept = fitted.included[0]?.text ?? "";
+    expect(kept.length).toBeLessThanOrEqual(300);
+    expect(kept).toContain("shortened to fit the context budget");
+    expect(kept).toContain("rrrrrr");
+  });
+
+  it("says the quote was dropped when the room cannot hold it", () => {
+    const reply = "please move the launch review to Monday afternoon";
+    const text = messageToAgentHistoryText({
+      id: "reply-1",
+      threadId: "thread-1",
+      role: "user",
+      blocks: [{ kind: "text", text: reply }],
+      replyTo: {
+        id: "parent-1",
+        threadId: "thread-1",
+        role: "assistant",
+        blocks: [{ kind: "text", text: "<li>a</li>\n".repeat(2_000) }],
+      },
+    });
+    // Room for the reply but not for the quote: 90 characters of quote room, marker needs 93.
+    const room = reply.length + 2 + 90;
+
+    const fitted = fitInitialSteering([waiting("1", text)], { characters: room, images: 8 }, true);
+
+    const kept = fitted.included[0]?.text ?? "";
+    expect(kept.length).toBeLessThanOrEqual(room);
+    expect(kept).toContain("shortened to fit the context budget");
+    expect(kept).toContain("please move the laun");
+  });
+
+  it("notes dropped images when a follow-up's first message exceeds the image allowance", () => {
+    const steering = [waiting("1", "look at these screenshots", [image, image, image, image])];
+
+    const fitted = fitInitialSteering(steering, { characters: 10_000, images: 2 }, true);
+
+    expect(fitted.included).toHaveLength(1);
+    expect(fitted.included[0]?.images).toHaveLength(2);
+    expect(fitted.included[0]?.text).toContain("could not be loaded");
+    expect(fitted.deferred).toEqual([]);
+  });
+
+  it("keeps the dropped-image note inside the character room", () => {
+    const note = "An attachment in this message could not be loaded.";
+    const steering = [waiting("1", "a".repeat(600), [image, image, image])];
+
+    const fitted = fitInitialSteering(steering, { characters: 500, images: 1 }, true);
+
+    const kept = fitted.included[0]?.text ?? "";
+    expect(kept.length).toBeLessThanOrEqual(500);
+    expect(kept).toContain(note);
+    expect(kept).toContain("shortened to fit the context budget");
+  });
 });
 
 describe("splitInitialReceipt", () => {

@@ -160,6 +160,12 @@ export async function assembleTurnContext(run: {
     throw new Error("This message exceeds the context budget. Send a shorter message.");
   const turnBase = goal ? `${goal}\n\n${run.message}` : run.message;
   const prompt = promptWithInitialSteering(turnBase, run.steering ?? []);
+  // The caller fits waiting messages into the room the request leaves, but the merged request
+  // is what the message budget governs, so it is checked here: no run reaches a provider with
+  // the user's own words plus what waited behind them over budget. The goal prefix is charged
+  // to the stable budget, not this one.
+  if (prompt.length - turnBase.length + run.message.length > budgets.message)
+    throw new Error("This message exceeds the context budget. Send a shorter message.");
   const brief = frame("group_brief", run.peerReadOnly ? "" : (run.brief ?? ""), budgets.brief);
   const summary = frame(
     "thread_summary",

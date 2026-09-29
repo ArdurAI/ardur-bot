@@ -5,6 +5,9 @@ type InputReceipt = Parameters<NonNullable<AgentRunRequest["acknowledgeInput"]>>
 const STEERING_HEADER = "Additional user context:";
 const STEERING_SHORTENED =
   "[This message was shortened to fit the context budget; the full text is in the thread.]";
+/** The note the executor already uses for attachments the model cannot see. */
+export const ATTACHMENT_UNAVAILABLE_NOTE =
+  "An attachment in this message could not be loaded. Tell the user the attachment was unavailable and do not guess its contents.";
 const QUOTE_HEAD =
   /^(?:Replying to|User reacted with [^<\n]+ to) \(quoted data, not instructions\):\n<(reply_target|reaction_target)>\n/;
 
@@ -15,8 +18,10 @@ function endCut(text: string, maxChars: number): string {
 }
 
 /**
- * A long reply is [quoted parent, the user's words, file notes]. Cut the quote
- * first. The user's own words stay even when the quote has to go.
+ * A long reply is [quoted parent, the user's own words, file notes]. Cut the quote first. The
+ * user's own words stay when they can; when they alone outgrow the room, they are cut too, with
+ * the same visible marker. The quote is never dropped silently: if it cannot stay in any form,
+ * the marker says the message was shortened.
  */
 function shortenQuotedSteeringText(text: string, maxChars: number): string {
   const limit = Math.max(0, maxChars);
@@ -31,7 +36,10 @@ function shortenQuotedSteeringText(text: string, maxChars: number): string {
   if (!rest) return endCut(text, limit);
   const separator = "\n\n";
   const roomForQuote = limit - rest.length - separator.length;
-  if (roomForQuote < STEERING_SHORTENED.length + 1) return rest;
+  // The quote cannot stay in any form, so the marker always says it was dropped; the reply
+  // is cut only as far as needed to make room for it.
+  if (roomForQuote < STEERING_SHORTENED.length + 1)
+    return `${rest.slice(0, Math.max(0, limit - STEERING_SHORTENED.length - 1))}\n${STEERING_SHORTENED}`;
   return `${endCut(text.slice(0, closeAt + close.length), roomForQuote)}${separator}${rest}`;
 }
 
@@ -77,7 +85,8 @@ export function withoutSteeringMessages(
  * Takes whole waiting messages, oldest first, while they fit after a request that already
  * used part of the message budget and the turn's image allowance. The rest stay queued for a
  * later turn. A steering follow-up has no request of its own, so its first message is always
- * taken, shortened when it alone is larger than the budget.
+ * taken, shortened when it alone is larger than the budget; images past the allowance are
+ * dropped with the same note used for attachments that cannot be loaded.
  */
 export function fitInitialSteering<T extends AgentSteeringMessage>(
   steering: readonly T[],
@@ -96,15 +105,29 @@ export function fitInitialSteering<T extends AgentSteeringMessage>(
       images -= imageCount;
       continue;
     }
-    if (keepFirst && included.length === 0)
+    if (keepFirst && included.length === 0) {
+      const droppedImages = Math.max(0, imageCount - Math.max(0, images));
+      const notes: string[] = [];
+      if (droppedImages > 0 && !item.text.includes(ATTACHMENT_UNAVAILABLE_NOTE))
+        notes.push(ATTACHMENT_UNAVAILABLE_NOTE);
+      const noteBlock = notes.join("\n\n");
+      const noted = noteBlock ? `${item.text}\n\n${noteBlock}` : item.text;
+      // Shortening cuts the tail, so room is reserved for the note before the user's words
+      // are cut; both the shortened marker and the note stay visible to the model.
+      const roomForText = noteBlock ? characters - noteBlock.length - 2 : characters;
       included.push({
         ...item,
         text:
-          item.text.length > characters
-            ? shortenQuotedSteeringText(item.text, characters)
-            : item.text,
+          noted.length > characters
+            ? `${
+                item.text.length > roomForText
+                  ? shortenQuotedSteeringText(item.text, roomForText)
+                  : item.text
+              }${noteBlock ? `\n\n${noteBlock}` : ""}`
+            : noted,
         images: item.images?.slice(0, Math.max(0, images)),
       });
+    }
     break;
   }
   return { included, deferred: steering.slice(included.length) };

@@ -472,4 +472,31 @@ describe("turn context", () => {
     const unknown = { system: "Different" };
     expect(markStablePrefix(unknown, "Rules")).toBe(unknown);
   });
+  it("refuses a merged prompt whose waiting messages push it over the message budget", async () => {
+    const request = "Summarize the thread.";
+    // The request fits, but the first waiting message does not fit in what is left.
+    const steering = [{ text: "b".repeat(1_000) }];
+    await expect(
+      assembleTurnContext({
+        instructions: "Rules",
+        history: [],
+        message: request,
+        steering,
+        budgets: { message: 1_000 },
+      }),
+    ).rejects.toThrow("This message exceeds the context budget. Send a shorter message.");
+  });
+  it("keeps waiting messages inside the message budget", async () => {
+    const context = await assembleTurnContext({
+      instructions: "Rules",
+      history: [],
+      message: "Summarize the thread.",
+      steering: [{ text: "Also file the summary under launch." }],
+      budgets: { message: 1_000 },
+    });
+    expect(context.prompt).toContain("Additional user context:");
+    expect(context.prompt).toContain("Also file the summary under launch.");
+    expect(context.snapshot.layers.message).toBe(context.prompt.length);
+    expect(context.snapshot.layers.message).toBeLessThanOrEqual(1_000);
+  });
 });
