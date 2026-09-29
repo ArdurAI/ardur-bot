@@ -4,9 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const fake = vi.hoisted(() => ({
   handlers: new Map<string, (event: IpcMainInvokeEvent, value?: unknown) => unknown>(),
   setBadgeCount: vi.fn(),
+  windows: new Map<unknown, unknown>(),
 }));
 vi.mock("electron", () => ({
   app: { setBadgeCount: fake.setBadgeCount },
+  BrowserWindow: {
+    fromWebContents: (contents: unknown) => fake.windows.get(contents) ?? null,
+  },
   ipcMain: {
     handle: (name: string, handler: (event: IpcMainInvokeEvent, value?: unknown) => unknown) => {
       fake.handlers.set(name, handler);
@@ -25,6 +29,7 @@ function usePlatform(platform: NodeJS.Platform) {
 beforeEach(() => {
   vi.clearAllMocks();
   fake.handlers.clear();
+  fake.windows.clear();
 });
 
 afterEach(() => {
@@ -47,6 +52,7 @@ function page(url: string) {
     isDestroyed: () => destroyed,
     webContents: contents,
   } as unknown as BrowserWindow;
+  fake.windows.set(contents, window);
   return {
     frame,
     contents,
@@ -197,6 +203,44 @@ describe("dock badge", () => {
     dock.sync();
     expect(dock.setBadgeCount).toHaveBeenLastCalledWith(2);
     expect(dock.tray.setTitle).toHaveBeenLastCalledWith("2");
+  });
+
+  it("keeps a count sent from the previous window during a failed switch", async () => {
+    const dock = install("darwin");
+    await dock.send(2);
+    expect(dock.setBadgeCount).toHaveBeenLastCalledWith(2);
+    const next = page("https://new.example.test");
+    dock.attach(next.contents as unknown as WebContents, "https://new.example.test");
+    dock.show(next.window);
+    dock.setBadgeCount.mockClear();
+    dock.tray.setTitle.mockClear();
+
+    await dock.sendFrom(dock, 3);
+    expect(dock.setBadgeCount).not.toHaveBeenCalled();
+    expect(dock.tray.setTitle).not.toHaveBeenCalled();
+
+    dock.show(dock.window);
+    dock.sync();
+    expect(dock.setBadgeCount).toHaveBeenLastCalledWith(3);
+    expect(dock.tray.setTitle).toHaveBeenLastCalledWith("3");
+  });
+
+  it("stores a count sent from a background window before it becomes current", async () => {
+    const dock = install("darwin");
+    await dock.send(2);
+    const next = page("https://new.example.test");
+    dock.attach(next.contents as unknown as WebContents, "https://new.example.test");
+    dock.setBadgeCount.mockClear();
+    dock.tray.setTitle.mockClear();
+
+    await dock.sendFrom(next, 5);
+    expect(dock.setBadgeCount).not.toHaveBeenCalled();
+    expect(dock.tray.setTitle).not.toHaveBeenCalled();
+
+    dock.show(next.window);
+    dock.sync();
+    expect(dock.setBadgeCount).toHaveBeenLastCalledWith(5);
+    expect(dock.tray.setTitle).toHaveBeenLastCalledWith("5");
   });
 
   it("shows the count when the menu bar icon appears later", async () => {

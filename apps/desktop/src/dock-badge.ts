@@ -1,5 +1,5 @@
-import type { BrowserWindow, IpcMainInvokeEvent, Tray, WebContents } from "electron";
-import { app, ipcMain } from "electron";
+import type { IpcMainInvokeEvent, Tray, WebContents } from "electron";
+import { app, BrowserWindow, ipcMain } from "electron";
 import { systemSenderAllowed } from "./system/sender.js";
 
 /** Whole numbers the Dock can show. Anything else is ignored. */
@@ -51,9 +51,10 @@ export function installDockBadge(options: {
 
   ipcMain.handle("desktop.dock.waiting", (event: IpcMainInvokeEvent, value: unknown) => {
     if (!validBadgeCount(value)) return;
-    const window = current();
+    const window = BrowserWindow.fromWebContents(event.sender);
     if (
       !window ||
+      window.isDestroyed() ||
       event.sender !== window.webContents ||
       event.senderFrame !== window.webContents.mainFrame
     )
@@ -66,7 +67,7 @@ export function installDockBadge(options: {
     if (!systemSenderAllowed(event, window, url)) return;
     waiting.delete(window.webContents);
     counts.set(window.webContents, value);
-    paint(value, options.tray());
+    if (current()?.webContents === window.webContents) paint(value, options.tray());
   });
 
   return {
