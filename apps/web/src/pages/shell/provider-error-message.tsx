@@ -1,4 +1,5 @@
 import type { ModelCatalogEntry, ProviderErrorKind, RuntimeProblem } from "@ardurbot/contracts";
+import { runtimeNames } from "@ardurbot/contracts";
 import { Button } from "@ardurbot/ui-web";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { parseProviderError } from "../../lib/provider-error";
@@ -89,11 +90,27 @@ export function ProviderErrorMessage({
           return runtimeProblem.reason;
       }
     })();
+    // Claude Code and Codex failures carry a classified reasonId; name the cause category
+    // instead of the raw runtime text. Anything unclassified keeps the recorded reason.
+    const nativeReason = (() => {
+      if (pin.runtimeKind !== "claude-code" && pin.runtimeKind !== "codex-app-server") return null;
+      const runtime = runtimeNames[pin.runtimeKind];
+      switch (runtimeProblem.reasonId) {
+        case "usage-limit":
+          return t`${runtime}'s usage limit is reached. Try again after it resets.`;
+        case "signed-out":
+          return t`Sign in to ${runtime} on this computer, then try again.`;
+        case "max-turns":
+          return t`${runtime} reached this run's turn limit. Narrow the task and try again.`;
+        default:
+          return null;
+      }
+    })();
     return (
       <>
         <span className="min-w-0 flex-1">
           {pin.runtimeKind !== "pi" || runtimeProblem.code !== "pin-credential-missing" ? (
-            (antigravityReason ?? runtimeProblem.reason)
+            (antigravityReason ?? nativeReason ?? runtimeProblem.reason)
           ) : (
             <Trans>
               This bot is pinned to {provider} · {model} · {effort}; connect it or change the pin.

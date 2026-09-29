@@ -217,8 +217,16 @@ msgid "{botName} couldn't use the model set for this group. Reconnect it or chan
 msgstr "{botName} não conseguiu usar o modelo definido para este grupo. Reconecte-o ou altere o modelo do grupo."
 
 #: src/pages/Shell.tsx
+msgid "{botName} hit the group model's usage limit. Try again after it resets, or change the group model."
+msgstr "{botName} atingiu o limite de uso do modelo do grupo. Tente novamente após a redefinição ou altere o modelo do grupo."
+
+#: src/pages/Shell.tsx
 msgid "{botName}’s computer"
 msgstr "Computador do {botName}"
+
+#: src/pages/Shell.tsx
+msgid "{botName}'s sign-in for the group model expired. Reconnect it or change the group model."
+msgstr "O login de {botName} para o modelo do grupo expirou. Reconecte-o ou altere o modelo do grupo."
 
 #: src/pages/LearningInsights.tsx
 msgid "{connection} rejected its sign-in; {count} runs could not use it."
@@ -294,6 +302,14 @@ msgstr "{remaining} restantes · o bot está observando, não agindo"
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "{runtime} loads all connected tools because deferred loading is unavailable."
 msgstr ""
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "{runtime} reached this run's turn limit. Narrow the task and try again."
+msgstr "{runtime} atingiu o limite de turnos desta execução. Restrinja a tarefa e tente novamente."
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "{runtime}'s usage limit is reached. Try again after it resets."
+msgstr "O limite de uso de {runtime} foi atingido. Tente novamente após a redefinição."
 
 #: src/pages/dashboard/NowPanel.tsx
 msgid "{seconds}s"
@@ -7906,6 +7922,10 @@ msgstr "Entrar"
 #: src/pages/account/AccountSettings.tsx
 msgid "Sign in again to manage sessions."
 msgstr ""
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Sign in to {runtime} on this computer, then try again."
+msgstr "Entre no {runtime} neste computador e tente novamente."
 
 #: src/pages/shell/provider-error-message.tsx
 #: src/pages/shell/runtime-settings.tsx

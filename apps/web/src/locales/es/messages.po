@@ -217,8 +217,16 @@ msgid "{botName} couldn't use the model set for this group. Reconnect it or chan
 msgstr "{botName} no pudo usar el modelo configurado para este grupo. Vuelve a conectar el servicio o cambia el modelo del grupo."
 
 #: src/pages/Shell.tsx
+msgid "{botName} hit the group model's usage limit. Try again after it resets, or change the group model."
+msgstr "{botName} alcanzó el límite de uso del modelo del grupo. Inténtalo de nuevo cuando se restablezca o cambia el modelo del grupo."
+
+#: src/pages/Shell.tsx
 msgid "{botName}’s computer"
 msgstr "Computadora de {botName}"
+
+#: src/pages/Shell.tsx
+msgid "{botName}'s sign-in for the group model expired. Reconnect it or change the group model."
+msgstr "La sesión de {botName} para el modelo del grupo caducó. Vuelve a conectarlo o cambia el modelo del grupo."
 
 #: src/pages/LearningInsights.tsx
 msgid "{connection} rejected its sign-in; {count} runs could not use it."
@@ -294,6 +302,14 @@ msgstr "Quedan {remaining} · el bot observa, no actúa"
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "{runtime} loads all connected tools because deferred loading is unavailable."
 msgstr ""
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "{runtime} reached this run's turn limit. Narrow the task and try again."
+msgstr "{runtime} alcanzó el límite de turnos de esta ejecución. Acota la tarea e inténtalo de nuevo."
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "{runtime}'s usage limit is reached. Try again after it resets."
+msgstr "Se alcanzó el límite de uso de {runtime}. Inténtalo de nuevo cuando se restablezca."
 
 #: src/pages/dashboard/NowPanel.tsx
 msgid "{seconds}s"
@@ -7906,6 +7922,10 @@ msgstr "Iniciar sesión"
 #: src/pages/account/AccountSettings.tsx
 msgid "Sign in again to manage sessions."
 msgstr ""
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Sign in to {runtime} on this computer, then try again."
+msgstr "Inicia sesión en {runtime} en este ordenador y vuelve a intentarlo."
 
 #: src/pages/shell/provider-error-message.tsx
 #: src/pages/shell/runtime-settings.tsx

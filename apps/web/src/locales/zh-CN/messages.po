@@ -217,8 +217,16 @@ msgid "{botName} couldn't use the model set for this group. Reconnect it or chan
 msgstr "{botName} 无法使用为此群组设置的模型。请重新连接，或更改群组模型。"
 
 #: src/pages/Shell.tsx
+msgid "{botName} hit the group model's usage limit. Try again after it resets, or change the group model."
+msgstr "{botName} 已达到群组模型的用量上限。请在限额重置后重试，或更改群组模型。"
+
+#: src/pages/Shell.tsx
 msgid "{botName}’s computer"
 msgstr "{botName} 的电脑"
+
+#: src/pages/Shell.tsx
+msgid "{botName}'s sign-in for the group model expired. Reconnect it or change the group model."
+msgstr "{botName} 的群组模型登录已过期。请重新连接，或更改群组模型。"
 
 #: src/pages/LearningInsights.tsx
 msgid "{connection} rejected its sign-in; {count} runs could not use it."
@@ -294,6 +302,14 @@ msgstr "剩余 {remaining} · Bot 只看不操作"
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "{runtime} loads all connected tools because deferred loading is unavailable."
 msgstr ""
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "{runtime} reached this run's turn limit. Narrow the task and try again."
+msgstr "{runtime} 已达到此次运行的轮次上限。请缩小任务范围后重试。"
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "{runtime}'s usage limit is reached. Try again after it resets."
+msgstr "{runtime} 的用量已达上限。请在限额重置后重试。"
 
 #: src/pages/dashboard/NowPanel.tsx
 msgid "{seconds}s"
@@ -7906,6 +7922,10 @@ msgstr "登录"
 #: src/pages/account/AccountSettings.tsx
 msgid "Sign in again to manage sessions."
 msgstr ""
+
+#: src/pages/shell/provider-error-message.tsx
+msgid "Sign in to {runtime} on this computer, then try again."
+msgstr "请在这台电脑上登录 {runtime}，然后重试。"
 
 #: src/pages/shell/provider-error-message.tsx
 #: src/pages/shell/runtime-settings.tsx

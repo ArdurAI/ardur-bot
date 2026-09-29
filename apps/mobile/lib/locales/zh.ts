@@ -37,6 +37,10 @@ export const ZH_MESSAGES: Record<string, string> = {
     "群组模型被 Bot 或空间设置阻止。请更改目标位置策略，或选择其他群组模型。",
   "{botName} couldn't use the model set for this group. Reconnect it or change the group model.":
     "{botName} 无法使用为此群组设置的模型。请重新连接，或更改群组模型。",
+  "{botName} hit the group model's usage limit. Try again after it resets, or change the group model.":
+    "{botName} 已达到群组模型的用量上限。请在限额重置后重试，或更改群组模型。",
+  "{botName}'s sign-in for the group model expired. Reconnect it or change the group model.":
+    "{botName} 的群组模型登录已过期。请重新连接，或更改群组模型。",
   "{botName} couldn't use the model set for this group. Change the group model or check this bot's settings.":
     "{botName} 无法使用为此群组设置的模型。请更改群组模型，或检查 Bot 设置。",
   Antigravity: "Antigravity",

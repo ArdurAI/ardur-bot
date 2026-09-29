@@ -6814,9 +6814,13 @@ const MessageView = memo(function MessageView({
               ? t`This group's model is blocked by the bot or space settings. Change the destination policy or choose another group model.`
               : block.notice?.id === "group-model-credential-missing"
                 ? t`${botName} couldn't use the model set for this group. Reconnect it or change the group model.`
-                : block.notice?.id === "group-model-unavailable"
-                  ? t`${botName} couldn't use the model set for this group. Change the group model or check this bot's settings.`
-                  : block.text;
+                : block.notice?.id === "group-model-usage-limit"
+                  ? t`${botName} hit the group model's usage limit. Try again after it resets, or change the group model.`
+                  : block.notice?.id === "group-model-sign-in-expired"
+                    ? t`${botName}'s sign-in for the group model expired. Reconnect it or change the group model.`
+                    : block.notice?.id === "group-model-unavailable"
+                      ? t`${botName} couldn't use the model set for this group. Change the group model or check this bot's settings.`
+                      : block.text;
           return (
             <div key={i} className="flex w-fit max-w-full justify-start">
               <div

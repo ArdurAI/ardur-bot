@@ -37,6 +37,10 @@ export const RU_MESSAGES: Record<string, string> = {
     "Модель группы заблокирована настройками бота или пространства. Измените правила для места назначения или выберите другую модель группы.",
   "{botName} couldn't use the model set for this group. Reconnect it or change the group model.":
     "{botName} не смог использовать модель, выбранную для этой группы. Восстановите подключение или измените модель группы.",
+  "{botName} hit the group model's usage limit. Try again after it resets, or change the group model.":
+    "{botName} достиг лимита использования модели группы. Повторите попытку после его сброса или измените модель группы.",
+  "{botName}'s sign-in for the group model expired. Reconnect it or change the group model.":
+    "Срок входа {botName} для модели группы истёк. Восстановите подключение или измените модель группы.",
   "{botName} couldn't use the model set for this group. Change the group model or check this bot's settings.":
     "{botName} не смог использовать модель, выбранную для этой группы. Измените модель группы или проверьте настройки бота.",
   Antigravity: "Antigravity",
