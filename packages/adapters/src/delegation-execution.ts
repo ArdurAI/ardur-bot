@@ -1,15 +1,31 @@
 import type { ConnectorRoute } from "@ardurbot/adapter-kit";
-import { DelegationAuthoritySchema, TaskCardSchema } from "@ardurbot/contracts";
-import { classifyRemoteTool, parseGroupAskKey, remotePermissionExpansion } from "@ardurbot/core";
+import {
+  DelegationAuthoritySchema,
+  type DelegationStopReason,
+  delegationStopLine,
+  TaskCardSchema,
+} from "@ardurbot/contracts";
+import {
+  classifyRemoteTool,
+  parseGroupAskKey,
+  peerEffectResourceRef,
+  remotePermissionExpansion,
+} from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import {
+  delegationStopReason,
   peerTrafficPaused,
   reconcileGoalExhaustion,
   requestCancel,
   updateWorkerTask,
 } from "@ardurbot/db";
 import { grantedMcpTools, mcpGrantForBot } from "./integration-access.js";
-import { peerReadOnlyRuntimeSupported, peerReadOnlyToolAllowed } from "./peer-policy.js";
+import { loadPeerBoundEffect } from "./peer-bound-effect.js";
+import {
+  peerEffectBoundToolAllowed,
+  peerReadOnlyRuntimeSupported,
+  peerReadOnlyToolAllowed,
+} from "./peer-policy.js";
 
 /**
  * The recorded ceiling also applies to connector routes resolved after catalog lookup. A worker
@@ -76,8 +92,23 @@ export async function checkDelegationExecution(
       root.deadlineAt <= new Date() ||
       (run.goalId && root.usedTokens >= root.tokenLimit))
   ) {
-    if (!root.cancelRequestedAt)
-      await requestCancel(prisma, { spaceId: run.spaceId, userId: run.userId }, rootTaskId);
+    if (!root.cancelRequestedAt) {
+      // The task itself is stopping. Record deadline or budget now; a later flush of
+      // usage must not replace that cause with a different inference.
+      const reason: DelegationStopReason =
+        root.deadlineAt <= new Date()
+          ? "deadline"
+          : root.usedTokens >= root.tokenLimit
+            ? "budget"
+            : "stopped";
+      await requestCancel(
+        prisma,
+        { spaceId: run.spaceId, userId: run.userId },
+        rootTaskId,
+        new Date(),
+        reason,
+      );
+    }
     if (run.goalId) await reconcileGoalExhaustion(prisma, run.goalId);
     return "This task is stopping; start a new task to continue.";
   }
@@ -106,14 +137,33 @@ export async function checkDelegationExecution(
     }
   }
   const card = TaskCardSchema.safeParse(row.card);
-  if (card.success && card.data.peerMode === "read-only") {
+  if (
+    card.success &&
+    (card.data.peerMode === "read-only" || card.data.peerMode === "effect-bound")
+  ) {
     if (
       !peerReadOnlyRuntimeSupported(
         String((run.runtimePin as { runtimeKind?: string } | null)?.runtimeKind ?? ""),
       )
     )
       return "This connection cannot run this peer task safely.";
-    if ((tool && !peerReadOnlyToolAllowed(tool)) || (route && route.connectorId !== "builtin")) {
+    // An effect-bound card admits exactly the approved tool on the approved
+    // connector route. Anything else is refused and recorded, as for read-only.
+    const bound =
+      card.data.peerMode === "effect-bound"
+        ? ((await loadPeerBoundEffect(prisma, runId)) ?? undefined)
+        : undefined;
+    const boundRouteAllowed = Boolean(
+      bound &&
+        tool === bound.effect.toolName &&
+        route &&
+        route.connectorId !== "builtin" &&
+        peerEffectResourceRef(route) === bound.effect.resourceRef,
+    );
+    if (
+      (tool && !peerEffectBoundToolAllowed(tool, bound?.effect)) ||
+      (route && route.connectorId !== "builtin" && !boundRouteAllowed)
+    ) {
       await prisma.$transaction((tx) =>
         updateWorkerTask(tx, {
           runId: run.id,
@@ -124,7 +174,7 @@ export async function checkDelegationExecution(
           tool: "report_progress",
           args: {
             state: "blocked",
-            text: "This desk request needs an action outside its read-only card.",
+            text: "This desk request needs an action outside its approved card.",
             action: "Bring the request to the owner for review.",
           },
         }),
@@ -134,17 +184,30 @@ export async function checkDelegationExecution(
   }
   if (helperDelegationId && (row.kind !== "helper" || row.parentRunId !== runId))
     return "This helper does not belong to this run.";
-  if (
-    !["queued", "running"].includes(row.status) ||
-    row.deadlineAt <= new Date() ||
-    (options.reservation !== false && row.usedTokens >= row.reservedTokens)
-  ) {
+  // A turn that already finished over its reservation keeps its answer. The background
+  // stop check passes reservation: false; the next step still stops on that overspend.
+  const overReservation = options.reservation !== false && row.usedTokens >= row.reservedTokens;
+  const stopReason: DelegationStopReason | null = !["queued", "running"].includes(row.status)
+    ? "stopped"
+    : row.deadlineAt <= new Date() || overReservation
+      ? delegationStopReason(row)
+      : null;
+  if (stopReason) {
+    if (stopReason !== "stopped")
+      // The gate initiated this stop: record the cause now. Confirmation must not
+      // re-infer it from whatever usage or deadline the row shows after unwinding.
+      await prisma.delegation.updateMany({
+        where: { id: row.id, cancelReason: null },
+        data: { cancelReason: stopReason },
+      });
     if (!helperDelegationId)
       await prisma.run.updateMany({
         where: { id: run.id, cancelRequestedAt: null },
         data: { cancelRequestedAt: new Date() },
       });
-    return "This worker has reached its budget or is stopping.";
+    return stopReason === "stopped"
+      ? "This worker is stopping."
+      : delegationStopLine(stopReason, "This worker");
   }
   if (!tool) return;
   const authority = DelegationAuthoritySchema.parse(row.authority);

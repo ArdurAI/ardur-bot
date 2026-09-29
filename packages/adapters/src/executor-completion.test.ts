@@ -176,7 +176,7 @@ describe("completionMarksUnread", () => {
     const segments = completionMessageSegments(steps, {
       allowSilentEmpty: runAllowsSilentEmpty("routine"),
     });
-    const blocks = finalBlocksAfterMidTurnProgress(segments, runAllowsSilentEmpty("routine"));
+    const blocks = finalBlocksAfterMidTurnProgress(segments, "silent-routine");
     expect(segments).toEqual(steps);
     expect(blocks).toEqual([]);
     expect(completionMarksUnread("routine", completionNotificationBody("", blocks))).toBe(false);
@@ -234,10 +234,7 @@ describe("stripNoResponseReply", () => {
       { kind: "text", text: NO_RESPONSE },
     ]);
     expect(stripped).toEqual({ assembled: "", blocks: [steps] });
-    const blocks = finalBlocksAfterMidTurnProgress(
-      stripped.blocks,
-      runAllowsSilentEmpty("routine"),
-    );
+    const blocks = finalBlocksAfterMidTurnProgress(stripped.blocks, "silent-routine");
     expect(blocks).toEqual([]);
     expect(completionMarksUnread("routine", completionNotificationBody("", blocks))).toBe(false);
   });
@@ -254,7 +251,7 @@ describe("stripNoResponseReply", () => {
       const segments = completionMessageSegments(stripped.blocks, {
         allowSilentEmpty: runAllowsSilentEmpty("routine"),
       });
-      const blocks = finalBlocksAfterMidTurnProgress(segments, runAllowsSilentEmpty("routine"));
+      const blocks = finalBlocksAfterMidTurnProgress(segments, "silent-routine");
       expect(blocks).toEqual([]);
       expect(completionMarksUnread("routine", completionNotificationBody("", blocks))).toBe(false);
     }

@@ -1,4 +1,4 @@
-import { groupAskKey } from "@ardurbot/core";
+import { groupAskKey, minimumDelegationReservation } from "@ardurbot/core";
 import { describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "./client.js";
 import { finishDelegation } from "./delegation.js";
@@ -382,41 +382,65 @@ describe("group ask fan-in", () => {
 });
 
 describe("group ask budget", () => {
+  // The one-request floor admission enforces for each member's own model, derived from the
+  // shared constants: a full context plus one output at the model's effective cap.
+  const standardFloor = minimumDelegationReservation();
+  const reasoningFloor = minimumDelegationReservation({ reasoning: true });
+  const askMember = (id: string, floor: number) => ({
+    actingBotId: id,
+    actingName: id,
+    kind: "group-handoff" as const,
+    admissionKey: groupAskKey(ask, "call", id),
+    tokens: floor,
+    minimumTokens: floor,
+  });
+
   it("fits every other member of a full room inside the coordinator's task budget", async () => {
     const tight = fixture();
     const refused = await Promise.allSettled(
-      ["a", "b", "c", "d", "e"].map((id) =>
-        tight.admit({
-          actingBotId: id,
-          actingName: id,
-          kind: "group-handoff",
-          admissionKey: groupAskKey(ask, "call", id),
-          tokens: 30_000,
-        }),
-      ),
+      ["a", "b", "c", "d", "e"].map((id) => tight.admit(askMember(id, standardFloor))),
     );
-    expect(refused.filter((result) => result.status === "rejected")).not.toHaveLength(0);
+    const codes = refused.flatMap((result) =>
+      result.status === "rejected" ? [result.reason.problem.code] : [],
+    );
+    // A default task root cannot hold a full room; the refusal is the room's budget, never
+    // the member's own reservation, which already equals its floor.
+    expect(codes).not.toHaveLength(0);
+    expect(codes).not.toContain("budget-too-small");
+    expect(codes).toContain("budget-exhausted");
 
     const sized = fixture();
-    await sized
-      .worker()
-      .$transaction((tx) =>
-        sizeDelegationRootForAsk(tx, { runId: "parent", members: 5, tokensPerMember: 30_000 }),
-      );
-    for (const id of ["a", "b", "c", "d", "e"])
-      await sized.admit({
-        actingBotId: id,
-        actingName: id,
-        kind: "group-handoff",
-        admissionKey: groupAskKey(ask, "call", id),
-        tokens: 30_000,
-      });
+    await sized.worker().$transaction((tx) =>
+      sizeDelegationRootForAsk(tx, {
+        runId: "parent",
+        memberTokens: Array.from({ length: 5 }, () => standardFloor),
+      }),
+    );
+    for (const id of ["a", "b", "c", "d", "e"]) await sized.admit(askMember(id, standardFloor));
     expect(sized.state().rows).toHaveLength(5);
+    expect(sized.state().rows.every((row) => row.reservedTokens === standardFloor)).toBe(true);
     expect(sized.state().root).toMatchObject({
       maxConcurrent: 5,
       maxDescendants: 12,
-      tokenLimit: 150_000,
-      reservedTokens: 150_000,
+      tokenLimit: 5 * standardFloor,
+      reservedTokens: 5 * standardFloor,
+    });
+  });
+
+  it("sizes the room to the sum of the members' floors, including a reasoning model's", async () => {
+    const f = fixture();
+    const floors = [standardFloor, standardFloor, reasoningFloor];
+    await f
+      .worker()
+      .$transaction((tx) =>
+        sizeDelegationRootForAsk(tx, { runId: "parent", memberTokens: floors }),
+      );
+    for (const [index, id] of ["a", "b", "c"].entries())
+      await f.admit(askMember(id, floors[index]!));
+    expect(f.state().rows.map((row) => row.reservedTokens)).toEqual(floors);
+    expect(f.state().root).toMatchObject({
+      tokenLimit: 2 * standardFloor + reasoningFloor,
+      reservedTokens: 2 * standardFloor + reasoningFloor,
     });
   });
 
@@ -433,21 +457,18 @@ describe("group ask budget", () => {
       maxDescendants: 12,
       tokenLimit: 120_000,
     } as never);
-    await f
-      .worker()
-      .$transaction((tx) =>
-        sizeDelegationRootForAsk(tx, { runId: "parent", members: 5, tokensPerMember: 30_000 }),
-      );
+    await f.worker().$transaction((tx) =>
+      sizeDelegationRootForAsk(tx, {
+        runId: "parent",
+        memberTokens: Array.from({ length: 5 }, () => standardFloor),
+      }),
+    );
     expect(f.state().root).toMatchObject({ maxConcurrent: 4, tokenLimit: 120_000 });
   });
 
   it("settles an asked member without a coordinator summary in the room", async () => {
     const f = fixture();
-    const row = await f.admit({
-      kind: "group-handoff",
-      admissionKey: groupAskKey(ask, "call", "worker"),
-      tokens: 30_000,
-    });
+    const row = await f.admit(askMember("worker", standardFloor));
     await f
       .worker()
       .$transaction((tx) => finishDelegation(tx, row.id, "completed", "I am Worker."));

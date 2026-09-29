@@ -71,6 +71,11 @@ export function HostComputerPrompt({ initialMe }: { initialMe?: Me }) {
                 servers.
               </Trans>
             </span>
+            <span className="block text-xs text-muted-foreground/80">
+              {mac
+                ? t`macOS will not ask for extra permission if you let bots run on this Mac. They run as you.`
+                : t`Your OS will not ask for extra permission if you let bots run on ${hostLabel}. They run as you.`}
+            </span>
           </DialogDescription>
         </DialogHeader>
         {error ? <p className="text-sm text-destructive">{error}</p> : null}

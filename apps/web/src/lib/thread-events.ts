@@ -17,6 +17,7 @@ import {
   isActive,
   isCommandCardEvent,
   isRunTerminalEvent,
+  isToolActivityBlock,
   mergeCommandLinks,
   mergeThreadHistory,
   prependThreadHistoryPage,
@@ -25,9 +26,11 @@ import {
   reduceLiveMessageBlocks,
   reduceRunContext,
   runFailureError,
+  showsReplyText,
   subagentBlockFromPayload,
   takeLiveMessage,
   updateCloudAgentMessages,
+  upsertAtLivePlace,
   upsertMessageById,
 } from "@ardurbot/core";
 
@@ -457,7 +460,11 @@ export function reduceThreadSnapshot(
       runId: event.runId,
       createdAt: event.createdAt,
     };
-    return { ...prev, cursor: event.seq, messages: [...remaining, streaming] };
+    return {
+      ...prev,
+      cursor: event.seq,
+      messages: placeLiveDraft(prev.messages, previous, remaining, streaming),
+    };
   }
   if (event.type === "agent.tool.called") {
     const liveId = progressMessageId(event);
@@ -476,7 +483,11 @@ export function reduceThreadSnapshot(
       runId: event.runId,
       createdAt: event.createdAt,
     };
-    return { ...prev, cursor: event.seq, messages: [...remaining, next] };
+    return {
+      ...prev,
+      cursor: event.seq,
+      messages: placeLiveDraft(prev.messages, previous, remaining, next),
+    };
   }
   if (event.type === "agent.tool.completed") {
     return { ...prev, cursor: event.seq };
@@ -493,17 +504,18 @@ export function reduceThreadSnapshot(
       runId: event.runId,
       createdAt: event.createdAt,
     };
-    const without: ThreadMessage[] = [];
-    const kept: ThreadMessage[] = [];
-    for (const message of prev.messages) {
-      if (message.id === next.id) continue;
-      if (message.id.startsWith("progress:")) {
-        if (message.runId) kept.push(message);
-      } else {
-        without.push(message);
-      }
-    }
-    return { ...prev, cursor: event.seq, messages: [...without, next, ...kept] };
+    // The card goes after the newest message, above the live drafts still trailing it.
+    // Drafts never move here: one that holds its place above later messages keeps it.
+    const rest = prev.messages.filter(
+      (message) =>
+        message.id !== next.id && (!message.id.startsWith("progress:") || Boolean(message.runId)),
+    );
+    const slot = rest.findLastIndex((message) => !message.id.startsWith("progress:")) + 1;
+    return {
+      ...prev,
+      cursor: event.seq,
+      messages: [...rest.slice(0, slot), next, ...rest.slice(slot)],
+    };
   }
 
   if (event.type === "thread.cloud_agent") {
@@ -535,12 +547,67 @@ export function reduceThreadSnapshot(
     const replacedSubagentIds = new Set(
       blocks.filter((block) => block.kind === "subagent").map((block) => block.agentId),
     );
-    const liveId = progressMessageId(event);
-    const { remaining } = takeLiveMessage(prev.messages, liveId);
-    const without = remaining.filter((message) => !replacedSubagent(message, replacedSubagentIds));
-    return { ...prev, cursor: event.seq, messages: upsertMessageById(without, next) };
+    const without = prev.messages.filter(
+      (message) => !replacedSubagent(message, replacedSubagentIds),
+    );
+    return {
+      ...prev,
+      cursor: event.seq,
+      messages: placeSavedMessage(
+        without,
+        progressMessageId(event),
+        next,
+        event.type === "thread.message.created",
+      ),
+    };
   }
   return prev;
+}
+
+/**
+ * A run's live draft holds its place in the thread once it shows reply text: the server
+ * holds the reply's position from that first streamed text, and the saved reply fills it.
+ * A draft with only tool activity or reasoning has no place yet (and no bubble); it follows
+ * the newest message, where its reply will be saved.
+ */
+function draftHoldsPlace(draft: ThreadMessage | undefined): boolean {
+  return draft !== undefined && showsReplyText(draft.blocks);
+}
+
+/** Put a run's updated live draft back: in the place it holds, or after the newest message. */
+function placeLiveDraft(
+  messages: readonly ThreadMessage[],
+  previous: ThreadMessage | undefined,
+  remaining: ThreadMessage[],
+  draft: ThreadMessage,
+): ThreadMessage[] {
+  return draftHoldsPlace(previous)
+    ? upsertAtLivePlace(messages, draft.id, draft)
+    : [...remaining, draft];
+}
+
+/**
+ * Place a saved message the way the server orders it. A new bot message that saves text
+ * fills the place its run's draft holds. Everything else lands after the newest message:
+ * the owner's messages and notices leave the draft alone, and the run's other messages
+ * (cards, or a reply whose draft held no place) keep a draft that holds its place for the
+ * reply still to come and drop one that does not.
+ */
+function placeSavedMessage(
+  messages: readonly ThreadMessage[],
+  liveId: string,
+  next: ThreadMessage,
+  created: boolean,
+): ThreadMessage[] {
+  if (next.role !== "bot") return upsertMessageById(messages, next);
+  if (!draftHoldsPlace(messages.find((message) => message.id === liveId))) {
+    return upsertMessageById(takeLiveMessage(messages, liveId).remaining, next);
+  }
+  const fillsDraft =
+    created &&
+    next.blocks.some((block) => block.kind === "text") &&
+    !messages.some((message) => message.id === next.id);
+  return fillsDraft ? upsertAtLivePlace(messages, liveId, next) : upsertMessageById(messages, next);
 }
 
 function updateMemberStatus(

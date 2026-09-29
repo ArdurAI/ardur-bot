@@ -25,18 +25,18 @@ const marked = (summary: string) => `${RECEIPT_FILTERED_SUMMARY_MARKER}${summary
 
 describe("shouldEnqueueCompaction", () => {
   it("is false when nothing has aged out of the window yet", () => {
-    expect(shouldEnqueueCompaction(99, null, 50, 50)).toBe(false);
+    expect(shouldEnqueueCompaction(99, 50, 50)).toBe(false);
   });
 
   it("is true once a full batch has aged out beyond the window", () => {
-    expect(shouldEnqueueCompaction(100, null, 50, 50)).toBe(true);
+    expect(shouldEnqueueCompaction(100, 50, 50)).toBe(true);
   });
 
   it("accounts for messages already compacted", () => {
-    // A cursor of 50 means seq 0..50 are compacted, so seq 51..150 (100 messages, reached at
-    // nextMessageSeq 151) is the first point a full batch has aged out beyond the window.
-    expect(shouldEnqueueCompaction(150, 50, 50, 50)).toBe(false);
-    expect(shouldEnqueueCompaction(151, 50, 50, 50)).toBe(true);
+    // The caller counts real rows above the cursor. Empty sequence numbers are not rows,
+    // so 99 remaining messages have not aged a batch out and 100 have.
+    expect(shouldEnqueueCompaction(99, 50, 50)).toBe(false);
+    expect(shouldEnqueueCompaction(100, 50, 50)).toBe(true);
   });
 });
 
@@ -166,20 +166,17 @@ describe("selectCompactedHistory", () => {
     expect(selected.history[0]!.seq).toBe(100);
   });
 
-  it("keeps the fallback when uncompacted messages contain an internal gap", () => {
+  it("keeps the summary across a reply place that stayed empty", () => {
+    // Seq 3 was a streamed reply's place, released when its run ended without a message.
     const selected = selectCompactedHistory({
-      messages: [
-        messages(0, 2)[0]!,
-        messages(0, 2)[1]!,
-        messages(0, 2)[2]!,
-        { ...messages(4, 4)[0]! },
-      ],
+      messages: [...messages(0, 2), ...messages(4, 4)],
       summary: marked("facts through 0"),
       historyCompactedUpToSeq: 0,
     });
 
-    expect(selected.usedLocalSummary).toBe(false);
-    expect(selected.history.map((message) => message.seq)).toEqual([0, 1, 2, 4]);
+    expect(selected.usedLocalSummary).toBe(true);
+    expect(selected.summary).toBe("facts through 0");
+    expect(selected.history.map((message) => message.seq)).toEqual([1, 2, 4]);
   });
 
   it("does not use a cursor without its durable summary", () => {
@@ -273,6 +270,8 @@ function compactionHarness(
     messages?: HarnessMessage[];
     quietReceiptIds?: string[];
     nextMessageSeq?: number;
+    /** Places held by running replies whose messages are not saved yet. */
+    heldReplySeqs?: number[];
     historyCompactedUpToSeq?: number | null;
     historyCompactionSummary?: string | null;
     legacySummary?: boolean;
@@ -291,7 +290,7 @@ function compactionHarness(
 ) {
   const messages: HarnessMessage[] =
     options.messages ??
-    Array.from({ length: 50 }, (_, i) => ({
+    Array.from({ length: 100 }, (_, i) => ({
       seq: i,
       role: i % 2 === 0 ? "user" : "bot",
       blocks: [{ kind: "text", text: `message ${i}` }],
@@ -302,7 +301,9 @@ function compactionHarness(
     spaceId: "workspace-1",
     userId: "user-1",
     nextEventSeq: 0,
-    nextMessageSeq: options.nextMessageSeq ?? messages.length,
+    nextMessageSeq:
+      options.nextMessageSeq ??
+      Math.max(messages.length, ...messages.map((message) => message.seq + 1)),
     historyCompactedUpToSeq: options.historyCompactedUpToSeq ?? (null as number | null),
     historyCompactionSummary: options.historyCompactionSummary
       ? options.legacySummary
@@ -349,22 +350,37 @@ function compactionHarness(
     event: {
       findFirst: vi.fn(async () => (options.wasCleared ? { seq: 0 } : null)),
     },
+    run: {
+      findMany: vi.fn(async () => (options.heldReplySeqs ?? []).map((replySeq) => ({ replySeq }))),
+    },
     message: {
       findMany: vi.fn(
         async (args: {
-          where: { seq: { gt?: number; lte?: number } };
+          where: { seq: { gt?: number; lt?: number; lte?: number } };
           orderBy?: { seq: "asc" | "desc" };
           take?: number;
         }) => {
           const matching =
             args.where.seq.lte !== undefined
               ? messages.filter((message) => message.seq <= args.where.seq.lte!)
-              : messages.filter((message) => message.seq > args.where.seq.gt!);
+              : messages.filter(
+                  (message) =>
+                    message.seq > args.where.seq.gt! &&
+                    (args.where.seq.lt === undefined || message.seq < args.where.seq.lt),
+                );
           const ordered = [...matching].sort((left, right) => left.seq - right.seq);
           if (args.orderBy?.seq === "desc") ordered.reverse();
           return ordered.slice(0, args.take ?? ordered.length);
         },
       ),
+      count: vi.fn(async (args: { where?: { seq?: { gt?: number; lt?: number } } }) => {
+        const seq = args.where?.seq;
+        return messages.filter((message) => {
+          if (seq?.gt !== undefined && message.seq <= seq.gt) return false;
+          if (seq?.lt !== undefined && message.seq >= seq.lt) return false;
+          return true;
+        }).length;
+      }),
     },
     botMessageDelivery: {
       findMany: vi.fn(async () => (options.quietReceiptIds ?? []).map((id) => ({ id }))),
@@ -452,7 +468,7 @@ describe("compactHistory", () => {
   it("records summary usage against its scoped source even when generation changes", async () => {
     const harness = compactionHarness({ deploymentModelKey: "fixture-key" });
     const findFirst = vi.fn(async () => ({ id: "source-run" }));
-    Object.assign(harness.prisma, { run: { findFirst } });
+    Object.assign(harness.prisma.run, { findFirst });
     const recordUsage = vi.fn(async () => undefined);
     harness.runtime.run.mockImplementation(async function* () {
       yield {
@@ -490,7 +506,7 @@ describe("compactHistory", () => {
   it("records missing summary usage on failure and does not spend without an attributable run", async () => {
     const harness = compactionHarness({ deploymentModelKey: "fixture-key" });
     const findFirst = vi.fn(async (): Promise<{ id: string } | null> => ({ id: "source-run" }));
-    Object.assign(harness.prisma, { run: { findFirst } });
+    Object.assign(harness.prisma.run, { findFirst });
     const recordUsage = vi.fn(async () => undefined);
     harness.runtime.run.mockImplementation(async function* () {
       yield* [];
@@ -522,6 +538,7 @@ describe("compactHistory", () => {
     const [request] = harness.runtime.run.mock.calls[0]!;
     expect(request.instructions).toContain("Current date and time");
     expect(request.tools).toBe("none");
+    expect(request.singleRequest).toBe(true);
     expect(request.model).toEqual({
       provider: "openrouter",
       id: "openai/gpt-5.6-luna",
@@ -564,7 +581,7 @@ describe("compactHistory", () => {
   });
 
   it("serializes attachment metadata into the transcript", async () => {
-    const messages: HarnessMessage[] = Array.from({ length: 50 }, (_, i) => ({
+    const messages: HarnessMessage[] = Array.from({ length: 100 }, (_, i) => ({
       seq: i,
       role: "user",
       blocks: [{ kind: "text", text: `message ${i}` }],
@@ -592,7 +609,7 @@ describe("compactHistory", () => {
   });
 
   it("omits ineligible quiet receipt text from a compacted transcript", async () => {
-    const messages: HarnessMessage[] = Array.from({ length: 50 }, (_, seq) => ({
+    const messages: HarnessMessage[] = Array.from({ length: 100 }, (_, seq) => ({
       seq,
       role: "user",
       blocks: [{ kind: "text", text: `message ${seq}` }],
@@ -725,12 +742,12 @@ describe("compactHistory", () => {
       deploymentModelKey: "openrouter-key",
       historyCompactedUpToSeq: 49,
       historyCompactionGeneration: 1,
-      messages: Array.from({ length: 50 }, (_, i) => ({
+      messages: Array.from({ length: 100 }, (_, i) => ({
         seq: i + 50,
         role: "user",
         blocks: [{ kind: "text", text: `new message ${i + 50}` }],
       })),
-      nextMessageSeq: 100,
+      nextMessageSeq: 150,
     });
 
     await compactHistory(harness.deps, "thread-1");
@@ -745,12 +762,12 @@ describe("compactHistory", () => {
   it("keeps the New chat boundary when compacting a later conversation", async () => {
     const harness = compactionHarness({
       deploymentModelKey: "fixture-key",
-      messages: Array.from({ length: 100 }, (_, seq) => ({
+      messages: Array.from({ length: 150 }, (_, seq) => ({
         seq,
         role: "user",
         blocks: [{ kind: "text", text: seq < 50 ? `old turn ${seq}` : `new turn ${seq}` }],
       })),
-      nextMessageSeq: 100,
+      nextMessageSeq: 150,
       historyCompactedUpToSeq: 49,
       historyCompactionSummary: "New chat.",
       historyCompactionGeneration: 1,
@@ -769,12 +786,12 @@ describe("compactHistory", () => {
   it("keeps an unmarked pre-upgrade New chat boundary when compacting later turns", async () => {
     const harness = compactionHarness({
       deploymentModelKey: "fixture-key",
-      messages: Array.from({ length: 100 }, (_, seq) => ({
+      messages: Array.from({ length: 150 }, (_, seq) => ({
         seq,
         role: "user",
         blocks: [{ kind: "text", text: seq < 50 ? `old turn ${seq}` : `new turn ${seq}` }],
       })),
-      nextMessageSeq: 100,
+      nextMessageSeq: 150,
       historyCompactedUpToSeq: 49,
       historyCompactionSummary: "New chat.",
       legacySummary: true,
@@ -794,12 +811,12 @@ describe("compactHistory", () => {
   it("rolls the previous local summary into the next batch", async () => {
     const harness = compactionHarness({
       deploymentModelKey: "openrouter-key",
-      messages: Array.from({ length: 100 }, (_, i) => ({
+      messages: Array.from({ length: 150 }, (_, i) => ({
         seq: i,
         role: "user",
         blocks: [{ kind: "text", text: `message ${i}` }],
       })),
-      nextMessageSeq: 100,
+      nextMessageSeq: 150,
     });
     harness.runtime.run
       .mockImplementationOnce(async function* () {
@@ -941,20 +958,105 @@ describe("compactHistory", () => {
     ).toMatchObject({ usedLocalSummary: true, summary: "Summary of 50 messages." });
   });
 
-  it("does not advance across a message coverage gap", async () => {
+  it("compacts across a reply place that was released without a message", async () => {
+    // Seq 1 stayed empty. The hole sits inside the aged-out batch and does not
+    // pull the newest real messages into the summary.
+    const messages: HarnessMessage[] = [
+      { seq: 0, role: "user", blocks: [{ kind: "text", text: "message 0" }] },
+      ...Array.from({ length: 99 }, (_, index) => ({
+        seq: index + 2,
+        role: "user",
+        blocks: [{ kind: "text" as const, text: `message ${index + 2}` }],
+      })),
+    ];
+    const harness = compactionHarness({
+      deploymentModelKey: "openrouter-key",
+      messages,
+      nextMessageSeq: 101,
+    });
+
+    await compactHistory(harness.deps, "thread-1");
+
+    expect(harness.runtime.run).toHaveBeenCalledOnce();
+    const [request] = harness.runtime.run.mock.calls[0]!;
+    expect(request.prompt).toContain("message 0");
+    expect(request.prompt).toContain("message 2");
+    expect(request.prompt).not.toContain("message 51");
+    expect(request.prompt).not.toContain("message 100");
+    expect(harness.thread.historyCompactedUpToSeq).toBe(50);
+  });
+
+  it("stops before a place a running reply still holds", async () => {
     const harness = compactionHarness({
       deploymentModelKey: "openrouter-key",
       messages: [
-        { seq: 0, role: "user", blocks: [{ kind: "text", text: "message 0" }] },
-        { seq: 2, role: "user", blocks: [{ kind: "text", text: "message 2" }] },
+        ...Array.from({ length: 60 }, (_, seq) => ({
+          seq,
+          role: "user",
+          blocks: [{ kind: "text" as const, text: `message ${seq}` }],
+        })),
+        { seq: 61, role: "user", blocks: [{ kind: "text", text: "message 61" }] },
+        { seq: 62, role: "user", blocks: [{ kind: "text", text: "message 62" }] },
       ],
+      heldReplySeqs: [60],
+    });
+
+    await compactHistory(harness.deps, "thread-1");
+
+    const [request] = harness.runtime.run.mock.calls[0]!;
+    expect(request.prompt).toContain("message 0");
+    expect(request.prompt).toContain("message 9");
+    expect(request.prompt).not.toContain("message 10");
+    expect(request.prompt).not.toContain("message 61");
+    // The reply saves at seq 60 later, so the cursor must stay below it.
+    expect(harness.thread.historyCompactedUpToSeq).toBe(9);
+  });
+
+  it("waits while the next place is still held by a running reply", async () => {
+    const harness = compactionHarness({
+      deploymentModelKey: "openrouter-key",
+      historyCompactedUpToSeq: 0,
+      historyCompactionSummary: "facts through 0",
+      messages: [0, 2, 3].map((seq) => ({
+        seq,
+        role: "user",
+        blocks: [{ kind: "text", text: `message ${seq}` }],
+      })),
+      heldReplySeqs: [1],
     });
 
     await compactHistory(harness.deps, "thread-1");
 
     expect(harness.runtime.run).not.toHaveBeenCalled();
-    expect(harness.saveMemory).not.toHaveBeenCalled();
     expect(harness.prisma.thread.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("does not take a place allocated after the thread was read for a released one", async () => {
+    // The thread was read at nextMessageSeq 100. Seq 200 was saved after that read,
+    // so it cannot pass for a released place inside the batch.
+    const messages: HarnessMessage[] = Array.from({ length: 100 }, (_, seq) => ({
+      seq,
+      role: "user",
+      blocks: [{ kind: "text", text: `message ${seq}` }],
+    }));
+    messages.push({
+      seq: 200,
+      role: "user",
+      blocks: [{ kind: "text", text: "late message" }],
+    });
+    const harness = compactionHarness({
+      deploymentModelKey: "openrouter-key",
+      nextMessageSeq: 100,
+      messages,
+    });
+
+    await compactHistory(harness.deps, "thread-1");
+
+    const [request] = harness.runtime.run.mock.calls[0]!;
+    expect(request.prompt).toContain("message 0");
+    expect(request.prompt).not.toContain("late message");
+    expect(request.prompt).not.toContain("message 50");
+    expect(harness.thread.historyCompactedUpToSeq).toBe(49);
   });
 
   it("does not resurrect a summary when clear wins while summarization is running", async () => {
@@ -1017,6 +1119,11 @@ describe("compactHistory", () => {
   it("never opens a provider write race with history clearing", async () => {
     const harness = compactionHarness({
       deploymentModelKey: "openrouter-key",
+      messages: Array.from({ length: 150 }, (_, seq) => ({
+        seq,
+        role: "user",
+        blocks: [{ kind: "text" as const, text: `message ${seq}` }],
+      })),
       nextMessageSeq: 150,
     });
     harness.saveMemory.mockRejectedValue(new Error("External summary writes are forbidden"));
@@ -1101,11 +1208,18 @@ describe("compactHistory", () => {
     const filler = "x".repeat(2_000);
     const harness = compactionHarness({
       deploymentModelKey: "openrouter-key",
-      messages: Array.from({ length: 50 }, (_, i) => ({
-        seq: i,
-        role: "user",
-        blocks: [{ kind: "text", text: `marker-${i} ${filler}` }],
-      })),
+      messages: [
+        ...Array.from({ length: 50 }, (_, i) => ({
+          seq: i,
+          role: "user",
+          blocks: [{ kind: "text" as const, text: `marker-${i} ${filler}` }],
+        })),
+        ...Array.from({ length: 50 }, (_, i) => ({
+          seq: i + 50,
+          role: "user",
+          blocks: [{ kind: "text" as const, text: `kept ${i}` }],
+        })),
+      ],
     });
 
     await compactHistory(harness.deps, "thread-1");
@@ -1132,6 +1246,11 @@ describe("compactHistory", () => {
   it("re-enqueues itself while a full batch of backlog still remains", async () => {
     const harness = compactionHarness({
       deploymentModelKey: "openrouter-key",
+      messages: Array.from({ length: 150 }, (_, seq) => ({
+        seq,
+        role: "user",
+        blocks: [{ kind: "text" as const, text: `message ${seq}` }],
+      })),
       nextMessageSeq: 150,
     });
 
@@ -1224,6 +1343,59 @@ describe("compactHistory", () => {
 
     expect(harness.jobs.enqueue).not.toHaveBeenCalled();
   });
+  it("keeps the newest real messages when released places inflate the sequence span", async () => {
+    const messages = Array.from({ length: 10 }, (_, index) => ({
+      seq: index * 10,
+      role: "user",
+      blocks: [{ kind: "text" as const, text: `kept verbatim ${index}` }],
+    }));
+    const harness = compactionHarness({
+      deploymentModelKey: "openrouter-key",
+      messages,
+      nextMessageSeq: 100,
+    });
+
+    await compactHistory(harness.deps, "thread-1");
+
+    expect(harness.runtime.run).not.toHaveBeenCalled();
+    expect(harness.thread.historyCompactedUpToSeq).toBeNull();
+    expect(
+      selectCompactedHistory({
+        messages: messages.map((message) => ({
+          seq: message.seq,
+          role: "user" as const,
+          content: message.blocks[0]!.text,
+        })),
+        summary: harness.thread.historyCompactionSummary,
+        historyCompactedUpToSeq: harness.thread.historyCompactedUpToSeq,
+      }).history.map((message) => message.content),
+    ).toEqual(messages.map((message) => message.blocks[0]!.text));
+  });
+
+  it("compacts only real messages that have aged out of the verbatim window", async () => {
+    // Sixty real messages spread over a much wider seq span. Empty places must not
+    // pull the newest fifty into the summary.
+    const messages = Array.from({ length: 60 }, (_, index) => ({
+      seq: index * 2,
+      role: "user",
+      blocks: [{ kind: "text" as const, text: `message ${index}` }],
+    }));
+    const harness = compactionHarness({
+      deploymentModelKey: "openrouter-key",
+      messages,
+      nextMessageSeq: 200,
+    });
+
+    await compactHistory(harness.deps, "thread-1");
+
+    const [request] = harness.runtime.run.mock.calls[0]!;
+    expect(request.prompt).toContain("message 0");
+    expect(request.prompt).toContain("message 9");
+    expect(request.prompt).not.toContain("message 10");
+    expect(request.prompt).not.toContain("message 59");
+    expect(harness.thread.historyCompactedUpToSeq).toBe(18);
+  });
+
   it("skips model calls and memory writes for a typed pin problem", async () => {
     const harness = compactionHarness({
       resolveModel: async () => ({

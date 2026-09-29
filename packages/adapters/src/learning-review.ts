@@ -447,6 +447,7 @@ export async function reviewLearning(
       history: [],
       tools: "none",
       ...selection.request,
+      singleRequest: true,
       model: {
         ...resolved,
         maxTokens: Math.min(resolved.maxTokens ?? config.maxOutputTokens, config.maxOutputTokens),

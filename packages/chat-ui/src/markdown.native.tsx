@@ -6,7 +6,7 @@ import Markdown, {
 import { memo, useMemo } from "react";
 import { Linking, StyleSheet, Text, View } from "react-native";
 import type { ChatMarkdownProps } from "./markdown";
-import { sanitizeMarkdownUrl } from "./markdown";
+import { nativeCursorProps, sanitizeMarkdownUrl } from "./markdown";
 
 function markdownStyles(palette: ColorTokens) {
   return StyleSheet.create({
@@ -128,6 +128,7 @@ const renderRules: RenderRules = {
 export const ChatMarkdown = memo(function ChatMarkdown({
   children,
   streaming = false,
+  cursor,
   palette = darkTokens,
   colorScheme = "dark",
 }: ChatMarkdownProps & { palette?: ColorTokens; colorScheme?: ResolvedAppearance }) {
@@ -143,10 +144,16 @@ export const ChatMarkdown = memo(function ChatMarkdown({
     },
   };
 
+  // Once the reply stops growing the cursor hides, while the streaming layout stays so
+  // partial fences remain sealed.
   return (
     <View style={layout.wrap}>
       {streaming ? (
-        <MarkdownStream {...sharedProps} cursorColor={palette.mutedForeground} streaming>
+        <MarkdownStream
+          {...sharedProps}
+          {...nativeCursorProps({ streaming, cursor }, palette.mutedForeground)}
+          streaming
+        >
           {children}
         </MarkdownStream>
       ) : (

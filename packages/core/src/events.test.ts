@@ -20,7 +20,12 @@ import {
   trackToolNameStreak,
 } from "./events.js";
 import { redactLearningText } from "./learning-signals.js";
-import { isInterimNarrationAt, isReasoningSummaryBlock } from "./tool-activity.js";
+import {
+  isInterimNarrationAt,
+  isReasoningSummaryBlock,
+  isStreamingTextBlock,
+  showsReplyText,
+} from "./tool-activity.js";
 import { workRecordEntries } from "./work-record.js";
 
 describe("containsSecret", () => {
@@ -54,6 +59,31 @@ describe("isRunTerminalEvent", () => {
 });
 
 describe("reduceLiveMessageBlocks", () => {
+  it("keeps reasoning summary blocks and replaces only narration when followed by streaming text", () => {
+    let blocks = reduceLiveMessageBlocks([], {
+      type: "progress",
+      payload: { text: "Let me check." },
+    });
+    blocks = reduceLiveMessageBlocks(blocks, {
+      type: "tool",
+      name: "shell",
+    });
+    blocks = reduceLiveMessageBlocks(blocks, {
+      type: "progress",
+      payload: { text: "Weighing options.", reasoning: true },
+    });
+    // streamed reply whose text does not start with the narration
+    blocks = reduceLiveMessageBlocks(blocks, {
+      type: "progress",
+      payload: { text: "The answer is four.", streaming: true },
+    });
+
+    expect(blocks).toEqual([
+      { kind: "steps", steps: [{ label: "Shell", count: 1 }] },
+      { kind: "progress", text: "Weighing options.", reasoning: true },
+      { kind: "progress", text: "The answer is four.", streaming: true },
+    ]);
+  });
   it("preserves structured live activity markers", () => {
     expect(
       reduceLiveMessageBlocks([], {
@@ -115,9 +145,10 @@ describe("reduceLiveMessageBlocks", () => {
     });
 
     // Two blocks with correct markers; the thought never merges into the reply.
+    // The streamed reply text is still growing, so it alone carries the cursor.
     expect(next).toEqual([
       { kind: "progress", text: "Weighing options.", reasoning: true },
-      { kind: "progress", text: "The answer" },
+      { kind: "progress", text: "The answer", streaming: true },
     ]);
 
     // The reply keeps streaming into its own block.
@@ -128,7 +159,7 @@ describe("reduceLiveMessageBlocks", () => {
       }),
     ).toEqual([
       { kind: "progress", text: "Weighing options.", reasoning: true },
-      { kind: "progress", text: "The answer is four." },
+      { kind: "progress", text: "The answer is four.", streaming: true },
     ]);
   });
 
@@ -174,7 +205,9 @@ describe("reduceLiveMessageBlocks", () => {
       payload: { delta: " Still looking.", streaming: true },
     });
 
-    expect(next).toEqual([{ kind: "progress", text: "Let me check. Still looking." }]);
+    expect(next).toEqual([
+      { kind: "progress", text: "Let me check. Still looking.", streaming: true },
+    ]);
   });
 
   it("folds narration flushed to text before a tool call into the record", () => {
@@ -250,7 +283,7 @@ describe("reduceLiveMessageBlocks", () => {
     expect(sealed).toEqual([
       { kind: "progress", text: "Running tests", activity: true },
       { kind: "steps", steps: [{ label: "Vitest", count: 1 }] },
-      { kind: "progress", text: "All green." },
+      { kind: "progress", text: "All green.", streaming: true },
     ]);
 
     expect(
@@ -261,7 +294,7 @@ describe("reduceLiveMessageBlocks", () => {
     ).toEqual([
       { kind: "progress", text: "Running tests", activity: true },
       { kind: "steps", steps: [{ label: "Vitest", count: 1 }] },
-      { kind: "progress", text: "All green.Wrapping up now" },
+      { kind: "progress", text: "All green.Wrapping up now", streaming: true },
     ]);
   });
 
@@ -278,7 +311,7 @@ describe("reduceLiveMessageBlocks", () => {
     expect(sealed).toEqual([
       { kind: "progress", text: "Running tests", activity: true },
       { kind: "steps", steps: [{ label: "Vitest", count: 1 }] },
-      { kind: "progress", text: "Almost" },
+      { kind: "progress", text: "Almost", streaming: true },
     ]);
 
     expect(
@@ -289,7 +322,7 @@ describe("reduceLiveMessageBlocks", () => {
     ).toEqual([
       { kind: "progress", text: "Running tests", activity: true },
       { kind: "steps", steps: [{ label: "Vitest", count: 1 }] },
-      { kind: "progress", text: "Almost done." },
+      { kind: "progress", text: "Almost done.", streaming: true },
     ]);
   });
 
@@ -350,6 +383,42 @@ describe("reduceLiveMessageBlocks", () => {
     ]);
   });
 
+  it("clears a stale activity title on an empty activity update while its tool lands once as a step", () => {
+    // The Pi runtime starts a tool whose activity title has no sentence
+    // ending, so the tool name is held on the title.
+    const activity = reduceLiveMessageBlocks([], {
+      type: "progress",
+      payload: { text: "Reading notes/plan.md", activity: true },
+    });
+    const working = reduceLiveMessageBlocks(activity, { type: "tool", name: "read_file" });
+    expect(working).toEqual([
+      {
+        kind: "progress",
+        text: "Reading notes/plan.md",
+        activity: true,
+        pendingToolNames: ["read_file"],
+      },
+    ]);
+
+    // Pi then clears the transient title before the reply resumes.
+    const cleared = reduceLiveMessageBlocks(working, {
+      type: "progress",
+      payload: { text: "", activity: true },
+    });
+
+    // Narration resumes: no stale activity block, and the held tool lands
+    // exactly once as a step.
+    expect(
+      reduceLiveMessageBlocks(cleared, {
+        type: "progress",
+        payload: { text: "Here are the notes.", streaming: true },
+      }),
+    ).toEqual([
+      { kind: "steps", steps: [{ label: "Read file", count: 1 }] },
+      { kind: "progress", text: "Here are the notes.", streaming: true },
+    ]);
+  });
+
   it("keeps a narration text chunk that arrives after a tool call", () => {
     const narration = reduceLiveMessageBlocks([], {
       type: "progress",
@@ -395,6 +464,55 @@ describe("reduceLiveMessageBlocks", () => {
       { kind: "steps", steps: [{ label: "Shell", count: 1 }] },
     ]);
   });
+
+  it("never marks a reasoning summary as streaming reply text", () => {
+    const blocks = reduceLiveMessageBlocks([], {
+      type: "progress",
+      payload: { text: "Weighing options.", reasoning: true, streaming: true },
+    });
+    // The cursor belongs to reply text only: a summary the provider streams
+    // carries no streaming flag, so no cursor and no reply-place hold.
+    expect(blocks).toEqual([{ kind: "progress", text: "Weighing options.", reasoning: true }]);
+    expect(blocks.filter(isStreamingTextBlock)).toHaveLength(0);
+    expect(showsReplyText(blocks)).toBe(false);
+  });
+
+  it("keeps the cursor off narration that tool activity folds into the record", () => {
+    const streamed = reduceLiveMessageBlocks([], {
+      type: "progress",
+      payload: { text: "Let me check", streaming: true },
+    });
+    expect(streamed.filter(isStreamingTextBlock)).toHaveLength(1);
+    const blocks = reduceLiveMessageBlocks(streamed, { type: "tool", name: "shell" });
+    // The tool call interrupts the narration: its block stops growing, so the
+    // streaming flag is gone and the cursor goes off while the run works.
+    expect(blocks).toEqual([
+      { kind: "progress", text: "Let me check", pendingToolNames: ["shell"] },
+    ]);
+    expect(blocks.filter(isStreamingTextBlock)).toHaveLength(0);
+    const flushed = reduceLiveMessageBlocks(blocks, {
+      type: "progress",
+      payload: { delta: " now.", streaming: true },
+    });
+    // The sentence completes: the narration flushes to text ahead of the step
+    // and folds into the work record as interim narration — no cursor anywhere.
+    expect(flushed).toEqual([
+      { kind: "text", text: "Let me check now." },
+      { kind: "steps", steps: [{ label: "Shell", count: 1 }] },
+    ]);
+    expect(flushed.filter(isStreamingTextBlock)).toHaveLength(0);
+    expect(isInterimNarrationAt(flushed, 0)).toBe(true);
+  });
+
+  it("keeps the cursor on streamed narration that is the final reply", () => {
+    const blocks = reduceLiveMessageBlocks([], {
+      type: "progress",
+      payload: { text: "Here is the answer", streaming: true },
+    });
+    expect(blocks).toEqual([{ kind: "progress", text: "Here is the answer", streaming: true }]);
+    expect(blocks.filter(isStreamingTextBlock)).toHaveLength(1);
+    expect(showsReplyText(blocks)).toBe(true);
+  });
 });
 
 type LiveCategory = "narration" | "activity" | "reasoning";
@@ -409,12 +527,19 @@ const categoryPayload = (category: LiveCategory, text: string, delta: boolean) =
   return delta ? { delta: text, streaming: true, ...marker } : { text, ...marker };
 };
 
-const progressBlock = (category: LiveCategory, text: string, pending?: string[]) => ({
+const progressBlock = (
+  category: LiveCategory,
+  text: string,
+  pending?: string[],
+  streaming?: boolean,
+) => ({
   kind: "progress" as const,
   text,
   ...(category === "activity" ? { activity: true as const } : {}),
   ...(category === "reasoning" ? { reasoning: true as const } : {}),
   ...(pending ? { pendingToolNames: pending } : {}),
+  // A narration tail built from a freshly streamed delta keeps the cursor.
+  ...(category === "narration" && streaming ? { streaming: true as const } : {}),
 });
 
 describe("reduceLiveMessageBlocks transition matrix", () => {
@@ -438,9 +563,15 @@ describe("reduceLiveMessageBlocks transition matrix", () => {
         const freshChunk = delta || (to === "narration" && same);
         const updateText = freshChunk ? " beta" : "Omega";
         const expectedText = freshChunk ? (same ? "Alpha beta" : " beta") : updateText;
+        // A streamed delta is still growing, so a narration tail it lands on
+        // carries the cursor; text and titled categories never do.
+        const streamingTail = to === "narration" && delta;
         const expected = same
-          ? [progressBlock(to, expectedText)]
-          : [progressBlock(from, "Alpha"), progressBlock(to, expectedText)];
+          ? [progressBlock(to, expectedText, undefined, streamingTail)]
+          : [
+              progressBlock(from, "Alpha"),
+              progressBlock(to, expectedText, undefined, streamingTail),
+            ];
         cases.push({ from, to, delta, payload: delta ? "delta" : "text", updateText, expected });
       }
     }
@@ -489,14 +620,15 @@ describe("reduceLiveMessageBlocks transition matrix", () => {
         ...head,
         { kind: "steps" as const, steps: [{ label: "Shell", count: 1 }] },
         ...middle,
-        { kind: "progress" as const, text: closedText },
+        // The closing narration delta is still growing: it carries the cursor.
+        { kind: "progress" as const, text: closedText, streaming: true as const },
       ];
     } else {
       expected = [
         ...head,
         ...middle,
         { kind: "steps" as const, steps: [{ label: "Shell", count: 1 }] },
-        { kind: "progress" as const, text: closedText },
+        { kind: "progress" as const, text: closedText, streaming: true as const },
       ];
     }
     return { ...entry, expected };
@@ -659,6 +791,163 @@ describe("reduceLiveMessageBlocks transition matrix", () => {
       ).toBe(false);
     },
   );
+
+  it("marks reply text as streaming only while it is still growing", () => {
+    const streaming = reduceLiveMessageBlocks([], {
+      type: "progress",
+      payload: { text: "Chief's summary", streaming: true },
+    });
+    expect(streaming).toEqual([{ kind: "progress", text: "Chief's summary", streaming: true }]);
+
+    // A tool call mid-sentence: the text has stopped while the run works on.
+    const working = reduceLiveMessageBlocks(streaming, { type: "tool", name: "run_command" });
+    expect(working).toEqual([
+      { kind: "progress", text: "Chief's summary", pendingToolNames: ["run_command"] },
+    ]);
+
+    // Text growing again re-marks the draft.
+    const growing = reduceLiveMessageBlocks(working, {
+      type: "progress",
+      payload: { delta: " And more", streaming: true },
+    });
+    expect(growing.at(-1)).toMatchObject({ kind: "progress", streaming: true });
+
+    // A completed sentence flushes to durable-styled text plus the tool step: no
+    // live text block remains to carry a cursor.
+    const flushed = reduceLiveMessageBlocks(
+      [{ kind: "progress", text: "Done.", streaming: true } as const],
+      { type: "tool", name: "run_command" },
+    );
+    expect(flushed).toEqual([
+      { kind: "text", text: "Done." },
+      { kind: "steps", steps: [{ label: "Run command", count: 1 }] },
+    ]);
+  });
+
+  it("keeps streamed reply text when an activity line follows it", () => {
+    const streamed = reduceLiveMessageBlocks([], {
+      type: "progress",
+      payload: { text: "Chief's summary", streaming: true },
+    });
+    const working = reduceLiveMessageBlocks(streamed, {
+      type: "progress",
+      payload: { text: "Running gh pr list", activity: true },
+    });
+    expect(working).toEqual([
+      { kind: "text", text: "Chief's summary" },
+      { kind: "progress", text: "Running gh pr list", activity: true },
+    ]);
+
+    const cleared = reduceLiveMessageBlocks(working, {
+      type: "progress",
+      payload: { text: "", activity: true },
+    });
+    expect(cleared).toEqual([{ kind: "text", text: "Chief's summary" }]);
+  });
+
+  it("replaces sealed reply text when later absolute text does not continue it", () => {
+    expect(
+      reduceLiveMessageBlocks([{ kind: "text", text: "Let me chart it." }], {
+        type: "progress",
+        payload: { text: "Weekly numbers.", streaming: true },
+      }),
+    ).toEqual([{ kind: "progress", text: "Weekly numbers.", streaming: true }]);
+  });
+});
+
+describe("merged behavior of reasoning, narration and streaming", () => {
+  it("streaming reasoning summary gets no streaming flag, no cursor, and does not count as reply text", () => {
+    // A reasoning summary arrives with streaming: true.
+    const reasoning = reduceLiveMessageBlocks([], {
+      type: "progress",
+      payload: { text: "Thinking about it...", reasoning: true, streaming: true },
+    });
+    // It should not get the streaming flag, because it's reasoning, not narration.
+    expect(reasoning).toEqual([
+      { kind: "progress", text: "Thinking about it...", reasoning: true },
+    ]);
+
+    // An activity line follows the reasoning summary.
+    // If reasoning were reply text, the activity would seal it into durable text.
+    // But since it's reasoning, it stays as a progress block.
+    const working = reduceLiveMessageBlocks(reasoning, {
+      type: "progress",
+      payload: { text: "Running command", activity: true },
+    });
+    expect(working).toEqual([
+      { kind: "progress", text: "Thinking about it...", reasoning: true },
+      { kind: "progress", text: "Running command", activity: true },
+    ]);
+  });
+
+  it("folds interim narration after a tool call (no cursor)", () => {
+    // Streamed narration
+    const narration = reduceLiveMessageBlocks([], {
+      type: "progress",
+      payload: { text: "Here is the plan...", streaming: true },
+    });
+    // Still growing, it gets streaming: true
+    expect(narration).toEqual([{ kind: "progress", text: "Here is the plan...", streaming: true }]);
+
+    // Tool call interrupts it.
+    const tool = reduceLiveMessageBlocks(narration, {
+      type: "tool",
+      name: "run_command",
+    });
+    // A finished sentence is sealed as text and the step follows, without a cursor.
+    expect(tool).toEqual([
+      { kind: "text", text: "Here is the plan..." },
+      { kind: "steps", steps: [{ label: "Run command", count: 1 }] },
+    ]);
+  });
+
+  it("holds a tool name on unfinished narration without keeping its cursor", () => {
+    const narration = reduceLiveMessageBlocks([], {
+      type: "progress",
+      payload: { text: "Here is the plan", streaming: true },
+    });
+    const tool = reduceLiveMessageBlocks(narration, { type: "tool", name: "run_command" });
+    expect(tool).toEqual([
+      { kind: "progress", text: "Here is the plan", pendingToolNames: ["run_command"] },
+    ]);
+  });
+
+  it("retains reasoning and dumps held tools on reply replacement", () => {
+    // A reasoning block, a plain narration block, and an activity block with held tools.
+    const state: MessageBlock[] = [
+      { kind: "progress", text: "Thinking...", reasoning: true },
+      { kind: "progress", text: "Starting reply..." },
+      {
+        kind: "progress",
+        text: "Doing work...",
+        activity: true,
+        pendingToolNames: ["run_command"],
+      },
+    ];
+
+    // An entirely new reply segment arrives. This triggers replacement.
+    const replaced = reduceLiveMessageBlocks(state, {
+      type: "progress",
+      payload: { text: "Here is my final answer", streaming: true },
+    });
+
+    // The activity block goes away, its tools become steps, reasoning stays.
+    expect(replaced).toEqual([
+      { kind: "progress", text: "Thinking...", reasoning: true },
+      { kind: "steps", steps: [{ label: "Run command", count: 1 }] },
+      { kind: "progress", text: "Here is my final answer", streaming: true },
+    ]);
+  });
+
+  it("streamed narration that is the final reply shows the cursor while it grows", () => {
+    const narration = reduceLiveMessageBlocks([], {
+      type: "progress",
+      payload: { text: "Here is the final reply", streaming: true },
+    });
+    expect(narration).toEqual([
+      { kind: "progress", text: "Here is the final reply", streaming: true },
+    ]);
+  });
 });
 
 describe("runFailureError", () => {
@@ -716,7 +1005,7 @@ describe("projectMessages", () => {
     ]);
     expect(messages).toHaveLength(2);
     expect(messages[0]?.blocks[0]).toEqual({ kind: "text", text: "hi" });
-    expect(messages[1]?.blocks[0]).toEqual({ kind: "progress", text: "Lisbon" });
+    expect(messages[1]?.blocks[0]).toEqual({ kind: "progress", text: "Lisbon", streaming: true });
   });
 
   it("drops streaming tokens once the completed message is durable", () => {
@@ -944,7 +1233,84 @@ describe("projectMessages", () => {
     ]);
     expect(messages[0]?.blocks).toEqual([
       { kind: "steps", steps: [{ label: "Shell", count: 1 }] },
-      { kind: "progress", text: "The check passed." },
+      { kind: "progress", text: "The check passed.", streaming: true },
+    ]);
+  });
+
+  it("keeps narration ahead of the activity line pi sends before the tool is saved", () => {
+    const messages = projectMessages([
+      {
+        id: "e1",
+        threadId: "t1",
+        seq: 0,
+        type: "thread.progress",
+        runId: "r1",
+        payload: { text: "Chief's summary", streaming: true },
+        createdAt: "2026-01-01T00:00:00.000Z",
+      },
+      {
+        id: "e2",
+        threadId: "t1",
+        seq: 1,
+        type: "thread.progress",
+        runId: "r1",
+        payload: { text: "Running gh pr list", activity: true },
+        createdAt: "2026-01-01T00:00:01.000Z",
+      },
+      {
+        id: "e3",
+        threadId: "t1",
+        seq: 2,
+        type: "agent.tool.called",
+        runId: "r1",
+        payload: { name: "shell" },
+        createdAt: "2026-01-01T00:00:02.000Z",
+      },
+    ]);
+    expect(messages[0]?.blocks).toEqual([
+      { kind: "text", text: "Chief's summary" },
+      {
+        kind: "progress",
+        text: "Running gh pr list",
+        activity: true,
+        pendingToolNames: ["shell"],
+      },
+    ]);
+  });
+
+  it("shows a later absolute reply instead of slicing it against sealed narration", () => {
+    const messages = projectMessages([
+      {
+        id: "e1",
+        threadId: "t1",
+        seq: 0,
+        type: "thread.progress",
+        runId: "r1",
+        payload: { text: "Let me chart it.", streaming: true },
+        createdAt: "2026-01-01T00:00:00.000Z",
+      },
+      {
+        id: "e2",
+        threadId: "t1",
+        seq: 1,
+        type: "agent.tool.called",
+        runId: "r1",
+        payload: { name: "render_plot" },
+        createdAt: "2026-01-01T00:00:01.000Z",
+      },
+      {
+        id: "e3",
+        threadId: "t1",
+        seq: 2,
+        type: "thread.progress",
+        runId: "r1",
+        payload: { text: "Weekly numbers.", streaming: true },
+        createdAt: "2026-01-01T00:00:02.000Z",
+      },
+    ]);
+    expect(messages[0]?.blocks).toEqual([
+      { kind: "steps", steps: [{ label: "Render plot", count: 1 }] },
+      { kind: "progress", text: "Weekly numbers.", streaming: true },
     ]);
   });
 
@@ -980,11 +1346,12 @@ describe("projectMessages", () => {
     ]);
     expect(messages).toHaveLength(1);
     // No sentence terminator has streamed in yet, so the "Shell" call stays hidden and
-    // everything so far renders as one continuous progress tail.
+    // everything so far renders as one continuous progress tail, still streaming.
     expect(messages[0]?.blocks).toEqual([
       {
         kind: "progress",
         text: "Let me check what I have locally and try the GitHub API",
+        streaming: true,
         pendingToolNames: ["shell"],
       },
     ]);

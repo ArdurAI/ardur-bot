@@ -186,6 +186,7 @@ import { localTimezone } from "../lib/local-timezone";
 import {
   copyableMessageText,
   narrationBubbleBlocks,
+  replyMarkdownProps,
   workingBotsWithoutVisibleActivity,
 } from "../lib/message-text";
 import { messageProviderLabel } from "../lib/messaging";
@@ -260,7 +261,6 @@ import {
 } from "./shell/message-cards";
 import { ProviderErrorMessage } from "./shell/provider-error-message";
 import {
-  BotSettingsTitle,
   hasSharedPanelHeader,
   isSettingsPanel,
   PanelHeaderTitle,
@@ -278,6 +278,7 @@ import { useTakeControl } from "./shell/use-take-control";
 import { handleWorkspaceOpenRun } from "./shell/workspace-run";
 import { SystemDictation } from "./system/SystemDictation";
 import { WindowChrome } from "./WindowChrome";
+import { terminalSupported } from "./workspace/terminal-controller";
 
 const BotSettings = lazy(() =>
   import("./shell/bot-panel").then((module) => ({ default: module.BotSettings })),
@@ -626,6 +627,24 @@ export function ShellPage({
     setComputer(next);
   }
 
+  // Visibility judged from the computer identity that owns the screen right now —
+  // commitComputer can run mid-refresh, before React re-renders with the new state.
+  function computerScreenVisible(targetBotId: string): boolean {
+    if (computerOpenRef.current) {
+      const modalBotId = computerBotIdRef.current ?? computerRef.current?.botId;
+      if (modalBotId !== targetBotId) return false;
+      return computerTabRef.current === "screen";
+    }
+    if (panelRef.current !== "computer") return false;
+    const computer = computerRef.current;
+    if (computer?.botId !== targetBotId) return false;
+    const effectiveTab = getEffectiveWorkspaceTab(
+      workspaceTabRef.current,
+      computer?.capabilities?.graphical,
+    );
+    return effectiveTab === "screen" || effectiveTab === "computer";
+  }
+
   function updateSnapshot(update: (prev: ThreadSnapshot | null) => ThreadSnapshot | null) {
     commitSnapshot(update(snapshotRef.current));
   }
@@ -753,6 +772,10 @@ export function ShellPage({
   const [computerBotId, setComputerBotId] = useState<string | undefined>();
   const computerOpenRef = useRef(false);
   const computerBotIdRef = useRef<string | undefined>(undefined);
+  const computerTabRef = useRef<"screen" | "terminal">("screen");
+  // Latest panel/tab identity for guards that run before React re-renders.
+  const panelRef = useRef<Panel>(null);
+  const workspaceTabRef = useRef(workspaceTab);
   const computerBootEpoch = useRef(0);
   const openComputerRef = useRef<(botId?: string) => Promise<void>>(async () => {});
   const [computerViewport, setComputerViewport] = useState<{
@@ -849,11 +872,15 @@ export function ShellPage({
   const effectiveWorkspaceTab = getEffectiveWorkspaceTab(
     workspaceTab,
     computer?.capabilities?.graphical,
+    true,
+    terminalSupported(computer),
   );
   const isVisible = isComputerVisible(computerOpen, panel, effectiveWorkspaceTab);
   computerVisible.current = isVisible;
   computerOpenRef.current = computerOpen;
   computerBotIdRef.current = computerBotId ?? active?.id;
+  panelRef.current = panel;
+  workspaceTabRef.current = workspaceTab;
   const activeGroup = groups.find((group) => group.id === groupId);
   useEffect(() => {
     setGoal(null);
@@ -1108,7 +1135,7 @@ export function ShellPage({
   }
 
   async function refreshComputerScreen(id: string, explicitRetry = false) {
-    if (!computerVisible.current) return null;
+    if (!computerVisible.current || !computerScreenVisible(id)) return null;
     const request = ++screenRequest.current;
     dispatchComputerError({
       type: "screen-requested",
@@ -2696,7 +2723,10 @@ export function ShellPage({
     ping();
     const timer = window.setInterval(ping, 60_000);
     return () => window.clearInterval(timer);
-  }, [panel, workspaceTab, computerOpen, computerBot?.id, active?.id, computer?.state]);
+    // The capability-driven tab resolution decides visibility: a computer that
+    // stops being graphical resolves a retained Screen tab to Tasks and must
+    // stop the heartbeat, and one that gains a capability must start it again.
+  }, [panel, effectiveWorkspaceTab, computerOpen, computerBot?.id, active?.id, computer?.state]);
 
   async function openComputer(botId?: string, viewOnly = false) {
     const id = botId ?? active?.id;
@@ -2773,6 +2803,7 @@ export function ShellPage({
     botId: computerBot?.id,
     hasControl,
     working: composerRunning,
+    open: computerOpen,
     onTakeControl: async () => {
       if (computerBot) {
         await rpc.computer.takeover({ botId: computerBot.id });
@@ -2781,7 +2812,11 @@ export function ShellPage({
     },
     onStop: stopRun,
     onOpen: useComputerTerminalOpen(setComputerOpen, setWorkspaceExpanded),
+    onTabChange: (nextTab) => {
+      computerTabRef.current = nextTab;
+    },
   });
+  computerTabRef.current = terminalSurface.tab;
   const displayedComputerError = visibleComputerError(
     computerErrorState,
     Boolean(embeddedScreenUrl),
@@ -3850,6 +3885,28 @@ export function ShellPage({
                   computer={computer}
                   tab={workspaceTab}
                   onTabChange={setWorkspaceTab}
+                  terminal={
+                    computer
+                      ? {
+                          working: composerRunning,
+                          onTakeControl: async () => {
+                            await rpc.computer.takeover({ botId: active.id });
+                            await refreshComputerFor(active.id);
+                          },
+                          onStop: stopRun,
+                          onStart: async () => {
+                            await bootComputer({
+                              botId: active.id,
+                              takeControl: false,
+                              overlay: false,
+                            });
+                          },
+                          onReleased: () => {
+                            void refreshComputerFor(active.id).catch(() => undefined);
+                          },
+                        }
+                      : null
+                  }
                   onOpenRun={(run) =>
                     handleWorkspaceOpenRun({
                       run,
@@ -4527,6 +4584,9 @@ export function ShellPage({
                       (computer.state === "running" ||
                         (computer.homeRevision && computer.homeRevision !== "empty"))
                         ? [{ id: "files", label: t`Files` }]
+                        : []),
+                      ...(terminalSupported(computer)
+                        ? [{ id: "terminal", label: t`Terminal` }]
                         : []),
                       { id: "routines", label: t`Routines` },
                       ...(computer?.capabilities?.graphical === true
@@ -6548,7 +6608,7 @@ const MessageView = memo(function MessageView({
                 className="max-w-full rounded-[20px] bg-muted px-[18px] py-3 text-[15.5px] leading-[1.5] text-foreground/90"
                 dir="auto"
               >
-                <ChatMarkdown streaming>{block.text}</ChatMarkdown>
+                <ChatMarkdown {...replyMarkdownProps(block)}>{block.text}</ChatMarkdown>
               </div>
             </div>
           );

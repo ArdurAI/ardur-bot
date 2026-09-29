@@ -467,8 +467,15 @@ describe("createRepos.reorderBots", () => {
 });
 
 describe("createRepos.createBot computer kind", () => {
-  async function createdKind(computerHost: string | null) {
-    const upsert = vi.fn(async (_args: { create: { kind: string } }) => ({ id: "computer" }));
+  async function createdComputer(computerHost: string | null, runtimeKind?: string) {
+    const upsert = vi.fn(
+      async (_args: {
+        where: { scopeKey: string };
+        create: { scope: string; scopeKey: string; homeKey: string; kind: string };
+        update: Record<string, never>;
+      }) => ({ id: "computer" }),
+    );
+    const create = vi.fn(async (_args: { data: { id?: string; computerId?: string } }) => baseBot);
     const tx = {
       $queryRaw: vi.fn(async () => []),
       spaceMember: {
@@ -477,7 +484,7 @@ describe("createRepos.createBot computer kind", () => {
       computer: { upsert },
       bot: {
         aggregate: vi.fn(async () => ({ _max: { position: 0 } })),
-        create: vi.fn(async () => baseBot),
+        create,
         findFirstOrThrow: vi.fn(async () => baseBot),
       },
       thread: { create: vi.fn(async () => baseBot.thread) },
@@ -495,23 +502,59 @@ describe("createRepos.createBot computer kind", () => {
       instructions: "",
       color: baseBot.color,
       notifyOnFinish: false,
+      ...(runtimeKind ? { runtimeKind } : {}),
     });
-    return upsert.mock.calls[0]?.[0].create.kind;
+    return {
+      upserts: upsert.mock.calls.map((call) => call[0]),
+      bot: create.mock.calls[0]?.[0]?.data,
+    };
   }
 
   afterEach(() => vi.unstubAllEnvs());
 
-  // Existing behaviour: the deployment's provider and the saved host choice decide the kind.
+  // The deployment's provider and the saved host choice decide the kind; when the choice is
+  // This Mac and Docker is available, a new bot on the built-in runtime starts on its own
+  // Docker computer instead of the space's Team computer (native runtimes are host-only, so
+  // a pinned bot keeps the host). Existing computer rows keep their kind (update: {}).
   it.each([
-    ["desktop", null, "desktop"],
-    ["docker", null, "docker"],
-    ["docker", "this-mac", "desktop"],
-    ["docker", "docker", "docker"],
+    ["desktop", null, undefined, "team", "desktop"],
+    ["docker", null, undefined, "team", "docker"],
+    ["docker", "this-mac", undefined, "dedicated", "docker"],
+    ["docker", "this-mac", "pi", "dedicated", "docker"],
+    ["docker", "this-mac", "claude-code", "team", "desktop"],
+    ["docker", "docker", undefined, "team", "docker"],
+    ["desktop", "this-mac", "pi", "team", "desktop"],
   ])(
-    "on a %s deployment with host choice %s starts a new computer on %s",
-    async (provider, computerHost, kind) => {
+    "on a %s deployment with host choice %s and runtime %s starts a %s computer on %s",
+    async (provider, computerHost, runtimeKind, scope, kind) => {
       vi.stubEnv("SANDBOX_PROVIDER", provider);
-      expect(await createdKind(computerHost)).toBe(kind);
+      const { upserts } = await createdComputer(computerHost, runtimeKind);
+      expect(upserts).toHaveLength(1);
+      expect(upserts[0]!.create.scope).toBe(scope);
+      expect(upserts[0]!.create.kind).toBe(kind);
+      expect(upserts[0]!.update).toEqual({});
     },
   );
+
+  it("gives the new built-in bot its own Docker computer keyed by the bot id", async () => {
+    vi.stubEnv("SANDBOX_PROVIDER", "docker");
+    const { upserts, bot } = await createdComputer("this-mac", "pi");
+    // No Team computer is created or touched for this bot.
+    expect(upserts).toHaveLength(1);
+    expect(upserts[0]!.where.scopeKey).toBe(`bot:${bot!.id}`);
+    expect(upserts[0]!.create.scopeKey).toBe(`bot:${bot!.id}`);
+    expect(upserts[0]!.create.homeKey).toBe(bot!.id);
+    expect(bot!.id).toBeTruthy();
+    expect(bot!.computerId).toBe("computer");
+  });
+
+  it("keeps a native-runtime bot on the Team computer even when it is the host", async () => {
+    vi.stubEnv("SANDBOX_PROVIDER", "docker");
+    const { upserts, bot } = await createdComputer("this-mac", "hermes");
+    expect(upserts).toHaveLength(1);
+    expect(upserts[0]!.where.scopeKey).toBe("team:ws-1");
+    expect(upserts[0]!.create.kind).toBe("desktop");
+    // The bot row reuses the cuid default path: no explicit id is forced.
+    expect(bot!.id).toBeUndefined();
+  });
 });

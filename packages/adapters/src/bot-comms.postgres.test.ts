@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { JobPublisher } from "@ardurbot/adapter-kit";
+import { ALL_DEVICE_SCOPES } from "@ardurbot/contracts";
 import { botMessageReceiptKind, buildBotMessageWakePrompt, peerPairKey } from "@ardurbot/core";
+import { peerEffectArgsDigest } from "@ardurbot/core/node/peer-effect-digest";
 import {
   acknowledgeBotMessageInput,
   appendBotMessageWakeInTransaction,
@@ -10,6 +12,7 @@ import {
   claimSteering,
   confirmDispatchStop,
   createDb,
+  createGroupRepos,
   createThreadEvents,
   createThreadMessage,
   dispatchBotMessageWake,
@@ -30,12 +33,14 @@ import {
   setBotCommunicationPaused,
 } from "@ardurbot/db";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { completeExternalEffect } from "./approval-effect.js";
 import { acknowledgeBotMessageReceipt, replyToBotDelivery } from "./bot-comms.js";
 import { messageBot } from "./bot-messages.js";
 import { loadRunBotDirectory } from "./bot-presence-directory.js";
 import { checkDelegationExecution } from "./delegation-execution.js";
 import { wakeGoalAfterDelegation } from "./goal-wake.js";
 import { createJobReconciler } from "./job-reconciler.js";
+import { claimPeerBoundEffect, loadPeerBoundEffect } from "./peer-bound-effect.js";
 import { recordRunUsage } from "./run-usage.js";
 
 const databaseUrl = process.env.DATABASE_URL;
@@ -161,7 +166,7 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
         rootTaskId: rootTask.id,
         objective: "Finish the fixture",
         tokenLimit: 100_000,
-        perWorkerTokens: 10_000,
+        perWorkerTokens: 40_000,
         maxConcurrent: 2,
         maxDescendants: 10,
         untilAt,
@@ -3021,6 +3026,385 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
     expect(ask.blocks).toEqual(
       expect.arrayContaining([expect.objectContaining({ answer: "expired", status: "answered" })]),
     );
+  });
+
+  const exactEffectArgs = { title: "Public fixture draft", version: 3 };
+  const exactDescriptor = {
+    kind: "connector-write" as const,
+    toolName: "destination.write",
+    resourceRef: "destination:drafts",
+    argsDigest: peerEffectArgsDigest(exactEffectArgs),
+    args: exactEffectArgs,
+  };
+  const exactLiveCall = {
+    toolName: "destination.write",
+    resourceRef: "destination:drafts",
+    args: exactEffectArgs,
+  };
+
+  async function sendExactEffectHold(f: Awaited<ReturnType<typeof fixture>>, key: string) {
+    const pin = {
+      runtimeKind: "pi" as const,
+      provider: "fixture",
+      modelId: "fixture",
+      effort: "off",
+      credentialId: "fixture",
+      revision: 0,
+    };
+    await prisma.run.update({
+      where: { id: f.coordinatorRun.id },
+      data: { status: "running", runtimePin: pin },
+    });
+    const deps = {
+      ...f.deps,
+      resolveDelegationPin: async () =>
+        ({
+          kind: "resolved",
+          pin,
+          provider: "fixture",
+          id: "fixture",
+          thinkingLevel: "off",
+        }) as never,
+    };
+    const sent = await messageBot(deps, f.coordinatorRun, f.coordinator, {
+      bot_id: f.worker.id,
+      message: "Publish the public draft exactly as approved.",
+      intent: "request" as const,
+      card: {
+        goal: "Publish the public draft",
+        inputs: [{ type: "text" as const, text: "Public fixture" }],
+        doneWhen: ["Draft is published"],
+        deadlineAt: null,
+      },
+      requested_effects: [exactDescriptor],
+      deliveryKey: `${key}:${f.goal.id}`,
+    });
+    expect(sent.ok).toBe(true);
+    const delivery = await prisma.botMessageDelivery.findFirstOrThrow({
+      where: { idempotencyKey: `bot-message:${key}:${f.goal.id}` },
+    });
+    const child = await prisma.run.findFirstOrThrow({
+      where: { delegationId: delivery.delegationId! },
+    });
+    const ask = await prisma.message.findFirstOrThrow({
+      where: { threadId: f.room.id, runId: child.id, role: "bot" },
+    });
+    const answer = (answerId: string) =>
+      f.deps.events.answerRunInput({
+        spaceId,
+        threadId: f.room.id,
+        runId: child.id,
+        messageId: ask.id,
+        answeredByUserId: userId,
+        answer: answerId,
+      });
+    return { delivery, child, ask, answer };
+  }
+
+  it("S4b shows the exact effect on the hold card and binds it to the approval", async () => {
+    const f = await fixture();
+    const { delivery, child, ask } = await sendExactEffectHold(f, "s4b-card");
+    expect(delivery.state).toBe("held");
+    expect(child.status).toBe("waiting_input");
+    const delegation = await prisma.delegation.findUniqueOrThrow({
+      where: { id: delivery.delegationId! },
+    });
+    expect(delegation.card).toMatchObject({ peerMode: "effect-bound" });
+    const effect = await prisma.externalEffect.findUniqueOrThrow({
+      where: { id: delivery.approvalEffectId! },
+    });
+    expect(effect.request).toMatchObject({
+      preparationOnly: false,
+      boundEffect: exactDescriptor,
+    });
+    const askBlock = (ask.blocks as Array<Record<string, unknown>>).find(
+      (block) => block.kind === "ask",
+    )!;
+    expect(askBlock.peerHold).toBe(true);
+    expect(askBlock.peerEffectBound).toBe(true);
+    expect(askBlock.text).toBe(
+      `${f.coordinator.name} wants ${f.worker.name} to run destination.write.`,
+    );
+    expect(String(askBlock.detail)).toContain("destination.write · destination:drafts");
+    expect(String(askBlock.detail)).toContain(JSON.stringify(exactEffectArgs));
+    expect(askBlock.actions).toEqual([
+      { id: "allow", label: "Allow once" },
+      { id: "deny", label: "Deny" },
+    ]);
+    // The recipient run cannot see the approved tool before approval.
+    await expect(loadPeerBoundEffect(prisma, child.id, { approvedOnly: true })).resolves.toBeNull();
+  });
+
+  it("S4b approves one exact effect and runs it once", async () => {
+    const f = await fixture();
+    const { delivery, child, answer } = await sendExactEffectHold(f, "s4b-run-once");
+    const effectId = delivery.approvalEffectId!;
+    expect(await answer("allow")).toBe(true);
+    expect((await prisma.run.findUniqueOrThrow({ where: { id: child.id } })).status).toBe("queued");
+    expect(
+      (await prisma.externalEffect.findUniqueOrThrow({ where: { id: effectId } })).status,
+    ).toBe("approved");
+    const bound = await loadPeerBoundEffect(prisma, child.id, { approvedOnly: true });
+    expect(bound).toMatchObject({ effectId, effect: exactDescriptor });
+    // The exact call claims the one execution, the connector result completes it.
+    await expect(claimPeerBoundEffect(prisma, bound!, exactLiveCall)).resolves.toEqual({
+      ok: true,
+    });
+    expect(
+      (await prisma.externalEffect.findUniqueOrThrow({ where: { id: effectId } })).status,
+    ).toBe("executing");
+    await expect(completeExternalEffect(prisma, effectId, "executing", { ok: true })).resolves.toBe(
+      true,
+    );
+    const completed = await prisma.externalEffect.findUniqueOrThrow({ where: { id: effectId } });
+    expect(completed).toMatchObject({ status: "completed", result: { ok: true } });
+    // A replay after completion is refused.
+    await expect(claimPeerBoundEffect(prisma, bound!, exactLiveCall)).resolves.toEqual({
+      ok: false,
+      kind: "replay",
+    });
+  });
+
+  it("S4b refuses a changed argument, tool or target and never consumes the approval", async () => {
+    const f = await fixture();
+    const { delivery, child, answer } = await sendExactEffectHold(f, "s4b-changed");
+    const effectId = delivery.approvalEffectId!;
+    expect(await answer("allow")).toBe(true);
+    const bound = (await loadPeerBoundEffect(prisma, child.id, { approvedOnly: true }))!;
+    await expect(
+      claimPeerBoundEffect(prisma, bound, {
+        ...exactLiveCall,
+        args: { ...exactEffectArgs, version: 4 },
+      }),
+    ).resolves.toEqual({ ok: false, kind: "mismatch", reason: "arguments" });
+    await expect(
+      claimPeerBoundEffect(prisma, bound, { ...exactLiveCall, toolName: "destination.delete" }),
+    ).resolves.toEqual({ ok: false, kind: "mismatch", reason: "tool" });
+    await expect(
+      claimPeerBoundEffect(prisma, bound, { ...exactLiveCall, resourceRef: "destination:other" }),
+    ).resolves.toEqual({ ok: false, kind: "mismatch", reason: "resource" });
+    // Every refusal left the approval approved.
+    expect(
+      (await prisma.externalEffect.findUniqueOrThrow({ where: { id: effectId } })).status,
+    ).toBe("approved");
+    // The native gate refuses and records a wrong tool or route, and admits the exact one.
+    await prisma.run.update({ where: { id: child.id }, data: { status: "running" } });
+    await prisma.delegation.update({
+      where: { id: delivery.delegationId! },
+      data: {
+        status: "running",
+        authority: { scopes: [...ALL_DEVICE_SCOPES], connectors: ["destination:drafts"] },
+      },
+    });
+    await expect(
+      checkDelegationExecution(prisma, child.id, "destination.delete", {
+        connectorId: "destination",
+        resourceId: "drafts",
+        toolName: "delete",
+      }),
+    ).resolves.toContain("read-only");
+    await expect(
+      checkDelegationExecution(prisma, child.id, "destination.write", {
+        connectorId: "destination",
+        resourceId: "other",
+        toolName: "write",
+      }),
+    ).resolves.toContain("read-only");
+    await expect(
+      checkDelegationExecution(prisma, child.id, "destination.write", {
+        connectorId: "destination",
+        resourceId: "drafts",
+        toolName: "write",
+      }),
+    ).resolves.toBeUndefined();
+    const card = (
+      await prisma.delegation.findUniqueOrThrow({ where: { id: delivery.delegationId! } })
+    ).card as { timeline?: unknown };
+    expect(JSON.stringify(card.timeline)).toContain("outside its approved card");
+    // The exact call still claims the one execution.
+    await expect(claimPeerBoundEffect(prisma, bound, exactLiveCall)).resolves.toEqual({
+      ok: true,
+    });
+  });
+
+  it("S4b refuses a replayed claim while the first execution is in flight", async () => {
+    const f = await fixture();
+    const { delivery, child, answer } = await sendExactEffectHold(f, "s4b-replay");
+    const effectId = delivery.approvalEffectId!;
+    expect(await answer("allow")).toBe(true);
+    const bound = (await loadPeerBoundEffect(prisma, child.id, { approvedOnly: true }))!;
+    await expect(claimPeerBoundEffect(prisma, bound, exactLiveCall)).resolves.toEqual({
+      ok: true,
+    });
+    // A second claim while the first runs settles as uncertain instead of executing twice.
+    const duplicate = await claimPeerBoundEffect(prisma, bound, exactLiveCall);
+    expect(duplicate).toMatchObject({ ok: false, kind: "uncertain" });
+    const settled = await prisma.externalEffect.findUniqueOrThrow({ where: { id: effectId } });
+    expect(settled.status).toBe("uncertain");
+    // The approval is gone: a later attempt is a plain replay refusal.
+    await expect(claimPeerBoundEffect(prisma, bound, exactLiveCall)).resolves.toEqual({
+      ok: false,
+      kind: "replay",
+    });
+    // The exposure loader no longer offers the bound tool.
+    await expect(loadPeerBoundEffect(prisma, child.id, { approvedOnly: true })).resolves.toBeNull();
+  });
+
+  // A group keeps at least two bots, so add a third member before removing the worker.
+  async function removeWorkerFromGroup(f: Awaited<ReturnType<typeof fixture>>) {
+    const third = await prisma.bot.create({
+      data: { spaceId, userId, name: `Third ${fixtureNumber}`, color: "ink" },
+    });
+    await prisma.chatGroupMember.create({ data: { groupId: f.goal.groupId, botId: third.id } });
+    const actor = { userId, spaceId, email: `${scopeId}@example.test`, isDeploymentOwner: true };
+    await createGroupRepos(prisma).updateGroup(actor, {
+      groupId: f.goal.groupId,
+      botIds: [f.coordinator.id, third.id],
+    });
+  }
+
+  it("S4b voids an approved exact effect when the worker is removed from the group", async () => {
+    const f = await fixture();
+    const { delivery, child, answer } = await sendExactEffectHold(f, "s4b-remove-void");
+    const effectId = delivery.approvalEffectId!;
+    expect(await answer("allow")).toBe(true);
+
+    await removeWorkerFromGroup(f);
+
+    const voided = await prisma.externalEffect.findUniqueOrThrow({ where: { id: effectId } });
+    expect(voided).toMatchObject({ status: "failed", result: { reason: "peer-member-removed" } });
+
+    // Child run is cancelled
+    expect((await prisma.run.findUniqueOrThrow({ where: { id: child.id } })).status).toBe(
+      "cancelled",
+    );
+
+    // Delivery is denied
+    expect(
+      await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id: delivery.id } }),
+    ).toMatchObject({ state: "denied" });
+
+    // The voided approval cannot run
+    const bound = { effectId, effect: exactDescriptor };
+    await expect(claimPeerBoundEffect(prisma, bound, exactLiveCall)).resolves.toEqual({
+      ok: false,
+      kind: "replay",
+    });
+
+    // Drain or wake it, assert the write never runs
+    await drainParkedPeerRuns(prisma);
+  });
+
+  it("S4b leaves an executing hold alone when the worker is removed", async () => {
+    const f = await fixture();
+    const { delivery, answer } = await sendExactEffectHold(f, "s4b-remove-exec");
+    const effectId = delivery.approvalEffectId!;
+    expect(await answer("allow")).toBe(true);
+
+    // Make the hold executing
+    const bound = { effectId, effect: exactDescriptor };
+    const claimed = await claimPeerBoundEffect(prisma, bound, exactLiveCall);
+    expect(claimed.ok).toBe(true);
+
+    await removeWorkerFromGroup(f);
+
+    // The effect should still be executing
+    const executing = await prisma.externalEffect.findUniqueOrThrow({ where: { id: effectId } });
+    expect(executing.status).toBe("executing");
+
+    // Delivery state shouldn't be overridden
+    const currentDelivery = await prisma.botMessageDelivery.findUniqueOrThrow({
+      where: { id: delivery.id },
+    });
+    expect(currentDelivery.state).not.toBe("denied");
+  });
+
+  it("S4b voids an approved exact effect when traffic pauses", async () => {
+    const f = await fixture();
+    const rootBefore = await prisma.delegationRoot.findUniqueOrThrow({
+      where: { rootTaskId: f.rootTask.id },
+    });
+    const { delivery, child, answer } = await sendExactEffectHold(f, "s4b-pause");
+    const effectId = delivery.approvalEffectId!;
+    expect(await answer("allow")).toBe(true);
+    const actor = { userId, spaceId, email: `${scopeId}@example.test`, isDeploymentOwner: true };
+    const paused = await setBotCommunicationPaused(prisma, actor, {
+      scope: "group",
+      groupId: f.goal.groupId,
+      paused: true,
+      expectedRevision: 1,
+    });
+    expect((await prisma.run.findUniqueOrThrow({ where: { id: child.id } })).status).toBe(
+      "peer_paused",
+    );
+    const voided = await prisma.externalEffect.findUniqueOrThrow({ where: { id: effectId } });
+    expect(voided).toMatchObject({ status: "failed", result: { reason: "peer-traffic-paused" } });
+    // The voided approval cannot run after the pause.
+    const bound = { effectId, effect: exactDescriptor };
+    await expect(claimPeerBoundEffect(prisma, bound, exactLiveCall)).resolves.toEqual({
+      ok: false,
+      kind: "replay",
+    });
+    await setBotCommunicationPaused(prisma, actor, {
+      scope: "group",
+      groupId: f.goal.groupId,
+      paused: false,
+      expectedRevision: paused.revision,
+    });
+    await drainParkedPeerRuns(prisma);
+    expect((await prisma.run.findUniqueOrThrow({ where: { id: child.id } })).status).toBe(
+      "cancelled",
+    );
+    expect(
+      await prisma.delegation.findUniqueOrThrow({ where: { id: delivery.delegationId! } }),
+    ).toMatchObject({ status: "cancelled" });
+    expect(
+      await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id: delivery.id } }),
+    ).toMatchObject({ state: "cancelled", outcome: "cancelled" });
+    expect(
+      await prisma.delegationRoot.findUniqueOrThrow({ where: { rootTaskId: f.rootTask.id } }),
+    ).toMatchObject({
+      activeDescendants: rootBefore.activeDescendants,
+      reservedTokens: rootBefore.reservedTokens,
+    });
+  });
+
+  it("S4b expires an approved exact effect that was never claimed", async () => {
+    const f = await fixture();
+    const rootBefore = await prisma.delegationRoot.findUniqueOrThrow({
+      where: { rootTaskId: f.rootTask.id },
+    });
+    const { delivery, child, answer } = await sendExactEffectHold(f, "s4b-expire");
+    const effectId = delivery.approvalEffectId!;
+    expect(await answer("allow")).toBe(true);
+    await prisma.botMessageDelivery.update({
+      where: { id: delivery.id },
+      data: { expiresAt: new Date(0) },
+    });
+    expect(await expireHeldBotMessages(prisma)).toBe(1);
+    const expired = await prisma.externalEffect.findUniqueOrThrow({ where: { id: effectId } });
+    expect(expired).toMatchObject({
+      status: "failed",
+      result: { reason: "peer-delivery-expired" },
+    });
+    expect((await prisma.run.findUniqueOrThrow({ where: { id: child.id } })).status).toBe(
+      "cancelled",
+    );
+    expect(
+      await prisma.delegation.findUniqueOrThrow({ where: { id: delivery.delegationId! } }),
+    ).toMatchObject({ status: "cancelled" });
+    expect(
+      await prisma.botMessageDelivery.findUniqueOrThrow({ where: { id: delivery.id } }),
+    ).toMatchObject({ state: "expired", outcome: "expired" });
+    expect(
+      await prisma.delegationRoot.findUniqueOrThrow({ where: { rootTaskId: f.rootTask.id } }),
+    ).toMatchObject({
+      activeDescendants: rootBefore.activeDescendants,
+      reservedTokens: rootBefore.reservedTokens,
+    });
+    await expect(
+      claimPeerBoundEffect(prisma, { effectId, effect: exactDescriptor }, exactLiveCall),
+    ).resolves.toEqual({ ok: false, kind: "replay" });
   });
 
   it("S4 pauses peer runs without cancelling unrelated owner work and refuses held approval", async () => {

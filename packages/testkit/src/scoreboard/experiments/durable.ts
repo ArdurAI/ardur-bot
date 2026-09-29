@@ -42,6 +42,7 @@ export function fixtureHandlers(overrides: Partial<BackgroundJobHandlers>): Back
     "history.compact": ignored,
     "messaging.deliver": ignored,
     "cloud_agent.poll": ignored,
+    "hermes.install": ignored,
     ...overrides,
   };
 }

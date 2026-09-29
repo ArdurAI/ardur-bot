@@ -4,12 +4,17 @@ import {
   CHANNEL_SCOPES,
   CHAT_COPY,
   canonicalDispatchJson,
+  delegationStopLine,
 } from "@ardurbot/contracts";
 import type { RemoteAuthority } from "@ardurbot/core";
 import { checkRemoteTool, effectiveRemoteAuthority } from "@ardurbot/core";
 import { settleBotMessageWakesInTransaction } from "./bot-comms.js";
 import type { DeviceGrant, Prisma, PrismaClient } from "./client.js";
-import { finishDelegation } from "./delegation.js";
+import {
+  ACTIVE_DELEGATIONS,
+  delegationEffectiveStopReason,
+  finishDelegation,
+} from "./delegation.js";
 import {
   assertDeviceTrusted,
   auditDevice,
@@ -441,6 +446,18 @@ export async function requestDispatchStop(
       },
       data: { status: "cancel-requested", cancelRequestedAt: now },
     });
+    // A device stop is an explicit owner action; record it so later usage flushed at
+    // shutdown cannot make the stop look like a budget or deadline stop.
+    await tx.delegation.updateMany({
+      where: {
+        rootTaskId: taskId,
+        spaceId: grant.spaceId,
+        userId: grant.userId,
+        status: { in: ACTIVE_DELEGATIONS },
+        cancelReason: null,
+      },
+      data: { cancelReason: "stopped" },
+    });
     await tx.run.updateMany({
       where: {
         OR: [{ taskId }, { remoteRootTaskId: taskId }, { delegationRootTaskId: taskId }],
@@ -484,13 +501,20 @@ export async function confirmDispatchStop(
       payload: {},
     });
     if (run.delegationId) {
-      await finishDelegation(tx, run.delegationId, "cancelled", "Worker stopped.");
+      const delegation = await tx.delegation.findUnique({ where: { id: run.delegationId } });
+      await finishDelegation(
+        tx,
+        run.delegationId,
+        "cancelled",
+        delegation
+          ? delegationStopLine(
+              delegationEffectiveStopReason(delegation, now),
+              delegation.actingName,
+            )
+          : delegationStopLine("stopped", "Worker"),
+      );
       // A stopped room member marks its coordination round instead of leaving
       // the line pending.
-      const delegation = await tx.delegation.findUnique({
-        where: { id: run.delegationId },
-        select: { actingBotId: true, actingName: true, admissionKey: true },
-      });
       if (delegation)
         await recordGroupAskOutcomeInTransaction(tx, {
           spaceId: run.spaceId,
@@ -526,7 +550,12 @@ export async function confirmDispatchStop(
       },
     });
     for (const helper of helpers)
-      await finishDelegation(tx, helper.id, "cancelled", "Worker stopped.");
+      await finishDelegation(
+        tx,
+        helper.id,
+        "cancelled",
+        delegationStopLine(delegationEffectiveStopReason(helper, now), helper.actingName),
+      );
     await persistDispatchSummary(tx, run, "stopped", null);
     return true;
   });

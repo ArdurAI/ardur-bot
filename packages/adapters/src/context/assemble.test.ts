@@ -1,6 +1,12 @@
-import { ASK_WAKE_PROMPT, botInstructionText, renderAskResults } from "@ardurbot/core";
+import { BOT_NAME_MAX_LENGTH } from "@ardurbot/contracts";
+import {
+  ASK_WAKE_PROMPT,
+  botInstructionText,
+  renderAskResults,
+  renderGoalContext,
+} from "@ardurbot/core";
 import { describe, expect, it, vi } from "vitest";
-import { assembleTurnContext, needsRecall } from "./assemble.js";
+import { assembleTurnContext, boundMessages, needsRecall } from "./assemble.js";
 import { markStablePrefix } from "./provider-cache.js";
 
 describe("turn context", () => {
@@ -11,6 +17,7 @@ describe("turn context", () => {
       instructions: "Read only the card.",
       brief: "PRIVATE_BRIEF_SENTINEL",
       summary: "PRIVATE_SUMMARY_SENTINEL",
+      goal: "PRIVATE_GOAL_SENTINEL",
       history: [{ id: "old", role: "user", content: "PRIVATE_HISTORY_SENTINEL" }],
       message: "<task_card>Authorized fixture</task_card>",
       query: "What happened earlier?",
@@ -19,7 +26,9 @@ describe("turn context", () => {
 
     expect(context.history).toEqual([]);
     expect(context.prompt).toContain("Authorized fixture");
-    expect(JSON.stringify(context)).not.toMatch(/PRIVATE_(BRIEF|SUMMARY|HISTORY|RECALL)_SENTINEL/);
+    expect(JSON.stringify(context)).not.toMatch(
+      /PRIVATE_(BRIEF|SUMMARY|GOAL|HISTORY|RECALL)_SENTINEL/,
+    );
     expect(recall).not.toHaveBeenCalled();
   });
   it("includes scoped quiet delivery data in a peer turn under the message budget", async () => {
@@ -57,11 +66,13 @@ describe("turn context", () => {
     ]);
     expect(context.history.at(-1)?.content).toBe(result);
     expect(context.snapshot.layers.messages).toBeLessThanOrEqual(12_000);
+    // 23 characters overflow the room left by the result. The step is a quarter of that
+    // room (2,994), not a quarter of the full 12,000, so the cut lands 2,994 characters in.
     expect(context.history.find((message) => message.id === "newer")?.content).toHaveLength(
-      12_000 - result.length,
+      12_001 - 2_994,
     );
   });
-  it("gives rolling history exactly the space left by a required result", async () => {
+  it("gives rolling history the space left by a required result, in whole steps", async () => {
     const context = await assembleTurnContext({
       instructions: "Review completed work.",
       history: [{ id: "newer", role: "user", content: "h".repeat(200) }],
@@ -70,10 +81,10 @@ describe("turn context", () => {
       budgets: { messages: 200 },
     });
     expect(context.history).toEqual([
-      { id: "newer", role: "user", content: "h".repeat(120) },
+      { id: "newer", role: "user", content: "h".repeat(110) },
       { id: "required", role: "user", content: "r".repeat(80) },
     ]);
-    expect(context.snapshot.layers.messages).toBe(200);
+    expect(context.snapshot.layers.messages).toBe(190);
   });
   it("keeps the head of an oversized required result with a visible budget marker", async () => {
     const marker =
@@ -117,17 +128,20 @@ describe("turn context", () => {
     });
     expect(Buffer.from(first.stablePrefix).equals(Buffer.from(second.stablePrefix))).toBe(true);
     expect(first.history.map((message) => message.content.slice(0, 20))).toEqual([
-      expect.stringContaining("<group_brief>"),
       expect.stringContaining("<thread_summary>"),
       expect.stringContaining("history"),
+      expect.stringContaining("<group_brief>"),
       expect.stringContaining("<recalled_memory>"),
     ]);
+    expect(first.stableHistory).toBe(2);
+    expect(second.history.slice(0, 2)).toEqual(first.history.slice(0, 2));
     expect(first.prompt).toBe(run.message);
     expect(first.history.some((message) => message.id === "current")).toBe(false);
     expect(first.snapshot.layers).toMatchObject({
       brief: 6000,
       summary: 4000,
-      messages: 12000,
+      // 32,000 history characters: the kept part starts on the 21,000 step.
+      messages: 11000,
       recall: 6000,
       message: run.message.length,
     });
@@ -161,10 +175,201 @@ describe("turn context", () => {
     const first = await assembleTurnContext({ ...base, teammates: "Worker: busy" });
     const next = await assembleTurnContext({ ...base, teammates: "Worker: idle" });
     expect(first.stablePrefix).toBe(next.stablePrefix);
-    expect(first.history[0]?.content).toContain("Worker: busy");
-    expect(next.history[0]?.content).toContain("Worker: idle");
+    expect(first.history.at(-1)?.content).toContain("Worker: busy");
+    expect(next.history.at(-1)?.content).toContain("Worker: idle");
+    expect(first.history.slice(0, first.stableHistory)).toEqual([
+      { role: "user", content: "Older request" },
+    ]);
+    expect(next.history.slice(0, next.stableHistory)).toEqual(
+      first.history.slice(0, first.stableHistory),
+    );
     expect(first.snapshot.layers.messages).toBeLessThanOrEqual(600);
   });
+
+  it("keeps everything before per-turn data byte-identical on the next turn", async () => {
+    const earlier = [
+      { id: "u1", role: "user" as const, content: "Where is the launch checklist?" },
+      { id: "b1", role: "assistant" as const, content: "Nine of fourteen items are done." },
+    ];
+    const turn = {
+      instructions: "Coordinate the launch team.",
+      summary: "The team agreed on a Friday launch.",
+      history: [...earlier, { id: "u2", role: "user" as const, content: "What is still open?" }],
+      sourceMessageId: "u2",
+      teammates: "Teammate snapshot at 2026-09-28T09:00:00.000Z\n- Writer · busy",
+      brief: "## Open items\n- Pricing table",
+      message: "Current date and time: 09:00 UTC.\n\nWhat is still open?",
+      recall: async () => "The owner prefers three bullets.",
+    };
+    const next = {
+      ...turn,
+      history: [
+        ...earlier,
+        { id: "u2", role: "user" as const, content: "What is still open?" },
+        { id: "b2", role: "assistant" as const, content: "The pricing table and the invite." },
+        { id: "u3", role: "user" as const, content: "Can you ask Writer to resend it?" },
+      ],
+      sourceMessageId: "u3",
+      teammates: "Teammate snapshot at 2026-09-28T09:04:00.000Z\n- Writer · idle",
+      brief: "## Open items\n- Webinar invite",
+      message: "Current date and time: 09:04 UTC.\n\nCan you ask Writer to resend it?",
+      recall: async () => "Writer owns the invites.",
+    };
+    const first = await assembleTurnContext(turn);
+    const second = await assembleTurnContext(next);
+    const kept = first.history.slice(0, first.stableHistory);
+    expect(kept.map((message) => message.content)).toEqual([
+      "<thread_summary>\nThe team agreed on a Friday launch.\n</thread_summary>",
+      "Where is the launch checklist?",
+      "Nine of fourteen items are done.",
+    ]);
+    expect(second.stablePrefix).toBe(first.stablePrefix);
+    expect(second.history.slice(0, kept.length)).toEqual(kept);
+    // The model still sees every layer, each once and after the conversation it describes.
+    for (const context of [first, second])
+      expect(
+        context.history
+          .slice(context.stableHistory)
+          .map((message) => message.content.split("\n")[0]),
+      ).toEqual(["<teammate_directory>", "<group_brief>", "<recalled_memory>"]);
+    expect(second.history.at(-3)?.content).toContain("Writer · idle");
+    expect(second.history.at(-2)?.content).toContain("Webinar invite");
+    expect(second.history.at(-1)?.content).toContain("Writer owns the invites.");
+  });
+  it("carries changing goal state in the latest turn, not the stable prefix", async () => {
+    const base = {
+      instructions: "Coordinate the goal.",
+      history: [{ id: "old", role: "user" as const, content: "Start the launch goal." }],
+      message: "Continue",
+    };
+    const first = await assembleTurnContext({ ...base, goal: "<goal_state>tokens: 10 / 100" });
+    const next = await assembleTurnContext({ ...base, goal: "<goal_state>tokens: 40 / 100" });
+    expect(next.stablePrefix).toBe(first.stablePrefix);
+    expect(next.history).toEqual(first.history);
+    expect(first.prompt).toBe("<goal_state>tokens: 10 / 100\n\nContinue");
+    expect(next.prompt).toBe("<goal_state>tokens: 40 / 100\n\nContinue");
+    expect(first.snapshot.layers.message).toBe(first.prompt.length);
+    const peer = await assembleTurnContext({ ...base, peerReadOnly: true, goal: "PRIVATE_GOAL" });
+    expect(peer.prompt).toBe("Continue");
+    // A goal that fits the instruction budget must not fail the message budget.
+    await expect(
+      assembleTurnContext({ ...base, goal: "g".repeat(48_000), message: "Continue" }),
+    ).resolves.toMatchObject({ prompt: expect.stringContaining("Continue") });
+  });
+  it("budgets a schema-sized goal apart from the message the user can send", async () => {
+    const now = new Date("2026-09-28T09:00:00.000Z");
+    const goal = renderGoalContext({
+      objective: "o".repeat(4_000),
+      doneWhen: Array.from({ length: 10 }, () => "d".repeat(500)),
+      status: "running",
+      members: [{ id: "bot-writer", name: "Writer" }],
+      assignments: Array.from({ length: 200 }, () => ({
+        actingName: "W".repeat(BOT_NAME_MAX_LENGTH),
+        status: "running",
+        createdAt: now,
+      })),
+      usedTokens: 10,
+      tokenLimit: 600_000,
+      untilAt: now,
+      now,
+    });
+    const message = "m".repeat(25_200);
+    expect(goal.length + 2 + message.length).toBeGreaterThan(48_000);
+    expect(message.length).toBeLessThanOrEqual(48_000);
+    const context = await assembleTurnContext({
+      instructions: "Coordinate the goal.",
+      history: [],
+      goal,
+      message,
+    });
+    expect(context.prompt.startsWith(goal)).toBe(true);
+    expect(context.prompt.endsWith(message)).toBe(true);
+    expect(context.stablePrefix).toBe("Coordinate the goal.");
+    await expect(
+      assembleTurnContext({
+        instructions: "Coordinate the goal.",
+        history: [],
+        goal: "g".repeat(64_000),
+        message: "Continue",
+      }),
+    ).rejects.toThrow("instructions exceed");
+  });
+  it("keeps the latest turns when a large directory leaves little history room", async () => {
+    const latest = "Where is the launch checklist?";
+    const context = await assembleTurnContext({
+      instructions: "Review completed work.",
+      teammates: `Teammate snapshot\n${"W".repeat(8_000)}`,
+      history: [
+        { id: "old", role: "user", content: "Earlier turn that can be cut." },
+        { id: "mid", role: "assistant", content: "n".repeat(1_600) },
+        { id: "latest", role: "user", content: latest },
+      ],
+      requiredContext: { id: "required", role: "user", content: "R".repeat(11_000) },
+      message: "Review the result.",
+    });
+    expect(context.history.find((message) => message.id === "latest")?.content).toBe(latest);
+    expect(context.snapshot.layers.messages).toBeLessThanOrEqual(12_000);
+  });
+  it("moves the start of overflowing history forward in whole steps", () => {
+    const messages = [
+      { role: "user" as const, content: "a".repeat(60) },
+      { role: "assistant" as const, content: "b".repeat(60) },
+    ];
+    // A step of one keeps exactly the newest budget.
+    expect(boundMessages(messages, 100)).toEqual([
+      { role: "user", content: "a".repeat(40) },
+      { role: "assistant", content: "b".repeat(60) },
+    ]);
+    // 20 characters overflow; the kept part starts on the next step, 25 characters in.
+    const kept = boundMessages(messages, 100, 25);
+    expect(kept).toEqual([
+      { role: "user", content: "a".repeat(35) },
+      { role: "assistant", content: "b".repeat(60) },
+    ]);
+    // A new message leaves the start alone until the overflow passes that step.
+    const longer = [...messages, { role: "user" as const, content: "c".repeat(5) }];
+    expect(boundMessages(longer, 100, 25).slice(0, 2)).toEqual(kept);
+    const stepped = boundMessages([...longer, { role: "user" as const, content: "d" }], 100, 25);
+    expect(stepped[0]).toEqual({ role: "user", content: "a".repeat(10) });
+    for (const result of [kept, stepped])
+      expect(
+        result.reduce((size, message) => size + message.content.length, 0),
+      ).toBeLessThanOrEqual(100);
+    expect(boundMessages(messages, 200, 25)).toEqual(messages);
+    expect(boundMessages(messages, 0, 25)).toEqual([]);
+  });
+  it("does not drop the newest message when the step is larger than the remaining room", () => {
+    const newest = "Where is the launch checklist?";
+    const thread = [
+      { role: "user" as const, content: "a".repeat(1_600) },
+      { role: "assistant" as const, content: newest },
+    ];
+    // The review's case: a 3,000-character step and 667 characters of room left.
+    const kept = boundMessages(thread, 667, 3_000);
+    expect(kept.at(-1)?.content).toBe(newest);
+    expect(kept.reduce((size, message) => size + message.content.length, 0)).toBeLessThanOrEqual(
+      667,
+    );
+    const exact = boundMessages(thread, 667, 1);
+    // A step that would erase the thread falls back to the old exact cut.
+    expect(boundMessages(thread, 667, 3_000)).toEqual(exact);
+  });
+  it("does not move the cut past a tool call and its result", () => {
+    const call = '<tool_call id="lookup">read</tool_call>';
+    const result = '<tool_result id="lookup">done</tool_result>';
+    const messages = [
+      { role: "user" as const, content: "o".repeat(100) },
+      { role: "assistant" as const, content: call },
+      { role: "user" as const, content: result },
+    ];
+    const budget = call.length + result.length + 10;
+    const kept = boundMessages(messages, budget, call.length);
+    const text = kept.map((message) => message.content).join("");
+    expect(text.includes("<tool_call")).toBe(true);
+    expect(text.includes("<tool_result")).toBe(true);
+    expect(text.length).toBeLessThanOrEqual(budget);
+  });
+
   it("cuts a long teammate directory between members, never partway through one", async () => {
     const lines = Array.from({ length: 40 }, (_, index) => `- Member ${index}: ${"x".repeat(60)}`);
     const result = await assembleTurnContext({
@@ -266,5 +471,32 @@ describe("turn context", () => {
     });
     const unknown = { system: "Different" };
     expect(markStablePrefix(unknown, "Rules")).toBe(unknown);
+  });
+  it("refuses a merged prompt whose waiting messages push it over the message budget", async () => {
+    const request = "Summarize the thread.";
+    // The request fits, but the first waiting message does not fit in what is left.
+    const steering = [{ text: "b".repeat(1_000) }];
+    await expect(
+      assembleTurnContext({
+        instructions: "Rules",
+        history: [],
+        message: request,
+        steering,
+        budgets: { message: 1_000 },
+      }),
+    ).rejects.toThrow("This message exceeds the context budget. Send a shorter message.");
+  });
+  it("keeps waiting messages inside the message budget", async () => {
+    const context = await assembleTurnContext({
+      instructions: "Rules",
+      history: [],
+      message: "Summarize the thread.",
+      steering: [{ text: "Also file the summary under launch." }],
+      budgets: { message: 1_000 },
+    });
+    expect(context.prompt).toContain("Additional user context:");
+    expect(context.prompt).toContain("Also file the summary under launch.");
+    expect(context.snapshot.layers.message).toBe(context.prompt.length);
+    expect(context.snapshot.layers.message).toBeLessThanOrEqual(1_000);
   });
 });

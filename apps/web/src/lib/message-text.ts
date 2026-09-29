@@ -2,6 +2,7 @@ import type { MessageBlock, ThreadMessage } from "@ardurbot/contracts";
 import {
   isInterimNarrationAt,
   isReasoningSummaryBlock,
+  isStreamingTextBlock,
   isToolActivityBlock,
   workRecordEntries,
 } from "@ardurbot/core";
@@ -22,20 +23,7 @@ export function narrationBubbleBlocks(blocks: readonly MessageBlock[]): MessageB
   );
 }
 
-/**
- * True while an in-flight message already shows the run's activity — reply
- * text streaming in the bubble or a visible compact work record — so the
- * transcript does not need the fallback working glyph as a second indicator.
- */
-export function liveMessageHasVisibleActivity(message: ThreadMessage): boolean {
-  if (!message.id.startsWith("progress:")) return false;
-  return (
-    message.blocks.some(
-      (block) => block.kind === "progress" && !isToolActivityBlock(block) && Boolean(block.text),
-    ) || workRecordEntries(message.blocks).length > 0
-  );
-}
-
+export { liveMessageHasVisibleActivity, workingBotsWithoutVisibleActivity } from "@ardurbot/core";
 /** Plain message text for clipboard copy — text/ask/progress only, no chrome. */
 export function copyableMessageText(message: ThreadMessage): string {
   return message.blocks
@@ -55,15 +43,10 @@ export function copyableMessageText(message: ThreadMessage): string {
     .trim();
 }
 
-/** Working bots whose live message does not already show this turn's activity. */
-export function workingBotsWithoutVisibleActivity<Bot extends { botId?: string }>(
-  workingBots: readonly Bot[],
-  messages: readonly ThreadMessage[],
-): Bot[] {
-  const covered = new Set(
-    messages.flatMap((message) =>
-      message.botId && liveMessageHasVisibleActivity(message) ? [message.botId] : [],
-    ),
-  );
-  return workingBots.filter((bot) => bot.botId == null || !covered.has(bot.botId));
+/**
+ * How a reply's text or progress block renders: live progress keeps the streaming layout
+ * (partial fences stay sealed), and the cursor shows only while its text is still growing.
+ */
+export function replyMarkdownProps(block: MessageBlock): { streaming: boolean; cursor: boolean } {
+  return { streaming: block.kind === "progress", cursor: isStreamingTextBlock(block) };
 }

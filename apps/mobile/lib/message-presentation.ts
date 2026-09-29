@@ -2,6 +2,7 @@ import type { MessageBlock } from "@ardurbot/contracts";
 import {
   isInterimNarrationAt,
   isReasoningSummaryBlock,
+  isStreamingTextBlock,
   isToolActivityBlock,
   workRecordEntries,
 } from "@ardurbot/core";
@@ -45,4 +46,14 @@ export function hasVisibleMessagePresentation(blocks: readonly MessageBlock[]): 
   return (
     blocks.some((block) => !isToolActivityBlock(block)) || workRecordEntries(blocks).length > 0
   );
+}
+
+/**
+ * The reply cursor shows only while the live draft's tail text is still growing. Once
+ * the text stops — the bot moved on to commands, cards, or a handoff — the cursor goes
+ * away even though the draft (and its streaming layout) is still live.
+ */
+export function liveReplyTextStreaming(blocks: readonly MessageBlock[]): boolean {
+  const tail = blocks.at(-1);
+  return tail !== undefined && isStreamingTextBlock(tail);
 }

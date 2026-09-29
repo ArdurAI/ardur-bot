@@ -1,9 +1,18 @@
 import { oc } from "@orpc/contract";
 import * as z from "zod";
+import { DEFAULT_MODEL_CONTEXT_WINDOW, MAX_MODEL_MAX_TOKENS } from "./domain.js";
 import { Id, IsoDate } from "./ids.js";
 
+/** Largest one-request floor: the standard prompt allowance plus the largest output cap. */
+export const GOAL_MAX_PER_WORKER_TOKENS = DEFAULT_MODEL_CONTEXT_WINDOW + MAX_MODEL_MAX_TOKENS;
+
 export const GOAL_DEFAULT_TOKEN_LIMIT = 600_000;
-export const GOAL_DEFAULT_PER_WORKER_TOKENS = 30_000;
+/**
+ * Covers one realistic worker request for a reasoning model: a full standard context
+ * (DEFAULT_MODEL_CONTEXT_WINDOW) plus one reasoning output (REASONING_MODEL_MAX_TOKENS),
+ * which is the admission floor minimumDelegationReservation computes for such a worker.
+ */
+export const GOAL_DEFAULT_PER_WORKER_TOKENS = 65_536;
 export const GOAL_DEFAULT_MAX_DESCENDANTS = 60;
 export const GOAL_MAX_DEPTH = 1;
 export const GOAL_MAX_HOPS = 6;
@@ -50,7 +59,7 @@ export const GoalStartInputSchema = z.object({
   doneWhen: z.array(z.string().trim().min(1).max(500)).max(10).default([]),
   untilAt: IsoDate.optional(),
   tokenLimit: z.number().int().min(1).max(5_000_000).optional(),
-  perWorkerTokens: z.number().int().min(5_000).max(100_000).optional(),
+  perWorkerTokens: z.number().int().min(5_000).max(GOAL_MAX_PER_WORKER_TOKENS).optional(),
   maxConcurrent: z.number().int().min(1).max(12).optional(),
   maxDescendants: z.number().int().min(1).max(200).optional(),
 });

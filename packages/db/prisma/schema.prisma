@@ -687,6 +687,10 @@ model Run {
   leaseExpiresAt       DateTime?
   checkpoint           String?
   clientNonce          String?
+  /// Thread position held for this run's reply from its first visible text, so a
+  /// message the owner sends while the run is active lands below the saved reply.
+  /// Only a running run holds one: a trigger clears it when the run leaves `running`.
+  replySeq             Int?
   sourceMessageId      String?
   sourceMessage        Message?         @relation("RunSourceMessage", fields: [sourceMessageId], references: [id], onDelete: SetNull)
   routineId            String?
@@ -734,6 +738,7 @@ model SteeringMessage {
   runId     String?
   run       Run?     @relation(fields: [runId], references: [id], onDelete: SetNull)
   claimedAt DateTime?
+  adopted   Boolean  @default(false)
   createdAt DateTime @default(now())
 
   @@unique([messageId, botId])
@@ -2143,6 +2148,12 @@ model Delegation {
   differences String[] @default([])
   ancestorBotIds String[]
   reservedTokens Int
+  // The amount the current attempt actually reserved at admission or rework. Null on rows
+  // written before this column existed; those settle against the legacy 10,000 reservation.
+  attemptReservedTokens Int?
+  // Why cancellation was requested, recorded when it happens ("budget", "deadline",
+  // "stopped"); null on older rows, whose finish path falls back to inferring the reason.
+  cancelReason String?
   usedTokens Int @default(0)
   deadlineAt DateTime
   admissionKey String @unique
@@ -2348,6 +2359,9 @@ model Comparison {
   participants Json
   budgetTokens Int
   mergeReserved Boolean
+  // The token amount the merge hold actually reserved; null on comparisons created
+  // before this column existed, whose hold was the legacy 10,000 reservation.
+  mergeReservedTokens Int?
   createdAt DateTime @default(now())
   executions ComparisonExecution[]
   @@unique([spaceId, userId, clientNonce])

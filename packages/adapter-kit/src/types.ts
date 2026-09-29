@@ -526,6 +526,10 @@ export interface AgentRunRequest {
   instructions: string;
   stablePrefix?: string;
   history: Array<{ id?: string; role: "user" | "assistant" | "system"; content: string }>;
+  /** Leading history entries expected to repeat unchanged next turn; a prompt cache may end there. */
+  stableHistory?: number;
+  /** Sent once and never repeated, so runtimes should not pay to write it to a prompt cache. */
+  singleRequest?: boolean;
   currentTurnImages?: AgentInputImage[];
   /** Explicit model-only mode; an empty array retains legacy built-in tools. */
   tools: ConnectorTool[] | "none";
@@ -635,6 +639,8 @@ export interface AgentRuntimeCapabilities {
   compaction: boolean;
   tools: boolean;
   scripted: boolean;
+  /** False when this runtime rejects every image, whatever the model accepts. */
+  images?: boolean;
   /** Brokered provider calls persist their own receipts; runtime aggregates are informational. */
   usageAccounting?: "runtime" | "external";
 }
@@ -707,6 +713,8 @@ export interface BackgroundJobPayloads {
   "messaging.deliver": { runId?: string };
   /** Reconcile durable remote-agent intent; scope is loaded from the database. */
   "cloud_agent.poll": { agentId: string };
+  /** Install the pinned Hermes runtime on this computer. No path, URL, or version. */
+  "hermes.install": Record<string, never>;
 }
 
 export type BackgroundJobName = keyof BackgroundJobPayloads;

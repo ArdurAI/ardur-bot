@@ -1,4 +1,4 @@
-import type { AgentRuntime, AgentUsage } from "@ardurbot/adapter-kit";
+import type { AgentRunRequest, AgentRuntime, AgentUsage } from "@ardurbot/adapter-kit";
 import { RequestUsageCollector, usageEvent } from "@ardurbot/adapter-kit";
 import { type EncryptedSecretStore, recordStandaloneUsage } from "@ardurbot/adapters";
 import type { PrismaClient } from "@ardurbot/db";
@@ -76,9 +76,11 @@ function usageLedger() {
 
 async function judgeUsage(usage: AgentUsage[], failed = false) {
   const recordUsage = vi.fn(async () => undefined);
+  const requests: AgentRunRequest[] = [];
   const judge = new ModelTeamChatEngagementJudge({
     runtime: {
-      async *run() {
+      async *run(request: AgentRunRequest) {
+        requests.push(request);
         for (const event of usage) yield usageEvent(event);
         if (failed) throw new Error("Synthetic transport failure");
         yield { type: "done", text: '{"act":true}' };
@@ -108,7 +110,7 @@ async function judgeUsage(usage: AgentUsage[], failed = false) {
     rules: "",
     messages: [],
   });
-  return { recordUsage, decision };
+  return { recordUsage, decision, requests };
 }
 
 const usageRequest = (attemptId = "first") =>
@@ -161,6 +163,13 @@ describe("team chat engagement judge", () => {
     expect(new Set(events.map((event) => event.request?.attemptId))).toEqual(
       new Set(["first", "retry"]),
     );
+  });
+
+  it("asks for one JSON answer without tools or a prompt-cache write", async () => {
+    const { requests } = await judgeUsage([]);
+    expect(requests).toEqual([
+      expect.objectContaining({ tools: "none", singleRequest: true, history: [] }),
+    ]);
   });
 
   it("forwards unavailable receipts so accounting records an explicit limitation, not zero", async () => {

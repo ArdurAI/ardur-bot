@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   hasVisibleMessagePresentation,
   isCenteredAgentEvent,
+  liveReplyTextStreaming,
   messagePresentationSegments,
 } from "./message-presentation";
 
@@ -158,5 +159,59 @@ describe("mobile message presentation", () => {
         { kind: "text", text: "Done." },
       ]),
     ).toEqual([{ kind: "content", blocks: [{ kind: "text", text: "Done." }] }]);
+  });
+
+  it("shows the reply cursor only while the draft's tail text is still growing", () => {
+    // Text is streaming in: cursor on.
+    expect(
+      liveReplyTextStreaming([
+        { kind: "progress", text: "Chief's summary", streaming: true } as MessageBlock,
+      ]),
+    ).toBe(true);
+
+    // Text stopped while the run works on commands: cursor off, even though the
+    // draft is still live.
+    expect(
+      liveReplyTextStreaming([
+        {
+          kind: "progress",
+          text: "Chief's summary",
+          pendingToolNames: ["run_command"],
+        } as MessageBlock,
+      ]),
+    ).toBe(false);
+    expect(
+      liveReplyTextStreaming([
+        { kind: "progress", text: "Running gh pr list", activity: true } as MessageBlock,
+      ]),
+    ).toBe(false);
+
+    // The run ended: the durable message carries plain text, never a cursor.
+    expect(liveReplyTextStreaming([{ kind: "text", text: "Chief's summary" }])).toBe(false);
+    expect(liveReplyTextStreaming([])).toBe(false);
+  });
+
+  it("never shows the cursor on a reasoning summary or folded narration", () => {
+    // A reasoning summary the provider streams is a thought, not reply text.
+    expect(
+      liveReplyTextStreaming([
+        {
+          kind: "progress",
+          text: "Weighing options.",
+          reasoning: true,
+          streaming: true,
+        } as MessageBlock,
+      ]),
+    ).toBe(false);
+    // Narration a later tool call folds into the work record loses the cursor.
+    expect(
+      liveReplyTextStreaming([
+        {
+          kind: "progress",
+          text: "Let me check.",
+          pendingToolNames: ["shell"],
+        } as MessageBlock,
+      ]),
+    ).toBe(false);
   });
 });

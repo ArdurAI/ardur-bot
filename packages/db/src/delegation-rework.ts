@@ -2,7 +2,11 @@ import type { Actor } from "@ardurbot/contracts";
 import { DELEGATION_LIMITS, delegationProblem, TaskCardSchema } from "@ardurbot/contracts";
 import { redactTaskValue, taskCardPrompt } from "@ardurbot/core";
 import type { Prisma } from "./client.js";
-import { DelegationAdmissionError, lockDelegationRoot } from "./delegation.js";
+import {
+  DelegationAdmissionError,
+  delegationAttemptReservation,
+  lockDelegationRoot,
+} from "./delegation.js";
 import { inheritedRemoteOrigin } from "./dispatch.js";
 import { appendTaskEvent } from "./task-cards.js";
 
@@ -35,7 +39,10 @@ export async function rejectDelegation(
   if (row.hop >= root.maxHops) refuse("hops-exceeded");
   if (root.activeDescendants >= root.maxConcurrent || root.totalDescendants >= root.maxDescendants)
     refuse("descendants-exceeded");
-  const tokens = DELEGATION_LIMITS.reservationTokens;
+  // The new attempt reserves at least what the previous attempt actually reserved, so a
+  // worker whose model floor grew since admission keeps a reservation that covers one
+  // request, and settlement later releases exactly this stored amount.
+  const tokens = Math.max(DELEGATION_LIMITS.reservationTokens, delegationAttemptReservation(row));
   if (root.reservedTokens + root.usedTokens + tokens > root.tokenLimit) refuse("budget-exhausted");
   const old = await tx.run.findUniqueOrThrow({ where: { id: row.runId ?? row.parentRunId } });
   if (row.runId && !["completed", "failed", "cancelled"].includes(old.status))
@@ -95,8 +102,10 @@ export async function rejectDelegation(
       status: "queued",
       hop: { increment: 1 },
       reservedTokens: card.budget.tokens,
+      attemptReservedTokens: tokens,
       completedAt: null,
       result: null,
+      cancelReason: null,
     },
   });
   return { ok: true as const, runId: run.id };

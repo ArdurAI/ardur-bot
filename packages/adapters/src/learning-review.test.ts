@@ -260,6 +260,7 @@ describe("proposal-only learning review", () => {
     expect(f.runtimeRun.mock.calls[0]?.[0]).toMatchObject({
       model: { provider: pin.provider, id: pin.modelId },
       tools: "none",
+      singleRequest: true,
     });
     expect(f.records.reviews[0]).toMatchObject({ status: "proposed", tokens: 50 });
   });

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { BoardLabelSchema } from "./board-label.js";
 import { LocalImportToolSchema } from "./local-import.js";
-import { RuntimePinSchema } from "./runtime-pins.js";
+import { RuntimeKindSchema, RuntimePinSchema } from "./runtime-pins.js";
 
 export const MessageOriginSchema = z.enum([
   "human-typed",
@@ -315,6 +315,18 @@ export const LearningBudgetsSchema = z.object({
   maxOutputTokens: z.number().int().min(128).max(8000).default(2000),
   maxOutputChars: z.number().int().min(256).max(40000).default(12000),
 });
+export const SetLearningReviewerInput = z.strictObject({
+  expectedRevision: z.number().int().nonnegative(),
+  pin: z.strictObject({
+    runtimeKind: RuntimeKindSchema,
+    provider: z.string().min(1),
+    modelId: z.string().min(1),
+    credentialId: z.string().min(1),
+    effort: z.string().nullable(),
+  }),
+});
+export type SetLearningReviewerInput = z.infer<typeof SetLearningReviewerInput>;
+
 export const SpaceLearningConfigInput = z
   .object({
     enabled: z.boolean().default(false),

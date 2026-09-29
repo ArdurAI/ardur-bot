@@ -1,5 +1,5 @@
 import { runContinueJob } from "@ardurbot/adapter-kit";
-import { GOAL_DEFAULT_PER_WORKER_TOKENS, type MessageBlock } from "@ardurbot/contracts";
+import type { MessageBlock } from "@ardurbot/contracts";
 import {
   ASK_REQUEST_MAX_LENGTH,
   askMemberPrompt,
@@ -29,11 +29,11 @@ import {
 } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 import type { DelegationResolver } from "./delegation.js";
-import { prepareDelegation } from "./delegation.js";
+import { delegationFloorForModel, prepareDelegation } from "./delegation.js";
 import type { ExecutorDeps } from "./executor.js";
 
-/** One member's answer is at most one ordinary worker turn, like a goal assignment. */
-export const ASK_MEMBER_TOKENS = GOAL_DEFAULT_PER_WORKER_TOKENS;
+/** The floor for a member whose model cannot be resolved yet: one standard-context request. */
+const ASK_MEMBER_FALLBACK_TOKENS = delegationFloorForModel({ provider: null, modelId: null });
 
 type AskRun = {
   id: string;
@@ -180,10 +180,31 @@ export async function askGroupMembers(
           notAsked,
         };
 
+      // Each member reserves exactly one realistic request for its own model — the floor
+      // admission enforces — and the room is sized to the sum of those floors, never the
+      // goal's per-worker default. Admission resolves the pin again, like a comparison does.
+      const floors = new Map<string, number>();
+      for (const member of fresh) {
+        const bot = await tx.bot.findFirstOrThrow({
+          where: { id: member.id, spaceId: run.spaceId, userId: run.userId },
+          include: { computer: true },
+        });
+        const selected = await deps.resolveDelegationPin?.(bot, {
+          tx,
+          targetThreadId: run.threadId,
+          userId: run.userId,
+          spaceId: run.spaceId,
+        });
+        floors.set(
+          member.id,
+          selected && selected.kind === "resolved"
+            ? delegationFloorForModel(selected.pin, selected)
+            : ASK_MEMBER_FALLBACK_TOKENS,
+        );
+      }
       await sizeDelegationRootForAsk(tx, {
         runId: run.id,
-        members: fresh.length,
-        tokensPerMember: ASK_MEMBER_TOKENS,
+        memberTokens: fresh.map((member) => floors.get(member.id) ?? ASK_MEMBER_FALLBACK_TOKENS),
       });
       const admitted: Array<{
         member: { id: string; name: string };
@@ -202,7 +223,7 @@ export async function askGroupMembers(
               kind: "group-handoff",
               admissionKey: groupAskKey(ask, input.callId, member.id),
               prompt: request,
-              tokens: ASK_MEMBER_TOKENS,
+              tokens: floors.get(member.id) ?? ASK_MEMBER_FALLBACK_TOKENS,
               targetThreadId: run.threadId,
             },
             deps.resolveDelegationPin,

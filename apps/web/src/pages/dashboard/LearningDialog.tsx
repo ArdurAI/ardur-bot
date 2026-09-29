@@ -17,7 +17,10 @@ export default function LearningDialog({ onClose }: { onClose: () => void }) {
         if (!open) onClose();
       }}
     >
-      <DialogContent aria-describedby={undefined} className="max-h-[85vh] overflow-auto">
+      <DialogContent
+        aria-describedby={undefined}
+        className="max-h-[85vh] min-w-0 overflow-x-hidden overflow-y-auto [&>*]:min-w-0 [&>*]:max-w-full"
+      >
         <DialogHeader>
           <DialogTitle>
             <Trans>Learning</Trans>
