@@ -1,4 +1,9 @@
-import { ACTIVE_RUN_STATUSES, plainTextFromMarkdown } from "@ardurbot/core";
+import type { MessageBlock } from "@ardurbot/contracts";
+import {
+  ACTIVE_RUN_STATUSES,
+  isReasoningSummaryBlock,
+  plainTextFromMarkdown,
+} from "@ardurbot/core";
 
 export const activeRunStatuses = [...ACTIVE_RUN_STATUSES];
 
@@ -12,13 +17,11 @@ export const activeRunSelection = {
 export function previewFromBlocks(blocks: unknown): string {
   const rows = Array.isArray(blocks) ? blocks : [];
   for (const block of rows) {
-    if (
-      block &&
-      typeof block === "object" &&
-      "text" in block &&
-      typeof (block as { text?: unknown }).text === "string"
-    ) {
-      return plainTextFromMarkdown((block as { text: string }).text);
+    if (!block || typeof block !== "object") continue;
+    const candidate = block as MessageBlock;
+    if (isReasoningSummaryBlock(candidate)) continue;
+    if ("text" in candidate && typeof candidate.text === "string") {
+      return plainTextFromMarkdown(candidate.text);
     }
   }
   return "";

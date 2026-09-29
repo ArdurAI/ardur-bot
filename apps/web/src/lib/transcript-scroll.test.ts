@@ -3,6 +3,7 @@ import {
   transcriptCanSnapAfterFrame,
   transcriptIsNearEnd,
   transcriptMovedDown,
+  transcriptSnapFollows,
 } from "./transcript-scroll.js";
 
 describe("transcriptIsNearEnd", () => {
@@ -36,5 +37,14 @@ describe("transcriptMovedDown", () => {
     expect(transcriptMovedDown(null, 920)).toBe(false);
     expect(transcriptMovedDown(950, 920)).toBe(false);
     expect(transcriptMovedDown(920, 950)).toBe(true);
+  });
+});
+
+describe("transcriptSnapFollows", () => {
+  it("pauses follow-to-end only while a quote selection is open", () => {
+    expect(transcriptSnapFollows(true, false)).toBe(true);
+    expect(transcriptSnapFollows(true, true)).toBe(false);
+    expect(transcriptSnapFollows(false, false)).toBe(false);
+    expect(transcriptSnapFollows(false, true)).toBe(false);
   });
 });

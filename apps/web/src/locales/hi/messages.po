@@ -3607,6 +3607,7 @@ msgstr ""
 msgid "Don’t have an account?"
 msgstr "खाता नहीं है?"
 
+#: src/components/ai/CompactWorkRecord.tsx
 #: src/lib/run-status-label.ts
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardColumns.tsx
@@ -3621,6 +3622,10 @@ msgstr ""
 #: src/pages/GoalForm.tsx
 msgid "Done when (one per line)"
 msgstr "पूर्ण होने की शर्तें (प्रति पंक्ति एक)"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Done: {title}"
+msgstr "पूर्ण: {title}"
 
 #. placeholder {0}: props.name
 #: src/components/ArtifactFileCard.tsx
@@ -3952,6 +3957,7 @@ msgstr ""
 msgid "failed"
 msgstr "असफल"
 
+#: src/components/ai/CompactWorkRecord.tsx
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/run-status-label.ts
 #: src/lib/team-delivery-text.ts
@@ -3976,6 +3982,10 @@ msgstr "संदेश भेजने में विफल"
 #: src/pages/Shell.tsx
 msgid "Failed to stop"
 msgstr "रोकने में विफल"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Failed: {title}"
+msgstr "विफल: {title}"
 
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Failure handling"
@@ -4625,6 +4635,14 @@ msgstr ""
 #: src/pages/CallView.tsx
 msgid "Interrupt"
 msgstr "बीच में रोकें"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Interrupted"
+msgstr "बाधित"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Interrupted: {title}"
+msgstr "बाधित: {title}"
 
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineSchedule.tsx
@@ -7343,6 +7361,7 @@ msgstr ""
 msgid "Run time must be in the future."
 msgstr ""
 
+#: src/components/ai/CompactWorkRecord.tsx
 #: src/components/CloudAgentCard.tsx
 msgid "running"
 msgstr "चल रहा है"
@@ -8886,14 +8905,19 @@ msgstr "फ़ॉलो करना बंद करें"
 msgid "Uninstall"
 msgstr ""
 
+#: src/components/ai/CompactWorkRecord.tsx
 #: src/pages/LearningCurator.tsx
 #: src/pages/system/SystemPage.tsx
 msgid "Unknown"
-msgstr ""
+msgstr "अज्ञात"
 
 #: src/pages/account/AccountTables.tsx
 msgid "Unknown device"
 msgstr ""
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Unknown: {title}"
+msgstr "अज्ञात: {title}"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Unlink"
@@ -9311,6 +9335,7 @@ msgstr "काम"
 msgid "Work items"
 msgstr "कार्य आइटम"
 
+#: src/components/ai/CompactWorkRecord.tsx
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/TeamBoard.tsx
@@ -9329,6 +9354,10 @@ msgstr "{task} पर काम कर रहा है"
 #: src/pages/TeamBoard.tsx
 msgid "Working on {task} for {0}"
 msgstr "{0} के लिए {task} पर काम कर रहा है"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Working: {title}"
+msgstr "काम जारी है: {title}"
 
 #: src/pages/Auth.tsx
 #: src/pages/CallView.tsx

@@ -45,6 +45,20 @@ describe("contracts", () => {
     );
   });
 
+  it("accepts a marked reasoning summary, rejects a false flag, and parses plain narration", () => {
+    expect(
+      MessageBlock.parse({ kind: "progress", text: "Weighing options", reasoning: true }),
+    ).toEqual({ kind: "progress", text: "Weighing options", reasoning: true });
+    expect(
+      MessageBlock.safeParse({ kind: "progress", text: "Weighing options", reasoning: false })
+        .success,
+    ).toBe(false);
+    expect(MessageBlock.parse({ kind: "progress", text: "On it." })).toEqual({
+      kind: "progress",
+      text: "On it.",
+    });
+  });
+
   it("parses bounded model image limits", () => {
     expect(parseModelMaxImagesPerPrompt("1")).toBe(1);
     expect(parseModelMaxImagesPerPrompt("1000")).toBe(1000);
