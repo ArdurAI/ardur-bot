@@ -1,7 +1,13 @@
 import { createHash, randomUUID } from "node:crypto";
+import { lstat, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import type { AdapterContext } from "@ardurbot/adapter-kit";
-import { teamBotWorkspaceDirectory, toComputerRef, workspacePath } from "@ardurbot/adapters";
+import {
+  LocalAgentHomeStore,
+  teamBotWorkspaceDirectory,
+  toComputerRef,
+  workspacePath,
+} from "@ardurbot/adapters";
 import type { Actor, WorkspaceContext } from "@ardurbot/contracts";
 import { IDE_FILE_BYTES, IdeEntrySchema, IdePathSchema } from "@ardurbot/contracts";
 import { resolveActionApproval } from "@ardurbot/core";
@@ -81,11 +87,27 @@ export function createWorkspaceFiles(deps: Deps) {
   }
   async function list(actor: Actor, input: Request, signal?: AbortSignal) {
     const { computer, state, root, filePath, adapterContext } = await resolve(actor, input, signal);
+    if (state.files !== "live")
+      await assertSavedInsideBotFolder(deps.home, computer.homeKey, root, filePath);
     const entries =
       state.files === "live"
         ? await deps.sandbox.listFiles(toComputerRef(computer), filePath, adapterContext)
         : await deps.home.list(computer.homeKey, filePath, adapterContext);
-    const mapped = entries.flatMap((entry) => {
+    const visible = [];
+    for (const entry of entries) {
+      if (state.files === "live") {
+        visible.push(entry);
+        continue;
+      }
+      try {
+        await assertSavedInsideBotFolder(deps.home, computer.homeKey, root, entry.path);
+      } catch (error) {
+        if (error instanceof IsolationError) continue;
+        throw error;
+      }
+      visible.push(entry);
+    }
+    const mapped = visible.flatMap((entry) => {
       const relative = path.posix.relative(root || ".", entry.path);
       const parsed = IdeEntrySchema.safeParse({ ...entry, path: relative });
       return parsed.success && !relative.startsWith("..") ? [parsed.data] : [];
@@ -93,7 +115,7 @@ export function createWorkspaceFiles(deps: Deps) {
     return { context: state, entries: mapped };
   }
   async function read(actor: Actor, input: Request, signal?: AbortSignal) {
-    const { computer, state, filePath, adapterContext } = await resolve(actor, input, signal);
+    const { computer, state, root, filePath, adapterContext } = await resolve(actor, input, signal);
     if (!input.path) throw new ORPCError("BAD_REQUEST");
     const parent = path.posix.dirname(input.path);
     const listed = await list(actor, { ...input, path: parent === "." ? "" : parent }, signal);
@@ -106,6 +128,7 @@ export function createWorkspaceFiles(deps: Deps) {
         preview: true,
       });
     } else {
+      await assertSavedInsideBotFolder(deps.home, computer.homeKey, root, filePath);
       bytes = new TextEncoder().encode(
         await deps.home
           .readFile(computer.homeKey, filePath, adapterContext, {
@@ -205,6 +228,12 @@ export function createWorkspaceFiles(deps: Deps) {
         data: { updatedAt: new Date() },
       });
     } else {
+      await assertSavedInsideBotFolder(
+        deps.home,
+        target.computer.homeKey,
+        target.root,
+        target.filePath,
+      );
       await deps.home.writeFile(
         target.computer.homeKey,
         target.filePath,
@@ -223,4 +252,97 @@ export function createWorkspaceFiles(deps: Deps) {
     read,
     save,
   };
+}
+
+/**
+ * The home store allows a symlink whose target stays inside the computer home.
+ * A team bot folder is narrower: the same link can land in another bot's files.
+ */
+async function assertSavedInsideBotFolder(
+  home: Deps["home"],
+  homeKey: string,
+  workspaceRoot: string,
+  filePath: string,
+) {
+  if (!workspaceRoot || !(home instanceof LocalAgentHomeStore)) return;
+  let homeDir: string;
+  try {
+    homeDir = await realpath(home.pathFor(homeKey));
+  } catch (error) {
+    if (isMissing(error)) return;
+    throw error;
+  }
+  const boundary = path.resolve(homeDir, ...workspaceRoot.split("/").filter(Boolean));
+  await assertRealBoundary(homeDir, boundary);
+  const relative = path.posix.relative(
+    workspaceRoot.replaceAll("\\", "/"),
+    filePath.replaceAll("\\", "/"),
+  );
+  if (!relative || relative === ".") return;
+  if (relative.startsWith("..") || path.posix.isAbsolute(relative)) throw new IsolationError();
+  await assertNoEscape(boundary, relative.split("/").filter(Boolean));
+}
+
+async function assertRealBoundary(homeDir: string, boundary: string) {
+  const relative = path.relative(homeDir, boundary);
+  if (!inside(homeDir, boundary)) throw new IsolationError();
+  let current = homeDir;
+  for (const part of relative.split(path.sep).filter(Boolean)) {
+    const next = path.join(current, part);
+    let info: Awaited<ReturnType<typeof lstat>>;
+    try {
+      info = await lstat(next);
+    } catch (error) {
+      if (isMissing(error)) return;
+      throw error;
+    }
+    if (info.isSymbolicLink() || !info.isDirectory()) throw new IsolationError();
+    current = next;
+  }
+}
+
+async function assertNoEscape(boundary: string, parts: string[]) {
+  let current = boundary;
+  for (let index = 0; index < parts.length; index += 1) {
+    const part = parts[index]!;
+    if (part === "." || part === "..") throw new IsolationError();
+    const next = path.join(current, part);
+    let info: Awaited<ReturnType<typeof lstat>>;
+    try {
+      info = await lstat(next);
+    } catch (error) {
+      if (isMissing(error)) return;
+      throw error;
+    }
+    const last = index === parts.length - 1;
+    if (info.isSymbolicLink()) {
+      let resolved: string;
+      try {
+        resolved = await realpath(next);
+      } catch (error) {
+        if (isMissing(error)) throw new IsolationError();
+        throw error;
+      }
+      const canonical = await realpath(boundary);
+      if (!inside(canonical, resolved)) throw new IsolationError();
+      if (last) return;
+      if (!(await stat(resolved)).isDirectory()) throw new IsolationError();
+      current = resolved;
+      continue;
+    }
+    if (!last && !info.isDirectory()) throw new IsolationError();
+    current = next;
+  }
+}
+
+function inside(root: string, candidate: string) {
+  const relative = path.relative(root, candidate);
+  return (
+    relative === "" ||
+    (!path.isAbsolute(relative) && relative !== ".." && !relative.startsWith(`..${path.sep}`))
+  );
+}
+
+function isMissing(error: unknown) {
+  return error instanceof Error && "code" in error && error.code === "ENOENT";
 }

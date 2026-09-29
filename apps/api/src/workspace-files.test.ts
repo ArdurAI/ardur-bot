@@ -1,4 +1,8 @@
 import { createHash } from "node:crypto";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { LocalAgentHomeStore } from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
 import { IDE_FILE_BYTES } from "@ardurbot/contracts";
 import { describe, expect, it, vi } from "vitest";
@@ -227,5 +231,66 @@ describe("bot workspace files", () => {
     );
     expect(f.sandbox.writeFile).not.toHaveBeenCalled();
     expect(f.db.computer.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("does not follow a symlink out of the bot folder when saving a stopped computer", async () => {
+    const f = fixture();
+    f.computer.state = "stopped";
+    const root = await mkdtemp(path.join(tmpdir(), "workspace-files-"));
+    const home = new LocalAgentHomeStore(root);
+    const dir = home.pathFor("home");
+    const secret = path.join(dir, "bots", "other", "secret.md");
+    const outside = path.join(root, "outside.md");
+    try {
+      await mkdir(path.join(dir, "bots", "bot"), { recursive: true });
+      await mkdir(path.dirname(secret), { recursive: true });
+      await writeFile(secret, "secret");
+      await writeFile(outside, "outside");
+      await writeFile(path.join(dir, "bots", "bot", "plain.md"), "hello");
+      await symlink(
+        path.join("..", "other", "secret.md"),
+        path.join(dir, "bots", "bot", "notes.md"),
+      );
+      await symlink(outside, path.join(dir, "bots", "bot", "escape.md"));
+      await symlink(path.join(dir, "bots", "other"), path.join(dir, "bots", "bot", "linked"));
+      const files = createWorkspaceFiles({
+        sandbox: f.sandbox,
+        home,
+        prisma: f.db,
+      } as unknown as Parameters<typeof createWorkspaceFiles>[0]);
+      const outcome = async (filePath: string, version: string) =>
+        files
+          .save(actor, {
+            ...f.input,
+            path: filePath,
+            content: "pwned",
+            version,
+            approved: false,
+          })
+          .then(
+            (result) => result.saved,
+            () => false,
+          );
+      expect(await outcome("notes.md", digest("secret"))).toBe(false);
+      expect(await outcome("linked/secret.md", digest("secret"))).toBe(false);
+      expect(await outcome("escape.md", digest("outside"))).toBe(false);
+      expect(await readFile(secret, "utf8")).toBe("secret");
+      expect(await readFile(outside, "utf8")).toBe("outside");
+      await expect(files.read(actor, { ...f.input, path: "notes.md" })).rejects.toThrow();
+      const listed = await files.list(actor, f.input);
+      expect(listed.entries.map((entry) => entry.path)).toEqual(["plain.md"]);
+      await expect(
+        files.save(actor, {
+          ...f.input,
+          path: "plain.md",
+          content: "hello!",
+          version: digest("hello"),
+          approved: false,
+        }),
+      ).resolves.toMatchObject({ saved: true, version: digest("hello!") });
+      expect(await readFile(path.join(dir, "bots", "bot", "plain.md"), "utf8")).toBe("hello!");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 });
