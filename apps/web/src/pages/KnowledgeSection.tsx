@@ -13,7 +13,9 @@ import {
   TabsTrigger,
   Textarea,
 } from "@ardurbot/ui-web";
+import { selectableRowClasses } from "@ardurbot/ui-web/lib/state-classes";
 import { Trans, useLingui } from "@lingui/react/macro";
+import { CheckIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { downloadArtifactBytes } from "../lib/artifact-open";
 import { rpc } from "../lib/rpc";
@@ -23,10 +25,6 @@ import { MemoryImportExport } from "./MemoryImportExport";
 
 const fieldClass = "mt-2 w-full font-mono text-[13px] leading-relaxed";
 
-function rowClass(open: boolean): string {
-  return `h-auto w-full justify-start whitespace-normal px-2.5 py-2.5 text-start ${open ? "bg-muted" : ""}`;
-}
-
 /**
  * Bot memory and the current user's skills in this space.
  * User-scoped memory shared across bots lives in the Memory settings overlay.
@@ -34,14 +32,21 @@ function rowClass(open: boolean): string {
 export function KnowledgeSection({
   botId,
   onSkillsChange,
+  defaultTab = "memory",
 }: {
   botId: string;
   onSkillsChange: (skills: AgentSkillCatalogEntry[]) => void;
+  defaultTab?: "memory" | "skills" | "learning";
 }) {
   const { t } = useLingui();
+  const [tab, setTab] = useState<string>(defaultTab);
+  useEffect(() => {
+    setTab(defaultTab);
+  }, [defaultTab]);
+
   return (
     <section className="mt-6" data-testid="bot-knowledge">
-      <Tabs defaultValue="memory">
+      <Tabs value={tab} onValueChange={setTab}>
         <TabsList aria-label={t`Knowledge`}>
           <TabsTrigger value="memory">
             <Trans>Memory</Trans>
@@ -315,15 +320,24 @@ function MemoryDocumentList({
             type="button"
             disabled={busy}
             onClick={() => (openId === doc.id ? setOpenId(null) : openDoc(doc))}
-            className={rowClass(openId === doc.id)}
+            className={selectableRowClasses(
+              openId === doc.id,
+              "h-auto w-full justify-start whitespace-normal px-2.5 py-2.5 text-start",
+            )}
+            aria-expanded={openId === doc.id}
           >
-            <span className="flex w-full items-baseline justify-between gap-3">
+            <span className="flex w-full items-center justify-between gap-3">
               <span className="min-w-0 truncate text-[14px] text-foreground" dir="auto">
                 {doc.path}
               </span>
-              <span className="shrink-0 text-[12px] text-muted-foreground">
-                <Trans>rev {doc.revision}</Trans>
-              </span>
+              <div className="flex shrink-0 items-center gap-2">
+                <span className="text-[12px] text-muted-foreground">
+                  <Trans>rev {doc.revision}</Trans>
+                </span>
+                {openId === doc.id ? (
+                  <CheckIcon className="size-4 shrink-0 text-foreground" />
+                ) : null}
+              </div>
             </span>
           </Button>
           {doc.gitSync && doc.gitSync.status !== "pushed" ? (
@@ -603,7 +617,10 @@ export function AgentSkills({
               type="button"
               disabled={busy}
               onClick={() => void openSkill(entry)}
-              className={`${rowClass(false)} block`}
+              className={selectableRowClasses(
+                false,
+                "h-auto w-full justify-start whitespace-normal px-2.5 py-2.5 text-start block",
+              )}
             >
               <span className="flex w-full items-baseline justify-between gap-3">
                 <span className="min-w-0 truncate text-[14px] text-foreground" dir="auto">

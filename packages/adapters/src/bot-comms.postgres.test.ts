@@ -55,7 +55,7 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
     db = createDb(databaseUrl!);
     prisma = db.prisma;
     await prisma.user.create({
-      data: { id: userId, name: "Fixture owner", email: `${scopeId}@ardurbot.test` },
+      data: { id: userId, name: "Fixture owner", email: `${scopeId}@example.test` },
     });
     await prisma.organization.create({
       data: {
@@ -2901,7 +2901,7 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
         answeredByUserId: userId,
         answer: "allow",
       });
-    const actor = { userId, spaceId, email: `${scopeId}@ardurbot.test`, isDeploymentOwner: true };
+    const actor = { userId, spaceId, email: `${scopeId}@example.test`, isDeploymentOwner: true };
     const paused = await setBotCommunicationPaused(prisma, actor, {
       scope: "group",
       groupId: f.goal.groupId,
@@ -3025,7 +3025,7 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
 
   it("S4 pauses peer runs without cancelling unrelated owner work and refuses held approval", async () => {
     const f = await fixture("owner");
-    const actor = { userId, spaceId, email: `${scopeId}@ardurbot.test`, isDeploymentOwner: true };
+    const actor = { userId, spaceId, email: `${scopeId}@example.test`, isDeploymentOwner: true };
     const policy = await setBotCommunicationPaused(prisma, actor, {
       scope: "group",
       groupId: f.goal.groupId,
@@ -3065,7 +3065,7 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
 
   it("S4 confirms a running peer cancellation without creating a coordinator wake during pause", async () => {
     const f = await fixture();
-    const actor = { userId, spaceId, email: `${scopeId}@ardurbot.test`, isDeploymentOwner: true };
+    const actor = { userId, spaceId, email: `${scopeId}@example.test`, isDeploymentOwner: true };
     const paused = await setBotCommunicationPaused(prisma, actor, {
       scope: "group",
       groupId: f.goal.groupId,
@@ -3098,7 +3098,7 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
       where: { deliveryIds: { has: reply.deliveryId } },
     });
     expect(wake.state).toBe("bound");
-    const actor = { userId, spaceId, email: `${scopeId}@ardurbot.test`, isDeploymentOwner: true };
+    const actor = { userId, spaceId, email: `${scopeId}@example.test`, isDeploymentOwner: true };
     const paused = await setBotCommunicationPaused(prisma, actor, {
       scope: "group",
       groupId: f.goal.groupId,
@@ -3149,7 +3149,7 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
       where: { id: wake.runId! },
       data: { status: "leased", leaseOwner: "pause-race", leaseFence: 1 },
     });
-    const actor = { userId, spaceId, email: `${scopeId}@ardurbot.test`, isDeploymentOwner: true };
+    const actor = { userId, spaceId, email: `${scopeId}@example.test`, isDeploymentOwner: true };
     const paused = await setBotCommunicationPaused(prisma, actor, {
       scope: "group",
       groupId: f.goal.groupId,
@@ -3348,7 +3348,7 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
         clientNonce: `live-fair-${liveGoal.goal.id}`,
       },
     });
-    const actor = { userId, spaceId, email: `${scopeId}@ardurbot.test`, isDeploymentOwner: true };
+    const actor = { userId, spaceId, email: `${scopeId}@example.test`, isDeploymentOwner: true };
     await setBotCommunicationPaused(prisma, actor, {
       scope: "group",
       groupId: pausedGoal.goal.groupId,
@@ -3408,7 +3408,7 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
         }),
       ),
     );
-    const actor = { userId, spaceId, email: `${scopeId}@ardurbot.test`, isDeploymentOwner: true };
+    const actor = { userId, spaceId, email: `${scopeId}@example.test`, isDeploymentOwner: true };
     const paused = await setBotCommunicationPaused(prisma, actor, {
       scope: "group",
       groupId: f.goal.groupId,
@@ -3459,7 +3459,7 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
         where: { id: f.parent.delegationId! },
         data: { status: "queued" },
       });
-      const actor = { userId, spaceId, email: `${scopeId}@ardurbot.test`, isDeploymentOwner: true };
+      const actor = { userId, spaceId, email: `${scopeId}@example.test`, isDeploymentOwner: true };
       const paused = await setBotCommunicationPaused(prisma, actor, {
         scope: "group",
         groupId: f.goal.groupId,
@@ -3553,7 +3553,7 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
       orderBy: { id: "asc" },
     });
     expect(direct).toHaveLength(2);
-    const actor = { userId, spaceId, email: `${scopeId}@ardurbot.test`, isDeploymentOwner: true };
+    const actor = { userId, spaceId, email: `${scopeId}@example.test`, isDeploymentOwner: true };
     const paused = await setBotCommunicationPaused(prisma, actor, {
       scope: "group",
       groupId: f.goal.groupId,
@@ -3680,7 +3680,7 @@ describePostgres("goal desk inbox (PostgreSQL)", () => {
 
   it("S4 keeps policy and delivery reads owner-only", async () => {
     const f = await fixture();
-    const member = { userId, spaceId, email: `${scopeId}@ardurbot.test`, isDeploymentOwner: false };
+    const member = { userId, spaceId, email: `${scopeId}@example.test`, isDeploymentOwner: false };
     await expect(getBotCommunicationPolicy(prisma, member, f.goal.groupId)).rejects.toThrow();
     await expect(
       setBotCommunicationPaused(prisma, member, {

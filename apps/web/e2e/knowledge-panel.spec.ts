@@ -12,7 +12,7 @@ import {
 test("memory and skills are readable and editable in the app", async ({ page }, testInfo) => {
   const stamp = Date.now();
   const userName = `Knowledge ${stamp}`;
-  await signup(page, `knowledge-${stamp}@ardurbot.test`, "password12", userName);
+  await signup(page, `knowledge-${stamp}@example.test`, "password12", userName);
   await completeOnboarding(page);
   await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
 

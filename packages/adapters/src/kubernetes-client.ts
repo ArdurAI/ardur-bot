@@ -18,6 +18,8 @@ import { kubernetesPolicyEnforced } from "./kubernetes-network.js";
 export interface KubernetesApi {
   capacity?(): Promise<{ nodes: CapacityNode[]; pods: CapacityPod[]; metrics?: CapacityMetric[] }>;
   namespaces?(): Promise<string[]>;
+  /** The API server's version, which any authenticated account may read. */
+  version?(signal: AbortSignal): Promise<string>;
   supportsEgress?(signal: AbortSignal): Promise<boolean>;
   setEgress?(name: string, enabled: boolean, signal: AbortSignal): Promise<void>;
   read(
@@ -122,8 +124,15 @@ export async function createKubernetesApi(
   namespace: string,
   context: string,
 ): Promise<KubernetesApi> {
-  const { CoreV1Api, AppsV1Api, NetworkingV1Api, CustomObjectsApi, Exec, createConfiguration } =
-    await import("@kubernetes/client-node");
+  const {
+    CoreV1Api,
+    AppsV1Api,
+    NetworkingV1Api,
+    CustomObjectsApi,
+    VersionApi,
+    Exec,
+    createConfiguration,
+  } = await import("@kubernetes/client-node");
   const config = await loadConfig(source);
   if (!config.getContexts().some((entry: { name: string }) => entry.name === context))
     throw new Error("The selected Kubernetes context is unavailable.");
@@ -216,6 +225,13 @@ export async function createKubernetesApi(
       return (await client.listNamespace({}, options(AbortSignal.timeout(8000)))).items.flatMap(
         (item) => (item.metadata?.name ? [item.metadata.name] : []),
       );
+    },
+    async version(signal) {
+      try {
+        return (await config.makeApiClient(VersionApi).getCode({}, options(signal))).gitVersion;
+      } catch {
+        throw new Error("Kubernetes request failed; check the connection.");
+      }
     },
     supportsEgress,
     async setEgress(name, enabled, signal) {

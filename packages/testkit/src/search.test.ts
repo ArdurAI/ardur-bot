@@ -37,7 +37,7 @@ describeSearch("workspace search", () => {
   });
 
   it("finds bots, messages, files, links, and routines within the workspace", async () => {
-    const cookie = await signup(app, `search-${stamp}@ardurbot.test`, "Search User");
+    const cookie = await signup(app, `search-${stamp}@example.test`, "Search User");
     const bot = await rpc<{ id: string }>(app, cookie, "bots/create", {
       name: "Finder",
       title: "Finder",
@@ -109,7 +109,7 @@ describeSearch("workspace search", () => {
   });
 
   it("returns no hits for another workspace", async () => {
-    const ownerCookie = await signup(app, `search-owner-${stamp}@ardurbot.test`, "Owner");
+    const ownerCookie = await signup(app, `search-owner-${stamp}@example.test`, "Owner");
     const ownerBot = await rpc<{ id: string }>(app, ownerCookie, "bots/create", {
       name: "OwnerOnly",
       title: "OwnerOnly",
@@ -119,7 +119,7 @@ describeSearch("workspace search", () => {
     });
     await sendAndWait(app, ownerCookie, ownerBot.id, { text: "owner-only-token-xyz" });
 
-    const intruderCookie = await signup(app, `search-intruder-${stamp}@ardurbot.test`, "Intruder");
+    const intruderCookie = await signup(app, `search-intruder-${stamp}@example.test`, "Intruder");
     const hits = await rpc<{ hits: unknown[] }>(app, intruderCookie, "search/query", {
       q: "owner-only-token-xyz",
     });
@@ -127,7 +127,7 @@ describeSearch("workspace search", () => {
   });
 
   it("finds group conversations, messages, and files", async () => {
-    const cookie = await signup(app, `search-group-${stamp}@ardurbot.test`, "Group Search User");
+    const cookie = await signup(app, `search-group-${stamp}@example.test`, "Group Search User");
     const botA = await rpc<{ id: string }>(app, cookie, "bots/create", {
       name: "Alpha",
       title: "Alpha",

@@ -3,13 +3,13 @@ import {
   BOT_COLORS,
   type Bot,
   type BotSection,
-  type HermesRuntimeConfig,
-  HermesRuntimeConfigSchema,
   type MessageBlock,
   RuntimeKindSchema,
   type SpaceBot,
 } from "@ardurbot/contracts";
+import type { HistoricalHermesRuntimeConfig } from "@ardurbot/contracts/runtime-config";
 import { sandboxKindForBot, userVisibleMessages } from "@ardurbot/core";
+import { decodeHistoricalHermesRuntimeConfig } from "@ardurbot/core/runtime-config";
 import { Prisma, type PrismaClient } from "./client.js";
 import { type ComputerMode, ensureComputerRecord, parseComputerMode } from "./computers.js";
 import { createThreadMessageInTransaction } from "./messages.js";
@@ -109,7 +109,7 @@ function mapBot(
     runtimeConfig:
       bot.runtimeConfig == null || bot.runtimeConfig === Prisma.DbNull
         ? null
-        : HermesRuntimeConfigSchema.parse(bot.runtimeConfig),
+        : decodeHistoricalHermesRuntimeConfig(bot.runtimeConfig),
     runtimeExperimental: bot.runtimeExperimental ?? false,
     teamChatAmbientEnabled: bot.teamChatAmbientEnabled ?? false,
     teamChatRules: bot.teamChatRules ?? "",
@@ -434,7 +434,7 @@ export function createRepos(prisma: PrismaClient) {
         modelCredentialId?: string | null;
         modelPinRevision?: number;
         runtimeKind?: string;
-        runtimeConfig?: HermesRuntimeConfig | null;
+        runtimeConfig?: HistoricalHermesRuntimeConfig | null;
         runtimeExperimental?: boolean;
         initialMessage?: {
           role: "user" | "bot" | "system";
@@ -472,7 +472,7 @@ export function createRepos(prisma: PrismaClient) {
           runtimeConfig =
             parent.runtimeConfig == null
               ? null
-              : HermesRuntimeConfigSchema.parse(parent.runtimeConfig);
+              : decodeHistoricalHermesRuntimeConfig(parent.runtimeConfig);
           runtimeExperimental = parent.runtimeExperimental ?? false;
           modelProvider = parent.modelProvider ?? null;
           modelCredentialId = parent.modelCredentialId ?? null;

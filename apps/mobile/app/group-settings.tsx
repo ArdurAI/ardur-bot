@@ -2,6 +2,8 @@ import {
   type BotCommunicationPolicy,
   GROUP_MEMBER_MAX,
   GROUP_MEMBER_MIN,
+  runtimeNames,
+  runtimeSupportsTools,
 } from "@ardurbot/contracts";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
@@ -197,6 +199,14 @@ export default function GroupSettingsScreen() {
     ]);
   }
 
+  const coordinatorRuntime =
+    coordinator && selected.includes(coordinator)
+      ? (group?.members.find((member) => member.botId === coordinator)?.effectiveRuntimePin
+          ?.runtimeKind ??
+        bots.find((bot) => bot.id === coordinator)?.runtimeKind ??
+        "pi")
+      : null;
+
   return (
     <>
       <Stack.Screen options={{ title: t("Group settings") }} />
@@ -243,6 +253,11 @@ export default function GroupSettingsScreen() {
                 botRuntimeKind={bot?.runtimeKind}
                 experimental={bot?.runtimeExperimental}
                 onSaved={onGroupSaved}
+                onBotReloaded={(refreshed) =>
+                  setBots((current) =>
+                    current.map((item) => (item.id === refreshed.id ? refreshed : item)),
+                  )
+                }
                 onError={setError}
               />
             );
@@ -270,6 +285,13 @@ export default function GroupSettingsScreen() {
               t("None")}
           </Text>
         </Pressable>
+        {coordinatorRuntime && !runtimeSupportsTools(coordinatorRuntime) ? (
+          <Text style={{ color: tokens.warning, marginTop: 8 }}>
+            {t("{runtime} can't use Ardur tools — a coordinator needs tools to hand off work.", {
+              runtime: runtimeNames[coordinatorRuntime],
+            })}
+          </Text>
+        ) : null}
         {error ? <Text style={{ color: tokens.destructive, marginTop: 12 }}>{error}</Text> : null}
         <Pressable
           onPress={() => void save()}

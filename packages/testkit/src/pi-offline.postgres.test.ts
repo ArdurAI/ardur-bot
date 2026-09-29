@@ -70,7 +70,7 @@ describe.skipIf(!databaseAvailable)("offline Pi product journey", () => {
         method: "POST",
         headers: { "content-type": "application/json", origin: fixtureOrigin },
         body: JSON.stringify({
-          email: `offline-pi-${randomUUID()}@ardurbot.test`,
+          email: `offline-pi-${randomUUID()}@example.test`,
           password: "password12",
           name: "Offline fixture",
         }),
@@ -83,15 +83,21 @@ describe.skipIf(!databaseAvailable)("offline Pi product journey", () => {
         baseUrl: model.baseUrl,
         apiKey: fixtureKey,
       });
-      const bot = await rpc<{ id: string }>(handles.app, cookie, "bots/create", {
-        name: "File fixture",
-        title: "",
-        description: "",
-        instructions: "Complete the task.",
-        notifyOnFinish: false,
-      });
+      const bot = await rpc<{ id: string; modelPinRevision?: number }>(
+        handles.app,
+        cookie,
+        "bots/create",
+        {
+          name: "File fixture",
+          title: "",
+          description: "",
+          instructions: "Complete the task.",
+          notifyOnFinish: false,
+        },
+      );
       await rpc(handles.app, cookie, "bots/update", {
         botId: bot.id,
+        expectedModelPinRevision: bot.modelPinRevision ?? 0,
         modelProvider: model.model.provider,
         modelId: model.model.id,
       });

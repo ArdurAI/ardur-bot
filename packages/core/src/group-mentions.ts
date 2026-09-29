@@ -18,6 +18,104 @@ export function hasMentionToken(text: string, name: string): boolean {
   ).test(text);
 }
 
+/**
+ * Words that can open a message before the addressed name ("hey Chief ...").
+ * Without one of these, an "@" or punctuation must close the address clause so
+ * a name used as a subject ("Radiant said Chief was wrong") never reroutes.
+ */
+const ADDRESS_OPENERS = new Set(["hey", "hi", "hello", "yo", "ok", "okay", "so"]);
+
+const OPENER_PATTERN = /^(\p{L}+)(?:\s*,\s*|\s+)/u;
+const CONJUNCTION_PATTERN = /^(?:and(?![\p{L}\p{N}_-])|&|\+)\s*/iu;
+const CLOSING_PUNCTUATION_PATTERN = /^[;:!?.]/;
+
+/**
+ * Members a message addresses by name at its start, with or without "@".
+ *
+ * Exact rule: after optional leading whitespace and one optional opener word,
+ * the message must begin with one or more whole member names (case-insensitive,
+ * same Unicode boundaries as hasMentionToken, longest name first), joined by
+ * commas, "and", "&" or "+". The address then counts when it is closed by
+ * punctuation (, ; : ! ? .), by the end of the message, by an "@" on any matched
+ * name, or by the leading opener. Anything else leaves the message unaddressed.
+ */
+export function resolveAddressedBotIds(input: {
+  text: string;
+  members: GroupMemberRef[];
+}): string[] {
+  const candidates = input.members
+    .map((member) => ({ id: member.id, name: member.name.trim() }))
+    .filter((member) => member.name.length > 0)
+    .sort((a, b) => b.name.length - a.name.length)
+    .map((candidate) => ({
+      id: candidate.id,
+      pattern: new RegExp(`^(@?)${escapeRegExp(candidate.name)}(?![\\p{L}\\p{N}_-])`, "iu"),
+    }));
+  if (!candidates.length) return [];
+
+  const matchName = (rest: string) => {
+    for (const candidate of candidates) {
+      const match = candidate.pattern.exec(rest);
+      if (match) return { id: candidate.id, length: match[0].length, mentioned: match[1] === "@" };
+    }
+    return undefined;
+  };
+
+  let rest = input.text.trimStart();
+  let openerSeen = false;
+  const opener = OPENER_PATTERN.exec(rest);
+  if (opener?.[1] && ADDRESS_OPENERS.has(opener[1].toLowerCase())) {
+    openerSeen = true;
+    rest = rest.slice(opener[0].length);
+  }
+
+  const addressed: string[] = [];
+  let terminated = false;
+  for (;;) {
+    const name = matchName(rest);
+    if (!name) break;
+    if (!addressed.includes(name.id)) addressed.push(name.id);
+    if (name.mentioned) terminated = true;
+    rest = rest.slice(name.length).trimStart();
+    if (!rest) {
+      terminated = true;
+      break;
+    }
+    if (rest.startsWith(",")) {
+      const past = rest.slice(1).trimStart();
+      if (matchName(past)) {
+        rest = past;
+        continue;
+      }
+      const conjunction = CONJUNCTION_PATTERN.exec(past);
+      if (conjunction) {
+        const afterConjunction = past.slice(conjunction[0].length);
+        if (matchName(afterConjunction)) {
+          rest = afterConjunction;
+          continue;
+        }
+      }
+      terminated = true;
+      break;
+    }
+    if (CLOSING_PUNCTUATION_PATTERN.test(rest)) {
+      terminated = true;
+      break;
+    }
+    const conjunction = CONJUNCTION_PATTERN.exec(rest);
+    if (conjunction) {
+      const past = rest.slice(conjunction[0].length);
+      if (matchName(past)) {
+        rest = past;
+        continue;
+      }
+    }
+    break;
+  }
+
+  return addressed.length > 0 && (terminated || openerSeen) ? addressed : [];
+}
+
 export function parseMentionNames(text: string): string[] {
   const names = new Set<string>();
   for (const match of text.matchAll(MENTION_PATTERN)) {

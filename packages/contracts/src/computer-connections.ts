@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { isComputerImageReference, MAX_COMPUTER_IMAGE_LENGTH } from "./computer-image.js";
 import { ComputerProfileSchema } from "./computer-profiles.js";
 import { EngineEndpointSchema, SshSettingsSchema } from "./fleet.js";
 
@@ -22,6 +23,12 @@ export class ComputerEngineUnavailableError extends Error {
 }
 
 const quantity = z.string().regex(/^\d+(?:\.\d+)?(?:m|[KMGT]i?)?$/);
+/** A Kubernetes DNS-1123 label, as used for namespace and Secret names here. */
+const dnsLabel = z.string().regex(/^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$/);
+const imageReference = z
+  .string()
+  .max(MAX_COMPUTER_IMAGE_LENGTH)
+  .refine(isComputerImageReference, "Enter an image reference, such as registry/computer:tag.");
 export const ComputerConnectionSettingsSchema = z.object({
   engine: z.enum(["docker", "podman", "kubernetes", "ssh"]),
   endpoint: EngineEndpointSchema.optional(),
@@ -30,16 +37,21 @@ export const ComputerConnectionSettingsSchema = z.object({
   hostSecretId: z.string().uuid().optional(),
   socket: z.string().max(1024).optional(),
   context: z.string().max(256).optional(),
-  namespace: z
-    .string()
-    .regex(/^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$/)
-    .default("ardurbot"),
+  namespace: dnsLabel.default("ardurbot"),
   storageSize: quantity.default("10Gi"),
   storageClass: z.string().max(256).optional(),
   cpuRequest: quantity.default("250m"),
   cpuLimit: quantity.default("2"),
   memoryRequest: quantity.default("256Mi"),
   memoryLimit: quantity.default("2Gi"),
+  /** Images for a private or air-gapped registry; unset uses the deployment's resolution. */
+  standardImage: imageReference.optional(),
+  developerImage: imageReference.optional(),
+  /** An existing image pull Secret in the namespace; the app never creates Secrets. */
+  imagePullSecret: z
+    .string()
+    .regex(/^[a-z0-9](?:[-a-z0-9.]{0,251}[a-z0-9])?$/)
+    .optional(),
 });
 export type ComputerConnectionSettings = z.infer<typeof ComputerConnectionSettingsSchema>;
 export const ComputerConnectionInputSchema = z.object({

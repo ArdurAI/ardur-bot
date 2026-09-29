@@ -17,7 +17,7 @@ async function createBot(page: Page, name: string) {
 test("a group member choice appears in the room and on its captured run", async ({
   page,
 }, testInfo) => {
-  await signup(page, `group-choice-${Date.now()}@ardurbot.test`, "password12", "Group choice");
+  await signup(page, `group-choice-${Date.now()}@example.test`, "password12", "Group choice");
   await completeOnboarding(page);
   await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
   const catalogChoice = listPiCatalog().find(
@@ -39,7 +39,12 @@ test("a group member choice appears in the room and on its captured run", async 
   await panel.getByRole("button", { name: "Create group", exact: true }).click();
   await page.waitForURL(/\/app\/g\/[^/]+$/);
   const groupId = page.url().split("/").at(-1)!;
-  await page.getByTestId("bot-settings-trigger").click();
+  const groupSettingsButton = page
+    .locator("main")
+    .getByRole("button", { name: "Group settings", exact: true });
+  await groupSettingsButton.click();
+  await expect(panel).toHaveAttribute("data-panel", "group-settings");
+  await expect(groupSettingsButton).toHaveAttribute("aria-pressed", "true");
   const control = panel.getByTestId(`group-model-${first}`);
   const select = control.locator("select").first();
   await expect
@@ -81,7 +86,7 @@ test("a group member choice appears in the room and on its captured run", async 
 
 test("create group from + and see two bots in one transcript", async ({ page }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `group-${stamp}@ardurbot.test`, "password12", "Group E2E");
+  await signup(page, `group-${stamp}@example.test`, "password12", "Group E2E");
   await completeOnboarding(page);
   await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
 
@@ -158,11 +163,11 @@ test("create group from + and see two bots in one transcript", async ({ page }, 
     .locator("aside")
     .first()
     .getByRole("button", { name: /^Draft team/ })
-    .locator(".ardurbot-group-avatar");
+    .locator(".ardur-group-avatar");
   await expect(groupAvatar).toBeVisible();
-  await expect(groupAvatar.locator(".ardurbot-bot-avatar")).toHaveCount(2);
+  await expect(groupAvatar.locator(".ardur-bot-avatar")).toHaveCount(2);
   const workingAvatar = groupAvatar.locator(
-    ".ardurbot-bot-avatar[data-status='running'], .ardurbot-organic-avatar[data-status='running']",
+    ".ardur-bot-avatar[data-status='running'], .ardur-organic-avatar[data-status='running']",
   );
   await expect(workingAvatar).toHaveCount(1);
   await captureScreenshot(page, testInfo, "group-avatar-active");

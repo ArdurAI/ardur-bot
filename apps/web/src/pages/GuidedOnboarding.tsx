@@ -116,7 +116,7 @@ export function GuidedOnboardingPage() {
 
   return (
     <main
-      data-ardurbot-surface="guided-onboarding"
+      data-ardur-surface="guided-onboarding"
       className="h-full overflow-y-auto bg-background px-6 py-8"
     >
       <div className="mx-auto max-w-3xl space-y-6">

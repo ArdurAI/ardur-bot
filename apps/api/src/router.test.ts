@@ -5,9 +5,81 @@ import { openScreenCapability } from "@ardurbot/core/node/screen-capability";
 import type { PrismaClient } from "@ardurbot/db";
 import { createLogger, createTestSink, installLogger } from "@ardurbot/logging";
 import { RPCHandler } from "@orpc/server/fetch";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RouterDeps } from "./router.js";
 import { createRouter } from "./router.js";
+
+describe("Hermes availability", () => {
+  beforeEach(() => {
+    vi.stubEnv("ARDURBOT_HOST_BRIDGE", "api");
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  const actor = {
+    spaceId: "workspace-1",
+    userId: "user-1",
+    email: "user@example.test",
+    isDeploymentOwner: true,
+  } satisfies Actor;
+
+  async function availability(host: { connected: boolean; health: unknown } | null) {
+    const prisma = {
+      user: { findMany: vi.fn(async () => [{ id: actor.userId }]) },
+      hostRegistration: {
+        findUnique: vi.fn(async () => ({ id: "default", userId: actor.userId })),
+      },
+      spaceModelPreference: { findMany: vi.fn(async () => []) },
+    } as unknown as PrismaClient;
+    const deps = {
+      prisma,
+      hostBridge: { status: vi.fn(async () => host) },
+      env: { sandboxProvider: "fake" },
+    } as unknown as RouterDeps;
+    const handler = new RPCHandler(createRouter(deps));
+    const { response } = await handler.handle(
+      new Request("http://127.0.0.1/rpc/runtimes/availability", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ json: { runtimeKind: "hermes" } }),
+      }),
+      { prefix: "/rpc", context: { actor } },
+    );
+    expect(response.status).toBe(200);
+    return response.json();
+  }
+
+  it.each([
+    [null],
+    [
+      {
+        connected: false,
+        health: { capabilities: { providerRelay: 1 }, hermes: { available: true } },
+      },
+    ],
+    [{ connected: true, health: null }],
+  ])("reports an unconnected computer when no connected health is available", async (host) => {
+    await expect(availability(host)).resolves.toEqual({
+      json: expect.objectContaining({
+        runtimeKind: "hermes",
+        available: false,
+        reason: "Host service is not running — open the desktop app.",
+      }),
+    });
+  });
+
+  it("requests an update only when connected health lacks the provider relay", async () => {
+    await expect(availability({ connected: true, health: { capabilities: {} } })).resolves.toEqual({
+      json: expect.objectContaining({
+        runtimeKind: "hermes",
+        available: false,
+        reason: "Update Ardur on the connected computer for the provider relay.",
+      }),
+    });
+  });
+});
 
 describe("account preferences", () => {
   function preferencesDeps(avatarStyle: string) {
@@ -20,7 +92,7 @@ describe("account preferences", () => {
       user: {
         update,
         findUniqueOrThrow: vi.fn().mockResolvedValue({
-          email: "user@ardurbot.test",
+          email: "user@example.test",
           name: "Test User",
           avatarStyle,
         }),
@@ -42,7 +114,7 @@ describe("account preferences", () => {
     const actor = {
       spaceId: "workspace-1",
       userId: "user-1",
-      email: "user@ardurbot.test",
+      email: "user@example.test",
       isDeploymentOwner: true,
     } satisfies Actor;
     return { update, deps, actor, handler: new RPCHandler(createRouter(deps)) };
@@ -139,7 +211,7 @@ describe("model setup gate", () => {
     const prisma = {
       user: {
         findUniqueOrThrow: vi.fn().mockResolvedValue({
-          email: "user@ardurbot.test",
+          email: "user@example.test",
           name: "Test User",
           avatarStyle: "robot",
         }),
@@ -171,7 +243,7 @@ describe("model setup gate", () => {
     const actor = {
       spaceId: "workspace-1",
       userId: "user-1",
-      email: "user@ardurbot.test",
+      email: "user@example.test",
       isDeploymentOwner: true,
     } satisfies Actor;
     return { actor, handler: new RPCHandler(createRouter(deps)) };
@@ -316,7 +388,7 @@ describe("thread answer delivery", () => {
     const actor = {
       spaceId: "workspace-1",
       userId: "user-1",
-      email: "user@ardurbot.test",
+      email: "user@example.test",
       isDeploymentOwner: true,
     } satisfies Actor;
     const handler = new RPCHandler(createRouter(deps));
@@ -379,7 +451,7 @@ describe("MCP server deletion", () => {
     const actor = {
       spaceId: "workspace-1",
       userId: "user-1",
-      email: "user@ardurbot.test",
+      email: "user@example.test",
       isDeploymentOwner: true,
     } satisfies Actor;
     const handler = new RPCHandler(createRouter(deps));
@@ -451,7 +523,7 @@ describe("connections.begin", () => {
     const actor = {
       spaceId: "workspace-1",
       userId: "user-1",
-      email: "user@ardurbot.test",
+      email: "user@example.test",
       isDeploymentOwner: true,
     } satisfies Actor;
     const handler = new RPCHandler(createRouter(deps));
@@ -558,7 +630,7 @@ describe("connections.complete", () => {
     const actor = {
       spaceId: "workspace-1",
       userId: "user-1",
-      email: "user@ardurbot.test",
+      email: "user@example.test",
       isDeploymentOwner: true,
     } satisfies Actor;
     const handler = new RPCHandler(createRouter(deps));
@@ -592,7 +664,7 @@ describe("updater owner gate", () => {
     const prisma = {
       user: {
         findUniqueOrThrow: vi.fn().mockResolvedValue({
-          email: "user@ardurbot.test",
+          email: "user@example.test",
           name: "Test User",
           avatarStyle: "robot",
         }),
@@ -622,7 +694,7 @@ describe("updater owner gate", () => {
     const actor = {
       spaceId: "workspace-1",
       userId: "user-2",
-      email: "member@ardurbot.test",
+      email: "member@example.test",
       isDeploymentOwner: false,
     } satisfies Actor;
 
@@ -643,7 +715,7 @@ describe("updater owner gate", () => {
     const actor = {
       spaceId: "workspace-1",
       userId: "user-1",
-      email: "owner@ardurbot.test",
+      email: "owner@example.test",
       isDeploymentOwner: true,
     } satisfies Actor;
 
@@ -668,7 +740,7 @@ describe("updater owner gate", () => {
     const actor = {
       spaceId: "workspace-1",
       userId: "user-1",
-      email: "owner@ardurbot.test",
+      email: "owner@example.test",
       isDeploymentOwner: true,
     } satisfies Actor;
 
@@ -693,7 +765,7 @@ describe("computer screen url", () => {
   const actor = {
     spaceId: "workspace-1",
     userId: "user-1",
-    email: "user@ardurbot.test",
+    email: "user@example.test",
     isDeploymentOwner: true,
   } satisfies Actor;
   const computerRow = {
@@ -845,7 +917,7 @@ describe("integration setup authorization", () => {
             actor: {
               userId: "user",
               spaceId: "space",
-              email: "user@ardurbot.test",
+              email: "user@example.test",
               isDeploymentOwner: owner,
             },
           },
@@ -880,7 +952,7 @@ describe("integration setup authorization", () => {
           actor: {
             userId: "member",
             spaceId: "space",
-            email: "member@ardurbot.test",
+            email: "member@example.test",
             isDeploymentOwner: false,
           },
         },
@@ -924,7 +996,7 @@ describe("interrupted computer reservation release", () => {
             actor: {
               spaceId: "space-1",
               userId: "user-1",
-              email: "user@ardurbot.test",
+              email: "user@example.test",
               isDeploymentOwner: owner,
             },
           },
@@ -972,7 +1044,7 @@ describe("model credential persistence", () => {
   const actor = {
     spaceId: "workspace-1",
     userId: "user-1",
-    email: "user@ardurbot.test",
+    email: "user@example.test",
     isDeploymentOwner: true,
   } satisfies Actor;
 

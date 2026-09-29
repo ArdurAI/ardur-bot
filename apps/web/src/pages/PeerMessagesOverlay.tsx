@@ -95,8 +95,8 @@ export function PeerMessagesOverlay({
         <div className="flex items-center justify-between gap-4 border-b border-sidebar-border px-[18px] py-3.5">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <div className="flex items-center -space-x-2">
-              <BotAvatar color={botColor} identity={botId} size={28} />
-              <BotAvatar color={peerBotColor} identity={peerBotId} size={28} />
+              <BotAvatar color={botColor} identity={botId} label={botName} size={28} />
+              <BotAvatar color={peerBotColor} identity={peerBotId} label={peerBotName} size={28} />
             </div>
             <DialogTitle className="truncate text-[15.5px] font-medium text-foreground" dir="auto">
               {title}

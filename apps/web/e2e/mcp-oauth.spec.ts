@@ -6,7 +6,7 @@ import { captureScreenshot, completeOnboarding, openUserSettings, signup } from 
 
 test("connects an MCP server through the OAuth popup callback", async ({ page }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `mcp-oauth-${stamp}@ardurbot.test`, "password12", "MCP OAuth");
+  await signup(page, `mcp-oauth-${stamp}@example.test`, "password12", "MCP OAuth");
   await completeOnboarding(page);
 
   let oauthStatus: McpServer["oauthStatus"] = "none";

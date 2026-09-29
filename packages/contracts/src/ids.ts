@@ -11,14 +11,19 @@ export const ActorSchema = z.object({
 });
 export type Actor = z.infer<typeof ActorSchema>;
 
+// Round-robin palette for newly created bots. These must stay identical to
+// GROK_BOT_COLORS in @ardurbot/core (bot-avatar-colors.ts) — core's
+// bot-avatar-colors.test.ts enforces the match so assigned colors render
+// exactly as chosen instead of snapping to a nearest pigment.
 export const BOT_COLORS = [
-  "#3EC5A8",
-  "#F5A03C",
-  "#6A6BF5",
-  "#9B5CF6",
-  "#3B82F6",
-  "#F2622A",
-  "#D9508A",
+  "#9A3B1E",
+  "#2F4A7A",
+  "#4E6B2F",
+  "#A84A22",
+  "#7A3F6A",
+  "#2E6B6B",
+  "#7F621B",
+  "#5A5F66",
 ] as const;
 
 export const RunStatus = z.enum([

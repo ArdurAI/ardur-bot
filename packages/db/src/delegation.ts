@@ -25,6 +25,7 @@ import {
   effectiveMcpGrantTools,
   effectiveRemoteAuthority,
   intersectDelegationAuthority,
+  parseGroupAskKey,
   redactTaskValue,
   taskCardChecklist,
   taskCardRequest,
@@ -615,6 +616,8 @@ export async function finishDelegation(
       },
     },
   });
+  // An asked member answers in the room itself; its coordinator reads the result on a follow-up.
+  if (parseGroupAskKey(row.admissionKey)) return;
   const root = await tx.delegationRoot.findUniqueOrThrow({ where: { rootTaskId: row.rootTaskId } });
   const goalRoomAssignment =
     row.kind === "group-handoff" &&

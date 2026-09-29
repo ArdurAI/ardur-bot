@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { captureScreenshot, completeOnboarding, signup } from "./helpers";
 
 test("composer menu and slash commands", async ({ page }, testInfo) => {
-  await signup(page, `composer-menu-${Date.now()}@ardurbot.test`, "password12", "Composer Test");
+  await signup(page, `composer-menu-${Date.now()}@example.test`, "password12", "Composer Test");
   await completeOnboarding(page);
   await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
   await page.getByRole("button", { name: "Add files or photos", exact: true }).click();

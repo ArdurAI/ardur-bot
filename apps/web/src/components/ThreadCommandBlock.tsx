@@ -1,5 +1,5 @@
 import type { CommandBlock as RecordedCommand } from "@ardurbot/contracts";
-import { commandOutput, commandSummary } from "@ardurbot/core";
+import { commandOutput, commandSummaryDisplay } from "@ardurbot/core";
 import { Button, CommandBlock, Input } from "@ardurbot/ui-web";
 import { useLingui } from "@lingui/react/macro";
 import { useId, useState } from "react";
@@ -113,7 +113,9 @@ export function ThreadCommandBlock({
             </div>
             {matches?.map((match) => (
               <details key={match.commandId} className="text-xs">
-                <summary className="cursor-pointer break-all">{commandSummary(match)}</summary>
+                <summary className="cursor-pointer break-all font-mono">
+                  {commandSummaryDisplay(match)}
+                </summary>
                 <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-all">
                   {commandOutput(match)}
                 </pre>

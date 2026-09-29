@@ -76,7 +76,6 @@ import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-  resolvePersonaColorDef,
   SlidingPanel,
 } from "@ardurbot/ui-web";
 import { i18n } from "@lingui/core";
@@ -189,7 +188,6 @@ import { readSeenRunErrorIds, rememberSeenRunErrorId } from "../lib/run-error-st
 import type {} from "../lib/scoreboard-trace";
 import { sharedInflight } from "../lib/shared-inflight";
 import {
-  activeMemberRun,
   activeThreadRuns,
   applyThreadSendReceipt,
   clearActiveThreadRuns,
@@ -231,7 +229,6 @@ import {
 import type { SettingsSection } from "./SettingsOverlay";
 import { SpaceSearchResults } from "./SpaceSearch";
 import { BotModelChip } from "./shell/bot-model-chip";
-import { BotSettings, CreateBotForm } from "./shell/bot-panel";
 import { isCommandPaletteHotkey } from "./shell/command-palette-hotkey";
 import {
   initialComputerErrorState,
@@ -241,6 +238,7 @@ import {
 import { ComputerScreenError } from "./shell/computer-screen-error";
 import { useComputerTerminal } from "./shell/computer-terminal";
 import { getEffectiveWorkspaceTab, isComputerVisible } from "./shell/computer-visibility";
+import { GroupParticipantModels } from "./shell/group-participants";
 import {
   AppConnectCard,
   ArtifactImage,
@@ -249,11 +247,26 @@ import {
   McpApprovalCard,
 } from "./shell/message-cards";
 import { ProviderErrorMessage } from "./shell/provider-error-message";
+import {
+  BotSettingsTitle,
+  hasSharedPanelHeader,
+  isSettingsPanel,
+  PanelHeaderTitle,
+  SettingsPanelToggle,
+  ThreadSettingsButton,
+} from "./shell/settings-chrome";
 import { useComputerTerminalOpen } from "./shell/use-computer-terminal-open";
 import { useTakeControl } from "./shell/use-take-control";
 import { handleWorkspaceOpenRun } from "./shell/workspace-run";
 import { SystemDictation } from "./system/SystemDictation";
 import { WindowChrome } from "./WindowChrome";
+
+const BotSettings = lazy(() =>
+  import("./shell/bot-panel").then((module) => ({ default: module.BotSettings })),
+);
+const CreateBotForm = lazy(() =>
+  import("./shell/bot-panel").then((module) => ({ default: module.CreateBotForm })),
+);
 
 const TeamBoard = lazy(() =>
   import("./TeamBoard").then((module) => ({ default: module.TeamBoard })),
@@ -3124,6 +3137,7 @@ export function ShellPage({
                             <BotAvatar
                               color={item.chat.color}
                               identity={item.chat.id}
+                              label={item.chat.name}
                               size={38}
                               status={item.chat.status}
                             />
@@ -3216,6 +3230,7 @@ export function ShellPage({
                       <BotAvatar
                         color={bot.color}
                         identity={bot.id}
+                        label={bot.name}
                         size={28}
                         status={bot.status}
                       />
@@ -3440,6 +3455,7 @@ export function ShellPage({
                 <BotAvatar
                   color={active.color}
                   identity={active.id}
+                  label={active.name}
                   size={26}
                   status={active.status}
                 />
@@ -3462,37 +3478,26 @@ export function ShellPage({
               />
             ) : null}
             {inGroup && activeGroup ? (
-              <div
-                data-testid="group-participant-models"
-                className="app-no-drag flex min-w-0 items-center gap-2 overflow-x-auto"
-              >
-                {activeGroup.members.map((member) => {
-                  const participant = bots.find((bot) => bot.id === member.botId);
-                  if (!participant) return null;
-                  const admitted = activeMemberRun(currentRuns, member.botId);
-                  return (
-                    <div
-                      key={member.botId}
-                      data-testid={`group-participant-${member.botId}`}
-                      className="flex shrink-0 items-center gap-1"
-                    >
-                      <span className="text-xs text-muted-foreground">{member.name}</span>
-                      <BotModelChip
-                        bot={participant}
-                        settings={modelSettings}
-                        pin={member.effectiveRuntimePin}
-                        nextPin={member.effectiveRuntimePin}
-                        run={admitted}
-                        display="using"
-                      />
-                    </div>
-                  );
-                })}
-              </div>
+              <GroupParticipantModels
+                activeGroup={activeGroup}
+                bots={bots}
+                currentRuns={currentRuns}
+                modelSettings={modelSettings}
+              />
             ) : null}
             <RunContext run={activeSnapshot?.contextRun ?? activeSnapshot?.run} />
           </div>
           <div className="flex items-center gap-1">
+            {(inGroup ? activeGroup : active) ? (
+              <ThreadSettingsButton
+                group={inGroup}
+                panel={panel}
+                onPanel={(next) => {
+                  setModelFocusRequest(0);
+                  setPanel(next);
+                }}
+              />
+            ) : null}
             {!inGroup && active ? (
               <button
                 type="button"
@@ -3676,36 +3681,29 @@ export function ShellPage({
       <SlidingPanel
         open={Boolean(panel && (active || activeGroup || panel === "create"))}
         panel={panel ?? "closed"}
+        size={isSettingsPanel(panel) ? "wide" : "narrow"}
         workspace={panel === "computer"}
         expanded={panel === "computer" && workspaceExpanded}
+        resizeLabel={t`Resize pane`}
       >
         {panel && (active || activeGroup || panel === "create") ? (
           <div
             className={
               panel === "computer"
                 ? "flex h-full min-h-0 w-full flex-col overflow-hidden px-3 py-3"
-                : "rk-scroll h-full w-full overflow-y-auto px-5 py-[17px] md:w-[384px]"
+                : "rk-scroll h-full w-full overflow-y-auto px-5 py-[17px]"
             }
           >
-            {panel !== "routine" &&
-            panel !== "create" &&
-            panel !== "create-group" &&
-            panel !== "group-settings" ? (
+            {hasSharedPanelHeader(panel) ? (
               <div
                 data-workspace-chrome={panel === "computer" ? "" : undefined}
-                className="mb-4 flex shrink-0 items-center justify-between"
+                className="mb-4 flex shrink-0 items-center justify-between gap-2"
               >
-                <span className="text-[13.5px] text-muted-foreground">
-                  {panel === "settings" ? (
-                    <Trans>Settings</Trans>
-                  ) : panel === "computer" ? (
-                    <Trans>Workspace</Trans>
-                  ) : active ? (
-                    (computer?.state ?? active.status)
-                  ) : (
-                    <Trans>Group</Trans>
-                  )}
-                </span>
+                <PanelHeaderTitle
+                  panel={panel}
+                  activeBot={active}
+                  computerState={computer?.state}
+                />
                 <div className="flex gap-1">
                   {panel === "computer" ? (
                     <Button
@@ -3732,15 +3730,10 @@ export function ShellPage({
                     />
                   ) : null}
                   {active ? (
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={panel === "settings" ? t`Show computer` : t`Show settings`}
-                      onClick={() => setPanel(panel === "settings" ? "computer" : "settings")}
-                      className={panel === "settings" ? "text-foreground" : "text-muted-foreground"}
-                    >
-                      <Settings size={16} strokeWidth={1.7} />
-                    </Button>
+                    <SettingsPanelToggle
+                      open={panel === "settings"}
+                      onToggle={() => setPanel(panel === "settings" ? "computer" : "settings")}
+                    />
                   ) : null}
                   <Button
                     variant="ghost"
@@ -3836,7 +3829,7 @@ export function ShellPage({
                 group={activeGroup}
                 bots={bots}
                 modelSettings={modelSettings}
-                onModelPin={async (member, pin) => {
+                onModelPin={async (member, pin, expectedBotModelPinRevision) => {
                   if (!member.memberId) return;
                   const target = {
                     groupId: activeGroup.id,
@@ -3845,7 +3838,14 @@ export function ShellPage({
                     expectedRevision: member.modelPinRevision ?? 0,
                   };
                   const updated = pin
-                    ? await rpc.groups.setMemberModelPin({ ...target, pin })
+                    ? await rpc.groups.setMemberModelPin({
+                        ...target,
+                        expectedBotModelPinRevision:
+                          expectedBotModelPinRevision ??
+                          bots.find((b) => b.id === member.botId)?.modelPinRevision ??
+                          0,
+                        pin,
+                      })
                     : await rpc.groups.clearMemberModelPin(target);
                   setGroups((current) =>
                     current.map((group) => (group.id === updated.id ? updated : group)),
@@ -3853,9 +3853,8 @@ export function ShellPage({
                   await refreshGroupThread(activeGroup.id).catch(() => undefined);
                 }}
                 onReloadMember={async (member) => {
-                  const latest = (await rpc.groups.list()).find(
-                    (group) => group.id === activeGroup.id,
-                  );
+                  const [groups] = await Promise.all([rpc.groups.list(), refreshBots()]);
+                  const latest = groups.find((group) => group.id === activeGroup.id);
                   if (!latest) return undefined;
                   setGroups((current) =>
                     current.map((group) => (group.id === latest.id ? latest : group)),
@@ -3891,44 +3890,49 @@ export function ShellPage({
               />
             ) : null}
             {panel === "create" ? (
-              <CreateBotForm
-                onCancel={() => setPanel(null)}
-                onCreate={(input) => createBot(input)}
-              />
+              <Suspense fallback={null}>
+                <CreateBotForm
+                  onCancel={() => setPanel(null)}
+                  onCreate={(input) => createBot(input)}
+                />
+              </Suspense>
             ) : null}
             {panel === "settings" && active ? (
-              <BotSettings
-                key={active.id}
-                bot={active}
-                modelFocusRequest={modelFocusRequest}
-                runtimeFocusRequest={runtimeFocusRequest}
-                modelSettings={modelSettings}
-                overrideGroups={groups}
-                onOpenGroup={(id) => {
-                  navigate(`/app/g/${id}`);
-                  setPanel("group-settings");
-                }}
-                memoryProviderConfigured={memoryProviderConfig != null}
-                onSkillsChange={setAgentSkills}
-                onSave={async ({ computerMode, ...patch }) => {
-                  if (computerMode !== active.computerMode) {
-                    await rpc.bots.setComputer({
-                      botId: active.id,
-                      mode: computerMode,
-                    });
-                  }
-                  await rpc.bots.update({ botId: active.id, ...patch });
-                  await refreshBots();
-                }}
-                onExport={async () => {
-                  const { path } = await rpc.export.bot({ botId: active.id });
-                  const anchor = document.createElement("a");
-                  anchor.href = path;
-                  anchor.download = "bot-v2.tar.gz";
-                  anchor.click();
-                }}
-                onClear={() => setClearTarget({ kind: "bot", chat: active })}
-              />
+              <Suspense fallback={null}>
+                <BotSettings
+                  key={active.id}
+                  bot={active}
+                  modelFocusRequest={modelFocusRequest}
+                  runtimeFocusRequest={runtimeFocusRequest}
+                  modelSettings={modelSettings}
+                  overrideGroups={groups}
+                  onOpenGroup={(id) => {
+                    navigate(`/app/g/${id}`);
+                    setPanel("group-settings");
+                  }}
+                  memoryProviderConfigured={memoryProviderConfig != null}
+                  onSkillsChange={setAgentSkills}
+                  onSave={async ({ computerMode, ...patch }) => {
+                    if (computerMode !== active.computerMode) {
+                      await rpc.bots.setComputer({
+                        botId: active.id,
+                        mode: computerMode,
+                      });
+                    }
+                    const updated = await rpc.bots.update({ botId: active.id, ...patch });
+                    await refreshBots();
+                    return updated;
+                  }}
+                  onExport={async () => {
+                    const { path } = await rpc.export.bot({ botId: active.id });
+                    const anchor = document.createElement("a");
+                    anchor.href = path;
+                    anchor.download = "bot-v2.tar.gz";
+                    anchor.click();
+                  }}
+                  onClear={() => setClearTarget({ kind: "bot", chat: active })}
+                />
+              </Suspense>
             ) : null}
             {panel === "routines" && active ? (
               <Suspense fallback={null}>
@@ -4644,6 +4648,7 @@ export function ShellPage({
                 <BotAvatar
                   color={computerBot.color}
                   identity={computerBot.id}
+                  label={computerBot.name}
                   size={28}
                   status={computerBot.status}
                 />
@@ -5395,11 +5400,16 @@ export const Composer = memo(function Composer({
   const mentionListboxId = useId();
   const dragDepth = useRef(0);
   const [draggingFiles, setDraggingFiles] = useState(false);
+  const [comparing, setComparing] = useState(false);
+  const [compareLoaded, setCompareLoaded] = useState(false);
   const canSend =
     draft.trim().length > 0 ||
     selectedSkill !== null ||
     selectedMentions.length > 0 ||
     pendingAttachments.length > 0;
+  const comparePrompt = comparisonBotId
+    ? serializeComposerPrompt(draft, selectedSkill, selectedMentions)
+    : "";
 
   useEffect(() => {
     if (!runError || !runErrorId) return;
@@ -5777,19 +5787,14 @@ export const Composer = memo(function Composer({
           />
         </Suspense>
       ) : null}
-      {comparisonBotId ? (
-        <Suspense
-          fallback={
-            <Button type="button" variant="ghost" size="sm" disabled>
-              <Trans>Compare with…</Trans>
-            </Button>
-          }
-        >
+      {comparisonBotId && compareLoaded ? (
+        <Suspense fallback={null}>
           <CompareStart
             botId={comparisonBotId}
-            text={serializeComposerPrompt(draft, selectedSkill, selectedMentions)}
+            text={comparePrompt}
             files={pendingAttachments.map((item) => item.file)}
-            disabled={disabled || sending}
+            open={comparing}
+            onOpenChange={setComparing}
             onCreated={() => {
               setDraft("");
               setSelectedSkill(null);
@@ -5799,56 +5804,58 @@ export const Composer = memo(function Composer({
           />
         </Suspense>
       ) : null}
-      <div className="relative h-8">
-        <div className="absolute bottom-1 start-12 flex max-w-[calc(100%-3rem)] gap-1.5 overflow-x-auto whitespace-nowrap">
-          {selectedSkill ? (
-            <span
-              data-testid="skill-chip"
-              className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-accent px-2.5 py-1 text-[13px] text-foreground"
-            >
-              <Box size={13} strokeWidth={1.7} className="shrink-0 text-muted-foreground/70" />
-              <span dir="auto" className="truncate">
-                {selectedSkill.name}
-              </span>
-              <button
-                type="button"
-                aria-label={t`Remove skill ${selectedSkill.name}`}
-                onClick={() => setSelectedSkill(null)}
-                className="text-muted-foreground hover:text-foreground"
+      {selectedSkill || selectedMentions.length ? (
+        <div data-testid="composer-chips" className="relative h-8">
+          <div className="absolute bottom-1 start-12 flex max-w-[calc(100%-3rem)] gap-1.5 overflow-x-auto whitespace-nowrap">
+            {selectedSkill ? (
+              <span
+                data-testid="skill-chip"
+                className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-accent px-2.5 py-1 text-[13px] text-foreground"
               >
-                <X size={12} strokeWidth={2} />
-              </button>
-            </span>
-          ) : null}
-          {selectedMentions.map((mention) => (
-            <span
-              key={mentionChipKey(mention)}
-              data-testid="mention-chip"
-              data-mention-kind={mention.kind}
-              className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-accent px-2.5 py-1 text-[13px] text-foreground"
-            >
-              <MentionChipIcon mention={mention} />
-              <span dir="auto" className="truncate">
-                {mention.name}
+                <Box size={13} strokeWidth={1.7} className="shrink-0 text-muted-foreground/70" />
+                <span dir="auto" className="truncate">
+                  {selectedSkill.name}
+                </span>
+                <button
+                  type="button"
+                  aria-label={t`Remove skill ${selectedSkill.name}`}
+                  onClick={() => setSelectedSkill(null)}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <X size={12} strokeWidth={2} />
+                </button>
               </span>
-              <button
-                type="button"
-                aria-label={t`Remove mention ${mention.name}`}
-                onClick={() =>
-                  setSelectedMentions((current) =>
-                    current.filter(
-                      (selected) => mentionChipKey(selected) !== mentionChipKey(mention),
-                    ),
-                  )
-                }
-                className="text-muted-foreground hover:text-foreground"
+            ) : null}
+            {selectedMentions.map((mention) => (
+              <span
+                key={mentionChipKey(mention)}
+                data-testid="mention-chip"
+                data-mention-kind={mention.kind}
+                className="inline-flex max-w-full items-center gap-1.5 rounded-full bg-accent px-2.5 py-1 text-[13px] text-foreground"
               >
-                <X size={12} strokeWidth={2} />
-              </button>
-            </span>
-          ))}
+                <MentionChipIcon mention={mention} />
+                <span dir="auto" className="truncate">
+                  {mention.name}
+                </span>
+                <button
+                  type="button"
+                  aria-label={t`Remove mention ${mention.name}`}
+                  onClick={() =>
+                    setSelectedMentions((current) =>
+                      current.filter(
+                        (selected) => mentionChipKey(selected) !== mentionChipKey(mention),
+                      ),
+                    )
+                  }
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  <X size={12} strokeWidth={2} />
+                </button>
+              </span>
+            ))}
+          </div>
         </div>
-      </div>
+      ) : null}
       <div
         data-testid="composer-bar"
         className="flex items-center gap-3.5 rounded-full border border-border bg-background py-[9px] pe-2.5 ps-3 transition-colors focus-within:border-ring"
@@ -5874,6 +5881,14 @@ export const Composer = memo(function Composer({
           onManage={onManage}
           onError={onComposerError}
           onOpen={onSlashOpen}
+          onCompare={
+            comparePrompt.trim() && !sending
+              ? () => {
+                  setCompareLoaded(true);
+                  setComparing(true);
+                }
+              : undefined
+          }
         />
         <div className="relative flex min-w-0 flex-1 items-end gap-1.5">
           <textarea
@@ -6024,7 +6039,14 @@ function MentionOptionIcon({ mention }: { mention: ComposerMention }) {
       </span>
     );
   }
-  return <BotAvatar color={mention.color ?? FALLBACK_BOT_COLOR} identity={mention.id} size={16} />;
+  return (
+    <BotAvatar
+      color={mention.color ?? FALLBACK_BOT_COLOR}
+      identity={mention.id}
+      label={mention.name}
+      size={16}
+    />
+  );
 }
 
 function MentionChipIcon({ mention }: { mention: ComposerMention }) {
@@ -6041,7 +6063,14 @@ function MentionChipIcon({ mention }: { mention: ComposerMention }) {
       </span>
     );
   }
-  return <BotAvatar color={mention.color ?? FALLBACK_BOT_COLOR} identity={mention.id} size={16} />;
+  return (
+    <BotAvatar
+      color={mention.color ?? FALLBACK_BOT_COLOR}
+      identity={mention.id}
+      label={mention.name}
+      size={16}
+    />
+  );
 }
 
 function previewMessageText(message: ThreadMessage): string {
@@ -6305,21 +6334,17 @@ const MessageView = memo(function MessageView({
   const visibleNarrationBlocks = message.blocks.filter((block) => !isToolActivityBlock(block));
   const parentJumpId = replyPreview?.id ?? replyToMessageId;
   const speakerBot = message.botId ? peerBot?.(message.botId) : undefined;
-  const speakerColorDef = useMemo(
-    () => resolvePersonaColorDef(message.botId ?? "bot", speakerBot?.color),
-    [message.botId, speakerBot?.color],
-  );
   const messageContext = (
     <>
       {speakerName ? (
         <div
-          className="mb-1.5 flex items-center gap-2 text-[13px] font-semibold tracking-tight"
+          className="mb-1.5 flex items-center gap-2 text-[13px] font-semibold tracking-tight text-foreground"
           dir="auto"
-          style={{ color: speakerColorDef.light }}
         >
           <BotAvatar
             color={speakerBot?.color ?? FALLBACK_BOT_COLOR}
             identity={message.botId}
+            label={speakerName}
             size={22}
           />
           {speakerName}

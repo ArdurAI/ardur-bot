@@ -125,6 +125,27 @@ export async function recordRunUsage(
     : { inputTokens: usage.inputTokens, cachedTokens: usage.cachedTokens ?? null };
 }
 
+/**
+ * Outside a goal, an admitted worker is bounded by its own allowance, and reservations
+ * already handed out do not block the coordinator's own provider request. A goal still
+ * stops the whole tree at the owner's limit. Cancel and deadline are checked by the caller.
+ */
+export function brokerRootTokensBlock(input: {
+  goal: boolean;
+  delegated: boolean;
+  usedTokens: number;
+  reservedTokens: number;
+  requestTokens: number;
+  tokenLimit: number;
+}): boolean {
+  if (!input.goal) {
+    if (input.delegated) return false;
+    return input.usedTokens + input.requestTokens > input.tokenLimit;
+  }
+  const held = input.delegated ? 0 : input.requestTokens;
+  return input.usedTokens + input.reservedTokens + held > input.tokenLimit;
+}
+
 /** The broker uses this sink for started receipts and every later observation. */
 export function recordBrokerRunUsage(
   deps: UsageDependencies,
@@ -389,10 +410,14 @@ async function recordRequestUsage(
           if (
             rootBudget.cancelRequestedAt ||
             rootBudget.deadlineAt <= new Date() ||
-            rootBudget.usedTokens +
-              rootBudget.reservedTokens +
-              (delegation ? 0 : request.admission.reservedTokens) >
-              rootBudget.tokenLimit
+            brokerRootTokensBlock({
+              goal: Boolean(lockedRun.goalId),
+              delegated: Boolean(delegation),
+              usedTokens: rootBudget.usedTokens,
+              reservedTokens: rootBudget.reservedTokens,
+              requestTokens: request.admission.reservedTokens,
+              tokenLimit: rootBudget.tokenLimit,
+            })
           )
             throw new Error("Broker root task allowance exhausted");
           if (delegation) {
