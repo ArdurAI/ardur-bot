@@ -33,7 +33,12 @@ vi.mock("react-native", () => ({
   }) =>
     createElement(
       "button",
-      { type: "button", onClick: onPress, "aria-label": accessibilityLabel, role: accessibilityRole },
+      {
+        type: "button",
+        onClick: onPress,
+        "aria-label": accessibilityLabel,
+        role: accessibilityRole,
+      },
       children,
     ),
   Text: ({ children }: { children: ReactNode }) => createElement("span", null, children),
@@ -94,10 +99,7 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-function field(
-  node: HTMLElement,
-  label: string,
-): HTMLTextAreaElement {
+function field(node: HTMLElement, label: string): HTMLTextAreaElement {
   return node.querySelector(`textarea[aria-label="${label}"]`) as HTMLTextAreaElement;
 }
 
@@ -120,7 +122,6 @@ async function typeInto(input: HTMLTextAreaElement, text: string) {
     input.dispatchEvent(new Event("input", { bubbles: true }));
   });
 }
-
 
 async function renderPanel(initial: HermesRuntimeConfigV2 | null = null) {
   const onChange = vi.fn();
@@ -208,7 +209,7 @@ it("emits the expanded document for valid edits", async () => {
 
 it("opens Advanced, serializes the draft, previews it, and renders managed rows", async () => {
   vi.mocked(rpc).mockResolvedValue(previewResponse);
-  const { node, root, onError } = await renderPanel(defaults);
+  const { node, root } = await renderPanel(defaults);
   const toggle = pressable(node, "Advanced");
   await act(async () => toggle.click());
   const editor = field(node, "Configuration (JSON)");
@@ -257,7 +258,9 @@ it("reports managed and forbidden keys with the shared messages", async () => {
       model: "gpt-x",
     }),
   );
-  expect(node.textContent).toContain("Ardur sets the model and thinking level. Change them in bot settings.");
+  expect(node.textContent).toContain(
+    "Ardur sets the model and thinking level. Change them in bot settings.",
+  );
 
   await change(
     editor,
@@ -327,7 +330,7 @@ it("resets the draft to the published defaults", async () => {
       }),
     ),
   );
-  const reset = node.querySelector('button') as unknown as HTMLButtonElement;
+  const reset = node.querySelector("button") as unknown as HTMLButtonElement;
   await act(async () => reset.click());
   expect(onReset).toHaveBeenCalled();
   const editor = field(node, "Configuration (JSON)");
@@ -401,9 +404,7 @@ it("ignores a stale preview response that resolves after a newer request", async
 it("surfaces server issue messages from the preview endpoint", async () => {
   vi.mocked(rpc).mockResolvedValue({
     preview: undefined,
-    issues: [
-      { code: "managed-tools", path: "tools", reasonId: "managed-tools" },
-    ],
+    issues: [{ code: "managed-tools", path: "tools", reasonId: "managed-tools" }],
   });
   const node = document.createElement("div");
   const root = createRoot(node);

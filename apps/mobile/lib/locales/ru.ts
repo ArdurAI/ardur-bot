@@ -1289,7 +1289,8 @@ export const RU_MESSAGES: Record<string, string> = {
   "This field is not supported.": "Это поле не поддерживается.",
   "Ardur sets the model and thinking level. Change them in bot settings.":
     "Ardur задаёт модель и уровень размышлений. Измените их в настройках бота.",
-  "Use Ardur Connections for provider settings.": "Используйте Ardur «Подключения» для настроек провайдера.",
+  "Use Ardur Connections for provider settings.":
+    "Используйте Ardur «Подключения» для настроек провайдера.",
   "Use Ardur settings for tools, integrations, MCP servers, skills, and plugins.":
     "Используйте настройки Ardur для инструментов, интеграций, MCP-серверов, навыков и плагинов.",
   "Ardur manages paths, hooks, permissions, and network access.":
@@ -1297,14 +1298,13 @@ export const RU_MESSAGES: Record<string, string> = {
   "Runtime settings cannot install or load code.":
     "Настройки среды выполнения не могут устанавливать или загружать код.",
   "Use Ardur Learning settings.": "Используйте настройки обучения Ardur.",
-  "Native child agents are not available with Hermes.":
-    "Вложенные агенты недоступны в Hermes.",
-  "Native compression is not available with Hermes.":
-    "Встроенное сжатие недоступно в Hermes.",
+  "Native child agents are not available with Hermes.": "Вложенные агенты недоступны в Hermes.",
+  "Native compression is not available with Hermes.": "Встроенное сжатие недоступно в Hermes.",
   "Use a whole number from 1 to 64.": "Введите целое число от 1 до 64.",
   "Use whole seconds.": "Указывайте целые секунды.",
   "Use whole KiB.": "Указывайте целые КиБ.",
-  "Choose Trim older context or Stop the run.": "Выберите «Сокращать старый контекст» или «Остановить запуск».",
+  "Choose Trim older context or Stop the run.":
+    "Выберите «Сокращать старый контекст» или «Остановить запуск».",
   "Use a whole number from 1 to 600.": "Введите целое число от 1 до 600.",
   "Use a whole number from 4 to 64.": "Введите целое число от 4 до 64.",
   "Use a whole number from 1 to 3.": "Введите целое число от 1 до 3.",
@@ -1328,5 +1328,5 @@ export const RU_MESSAGES: Record<string, string> = {
   "Reset to defaults": "Сбросить к стандартным",
   "Fix the configuration JSON to edit these settings.":
     "Исправьте JSON конфигурации, чтобы изменять эти настройки.",
-  "Reload": "Перезагрузить",
+  Reload: "Перезагрузить",
 };

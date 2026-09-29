@@ -1248,10 +1248,8 @@ export const ZH_MESSAGES: Record<string, string> = {
     "路径、钩子、权限和网络访问由 Ardur 管理。",
   "Runtime settings cannot install or load code.": "运行时设置不能安装或加载代码。",
   "Use Ardur Learning settings.": "请使用 Ardur 的学习设置。",
-  "Native child agents are not available with Hermes.":
-    "Hermes 不提供原生子代理。",
-  "Native compression is not available with Hermes.":
-    "Hermes 不提供原生压缩。",
+  "Native child agents are not available with Hermes.": "Hermes 不提供原生子代理。",
+  "Native compression is not available with Hermes.": "Hermes 不提供原生压缩。",
   "Use a whole number from 1 to 64.": "请输入 1 到 64 之间的整数。",
   "Use whole seconds.": "请输入整数秒。",
   "Use whole KiB.": "请输入整数 KiB。",
@@ -1275,7 +1273,6 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Unavailable with Hermes.": "在 Hermes 中不可用。",
   "Native compression": "原生压缩",
   "Reset to defaults": "重置为默认值",
-  "Fix the configuration JSON to edit these settings.":
-    "请修复配置 JSON 后再编辑这些设置。",
-  "Reload": "重新加载",
+  "Fix the configuration JSON to edit these settings.": "请修复配置 JSON 后再编辑这些设置。",
+  Reload: "重新加载",
 };

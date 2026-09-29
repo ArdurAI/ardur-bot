@@ -353,9 +353,7 @@ export default function BotSettingsScreen() {
       if (err instanceof RpcError && err.code === "CONFLICT") {
         // Same conflict message and recovery as web: reload the bot before saving again.
         setConflict(true);
-        setError(
-          err.message || t("Bot settings changed. Reload before saving."),
-        );
+        setError(err.message || t("Bot settings changed. Reload before saving."));
         try {
           const next = await rpc<BotSettingsRecord>("bots/get", { botId });
           setBot(next);
@@ -528,9 +526,7 @@ export default function BotSettingsScreen() {
             value={runtimeConfig}
             onChange={setRuntimeConfig}
             onError={setRuntimeConfigError}
-            onOpenLearning={() =>
-              router.push({ pathname: "/learning", params: { botId } })
-            }
+            onOpenLearning={() => router.push({ pathname: "/learning", params: { botId } })}
             pin={{
               runtimeKind: "hermes",
               provider: effectiveProvider,
@@ -673,7 +669,10 @@ export default function BotSettingsScreen() {
         <Pressable
           onPress={() => void save()}
           disabled={
-            !name.trim() || pending || !bot || (runtimeKind === "hermes" && Boolean(runtimeConfigError))
+            !name.trim() ||
+            pending ||
+            !bot ||
+            (runtimeKind === "hermes" && Boolean(runtimeConfigError))
           }
           style={{
             marginTop: 24,
@@ -682,7 +681,10 @@ export default function BotSettingsScreen() {
             padding: 16,
             alignItems: "center",
             opacity:
-              !name.trim() || pending || !bot || (runtimeKind === "hermes" && Boolean(runtimeConfigError))
+              !name.trim() ||
+              pending ||
+              !bot ||
+              (runtimeKind === "hermes" && Boolean(runtimeConfigError))
                 ? 0.4
                 : 1,
           }}

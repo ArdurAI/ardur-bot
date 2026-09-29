@@ -89,12 +89,7 @@ export function RuntimeConfigPanel({
       return;
     }
     if (num < 1 || num > 600) {
-      updateErrors(
-        callsError,
-        t("Use a whole number from 1 to 600."),
-        contextError,
-        advancedError,
-      );
+      updateErrors(callsError, t("Use a whole number from 1 to 600."), contextError, advancedError);
       return;
     }
     onChange({
@@ -223,7 +218,11 @@ export function RuntimeConfigPanel({
       ) : null}
 
       {onOpenLearning ? (
-        <Pressable accessibilityRole="button" accessibilityLabel={t("Learning")} onPress={onOpenLearning}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t("Learning")}
+          onPress={onOpenLearning}
+        >
           <Text style={{ color: tokens.mutedForeground }}>{t("Learning")}</Text>
         </Pressable>
       ) : null}

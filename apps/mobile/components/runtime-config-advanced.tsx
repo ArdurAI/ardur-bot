@@ -59,8 +59,7 @@ export function runtimeConfigIssueMessage(
       if (issue.path === "limits.maxProviderRequests") return t("Use a whole number from 1 to 64.");
       if (issue.path === "limits.timeoutMs") return t("Use whole seconds.");
       if (issue.path === "context.maxInputBytes") return t("Use whole KiB.");
-      if (issue.path === "context.overflow")
-        return t("Choose Trim older context or Stop the run.");
+      if (issue.path === "context.overflow") return t("Choose Trim older context or Stop the run.");
       if (issue.path === "harness.agent.api_max_retries")
         return t("Use a whole number from 1 to 3.");
       return t("Use a whole number from 1 to 64.");
@@ -311,13 +310,12 @@ export function RuntimeConfigAdvanced({
           <Text style={label}>
             {t("When context is full")}:{" "}
             <Text style={field}>
-              {effective.context.overflow === "trim"
-                ? t("Trim older context")
-                : t("Stop the run")}
+              {effective.context.overflow === "trim" ? t("Trim older context") : t("Stop the run")}
             </Text>
           </Text>
           <Text style={label}>
-            {t("API attempts")}: <Text style={field}>{effective.harness.agent.api_max_retries}</Text>
+            {t("API attempts")}:{" "}
+            <Text style={field}>{effective.harness.agent.api_max_retries}</Text>
           </Text>
         </View>
 
