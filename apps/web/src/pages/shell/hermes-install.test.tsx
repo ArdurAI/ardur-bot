@@ -114,10 +114,7 @@ describe("Install Hermes", () => {
 
   it("offers Install Hermes when the managed install fails its safety check", async () => {
     api.availability.mockResolvedValue(
-      hermes(
-        { state: "absent" },
-        "The Hermes install on this computer failed its safety check.",
-      ),
+      hermes({ state: "absent" }, "The Hermes install on this computer failed its safety check."),
     );
     await renderHermes();
     expect(container.textContent).toContain(
