@@ -268,6 +268,22 @@ msgstr ""
 msgid "{minutes}m ago"
 msgstr "hace {minutes} min"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer"
+msgstr "{name} no pudo responder"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer: its model account hit a rate limit"
+msgstr "{name} no pudo responder: la cuenta de su modelo alcanzó un límite de velocidad"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer: its model account needs attention"
+msgstr "{name} no pudo responder: la cuenta de su modelo necesita atención"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer: its model is unavailable"
+msgstr "{name} no pudo responder: su modelo no está disponible"
+
 #. js-lingui-explicit-id
 #: src/lib/use-notifications.ts
 msgid "{name} failed"
@@ -282,6 +298,10 @@ msgstr "{name} terminó"
 #: src/lib/use-notifications.ts
 msgid "{name} needs your input"
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} stopped before answering"
+msgstr "{name} se detuvo antes de responder"
 
 #: src/pages/LearningInbox.tsx
 msgid "{pending, plural, one {# suggestion to review} other {# suggestions to review}}"
@@ -539,6 +559,10 @@ msgstr ""
 msgid "Add folder"
 msgstr ""
 
+#: src/pages/ScratchpadSection.tsx
+msgid "Add from board"
+msgstr "Añadir desde el tablero"
+
 #: src/pages/PluginsOverlay.tsx
 msgid "Add GraphQL"
 msgstr "Añadir GraphQL"
@@ -794,6 +818,10 @@ msgstr ""
 msgid "Answer"
 msgstr "Responder"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "answered"
+msgstr "respondió"
+
 #: src/components/AskCard.tsx
 msgid "Answered"
 msgstr "Respondido"
@@ -1024,8 +1052,8 @@ msgstr ""
 msgid "Ask"
 msgstr ""
 
-#: src/pages/ide/dialogs.tsx
 #: src/pages/ide/IdePage.tsx
+#: src/pages/workspace/dialogs.tsx
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Ask a bot"
 msgstr ""
@@ -1068,6 +1096,10 @@ msgstr ""
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Ask the server owner to configure this provider."
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Asked {asked, plural, one {# bot} other {# bots}} · {answered, plural, one {# answered} other {# answered}}"
+msgstr "Se preguntó a {asked, plural, one {# bot} other {# bots}} · {answered, plural, one {# respondió} other {# respondieron}}"
 
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "asks first"
@@ -1288,6 +1320,7 @@ msgstr ""
 #: src/pages/board/Board.tsx
 #: src/pages/board/BoardsSettings.tsx
 #: src/pages/dashboard/DashboardPage.tsx
+#: src/pages/ScratchpadSection.tsx
 #: src/pages/shell/TopNav.tsx
 msgid "Board"
 msgstr ""
@@ -1365,9 +1398,9 @@ msgstr ""
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
-#: src/pages/ide/dialogs.tsx
 #: src/pages/shell/OpenToSetting.tsx
 #: src/pages/shell/top-nav.ts
+#: src/pages/workspace/dialogs.tsx
 msgid "Bots"
 msgstr ""
 
@@ -1471,6 +1504,7 @@ msgstr "No se puede alcanzar el servidor."
 #: src/pages/memory/MemoryImport.tsx
 #: src/pages/MemoryImportExport.tsx
 #: src/pages/PluginsOverlay.tsx
+#: src/pages/ScratchpadSection.tsx
 #: src/pages/settings/UploadedFiles.tsx
 #: src/pages/shell/dialogs.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
@@ -1928,6 +1962,7 @@ msgstr "Color {color}"
 msgid "Coming soon"
 msgstr "Próximamente"
 
+#: src/components/ai/CompactWorkRecord.tsx
 #: src/pages/customize/McpDiagnostics.tsx
 #: src/pages/McpServersOverlay.tsx
 msgid "Command"
@@ -1986,6 +2021,10 @@ msgstr ""
 #: src/pages/capabilities/CapabilitiesPage.tsx
 msgid "Computer change pending."
 msgstr ""
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Computer changed. Refresh files."
+msgstr "La computadora cambió. Actualiza los archivos."
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Computer engine is unavailable."
@@ -2283,6 +2322,10 @@ msgstr ""
 #: src/pages/TeamBoard.tsx
 msgid "Conversation with {0}"
 msgstr "Conversación con {0}"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Coordination round: {asked} asked, {answered} answered"
+msgstr "Ronda de coordinación: {asked} preguntados, {answered} respuestas"
 
 #: src/pages/GroupPanel.tsx
 msgid "Coordinator"
@@ -2936,6 +2979,10 @@ msgstr "No se pudo guardar esta opción"
 msgid "Could not save this credential. Check it and try again."
 msgstr ""
 
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "Could not save this file. Try again."
+msgstr "No se pudo guardar este archivo. Inténtalo de nuevo."
+
 #: src/pages/customize/McpCredentialFix.tsx
 msgid "Could not save. Try again."
 msgstr ""
@@ -3082,6 +3129,10 @@ msgstr ""
 #: src/pages/settings/UploadedFiles.tsx
 msgid "Could not update uploaded files."
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "couldn't answer"
+msgstr "no pudo responder"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Couldn't install Hermes. Try again."
@@ -4098,6 +4149,10 @@ msgstr "Finalizando conexión MCP…"
 msgid "First bot not created"
 msgstr "El primer bot aún no se ha creado"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Fix"
+msgstr "Corregir"
+
 #: src/pages/shell/runtime-config-panel.tsx
 msgid "Fix the configuration JSON to edit these settings."
 msgstr "Corrige el JSON de configuración para editar estos ajustes."
@@ -4284,6 +4339,10 @@ msgstr "Cuelga primero y luego ingresa el código en pantalla."
 #: src/pages/CallView.tsx
 msgid "Hang up, then enter the code on screen."
 msgstr "Cuelga y luego ingresa el código en pantalla."
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "has not answered yet"
+msgstr "aún no ha respondido"
 
 #: src/pages/RoutineEditor.tsx
 msgid "header"
@@ -4677,6 +4736,10 @@ msgstr "Cantidad del intervalo"
 #: src/pages/RoutineSchedule.tsx
 msgid "Interval unit"
 msgstr "Unidad del intervalo"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "is waiting for you"
+msgstr "te está esperando"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Isolated"
@@ -5667,6 +5730,10 @@ msgstr "Nueva habilidad"
 msgid "New space"
 msgstr "Nuevo space"
 
+#: src/pages/ScratchpadSection.tsx
+msgid "New work item"
+msgstr "Nuevo elemento de trabajo"
+
 #: src/pages/account/AccountTables.tsx
 #: src/pages/dashboard/RoutinesPanel.tsx
 #: src/pages/shell/terminal-session.tsx
@@ -6140,6 +6207,10 @@ msgstr ""
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Open files"
 msgstr ""
+
+#: src/pages/ScratchpadSection.tsx
+msgid "Open in board"
+msgstr "Abrir en el tablero"
 
 #: src/pages/workspace/WorkspaceScreen.tsx
 msgid "Open in full window"
@@ -6643,7 +6714,7 @@ msgstr "En cola"
 msgid "Quick access shortcut"
 msgstr ""
 
-#: src/pages/ide/dialogs.tsx
+#: src/pages/workspace/dialogs.tsx
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Quick open"
 msgstr ""
@@ -6673,10 +6744,6 @@ msgstr "Leído"
 #: src/components/PeerMessageReceipt.tsx
 msgid "Read by {recipient}"
 msgstr "Leído por {recipient}"
-
-#: src/pages/workspace/WorkspaceFiles.tsx
-msgid "Read only in this pane. Open IDE to edit."
-msgstr ""
 
 #: src/pages/ide/IdePage.tsx
 msgid "Read only: file is larger than 2 MB"
@@ -7482,6 +7549,7 @@ msgstr ""
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/dialogs.tsx
+#: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Save"
 msgstr "Guardar"
 
@@ -7513,6 +7581,7 @@ msgstr "Guardar modelo"
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/ide/IdePage.tsx
 #: src/pages/MemoryHistory.tsx
+#: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Saved"
 msgstr "Guardado"
 
@@ -7605,6 +7674,7 @@ msgstr ""
 #: src/pages/board/Board.tsx
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/PluginsOverlay.tsx
+#: src/pages/ScratchpadSection.tsx
 #: src/pages/Shell.tsx
 #: src/pages/shell/bot-picker.tsx
 #: src/pages/shell/command-palette.tsx
@@ -7686,7 +7756,7 @@ msgstr ""
 msgid "Selected bots"
 msgstr "Bots seleccionados"
 
-#: src/pages/ide/dialogs.tsx
+#: src/pages/workspace/dialogs.tsx
 msgid "Selection shortened to 32,000 characters."
 msgstr "La selección se ha reducido a 32.000 caracteres."
 
@@ -8268,6 +8338,10 @@ msgstr ""
 msgid "Stopped"
 msgstr "Detenido"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "stopped before answering"
+msgstr "se detuvo antes de responder"
+
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
@@ -8472,9 +8546,17 @@ msgstr "La API no volvió. Actualiza esta página."
 msgid "The bot is working — wait or stop it"
 msgstr ""
 
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "The computer is busy. Wait for it to finish."
+msgstr "El ordenador está ocupado. Espera a que termine."
+
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "The connection was cancelled."
 msgstr ""
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "The file changed. Open it again before saving."
+msgstr "El archivo cambió. Ábrelo de nuevo antes de guardar."
 
 #: src/pages/GuidedOnboarding.tsx
 msgid "The first bot could not be created. Try again."
@@ -8520,9 +8602,9 @@ msgid "Thinking"
 msgstr "Pensando"
 
 #: src/components/ThreadCommandBlock.tsx
-#: src/pages/ide/dialogs.tsx
 #: src/pages/ide/IdePage.tsx
 #: src/pages/ide/terminal.tsx
+#: src/pages/workspace/dialogs.tsx
 #: src/pages/workspace/terminal-controller.ts
 msgid "This action could not finish; try again."
 msgstr ""
@@ -8626,11 +8708,23 @@ msgstr "Esta versión de la configuración no es compatible."
 msgid "This field is not supported."
 msgstr "Este campo no es compatible."
 
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "This file is larger than 2 MB. Open a copy to edit it."
+msgstr "Este archivo supera los 2 MB. Abre una copia para editarlo."
+
 #: src/components/ArtifactFileCard.tsx
 msgid "This file is not valid UTF-8 Markdown."
 msgstr "Este archivo no es Markdown UTF-8 válido."
 
-#: src/pages/ide/file-tree.tsx
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "This file is read-only. Open a copy to edit it."
+msgstr "Este archivo es de solo lectura. Abre una copia para editarlo."
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "This file no longer exists. Save it as a new file or close it."
+msgstr "Este archivo ya no existe. Guárdalo como un archivo nuevo o ciérralo."
+
+#: src/pages/workspace/file-tree.tsx
 msgid "This folder is empty."
 msgstr ""
 
@@ -8645,6 +8739,10 @@ msgstr ""
 #: src/pages/Shell.tsx
 msgid "This group's model is blocked by the bot or space settings. Change the destination policy or choose another group model."
 msgstr "La configuración del bot o del espacio bloquea el modelo del grupo. Cambia la política de destino o elige otro modelo para el grupo."
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "This is a binary file. You cannot edit it here."
+msgstr "Este es un archivo binario. No puedes editarlo aquí."
 
 #: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
@@ -8954,6 +9052,8 @@ msgid "Unpin"
 msgstr "Desfijar"
 
 #: src/pages/ide/IdePage.tsx
+#: src/pages/workspace/WorkspaceFileGuard.tsx
+#: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Unsaved changes"
 msgstr ""
 

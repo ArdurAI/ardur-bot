@@ -1,5 +1,5 @@
 import type { CommandBlock, MessageBlock } from "@ardurbot/contracts";
-import { isInterimNarrationAt } from "./tool-activity.js";
+import { isInterimNarrationAt, isToolActivityBlock } from "./tool-activity.js";
 
 export type ActivityLabel =
   | "narration"
@@ -13,7 +13,12 @@ export type ActivityOutcome = "pending" | "success" | "failure" | "unknown" | "i
 
 export interface ActivityEvidence {
   label: ActivityLabel;
-  title: string;
+  /**
+   * Display title. Absent when the core cannot name the block without
+   * inventing copy — a historical shell event may have no command text, and
+   * each frontend names that row in its own language instead.
+   */
+  title?: string;
   timestamp?: string;
   durationMs?: number;
   outcome?: ActivityOutcome;
@@ -53,7 +58,7 @@ export function mapMessageBlockToActivity(block: MessageBlock, live = false): Ac
   if (block.kind === "command") {
     return {
       label: "tool-activity",
-      title: block.command.command ?? "Command",
+      title: block.command.command ?? undefined,
       timestamp: block.command.startedAt ?? undefined,
       durationMs: block.command.durationMs ?? undefined,
       outcome: mapCommandOutcome(block.command),
@@ -135,4 +140,28 @@ export function workRecordStatus(entries: WorkRecordEntry[]): WorkRecordStatus {
   if (entries.some((m) => m.evidence.outcome === "interrupted")) return "interrupted";
   if (entries.some((m) => m.evidence.outcome === "unknown")) return "unknown";
   return "done";
+}
+
+export function liveMessageHasVisibleActivity(message: {
+  id: string;
+  blocks: readonly MessageBlock[];
+}): boolean {
+  if (!message.id.startsWith("progress:")) return false;
+  return (
+    message.blocks.some(
+      (block) => block.kind === "progress" && !isToolActivityBlock(block) && Boolean(block.text),
+    ) || workRecordEntries(message.blocks).length > 0
+  );
+}
+
+export function workingBotsWithoutVisibleActivity<Bot extends { botId?: string | null }>(
+  workingBots: readonly Bot[],
+  messages: readonly { id: string; blocks: readonly MessageBlock[]; botId?: string | null }[],
+): Bot[] {
+  const covered = new Set(
+    messages.flatMap((message) =>
+      message.botId && liveMessageHasVisibleActivity(message) ? [message.botId] : [],
+    ),
+  );
+  return workingBots.filter((bot) => bot.botId == null || !covered.has(bot.botId));
 }

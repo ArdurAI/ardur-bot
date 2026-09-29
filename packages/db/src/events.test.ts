@@ -20,6 +20,7 @@ import {
   finalizeRun,
   followThreadEvents,
   groupModelFailureNotice,
+  isSteeringContinuationClientNonce,
   pauseRunForInput,
   pauseRunForTakeover,
   peerRunMessageBlocks,
@@ -261,6 +262,159 @@ describe("finalizeRun", () => {
       }),
     );
     expect(publish).toHaveBeenCalledOnce();
+    // A runtime failure releases steering without its old claim, so the next run owns it.
+    expect(tx.steeringMessage.updateMany).toHaveBeenCalledWith({
+      where: { runId: "run-1" },
+      data: { runId: null, claimedAt: null, adopted: false },
+    });
+  });
+
+  it("releases a taken-over waiting row when a later non-follow-up fails", async () => {
+    const tx = {
+      $queryRaw: vi.fn(async () => []),
+      run: {
+        findUnique: vi.fn(async () => ({ status: "running" })),
+        findUniqueOrThrow: vi.fn(async () => ({
+          clientNonce: null,
+          sourceMessage: { seq: 8 },
+        })),
+        findFirst: vi.fn(async () => null),
+        updateMany: vi.fn(async () => ({ count: 1 })),
+      },
+      attempt: { updateMany: vi.fn(async () => ({ count: 1 })) },
+      task: { updateMany: vi.fn(async () => ({ count: 1 })) },
+      thread: { update: vi.fn(async () => ({ nextEventSeq: 1 })) },
+      event: {
+        create: vi.fn(async () => ({ threadId: "thread-1", seq: 0 })),
+        deleteMany: vi.fn(async () => ({ count: 0 })),
+      },
+      steeringMessage: {
+        findMany: vi.fn(async () => []),
+        updateMany: vi.fn(async () => ({ count: 1 })),
+      },
+      botMessageWake: { findMany: vi.fn(async () => []) },
+      botMessageDelivery: { updateMany: vi.fn(async () => ({ count: 0 })) },
+      bot: { update: vi.fn(async () => ({})) },
+    };
+    const prisma = {
+      $transaction: vi.fn(async (operation: (client: typeof tx) => unknown) => operation(tx)),
+    } as unknown as PrismaClient;
+
+    await finalizeRun(
+      prisma,
+      {
+        spaceId: "space-1",
+        threadId: "thread-1",
+        botId: "bot-1",
+        runId: "run-2",
+        taskId: "task-1",
+        attemptId: "attempt-1",
+        leaseOwner: "worker-1",
+        leaseFence: 1,
+        outcome: "failed",
+        error: "provider failed",
+        runtimeProblem: {
+          kind: "problem",
+          code: "runtime-unavailable",
+          pin: {
+            provider: "openai",
+            modelId: "fixture-model",
+            effort: "high",
+            credentialId: "fixture-credential",
+            runtimeKind: "codex-app-server",
+            revision: 1,
+          },
+          reason: "The paired computer disconnected.",
+          actions: [],
+        },
+      },
+      { publish: vi.fn(async () => undefined) } as never,
+    );
+
+    expect(tx.steeringMessage.updateMany).toHaveBeenCalledWith({
+      where: { runId: "run-2" },
+      data: { runId: null, claimedAt: null, adopted: false },
+    });
+  });
+
+  it("keeps a follow-up's own batch and releases rows it took over", async () => {
+    const tx = {
+      $queryRaw: vi.fn(async () => []),
+      run: {
+        findUnique: vi.fn(async () => ({ status: "running" })),
+        findUniqueOrThrow: vi.fn(async () => ({
+          clientNonce: "steering-continuation:run-1",
+          sourceMessage: { seq: 8 },
+        })),
+        findFirst: vi.fn(async () => null),
+        updateMany: vi.fn(async () => ({ count: 1 })),
+      },
+      attempt: { updateMany: vi.fn(async () => ({ count: 1 })) },
+      task: { updateMany: vi.fn(async () => ({ count: 1 })) },
+      thread: { update: vi.fn(async () => ({ nextEventSeq: 1 })) },
+      event: {
+        create: vi.fn(async () => ({ threadId: "thread-1", seq: 0 })),
+        deleteMany: vi.fn(async () => ({ count: 0 })),
+      },
+      steeringMessage: {
+        findMany: vi.fn(async () => []),
+        updateMany: vi.fn(async () => ({ count: 1 })),
+      },
+      botMessageWake: { findMany: vi.fn(async () => []) },
+      botMessageDelivery: { updateMany: vi.fn(async () => ({ count: 0 })) },
+      bot: { update: vi.fn(async () => ({})) },
+    };
+    const prisma = {
+      $transaction: vi.fn(async (operation: (client: typeof tx) => unknown) => operation(tx)),
+    } as unknown as PrismaClient;
+
+    await finalizeRun(
+      prisma,
+      {
+        spaceId: "space-1",
+        threadId: "thread-1",
+        botId: "bot-1",
+        runId: "run-2",
+        taskId: "task-1",
+        attemptId: "attempt-1",
+        leaseOwner: "worker-1",
+        leaseFence: 1,
+        outcome: "failed",
+        error: "provider failed",
+        runtimeProblem: {
+          kind: "problem",
+          code: "runtime-unavailable",
+          pin: {
+            provider: "openai",
+            modelId: "fixture-model",
+            effort: "high",
+            credentialId: "fixture-credential",
+            runtimeKind: "codex-app-server",
+            revision: 1,
+          },
+          reason: "The paired computer disconnected.",
+          actions: [],
+        },
+      },
+      { publish: vi.fn(async () => undefined) } as never,
+    );
+
+    expect(tx.steeringMessage.updateMany).toHaveBeenCalledWith({
+      where: {
+        runId: "run-2",
+        OR: [{ adopted: true }, { message: { seq: { gt: 8 } } }],
+      },
+      data: { runId: null, claimedAt: null, adopted: false },
+    });
+  });
+
+  it("marks only steering continuation nonces", () => {
+    expect(isSteeringContinuationClientNonce("steering-continuation:run-1")).toBe(true);
+    expect(isSteeringContinuationClientNonce("steering-continuation:")).toBe(true);
+    expect(isSteeringContinuationClientNonce("peer-wake:run-1")).toBe(false);
+    expect(isSteeringContinuationClientNonce("send:message-1")).toBe(false);
+    expect(isSteeringContinuationClientNonce(null)).toBe(false);
+    expect(isSteeringContinuationClientNonce(undefined)).toBe(false);
   });
 });
 
@@ -2087,6 +2241,7 @@ describe("claimSteering", () => {
       $queryRaw: vi.fn(),
       steeringSummary: { upsert: vi.fn() },
       run: { findFirst: vi.fn().mockResolvedValue({ id: "run-1" }) },
+      botMessageWake: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
       steeringMessage: {
         findMany: vi.fn().mockResolvedValue([
           {
@@ -2170,8 +2325,12 @@ describe("claimSteering", () => {
         }),
       }),
     );
+    // Rows a failed run released may still carry its claim; the delivering run takes them over.
     expect(tx.steeringMessage.updateMany).toHaveBeenCalledWith({
-      where: { id: { in: ["steer-1", "steer-2"] }, claimedAt: null },
+      where: {
+        id: { in: ["steer-1", "steer-2"] },
+        OR: [{ claimedAt: null }, { runId: null }],
+      },
       data: { runId: "run-1", claimedAt: expect.any(Date) },
     });
   });

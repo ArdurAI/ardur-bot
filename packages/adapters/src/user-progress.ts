@@ -63,10 +63,13 @@ export function extractNarrationText(
  */
 export function finalBlocksAfterMidTurnProgress(
   blocks: MessageBlock[],
-  publishedMidTurn: boolean,
+  reason: "silent-routine" | "ordinary-run",
 ): MessageBlock[] {
-  if (!publishedMidTurn || blocks.length === 0) return blocks;
-  if (blocks.every((block) => isToolActivityBlock(block) || isReasoningSummaryBlock(block)))
+  if (blocks.length === 0) return blocks;
+  if (
+    reason === "silent-routine" &&
+    blocks.every((block) => isToolActivityBlock(block) || isReasoningSummaryBlock(block))
+  )
     return [];
   return blocks;
 }

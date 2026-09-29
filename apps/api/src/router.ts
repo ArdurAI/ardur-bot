@@ -749,10 +749,13 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         workspaceFiles.describe(context.actor, input.botId),
       ),
       list: authed.workspace.list.handler(({ context, input }) =>
-        workspaceFiles.list(context.actor, input),
+        workspaceFiles.list(context.actor, input, context.signal),
       ),
       read: authed.workspace.read.handler(({ context, input }) =>
-        workspaceFiles.read(context.actor, input),
+        workspaceFiles.read(context.actor, input, context.signal),
+      ),
+      save: authed.workspace.save.handler(({ context, input }) =>
+        workspaceFiles.save(context.actor, input, context.signal),
       ),
       tasks: authed.workspace.tasks.handler(({ context, input }) =>
         workspaceTasks(deps.prisma, context.actor, input.botId),
@@ -3402,7 +3405,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
     scratchpad: {
       list: authed.scratchpad.list.handler(async ({ context, input }) => {
         await repos.getBot(context.actor, input.botId);
-        return listScratchpadItems(
+        const items = await listScratchpadItems(
           { prisma: deps.prisma },
           {
             spaceId: context.actor.spaceId,
@@ -3411,6 +3414,51 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
             includeDone: input.includeDone ?? false,
           },
         );
+
+        const workspaces = new Set(
+          items.map((i) => i.boardWorkspaceId).filter(Boolean) as string[],
+        );
+        const snapshots = new Map<string, Awaited<ReturnType<typeof board.snapshot>>>();
+
+        for (const ws of workspaces) {
+          try {
+            snapshots.set(ws, await board.snapshot(context.actor, { workspaceId: ws }));
+          } catch {
+            // ignore if board unavailable
+          }
+        }
+
+        return items.map((item) => {
+          if (!item.boardWorkspaceId || !item.boardItemId) return item;
+          const snap = snapshots.get(item.boardWorkspaceId);
+          if (!snap) return item;
+          const boardItem = snap.items.find((i) => i.id === item.boardItemId);
+          if (!boardItem) return item;
+
+          let st = boardItem.status;
+          if (st === "closed") {
+            st =
+              boardItem.closedAt && Date.parse(boardItem.closedAt) >= Date.now() - 7 * 86400000
+                ? "done"
+                : "closed";
+          } else if (
+            st === "deferred" ||
+            st === "pinned" ||
+            (boardItem.deferUntil && Date.parse(boardItem.deferUntil) > Date.now())
+          ) {
+            st = "deferred";
+          } else {
+            const isBlocked = snap.blockedIds.includes(boardItem.id) || st === "blocked";
+            if (isBlocked) {
+              st = "blocked";
+            } else if (st === "in_progress" || st === "hooked") {
+              st = "in_progress";
+            } else {
+              st = snap.readyIds.includes(boardItem.id) ? "ready" : "blocked";
+            }
+          }
+          return { ...item, status: st as any, title: boardItem.title };
+        });
       }),
       create: authed.scratchpad.create.handler(async ({ context, input }) => {
         await repos.getBot(context.actor, input.botId);
@@ -3438,6 +3486,31 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         if (input.status !== undefined && !isScratchpadStatus(input.status)) {
           throw new ORPCError("BAD_REQUEST", { message: "Invalid scratchpad status." });
         }
+
+        if (existing.boardWorkspaceId && existing.boardItemId && input.status !== undefined) {
+          try {
+            if (input.status === "done" || input.status === "closed") {
+              const provider = await board.service.provider(
+                context.actor,
+                existing.boardWorkspaceId,
+              );
+              await provider.close([existing.boardItemId], input.status);
+            } else {
+              let st: any = "open";
+              if (input.status === "parked" || input.status === "deferred") st = "deferred";
+              else if (input.status === "in_progress") st = "in_progress";
+              else if (input.status === "blocked") st = "blocked";
+              const provider = await board.service.provider(
+                context.actor,
+                existing.boardWorkspaceId,
+              );
+              await provider.update(existing.boardItemId, { status: st });
+            }
+          } catch (e) {
+            getLogger().error("Failed to update board status for linked item", e);
+          }
+        }
+
         const row = await deps.prisma.scratchpadItem.update({
           where: { id: existing.id },
           data: {
@@ -3459,6 +3532,74 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         if (!existing) throw new IsolationError();
         await deps.prisma.scratchpadItem.delete({ where: { id: existing.id } });
         return { ok: true as const };
+      }),
+      linkBoardItems: authed.scratchpad.linkBoardItems.handler(async ({ context, input }) => {
+        await repos.getBot(context.actor, input.botId);
+
+        const workspace = await deps.prisma.boardWorkspace.findFirst({
+          where: {
+            id: input.boardWorkspaceId,
+            spaceId: context.actor.spaceId,
+            enabled: true,
+          },
+        });
+        if (!workspace)
+          throw new ORPCError("BAD_REQUEST", { message: "Board not found or disabled" });
+        if (!workspace.allowAllBots && !workspace.allowedBotIds.includes(input.botId)) {
+          throw new ORPCError("BAD_REQUEST", { message: "Bot not allowed on board" });
+        }
+
+        const snapshot = await board.snapshot(context.actor, {
+          workspaceId: input.boardWorkspaceId,
+        });
+        const itemsById = new Map(snapshot.items.map((i) => [i.id, i]));
+        for (const itemId of input.boardItemIds) {
+          if (!itemsById.has(itemId)) {
+            throw new ORPCError("BAD_REQUEST", { message: `Item ${itemId} not found on board` });
+          }
+        }
+
+        const existing = await deps.prisma.scratchpadItem.findMany({
+          where: {
+            spaceId: context.actor.spaceId,
+            botId: input.botId,
+            boardWorkspaceId: input.boardWorkspaceId,
+            boardItemId: { in: input.boardItemIds },
+          },
+        });
+        if (existing.length > 0) {
+          throw new ORPCError("BAD_REQUEST", { message: "Duplicate link refused" });
+        }
+
+        const now = new Date();
+        const data = input.boardItemIds.map((itemId) => {
+          const item = itemsById.get(itemId)!;
+          return {
+            spaceId: context.actor.spaceId,
+            botId: input.botId,
+            userId: context.actor.userId,
+            boardWorkspaceId: input.boardWorkspaceId,
+            boardItemId: itemId,
+            title: item.title,
+            status: "open",
+            notes: "",
+            createdAt: now,
+            updatedAt: now,
+          };
+        });
+
+        await deps.prisma.scratchpadItem.createMany({ data });
+
+        const created = await deps.prisma.scratchpadItem.findMany({
+          where: {
+            spaceId: context.actor.spaceId,
+            botId: input.botId,
+            boardWorkspaceId: input.boardWorkspaceId,
+            boardItemId: { in: input.boardItemIds },
+          },
+          orderBy: { createdAt: "desc" },
+        });
+        return created.map(mapScratchpadItem);
       }),
     },
     skills: {

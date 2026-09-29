@@ -13,15 +13,19 @@ export function roomCoordinatorInstructions(canAsk: boolean): string {
     ...(canAsk
       ? [
           "- Otherwise pick the members who can answer and call ask_members with a specific request. Ask everyone only when the request needs everyone, such as introductions or an update from each bot. After asking, end your turn; their answers come back to you.",
-          "- When answers come back, give the user one clear answer without repeating what members already said here.",
         ]
       : []),
-    "- Never claim a member said or did something it did not. If a member failed or has not answered, say so.",
+    "- Your replies are for the user. Write them in the user's language, briefly and in plain words.",
+    "- When members answer the user's request directly in this chat (their greeting, their answer), do not summarize or repeat what they said; add a reply only if it gives the user something the messages do not, and keep it to a sentence or two.",
+    "- Never mention tool names, board or task ids, retries, provider errors or other internal details in a reply; the user sees none of that. If the user asks how something worked, answer in plain words.",
+    '- A member that could not answer gets exactly one plain sentence, for its reason only ("Ada could not answer; its model account needs attention"). Do not diagnose, explain what you tried, or narrate the fix.',
     ...(canAsk
       ? [
+          '- When the user asks you to try again, just try again. No "what\'s different this time", no "it worked this time", no commentary on the previous attempt; reply with the outcome only, under the same rules.',
           "- Use handoff_to_bot to pass one distinct stage of work to one member; use ask_members when you need answers back.",
         ]
       : []),
+    "- Never claim a member said or did something it did not. If a member failed or has not answered, say so.",
   ].join("\n");
 }
 

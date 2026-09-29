@@ -590,9 +590,58 @@ describe("lingui catalogs", () => {
     }
   });
 
+  it("translates workspace file save errors in every shipped catalog", async () => {
+    const sentences = [
+      "Could not save this file. Try again.",
+      "The computer is busy. Wait for it to finish.",
+      "Computer changed. Refresh files.",
+      "The file changed. Open it again before saving.",
+      "This file is read-only. Open a copy to edit it.",
+      "This file is larger than 2 MB. Open a copy to edit it.",
+      "This is a binary file. You cannot edit it here.",
+      "This file no longer exists. Save it as a new file or close it.",
+    ];
+    for (const locale of ["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"]) {
+      const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));
+      const parsed = await formatter().parse(readFileSync(filename, "utf8"), {
+        locale,
+        sourceLocale: "en",
+        filename,
+      });
+      for (const sentence of sentences) {
+        const entry = Object.values(parsed).find((value) => value.message === sentence);
+        expect(entry, `${locale}: ${sentence} missing from catalog`).toBeTruthy();
+        expect(entry?.translation?.trim(), `${locale}: ${sentence} must not be empty`).toBeTruthy();
+      }
+    }
+  });
+
   it("translates the learning reviewer strings in every shipped catalog", () => {
     const sentences = ["Learning reviewer", "The reviewer was changed in another window."];
     for (const locale of ["en", "de", "ko", "tr", "hi", "pt-BR", "zh-CN", "es", "ru"]) {
+      const catalog = readFileSync(
+        fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url)),
+        "utf8",
+      );
+      for (const sentence of sentences) {
+        const key = `msgid ${JSON.stringify(sentence)}\nmsgstr "`;
+        const at = catalog.indexOf(key);
+        expect(at, `${locale}: ${sentence} missing from catalog`).toBeGreaterThanOrEqual(0);
+        const translated = catalog.slice(at + key.length, catalog.indexOf('"', at + key.length));
+        expect(translated.trim(), `${locale}: ${sentence} must not be empty`).toBeTruthy();
+      }
+    }
+  });
+
+  it("translates each coordination failure reason in every shipped catalog", () => {
+    const sentences = [
+      "{name} couldn't answer",
+      "{name} couldn't answer: its model account needs attention",
+      "{name} couldn't answer: its model account hit a rate limit",
+      "{name} couldn't answer: its model is unavailable",
+      "{name} stopped before answering",
+    ];
+    for (const locale of ["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"]) {
       const catalog = readFileSync(
         fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url)),
         "utf8",
@@ -623,6 +672,26 @@ describe("lingui catalogs", () => {
         expect(catalog).toContain(`msgid ${JSON.stringify(sentence)}`);
         if (locale !== "en") {
           expect(catalog).not.toContain(`msgid ${JSON.stringify(sentence)}\nmsgstr ""`);
+        }
+      }
+    }
+  });
+
+  it("translates open-work board links in every shipped catalog", () => {
+    const sentences = ["Add from board", "New work item", "Open in board"];
+    for (const locale of ["en", "de", "ko", "tr", "hi", "pt-BR", "zh-CN", "es", "ru"]) {
+      const catalog = readFileSync(
+        fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url)),
+        "utf8",
+      );
+      for (const sentence of sentences) {
+        expect(catalog).toContain(`msgid ${JSON.stringify(sentence)}`);
+        if (locale !== "en") {
+          expect(catalog).not.toContain(`msgid ${JSON.stringify(sentence)}\nmsgstr ""`);
+          const key = `msgid ${JSON.stringify(sentence)}\nmsgstr "`;
+          const at = catalog.indexOf(key);
+          const translated = catalog.slice(at + key.length, catalog.indexOf('"', at + key.length));
+          expect(translated).not.toEqual(sentence);
         }
       }
     }

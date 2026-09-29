@@ -16,7 +16,7 @@
       "id": "team",
       "eyebrow": "TEAM",
       "title": "Named bots, together",
-      "body": "Give each bot its own conversation and history, bring bots together in group chats, and see current tasks and availability in Team. Inspect tasks and read-only workspace files beside a conversation on web and desktop, or in native screens on mobile.",
+      "body": "Give each bot its own conversation and history, bring bots together in group chats, and see current tasks and availability in Team. On web and desktop, inspect tasks and edit workspace files beside a conversation. Mobile reads those files in its own screens.",
       "source": "README.md#What you get today"
     },
     {
@@ -37,7 +37,7 @@
       "id": "delegate",
       "eyebrow": "DELEGATION",
       "title": "Bots work together",
-      "body": "A group's coordinator can ask members for their answers in the room and bring them back as one reply. A goal coordinator can send bounded requests to group members' desk threads. Receipts show delivery, confirmed reading and replies. Effect requests wait for owner approval: the owner can allow one exact action once or read-only preparation, and can pause group or space team messages. Bots can also hand off room work or use short-lived subagents.",
+      "body": "A group's coordinator can ask members for their answers in the room; the asking collapses into one expandable line per round and each member answers under its own name. A goal coordinator can send bounded requests to group members' desk threads. Receipts show delivery, confirmed reading and replies. Effect requests wait for owner approval: the owner can allow one exact action once or read-only preparation, and can pause group or space team messages. Bots can also hand off room work or use short-lived subagents.",
       "source": "README.md#What you get today"
     },
     {

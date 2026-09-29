@@ -485,12 +485,23 @@ export const CreateRoutineInput = z
     }
   });
 
-export const ScratchpadItemStatusSchema = z.enum(["open", "parked", "done"]);
+export const ScratchpadItemStatusSchema = z.enum([
+  "open",
+  "parked",
+  "done",
+  "in_progress",
+  "blocked",
+  "deferred",
+  "ready",
+  "closed",
+]);
 export type ScratchpadItemStatus = z.infer<typeof ScratchpadItemStatusSchema>;
 
 export const ScratchpadItemSchema = z.object({
   id: Id,
   botId: Id,
+  boardWorkspaceId: z.string().nullable().optional(),
+  boardItemId: z.string().nullable().optional(),
   title: z.string(),
   status: ScratchpadItemStatusSchema,
   notes: z.string(),

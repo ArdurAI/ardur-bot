@@ -13,7 +13,7 @@ import {
 import { useLingui } from "@lingui/react/macro";
 import { useEffect, useState } from "react";
 import type { EditorSelection } from "./editor";
-import { quickMatches, scanFiles } from "./model";
+import { quickMatches, scanFiles } from "./files-model";
 
 export function QuickOpen({
   list,

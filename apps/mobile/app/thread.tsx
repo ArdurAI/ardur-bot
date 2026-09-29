@@ -22,6 +22,7 @@ import {
   cloudAgentHttpsUrl,
   composerCommands,
   composerSkills,
+  coordinationBlock,
   isApprovalAskBlock,
   isRunTerminalEvent,
   isSecretAskBlock,
@@ -32,6 +33,7 @@ import {
   selectedAskActionLabel,
   serializeComposerPrompt,
   userVisibleMessages,
+  workingBotsWithoutVisibleActivity,
 } from "@ardurbot/core";
 import * as Clipboard from "expo-clipboard";
 import { useFocusEffect, useLocalSearchParams, useNavigation, useRouter } from "expo-router";
@@ -76,6 +78,7 @@ import { BotAvatar } from "../components/bot-avatar";
 import { BotRuntimeLabel } from "../components/bot-runtime-label";
 import { CompactWorkRecord } from "../components/compact-work-record";
 import { MobileRunContext } from "../components/context-section";
+import { CoordinationLine } from "../components/coordination-line";
 import { DispatchStatus } from "../components/DispatchStatus";
 import {
   MarkdownArtifactPreview,
@@ -429,14 +432,15 @@ function Thread() {
     if (!inGroup) return [];
     const seen = new Set<string>();
     const working = snap?.activeRuns ?? (snap?.run ? [snap.run] : []);
-    return working.flatMap((run) => {
+    const bots = working.flatMap((run) => {
       if (!run.botId || seen.has(run.botId) || !isWorkingStatus(run.status)) return [];
       const member = snap?.members?.find((candidate) => candidate.botId === run.botId);
       if (!member) return [];
       seen.add(run.botId);
       return [{ ...member, status: run.status }];
     });
-  }, [inGroup, snap?.activeRuns, snap?.members, snap?.run]);
+    return workingBotsWithoutVisibleActivity(bots, visibleMessages);
+  }, [inGroup, snap?.activeRuns, snap?.members, snap?.run, visibleMessages]);
   const working = inGroup ? workingGroupBots.length > 0 : isWorkingStatus(currentBotStatus);
 
   useEffect(() => {
@@ -1608,6 +1612,9 @@ function Thread() {
               }
               onAnswer={answerMessage}
               onOpenBot={openBot}
+              onOpenMemberModelSettings={(botId: string) =>
+                router.push({ pathname: "/bot-settings", params: { botId, focus: "model" } })
+              }
               onPreviewMarkdown={setMarkdownPreview}
               actionProps={actionProps}
             />
@@ -2435,6 +2442,7 @@ const MessageBubble = memo(function MessageBubble({
   canAnswer,
   onAnswer,
   onOpenBot,
+  onOpenMemberModelSettings,
   onPreviewMarkdown,
   actionProps,
 }: {
@@ -2448,6 +2456,7 @@ const MessageBubble = memo(function MessageBubble({
   canAnswer: boolean;
   onAnswer: (message: MobileMessage, answer: string) => Promise<void>;
   onOpenBot: (botId: string, name: string) => void;
+  onOpenMemberModelSettings: (botId: string) => void;
   onPreviewMarkdown: (target: MarkdownArtifactPreviewTarget) => void;
   actionProps: MessageActionProps;
 }) {
@@ -2499,6 +2508,16 @@ const MessageBubble = memo(function MessageBubble({
         detail={handoff.text}
         expanded={peerExpanded}
         onToggle={() => setPeerExpanded((expanded) => !expanded)}
+      />
+    );
+  }
+  const coordination = coordinationBlock(message.blocks);
+  if (coordination) {
+    return (
+      <CoordinationLine
+        block={coordination}
+        actionProps={actionProps}
+        onOpenMemberSettings={onOpenMemberModelSettings}
       />
     );
   }

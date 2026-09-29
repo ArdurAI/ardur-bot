@@ -264,6 +264,9 @@ export interface MemorySnapshot {
     content: string;
     revision: number;
     updatedAt?: string;
+    /** Durable scope and owner when the store knows them; the recall index filters by them. */
+    scope?: "bot" | "user" | "shared";
+    owner?: string;
   }>;
 }
 
@@ -639,6 +642,8 @@ export interface AgentRuntimeCapabilities {
   compaction: boolean;
   tools: boolean;
   scripted: boolean;
+  /** False when this runtime rejects every image, whatever the model accepts. */
+  images?: boolean;
   /** Brokered provider calls persist their own receipts; runtime aggregates are informational. */
   usageAccounting?: "runtime" | "external";
 }

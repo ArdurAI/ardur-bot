@@ -368,6 +368,37 @@ export const MessageBlock = z.discriminatedUnion("kind", [
     /** Links in a bot-started chain; absent when a person started it. */
     hop: z.number().int().nonnegative().optional(),
   }),
+  z.object({
+    /**
+     * One group-coordination round: the coordinator's request to room members and
+     * how each asked member fared. This is coordination, not a reply — surfaces
+     * collapse it to a single line and show the details only when expanded.
+     */
+    kind: z.literal("coordination"),
+    /** The ask's idempotency key (`group-ask:<round>:<run>:<callId>`); identifies the round. */
+    nonce: z.string(),
+    /** Ask round within the coordinator's turn chain, 1-based. */
+    round: z.number().int().positive(),
+    /** The request exactly as the asked members received it. */
+    text: z.string(),
+    /** Short progress notes the coordinator posted while the round was open. */
+    updates: z.array(z.string()),
+    members: z.array(
+      z.object({
+        botId: Id,
+        name: z.string(),
+        outcome: z.enum(["pending", "answered", "failed", "stopped", "waiting"]),
+        /** Why a failed member could not answer, as a code each screen translates. */
+        reasonCode: z
+          .enum(["auth", "rate-limit", "model-unavailable", "stopped", "other"])
+          .optional(),
+        /** Legacy plain cause; early rounds stored an English sentence here. */
+        reason: z.string().optional(),
+      }),
+    ),
+    /** Wall-clock of the latest edit, for readers that order the line by activity. */
+    updatedAt: z.string().optional(),
+  }),
 ]);
 export type MessageBlock = z.infer<typeof MessageBlock>;
 

@@ -54,19 +54,19 @@ describe("extractNarrationText", () => {
 });
 
 describe("finalBlocksAfterMidTurnProgress", () => {
-  it("drops a hollow final message that is only hidden tool activity", () => {
+  it("drops a hollow final message that is only hidden tool activity for silent routines", () => {
     const steps: MessageBlock = { kind: "steps", steps: [{ label: "Shell", count: 2 }] };
-    expect(finalBlocksAfterMidTurnProgress([steps], true)).toEqual([]);
-    expect(finalBlocksAfterMidTurnProgress([steps], false)).toEqual([steps]);
+    expect(finalBlocksAfterMidTurnProgress([steps], "silent-routine")).toEqual([]);
+    expect(finalBlocksAfterMidTurnProgress([steps], "ordinary-run")).toEqual([steps]);
   });
 
-  it("treats a reasoning summary as hidden work, not a final answer", () => {
+  it("treats a reasoning summary as hidden work, dropping it for silent routines", () => {
     const blocks: MessageBlock[] = [
       { kind: "progress", text: "Weighing options.", reasoning: true },
       { kind: "steps", steps: [{ label: "Shell", count: 1 }] },
     ];
-    expect(finalBlocksAfterMidTurnProgress(blocks, true)).toEqual([]);
-    expect(finalBlocksAfterMidTurnProgress(blocks, false)).toEqual(blocks);
+    expect(finalBlocksAfterMidTurnProgress(blocks, "silent-routine")).toEqual([]);
+    expect(finalBlocksAfterMidTurnProgress(blocks, "ordinary-run")).toEqual(blocks);
   });
 
   it("keeps a final answer alongside tool activity", () => {
@@ -74,7 +74,7 @@ describe("finalBlocksAfterMidTurnProgress", () => {
       { kind: "steps", steps: [{ label: "Web search", count: 1 }] },
       { kind: "text", text: "You are free Tuesday afternoon." },
     ];
-    expect(finalBlocksAfterMidTurnProgress(blocks, true)).toEqual(blocks);
+    expect(finalBlocksAfterMidTurnProgress(blocks, "silent-routine")).toEqual(blocks);
     expect(isToolActivityBlock(blocks[0]!)).toBe(true);
   });
 });

@@ -59,6 +59,31 @@ describe("isRunTerminalEvent", () => {
 });
 
 describe("reduceLiveMessageBlocks", () => {
+  it("keeps reasoning summary blocks and replaces only narration when followed by streaming text", () => {
+    let blocks = reduceLiveMessageBlocks([], {
+      type: "progress",
+      payload: { text: "Let me check." },
+    });
+    blocks = reduceLiveMessageBlocks(blocks, {
+      type: "tool",
+      name: "shell",
+    });
+    blocks = reduceLiveMessageBlocks(blocks, {
+      type: "progress",
+      payload: { text: "Weighing options.", reasoning: true },
+    });
+    // streamed reply whose text does not start with the narration
+    blocks = reduceLiveMessageBlocks(blocks, {
+      type: "progress",
+      payload: { text: "The answer is four.", streaming: true },
+    });
+
+    expect(blocks).toEqual([
+      { kind: "steps", steps: [{ label: "Shell", count: 1 }] },
+      { kind: "progress", text: "Weighing options.", reasoning: true },
+      { kind: "progress", text: "The answer is four.", streaming: true },
+    ]);
+  });
   it("preserves structured live activity markers", () => {
     expect(
       reduceLiveMessageBlocks([], {
@@ -355,6 +380,42 @@ describe("reduceLiveMessageBlocks", () => {
     ).toEqual([
       { kind: "text", text: "Let me look at it." },
       { kind: "steps", steps: [{ label: "Ls", count: 1 }] },
+    ]);
+  });
+
+  it("clears a stale activity title on an empty activity update while its tool lands once as a step", () => {
+    // The Pi runtime starts a tool whose activity title has no sentence
+    // ending, so the tool name is held on the title.
+    const activity = reduceLiveMessageBlocks([], {
+      type: "progress",
+      payload: { text: "Reading notes/plan.md", activity: true },
+    });
+    const working = reduceLiveMessageBlocks(activity, { type: "tool", name: "read_file" });
+    expect(working).toEqual([
+      {
+        kind: "progress",
+        text: "Reading notes/plan.md",
+        activity: true,
+        pendingToolNames: ["read_file"],
+      },
+    ]);
+
+    // Pi then clears the transient title before the reply resumes.
+    const cleared = reduceLiveMessageBlocks(working, {
+      type: "progress",
+      payload: { text: "", activity: true },
+    });
+
+    // Narration resumes: no stale activity block, and the held tool lands
+    // exactly once as a step.
+    expect(
+      reduceLiveMessageBlocks(cleared, {
+        type: "progress",
+        payload: { text: "Here are the notes.", streaming: true },
+      }),
+    ).toEqual([
+      { kind: "steps", steps: [{ label: "Read file", count: 1 }] },
+      { kind: "progress", text: "Here are the notes.", streaming: true },
     ]);
   });
 
@@ -848,6 +909,33 @@ describe("merged behavior of reasoning, narration and streaming", () => {
     const tool = reduceLiveMessageBlocks(narration, { type: "tool", name: "run_command" });
     expect(tool).toEqual([
       { kind: "progress", text: "Here is the plan", pendingToolNames: ["run_command"] },
+    ]);
+  });
+
+  it("retains reasoning and dumps held tools on reply replacement", () => {
+    // A reasoning block, a plain narration block, and an activity block with held tools.
+    const state: MessageBlock[] = [
+      { kind: "progress", text: "Thinking...", reasoning: true },
+      { kind: "progress", text: "Starting reply..." },
+      {
+        kind: "progress",
+        text: "Doing work...",
+        activity: true,
+        pendingToolNames: ["run_command"],
+      },
+    ];
+
+    // An entirely new reply segment arrives. This triggers replacement.
+    const replaced = reduceLiveMessageBlocks(state, {
+      type: "progress",
+      payload: { text: "Here is my final answer", streaming: true },
+    });
+
+    // The activity block goes away, its tools become steps, reasoning stays.
+    expect(replaced).toEqual([
+      { kind: "progress", text: "Thinking...", reasoning: true },
+      { kind: "steps", steps: [{ label: "Run command", count: 1 }] },
+      { kind: "progress", text: "Here is my final answer", streaming: true },
     ]);
   });
 

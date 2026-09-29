@@ -1979,6 +1979,59 @@ describe("thread event reduction", () => {
     expect(next?.messages[0]?.blocks[0]).toMatchObject({ status: "answered", answer: "Paris" });
   });
 
+  it("replaces a coordination line in place when a member outcome lands", () => {
+    const initial = snapshot([
+      message("ask-1", [
+        {
+          kind: "coordination",
+          nonce: "group-ask:1:run-1:call-1",
+          round: 1,
+          text: "Say hello.",
+          updates: [],
+          members: [
+            { botId: "ada", name: "Ada", outcome: "pending" },
+            { botId: "ben", name: "Ben", outcome: "pending" },
+          ],
+        },
+      ]),
+    ]);
+    const next = reduceThreadSnapshot(
+      initial,
+      event({
+        type: "thread.message.updated",
+        seq: 7,
+        payload: {
+          messageId: "ask-1",
+          role: "bot",
+          blocks: [
+            {
+              kind: "coordination",
+              nonce: "group-ask:1:run-1:call-1",
+              round: 1,
+              text: "Say hello.",
+              updates: [],
+              members: [
+                { botId: "ada", name: "Ada", outcome: "answered" },
+                { botId: "ben", name: "Ben", outcome: "pending" },
+              ],
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(next?.messages).toHaveLength(1);
+    expect(next?.messages[0]?.id).toBe("ask-1");
+    expect(next?.cursor).toBe(7);
+    expect(next?.messages[0]?.blocks[0]).toMatchObject({
+      kind: "coordination",
+      members: [
+        { botId: "ada", outcome: "answered" },
+        { botId: "ben", outcome: "pending" },
+      ],
+    });
+  });
+
   it("preserves botId on durable bot messages", () => {
     const initial = snapshot([]);
     const next = reduceThreadSnapshot(

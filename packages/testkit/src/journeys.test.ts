@@ -51,7 +51,8 @@ import * as turnContext from "../../adapters/src/context/assemble.js";
 import { checkDelegationExecution } from "../../adapters/src/delegation-execution.js";
 import { compactHistory } from "../../adapters/src/history-compaction.js";
 import { integrationApprovalForCall } from "../../adapters/src/integration-access.js";
-import { promptWithInitialSteering, toHistory } from "../../adapters/src/pi-runtime.js";
+import { toHistory } from "../../adapters/src/pi-runtime.js";
+import { promptWithInitialSteering } from "../../adapters/src/steering-input.js";
 import { sessionCookieHeader } from "./index.js";
 
 type App = { request: (input: string, init?: RequestInit) => Promise<Response> };
@@ -5979,26 +5980,51 @@ describeJourneys("required product journeys", () => {
         admissionKey: expect.stringMatching(new RegExp(`^group-ask:1:${intro.runId}:`)),
         coordinatorWokenAt: expect.any(Date),
       });
+    // The ask stores as one coordination block the room collapses to a line;
+    // every asked member ends recorded as answered on it. Outcomes land as
+    // each member's run settles, which can trail the coordinator's follow-up.
+    let askBlock: Record<string, unknown> | undefined;
+    let askMessageMeta: { botId: string; runId: string | null } | undefined;
+    let askMessages: unknown[] = [];
+    await waitForDatabase(async () => {
+      const rows = await prisma.message.findMany({
+        where: { threadId: group.threadId, role: "bot" },
+        orderBy: { seq: "asc" },
+        select: { botId: true, runId: true, blocks: true },
+      });
+      const found = rows.filter((message) =>
+        JSON.stringify(message.blocks).includes("Introduce yourself to the room"),
+      );
+      askMessages = found;
+      askMessageMeta = found[0] ? { botId: found[0].botId, runId: found[0].runId } : undefined;
+      askBlock = (found[0]?.blocks as Array<Record<string, unknown>> | undefined)?.[0];
+      const members = (askBlock?.members as Array<{ outcome: string }> | undefined) ?? [];
+      return (
+        found.length === 1 &&
+        members.length === 3 &&
+        members.every((member) => member.outcome === "answered")
+      );
+    });
+    expect(askMessages).toHaveLength(1);
+    expect(askMessageMeta).toEqual({ botId: chief.id, runId: intro.runId });
+    expect(askBlock).toMatchObject({
+      kind: "coordination",
+      round: 1,
+      text: "Introduce yourself to the room in one sentence.",
+    });
+    const askedMembers = (askBlock?.members ?? []) as Array<{ botId: string; outcome: string }>;
+    expect(askedMembers.map((member) => member.botId).sort()).toEqual(
+      [ada.id, ben.id, cy.id].sort(),
+    );
+    expect(askedMembers.map((member) => member.outcome)).toEqual([
+      "answered",
+      "answered",
+      "answered",
+    ]);
     const roomMessages = await prisma.message.findMany({
       where: { threadId: group.threadId, role: "bot" },
       orderBy: { seq: "asc" },
       select: { botId: true, runId: true, blocks: true },
-    });
-    const askMessages = roomMessages.filter((message) =>
-      JSON.stringify(message.blocks).includes("Introduce yourself to the room"),
-    );
-    expect(askMessages).toHaveLength(1);
-    expect(askMessages[0]).toMatchObject({
-      botId: chief.id,
-      runId: intro.runId,
-      blocks: [
-        {
-          kind: "text",
-          text: expect.stringMatching(
-            /^(@(Ada|Ben|Cy) ){3}Introduce yourself to the room in one sentence\.$/,
-          ),
-        },
-      ],
     });
     for (const row of asked)
       expect(

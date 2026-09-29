@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
 import {
   access,
+  lstat,
   mkdir,
   open,
   readdir,
@@ -19,6 +20,9 @@ import type {
   PortableFile,
 } from "@ardurbot/adapter-kit";
 import { fileHandlePath } from "./file-handle-path.js";
+
+/** A path would leave the bot home or the workspace root being written inside. */
+export class HomeContainmentError extends Error {}
 
 export class LocalAgentHomeStore implements AgentHomeStore {
   private readonly botWrites = new Map<string, Promise<void>>();
@@ -175,6 +179,82 @@ export class LocalAgentHomeStore implements AgentHomeStore {
     });
   }
 
+  /**
+   * Write inside a narrower workspace root within the bot home. The boundary
+   * check and the write hold the same per-bot write lock, so a concurrent
+   * commit cannot rename a swapped directory into place between them, and the
+   * content lands in a temporary file inside the verified real directory
+   * before a rename onto the target, which replaces a swapped-in symlink
+   * instead of following it.
+   */
+  async writeFileInsideRoot(
+    botId: string,
+    workspaceRoot: string,
+    filePath: string,
+    content: string,
+    _context: AdapterContext,
+  ): Promise<void> {
+    return this.withBotWrite(botId, async () => {
+      await this.recoverInterruptedCommit(botId);
+      const dir = this.botDir(botId);
+      await mkdir(dir, { recursive: true });
+      const homeDir = await realpath(dir);
+      const boundary = await confinedRootDirectory(homeDir, workspaceRoot);
+      const canonical = await realpath(boundary);
+      const relative = path.posix.relative(
+        workspaceRoot.replaceAll("\\", "/") || ".",
+        filePath.replaceAll("\\", "/"),
+      );
+      if (
+        !relative ||
+        relative === "." ||
+        relative.startsWith("..") ||
+        path.posix.isAbsolute(relative)
+      )
+        throw new HomeContainmentError("Path escapes the bot workspace");
+      const parts = relative.split("/").filter(Boolean);
+      const name = parts.at(-1)!;
+      const directory = await confinedWriteDirectory(canonical, parts.slice(0, -1));
+      const target = path.join(directory, name);
+      // The temp file starts with the umask default; a replaced file keeps
+      // its mode, applied after the containment check below.
+      let mode: number | undefined;
+      try {
+        const existing = await lstat(target);
+        // A symlink is never followed; refuse it so the writer decides.
+        if (existing.isSymbolicLink() || !existing.isFile())
+          throw new HomeContainmentError("Path escapes the bot workspace");
+        mode = existing.mode & 0o777;
+      } catch (error) {
+        if (!isMissing(error)) throw error;
+      }
+      const temporary = path.join(directory, `.${name}.tmp-${randomUUID()}`);
+      const handle = await open(
+        temporary,
+        constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
+        0o666,
+      );
+      try {
+        // The verified pathname can lie if an ancestor was replaced; check
+        // the opened object itself before any content reaches it.
+        assertWorkspaceContained(canonical, await fileHandlePath(handle.fd));
+        if (mode !== undefined) await handle.chmod(mode);
+        await handle.writeFile(content, "utf8");
+      } catch (error) {
+        await handle.close().catch(() => undefined);
+        await rm(temporary, { force: true }).catch(() => undefined);
+        throw error;
+      }
+      await handle.close();
+      try {
+        await rename(temporary, target);
+      } catch (error) {
+        await rm(temporary, { force: true }).catch(() => undefined);
+        throw error;
+      }
+    });
+  }
+
   async list(botId: string, dirPath: string, _context: AdapterContext) {
     await this.waitForBotWrite(botId);
     await this.recoverInterruptedCommit(botId);
@@ -302,6 +382,88 @@ function assertContained(root: string, candidate: string) {
   )
     return;
   throw new Error("Path escapes the bot home");
+}
+
+function assertWorkspaceContained(root: string, candidate: string) {
+  const relative = path.relative(root, candidate);
+  if (
+    relative === "" ||
+    (!path.isAbsolute(relative) && !relative.startsWith(`..${path.sep}`) && relative !== "..")
+  )
+    return;
+  throw new HomeContainmentError("Path escapes the bot workspace");
+}
+
+/**
+ * Resolve the workspace root inside the bot home. Every existing component
+ * must be a real directory: a symlinked boundary could be retargeted by a
+ * later commit, so it is refused rather than followed. Missing components are
+ * created inside the verified parent.
+ */
+async function confinedRootDirectory(homeDir: string, workspaceRoot: string) {
+  const parts = workspaceRoot.replaceAll("\\", "/").split("/").filter(Boolean);
+  const lexical = path.resolve(homeDir, ...parts);
+  assertWorkspaceContained(homeDir, lexical);
+  let current = homeDir;
+  for (const part of parts) {
+    if (part === "." || part === "..")
+      throw new HomeContainmentError("Path escapes the bot workspace");
+    const next = path.join(current, part);
+    let info: Awaited<ReturnType<typeof lstat>>;
+    try {
+      info = await lstat(next);
+    } catch (error) {
+      if (!isMissing(error)) throw error;
+      await mkdir(next);
+      current = next;
+      continue;
+    }
+    if (info.isSymbolicLink() || !info.isDirectory())
+      throw new HomeContainmentError("Path escapes the bot workspace");
+    current = next;
+  }
+  return current;
+}
+
+/**
+ * Resolve the directory that will hold the written file. An in-boundary
+ * symlink is followed once, to its verified real target; anything resolving
+ * outside the workspace root is refused. Missing directories are created
+ * inside the verified parent.
+ */
+async function confinedWriteDirectory(canonicalBoundary: string, parts: string[]) {
+  let current = canonicalBoundary;
+  for (const part of parts) {
+    if (part === "." || part === "..")
+      throw new HomeContainmentError("Path escapes the bot workspace");
+    const next = path.join(current, part);
+    let info: Awaited<ReturnType<typeof lstat>>;
+    try {
+      info = await lstat(next);
+    } catch (error) {
+      if (!isMissing(error)) throw error;
+      await mkdir(next);
+      current = next;
+      continue;
+    }
+    if (info.isSymbolicLink()) {
+      let resolved: string;
+      try {
+        resolved = await realpath(next);
+      } catch (error) {
+        if (isMissing(error)) throw new HomeContainmentError("Path escapes the bot workspace");
+        throw error;
+      }
+      assertWorkspaceContained(canonicalBoundary, resolved);
+      if (!(await stat(resolved)).isDirectory())
+        throw new HomeContainmentError("Path escapes the bot workspace");
+      current = resolved;
+      continue;
+    }
+    if (!info.isDirectory()) throw new HomeContainmentError("Path escapes the bot workspace");
+    current = next;
+  }
+  return current;
 }
 
 function isMissing(error: unknown): error is NodeJS.ErrnoException {

@@ -83,11 +83,6 @@ export function selectAskTargets<T extends { id: string; name: string }>(
   return { targets: [...targets.values()], unknown };
 }
 
-/** What the room shows for one ask: the coordinator addressing the members it asked. */
-export function askMessageText(targets: readonly { name: string }[], request: string): string {
-  return `${targets.map((target) => `@${target.name.trim()}`).join(" ")} ${request.trim()}`;
-}
-
 /** The prompt an asked member wakes on. The coordinator's text stays framed peer content. */
 export function askMemberPrompt(input: { from: BotAddress; request: string }): string {
   const name = escapeDirectoryField(input.from.name.trim() || "The coordinator");
@@ -104,7 +99,7 @@ export function askMemberPrompt(input: { from: BotAddress; request: string }): s
 
 /** The coordinator's follow-up turn. Results arrive as required task data beside it. */
 export const ASK_WAKE_PROMPT =
-  "The members you asked have answered or stopped. Their results are listed in this chat's context. Give the user one clear answer to their request. Do not repeat what the members already said here, and never claim a member said or did something it did not.";
+  "The members you asked have answered or stopped; their results are listed in this chat's context as task data. Reply for the user, briefly and in plain words. When the members' answers already say what the user asked for (each one greeted, each one answered), do not summarize or repeat them — add a reply only if it gives the user something the answers do not. Never mention tool names, board or task ids, retries, provider errors or other internal details, and never narrate what you tried or what is different from a previous attempt; if the user asks to try again, just try again and reply with the outcome. A member that could not answer gets one plain sentence for its reason only. Never claim a member said or did something it did not.";
 
 export type AskMemberOutcome = "answered" | "failed" | "stopped" | "waiting" | "pending";
 

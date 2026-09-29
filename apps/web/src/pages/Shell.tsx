@@ -40,6 +40,7 @@ import {
   canAddComposerFolder,
   clampMentionHighlightIndex,
   composerSkills,
+  coordinationBlock,
   cronFromPreset,
   groupBotsForSidebar,
   inferAttachmentMimeType,
@@ -133,6 +134,7 @@ import { ArtifactFileCard } from "../components/ArtifactFileCard";
 import { AskCard } from "../components/AskCard";
 import { ActiveBotGlyph } from "../components/ai/CollaborationMarker";
 import { CompactWorkRecord } from "../components/ai/CompactWorkRecord";
+import { CoordinationLine } from "../components/ai/CoordinationLine";
 import { NarrationBlocks } from "../components/ai/NarrationBlocks";
 import { CloudAgentCard } from "../components/CloudAgentCard";
 import { ComputerMaintenanceActions } from "../components/ComputerMaintenanceActions";
@@ -179,7 +181,7 @@ import {
 import { desktopBridge } from "../lib/desktop";
 import { countOwnerWaiting, openDockSnapshot, publishDockWaitingCount } from "../lib/dock-badge";
 import { scheduleFocusPrompt } from "../lib/focus-prompt";
-import { INSIGHT_ACTION_EVENT } from "../lib/insight-actions";
+import { INSIGHT_ACTION_EVENT, openInsightAction } from "../lib/insight-actions";
 import { localTimezone } from "../lib/local-timezone";
 import {
   copyableMessageText,
@@ -277,6 +279,7 @@ import { handleWorkspaceOpenRun } from "./shell/workspace-run";
 import { SystemDictation } from "./system/SystemDictation";
 import { WindowChrome } from "./WindowChrome";
 import { terminalSupported } from "./workspace/terminal-controller";
+import { WorkspaceFileGuard } from "./workspace/WorkspaceFileGuard";
 
 const BotSettings = lazy(() =>
   import("./shell/bot-panel").then((module) => ({ default: module.BotSettings })),
@@ -2894,6 +2897,7 @@ export function ShellPage({
         mobileSidebarSwipeRef.current = null;
       }}
     >
+      <WorkspaceFileGuard />
       <ComputerUpdateProgress
         onCompleted={() => {
           if (active) void refreshThread(active.id);
@@ -3705,6 +3709,7 @@ export function ShellPage({
             onSpeak={speakMessage}
             onOpenComputer={onOpenComputer}
             onOpenMcp={(serverId) => openSettings("mcp", undefined, serverId)}
+            onOpenMemberModelSettings={(botId) => openInsightAction({ kind: "bot-model", botId })}
           />
         )}
         {recordingSkill ? (
@@ -3813,7 +3818,7 @@ export function ShellPage({
             className={
               panel === "computer"
                 ? "flex h-full min-h-0 w-full flex-col overflow-hidden px-3 py-3"
-                : "rk-scroll h-full w-full overflow-y-auto px-5 py-[17px]"
+                : "rk-scroll h-full min-w-0 w-full overflow-y-auto px-5 py-[17px]"
             }
           >
             {hasSharedPanelHeader(panel) ? (
@@ -5012,6 +5017,7 @@ const Transcript = memo(function Transcript({
   onReact,
   onJumpToMessage,
   onOpenPeerMessages,
+  onOpenMemberModelSettings,
   memberName,
   peerBot,
   onRefresh,
@@ -5043,6 +5049,7 @@ const Transcript = memo(function Transcript({
   ) => Promise<void>;
   onJumpToMessage: (messageId: string) => void;
   onOpenPeerMessages: (peer: { peerBotId: string; peerBotName: string }) => void;
+  onOpenMemberModelSettings?: (botId: string) => void;
   memberName?: (botId: string | undefined) => string | undefined;
   peerBot: (botId: string) => { color: string; status?: string } | undefined;
   onRefresh: () => Promise<void>;
@@ -5261,12 +5268,17 @@ const Transcript = memo(function Transcript({
           )
             return null;
           const peerReceipt = isPeerReceiptBlocks(message.blocks);
+          const coordination = coordinationBlock(message.blocks);
           const messageReactions = reactionView.reactions.get(message.id);
           return (
             <div
               key={message.id}
               data-message-id={message.id}
-              className={peerReceipt ? "relative py-0.5" : "group/message relative hover:z-20"}
+              className={cn(
+                peerReceipt || coordination
+                  ? "relative py-0.5"
+                  : "group/message relative hover:z-20",
+              )}
             >
               {!peerReceipt && !message.id.startsWith("progress:") ? (
                 <time
@@ -5283,73 +5295,80 @@ const Transcript = memo(function Transcript({
                   })}
                 </time>
               ) : null}
-              <div
-                className={
-                  peerReceipt
-                    ? undefined
-                    : `relative flex ${message.role === "user" ? "justify-end" : "justify-start"}`
-                }
-              >
+              {coordination ? (
+                <CoordinationLine
+                  block={coordination}
+                  onOpenMemberSettings={onOpenMemberModelSettings}
+                />
+              ) : (
                 <div
-                  data-testid={peerReceipt ? undefined : "message-bubble-frame"}
                   className={
                     peerReceipt
                       ? undefined
-                      : `relative w-fit min-w-0 ${
-                          message.role === "user"
-                            ? "max-w-[min(70%,calc(100%_-_6rem))]"
-                            : "max-w-[min(74%,calc(100%_-_6rem))]"
-                        }`
+                      : `relative flex ${message.role === "user" ? "justify-end" : "justify-start"}`
                   }
                 >
-                  {peerReceipt ? null : (
-                    <MessageHoverActions
-                      message={message}
-                      side={message.role === "user" ? "start" : "end"}
-                      onReply={onReply}
-                      onReact={onReact}
-                    />
-                  )}
-                  <MessageView
-                    artifactTarget={artifactTarget}
-                    message={message}
-                    canAnswer={
-                      message.id === answerableAskMessageId ||
-                      message.blocks.some(
-                        (block) =>
-                          block.kind === "ask" && block.peerHold && block.status === "pending",
-                      )
-                    }
-                    onOpenBot={onOpenBot}
-                    onOpenPeerMessages={onOpenPeerMessages}
-                    onAnswer={onAnswer}
-                    speakerName={
+                  <div
+                    data-testid={peerReceipt ? undefined : "message-bubble-frame"}
+                    className={
                       peerReceipt
                         ? undefined
-                        : message.role === "bot"
-                          ? memberName?.(message.botId)
+                        : `relative w-fit min-w-0 ${
+                            message.role === "user"
+                              ? "max-w-[min(70%,calc(100%_-_6rem))]"
+                              : "max-w-[min(74%,calc(100%_-_6rem))]"
+                          }`
+                    }
+                  >
+                    {peerReceipt ? null : (
+                      <MessageHoverActions
+                        message={message}
+                        side={message.role === "user" ? "start" : "end"}
+                        onReply={onReply}
+                        onReact={onReact}
+                      />
+                    )}
+                    <MessageView
+                      artifactTarget={artifactTarget}
+                      message={message}
+                      canAnswer={
+                        message.id === answerableAskMessageId ||
+                        message.blocks.some(
+                          (block) =>
+                            block.kind === "ask" && block.peerHold && block.status === "pending",
+                        )
+                      }
+                      onOpenBot={onOpenBot}
+                      onOpenPeerMessages={onOpenPeerMessages}
+                      onAnswer={onAnswer}
+                      speakerName={
+                        peerReceipt
+                          ? undefined
+                          : message.role === "bot"
+                            ? memberName?.(message.botId)
+                            : undefined
+                      }
+                      memberName={memberName}
+                      peerBot={peerBot}
+                      replyPreview={
+                        message.replyToMessageId
+                          ? messageById.get(message.replyToMessageId)
                           : undefined
-                    }
-                    memberName={memberName}
-                    peerBot={peerBot}
-                    replyPreview={
-                      message.replyToMessageId
-                        ? messageById.get(message.replyToMessageId)
-                        : undefined
-                    }
-                    replyToMessageId={message.replyToMessageId}
-                    onJumpToMessage={onJumpToMessage}
-                    onRefresh={onRefresh}
-                    onBotChanged={onBotChanged}
-                    onAddRoutine={onAddRoutine}
-                    voiceReady={voiceReady}
-                    speaking={speakingMessageId === message.id}
-                    onSpeak={() => onSpeak(message)}
-                    onOpenComputer={onOpenComputer}
-                    onOpenMcp={onOpenMcp}
-                  />
+                      }
+                      replyToMessageId={message.replyToMessageId}
+                      onJumpToMessage={onJumpToMessage}
+                      onRefresh={onRefresh}
+                      onBotChanged={onBotChanged}
+                      onAddRoutine={onAddRoutine}
+                      voiceReady={voiceReady}
+                      speaking={speakingMessageId === message.id}
+                      onSpeak={() => onSpeak(message)}
+                      onOpenComputer={onOpenComputer}
+                      onOpenMcp={onOpenMcp}
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
               {!peerReceipt && messageReactions ? (
                 <div
                   data-testid="message-reactions"

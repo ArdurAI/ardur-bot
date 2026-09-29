@@ -67,6 +67,37 @@ describe("mapMessageBlockToActivity", () => {
     expect(evidence.timestamp).toBe("2026-09-28T00:00:00Z");
   });
 
+  it("returns no title for a historical shell event with no command text", () => {
+    const block: MessageBlock = {
+      kind: "command",
+      command: {
+        commandId: "1",
+        runId: "1",
+        attemptId: "1",
+        executionId: "1",
+        command: null,
+        cwd: "/",
+        computerId: "1",
+        computer: "local",
+        startedAt: "2026-09-28T00:00:00Z",
+        durationMs: 100,
+        exitCode: 0,
+        outcome: "completed",
+        stdout: "",
+        stderr: "",
+        error: "",
+        redacted: false,
+        truncated: false,
+        replayOf: null,
+        rerunDisabledReason: null,
+      },
+    };
+    const evidence = mapMessageBlockToActivity(block);
+    expect(evidence.label).toBe("tool-activity");
+    // No English fallback: each frontend names the row in its own language.
+    expect(evidence.title).toBeUndefined();
+  });
+
   it("maps unhandled blocks to unavailable", () => {
     expect(mapMessageBlockToActivity({ kind: "meta", text: "meta" }).label).toBe("unavailable");
   });

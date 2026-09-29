@@ -738,6 +738,7 @@ model SteeringMessage {
   runId     String?
   run       Run?     @relation(fields: [runId], references: [id], onDelete: SetNull)
   claimedAt DateTime?
+  adopted   Boolean  @default(false)
   createdAt DateTime @default(now())
 
   @@unique([messageId, botId])
@@ -852,18 +853,22 @@ model Routine {
 }
 
 model ScratchpadItem {
-  id        String   @id @default(cuid())
-  spaceId   String
-  space     Space    @relation(fields: [spaceId], references: [id], onDelete: Cascade)
-  botId     String
-  bot       Bot      @relation(fields: [botId], references: [id], onDelete: Cascade)
-  userId    String
-  title     String
-  status    String   @default("open")
-  notes     String   @default("")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id               String          @id @default(cuid())
+  spaceId          String
+  space            Space           @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  botId            String
+  bot              Bot             @relation(fields: [botId], references: [id], onDelete: Cascade)
+  boardWorkspaceId String?
+  boardWorkspace   BoardWorkspace? @relation(fields: [boardWorkspaceId], references: [id], onDelete: Cascade)
+  boardItemId      String?
+  userId           String
+  title            String
+  status           String          @default("open")
+  notes            String          @default("")
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
 
+  @@unique([botId, boardWorkspaceId, boardItemId])
   @@index([spaceId, botId, status])
   @@index([spaceId, botId, updatedAt])
   @@map("scratchpad_items")
@@ -2413,6 +2418,7 @@ model BoardWorkspace {
   runs Run[]
   follows BoardFollow[]
   notices BoardNotification[]
+  scratchpadItems ScratchpadItem[]
 
   @@unique([spaceId, path])
   @@index([spaceId, enabled])
