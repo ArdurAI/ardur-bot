@@ -56,7 +56,7 @@ export function teamRowText(
       // translate it; anything else is the recorded text.
       const reason = row.reasonCategory
         ? t(failureCategory(row.reasonCategory).message, {
-            runtime: row.reasonRuntime ?? "This runtime",
+            runtime: row.reasonRuntime ?? t("This runtime"),
           })
         : (row.reason ?? t("The task needs attention"));
       return `${t("Blocked")} — ${reason}`;

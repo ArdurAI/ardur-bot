@@ -1379,4 +1379,5 @@ export const RU_MESSAGES: Record<string, string> = {
   "stopped before answering": "остановился до ответа",
   "is waiting for you": "ждёт вас",
   "has not answered yet": "пока не ответил",
+  "This runtime": "Эта среда выполнения",
 };

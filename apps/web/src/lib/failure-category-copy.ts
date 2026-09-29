@@ -18,6 +18,9 @@ export const failureCategoryMessages: Record<FailureCategoryId, ReturnType<typeo
   other: msg`{runtime} could not finish this run. Check the runtime or change the pin.`,
 };
 
+/** Stands in a sentence for a runtime whose name is not known. */
+export const unknownRuntimeName = msg`This runtime`;
+
 /** Handoff-context sentences for the entries the table gives a member line. */
 export const failureCategoryMemberMessages: Partial<
   Record<FailureCategoryId, ReturnType<typeof msg>>

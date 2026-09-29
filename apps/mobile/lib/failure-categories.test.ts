@@ -24,6 +24,19 @@ describe("failure-category mobile completeness", () => {
     }
   });
 
+  it("names an unknown runtime in the reader's language", () => {
+    expect(RU_MESSAGES["This runtime"]).toBeTruthy();
+    expect(ZH_MESSAGES["This runtime"]).toBeTruthy();
+    for (const locale of ["ru", "zh-CN"] as const) {
+      activateUiLocale(locale);
+      for (const entry of FAILURE_CATEGORIES) {
+        const rendered = failureCategoryText(entry.id);
+        expect(rendered, `${locale}: ${entry.id}`).not.toContain("This runtime");
+        expect(rendered, `${locale}: ${entry.id}`).not.toContain("{runtime}");
+      }
+    }
+  });
+
   it("renders every category in Russian with no English left", () => {
     activateUiLocale("ru");
     for (const entry of FAILURE_CATEGORIES) {

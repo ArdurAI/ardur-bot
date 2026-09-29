@@ -1324,4 +1324,5 @@ export const ZH_MESSAGES: Record<string, string> = {
   "stopped before answering": "未回答就停止",
   "is waiting for you": "正在等你",
   "has not answered yet": "尚未回答",
+  "This runtime": "此运行时",
 };

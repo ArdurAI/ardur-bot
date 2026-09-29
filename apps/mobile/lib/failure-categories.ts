@@ -11,9 +11,9 @@ export function failureCategoryText(
   id: FailureCategoryId,
   params: FailureCategoryParams = {},
 ): string {
+  // The table's default sentences name the runtime only.
   return t(failureCategory(id).message, {
-    runtime: params.runtime ?? "This runtime",
-    bot: params.bot ?? "This bot",
-    member: params.member ?? "Worker",
+    ...params,
+    runtime: params.runtime ?? t("This runtime"),
   });
 }

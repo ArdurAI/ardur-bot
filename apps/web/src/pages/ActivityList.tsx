@@ -4,7 +4,7 @@ import { i18n } from "@lingui/core";
 import { t } from "@lingui/core/macro";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { useEffect, useState } from "react";
-import { failureCategoryMessages } from "../lib/failure-category-copy";
+import { failureCategoryMessages, unknownRuntimeName } from "../lib/failure-category-copy";
 import { rpc } from "../lib/rpc";
 import { statusLabel } from "../lib/run-status-label";
 import { localizedTeamDeliveryText } from "../lib/team-delivery-text";
@@ -133,7 +133,7 @@ function ActivityRow({
     run.status === "failed" && run.failureCategory
       ? i18n._({
           ...failureCategoryMessages[run.failureCategory],
-          values: { runtime: run.failureRuntime ?? "This runtime" },
+          values: { runtime: run.failureRuntime ?? i18n._(unknownRuntimeName) },
         })
       : null;
   const presenceUnknown =

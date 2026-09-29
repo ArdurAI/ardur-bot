@@ -1331,7 +1331,7 @@ msgstr ""
 msgid "Blocked"
 msgstr "차단됨"
 
-#. placeholder {0}: row.reasonCategory ? t(failureCategoryMessages[row.reasonCategory], { runtime: row.reasonRuntime ?? "This runtime", }) : row.reason
+#. placeholder {0}: row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName) }, }) : row.reason
 #: src/pages/TeamBoard.tsx
 msgid "Blocked — {0}"
 msgstr "차단됨 — {0}"
@@ -8807,6 +8807,10 @@ msgstr ""
 #: src/pages/Auth.tsx
 msgid "This reset link is invalid or expired"
 msgstr "이 재설정 링크는 유효하지 않거나 만료되었습니다"
+
+#: src/lib/failure-category-copy.ts
+msgid "This runtime"
+msgstr "이 런타임"
 
 #: src/pages/import/LocalImportPage.tsx
 msgid "This scan is out of date. Re-scan, then try again."

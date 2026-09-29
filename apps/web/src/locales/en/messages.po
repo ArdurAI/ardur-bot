@@ -1331,7 +1331,7 @@ msgstr "Block link copied."
 msgid "Blocked"
 msgstr "Blocked"
 
-#. placeholder {0}: row.reasonCategory ? t(failureCategoryMessages[row.reasonCategory], { runtime: row.reasonRuntime ?? "This runtime", }) : row.reason
+#. placeholder {0}: row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName) }, }) : row.reason
 #: src/pages/TeamBoard.tsx
 msgid "Blocked — {0}"
 msgstr "Blocked — {0}"
@@ -8807,6 +8807,10 @@ msgstr "This replaces the computer's files. Continue?"
 #: src/pages/Auth.tsx
 msgid "This reset link is invalid or expired"
 msgstr "This reset link is invalid or expired"
+
+#: src/lib/failure-category-copy.ts
+msgid "This runtime"
+msgstr "This runtime"
 
 #: src/pages/import/LocalImportPage.tsx
 msgid "This scan is out of date. Re-scan, then try again."

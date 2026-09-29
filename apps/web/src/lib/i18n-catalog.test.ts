@@ -692,6 +692,8 @@ describe("lingui catalogs", () => {
       "{member} stopped.",
       "{member} failed.",
       "Blocked — {0}",
+      // Stands in for a runtime whose name is not known.
+      "This runtime",
     ];
     for (const locale of ["de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"]) {
       const catalog = readFileSync(

@@ -1331,7 +1331,7 @@ msgstr ""
 msgid "Blocked"
 msgstr "已阻止"
 
-#. placeholder {0}: row.reasonCategory ? t(failureCategoryMessages[row.reasonCategory], { runtime: row.reasonRuntime ?? "This runtime", }) : row.reason
+#. placeholder {0}: row.reasonCategory ? i18n._({ ...failureCategoryMessages[row.reasonCategory], values: { runtime: row.reasonRuntime ?? i18n._(unknownRuntimeName) }, }) : row.reason
 #: src/pages/TeamBoard.tsx
 msgid "Blocked — {0}"
 msgstr "已阻塞 — {0}"
@@ -8807,6 +8807,10 @@ msgstr ""
 #: src/pages/Auth.tsx
 msgid "This reset link is invalid or expired"
 msgstr "此重置链接无效或已过期"
+
+#: src/lib/failure-category-copy.ts
+msgid "This runtime"
+msgstr "此运行时"
 
 #: src/pages/import/LocalImportPage.tsx
 msgid "This scan is out of date. Re-scan, then try again."
