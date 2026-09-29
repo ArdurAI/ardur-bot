@@ -2,7 +2,7 @@
 import type { ComponentProps, ReactNode } from "react";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 
 const { previewMock } = vi.hoisted(() => ({
   previewMock: vi.fn(),
@@ -73,9 +73,10 @@ afterEach(async () => {
 });
 
 async function render(props: Partial<Parameters<typeof RuntimeConfigAdvanced>[0]> = {}) {
-  const onChange = props.onChange ?? vi.fn();
-  const onError = props.onError ?? vi.fn();
-  const onReset = props.onReset ?? vi.fn();
+  type Props = Parameters<typeof RuntimeConfigAdvanced>[0];
+  const onChange = (props.onChange ?? vi.fn()) as Props["onChange"] & Mock;
+  const onError = (props.onError ?? vi.fn()) as Props["onError"] & Mock;
+  const onReset = (props.onReset ?? vi.fn()) as Props["onReset"] & Mock;
 
   await act(async () => {
     root.render(

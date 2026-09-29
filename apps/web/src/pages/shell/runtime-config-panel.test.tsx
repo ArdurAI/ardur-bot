@@ -107,14 +107,14 @@ describe("RuntimeConfigPanel", () => {
 
     const inputs = container.querySelectorAll("input");
     expect(inputs).toHaveLength(3);
-    expect(inputs[0].value).toBe("16");
-    expect(inputs[1].value).toBe("180");
-    expect(inputs[2].value).toBe("16");
+    expect(inputs[0]!.value).toBe("16");
+    expect(inputs[1]!.value).toBe("180");
+    expect(inputs[2]!.value).toBe("16");
   });
 
   it("updates calls limit and calls onChange", async () => {
     const { onChange, onError } = await render();
-    const callsInput = container.querySelectorAll("input")[0];
+    const callsInput = container.querySelectorAll("input")[0]!;
 
     await changeInput(callsInput, "32");
     expect(onChange).toHaveBeenCalledWith(
@@ -127,7 +127,7 @@ describe("RuntimeConfigPanel", () => {
 
   it("updates time limit in seconds and converts to milliseconds", async () => {
     const { onChange, onError } = await render();
-    const timeInput = container.querySelectorAll("input")[1];
+    const timeInput = container.querySelectorAll("input")[1]!;
 
     await changeInput(timeInput, "60");
     expect(onChange).toHaveBeenCalledWith(
@@ -140,7 +140,7 @@ describe("RuntimeConfigPanel", () => {
 
   it("updates context limit in KiB and converts to bytes", async () => {
     const { onChange, onError } = await render();
-    const contextInput = container.querySelectorAll("input")[2];
+    const contextInput = container.querySelectorAll("input")[2]!;
 
     await changeInput(contextInput, "32");
     expect(onChange).toHaveBeenCalledWith(
@@ -153,7 +153,9 @@ describe("RuntimeConfigPanel", () => {
 
   it("validates bounds and granularity for all fields", async () => {
     const { onError } = await render();
-    const [callsInput, timeInput, contextInput] = container.querySelectorAll("input");
+    const [callsInput, timeInput, contextInput] = Array.from(
+      container.querySelectorAll("input"),
+    ) as [HTMLInputElement, HTMLInputElement, HTMLInputElement];
 
     // Calls bounds
     await changeInput(callsInput, "0");
@@ -185,7 +187,10 @@ describe("RuntimeConfigPanel", () => {
 
   it("retains per-field errors when editing another valid field", async () => {
     const { onError } = await render();
-    const [callsInput, timeInput] = container.querySelectorAll("input");
+    const [callsInput, timeInput] = Array.from(container.querySelectorAll("input")) as [
+      HTMLInputElement,
+      HTMLInputElement,
+    ];
 
     // Put calls into error
     await changeInput(callsInput, "0");

@@ -3,8 +3,8 @@ import type {
   HermesRuntimeConfigV2,
   HermesRuntimeConfigV2Draft,
 } from "@ardurbot/contracts/runtime-config";
+import type { RuntimeConfigIssue } from "@ardurbot/contracts/runtime-config";
 import { HERMES_RUNTIME_V2_DEFAULTS } from "@ardurbot/contracts/runtime-config";
-import type { RuntimeConfigIssue } from "@ardurbot/contracts/runtime-config-editor";
 import { parseRuntimeConfigText } from "@ardurbot/contracts/runtime-config-editor";
 import type { RuntimePin } from "@ardurbot/contracts/runtime-pins";
 import {
@@ -114,7 +114,7 @@ export function RuntimeConfigAdvanced({
       });
       if (latestRequestId.current !== reqId) return;
       if (res.issues && res.issues.length > 0) {
-        const msg = runtimeConfigIssueMessage(res.issues[0]);
+        const msg = runtimeConfigIssueMessage(res.issues[0]!);
         setPreviewError(msg);
         onErrorRef.current(msg);
       } else if (res.preview) {
@@ -156,8 +156,7 @@ export function RuntimeConfigAdvanced({
     setText(newText);
     const parsed = parseRuntimeConfigText(newText);
     if (!parsed.success) {
-      const firstIssue = parsed.issues[0];
-      const msg = runtimeConfigIssueMessage(firstIssue);
+      const msg = runtimeConfigIssueMessage(parsed.issues[0]!);
       setLocalError(msg);
       onError(msg);
       return;

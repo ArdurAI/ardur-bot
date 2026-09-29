@@ -140,7 +140,7 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-const onSave = vi.fn(async () => undefined);
+const onSave = vi.fn(async (): Promise<{ modelPinRevision?: number } | void> => undefined);
 function settings(
   overrides: Partial<Bot> = {},
   modelFocusRequest = 0,

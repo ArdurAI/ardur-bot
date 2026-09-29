@@ -166,6 +166,7 @@ export function GroupModelControl({
 
   async function handleUseBotRuntimeSettings() {
     if (!activeMember?.memberId || saving || !confirmed) return;
+    if (!confirmed.provider || !confirmed.modelId || !confirmed.credentialId) return;
     setSaving(true);
     setError(null);
     try {
