@@ -1,4 +1,10 @@
-# Seal scenes
+---
+title: "Seal scenes"
+description: "A bot's seal shows what the bot is doing: starting, thinking, searching, working through steps, waiting for its owner, paused, done or stopped with an error. An operator can tell…"
+source_path: "docs/seal-scenes.md"
+---
+
+> [Source: docs/seal-scenes.md](https://github.com/ArdurAI/ardur-bot/blob/__ARDUR_BOT_SOURCE_REF__/docs/seal-scenes.md). Edit the source file, then run `python3 site/scripts/sync_docs.py` to refresh this page.
 
 A bot's seal shows what the bot is doing: starting, thinking, searching, working through steps, waiting for its owner, paused, done or stopped with an error. An operator can tell at a glance which bot needs them; a screen reader hears the same phase after a busy bot's name. How each phase looks and moves is data, shared by web, desktop and mobile, so changing it means editing one file.
 
