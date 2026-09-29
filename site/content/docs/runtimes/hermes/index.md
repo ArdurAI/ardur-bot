@@ -95,12 +95,19 @@ applied it. The bot and run keep their exact credential, model, effort and revis
 Group member model choices must pass the same compatibility check. An admitted run
 keeps its immutable pin even if the bot or group choice changes later.
 
-The settings panel exposes two limits: **Model calls per turn** (1–64, default 16)
-and **Time limit** (1–600 seconds, default 180). They live together in a versioned
-bot field and are copied into the run pin. There is no raw Hermes configuration
-editor. A model call ceiling constrains broker admissions; a started request with
-unknown usage retains its conservative reservation. These are initial policy
-values, not measured performance or spend promises.
+The settings panel exposes three tunable limits and an Advanced inspector:
+**Model calls per turn** (1–64, default 16), **Time limit (seconds)**
+(1–600 s, default 180) and **Context limit (KiB)** (4–64 KiB, default 16).
+They live together in a versioned bot field and are copied into the run pin.
+Advanced edits the same document as strict JSON and previews the effective
+configuration server-side; familiar harness keys for model, connections,
+tools, paths, native memory, children or compression are rejected with a
+specific reason because Ardur owns those. Native Hermes memory, learning,
+child agents, automatic compression and independent provider routes stay
+disabled in this release. A model call ceiling constrains broker
+admissions; a started request with unknown usage retains its conservative
+reservation. These are initial policy values, not measured performance or
+spend promises.
 
 ## Host and tool authority
 
