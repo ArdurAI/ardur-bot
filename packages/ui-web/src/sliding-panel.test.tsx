@@ -153,3 +153,39 @@ it("keeps narrow panels at 384 px without a resize handle", async () => {
     await act(async () => root.unmount());
   }
 });
+
+it("keeps a wide panel's width while it slides closed", async () => {
+  const host = document.createElement("div");
+  const root = createRoot(host);
+  try {
+    await act(async () =>
+      root.render(
+        <SlidingPanel open panel="settings" size="wide">
+          <div />
+        </SlidingPanel>,
+      ),
+    );
+    await act(async () =>
+      root.render(
+        <SlidingPanel open={false} panel="closed">
+          {null}
+        </SlidingPanel>,
+      ),
+    );
+    const aside = host.querySelector("aside");
+    expect(aside?.className).toContain("md:w-(--pane-width)");
+    expect(aside?.className).not.toContain("max-w-[384px]");
+    expect(host.querySelector("hr")).toBeNull();
+
+    await act(async () =>
+      root.render(
+        <SlidingPanel open panel="create">
+          <div />
+        </SlidingPanel>,
+      ),
+    );
+    expect(host.querySelector("aside")?.className).toContain("max-w-[384px]");
+  } finally {
+    await act(async () => root.unmount());
+  }
+});

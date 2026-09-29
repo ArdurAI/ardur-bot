@@ -41,7 +41,11 @@ export function SlidingPanel({
     workspace: savedPaneWidth("workspace"),
     wide: savedPaneWidth("wide"),
   }));
-  const resizable: ResizablePane | null = workspace ? "workspace" : size === "wide" ? "wide" : null;
+  const requested: ResizablePane | null = workspace ? "workspace" : size === "wide" ? "wide" : null;
+  const [lastOpened, setLastOpened] = useState(requested);
+  if (open && lastOpened !== requested) setLastOpened(requested);
+  // A closing panel keeps its width so its content does not reflow as it slides away.
+  const resizable = open ? requested : lastOpened;
   const width = resizable ? widths[resizable] : null;
   useEffect(() => {
     if (!resizable || width === null) return;
