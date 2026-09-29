@@ -29,6 +29,14 @@ import type { MemoryService } from "@ardurbot/memory";
 import { ORPCError } from "@orpc/server";
 import { requireSpaceOwner } from "./memory-provider-config.js";
 
+function learningProposalRowId(row: { id?: string; body?: unknown }) {
+  if (typeof row.id === "string" && row.id.length > 0) return row.id;
+  const body = row.body;
+  if (body && typeof body === "object" && "id" in body && typeof body.id === "string") {
+    return body.id;
+  }
+  return "";
+}
 export function createLearningService(deps: {
   prisma: PrismaClient;
   jobs: JobPublisher;
@@ -332,15 +340,28 @@ export function createLearningService(deps: {
     async list(actor: Actor, botId?: string) {
       await learningMember(deps.prisma, { spaceId: actor.spaceId, userId: actor.userId }, botId);
       const where = { spaceId: actor.spaceId, userId: actor.userId, ...(botId ? { botId } : {}) };
-      const [reviews, proposals, counts] = await Promise.all([
+      const [reviews, recent, pendingRows, counts] = await Promise.all([
         deps.prisma.reviewExecution.findMany({
           where: { ...where, completedAt: { not: null } },
           orderBy: { createdAt: "desc" },
           take: 100,
         }),
         deps.prisma.learningProposal.findMany({ where, orderBy: { createdAt: "desc" }, take: 100 }),
+        // The newest page can be decided items. Older pending items still have to be reviewable.
+        deps.prisma.learningProposal.findMany({
+          where: { ...where, status: "pending", expiresAt: { gt: new Date() } },
+          orderBy: { createdAt: "desc" },
+          take: 100,
+        }),
         summary(actor, botId),
       ]);
+      const seen = new Set<string>();
+      const proposals = [...recent, ...pendingRows].filter((row) => {
+        const id = learningProposalRowId(row);
+        if (!id || seen.has(id)) return false;
+        seen.add(id);
+        return true;
+      });
       const bots = await deps.prisma.bot.findMany({
         where: { spaceId: actor.spaceId, userId: actor.userId },
         select: { id: true, name: true },

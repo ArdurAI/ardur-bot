@@ -10,6 +10,10 @@ import type { Actor } from "@ardurbot/contracts";
 import { REPLY_QUOTE_MAX_LENGTH } from "@ardurbot/contracts";
 import { openScreenCapability } from "@ardurbot/core/node/screen-capability";
 import type { PrismaClient } from "@ardurbot/db";
+import {
+  HERMES_SOURCE_PIN,
+  HERMES_SOURCE_TREE,
+} from "@ardurbot/host-runtime/runtimes/hermes-install";
 import { createLogger, createTestSink, installLogger } from "@ardurbot/logging";
 import { RPCHandler } from "@orpc/server/fetch";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -140,6 +144,10 @@ describe("Hermes availability without the host bridge", () => {
         const install = join(data, "install");
         await mkdir(join(install, ".venv", "bin"), { recursive: true });
         await writeFile(join(install, ".venv", "bin", "python"), "fixture");
+        await writeFile(
+          join(install, ".ardur-install.json"),
+          JSON.stringify({ pin: HERMES_SOURCE_PIN, tree: HERMES_SOURCE_TREE }),
+        );
         vi.stubEnv("ARDUR_HERMES_INSTALL", install);
       } else {
         vi.stubEnv("ARDUR_HERMES_INSTALL", "");

@@ -16,7 +16,7 @@ import {
   TabsTrigger,
   Textarea,
 } from "@ardurbot/ui-web";
-import { Trans, useLingui } from "@lingui/react/macro";
+import { Plural, Trans, useLingui } from "@lingui/react/macro";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { boardCloseFailedTitle, boardCloseTriedBody } from "../lib/board-close-copy";
 import { actionMessage } from "../lib/orpc-action-message";
@@ -24,13 +24,13 @@ import { rpc } from "../lib/rpc";
 import { LearningCurator } from "./LearningCurator";
 import { LearningObservations, LearningObservationView } from "./LearningObservation";
 import { LearningTimeline } from "./LearningTimeline";
+import { learningItemTitle } from "./learning-item-text";
 
 const LearningInsights = lazy(() => import("./LearningInsights"));
 
 type Inbox = Awaited<ReturnType<typeof rpc.learning.list>>;
 type Conflict = NonNullable<Awaited<ReturnType<typeof rpc.learning.revert>>["conflict"]>;
 export function LearningBadge({ botId }: { botId?: string }) {
-  const { t } = useLingui();
   const [counts, setCounts] = useState<Pick<Inbox, "pendingCount" | "appliedThisWeek"> | null>(
     null,
   );
@@ -55,11 +55,21 @@ export function LearningBadge({ botId }: { botId?: string }) {
     };
   }, [botId]);
   if (!counts) return null;
+  const pending = counts.pendingCount;
+  const learned = counts.appliedThisWeek;
   return (
-    <span className="block truncate whitespace-nowrap text-xs text-muted-foreground">
-      {counts.pendingCount > 0 ? t`${counts.pendingCount} suggestions to review` : null}
-      {counts.pendingCount > 0 && counts.appliedThisWeek > 0 ? " · " : null}
-      {counts.appliedThisWeek > 0 ? t`learned ${counts.appliedThisWeek} things this week` : null}
+    <span className="block min-w-0 break-words text-xs text-muted-foreground">
+      {pending > 0 ? (
+        <Plural value={pending} one="# suggestion to review" other="# suggestions to review" />
+      ) : null}
+      {pending > 0 && learned > 0 ? " · " : null}
+      {learned > 0 ? (
+        <Plural
+          value={learned}
+          one="learned # thing this week"
+          other="learned # things this week"
+        />
+      ) : null}
     </span>
   );
 }
@@ -74,9 +84,12 @@ export function LearningInbox({ botId }: { botId?: string }) {
   const [offers, setOffers] = useState<Array<Pick<LearningGrantInput, "category" | "scope">>>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [conflicts, setConflicts] = useState<Record<string, Conflict | null>>({});
   const busyRef = useRef(busy);
   busyRef.current = busy;
   const request = useRef(0);
+  // Set when a person opens a proposal, cleared once that open chooses the tab.
+  const openedProposalId = useRef<string | null>(null);
   const load = useCallback(async () => {
     const current = ++request.current;
     const [list, config, consent, proposal] = await Promise.all([
@@ -120,6 +133,17 @@ export function LearningInbox({ botId }: { botId?: string }) {
     );
     setSelected((current) => (current?.id === proposal.id ? proposal : current));
   }, []);
+  const rows = [
+    ...(selected ? [selected] : []),
+    ...(inbox?.proposals.filter((item) => item.id !== selected?.id) ?? []),
+  ];
+  const waiting = rows.filter((item) => item.status === "pending");
+  const decided = rows.filter((item) => item.status !== "pending");
+  useEffect(() => {
+    if (!selected || selected.id !== selectedId || openedProposalId.current !== selected.id) return;
+    openedProposalId.current = null;
+    setTab(selected.status === "pending" ? "inbox" : "timeline");
+  }, [selected, selectedId]);
   async function change(action: () => Promise<unknown>) {
     if (busy) return;
     setBusy(true);
@@ -134,34 +158,58 @@ export function LearningInbox({ botId }: { botId?: string }) {
       setBusy(false);
     }
   }
+  const renderCard = (proposal: LearningProposal) => (
+    <LearningCard
+      key={proposal.id}
+      proposal={proposal}
+      botName={proposal.scope.botId ? inbox?.botNames?.[proposal.scope.botId] : undefined}
+      expanded={proposal.id === selectedId}
+      busy={busy}
+      change={change}
+      settle={settle}
+      conflict={conflicts[proposal.id] ?? null}
+      onConflict={(conflict) =>
+        setConflicts((current) => ({ ...current, [proposal.id]: conflict }))
+      }
+    />
+  );
   return (
-    <section aria-label={t`What I learned`} data-testid="learning-inbox" className="space-y-3 py-3">
+    <section
+      aria-label={t`What I learned`}
+      data-testid="learning-inbox"
+      className="min-w-0 max-w-full space-y-3 py-3"
+    >
       <h3 className="text-sm font-medium">
         <Trans>What I learned</Trans>
       </h3>
       {settings ? (
-        <div className="flex items-center gap-3">
+        <div className="space-y-2">
           {!settings.enabled ? (
             <p className="text-sm text-muted-foreground">
               <Trans>Learning is off for this space.</Trans>
             </p>
           ) : null}
           {settings.canConfigure ? (
-            <Switch
-              aria-label={t`Learning`}
-              checked={settings.enabled}
-              disabled={busy}
-              onCheckedChange={(enabled) =>
-                void change(() =>
-                  rpc.learning.configure({
-                    enabled,
-                    consolidationEnabled: settings.consolidationEnabled,
-                    reviewerPin: settings.reviewerPin ?? settings.destination,
-                    budgets: settings.budgets,
-                  }),
-                )
-              }
-            />
+            <div className="flex items-center gap-3 text-sm">
+              <Switch
+                aria-label={t`Learning for this space`}
+                checked={settings.enabled}
+                disabled={busy}
+                onCheckedChange={(enabled) =>
+                  void change(() =>
+                    rpc.learning.configure({
+                      enabled,
+                      consolidationEnabled: settings.consolidationEnabled,
+                      reviewerPin: settings.reviewerPin ?? settings.destination,
+                      budgets: settings.budgets,
+                    }),
+                  )
+                }
+              />
+              <span aria-hidden>
+                <Trans>Learning for this space</Trans>
+              </span>
+            </div>
           ) : null}
         </div>
       ) : null}
@@ -226,35 +274,36 @@ export function LearningInbox({ botId }: { botId?: string }) {
           </TabsTrigger>
         </TabsList>
         <TabsContent value="timeline">
-          <LearningTimeline
-            botId={botId}
-            openProposal={(id) => {
-              setSelectedId(id);
-              setTab("inbox");
-            }}
-          />
+          <div data-testid="learning-decided" className="space-y-3">
+            {decided.map(renderCard)}
+            <LearningTimeline
+              botId={botId}
+              openProposal={(id) => {
+                openedProposalId.current = id;
+                setSelectedId(id);
+                if (selected?.id === id) {
+                  openedProposalId.current = null;
+                  setTab(selected.status === "pending" ? "inbox" : "timeline");
+                }
+              }}
+            />
+          </div>
         </TabsContent>
         <TabsContent value="inbox">
-          <LearningBadge botId={botId} />
-          {inbox?.proposals.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              <Trans>Nothing to review.</Trans>
-            </p>
-          ) : null}
-          {[
-            ...(selected ? [selected] : []),
-            ...(inbox?.proposals.filter((p) => p.id !== selected?.id) ?? []),
-          ].map((proposal) => (
-            <LearningCard
-              key={proposal.id}
-              proposal={proposal}
-              botName={proposal.scope.botId ? inbox?.botNames?.[proposal.scope.botId] : undefined}
-              expanded={proposal.id === selectedId}
-              busy={busy}
-              change={change}
-              settle={settle}
-            />
-          ))}
+          <div data-testid="learning-waiting" className="space-y-3">
+            <LearningBadge botId={botId} />
+            {decided.map((proposal) => {
+              const conflict = conflicts[proposal.id];
+              if (!conflict) return null;
+              return <LearningConflict key={proposal.id} proposal={proposal} conflict={conflict} />;
+            })}
+            {inbox && waiting.length === 0 && inbox.pendingCount === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                <Trans>Nothing to review.</Trans>
+              </p>
+            ) : null}
+            {waiting.map(renderCard)}
+          </div>
         </TabsContent>
       </Tabs>
       {offers
@@ -325,6 +374,54 @@ export function LearningInbox({ botId }: { botId?: string }) {
     </section>
   );
 }
+function LearningConflict({
+  proposal,
+  conflict,
+}: {
+  proposal: LearningProposal;
+  conflict: Conflict;
+}) {
+  return (
+    <div role="alert" className="mt-3 text-sm">
+      {proposal.type === "board-item" ? (
+        <p>
+          {conflict.code === "board-left-open" ? (
+            <Trans>
+              This board item changed after it was filed, so it was left open for review on the
+              Board.
+            </Trans>
+          ) : conflict.code === "board-already-closed" ? (
+            <Trans>This board item was already closed on the Board.</Trans>
+          ) : conflict.code === "board-changed" || !conflict.current ? (
+            <Trans>This board item changed after it was filed. Review it on the Board.</Trans>
+          ) : (
+            conflict.current
+          )}
+        </p>
+      ) : (
+        <p>
+          <Trans>Later edits overlap this change. Review both versions in History.</Trans>
+        </p>
+      )}
+      {proposal.type === "board-item" ? null : (
+        <>
+          <p>
+            <Trans>Before</Trans>
+          </p>
+          <pre className="break-words whitespace-pre-wrap">{conflict.before}</pre>
+          <p>
+            <Trans>Applied</Trans>
+          </p>
+          <pre className="break-words whitespace-pre-wrap">{conflict.applied}</pre>
+          <p>
+            <Trans>Current</Trans>
+          </p>
+          <pre className="break-words whitespace-pre-wrap">{conflict.current}</pre>
+        </>
+      )}
+    </div>
+  );
+}
 function LearningCard({
   proposal,
   botName,
@@ -332,6 +429,8 @@ function LearningCard({
   busy,
   change,
   settle,
+  conflict,
+  onConflict,
 }: {
   proposal: LearningProposal;
   botName?: string;
@@ -339,6 +438,8 @@ function LearningCard({
   busy: boolean;
   change: (action: () => Promise<unknown>) => Promise<void>;
   settle: (result: LearningActionResult) => void;
+  conflict: Conflict | null;
+  onConflict: (conflict: Conflict | null) => void;
 }) {
   const { t, i18n } = useLingui();
   const [detailsOpen, setDetailsOpen] = useState(expanded);
@@ -349,29 +450,20 @@ function LearningCard({
   const [draft, setDraft] = useState(proposal.proposedContent ?? "");
   const [settingValue, setSettingValue] = useState(proposal.typedDelta?.value === true);
   const [evidence, setEvidence] = useState<ProposalEvidence | null>(null);
-  const [conflict, setConflict] = useState<Conflict | null>(null);
   const blocked = learningApprovalBlock(proposal);
   const pending = proposal.status === "pending";
   return (
     <article
-      className="rounded-lg border p-3 motion-safe:animate-in motion-safe:fade-in duration-[240ms] ease-[cubic-bezier(0.2,0.7,0.2,1)] motion-reduce:animate-none"
+      className="min-w-0 max-w-full break-words rounded-lg border p-3 motion-safe:animate-in motion-safe:fade-in duration-[240ms] ease-[cubic-bezier(0.2,0.7,0.2,1)] motion-reduce:animate-none"
       data-status={proposal.status}
       id={`learning-${proposal.id}`}
     >
-      <p className="truncate text-sm font-medium">
+      <p className="break-words text-sm font-medium" data-testid="learning-item-title">
         {proposal.operation === "revert-suggestion"
           ? t`Possible regression — review undo`
           : proposal.operation === "consolidation"
             ? t`Proposed consolidation`
-            : proposal.type === "policy-suggestion"
-              ? proposal.rationale
-              : proposal.type === "board-item"
-                ? proposal.boardItem?.title
-                : (proposal.proposedContent
-                    ?.split("\n")
-                    .find((line) => line.trim() && line !== "---") ??
-                  proposal.typedDelta?.key ??
-                  proposal.type)}
+            : learningItemTitle(proposal)}
       </p>
       <p className="text-xs text-muted-foreground">
         {proposal.scope.botId
@@ -396,7 +488,7 @@ function LearningCard({
                 void change(async () => {
                   const result = await rpc.learning.reject({ proposalId: proposal.id });
                   settle(result);
-                  setConflict(result.conflict ?? null);
+                  onConflict(result.conflict ?? null);
                 })
               }
             >
@@ -429,7 +521,7 @@ function LearningCard({
                   void change(async () => {
                     const result = await rpc.learning.revert({ proposalId: proposal.id });
                     settle(result);
-                    setConflict(result.conflict ?? null);
+                    onConflict(result.conflict ?? null);
                   })
                 }
               >
@@ -523,7 +615,9 @@ function LearningCard({
             ) : null}
           </div>
         ) : (
-          <pre className="max-h-64 overflow-auto whitespace-pre-wrap py-2">{proposal.diff}</pre>
+          <pre className="max-h-64 min-w-0 max-w-full overflow-auto break-words whitespace-pre-wrap py-2">
+            {proposal.diff}
+          </pre>
         )}
         <p>{proposal.rationale}</p>
         {proposal.observation ? (
@@ -623,46 +717,7 @@ function LearningCard({
           />
         ) : null}
       </details>
-      {conflict ? (
-        <div role="alert" className="mt-3 text-sm">
-          {proposal.type === "board-item" ? (
-            <p>
-              {conflict.code === "board-left-open" ? (
-                <Trans>
-                  This board item changed after it was filed, so it was left open for review on the
-                  Board.
-                </Trans>
-              ) : conflict.code === "board-already-closed" ? (
-                <Trans>This board item was already closed on the Board.</Trans>
-              ) : conflict.code === "board-changed" || !conflict.current ? (
-                <Trans>This board item changed after it was filed. Review it on the Board.</Trans>
-              ) : (
-                conflict.current
-              )}
-            </p>
-          ) : (
-            <p>
-              <Trans>Later edits overlap this change. Review both versions in History.</Trans>
-            </p>
-          )}
-          {proposal.type === "board-item" ? null : (
-            <>
-              <p>
-                <Trans>Before</Trans>
-              </p>
-              <pre className="whitespace-pre-wrap">{conflict.before}</pre>
-              <p>
-                <Trans>Applied</Trans>
-              </p>
-              <pre className="whitespace-pre-wrap">{conflict.applied}</pre>
-              <p>
-                <Trans>Current</Trans>
-              </p>
-              <pre className="whitespace-pre-wrap">{conflict.current}</pre>
-            </>
-          )}
-        </div>
-      ) : null}
+      {conflict ? <LearningConflict proposal={proposal} conflict={conflict} /> : null}
     </article>
   );
 }

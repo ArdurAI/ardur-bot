@@ -1,6 +1,6 @@
 import type { ThreadMessage } from "@ardurbot/contracts";
 import { describe, expect, it } from "vitest";
-import { copyableMessageText } from "./message-text.js";
+import { copyableMessageText, replyMarkdownProps } from "./message-text.js";
 
 function message(blocks: ThreadMessage["blocks"]): ThreadMessage {
   return { id: "m_1", threadId: "t_1", seq: 1, role: "bot", blocks, createdAt: "2026-08-29" };
@@ -54,5 +54,32 @@ describe("copyableMessageText", () => {
         ]),
       ),
     ).toBe("iMessage · Alice: hello");
+  });
+});
+
+describe("replyMarkdownProps", () => {
+  it("shows the cursor only on reply text that is still streaming", () => {
+    expect(
+      replyMarkdownProps({ kind: "progress", text: "Chief's summary", streaming: true }),
+    ).toEqual({ streaming: true, cursor: true });
+    // The text paused while the run works: the streaming layout stays, the cursor goes.
+    expect(replyMarkdownProps({ kind: "progress", text: "Chief's summary" })).toEqual({
+      streaming: true,
+      cursor: false,
+    });
+    // Tool activity never carries the reply cursor.
+    expect(
+      replyMarkdownProps({
+        kind: "progress",
+        text: "Running gh pr list",
+        activity: true,
+        streaming: true,
+      }),
+    ).toEqual({ streaming: true, cursor: false });
+    // A saved reply is plain text.
+    expect(replyMarkdownProps({ kind: "text", text: "Chief's summary" })).toEqual({
+      streaming: false,
+      cursor: false,
+    });
   });
 });

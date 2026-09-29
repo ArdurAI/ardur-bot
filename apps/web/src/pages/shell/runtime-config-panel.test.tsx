@@ -5,6 +5,10 @@ import { act, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const { previewMock } = vi.hoisted(() => ({
+  previewMock: vi.fn(),
+}));
+
 vi.mock("@lingui/core/macro", () => ({
   t: (parts: TemplateStringsArray, ...values: unknown[]) =>
     parts.reduce((text, part, index) => text + part + (values[index] ?? ""), ""),
@@ -28,29 +32,36 @@ vi.mock("@ardurbot/ui-web", () => ({
 vi.mock("../../lib/rpc", () => ({
   rpc: {
     runtimeConfig: {
-      preview: vi.fn(async () => ({
-        preview: {
-          settings: {
-            version: 2,
-            runtimeKind: "hermes",
-            limits: { maxProviderRequests: 16, timeoutMs: 180_000 },
-            context: { maxInputBytes: 16_384, overflow: "trim" },
-            harness: { agent: { api_max_retries: 1 } },
-          },
-          managed: {
-            model: "claude-sonnet-4-6",
-            thinkingLevel: "medium",
-            connection: "test-connection",
-            tools: "standard",
-          },
-        },
-        issues: [],
-      })),
+      preview: (...args: unknown[]) => previewMock(...args),
     },
   },
 }));
 
 import { RuntimeConfigPanel } from "./runtime-config-panel";
+
+const successPreview = {
+  preview: {
+    settings: {
+      version: 2,
+      runtimeKind: "hermes",
+      limits: { maxProviderRequests: 16, timeoutMs: 180_000 },
+      context: { maxInputBytes: 16_384, overflow: "trim" },
+      harness: { agent: { api_max_retries: 1 } },
+    },
+    managed: {
+      model: "claude-sonnet-4-6",
+      thinkingLevel: "medium",
+      connection: "test-connection",
+      tools: "standard",
+    },
+  },
+  issues: [],
+};
+
+beforeEach(() => {
+  previewMock.mockReset();
+  previewMock.mockResolvedValue(successPreview);
+});
 
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot>;
@@ -376,6 +387,57 @@ describe("RuntimeConfigPanel", () => {
     await changeInput(contextInput, "65");
     expect(contextInput.getAttribute("aria-invalid")).toBe("true");
     expect(describedByText(contextInput)).toBe("Use a whole number from 4 to 64.");
+  });
+
+  it("clears a rejected preview after a short-panel edit replaces the text", async () => {
+    // The server rejects the model key, so Save stays disabled; a later
+    // short-panel edit replaces the editor text with a normalized value and
+    // must not keep that stale error.
+    previewMock.mockReset();
+    previewMock.mockResolvedValueOnce({
+      preview: undefined,
+      issues: [{ code: "managed-model", path: "model", reasonId: "managed-model" }],
+    });
+    previewMock.mockResolvedValue(successPreview);
+
+    const onError = vi.fn();
+    await act(async () => {
+      root.render(<ControlledHarness onError={onError} />);
+    });
+    const { textarea } = await openAdvanced();
+
+    await vi.waitFor(() => {
+      expect(container.textContent).toContain(
+        "Ardur sets the model and thinking level. Change them in bot settings.",
+      );
+    });
+    expect(onError).toHaveBeenLastCalledWith(
+      "Ardur sets the model and thinking level. Change them in bot settings.",
+    );
+
+    // The JSON parses, so the short-panel fields stay editable; Save is blocked
+    // only by the reported error.
+    const callsInput = container.querySelectorAll("input")[0]! as HTMLInputElement;
+    expect(callsInput.disabled).toBe(false);
+
+    previewMock.mockClear();
+    await changeInput(callsInput, "24");
+
+    await vi.waitFor(() => {
+      expect(JSON.parse(textarea.value).limits.maxProviderRequests).toBe(24);
+    });
+    expect(onError).toHaveBeenLastCalledWith(null);
+    expect(container.textContent).not.toContain(
+      "Ardur sets the model and thinking level. Change them in bot settings.",
+    );
+
+    await vi.waitFor(() => {
+      expect(previewMock).toHaveBeenCalled();
+    });
+    const lastCall = previewMock.mock.calls.at(-1)![0] as {
+      runtimeConfig: { limits: { maxProviderRequests: number } };
+    };
+    expect(lastCall.runtimeConfig.limits.maxProviderRequests).toBe(24);
   });
 
   // A non-null onError keeps the bot-settings Save button disabled.

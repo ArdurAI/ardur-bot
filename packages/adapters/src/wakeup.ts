@@ -41,6 +41,8 @@ export class GraphileJobPublisher implements JobPublisher {
       ...(job.preserveRunAt && job.replaceKey ? { jobKeyMode: "preserve_run_at" as const } : {}),
       // An import request is answered once; a retry would repeat the whole import unseen.
       ...(job.name === "local-import.run" ? { maxAttempts: 1 } : {}),
+      // A second click replaces a waiting install. A running one is refused by the lock.
+      ...(job.name === "hermes.install" ? { maxAttempts: 1, jobKeyMode: "replace" as const } : {}),
       ...(["memory.deliver", "memory.git-push"].includes(job.name)
         ? { queueName: memoryDeliveryQueue(job) }
         : {}),
