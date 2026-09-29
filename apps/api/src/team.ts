@@ -286,6 +286,9 @@ export async function teamBoard(
         // Unavailable measurements stay unavailable. Unknown categories are omitted.
         // Partial categories are a lower bound, so the number is shown as "at least".
         // A zero fallback would claim a native run consumed nothing when usage never arrived.
+        // A run that started (or finished) without any usage record is likewise unavailable;
+        // zero is only honest for work that never started.
+        const started = selected ? selected.status !== "queued" : Boolean(run?.startedAt);
         type Coverage = Record<string, string> | null;
         let measured = 0;
         let hasGap = false;
@@ -306,7 +309,8 @@ export async function teamBoard(
             hasGap = true;
         }
         return {
-          tokens: spent.length > 0 && measured === 0 && hasGap ? null : measured,
+          tokens:
+            spent.length === 0 ? (started ? null : 0) : measured === 0 && hasGap ? null : measured,
           partial: hasGap && measured > 0,
           costs: spent.flatMap((item) =>
             item.cost !== null && item.pricingProvenance

@@ -214,6 +214,24 @@ describe("team.board", () => {
       costs: [],
     });
   });
+  it("shows a started run that never reported usage as unavailable, not zero", async () => {
+    const f = fixture();
+    f.db.usageRecord.findMany.mockResolvedValue([]);
+    expect(TeamBoardSchema.parse(await teamBoard(f.prisma, actor)).rows[0]!.usage).toEqual({
+      tokens: null,
+      partial: false,
+      costs: [],
+    });
+  });
+  it("keeps zero for a run that never started", async () => {
+    const f = fixture("queued", "queued");
+    f.db.usageRecord.findMany.mockResolvedValue([]);
+    expect(TeamBoardSchema.parse(await teamBoard(f.prisma, actor)).rows[0]!.usage).toEqual({
+      tokens: 0,
+      partial: false,
+      costs: [],
+    });
+  });
   it("shows saved blocker reasons and actions", async () => {
     const f = fixture();
     f.delegation.card = {
