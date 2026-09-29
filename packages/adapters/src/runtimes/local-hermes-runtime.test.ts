@@ -89,13 +89,15 @@ describe("LocalHermesRuntime", () => {
     await expect(collect(runtime.run(request()))).rejects.toThrow("Hermes needs a provider broker.");
   });
 
-  it("refuses if the install is missing", async () => {
+  it("refuses if the install is missing, without opening a broker session", async () => {
     vi.stubEnv("ARDUR_HERMES_INSTALL", join(root, "missing"));
-    const runtime = new LocalHermesRuntime(vi.fn().mockResolvedValue({
+    const brokerForTurn = vi.fn().mockResolvedValue({
       broker: { grant: { id: "123", token: "token", expiresAt: 0 }, revoke: vi.fn() },
       scope: {},
-    }));
+    });
+    const runtime = new LocalHermesRuntime(brokerForTurn);
     await expect(collect(runtime.run(request()))).rejects.toThrow("Pinned Hermes install failed its safety check.");
+    expect(brokerForTurn).not.toHaveBeenCalled();
   });
 
   it("completes a local runtime success turn and routes a provider call through the relay", async () => {

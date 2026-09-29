@@ -39,18 +39,6 @@ export class LocalHermesRuntime implements AgentRuntime {
     const staging = localHermesStaging();
     const install = process.env.ARDUR_HERMES_INSTALL;
 
-    const operationId = randomUUID();
-    const brokerSession = this.brokerForTurn
-      ? await this.brokerForTurn(request, context ?? {}, {
-          operationId,
-          hostGeneration: "local",
-        })
-      : undefined;
-
-    if (!brokerSession) throw new Error("Hermes needs a provider broker.");
-
-    const relayDispatcher = new HermesRelayDispatcher(brokerSession, context?.signal ?? new AbortController().signal);
-
     let profileAcknowledged = false;
 
     const capturedPin = request.model.runtimePin as
@@ -89,6 +77,7 @@ export class LocalHermesRuntime implements AgentRuntime {
     }
 
     let relay: Awaited<ReturnType<typeof startHermesProviderRelay>> | undefined;
+    let brokerSession: { broker: HermesProviderBroker; scope: BrokerScope } | undefined;
     try {
       const runtime = await buildHermesRuntime({
         hostRoot: staging,
@@ -103,6 +92,21 @@ export class LocalHermesRuntime implements AgentRuntime {
       });
 
       if (!runtime) throw new Error("Pinned Hermes install is unavailable.");
+
+      const operationId = randomUUID();
+      brokerSession = this.brokerForTurn
+        ? await this.brokerForTurn(request, context ?? {}, {
+            operationId,
+            hostGeneration: "local",
+          })
+        : undefined;
+
+      if (!brokerSession) throw new Error("Hermes needs a provider broker.");
+
+      const relayDispatcher = new HermesRelayDispatcher(
+        brokerSession,
+        context?.signal ?? new AbortController().signal,
+      );
 
       relay = await startHermesProviderRelay(
         { protocol: 1, ...brokerSession.broker.grant, hostGeneration: "local" },
@@ -134,7 +138,7 @@ export class LocalHermesRuntime implements AgentRuntime {
     } finally {
       this.running.delete(request.runId);
       relay?.close();
-      brokerSession.broker.revoke();
+      brokerSession?.broker.revoke();
     }
   }
 }
