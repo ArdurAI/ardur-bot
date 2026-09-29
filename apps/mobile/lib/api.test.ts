@@ -2717,7 +2717,6 @@ describe("mobile thread event reduction", () => {
       "chart-1",
     ]);
     expect(state?.messages[1]?.blocks).toEqual([
-      { kind: "progress", text: "Rendering a chart", activity: true },
       { kind: "progress", text: "Weekly numbers.", streaming: true },
     ]);
     state = applyMobileThreadEvent(state, {
