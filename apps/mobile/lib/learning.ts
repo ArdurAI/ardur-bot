@@ -1,7 +1,7 @@
 import type {
   ModelCatalogEntry,
   ModelCredential,
-  RuntimePin,
+  RuntimeKind,
   ThinkingLevel,
 } from "@ardurbot/contracts";
 import {
@@ -14,7 +14,15 @@ import {
 import { connectedModelOptions, parseModelPinOptionKey, rpcErrorMessage } from "@ardurbot/core";
 import { RpcServerError, rpc } from "./api";
 
-type MenuOption = { label: string; onPress: () => void };
+type MenuOption = { text: string; onPress: () => void };
+
+export type ReviewerChoice = {
+  runtimeKind: RuntimeKind;
+  provider: string;
+  modelId: string;
+  credentialId: string;
+  effort: string | null;
+};
 
 export async function loadLearning(botId?: string) {
   return LearningInboxSchema.parse(await rpc("learning/list", { botId }));
@@ -73,26 +81,34 @@ export function learningBeforeAfter(diff: string) {
 export function reviewerMenuOptions(
   catalog: ModelCatalogEntry[],
   credentials: ModelCredential[],
-  t: (key: string, values?: Record<string, string>) => string,
+  t: (key: string, values?: Record<string, string | number>) => string,
   onSelect: (pin: {
-    runtimeKind: "pi";
+    runtimeKind: "pi" | "hermes";
     provider: string;
     modelId: string;
     credentialId: string;
   }) => void,
+  runtimeKind: "pi" | "hermes" = "pi",
+  onConnect: () => void = () => {},
 ): MenuOption[] {
-  const options = connectedModelOptions(catalog, credentials);
+  const usable =
+    runtimeKind === "hermes"
+      ? credentials.filter(
+          (item) => item.provider === "openai-compatible" || item.provider === "ollama",
+        )
+      : credentials;
+  const options = connectedModelOptions(catalog, usable);
   if (options.length === 0) {
-    return [{ label: t("Connect a model"), onPress: () => {} }];
+    return [{ text: t("Connect a model"), onPress: onConnect }];
   }
 
   return options.map((opt) => ({
-    label: opt.label,
+    text: opt.label,
     onPress: () => {
       const selected = parseModelPinOptionKey(opt.key);
       if (!selected?.credentialId) return;
       onSelect({
-        runtimeKind: "pi",
+        runtimeKind,
         provider: selected.provider,
         modelId: selected.modelId,
         credentialId: selected.credentialId,
@@ -104,7 +120,7 @@ export function reviewerMenuOptions(
 export function thinkingMenuOptions(
   supported: ThinkingLevel[],
   isOllama: boolean,
-  t: (key: string, values?: Record<string, string>) => string,
+  t: (key: string, values?: Record<string, string | number>) => string,
   onSelect: (effort: ThinkingLevel) => void,
 ): MenuOption[] {
   const options = supported.filter((level) =>
@@ -112,12 +128,12 @@ export function thinkingMenuOptions(
   );
 
   return options.map((level) => ({
-    label: isOllama ? (level === "off" ? t("Off") : t("On")) : level,
+    text: isOllama ? (level === "off" ? t("Off") : t("On")) : level,
     onPress: () => onSelect(level),
   }));
 }
 
-export async function setReviewerPin(expectedRevision: number, pin: RuntimePin) {
+export async function setReviewerPin(expectedRevision: number, pin: ReviewerChoice) {
   return SpaceLearningConfigSchema.parse(
     await rpc("learning/setReviewer", {
       expectedRevision,

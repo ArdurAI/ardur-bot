@@ -1096,7 +1096,7 @@ it("reviewerMenuOptions returns connect a model if none", () => {
     (k) => k,
     () => {},
   );
-  expect(options[0].label).toBe("Connect a model");
+  expect(options[0]?.text).toBe("Connect a model");
 });
 
 it("decodes a rendered connection key instead of splitting on colons", () => {
@@ -1125,6 +1125,39 @@ it("decodes a rendered connection key instead of splitting on colons", () => {
   });
 });
 
+it("keeps a Hermes connection on Hermes instead of the built-in runtime", () => {
+  let chosen: { runtimeKind: string; provider: string; modelId: string } | null = null;
+  const options = reviewerMenuOptions(
+    [
+      { provider: "openai-compatible", id: "local-model", label: "Local", billing: "usage" },
+      { provider: "openai", id: "reviewer", label: "Reviewer", billing: "usage" },
+    ],
+    [
+      {
+        id: "local",
+        provider: "openai-compatible",
+        label: "Local",
+        hasKey: true,
+        isDefault: false,
+      },
+      { id: "cred", provider: "openai", label: "OpenAI", hasKey: true, isDefault: true },
+    ],
+    (key) => key,
+    (pin) => {
+      chosen = pin;
+    },
+    "hermes",
+  );
+  expect(options.map((option) => option.text)).toEqual(["openai-compatible · Local"]);
+  options[0]?.onPress();
+  expect(chosen).toEqual({
+    runtimeKind: "hermes",
+    provider: "openai-compatible",
+    modelId: "local-model",
+    credentialId: "local",
+  });
+});
+
 it("thinkingMenuOptions returns options", () => {
   const options = thinkingMenuOptions(
     ["low", "medium", "high"] as any,
@@ -1133,7 +1166,7 @@ it("thinkingMenuOptions returns options", () => {
     () => {},
   );
   expect(options.length).toBe(3);
-  expect(options[0].label).toBe("low");
+  expect(options[0]?.text).toBe("low");
 });
 
 it("setReviewerPin calls rpc", async () => {
@@ -1146,6 +1179,12 @@ it("setReviewerPin calls rpc", async () => {
     canConfigure: true,
   });
 
-  await setReviewerPin(1, { runtimeKind: "pi", provider: "p1", modelId: "m1", credentialId: "c1" });
+  await setReviewerPin(1, {
+    runtimeKind: "pi",
+    provider: "p1",
+    modelId: "m1",
+    credentialId: "c1",
+    effort: null,
+  });
   expect(request).toHaveBeenCalledWith("learning/setReviewer", expect.any(Object));
 });
