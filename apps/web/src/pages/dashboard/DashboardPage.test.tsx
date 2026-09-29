@@ -56,6 +56,8 @@ vi.mock("@lingui/react", () => ({
 }));
 vi.mock("@lingui/react/macro", () => ({
   Trans: ({ children }: { children: ReactNode }) => children,
+  Plural: ({ value, one, other }: { value: number; one: string; other: string }) =>
+    (value === 1 ? one : other).replaceAll("#", new Intl.NumberFormat("en").format(value)),
   useLingui: () => ({ t: translate }),
 }));
 vi.mock("@ardurbot/chat-ui/web", () => ({
