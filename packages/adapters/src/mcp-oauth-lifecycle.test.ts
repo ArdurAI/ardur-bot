@@ -1,4 +1,6 @@
 import { randomBytes } from "node:crypto";
+import type { AdapterContext } from "@ardurbot/adapter-kit";
+import { createLogger, createTestSink, installLogger } from "@ardurbot/logging";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { OAuthMaterial, StoredMcpOAuthProvider } from "./mcp-oauth.js";
 import { McpOAuthBroker } from "./mcp-oauth.js";
@@ -29,6 +31,31 @@ function material(): OAuthMaterial {
     },
   };
 }
+const SERVER_WHERE = ["enabled", "id", "revision", "spaceId", "userId"];
+const SECRET_WHERE = ["id", "spaceId", "userId"];
+const SECRET_DATA = ["ciphertext", "id", "kind", "spaceId", "userId"];
+
+function rejectUnknown(value: object, allowed: readonly string[], invocation: string) {
+  for (const key of Object.keys(value)) {
+    if (!allowed.includes(key)) {
+      throw new Error(`Invalid \`${invocation}\` invocation: Unknown argument \`${key}\`.`);
+    }
+  }
+}
+
+function runContext(): AdapterContext {
+  return {
+    operationId: "run-op",
+    traceId: "run-trace",
+    spaceId: actor.spaceId,
+    userId: actor.userId,
+    botId: "bot",
+    runId: "run",
+    signal: AbortSignal.timeout(30_000),
+    connectedConnections: [],
+  };
+}
+
 async function fixture(
   response: () => Promise<Response>,
   overrides: {
@@ -36,6 +63,7 @@ async function fixture(
     connectionState?: string;
     pendingOauthSessionId?: string | null;
   } = {},
+  options: { caller?: AdapterContext; strict?: boolean } = {},
 ) {
   const secrets = new EncryptedSecretStore(randomBytes(32).toString("hex"));
   const context = {
@@ -60,9 +88,16 @@ async function fixture(
     ...overrides,
   };
   let lock = Promise.resolve();
+  const caller = options.caller ?? actor;
+  const guard = (value: object, allowed: readonly string[], invocation: string) => {
+    if (options.strict) rejectUnknown(value, allowed, invocation);
+  };
   const db = {
     mcpServer: {
-      findFirst: vi.fn(async () => ({ ...server })),
+      findFirst: vi.fn(async ({ where }: { where: object }) => {
+        guard(where, SERVER_WHERE, "tx.mcpServer.findFirst()");
+        return { ...server };
+      }),
       update: vi.fn(async ({ data }) => {
         const revision =
           data.revision && typeof data.revision === "object" && "increment" in data.revision
@@ -87,12 +122,17 @@ async function fixture(
       }),
     },
     secret: {
-      findFirst: vi.fn(async ({ where }) => rows.get(where.id)),
-      create: vi.fn(async ({ data }) => {
+      findFirst: vi.fn(async ({ where }: { where: { id: string } }) => {
+        guard(where, SECRET_WHERE, "tx.secret.findFirst()");
+        return rows.get(where.id);
+      }),
+      create: vi.fn(async ({ data }: { data: { id: string; ciphertext: string } }) => {
+        guard(data, SECRET_DATA, "tx.secret.create()");
         rows.set(data.id, data);
         return data;
       }),
-      deleteMany: vi.fn(async ({ where }) => {
+      deleteMany: vi.fn(async ({ where }: { where: { id: string } }) => {
+        guard(where, SECRET_WHERE, "tx.secret.deleteMany()");
         rows.delete(where.id);
         return { count: 1 };
       }),
@@ -110,7 +150,7 @@ async function fixture(
     fetch,
     resolveHostname: async () => [{ address: "203.0.113.10", family: 4 }],
   });
-  const provider = async () => (await broker.providerFor(server, actor)) as StoredMcpOAuthProvider;
+  const provider = async () => (await broker.providerFor(server, caller)) as StoredMcpOAuthProvider;
   return {
     broker,
     context,
@@ -320,6 +360,144 @@ describe("managed OAuth lifecycle", () => {
       connectionState: "connected",
       pendingOauthSessionId: null,
       lastError: "Could not complete sign-in. Connect again.",
+    });
+  });
+  it("refreshes with a full run context and writes only the owner columns", async () => {
+    const f = await fixture(
+      async () =>
+        Response.json({
+          access_token: "fake-fresh-access",
+          token_type: "bearer",
+          expires_in: 3600,
+        }),
+      {},
+      { caller: runContext(), strict: true },
+    );
+    const secretId = f.server().secretId;
+    await (await f.provider()).prepareTokens();
+    expect(f.db.mcpServer.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: "connection",
+        spaceId: actor.spaceId,
+        userId: actor.userId,
+        enabled: true,
+        revision: 1,
+      },
+    });
+    expect(f.db.secret.findFirst).toHaveBeenCalledWith({
+      where: { id: secretId, spaceId: actor.spaceId, userId: actor.userId },
+    });
+    expect(f.db.secret.create).toHaveBeenCalledWith({
+      data: {
+        id: expect.any(String),
+        spaceId: actor.spaceId,
+        userId: actor.userId,
+        kind: "mcp",
+        ciphertext: expect.any(String),
+      },
+    });
+    expect(f.db.secret.deleteMany).toHaveBeenCalledWith({
+      where: { id: secretId, spaceId: actor.spaceId, userId: actor.userId },
+    });
+    expect(f.persisted().oauth?.tokens?.access_token).toBe("fake-fresh-access");
+  });
+  it("rejects a full run context's tokens without writing run fields", async () => {
+    const f = await fixture(
+      async () => Response.json({}),
+      {},
+      { caller: runContext(), strict: true },
+    );
+    const secretId = f.server().secretId;
+    await expect((await f.provider()).rejectTokens()).rejects.toThrow("invalid_token");
+    expect(f.db.mcpServer.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: "connection",
+        spaceId: actor.spaceId,
+        userId: actor.userId,
+        enabled: true,
+        revision: 1,
+      },
+    });
+    expect(f.db.secret.findFirst).toHaveBeenCalledWith({
+      where: { id: secretId, spaceId: actor.spaceId, userId: actor.userId },
+    });
+    expect(f.db.secret.create).toHaveBeenCalledWith({
+      data: {
+        id: expect.any(String),
+        spaceId: actor.spaceId,
+        userId: actor.userId,
+        kind: "mcp",
+        ciphertext: expect.any(String),
+      },
+    });
+    expect(f.db.secret.deleteMany).toHaveBeenCalledWith({
+      where: { id: secretId, spaceId: actor.spaceId, userId: actor.userId },
+    });
+    expect(f.server()).toMatchObject({
+      connectionState: "needs-sign-in",
+      lastError: "Needs sign-in (invalid_token).",
+    });
+  });
+  it("logs a refresh failure that is not a sign-in rejection", async () => {
+    const f = await fixture(
+      async () => {
+        throw new TypeError("fake-network-response");
+      },
+      {},
+      { caller: runContext(), strict: true },
+    );
+    const sink = createTestSink();
+    installLogger(createLogger({ service: "ardurbot-worker", sinks: [sink] }));
+    try {
+      await expect((await f.provider()).prepareTokens()).rejects.toThrow("fake-network-response");
+    } finally {
+      installLogger(createLogger({ service: "ardurbot", level: "off", sinks: [] }));
+    }
+    expect(f.server().connectionState).toBe("connected");
+    expect(f.persisted().oauth?.tokens?.refresh_token).toBe("fake-old-refresh");
+    expect(sink.events).toEqual([
+      expect.objectContaining({
+        message: "mcp oauth refresh failed",
+        serverId: "connection",
+        spaceId: actor.spaceId,
+        detail: "Could not reach auth.example.test: fake-network-response",
+      }),
+    ]);
+    expect(JSON.stringify(sink.events)).not.toContain("fake-old-refresh");
+    expect(JSON.stringify(sink.events)).not.toContain("fake-old-access");
+  });
+  it("still marks Needs sign-in when a full run context's refresh is rejected", async () => {
+    const f = await fixture(
+      async () =>
+        Response.json(
+          { error: "invalid_grant", error_description: "fake-secret-response" },
+          { status: 400 },
+        ),
+      {},
+      { caller: runContext(), strict: true },
+    );
+    const sink = createTestSink();
+    installLogger(createLogger({ service: "ardurbot-worker", sinks: [sink] }));
+    try {
+      await expect((await f.provider()).prepareTokens()).rejects.toThrow("invalid_grant");
+    } finally {
+      installLogger(createLogger({ service: "ardurbot", level: "off", sinks: [] }));
+    }
+    expect(f.server()).toMatchObject({
+      connectionState: "needs-sign-in",
+      lastError: "Needs sign-in (invalid_grant).",
+    });
+    expect(f.persisted().oauth?.tokens).toBeUndefined();
+    expect(JSON.stringify(f.server())).not.toContain("fake-secret-response");
+    expect(sink.events).toEqual([]);
+    expect(f.db.secret.create).toHaveBeenCalledWith({
+      data: {
+        id: expect.any(String),
+        spaceId: actor.spaceId,
+        userId: actor.userId,
+        kind: "mcp",
+        ciphertext: expect.any(String),
+      },
     });
   });
 });

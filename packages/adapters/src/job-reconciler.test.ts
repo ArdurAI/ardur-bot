@@ -2,10 +2,12 @@ import type { BackgroundJob, JobPublisher } from "@ardurbot/adapter-kit";
 import type { Pool, PrismaClient, ThreadEvents } from "@ardurbot/db";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { returnBotMessageOutcome } from "./bot-messages.js";
+import { wakeCoordinatorAfterAsk } from "./group-ask.js";
 import type { ReconciliationLeadership } from "./job-reconciler.js";
 import { createJobReconciler, createPostgresReconciliationLeadership } from "./job-reconciler.js";
 
 vi.mock("./bot-messages.js", () => ({ returnBotMessageOutcome: vi.fn() }));
+vi.mock("./group-ask.js", () => ({ wakeCoordinatorAfterAsk: vi.fn(async () => undefined) }));
 
 beforeEach(() => {
   vi.mocked(returnBotMessageOutcome).mockReset();
@@ -41,6 +43,28 @@ function fakePrisma(
 }
 
 describe("createJobReconciler", () => {
+  it("replays each unsettled room ask once so a busy or missed coordinator is woken later", async () => {
+    const findMany = vi.fn(async () => [
+      { id: "ada-ask", admissionKey: "group-ask:1:chief-run:call-1:ada" },
+      { id: "ben-ask", admissionKey: "group-ask:1:chief-run:call-2:ben" },
+      { id: "later-ask", admissionKey: "group-ask:2:wake-run:call-1:ada" },
+    ]);
+    const prisma = { ...fakePrisma(), delegation: { findMany } } as unknown as PrismaClient;
+    const { jobs } = publisher();
+    await createJobReconciler({ prisma, jobs }).reconcileOnce();
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          admissionKey: { startsWith: "group-ask:" },
+          coordinatorWokenAt: null,
+        }),
+      }),
+    );
+    expect(vi.mocked(wakeCoordinatorAfterAsk).mock.calls.map(([, id]) => id)).toEqual([
+      "ada-ask",
+      "later-ask",
+    ]);
+  });
   it("includes opted-in import reconciliation without delaying the routine path on failure", async () => {
     const prisma = fakePrisma();
     const { jobs } = publisher();

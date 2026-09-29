@@ -432,7 +432,7 @@ describeMessaging("messaging surface journeys", () => {
       content: "legacy path",
       handle: `legacy-dm-${stamp}`,
     });
-    const res = await app.request("https://ardurbot.test/api/v1/phone/webhook", {
+    const res = await app.request("https://example.test/api/v1/phone/webhook", {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -449,7 +449,7 @@ describeMessaging("messaging surface journeys", () => {
     const stranger = uniqueNumber();
     // A mistaken parser that unwraps `data` would treat this as a message and
     // provision. The SendBlue inbound shape is flat; nested envelopes are ignored.
-    const res = await app.request("https://ardurbot.test/api/v1/phone/webhook", {
+    const res = await app.request("https://example.test/api/v1/phone/webhook", {
       method: "POST",
       headers: {
         "content-type": "application/json",

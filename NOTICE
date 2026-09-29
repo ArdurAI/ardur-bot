@@ -6,7 +6,8 @@ This product is derived from Rakazo (https://github.com/elie222/rakazo),
 Copyright the Rakazo contributors, licensed under the Apache License,
 Version 2.0. Ardur was forked from Rakazo commit 59d4f0c2 on 2026-09-23.
 Files were modified for Ardur, including a project-wide rename; see
-docs/decisions/ADR-001-fork-and-rename.md and scripts/rename-from-upstream.py.
+docs/decisions/ADR-001-fork-and-rename.md and, in the Git history,
+scripts/rename-from-upstream.py (added in commit 55fc04a9).
 
 "Rakazo" is the name of the upstream project. Ardur is not affiliated
 with or endorsed by the Rakazo project.

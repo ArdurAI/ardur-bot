@@ -9,16 +9,14 @@ always uses your ChatGPT account at `xhigh` effort, a research bot on Kimi, a lo
 Ollama. Bots work on computers you control: your machine, Docker, and (planned) Podman and
 Kubernetes.
 
-Ardur is a fork of [Rakazo](https://github.com/elie222/rakazo) (Apache-2.0). See
-[NOTICE](NOTICE) and [ADR-001](docs/decisions/ADR-001-fork-and-rename.md).
+Ardur is an independently maintained fork; see [NOTICE](NOTICE) for its upstream origin and
+Apache-2.0 attribution.
 
-> **Status: pre-alpha.** Everything lands on the `dev` branch; `main` moves only after a
+> **Status: alpha.** Everything lands on the `dev` branch; `main` moves only after a
 > human has verified a build. The release workflow produces unsigned desktop previews;
 > check the release assets before choosing an installer. Running from source remains available.
 
 ## What you get today
-
-Inherited from Rakazo and working:
 
 - Persistent bots with their own conversation, memory, routines and history
 - Group chats and delegation between bots, plus short-lived subagents
@@ -40,7 +38,7 @@ Inherited from Rakazo and working:
 
 Experimental Antigravity text conversations can run on a connected host computer with an exact model pin; see [Antigravity runtime](docs/antigravity-runtime.md).
 
-Experimental Hermes bots reuse a compatible Ardur model connection on a paired macOS or Linux host with a configured pinned installation. Hermes is unavailable on Windows; see [Hermes runtime](docs/runtimes/hermes.md).
+Experimental Hermes runs on this computer in desktop local mode and the dev stack, or on a paired macOS or Linux host, with a pinned install. Windows isn't supported; see [Hermes runtime](docs/runtimes/hermes.md).
 
 ## Memory
 
@@ -62,10 +60,9 @@ After synchronization, shared notes are Markdown files in the connected reposito
 
 ## Where it is going
 
-- Subscription-honest providers: Claude Pro/Max through your own unmodified `claude` CLI
-  (the inherited Claude.ai OAuth login will be removed, since Anthropic's terms do not allow
-  third-party apps to use it), Codex through OpenAI's documented integration, Kimi and Z.ai
-  coding plans, Gemini with an API key, Ollama as a first-class choice
+- Subscription-honest providers: Claude Pro/Max through your own unmodified `claude` CLI,
+  Codex through OpenAI's documented integration, Kimi and Z.ai coding plans, Gemini with an
+  API key, Ollama as a first-class choice
 - Computers on Podman and kind/Kubernetes
 - Signed and notarized downloads
 - A fast, smooth UI on Windows, macOS and Linux
@@ -79,35 +76,63 @@ These builds are **unsigned**; macOS builds are also **not notarized**. Signed b
 Only approve a download you trust from the official release page.
 
 - **macOS:** open the arm64 DMG for Apple Silicon or x64 DMG for Intel, drag **Ardur.app**
-  into **Applications**, and eject the DMG. Gatekeeper can say the developer cannot be verified
-  or the app cannot be checked for malicious software. In Finder, right-click → **Open** →
-  **Open**. On recent macOS versions where that override is unavailable, attempt to open once,
-  then use **System Settings → Privacy & Security → Open Anyway**, authenticate, and click
-  **Open**. A terminal alternative for that downloaded app is:
+  into **Applications**, and eject the DMG. The ZIP contains the same app for manual installation.
+  Gatekeeper can say the developer cannot be verified or the app cannot be checked for malicious
+  software. Updates show **“A new version is available — download”**; download the next DMG and
+  replace the app manually.
+- **Windows:** run the x64 NSIS `.exe`. SmartScreen may show **“Windows protected your PC”**
+  and an unknown publisher.
+- **Linux:** download the matching AppImage, or the `.deb` on Debian/Ubuntu. Linux commonly
+  requires the executable permission rather than displaying a SmartScreen-style publisher prompt.
+
+To open the app the first time:
+
+<!-- site-facts:first-open:start -->
+<!-- Generated from site/data/product.json by pnpm site:facts; edit that file. -->
+**macOS**
+
+- In Finder, right-click the app, choose “Open”, then choose “Open” again.
+- If macOS doesn't offer “Open”, try to open the app once, then go to “System Settings”, then “Privacy & Security”, and choose “Open Anyway”.
+- Enter your password when asked, then choose “Open”.
+- Or remove the download's quarantine flag in Terminal.
 
   ```sh
   xattr -d com.apple.quarantine "/Applications/Ardur.app"
+  ```
+- Then open the app.
+
+  ```sh
   open "/Applications/Ardur.app"
   ```
 
-  The ZIP contains the same app for manual installation. Approving quarantine does not add a
-  developer signature or notarization. Updates show **“A new version is available — download”**;
-  download the next DMG and replace the app manually.
-- **Windows:** run the x64 NSIS `.exe`. SmartScreen may show **“Windows protected your PC”**
-  and an unknown publisher. Choose **More info → Run anyway**, then finish the installer.
-  Managed computers may disallow this override. No trusted publisher identity is asserted.
-- **Linux:** download the matching AppImage, then run:
+**Windows**
+
+- If “Windows protected your PC” appears, choose “More info”, then “Run anyway”.
+- Finish the installer.
+
+**Linux**
+
+- Make the AppImage executable, then open it.
 
   ```sh
   chmod +x ./ardur-*.AppImage
-  ./ardur-0.1.0-alpha.2-linux-x86_64.AppImage
   ```
+- On Debian or Ubuntu, you can install the deb instead.
 
-  Substitute your downloaded version and architecture. Linux commonly requires the executable
-  permission rather than displaying a SmartScreen-style publisher prompt. Some distributions
-  require FUSE support for AppImages. On Debian/Ubuntu, the `.deb` alternative installs with
-  `sudo apt install ./ardur-*.deb`; a standalone deb has no distribution-repository trust
-  guarantee. Run `ardur --version` after installing it.
+  ```sh
+  sudo apt install ./ardur-*.deb
+  ```
+- After installing the deb, check that it runs.
+
+  ```sh
+  ardur --version
+  ```
+<!-- site-facts:first-open:end -->
+
+Approving quarantine does not add a developer signature or notarization. Managed Windows
+computers may disallow the SmartScreen override, and no trusted publisher identity is asserted.
+Some Linux distributions require FUSE support for AppImages, and a standalone deb has no
+distribution-repository trust guarantee.
 
 **This computer** starts the app's own database and services. Docker is not required for that
 first launch. You can still connect the client to an existing server. See
@@ -139,7 +164,6 @@ Node.js 24.x, or Node.js 26+; pnpm 9; and Docker. Node.js 23.x and 25.x are not 
 ```sh
 git clone https://github.com/ArdurAI/ardur-bot.git
 cd ardur-bot
-git checkout dev
 cp .env.example .env
 ```
 
@@ -191,9 +215,8 @@ pnpm lint    # Biome lint and format
 pnpm test    # offline unit tests, no keys needed
 ```
 
-More checks, the branch policy and how to sync with upstream Rakazo are in
-[CONTRIBUTING.md](CONTRIBUTING.md). Design notes are under [docs/](docs/) where
-present and decisions under [docs/decisions/](docs/decisions/).
+More checks and the branch policy are in [CONTRIBUTING.md](CONTRIBUTING.md). Design notes
+are under [docs/](docs/) where present and decisions under [docs/decisions/](docs/decisions/).
 
 ## Community
 
@@ -204,4 +227,4 @@ present and decisions under [docs/decisions/](docs/decisions/).
 
 ## License
 
-Apache-2.0. Derived from Rakazo; see [NOTICE](NOTICE).
+Apache-2.0; see [LICENSE](LICENSE) and [NOTICE](NOTICE).

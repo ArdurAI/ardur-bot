@@ -6,6 +6,7 @@ import {
   resolveAppearancePreference,
   tokensForAppearance,
 } from "@ardurbot/ui-tokens";
+import { rememberDesktopBoot } from "./desktop-boot";
 
 export type { AppearancePreference, ResolvedAppearance };
 
@@ -44,6 +45,7 @@ export function applyUiAppearance(
 
 export function setUiAppearance(preference: AppearancePreference): ResolvedAppearance {
   persistAppearancePreference(preference);
+  rememberDesktopBoot({ theme: preference });
   return applyUiAppearance(preference);
 }
 

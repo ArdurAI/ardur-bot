@@ -6,7 +6,7 @@ import { expect, test } from "@playwright/test";
 import { captureScreenshot, completeOnboarding, openUserSettings, signup } from "./helpers";
 
 test("owner previews, imports and removes local tool data", async ({ page }, testInfo) => {
-  await signup(page, `import-${Date.now()}@ardurbot.test`, "password12", "Import fixture");
+  await signup(page, `import-${Date.now()}@example.test`, "password12", "Import fixture");
   await completeOnboarding(page);
   // Settings reads deployment ownership from bootstrap, the Import page from me; after another
   // test has claimed ownership this account is a non-owner, so both responses are patched.

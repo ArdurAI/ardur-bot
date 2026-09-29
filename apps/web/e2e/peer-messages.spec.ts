@@ -5,7 +5,7 @@ test("shows peer chips in transcript and opens view-only peer chat", async ({ pa
   const stamp = Date.now();
   await signup(
     page,
-    `peer-msg-${testInfo.workerIndex}-${stamp}@ardurbot.test`,
+    `peer-msg-${testInfo.workerIndex}-${stamp}@example.test`,
     "password12",
     "Peer Msg",
   );
@@ -65,7 +65,7 @@ test("shows peer chips in transcript and opens view-only peer chat", async ({ pa
   await expect(chip).toHaveAccessibleName(
     /^((Sent|Delivered) to|(Message|Delivered) from|(Read by \w+|Replied|Waiting for a turn) · (to|from)) Researcher$/,
   );
-  await expect(chip.locator(".ardurbot-bot-avatar")).toBeVisible();
+  await expect(chip.locator(".ardur-bot-avatar")).toBeVisible();
   await expect(chip).not.toContainText("{peer}");
   // User bubble still contains the phrase; peer body must not appear outside the chip.
   await expect(chip).not.toContainText("peer-exchange-alpha");

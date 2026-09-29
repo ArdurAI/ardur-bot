@@ -5,7 +5,7 @@ test("offers Manage and says to enable a server first when its sign-in card is a
   page,
 }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `mcp-approval-card-${stamp}@ardurbot.test`, "password12", "Approval Card");
+  await signup(page, `mcp-approval-card-${stamp}@example.test`, "password12", "Approval Card");
   await completeOnboarding(page);
 
   const composer = page.getByPlaceholder(/Message/);

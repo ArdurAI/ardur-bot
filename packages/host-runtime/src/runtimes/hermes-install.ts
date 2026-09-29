@@ -1,13 +1,29 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
+import { mkdir, realpath } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import type { HermesExecutionEnvelopeSchema } from "@ardurbot/contracts/runtime-config";
+import type * as z from "zod";
 import sourceHashes from "../../python/hermes_sources.json" with { type: "json" };
-import type { HermesLaunch, HermesLaunchSpec } from "./hermes-runtime.js";
+import { type HermesLaunch, type HermesLaunchSpec, HermesRuntime } from "./hermes-runtime.js";
 import { stopNative } from "./native-process.js";
 
 export const HERMES_SOURCE_PIN = "29112bef099274229cadff79cdff7bf7b99c4b77";
+
+export function localHermesRoot(): string {
+  return path.join(path.resolve(process.env.DATA_DIR ?? "./data"), "hermes");
+}
+
+export function localHermesStaging(): string {
+  return path.join(localHermesRoot(), "staging");
+}
+
+export function localHermesInstallCandidate(): string | null {
+  return hermesInstallCandidate(localHermesStaging(), process.env.ARDUR_HERMES_INSTALL);
+}
+
 /** The workspace root is supplied by the trusted host configuration, never a bot request. */
 export function hermesInstallCandidate(
   hostRoot: string,
@@ -53,6 +69,11 @@ export function resolveHermesLauncherAsset(
     );
   const bundled = hermesLauncherAsset(bundleFile);
   if (existsSync(bundled) && complete(bundled)) return bundled;
+  const desktopBundled = path.resolve(
+    path.dirname(bundleFile),
+    "../host-service/python/hermes_launcher.py",
+  );
+  if (existsSync(desktopBundled) && complete(desktopBundled)) return desktopBundled;
   try {
     if (moduleUrl) {
       const source = path.resolve(
@@ -60,6 +81,11 @@ export function resolveHermesLauncherAsset(
         "../python/hermes_launcher.py",
       );
       if (existsSync(source) && complete(source)) return source;
+      const workerDevSource = path.resolve(
+        path.dirname(fileURLToPath(moduleUrl)),
+        "../../../host-runtime/python/hermes_launcher.py",
+      );
+      if (existsSync(workerDevSource) && complete(workerDevSource)) return workerDevSource;
     }
   } catch {
     // Bundled builds may have no module URL. A missing asset always fails closed.
@@ -87,4 +113,37 @@ export function pinnedHermesLaunch(install: string, launcher: string): HermesLau
     });
     return { child, teardown: async () => stopNative(child) };
   };
+}
+
+export async function buildHermesRuntime(options: {
+  hostRoot: string;
+  explicitInstall?: string;
+  bundleFile: string;
+  moduleUrl: string | undefined;
+  executionEnvelope?: z.infer<typeof HermesExecutionEnvelopeSchema>;
+  onProfileAcknowledged: () => void;
+  onTurnFinished: () => void;
+}): Promise<HermesRuntime | null> {
+  const install = hermesInstallCandidate(options.hostRoot, options.explicitInstall);
+  if (!install) return null;
+  const qualified = probeHermesInstall(install);
+  await mkdir(options.hostRoot, { recursive: true, mode: 0o700 });
+  const staging = await realpath(options.hostRoot);
+  const overlap = path.relative(qualified.root, staging);
+  if (
+    overlap === "" ||
+    (overlap !== ".." && !overlap.startsWith(`..${path.sep}`) && !path.isAbsolute(overlap))
+  )
+    throw new Error("Hermes staging cannot overlap its install.");
+  const launcher = resolveHermesLauncherAsset(options.bundleFile, options.moduleUrl);
+  return new HermesRuntime({
+    command: qualified.python,
+    args: [launcher],
+    launch: pinnedHermesLaunch(qualified.root, launcher),
+    pinned: true,
+    executionEnvelope: options.executionEnvelope,
+    onProfileAcknowledged: options.onProfileAcknowledged,
+    stagingParent: options.hostRoot,
+    onTurnFinished: options.onTurnFinished,
+  });
 }

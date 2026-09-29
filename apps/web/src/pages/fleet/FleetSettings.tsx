@@ -549,6 +549,11 @@ function AddComputer({
     memoryRequest: details?.settings.memoryRequest ?? "256Mi",
     memoryLimit: details?.settings.memoryLimit ?? "2Gi",
   });
+  const [images, setImages] = useState({
+    standardImage: details?.settings.standardImage ?? "",
+    developerImage: details?.settings.developerImage ?? "",
+    imagePullSecret: details?.settings.imagePullSecret ?? "",
+  });
   const [tls, setTls] = useState({ ca: "", cert: "", key: "" });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -598,6 +603,14 @@ function AddComputer({
                   ? { dockerContext: details?.settings.dockerContext ?? target?.context }
                   : {}),
               }),
+        ...(kind === "ssh"
+          ? {}
+          : {
+              standardImage: images.standardImage.trim() || undefined,
+              developerImage: images.developerImage.trim() || undefined,
+              imagePullSecret:
+                (kind === "kubernetes" && images.imagePullSecret.trim()) || undefined,
+            }),
       });
       const connection = {
         name,
@@ -862,6 +875,32 @@ function AddComputer({
                 : null}
             </>
           )}
+          {kind !== "ssh" && !details?.settings.socket ? (
+            <details>
+              <summary className="text-sm text-muted-foreground">
+                <Trans>Advanced</Trans>
+              </summary>
+              <div className="space-y-2 pt-2">
+                {(
+                  [
+                    ["standardImage", t`Standard image`],
+                    ["developerImage", t`Developer image`],
+                    ...(kind === "kubernetes"
+                      ? ([["imagePullSecret", t`Image pull secret`]] as const)
+                      : []),
+                  ] as const
+                ).map(([key, label]) => (
+                  <Input
+                    key={key}
+                    aria-label={label}
+                    placeholder={label}
+                    value={images[key]}
+                    onChange={(event) => setImages({ ...images, [key]: event.target.value })}
+                  />
+                ))}
+              </div>
+            </details>
+          ) : null}
           {error ? (
             <p role="alert" className="text-sm text-destructive">
               {error}

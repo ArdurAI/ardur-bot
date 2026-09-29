@@ -61,6 +61,12 @@ describe("activateUiLocale", () => {
     expect(i18n._({ id: "Settings", message: "Settings" })).toBe("Settings");
   });
 
+  it("does not write a second resolvedUiLocale copy to storage", async () => {
+    const store = stubLocaleStorage();
+    await activateUiLocale("de");
+    expect(store.get("ardurbot.resolvedUiLocale")).toBeUndefined();
+  });
+
   it("falls back to empty English when every catalog fails", async () => {
     setCatalogLoadersForTests({
       en: async () => {

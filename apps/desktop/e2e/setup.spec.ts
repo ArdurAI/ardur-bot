@@ -256,7 +256,7 @@ test("an HTTP error document is not accepted after a healthy probe", async () =>
 
 test("a session-pending shell skeleton is not accepted as a ready app", async () => {
   const skeletonHtml = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Ardur</title></head>
-<body><div id="root"><div data-ardurbot-app-state="session-pending"><aside></aside><main><div>Opening your Space…</div></main></div></div></body></html>`;
+<body><div id="root"><div data-ardur-app-state="session-pending"><aside></aside><main><div>Opening your Space…</div></main></div></div></body></html>`;
   const skeleton = createServer((request, response) => {
     if (request.url === "/rpc/health" && request.method === "POST") {
       response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
@@ -298,17 +298,17 @@ for (const { name, surface } of [
   },
   {
     name: "logged-out welcome",
-    surface: '<div data-ardurbot-surface="welcome"><button>Sign up</button></div>',
+    surface: '<div data-ardur-surface="welcome"><button>Sign up</button></div>',
   },
   {
     name: "translated logged-out welcome",
-    surface: '<div data-ardurbot-surface="welcome"><button>Créer un compte</button></div>',
+    surface: '<div data-ardur-surface="welcome"><button>Créer un compte</button></div>',
   },
 ]) {
   test(`a post-session ${name} mount is accepted`, async () => {
     const readyHtml = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Ardur</title>
 </head>
-<body><div id="root"><div data-ardurbot-app-state="ready">${surface}</div></div></body></html>`;
+<body><div id="root"><div data-ardur-app-state="ready">${surface}</div></div></body></html>`;
     const ready = createServer((request, response) => {
       if (request.url === "/rpc/health" && request.method === "POST") {
         response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
@@ -333,7 +333,7 @@ for (const { name, surface } of [
         setup.getByRole("button", { name: "Continue" }).click(),
       ]).then(([window]) => window);
 
-      await expect(appWindow.locator('[data-ardurbot-app-state="ready"]')).toBeVisible();
+      await expect(appWindow.locator('[data-ardur-app-state="ready"]')).toBeVisible();
       await expect
         .poll(async () => {
           try {
@@ -356,7 +356,7 @@ for (const { name, surface } of [
 
 test("a shell mount before workspace bootstrap is not accepted", async () => {
   const preBootstrapHtml = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Ardur</title></head>
-<body><div id="root"><div data-ardurbot-app-state="ready"><div data-testid="shell-root" data-ready="false">Workspace</div></div></div></body></html>`;
+<body><div id="root"><div data-ardur-app-state="ready"><div data-testid="shell-root" data-ready="false">Workspace</div></div></div></body></html>`;
   const preBootstrap = createServer((request, response) => {
     if (request.url === "/rpc/health" && request.method === "POST") {
       response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
@@ -393,7 +393,7 @@ test("a shell mount before workspace bootstrap is not accepted", async () => {
 
 test("a session-ready marker without a route surface is not accepted", async () => {
   const emptyReadyHtml = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Ardur</title></head>
-<body><div id="root"><div data-ardurbot-app-state="ready" class="h-full"></div></div></body></html>`;
+<body><div id="root"><div data-ardur-app-state="ready" class="h-full"></div></div></body></html>`;
   const emptyReady = createServer((request, response) => {
     if (request.url === "/rpc/health" && request.method === "POST") {
       response.writeHead(200, { "content-type": "application/json; charset=utf-8" });
