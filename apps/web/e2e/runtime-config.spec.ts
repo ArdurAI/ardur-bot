@@ -93,6 +93,7 @@ test("the Hermes short panel and Advanced editor share one draft", async ({ page
   await expect(settings.getByRole("button", { name: "Save", exact: true })).toBeEnabled();
   await expect(json).toHaveValue(/"maxProviderRequests": 16/);
   await captureScreenshot(page, testInfo, "runtime-config-advanced");
+  await page.unrouteAll({ behavior: "ignoreErrors" });
 });
 
 test("a group shows captured runtime settings and refreshes them from the bot", async ({
@@ -171,13 +172,16 @@ test("a group shows captured runtime settings and refreshes them from the bot", 
     (request) =>
       request.url().includes("/rpc/groups/setMemberModelPin") && request.method() === "POST",
   );
-  await page.route("**/rpc/groups/setMemberModelPin", async (route) => {
-    const response = await route.fetch();
-    const body = (await response.json()) as { json: Group };
-    await route.fulfill({ response, json: body });
-  });
+  const responded = page.waitForResponse(
+    (response) =>
+      response.url().includes("/rpc/groups/setMemberModelPin") &&
+      response.request().method() === "POST",
+  );
   await control.getByRole("button", { name: "Use bot runtime settings" }).click();
   const request = await refresh;
+  const response = await responded;
+  expect(response.ok()).toBe(true);
+  expect(response.status()).toBe(200);
   const sent = request.postDataJSON() as {
     json: {
       botId: string;
@@ -196,4 +200,6 @@ test("a group shows captured runtime settings and refreshes them from the bot", 
     provider: "openai-compatible",
     modelId: "fixture-model",
   });
+  await expect(control.getByText("Captured for this group.")).toBeVisible();
+  await page.unrouteAll({ behavior: "ignoreErrors" });
 });
