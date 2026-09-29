@@ -4255,6 +4255,14 @@ msgstr "Hermes는 아직 이 연결을 지원하지 않습니다."
 msgid "Hermes is not installed on this computer."
 msgstr "이 컴퓨터에 Hermes가 설치되어 있지 않습니다."
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "The Hermes install on this computer failed its safety check."
+msgstr "이 컴퓨터의 Hermes 설치가 안전 검사를 통과하지 못했습니다."
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Hermes isn't available on Windows yet."
+msgstr "Hermes는 아직 Windows에서 사용할 수 없습니다."
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Hermes runs with this computer's access."
 msgstr "Hermes는 이 컴퓨터의 접근 권한으로 실행됩니다."

@@ -37,8 +37,10 @@ the managed install at `<DATA_DIR>/hermes/runtimes/hermes-agent`. A relative
 path across the stack.
 The host probes no other location, including `PATH`, pipx, Homebrew or a
 personal Hermes directory. Restart the desktop app or host service after
-installing or changing the selector. Until qualification passes, settings show
-"Hermes is not installed on this computer."
+installing or changing the selector. A missing install shows "Hermes is not
+installed on this computer." A checkout that fails its safety check shows "The
+Hermes install on this computer failed its safety check." Windows shows "Hermes
+isn't available on Windows yet."
 
 The optional qualification lane needs an owner-provided install and fake
 provider; run it separately from normal unit tests:

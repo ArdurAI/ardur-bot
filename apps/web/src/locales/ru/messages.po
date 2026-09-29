@@ -4255,6 +4255,14 @@ msgstr "Hermes пока не поддерживает это подключен�
 msgid "Hermes is not installed on this computer."
 msgstr "Hermes не установлен на этом компьютере."
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "The Hermes install on this computer failed its safety check."
+msgstr "Установка Hermes на этом компьютере не прошла проверку безопасности."
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Hermes isn't available on Windows yet."
+msgstr "Hermes пока недоступен в Windows."
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Hermes runs with this computer's access."
 msgstr "Hermes работает с правами доступа этого компьютера."
