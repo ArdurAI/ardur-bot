@@ -48,7 +48,7 @@ function injectTransportMessage(body: ThreadPayload, stamp: number) {
 
 test("labels a Sendblue group message with its actual transport", async ({ page }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `messaging-transport-${stamp}@ardurbot.test`, "password12", "Transport E2E");
+  await signup(page, `messaging-transport-${stamp}@example.test`, "password12", "Transport E2E");
   await completeOnboarding(page);
   await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
 

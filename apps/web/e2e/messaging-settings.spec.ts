@@ -81,7 +81,7 @@ test("Korean messaging settings show linked chat apps, channels, and connections
 
   const stamp = Date.now();
   const userName = `Messenger ${stamp}`;
-  await signup(page, `messaging-${stamp}@ardurbot.test`, "password12", userName);
+  await signup(page, `messaging-${stamp}@example.test`, "password12", userName);
   await completeOnboarding(page);
 
   await page.locator("header.app-drag").getByRole("button", { name: "Settings" }).click();
@@ -207,7 +207,7 @@ test("team conversation settings open from messaging overlay", async ({ page }, 
 
   const stamp = Date.now();
   const userName = `TeamChat ${stamp}`;
-  await signup(page, `team-chat-${stamp}@ardurbot.test`, "password12", userName);
+  await signup(page, `team-chat-${stamp}@example.test`, "password12", userName);
   await completeOnboarding(page);
 
   await page.locator("header.app-drag").getByRole("button", { name: "Settings" }).click();

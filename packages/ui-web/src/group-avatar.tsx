@@ -25,7 +25,7 @@ export const GroupAvatar = memo(function GroupAvatar({
     return (
       <div
         className={cn(
-          "ardurbot-group-avatar relative flex items-center justify-center rounded-full border border-border bg-muted text-muted-foreground",
+          "ardur-group-avatar relative flex items-center justify-center rounded-full border border-border bg-muted text-muted-foreground",
           className,
         )}
         aria-hidden="true"
@@ -59,7 +59,7 @@ export const GroupAvatar = memo(function GroupAvatar({
         label={firstMember.name}
         size={size}
         status={firstMember.status}
-        className={cn("ardurbot-group-avatar", className)}
+        className={cn("ardur-group-avatar", className)}
       />
     );
   }
@@ -72,7 +72,7 @@ export const GroupAvatar = memo(function GroupAvatar({
 
   return (
     <div
-      className={cn("ardurbot-group-avatar flex flex-row items-center select-none", className)}
+      className={cn("ardur-group-avatar flex flex-row items-center select-none", className)}
       aria-hidden="true"
       style={{ height: size, flex: "none" }}
     >

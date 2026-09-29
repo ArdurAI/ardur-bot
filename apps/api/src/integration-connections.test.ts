@@ -1183,6 +1183,45 @@ describe("catalog connection lifecycle", () => {
       { botId: "bot", access: "none", toolIds: [], needsReview: false },
     ]);
   });
+  it("keeps a narrowed allowlist when the same connection signs in again", async () => {
+    const f = fixture();
+    const wider = captureIntegrationManifest(
+      [
+        {
+          name: "synthetic_read",
+          description: "Synthetic test fixture, not a vendor tool",
+          inputSchema: { type: "object" },
+        },
+        {
+          name: "synthetic_delete",
+          description: "Synthetic test fixture, not a vendor tool",
+          inputSchema: { type: "object" },
+        },
+      ],
+      "synthetic-1",
+    );
+    f.setRow({ catalogId: "notion", endpoint: "https://mcp.notion.com/mcp", name: "Notion" });
+    await f.service.assign(actor, {
+      connectionId: "connection",
+      toolIds: ["synthetic_read"],
+      spaceToolPolicies: { synthetic_read: "allow" },
+    });
+    f.oauth.begin.mockImplementation(async (input: { sessionId: string }) => ({
+      status: "authorization_required" as const,
+      sessionId: input.sessionId,
+      authorizationUrl: "https://example.test/authorize",
+    }));
+    vi.spyOn(f.service, "tools").mockResolvedValue(wider);
+    const started = await f.service.connect(actor, {
+      catalogId: "notion",
+      connectionId: "connection",
+    });
+    await f.service.capture(actor, "connection", started.sessionId!);
+    expect(f.row().spaceAllowedTools).toEqual(["synthetic_read"]);
+    expect(f.row().spaceToolPolicies).toEqual({ synthetic_read: "allow" });
+    expect(f.row().needsReview).toBe(true);
+    expect(f.row().spaceAllowedTools).not.toContain("synthetic_delete");
+  });
 });
 
 describe("connection recovery and health", () => {

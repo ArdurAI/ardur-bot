@@ -5,7 +5,7 @@ test("general settings language picker includes Simplified Chinese and applies i
   page,
 }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `ui-locale-zh-cn-${stamp}@ardurbot.test`, "password12", "Locale QA");
+  await signup(page, `ui-locale-zh-cn-${stamp}@example.test`, "password12", "Locale QA");
   await completeOnboarding(page, testInfo);
 
   const settings = await openUserSettings(page, "general");
@@ -30,7 +30,7 @@ test("general settings language picker includes Korean and applies it", async ({
   page,
 }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `ui-locale-ko-${stamp}@ardurbot.test`, "password12", "Locale QA");
+  await signup(page, `ui-locale-ko-${stamp}@example.test`, "password12", "Locale QA");
   await completeOnboarding(page, testInfo);
 
   const settings = await openUserSettings(page, "general");
@@ -55,7 +55,7 @@ test("general settings language picker includes Spanish and applies it", async (
   page,
 }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `ui-locale-es-${stamp}@ardurbot.test`, "password12", "Locale QA");
+  await signup(page, `ui-locale-es-${stamp}@example.test`, "password12", "Locale QA");
   await completeOnboarding(page, testInfo);
 
   const settings = await openUserSettings(page, "general");
@@ -82,7 +82,7 @@ test("general settings language picker includes Russian and persists it", async 
   page,
 }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `ui-locale-ru-${stamp}@ardurbot.test`, "password12", "Locale QA");
+  await signup(page, `ui-locale-ru-${stamp}@example.test`, "password12", "Locale QA");
   await completeOnboarding(page, testInfo);
 
   await page.locator("header.app-drag").getByRole("button", { name: "Settings" }).click();

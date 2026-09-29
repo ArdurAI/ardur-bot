@@ -211,6 +211,7 @@ export function GroupSettings({
   onModelPin: (
     member: GroupMember,
     pin: SetGroupMemberModelPinInput["pin"] | null,
+    expectedBotModelPinRevision?: number,
   ) => Promise<void>;
   onReloadMember?: (member: GroupMember) => Promise<GroupMember | undefined>;
   modelSettings: ModelSettings | null;
@@ -337,11 +338,6 @@ export function GroupSettings({
 
   return (
     <div>
-      <div className="mb-4 flex items-center justify-between">
-        <span className="text-[13.5px] text-muted-foreground">
-          <Trans>Group settings</Trans>
-        </span>
-      </div>
       {error ? (
         <p role="alert" className="mb-3 text-[13px] text-destructive">
           {error}

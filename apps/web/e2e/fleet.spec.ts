@@ -10,7 +10,7 @@ test("Computers shows fleet capacity, placement and move consent", async ({ page
       json: { json: { ...body.json, me: { ...body.json.me, isDeploymentOwner: true } } },
     });
   });
-  await signup(page, `fleet-${Date.now()}@ardurbot.test`, "password12", "Builder");
+  await signup(page, `fleet-${Date.now()}@example.test`, "password12", "Builder");
   await completeOnboarding(page);
   const capacity = {
     cpuCount: 8,

@@ -2,6 +2,13 @@ import type { TaskCard, TaskCardRequest } from "@ardurbot/contracts";
 import { TaskCardRequestSchema, TaskCardSchema, taskCardSentence } from "@ardurbot/contracts";
 import { redactLearningText } from "./learning-signals.js";
 
+/** A task card's goal, when the stored card actually has one. */
+export function taskCardGoal(card: unknown): string | undefined {
+  return card && typeof card === "object" && "goal" in card && typeof card.goal === "string"
+    ? card.goal
+    : undefined;
+}
+
 /** Redact values, never JSON syntax; structured references remain references. */
 export function redactTaskValue<T>(value: T, secrets: readonly string[] = []): T {
   if (typeof value === "string") return redactLearningText(value, secrets) as T;

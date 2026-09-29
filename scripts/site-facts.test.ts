@@ -19,12 +19,14 @@ import {
   resolveScheduleTiming,
 } from "../packages/adapters/src/schedule-tools";
 import { CreateRoutineInput } from "../packages/contracts/src/domain";
+import type { SiteProduct } from "../packages/contracts/src/site-product";
 import { SiteProductSchema } from "../packages/contracts/src/site-product";
 import { POPULAR_MODEL_PROVIDER_IDS } from "../packages/core/src/model-providers";
 import { flatPngScreenshot } from "../packages/testkit/src/png-validation";
 import {
   generatedProduct,
   generatedReadme,
+  installScriptPlatforms,
   memoryFromCode,
   providersFromCatalog,
   routinesFromCode,
@@ -60,6 +62,7 @@ async function fixture() {
     "site/data/product.json",
     "site/data/feature-docs.json",
     "README.md",
+    "scripts/install.sh",
     ...casks.map((cask) => `homebrew/Casks/${cask}`),
     "apps/web/e2e/site-screenshots.spec.ts",
     "apps/web/src/locales/en/messages.po",
@@ -784,6 +787,17 @@ describe("site facts", () => {
     expect(generatedReadme(readme, changed)).toContain("pnpm check\n```");
     changed.providers.find((provider) => provider.id === "openrouter")!.name = "Fixture Provider";
     expect(generatedReadme(readme, changed)).toContain("Fixture Provider");
+    changed.install.desktop.firstOpen![1]!.steps.push({
+      text: "Fixture step.",
+      command: "fixture --run",
+    });
+    expect(generatedReadme(readme, changed)).toContain(
+      "- Fixture step.\n\n  ```sh\n  fixture --run\n  ```\n\n**Linux**",
+    );
+    changed.install.desktop.firstOpen!.pop();
+    expect(() => generatedReadme(readme, changed)).toThrow(
+      "install.desktop.firstOpen needs Linux steps for the README.",
+    );
   });
 
   it("builds the Homebrew command from the shipped cask name", async () => {
@@ -797,6 +811,119 @@ describe("site facts", () => {
     expect(generated.install.homebrew.command).toBe(
       `brew tap ArdurAI/tap && brew trust --cask ArdurAI/tap/${cask} && brew install --cask ArdurAI/tap/${cask}`,
     );
+  });
+
+  it("derives install script platforms from the systems the script branches on", async () => {
+    const script = await readFile(path.join(sourceRoot, "scripts/install.sh"), "utf8");
+    expect(installScriptPlatforms(script)).toEqual(["macOS", "Linux"]);
+    expect(() =>
+      installScriptPlatforms(`${script}\nif [[ "$OS" == "FreeBSD" ]]; then exit 0; fi\n`),
+    ).toThrow('Add uname "FreeBSD" to INSTALL_SCRIPT_SYSTEMS');
+    expect(() => installScriptPlatforms("echo install")).toThrow('no longer branches on "$OS"');
+  });
+
+  it("publishes first-launch steps and install platforms from the script and cask", async () => {
+    const root = await fixture();
+    const generated = await generatedProduct(root);
+    expect(generated.install.fromSource.commands).not.toContain("git checkout dev");
+    expect(generated.install.desktop.firstOpen?.map((entry) => entry.os)).toEqual([
+      "macOS",
+      "Windows",
+      "Linux",
+    ]);
+    expect(generated.install.desktop.note).toBeTruthy();
+    expect(generated.install.installScript?.platforms).toEqual(["macOS", "Linux"]);
+    expect(generated.install.homebrew.platforms).toEqual(["macOS"]);
+    const caskPath = path.join(
+      root,
+      "homebrew/Casks",
+      generated.install.homebrew.caskPath.slice(6),
+    );
+    const cask = await readFile(caskPath, "utf8");
+    await writeFile(caskPath, cask.replace(/^\s*depends_on :macos\n/m, ""));
+    await expect(generatedProduct(root)).rejects.toThrow("The cask no longer depends on macOS");
+  });
+
+  it("rejects install guidance outside the website's limits", async () => {
+    const product = SiteProductSchema.parse(
+      JSON.parse(await readFile(path.join(sourceRoot, "site/data/product.json"), "utf8")),
+    );
+    const accepts = (change: (install: SiteProduct["install"]) => void) => {
+      const changed = structuredClone(product);
+      change(changed.install);
+      return SiteProductSchema.safeParse(changed).success;
+    };
+    const macSteps = (install: SiteProduct["install"]) => install.desktop.firstOpen![0]!.steps;
+    // Loosely typed, so a test can write values the schema must reject.
+    const loose = (value: object) => value as Record<string, unknown>;
+    const valid: ((install: SiteProduct["install"]) => void)[] = [
+      () => {},
+      (install) => {
+        macSteps(install)[0]!.text = "a".repeat(280);
+        macSteps(install)[0]!.command = "a".repeat(200);
+      },
+      (install) => {
+        while (macSteps(install).length < 6) macSteps(install).push({ text: "Continue." });
+      },
+      (install) => {
+        delete install.desktop.firstOpen;
+        delete install.desktop.note;
+        delete install.installScript;
+        delete install.homebrew.platforms;
+      },
+    ];
+    const invalid: ((install: SiteProduct["install"]) => void)[] = [
+      (install) => {
+        macSteps(install)[0]!.text = "a".repeat(281);
+      },
+      (install) => {
+        macSteps(install)[0]!.text = 'Choose "Open".';
+      },
+      (install) => {
+        macSteps(install)[0]!.text = "Choose “Open.";
+      },
+      (install) => {
+        macSteps(install)[0]!.command = "a".repeat(201);
+      },
+      (install) => {
+        macSteps(install)[0]!.command = "cd /tmp\nls";
+      },
+      (install) => {
+        loose(macSteps(install)[0]!).label = "Open";
+      },
+      (install) => {
+        while (macSteps(install).length < 7) macSteps(install).push({ text: "Continue." });
+      },
+      (install) => {
+        install.desktop.firstOpen![0]!.steps = [];
+      },
+      (install) => {
+        install.desktop.firstOpen![1]!.os = "macOS";
+      },
+      (install) => {
+        loose(install.desktop.firstOpen![2]!).os = "FreeBSD";
+      },
+      (install) => {
+        install.desktop.firstOpen = [];
+      },
+      (install) => {
+        install.desktop.note = "a".repeat(281);
+      },
+      (install) => {
+        install.desktop.note = 'Open "This computer".';
+      },
+      (install) => {
+        install.installScript!.platforms = [];
+      },
+      (install) => {
+        install.installScript!.platforms = ["Linux", "Linux"];
+      },
+      (install) => {
+        loose(install.homebrew).platforms = ["Solaris"];
+      },
+    ];
+    expect(valid.map(accepts)).toEqual(valid.map(() => true));
+    expect(invalid.map(accepts)).toEqual(invalid.map(() => false));
   });
 
   it("keeps the Homebrew verified mark and accepts only a boolean", async () => {
