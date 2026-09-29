@@ -386,6 +386,8 @@ test("captures bot chat, group collaboration, and routines from seeded demo data
   await expect(page.getByRole("button", { name: /Change model: Ardur · Codex/ })).not.toContainText(
     "not available",
   );
+  // Commands live in the compact work record; expand it before the capture.
+  await page.getByText("cat planning/release-checklist.md").click();
   await expect(page.getByTestId("command-block")).toContainText(
     "in /home/ardurbot/workspace · 2 s · exit 0",
   );

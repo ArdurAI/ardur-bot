@@ -29,6 +29,11 @@
       "development": "./src/approval-effect-key.ts",
       "default": "./src/approval-effect-key.ts"
     },
+    "./node/peer-effect-digest": {
+      "types": "./src/node/peer-effect-digest.ts",
+      "development": "./src/node/peer-effect-digest.ts",
+      "default": "./src/node/peer-effect-digest.ts"
+    },
     "./node/screen-proxy-response": {
       "types": "./src/node/screen-proxy-response.ts",
       "development": "./src/node/screen-proxy-response.ts",

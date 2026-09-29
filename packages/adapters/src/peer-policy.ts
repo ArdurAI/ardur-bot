@@ -1,5 +1,5 @@
 /** Goal desk work can only report on its own card or return a result. */
-import type { TaskCard } from "@ardurbot/contracts";
+import type { PeerEffectDescriptor, TaskCard } from "@ardurbot/contracts";
 
 const PEER_CARD_TOOLS = new Set([
   "report_progress",
@@ -42,6 +42,17 @@ export function peerArtifactWhere(scope: {
 
 export function peerReadOnlyToolAllowed(name: string): boolean {
   return PEER_CARD_TOOLS.has(name) || name === "message_bot";
+}
+
+/**
+ * Tool exposure for a desk card: the read-only set, plus the one exact tool an
+ * approved effect bound to this card. Everything else stays hidden.
+ */
+export function peerEffectBoundToolAllowed(
+  name: string,
+  bound: { toolName?: string } | undefined,
+): boolean {
+  return peerReadOnlyToolAllowed(name) || (Boolean(bound?.toolName) && name === bound!.toolName);
 }
 
 export function peerReadOnlyRuntimeSupported(runtimeKind: string): boolean {

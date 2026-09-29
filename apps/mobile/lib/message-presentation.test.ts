@@ -50,20 +50,24 @@ describe("mobile message presentation", () => {
         blocks: [{ kind: "bot_message_sent", toBotId: "b", toBotName: "Research", text: "Go" }],
       },
     ]);
-    expect(
-      hasVisibleMessagePresentation([
-        { kind: "steps", steps: [{ label: "Message bot", count: 1 }] },
-      ]),
-    ).toBe(false);
   });
 
-  it("hides marked activity without treating Using narration as a tool", () => {
-    const activity = { kind: "progress", text: "Using browser", activity: true } as const;
-    const narration = { kind: "progress", text: "Using browser is optional." } as const;
+  it("keeps a plain reply with no tools in the bubble", () => {
+    const reply = { kind: "progress", text: "On it, one moment." } as const;
+    expect(messagePresentationSegments([reply])).toEqual([{ kind: "content", blocks: [reply] }]);
+  });
 
-    expect(messagePresentationSegments([activity, narration])).toEqual([
-      { kind: "content", blocks: [narration] },
-    ]);
+  it("moves only marked reasoning summaries to the record", () => {
+    const activity = { kind: "progress", text: "Using browser", activity: true } as const;
+    const reasoning = {
+      kind: "progress",
+      text: "Using browser is optional.",
+      reasoning: true,
+    } as const;
+
+    expect(messagePresentationSegments([activity, reasoning])).toEqual([]);
+    // A reasoning-only message stays visible: the record renders it.
+    expect(hasVisibleMessagePresentation([reasoning])).toBe(true);
 
     const mixed: Extract<MessageBlock, { kind: "progress" }> = {
       kind: "progress",
@@ -73,12 +77,55 @@ describe("mobile message presentation", () => {
     expect(messagePresentationSegments([mixed])).toEqual([{ kind: "content", blocks: [mixed] }]);
   });
 
-  it("keeps only response content around tool activity", () => {
+  it("folds interim narration into the record and keeps trailing narration in the bubble", () => {
+    const interim = { kind: "progress", text: "Let me check." } as const;
+    const steps = {
+      kind: "steps",
+      steps: [{ label: "Browser", count: 1 }],
+    } satisfies MessageBlock;
+    const trailing = { kind: "progress", text: "Here is the answer." } as const;
+
+    expect(messagePresentationSegments([interim, steps, trailing])).toEqual([
+      { kind: "content", blocks: [trailing] },
+    ]);
+  });
+
+  it("folds narration flushed to text before tool activity into the record", () => {
+    const flushed = { kind: "text", text: "Let me check." } as const;
+    const steps = {
+      kind: "steps",
+      steps: [{ label: "Browser", count: 1 }],
+    } satisfies MessageBlock;
+    const reply = { kind: "text", text: "Here is the answer." } as const;
+
+    expect(messagePresentationSegments([flushed, steps, reply])).toEqual([
+      { kind: "content", blocks: [reply] },
+    ]);
+  });
+
+  it("renders old stored messages without the flag as narration", () => {
+    const old = [
+      { kind: "progress", text: "Checking that now." },
+      { kind: "text", text: "Done." },
+    ] as MessageBlock[];
+    expect(messagePresentationSegments(old)).toEqual([{ kind: "content", blocks: old }]);
+  });
+
+  it("keeps tool-only messages visible for the record", () => {
+    const stepsOnly = [
+      { kind: "steps", steps: [{ label: "Browser", count: 1 }] },
+    ] as MessageBlock[];
+    expect(messagePresentationSegments(stepsOnly)).toEqual([]);
+    expect(hasVisibleMessagePresentation(stepsOnly)).toBe(true);
+  });
+
+  it("keeps only the trailing response content around tool activity", () => {
     const tool: Extract<MessageBlock, { kind: "steps" }> = {
       kind: "steps",
       steps: [{ label: "Read file", count: 1 }],
     };
 
+    // The interim note folds into the work record; the answer stays in the bubble.
     expect(
       messagePresentationSegments([
         { kind: "text", text: "Checking." },
@@ -88,10 +135,7 @@ describe("mobile message presentation", () => {
     ).toEqual([
       {
         kind: "content",
-        blocks: [
-          { kind: "text", text: "Checking." },
-          { kind: "text", text: "Done." },
-        ],
+        blocks: [{ kind: "text", text: "Done." }],
       },
     ]);
 
@@ -131,5 +175,29 @@ describe("mobile message presentation", () => {
     // The run ended: the durable message carries plain text, never a cursor.
     expect(liveReplyTextStreaming([{ kind: "text", text: "Chief's summary" }])).toBe(false);
     expect(liveReplyTextStreaming([])).toBe(false);
+  });
+
+  it("never shows the cursor on a reasoning summary or folded narration", () => {
+    // A reasoning summary the provider streams is a thought, not reply text.
+    expect(
+      liveReplyTextStreaming([
+        {
+          kind: "progress",
+          text: "Weighing options.",
+          reasoning: true,
+          streaming: true,
+        } as MessageBlock,
+      ]),
+    ).toBe(false);
+    // Narration a later tool call folds into the work record loses the cursor.
+    expect(
+      liveReplyTextStreaming([
+        {
+          kind: "progress",
+          text: "Let me check.",
+          pendingToolNames: ["shell"],
+        } as MessageBlock,
+      ]),
+    ).toBe(false);
   });
 });

@@ -1,5 +1,5 @@
 import type { MessageBlock } from "@ardurbot/contracts";
-import { isToolActivityBlock } from "@ardurbot/core";
+import { isReasoningSummaryBlock, isToolActivityBlock } from "@ardurbot/core";
 
 /** Keep mid-turn progress beats short; prefer a few high-signal updates. */
 export const USER_PROGRESS_MESSAGE_MAX_LENGTH = 500;
@@ -58,14 +58,19 @@ export function extractNarrationText(
 
 /**
  * After mid-turn progress messages were already posted, skip a hollow final
- * message that would only carry hidden tool-activity blocks (or nothing).
+ * message that would only carry hidden tool activity or reasoning summaries
+ * (or nothing).
  */
 export function finalBlocksAfterMidTurnProgress(
   blocks: MessageBlock[],
-  publishedMidTurn: boolean,
+  reason: "silent-routine" | "ordinary-run",
 ): MessageBlock[] {
-  if (!publishedMidTurn || blocks.length === 0) return blocks;
-  if (blocks.every((block) => isToolActivityBlock(block))) return [];
+  if (blocks.length === 0) return blocks;
+  if (
+    reason === "silent-routine" &&
+    blocks.every((block) => isToolActivityBlock(block) || isReasoningSummaryBlock(block))
+  )
+    return [];
   return blocks;
 }
 

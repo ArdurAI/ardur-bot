@@ -1335,4 +1335,11 @@ export const RU_MESSAGES: Record<string, string> = {
   "Fix the configuration JSON to edit these settings.":
     "Исправьте JSON конфигурации, чтобы изменять эти настройки.",
   Reload: "Перезагрузить",
+  "Done: {title}": "Готово: {title}",
+  "Failed: {title}": "Ошибка: {title}",
+  "Working: {title}": "Выполняется: {title}",
+  Interrupted: "Прервано",
+  "Interrupted: {title}": "Прервано: {title}",
+  "Unknown: {title}": "Неизвестно: {title}",
+  Command: "Команда",
 };

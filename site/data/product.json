@@ -37,7 +37,7 @@
       "id": "delegate",
       "eyebrow": "DELEGATION",
       "title": "Bots work together",
-      "body": "A group's coordinator can ask members for their answers in the room and bring them back as one reply. A goal coordinator can send bounded requests to group members' desk threads. Receipts show delivery, confirmed reading and replies. Effect requests wait for owner approval before read-only preparation, and the owner can pause group or space team messages. Bots can also hand off room work or use short-lived subagents.",
+      "body": "A group's coordinator can ask members for their answers in the room and bring them back as one reply. A goal coordinator can send bounded requests to group members' desk threads. Receipts show delivery, confirmed reading and replies. Effect requests wait for owner approval: the owner can allow one exact action once or read-only preparation, and can pause group or space team messages. Bots can also hand off room work or use short-lived subagents.",
       "source": "README.md#What you get today"
     },
     {
@@ -903,7 +903,7 @@
     {
       "id": "app-chat",
       "file": "screenshots/app-chat.png",
-      "alt": "Chief of Staff bot conversation showing a release checklist command, a drafted team update, and an approval card beside a six-bot team.",
+      "alt": "Chief of Staff bot conversation showing a release checklist command inside the expanded compact work record, a drafted team update, and an approval card beside a six-bot team.",
       "width": 2880,
       "height": 1800,
       "theme": "light"

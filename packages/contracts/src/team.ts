@@ -61,7 +61,13 @@ export const TeamRowSchema = z.object({
     runtimeInfo: RuntimeInfoSchema.nullable().optional(),
   }).nullable(),
   usage: z.object({
-    tokens: z.number().int(),
+    /** Measured token total; null when recorded consumption is unavailable, never a fake zero. */
+    tokens: z.number().int().nullable(),
+    /**
+     * True when the total is a lower bound: some recorded consumption is unavailable
+     * or only partially counted. Older payloads omit it; missing means a firm total.
+     */
+    partial: z.boolean().default(false),
     costs: z.array(z.object({ amount: z.number(), provenance: z.string() })),
   }),
 });

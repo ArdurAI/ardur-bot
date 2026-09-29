@@ -191,105 +191,213 @@ export type LiveMessageUpdate =
   | { type: "progress"; payload: Record<string, unknown> | undefined }
   | { type: "tool"; name: string };
 
+type LiveBlockCategory = "activity" | "reasoning" | "narration";
+
+function progressCategory(block: { activity?: true; reasoning?: true }): LiveBlockCategory {
+  if (block.activity === true) return "activity";
+  if (block.reasoning === true) return "reasoning";
+  return "narration";
+}
+
+/** The sealed tail's held names moved to the new block; drop the stale queue and cursor. */
+function dropPendingToolNames(
+  block: Extract<MessageBlock, { kind: "progress" }>,
+): Extract<MessageBlock, { kind: "progress" }> {
+  const { pendingToolNames: _moved, streaming: _stopped, ...rest } = block;
+  return rest;
+}
+
+/** The reply's streamed text so far; a reasoning summary is a thought, not the reply. */
 function replyText(blocks: readonly MessageBlock[]): string {
   let text = "";
   for (const block of blocks) {
-    if (block.kind === "text" || (block.kind === "progress" && block.activity !== true)) {
+    if (
+      block.kind === "text" ||
+      (block.kind === "progress" && block.activity !== true && block.reasoning !== true)
+    ) {
       text += block.text;
     }
   }
   return text;
 }
 
-/** Seal an open reply tail so a following activity line cannot replace it. */
-function sealOpenReply(blocks: readonly MessageBlock[]): MessageBlock[] {
-  const tail = blocks.at(-1);
-  if (tail?.kind !== "progress" || tail.activity === true) return [...blocks];
-  return appendTextSegment(blocks.slice(0, -1), tail.text);
-}
-
 export function reduceLiveMessageBlocks(
   blocks: readonly MessageBlock[],
   update: LiveMessageUpdate,
 ): MessageBlock[] {
-  // Pi (and Hermes) post the tool's activity line before the narration is saved.
-  // The line replaces only a previous activity line. Reply text stays, so the draft
-  // keeps the place the saved narration fills.
-  if (update.type === "progress" && update.payload?.activity === true) {
-    const sealed = sealOpenReply(blocks).filter(
-      (block) => !(block.kind === "progress" && block.activity === true),
-    );
-    const activityText = String(update.payload.text ?? "");
-    if (!activityText) return sealed;
-    return [...sealed, { kind: "progress", text: activityText, activity: true as const }];
-  }
-
   // A later reply segment sends its own text, not a suffix of the narration already sealed.
-  // Slicing that text by the sealed length would drop it. Steps from the earlier segment stay.
-  if (update.type === "progress" && typeof update.payload?.delta !== "string") {
-    const incoming = String(update.payload?.text ?? "");
+  // Slicing that text by the sealed length would drop it. Steps from the earlier segment stay,
+  // and so do any tool names the replaced tail was still holding: they land as steps here.
+  if (
+    update.type === "progress" &&
+    typeof update.payload?.delta !== "string" &&
+    update.payload?.streaming === true &&
+    update.payload?.activity !== true &&
+    update.payload?.reasoning !== true
+  ) {
+    const incoming = String(update.payload.text ?? "");
     const soFar = replyText(blocks);
     if (soFar.length > 0 && !incoming.startsWith(soFar)) {
-      const kept = blocks.filter((block) => block.kind !== "text" && block.kind !== "progress");
+      let kept: MessageBlock[] = [];
+      for (const block of blocks) {
+        if (block.kind === "text") continue;
+        if (block.kind === "progress") {
+          for (const name of block.pendingToolNames ?? []) kept = appendToolCallSegment(kept, name);
+          if (block.reasoning === true) {
+            const { pendingToolNames, ...rest } = block as Extract<
+              MessageBlock,
+              { kind: "progress" }
+            >;
+            kept.push(rest);
+          }
+        } else {
+          kept.push(block);
+        }
+      }
       if (!incoming) return kept;
-      const streaming = update.payload?.streaming === true;
-      return [
-        ...kept,
-        {
-          kind: "progress",
-          text: incoming,
-          ...(streaming ? { streaming: true as const } : {}),
-        },
-      ];
+      return [...kept, { kind: "progress", text: incoming, streaming: true as const }];
     }
   }
 
   const tail = blocks.at(-1);
-  const segments = tail?.kind === "progress" ? blocks.slice(0, -1) : blocks;
-  const priorText = liveMessageText(blocks);
-  const flushedLength =
-    tail?.kind === "progress" ? priorText.length - tail.text.length : priorText.length;
-  const tailText =
+  const tailProgress = tail?.kind === "progress" ? tail : null;
+  const updateCategory =
     update.type === "progress"
-      ? progressMessageText(update.payload, priorText).slice(flushedLength)
-      : tail?.kind === "progress"
-        ? tail.text
-        : "";
+      ? progressCategory({
+          activity: update.payload?.activity === true ? true : undefined,
+          reasoning: update.payload?.reasoning === true ? true : undefined,
+        })
+      : null;
+  // A progress update whose category differs from the tail's starts a new
+  // block; reasoning and narration never merge into one block.
+  const sealed =
+    tailProgress !== null &&
+    updateCategory !== null &&
+    progressCategory(tailProgress) !== updateCategory;
+  const textPayload =
+    update.type === "progress" && typeof update.payload?.delta !== "string"
+      ? String(update.payload?.text ?? "")
+      : null;
+  // An empty title must not take held names off a sentence that is still open.
+  if (
+    textPayload !== null &&
+    !textPayload.trim() &&
+    (tailProgress?.pendingToolNames?.length ?? 0) > 0
+  ) {
+    // A same-category activity update with an empty title clears the transient
+    // activity line instead (the Pi runtime sends one before the reply
+    // resumes): the stale title goes away while its held tool names still
+    // land once as steps.
+    if (
+      updateCategory === "activity" &&
+      tailProgress !== null &&
+      progressCategory(tailProgress) === "activity"
+    ) {
+      let cleared: MessageBlock[] = [...blocks.slice(0, -1)];
+      for (const name of tailProgress.pendingToolNames ?? []) {
+        cleared = appendToolCallSegment(cleared, name);
+      }
+      return cleared;
+    }
+    return [...blocks];
+  }
+  // Held tool names ride across the seal onto the new block, so the sealed
+  // tail gives the queue up: its text is final and the names materialize as
+  // steps at the new block's first sentence end, exactly once, never dropped.
+  // Held tool names flush into steps *before* a reasoning summary starts, so
+  // live order equals saved order (where executor flushes them first).
+  // Likewise, flush them before new narration starts so trailing replies
+  // follow the steps instead of preceding them.
+  const flushEarly =
+    sealed &&
+    (updateCategory === "reasoning" || updateCategory === "narration") &&
+    (tailProgress?.pendingToolNames?.length ?? 0) > 0;
+  const carriedNames = sealed && !flushEarly ? (tailProgress?.pendingToolNames ?? []) : [];
+  // Freshly streamed reply text that an activity line interrupts becomes
+  // durable text: the first visible reply reserves the reply's thread position.
+  // A reasoning summary is never reply text, and plain narration beats stay
+  // progress blocks so they fold into the work record.
+  const reservedReplyText =
+    sealed &&
+    updateCategory === "activity" &&
+    tailProgress !== null &&
+    progressCategory(tailProgress) === "narration" &&
+    tailProgress.streaming === true;
+  const sealedTail = carriedNames.length > 0 || flushEarly ? tailProgress : null;
+  let segments = reservedReplyText
+    ? appendTextSegment(blocks.slice(0, -1), tailProgress?.text ?? "")
+    : sealedTail
+      ? [...blocks.slice(0, -1), dropPendingToolNames(sealedTail)]
+      : tailProgress && !sealed
+        ? blocks.slice(0, -1)
+        : [...blocks];
+  if (!reservedReplyText && sealed && tailProgress && !sealedTail) {
+    // The sealed tail's streamed text stopped growing; kept as an interim
+    // block it must not keep the cursor.
+    const { streaming: _stopped, ...closedTail } = tailProgress;
+    segments = [...blocks.slice(0, -1), closedTail];
+  }
+  if (flushEarly && tailProgress?.pendingToolNames) {
+    for (const name of tailProgress.pendingToolNames) {
+      segments = appendToolCallSegment(segments, name);
+    }
+  }
+  const openTail = tailProgress && !sealed ? tailProgress : null;
+  const category = updateCategory ?? (openTail ? progressCategory(openTail) : "narration");
+  // Narration `text` is the new chunk. Activity and reasoning `text` replace
+  // the title. A delta continues the open tail, and across a seal it is only
+  // the new block's text.
+  let tailText: string;
+  if (update.type === "tool") {
+    tailText = openTail?.text ?? "";
+  } else if (typeof update.payload?.delta === "string") {
+    const delta = update.payload.delta;
+    tailText = openTail ? openTail.text + delta : delta;
+  } else if (category === "narration" && openTail) {
+    tailText = openTail.text + (textPayload ?? "");
+  } else {
+    tailText = textPayload ?? "";
+  }
   const pendingToolNames = [
-    ...(tail?.kind === "progress" ? (tail.pendingToolNames ?? []) : []),
+    ...(openTail?.pendingToolNames ?? []),
+    ...carriedNames,
     ...(update.type === "tool" ? [update.name] : []),
   ];
-  const activity =
-    update.type === "progress"
-      ? update.payload?.activity === true
-      : tail?.kind === "progress" && tail.activity === true;
-  // The cursor follows the reply's text, not the run: only a freshly streamed delta
-  // marks the draft as still growing; tool calls and activity lines leave it off.
-  const streaming = update.type === "progress" && update.payload?.streaming === true && !activity;
+  // A reasoning title is a finished summary even with no sentence ending, so a
+  // tool landing on it shows its step. Names carried in from the previous block
+  // do not belong to a new activity title, so that title stays and the steps follow.
+  const reasoningClosed =
+    update.type === "tool" && category === "reasoning" && tailText.trim() !== "";
+  const namesAreCarried = carriedNames.length > 0;
+  // The cursor follows the reply's text, not the run: only freshly streamed
+  // narration marks the draft as still growing. Tool calls, activity lines and
+  // reasoning summaries all leave it off.
+  const streaming =
+    update.type === "progress" && update.payload?.streaming === true && category === "narration";
 
-  if (pendingToolNames.length > 0 && endsSentence(tailText)) {
-    let next = activity ? [...segments] : appendTextSegment(segments, tailText);
+  if (pendingToolNames.length > 0 && (endsSentence(tailText) || reasoningClosed)) {
+    let next: MessageBlock[];
+    if (category === "narration") next = appendTextSegment(segments, tailText);
+    else if (category === "reasoning" && tailText.trim())
+      next = [...segments, { kind: "progress", text: tailText, reasoning: true }];
+    else if (category === "activity" && namesAreCarried && tailText.trim())
+      next = [...segments, { kind: "progress", text: tailText, activity: true }];
+    else next = [...segments];
     for (const name of pendingToolNames) next = appendToolCallSegment(next, name);
     return next;
   }
-  if (!tailText) return [...segments];
+  if (!tailText) return segments;
   return [
     ...segments,
     {
       kind: "progress",
       text: tailText,
-      ...(activity ? { activity: true as const } : {}),
+      ...(category === "activity" ? { activity: true as const } : {}),
+      ...(category === "reasoning" ? { reasoning: true as const } : {}),
       ...(streaming ? { streaming: true as const } : {}),
       ...(pendingToolNames.length > 0 ? { pendingToolNames } : {}),
     },
   ];
-}
-
-function liveMessageText(blocks: readonly MessageBlock[]): string {
-  return blocks
-    .filter((block) => block.kind === "text" || block.kind === "progress")
-    .map((block) => block.text)
-    .join("");
 }
 
 export type ToolStep = { label: string; count: number };

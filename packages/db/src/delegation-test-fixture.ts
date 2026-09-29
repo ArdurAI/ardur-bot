@@ -1,4 +1,5 @@
 import type { DelegationSnapshot } from "@ardurbot/contracts";
+import { DELEGATION_LIMITS } from "@ardurbot/contracts";
 import { vi } from "vitest";
 import type { Prisma, PrismaClient } from "./client.js";
 import { admitDelegation } from "./delegation.js";
@@ -164,7 +165,8 @@ export function fixture() {
             maxConcurrent: 4,
             maxHops: 6,
             maxDescendants: 12,
-            tokenLimit: 120000,
+            // The production default; a test that needs a bigger room sets tokenLimit itself.
+            tokenLimit: DELEGATION_LIMITS.tokens,
             ...create,
           }),
       ),
@@ -203,16 +205,21 @@ export function fixture() {
       ),
       updateMany: vi.fn(async ({ where, data }) => {
         let count = 0;
-        for (const row of state.rows)
-          if (
-            (!where.id || row.id === where.id) &&
-            (typeof where.status === "string"
-              ? row.status === where.status
-              : where.status.in.includes(row.status))
-          ) {
-            apply(row, data);
-            count++;
+        for (const row of state.rows) {
+          if (where.id && row.id !== where.id) continue;
+          if ("cancelReason" in where) {
+            if (where.cancelReason === null) {
+              if (row.cancelReason != null) continue;
+            } else if (row.cancelReason !== where.cancelReason) continue;
           }
+          const statusOk =
+            typeof where.status === "string"
+              ? row.status === where.status
+              : where.status.in.includes(row.status);
+          if (!statusOk) continue;
+          apply(row, data);
+          count++;
+        }
         return { count };
       }),
     },
