@@ -76,7 +76,7 @@ it("renders nothing in English while the saved language is still loading", async
 
   const view = mount(<Label />);
   expect(view.textContent).toBe("");
-  expect(view.querySelector('[data-ardurbot-app-state="i18n-pending"]')).not.toBeNull();
+  expect(view.querySelector('[data-ardur-app-state="i18n-pending"]')).not.toBeNull();
 
   await act(async () => loadGerman({ messages: { Settings: "Einstellungen" } }));
   expect(view.textContent).toBe("Einstellungen");
@@ -90,7 +90,7 @@ it("shows the saved language on the first frame when its catalog loaded before R
 
   const view = mount(<Label />);
   expect(view.textContent).toBe("Einstellungen");
-  expect(view.querySelector('[data-ardurbot-app-state="i18n-pending"]')).toBeNull();
+  expect(view.querySelector('[data-ardur-app-state="i18n-pending"]')).toBeNull();
   expect(german).toHaveBeenCalledOnce();
 });
 

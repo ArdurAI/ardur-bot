@@ -7,12 +7,15 @@ export function CollaborationMarker({
   color,
   identity,
   label,
+  name,
   onClick,
 }: {
   ariaLabel: string;
   color: string;
   identity: string;
   label: string;
+  /** The peer bot's name, for its avatar initial. */
+  name: string;
   onClick: () => void;
 }) {
   return (
@@ -24,7 +27,7 @@ export function CollaborationMarker({
         onClick={onClick}
         className="inline-flex max-w-full items-center gap-1.5 rounded-full px-2.5 py-1 text-[13px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground/75"
       >
-        <BotAvatar color={color} identity={identity} label={label} size={16} />
+        <BotAvatar color={color} identity={identity} label={name} size={16} />
         <span dir="auto" className="truncate">
           {label}
         </span>
