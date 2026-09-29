@@ -615,6 +615,20 @@ export function ShellPage({
     setComputer(next);
   }
 
+  // Visibility judged from the computer identity that owns the screen right now —
+  // commitComputer can run mid-refresh, before React re-renders with the new state.
+  function computerScreenVisible(targetBotId: string): boolean {
+    if (computerOpenRef.current) return true;
+    if (panelRef.current !== "computer") return false;
+    const computer = computerRef.current;
+    if (computer?.botId !== targetBotId) return false;
+    const effectiveTab = getEffectiveWorkspaceTab(
+      workspaceTabRef.current,
+      computer?.capabilities?.graphical,
+    );
+    return effectiveTab === "screen" || effectiveTab === "computer";
+  }
+
   function updateSnapshot(update: (prev: ThreadSnapshot | null) => ThreadSnapshot | null) {
     commitSnapshot(update(snapshotRef.current));
   }
@@ -742,6 +756,9 @@ export function ShellPage({
   const [computerBotId, setComputerBotId] = useState<string | undefined>();
   const computerOpenRef = useRef(false);
   const computerBotIdRef = useRef<string | undefined>(undefined);
+  // Latest panel/tab identity for guards that run before React re-renders.
+  const panelRef = useRef<Panel>(null);
+  const workspaceTabRef = useRef(workspaceTab);
   const computerBootEpoch = useRef(0);
   const openComputerRef = useRef<(botId?: string) => Promise<void>>(async () => {});
   const [computerViewport, setComputerViewport] = useState<{
@@ -843,6 +860,8 @@ export function ShellPage({
   computerVisible.current = isVisible;
   computerOpenRef.current = computerOpen;
   computerBotIdRef.current = computerBotId ?? active?.id;
+  panelRef.current = panel;
+  workspaceTabRef.current = workspaceTab;
   const activeGroup = groups.find((group) => group.id === groupId);
   useEffect(() => {
     setGoal(null);
@@ -1097,7 +1116,7 @@ export function ShellPage({
   }
 
   async function refreshComputerScreen(id: string, explicitRetry = false) {
-    if (!computerVisible.current) return null;
+    if (!computerVisible.current || !computerScreenVisible(id)) return null;
     const request = ++screenRequest.current;
     dispatchComputerError({
       type: "screen-requested",
