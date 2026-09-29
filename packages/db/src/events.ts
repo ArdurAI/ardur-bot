@@ -102,6 +102,7 @@ export interface ThreadEvents {
   answerRunInput(input: AnswerRunInput): Promise<boolean>;
   append(input: AppendEventInput): Promise<ProductEvent>;
   claimSteering(input: ClaimSteeringInput): Promise<ClaimedSteeringMessage[]>;
+  releaseSteering(input: ReleaseSteeringInput): Promise<void>;
   clearThread(input: ClearThreadInput): Promise<ClearThreadResult>;
   finalizeComputerControlRelease(
     input: FinalizeComputerControlReleaseInput,
@@ -152,6 +153,15 @@ export interface ClaimSteeringInput {
   leaseFence: number;
   seenIds: string[];
   kind?: "correction" | "added-requirement" | "other";
+}
+
+export interface ReleaseSteeringInput {
+  threadId: string;
+  botId: string;
+  runId: string;
+  leaseOwner: string;
+  leaseFence: number;
+  ids: string[];
 }
 
 export interface ClaimedSteeringMessage {
@@ -305,6 +315,7 @@ export function createThreadEvents(
     answerRunInput: (input) => answerRunInput(prisma, input, realtime, options.runSecretWriter),
     append: (input) => appendEvent(prisma, input, realtime),
     claimSteering: (input) => claimSteering(prisma, input),
+    releaseSteering: (input) => releaseSteering(prisma, input),
     clearThread: (input) => clearThread(prisma, input, realtime),
     finalizeComputerControlRelease: (input) =>
       finalizeComputerControlRelease(prisma, input, realtime),
@@ -707,9 +718,30 @@ export async function claimSteering(
       orderBy: [{ message: { seq: "asc" } }, { id: "asc" }],
     });
     if (steering.length === 0) return [];
+    // A row another run let go may still carry that run's claim. Taking it over makes the run
+    // that delivers it the one that deletes it on completion, so it is not answered again.
     await tx.steeringMessage.updateMany({
-      where: { id: { in: steering.map((item) => item.id) }, claimedAt: null },
+      where: {
+        id: { in: steering.map((item) => item.id) },
+        OR: [{ claimedAt: null }, { runId: null }],
+      },
       data: { runId: input.runId, claimedAt: new Date() },
+    });
+    const takenOver = steering.filter((item) => item.runId === null).map((item) => item.id);
+    if (takenOver.length) {
+      await tx.steeringMessage.updateMany({
+        where: { id: { in: takenOver }, runId: input.runId },
+        data: { adopted: true },
+      });
+    }
+    // The bound wake follows its steering row to the run now answering it. A
+    // continuation's batch is pre-assigned rather than taken over, and a released
+    // row's wake was cleared, so every claimed row re-points its wake, not just
+    // takeovers. Claiming never selects another live run's rows, so a bound wake
+    // can only move here from a finished run or a cleared one.
+    await tx.botMessageWake.updateMany({
+      where: { steeringMessageId: { in: steering.map((item) => item.id) }, state: "bound" },
+      data: { runId: input.runId },
     });
     // The summary survives deletion of the consumed queue row. Text stays in its source message.
     for (const item of steering) {
@@ -733,6 +765,48 @@ export async function claimSteering(
       text: blocksToAgentHistoryText(item.message.blocks as MessageBlock[]),
       blocks: item.message.blocks as MessageBlock[],
     }));
+  });
+}
+
+/**
+ * Unclaims steering the run took but cannot carry this turn. Clearing runId
+ * makes the row a later follow-up; this turn's claims also skip these ids so
+ * the runtime cannot take them straight back.
+ */
+export async function releaseSteering(
+  prisma: PrismaClient,
+  input: ReleaseSteeringInput,
+): Promise<void> {
+  if (input.ids.length === 0) return;
+  await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    await tx.$queryRaw`SELECT id FROM threads WHERE id = ${input.threadId} FOR UPDATE`;
+    const run = await tx.run.findFirst({
+      where: {
+        id: input.runId,
+        threadId: input.threadId,
+        botId: input.botId,
+        status: "running",
+        leaseOwner: input.leaseOwner,
+        leaseFence: input.leaseFence,
+      },
+      select: { id: true },
+    });
+    if (!run) return;
+    const released = await tx.steeringMessage.findMany({
+      where: { id: { in: input.ids }, runId: input.runId },
+      select: { messageId: true },
+    });
+    await tx.steeringMessage.updateMany({
+      where: { id: { in: input.ids }, runId: input.runId },
+      data: { claimedAt: null, runId: null, adopted: false },
+    });
+    await tx.botMessageWake.updateMany({
+      where: { steeringMessageId: { in: input.ids }, runId: input.runId, state: "bound" },
+      data: { runId: null },
+    });
+    await tx.steeringSummary.deleteMany({
+      where: { runId: input.runId, messageId: { in: released.map((row) => row.messageId) } },
+    });
   });
 }
 
@@ -1952,18 +2026,30 @@ async function finalizeRunOnce(
         data: { runId: null },
       });
     } else {
-      const { sourceMessage } = await tx.run.findUniqueOrThrow({
+      const failing = await tx.run.findUniqueOrThrow({
         where: { id: input.runId },
-        select: { sourceMessage: { select: { seq: true } } },
+        select: {
+          clientNonce: true,
+          sourceMessage: { select: { seq: true } },
+        },
       });
-      // A continuation's source is the newest steering it was created for. Only newer
-      // messages justify another run after failure, even if setup failed before claiming.
+      const batchSeq =
+        isSteeringContinuationClientNonce(failing.clientNonce) && failing.sourceMessage
+          ? failing.sourceMessage.seq
+          : null;
+      // A follow-up keeps the batch it was created with. Every other waiting row it
+      // holds, including one it took over from a failed run, is released so a later
+      // run can answer it. A run that is not a follow-up releases every row.
       await tx.steeringMessage.updateMany({
         where: {
           runId: input.runId,
-          message: sourceMessage ? { seq: { gt: sourceMessage.seq } } : undefined,
+          ...(batchSeq == null
+            ? {}
+            : {
+                OR: [{ adopted: true }, { message: { seq: { gt: batchSeq } } }],
+              }),
         },
-        data: { runId: null },
+        data: { runId: null, claimedAt: null, adopted: false },
       });
     }
     const steeringContinuationRunId =
@@ -1980,6 +2066,18 @@ async function finalizeRunOnce(
       updatedThreads: [...peerSettlement.updatedThreads, ...quietUpdates],
     };
   });
+}
+
+/**
+ * Runs created by createSteeringContinuation carry this clientNonce prefix so a
+ * failed follow-up can be told from an ordinary run. The follow-up keeps the
+ * batch it was created with; rows it took over, and messages that arrived
+ * later, are released for a later run.
+ */
+export const STEERING_CONTINUATION_CLIENT_NONCE_PREFIX = "steering-continuation:";
+
+export function isSteeringContinuationClientNonce(clientNonce: string | null | undefined): boolean {
+  return Boolean(clientNonce?.startsWith(STEERING_CONTINUATION_CLIENT_NONCE_PREFIX));
 }
 
 async function createSteeringContinuation(
@@ -2009,6 +2107,13 @@ async function createSteeringContinuation(
   });
   if (pending.length === 0) return null;
   const last = pending.at(-1)!;
+  // The continuation answers on the finished run's behalf, so it carries the
+  // run's goal scope: peer deliveries it takes over acknowledge against the
+  // same recipient fence, and admission derives the same peer authority.
+  const source = await tx.run.findUniqueOrThrow({
+    where: { id: input.runId },
+    select: { goalId: true, delegationRootTaskId: true },
+  });
   const task = await tx.task.create({
     data: {
       spaceId: input.spaceId,
@@ -2022,6 +2127,8 @@ async function createSteeringContinuation(
   const run = await tx.run.create({
     data: {
       ...(await inheritedRemoteOrigin(tx, input.runId)),
+      ...(source.goalId ? { goalId: source.goalId } : {}),
+      ...(source.delegationRootTaskId ? { delegationRootTaskId: source.delegationRootTaskId } : {}),
 
       spaceId: input.spaceId,
       botId: input.botId,
@@ -2030,12 +2137,15 @@ async function createSteeringContinuation(
       userId: pending[0]!.userId,
       status: "queued",
       trigger: "follow_up",
+      // One finalization creates at most one continuation, so the finishing run's
+      // id keeps the nonce unique within the space.
+      clientNonce: `${STEERING_CONTINUATION_CLIENT_NONCE_PREFIX}${input.runId}`,
       sourceMessageId: last.message.id,
     },
   });
   await tx.steeringMessage.updateMany({
     where: { id: { in: pending.map((item) => item.id) }, runId: null },
-    data: { runId: run.id, claimedAt: null },
+    data: { runId: run.id, claimedAt: null, adopted: false },
   });
   return run.id;
 }

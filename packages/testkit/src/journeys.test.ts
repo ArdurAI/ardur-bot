@@ -51,7 +51,8 @@ import * as turnContext from "../../adapters/src/context/assemble.js";
 import { checkDelegationExecution } from "../../adapters/src/delegation-execution.js";
 import { compactHistory } from "../../adapters/src/history-compaction.js";
 import { integrationApprovalForCall } from "../../adapters/src/integration-access.js";
-import { promptWithInitialSteering, toHistory } from "../../adapters/src/pi-runtime.js";
+import { toHistory } from "../../adapters/src/pi-runtime.js";
+import { promptWithInitialSteering } from "../../adapters/src/steering-input.js";
 import { sessionCookieHeader } from "./index.js";
 
 type App = { request: (input: string, init?: RequestInit) => Promise<Response> };

@@ -1075,6 +1075,11 @@ msgstr "{0} बजे"
 msgid "at {timeSelect}"
 msgstr "{timeSelect} बजे"
 
+#. placeholder {0}: row.usage.tokens
+#: src/pages/TeamBoard.tsx
+msgid "at least {0}"
+msgstr "कम से कम {0}"
+
 #: src/pages/storage/StorageSettings.tsx
 msgid "at least {size}"
 msgstr ""
@@ -8873,8 +8878,9 @@ msgstr "असाइन नहीं किया गया"
 
 #: src/components/SoftwareUpdateSection.tsx
 #: src/pages/fleet/FleetSettings.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Unavailable"
-msgstr ""
+msgstr "उपलब्ध नहीं"
 
 #: src/pages/shell/runtime-config-advanced.tsx
 msgid "Unavailable with Hermes."

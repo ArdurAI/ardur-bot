@@ -5,6 +5,7 @@ import type {
   RuntimeProblem,
 } from "@ardurbot/contracts";
 import { DelegationSnapshotSchema, RuntimePinSchema, runtimePinProblem } from "@ardurbot/contracts";
+import { minimumDelegationReservation } from "@ardurbot/core";
 import type { Bot, Prisma, PrismaClient, ThreadEvents } from "@ardurbot/db";
 import {
   admitDelegation,
@@ -13,6 +14,7 @@ import {
   inheritedRemoteOrigin,
 } from "@ardurbot/db";
 import { destinationForModel } from "./model-locality.js";
+import { piModelLimits } from "./pi-models.js";
 import type { ResolvedRunPin } from "./run-model-pin.js";
 
 export type DelegationResolver = (
@@ -26,6 +28,29 @@ export type DelegationResolver = (
 ) => Promise<
   (ResolvedRunPin & { pinSource?: RuntimePinSource; usageGroupId?: string | null }) | RuntimeProblem
 >;
+/** Effective request limits known about the worker's model or connection. */
+export type DelegationModelLimits = {
+  contextWindow?: number;
+  maxTokens?: number;
+  reasoning?: boolean;
+};
+/**
+ * The one-request admission floor for a pin, derived from the model registry and the
+ * connection's configured limits through the same output-cap resolver the runtime uses.
+ */
+export function delegationFloorForModel(
+  pin: { provider: string | null; modelId: string | null },
+  resolved?: DelegationModelLimits,
+): number {
+  const registryLimits =
+    pin.provider && pin.modelId ? piModelLimits(pin.provider, pin.modelId) : undefined;
+  return minimumDelegationReservation({
+    contextWindow: resolved?.contextWindow ?? registryLimits?.contextWindow,
+    modelMaxTokens: registryLimits?.maxTokens,
+    configuredMaxTokens: resolved?.maxTokens,
+    reasoning: resolved?.reasoning ?? registryLimits?.reasoning,
+  });
+}
 export async function prepareDelegation(
   tx: Prisma.TransactionClient,
   input: {
@@ -44,6 +69,11 @@ export async function prepareDelegation(
     tokens?: number;
     deadlineAt?: Date;
     targetThreadId?: string;
+    /**
+     * The worker connection's effective request limits when the pin is inherited and no
+     * resolver runs (helpers and children execute on the parent's resolved connection).
+     */
+    workerLimits?: DelegationModelLimits;
   },
   resolve?: DelegationResolver,
 ) {
@@ -59,6 +89,7 @@ export async function prepareDelegation(
   });
   let snapshot: DelegationSnapshot;
   let admissionUsageGroupId: string | null = null;
+  let workerModel: ResolvedRunPin | undefined;
   if (inherited && parent.delegationId) {
     const row = await tx.delegation.findUniqueOrThrow({ where: { id: parent.delegationId } });
     snapshot = DelegationSnapshotSchema.parse(row.snapshot);
@@ -104,6 +135,8 @@ export async function prepareDelegation(
       : selected!.kind === "resolved"
         ? selected!.pinSource
         : null;
+    workerModel =
+      !inherited && selected!.kind === "resolved" ? (selected! as ResolvedRunPin) : undefined;
     snapshot = {
       pin: inherited ? pin.data! : selected!.pin,
       ...(pinSource ? { pinSource } : {}),
@@ -123,7 +156,14 @@ export async function prepareDelegation(
         : destinationForModel(selected! as ResolvedRunPin),
     };
   }
-  const record = await admitDelegation(tx, { ...input, snapshot });
+  // The floor covers one realistic request on the worker's effective settings: the registry's
+  // model limits, the resolved connection's limits, or (for inherited pins) the limits the
+  // parent's executor supplies. The output side uses the same resolver the runtime uses.
+  const record = await admitDelegation(tx, {
+    ...input,
+    snapshot,
+    minimumTokens: delegationFloorForModel(snapshot.pin, workerModel ?? input.workerLimits),
+  });
   const admittedSnapshot = DelegationSnapshotSchema.parse(record.snapshot);
   return {
     ok: true as const,

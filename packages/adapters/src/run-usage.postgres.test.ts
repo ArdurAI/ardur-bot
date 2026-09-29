@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
 import type { AgentUsage, RequestUsageObservation } from "@ardurbot/adapter-kit";
 import { RequestUsageCollector, usageEvent } from "@ardurbot/adapter-kit";
-import { type ContextSnapshot, TaskCardSchema } from "@ardurbot/contracts";
+import { type ContextSnapshot, DELEGATION_LIMITS, TaskCardSchema } from "@ardurbot/contracts";
 import type { Prisma, PrismaClient } from "@ardurbot/db";
 import {
   admitDelegation,
+  confirmDispatchStop,
   createDb,
   finishDelegation,
   rejectDelegation,
@@ -811,7 +812,7 @@ postgres("request ledger on disposable PostgreSQL", () => {
     });
     await db.prisma.delegationRoot.update({
       where: { rootTaskId: f.id },
-      data: { tokenLimit: 20_000, reservedTokens: 1000, activeDescendants: 1 },
+      data: { tokenLimit: 120_000, reservedTokens: 1000, activeDescendants: 1 },
     });
     const snapshot = {
       pin: f.pin,
@@ -921,7 +922,10 @@ postgres("request ledger on disposable PostgreSQL", () => {
         "Revise the synthetic result",
       ),
     );
-    expect(await f.root()).toMatchObject({ reservedTokens: 10_100, usedTokens: 0 });
+    expect(await f.root()).toMatchObject({
+      reservedTokens: 100 + DELEGATION_LIMITS.reservationTokens,
+      usedTokens: 0,
+    });
     const reworkRun = await db.prisma.run.update({
       where: { id: rework.runId },
       data: { status: "running", leaseOwner: "worker", leaseFence: 2 },
@@ -936,7 +940,10 @@ postgres("request ledger on disposable PostgreSQL", () => {
     await reworkRecord(fresh.start());
     await reworkRecord(fresh.snapshot({ input: 0, output: 0 }));
     await reworkRecord(fresh.finish("success"));
-    expect(await f.root()).toMatchObject({ reservedTokens: 10_100, usedTokens: 0 });
+    expect(await f.root()).toMatchObject({
+      reservedTokens: 100 + DELEGATION_LIMITS.reservationTokens,
+      usedTokens: 0,
+    });
     await db.prisma.$transaction((tx) =>
       finishDelegation(tx, delegation.id, "completed", "Revised result", rework.runId),
     );
@@ -986,7 +993,10 @@ postgres("request ledger on disposable PostgreSQL", () => {
     );
     await thirdRecord(thirdHold.snapshot({ input: 15, output: 5 }));
     await thirdRecord(thirdHold.finish("success"));
-    expect(await f.root()).toMatchObject({ reservedTokens: 10_000, usedTokens: 40 });
+    expect(await f.root()).toMatchObject({
+      reservedTokens: DELEGATION_LIMITS.reservationTokens,
+      usedTokens: 40,
+    });
     const fourthRun = await db.prisma.run.update({
       where: { id: fourth.runId },
       data: { status: "running", leaseOwner: "worker", leaseFence: 2 },
@@ -1001,7 +1011,10 @@ postgres("request ledger on disposable PostgreSQL", () => {
     await fourthRecord(fourthRequest.start());
     await fourthRecord(fourthRequest.snapshot({ input: 9980, output: 0 }));
     await fourthRecord(fourthRequest.finish("success"));
-    expect(await f.root()).toMatchObject({ reservedTokens: 20, usedTokens: 10_020 });
+    expect(await f.root()).toMatchObject({
+      reservedTokens: DELEGATION_LIMITS.reservationTokens - 9_980,
+      usedTokens: 10_020,
+    });
     await db.prisma.$transaction((tx) =>
       finishDelegation(tx, delegation.id, "completed", "Final result", fourth.runId),
     );
@@ -1796,5 +1809,175 @@ postgres("request ledger on disposable PostgreSQL", () => {
     expect(
       await db.prisma.requestUsageObservation.count({ where: { usageRecordId: row.id } }),
     ).toBe(0);
+  });
+
+  it("reserves one realistic request, refuses small budgets early, and names budget stops", async () => {
+    const f = await fixture();
+    const snapshot = {
+      pin: f.pin,
+      computer: { id: null, mode: "team" as const, kind: null },
+      destination: { host: null, local: true },
+    };
+    const admit = (key: string, patch: Record<string, unknown> = {}) =>
+      db.prisma.$transaction((tx) =>
+        admitDelegation(tx, {
+          spaceId: f.id,
+          userId: f.run.userId,
+          parentRunId: f.id,
+          actingBotId: f.id,
+          actingName: "Fixture",
+          kind: "helper",
+          admissionKey: key,
+          prompt: "Synthetic helper",
+          snapshot,
+          ...patch,
+        }),
+      );
+    // A caller that did not choose a budget gets one realistic request, not the old 10000.
+    const row = await admit(`${f.id}-default`);
+    expect(row.reservedTokens).toBe(DELEGATION_LIMITS.reservationTokens);
+    expect(row.reservedTokens).toBeGreaterThan(16_734);
+    expect(await f.root()).toMatchObject({ reservedTokens: DELEGATION_LIMITS.reservationTokens });
+    // An explicit budget below the caller's one-request floor refuses before anything starts.
+    await expect(
+      admit(`${f.id}-small`, { tokens: 10_000, minimumTokens: 36_864 }),
+    ).rejects.toMatchObject({ problem: { code: "budget-too-small" } });
+    expect(await db.prisma.delegation.count({ where: { admissionKey: `${f.id}-small` } })).toBe(0);
+    expect(await f.root()).toMatchObject({
+      reservedTokens: DELEGATION_LIMITS.reservationTokens,
+      usedTokens: 0,
+    });
+    const startWorker = async (delegationId: string, suffix: string) => {
+      const workerTask = await db.prisma.task.create({
+        data: {
+          id: `${f.id}-${suffix}`,
+          spaceId: f.id,
+          userId: f.run.userId,
+          botId: f.id,
+          threadId: f.id,
+          prompt: "Synthetic helper",
+          status: "running",
+        },
+      });
+      const workerRun = await db.prisma.run.create({
+        data: {
+          id: `${f.id}-${suffix}`,
+          spaceId: f.id,
+          userId: f.run.userId,
+          botId: f.id,
+          threadId: f.id,
+          taskId: workerTask.id,
+          delegationId,
+          delegationRootTaskId: f.id,
+          status: "running",
+          trigger: "bot_message",
+          runtimePin: f.pin,
+        },
+      });
+      await db.prisma.delegation.update({
+        where: { id: delegationId },
+        data: { runId: workerRun.id, status: "running" },
+      });
+      return workerRun;
+    };
+    const settle = (runId: string, delegationId: string, input: number, output: number) =>
+      recordRunUsage(
+        { prisma: db.prisma, events: f.events },
+        {
+          id: runId,
+          spaceId: f.id,
+          userId: f.run.userId,
+          botId: f.id,
+          threadId: f.id,
+          taskId: runId,
+          delegationId,
+        },
+        f.usage({
+          requestId: `request-${runId}`,
+          categories: {
+            logicalInput: input,
+            uncachedInput: input,
+            cacheReadInput: 0,
+            cacheWriteInput: 0,
+            output,
+            reasoning: 0,
+          },
+        }),
+      );
+    // A runtime that cannot be stopped mid-step still records its overspend truthfully.
+    const overRun = await startWorker(row.id, "over");
+    await settle(overRun.id, row.id, 36_000, DELEGATION_LIMITS.reservationTokens - 36_000 + 100);
+    expect(await f.root()).toMatchObject({
+      reservedTokens: 0,
+      usedTokens: DELEGATION_LIMITS.reservationTokens + 100,
+    });
+    await db.prisma.$transaction((tx) => finishDelegation(tx, row.id, "completed", "Done"));
+    expect(
+      (await db.prisma.delegation.findUniqueOrThrow({ where: { id: row.id } })).result,
+    ).toContain("Overspent its token budget by 100 tokens.");
+    await db.prisma.run.update({ where: { id: overRun.id }, data: { status: "completed" } });
+    // A worker stopped for budget names the reason on its card.
+    const stopped = await admit(`${f.id}-stopped`);
+    const stoppedRun = await startWorker(stopped.id, "stopped");
+    await settle(stoppedRun.id, stopped.id, 36_000, DELEGATION_LIMITS.reservationTokens - 36_000);
+    await db.prisma.run.update({
+      where: { id: stoppedRun.id },
+      data: { cancelRequestedAt: new Date() },
+    });
+    expect(await confirmDispatchStop(db.prisma, stoppedRun.id)).toBe(true);
+    expect(
+      (await db.prisma.delegation.findUniqueOrThrow({ where: { id: stopped.id } })).result,
+    ).toContain("used its token budget");
+    expect(await f.root()).toMatchObject({
+      reservedTokens: 0,
+      usedTokens: 2 * DELEGATION_LIMITS.reservationTokens + 100,
+    });
+  });
+
+  it("admits only one of two concurrent workers when one reservation remains", async () => {
+    const f = await fixture();
+    const reservation = DELEGATION_LIMITS.reservationTokens;
+    await db.prisma.delegationRoot.update({
+      where: { rootTaskId: f.id },
+      data: { tokenLimit: reservation, maxConcurrent: 4, maxDescendants: 12 },
+    });
+    const snapshot = {
+      pin: f.pin,
+      computer: { id: null, mode: "team" as const, kind: null },
+      destination: { host: null, local: true },
+    };
+    const admit = (client: PrismaClient, key: string) =>
+      client.$transaction((tx) =>
+        admitDelegation(tx, {
+          spaceId: f.id,
+          userId: f.run.userId,
+          parentRunId: f.id,
+          actingBotId: f.id,
+          actingName: "Fixture",
+          kind: "helper",
+          admissionKey: key,
+          prompt: "Synthetic helper",
+          snapshot,
+          tokens: reservation,
+        }),
+      );
+    const results = await Promise.allSettled([
+      admit(db.prisma, `${f.id}-a`),
+      admit(peer.prisma, `${f.id}-b`),
+    ]);
+    const admitted = results.filter((result) => result.status === "fulfilled");
+    const refused = results.filter((result) => result.status === "rejected");
+    expect(admitted).toHaveLength(1);
+    expect(refused).toHaveLength(1);
+    expect(refused[0]).toMatchObject({
+      reason: { problem: { code: "budget-exhausted" } },
+    });
+    expect(await f.root()).toMatchObject({
+      reservedTokens: reservation,
+      activeDescendants: 1,
+      totalDescendants: 1,
+      usedTokens: 0,
+    });
+    expect(await db.prisma.delegation.count({ where: { rootTaskId: f.id } })).toBe(1);
   });
 });

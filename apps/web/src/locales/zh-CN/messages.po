@@ -1075,6 +1075,11 @@ msgstr "{0}"
 msgid "at {timeSelect}"
 msgstr "{timeSelect}"
 
+#. placeholder {0}: row.usage.tokens
+#: src/pages/TeamBoard.tsx
+msgid "at least {0}"
+msgstr "至少 {0}"
+
 #: src/pages/storage/StorageSettings.tsx
 msgid "at least {size}"
 msgstr "至少 {size}"
@@ -8873,6 +8878,7 @@ msgstr "未分配"
 
 #: src/components/SoftwareUpdateSection.tsx
 #: src/pages/fleet/FleetSettings.tsx
+#: src/pages/TeamBoard.tsx
 msgid "Unavailable"
 msgstr "不可用"
 
