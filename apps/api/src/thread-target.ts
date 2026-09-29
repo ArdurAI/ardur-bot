@@ -588,27 +588,49 @@ function pickLatestTerminalRun<T extends { id: string; createdAt: Date; complete
   });
 }
 
+/** Drop reply text the run already saved. Tool activity on that draft stays. */
+function withoutSavedReplyText<T extends { blocks: MessageBlock[] }>(message: T): T | null {
+  const blocks = message.blocks.filter(
+    (block) => block.kind !== "text" && !(block.kind === "progress" && block.activity !== true),
+  );
+  if (blocks.length === 0) return null;
+  return { ...message, blocks };
+}
+
 /**
  * Saved messages with the active runs' live messages after them. A draft whose reply text
  * is on screen sits at the place its run holds instead, above anything sent after that text
- * appeared, which is where its saved reply lands.
+ * appeared, which is where its saved reply lands. Once that place is released, the saved
+ * narration is the reply: the live draft keeps only tool activity.
  */
 function messagesWithLiveEvents(
   persisted: ThreadSnapshot["messages"],
   liveEvents: Parameters<typeof projectMessages>[0],
   runs: ReadonlyArray<{ id: string; replySeq: number | null }>,
 ) {
-  const live = projectMessages(liveEvents).filter((message) => {
-    if (message.blocks.some((block) => block.kind === "progress" || block.kind === "steps")) {
-      return true;
-    }
-    if (!message.id.startsWith("subagent:")) return false;
-    return !persisted.some((row) =>
-      row.blocks.some(
-        (block) => block.kind === "subagent" && message.id === `subagent:${block.agentId}`,
-      ),
-    );
-  });
+  const replySeqByRun = new Map(runs.map((run) => [run.id, run.replySeq]));
+  const live = projectMessages(liveEvents)
+    .flatMap((message) => {
+      const replySeq = message.runId ? replySeqByRun.get(message.runId) : undefined;
+      // Only a run whose place was released (replySeq null) has saved its narration.
+      // A missing run, or a place still held (including seq 0), keeps the live text.
+      if (replySeq !== null || message.id !== progressMessageId({ runId: message.runId })) {
+        return [message];
+      }
+      const stripped = withoutSavedReplyText(message);
+      return stripped ? [stripped] : [];
+    })
+    .filter((message) => {
+      if (message.blocks.some((block) => block.kind === "progress" || block.kind === "steps")) {
+        return true;
+      }
+      if (!message.id.startsWith("subagent:")) return false;
+      return !persisted.some((row) =>
+        row.blocks.some(
+          (block) => block.kind === "subagent" && message.id === `subagent:${block.agentId}`,
+        ),
+      );
+    });
   const heldDrafts = runs
     .flatMap((run) => {
       const draft = live.find((message) => message.id === progressMessageId({ runId: run.id }));

@@ -1669,6 +1669,194 @@ describe("thread event reduction", () => {
     expect(state?.messages.map((item) => item.id)).toEqual(["m-0", "reply-1", "chart-1"]);
   });
 
+  it("keeps the streamed reply above the follow-up when tool activity arrives before the narration is saved", () => {
+    // Pi posts the activity line, then the executor saves the narration, then the tool call.
+    let state = reduceThreadSnapshot(
+      snapshot([message("m-0", [{ kind: "text", text: "earlier" }], 0)]),
+      event({
+        type: "thread.progress",
+        seq: 1,
+        payload: { text: "Chief's summary", streaming: true },
+      }),
+    );
+    state = reduceThreadSnapshot(
+      state,
+      event({
+        type: "thread.message.created",
+        seq: 2,
+        payload: {
+          messageId: "q-1",
+          role: "user",
+          blocks: [{ kind: "text", text: "any pending PRs left?" }],
+        },
+      }),
+    );
+    state = reduceThreadSnapshot(
+      state,
+      event({
+        type: "thread.progress",
+        seq: 3,
+        payload: { text: "Running gh pr list", activity: true },
+      }),
+    );
+    expect(state?.messages.map((item) => item.id)).toEqual(["m-0", "progress:run-1", "q-1"]);
+    expect(state?.messages[1]?.blocks).toEqual([
+      { kind: "text", text: "Chief's summary" },
+      { kind: "progress", text: "Running gh pr list", activity: true },
+    ]);
+    state = reduceThreadSnapshot(
+      state,
+      event({
+        type: "thread.message.created",
+        seq: 4,
+        payload: {
+          messageId: "narr-1",
+          role: "bot",
+          blocks: [{ kind: "text", text: "Chief's summary" }],
+        },
+      }),
+    );
+    state = reduceThreadSnapshot(
+      state,
+      event({ type: "agent.tool.called", seq: 5, payload: { name: "shell" } }),
+    );
+    // The narration filled the draft's place. The tool call after that is a new
+    // activity draft at the end, and it does not move the saved reply.
+    expect(state?.messages.map((item) => item.id)).toEqual([
+      "m-0",
+      "narr-1",
+      "q-1",
+      "progress:run-1",
+    ]);
+    expect(state?.messages.at(-1)?.blocks).toEqual([
+      { kind: "steps", steps: [{ label: "Shell", count: 1 }] },
+    ]);
+  });
+
+  it("keeps each bot's narration in the place it streamed when another bot is also replying", () => {
+    const user = {
+      ...message("q-0", [{ kind: "text", text: "status please" }], 0),
+      role: "user" as const,
+    };
+    let state = reduceThreadSnapshot(
+      snapshot([user]),
+      event({
+        type: "thread.progress",
+        seq: 1,
+        runId: "run-a",
+        botId: "bot-a",
+        payload: { text: "Alpha answer", streaming: true },
+      }),
+    );
+    state = reduceThreadSnapshot(
+      state,
+      event({
+        type: "thread.progress",
+        seq: 2,
+        runId: "run-b",
+        botId: "bot-b",
+        payload: { text: "Beta answer", streaming: true },
+      }),
+    );
+    state = reduceThreadSnapshot(
+      state,
+      event({
+        type: "thread.progress",
+        seq: 3,
+        runId: "run-a",
+        botId: "bot-a",
+        payload: { text: "Running gh pr list", activity: true },
+      }),
+    );
+    expect(state?.messages.map((item) => item.id)).toEqual([
+      "q-0",
+      "progress:run-a",
+      "progress:run-b",
+    ]);
+    state = reduceThreadSnapshot(
+      state,
+      event({
+        type: "thread.message.created",
+        seq: 4,
+        runId: "run-a",
+        botId: "bot-a",
+        payload: {
+          messageId: "a-narr",
+          role: "bot",
+          blocks: [{ kind: "text", text: "Alpha answer" }],
+        },
+      }),
+    );
+    state = reduceThreadSnapshot(
+      state,
+      event({
+        type: "thread.message.created",
+        seq: 5,
+        runId: "run-b",
+        botId: "bot-b",
+        payload: {
+          messageId: "b-reply",
+          role: "bot",
+          blocks: [{ kind: "text", text: "Beta answer" }],
+        },
+      }),
+    );
+    expect(state?.messages.map((item) => item.id)).toEqual(["q-0", "a-narr", "b-reply"]);
+  });
+
+  it("keeps a routine summary above the card when activity arrives before the narration is saved", () => {
+    const chart = { kind: "chart" as const, name: "Weekly", spec: {}, data: [] };
+    let state = reduceThreadSnapshot(
+      snapshot([message("m-0", [{ kind: "text", text: "earlier" }], 0)]),
+      event({
+        type: "thread.progress",
+        seq: 1,
+        payload: { text: "Let me chart it.", streaming: true },
+      }),
+    );
+    state = reduceThreadSnapshot(
+      state,
+      event({
+        type: "thread.progress",
+        seq: 2,
+        payload: { text: "Rendering a chart", activity: true },
+      }),
+    );
+    state = reduceThreadSnapshot(
+      state,
+      event({
+        type: "thread.message.created",
+        seq: 3,
+        payload: { messageId: "chart-1", role: "bot", blocks: [chart] },
+      }),
+    );
+    state = reduceThreadSnapshot(
+      state,
+      event({
+        type: "thread.progress",
+        seq: 4,
+        payload: { text: "Weekly numbers.", streaming: true },
+      }),
+    );
+    expect(state?.messages.map((item) => item.id)).toEqual(["m-0", "progress:run-1", "chart-1"]);
+    expect(state?.messages[1]?.blocks).toEqual([
+      { kind: "progress", text: "Weekly numbers.", streaming: true },
+    ]);
+    state = reduceThreadSnapshot(
+      state,
+      event({
+        type: "thread.message.created",
+        seq: 5,
+        payload: {
+          messageId: "summary-1",
+          role: "bot",
+          blocks: [{ kind: "text", text: "Weekly numbers." }],
+        },
+      }),
+    );
+    expect(state?.messages.map((item) => item.id)).toEqual(["m-0", "summary-1", "chart-1"]);
+  });
+
   it("marks the live reply as streaming only while its text is growing", () => {
     const initial = snapshot([]);
     const growing = reduceThreadSnapshot(

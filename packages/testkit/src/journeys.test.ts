@@ -1022,8 +1022,8 @@ describeJourneys("required product journeys", () => {
   });
 
   // A streamed reply holds its place only while its run is running. Every exit from
-  // running releases it, and history compaction moves past a released place but never
-  // past a place a running reply still holds.
+  // running releases it. Compaction counts real messages, keeps the newest window word
+  // for word, and never moves past a place a running reply still holds.
   it("releases a streamed reply's place when its run stops running and compacts past it", async () => {
     const cookie = await signup(app, `reply-release-${stamp}@ardurbot.test`, "Reply Release");
     const me = await rpc<Me>(app, cookie, "me");
@@ -1157,19 +1157,37 @@ describeJourneys("required product journeys", () => {
     const cursor = async () =>
       (await prisma.thread.findUniqueOrThrow({ where: { id: thread.id } })).historyCompactedUpToSeq;
 
-    // The released places 0-3 do not stop compaction; the held place 6 does.
+    // Released places 0-3 stay empty. Later messages do not let compaction pass the
+    // place the reply still holds.
+    const later = [];
+    for (let index = 0; index < 58; index += 1) {
+      later.push(await ownerSays(`verbatim ${index}`));
+    }
+    expect(later[0]?.seq).toBe(8);
+    expect(later[57]?.seq).toBe(65);
     await compactHistory(compactionDeps, thread.id);
-    expect(await cursor()).toBe(5);
+    expect(await cursor()).toBeNull();
+    expect(summarize).not.toHaveBeenCalled();
 
-    // Once the reply saves into its place, compaction continues through it.
+    // Once the reply saves into its place and the oldest real messages age out,
+    // those rows are summarized and the newest window stays word for word.
     await streaming.complete([{ kind: "text", text: "Rad shipped the release." }]);
     const reply = await prisma.message.findFirstOrThrow({
       where: { threadId: thread.id, runId: streaming.run.id, role: "bot" },
     });
     expect(reply.seq).toBe(6);
     await compactHistory(compactionDeps, thread.id);
-    expect(await cursor()).toBe(7);
-    expect(summarize).toHaveBeenCalledTimes(2);
+    expect(await cursor()).toBe(15);
+    expect(summarize).toHaveBeenCalledTimes(1);
+    const prompt = (summarize.mock.calls[0]![0] as { prompt: string }).prompt;
+    expect(prompt).toContain("first question");
+    expect(prompt).toContain("Rad shipped the release.");
+    expect(prompt).toContain("verbatim 0");
+    expect(prompt).not.toContain("verbatim 8");
+    expect(prompt).not.toContain("verbatim 57");
+    await compactHistory(compactionDeps, thread.id);
+    expect(await cursor()).toBe(15);
+    expect(summarize).toHaveBeenCalledTimes(1);
     await settleFixtureWork([bot.id]);
   });
 

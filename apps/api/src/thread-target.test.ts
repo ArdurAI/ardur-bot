@@ -398,6 +398,139 @@ describe("threadSnapshot", () => {
     ]);
   });
 
+  it("does not replay a saved narration as a second live draft", async () => {
+    const run = {
+      id: "run-1",
+      botId: "bot-1",
+      threadId: "thread-1",
+      taskId: "task-1",
+      status: "running",
+      trigger: "user",
+      modelProvider: null,
+      modelId: null,
+      error: null,
+      startedAt: null,
+      completedAt: null,
+      createdAt: new Date("2026-09-28T14:28:27.000Z"),
+      replySeq: null,
+    };
+    const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([{ id: "thread-1" }]),
+      message: {
+        findMany: vi
+          .fn()
+          .mockResolvedValue([savedMessage("narration-1", 0, "bot", "Let me chart it.")]),
+      },
+      event: {
+        findFirst: vi.fn().mockResolvedValue({ seq: 3 }),
+        findMany: vi.fn().mockResolvedValue([
+          progressEvent("run-1", "bot-1", 1, "Let me chart it."),
+          {
+            id: "event-2",
+            threadId: "thread-1",
+            botId: "bot-1",
+            seq: 2,
+            type: "agent.tool.called",
+            runId: "run-1",
+            payload: { name: "render_plot" },
+            createdAt: new Date("2026-09-28T14:29:02.000Z"),
+          },
+        ]),
+      },
+      run: { findFirst: botRunFindFirst([run]) },
+    };
+    const prisma = {
+      $transaction: vi.fn(async (callback: (client: typeof tx) => unknown) => callback(tx)),
+    } as unknown as PrismaClient;
+    const snapshot = await threadSnapshot({ prisma }, {
+      kind: "bot",
+      botId: "bot-1",
+      threadId: "thread-1",
+      bot: { computer: null },
+    } as ThreadTarget);
+    const narrationCopies = snapshot.messages.flatMap((message) =>
+      message.blocks.filter((block) => "text" in block && block.text.includes("Let me chart it.")),
+    );
+    expect(narrationCopies).toHaveLength(1);
+    expect(snapshot.messages.find((message) => message.id === "progress:run-1")?.blocks).toEqual([
+      { kind: "steps", steps: [{ label: "Render plot", count: 1 }] },
+    ]);
+  });
+
+  it("does not replay narration when an activity line arrives before the tool is saved", async () => {
+    const run = {
+      id: "run-1",
+      botId: "bot-1",
+      threadId: "thread-1",
+      taskId: "task-1",
+      status: "running",
+      trigger: "user",
+      modelProvider: null,
+      modelId: null,
+      error: null,
+      startedAt: null,
+      completedAt: null,
+      createdAt: new Date("2026-09-28T14:28:27.000Z"),
+      replySeq: null,
+    };
+    const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([{ id: "thread-1" }]),
+      message: {
+        findMany: vi
+          .fn()
+          .mockResolvedValue([savedMessage("narration-1", 0, "bot", "Let me chart it.")]),
+      },
+      event: {
+        findFirst: vi.fn().mockResolvedValue({ seq: 4 }),
+        findMany: vi.fn().mockResolvedValue([
+          progressEvent("run-1", "bot-1", 1, "Let me chart it."),
+          {
+            id: "event-2",
+            threadId: "thread-1",
+            botId: "bot-1",
+            seq: 2,
+            type: "thread.progress",
+            runId: "run-1",
+            payload: { text: "Running gh pr list", activity: true },
+            createdAt: new Date("2026-09-28T14:29:02.000Z"),
+          },
+          {
+            id: "event-3",
+            threadId: "thread-1",
+            botId: "bot-1",
+            seq: 3,
+            type: "agent.tool.called",
+            runId: "run-1",
+            payload: { name: "shell" },
+            createdAt: new Date("2026-09-28T14:29:03.000Z"),
+          },
+        ]),
+      },
+      run: { findFirst: botRunFindFirst([run]) },
+    };
+    const prisma = {
+      $transaction: vi.fn(async (callback: (client: typeof tx) => unknown) => callback(tx)),
+    } as unknown as PrismaClient;
+    const snapshot = await threadSnapshot({ prisma }, {
+      kind: "bot",
+      botId: "bot-1",
+      threadId: "thread-1",
+      bot: { computer: null },
+    } as ThreadTarget);
+    const narrationCopies = snapshot.messages.flatMap((message) =>
+      message.blocks.filter((block) => "text" in block && block.text.includes("Let me chart it.")),
+    );
+    expect(narrationCopies).toHaveLength(1);
+    expect(snapshot.messages.find((message) => message.id === "progress:run-1")?.blocks).toEqual([
+      {
+        kind: "progress",
+        text: "Running gh pr list",
+        activity: true,
+        pendingToolNames: ["shell"],
+      },
+    ]);
+  });
+
   it("names the active bot's computer host the way Fleet settings and Team do", async () => {
     const tx = {
       $queryRaw: vi.fn().mockResolvedValue([{ id: "thread-1" }]),

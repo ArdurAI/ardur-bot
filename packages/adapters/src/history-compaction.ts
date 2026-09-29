@@ -25,16 +25,57 @@ const NOTHING_COMPACTED = -1;
 /** Durable state left while an unmarked summary is rebuilt from retained rows. */
 const PENDING_SUMMARY_REBUILD = "[pending-summary-rebuild:v1]";
 
+/**
+ * True once at least one full batch of real messages has aged out of the verbatim window.
+ * `uncompactedMessageCount` is a count of message rows, not a span of sequence numbers:
+ * a released reply place stays empty and must not count as a message.
+ */
 export function shouldEnqueueCompaction(
-  nextMessageSeq: number,
-  historyCompactedUpToSeq: number | null,
+  uncompactedMessageCount: number,
   windowSize: number,
   batchSize: number,
 ): boolean {
-  const compactedUpTo = historyCompactedUpToSeq ?? NOTHING_COMPACTED;
-  // Messages occupy seq 0..nextMessageSeq-1, and everything up to and including compactedUpTo is
-  // already compacted, so the uncompacted count is (nextMessageSeq - 1) - compactedUpTo.
-  return nextMessageSeq - compactedUpTo - 1 >= windowSize + batchSize;
+  return uncompactedMessageCount >= windowSize + batchSize;
+}
+
+function lowestHeldReplySeq(
+  holds: ReadonlyArray<{ replySeq: number | null }>,
+  aboveSeq: number,
+): number | null {
+  let lowest: number | null = null;
+  for (const hold of holds) {
+    if (hold.replySeq === null || hold.replySeq <= aboveSeq) continue;
+    if (lowest === null || hold.replySeq < lowest) lowest = hold.replySeq;
+  }
+  return lowest;
+}
+
+/** Seq strictly below which a message can be compacted. A running reply's place is not included. */
+async function compactionUpperSeq(
+  prisma: PrismaClient,
+  threadId: string,
+  nextMessageSeq: number,
+  aboveSeq: number,
+): Promise<number> {
+  const held = await prisma.run.findMany({
+    where: { threadId, status: "running", replySeq: { not: null } },
+    select: { replySeq: true },
+  });
+  const lowestHeld = lowestHeldReplySeq(held, aboveSeq);
+  return lowestHeld === null ? nextMessageSeq : Math.min(nextMessageSeq, lowestHeld);
+}
+
+async function countEligibleMessages(
+  prisma: PrismaClient,
+  threadId: string,
+  nextMessageSeq: number,
+  historyCompactedUpToSeq: number | null,
+): Promise<number> {
+  const cursor = historyCompactedUpToSeq ?? NOTHING_COMPACTED;
+  const upper = await compactionUpperSeq(prisma, threadId, nextMessageSeq, cursor);
+  return prisma.message.count({
+    where: { threadId, seq: { gt: cursor, lt: upper } },
+  });
 }
 
 export function nextCompactionBatchRange(
@@ -72,8 +113,12 @@ export async function scheduleCompactionAfterTurn(
     return;
   if (
     shouldEnqueueCompaction(
-      run.thread.nextMessageSeq,
-      run.thread.historyCompactedUpToSeq,
+      await countEligibleMessages(
+        prisma,
+        run.thread.id,
+        run.thread.nextMessageSeq,
+        run.thread.historyCompactedUpToSeq,
+      ),
       HISTORY_WINDOW_SIZE,
       COMPACTION_BATCH_SIZE,
     )
@@ -292,27 +337,32 @@ export async function compactHistory(
     // running reply still holds, which its message fills later. Read the holds after the
     // thread and only messages below its counter as read then: a place allocated since
     // cannot pass for released, and a hold cleared since was filled or released before
-    // the messages are read.
-    const held = await deps.prisma.run.findMany({
-      where: { threadId, status: "running", replySeq: { not: null } },
-      select: { replySeq: true },
+    // the messages are read. The newest window of those real messages stays word for word.
+    const upper = await compactionUpperSeq(
+      deps.prisma,
+      threadId,
+      thread.nextMessageSeq,
+      range.fromSeqExclusive,
+    );
+    const kept = await deps.prisma.message.findMany({
+      where: { threadId, seq: { gt: range.fromSeqExclusive, lt: upper } },
+      orderBy: { seq: "desc" },
+      take: HISTORY_WINDOW_SIZE,
+      select: { seq: true },
     });
-    batch = await deps.prisma.message.findMany({
-      where: { threadId, seq: { gt: range.fromSeqExclusive, lt: thread.nextMessageSeq } },
-      orderBy: { seq: "asc" },
-      take: range.take,
-      select: { seq: true, role: true, blocks: true },
-    });
+    if (kept.length >= HISTORY_WINDOW_SIZE) {
+      const oldestKeptSeq = kept[kept.length - 1]!.seq;
+      batch = await deps.prisma.message.findMany({
+        where: { threadId, seq: { gt: range.fromSeqExclusive, lt: oldestKeptSeq } },
+        orderBy: { seq: "asc" },
+        take: range.take,
+        select: { seq: true, role: true, blocks: true },
+      });
+    }
     // Clearing messages retains their sequence counter. After invalidating a legacy summary,
     // the first surviving row can therefore start above zero without leaving a coverage gap.
     if ((invalidatedSummary || pendingRebuild) && batch.length > 0)
       fromSeqExclusive = batch[0]!.seq - 1;
-    const firstHeld = Math.min(
-      ...held.flatMap((run) =>
-        run.replySeq !== null && run.replySeq > range.fromSeqExclusive ? [run.replySeq] : [],
-      ),
-    );
-    batch = batch.filter((message) => message.seq < firstHeld);
   }
   if (batch.length === 0) return;
 
@@ -475,8 +525,12 @@ export async function compactHistory(
   // otherwise leave most of that history in neither the verbatim window nor the local summary.
   if (
     shouldEnqueueCompaction(
-      latest.nextMessageSeq,
-      latest.historyCompactedUpToSeq,
+      await countEligibleMessages(
+        deps.prisma,
+        threadId,
+        latest.nextMessageSeq,
+        latest.historyCompactedUpToSeq,
+      ),
       HISTORY_WINDOW_SIZE,
       COMPACTION_BATCH_SIZE,
     )

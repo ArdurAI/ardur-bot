@@ -101,6 +101,36 @@ describe("reduceLiveMessageBlocks", () => {
       { kind: "steps", steps: [{ label: "Run command", count: 1 }] },
     ]);
   });
+
+  it("keeps streamed reply text when an activity line follows it", () => {
+    const streamed = reduceLiveMessageBlocks([], {
+      type: "progress",
+      payload: { text: "Chief's summary", streaming: true },
+    });
+    const working = reduceLiveMessageBlocks(streamed, {
+      type: "progress",
+      payload: { text: "Running gh pr list", activity: true },
+    });
+    expect(working).toEqual([
+      { kind: "text", text: "Chief's summary" },
+      { kind: "progress", text: "Running gh pr list", activity: true },
+    ]);
+
+    const cleared = reduceLiveMessageBlocks(working, {
+      type: "progress",
+      payload: { text: "", activity: true },
+    });
+    expect(cleared).toEqual([{ kind: "text", text: "Chief's summary" }]);
+  });
+
+  it("replaces sealed reply text when later absolute text does not continue it", () => {
+    expect(
+      reduceLiveMessageBlocks([{ kind: "text", text: "Let me chart it." }], {
+        type: "progress",
+        payload: { text: "Weekly numbers.", streaming: true },
+      }),
+    ).toEqual([{ kind: "progress", text: "Weekly numbers.", streaming: true }]);
+  });
 });
 
 describe("runFailureError", () => {
@@ -387,6 +417,83 @@ describe("projectMessages", () => {
     expect(messages[0]?.blocks).toEqual([
       { kind: "steps", steps: [{ label: "Shell", count: 1 }] },
       { kind: "progress", text: "The check passed.", streaming: true },
+    ]);
+  });
+
+  it("keeps narration ahead of the activity line pi sends before the tool is saved", () => {
+    const messages = projectMessages([
+      {
+        id: "e1",
+        threadId: "t1",
+        seq: 0,
+        type: "thread.progress",
+        runId: "r1",
+        payload: { text: "Chief's summary", streaming: true },
+        createdAt: "2026-01-01T00:00:00.000Z",
+      },
+      {
+        id: "e2",
+        threadId: "t1",
+        seq: 1,
+        type: "thread.progress",
+        runId: "r1",
+        payload: { text: "Running gh pr list", activity: true },
+        createdAt: "2026-01-01T00:00:01.000Z",
+      },
+      {
+        id: "e3",
+        threadId: "t1",
+        seq: 2,
+        type: "agent.tool.called",
+        runId: "r1",
+        payload: { name: "shell" },
+        createdAt: "2026-01-01T00:00:02.000Z",
+      },
+    ]);
+    expect(messages[0]?.blocks).toEqual([
+      { kind: "text", text: "Chief's summary" },
+      {
+        kind: "progress",
+        text: "Running gh pr list",
+        activity: true,
+        pendingToolNames: ["shell"],
+      },
+    ]);
+  });
+
+  it("shows a later absolute reply instead of slicing it against sealed narration", () => {
+    const messages = projectMessages([
+      {
+        id: "e1",
+        threadId: "t1",
+        seq: 0,
+        type: "thread.progress",
+        runId: "r1",
+        payload: { text: "Let me chart it.", streaming: true },
+        createdAt: "2026-01-01T00:00:00.000Z",
+      },
+      {
+        id: "e2",
+        threadId: "t1",
+        seq: 1,
+        type: "agent.tool.called",
+        runId: "r1",
+        payload: { name: "render_plot" },
+        createdAt: "2026-01-01T00:00:01.000Z",
+      },
+      {
+        id: "e3",
+        threadId: "t1",
+        seq: 2,
+        type: "thread.progress",
+        runId: "r1",
+        payload: { text: "Weekly numbers.", streaming: true },
+        createdAt: "2026-01-01T00:00:02.000Z",
+      },
+    ]);
+    expect(messages[0]?.blocks).toEqual([
+      { kind: "steps", steps: [{ label: "Render plot", count: 1 }] },
+      { kind: "progress", text: "Weekly numbers.", streaming: true },
     ]);
   });
 
