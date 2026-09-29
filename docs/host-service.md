@@ -105,17 +105,26 @@ sequenceDiagram
   (`NATIVE_SESSION_GUARD` in `runtimes/native-process.ts`) under its own read-only
   profile with the network off and shell tools disabled, and the runtime refuses a bot
   folder that sits inside the protected paths or contains them. Codex follows links in
-  its folder and in every file it is granted, and it loads instruction files (`AGENTS.md`
-  and the configured fallback names) into the prompt, so the folder is checked and
-  granted as the disk spells it, and an instruction file is granted only when it is a
-  real file: a link that leaves the bot's folder, a second name for a file elsewhere
-  (a hard link) or protected data refuses the session before it starts. A link planted
-  after that check is not granted, and Codex's own sandbox refuses to read it. Codex's
-  `deny` entries do not help here: a granted link wins over a `deny` on its target. One
-  gap remains, for files outside the protected paths only: a second name for such a
-  file, created inside the bot's folder in the moment between the check and Codex
-  reading it, is read. A guarded command cannot create a second name for protected
-  data. A probe uses that same wrap. When the profile cannot be built, the probe
+  what it reads and cannot check the file it ends up with, so it is given as little to
+  read as possible. The bot's folder is resolved first, then checked, granted and handed
+  to Codex as the disk spells it, and looked at once more just before the session is
+  asked for. Codex's own loading of project instructions is turned off
+  (`project_doc_max_bytes = 0`): Ardur reads `AGENTS.md`, its override and the
+  configured fallback names itself, by Codex's rules and limit, and hands Codex the
+  text. Each file is opened first and checked second, so what is checked is what is
+  read: it must be an ordinary file with one name, inside the project and outside the
+  protected paths, and still where it was found once it is open. A link out of the
+  project, a second name for a file elsewhere (a hard link), a folder, a broken link or
+  protected data refuses the session before it starts. Codex's `deny` entries are not
+  used as a second lock: a granted link wins over a `deny` on its target. Codex also
+  loads an instruction file from its own folder, which cannot be turned off. After the
+  session starts and before any turn is sent, every file Codex reports as loaded must
+  be an ordinary file outside the protected paths and outside the project, unchanged
+  since just before the session was asked for; a file swapped for a link and put back
+  keeps the time of that change, which cannot be reset. One gap remains until bot
+  commands are kept out of the agent tools' own folders: replacing Codex's whole folder
+  with a copy for the moment a session starts, and putting it back, is not detected.
+  A probe uses that same wrap. When the profile cannot be built, the probe
   does not start the command. The profile is `(allow default)` plus targeted denies, so
   ordinary work is untouched while the deny list blocks reads and writes of Ardur's
   control plane: the env file the stack loaded (recorded as `ARDURBOT_ENV_FILE`), the
