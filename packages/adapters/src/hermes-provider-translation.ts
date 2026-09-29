@@ -295,7 +295,12 @@ export class BrokerTranslationError extends Error {
   }
 }
 
-export type ToolCallAccumulator = { id: string; name: string; arguments: string };
+export type ToolCallAccumulator = {
+  id: string;
+  name: string;
+  arguments: string;
+  hasDeltas: boolean;
+};
 
 /**
  * Consume the provider layer's event stream and emit Chat Completions SSE
@@ -364,6 +369,7 @@ export async function translateStream(options: {
           id: slot?.id ?? `call_${index}`,
           name: slot?.name ?? "",
           arguments: "",
+          hasDeltas: false,
         };
         toolCalls.push(entry);
         emit({
@@ -382,34 +388,59 @@ export async function translateStream(options: {
         const index = callIndex.get(event.contentIndex);
         if (index === undefined) break;
         toolCalls[index]!.arguments += event.delta;
+        toolCalls[index]!.hasDeltas = true;
         emit({
           tool_calls: [{ index, function: { arguments: event.delta } }],
         });
         break;
       }
       case "toolcall_end": {
-        const index = callIndex.get(event.contentIndex);
-        if (index === undefined) break;
-        // The end event is authoritative: replay the complete call so a
-        // provider that streamed partial JSON still round-trips exactly.
-        toolCalls[index] = {
-          id: event.toolCall.id,
-          name: event.toolCall.name,
-          arguments: JSON.stringify(event.toolCall.arguments),
-        };
-        emit({
-          tool_calls: [
-            {
-              index,
-              id: event.toolCall.id,
-              type: "function",
-              function: {
-                name: event.toolCall.name,
-                arguments: toolCalls[index]!.arguments,
+        let index = callIndex.get(event.contentIndex);
+        const fullArgs = JSON.stringify(event.toolCall.arguments);
+        if (index === undefined) {
+          index = toolCalls.length;
+          callIndex.set(event.contentIndex, index);
+          toolCalls.push({
+            id: event.toolCall.id,
+            name: event.toolCall.name,
+            arguments: fullArgs,
+            hasDeltas: false,
+          });
+          emit({
+            tool_calls: [
+              {
+                index,
+                id: event.toolCall.id,
+                type: "function",
+                function: {
+                  name: event.toolCall.name,
+                  arguments: fullArgs,
+                },
               },
-            },
-          ],
-        });
+            ],
+          });
+        } else {
+          const hadDeltas = toolCalls[index]!.hasDeltas;
+          toolCalls[index] = {
+            id: event.toolCall.id,
+            name: event.toolCall.name,
+            arguments: fullArgs,
+            hasDeltas: hadDeltas,
+          };
+          emit({
+            tool_calls: [
+              {
+                index,
+                id: event.toolCall.id,
+                type: "function",
+                function: {
+                  name: event.toolCall.name,
+                  arguments: hadDeltas ? "" : fullArgs,
+                },
+              },
+            ],
+          });
+        }
         break;
       }
       case "done": {
@@ -432,6 +463,9 @@ export async function translateStream(options: {
   }
 
   const usageBlock = usage ? chatUsage(usage) : undefined;
+  if (toolCalls.length > 0 && finish === "stop") {
+    finish = "tool_calls";
+  }
   if (streamMode) {
     emit({}, finish);
     if (usageBlock)

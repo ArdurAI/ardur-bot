@@ -444,6 +444,96 @@ describe("worker provider broker translated route", () => {
     expect(secondBody.choices[0].finish_reason).toBe("stop");
   });
 
+  it("streams tool call arguments exactly once in SSE for both fragment and end-only cases", async () => {
+    const toolName = hermesToolName("fixture_echo");
+
+    // 1. Fragment case: arguments streamed via deltas then ended
+    const fragmentStream = translatedFixture([
+      startEvent,
+      {
+        type: "toolcall_start",
+        contentIndex: 0,
+        partial: partial([{ type: "toolCall", id: "call_1", name: toolName, arguments: {} as PiJsonObject }]),
+      },
+      {
+        type: "toolcall_delta",
+        contentIndex: 0,
+        delta: '{"phrase":',
+        partial: partial([{ type: "toolCall", id: "call_1", name: toolName, arguments: {} as PiJsonObject }]),
+      },
+      {
+        type: "toolcall_delta",
+        contentIndex: 0,
+        delta: '"hi"}',
+        partial: partial([{ type: "toolCall", id: "call_1", name: toolName, arguments: {} as PiJsonObject }]),
+      },
+      {
+        type: "toolcall_end",
+        contentIndex: 0,
+        toolCall: { type: "toolCall", id: "call_1", name: toolName, arguments: { phrase: "hi" } },
+        partial: partial([{ type: "toolCall", id: "call_1", name: toolName, arguments: { phrase: "hi" } }]),
+      },
+      doneEvent([], "toolUse"),
+    ]);
+
+    const fragmentResp = await fragmentStream.broker.open(
+      fragmentStream.request({
+        body: {
+          model: "claude-fixture",
+          messages: [{ role: "user", content: "echo hi" }],
+          tools: [{ type: "function", function: { name: toolName, parameters: {} } }],
+          stream: true,
+        },
+      }),
+    );
+    expect(fragmentResp.status).toBe(200);
+    const fragmentFrames = parseFrames(await fragmentResp.text());
+    const fragmentArgs = fragmentFrames
+      .flatMap((chunk) => chunk.choices[0]?.delta?.tool_calls ?? [])
+      .map((call) => call.function?.arguments ?? "")
+      .join("");
+    expect(fragmentArgs).toBe('{"phrase":"hi"}');
+    const fragmentFinish = fragmentFrames.find((chunk) => chunk.choices[0]?.finish_reason === "tool_calls");
+    expect(fragmentFinish).toBeDefined();
+
+    // 2. End-only case: no delta events, arguments given only at toolcall_end
+    const endOnlyStream = translatedFixture([
+      startEvent,
+      {
+        type: "toolcall_start",
+        contentIndex: 0,
+        partial: partial([{ type: "toolCall", id: "call_2", name: toolName, arguments: {} as PiJsonObject }]),
+      },
+      {
+        type: "toolcall_end",
+        contentIndex: 0,
+        toolCall: { type: "toolCall", id: "call_2", name: toolName, arguments: { phrase: "end-only" } },
+        partial: partial([{ type: "toolCall", id: "call_2", name: toolName, arguments: { phrase: "end-only" } }]),
+      },
+      doneEvent([], "toolUse"),
+    ]);
+
+    const endOnlyResp = await endOnlyStream.broker.open(
+      endOnlyStream.request({
+        body: {
+          model: "claude-fixture",
+          messages: [{ role: "user", content: "echo end-only" }],
+          tools: [{ type: "function", function: { name: toolName, parameters: {} } }],
+          stream: true,
+        },
+      }),
+    );
+    expect(endOnlyResp.status).toBe(200);
+    const endOnlyFrames = parseFrames(await endOnlyResp.text());
+    const endOnlyArgs = endOnlyFrames
+      .flatMap((chunk) => chunk.choices[0]?.delta?.tool_calls ?? [])
+      .map((call) => call.function?.arguments ?? "")
+      .join("");
+    expect(endOnlyArgs).toBe('{"phrase":"end-only"}');
+    const endOnlyFinish = endOnlyFrames.find((chunk) => chunk.choices[0]?.finish_reason === "tool_calls");
+    expect(endOnlyFinish).toBeDefined();
+  });
+
   it("translates a data-URL image into the provider-layer image type", async () => {
     const f = translatedFixture([
       startEvent,
