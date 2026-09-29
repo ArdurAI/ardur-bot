@@ -16,7 +16,8 @@ import { installNavigationGuard } from "../../lib/navigation-guard";
 import { useUnsavedChanges } from "./unsaved";
 
 const desktop = vi.hoisted(() => ({ setUnsavedChanges: vi.fn().mockResolvedValue(undefined) }));
-vi.mock("../../lib/desktop", () => ({ desktopBridge: () => ({ window: desktop }) }));
+const bridge = vi.hoisted(() => ({ current: undefined as { window?: unknown } | undefined }));
+vi.mock("../../lib/desktop", () => ({ desktopBridge: () => bridge.current ?? { window: desktop } }));
 
 let host: HTMLDivElement, renderer: ReturnType<typeof createRoot>, navigate: NavigateFunction;
 let navigator: Navigator;
@@ -195,5 +196,16 @@ describe("IDE guard with BrowserRouter", () => {
     expect(navigator.replace).toBe(replace);
     expect(unload()).toBe(false);
     expect(desktop.setUnsavedChanges).toHaveBeenLastCalledWith(false);
+  });
+
+  it("keeps editing when a desktop bridge has no window controls", async () => {
+    // An older or partial desktop bridge must not take the whole page down.
+    bridge.current = {};
+    try {
+      await click("button");
+      expect(host.textContent).toContain("Editor modified");
+    } finally {
+      bridge.current = undefined;
+    }
   });
 });
