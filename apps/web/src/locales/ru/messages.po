@@ -6014,9 +6014,9 @@ msgstr ""
 
 #: src/pages/customize/SkillsPage.tsx
 #: src/pages/ide/IdePage.tsx
-#: src/pages/ide/terminal.tsx
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/Shell.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Open"
 msgstr "Открыть"
 
@@ -6141,6 +6141,7 @@ msgstr ""
 
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/shell/terminal-session.tsx
+#: src/pages/workspace/WorkspaceTerminal.tsx
 msgid "Opening terminal"
 msgstr ""
 
@@ -6755,6 +6756,7 @@ msgstr ""
 
 #: src/pages/ide/terminal.tsx
 #: src/pages/Shell.tsx
+#: src/pages/workspace/WorkspaceTerminal.tsx
 msgid "Release"
 msgstr "Освободить управление"
 
@@ -8059,6 +8061,14 @@ msgstr "Создать доску?"
 msgid "Start comparison"
 msgstr ""
 
+#: src/pages/workspace/terminal-controller.ts
+msgid "Start computer"
+msgstr "Запустить компьютер"
+
+#: src/pages/workspace/terminal-controller.ts
+msgid "Start computer to open a terminal"
+msgstr "Запустите компьютер, чтобы открыть терминал"
+
 #: src/pages/GoalForm.tsx
 msgid "Start goal"
 msgstr "Начать цель"
@@ -8121,8 +8131,8 @@ msgstr "Шаги"
 #: src/pages/DelegationLines.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/Shell.tsx
-#: src/pages/shell/computer-terminal.tsx
 #: src/pages/TeamBoard.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Stop"
 msgstr "Остановить"
 
@@ -8233,14 +8243,12 @@ msgstr ""
 msgid "System"
 msgstr "Системная"
 
-#: src/pages/ide/terminal.tsx
 #: src/pages/Shell.tsx
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Take control"
 msgstr "Взять под контроль"
 
-#: src/pages/ide/terminal.tsx
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Take control to open a terminal"
 msgstr ""
 
@@ -8307,8 +8315,10 @@ msgid "Tell your bot what to change or remove"
 msgstr ""
 
 #: src/pages/ide/IdePage.tsx
+#: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/shell/terminal-session.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Terminal"
 msgstr ""
 
@@ -8316,8 +8326,7 @@ msgstr ""
 msgid "Terminal could not open; try again"
 msgstr ""
 
-#: src/pages/ide/terminal.tsx
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Terminal is not available on this computer"
 msgstr ""
 
@@ -8357,7 +8366,7 @@ msgstr "Этот токен не принят. Проверьте его и по
 msgid "The API did not come back. Refresh this page."
 msgstr "API не вернулся. Обновите эту страницу."
 
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "The bot is working — wait or stop it"
 msgstr ""
 
@@ -8407,6 +8416,7 @@ msgstr "рассуждение"
 #: src/pages/ide/dialogs.tsx
 #: src/pages/ide/IdePage.tsx
 #: src/pages/ide/terminal.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "This action could not finish; try again."
 msgstr ""
 

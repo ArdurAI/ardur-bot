@@ -6014,9 +6014,9 @@ msgstr "Only space-shared documents go to this repository."
 
 #: src/pages/customize/SkillsPage.tsx
 #: src/pages/ide/IdePage.tsx
-#: src/pages/ide/terminal.tsx
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/Shell.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Open"
 msgstr "Open"
 
@@ -6141,6 +6141,7 @@ msgstr "Opening chat…"
 
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/shell/terminal-session.tsx
+#: src/pages/workspace/WorkspaceTerminal.tsx
 msgid "Opening terminal"
 msgstr "Opening terminal"
 
@@ -6755,6 +6756,7 @@ msgstr "Rejected"
 
 #: src/pages/ide/terminal.tsx
 #: src/pages/Shell.tsx
+#: src/pages/workspace/WorkspaceTerminal.tsx
 msgid "Release"
 msgstr "Release"
 
@@ -8059,6 +8061,14 @@ msgstr "Start board?"
 msgid "Start comparison"
 msgstr "Start comparison"
 
+#: src/pages/workspace/terminal-controller.ts
+msgid "Start computer"
+msgstr "Start computer"
+
+#: src/pages/workspace/terminal-controller.ts
+msgid "Start computer to open a terminal"
+msgstr "Start computer to open a terminal"
+
 #: src/pages/GoalForm.tsx
 msgid "Start goal"
 msgstr "Start goal"
@@ -8121,8 +8131,8 @@ msgstr "Steps"
 #: src/pages/DelegationLines.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/Shell.tsx
-#: src/pages/shell/computer-terminal.tsx
 #: src/pages/TeamBoard.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Stop"
 msgstr "Stop"
 
@@ -8233,14 +8243,12 @@ msgstr "Syncs to {0}"
 msgid "System"
 msgstr "System"
 
-#: src/pages/ide/terminal.tsx
 #: src/pages/Shell.tsx
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Take control"
 msgstr "Take control"
 
-#: src/pages/ide/terminal.tsx
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Take control to open a terminal"
 msgstr "Take control to open a terminal"
 
@@ -8307,8 +8315,10 @@ msgid "Tell your bot what to change or remove"
 msgstr "Tell your bot what to change or remove"
 
 #: src/pages/ide/IdePage.tsx
+#: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/shell/terminal-session.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Terminal"
 msgstr "Terminal"
 
@@ -8316,8 +8326,7 @@ msgstr "Terminal"
 msgid "Terminal could not open; try again"
 msgstr "Terminal could not open; try again"
 
-#: src/pages/ide/terminal.tsx
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Terminal is not available on this computer"
 msgstr "Terminal is not available on this computer"
 
@@ -8357,7 +8366,7 @@ msgstr "That token was not accepted. Check it and try again."
 msgid "The API did not come back. Refresh this page."
 msgstr "The API did not come back. Refresh this page."
 
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "The bot is working — wait or stop it"
 msgstr "The bot is working — wait or stop it"
 
@@ -8407,6 +8416,7 @@ msgstr "Thinking"
 #: src/pages/ide/dialogs.tsx
 #: src/pages/ide/IdePage.tsx
 #: src/pages/ide/terminal.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "This action could not finish; try again."
 msgstr "This action could not finish; try again."
 
