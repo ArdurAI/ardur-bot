@@ -38,7 +38,9 @@ Ardur does not sync with its upstream project automatically. To bring in an upst
 port it on a branch like any other change: use Ardur's names for anything it adds, keep the
 stable internal identifiers (app and bundle ids, database names, storage keys, protocol names,
 the `ARDURBOT_*` variables and the `@ardurbot/*` package scope), and review the diff before it
-lands. See `docs/decisions/ADR-001-fork-and-rename.md`.
+lands. The upstream name appears only in `LICENSE`, `NOTICE` and the dated fork entry in
+`CHANGELOG.md`; `scripts/no-upstream-references.test.ts` fails if it appears anywhere else. See
+`docs/decisions/ADR-001-fork-and-rename.md`.
 
 ## Public repository
 

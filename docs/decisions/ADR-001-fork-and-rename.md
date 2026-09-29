@@ -1,6 +1,6 @@
 # ADR-001: Fork the upstream project, rename fully, track upstream with a script
 
-Status: accepted (2026-09-23)
+Status: accepted (2026-09-23); rename script retired (2026-09-28), see Update
 
 ## Context
 
@@ -34,3 +34,12 @@ Upstream lands roughly 700 commits a month, so it will keep adding things we wan
   path, see ADR-002 when written) live in new files where possible.
 - `LICENSE`, `NOTICE` and the dated `CHANGELOG.md` entry keep the upstream name on
   purpose, for attribution.
+
+## Update (2026-09-28)
+
+Ardur is maintained independently. `scripts/rename-from-upstream.py` is retired;
+it stays in the Git history (added in commit 55fc04a9). Upstream changes are
+ported by hand as `CONTRIBUTING.md` describes, and the stable internal
+identifiers keep their names. `scripts/no-upstream-references.test.ts` fails
+the unit tests if the upstream name or its domains appear outside `LICENSE`,
+`NOTICE` and the dated `CHANGELOG.md` entry.
