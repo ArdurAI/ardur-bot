@@ -189,18 +189,30 @@ async function handle(value) {
     const home = process.env.HERMES_HOME;
     const config = JSON.parse(await readFile(join(home, "config.yaml"), "utf8"));
     const context = await readFile(join(home, "SOUL.md"), "utf8");
-    message(
-      JSON.stringify({
-        homeMatches: home === process.env.HOME,
-        cwdMatches: (await realpath(process.cwd())) === (await realpath(join(home, "workspace"))),
-        parentSecretAbsent: process.env.ARDUR_PARENT_SECRET === undefined,
-        configHasKey: JSON.stringify(config).includes(process.env.ARDUR_HERMES_PROVIDER_KEY),
-        config,
-        env: process.env,
-        context,
-        prompt: value.params.prompt,
-      }),
-    );
+    const report = {
+      homeMatches: home === process.env.HOME,
+      cwdMatches: (await realpath(process.cwd())) === (await realpath(join(home, "workspace"))),
+      parentSecretAbsent: process.env.ARDUR_PARENT_SECRET === undefined,
+      configHasKey: JSON.stringify(config).includes(process.env.ARDUR_HERMES_PROVIDER_KEY),
+      config,
+      env: process.env,
+      context,
+      prompt: value.params.prompt,
+      providerKey: process.env.ARDUR_HERMES_PROVIDER_KEY ?? null,
+      baseUrl: process.env.ARDUR_HERMES_RELAY_URL ?? null,
+    };
+    // Stdout is redacted with whatever key this process was given, so the
+    // unredacted proof has to be a file the parent reads after the turn.
+    if (process.env.ARDUR_HERMES_INSTALL) {
+      writeFileSync(
+        join(process.env.ARDUR_HERMES_INSTALL, "spawn-report.json"),
+        JSON.stringify(report),
+        {
+          mode: 0o600,
+        },
+      );
+    }
+    message(JSON.stringify(report));
     send({ id: value.id, result: { stopReason: "end_turn" } });
     return;
   }

@@ -362,9 +362,10 @@ describe("LocalHermesRuntime", () => {
     expect(broker.revoke).toHaveBeenCalled();
   });
 
-  it("inspects the launch config and ensures relay overrides real key", async () => {
+  it("keeps the real provider key off the spawned Hermes process", async () => {
+    const token = "b".repeat(43);
     const broker = {
-      grant: { id: "123", token: "relay-token-123", expiresAt: 0 },
+      grant: { id: "123", token, expiresAt: Date.now() + 60_000 },
       revoke: vi.fn(),
     };
     const runtime = new LocalHermesRuntime(
@@ -374,10 +375,14 @@ describe("LocalHermesRuntime", () => {
       }),
     );
 
+    vi.stubEnv("ARDUR_PARENT_SECRET", "sentinel-parent");
     const req = request();
-    await import("node:fs/promises").then((m) =>
-      m.writeFile(join(root, "scenario.txt"), "inspect"),
-    );
+    req.model = {
+      ...req.model,
+      apiKey: "sentinel-real-provider-key",
+      baseUrl: "http://127.0.0.1:9/sentinel-real-base",
+    };
+    await writeFile(join(root, "scenario.txt"), "inspect");
     req.prompt = "inspect";
     const context: any = {
       agentInstall: { hostRoot: "something", version: "1" },
@@ -385,18 +390,25 @@ describe("LocalHermesRuntime", () => {
     };
 
     const result = await collect(runtime.run(req, context));
-    const textEvent = result.find((e) => e.type === "text");
-    const data = JSON.parse(textEvent.text);
-
-    // Defect 1: ensure the launch args don't contain real key or real base URL
-    expect(data.configHasKey).toBe(false);
-    expect(data.env.ARDUR_HERMES_RELAY_URL).toMatch(/^http:\/\/127\.0\.0\.1:/);
-    expect(data.env.ARDUR_HERMES_PROVIDER_KEY).toBe("[redacted]");
-
-    // Defect 7: Invariant checks
-    expect(data.homeMatches).toBe(true);
-    expect(data.cwdMatches).toBe(true);
-    expect(data.parentSecretAbsent).toBe(true);
+    expect(result).toContainEqual(expect.objectContaining({ type: "done" }));
+    const report = JSON.parse(await readFile(join(installDir, "spawn-report.json"), "utf8")) as {
+      providerKey: string;
+      baseUrl: string;
+      env: Record<string, string>;
+      config: unknown;
+      homeMatches: boolean;
+      cwdMatches: boolean;
+      parentSecretAbsent: boolean;
+    };
+    const dumped = JSON.stringify({ env: report.env, config: report.config });
+    expect(dumped).not.toContain("sentinel-real-provider-key");
+    expect(dumped).not.toContain("sentinel-real-base");
+    expect(dumped).not.toContain("sentinel-parent");
+    expect(report.providerKey).toBe(token);
+    expect(report.baseUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/v1$/);
+    expect(report.homeMatches).toBe(true);
+    expect(report.cwdMatches).toBe(true);
+    expect(report.parentSecretAbsent).toBe(true);
   });
 
   it("handles provider failure properly as tool failed without exposing key", async () => {
