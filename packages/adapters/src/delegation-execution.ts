@@ -1,6 +1,6 @@
 import type { ConnectorRoute } from "@ardurbot/adapter-kit";
 import { DelegationAuthoritySchema, TaskCardSchema } from "@ardurbot/contracts";
-import { classifyRemoteTool, remotePermissionExpansion } from "@ardurbot/core";
+import { classifyRemoteTool, parseGroupAskKey, remotePermissionExpansion } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import {
   peerTrafficPaused,
@@ -72,6 +72,27 @@ export async function checkDelegationExecution(
   const delegationId = helperDelegationId ?? run.delegationId;
   if (!delegationId) return;
   const row = await prisma.delegation.findUniqueOrThrow({ where: { id: delegationId } });
+  // A member asked by its room coordinator stops when the owner pauses team messages there.
+  if (parseGroupAskKey(row.admissionKey)) {
+    const thread = await prisma.thread.findUnique({
+      where: { id: run.threadId },
+      select: { groupId: true },
+    });
+    if (
+      thread?.groupId &&
+      (await peerTrafficPaused(prisma, {
+        spaceId: run.spaceId,
+        userId: run.userId,
+        groupId: thread.groupId,
+      }))
+    ) {
+      await prisma.run.updateMany({
+        where: { id: run.id, cancelRequestedAt: null },
+        data: { cancelRequestedAt: new Date() },
+      });
+      return "Team messages are paused.";
+    }
+  }
   const card = TaskCardSchema.safeParse(row.card);
   if (card.success && card.data.peerMode === "read-only") {
     if (

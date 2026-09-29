@@ -310,6 +310,24 @@ describe("run workspace checkpoint", () => {
 });
 
 describe("run tool selection", () => {
+  it("offers ask_members only to a group's coordinator", () => {
+    const names = (groupId: string | null, roomCoordinator?: boolean) =>
+      selectBuiltinToolsForRun({
+        graphicalToolsAllowed: false,
+        groupId,
+        trigger: "user",
+        semanticMemoryEnabled: false,
+        messagingChannelRun: false,
+        roomCoordinator,
+      }).map((tool) => tool.name);
+    expect(names("group-1", true)).toEqual(
+      expect.arrayContaining(["ask_members", "handoff_to_bot"]),
+    );
+    expect(names("group-1", false)).not.toContain("ask_members");
+    expect(names("group-1")).not.toContain("ask_members");
+    expect(names(null, true)).not.toContain("ask_members");
+  });
+
   it.each([
     [false, false],
     [false, true],

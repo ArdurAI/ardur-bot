@@ -3,6 +3,7 @@ import {
   type AskMemberOutcome,
   askMemberOutcome,
   askWakeNonce,
+  GROUP_ASK_KEY_PREFIX,
   type GroupAsk,
   groupAskPrefix,
   parseGroupAskKey,
@@ -189,6 +190,35 @@ const cardGoal = (card: unknown) =>
   card && typeof card === "object" && "goal" in card && typeof card.goal === "string"
     ? card.goal
     : "";
+
+/**
+ * Recent asks that have neither woken their coordinator nor settled: one delegation per ask,
+ * for reconciliation to replay after a missed wake or a coordinator that was busy.
+ */
+export async function unsettledGroupAskDelegations(
+  prisma: PrismaClient,
+  since: Date,
+  take: number,
+): Promise<string[]> {
+  const rows = await prisma.delegation.findMany({
+    where: {
+      admissionKey: { startsWith: GROUP_ASK_KEY_PREFIX },
+      coordinatorWokenAt: null,
+      createdAt: { gt: since },
+    },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    take,
+    select: { id: true, admissionKey: true },
+  });
+  const asks = new Set<string>();
+  return rows.flatMap((row) => {
+    const ask = parseGroupAskKey(row.admissionKey);
+    const key = ask ? groupAskPrefix(ask) : undefined;
+    if (!key || asks.has(key)) return [];
+    asks.add(key);
+    return [row.id];
+  });
+}
 
 export type GroupAskResult = {
   id: string;

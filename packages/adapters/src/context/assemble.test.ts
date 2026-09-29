@@ -165,6 +165,22 @@ describe("turn context", () => {
     expect(next.history[0]?.content).toContain("Worker: idle");
     expect(first.snapshot.layers.messages).toBeLessThanOrEqual(600);
   });
+  it("cuts a long teammate directory between members, never partway through one", async () => {
+    const lines = Array.from({ length: 40 }, (_, index) => `- Member ${index}: ${"x".repeat(60)}`);
+    const result = await assembleTurnContext({
+      instructions: "Coordinate.",
+      history: [],
+      message: "What is the status?",
+      teammates: ["Room members.", ...lines].join("\n"),
+      budgets: { messages: 3_000 },
+    });
+    const framed = result.history[0]?.content ?? "";
+    expect(framed.length).toBeLessThanOrEqual(1_000);
+    const body = framed.split("\n").slice(1, -1);
+    expect(body[0]).toBe("Room members.");
+    for (const line of body.slice(1)) expect(line).toMatch(/^- Member \d+: x{60}$/);
+    expect(framed.endsWith("</teammate_directory>")).toBe(true);
+  });
   it("refuses to silently truncate instructions or the new request", async () => {
     await expect(
       assembleTurnContext({ instructions: "x".repeat(64001), history: [], message: "Hello" }),

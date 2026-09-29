@@ -274,3 +274,39 @@ it("records a blocked card when a peer run forges a hidden tool call", async () 
     }),
   );
 });
+it("stops a member asked by its room coordinator once the owner pauses team messages", async () => {
+  const updateMany = vi.fn(async () => ({ count: 1 }));
+  const paused = vi.fn(async () => [{ paused: true, enabled: true }]);
+  const prisma = {
+    run: {
+      findUniqueOrThrow: vi.fn(async () => ({
+        id: "run",
+        taskId: "task",
+        threadId: "room",
+        spaceId: "space",
+        userId: "owner",
+        delegationId: "ask",
+      })),
+      updateMany,
+    },
+    delegationRoot: { findUnique: vi.fn(async () => null) },
+    delegation: {
+      findUniqueOrThrow: vi.fn(async () => ({
+        admissionKey: "group-ask:1:coordinator-run:call:run-bot",
+        status: "running",
+        deadlineAt: new Date(Date.now() + 60_000),
+        usedTokens: 0,
+        reservedTokens: 100,
+      })),
+    },
+    thread: { findUnique: vi.fn(async () => ({ groupId: "group" })) },
+    botCommunicationPolicy: { findMany: paused },
+  } as unknown as PrismaClient;
+  expect(await checkDelegationExecution(prisma, "run")).toBe("Team messages are paused.");
+  expect(updateMany).toHaveBeenCalledWith({
+    where: { id: "run", cancelRequestedAt: null },
+    data: { cancelRequestedAt: expect.any(Date) },
+  });
+  paused.mockResolvedValue([]);
+  expect(await checkDelegationExecution(prisma, "run")).toBeUndefined();
+});
