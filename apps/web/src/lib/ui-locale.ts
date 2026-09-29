@@ -3,6 +3,8 @@ export const UI_LOCALES = ["en", "de", "ko", "tr", "hi", "pt-BR", "zh-CN", "es",
 export type UiLocale = (typeof UI_LOCALES)[number];
 
 export const UI_LOCALE_STORAGE_KEY = "ardurbot.uiLocale";
+/** The language on screen; index.html sets it as `<html lang>` before the first paint. */
+export const RESOLVED_UI_LOCALE_STORAGE_KEY = "ardurbot.resolvedUiLocale";
 
 export const UI_LOCALE_LABELS: Record<UiLocale, string> = {
   en: "English",
@@ -132,5 +134,14 @@ export function persistUiLocale(
     storage.setItem(UI_LOCALE_STORAGE_KEY, locale);
   } catch {
     // Ignore quota / private-mode failures; in-memory locale still applies.
+  }
+}
+
+/** Remember the language on screen, which is not a choice: `persistUiLocale` keeps that. */
+export function persistResolvedUiLocale(locale: UiLocale): void {
+  try {
+    localStorage.setItem(RESOLVED_UI_LOCALE_STORAGE_KEY, locale);
+  } catch {
+    // Storage is optional: without it `<html lang>` waits for the bundle, as before.
   }
 }

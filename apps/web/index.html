@@ -24,6 +24,10 @@
           document.documentElement.dataset.chatFont = ["sans", "serif", "system"].includes(preferences?.chatFont) ? preferences.chatFont : "sans";
           document.documentElement.dataset.motion = preferences?.motion === "reduced" ? "reduced" : "system";
         } catch {}
+        try {
+          const language = localStorage.getItem("ardurbot.resolvedUiLocale");
+          if (["en", "de", "ko", "tr", "hi", "pt-BR", "zh-CN", "es", "ru"].includes(language)) document.documentElement.lang = language;
+        } catch {}
         const systemLight =
           typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: light)").matches;
         const theme = preference === "system" ? (systemLight ? "light" : "dark") : preference;

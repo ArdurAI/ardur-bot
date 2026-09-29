@@ -1,6 +1,7 @@
 import { i18n } from "@lingui/core";
 import { applyUiDirection } from "./apply-ui-direction";
-import { persistUiLocale, resolveUiLocale, type UiLocale } from "./ui-locale";
+import type { UiLocale } from "./ui-locale";
+import { persistResolvedUiLocale, persistUiLocale, resolveUiLocale } from "./ui-locale";
 
 export { i18n };
 
@@ -22,12 +23,15 @@ const defaultCatalogLoaders: Record<UiLocale, CatalogLoader> = {
 
 let catalogLoaders: Record<UiLocale, CatalogLoader> = defaultCatalogLoaders;
 let activeLocale: UiLocale | null = null;
+// What the latest finished activation was asked for. After a fallback it is not `activeLocale`.
+let settledLocale: UiLocale | null = null;
 let activationGeneration = 0;
 
 /** Test-only: replace catalog loaders (restore with `null`). */
 export function setCatalogLoadersForTests(loaders: Record<UiLocale, CatalogLoader> | null): void {
   catalogLoaders = loaders ?? defaultCatalogLoaders;
   activeLocale = null;
+  settledLocale = null;
   activationGeneration = 0;
 }
 
@@ -35,16 +39,27 @@ export function getActiveUiLocale(): UiLocale {
   return activeLocale ?? resolveUiLocale();
 }
 
+/** Whether the screen already shows `locale`, or the English it fell back to. */
+export function isUiLocaleSettled(locale: UiLocale): boolean {
+  return settledLocale === locale && activeLocale !== null && i18n.locale === activeLocale;
+}
+
 async function loadCatalog(locale: UiLocale): Promise<CatalogMessages> {
   const { messages } = await catalogLoaders[locale]();
   return messages;
 }
 
-function activateLoaded(locale: UiLocale, messages: CatalogMessages): UiLocale {
+function activateLoaded(
+  requested: UiLocale,
+  locale: UiLocale,
+  messages: CatalogMessages,
+): UiLocale {
   i18n.load(locale, messages);
   i18n.activate(locale);
   activeLocale = locale;
+  settledLocale = requested;
   applyUiDirection(locale);
+  persistResolvedUiLocale(locale);
   return locale;
 }
 
@@ -57,25 +72,28 @@ export async function activateUiLocale(locale: UiLocale): Promise<UiLocale> {
   const generation = ++activationGeneration;
   const isCurrent = () => generation === activationGeneration;
 
-  if (activeLocale === locale && i18n.locale === locale) return locale;
+  if (activeLocale === locale && i18n.locale === locale) {
+    settledLocale = locale;
+    return locale;
+  }
 
   try {
     const messages = await loadCatalog(locale);
     if (!isCurrent()) return getActiveUiLocale();
-    return activateLoaded(locale, messages);
+    return activateLoaded(locale, locale, messages);
   } catch {
     if (!isCurrent()) return getActiveUiLocale();
     if (locale !== "en") {
       try {
         const messages = await loadCatalog("en");
         if (!isCurrent()) return getActiveUiLocale();
-        return activateLoaded("en", messages);
+        return activateLoaded(locale, "en", messages);
       } catch {
         // Continue to empty English below.
       }
     }
     if (!isCurrent()) return getActiveUiLocale();
-    return activateLoaded("en", {});
+    return activateLoaded(locale, "en", {});
   }
 }
 
