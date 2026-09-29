@@ -17,7 +17,9 @@ import { useUnsavedChanges } from "./unsaved";
 
 const desktop = vi.hoisted(() => ({ setUnsavedChanges: vi.fn().mockResolvedValue(undefined) }));
 const bridge = vi.hoisted(() => ({ current: undefined as { window?: unknown } | undefined }));
-vi.mock("../../lib/desktop", () => ({ desktopBridge: () => bridge.current ?? { window: desktop } }));
+vi.mock("../../lib/desktop", () => ({
+  desktopBridge: () => bridge.current ?? { window: desktop },
+}));
 
 let host: HTMLDivElement, renderer: ReturnType<typeof createRoot>, navigate: NavigateFunction;
 let navigator: Navigator;
