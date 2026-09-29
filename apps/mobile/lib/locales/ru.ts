@@ -76,6 +76,7 @@ export const RU_MESSAGES: Record<string, string> = {
   "Antigravity could not run this turn: {reason}.":
     "Antigravity не смог выполнить этот запрос: {reason}.",
   "Cost unavailable": "Стоимость недоступна",
+  "Partially reported": "Частично зафиксировано",
   "Antigravity is installed (version {version})": "Antigravity установлен (версия {version})",
   "Sign-in unknown until the first run": "Статус входа неизвестен до первого запуска",
   "Antigravity is not installed on this computer. Install it and sign in there, then check again.":
@@ -1164,6 +1165,12 @@ export const RU_MESSAGES: Record<string, string> = {
   "Learning review is off": "Проверка обучения выключена",
   "Learning review is on": "Проверка обучения включена",
   "Reviewer: {model}": "Проверяющая модель: {model}",
+  "Learning review": "Проверка обучения",
+  "Learning reviewer": "Проверяющая модель обучения",
+  "Thinking: {level}": "Рассуждение: {level}",
+  "Connect a model": "Подключить модель",
+  "Reviews use this connection and may incur model charges.":
+    "Проверки используют это подключение, за вызовы модели может взиматься плата.",
   Enable: "Включить",
   "Filed by {name}": "Создал бот {name}",
   "No reviewer model yet.": "Проверяющая модель ещё не выбрана.",
@@ -1278,4 +1285,54 @@ export const RU_MESSAGES: Record<string, string> = {
   "Could not save group model.": "Не удалось сохранить модель группы.",
   "This member's model changed. Reload the group.":
     "Модель этого участника изменилась. Перезагрузите группу.",
+  "Time limit (seconds)": "Лимит времени (секунды)",
+  "Context limit (KiB)": "Лимит контекста (КиБ)",
+  "Enter valid JSON.": "Введите корректный JSON.",
+  "Remove the duplicate field.": "Удалите повторяющееся поле.",
+  "Configuration must be 16 KiB or smaller.": "Конфигурация должна быть не больше 16 КиБ.",
+  "This configuration is too complex.": "Эта конфигурация слишком сложная.",
+  "This configuration version is not supported.": "Эта версия конфигурации не поддерживается.",
+  "This field is not supported.": "Это поле не поддерживается.",
+  "Ardur sets the model and thinking level. Change them in bot settings.":
+    "Ardur задаёт модель и уровень размышлений. Измените их в настройках бота.",
+  "Use Ardur Connections for provider settings.":
+    "Используйте Ardur «Подключения» для настроек провайдера.",
+  "Use Ardur settings for tools, integrations, MCP servers, skills, and plugins.":
+    "Используйте настройки Ardur для инструментов, интеграций, MCP-серверов, навыков и плагинов.",
+  "Ardur manages paths, hooks, permissions, and network access.":
+    "Ardur управляет путями, хуками, разрешениями и доступом к сети.",
+  "Runtime settings cannot install or load code.":
+    "Настройки среды выполнения не могут устанавливать или загружать код.",
+  "Use Ardur Learning settings.": "Используйте настройки обучения Ardur.",
+  "Native child agents are not available with Hermes.": "Вложенные агенты недоступны в Hermes.",
+  "Native compression is not available with Hermes.": "Встроенное сжатие недоступно в Hermes.",
+  "Use a whole number from 1 to 64.": "Введите целое число от 1 до 64.",
+  "Use whole seconds.": "Указывайте целые секунды.",
+  "Use whole KiB.": "Указывайте целые КиБ.",
+  "Choose Trim older context or Stop the run.":
+    "Выберите «Сокращать старый контекст» или «Остановить запуск».",
+  "Use a whole number from 1 to 600.": "Введите целое число от 1 до 600.",
+  "Use a whole number from 4 to 64.": "Введите целое число от 4 до 64.",
+  "Use a whole number from 1 to 3.": "Введите целое число от 1 до 3.",
+  "Bot settings changed. Reload before saving.":
+    "Настройки бота изменились. Перезагрузите перед сохранением.",
+  "Could not preview the configuration. Try again.":
+    "Не удалось показать конфигурацию. Попробуйте ещё раз.",
+  "Configuration (JSON)": "Конфигурация (JSON)",
+  "Effective configuration": "Действующая конфигурация",
+  "Your settings": "Ваши настройки",
+  "Ardur manages": "Ardur управляет",
+  "Model, thinking, connections, tools, and permissions come from Ardur.":
+    "Модель, размышления, подключения, инструменты и разрешения задаются Ardur.",
+  "When context is full": "Когда контекст заполнен",
+  "Trim older context": "Сокращать старый контекст",
+  "Stop the run": "Остановить запуск",
+  "API attempts": "Попытки API",
+  "Child agents": "Вложенные агенты",
+  "Unavailable with Hermes.": "Недоступно в Hermes.",
+  "Native compression": "Встроенное сжатие",
+  "Reset to defaults": "Сбросить к стандартным",
+  "Fix the configuration JSON to edit these settings.":
+    "Исправьте JSON конфигурации, чтобы изменять эти настройки.",
+  Reload: "Перезагрузить",
 };

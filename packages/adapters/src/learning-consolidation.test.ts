@@ -136,6 +136,7 @@ it("uses a model-only bounded call, shares reservations and records every source
   expect(f.execute).toHaveBeenCalledWith(
     expect.objectContaining({
       tools: "none",
+      singleRequest: true,
       history: [],
       model: expect.objectContaining({ id: "local", maxTokens: 2000 }),
     }),

@@ -34,7 +34,7 @@ vi.mock("expo-secure-store", () => ({
 }));
 const translate = (text: string) => text;
 vi.mock("./i18n", () => ({ useI18n: () => ({ t: translate }) }));
-vi.mock("./native", () => ({ useMobileTokens: () => ({}) }));
+vi.mock("./native", () => ({ useMobileTokens: () => ({}), useResolvedAppearance: () => "light" }));
 vi.mock("expo-router", () => ({
   Stack: { Screen: () => null },
   Redirect: ({ href }: { href: unknown }) => h("output", null, JSON.stringify(href)),

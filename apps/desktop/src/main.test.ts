@@ -62,6 +62,11 @@ function fixture() {
     setupError: null,
     desktopSystem: undefined,
     desktopTray: null,
+    dockBadge: { attach: vi.fn(), sync: vi.fn() },
+    // The shortcut menu follows the active window; the real menu needs Electron, so stub it here.
+    Menu: { getApplicationMenu: () => null },
+    watchAppShortcutMenu: vi.fn(),
+    syncAppShortcutMenu: vi.fn(),
     quitting: false,
     warmWindowTimer: undefined,
     clearTimeout: vi.fn(),
@@ -361,6 +366,7 @@ describe("main window host lifecycle", () => {
   it("keeps the reactivated host running when reconnect destroys the previous window", async () => {
     const f = fixture();
     expect(await f.openAppOnce(url)).toBe(true);
+    expect(f.dockBadge.attach).toHaveBeenCalledOnce();
     f.commitPendingAppSwitch();
     const previous = f.mainWindow!;
     expect(await f.openAppOnce(url)).toBe(true);
@@ -382,6 +388,7 @@ describe("main window host lifecycle", () => {
     await f.openAppOnce(url);
     const replacement = f.mainWindow!;
     expect(await f.abandonPendingAppSwitch(null, url)).toBe("restored");
+    expect(f.dockBadge.sync).toHaveBeenCalled();
     expect(replacement.isDestroyed()).toBe(true);
     expect(f.mainWindow).toBe(previous);
     expect(f.stop).not.toHaveBeenCalled();
@@ -396,7 +403,18 @@ describe("main window host lifecycle", () => {
     f.loadAppUrl.mockRejectedValueOnce(new Error("offline"));
     expect(await f.openAppOnce(url)).toBe(false);
     expect(f.mainWindow).toBe(previous);
+    expect(f.dockBadge.sync).toHaveBeenCalled();
     expect(f.stop).not.toHaveBeenCalled();
+  });
+  it("attaches the dock count to the window server before that server is published", async () => {
+    const f = fixture();
+    let published: string | null = "unset";
+    f.loadAppUrl.mockImplementationOnce(async () => {
+      published = f.currentTargetUrl;
+    });
+    await f.openAppOnce(url);
+    expect(f.dockBadge.attach).toHaveBeenCalledWith(expect.anything(), url);
+    expect(published).toBeNull();
   });
   it("reactivates the restored server before completing a failed setup save", async () => {
     const f = fixture();

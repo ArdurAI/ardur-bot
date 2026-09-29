@@ -19,6 +19,11 @@
       "development": "./src/node/load-root-env.ts",
       "default": "./src/node/load-root-env.ts"
     },
+    "./node/service-secrets": {
+      "types": "./src/node/service-secrets.ts",
+      "development": "./src/node/service-secrets.ts",
+      "default": "./src/node/service-secrets.ts"
+    },
     "./node/approval-effect-key": {
       "types": "./src/approval-effect-key.ts",
       "development": "./src/approval-effect-key.ts",

@@ -376,6 +376,99 @@ describe("Codex app-server protocol", () => {
       },
     });
   });
+  it("names the limitation and keeps totals null when a turn is interrupted before usage", async () => {
+    const f = fixture("success", {
+      duringTurn: [
+        {
+          method: "item/agentMessage/delta",
+          params: { threadId: "thread-native", delta: "hello" },
+        },
+      ],
+    });
+    const controller = new AbortController();
+    const events: AgentRuntimeEvent[] = [];
+    for await (const event of f.runtime.run(f.request, { signal: controller.signal })) {
+      events.push(event);
+      if (event.type === "text") {
+        controller.abort();
+        await f.runtime.abort(f.request.runId);
+      }
+    }
+    const final = events.filter((event) => event.type === "usage").at(-1);
+    expect(final?.request?.categories).toEqual({
+      logicalInput: null,
+      uncachedInput: null,
+      cacheReadInput: null,
+      cacheWriteInput: null,
+      output: null,
+      reasoning: null,
+    });
+    expect(final?.request?.collection).toMatchObject({
+      outcome: "cancelled",
+      availability: "unavailable",
+      limitations: expect.arrayContaining(["late-usage-unverified"]),
+    });
+  });
+  it("keeps partial measured spend with a named limitation when interrupted mid-turn", async () => {
+    const f = fixture("success", {
+      duringTurn: [
+        usage(30, 8),
+        {
+          method: "item/agentMessage/delta",
+          params: { threadId: "thread-native", delta: "hello" },
+        },
+      ],
+    });
+    const controller = new AbortController();
+    const events: AgentRuntimeEvent[] = [];
+    for await (const event of f.runtime.run(f.request, { signal: controller.signal })) {
+      events.push(event);
+      if (event.type === "text") {
+        controller.abort();
+        await f.runtime.abort(f.request.runId);
+      }
+    }
+    const final = events.filter((event) => event.type === "usage").at(-1);
+    expect(final?.request?.categories).toMatchObject({ logicalInput: 30, output: 8 });
+    expect(final?.request?.collection).toMatchObject({
+      outcome: "cancelled",
+      limitations: expect.arrayContaining(["late-usage-unverified"]),
+    });
+  });
+  it("records a failed completed turn with its outcome and measured totals", async () => {
+    const f = fixture("success", {
+      duringTurn: [
+        usage(30, 8),
+        {
+          method: "turn/completed",
+          params: { threadId: "thread-native", turn: { id: "turn-native", status: "failed" } },
+        },
+      ],
+    });
+    const events: AgentRuntimeEvent[] = [];
+    await expect(
+      (async () => {
+        for await (const event of f.runtime.run(f.request)) events.push(event);
+      })(),
+    ).rejects.toMatchObject({ problem: { code: "runtime-unavailable" } });
+    const final = events.filter((event) => event.type === "usage").at(-1);
+    expect(final?.request?.categories).toMatchObject({ logicalInput: 30, output: 8 });
+    expect(final?.request?.collection?.outcome).toBe("failed");
+  });
+  it("names the limitation when a reroute interrupts the turn", async () => {
+    const f = fixture("reroute");
+    const events: AgentRuntimeEvent[] = [];
+    await expect(
+      (async () => {
+        for await (const event of f.runtime.run(f.request)) events.push(event);
+      })(),
+    ).rejects.toMatchObject({ problem: { code: "pin-model-unknown" } });
+    const final = events.filter((event) => event.type === "usage").at(-1);
+    expect(final?.request?.collection).toMatchObject({
+      outcome: "cancelled",
+      limitations: expect.arrayContaining(["late-usage-unverified"]),
+    });
+  });
   it("initializes ardur-bot, keeps the exact model and effort, records the session and disables other MCPs", async () => {
     const f = fixture();
     f.request.nativeCwd = "/safe-workspace";

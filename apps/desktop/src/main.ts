@@ -18,6 +18,12 @@ import {
   session,
   shell,
 } from "electron";
+import {
+  applicationMenuTemplate,
+  applyAppShortcutMenu,
+  runAppShortcut,
+  watchAppShortcutMenu,
+} from "./app-menu.js";
 import type { ElectronAutoUpdater } from "./auto-update.js";
 import { DesktopUpdateController, LAUNCH_CHECK_DELAY_MS } from "./auto-update.js";
 import { BootSnapshotStore } from "./boot-snapshot.js";
@@ -31,6 +37,7 @@ import {
   sqlMigrationsReady,
 } from "./db-migrate.js";
 import { installDevices } from "./devices-ipc.js";
+import { installDockBadge } from "./dock-badge.js";
 import { DOCKER_INSTALL_LINKS, isDesktopSetupLink, runDocker } from "./docker-cli.js";
 import { installCustomizationIpc } from "./extensions/ipc.js";
 import { accountGuidedSteps } from "./guided-setup/account.js";
@@ -139,7 +146,8 @@ const DESKTOP_STACK_PROBE_PATH = "/.well-known/ardurbot-desktop-stack";
 const DESKTOP_STACK_TOKEN_HEADER = "x-ardurbot-desktop-stack-token";
 let desktopTray: ReturnType<typeof systemTray> = null;
 let mainWindow: BrowserWindow | null = null;
-/** The theme and language the app page last showed; new main windows open in that colour. */
+let dockBadge: ReturnType<typeof installDockBadge> | null = null;
+/** The theme the app page last showed; new main windows open in that colour. */
 let bootSnapshot: BootSnapshotStore | undefined;
 const unsavedFiles = new UnsavedFiles<BrowserWindow>();
 const appWindowTargets = new WeakMap<BrowserWindow, string>();
@@ -378,6 +386,11 @@ function createWindow(url: string, partition: string | null) {
     },
   });
   mainWindow = win;
+  watchAppShortcutMenu(
+    win.webContents,
+    () => Menu.getApplicationMenu(),
+    () => mainWindow === win,
+  );
   appWindowTargets.set(win, url);
   desktopSystem?.attachWindow(win, url);
   const targetOrigin = safeOrigin(url);
@@ -476,6 +489,7 @@ function createWindow(url: string, partition: string | null) {
       clearTimeout(warmWindowTimer);
       mainWindow = null;
       hostService?.windowClosed();
+      dockBadge?.sync();
     }
   });
   markOnce("rk:main:window-created");
@@ -486,6 +500,7 @@ function createWindow(url: string, partition: string | null) {
   win.webContents.once("dom-ready", () => markOnce("rk:main:dom-ready"));
   win.webContents.once("did-finish-load", () => markOnce("rk:main:did-finish-load"));
   win.webContents.once("did-stop-loading", () => markOnce("rk:main:did-stop-loading"));
+  dockBadge?.attach(win.webContents, url);
   markOnce("rk:main:load-url-start");
   const loaded = loadAppUrl(win, url).then(
     () => markOnce("rk:main:load-url-resolved"),
@@ -958,12 +973,17 @@ async function showLocalSettings() {
   }
 }
 
+function syncAppShortcutMenu(win: BrowserWindow) {
+  if (win.isDestroyed()) return;
+  const menu = Menu.getApplicationMenu();
+  if (menu) applyAppShortcutMenu(menu, win.webContents.getURL());
+}
+
 function installApplicationMenu() {
   if (process.platform === "darwin") app.setAboutPanelOptions({ applicationName: "Ardur" });
   const localSettings: Electron.MenuItemConstructorOptions = {
     id: "local-server-settings",
     label: "Local Server Settings…",
-    accelerator: "CmdOrCtrl+,",
     click: () => {
       void showLocalSettings();
     },
@@ -984,42 +1004,11 @@ function installApplicationMenu() {
       else void localMode.stop();
     },
   };
-  const template: Electron.MenuItemConstructorOptions[] =
-    process.platform === "darwin"
-      ? [
-          {
-            label: "Ardur",
-            submenu: [
-              { role: "about", label: "About Ardur" },
-              { type: "separator" },
-              localSettings,
-              changeServer,
-              stopStack,
-              { type: "separator" },
-              { role: "hide", label: "Hide Ardur" },
-              { role: "hideOthers" },
-              { role: "unhide" },
-              { type: "separator" },
-              { role: "quit", label: "Quit Ardur" },
-            ],
-          },
-          { role: "editMenu" },
-          { role: "windowMenu" },
-        ]
-      : [
-          {
-            label: "File",
-            submenu: [
-              localSettings,
-              changeServer,
-              stopStack,
-              { type: "separator" },
-              { role: "quit" },
-            ],
-          },
-          { role: "editMenu" },
-          { role: "windowMenu" },
-        ];
+  const template = applicationMenuTemplate(
+    process.platform,
+    { localSettings, changeServer, stopStack },
+    (id) => runAppShortcut(mainWindow, id, BrowserWindow.getFocusedWindow()),
+  );
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
@@ -1168,7 +1157,11 @@ async function openAppOnce(targetUrl: string, resolved?: ResolvedSessionTarget) 
   } catch (error) {
     pendingPreviousWindow = null;
     // Keep the previous app window so Cancel / close can restore it.
-    if (previous !== null && !previous.isDestroyed()) mainWindow = previous;
+    if (previous !== null && !previous.isDestroyed()) {
+      mainWindow = previous;
+      syncAppShortcutMenu(previous);
+    }
+    dockBadge?.sync();
     // Show the setup window BEFORE destroying the failed one: on Windows/Linux,
     // destroying the last window fires "window-all-closed" -> app.quit() before
     // showSetupWindow() runs, so the app silently exits instead of showing this error.
@@ -1198,6 +1191,8 @@ async function abandonPendingAppSwitch(
   if (previous !== null && !previous.isDestroyed()) {
     const failed = mainWindow;
     mainWindow = previous;
+    syncAppShortcutMenu(previous);
+    dockBadge?.sync();
     if (failed !== null && !failed.isDestroyed() && failed !== previous) failed.destroy();
     currentSetup = previousSetup;
     currentTargetUrl = previousUrl;
@@ -1280,6 +1275,7 @@ async function recoverFromCrashedSave(
     mainWindow = null;
     currentSetup = previousSetup;
     currentTargetUrl = previousUrl;
+    dockBadge?.sync();
   }
   const message =
     previousSetup !== null
@@ -1423,6 +1419,7 @@ app.whenReady().then(async () => {
   if (initialLink) pendingIntegrationReturn = integrationReturnId(initialLink);
   installCustomizationIpc({ window: () => mainWindow, target: () => currentTargetUrl });
   installDesktopNotifications({ window: () => mainWindow, target: () => currentTargetUrl });
+  dockBadge = installDockBadge({ window: () => mainWindow, tray: () => desktopTray });
   const userDataDir = app.getPath("userData");
   hostService = installHostService({
     window: () => mainWindow,
@@ -1979,6 +1976,7 @@ app.whenReady().then(async () => {
     desktopTray = systemTray(desktopTray, enabled, () => {
       app.emit("activate");
     });
+    dockBadge?.sync();
   };
   desktopSystem = await installSystemRuntime({
     window: () => mainWindow,

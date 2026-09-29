@@ -34,8 +34,10 @@ body,
   font-family: var(--chat-font-system);
 }
 
-/* Search removes a group's chrome when all of its registered rows are hidden. */
-[data-settings-group]:not(:has([data-settings-row]:not([hidden]))) {
+/* Settings search removes a group's chrome when all of its registered rows are hidden.
+   Scoped to the settings overlay: card groups without searchable rows (like the bot
+   panel's) must always stay visible. */
+[data-settings-section] [data-settings-group]:not(:has([data-settings-row]:not([hidden]))) {
   display: none;
 }
 

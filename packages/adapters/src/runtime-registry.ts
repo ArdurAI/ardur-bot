@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import type { AdapterContext, AgentRunRequest, AgentRuntime } from "@ardurbot/adapter-kit";
 import type {
   RuntimeAvailability,
@@ -105,6 +104,29 @@ export class RuntimeRegistry {
 }
 
 import { LocalHermesRuntime } from "./runtimes/local-hermes-runtime.js";
+/** A runtime for a one-off call outside a run, with the request fields it must run with. */
+export type DetachedRuntime = {
+  runtime: AgentRuntime;
+  request: Pick<AgentRunRequest, "nativeCwd" | "controlledComparison">;
+};
+
+/**
+ * Isolation for a one-off native call outside a run, such as a learning review. Codex
+ * and Claude Code run as in a controlled comparison, without the bot folder's
+ * instructions, settings, skills or saved memories. Antigravity cannot isolate a turn
+ * and refuses to start without the bot's host folder.
+ */
+export function detachedRuntimeRequest(
+  pin: RuntimePin,
+  computer: { kind: string; providerRef: string | null } | null | undefined,
+): DetachedRuntime["request"] {
+  if (pin.runtimeKind === "pi") return {};
+  if (pin.runtimeKind === "antigravity")
+    return {
+      nativeCwd: computer?.kind === "desktop" ? (computer.providerRef ?? undefined) : undefined,
+    };
+  return { controlledComparison: true };
+}
 
 export function createRuntimeRegistry(
   pi: AgentRuntime,
@@ -179,29 +201,51 @@ export async function nativeRuntimeAvailability(
         reason: "Hermes isn't available on Windows yet.",
       };
     }
-    const { localHermesInstallCandidate, probeHermesInstall } = await import(
-      "@ardurbot/host-runtime/runtimes/hermes-install"
-    );
-    const install = localHermesInstallCandidate();
-    if (!install || !existsSync(install)) {
-      return {
-        runtimeKind: "hermes",
-        available: false,
-        models: [],
-        reason: "Hermes is not installed on this computer.",
-      };
+    const {
+      hermesInstallProgress,
+      localHermesInstallCandidate,
+      localHermesRoot,
+      probeHermesInstall,
+    } = await import("@ardurbot/host-runtime/runtimes/hermes-install");
+    const candidate = localHermesInstallCandidate();
+    // An explicit install belongs to the operator, so a failed check never offers reinstall.
+    const managed = !process.env.ARDUR_HERMES_INSTALL;
+    const progress = hermesInstallProgress(localHermesRoot());
+    let available = false;
+    if (candidate) {
+      try {
+        probeHermesInstall(candidate);
+        available = true;
+      } catch {
+        available = false;
+      }
     }
-    try {
-      probeHermesInstall(install);
-      return { runtimeKind: "hermes", available: true, models: [] };
-    } catch {
-      return {
-        runtimeKind: "hermes",
-        available: false,
-        models: [],
-        reason: "The Hermes install on this computer failed its safety check.",
-      };
-    }
+    const install = available
+      ? progress?.state === "ready"
+        ? { state: "ready" as const }
+        : undefined
+      : !managed
+        ? undefined
+        : progress?.state === "installing"
+          ? progress
+          : progress
+            ? { state: "failed" as const }
+            : candidate
+              ? { state: "absent" as const }
+              : undefined;
+    return {
+      runtimeKind: "hermes",
+      available,
+      models: [],
+      ...(!available
+        ? {
+            reason: candidate
+              ? "The Hermes install on this computer failed its safety check."
+              : "Hermes is not installed on this computer.",
+          }
+        : {}),
+      ...(install ? { install } : {}),
+    };
   }
   return kind === "claude-code"
     ? probeClaude()

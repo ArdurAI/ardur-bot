@@ -1086,3 +1086,127 @@ it("only trusts a message the server actually sent, and falls back for a transpo
   expect(actionMessage(new Error("rpc learning/reject failed"), fallback)).toBe(fallback);
   expect(actionMessage("not an error", fallback)).toBe(fallback);
 });
+
+import type { ThinkingLevel } from "@ardurbot/contracts";
+import { reviewerMenuOptions, setReviewerPin, thinkingMenuOptions } from "./learning.js";
+
+it("reviewerMenuOptions returns connect a model if none", () => {
+  const options = reviewerMenuOptions(
+    [],
+    [],
+    (k) => k,
+    () => {},
+  );
+  expect(options[0]?.text).toBe("Connect a model");
+});
+
+it("decodes a rendered connection key instead of splitting on colons", () => {
+  let chosen: { provider: string; modelId: string; credentialId: string } | null = null;
+  const options = reviewerMenuOptions(
+    [
+      {
+        provider: "openai",
+        id: "reviewer",
+        label: "Reviewer",
+        billing: "usage",
+      },
+    ],
+    [{ id: "cred", provider: "openai", label: "OpenAI", hasKey: true, isDefault: true }],
+    (key) => key,
+    (pin) => {
+      chosen = pin;
+    },
+  );
+  options[0]?.onPress();
+  expect(chosen).toEqual({
+    runtimeKind: "pi",
+    provider: "openai",
+    modelId: "reviewer",
+    credentialId: "cred",
+  });
+});
+
+it("keeps a Hermes connection on Hermes instead of the built-in runtime", () => {
+  let chosen: { runtimeKind: string; provider: string; modelId: string } | null = null;
+  const options = reviewerMenuOptions(
+    [
+      { provider: "openai-compatible", id: "local-model", label: "Local", billing: "usage" },
+      { provider: "openai", id: "reviewer", label: "Reviewer", billing: "usage" },
+    ],
+    [
+      {
+        id: "local",
+        provider: "openai-compatible",
+        label: "Local",
+        hasKey: true,
+        isDefault: false,
+      },
+      { id: "cred", provider: "openai", label: "OpenAI", hasKey: true, isDefault: true },
+    ],
+    (key) => key,
+    (pin) => {
+      chosen = pin;
+    },
+    "hermes",
+  );
+  expect(options.map((option) => option.text)).toEqual(["openai-compatible · Local"]);
+  options[0]?.onPress();
+  expect(chosen).toEqual({
+    runtimeKind: "hermes",
+    provider: "openai-compatible",
+    modelId: "local-model",
+    credentialId: "local",
+  });
+});
+
+it("thinkingMenuOptions labels every level through the translator", () => {
+  const levels: ThinkingLevel[] = ["low", "medium", "high"];
+  const options = thinkingMenuOptions(
+    levels,
+    false,
+    (k) => k,
+    () => {},
+  );
+  expect(options.map((option) => option.text)).toEqual(["Low", "Medium", "High"]);
+});
+
+it("thinkingMenuOptions renders translated effort labels", () => {
+  const levels: ThinkingLevel[] = ["low", "medium", "high"];
+  const translate = (key: string) => RU_MESSAGES[key] ?? key;
+  const options = thinkingMenuOptions(levels, false, translate, () => {});
+  expect(options.map((option) => option.text)).toEqual(["Низкий", "Средний", "Высокий"]);
+});
+
+it("catalogs the learning reviewer strings in Russian and Chinese", () => {
+  for (const messages of [RU_MESSAGES, ZH_MESSAGES]) {
+    for (const key of [
+      "Learning review",
+      "Learning reviewer",
+      "Thinking: {level}",
+      "Connect a model",
+      "Reviews use this connection and may incur model charges.",
+    ]) {
+      expect(messages[key], key).toBeTruthy();
+    }
+  }
+});
+
+it("setReviewerPin calls rpc", async () => {
+  request.mockResolvedValueOnce({
+    enabled: true,
+    consolidationEnabled: false,
+    reviewerPin: null,
+    budgets: {},
+    destination: null,
+    canConfigure: true,
+  });
+
+  await setReviewerPin(1, {
+    runtimeKind: "pi",
+    provider: "p1",
+    modelId: "m1",
+    credentialId: "c1",
+    effort: null,
+  });
+  expect(request).toHaveBeenCalledWith("learning/setReviewer", expect.any(Object));
+});

@@ -225,12 +225,21 @@ export async function normalizeModelPinUpdate(
   };
 }
 
+/** A validated choice with every required field bound: the shape setReviewer accepts. */
+export type ValidatedModelPinChoice = {
+  runtimeKind: RuntimeKind;
+  provider: string;
+  modelId: string;
+  credentialId: string;
+  effort: string | null;
+};
+
 /** Share the bot editor's catalog, credential, custom endpoint, effort and native checks. */
 export async function validateModelPinSelection(
   deps: RouterDeps,
   actor: Actor,
   choice: Omit<RuntimePin, "revision">,
-): Promise<Omit<RuntimePin, "revision">> {
+): Promise<ValidatedModelPinChoice> {
   const checked = RuntimePinSchema.omit({ revision: true }).parse(choice);
   if (
     !checked.provider ||

@@ -43,6 +43,7 @@ describe("desktop preload bridge", () => {
       "boot",
       "customization",
       "devices",
+      "dock",
       "host",
       "integrations",
       "localSettings",
@@ -50,6 +51,7 @@ describe("desktop preload bridge", () => {
       "notifications",
       "oauth",
       "platform",
+      "shortcuts",
       "storage",
       "system",
       "update",
@@ -100,6 +102,8 @@ describe("desktop preload bridge", () => {
       "desktop.memoryFolders.select",
     ]);
     expect(invoke).toHaveBeenCalledWith("desktop.memoryFolders.select", "space-fixture");
+    await bridge.dock?.setWaitingCount(2);
+    expect(invoke).toHaveBeenCalledWith("desktop.dock.waiting", 2);
   });
 
   it("keeps setup off the app bridge so a connected server cannot re-point the app", () => {
@@ -109,6 +113,7 @@ describe("desktop preload bridge", () => {
       "boot",
       "customization",
       "devices",
+      "dock",
       "host",
       "integrations",
       "localSettings",
@@ -116,6 +121,7 @@ describe("desktop preload bridge", () => {
       "notifications",
       "oauth",
       "platform",
+      "shortcuts",
       "storage",
       "system",
       "update",
@@ -150,6 +156,25 @@ describe("desktop preload bridge", () => {
 
     unsubscribe();
     expect(off).toHaveBeenCalledWith("desktop.oauth.callback", expect.any(Function));
+  });
+  it("passes desktop menu shortcut ids to the page without the IPC event", () => {
+    const listeners: Array<(event: unknown, id: unknown) => void> = [];
+    const on = vi.fn((_channel: string, handler: (event: unknown, id: unknown) => void) => {
+      listeners.push(handler);
+    });
+    const off = vi.fn();
+    const { exposeInMainWorld } = runPreload("preload.cjs", { on, off });
+    const [, bridge] = exposeInMainWorld.mock.calls[0] as [string, ArdurBotDesktop];
+    const received: unknown[] = [];
+    const unsubscribe = bridge.shortcuts!.onRun((id) => received.push(id));
+
+    expect(on).toHaveBeenCalledWith("desktop.shortcuts.run", expect.any(Function));
+    listeners[0]?.({ sender: "ipc-event" }, "newBot");
+    listeners[0]?.({ sender: "ipc-event" }, { id: "newBot" });
+    expect(received).toEqual(["newBot"]);
+
+    unsubscribe();
+    expect(off).toHaveBeenCalledWith("desktop.shortcuts.run", listeners[0]);
   });
   it("exposes fixed customization operations and resolves dropped files inside preload", async () => {
     const { invoke, exposeInMainWorld } = runPreload("preload.cjs");

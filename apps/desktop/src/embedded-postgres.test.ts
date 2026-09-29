@@ -5,6 +5,7 @@ import type { Server } from "node:net";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { loadServiceSecrets } from "@ardurbot/core/node/service-secrets";
 import { applySqlMigrationsToDatabase, ensureApplicationDatabase } from "@ardurbot/db/migrate";
 import { Client } from "pg";
 import { afterEach, describe, expect, it } from "vitest";
@@ -240,8 +241,15 @@ describe.skipIf(skipReason !== null)("embedded Postgres", () => {
     expect(await readdir(systemTemp)).toEqual([]);
     expect((await readdir(userData)).filter((name) => name.startsWith("initdb-"))).toEqual([]);
 
-    const databaseUrl = envs[0]?.DATABASE_URL ?? "";
+    // The services start from exactly this environment: a passwordless DATABASE_URL
+    // plus the guarded secrets file. Join them the way the service entry point does,
+    // on a copy that is never written back onto the spawned environment.
+    const environment = envs[0] ?? {};
+    const overlay = loadServiceSecrets(environment);
+    const databaseUrl = overlay.DATABASE_URL ?? "";
+    expect(new URL(environment.DATABASE_URL!).password).toBe("");
     expect(new URL(databaseUrl).username).toBe("ardurbot_app");
+    expect(new URL(databaseUrl).password).not.toBe("");
     expect(await query(databaseUrl, "SELECT current_user AS who")).toEqual([
       { who: "ardurbot_app" },
     ]);

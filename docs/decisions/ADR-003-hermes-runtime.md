@@ -6,13 +6,18 @@ Date: 2026-09-27. Status: Experimental implementation; native acceptance pending
 
 Expose Hermes in the shared runtime picker and keep Ardur as the authority for
 connections, model pins, tools, permissions and usage. A bot selects an existing
-direct Chat Completions connection, its model and effort, then may adjust only a
-versioned call count and time limit. The worker brokers provider traffic; the
-paired host launches a pinned installation in a fresh synthetic home with only
-the Ardur MCP bridge. Stop and lease loss revoke the per-turn grant.
+direct Chat Completions connection, its model and effort, then may adjust the
+versioned call, time and context limits, with an Advanced JSON view over the
+same supported document. The worker brokers provider traffic; the paired host
+launches a pinned installation in a fresh synthetic home with only the Ardur
+MCP bridge. Stop and lease loss revoke the per-turn grant.
 
 The first qualified provider set is `openai-compatible` and Ollama. The default
-limits are 16 calls and 180 seconds, with strict bounds. Host execution has native
+limits are 16 calls, 180 seconds and 16 KiB of input context, with strict
+bounds and a server-authoritative preview. Advanced is deliberately a strict
+subset: managed keys (model, connections, tools, paths) and forbidden behavior
+(native memory, learning, child agents, compression, code loading) are
+rejected, never silently accepted or ignored. Host execution has native
 owner authority. macOS and Linux require separate pinned-install acceptance;
 Windows is unavailable. History is labeled quoted context. Effort remains
 requested-only unless provider confirmation is qualified. Usage without a known
