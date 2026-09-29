@@ -1,0 +1,223 @@
+# Lima template for an Ardur virtual machine computer. Design and sources: docs/vm-computers.md
+#
+# Every field is documented in Lima's reference template:
+# https://github.com/lima-vm/lima/blob/v2.2.0/templates/default.yaml
+#
+# Ardur uses this file unchanged and sets the per-computer values with `limactl create --set`:
+# vmType, cpus, memory, disk and the two param labels. The values below are the defaults.
+# Never put a secret in this file or in a param: the guest can read both.
+
+minimumLimaVersion: "2.2.0"
+
+# vz on macOS, qemu on Linux. Ardur sets the host's value when it creates the VM.
+vmType: vz
+
+# Ubuntu 24.04 LTS, pinned by release date and SHA-256; Lima checks the digest after download.
+# These are the entries Lima 2.2.0 ships in templates/_images/ubuntu-24.04.yaml.
+images:
+  - location: "https://cloud-images.ubuntu.com/releases/noble/release-20260705/ubuntu-24.04-server-cloudimg-arm64.img"
+    arch: aarch64
+    digest: "sha256:7df0201546f75b8bcc1044594c806c35749421ad3c9bc1be2a3ab806cfae39cc"
+  - location: "https://cloud-images.ubuntu.com/releases/noble/release-20260705/ubuntu-24.04-server-cloudimg-amd64.img"
+    arch: x86_64
+    digest: "sha256:ffe6203da54deeb6db5d2a98a83f9ec8e55f149d3f7ba622e1abe5fa966ee3d6"
+
+cpus: 2
+memory: 4GiB
+disk: 40GiB
+
+# Plain mode turns off mounts, dynamic port forwarding, the built-in containerd, the guest agent
+# and SSH agent forwarding. The settings after it say the same thing explicitly, so the VM stays
+# closed even if plain mode's scope changes.
+plain: true
+mounts: []
+portForwards:
+  # Lima's documented "don't forward these ports" rule, covering every guest port and protocol.
+  - guestIP: "0.0.0.0"
+    proto: any
+    ignore: true
+networks: []
+containerd:
+  system: false
+  user: false
+
+ssh:
+  # 0 lets Lima pick a free port on the host's 127.0.0.1, forwarded to the guest's port 22.
+  # Ardur reads it from `limactl list --json` after every start.
+  localPort: 0
+  loadDotSSHPubKeys: false
+  forwardAgent: false
+  forwardX11: false
+  forwardX11Trusted: false
+  overVsock: false
+
+# DNS for the guest comes from Lima's resolver at 192.168.5.3; the guest firewall allows only that.
+hostResolver:
+  enabled: true
+# Do not copy the host's proxy variables, and any credentials in them, into the guest.
+propagateProxyEnv: false
+upgradePackages: false
+
+# Keep the image's UTC instead of copying the host's time zone.
+timezone: ""
+
+# Lima's admin user. Only Lima's host agent logs in as it; bot work runs as the "bot" user.
+# Lima copies the host account's full name into `comment` unless it is set.
+user:
+  name: lima
+  comment: Lima
+
+param:
+  # Labels for crash recovery and orphan cleanup. Ardur sets both for each computer.
+  ArdurComputer: "000000000000000000000000"
+  ArdurDeployment: "0000000000000000"
+
+provision:
+  - mode: system
+    script: |
+      #!/bin/bash
+      # Runs as root at every boot. The slow part runs once per set of pinned versions.
+      set -euo pipefail
+      export DEBIAN_FRONTEND=noninteractive
+
+      BOT_USER=bot
+      BOT_UID=2000
+      DOCKER_VERSION="5:29.8.1-1~ubuntu.24.04~noble"
+      CONTAINERD_VERSION="2.3.6-1~ubuntu.24.04~noble"
+      BUILDX_VERSION="0.37.1-1~ubuntu.24.04~noble"
+      COMPOSE_VERSION="5.5.1-1~ubuntu.24.04~noble"
+      DOCKER_KEY_FINGERPRINT="9DC858229FC7DD38854AE2D88D81803C0EBFCD88"
+      KIND_VERSION="v0.33.0"
+      KUBERNETES_VERSION="v1.37.1"
+      ARCH="$(dpkg --print-architecture)"
+      case "$ARCH" in
+        arm64)
+          KIND_SHA256="20022bee6cfcd5086cb7234d218e3454e6090022f2a8f55d1fa7fcf42c3867a2"
+          KUBERNETES_CLIENT_SHA512="bd57d942ec8977b1da238d2c37d01e9aced530b789773158af058c87f4b407c3a87ddc400abb33659154dafdf6b38011b252491312927a58861b979a56d8f741"
+          ;;
+        amd64)
+          KIND_SHA256="aee6151561422756b764a4ae28e7f44cda5af5a9eead3cc9985112b1de8d8e0d"
+          KUBERNETES_CLIENT_SHA512="decde4d990d0fbf6451e65524dec42c549de3339f27005c45af8d3c61cca1de852524ebf2215c82be86d4ab2621c823f56f718b8d2c304b9100a903e696c0c32"
+          ;;
+        *)
+          echo "Unsupported architecture: $ARCH" >&2
+          exit 1
+          ;;
+      esac
+      PINS="docker=$DOCKER_VERSION containerd=$CONTAINERD_VERSION buildx=$BUILDX_VERSION compose=$COMPOSE_VERSION kind=$KIND_VERSION kubernetes=$KUBERNETES_VERSION"
+
+      # 1. Guest firewall, owned by root and loaded early at every later boot. It blocks the
+      # host's loopback (192.168.5.2), private and link-local ranges, and Tailscale addresses,
+      # and allows DNS through Lima's resolver and the public internet.
+      if ! command -v nft >/dev/null 2>&1; then
+        apt-get update
+        apt-get install -y nftables
+      fi
+      cat >/etc/nftables.conf <<'EOF'
+      #!/usr/sbin/nft -f
+      flush ruleset
+      table inet ardur {
+        chain output {
+          type filter hook output priority filter; policy accept;
+          oifname "lo" accept
+          ct state established,related accept
+          ip daddr 192.168.5.3 meta l4proto { tcp, udp } th dport 53 accept
+          ip daddr { 0.0.0.0/8, 10.0.0.0/8, 100.64.0.0/10, 127.0.0.0/8, 169.254.0.0/16, 172.16.0.0/12, 192.0.0.0/24, 192.168.0.0/16, 198.18.0.0/15, 224.0.0.0/3 } reject
+          ip6 daddr { ::1, fc00::/7, fe80::/10, ff00::/8 } reject
+        }
+      }
+      EOF
+      systemctl enable nftables.service
+      nft -f /etc/nftables.conf
+
+      # 2. Pinned software, installed once.
+      if [ "$(cat /var/lib/ardur/provisioned 2>/dev/null || true)" != "$PINS" ]; then
+        apt-get update
+        apt-get install -y ca-certificates curl gnupg uidmap dbus-user-session slirp4netns
+
+        # Docker's apt repository, trusted only after its key matches the pinned fingerprint.
+        key="$(mktemp)"
+        curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o "$key"
+        fingerprint="$(gpg --show-keys --with-colons "$key" | awk -F: '$1 == "fpr" { print $10; exit }')"
+        if [ "$fingerprint" != "$DOCKER_KEY_FINGERPRINT" ]; then
+          echo "Docker's signing key does not match the pinned fingerprint" >&2
+          exit 1
+        fi
+        install -m 0755 -d /etc/apt/keyrings
+        install -m 0644 "$key" /etc/apt/keyrings/docker.asc
+        rm -f "$key"
+        printf '%s\n' "Types: deb" "URIs: https://download.docker.com/linux/ubuntu" "Suites: noble" \
+          "Components: stable" "Architectures: $ARCH" "Signed-By: /etc/apt/keyrings/docker.asc" \
+          >/etc/apt/sources.list.d/docker.sources
+        apt-get update
+        apt-get install -y "docker-ce=$DOCKER_VERSION" "docker-ce-cli=$DOCKER_VERSION" \
+          "docker-ce-rootless-extras=$DOCKER_VERSION" "containerd.io=$CONTAINERD_VERSION" \
+          "docker-buildx-plugin=$BUILDX_VERSION" "docker-compose-plugin=$COMPOSE_VERSION"
+        apt-mark hold docker-ce docker-ce-cli docker-ce-rootless-extras containerd.io \
+          docker-buildx-plugin docker-compose-plugin
+        # Rootless only: no root daemon and no root-owned Docker socket in the guest.
+        systemctl disable --now docker.service docker.socket containerd.service
+        systemctl mask docker.service docker.socket containerd.service
+
+        # kind and kubectl, each checked against a pinned checksum before it is installed.
+        work="$(mktemp -d)"
+        curl -fsSLo "$work/kind" \
+          "https://github.com/kubernetes-sigs/kind/releases/download/$KIND_VERSION/kind-linux-$ARCH"
+        echo "$KIND_SHA256  $work/kind" | sha256sum --check --strict
+        install -o root -g root -m 0755 "$work/kind" /usr/local/bin/kind
+        curl -fsSLo "$work/client.tar.gz" \
+          "https://dl.k8s.io/$KUBERNETES_VERSION/kubernetes-client-linux-$ARCH.tar.gz"
+        echo "$KUBERNETES_CLIENT_SHA512  $work/client.tar.gz" | sha512sum --check --strict
+        tar -xzf "$work/client.tar.gz" -C "$work" kubernetes/client/bin/kubectl
+        install -o root -g root -m 0755 "$work/kubernetes/client/bin/kubectl" /usr/local/bin/kubectl
+        rm -rf "$work"
+
+        # Limits kind documents for clusters, and the modules rootless kind needs.
+        printf '%s\n' "fs.inotify.max_user_watches = 524288" "fs.inotify.max_user_instances = 512" \
+          >/etc/sysctl.d/90-ardur-kind.conf
+        sysctl --system >/dev/null
+        printf '%s\n' ip6_tables ip6table_nat ip_tables iptable_nat >/etc/modules-load.d/ardur-kind.conf
+        systemctl restart systemd-modules-load.service
+
+        # The unprivileged bot user: no sudo, no docker group, its own rootless Docker.
+        if ! id -u "$BOT_USER" >/dev/null 2>&1; then
+          useradd --create-home --uid "$BOT_UID" --user-group --shell /bin/bash "$BOT_USER"
+        fi
+        grep -q "^$BOT_USER:" /etc/subuid || usermod --add-subuids 300000-365535 "$BOT_USER"
+        grep -q "^$BOT_USER:" /etc/subgid || usermod --add-subgids 300000-365535 "$BOT_USER"
+        loginctl enable-linger "$BOT_USER"
+        grep -q '^DOCKER_HOST=' /etc/environment ||
+          echo "DOCKER_HOST=unix:///run/user/$BOT_UID/docker.sock" >>/etc/environment
+        systemctl start "user@$BOT_UID.service"
+        runuser -u "$BOT_USER" -- env HOME="/home/$BOT_USER" XDG_RUNTIME_DIR="/run/user/$BOT_UID" \
+          DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$BOT_UID/bus" \
+          dockerd-rootless-setuptool.sh install
+
+        install -d -m 0755 /var/lib/ardur
+        printf '%s\n' "$PINS" >/var/lib/ardur/provisioned
+      fi
+
+      # 3. Every boot: record the labels, keep the bot unprivileged, and let it log in with the
+      # host-held key that Lima installed for its admin user. The private key never enters the guest.
+      printf 'computer=%s\ndeployment=%s\n' "$PARAM_ArdurComputer" "$PARAM_ArdurDeployment" \
+        >/etc/ardur-labels
+      for group in sudo admin docker lxd; do
+        gpasswd -d "$BOT_USER" "$group" >/dev/null 2>&1 || true
+      done
+      admin_home="$(getent passwd lima | cut -d: -f6)"
+      chmod 0750 "$admin_home"
+      install -d -m 0700 -o "$BOT_USER" -g "$BOT_USER" "/home/$BOT_USER/.ssh"
+      install -m 0600 -o "$BOT_USER" -g "$BOT_USER" "$admin_home/.ssh/authorized_keys" \
+        "/home/$BOT_USER/.ssh/authorized_keys"
+
+probes:
+  - mode: readiness
+    description: Ardur provisioning to finish
+    script: |
+      #!/bin/bash
+      set -eu
+      if ! timeout 900 bash -c 'until [ -f /var/lib/ardur/provisioned ]; do sleep 5; done'; then
+        echo >&2 "Ardur provisioning did not finish"
+        exit 1
+      fi
+    hint: See /var/log/cloud-init-output.log in the guest.
