@@ -622,6 +622,52 @@ describe("coordination round recording", () => {
     }
   });
 
+  it("refuses a member id that contains a colon instead of mis-parsing the key", async () => {
+    // Member ids are cuids, so this is a guard: a colon in the member segment
+    // would shift the derived nonce away from the round's message, and the
+    // lookup must miss cleanly rather than write to the wrong message.
+    const realNonce = `group-ask:1:ask-run:${callId}`;
+    const stored = structuredClone(coordinationMessage);
+    const messageUpdate = vi.fn(async () => ({}));
+    const tx = {
+      message: {
+        findUnique: vi.fn(
+          async ({
+            where,
+          }: {
+            where: { threadId_clientNonce: { threadId: string; clientNonce: string } };
+          }) => (where.threadId_clientNonce.clientNonce === realNonce ? stored : null),
+        ),
+        findFirst: vi.fn(async () => null),
+        update: messageUpdate,
+      },
+      thread: { update: vi.fn(async () => ({ nextEventSeq: 7 })) },
+      event: { create: vi.fn(async () => ({ id: "event" })) },
+    };
+    await expect(
+      recordGroupAskOutcomeInTransaction(tx as never, {
+        ...scope,
+        threadId: "room",
+        delegation: delegation({ admissionKey: groupAskKey(ask, callId, "ada:odd") }),
+        delegationStatus: "completed",
+        runStatus: "completed",
+        now,
+      }),
+    ).resolves.toBeNull();
+    expect(tx.message.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          threadId_clientNonce: {
+            threadId: "room",
+            clientNonce: `${realNonce}:ada`,
+          },
+        },
+      }),
+    );
+    expect(messageUpdate).not.toHaveBeenCalled();
+    expect(tx.event.create).not.toHaveBeenCalled();
+  });
+
   it("keeps the first terminal outcome and ignores delegations that are not asks", async () => {
     const settled = messageHarness({
       message: {
