@@ -48,6 +48,7 @@ import type { EndpointResult } from "./endpoint";
 import { defaultApiBase, normalizeApiBase } from "./endpoint";
 import { t } from "./i18n";
 import { resumeLiveNotifications } from "./live-notifications";
+import { hasVisibleMessagePresentation } from "./message-presentation";
 import { RpcError } from "./rpc-error";
 import {
   clearSessionToken,
@@ -1204,7 +1205,7 @@ export function applyMobileThreadEvent(
     return {
       ...prev,
       cursor: event.seq ?? prev.cursor,
-      messages: [...remaining, streaming],
+      messages: placeLiveDraft(prev.messages, previous, remaining, streaming),
     };
   }
   if (event.type === "agent.tool.called") {
@@ -1223,7 +1224,7 @@ export function applyMobileThreadEvent(
     return {
       ...prev,
       cursor: event.seq ?? prev.cursor,
-      messages: [...remaining, streaming],
+      messages: placeLiveDraft(prev.messages, previous, remaining, streaming),
     };
   }
   if (event.type === "agent.tool.completed") {
@@ -1284,19 +1285,59 @@ export function applyMobileThreadEvent(
           )
         ),
     );
-    // The run's saved reply fills its live draft's slot, so it stays above anything the
-    // owner sent after the draft's text appeared. Other messages leave the draft be.
-    const messages =
-      next.role === "bot"
-        ? upsertAtLivePlace(without, liveId, next)
-        : upsertMessageById(without, next);
     return {
       ...prev,
       cursor: event.seq ?? prev.cursor,
-      messages,
+      messages: placeSavedMessage(without, liveId, next, event.type === "thread.message.created"),
     };
   }
   return prev;
+}
+
+/**
+ * A run's live draft holds its place in the thread once it shows reply text: the server
+ * holds the reply's position from that first streamed text, and the saved reply fills it.
+ * A draft with only tool activity has no place yet (and no bubble); it follows the newest
+ * message, where its reply will be saved.
+ */
+function draftHoldsPlace(draft: MobileMessage | undefined): boolean {
+  return draft !== undefined && hasVisibleMessagePresentation(draft.blocks);
+}
+
+/** Put a run's updated live draft back: in the place it holds, or after the newest message. */
+function placeLiveDraft(
+  messages: readonly MobileMessage[],
+  previous: MobileMessage | undefined,
+  remaining: MobileMessage[],
+  draft: MobileMessage,
+): MobileMessage[] {
+  return draftHoldsPlace(previous)
+    ? upsertAtLivePlace(messages, draft.id, draft)
+    : [...remaining, draft];
+}
+
+/**
+ * Place a saved message the way the server orders it. A new bot message that saves text
+ * fills the place its run's draft holds. Everything else lands after the newest message:
+ * the owner's messages and notices leave the draft alone, and the run's other messages
+ * (cards, or a reply whose draft held no place) keep a draft that holds its place for the
+ * reply still to come and drop one that does not.
+ */
+function placeSavedMessage(
+  messages: readonly MobileMessage[],
+  liveId: string,
+  next: MobileMessage,
+  created: boolean,
+): MobileMessage[] {
+  if (next.role !== "bot") return upsertMessageById(messages, next);
+  if (!draftHoldsPlace(messages.find((message) => message.id === liveId))) {
+    return upsertMessageById(takeLiveMessage(messages, liveId).remaining, next);
+  }
+  const fillsDraft =
+    created &&
+    next.blocks.some((block) => block.kind === "text") &&
+    !messages.some((message) => message.id === next.id);
+  return fillsDraft ? upsertAtLivePlace(messages, liveId, next) : upsertMessageById(messages, next);
 }
 
 export {

@@ -28,6 +28,10 @@ function evidenceStore() {
     delegationRootTaskId: null,
     replySeq: null as number | null,
   };
+  // Leaving `running` releases the held place, as the trigger on runs does.
+  const released = () => {
+    if (run.status !== "running") run.replySeq = null;
+  };
   const tx = {
     $queryRaw: vi.fn(async () => []),
     thread: {
@@ -60,12 +64,13 @@ function evidenceStore() {
       deleteMany: vi.fn(async () => ({ count: 0 })),
     },
     run: {
-      findUnique: vi.fn(async () => run),
-      findFirst: vi.fn(async () => run),
+      findUnique: vi.fn(async () => ({ ...run })),
+      findFirst: vi.fn(async () => ({ ...run })),
       findMany: vi.fn(async () => []),
       create: vi.fn(async () => run),
       update: vi.fn(async ({ data }: { data: { replySeq?: number | null } }) => {
         if ("replySeq" in data) run.replySeq = data.replySeq ?? null;
+        released();
         return run;
       }),
       updateMany: vi.fn(
@@ -79,6 +84,7 @@ function evidenceStore() {
           if (where.replySeq === null && run.replySeq !== null) return { count: 0 };
           if (data.replySeq !== undefined) run.replySeq = data.replySeq;
           if (data.status) run.status = data.status;
+          released();
           return { count: 1 };
         },
       ),

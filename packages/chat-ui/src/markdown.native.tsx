@@ -6,7 +6,7 @@ import Markdown, {
 import { memo, useMemo } from "react";
 import { Linking, StyleSheet, Text, View } from "react-native";
 import type { ChatMarkdownProps } from "./markdown";
-import { sanitizeMarkdownUrl } from "./markdown";
+import { nativeCursorProps, sanitizeMarkdownUrl } from "./markdown";
 
 function markdownStyles(palette: ColorTokens) {
   return StyleSheet.create({
@@ -143,17 +143,15 @@ export const ChatMarkdown = memo(function ChatMarkdown({
       return false;
     },
   };
-  // The cursor follows the text, not the run: once the reply stops growing it hides,
-  // while the streaming layout stays so partial fences remain sealed.
-  const showCursor = cursor ?? streaming;
 
+  // Once the reply stops growing the cursor hides, while the streaming layout stays so
+  // partial fences remain sealed.
   return (
     <View style={layout.wrap}>
       {streaming ? (
         <MarkdownStream
           {...sharedProps}
-          cursorColor={palette.mutedForeground}
-          cursorStyle={showCursor ? undefined : layout.hiddenCursor}
+          {...nativeCursorProps({ streaming, cursor }, palette.mutedForeground)}
           streaming
         >
           {children}
@@ -170,11 +168,6 @@ const layout = StyleSheet.create({
     width: "100%",
     minWidth: 0,
     flexShrink: 1,
-  },
-  hiddenCursor: {
-    width: 0,
-    height: 0,
-    marginTop: 0,
   },
 });
 

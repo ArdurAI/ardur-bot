@@ -53,10 +53,11 @@ export interface CreateThreadMessageInput {
   clientNonce?: string;
   markUnread?: boolean;
   /**
-   * A run's final message passes this so tool-only completions still fill the place
-   * their streaming reserved; bot messages carrying reply text consume it regardless.
+   * The place the run's streamed reply held, read by the caller before the run left
+   * `running` (leaving it releases the place). The run's final message fills it even
+   * when it carries no text.
    */
-  consumeReservedReplySeq?: boolean;
+  heldReplySeq?: number | null;
 }
 
 export async function createThreadMessage(prisma: PrismaClient, input: CreateThreadMessageInput) {
@@ -69,31 +70,36 @@ export async function createThreadMessageInTransaction(
   tx: Prisma.TransactionClient,
   input: CreateThreadMessageInput,
 ) {
-  const run = await assertRunCanWriteHistory(tx, input.runId);
-  // A bot message that saves text the run already showed fills the place reserved when
-  // that text first appeared, so it stays above anything the owner sent meanwhile.
-  const reservedSeq =
-    input.runId &&
+  // A bot message that saves text its run already showed fills the place held when that
+  // text first appeared, so it stays above anything the owner sent meanwhile.
+  const fillsReplyPlace =
+    Boolean(input.runId) &&
     input.role === "bot" &&
-    run?.replySeq != null &&
-    (input.consumeReservedReplySeq === true || input.blocks.some((block) => block.kind === "text"))
-      ? run.replySeq
-      : null;
+    (input.heldReplySeq != null || input.blocks.some((block) => block.kind === "text"));
+  if (fillsReplyPlace) {
+    // The thread row orders every seq allocation. Lock it before reading the run's hold,
+    // so two messages of one run cannot both take the place.
+    await tx.$queryRaw`SELECT id FROM threads WHERE id = ${input.threadId} FOR UPDATE`;
+  }
+  const run = fillsReplyPlace ? await assertRunCanWriteHistory(tx, input.runId) : undefined;
+  const runHold = run && run.threadId === input.threadId ? run.replySeq : null;
+  const heldSeq = input.heldReplySeq ?? runHold;
+  if (input.runId && runHold !== null && runHold === heldSeq) {
+    await tx.run.update({ where: { id: input.runId }, data: { replySeq: null } });
+  }
   const thread = await tx.thread.update({
     where: { id: input.threadId },
     data: {
-      ...(reservedSeq === null ? { nextMessageSeq: { increment: 1 } } : {}),
+      ...(heldSeq === null ? { nextMessageSeq: { increment: 1 } } : {}),
       unread: (input.markUnread ?? input.role === "bot") ? true : undefined,
     },
     select: { nextMessageSeq: true },
   });
-  if (reservedSeq !== null && input.runId) {
-    await tx.run.update({ where: { id: input.runId }, data: { replySeq: null } });
-  }
+  if (!fillsReplyPlace) await assertRunCanWriteHistory(tx, input.runId);
   return tx.message.create({
     data: {
       threadId: input.threadId,
-      seq: reservedSeq ?? thread.nextMessageSeq - 1,
+      seq: heldSeq ?? thread.nextMessageSeq - 1,
       role: input.role,
       origin: input.origin ?? "system",
       actorId: input.actorId,
@@ -104,49 +110,6 @@ export async function createThreadMessageInTransaction(
       runId: input.runId,
       clientNonce: input.clientNonce,
     },
-  });
-}
-
-/**
- * Hold the thread position of a run's reply while its text streams. The first visible
- * text is already on the owner's screen, so anything sent after it must land below the
- * reply once the reply is saved. Idempotent: one place per streamed draft, and a
- * concurrent reservation keeps the earlier place. Consumed by the bot message that
- * saves the text; discarded if the draft is thrown away (pause, terminal cleanup).
- */
-export async function reserveRunReplySeqInTransaction(
-  tx: Prisma.TransactionClient,
-  input: { threadId: string; runId: string; currentReplySeq?: number | null },
-): Promise<void> {
-  const current =
-    input.currentReplySeq !== undefined
-      ? input.currentReplySeq
-      : ((
-          await tx.run.findUnique({
-            where: { id: input.runId },
-            select: { replySeq: true },
-          })
-        )?.replySeq ?? null);
-  if (current !== null) return;
-  const thread = await tx.thread.update({
-    where: { id: input.threadId },
-    data: { nextMessageSeq: { increment: 1 } },
-    select: { nextMessageSeq: true },
-  });
-  await tx.run.updateMany({
-    where: { id: input.runId, replySeq: null },
-    data: { replySeq: thread.nextMessageSeq - 1 },
-  });
-}
-
-/** Drop a reply reservation whose streamed draft is no longer part of the transcript. */
-export async function discardRunReplySeqInTransaction(
-  tx: Prisma.TransactionClient,
-  runId: string,
-): Promise<void> {
-  await tx.run.updateMany({
-    where: { id: runId, replySeq: { not: null } },
-    data: { replySeq: null },
   });
 }
 
@@ -162,6 +125,7 @@ export async function assertRunCanWriteHistory(
   runId?: string,
 ): Promise<
   | {
+      threadId: string;
       status: string;
       startedAt: Date | null;
       originDeviceGrantId: string | null;
@@ -176,6 +140,7 @@ export async function assertRunCanWriteHistory(
   const run = await tx.run.findUnique({
     where: { id: runId },
     select: {
+      threadId: true,
       status: true,
       startedAt: true,
       originDeviceGrantId: true,

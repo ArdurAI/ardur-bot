@@ -166,20 +166,17 @@ describe("selectCompactedHistory", () => {
     expect(selected.history[0]!.seq).toBe(100);
   });
 
-  it("keeps the fallback when uncompacted messages contain an internal gap", () => {
+  it("keeps the summary across a reply place that stayed empty", () => {
+    // Seq 3 was a streamed reply's place, released when its run ended without a message.
     const selected = selectCompactedHistory({
-      messages: [
-        messages(0, 2)[0]!,
-        messages(0, 2)[1]!,
-        messages(0, 2)[2]!,
-        { ...messages(4, 4)[0]! },
-      ],
+      messages: [...messages(0, 2), ...messages(4, 4)],
       summary: marked("facts through 0"),
       historyCompactedUpToSeq: 0,
     });
 
-    expect(selected.usedLocalSummary).toBe(false);
-    expect(selected.history.map((message) => message.seq)).toEqual([0, 1, 2, 4]);
+    expect(selected.usedLocalSummary).toBe(true);
+    expect(selected.summary).toBe("facts through 0");
+    expect(selected.history.map((message) => message.seq)).toEqual([1, 2, 4]);
   });
 
   it("does not use a cursor without its durable summary", () => {
@@ -273,6 +270,8 @@ function compactionHarness(
     messages?: HarnessMessage[];
     quietReceiptIds?: string[];
     nextMessageSeq?: number;
+    /** Places held by running replies whose messages are not saved yet. */
+    heldReplySeqs?: number[];
     historyCompactedUpToSeq?: number | null;
     historyCompactionSummary?: string | null;
     legacySummary?: boolean;
@@ -302,7 +301,9 @@ function compactionHarness(
     spaceId: "workspace-1",
     userId: "user-1",
     nextEventSeq: 0,
-    nextMessageSeq: options.nextMessageSeq ?? messages.length,
+    nextMessageSeq:
+      options.nextMessageSeq ??
+      Math.max(messages.length, ...messages.map((message) => message.seq + 1)),
     historyCompactedUpToSeq: options.historyCompactedUpToSeq ?? (null as number | null),
     historyCompactionSummary: options.historyCompactionSummary
       ? options.legacySummary
@@ -349,17 +350,24 @@ function compactionHarness(
     event: {
       findFirst: vi.fn(async () => (options.wasCleared ? { seq: 0 } : null)),
     },
+    run: {
+      findMany: vi.fn(async () => (options.heldReplySeqs ?? []).map((replySeq) => ({ replySeq }))),
+    },
     message: {
       findMany: vi.fn(
         async (args: {
-          where: { seq: { gt?: number; lte?: number } };
+          where: { seq: { gt?: number; lt?: number; lte?: number } };
           orderBy?: { seq: "asc" | "desc" };
           take?: number;
         }) => {
           const matching =
             args.where.seq.lte !== undefined
               ? messages.filter((message) => message.seq <= args.where.seq.lte!)
-              : messages.filter((message) => message.seq > args.where.seq.gt!);
+              : messages.filter(
+                  (message) =>
+                    message.seq > args.where.seq.gt! &&
+                    (args.where.seq.lt === undefined || message.seq < args.where.seq.lt),
+                );
           const ordered = [...matching].sort((left, right) => left.seq - right.seq);
           if (args.orderBy?.seq === "desc") ordered.reverse();
           return ordered.slice(0, args.take ?? ordered.length);
@@ -452,7 +460,7 @@ describe("compactHistory", () => {
   it("records summary usage against its scoped source even when generation changes", async () => {
     const harness = compactionHarness({ deploymentModelKey: "fixture-key" });
     const findFirst = vi.fn(async () => ({ id: "source-run" }));
-    Object.assign(harness.prisma, { run: { findFirst } });
+    Object.assign(harness.prisma.run, { findFirst });
     const recordUsage = vi.fn(async () => undefined);
     harness.runtime.run.mockImplementation(async function* () {
       yield {
@@ -490,7 +498,7 @@ describe("compactHistory", () => {
   it("records missing summary usage on failure and does not spend without an attributable run", async () => {
     const harness = compactionHarness({ deploymentModelKey: "fixture-key" });
     const findFirst = vi.fn(async (): Promise<{ id: string } | null> => ({ id: "source-run" }));
-    Object.assign(harness.prisma, { run: { findFirst } });
+    Object.assign(harness.prisma.run, { findFirst });
     const recordUsage = vi.fn(async () => undefined);
     harness.runtime.run.mockImplementation(async function* () {
       yield* [];
@@ -941,7 +949,8 @@ describe("compactHistory", () => {
     ).toMatchObject({ usedLocalSummary: true, summary: "Summary of 50 messages." });
   });
 
-  it("does not advance across a message coverage gap", async () => {
+  it("compacts across a reply place that was released without a message", async () => {
+    // Seq 1 was held by a reply that streamed and then stayed silent, failed or was stopped.
     const harness = compactionHarness({
       deploymentModelKey: "openrouter-key",
       messages: [
@@ -952,9 +961,70 @@ describe("compactHistory", () => {
 
     await compactHistory(harness.deps, "thread-1");
 
+    expect(harness.runtime.run).toHaveBeenCalledOnce();
+    const [request] = harness.runtime.run.mock.calls[0]!;
+    expect(request.prompt).toContain("message 0");
+    expect(request.prompt).toContain("message 2");
+    expect(harness.thread.historyCompactedUpToSeq).toBe(2);
+  });
+
+  it("stops before a place a running reply still holds", async () => {
+    const harness = compactionHarness({
+      deploymentModelKey: "openrouter-key",
+      messages: [0, 1, 3, 4].map((seq) => ({
+        seq,
+        role: "user",
+        blocks: [{ kind: "text", text: `message ${seq}` }],
+      })),
+      heldReplySeqs: [2],
+    });
+
+    await compactHistory(harness.deps, "thread-1");
+
+    const [request] = harness.runtime.run.mock.calls[0]!;
+    expect(request.prompt).toContain("message 1");
+    expect(request.prompt).not.toContain("message 3");
+    // The reply saves at seq 2 later, so the cursor must stay below it.
+    expect(harness.thread.historyCompactedUpToSeq).toBe(1);
+  });
+
+  it("waits while the next place is still held by a running reply", async () => {
+    const harness = compactionHarness({
+      deploymentModelKey: "openrouter-key",
+      historyCompactedUpToSeq: 0,
+      historyCompactionSummary: "facts through 0",
+      messages: [0, 2, 3].map((seq) => ({
+        seq,
+        role: "user",
+        blocks: [{ kind: "text", text: `message ${seq}` }],
+      })),
+      heldReplySeqs: [1],
+    });
+
+    await compactHistory(harness.deps, "thread-1");
+
     expect(harness.runtime.run).not.toHaveBeenCalled();
-    expect(harness.saveMemory).not.toHaveBeenCalled();
     expect(harness.prisma.thread.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("does not take a place allocated after the thread was read for a released one", async () => {
+    // The thread was read when only seq 0 existed. Seq 1 was held and seq 2 saved before
+    // the batch was read, after the holds were read, so seq 1 cannot pass for released.
+    const harness = compactionHarness({
+      deploymentModelKey: "openrouter-key",
+      nextMessageSeq: 1,
+      messages: [0, 2].map((seq) => ({
+        seq,
+        role: "user",
+        blocks: [{ kind: "text", text: `message ${seq}` }],
+      })),
+    });
+
+    await compactHistory(harness.deps, "thread-1");
+
+    const [request] = harness.runtime.run.mock.calls[0]!;
+    expect(request.prompt).not.toContain("message 2");
+    expect(harness.thread.historyCompactedUpToSeq).toBe(0);
   });
 
   it("does not resurrect a summary when clear wins while summarization is running", async () => {

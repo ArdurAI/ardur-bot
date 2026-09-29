@@ -273,6 +273,131 @@ describe("threadSnapshot", () => {
     ]);
   });
 
+  it("keeps a streaming reply above the follow-up sent after its text appeared", async () => {
+    const run = {
+      id: "run-1",
+      botId: "bot-1",
+      threadId: "thread-1",
+      taskId: "task-1",
+      status: "running",
+      trigger: "user",
+      modelProvider: null,
+      modelId: null,
+      error: null,
+      startedAt: null,
+      completedAt: null,
+      createdAt: new Date("2026-09-28T14:28:27.000Z"),
+      // Held when the reply's first text streamed; the owner's follow-up then took seq 2.
+      replySeq: 1,
+    };
+    const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([{ id: "thread-1" }]),
+      message: {
+        findMany: vi
+          .fn()
+          .mockResolvedValue([
+            savedMessage("follow-up", 2, "user", "any pending PRs left?"),
+            savedMessage("earlier", 0, "user", "what did rad get right?"),
+          ]),
+      },
+      event: {
+        findFirst: vi.fn().mockResolvedValue({ seq: 9 }),
+        findMany: vi
+          .fn()
+          .mockResolvedValue([progressEvent("run-1", "bot-1", 5, "Rad shipped the release.")]),
+      },
+      run: { findFirst: botRunFindFirst([run]) },
+    };
+    const prisma = {
+      $transaction: vi.fn(async (callback: (client: typeof tx) => unknown) => callback(tx)),
+    } as unknown as PrismaClient;
+    const target = {
+      kind: "bot",
+      botId: "bot-1",
+      threadId: "thread-1",
+      bot: { computer: null },
+    } as ThreadTarget;
+
+    const snapshot = await threadSnapshot({ prisma }, target);
+
+    expect(snapshot.messages.map((message) => message.id)).toEqual([
+      "earlier",
+      "progress:run-1",
+      "follow-up",
+    ]);
+  });
+
+  it("orders each group member's streaming reply by the place it holds", async () => {
+    const activeRun = (id: string, botId: string, replySeq: number | null) => ({
+      id,
+      botId,
+      threadId: "thread-1",
+      taskId: `task-${id}`,
+      status: "running",
+      trigger: "user",
+      modelProvider: null,
+      modelId: null,
+      error: null,
+      startedAt: null,
+      completedAt: null,
+      createdAt: new Date("2026-09-28T14:28:27.000Z"),
+      replySeq,
+    });
+    const tx = {
+      $queryRaw: vi.fn().mockResolvedValue([{ id: "thread-1" }]),
+      message: {
+        findMany: vi
+          .fn()
+          .mockResolvedValue([
+            savedMessage("second-question", 4, "user", "and the docs?"),
+            savedMessage("first-question", 2, "user", "any pending PRs left?"),
+            savedMessage("kickoff", 0, "user", "status please"),
+          ]),
+      },
+      event: {
+        findFirst: vi.fn().mockResolvedValue({ seq: 12 }),
+        findMany: vi.fn().mockResolvedValue([
+          progressEvent("run-chief", "bot-chief", 6, "Release is out."),
+          progressEvent("run-rad", "bot-rad", 8, "Docs are merged."),
+          {
+            id: "event-10",
+            threadId: "thread-1",
+            botId: "bot-scout",
+            seq: 10,
+            type: "agent.tool.called",
+            runId: "run-scout",
+            payload: { name: "GITHUB_LIST_PULLS", executionId: "call-1" },
+            createdAt: new Date("2026-09-28T14:29:10.000Z"),
+          },
+        ]),
+      },
+      run: {
+        findMany: groupRunFindMany({
+          active: [
+            activeRun("run-rad", "bot-rad", 3),
+            activeRun("run-chief", "bot-chief", 1),
+            // Tool steps only, no reply text on screen yet: no held place.
+            activeRun("run-scout", "bot-scout", null),
+          ],
+        }),
+      },
+    };
+    const prisma = {
+      $transaction: vi.fn(async (callback: (client: typeof tx) => unknown) => callback(tx)),
+    } as unknown as PrismaClient;
+
+    const snapshot = await threadSnapshot({ prisma }, groupTarget());
+
+    expect(snapshot.messages.map((message) => message.id)).toEqual([
+      "kickoff",
+      "progress:run-chief",
+      "first-question",
+      "progress:run-rad",
+      "second-question",
+      "progress:run-scout",
+    ]);
+  });
+
   it("names the active bot's computer host the way Fleet settings and Team do", async () => {
     const tx = {
       $queryRaw: vi.fn().mockResolvedValue([{ id: "thread-1" }]),
@@ -935,6 +1060,35 @@ describe("threadSnapshot", () => {
     ]);
   });
 });
+
+function savedMessage(id: string, seq: number, role: "user" | "bot", text: string) {
+  return {
+    id,
+    threadId: "thread-1",
+    seq,
+    role,
+    blocks: [{ kind: "text", text }],
+    botId: null,
+    replyToMessageId: null,
+    replyQuote: null,
+    runId: null,
+    createdAt: new Date(Date.UTC(2026, 8, 28, 14, 28, seq)),
+    feedback: [],
+  };
+}
+
+function progressEvent(runId: string, botId: string, seq: number, text: string) {
+  return {
+    id: `event-${seq}`,
+    threadId: "thread-1",
+    botId,
+    seq,
+    type: "thread.progress",
+    runId,
+    payload: { text, streaming: true },
+    createdAt: new Date(Date.UTC(2026, 8, 28, 14, 29, seq)),
+  };
+}
 
 function isTerminalRunQuery(where: { status?: { in?: string[] } } | undefined) {
   const statuses = where?.status?.in;

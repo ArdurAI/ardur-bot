@@ -9,6 +9,26 @@ export type ChatMarkdownProps = {
   cursor?: boolean;
 };
 
+/** Whether the blinking cursor shows: it follows the reply's text, defaulting to `streaming`. */
+export function showsCursor({
+  streaming = false,
+  cursor,
+}: Pick<ChatMarkdownProps, "streaming" | "cursor">): boolean {
+  return cursor ?? streaming;
+}
+
+/**
+ * Cursor props for the native streaming view. A hidden cursor is drawn transparent, not
+ * resized, so it keeps its space and the reply bubble does not shrink when the text pauses
+ * for a tool call and grow back when it resumes.
+ */
+export function nativeCursorProps(
+  props: Pick<ChatMarkdownProps, "streaming" | "cursor">,
+  color: string,
+): { cursorColor: string } {
+  return { cursorColor: showsCursor(props) ? color : "transparent" };
+}
+
 const protocolPattern = /^([a-z][a-z\d+.-]*):/i;
 const safeProtocols = new Set(["http", "https", "mailto", "tel"]);
 

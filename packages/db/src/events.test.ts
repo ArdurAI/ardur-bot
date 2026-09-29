@@ -2332,15 +2332,8 @@ describe("appendEvent", () => {
       payload: { delta: "hello \uFFFD", streaming: true },
     };
     const tx = {
-      thread: {
-        update: vi.fn(async ({ data }: { data: { nextMessageSeq?: unknown } }) =>
-          data.nextMessageSeq ? { nextMessageSeq: 1 } : { nextEventSeq: 4 },
-        ),
-      },
-      run: {
-        findUnique: vi.fn().mockResolvedValue({ status: "running", replySeq: null }),
-        updateMany: vi.fn(async () => ({ count: 1 })),
-      },
+      thread: { update: vi.fn().mockResolvedValue({ nextEventSeq: 4 }) },
+      run: { findUnique: vi.fn().mockResolvedValue({ status: "running" }) },
       event: { create: vi.fn().mockResolvedValue(created) },
     };
     const prisma = {

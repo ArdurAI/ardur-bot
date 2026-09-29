@@ -29,6 +29,7 @@ import {
   ACTIVE_RUN_STATUSES,
   hasMentionToken,
   isActive,
+  progressMessageId,
   projectMessages,
   runFailureError,
 } from "@ardurbot/core";
@@ -450,7 +451,11 @@ export async function threadSnapshot(
       threadId: target.threadId,
       contextRun: core.contextRun ? mapRun(core.contextRun) : null,
       cursor: core.last?.seq ?? -1,
-      messages: messagesWithLiveEvents(core.messagePage.messages, core.liveEvents),
+      messages: messagesWithLiveEvents(
+        core.messagePage.messages,
+        core.liveEvents,
+        core.run ? [core.run] : [],
+      ),
       olderCursor: core.messagePage.olderCursor,
       run: core.run
         ? {
@@ -530,7 +535,7 @@ export async function threadSnapshot(
     members: target.members,
     threadId: target.threadId,
     cursor: core.last?.seq ?? -1,
-    messages: messagesWithLiveEvents(core.messagePage.messages, core.liveEvents),
+    messages: messagesWithLiveEvents(core.messagePage.messages, core.liveEvents, core.activeRuns),
     olderCursor: core.messagePage.olderCursor,
     // Match the live reducer: a failed latest terminal stays in run even while siblings are
     // still active or start late. A newer completed/cancelled terminal clears it.
@@ -583,9 +588,15 @@ function pickLatestTerminalRun<T extends { id: string; createdAt: Date; complete
   });
 }
 
+/**
+ * Saved messages with the active runs' live messages after them. A draft whose reply text
+ * is on screen sits at the place its run holds instead, above anything sent after that text
+ * appeared, which is where its saved reply lands.
+ */
 function messagesWithLiveEvents(
   persisted: ThreadSnapshot["messages"],
   liveEvents: Parameters<typeof projectMessages>[0],
+  runs: ReadonlyArray<{ id: string; replySeq: number | null }>,
 ) {
   const live = projectMessages(liveEvents).filter((message) => {
     if (message.blocks.some((block) => block.kind === "progress" || block.kind === "steps")) {
@@ -598,7 +609,24 @@ function messagesWithLiveEvents(
       ),
     );
   });
-  return [...persisted, ...live];
+  const heldDrafts = runs
+    .flatMap((run) => {
+      const draft = live.find((message) => message.id === progressMessageId({ runId: run.id }));
+      return draft && run.replySeq != null ? [{ seq: run.replySeq, draft }] : [];
+    })
+    .sort((left, right) => left.seq - right.seq);
+  const placed = new Set<(typeof live)[number]>();
+  const messages: Array<(typeof persisted)[number] | (typeof live)[number]> = [];
+  for (const row of persisted) {
+    for (const { seq, draft } of heldDrafts) {
+      if (seq < row.seq && !placed.has(draft)) {
+        messages.push(draft);
+        placed.add(draft);
+      }
+    }
+    messages.push(row);
+  }
+  return [...messages, ...live.filter((message) => !placed.has(message))];
 }
 
 function mapRun(run: {

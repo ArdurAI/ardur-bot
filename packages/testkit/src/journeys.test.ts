@@ -27,12 +27,14 @@ import {
   ONCE_ROUTINE_CRON,
   RECEIPT_FILTERED_SUMMARY_MARKER,
 } from "@ardurbot/core";
+import type { Prisma } from "@ardurbot/db";
 import {
   admitDelegation,
   appendEvent,
   claimSteering,
   createThreadEvents,
   createThreadMessage,
+  createThreadMessageInTransaction,
   expireQuietBotMessages,
   finalizeRun,
   RunHistoryWriteError,
@@ -46,6 +48,7 @@ import { afterAll, beforeAll, describe, expect, it, onTestFinished, vi } from "v
 import type { createApp } from "../../../apps/api/src/app.ts";
 import * as turnContext from "../../adapters/src/context/assemble.js";
 import { checkDelegationExecution } from "../../adapters/src/delegation-execution.js";
+import { compactHistory } from "../../adapters/src/history-compaction.js";
 import { integrationApprovalForCall } from "../../adapters/src/integration-access.js";
 import { promptWithInitialSteering, toHistory } from "../../adapters/src/pi-runtime.js";
 import { sessionCookieHeader } from "./index.js";
@@ -981,6 +984,12 @@ describeJourneys("required product journeys", () => {
     });
     expect(followUp.seq).toBe(1);
 
+    // Reloading while the run is still active shows the draft where the reply will land.
+    const midRun = await rpc<Snap>(app, cookie, "threads/get", { botId: bot.id });
+    const midRunIds = midRun.messages.map((message) => message.id);
+    expect(midRunIds.indexOf(`progress:${run.id}`)).toBeGreaterThanOrEqual(0);
+    expect(midRunIds.indexOf(`progress:${run.id}`)).toBeLessThan(midRunIds.indexOf(followUp.id));
+
     // Only when the run finishes does the reply become a durable message.
     const finished = await finalizeRun(prisma, {
       spaceId: me.spaceId,
@@ -1009,6 +1018,231 @@ describeJourneys("required product journeys", () => {
     expect(ids.indexOf(reply.id)).toBeGreaterThanOrEqual(0);
     expect(ids.indexOf(reply.id)).toBeLessThan(ids.indexOf(followUp.id));
     expect(snap.messages.find((message) => message.id === reply.id)?.seq).toBe(0);
+    await settleFixtureWork([bot.id]);
+  });
+
+  // A streamed reply holds its place only while its run is running. Every exit from
+  // running releases it, and history compaction moves past a released place but never
+  // past a place a running reply still holds.
+  it("releases a streamed reply's place when its run stops running and compacts past it", async () => {
+    const cookie = await signup(app, `reply-release-${stamp}@ardurbot.test`, "Reply Release");
+    const me = await rpc<Me>(app, cookie, "me");
+    const bot = await rpc<Bot>(app, cookie, "bots/create", {
+      name: "Chief",
+      title: "",
+      description: "",
+      instructions: "",
+      notifyOnFinish: true,
+    });
+    const thread = await prisma.thread.findUniqueOrThrow({ where: { botId: bot.id } });
+    const scope = { spaceId: me.spaceId, threadId: thread.id, botId: bot.id };
+    const startRun = async () => {
+      const task = await prisma.task.create({
+        data: { ...scope, userId: me.userId, prompt: "status please", status: "running" },
+      });
+      const run = await prisma.run.create({
+        data: {
+          ...scope,
+          userId: me.userId,
+          taskId: task.id,
+          trigger: "user",
+          status: "running",
+          leaseOwner: "reply-release-fixture",
+          leaseFence: 1,
+          startedAt: new Date(),
+        },
+      });
+      const attempt = await prisma.attempt.create({
+        data: { runId: run.id, fence: 1, status: "running" },
+      });
+      const finish = { ...scope, runId: run.id, taskId: task.id, attemptId: attempt.id };
+      return {
+        stream: (text: string) =>
+          appendEvent(prisma, {
+            ...scope,
+            type: "thread.progress",
+            runId: run.id,
+            payload: { text, streaming: true },
+          }),
+        complete: (blocks: Array<{ kind: "text"; text: string }>) =>
+          finalizeRun(prisma, {
+            ...finish,
+            leaseOwner: "reply-release-fixture",
+            leaseFence: 1,
+            outcome: "completed",
+            blocks,
+          }),
+        fail: () =>
+          finalizeRun(prisma, {
+            ...finish,
+            leaseOwner: "reply-release-fixture",
+            leaseFence: 1,
+            outcome: "failed",
+            error: "The model provider is unavailable.",
+          }),
+        replySeq: async () =>
+          (await prisma.run.findUniqueOrThrow({ where: { id: run.id } })).replySeq,
+        run,
+      };
+    };
+    const ownerSays = (text: string) =>
+      createThreadMessage(prisma, {
+        threadId: thread.id,
+        role: "user",
+        origin: "human",
+        actorId: me.userId,
+        blocks: [{ kind: "text", text }],
+      });
+
+    // Stop while the reply streams: the draft is gone, and so is its place.
+    const stopped = await startRun();
+    await stopped.stream("Looking at the open PRs");
+    expect(await stopped.replySeq()).toBe(0);
+    await rpc(app, cookie, "threads/stop", { botId: bot.id });
+    expect(await stopped.replySeq()).toBeNull();
+
+    // A run that fails after streaming, and a routine-style run that streams and then
+    // saves nothing, release their places too.
+    const failed = await startRun();
+    await failed.stream("Checking the release");
+    expect(await failed.replySeq()).toBe(1);
+    await failed.fail();
+    expect(await failed.replySeq()).toBeNull();
+    const silent = await startRun();
+    await silent.stream("NO_RESPONSE");
+    expect(await silent.replySeq()).toBe(2);
+    await silent.complete([]);
+    expect(await silent.replySeq()).toBeNull();
+
+    // Any other write that moves a run out of running releases its place, and a run
+    // that is not running cannot take one.
+    const recovered = await startRun();
+    await recovered.stream("Half a reply");
+    expect(await recovered.replySeq()).toBe(3);
+    await prisma.run.update({ where: { id: recovered.run.id }, data: { status: "leased" } });
+    expect(await recovered.replySeq()).toBeNull();
+    await prisma.run.update({ where: { id: recovered.run.id }, data: { replySeq: 3 } });
+    expect(await recovered.replySeq()).toBeNull();
+    await settleFixtureWork([bot.id]);
+
+    const first = await ownerSays("first question");
+    const second = await ownerSays("second question");
+    expect([first.seq, second.seq]).toEqual([4, 5]);
+
+    // A reply that is still streaming holds seq 6 while the owner's next message takes 7.
+    const streaming = await startRun();
+    await streaming.stream("Rad shipped the release.");
+    expect(await streaming.replySeq()).toBe(6);
+    const third = await ownerSays("third question");
+    expect(third.seq).toBe(7);
+
+    const summarize = vi.fn(async function* () {
+      yield { type: "done" as const, text: "Summary so far." };
+    });
+    const compactionDeps = {
+      prisma,
+      runtime: {
+        describe: () => ({
+          id: "summary-fixture",
+          contractVersion: "1",
+          adapterVersion: "1",
+          capabilities: { streaming: true, compaction: true, tools: false, scripted: false },
+        }),
+        run: summarize,
+      } as unknown as AgentRuntime,
+      jobs: { enqueue: async () => undefined },
+      memoryProviders: { resolve: async () => null },
+      resolveModel: async () => ({ provider: "openrouter", id: "summary-model", apiKey: "k" }),
+    };
+    const cursor = async () =>
+      (await prisma.thread.findUniqueOrThrow({ where: { id: thread.id } })).historyCompactedUpToSeq;
+
+    // The released places 0-3 do not stop compaction; the held place 6 does.
+    await compactHistory(compactionDeps, thread.id);
+    expect(await cursor()).toBe(5);
+
+    // Once the reply saves into its place, compaction continues through it.
+    await streaming.complete([{ kind: "text", text: "Rad shipped the release." }]);
+    const reply = await prisma.message.findFirstOrThrow({
+      where: { threadId: thread.id, runId: streaming.run.id, role: "bot" },
+    });
+    expect(reply.seq).toBe(6);
+    await compactHistory(compactionDeps, thread.id);
+    expect(await cursor()).toBe(7);
+    expect(summarize).toHaveBeenCalledTimes(2);
+    await settleFixtureWork([bot.id]);
+  });
+
+  it("gives two text messages of one run that save at once separate places", async () => {
+    const cookie = await signup(app, `reply-race-${stamp}@ardurbot.test`, "Reply Race");
+    const me = await rpc<Me>(app, cookie, "me");
+    const bot = await rpc<Bot>(app, cookie, "bots/create", {
+      name: "Chief",
+      title: "",
+      description: "",
+      instructions: "",
+      notifyOnFinish: true,
+    });
+    const thread = await prisma.thread.findUniqueOrThrow({ where: { botId: bot.id } });
+    const task = await prisma.task.create({
+      data: {
+        spaceId: me.spaceId,
+        userId: me.userId,
+        botId: bot.id,
+        threadId: thread.id,
+        prompt: "two updates",
+        status: "running",
+      },
+    });
+    const run = await prisma.run.create({
+      data: {
+        spaceId: me.spaceId,
+        userId: me.userId,
+        botId: bot.id,
+        threadId: thread.id,
+        taskId: task.id,
+        trigger: "user",
+        status: "running",
+        leaseOwner: "reply-race-fixture",
+        leaseFence: 1,
+        startedAt: new Date(),
+      },
+    });
+    await appendEvent(prisma, {
+      spaceId: me.spaceId,
+      threadId: thread.id,
+      botId: bot.id,
+      type: "thread.progress",
+      runId: run.id,
+      payload: { text: "Two updates coming", streaming: true },
+    });
+    const save = (tx: Prisma.TransactionClient, text: string) =>
+      createThreadMessageInTransaction(tx, {
+        threadId: thread.id,
+        role: "bot",
+        botId: bot.id,
+        runId: run.id,
+        blocks: [{ kind: "text", text }],
+      });
+    // Parallel tool calls can save two messages of one run at once. The first keeps its
+    // transaction open for a moment after saving, so the second starts while the first
+    // has not committed yet.
+    let firstSaved!: () => void;
+    const saved = new Promise<void>((resolve) => {
+      firstSaved = resolve;
+    });
+    const first = prisma.$transaction(async (tx) => {
+      const message = await save(tx, "update one");
+      firstSaved();
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      return message;
+    });
+    await saved;
+    const second = prisma.$transaction((tx) => save(tx, "update two"));
+    const seqs = (await Promise.all([first, second])).map((message) => message.seq).sort();
+
+    expect(seqs).toEqual([0, 1]);
+    expect((await prisma.run.findUniqueOrThrow({ where: { id: run.id } })).replySeq).toBeNull();
     await settleFixtureWork([bot.id]);
   });
 
