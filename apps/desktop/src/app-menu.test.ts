@@ -112,37 +112,36 @@ describe("desktop application menu", () => {
     ]);
   });
 
-  it("acts only when the focused window is the main window", () => {
+  it("runs a menu shortcut in the app window unless another Ardur window has focus", () => {
     const send = vi.fn();
-    const focusedWindow = {
+    const window = {
       isDestroyed: () => false,
-      isFocused: () => true,
+      isMinimized: () => true,
+      restore: vi.fn(),
+      show: vi.fn(),
+      focus: vi.fn(),
       webContents: { send },
     };
-    runAppShortcut(focusedWindow as unknown as Parameters<typeof runAppShortcut>[0], "newBot");
+    type Target = Parameters<typeof runAppShortcut>[0];
+    // No Ardur window focused (the window is hidden or minimized): bring it back and run.
+    runAppShortcut(window as unknown as Target, "newBot", null);
+    expect(window.restore).toHaveBeenCalledOnce();
+    expect(window.show).toHaveBeenCalledOnce();
+    expect(window.focus).toHaveBeenCalledOnce();
     expect(send).toHaveBeenCalledWith(APP_SHORTCUT_CHANNEL, "newBot" satisfies AppShortcutId);
     expect(readFileSync(new URL("./preload.cjs", import.meta.url), "utf8")).toContain(
       `ipcRenderer.on("${APP_SHORTCUT_CHANNEL}"`,
     );
 
     send.mockClear();
-    const unfocusedWindow = {
-      isDestroyed: () => false,
-      isFocused: () => false,
-      webContents: { send },
-    };
-    // While another window (sign-in popup, Local Server Settings, setup) is focused,
-    // a menu shortcut must not act on the main window.
-    runAppShortcut(unfocusedWindow as unknown as Parameters<typeof runAppShortcut>[0], "newBot");
-    expect(send).not.toHaveBeenCalled();
+    runAppShortcut(window as unknown as Target, "settings", window);
+    expect(send).toHaveBeenCalledWith(APP_SHORTCUT_CHANNEL, "settings" satisfies AppShortcutId);
 
-    runAppShortcut(null, "back");
-    runAppShortcut(
-      { ...focusedWindow, isDestroyed: () => true } as unknown as Parameters<
-        typeof runAppShortcut
-      >[0],
-      "back",
-    );
+    send.mockClear();
+    // The sign-in pop-up, Local Server Settings or setup has focus: leave the app window alone.
+    runAppShortcut(window as unknown as Target, "back", { id: "sign-in-popup" });
+    runAppShortcut(null, "back", null);
+    runAppShortcut({ ...window, isDestroyed: () => true } as unknown as Target, "back", null);
     expect(send).not.toHaveBeenCalled();
   });
 

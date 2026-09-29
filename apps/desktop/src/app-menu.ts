@@ -39,15 +39,22 @@ export function appShortcutMenuItem(
 }
 
 /**
- * Runs the shortcut in the app window, only when it is the focused window.
- * Other windows (in-app sign-in pop-up, Local Server Settings, setup) must not
- * have their focused actions intercepted by main-window menu shortcuts.
+ * Runs the shortcut in the app window, bringing it forward as its keys would. It does nothing
+ * while another Ardur window (the sign-in pop-up, Local Server Settings, setup) has focus.
  */
 export function runAppShortcut(
-  window: Pick<BrowserWindow, "isDestroyed" | "isFocused" | "webContents"> | null,
+  window: Pick<
+    BrowserWindow,
+    "isDestroyed" | "isMinimized" | "restore" | "show" | "focus" | "webContents"
+  > | null,
   id: AppShortcutId,
+  focused: unknown = null,
 ) {
-  if (!window || window.isDestroyed() || !window.isFocused()) return;
+  if (!window || window.isDestroyed()) return;
+  if (focused !== null && focused !== window) return;
+  if (window.isMinimized()) window.restore();
+  window.show();
+  window.focus();
   window.webContents.send(APP_SHORTCUT_CHANNEL, id);
 }
 

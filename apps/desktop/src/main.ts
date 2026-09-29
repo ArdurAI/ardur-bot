@@ -988,7 +988,7 @@ function installApplicationMenu() {
   const template = applicationMenuTemplate(
     process.platform,
     { localSettings, changeServer, stopStack },
-    (id) => runAppShortcut(mainWindow, id),
+    (id) => runAppShortcut(mainWindow, id, BrowserWindow.getFocusedWindow()),
   );
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
