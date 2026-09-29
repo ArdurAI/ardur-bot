@@ -60,6 +60,15 @@ describe("finalBlocksAfterMidTurnProgress", () => {
     expect(finalBlocksAfterMidTurnProgress([steps], false)).toEqual([steps]);
   });
 
+  it("treats a reasoning summary as hidden work, not a final answer", () => {
+    const blocks: MessageBlock[] = [
+      { kind: "progress", text: "Weighing options.", reasoning: true },
+      { kind: "steps", steps: [{ label: "Shell", count: 1 }] },
+    ];
+    expect(finalBlocksAfterMidTurnProgress(blocks, true)).toEqual([]);
+    expect(finalBlocksAfterMidTurnProgress(blocks, false)).toEqual(blocks);
+  });
+
   it("keeps a final answer alongside tool activity", () => {
     const blocks: MessageBlock[] = [
       { kind: "steps", steps: [{ label: "Web search", count: 1 }] },

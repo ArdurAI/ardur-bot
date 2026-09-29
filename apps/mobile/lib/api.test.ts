@@ -1933,9 +1933,7 @@ describe("mobile thread event reduction", () => {
       { kind: "text", text: "Let me check now." },
       { kind: "steps", steps: [{ label: "Slack find channels", count: 1 }] },
     ]);
-    expect(blockText(completed?.messages[0] as MobileMessage)).toBe(
-      "Let me check now.\nSlack find channels",
-    );
+    expect(blockText(completed?.messages[0] as MobileMessage)).toBe("Slack find channels");
   });
 
   it("formats channel messages with their platform attribution", () => {
@@ -1985,6 +1983,19 @@ describe("mobile thread event reduction", () => {
     expect(blockText(mobileMessage("legacy", [{ kind: "text", text: "Legacy notice" }]))).toBe(
       "Legacy notice",
     );
+  });
+
+  it("does not speak a reasoning summary or interim narration", () => {
+    expect(
+      blockText(
+        mobileMessage("spoken", [
+          { kind: "progress", text: "Weighing options.", reasoning: true },
+          { kind: "text", text: "Here is the answer." },
+          { kind: "steps", steps: [{ label: "Shell", count: 1 }] },
+          { kind: "text", text: "The actual answer is here." },
+        ]),
+      ),
+    ).toBe("Shell\nThe actual answer is here.");
   });
 
   it("deduplicates durable messages, replaces matching subagent state and keeps the draft", () => {
@@ -2829,6 +2840,33 @@ describe("mobile clipboard text", () => {
         ],
       }),
     ).toBe(answer);
+  });
+  it("leaves a reasoning summary out of copied text", async () => {
+    const { copyableMobileMessageText } = await import("./api");
+    expect(
+      copyableMobileMessageText({
+        id: "message",
+        role: "bot",
+        blocks: [
+          { kind: "progress", text: "Weighing options.", reasoning: true },
+          { kind: "text", text: "Here is the answer." },
+        ],
+      }),
+    ).toBe("Here is the answer.");
+  });
+  it("omits interim narration", async () => {
+    const { copyableMobileMessageText } = await import("./api");
+    expect(
+      copyableMobileMessageText({
+        id: "message",
+        role: "bot",
+        blocks: [
+          { kind: "progress", text: "Searching..." },
+          { kind: "steps" } as any,
+          { kind: "progress", text: "Reading result..." },
+        ],
+      }),
+    ).toBe("Reading result...");
   });
   it("includes the shortened reply marker when copying a bounded receipt", async () => {
     const { copyableMobileMessageText } = await import("./api");

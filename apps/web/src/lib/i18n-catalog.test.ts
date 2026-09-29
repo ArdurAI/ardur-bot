@@ -521,6 +521,22 @@ describe("lingui catalogs", () => {
     }
   });
 
+  it("ships the Team board usage availability labels in every catalog", () => {
+    // A native run that never reported usage renders these instead of a fake zero;
+    // an empty translation would fall back to English on the card.
+    const sentences = ["Unavailable", "at least {0}"];
+    for (const locale of ["en", "de", "ko", "tr", "hi", "pt-BR", "zh-CN", "es", "ru"]) {
+      const catalog = readFileSync(
+        fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url)),
+        "utf8",
+      );
+      for (const sentence of sentences) {
+        expect(catalog).toContain(`msgid ${JSON.stringify(sentence)}`);
+        expect(catalog).not.toContain(`msgid ${JSON.stringify(sentence)}\nmsgstr ""`);
+      }
+    }
+  });
+
   it("ships both computer preparation messages in every catalog", () => {
     const sentences = ["Preparing the bot computer…", "Preparing the bot computer… {percent}%"];
     for (const locale of ["en", "de", "ko", "tr", "hi", "pt-BR", "zh-CN", "es", "ru"]) {

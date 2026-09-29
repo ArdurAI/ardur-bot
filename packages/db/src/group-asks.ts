@@ -29,12 +29,12 @@ export const GROUP_ASK_EXPIRY_GRACE_MS = 15 * 60_000;
 
 /**
  * Fit one ask's members inside the coordinator's task budget: each member keeps its own
- * reservation, and the task's descendant count, hops and deadline stay as they are. A goal's
- * owner-set budget is never raised.
+ * reservation — one realistic request for its own model — and the task's descendant count,
+ * hops and deadline stay as they are. A goal's owner-set budget is never raised.
  */
 export async function sizeDelegationRootForAsk(
   tx: Prisma.TransactionClient,
-  input: { runId: string; members: number; tokensPerMember: number },
+  input: { runId: string; memberTokens: readonly number[] },
 ) {
   const { run, rootTaskId } = await lockDelegationRootForRun(tx, input.runId);
   const root = await ensureDelegationRootBudget(tx, {
@@ -45,12 +45,18 @@ export async function sizeDelegationRootForAsk(
     coordinatorThreadId: run.threadId,
     runCreatedAt: run.createdAt,
   });
-  if (input.members <= 0 || (await tx.teamGoal.findUnique({ where: { rootTaskId } }))) return root;
+  if (!input.memberTokens.length || (await tx.teamGoal.findUnique({ where: { rootTaskId } })))
+    return root;
   const tokenLimit = Math.max(
     root.tokenLimit,
-    root.usedTokens + root.reservedTokens + input.members * input.tokensPerMember,
+    root.usedTokens +
+      root.reservedTokens +
+      input.memberTokens.reduce((sum, tokens) => sum + tokens, 0),
   );
-  const maxConcurrent = Math.max(root.maxConcurrent, root.activeDescendants + input.members);
+  const maxConcurrent = Math.max(
+    root.maxConcurrent,
+    root.activeDescendants + input.memberTokens.length,
+  );
   if (tokenLimit === root.tokenLimit && maxConcurrent === root.maxConcurrent) return root;
   return tx.delegationRoot.update({ where: { rootTaskId }, data: { tokenLimit, maxConcurrent } });
 }

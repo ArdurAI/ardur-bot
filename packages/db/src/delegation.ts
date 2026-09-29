@@ -4,6 +4,7 @@ import type {
   DelegationProblem,
   DelegationRecord,
   DelegationSnapshot,
+  DelegationStopReason,
   MessageBlock,
 } from "@ardurbot/contracts";
 import {
@@ -15,6 +16,7 @@ import {
   IntegrationManifestSchema,
   LocalityPolicySchema,
   RequestUsageObservationSchema,
+  runtimeEnforcesDelegationBudget,
   TaskCardSchema,
 } from "@ardurbot/contracts";
 import {
@@ -176,6 +178,8 @@ export async function admitDelegation(
     prompt: string;
     snapshot: DelegationSnapshot;
     tokens?: number;
+    /** One-request floor for the worker's pinned model; explicit budgets below it refuse. */
+    minimumTokens?: number;
     deadlineAt?: Date;
     newChild?: boolean;
     card?: unknown;
@@ -252,13 +256,15 @@ export async function admitDelegation(
   if (hop > root.maxHops) refuse("hops-exceeded");
   if (root.totalDescendants >= root.maxDescendants || root.activeDescendants >= root.maxConcurrent)
     refuse("descendants-exceeded");
-  const tokens = input.tokens ?? DELEGATION_LIMITS.reservationTokens;
-  if (
-    !Number.isSafeInteger(tokens) ||
-    tokens <= 0 ||
-    root.reservedTokens + root.usedTokens + tokens > root.tokenLimit
-  )
-    refuse("budget-exhausted");
+  // An explicit budget is never raised silently. The default reservation must still cover
+  // the admission floor for this worker's model, so it grows to the floor when higher.
+  const tokens =
+    input.tokens ?? Math.max(DELEGATION_LIMITS.reservationTokens, input.minimumTokens ?? 0);
+  if (!Number.isSafeInteger(tokens) || tokens <= 0) refuse("budget-exhausted");
+  // An explicit budget the owner or coordinator set is never raised silently; one that
+  // cannot cover even one request for the worker's model refuses before the worker starts.
+  if (input.minimumTokens !== undefined && tokens < input.minimumTokens) refuse("budget-too-small");
+  if (root.reservedTokens + root.usedTokens + tokens > root.tokenLimit) refuse("budget-exhausted");
   const deadlineAt = new Date(
     Math.min(
       root.deadlineAt.getTime(),
@@ -268,6 +274,8 @@ export async function admitDelegation(
   );
   if (!Number.isFinite(deadlineAt.getTime()) || deadlineAt <= now) refuse("deadline-passed");
   const snapshot = DelegationSnapshotSchema.parse(input.snapshot);
+  // A runtime that cannot be stopped at its reservation must not look budgeted.
+  if (!runtimeEnforcesDelegationBudget(snapshot.pin.runtimeKind)) refuse("runtime-unbudgeted");
   for (const policy of [
     requester.allowedModelDestinations,
     recipient.allowedModelDestinations,
@@ -436,6 +444,7 @@ export async function admitDelegation(
       ancestorBotIds,
       differences: delegationDifferences(parentSnapshot, snapshot, input.actingName),
       reservedTokens: tokens,
+      attemptReservedTokens: tokens,
       deadlineAt,
       admissionKey: input.admissionKey,
       fingerprint,
@@ -450,9 +459,10 @@ export async function requestCancel(
   scope: Scope,
   rootTaskId: string,
   now = new Date(),
+  reason: DelegationStopReason = "stopped",
 ) {
   return withTransactionRetry(() =>
-    prisma.$transaction((tx) => requestCancelInTransaction(tx, scope, rootTaskId, now)),
+    prisma.$transaction((tx) => requestCancelInTransaction(tx, scope, rootTaskId, now, reason)),
   );
 }
 
@@ -462,6 +472,7 @@ export async function requestCancelInTransaction(
   scope: Scope,
   rootTaskId: string,
   now = new Date(),
+  reason: DelegationStopReason = "stopped",
 ) {
   await lockDelegationRoot(tx, rootTaskId);
   const root = await tx.delegationRoot.findFirstOrThrow({ where: { rootTaskId, ...scope } });
@@ -476,6 +487,12 @@ export async function requestCancelInTransaction(
   await tx.delegation.updateMany({
     where: { rootTaskId, status: { in: ACTIVE_DELEGATIONS } },
     data: { status: "cancel-requested", cancelRequestedAt: now },
+  });
+  // Record why the stop was requested while it is known; the first cause wins, and
+  // confirmation never re-infers it from usage or the deadline after the fact.
+  await tx.delegation.updateMany({
+    where: { rootTaskId, status: "cancel-requested", cancelReason: null },
+    data: { cancelReason: reason },
   });
   await tx.run.updateMany({
     where: {
@@ -498,6 +515,49 @@ export async function requestCancelInTransaction(
   return { cancelRequested: true as const };
 }
 
+/** Same order as the execution gate: a passed deadline is terminal regardless of spend. */
+export function delegationStopReason(
+  row: { deadlineAt: Date; usedTokens: number; reservedTokens: number },
+  now = new Date(),
+): DelegationStopReason {
+  if (row.deadlineAt <= now) return "deadline";
+  if (row.usedTokens >= row.reservedTokens) return "budget";
+  return "stopped";
+}
+/**
+ * The amount the row's current attempt actually reserved. Rows written before
+ * per-attempt amounts were stored keep their old reservation: the legacy 10,000
+ * for a reworked attempt, the row's own reservation for a first attempt.
+ */
+export function delegationAttemptReservation(row: {
+  hop: number;
+  reservedTokens: number;
+  attemptReservedTokens: number | null;
+}): number {
+  return (
+    row.attemptReservedTokens ??
+    (row.hop > 1 ? DELEGATION_LIMITS.legacyReservationTokens : row.reservedTokens)
+  );
+}
+/**
+ * Why the worker stopped: the reason recorded when cancellation was requested, or the
+ * deadline/budget inference for rows stopped before reasons were recorded.
+ */
+export function delegationEffectiveStopReason(
+  row: {
+    cancelReason?: string | null;
+    deadlineAt: Date;
+    usedTokens: number;
+    reservedTokens: number;
+  },
+  now = new Date(),
+): DelegationStopReason {
+  return row.cancelReason === "budget" ||
+    row.cancelReason === "deadline" ||
+    row.cancelReason === "stopped"
+    ? row.cancelReason
+    : delegationStopReason(row, now);
+}
 /** Called only after the executor finishes or confirms its abort. The unique summary is durable. */
 export async function finishDelegation(
   tx: Prisma.TransactionClient,
@@ -512,17 +572,6 @@ export async function finishDelegation(
   if (expectedRunId !== undefined && row.runId !== expectedRunId) return;
   if (row.status === "cancel-requested" && status !== "cancelled") return;
   const redactedText = redactTaskValue(text);
-  const changed = await tx.delegation.updateMany({
-    where: { id, status: { in: ACTIVE_DELEGATIONS } },
-    data: {
-      status,
-      result: redactedText.slice(0, PEER_RECEIPT_MAX_LENGTH),
-      completedAt: new Date(),
-      ...(status === "cancelled" ? { cancelConfirmedAt: new Date() } : {}),
-    },
-  });
-  if (!changed.count) return;
-  await appendTaskEvent(tx, row, status, text);
   const brokerHeld = row.runId ? await unresolvedBrokerTokens(tx, row.id, row.runId) : 0;
   const attemptSpent =
     row.hop > 1 && row.runId
@@ -538,13 +587,32 @@ export async function finishDelegation(
   const usedInAttempt = attemptSpent
     ? (attemptSpent._sum.inputTokens ?? 0) + (attemptSpent._sum.outputTokens ?? 0)
     : row.usedTokens;
-  const attemptLimit = row.hop > 1 ? DELEGATION_LIMITS.reservationTokens : row.reservedTokens;
+  // Settlement and the card both use the amount this attempt actually reserved,
+  // never the current global constant: an older attempt keeps its own reservation.
+  const attemptReserved = delegationAttemptReservation(row);
+  // Measured overspend stays on the card for every terminal status — completed,
+  // failed, cancelled and reworked attempts alike — so the evidence survives.
+  const overspentBy = Math.max(0, usedInAttempt - attemptReserved);
+  const resultText = overspentBy
+    ? `${redactedText ? `${redactedText}\n` : ""}Overspent its token budget by ${overspentBy} tokens.`
+    : redactedText;
+  const changed = await tx.delegation.updateMany({
+    where: { id, status: { in: ACTIVE_DELEGATIONS } },
+    data: {
+      status,
+      result: resultText.slice(0, PEER_RECEIPT_MAX_LENGTH),
+      completedAt: new Date(),
+      ...(status === "cancelled" ? { cancelConfirmedAt: new Date() } : {}),
+    },
+  });
+  if (!changed.count) return;
+  await appendTaskEvent(tx, row, status, resultText);
   await tx.delegationRoot.update({
     where: { rootTaskId: row.rootTaskId },
     data: {
       activeDescendants: { decrement: 1 },
       reservedTokens: {
-        decrement: Math.max(0, attemptLimit - usedInAttempt - brokerHeld),
+        decrement: Math.max(0, attemptReserved - usedInAttempt - brokerHeld),
       },
     },
   });
@@ -579,7 +647,7 @@ export async function finishDelegation(
             kind: "text",
             text: goalRoomAssignment
               ? `${row.actingName}: ${status === "completed" ? "completed, awaiting acceptance" : status}.`
-              : `${row.requesterName} → ${row.actingName}: ${status === "completed" ? "completed, awaiting acceptance" : status}.\n${redactedText.slice(0, 2000)}${row.card && TaskCardSchema.parse(row.card).doneWhen.length ? `\n${taskCardChecklist(TaskCardSchema.parse(row.card))}` : ""}`,
+              : `${row.requesterName} → ${row.actingName}: ${status === "completed" ? "completed, awaiting acceptance" : status}.\n${resultText.slice(0, 2000)}${row.card && TaskCardSchema.parse(row.card).doneWhen.length ? `\n${taskCardChecklist(TaskCardSchema.parse(row.card))}` : ""}`,
           },
         ];
   const message = row.summaryMessageId

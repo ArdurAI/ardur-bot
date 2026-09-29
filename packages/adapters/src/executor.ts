@@ -84,6 +84,7 @@ import {
   inferAttachmentMimeType,
   isMessagingChannelRun,
   isOneShotRoutineCrons,
+  isReasoningSummaryBlock,
   isTerminal,
   MAX_ASK_ROUNDS,
   messagingChannelId,
@@ -3050,6 +3051,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 leaseOwner: workerId,
                 leaseFence: fence,
                 blocks: [
+                  ...redactBlocks(messageSegments, runSecrets),
                   {
                     kind: "ask",
                     text: reason,
@@ -3728,6 +3730,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               leaseOwner: workerId,
               leaseFence: fence,
               blocks: [
+                ...redactBlocks(messageSegments, runSecrets),
                 buildApprovalAskBlock(applied!.effect.id, name, args, runSecrets, {
                   reviewReason,
                   allowAlways:
@@ -4855,6 +4858,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               leaseOwner: workerId,
               leaseFence: fence,
               blocks: [
+                ...redactBlocks(messageSegments, runSecrets),
                 {
                   kind: "ask",
                   text: String(args.label ?? "Code"),
@@ -6204,6 +6208,13 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   name,
                   redactSecrets(task, runSecrets),
                   redactTaskValue(card, runSecrets),
+                  // Helpers run on this run's resolved connection; its configured
+                  // output cap and context window set the helper's admission floor.
+                  {
+                    contextWindow: selected.contextWindow,
+                    maxTokens: selected.maxTokens,
+                    reasoning: selected.reasoning,
+                  },
                 );
                 if ("error" in admitted) return admitted;
                 try {
@@ -6383,6 +6394,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 pendingProgress = "";
                 lastProgressAt = Date.now();
               }
+              const safeText = redactSecrets(event.text, runSecrets);
               await deps.events.append({
                 spaceId: run.spaceId,
                 threadId: thread.id,
@@ -6390,10 +6402,28 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 type: run.delegationId ? "delegation.progress" : "thread.progress",
                 runId,
                 payload: {
-                  text: redactSecrets(event.text, runSecrets),
+                  text: safeText,
                   ...(event.activity ? { activity: true } : {}),
+                  ...(event.reasoning ? { reasoning: true } : {}),
                 },
               });
+              // The live beat clears when the run finishes, so the finished work record
+              // keeps the summary itself. Consecutive summaries replace that tail, matching
+              // the live reducer. Reply text still streaming stays one block. A note held
+              // for message_user is flushed first so the summary cannot land ahead of it.
+              if (event.reasoning && !event.activity && safeText.trim()) {
+                if (pendingToolNames.length > 0) flushPendingTools();
+                const summary = {
+                  kind: "progress" as const,
+                  text: safeText,
+                  reasoning: true as const,
+                };
+                const tail = messageSegments.at(-1);
+                messageSegments =
+                  tail && isReasoningSummaryBlock(tail)
+                    ? [...messageSegments.slice(0, -1), summary]
+                    : [...messageSegments, summary];
+              }
             } else if (event.type === "ask") {
               if (!(await renewRunLease(deps, runId, workerId, fence))) return;
               const safeText = redactSecrets(event.text, runSecrets);
@@ -6414,6 +6444,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 leaseOwner: workerId,
                 leaseFence: fence,
                 blocks: [
+                  ...redactBlocks(messageSegments, runSecrets),
                   {
                     kind: "ask",
                     text: safeText,
@@ -6477,6 +6508,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 leaseOwner: workerId,
                 leaseFence: fence,
                 reason: safeReason,
+                blocks: redactBlocks(messageSegments, runSecrets),
                 computerId: storedComputer.id,
               });
               if (!paused) return;
@@ -6619,6 +6651,21 @@ export function createRunExecutor(deps: ExecutorDeps) {
               if (!comparisonRun && recorded) {
                 recordContextUsage(turnContext.snapshot, recorded);
                 await saveContextSnapshot();
+              }
+              // Stop as soon as persisted usage crosses the reservation. Waiting for the
+              // next heartbeat would let a native runtime start another request.
+              const watchedDelegation = event.delegationId ?? run.delegationId;
+              if (watchedDelegation) {
+                const stop = await checkDelegationExecution(
+                  deps.prisma,
+                  runId,
+                  undefined,
+                  undefined,
+                  event.delegationId && event.delegationId !== run.delegationId
+                    ? event.delegationId
+                    : undefined,
+                );
+                if (stop) runAbortController?.abort(new DispatchStopRequested());
               }
             } else if (event.type === "done") {
               if (!assembled && event.text) {
@@ -7306,7 +7353,8 @@ export function completionMessageSegments(
 ): MessageBlock[] {
   if (options?.suppressOutput) return [];
   const fallback = options?.emptyResponseText?.trim() || "done.";
-  if (segments.length > 0) {
+  // A reasoning summary annotates work; on its own the turn produced nothing.
+  if (segments.some((segment) => !isReasoningSummaryBlock(segment))) {
     if (
       !options?.allowSilentEmpty &&
       options?.emptyResponseText !== undefined &&
@@ -7317,7 +7365,7 @@ export function completionMessageSegments(
     return segments;
   }
   if (options?.allowSilentEmpty || options?.skipEmptyFallback) return [];
-  return [{ kind: "text", text: fallback }];
+  return [...segments, { kind: "text", text: fallback }];
 }
 
 /** User-facing text for completion notifications; empty when only tool/step activity remains. */
@@ -7486,7 +7534,13 @@ function redactBlocks(blocks: MessageBlock[], secrets: string[]): MessageBlock[]
     if (block.kind === "text") {
       return { kind: "text" as const, text: redactSecrets(block.text, secrets) };
     }
-    if (block.kind === "bot_message_sent" || block.kind === "bot_message_received") {
+    // A kept reasoning summary was redacted when it streamed; a secret added later in
+    // the run is still caught here, as it is for text.
+    if (
+      block.kind === "progress" ||
+      block.kind === "bot_message_sent" ||
+      block.kind === "bot_message_received"
+    ) {
       return { ...block, text: redactSecrets(block.text, secrets) };
     }
     return block;

@@ -2,10 +2,10 @@ import { createHash } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import type { AgentUsage, RequestUsageObservation, UsagePurpose } from "@ardurbot/adapter-kit";
 import type { RuntimePin } from "@ardurbot/contracts";
-import { DELEGATION_LIMITS } from "@ardurbot/contracts";
 import type { PrismaClient, ThreadEvents, UsageRecord } from "@ardurbot/db";
 import {
   appendEventInTransaction,
+  delegationAttemptReservation,
   ensureDelegationRootBudget,
   lockDelegationRootTask,
   Prisma,
@@ -631,8 +631,7 @@ async function recordRequestUsage(
             const usedInAttempt = attemptSpent
               ? (attemptSpent._sum.inputTokens ?? 0) + (attemptSpent._sum.outputTokens ?? 0)
               : delegation.usedTokens;
-            const attemptLimit =
-              delegation.hop > 1 ? DELEGATION_LIMITS.reservationTokens : delegation.reservedTokens;
+            const attemptLimit = delegationAttemptReservation(delegation);
             const heldInAttempt = reservations
               .filter((row) => row.delegationId === delegation.id && row.runId === run.id)
               .reduce((sum, row) => sum + row.held, 0);
@@ -806,8 +805,7 @@ async function updateUsageBudget(
   const priorAttemptTokens = attemptSpent
     ? (attemptSpent._sum.inputTokens ?? 0) + (attemptSpent._sum.outputTokens ?? 0) - tokens
     : current.usedTokens;
-  const attemptLimit =
-    current.hop > 1 ? DELEGATION_LIMITS.reservationTokens : current.reservedTokens;
+  const attemptLimit = delegationAttemptReservation(current);
   await tx.delegation.update({
     where: { id: current.id },
     data: { usedTokens: { increment: tokens } },

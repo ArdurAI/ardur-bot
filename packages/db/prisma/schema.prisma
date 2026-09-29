@@ -2148,6 +2148,12 @@ model Delegation {
   differences String[] @default([])
   ancestorBotIds String[]
   reservedTokens Int
+  // The amount the current attempt actually reserved at admission or rework. Null on rows
+  // written before this column existed; those settle against the legacy 10,000 reservation.
+  attemptReservedTokens Int?
+  // Why cancellation was requested, recorded when it happens ("budget", "deadline",
+  // "stopped"); null on older rows, whose finish path falls back to inferring the reason.
+  cancelReason String?
   usedTokens Int @default(0)
   deadlineAt DateTime
   admissionKey String @unique
@@ -2353,6 +2359,9 @@ model Comparison {
   participants Json
   budgetTokens Int
   mergeReserved Boolean
+  // The token amount the merge hold actually reserved; null on comparisons created
+  // before this column existed, whose hold was the legacy 10,000 reservation.
+  mergeReservedTokens Int?
   createdAt DateTime @default(now())
   executions ComparisonExecution[]
   @@unique([spaceId, userId, clientNonce])

@@ -448,7 +448,12 @@ export function hostSocketUrl(apiUrl: string, internal = false) {
 /** Native adapters emit only this shared runtime event vocabulary. */
 export const HostRuntimeEventSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("text"), text }),
-  z.strictObject({ type: z.literal("progress"), text, activity: z.literal(true).optional() }),
+  z.strictObject({
+    type: z.literal("progress"),
+    text,
+    activity: z.literal(true).optional(),
+    reasoning: z.literal(true).optional(),
+  }),
   z.strictObject({
     type: z.literal("tool"),
     name: z.string().max(160),

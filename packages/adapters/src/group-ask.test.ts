@@ -2,7 +2,7 @@ import { delegationProblem } from "@ardurbot/contracts";
 import type * as Database from "@ardurbot/db";
 import { DelegationAdmissionError } from "@ardurbot/db";
 import type * as DelegationModule from "./delegation.js";
-import { prepareDelegation } from "./delegation.js";
+import { delegationFloorForModel, prepareDelegation } from "./delegation.js";
 
 vi.mock("./delegation.js", async (importOriginal) => ({
   ...(await importOriginal<typeof DelegationModule>()),
@@ -30,12 +30,7 @@ vi.mock("@ardurbot/db", async (importOriginal) => ({
 import type { PrismaClient } from "@ardurbot/db";
 import { loadGroupAskResults, sizeDelegationRootForAsk } from "@ardurbot/db";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  ASK_MEMBER_TOKENS,
-  askGroupMembers,
-  loadAskWakeContext,
-  wakeCoordinatorAfterAsk,
-} from "./group-ask.js";
+import { askGroupMembers, loadAskWakeContext, wakeCoordinatorAfterAsk } from "./group-ask.js";
 
 const run = {
   id: "chief-run",
@@ -52,12 +47,35 @@ const members = [
   { id: "cy", name: "Cy" },
 ];
 
+/** A resolved pin on a standard model the registry does not know: the standard floor. */
+const resolvedPin = {
+  kind: "resolved" as const,
+  pin: {
+    runtimeKind: "pi" as const,
+    provider: "test",
+    modelId: "standard",
+    effort: "high" as const,
+    credentialId: "connection",
+    revision: 0,
+  },
+  reasoning: false,
+};
+const reasoningPin = {
+  ...resolvedPin,
+  pin: { ...resolvedPin.pin, modelId: "reasoning" },
+  reasoning: true,
+};
+// Expectations derive from the same floor admission enforces, not from literals.
+const memberFloor = delegationFloorForModel(resolvedPin.pin, resolvedPin);
+const reasoningFloor = delegationFloorForModel(reasoningPin.pin, reasoningPin);
+
 function harness(
   options: {
     coordinatorBotId?: string;
     paused?: boolean;
     existingMessage?: boolean;
     asked?: Array<{ actingBotId: string; actingName: string }>;
+    resolveDelegationPin?: (bot: { id: string }) => Promise<unknown>;
   } = {},
 ) {
   let seq = 0;
@@ -95,6 +113,13 @@ function harness(
       findUnique: vi.fn(async () => ({ status: "running" })),
       create: runCreate,
     },
+    bot: {
+      findFirstOrThrow: vi.fn(async ({ where }: { where: { id: string } }) => {
+        const bot = members.find((member) => member.id === where.id);
+        if (!bot) throw new Error("not found");
+        return { ...bot, computerId: "computer", computer: null };
+      }),
+    },
     message: {
       findUnique: vi.fn(async () => (options.existingMessage ? { id: "ask-message" } : null)),
       create: messageCreate,
@@ -118,6 +143,7 @@ function harness(
     prisma,
     events: { notify: vi.fn(async () => undefined) },
     jobs: { enqueue: vi.fn(async () => undefined) },
+    resolveDelegationPin: options.resolveDelegationPin ?? (async () => resolvedPin),
   };
   return { deps, tx, runCreate, taskCreate, messageCreate, eventCreate };
 }
@@ -162,15 +188,14 @@ describe("ask_members fan-out", () => {
           kind: "group-handoff",
           parentRunId: run.id,
           admissionKey: `group-ask:1:chief-run:call-1:${id}`,
-          tokens: ASK_MEMBER_TOKENS,
+          tokens: memberFloor,
           targetThreadId: "room",
         }),
       ),
     );
     expect(sizeDelegationRootForAsk).toHaveBeenCalledWith(expect.anything(), {
       runId: run.id,
-      members: 3,
-      tokensPerMember: ASK_MEMBER_TOKENS,
+      memberTokens: [memberFloor, memberFloor, memberFloor],
     });
     expect(h.messageCreate).toHaveBeenCalledOnce();
     expect(h.messageCreate).toHaveBeenCalledWith({
@@ -205,6 +230,39 @@ describe("ask_members fan-out", () => {
       ),
     );
     expect(h.deps.jobs.enqueue).toHaveBeenCalledTimes(3);
+  });
+
+  it("reserves each member's own floor, larger for a reasoning model, and sizes the room to the sum", async () => {
+    const h = harness({
+      resolveDelegationPin: async (bot) => (bot.id === "ben" ? reasoningPin : resolvedPin),
+    });
+    const result = await askGroupMembers(h.deps as never, run, "group", {
+      members: ["all"],
+      request: "What are you working on?",
+      callId: "call-1",
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      asked: [
+        { botId: "ada", name: "Ada" },
+        { botId: "ben", name: "Ben" },
+        { botId: "cy", name: "Cy" },
+      ],
+      notAsked: [],
+    });
+    expect(
+      vi.mocked(prepareDelegation).mock.calls.map(([, input]) => [input.actingBotId, input.tokens]),
+    ).toEqual([
+      ["ada", memberFloor],
+      ["ben", reasoningFloor],
+      ["cy", memberFloor],
+    ]);
+    expect(reasoningFloor).toBeGreaterThan(memberFloor);
+    expect(sizeDelegationRootForAsk).toHaveBeenCalledWith(expect.anything(), {
+      runId: run.id,
+      memberTokens: [memberFloor, reasoningFloor, memberFloor],
+    });
   });
 
   it("asks the rest when one member's budget refuses, and reports that member", async () => {
