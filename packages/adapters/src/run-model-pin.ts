@@ -29,6 +29,7 @@ import { hermesCompatibility, hermesConfigHash } from "./hermes-compatibility.js
 import { modelLocalityAllowed } from "./model-locality.js";
 import { listPiCatalog } from "./pi-models.js";
 import { AnthropicOAuthUnavailableError } from "./pi-oauth.js";
+import { catalogModels } from "./pi-runtime.js";
 import type { BotPinFields } from "./pin-resolution.js";
 import {
   credentialForPin,
@@ -228,12 +229,33 @@ export async function resolveRunModelPin(input: {
       pin.effort = inheritedOllamaEffort(bot.thinkingLevel, discovered.reasoning);
     }
     const model = loadedModel ?? (await input.loadKey(credential, pin));
+    // Key-based catalog providers keep their capabilities in the registry, not
+    // in the connection secret; Hermes sizes its manifest and broker from them.
+    const translatedHermes =
+      pin.runtimeKind === "hermes" &&
+      pin.provider !== "openai-compatible" &&
+      pin.provider !== "ollama" &&
+      pin.provider !== "scripted";
+    const concrete = translatedHermes
+      ? catalogModels().getModel(model.provider, model.id)
+      : undefined;
     const resolved = {
       ...model,
+      ...(translatedHermes
+        ? {
+            reasoning: model.reasoning ?? concrete?.reasoning,
+            acceptsImages: concrete
+              ? concrete.input.includes("image")
+              : Boolean(model.acceptsImages),
+          }
+        : {}),
       ...(pin.runtimeKind === "hermes"
         ? {
-            contextWindow: model.contextWindow ?? 32_768,
-            maxTokens: Math.min(model.maxTokens ?? 4_096, input.maxOutputTokens ?? 65_536),
+            contextWindow: model.contextWindow ?? concrete?.contextWindow ?? 32_768,
+            maxTokens: Math.min(
+              model.maxTokens ?? concrete?.maxTokens ?? 4_096,
+              input.maxOutputTokens ?? 65_536,
+            ),
           }
         : {}),
       runtimePin: pin,

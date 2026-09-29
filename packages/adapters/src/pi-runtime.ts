@@ -83,7 +83,8 @@ const toolCallBudgetsByRun = new Map<string, ToolCallBudget>();
 // their imports, and ESM hoists those imports, so module-level env reads here
 // would run before .env is loaded and miss the local provider entirely.
 let catalogModelsCache: Models | undefined;
-function catalogModels(): Models {
+/** The composed built-in + local + OpenAI-compatible registry, built on first use. */
+export function catalogModels(): Models {
   catalogModelsCache ??= registerOpenAiCompatibleCatalog(registerLocalProvider(builtinModels()));
   return catalogModelsCache;
 }

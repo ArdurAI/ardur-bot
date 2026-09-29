@@ -2,18 +2,20 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { AgentRunRequest } from "@ardurbot/adapter-kit";
+import type { AgentRunRequest, AgentUsage } from "@ardurbot/adapter-kit";
 import {
   buildHermesRuntime,
   HERMES_SOURCE_PIN,
   HERMES_SOURCE_TREE,
 } from "@ardurbot/host-runtime/runtimes/hermes-install";
 import type { HermesRuntime } from "@ardurbot/host-runtime/runtimes/hermes-runtime";
+import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import profileFixture from "../../../host-runtime/python/tests/valid_profile.json" with {
   type: "json",
 };
-import type { BrokerRequest, HermesProviderBroker } from "../hermes-provider-broker.js";
+import type { BrokerRequest, BrokerScope } from "../hermes-provider-broker.js";
+import { HermesProviderBroker } from "../hermes-provider-broker.js";
 import { advertisedHostTools, buildHostTurn } from "../host-turn.js";
 import { LocalHermesRuntime } from "./local-hermes-runtime.js";
 
@@ -368,6 +370,185 @@ describe("LocalHermesRuntime", () => {
     });
     expect(broker.revoke).toHaveBeenCalled();
   });
+
+  it.each([
+    { provider: "anthropic", api: "anthropic-messages", ownerKey: "anthropic-owner-key" },
+    { provider: "google", api: "google-generative-ai", ownerKey: "gemini-owner-key" },
+  ] as const)(
+    "runs a $provider key pin through the translated broker route in local mode",
+    async ({ provider, api, ownerKey }) => {
+      const records: AgentUsage[] = [];
+      const captured: Array<{ model: unknown; options: { apiKey?: string } | undefined }> = [];
+      const partial = (content: unknown[] = []) =>
+        ({
+          role: "assistant",
+          content,
+          api,
+          provider,
+          model: "fixture-model",
+          usage: {
+            input: 0,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            totalTokens: 0,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+          },
+          stopReason: "pending",
+          timestamp: Date.now(),
+        }) as never;
+      const streamSimple = async (model: unknown, _context: unknown, options?: unknown) => {
+        captured.push({ model, options: options as { apiKey?: string } | undefined });
+        const stream = createAssistantMessageEventStream();
+        stream.push({ type: "start", partial: partial() });
+        stream.push({ type: "text_delta", contentIndex: 0, delta: "Bonjour", partial: partial() });
+        stream.push({
+          type: "done",
+          reason: "stop",
+          message: {
+            ...partial([{ type: "text", text: "Bonjour" }]),
+            usage: {
+              input: 7,
+              output: 5,
+              cacheRead: 0,
+              cacheWrite: 0,
+              totalTokens: 12,
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+            },
+            stopReason: "stop",
+          },
+        });
+        stream.end();
+        return stream;
+      };
+      const req = request();
+      req.model = {
+        ...req.model,
+        provider,
+        id: "fixture-model",
+        apiKey: ownerKey,
+        thinkingLevel: "off",
+        reasoning: false,
+        runtimePin: {
+          ...req.model.runtimePin!,
+          provider,
+          modelId: "fixture-model",
+          effort: "off",
+        },
+      };
+      let broker!: HermesProviderBroker;
+      let revokeSpy: ReturnType<typeof vi.spyOn>;
+      vi.mocked(buildHermesRuntime).mockImplementationOnce(async (options) => {
+        return {
+          abort: async () => {},
+          fail: async () => {},
+          run: async function* (localReq: AgentRunRequest) {
+            options.onProfileAcknowledged();
+            // Hermes speaks Chat Completions to the relay with the grant token.
+            const response = await fetch(`${localReq.model.baseUrl}/chat/completions`, {
+              method: "POST",
+              headers: {
+                authorization: `Bearer ${localReq.model.apiKey}`,
+                "content-type": "application/json",
+              },
+              body: JSON.stringify({
+                model: "fixture-model",
+                messages: [{ role: "user", content: "hi" }],
+                stream: false,
+              }),
+            });
+            expect(response.status).toBe(200);
+            expect(response.headers.get("content-type")).toBe("application/json");
+            const body = await response.json();
+            expect(body.object).toBe("chat.completion");
+            expect(body.model).toBe("fixture-model");
+            expect(body.choices[0].message.content).toBe("Bonjour");
+            expect(body.usage).toEqual({
+              prompt_tokens: 7,
+              completion_tokens: 5,
+              total_tokens: 12,
+            });
+            yield { type: "done" };
+          },
+        } as unknown as HermesRuntime;
+      });
+      const runtime = new LocalHermesRuntime(async () => {
+        const scope: BrokerScope = {
+          runId: req.runId,
+          botId: req.botId,
+          userId: "owner",
+          spaceId: "space",
+          operationId: "operation",
+          leaseOwner: "worker",
+          leaseFence: 1,
+          hostGeneration: 3,
+          configurationHash: "fixture",
+          pin: {
+            credentialId: "fixture-cred",
+            provider,
+            modelId: "fixture-model",
+            effort: "off",
+          },
+        };
+        broker = new HermesProviderBroker({
+          scope,
+          credentialId: "fixture-cred",
+          pinnedEffort: "off",
+          connection: {
+            credentialId: "fixture-cred",
+            provider,
+            modelId: "fixture-model",
+            baseUrl: "https://provider.example.com",
+            route: "provider-translated",
+            contextWindow: 200_000,
+            maxOutputTokens: 8_192,
+            acceptsImages: false,
+            supportsDeveloperRole: false,
+            effort: { field: "none", supported: ["off"] },
+            reportedModel: "required",
+          },
+          tools: [],
+          maxRequests: 16,
+          maxReservedTokens: 4_000_000,
+          expiresAt: Date.now() + 60_000,
+          active: async () => true,
+          record: async (usage) => {
+            records.push(usage);
+          },
+          catalog: {
+            model: {
+              id: "fixture-model",
+              name: "Fixture",
+              api,
+              provider,
+              baseUrl: "https://provider.example.com",
+              reasoning: false,
+              input: ["text"],
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+              contextWindow: 200_000,
+              maxTokens: 8_192,
+            },
+            apiKey: ownerKey,
+          } as never,
+          streamSimple: streamSimple as never,
+        });
+        revokeSpy = vi.spyOn(broker, "revoke");
+        return { broker, scope };
+      });
+      const events = await collect(runtime.run(req));
+      expect(events).toContainEqual({ type: "done" });
+      expect(revokeSpy!).toHaveBeenCalled();
+      expect(captured).toHaveLength(1);
+      expect(captured[0]!.model).toMatchObject({ provider, id: "fixture-model", api });
+      expect(captured[0]!.options?.apiKey).toBe(ownerKey);
+      expect(records[0]?.request?.admission).toMatchObject({
+        kind: "worker-provider-broker",
+        maxRequests: 16,
+        maxReservedTokens: 4_000_000,
+      });
+      expect(records.at(-1)?.request?.collection?.outcome).toBe("success");
+    },
+  );
 
   it("keeps the real provider key off the spawned Hermes process", async () => {
     const token = "b".repeat(43);

@@ -4,6 +4,7 @@ import type { HostFrame, HostOperation } from "@ardurbot/contracts/host-bridge";
 import { HermesRuntimeConfigV2Schema } from "@ardurbot/contracts/runtime-config";
 import { effectiveRuntimeConfigHash } from "@ardurbot/core/node/runtime-config-hash";
 import type { HostClient } from "@ardurbot/host-runtime/host-client";
+import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
 import {
   compileHermesRuntimeConfig,
   validateCompiledHermesProfile,
@@ -13,8 +14,12 @@ import profileFixture from "../../host-runtime/python/tests/valid_profile.json" 
   type: "json",
 };
 import { approvalPausedToolResult } from "./approval-effect.js";
-import type { BrokerScope, HermesProviderBroker } from "./hermes-provider-broker.js";
-import { summaryOperationHash, summaryOperationManifest } from "./hermes-provider-broker.js";
+import type { BrokerScope } from "./hermes-provider-broker.js";
+import {
+  HermesProviderBroker,
+  summaryOperationHash,
+  summaryOperationManifest,
+} from "./hermes-provider-broker.js";
 import { RemoteHostRuntime } from "./remote-host-runtime.js";
 import { accountRuntimeUsage } from "./runtime-usage.js";
 
@@ -736,6 +741,212 @@ describe("worker-owned remote runtime callbacks", () => {
     expect(open).toHaveBeenCalledOnce();
     expect(revoke).toHaveBeenCalledOnce();
   });
+  it.each([
+    { provider: "anthropic", api: "anthropic-messages", ownerKey: "anthropic-owner-key" },
+    { provider: "google", api: "google-generative-ai", ownerKey: "gemini-owner-key" },
+  ] as const)(
+    "runs a $provider key pin through the translated broker route in bridge mode",
+    async ({ provider, api, ownerKey }) => {
+      const generation = crypto.randomUUID();
+      const records: AgentUsage[] = [];
+      const captured: Array<{
+        model: unknown;
+        options: { apiKey?: string } | undefined;
+      }> = [];
+      const text = (value: string) => ({ type: "text" as const, text: value });
+      const partial = (content: unknown[] = []) =>
+        ({
+          role: "assistant",
+          content,
+          api,
+          provider,
+          model: "fixture-model",
+          usage: {
+            input: 0,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            totalTokens: 0,
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+          },
+          stopReason: "pending",
+          timestamp: Date.now(),
+        }) as never;
+      const streamSimple = async (model: unknown, _context: unknown, options?: unknown) => {
+        captured.push({ model, options: options as { apiKey?: string } | undefined });
+        const stream = createAssistantMessageEventStream();
+        stream.push({ type: "start", partial: partial() });
+        stream.push({ type: "text_delta", contentIndex: 0, delta: "Bonjour", partial: partial() });
+        stream.push({
+          type: "done",
+          reason: "stop",
+          message: {
+            ...partial([text("Bonjour")]),
+            usage: {
+              input: 7,
+              output: 5,
+              cacheRead: 0,
+              cacheWrite: 0,
+              totalTokens: 12,
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+            },
+            stopReason: "stop",
+          },
+        });
+        stream.end();
+        return stream;
+      };
+      const catalog = {
+        model: {
+          id: "fixture-model",
+          name: "Fixture",
+          api,
+          provider,
+          baseUrl: "https://provider.example.com",
+          reasoning: false,
+          input: ["text"],
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+          contextWindow: 200_000,
+          maxTokens: 8_192,
+        },
+        apiKey: ownerKey,
+      } as const;
+      let expectedOperationId = "";
+      const brokerForTurn = async (
+        _run: AgentRunRequest,
+        _context: unknown,
+        fence: { operationId: string; hostGeneration: string },
+      ) => {
+        expectedOperationId = fence.operationId;
+        const scope: BrokerScope = {
+          runId: "run",
+          botId: "bot",
+          userId: "owner",
+          spaceId: "space",
+          operationId: fence.operationId,
+          leaseOwner: "worker",
+          leaseFence: 1,
+          hostGeneration: createHash("sha256")
+            .update(fence.hostGeneration)
+            .digest()
+            .readUIntBE(0, 6),
+          configurationHash: "fixture",
+          pin: {
+            credentialId: "credential",
+            provider,
+            modelId: "fixture-model",
+            effort: "off",
+          },
+        };
+        const broker = new HermesProviderBroker({
+          scope,
+          credentialId: "credential",
+          pinnedEffort: "off",
+          connection: {
+            credentialId: "credential",
+            provider,
+            modelId: "fixture-model",
+            baseUrl: catalog.model.baseUrl,
+            route: "provider-translated",
+            contextWindow: 200_000,
+            maxOutputTokens: 8_192,
+            acceptsImages: false,
+            supportsDeveloperRole: false,
+            effort: { field: "none", supported: ["off"] },
+            reportedModel: "required",
+          },
+          tools: [],
+          maxRequests: 16,
+          maxReservedTokens: 4_000_000,
+          expiresAt: Date.now() + 60_000,
+          active: async () => true,
+          record: async (usage) => {
+            records.push(usage);
+          },
+          catalog: catalog as never,
+          streamSimple: streamSimple as never,
+        });
+        return { broker, scope };
+      };
+      const requestHost = vi.fn(async function* (
+        operation: HostOperation,
+        _context: unknown,
+        callback: Callback,
+        operationId: string,
+      ) {
+        expect(operation.op).toBe("runtime.turn");
+        expect(operationId).toBe(expectedOperationId);
+        // The grant reaches the host; the owner key stays inside the worker.
+        expect(JSON.stringify(operation)).not.toContain(ownerKey);
+        const opened = (await callback(
+          frame("provider.open", [
+            {
+              model: "fixture-model",
+              messages: [{ role: "user", content: "hi" }],
+              stream: false,
+            },
+          ]),
+        )) as { status: number; contentType: string };
+        expect(opened).toEqual({ status: 200, contentType: "application/json" });
+        const read = (await callback(frame("provider.read", [0]))) as {
+          chunk: string;
+          done: boolean;
+        };
+        const body = JSON.parse(Buffer.from(read.chunk, "base64").toString("utf8"));
+        expect(body.object).toBe("chat.completion");
+        expect(body.model).toBe("fixture-model");
+        expect(body.choices[0].message.content).toBe("Bonjour");
+        expect(body.usage).toEqual({ prompt_tokens: 7, completion_tokens: 5, total_tokens: 12 });
+        expect(read.done).toBe(true);
+        yield {
+          v: 1,
+          type: "stream",
+          id: operationId,
+          seq: 0,
+          channel: "event",
+          data: { type: "done" },
+        } as const;
+      });
+      const client = {
+        health: async () => ({ capabilities: { providerRelay: 1 }, generation }),
+        request: requestHost,
+      } as unknown as HostClient;
+      const remote = new RemoteHostRuntime(client, "hermes", brokerForTurn);
+      const original = request();
+      const run: AgentRunRequest = {
+        ...original,
+        model: {
+          ...original.model,
+          provider,
+          id: "fixture-model",
+          apiKey: ownerKey,
+          thinkingLevel: "off",
+          contextWindow: 200_000,
+          maxTokens: 8_192,
+          runtimePin: {
+            runtimeKind: "hermes",
+            provider,
+            modelId: "fixture-model",
+            effort: "off",
+            credentialId: "credential",
+            revision: 1,
+          } as unknown as AgentRunRequest["model"]["runtimePin"],
+        },
+      };
+      expect(await collect(remote.run(run, { userId: "owner", spaceId: "space" }))).toEqual([
+        { type: "done" },
+      ]);
+      expect(captured).toHaveLength(1);
+      expect(captured[0]!.model).toMatchObject({ provider, id: "fixture-model", api });
+      expect(captured[0]!.options?.apiKey).toBe(ownerKey);
+      expect(records[0]?.request?.admission).toMatchObject({
+        kind: "worker-provider-broker",
+        maxRequests: 16,
+        maxReservedTokens: 4_000_000,
+      });
+      expect(records.at(-1)?.request?.collection?.outcome).toBe("success");
+    },
+  );
   it("forwards receipt callbacks to the executor, which can refuse native acknowledgement", async () => {
     const acknowledgeInput = vi.fn(async () => {
       throw new Error("Input acknowledgement is unsupported by this runtime.");
