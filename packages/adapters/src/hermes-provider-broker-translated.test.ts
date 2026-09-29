@@ -534,6 +534,79 @@ describe("worker provider broker translated route", () => {
     expect(endOnlyFinish).toBeDefined();
   });
 
+  it("preserves empty or absent tool results in multi-turn conversation with a void tool", async () => {
+    const toolName = hermesToolName("fixture_void");
+    const f = translatedFixture(
+      [
+        startEvent,
+        ...textDeltaEvents("completed void action"),
+        doneEvent([text("completed void action")]),
+      ],
+      {
+        tools: [{ name: "fixture_void", description: "Void tool", parameters: { type: "object" } }],
+      },
+    );
+
+    const response = await f.broker.open(
+      f.request({
+        body: {
+          model: "claude-fixture",
+          messages: [
+            { role: "user", content: "run void action" },
+            {
+              role: "assistant",
+              content: null,
+              tool_calls: [
+                {
+                  id: "call_void_1",
+                  type: "function",
+                  function: { name: toolName, arguments: "{}" },
+                },
+              ],
+            },
+            { role: "tool", tool_call_id: "call_void_1", content: "" },
+            {
+              role: "assistant",
+              content: null,
+              tool_calls: [
+                {
+                  id: "call_void_2",
+                  type: "function",
+                  function: { name: toolName, arguments: "{}" },
+                },
+              ],
+            },
+            { role: "tool", tool_call_id: "call_void_2" },
+          ],
+          stream: false,
+        },
+      }),
+    );
+    expect(response.status).toBe(200);
+    const replayed = f.captured[0]!.context;
+    expect(replayed.messages).toHaveLength(5);
+    expect(replayed.messages[2]).toEqual(
+      expect.objectContaining({
+        role: "toolResult",
+        toolCallId: "call_void_1",
+        toolName,
+        content: [{ type: "text", text: "" }],
+        isError: false,
+      }),
+    );
+    expect(replayed.messages[4]).toEqual(
+      expect.objectContaining({
+        role: "toolResult",
+        toolCallId: "call_void_2",
+        toolName,
+        content: [{ type: "text", text: "" }],
+        isError: false,
+      }),
+    );
+    const body = JSON.parse(await response.text());
+    expect(body.choices[0].message.content).toBe("completed void action");
+  });
+
   it("translates a data-URL image into the provider-layer image type", async () => {
     const f = translatedFixture([
       startEvent,

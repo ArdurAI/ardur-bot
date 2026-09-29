@@ -196,11 +196,10 @@ export function piContext(body: {
       const text = textParts(message.content).join("\n");
       const images = imageParts(message.content);
       const callId = typeof message.tool_call_id === "string" ? message.tool_call_id : "";
-      const content: ToolResultContent = [
-        ...(text ? [{ type: "text" as const, text }] : []),
-        ...images,
-      ];
-      if (!content.length) continue;
+      const content: ToolResultContent =
+        text || images.length
+          ? [...(text ? [{ type: "text" as const, text }] : []), ...images]
+          : [{ type: "text" as const, text: "" }];
       messages.push({
         role: "toolResult",
         toolCallId: callId || `call_${timestamp()}`,
