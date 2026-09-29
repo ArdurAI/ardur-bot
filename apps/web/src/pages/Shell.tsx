@@ -3665,13 +3665,14 @@ export function ShellPage({
         panel={panel ?? "closed"}
         workspace={panel === "computer"}
         expanded={panel === "computer" && workspaceExpanded}
+        resizeLabel={t`Resize pane`}
       >
         {panel && (active || activeGroup || panel === "create") ? (
           <div
             className={
               panel === "computer"
                 ? "flex h-full min-h-0 w-full flex-col overflow-hidden px-3 py-3"
-                : "rk-scroll h-full w-full overflow-y-auto px-5 py-[17px] md:w-[384px]"
+                : "rk-scroll h-full min-w-0 w-full overflow-y-auto px-5 py-[17px]"
             }
           >
             {panel !== "routine" &&

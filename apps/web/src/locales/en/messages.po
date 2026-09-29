@@ -7020,6 +7020,10 @@ msgstr "Reset your password"
 msgid "Resetting…"
 msgstr "Resetting…"
 
+#: src/pages/Shell.tsx
+msgid "Resize pane"
+msgstr "Resize pane"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Resources"
 msgstr "Resources"

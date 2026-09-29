@@ -7020,6 +7020,10 @@ msgstr "Parolanızı sıfırlayın"
 msgid "Resetting…"
 msgstr ""
 
+#: src/pages/Shell.tsx
+msgid "Resize pane"
+msgstr "Bölmenin boyutunu değiştir"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Resources"
 msgstr ""

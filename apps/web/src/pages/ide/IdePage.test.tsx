@@ -36,21 +36,25 @@ vi.mock("@lingui/core/macro", () => ({
 vi.mock("@lingui/react", () => ({
   useLingui: () => ({ i18n: { _: (value: MessageDescriptor) => value.message ?? value.id } }),
 }));
-vi.mock("@ardurbot/ui-web", () => ({
-  Button: ({
-    size: _size,
-    variant: _variant,
-    ...props
-  }: ComponentProps<"button"> & { size?: string; variant?: string }) => <button {...props} />,
-  Input: (props: ComponentProps<"input">) => <input {...props} />,
-  Textarea: (props: ComponentProps<"textarea">) => <textarea {...props} />,
-  NativeSelect: (props: ComponentProps<"select">) => <select {...props} />,
-  NativeSelectOption: (props: ComponentProps<"option">) => <option {...props} />,
-  Dialog: ({ children, open }: { children: ReactNode; open: boolean }) =>
-    open ? <div role="dialog">{children}</div> : null,
-  DialogContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
-  DialogTitle: ({ children }: { children: ReactNode }) => <h2>{children}</h2>,
-}));
+vi.mock("@ardurbot/ui-web", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@ardurbot/ui-web")>();
+  return {
+    Button: ({
+      size: _size,
+      variant: _variant,
+      ...props
+    }: ComponentProps<"button"> & { size?: string; variant?: string }) => <button {...props} />,
+    Input: (props: ComponentProps<"input">) => <input {...props} />,
+    Textarea: (props: ComponentProps<"textarea">) => <textarea {...props} />,
+    NativeSelect: (props: ComponentProps<"select">) => <select {...props} />,
+    NativeSelectOption: (props: ComponentProps<"option">) => <option {...props} />,
+    Dialog: ({ children, open }: { children: ReactNode; open: boolean }) =>
+      open ? <div role="dialog">{children}</div> : null,
+    DialogContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+    DialogTitle: ({ children }: { children: ReactNode }) => <h2>{children}</h2>,
+    Splitter: actual.Splitter,
+  };
+});
 vi.mock("./terminal", () => ({
   IdeTerminal: ({ root }: { root: { computerId: string } }) => (
     <div data-terminal-computer={root.computerId}>terminal surface</div>

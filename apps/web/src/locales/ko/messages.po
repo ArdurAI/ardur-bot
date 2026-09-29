@@ -7020,6 +7020,10 @@ msgstr "비밀번호를 재설정하세요"
 msgid "Resetting…"
 msgstr "재설정 중…"
 
+#: src/pages/Shell.tsx
+msgid "Resize pane"
+msgstr "패널 크기 조절"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Resources"
 msgstr ""

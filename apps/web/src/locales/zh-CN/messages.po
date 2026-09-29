@@ -7020,6 +7020,10 @@ msgstr "重置你的密码"
 msgid "Resetting…"
 msgstr "正在重置…"
 
+#: src/pages/Shell.tsx
+msgid "Resize pane"
+msgstr "调整面板宽度"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Resources"
 msgstr ""

@@ -7020,6 +7020,10 @@ msgstr "Redefina sua senha"
 msgid "Resetting…"
 msgstr "Redefinindo…"
 
+#: src/pages/Shell.tsx
+msgid "Resize pane"
+msgstr "Redimensionar o painel"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Resources"
 msgstr ""

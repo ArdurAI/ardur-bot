@@ -41,4 +41,5 @@ export { useLocalDayTick } from "./hooks/use-local-day-tick.js";
 export { cn } from "./lib/utils.js";
 export { ModelThinkingOptions } from "./model-thinking-options.js";
 export { SlidingPanel } from "./sliding-panel.js";
+export { Splitter } from "./workspace/splitter.js";
 export { type WorkspaceTab, WorkspaceTabs } from "./workspace/tabs.js";

@@ -7020,6 +7020,10 @@ msgstr "अपना पासवर्ड रीसेट करें"
 msgid "Resetting…"
 msgstr "रीसेट हो रहा है…"
 
+#: src/pages/Shell.tsx
+msgid "Resize pane"
+msgstr "पैन का आकार बदलें"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Resources"
 msgstr ""

@@ -7020,6 +7020,10 @@ msgstr "Сбросить пароль"
 msgid "Resetting…"
 msgstr "Сброс…"
 
+#: src/pages/Shell.tsx
+msgid "Resize pane"
+msgstr "Изменить ширину панели"
+
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Resources"
 msgstr ""
