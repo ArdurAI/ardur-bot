@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   type Actor,
   BOT_COLORS,
@@ -487,6 +488,12 @@ export function createRepos(prisma: PrismaClient) {
         settings?.computerHost,
         runtimeKind,
       );
+      // The kind decision chose Docker although the owner runs bots on This Mac (possible
+      // only for a runtime that supports non-host computers, today the built-in one). That
+      // new bot must not inherit the space's Team computer — it may be the host — so it
+      // starts on its own Docker computer instead. The owner can still move it to the Team
+      // computer (with the This Mac warning). Existing bots and computer rows never change.
+      const privateDockerComputer = kind === "docker" && settings?.computerHost === "this-mac";
       const insertBot = () =>
         prisma.$transaction(async (tx) => {
           await lockSpaceForContentCreation(tx, {
@@ -497,14 +504,26 @@ export function createRepos(prisma: PrismaClient) {
             where: { spaceId: actor.spaceId, userId: actor.userId },
             _max: { position: true },
           });
-          const teamComputer = await ensureComputerRecord(tx, {
-            mode: "team",
-            spaceId: actor.spaceId,
-            userId: actor.userId,
-            kind,
-          });
+          // A dedicated computer's key contains the bot id, so the id is fixed up front;
+          // both rows land in this one transaction.
+          const botId = privateDockerComputer ? randomUUID() : undefined;
+          const computer = privateDockerComputer
+            ? await ensureComputerRecord(tx, {
+                mode: "dedicated",
+                spaceId: actor.spaceId,
+                userId: actor.userId,
+                botId,
+                kind,
+              })
+            : await ensureComputerRecord(tx, {
+                mode: "team",
+                spaceId: actor.spaceId,
+                userId: actor.userId,
+                kind,
+              });
           const created = await tx.bot.create({
             data: {
+              ...(botId ? { id: botId } : {}),
               spaceId: actor.spaceId,
               userId: actor.userId,
               name: input.name,
@@ -515,7 +534,7 @@ export function createRepos(prisma: PrismaClient) {
               color,
               position: (positions._max.position ?? -1) + 1,
               parentBotId: input.parentBotId ?? null,
-              computerId: teamComputer.id,
+              computerId: computer.id,
               spawnKey: input.spawnKey,
               modelProvider,
               modelId,
@@ -540,7 +559,7 @@ export function createRepos(prisma: PrismaClient) {
               ...input.initialMessage,
             });
           }
-          if (input.computerMode === "dedicated") {
+          if (input.computerMode === "dedicated" && !privateDockerComputer) {
             const dedicated = await ensureComputerRecord(tx, {
               mode: "dedicated",
               spaceId: actor.spaceId,
