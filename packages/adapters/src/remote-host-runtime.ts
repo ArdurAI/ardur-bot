@@ -9,7 +9,6 @@ import type {
 import {
   HostRuntimeEventSchema,
   HostRuntimeInfoSchema,
-  HostTurnSchema,
 } from "@ardurbot/contracts/host-bridge";
 import type { RuntimeInfoSchema } from "@ardurbot/contracts/runtime-pins";
 import { validateHermesExecutionEnvelope } from "@ardurbot/core/node/runtime-config-hash";
@@ -17,12 +16,9 @@ import type { HostClient } from "@ardurbot/host-runtime/host-client";
 import * as z from "zod";
 import type { BrokerScope, HermesProviderBroker } from "./hermes-provider-broker.js";
 import { HermesRelayDispatcher, summaryOperationHash, summaryOperationManifest } from "./hermes-provider-broker.js";
+import { buildHostTurn } from "./host-turn.js";
 
-/** The host turn receives the same tool catalog the executor selected, including board tools. */
-export function advertisedHostTools(tools: AgentRunRequest["tools"]) {
-  if (tools === "none") return "none" as const;
-  return tools.map(({ name, description, inputSchema }) => ({ name, description, inputSchema }));
-}
+export { advertisedHostTools } from "./host-turn.js";
 
 export class RemoteHostRuntime implements AgentRuntime {
   private active = new Map<string, AbortController>();
@@ -176,55 +172,15 @@ export class RemoteHostRuntime implements AgentRuntime {
       const homeKey = request.nativeCwd?.startsWith("host:")
         ? request.nativeCwd.slice(5)
         : request.botId;
-      const turn = HostTurnSchema.parse({
+      const turn = buildHostTurn({
+        kind: this.kind,
+        request,
         executionEnvelope,
+        operationHash,
         providerBroker: brokerSession
-          ? { protocol: 1, ...brokerSession.broker.grant, hostGeneration: health!.generation }
+          ? { protocol: 1, ...brokerSession.broker.grant, hostGeneration: health!.generation! }
           : undefined,
-        controlledComparison: request.controlledComparison,
-        botId: request.botId,
-        threadId: request.threadId,
-        runId: request.runId,
-        providerSourceRunId: request.providerSourceRunId,
-        providerPurpose: request.providerPurpose === "summary" ? "summary" : undefined,
         providerBriefAttemptedAt: brokerSession?.scope.briefAttemptedAt,
-        prompt: request.prompt,
-        instructions: request.instructions,
-        history: request.history,
-        nativeSession: request.nativeSession,
-        nativeCwd: request.nativeCwd?.startsWith("host:") ? undefined : request.nativeCwd,
-        sourceMessageId: request.sourceMessageId,
-        tools: advertisedHostTools(request.tools),
-        model: {
-          runtimePin: executionEnvelope
-            ? { ...request.model.runtimePin, runtimeConfig: undefined }
-            : request.model.runtimePin,
-          provider: request.model.provider,
-          id: request.model.id,
-          maxTokens:
-            this.kind === "hermes"
-              ? operationHash
-                ? (request.model.maxTokens ?? 4_096)
-                : (executionEnvelope?.effectiveRuntimeConfig.model.maxTokens ??
-                  request.model.maxTokens ??
-                  4_096)
-              : request.model.maxTokens,
-          contextWindow:
-            this.kind === "hermes"
-              ? (executionEnvelope?.effectiveRuntimeConfig.model.contextWindow ??
-                request.model.contextWindow ??
-                32_768)
-              : request.model.contextWindow,
-          acceptsImages: request.model.acceptsImages,
-          reasoning: request.model.reasoning,
-          thinkingLevel: request.model.thinkingLevel,
-        },
-        currentTurnImages: request.currentTurnImages?.map((image) => ({
-          ...image,
-          data: Buffer.from(image.data).toString("base64"),
-        })),
-        allowSilentEmpty: request.allowSilentEmpty,
-        emptyResponseText: request.emptyResponseText,
       });
       abort.signal.throwIfAborted();
       const tools = request.tools === "none" ? [] : request.tools;

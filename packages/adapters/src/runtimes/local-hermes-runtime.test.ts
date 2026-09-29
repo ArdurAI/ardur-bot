@@ -4,6 +4,7 @@ import type { AgentRunRequest, AdapterContext } from "@ardurbot/adapter-kit";
 import { HermesProviderBroker } from "../hermes-provider-broker.js";
 import { buildHermesRuntime } from "@ardurbot/host-runtime/runtimes/hermes-install";
 import type { HermesRuntime } from "@ardurbot/host-runtime/runtimes/hermes-runtime";
+import { advertisedHostTools, buildHostTurn } from "../host-turn.js";
 import { join, dirname } from "node:path";
 import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -222,6 +223,60 @@ describe("LocalHermesRuntime", () => {
     }));
     const events = await collect(runtime.run(req));
     expect(events).toContainEqual({ type: "done" });
+    expect(broker.revoke).toHaveBeenCalled();
+  });
+
+  it("gives Hermes the same turn as the bridge, minus the real credential", async () => {
+    const grant = { id: crypto.randomUUID(), token: "grant-token-abc", expiresAt: Date.now() + 60_000 };
+    const broker = { grant, revoke: vi.fn() };
+    let captured: AgentRunRequest | undefined;
+    vi.mocked(buildHermesRuntime).mockImplementationOnce(async () => {
+      return {
+        abort: async () => {},
+        fail: async () => {},
+        run: (req: AgentRunRequest) => {
+          captured = req;
+          return (async function* () {
+            yield { type: "done" };
+          })();
+        },
+      } as unknown as HermesRuntime;
+    });
+    const req = request({
+      tools: [
+        {
+          name: "fixture_echo",
+          description: "Echo",
+          inputSchema: { type: "object" },
+          route: { connectorId: "connector", toolName: "echo" },
+        },
+      ],
+    });
+    req.model.apiKey = "sentinel-real-key-321";
+    req.model.oauth = { credential: { accessToken: "sentinel-oauth-token" } } as never;
+    const runtime = new LocalHermesRuntime(async () => ({
+      broker: broker as unknown as HermesProviderBroker,
+      scope: {} as never,
+    }));
+    const events = await collect(runtime.run(req));
+    expect(events).toContainEqual({ type: "done" });
+
+    const expected = buildHostTurn({
+      kind: "hermes",
+      request: req,
+      executionEnvelope: profileFixture as never,
+    });
+    // The local turn matches the bridge turn apart from the relay endpoint and grant token.
+    expect(captured!.tools).toEqual(expected.tools);
+    expect(captured!.tools).toEqual(advertisedHostTools(req.tools));
+    expect(JSON.stringify(captured!.tools)).not.toContain("connectorId");
+    const { baseUrl, apiKey, ...localModel } = captured!.model;
+    expect(localModel).toEqual(expected.model);
+    expect(baseUrl).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/v1$/);
+    expect(apiKey).toBe(grant.token);
+    expect("oauth" in captured!.model).toBe(false);
+    expect(JSON.stringify(captured)).not.toContain("sentinel-real-key");
+    expect(JSON.stringify(captured)).not.toContain("sentinel-oauth-token");
     expect(broker.revoke).toHaveBeenCalled();
   });
 

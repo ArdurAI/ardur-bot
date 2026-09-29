@@ -5,6 +5,8 @@ import { startHermesProviderRelay } from "@ardurbot/host-runtime/runtimes/hermes
 import type { HermesRuntime } from "@ardurbot/host-runtime/runtimes/hermes-runtime";
 import { HermesRelayDispatcher } from "../hermes-provider-broker.js";
 import type { BrokerScope, HermesProviderBroker } from "../hermes-provider-broker.js";
+import { summaryOperationHash, summaryOperationManifest } from "../hermes-provider-broker.js";
+import { buildHostTurn } from "../host-turn.js";
 import { validateHermesExecutionEnvelope } from "@ardurbot/core/node/runtime-config-hash";
 
 export class LocalHermesRuntime implements AgentRuntime {
@@ -58,7 +60,15 @@ export class LocalHermesRuntime implements AgentRuntime {
           })
         : undefined;
 
-    if (executionEnvelope) {
+    const operationHash =
+      request.providerPurpose === "summary" &&
+      request.providerSourceRunId &&
+      request.providerSourceRunId !== request.runId
+        ? summaryOperationHash(
+            summaryOperationManifest(capturedPin!, request.model.maxTokens ?? 4_096),
+          )
+        : undefined;
+    if (executionEnvelope && operationHash) {
       const { compileHermesRuntimeConfig } = await import("@ardurbot/host-runtime/runtimes/hermes-config");
       const { effectiveRuntimeConfigHash } = await import("@ardurbot/core/node/runtime-config-hash");
       const compiled = compileHermesRuntimeConfig(executionEnvelope.runtimeConfig, {
@@ -128,13 +138,32 @@ export class LocalHermesRuntime implements AgentRuntime {
       const authorizeTool = request.authorizeTool;
       const executeTool = request.executeTool;
       const onToolCompleted = request.onToolCompleted;
+      const turn = buildHostTurn({
+        kind: "hermes",
+        request,
+        executionEnvelope,
+        operationHash,
+        providerBriefAttemptedAt: brokerSession.scope.briefAttemptedAt,
+      });
       const localRequest: AgentRunRequest = {
-        ...request,
+        ...turn,
+        currentTurnImages: turn.currentTurnImages?.map((image) => ({
+          ...image,
+          data: Buffer.from(image.data, "base64"),
+        })),
         model: {
-          ...request.model,
+          runtimePin: turn.model.runtimePin as AgentRunRequest["model"]["runtimePin"],
+          provider: turn.model.provider,
+          id: turn.model.id,
           baseUrl: relay.url,
           apiKey: brokerSession.broker.grant.token,
+          maxTokens: turn.model.maxTokens,
+          contextWindow: turn.model.contextWindow,
+          acceptsImages: turn.model.acceptsImages,
+          reasoning: turn.model.reasoning,
+          thinkingLevel: turn.model.thinkingLevel,
         },
+        tools: turn.tools as AgentRunRequest["tools"],
         authorizeTool: authorizeTool
           ? async (name) => {
               assertProfileAcknowledged();
@@ -142,9 +171,13 @@ export class LocalHermesRuntime implements AgentRuntime {
             }
           : undefined,
         executeTool: executeTool
-          ? async (name, args, executionId, route) => {
+          ? async (name, args, executionId) => {
               assertProfileAcknowledged();
-              return executeTool(name, args, executionId, route);
+              const tool =
+                request.tools === "none"
+                  ? undefined
+                  : request.tools.find((entry) => entry.name === name);
+              return executeTool(name, args, executionId, tool?.route);
             }
           : undefined,
         onToolCompleted: onToolCompleted
@@ -156,8 +189,10 @@ export class LocalHermesRuntime implements AgentRuntime {
               });
             }
           : undefined,
+        onRuntimeInfo: request.onRuntimeInfo,
+        acknowledgeInput: request.acknowledgeInput,
+        claimSteering: request.claimSteering,
       };
-      delete (localRequest.model as any).oauth;
       yield* runtime.run(localRequest, context);
     } finally {
       this.running.delete(request.runId);
