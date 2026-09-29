@@ -401,11 +401,7 @@ async function linkLock(directory: string, lockPath: string, body: string): Prom
  * and token, so a fresh lock is never removed. A takeover lock whose own pid is
  * dead is broken the same way: re-read, confirm it is unchanged, then remove.
  */
-async function breakStaleLock(
-  lockPath: string,
-  stale: LockBody,
-  body: string,
-): Promise<boolean> {
+async function breakStaleLock(lockPath: string, stale: LockBody, body: string): Promise<boolean> {
   const directory = path.dirname(lockPath);
   const takeoverPath = path.join(directory, ".install.lock.takeover");
   const takeoverToken = randomUUID();

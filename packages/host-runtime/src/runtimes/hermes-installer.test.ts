@@ -897,8 +897,7 @@ it("breaks a takeover lock left by a dead installer and installs", async () => {
   try {
     await installHermes({
       root,
-      fetch: async (input) =>
-        new Response(input === HERMES_SOURCE_URL ? sourceArchive() : uv.gzip),
+      fetch: async (input) => new Response(input === HERMES_SOURCE_URL ? sourceArchive() : uv.gzip),
       platform: "linux",
       arch: "x64",
       expectedTree,
@@ -1022,9 +1021,7 @@ it.skipIf(process.platform === "win32")(
         }),
       ).rejects.toThrow(HERMES_INSTALL_FAILED);
       expect(readdirSync(elsewhere)).toEqual([]);
-      expect(
-        lstatSync(path.join(root, "runtimes", ".uv-cache")).isSymbolicLink(),
-      ).toBe(true);
+      expect(lstatSync(path.join(root, "runtimes", ".uv-cache")).isSymbolicLink()).toBe(true);
       expect(readHermesInstallStatus(root)?.message).toBe(HERMES_INSTALL_FAILED);
     } finally {
       await rm(root, { recursive: true, force: true });
