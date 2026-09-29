@@ -88,15 +88,12 @@ describe("hermesConnectionRefusal", () => {
     expect(isHermesPassThroughProvider("openai-compatible")).toBe(true);
     expect(isHermesPassThroughProvider("ollama")).toBe(true);
     expect(isHermesPassThroughProvider("anthropic")).toBe(false);
-    expect(HERMES_CONNECTION_POLICY.passThroughProviders).toEqual([
-      "openai-compatible",
-      "ollama",
-    ]);
+    expect(HERMES_CONNECTION_POLICY.passThroughProviders).toEqual(["openai-compatible", "ollama"]);
   });
 
   it("returns the table sentence for every refusal id", () => {
-    const sentences: Record<HermesConnectionRefusal, string> = HERMES_CONNECTION_POLICY
-      .refusalSentences;
+    const sentences: Record<HermesConnectionRefusal, string> =
+      HERMES_CONNECTION_POLICY.refusalSentences;
     expect(sentences["claude-subscription"]).toBe(
       "Claude subscriptions only work in Anthropic's own apps; add an Anthropic API key to use Claude with Hermes.",
     );
