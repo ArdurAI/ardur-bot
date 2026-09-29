@@ -2412,6 +2412,20 @@ describe("mobile clipboard text", () => {
       }),
     ).toBe("Here is the answer.");
   });
+  it("omits interim narration", async () => {
+    const { copyableMobileMessageText } = await import("./api");
+    expect(
+      copyableMobileMessageText({
+        id: "message",
+        role: "bot",
+        blocks: [
+          { kind: "progress", text: "Searching..." },
+          { kind: "steps" } as any,
+          { kind: "progress", text: "Reading result..." },
+        ],
+      }),
+    ).toBe("Reading result...");
+  });
   it("includes the shortened reply marker when copying a bounded receipt", async () => {
     const { copyableMobileMessageText } = await import("./api");
     expect(

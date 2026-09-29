@@ -55,6 +55,18 @@ describe("copyableMessageText", () => {
     ).toBe("On it.\nHere is the answer.");
   });
 
+  it("omits interim narration", () => {
+    expect(
+      copyableMessageText(
+        message([
+          { kind: "progress", text: "Searching..." },
+          { kind: "steps" } as any,
+          { kind: "progress", text: "Reading result..." },
+        ]),
+      ),
+    ).toBe("Reading result...");
+  });
+
   it("falls back to the provider label for unknown transport values", () => {
     expect(
       copyableMessageText(

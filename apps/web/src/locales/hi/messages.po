@@ -4512,6 +4512,14 @@ msgstr ""
 msgid "Interrupt"
 msgstr "बीच में रोकें"
 
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Interrupted"
+msgstr "बाधित"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Interrupted: {title}"
+msgstr "बाधित: {title}"
+
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineSchedule.tsx
 msgid "Interval"
@@ -8646,14 +8654,19 @@ msgstr "फ़ॉलो करना बंद करें"
 msgid "Uninstall"
 msgstr ""
 
+#: src/components/ai/CompactWorkRecord.tsx
 #: src/pages/LearningCurator.tsx
 #: src/pages/system/SystemPage.tsx
 msgid "Unknown"
-msgstr ""
+msgstr "अज्ञात"
 
 #: src/pages/account/AccountTables.tsx
 msgid "Unknown device"
 msgstr ""
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Unknown: {title}"
+msgstr "अज्ञात: {title}"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Unlink"
@@ -9139,19 +9152,3 @@ msgstr "हमेशा चालू रहने वाले एजेंट�
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
-
-#: src/components/ai/CompactWorkRecord.tsx
-msgid "Interrupted"
-msgstr "बाधित"
-
-#: src/components/ai/CompactWorkRecord.tsx
-msgid "Interrupted: {title}"
-msgstr "बाधित: {title}"
-
-#: src/components/ai/CompactWorkRecord.tsx
-msgid "Unknown"
-msgstr "अज्ञात"
-
-#: src/components/ai/CompactWorkRecord.tsx
-msgid "Unknown: {title}"
-msgstr "अज्ञात: {title}"

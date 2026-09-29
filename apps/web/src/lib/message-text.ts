@@ -39,8 +39,9 @@ export function liveMessageHasVisibleActivity(message: ThreadMessage): boolean {
 /** Plain message text for clipboard copy — text/ask/progress only, no chrome. */
 export function copyableMessageText(message: ThreadMessage): string {
   return message.blocks
-    .map((block) => {
+    .map((block, index) => {
       if (isReasoningSummaryBlock(block)) return "";
+      if (isInterimNarrationAt(message.blocks, index)) return "";
       if (block.kind === "channel_message") {
         return `${messageProviderLabel(block.provider, block.transport)} · ${block.fromLabel}: ${block.text}`;
       }

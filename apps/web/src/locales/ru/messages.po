@@ -4512,6 +4512,14 @@ msgstr ""
 msgid "Interrupt"
 msgstr "Прерывать"
 
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Interrupted"
+msgstr "Прервано"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Interrupted: {title}"
+msgstr "Прервано: {title}"
+
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineSchedule.tsx
 msgid "Interval"
@@ -8646,14 +8654,19 @@ msgstr "Отписаться"
 msgid "Uninstall"
 msgstr "Удалить"
 
+#: src/components/ai/CompactWorkRecord.tsx
 #: src/pages/LearningCurator.tsx
 #: src/pages/system/SystemPage.tsx
 msgid "Unknown"
-msgstr ""
+msgstr "Неизвестно"
 
 #: src/pages/account/AccountTables.tsx
 msgid "Unknown device"
 msgstr ""
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Unknown: {title}"
+msgstr "Неизвестно: {title}"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Unlink"
@@ -9139,19 +9152,3 @@ msgstr "Ваша команда постоянно работающих аген
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
-
-#: src/components/ai/CompactWorkRecord.tsx
-msgid "Interrupted"
-msgstr "Прервано"
-
-#: src/components/ai/CompactWorkRecord.tsx
-msgid "Interrupted: {title}"
-msgstr "Прервано: {title}"
-
-#: src/components/ai/CompactWorkRecord.tsx
-msgid "Unknown"
-msgstr "Неизвестно"
-
-#: src/components/ai/CompactWorkRecord.tsx
-msgid "Unknown: {title}"
-msgstr "Неизвестно: {title}"

@@ -1443,3 +1443,28 @@ it("flushes held reply text and tool names before a reasoning summary", async ()
     }),
   );
 });
+
+describe("reasoning survival across pauses", () => {
+  it("includes the retained work-record blocks in the durable pause message", async () => {
+    const f = fixture("run-ask");
+    f.runtimeRun.mockImplementation(async function* () {
+      yield { type: "progress", text: "Thinking about the user's request.", reasoning: true };
+      yield { type: "ask", text: "Need clarification", detail: null, actions: [] };
+    });
+
+    await f.executor.continueRun(f.runRecord.id, "worker-1");
+    expect(f.events.pauseRunForInput).toHaveBeenCalledOnce();
+    expect(f.events.pauseRunForInput).toHaveBeenCalledWith(
+      expect.objectContaining({
+        blocks: expect.arrayContaining([
+          expect.objectContaining({
+            kind: "progress",
+            text: "Thinking about the user's request.",
+            reasoning: true,
+          }),
+          expect.objectContaining({ kind: "ask", text: "Need clarification" }),
+        ]),
+      }),
+    );
+  });
+});

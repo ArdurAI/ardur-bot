@@ -4512,6 +4512,14 @@ msgstr ""
 msgid "Interrupt"
 msgstr "끼어들기"
 
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Interrupted"
+msgstr "중단됨"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Interrupted: {title}"
+msgstr "중단됨: {title}"
+
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineSchedule.tsx
 msgid "Interval"
@@ -8646,14 +8654,19 @@ msgstr "팔로우 취소"
 msgid "Uninstall"
 msgstr ""
 
+#: src/components/ai/CompactWorkRecord.tsx
 #: src/pages/LearningCurator.tsx
 #: src/pages/system/SystemPage.tsx
 msgid "Unknown"
-msgstr ""
+msgstr "알 수 없음"
 
 #: src/pages/account/AccountTables.tsx
 msgid "Unknown device"
 msgstr ""
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Unknown: {title}"
+msgstr "알 수 없음: {title}"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Unlink"
@@ -9139,19 +9152,3 @@ msgstr "언제든 실제 작업을 맡길 수 있는<0/>나만의 Agent 팀"
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
-
-#: src/components/ai/CompactWorkRecord.tsx
-msgid "Interrupted"
-msgstr "중단됨"
-
-#: src/components/ai/CompactWorkRecord.tsx
-msgid "Interrupted: {title}"
-msgstr "중단됨: {title}"
-
-#: src/components/ai/CompactWorkRecord.tsx
-msgid "Unknown"
-msgstr "알 수 없음"
-
-#: src/components/ai/CompactWorkRecord.tsx
-msgid "Unknown: {title}"
-msgstr "알 수 없음: {title}"

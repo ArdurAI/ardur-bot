@@ -2798,6 +2798,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 leaseOwner: workerId,
                 leaseFence: fence,
                 blocks: [
+                  ...redactBlocks(messageSegments, runSecrets),
                   {
                     kind: "ask",
                     text: reason,
@@ -3436,6 +3437,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               leaseOwner: workerId,
               leaseFence: fence,
               blocks: [
+                ...redactBlocks(messageSegments, runSecrets),
                 buildApprovalAskBlock(applied!.effect.id, name, args, runSecrets, {
                   reviewReason,
                   allowAlways:
@@ -4532,6 +4534,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               leaseOwner: workerId,
               leaseFence: fence,
               blocks: [
+                ...redactBlocks(messageSegments, runSecrets),
                 {
                   kind: "ask",
                   text: String(args.label ?? "Code"),
@@ -6020,6 +6023,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 leaseOwner: workerId,
                 leaseFence: fence,
                 blocks: [
+                  ...redactBlocks(messageSegments, runSecrets),
                   {
                     kind: "ask",
                     text: safeText,
@@ -6083,6 +6087,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 leaseOwner: workerId,
                 leaseFence: fence,
                 reason: safeReason,
+                blocks: redactBlocks(messageSegments, runSecrets),
                 computerId: storedComputer.id,
               });
               if (!paused) return;

@@ -238,6 +238,7 @@ export interface PauseRunForTakeover {
   leaseOwner: string;
   leaseFence: number;
   reason: string;
+  blocks?: import("@ardurbot/contracts").MessageBlock[];
   /** Computer that should expose the pending takeover to the UI via controlRunId. */
   computerId: string;
 }
@@ -1309,6 +1310,7 @@ export async function pauseRunForTakeover(
       runId: input.runId,
       payload: {
         reason: input.reason,
+        blocks: input.blocks,
         takeoverRequested: true,
         retainedControl: retainControl,
       },

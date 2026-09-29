@@ -920,8 +920,9 @@ export function messagingProviderLabel(provider: string, transport?: string): st
 
 export function copyableMobileMessageText(message: MobileMessage): string {
   return message.blocks
-    .map((block) => {
+    .map((block, index) => {
       if (isReasoningSummaryBlock(block)) return "";
+      if (isInterimNarrationAt(message.blocks, index)) return "";
       if (block.kind === "channel_message") {
         return `${messagingProviderLabel(block.provider, block.transport)} · ${block.fromLabel}: ${block.text}`;
       }

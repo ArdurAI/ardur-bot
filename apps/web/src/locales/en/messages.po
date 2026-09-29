@@ -4512,6 +4512,14 @@ msgstr "Interactive visualizations, charts, and diagrams directly in the convers
 msgid "Interrupt"
 msgstr "Interrupt"
 
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Interrupted"
+msgstr "Interrupted"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Interrupted: {title}"
+msgstr "Interrupted: {title}"
+
 #: src/pages/RoutineEditor.tsx
 #: src/pages/RoutineSchedule.tsx
 msgid "Interval"
@@ -8646,6 +8654,7 @@ msgstr "Unfollow"
 msgid "Uninstall"
 msgstr "Uninstall"
 
+#: src/components/ai/CompactWorkRecord.tsx
 #: src/pages/LearningCurator.tsx
 #: src/pages/system/SystemPage.tsx
 msgid "Unknown"
@@ -8654,6 +8663,10 @@ msgstr "Unknown"
 #: src/pages/account/AccountTables.tsx
 msgid "Unknown device"
 msgstr "Unknown device"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Unknown: {title}"
+msgstr "Unknown: {title}"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Unlink"
