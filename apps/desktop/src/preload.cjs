@@ -130,6 +130,15 @@ contextBridge.exposeInMainWorld("ardurbotDesktop", {
       return () => ipcRenderer.off("desktop.integrations.return", handler);
     },
   },
+  shortcuts: {
+    onRun: (listener) => {
+      const handler = (_event, id) => {
+        if (typeof id === "string") listener(id);
+      };
+      ipcRenderer.on("desktop.shortcuts.run", handler);
+      return () => ipcRenderer.off("desktop.shortcuts.run", handler);
+    },
+  },
   oauth: {
     open: (url) => ipcRenderer.invoke("desktop.oauth.open", url),
     cancel: (url) => ipcRenderer.invoke("desktop.oauth.cancel", url),

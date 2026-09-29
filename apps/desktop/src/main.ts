@@ -8,6 +8,7 @@ import { GUIDED_SETUP_CHANNELS } from "@ardurbot/contracts/desktop-setup";
 import { LOCAL_SETTINGS_PAGE } from "@ardurbot/contracts/local-settings";
 import type { Session } from "electron";
 import { app, BrowserWindow, dialog, ipcMain, Menu, net, session, shell } from "electron";
+import { applicationMenuTemplate, runAppShortcut } from "./app-menu.js";
 import type { ElectronAutoUpdater } from "./auto-update.js";
 import { DesktopUpdateController, LAUNCH_CHECK_DELAY_MS } from "./auto-update.js";
 import { openBrowserAuth } from "./browser-auth.js";
@@ -948,7 +949,6 @@ function installApplicationMenu() {
   const localSettings: Electron.MenuItemConstructorOptions = {
     id: "local-server-settings",
     label: "Local Server Settings…",
-    accelerator: "CmdOrCtrl+,",
     click: () => {
       void showLocalSettings();
     },
@@ -969,42 +969,11 @@ function installApplicationMenu() {
       else void localMode.stop();
     },
   };
-  const template: Electron.MenuItemConstructorOptions[] =
-    process.platform === "darwin"
-      ? [
-          {
-            label: "Ardur",
-            submenu: [
-              { role: "about", label: "About Ardur" },
-              { type: "separator" },
-              localSettings,
-              changeServer,
-              stopStack,
-              { type: "separator" },
-              { role: "hide", label: "Hide Ardur" },
-              { role: "hideOthers" },
-              { role: "unhide" },
-              { type: "separator" },
-              { role: "quit", label: "Quit Ardur" },
-            ],
-          },
-          { role: "editMenu" },
-          { role: "windowMenu" },
-        ]
-      : [
-          {
-            label: "File",
-            submenu: [
-              localSettings,
-              changeServer,
-              stopStack,
-              { type: "separator" },
-              { role: "quit" },
-            ],
-          },
-          { role: "editMenu" },
-          { role: "windowMenu" },
-        ];
+  const template = applicationMenuTemplate(
+    process.platform,
+    { localSettings, changeServer, stopStack },
+    (id) => runAppShortcut(mainWindow, id),
+  );
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 

@@ -106,6 +106,10 @@ export interface ArdurBotDesktop {
     focus(): Promise<void>;
     onReturn(listener: (id: string) => void): () => void;
   };
+  /** Desktop menu items run the app shortcut with this id, as its keys would. */
+  shortcuts?: {
+    onRun(listener: (id: string) => void): () => void;
+  };
   oauth: {
     /**
      * Open system-browser auth. A redirect_uri must be HTTP loopback with state;

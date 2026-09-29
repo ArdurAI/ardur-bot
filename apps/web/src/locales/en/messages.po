@@ -1150,6 +1150,7 @@ msgstr "Awake for {0} routines"
 #: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
+#: src/pages/Shell.tsx
 msgid "Back"
 msgstr "Back"
 
@@ -4076,6 +4077,10 @@ msgstr "For {task}, {better} on this machine did as well as {other} in your runs
 msgid "Forgot password?"
 msgstr "Forgot password?"
 
+#: src/pages/Shell.tsx
+msgid "Forward"
+msgstr "Forward"
+
 #: src/pages/import/LocalImportPage.tsx
 msgid "Found on this computer"
 msgstr "Found on this computer"
@@ -5528,6 +5533,7 @@ msgstr "Never"
 msgid "New access token"
 msgstr "New access token"
 
+#: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "New bot"
 msgstr "New bot"

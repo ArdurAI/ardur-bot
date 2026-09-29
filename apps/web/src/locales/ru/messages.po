@@ -1150,6 +1150,7 @@ msgstr ""
 #: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
+#: src/pages/Shell.tsx
 msgid "Back"
 msgstr "Назад"
 
@@ -4076,6 +4077,10 @@ msgstr "Для {task} {better} на этом компьютере справил
 msgid "Forgot password?"
 msgstr "Забыли пароль?"
 
+#: src/pages/Shell.tsx
+msgid "Forward"
+msgstr "Вперёд"
+
 #: src/pages/import/LocalImportPage.tsx
 msgid "Found on this computer"
 msgstr ""
@@ -5528,6 +5533,7 @@ msgstr ""
 msgid "New access token"
 msgstr "Новый токен доступа"
 
+#: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "New bot"
 msgstr "Новый бот"

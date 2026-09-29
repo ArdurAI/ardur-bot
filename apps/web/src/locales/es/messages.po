@@ -1150,6 +1150,7 @@ msgstr ""
 #: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
+#: src/pages/Shell.tsx
 msgid "Back"
 msgstr "Atrás"
 
@@ -4076,6 +4077,10 @@ msgstr ""
 msgid "Forgot password?"
 msgstr "¿Olvidaste la contraseña?"
 
+#: src/pages/Shell.tsx
+msgid "Forward"
+msgstr "Adelante"
+
 #: src/pages/import/LocalImportPage.tsx
 msgid "Found on this computer"
 msgstr ""
@@ -4265,7 +4270,7 @@ msgstr "Hola, así sonaré cuando lea las respuestas en voz alta."
 
 #: src/pages/Shell.tsx
 msgid "Hide bots"
-msgstr ""
+msgstr "Ocultar bots"
 
 #: src/pages/customize/McpDiagnostics.tsx
 msgid "Hide logs"
@@ -5528,6 +5533,7 @@ msgstr ""
 msgid "New access token"
 msgstr ""
 
+#: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "New bot"
 msgstr "Nuevo bot"
@@ -7756,7 +7762,7 @@ msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Show bots"
-msgstr ""
+msgstr "Mostrar bots"
 
 #: src/pages/Shell.tsx
 msgid "Show computer"

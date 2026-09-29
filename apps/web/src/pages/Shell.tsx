@@ -157,6 +157,8 @@ import { TeachCaptureOverlay } from "../components/teach/TeachCaptureOverlay";
 import { TeachComputerOverlayControl } from "../components/teach/TeachComputerOverlay";
 import { TeachRecordingChrome, TeachStopButton } from "../components/teach/TeachRecordingChrome";
 import { readActivityMode, writeActivityMode } from "../lib/activity-mode";
+import type { AppShortcutHandlers } from "../lib/app-shortcuts";
+import { shortcutAria, useAppShortcuts } from "../lib/app-shortcuts";
 import type { ArtifactTarget } from "../lib/artifact-open";
 import { authClient } from "../lib/auth";
 import { takeInitialBootstrap } from "../lib/bootstrap";
@@ -211,7 +213,6 @@ import {
 import { whenSpeakerReady, withSpeaker } from "../lib/tts-lazy";
 import { useModelSettings } from "../lib/use-model-settings";
 import { useNotifications } from "../lib/use-notifications";
-import { useSettingsShortcut } from "../lib/use-settings-shortcut";
 import type { ContextMenuPosition } from "./BotContextMenu";
 import { ConnectorSuggestion } from "./capabilities/ConnectorSuggestion";
 import { DashboardPage } from "./dashboard/DashboardPage";
@@ -229,7 +230,6 @@ import {
 import type { SettingsSection } from "./SettingsOverlay";
 import { SpaceSearchResults } from "./SpaceSearch";
 import { BotModelChip } from "./shell/bot-model-chip";
-import { isCommandPaletteHotkey } from "./shell/command-palette-hotkey";
 import {
   initialComputerErrorState,
   reduceComputerError,
@@ -597,7 +597,6 @@ export function ShellPage({
   }
   const [integrationFocus, setIntegrationFocus] = useState<string>();
   const [settingsOpen, setSettingsOpen] = useState(false);
-  useSettingsShortcut(() => openSettings("general"));
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("general");
   const [messagingSettingsOpen, setMessagingSettingsOpen] = useState(false);
   const [messagingSurfaceEnabled, setMessagingSurfaceEnabled] = useState(false);
@@ -2580,15 +2579,55 @@ export function ShellPage({
     return () => window.removeEventListener("keydown", onKey);
   }, [computerOpen]);
 
+  const sidebarSearchRef = useRef<HTMLInputElement>(null);
+  const sidebarSearchPending = useRef(false);
+  const [sidebarSearchRequest, setSidebarSearchRequest] = useState(0);
+  // Search waits until the bots list is shown: it is hidden on the dashboard and when minimized.
   useEffect(() => {
-    function onKey(event: KeyboardEvent) {
-      if (!isCommandPaletteHotkey(event)) return;
-      event.preventDefault();
-      setCommandPaletteState(!commandPaletteOpenRef.current);
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [setCommandPaletteState]);
+    if (!sidebarSearchPending.current || dashboard || (botsSidebarCollapsed && !mobileSidebarOpen))
+      return;
+    sidebarSearchPending.current = false;
+    sidebarSearchRef.current?.focus();
+  }, [sidebarSearchRequest, dashboard, botsSidebarCollapsed, mobileSidebarOpen]);
+  const narrowLayout = () => window.matchMedia("(max-width: 767px)").matches;
+  const shortcutHandlers = {
+    commandPalette: () => setCommandPaletteState(!commandPaletteOpenRef.current),
+    newBot: () => {
+      setCreateMenuOpen(false);
+      setMobileSidebarOpen(false);
+      setPanel("create");
+    },
+    focusMessage:
+      team || dashboard
+        ? undefined
+        : () => {
+            setMobileSidebarOpen(false);
+            requestAnimationFrame(() =>
+              document.querySelector<HTMLTextAreaElement>('textarea[name="chat-message"]')?.focus(),
+            );
+          },
+    find: () => {
+      if (dashboard) navigate("/app/bots");
+      if (narrowLayout()) setMobileSidebarOpen(true);
+      else if (botsSidebarCollapsed) setBotsSidebarCollapsedPref(false);
+      sidebarSearchPending.current = true;
+      setSidebarSearchRequest((request) => request + 1);
+    },
+    toggleSidebar: dashboard
+      ? undefined
+      : () => {
+          if (narrowLayout()) setMobileSidebarOpen((open) => !open);
+          else setBotsSidebarCollapsedPref(!botsSidebarCollapsed);
+        },
+    // React Router numbers its entries; index 0 is where this tab entered the app.
+    back: () => {
+      const index = (window.history.state as { idx?: unknown } | null)?.idx;
+      if (typeof index === "number" && index > 0) navigate(-1);
+    },
+    forward: () => navigate(1),
+    settings: () => openSettings("general"),
+  } satisfies AppShortcutHandlers;
+  useAppShortcuts(shortcutHandlers);
 
   useEffect(() => {
     const heartbeatBotId = computerBot?.id ?? active?.id;
@@ -2845,6 +2884,7 @@ export function ShellPage({
               aria-label={t`Minimize bots`}
               title={t`Minimize bots`}
               data-testid="minimize-bots-sidebar"
+              aria-keyshortcuts={shortcutAria("toggleSidebar")}
               onClick={() => setBotsSidebarCollapsedPref(true)}
             >
               <PanelLeftClose size={15} strokeWidth={1.8} aria-hidden="true" />
@@ -2916,11 +2956,13 @@ export function ShellPage({
             <Search size={16} strokeWidth={1.8} aria-hidden="true" />
           </InputGroupAddon>
           <InputGroupInput
+            ref={sidebarSearchRef}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t`Search`}
             autoComplete="off"
             name="sidebar-search"
+            aria-keyshortcuts={shortcutAria("find")}
           />
         </InputGroup>
         <div className="rk-scroll flex flex-1 flex-col gap-0.5 overflow-y-auto px-2.5 pb-2.5">
@@ -3422,6 +3464,7 @@ export function ShellPage({
                 type="button"
                 data-testid="restore-bots-sidebar"
                 aria-label={t`Show bots`}
+                aria-keyshortcuts={shortcutAria("toggleSidebar")}
                 title={t`Show bots`}
                 onClick={() => setBotsSidebarCollapsedPref(false)}
                 className="app-no-drag hidden h-8 w-8 shrink-0 place-items-center rounded-lg text-foreground/75 hover:bg-accent md:grid"
@@ -4443,6 +4486,25 @@ export function ShellPage({
                 setMobileSidebarOpen(false);
                 navigate(`/app/${id}`);
               }}
+              actions={(
+                [
+                  ["newBot", t`New bot`],
+                  ["focusMessage", t`Message`],
+                  ["find", t`Search`],
+                  [
+                    "toggleSidebar",
+                    (narrowLayout() ? mobileSidebarOpen : !botsSidebarCollapsed)
+                      ? t`Hide bots`
+                      : t`Show bots`,
+                  ],
+                  ["back", t`Back`],
+                  ["forward", t`Forward`],
+                  ["settings", t`Settings`],
+                ] as const
+              ).flatMap(([id, label]) => {
+                const run = shortcutHandlers[id];
+                return run ? [{ id, label, onSelect: run }] : [];
+              })}
             />
           </Suspense>
         ) : null}
@@ -4802,6 +4864,7 @@ export function ShellPage({
             size="icon"
             className="app-no-drag"
             aria-label={t`Search`}
+            aria-keyshortcuts={shortcutAria("commandPalette")}
             onClick={() => setCommandPaletteState(true)}
           >
             <Search size={17} />
@@ -4811,6 +4874,7 @@ export function ShellPage({
             size="icon"
             className="app-no-drag ms-auto shrink-0"
             aria-label={t`Settings`}
+            aria-keyshortcuts={shortcutAria("settings")}
             onClick={() => openSettings("general")}
           >
             <Settings size={17} />
@@ -5930,6 +5994,7 @@ export const Composer = memo(function Composer({
                 : undefined
             }
             aria-label={activeName ? t`Message ${activeName}` : t`Message`}
+            aria-keyshortcuts={shortcutAria("focusMessage")}
             role="combobox"
             aria-autocomplete="list"
             aria-haspopup="listbox"
