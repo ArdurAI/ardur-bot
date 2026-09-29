@@ -2,6 +2,8 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { LocalHermesRuntime } from "./local-hermes-runtime.js";
 import type { AgentRunRequest, AdapterContext } from "@ardurbot/adapter-kit";
 import { HermesProviderBroker } from "../hermes-provider-broker.js";
+import { buildHermesRuntime } from "@ardurbot/host-runtime/runtimes/hermes-install";
+import type { HermesRuntime } from "@ardurbot/host-runtime/runtimes/hermes-runtime";
 import { join, dirname } from "node:path";
 import { mkdtemp, rm, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -9,6 +11,11 @@ import { fileURLToPath } from "node:url";
 import profileFixture from "../../../host-runtime/python/tests/valid_profile.json" with { type: "json" };
 
 vi.mock("../../../host-runtime/python/hermes_sources.json", () => ({ default: {} }));
+
+vi.mock("@ardurbot/host-runtime/runtimes/hermes-install", async (original) => {
+  const mod = await original<typeof import("@ardurbot/host-runtime/runtimes/hermes-install")>();
+  return { ...mod, buildHermesRuntime: vi.fn(mod.buildHermesRuntime) };
+});
 
 vi.mock("@ardurbot/core/node/runtime-config-hash", async (original) => ({
   ...(await original<object>()),
@@ -98,6 +105,124 @@ describe("LocalHermesRuntime", () => {
     const runtime = new LocalHermesRuntime(brokerForTurn);
     await expect(collect(runtime.run(request()))).rejects.toThrow("Pinned Hermes install failed its safety check.");
     expect(brokerForTurn).not.toHaveBeenCalled();
+  });
+
+  it("refuses provider and tool callbacks until the configuration is acknowledged", async () => {
+    const token = "a".repeat(43);
+    const open = vi.fn(
+      async () =>
+        new Response('{"model":"fixture-model"}', {
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    const broker = {
+      grant: { id: crypto.randomUUID(), token, expiresAt: Date.now() + 60_000 },
+      revoke: vi.fn(),
+      open,
+    };
+    const executeTool = vi.fn(async () => ({ ok: true }));
+    const onToolCompleted = vi.fn(async () => {});
+    vi.mocked(buildHermesRuntime).mockImplementationOnce(async (options) => {
+      const providerCall = (baseUrl: string) =>
+        fetch(`${baseUrl}/chat/completions`, {
+          method: "POST",
+          headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+          body: JSON.stringify({ model: "fixture-model", messages: [{ role: "user", content: "hi" }] }),
+        });
+      return {
+        abort: async () => {},
+        fail: async () => {},
+        run: async function* (req: AgentRunRequest) {
+          await expect(req.executeTool?.("fixture_echo", {}, "run:early")).rejects.toThrow(
+            "Hermes configuration is not acknowledged.",
+          );
+          await expect(
+            req.onToolCompleted?.({ name: "fixture_echo", executionId: "run:early", durationMs: 1 }),
+          ).rejects.toThrow("Hermes configuration is not acknowledged.");
+          const refused = await providerCall(req.model.baseUrl!);
+          expect(refused.status).toBe(502);
+          expect(open).not.toHaveBeenCalled();
+          options.onProfileAcknowledged();
+          await expect(req.executeTool?.("fixture_echo", {}, "run:late")).resolves.toEqual({
+            ok: true,
+          });
+          const admitted = await providerCall(req.model.baseUrl!);
+          expect(admitted.status).toBe(200);
+          expect(open).toHaveBeenCalledOnce();
+          yield { type: "done" };
+        },
+      } as unknown as HermesRuntime;
+    });
+    const req = request({
+      tools: [{ name: "fixture_echo", description: "Echo", inputSchema: { type: "object" } }],
+      executeTool,
+      onToolCompleted,
+    });
+    const runtime = new LocalHermesRuntime(async () => ({
+      broker: broker as unknown as HermesProviderBroker,
+      scope: {} as never,
+    }));
+    const events = await collect(runtime.run(req));
+    expect(events).toContainEqual({ type: "done" });
+    expect(broker.revoke).toHaveBeenCalled();
+  });
+
+  it("gates nothing when the request carries no execution envelope", async () => {
+    const token = "b".repeat(43);
+    const open = vi.fn(
+      async () =>
+        new Response('{"model":"fixture-model"}', {
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    const broker = {
+      grant: { id: crypto.randomUUID(), token, expiresAt: Date.now() + 60_000 },
+      revoke: vi.fn(),
+      open,
+    };
+    const executeTool = vi.fn(async () => ({ ok: true }));
+    vi.mocked(buildHermesRuntime).mockImplementationOnce(async () => {
+      return {
+        abort: async () => {},
+        fail: async () => {},
+        run: async function* (req: AgentRunRequest) {
+          // No acknowledgement ever fires for a request without an envelope.
+          await expect(req.executeTool?.("fixture_echo", {}, "run:any")).resolves.toEqual({
+            ok: true,
+          });
+          const admitted = await fetch(`${req.model.baseUrl}/chat/completions`, {
+            method: "POST",
+            headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+            body: JSON.stringify({
+              model: "fixture-model",
+              messages: [{ role: "user", content: "hi" }],
+            }),
+          });
+          expect(admitted.status).toBe(200);
+          expect(open).toHaveBeenCalledOnce();
+          yield { type: "done" };
+        },
+      } as unknown as HermesRuntime;
+    });
+    const req = request({
+      tools: [{ name: "fixture_echo", description: "Echo", inputSchema: { type: "object" } }],
+      executeTool,
+    });
+    req.model.runtimePin = {
+      runtimeKind: "hermes",
+      credentialId: "fixture-cred",
+      provider: "openai-compatible",
+      modelId: "fixture-model",
+      effort: "high",
+      revision: 1,
+    };
+    const runtime = new LocalHermesRuntime(async () => ({
+      broker: broker as unknown as HermesProviderBroker,
+      scope: {} as never,
+    }));
+    const events = await collect(runtime.run(req));
+    expect(events).toContainEqual({ type: "done" });
+    expect(broker.revoke).toHaveBeenCalled();
   });
 
   it("completes a local runtime success turn and routes a provider call through the relay", async () => {

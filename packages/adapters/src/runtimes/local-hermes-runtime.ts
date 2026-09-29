@@ -78,6 +78,10 @@ export class LocalHermesRuntime implements AgentRuntime {
 
     let relay: Awaited<ReturnType<typeof startHermesProviderRelay>> | undefined;
     let brokerSession: { broker: HermesProviderBroker; scope: BrokerScope } | undefined;
+    const assertProfileAcknowledged = () => {
+      if (executionEnvelope && !profileAcknowledged)
+        throw new Error("Hermes configuration is not acknowledged.");
+    };
     try {
       const runtime = await buildHermesRuntime({
         hostRoot: staging,
@@ -110,13 +114,20 @@ export class LocalHermesRuntime implements AgentRuntime {
 
       relay = await startHermesProviderRelay(
         { protocol: 1, ...brokerSession.broker.grant, hostGeneration: "local" },
-        (method, args) => relayDispatcher.dispatch(method, args),
+        (method, args) => {
+          if (method === "provider.open" || method === "provider.read")
+            assertProfileAcknowledged();
+          return relayDispatcher.dispatch(method, args);
+        },
         () => {
           void this.fail(request.runId);
         }
       );
 
       this.running.set(request.runId, runtime);
+      const authorizeTool = request.authorizeTool;
+      const executeTool = request.executeTool;
+      const onToolCompleted = request.onToolCompleted;
       const localRequest: AgentRunRequest = {
         ...request,
         model: {
@@ -124,9 +135,22 @@ export class LocalHermesRuntime implements AgentRuntime {
           baseUrl: relay.url,
           apiKey: brokerSession.broker.grant.token,
         },
-        onToolCompleted: request.onToolCompleted
+        authorizeTool: authorizeTool
+          ? async (name) => {
+              assertProfileAcknowledged();
+              return authorizeTool(name);
+            }
+          : undefined,
+        executeTool: executeTool
+          ? async (name, args, executionId, route) => {
+              assertProfileAcknowledged();
+              return executeTool(name, args, executionId, route);
+            }
+          : undefined,
+        onToolCompleted: onToolCompleted
           ? async (result) => {
-              await request.onToolCompleted?.({
+              assertProfileAcknowledged();
+              await onToolCompleted({
                 ...result,
                 error: result.error ? "Tool failed." : undefined,
               });
