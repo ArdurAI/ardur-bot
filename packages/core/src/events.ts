@@ -241,13 +241,26 @@ export function reduceLiveMessageBlocks(
   // Held tool names ride across the seal onto the new block, so the sealed
   // tail gives the queue up: its text is final and the names materialize as
   // steps at the new block's first sentence end, exactly once, never dropped.
-  const carriedNames = sealed ? (tailProgress?.pendingToolNames ?? []) : [];
-  const sealedTail = carriedNames.length > 0 ? tailProgress : null;
-  const segments = sealedTail
+  // Held tool names flush into steps *before* a reasoning summary starts, so
+  // live order equals saved order (where executor flushes them first).
+  // Likewise, flush them before new narration starts so trailing replies
+  // follow the steps instead of preceding them.
+  const flushEarly =
+    sealed &&
+    (updateCategory === "reasoning" || updateCategory === "narration") &&
+    (tailProgress?.pendingToolNames?.length ?? 0) > 0;
+  const carriedNames = sealed && !flushEarly ? (tailProgress?.pendingToolNames ?? []) : [];
+  const sealedTail = carriedNames.length > 0 || flushEarly ? tailProgress : null;
+  let segments = sealedTail
     ? [...blocks.slice(0, -1), dropPendingToolNames(sealedTail)]
     : tailProgress && !sealed
       ? blocks.slice(0, -1)
       : [...blocks];
+  if (flushEarly && tailProgress?.pendingToolNames) {
+    for (const name of tailProgress.pendingToolNames) {
+      segments = appendToolCallSegment(segments, name);
+    }
+  }
   const openTail = tailProgress && !sealed ? tailProgress : null;
   const category = updateCategory ?? (openTail ? progressCategory(openTail) : "narration");
   // Narration `text` is the new chunk. Activity and reasoning `text` replace

@@ -9139,3 +9139,19 @@ msgstr "언제든 실제 작업을 맡길 수 있는<0/>나만의 Agent 팀"
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Interrupted"
+msgstr "중단됨"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Interrupted: {title}"
+msgstr "중단됨: {title}"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Unknown"
+msgstr "알 수 없음"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Unknown: {title}"
+msgstr "알 수 없음: {title}"

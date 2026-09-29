@@ -1,6 +1,6 @@
 import { ChatMarkdown } from "@ardurbot/chat-ui/web";
 import type { MessageBlock } from "@ardurbot/contracts";
-import { workRecordEntries } from "@ardurbot/core";
+import { workRecordEntries, workRecordStatus } from "@ardurbot/core";
 import { Trans, useLingui } from "@lingui/react/macro";
 import { Check, ChevronDown, ChevronRight, X } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -21,9 +21,9 @@ export function CompactWorkRecord({
 
   if (entries.length === 0) return null;
 
+  const status = workRecordStatus(entries);
   const active = entries.filter((m) => m.evidence.outcome === "pending");
-  const isDone = active.length === 0;
-  const failed = isDone && entries.some((m) => m.evidence.outcome === "failure");
+  const isDone = status !== "working";
   const currentState = active.length > 0 ? active[active.length - 1] : entries[entries.length - 1];
   // Collapsed, the status line previews the current activity. Expanded, it
   // steps back to the generic label so the full row below is the single copy
@@ -31,17 +31,16 @@ export function CompactWorkRecord({
   const headerTitle = expanded ? undefined : currentState?.evidence.title;
   // The status icons are visual only, so the name carries the outcome too.
   const title = currentState?.evidence.title.trim() ?? "";
-  const accessibleName = !isDone
-    ? title
-      ? t`Working: ${title}`
-      : t`Working`
-    : failed
-      ? title
-        ? t`Failed: ${title}`
-        : t`Failed`
-      : title
-        ? t`Done: ${title}`
-        : t`Done`;
+  const accessibleName =
+    status === "working"
+      ? title ? t`Working: ${title}` : t`Working`
+      : status === "failed"
+        ? title ? t`Failed: ${title}` : t`Failed`
+        : status === "interrupted"
+          ? title ? t`Interrupted: ${title}` : t`Interrupted`
+          : status === "unknown"
+            ? title ? t`Unknown: ${title}` : t`Unknown`
+            : title ? t`Done: ${title}` : t`Done`;
 
   return (
     <div className="flex flex-col gap-2 my-2 w-full max-w-full">
@@ -59,14 +58,20 @@ export function CompactWorkRecord({
               <div className="h-[2px] border-t-2 border-dotted border-border w-[50px]"></div>
             </div>
           )}
-          {isDone && failed && <X className="w-3.5 h-3.5 text-destructive shrink-0" />}
-          {isDone && !failed && <Check className="w-3.5 h-3.5 text-success shrink-0" />}
+          {status === "failed" && <X className="w-3.5 h-3.5 text-destructive shrink-0" />}
+          {status === "interrupted" && <X className="w-3.5 h-3.5 text-destructive shrink-0" />}
+          {status === "unknown" && <Check className="w-3.5 h-3.5 text-muted-foreground shrink-0" />}
+          {status === "done" && <Check className="w-3.5 h-3.5 text-success shrink-0" />}
           <div className="truncate">
             {headerTitle ??
-              (!isDone ? (
+              (status === "working" ? (
                 <Trans>Working</Trans>
-              ) : failed ? (
+              ) : status === "failed" ? (
                 <Trans>Failed</Trans>
+              ) : status === "interrupted" ? (
+                <Trans>Interrupted</Trans>
+              ) : status === "unknown" ? (
+                <Trans>Unknown</Trans>
               ) : (
                 <Trans>Done</Trans>
               ))}

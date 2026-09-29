@@ -126,3 +126,13 @@ function mapCommandOutcome(command: CommandBlock): ActivityOutcome {
       return "unknown";
   }
 }
+
+export type WorkRecordStatus = "working" | "failed" | "interrupted" | "unknown" | "done";
+
+export function workRecordStatus(entries: WorkRecordEntry[]): WorkRecordStatus {
+  if (entries.some((m) => m.evidence.outcome === "pending")) return "working";
+  if (entries.some((m) => m.evidence.outcome === "failure")) return "failed";
+  if (entries.some((m) => m.evidence.outcome === "interrupted")) return "interrupted";
+  if (entries.some((m) => m.evidence.outcome === "unknown")) return "unknown";
+  return "done";
+}

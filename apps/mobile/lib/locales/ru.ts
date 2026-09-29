@@ -1273,4 +1273,7 @@ export const RU_MESSAGES: Record<string, string> = {
   "Could not save group model.": "Не удалось сохранить модель группы.",
   "This member's model changed. Reload the group.":
     "Модель этого участника изменилась. Перезагрузите группу.",
+  "Interrupted": "Прервано",
+  "Interrupted: {title}": "Прервано: {title}",
+  "Unknown: {title}": "Неизвестно: {title}"
 };

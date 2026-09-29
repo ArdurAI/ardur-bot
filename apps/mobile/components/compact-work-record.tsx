@@ -1,6 +1,6 @@
 import { ChatMarkdown } from "@ardurbot/chat-ui/native";
 import type { MessageBlock } from "@ardurbot/contracts";
-import { workRecordEntries } from "@ardurbot/core";
+import { workRecordEntries, workRecordStatus } from "@ardurbot/core";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Animated, Pressable, Text, View } from "react-native";
 import { mobileTokens } from "../lib/appearance";
@@ -24,8 +24,9 @@ export function CompactWorkRecord({
   const [expanded, setExpanded] = useState(false);
 
   const entries = useMemo(() => workRecordEntries(blocks, live), [blocks, live]);
+  const status = workRecordStatus(entries);
   const active = entries.filter((m) => m.evidence.outcome === "pending");
-  const isDone = active.length === 0;
+  const isDone = status !== "working";
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const [motionAllowed, setMotionAllowed] = useState(false);
@@ -60,13 +61,11 @@ export function CompactWorkRecord({
 
   if (entries.length === 0) return null;
 
-  const failed = isDone && entries.some((m) => m.evidence.outcome === "failure");
   const currentState = active.length > 0 ? active[active.length - 1] : entries[entries.length - 1];
   // Collapsed, the status line previews the current activity (a streaming
   // reasoning summary included). Expanded, it steps back to the generic label
   // so the full row below is the single copy of that text.
   const headerTitle = expanded ? undefined : currentState?.evidence.title;
-  const status = !isDone ? "working" : failed ? "failed" : "done";
 
   return (
     <View style={{ marginVertical: 8, width: "100%" }}>
@@ -106,7 +105,7 @@ export function CompactWorkRecord({
               />
             </View>
           )}
-          {isDone && failed && (
+          {(status === "failed" || status === "interrupted") && (
             <NativeSymbol
               ios="xmark"
               android="close-outline"
@@ -114,7 +113,15 @@ export function CompactWorkRecord({
               color={tokens.destructive}
             />
           )}
-          {isDone && !failed && (
+          {status === "unknown" && (
+            <NativeSymbol
+              ios="checkmark"
+              android="checkmark-outline"
+              size={14}
+              color={tokens.mutedForeground}
+            />
+          )}
+          {status === "done" && (
             <NativeSymbol
               ios="checkmark"
               android="checkmark-outline"
@@ -133,7 +140,7 @@ export function CompactWorkRecord({
             numberOfLines={1}
             ellipsizeMode="tail"
           >
-            {headerTitle ?? (!isDone ? t("Working") : failed ? t("Failed") : t("Done"))}
+            {headerTitle ?? (status === "working" ? t("Working") : status === "failed" ? t("Failed") : status === "interrupted" ? t("Interrupted") : status === "unknown" ? t("Unknown") : t("Done"))}
             {currentState?.evidence.outcome === "pending" && " ..."}
           </Text>
         </View>

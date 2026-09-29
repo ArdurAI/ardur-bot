@@ -9139,3 +9139,19 @@ msgstr "Tu equipo de agentes siempre activos<0/>a los que puedes dar trabajo rea
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Interrupted"
+msgstr "Interrumpido"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Interrupted: {title}"
+msgstr "Interrumpido: {title}"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Unknown"
+msgstr "Desconocido"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Unknown: {title}"
+msgstr "Desconocido: {title}"

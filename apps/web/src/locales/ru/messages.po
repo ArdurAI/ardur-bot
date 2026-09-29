@@ -9139,3 +9139,19 @@ msgstr "Ваша команда постоянно работающих аген
 #: src/pages/customize/CustomizeControls.tsx
 msgid "Yours"
 msgstr ""
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Interrupted"
+msgstr "Прервано"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Interrupted: {title}"
+msgstr "Прервано: {title}"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Unknown"
+msgstr "Неизвестно"
+
+#: src/components/ai/CompactWorkRecord.tsx
+msgid "Unknown: {title}"
+msgstr "Неизвестно: {title}"

@@ -249,11 +249,10 @@ describe("reduceLiveMessageBlocks", () => {
     });
     expect(sealed).toEqual([
       { kind: "progress", text: "Running tests", activity: true },
-      { kind: "text", text: "All green." },
       { kind: "steps", steps: [{ label: "Vitest", count: 1 }] },
+      { kind: "progress", text: "All green." },
     ]);
 
-    // The reply keeps streaming after the flushed beat.
     expect(
       reduceLiveMessageBlocks(sealed, {
         type: "progress",
@@ -261,9 +260,8 @@ describe("reduceLiveMessageBlocks", () => {
       }),
     ).toEqual([
       { kind: "progress", text: "Running tests", activity: true },
-      { kind: "text", text: "All green." },
       { kind: "steps", steps: [{ label: "Vitest", count: 1 }] },
-      { kind: "progress", text: "Wrapping up now" },
+      { kind: "progress", text: "All green.Wrapping up now" },
     ]);
   });
 
@@ -279,7 +277,8 @@ describe("reduceLiveMessageBlocks", () => {
     });
     expect(sealed).toEqual([
       { kind: "progress", text: "Running tests", activity: true },
-      { kind: "progress", text: "Almost", pendingToolNames: ["vitest"] },
+      { kind: "steps", steps: [{ label: "Vitest", count: 1 }] },
+      { kind: "progress", text: "Almost" },
     ]);
 
     expect(
@@ -289,8 +288,8 @@ describe("reduceLiveMessageBlocks", () => {
       }),
     ).toEqual([
       { kind: "progress", text: "Running tests", activity: true },
-      { kind: "text", text: "Almost done." },
       { kind: "steps", steps: [{ label: "Vitest", count: 1 }] },
+      { kind: "progress", text: "Almost done." },
     ]);
   });
 
@@ -325,8 +324,8 @@ describe("reduceLiveMessageBlocks", () => {
       }),
     ).toEqual([
       { kind: "progress", text: "Let me check" },
-      { kind: "progress", text: "The config looks stale.", reasoning: true },
       { kind: "steps", steps: [{ label: "Shell", count: 1 }] },
+      { kind: "progress", text: "The config looks stale.", reasoning: true },
     ]);
   });
 
@@ -477,12 +476,29 @@ describe("reduceLiveMessageBlocks transition matrix", () => {
       ? []
       : [progressBlock(entry.to, entry.expected.at(-1)!.text)];
     const head = entry.from === entry.to ? [] : [progressBlock(entry.from, "Alpha")];
-    const expected = [
-      ...head,
-      ...middle,
-      { kind: "text" as const, text: closedText },
-      { kind: "steps" as const, steps: [{ label: "Shell", count: 1 }] },
-    ];
+    let expected: MessageBlock[];
+    if (entry.to === "narration" && entry.from === "narration") {
+      expected = [
+        ...head,
+        ...middle,
+        { kind: "text" as const, text: closedText },
+        { kind: "steps" as const, steps: [{ label: "Shell", count: 1 }] },
+      ];
+    } else if (entry.to === "reasoning") {
+      expected = [
+        ...head,
+        { kind: "steps" as const, steps: [{ label: "Shell", count: 1 }] },
+        ...middle,
+        { kind: "progress" as const, text: closedText },
+      ];
+    } else {
+      expected = [
+        ...head,
+        ...middle,
+        { kind: "steps" as const, steps: [{ label: "Shell", count: 1 }] },
+        { kind: "progress" as const, text: closedText },
+      ];
+    }
     return { ...entry, expected };
   });
 
@@ -578,14 +594,25 @@ describe("reduceLiveMessageBlocks transition matrix", () => {
             ? [progressBlock(tail, tailText)]
             : [];
       const head = pending === "carried" ? [progressBlock(sealedBy(tail), "Intro")] : [];
-      const steps =
-        pending === "none"
-          ? [{ label: "Shell", count: 1 }]
-          : [
-              { label: "Read file", count: 1 },
-              { label: "Shell", count: 1 },
-            ];
-      return { tail, pending, expected: [...head, ...kept, { kind: "steps" as const, steps }] };
+      let expected: MessageBlock[];
+      if ((tail === "reasoning" || tail === "narration") && pending === "carried") {
+        expected = [
+          ...head,
+          { kind: "steps" as const, steps: [{ label: "Read file", count: 1 }] },
+          ...kept,
+          { kind: "steps" as const, steps: [{ label: "Shell", count: 1 }] },
+        ];
+      } else {
+        const steps =
+          pending === "none"
+            ? [{ label: "Shell", count: 1 }]
+            : [
+                { label: "Read file", count: 1 },
+                { label: "Shell", count: 1 },
+              ];
+        expected = [...head, ...kept, { kind: "steps" as const, steps }];
+      }
+      return { tail, pending, expected };
     }),
   );
 
