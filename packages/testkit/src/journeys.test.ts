@@ -5415,7 +5415,7 @@ describeJourneys("required product journeys", () => {
     expect(remainingBotIds).not.toContain(artifactOwnerId);
   });
 
-  // A native coordinator (Claude Code) reports its whole turn's usage, cache reads included, as
+  // A coordinator on a native runtime reports its whole turn's usage, cache reads included, as
   // the turn ends: well past the default task budget, just before its room workers can start.
   async function* heavyTurn(events: AsyncIterable<AgentRuntimeEvent>) {
     for await (const event of events)
