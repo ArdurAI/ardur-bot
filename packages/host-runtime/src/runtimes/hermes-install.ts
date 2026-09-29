@@ -102,6 +102,84 @@ function assertHermesIdentity(install: string, pin: string, tree: string): void 
     throw new Error("Install marker mismatch.");
 }
 
+export const HERMES_INSTALL_PHASES = [
+  "downloading",
+  "checking",
+  "python",
+  "packages",
+  "finishing",
+] as const;
+export type HermesInstallPhase = (typeof HERMES_INSTALL_PHASES)[number];
+export type HermesInstallRunState = "installing" | "ready" | "failed";
+
+export type HermesInstallStatus = {
+  state: HermesInstallRunState;
+  phase?: HermesInstallPhase;
+  message: string;
+  updatedAt: string;
+};
+
+const HERMES_INSTALL_LOCK_STALE_MS = 60 * 60 * 1000;
+
+export function hermesInstallStatusPath(root: string): string {
+  return path.join(root, "install-status.json");
+}
+
+export function hermesInstallLockPath(root: string): string {
+  return path.join(root, "runtimes", ".install.lock");
+}
+
+export function readHermesInstallStatus(root: string): HermesInstallStatus | null {
+  try {
+    const parsed = JSON.parse(readFileSync(hermesInstallStatusPath(root), "utf8")) as {
+      state?: unknown;
+      phase?: unknown;
+      message?: unknown;
+      updatedAt?: unknown;
+    };
+    if (parsed.state !== "installing" && parsed.state !== "ready" && parsed.state !== "failed")
+      return null;
+    if (
+      parsed.phase !== undefined &&
+      !HERMES_INSTALL_PHASES.includes(parsed.phase as HermesInstallPhase)
+    )
+      return null;
+    if (typeof parsed.message !== "string" || typeof parsed.updatedAt !== "string") return null;
+    return {
+      state: parsed.state,
+      ...(parsed.phase ? { phase: parsed.phase as HermesInstallPhase } : {}),
+      message: parsed.message,
+      updatedAt: parsed.updatedAt,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** A live pid stays held for at most an hour. A dead pid is stale immediately. */
+export function hermesInstallLockHeld(root: string, now = Date.now()): boolean {
+  try {
+    const lockPath = hermesInstallLockPath(root);
+    const stat = statSync(lockPath);
+    const parsed = JSON.parse(readFileSync(lockPath, "utf8")) as { pid?: unknown };
+    const pid = typeof parsed.pid === "number" ? parsed.pid : undefined;
+    if (pid !== undefined && !installPidAlive(pid)) return false;
+    return now - stat.mtimeMs < HERMES_INSTALL_LOCK_STALE_MS;
+  } catch {
+    return false;
+  }
+}
+
+function installPidAlive(pid: number): boolean {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code === "EPERM";
+  }
+}
+
 export function hermesLauncherAsset(bundleFile: string): string {
   return path.join(path.dirname(bundleFile), "python", "hermes_launcher.py");
 }
