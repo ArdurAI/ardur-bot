@@ -7,7 +7,7 @@ import {
   type SpaceLearningConfig,
 } from "@ardurbot/contracts";
 import type { BoardConfiguration, BoardProblem, BoardWorkspace } from "@ardurbot/contracts/board";
-import { modelPinOptionKey, parseModelPinOptionKey, spaceDefaultEffort } from "@ardurbot/core";
+import { modelPinOptionKey, parseModelPinOptionKey, hermesConnectionRefusal, spaceDefaultEffort } from "@ardurbot/core";
 import {
   Button,
   Dialog,
@@ -318,8 +318,11 @@ export default function BoardsSettings({ onBusyChange, navigate }: SettingsPageP
                       settings={modelSettings}
                       showAll={false}
                       disabled={busy || !canChooseReviewer}
-                      allowedProviders={
-                        kind === "hermes" ? ["openai-compatible", "ollama"] : undefined
+                      isCredentialDisabled={
+                        kind === "hermes"
+                          ? (credential) =>
+                              Boolean(hermesConnectionRefusal(credential.provider, credential))
+                          : undefined
                       }
                       value={(() => {
                         const selected =
