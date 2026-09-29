@@ -1671,4 +1671,51 @@ postgres("request ledger on disposable PostgreSQL", () => {
       usedTokens: 2 * DELEGATION_LIMITS.reservationTokens + 100,
     });
   });
+
+  it("admits only one of two concurrent workers when one reservation remains", async () => {
+    const f = await fixture();
+    const reservation = DELEGATION_LIMITS.reservationTokens;
+    await db.prisma.delegationRoot.update({
+      where: { rootTaskId: f.id },
+      data: { tokenLimit: reservation, maxConcurrent: 4, maxDescendants: 12 },
+    });
+    const snapshot = {
+      pin: f.pin,
+      computer: { id: null, mode: "team" as const, kind: null },
+      destination: { host: null, local: true },
+    };
+    const admit = (client: PrismaClient, key: string) =>
+      client.$transaction((tx) =>
+        admitDelegation(tx, {
+          spaceId: f.id,
+          userId: f.run.userId,
+          parentRunId: f.id,
+          actingBotId: f.id,
+          actingName: "Fixture",
+          kind: "helper",
+          admissionKey: key,
+          prompt: "Synthetic helper",
+          snapshot,
+          tokens: reservation,
+        }),
+      );
+    const results = await Promise.allSettled([
+      admit(db.prisma, `${f.id}-a`),
+      admit(peer.prisma, `${f.id}-b`),
+    ]);
+    const admitted = results.filter((result) => result.status === "fulfilled");
+    const refused = results.filter((result) => result.status === "rejected");
+    expect(admitted).toHaveLength(1);
+    expect(refused).toHaveLength(1);
+    expect(refused[0]).toMatchObject({
+      reason: { problem: { code: "budget-exhausted" } },
+    });
+    expect(await f.root()).toMatchObject({
+      reservedTokens: reservation,
+      activeDescendants: 1,
+      totalDescendants: 1,
+      usedTokens: 0,
+    });
+    expect(await db.prisma.delegation.count({ where: { rootTaskId: f.id } })).toBe(1);
+  });
 });
