@@ -58,6 +58,7 @@ export function PeerMessageReceipt({
       color={color}
       identity={peerBotId}
       label={label}
+      name={peer}
       onClick={() => onOpen({ peerBotId, peerBotName: peer })}
     />
   );

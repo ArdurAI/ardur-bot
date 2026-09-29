@@ -1,12 +1,65 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import {
   hermesInstallCandidate,
+  hermesLaunchArgv,
+  localHermesInstallCandidate,
+  localHermesRoot,
+  localHermesStaging,
   probeHermesInstall,
   resolveHermesLauncherAsset,
 } from "./hermes-install.js";
+
+it("wraps the pinned Hermes process in the host guardrail only on macOS", () => {
+  const guard = {
+    paths: ["/fixture/user-data/secrets.env"],
+    ports: [55433],
+    sockets: ["/fixture/run/docker.sock"],
+  };
+  const wrapped = hermesLaunchArgv(
+    "/fixture/.venv/bin/python",
+    "/fixture/launcher.py",
+    guard,
+    "darwin",
+  );
+  expect(wrapped[0]).toBe("/usr/bin/sandbox-exec");
+  expect(wrapped[1]).toBe("-p");
+  expect(wrapped[2]).toContain('(subpath "/fixture/user-data/secrets.env")');
+  expect(wrapped[2]).toContain('(remote ip "localhost:55433")');
+  expect(wrapped[2]).toContain('(remote unix-socket (literal "/fixture/run/docker.sock"))');
+  expect(wrapped.slice(3)).toEqual(["/fixture/.venv/bin/python", "-B", "/fixture/launcher.py"]);
+  for (const platform of ["linux", "win32"] as const)
+    expect(
+      hermesLaunchArgv("/fixture/.venv/bin/python", "/fixture/launcher.py", guard, platform),
+    ).toEqual(["/fixture/.venv/bin/python", "-B", "/fixture/launcher.py"]);
+  expect(
+    hermesLaunchArgv("/fixture/.venv/bin/python", "/fixture/launcher.py", undefined, "darwin"),
+  ).toEqual(["/fixture/.venv/bin/python", "-B", "/fixture/launcher.py"]);
+});
+
+it("resolves the local root, staging and managed install under DATA_DIR", async () => {
+  const data = await mkdtemp(path.join(tmpdir(), "hermes-local-root-"));
+  vi.stubEnv("DATA_DIR", data);
+  vi.stubEnv("ARDUR_HERMES_INSTALL", "");
+  try {
+    const root = path.join(path.resolve(data), "hermes");
+    expect(localHermesRoot()).toBe(root);
+    expect(localHermesStaging()).toBe(path.join(root, "staging"));
+    const managed = path.join(root, "runtimes", "hermes-agent");
+    expect(localHermesInstallCandidate()).toBeNull();
+    await mkdir(managed, { recursive: true });
+    expect(localHermesInstallCandidate()).toBe(managed);
+    expect(hermesInstallCandidate(localHermesStaging(), undefined)).toBe(managed);
+    expect(localHermesInstallCandidate()).toBe(
+      hermesInstallCandidate(localHermesStaging(), process.env.ARDUR_HERMES_INSTALL),
+    );
+  } finally {
+    vi.unstubAllEnvs();
+    await rm(data, { recursive: true, force: true });
+  }
+});
 
 it.skipIf(process.platform === "win32")(
   "prefers the explicit install over the one managed host location",
@@ -71,4 +124,30 @@ it.skipIf(process.platform === "win32")("refuses a project dotenv by existence a
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+it("resolves the desktop packaged launcher from the worker service bundle", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "desktop-asset-"));
+  try {
+    const workerBundle = path.join(root, "services", "worker.mjs");
+    const launcher = path.join(root, "host-service", "python", "hermes_launcher.py");
+    await mkdir(path.dirname(launcher), { recursive: true });
+    await writeFile(launcher, "fixture");
+    for (const name of ["hermes_profile.py", "hermes_sources.json", "runtime_config_profile.json"])
+      await writeFile(path.join(path.dirname(launcher), name), "fixture");
+    expect(resolveHermesLauncherAsset(workerBundle, undefined)).toBe(launcher);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+it("resolves the source launcher from the local hermes runtime module", () => {
+  const bundle = path.join(tmpdir(), "unrelated-services", "worker.mjs");
+  const localModuleUrl = new URL(
+    "../../../adapters/src/runtimes/local-hermes-runtime.ts",
+    import.meta.url,
+  ).href;
+  expect(resolveHermesLauncherAsset(bundle, localModuleUrl)).toBe(
+    path.resolve(import.meta.dirname, "../../python/hermes_launcher.py"),
+  );
 });

@@ -16,7 +16,15 @@ import {
   inspectHostEnvironment,
   redactHostStatus,
   resolveHostBinary,
+  setHostCommandGuard,
 } from "./host-environment.js";
+
+/** A darwin probe is sandbox-exec, then the profile, then the real command. */
+function launched(binary: string, args: readonly string[]) {
+  if (path.basename(binary) === "sandbox-exec")
+    return { binary: args[2] ?? "", args: args.slice(3) };
+  return { binary, args };
+}
 
 const roots: string[] = [];
 function child(output = "", code: number | null = 0, error?: string) {
@@ -42,8 +50,11 @@ function child(output = "", code: number | null = 0, error?: string) {
 }
 beforeEach(() => {
   fake.spawn.mockReset();
+  // A tiny explicit guard. The fallback would realpath engine sockets on this machine.
+  setHostCommandGuard({ paths: [], ports: [1], sockets: [] });
 });
 afterEach(async () => {
+  setHostCommandGuard(undefined);
   vi.useRealTimers();
   vi.unstubAllEnvs();
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })));
@@ -78,8 +89,14 @@ describe("host login environment", () => {
     });
     expect(result.env).not.toHaveProperty("GH_TOKEN");
     expect(fake.spawn).toHaveBeenCalledWith(
-      "/bin/zsh",
-      ["-lc", expect.stringContaining("AWS_PROFILE")],
+      "/usr/bin/sandbox-exec",
+      [
+        "-p",
+        expect.stringContaining('(remote ip "localhost:1")'),
+        "/bin/zsh",
+        "-lc",
+        expect.stringContaining("AWS_PROFILE"),
+      ],
       expect.objectContaining({
         env: expect.objectContaining({ HOME: "/fixture/home", SHELL: "/bin/zsh" }),
         shell: false,
@@ -226,11 +243,12 @@ describe("host login environment", () => {
   });
   it("captures once for concurrent host users and reuses it for native launches", async () => {
     vi.resetModules();
-    fake.spawn.mockImplementation((_binary, args) =>
-      args[0] === "-lc" ? child("\0/fixture/bin\0") : child(),
+    fake.spawn.mockImplementation((_binary, args: string[]) =>
+      args.includes("-lc") ? child("\0/fixture/bin\0") : child(),
     );
     vi.stubEnv("SHELL", "/bin/zsh");
     const environment = await import("./host-environment.js");
+    environment.setHostCommandGuard({ paths: [], ports: [1], sockets: [] });
     const [first, second] = await Promise.all([
       environment.getHostEnvironment(),
       environment.getHostEnvironment(),
@@ -262,15 +280,16 @@ describe("host inventory", () => {
   }
   it("detects tools on the captured PATH, probes only permitted statuses, and redacts emails", async () => {
     const root = await binaries(HOST_TOOLS);
-    fake.spawn.mockImplementation((binary, args) =>
-      child(
-        path.basename(binary) === "kubectl"
+    fake.spawn.mockImplementation((binary: string, args: string[]) => {
+      const command = launched(binary, args);
+      return child(
+        path.basename(command.binary) === "kubectl"
           ? "fixture-user@example.test/context\nignored second line"
-          : args[0] === "--version"
+          : command.args[0] === "--version"
             ? "gh version 2.80.0\n"
             : "private authentication output",
-      ),
-    );
+      );
+    });
     const environment = await inspectHostEnvironment(
       Promise.resolve({ env: { PATH: root, HOME: "/fixture/home" } }),
     );
@@ -286,11 +305,21 @@ describe("host inventory", () => {
       status: "not checked",
     });
     expect(environment.tools.find((tool) => tool.name === "aws")?.status).toBe("not checked");
-    expect(fake.spawn.mock.calls.map(([binary, args]) => [path.basename(binary), args])).toEqual([
+    expect(
+      fake.spawn.mock.calls.map(([binary, args]) => {
+        const command = launched(binary, args);
+        return [path.basename(command.binary), [...command.args]];
+      }),
+    ).toEqual([
       ["gh", ["--version"]],
       ["gh", ["auth", "status"]],
       ["kubectl", ["config", "current-context"]],
     ]);
+    if (process.platform === "darwin") {
+      expect(fake.spawn.mock.calls.every(([binary]) => binary === "/usr/bin/sandbox-exec")).toBe(
+        true,
+      );
+    }
     const note = hostEnvironmentNote(environment);
     expect(note).toContain("gh 2.80.0 (signed in)");
     expect(note).toContain("Ask-first");

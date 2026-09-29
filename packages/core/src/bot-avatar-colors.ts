@@ -110,6 +110,22 @@ const OLD_COLOR_MAP: Record<string, string> = {
   gray: "#64748B",
 };
 
+/**
+ * Bots created before the pigment palette shipped carry these exact hexes from
+ * the old round-robin assignment. Nearest-pigment snapping collapses them onto
+ * only 4 of the 8 pigments, so they get an explicit 1:1 mapping that preserves
+ * the spread those bots already had. Keep every value distinct.
+ */
+const LEGACY_BOT_COLOR_PIGMENTS: Record<string, string> = {
+  "#3ec5a8": "teal",
+  "#f5a03c": "ochre",
+  "#6a6bf5": "indigo",
+  "#9b5cf6": "plum",
+  "#3b82f6": "slate",
+  "#f2622a": "persimmon",
+  "#d9508a": "bengara",
+};
+
 export function resolvePersonaColorDef(
   identity: string,
   explicitColor?: string | null,
@@ -124,6 +140,12 @@ export function resolvePersonaColorDef(
     let hexToMatch = clean;
     if (OLD_COLOR_MAP[clean]) {
       hexToMatch = OLD_COLOR_MAP[clean]!;
+    }
+
+    const legacyPigmentId = LEGACY_BOT_COLOR_PIGMENTS[hexToMatch];
+    if (legacyPigmentId) {
+      const mapped = GROK_COLOR_LIST.find((c) => c.id === legacyPigmentId);
+      if (mapped) return mapped;
     }
 
     if (/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(hexToMatch)) {
@@ -158,7 +180,7 @@ function hexToRgb(hex: string) {
 function colorDistance(hex1: string, hex2: string) {
   const c1 = hexToRgb(hex1);
   const c2 = hexToRgb(hex2);
-  return Math.pow(c1.r - c2.r, 2) + Math.pow(c1.g - c2.g, 2) + Math.pow(c1.b - c2.b, 2);
+  return (c1.r - c2.r) ** 2 + (c1.g - c2.g) ** 2 + (c1.b - c2.b) ** 2;
 }
 
 function getNearestPigment(hex: string): GrokColorDef {

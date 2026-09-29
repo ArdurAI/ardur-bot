@@ -9,7 +9,7 @@ import type { PrismaClient, ThreadEvents } from "@ardurbot/db";
 import { createLogger, createTestSink, installLogger } from "@ardurbot/logging";
 import type { MemoryService } from "@ardurbot/memory";
 import { describe, expect, it, vi } from "vitest";
-import { createBackgroundJobHandlers } from "./background-job-handlers.js";
+import { createBackgroundJobHandlers, reviewRuntimeGate } from "./background-job-handlers.js";
 import { createRunExecutor } from "./executor.js";
 import { compactHistory } from "./history-compaction.js";
 import { deliverMessagingOutbound, mirrorMessagingOutbound } from "./messaging-delivery.js";
@@ -20,6 +20,38 @@ vi.mock("./messaging-delivery.js", () => ({
   deliverMessagingOutbound: vi.fn(async () => undefined),
   mirrorMessagingOutbound: vi.fn(async () => undefined),
 }));
+
+describe("reviewRuntimeGate", () => {
+  const pin = (runtimeKind: string) =>
+    ({
+      runtimeKind,
+      provider: "fixture",
+      modelId: "fixture",
+      effort: "medium",
+      credentialId: "native",
+      revision: 1,
+    }) as never;
+  it("refuses a Hermes reviewer in every mode", () => {
+    for (const hostBridge of [false, true]) {
+      const refused = reviewRuntimeGate({ pin: pin("hermes"), hostBridge });
+      expect(refused).toMatchObject({ kind: "problem", code: "runtime-unavailable" });
+      expect(refused?.reason).toContain("Hermes");
+    }
+  });
+  it("refuses native reviewers in host-bridge mode but allows pi", () => {
+    for (const kind of ["codex-app-server", "claude-code", "antigravity"]) {
+      const refused = reviewRuntimeGate({ pin: pin(kind), hostBridge: true });
+      expect(refused).toMatchObject({ kind: "problem", code: "runtime-unavailable" });
+      expect(refused?.reason).toContain("connected host");
+    }
+    expect(reviewRuntimeGate({ pin: pin("pi"), hostBridge: true })).toBeNull();
+  });
+  it("allows native reviewers in direct mode", () => {
+    for (const kind of ["codex-app-server", "claude-code", "antigravity"]) {
+      expect(reviewRuntimeGate({ pin: pin(kind), hostBridge: false })).toBeNull();
+    }
+  });
+});
 
 describe("createBackgroundJobHandlers", () => {
   it("delivers a 25 ms reply without waiting for a 500 ms brief model call", async () => {

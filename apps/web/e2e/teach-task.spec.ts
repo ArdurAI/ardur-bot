@@ -3,7 +3,7 @@ import { captureScreenshot, completeOnboarding, signup } from "./helpers";
 
 test("teach a task records interaction and saves a draft", async ({ page }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `teach-${stamp}@ardurbot.test`, "password12", "Teach");
+  await signup(page, `teach-${stamp}@example.test`, "password12", "Teach");
   await completeOnboarding(page);
 
   await page.getByTitle("Agent computer").click();
@@ -30,6 +30,8 @@ test("teach a task records interaction and saves a draft", async ({ page }, test
   await openButton.click();
   await expect(page.getByRole("button", { name: "Close computer" })).toBeVisible();
   const chrome = page.getByTestId("computer-chrome");
+  // The workspace opens the screen to watch; taking control is its own step.
+  await chrome.getByRole("button", { name: "Take control" }).click();
   await expect(chrome.getByText("You have control", { exact: true })).toBeVisible();
   await expect(chrome.getByRole("button", { name: "Release", exact: true })).toBeVisible();
   await expect(chrome.getByTestId("teach-start-button")).toBeVisible();

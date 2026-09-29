@@ -456,6 +456,7 @@ export async function compactHistory(
         ].join(" "),
         history: [],
         tools: "none",
+        singleRequest: true,
         model,
       },
       {

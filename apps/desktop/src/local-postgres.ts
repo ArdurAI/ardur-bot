@@ -34,6 +34,17 @@ export const DATABASE_NAME = "ardurbot";
 /** 5432 is the library default. 5433 is a common host Postgres and must not be reused. */
 export const FORBIDDEN_PORTS = new Set([5432, 5433]);
 
+/**
+ * The embedded server listens on loopback TCP only. An empty unix socket directory
+ * means there is no socket file a sandboxed command can connect to.
+ */
+export const EMBEDDED_POSTGRES_FLAGS = [
+  "-c",
+  "listen_addresses=127.0.0.1",
+  "-c",
+  "unix_socket_directories=",
+] as const;
+
 type EmbeddedPostgresConstructor = new (options: EmbeddedPostgresOptions) => EmbeddedPostgresLike;
 
 export interface EmbeddedPostgresBinaries {

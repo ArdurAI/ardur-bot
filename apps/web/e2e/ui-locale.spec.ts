@@ -5,7 +5,7 @@ test("general settings language picker includes Simplified Chinese and applies i
   page,
 }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `ui-locale-zh-cn-${stamp}@ardurbot.test`, "password12", "Locale QA");
+  await signup(page, `ui-locale-zh-cn-${stamp}@example.test`, "password12", "Locale QA");
   await completeOnboarding(page, testInfo);
 
   const settings = await openUserSettings(page, "general");
@@ -16,10 +16,10 @@ test("general settings language picker includes Simplified Chinese and applies i
 
   const picker = settings.getByTestId("ui-locale-select");
   await picker.click();
-  await expect(settings.getByRole("option", { name: "简体中文", exact: true })).toBeVisible();
+  await expect(page.getByRole("option", { name: "简体中文", exact: true })).toBeVisible();
   await captureScreenshot(page, testInfo, "ui-locale-picker-zh-cn");
 
-  await settings.getByRole("option", { name: "简体中文", exact: true }).click();
+  await page.getByRole("option", { name: "简体中文", exact: true }).click();
   await expect(settings.getByRole("heading", { name: "通用", exact: true }).first()).toBeVisible();
   await expect(settings.getByRole("group", { name: "语言", exact: true })).toBeVisible();
   await expect(picker).toHaveText("简体中文");
@@ -30,7 +30,7 @@ test("general settings language picker includes Korean and applies it", async ({
   page,
 }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `ui-locale-ko-${stamp}@ardurbot.test`, "password12", "Locale QA");
+  await signup(page, `ui-locale-ko-${stamp}@example.test`, "password12", "Locale QA");
   await completeOnboarding(page, testInfo);
 
   const settings = await openUserSettings(page, "general");
@@ -41,10 +41,10 @@ test("general settings language picker includes Korean and applies it", async ({
 
   const picker = settings.getByTestId("ui-locale-select");
   await picker.click();
-  await expect(settings.getByRole("option", { name: "한국어", exact: true })).toBeVisible();
+  await expect(page.getByRole("option", { name: "한국어", exact: true })).toBeVisible();
   await captureScreenshot(page, testInfo, "ui-locale-picker-ko");
 
-  await settings.getByRole("option", { name: "한국어", exact: true }).click();
+  await page.getByRole("option", { name: "한국어", exact: true }).click();
   await expect(settings.getByRole("heading", { name: "일반", exact: true }).first()).toBeVisible();
   await expect(settings.getByRole("group", { name: "언어", exact: true })).toBeVisible();
   await expect(picker).toHaveText("한국어");
@@ -55,7 +55,7 @@ test("general settings language picker includes Spanish and applies it", async (
   page,
 }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `ui-locale-es-${stamp}@ardurbot.test`, "password12", "Locale QA");
+  await signup(page, `ui-locale-es-${stamp}@example.test`, "password12", "Locale QA");
   await completeOnboarding(page, testInfo);
 
   const settings = await openUserSettings(page, "general");
@@ -66,10 +66,10 @@ test("general settings language picker includes Spanish and applies it", async (
 
   const picker = settings.getByTestId("ui-locale-select");
   await picker.click();
-  await expect(settings.getByRole("option", { name: "Español", exact: true })).toBeVisible();
+  await expect(page.getByRole("option", { name: "Español", exact: true })).toBeVisible();
   await captureScreenshot(page, testInfo, "ui-locale-picker-es");
 
-  await settings.getByRole("option", { name: "Español", exact: true }).click();
+  await page.getByRole("option", { name: "Español", exact: true }).click();
   await expect(
     settings.getByRole("heading", { name: "General", exact: true }).first(),
   ).toBeVisible();
@@ -82,7 +82,7 @@ test("general settings language picker includes Russian and persists it", async 
   page,
 }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `ui-locale-ru-${stamp}@ardurbot.test`, "password12", "Locale QA");
+  await signup(page, `ui-locale-ru-${stamp}@example.test`, "password12", "Locale QA");
   await completeOnboarding(page, testInfo);
 
   await page.locator("header.app-drag").getByRole("button", { name: "Settings" }).click();
@@ -92,10 +92,10 @@ test("general settings language picker includes Russian and persists it", async 
 
   const picker = settings.getByTestId("ui-locale-select");
   await picker.click();
-  await expect(settings.getByRole("option", { name: "Русский", exact: true })).toBeVisible();
+  await expect(page.getByRole("option", { name: "Русский", exact: true })).toBeVisible();
   await captureScreenshot(page, testInfo, "ui-locale-picker-ru");
 
-  await settings.getByRole("option", { name: "Русский", exact: true }).click();
+  await page.getByRole("option", { name: "Русский", exact: true }).click();
   await expect(settings.getByRole("heading", { name: "Общие", exact: true }).first()).toBeVisible();
   await expect(settings.getByRole("group", { name: "Язык", exact: true })).toBeVisible();
   await expect(picker).toHaveText("Русский");

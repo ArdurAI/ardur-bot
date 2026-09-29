@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { gunzipSync } from "node:zlib";
-import type { AgentRuntime } from "@ardurbot/adapter-kit";
+import type { AgentRunRequest, AgentRuntime, AgentRuntimeEvent } from "@ardurbot/adapter-kit";
 import {
   archiveBot,
   ComposioEmulator,
@@ -184,10 +184,10 @@ describeJourneys("required product journeys", () => {
   });
 
   it("new bots inherit a connected tool while an explicit removal survives saves and review", async () => {
-    const cookie = await signup(app, `integration-access-${stamp}@ardurbot.test`, "Workspace");
+    const cookie = await signup(app, `integration-access-${stamp}@example.test`, "Workspace");
     const otherCookie = await signup(
       app,
-      `integration-access-other-${stamp}@ardurbot.test`,
+      `integration-access-other-${stamp}@example.test`,
       "Other workspace",
     );
     const owner = await rpc<Me>(app, cookie, "me");
@@ -295,7 +295,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("keeps a custom MCP override below the space Block after a partial update", async () => {
-    const cookie = await signup(app, `custom-ceiling-${stamp}@ardurbot.test`, "Workspace");
+    const cookie = await signup(app, `custom-ceiling-${stamp}@example.test`, "Workspace");
     const owner = await rpc<Me>(app, cookie, "me");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Worker",
@@ -381,7 +381,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("admits and executes an inherited integration call through delegation", async () => {
-    const cookie = await signup(app, `inherited-delegation-${stamp}@ardurbot.test`, "Workspace");
+    const cookie = await signup(app, `inherited-delegation-${stamp}@example.test`, "Workspace");
     const owner = await rpc<Me>(app, cookie, "me");
     const requester = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Requester",
@@ -514,10 +514,10 @@ describeJourneys("required product journeys", () => {
   });
 
   it("computer updates preserve the workspace and reserve the shared computer until completion", async () => {
-    const cookie = await signup(app, `maintenance-${stamp}@ardurbot.test`, "Maintenance");
+    const cookie = await signup(app, `maintenance-${stamp}@example.test`, "Maintenance");
     const outsider = await signup(
       app,
-      `maintenance-other-${stamp}@ardurbot.test`,
+      `maintenance-other-${stamp}@example.test`,
       "Other workspace",
     );
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
@@ -619,8 +619,8 @@ describeJourneys("required product journeys", () => {
   });
 
   it("1+2: users are isolated and workspace bots share the Team Computer", async () => {
-    const ada = await signup(app, `ada-j-${stamp}@ardurbot.test`, "Ada Journey");
-    const bob = await signup(app, `bob-j-${stamp}@ardurbot.test`, "Bob Journey");
+    const ada = await signup(app, `ada-j-${stamp}@example.test`, "Ada Journey");
+    const bob = await signup(app, `bob-j-${stamp}@example.test`, "Bob Journey");
 
     const adaMe = await rpc<Me>(app, ada, "me");
     const bobMe = await rpc<Me>(app, bob, "me");
@@ -787,7 +787,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("clears a conversation without removing the bot, computer, memory, or routines", async () => {
-    const cookie = await signup(app, `clear-j-${stamp}@ardurbot.test`, "Clear Journey");
+    const cookie = await signup(app, `clear-j-${stamp}@example.test`, "Clear Journey");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Keeper",
       title: "Keeps its setup",
@@ -1339,7 +1339,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("starts a new chat without sending retained history to the next turn", async () => {
-    const cookie = await signup(app, `restart-j-${stamp}@ardurbot.test`, "Restart Journey");
+    const cookie = await signup(app, `restart-j-${stamp}@example.test`, "Restart Journey");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Fresh Start",
       title: "",
@@ -1394,7 +1394,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("2b: two Team bots send at once on distinct screens", async () => {
-    const cookie = await signup(app, `parallel-j-${stamp}@ardurbot.test`, "Parallel");
+    const cookie = await signup(app, `parallel-j-${stamp}@example.test`, "Parallel");
     const writer = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Writer",
       title: "",
@@ -1441,7 +1441,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("3: disconnect and reconnect from a cursor reconstructs the thread", async () => {
-    const cookie = await signup(app, `cursor-j-${stamp}@ardurbot.test`, "Cursor");
+    const cookie = await signup(app, `cursor-j-${stamp}@example.test`, "Cursor");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Chief",
       title: "",
@@ -1465,7 +1465,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("4: takeover login then resume without exposing credentials", async () => {
-    const cookie = await signup(app, `takeover-j-${stamp}@ardurbot.test`, "Takeover");
+    const cookie = await signup(app, `takeover-j-${stamp}@example.test`, "Takeover");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Chief",
       title: "",
@@ -1508,7 +1508,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("4d: skipping takeover resumes without treating login as done", async () => {
-    const cookie = await signup(app, `takeover-skip-j-${stamp}@ardurbot.test`, "Skip Takeover");
+    const cookie = await signup(app, `takeover-skip-j-${stamp}@example.test`, "Skip Takeover");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Chief",
       title: "",
@@ -1552,7 +1552,7 @@ describeJourneys("required product journeys", () => {
     const previousTakeoverTtl = process.env.COMPUTER_TAKEOVER_TTL_MS;
     process.env.COMPUTER_TAKEOVER_TTL_MS = "1000";
     try {
-      const cookie = await signup(app, `takeover-expiry-j-${stamp}@ardurbot.test`, "Expiry");
+      const cookie = await signup(app, `takeover-expiry-j-${stamp}@example.test`, "Expiry");
       const bot = await rpc<Bot>(app, cookie, "bots/create", {
         name: "Chief",
         title: "",
@@ -1636,7 +1636,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("4c: a takeover authorizes input only on the controlled bot screen", async () => {
-    const cookie = await signup(app, `takeover-scope-j-${stamp}@ardurbot.test`, "Takeover Scope");
+    const cookie = await signup(app, `takeover-scope-j-${stamp}@example.test`, "Takeover Scope");
     const writer = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Writer",
       title: "",
@@ -1669,7 +1669,7 @@ describeJourneys("required product journeys", () => {
   it("4d: a stale Team release cannot clear a newer bot takeover", async () => {
     const cookie = await signup(
       app,
-      `takeover-release-fence-j-${stamp}@ardurbot.test`,
+      `takeover-release-fence-j-${stamp}@example.test`,
       "Release Fence",
     );
     const writer = await rpc<Bot>(app, cookie, "bots/create", {
@@ -1836,7 +1836,7 @@ describeJourneys("required product journeys", () => {
   it("4e: concurrent Team takeovers never return another bot's lease", async () => {
     const cookie = await signup(
       app,
-      `takeover-owner-race-j-${stamp}@ardurbot.test`,
+      `takeover-owner-race-j-${stamp}@example.test`,
       "Takeover Owner Race",
     );
     const writer = await rpc<Bot>(app, cookie, "bots/create", {
@@ -1917,7 +1917,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("5: a routine wakes the bot and posts into the existing thread", async () => {
-    const cookie = await signup(app, `routine-j-${stamp}@ardurbot.test`, "Routine");
+    const cookie = await signup(app, `routine-j-${stamp}@example.test`, "Routine");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Chief",
       title: "",
@@ -2000,7 +2000,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("5b: tool-created schedules wake in the creating group or 1:1 thread", async () => {
-    const cookie = await signup(app, `schedule-dest-j-${stamp}@ardurbot.test`, "Schedule Dest");
+    const cookie = await signup(app, `schedule-dest-j-${stamp}@example.test`, "Schedule Dest");
     const me = await rpc<Me>(app, cookie, "me");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Scheduler",
@@ -2122,7 +2122,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("allocates event and message cursors atomically under concurrent writes", async () => {
-    const cookie = await signup(app, `sequence-j-${stamp}@ardurbot.test`, "Sequence");
+    const cookie = await signup(app, `sequence-j-${stamp}@example.test`, "Sequence");
     const actor = await rpc<Me>(app, cookie, "me");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Sequencer",
@@ -2191,7 +2191,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("7: destination write is independently inspectable and credentials stay out of the thread", async () => {
-    const cookie = await signup(app, `dest-j-${stamp}@ardurbot.test`, "Dest");
+    const cookie = await signup(app, `dest-j-${stamp}@example.test`, "Dest");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Chief",
       title: "",
@@ -2218,7 +2218,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("8: retrying a completed effect does not duplicate the destination write", async () => {
-    const cookie = await signup(app, `crash-j-${stamp}@ardurbot.test`, "Crash");
+    const cookie = await signup(app, `crash-j-${stamp}@example.test`, "Crash");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Chief",
       title: "",
@@ -2248,7 +2248,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("9: export includes memory and files but not secrets or browser sessions", async () => {
-    const cookie = await signup(app, `export-j-${stamp}@ardurbot.test`, "Export");
+    const cookie = await signup(app, `export-j-${stamp}@example.test`, "Export");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Chief",
       title: "",
@@ -2284,8 +2284,8 @@ describeJourneys("required product journeys", () => {
   });
 
   it("10: bots can be archived safely and deleted with or without their memories", async () => {
-    const ada = await signup(app, `delete-j-${stamp}@ardurbot.test`, "Delete Ada");
-    const bob = await signup(app, `delete-bob-j-${stamp}@ardurbot.test`, "Delete Bob");
+    const ada = await signup(app, `delete-j-${stamp}@example.test`, "Delete Ada");
+    const bob = await signup(app, `delete-bob-j-${stamp}@example.test`, "Delete Bob");
     const keep = await rpc<Bot>(app, ada, "bots/create", {
       name: "Keep",
       title: "",
@@ -2396,7 +2396,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("11: deleting an account removes the user and personal workspace data", async () => {
-    const email = `account-delete-j-${stamp}@ardurbot.test`;
+    const email = `account-delete-j-${stamp}@example.test`;
     const cookie = await signup(app, email, "Delete Account");
     const me = await rpc<Me>(app, cookie, "me");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
@@ -2425,7 +2425,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("12: a bot can spawn a regular bot and must confirm the name to delete it", async () => {
-    const cookie = await signup(app, `spawn-j-${stamp}@ardurbot.test`, "Spawn");
+    const cookie = await signup(app, `spawn-j-${stamp}@example.test`, "Spawn");
     const parent = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Chief",
       title: "",
@@ -2479,7 +2479,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("12b: a bot can silence and resume its own finish notifications", async () => {
-    const cookie = await signup(app, `notify-finish-j-${stamp}@ardurbot.test`, "Notify");
+    const cookie = await signup(app, `notify-finish-j-${stamp}@example.test`, "Notify");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Chief",
       title: "",
@@ -2502,7 +2502,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("13: a subagent shows up in the parent thread without creating a bot", async () => {
-    const cookie = await signup(app, `subagent-j-${stamp}@ardurbot.test`, "Subagent");
+    const cookie = await signup(app, `subagent-j-${stamp}@example.test`, "Subagent");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Chief",
       title: "",
@@ -2527,7 +2527,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("14: this-mac is refused unless the sandbox is docker", async () => {
-    const cookie = await signup(app, `host-j-${stamp}@ardurbot.test`, "Host");
+    const cookie = await signup(app, `host-j-${stamp}@example.test`, "Host");
     const me = await rpc<Me>(app, cookie, "me");
     expect(me.canChooseHostComputer).toBe(false);
     await prisma.deploymentSettings.update({
@@ -2542,7 +2542,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("15: ask, answer, stop, follow-up, and clientNonce stay consistent", async () => {
-    const cookie = await signup(app, `ask-j-${stamp}@ardurbot.test`, "Ask");
+    const cookie = await signup(app, `ask-j-${stamp}@example.test`, "Ask");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Chief",
       title: "",
@@ -2646,7 +2646,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("15b: a free-text chat message answers a waiting ask", async () => {
-    const cookie = await signup(app, `ask-freetext-j-${stamp}@ardurbot.test`, "Ask Free");
+    const cookie = await signup(app, `ask-freetext-j-${stamp}@example.test`, "Ask Free");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Chief",
       title: "",
@@ -2697,8 +2697,8 @@ describeJourneys("required product journeys", () => {
   });
 
   it("16: routine test-run and plugin connect/revoke", async () => {
-    const ada = await signup(app, `plug-j-${stamp}@ardurbot.test`, "Plug Ada");
-    const bob = await signup(app, `plug-bob-j-${stamp}@ardurbot.test`, "Plug Bob");
+    const ada = await signup(app, `plug-j-${stamp}@example.test`, "Plug Ada");
+    const bob = await signup(app, `plug-bob-j-${stamp}@example.test`, "Plug Bob");
     const bot = await rpc<Bot>(app, ada, "bots/create", {
       name: "Chief",
       title: "",
@@ -2757,12 +2757,15 @@ describeJourneys("required product journeys", () => {
   });
 
   it("54: a coordinator assigns two members and receives one wake per finished assignment", async () => {
-    const instructionsByRun = new Map<string, string>();
+    const inputsByRun = new Map<string, { instructions: string; prompt: string }>();
     const originalRun = ScriptedAgentRuntime.prototype.run;
     const runtimeSpy = vi
       .spyOn(ScriptedAgentRuntime.prototype, "run")
       .mockImplementation((request, context) => {
-        instructionsByRun.set(request.runId, request.instructions);
+        inputsByRun.set(request.runId, {
+          instructions: request.instructions,
+          prompt: request.prompt,
+        });
         return originalRun.call(new ScriptedAgentRuntime(), request, context);
       });
     onTestFinished(() => runtimeSpy.mockRestore());
@@ -2819,7 +2822,9 @@ describeJourneys("required product journeys", () => {
         (await prisma.run.findUnique({ where: { id: startRun.id }, select: { status: true } }))
           ?.status === "completed",
     );
-    expect(instructionsByRun.get(startRun.id)).toContain("Both reviews are posted");
+    // Goal state changes every turn, so it travels with the turn, not the cached instructions.
+    expect(inputsByRun.get(startRun.id)?.prompt).toContain("Both reviews are posted");
+    expect(inputsByRun.get(startRun.id)?.instructions).not.toContain("Both reviews are posted");
     expect(
       await prisma.message.count({
         where: { threadId: group.threadId, runId: startRun.id, role: "bot" },
@@ -3006,7 +3011,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("S1: a goal desk request returns through a distinct reviewer and one coordinator wake per card", async () => {
-    const owner = await signup(app, `desk-loop-${stamp}@ardurbot.test`, "Desk loop owner");
+    const owner = await signup(app, `desk-loop-${stamp}@example.test`, "Desk loop owner");
     const ownerMe = await rpc<Me>(app, owner, "me");
     await prisma.deploymentSettings.update({
       where: { id: "default" },
@@ -3670,7 +3675,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("S1: archiving a desk recipient closes its card and wakes the coordinator once", async () => {
-    const owner = await signup(app, `desk-archive-${stamp}@ardurbot.test`, "Desk archive owner");
+    const owner = await signup(app, `desk-archive-${stamp}@example.test`, "Desk archive owner");
     const ownerMe = await rpc<Me>(app, owner, "me");
     await prisma.deploymentSettings.update({
       where: { id: "default" },
@@ -3806,7 +3811,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("S1: clearing a queued desk request settles its card and wakes the coordinator once", async () => {
-    const owner = await signup(app, `desk-clear-${stamp}@ardurbot.test`, "Desk clear owner");
+    const owner = await signup(app, `desk-clear-${stamp}@example.test`, "Desk clear owner");
     const ownerMe = await rpc<Me>(app, owner, "me");
     await prisma.deploymentSettings.update({
       where: { id: "default" },
@@ -3954,7 +3959,7 @@ describeJourneys("required product journeys", () => {
       credentialId: "scripted",
       revision: 0,
     };
-    const owner = await signup(app, `peer-steering-${stamp}@ardurbot.test`, "Peer steering owner");
+    const owner = await signup(app, `peer-steering-${stamp}@example.test`, "Peer steering owner");
     const ownerMe = await rpc<Me>(app, owner, "me");
     await prisma.deploymentSettings.update({
       where: { id: "default" },
@@ -4222,7 +4227,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("sends only claimed quiet deliveries after selection and through context assembly", async () => {
-    const owner = await signup(app, `quiet-executor-${stamp}@ardurbot.test`, "Quiet owner");
+    const owner = await signup(app, `quiet-executor-${stamp}@example.test`, "Quiet owner");
     const actor = await rpc<Me>(app, owner, "me");
     await prisma.deploymentSettings.update({
       where: { id: "default" },
@@ -4607,7 +4612,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("omits an expired private quiet receipt on a direct turn without a goal", async () => {
-    const owner = await signup(app, `private-quiet-${stamp}@ardurbot.test`, "Private owner");
+    const owner = await signup(app, `private-quiet-${stamp}@example.test`, "Private owner");
     const actor = await rpc<Me>(app, owner, "me");
     await prisma.deploymentSettings.update({
       where: { id: "default" },
@@ -4755,7 +4760,7 @@ describeJourneys("required product journeys", () => {
       credentialId: "scripted",
       revision: 0,
     };
-    const owner = await signup(app, `wake-budget-${stamp}@ardurbot.test`, "Wake owner");
+    const owner = await signup(app, `wake-budget-${stamp}@example.test`, "Wake owner");
     const ownerMe = await rpc<Me>(app, owner, "me");
     await prisma.deploymentSettings.update({
       where: { id: "default" },
@@ -4967,7 +4972,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("delivers a non-goal message beside an owner send without a deadlock or lost send", async () => {
-    const owner = await signup(app, `delivery-send-${stamp}@ardurbot.test`, "Delivery owner");
+    const owner = await signup(app, `delivery-send-${stamp}@example.test`, "Delivery owner");
     const ownerMe = await rpc<Me>(app, owner, "me");
     const sender = await rpc<Bot>(app, owner, "bots/create", {
       name: "Sender",
@@ -5120,7 +5125,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("submits steering while finalization waits without a database deadlock", async () => {
-    const owner = await signup(app, `finalize-send-${stamp}@ardurbot.test`, "Concurrent owner");
+    const owner = await signup(app, `finalize-send-${stamp}@example.test`, "Concurrent owner");
     const ownerMe = await rpc<Me>(app, owner, "me");
     const bot = await rpc<Bot>(app, owner, "bots/create", {
       name: "Concurrent worker",
@@ -5230,7 +5235,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("a spent goal cancels a waiting coordinator and releases new room messages", async () => {
-    const owner = await signup(app, `budget-j-${stamp}@ardurbot.test`, "Budget owner");
+    const owner = await signup(app, `budget-j-${stamp}@example.test`, "Budget owner");
     const ownerMe = await rpc<Me>(app, owner, "me");
     await prisma.deploymentSettings.update({
       where: { id: "default" },
@@ -5413,7 +5418,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("55: group chats share one transcript with mentions and handoffs", async () => {
-    const ada = await signup(app, `ada-g-${stamp}@ardurbot.test`, "Ada Groups");
+    const ada = await signup(app, `ada-g-${stamp}@example.test`, "Ada Groups");
     const adaMe = await rpc<Me>(app, ada, "me");
     const botA = await rpc<Bot>(app, ada, "bots/create", {
       name: "BotA",
@@ -5836,8 +5841,260 @@ describeJourneys("required product journeys", () => {
     expect(remainingBotIds).not.toContain(artifactOwnerId);
   });
 
+  // A coordinator on a native runtime reports its whole turn's usage, cache reads included, as
+  // the turn ends: well past the default task budget, just before its room workers can start.
+  async function* heavyTurn(events: AsyncIterable<AgentRuntimeEvent>) {
+    for await (const event of events)
+      yield event.type === "usage" ? { ...event, inputTokens: 200_000 } : event;
+  }
+  function scriptCoordinator(
+    marker: string,
+    tool: string,
+    call: { name: string; args: Record<string, unknown> },
+  ) {
+    const requests = new Map<string, AgentRunRequest>();
+    const originalRun = ScriptedAgentRuntime.prototype.run;
+    const runtimeSpy = vi
+      .spyOn(ScriptedAgentRuntime.prototype, "run")
+      .mockImplementation((request, context) => {
+        requests.set(request.runId, request);
+        const coordinatorTurn =
+          request.prompt.includes(marker) &&
+          Array.isArray(request.tools) &&
+          request.tools.some((candidate) => candidate.name === tool);
+        const events = originalRun.call(
+          new ScriptedAgentRuntime(),
+          coordinatorTurn
+            ? { ...request, script: [{ toolCalls: [call], complete: true }] }
+            : request,
+          context,
+        );
+        return coordinatorTurn ? heavyTurn(events) : events;
+      });
+    onTestFinished(() => runtimeSpy.mockRestore());
+    return requests;
+  }
+
+  it("56: a room coordinator answers status from records and asks every member once", async () => {
+    const requests = scriptCoordinator("introduce each other", "ask_members", {
+      name: "ask_members",
+      args: { members: ["all"], request: "Introduce yourself to the room in one sentence." },
+    });
+    const owner = await signup(app, `room-ask-${stamp}@ardurbot.test`, "Room ask owner");
+    const bots: Bot[] = [];
+    for (const [name, title] of [
+      ["Chief", "Coordinator"],
+      ["Ada", "Researcher"],
+      ["Ben", "Writer"],
+      ["Cy", "Analyst"],
+    ])
+      bots.push(
+        await rpc<Bot>(app, owner, "bots/create", {
+          name,
+          title,
+          description: "",
+          instructions: "",
+          notifyOnFinish: true,
+        }),
+      );
+    const [chief, ada, ben, cy] = bots as [Bot, Bot, Bot, Bot];
+    const group = await rpc<{ id: string; threadId: string }>(app, owner, "groups/create", {
+      name: "Intro room",
+      botIds: [chief.id, ada.id, ben.id, cy.id],
+    });
+    await rpc(app, owner, "groups/update", { groupId: group.id, coordinatorBotId: chief.id });
+    const finished = (runId: string) =>
+      waitForDatabase(
+        async () =>
+          (await prisma.run.findUnique({ where: { id: runId }, select: { status: true } }))
+            ?.status === "completed",
+      );
+
+    // A status question is answered from the member list; no member is started.
+    const statusRequestAt = new Date();
+    const status = await rpc<{ runId: string; runIds?: string[] }>(app, owner, "threads/send", {
+      groupId: group.id,
+      text: "what is the status",
+    });
+    expect(status.runIds ?? [status.runId]).toHaveLength(1);
+    await finished(status.runId);
+    const statusRequest = requests.get(status.runId)!;
+    expect(statusRequest.instructions).toContain("You coordinate this group chat");
+    const directory = statusRequest.history.map((message) => message.content).join("\n");
+    expect(directory).toContain("Room members and what their run records show");
+    expect(directory).toContain(`- Ada (id: ${ada.id}) — Researcher. Now: free.`);
+    expect(directory).toContain(`- Ben (id: ${ben.id}) — Writer. Now: free.`);
+    expect(await prisma.delegation.count({ where: { parentRunId: status.runId } })).toBe(0);
+    expect(
+      await prisma.run.count({
+        where: { threadId: group.threadId, botId: { in: [ada.id, ben.id, cy.id] } },
+      }),
+    ).toBe(0);
+
+    // "Introduce each other" asks every other member exactly once and fans back in.
+    const intro = await rpc<{ runId: string; runIds?: string[] }>(app, owner, "threads/send", {
+      groupId: group.id,
+      text: "tell the bots to introduce each other, do not mention individually",
+    });
+    expect(intro.runIds ?? [intro.runId]).toHaveLength(1);
+    const wakeNonce = `ask-wake:1:${intro.runId}`;
+    // Three members answer one at a time in the room before the coordinator's follow-up runs.
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        await waitForDatabase(
+          async () =>
+            (
+              await prisma.run.findFirst({
+                where: { clientNonce: wakeNonce },
+                select: { status: true },
+              })
+            )?.status === "completed",
+        );
+        break;
+      } catch (error) {
+        if (attempt < 3) continue;
+        const state = await prisma.run.findMany({
+          where: { threadId: group.threadId, createdAt: { gte: statusRequestAt } },
+          orderBy: { createdAt: "asc" },
+          select: { botId: true, status: true, error: true, clientNonce: true, trigger: true },
+        });
+        throw new Error(`${(error as Error).message}: ${JSON.stringify(state)}`);
+      }
+    }
+    const asked = await prisma.delegation.findMany({
+      where: { parentRunId: intro.runId },
+      orderBy: { createdAt: "asc" },
+    });
+    expect(asked.map((row) => row.actingBotId).sort()).toEqual([ada.id, ben.id, cy.id].sort());
+    // The coordinator's end-of-turn usage overspent the task; its admitted members still ran.
+    const askRoot = await prisma.delegationRoot.findUniqueOrThrow({
+      where: { rootTaskId: asked[0]!.rootTaskId },
+    });
+    expect(askRoot.usedTokens).toBeGreaterThan(askRoot.tokenLimit);
+    expect(askRoot.cancelRequestedAt).toBeNull();
+    for (const row of asked)
+      expect(row).toMatchObject({
+        kind: "group-handoff",
+        status: "accepted",
+        admissionKey: expect.stringMatching(new RegExp(`^group-ask:1:${intro.runId}:`)),
+        coordinatorWokenAt: expect.any(Date),
+      });
+    const roomMessages = await prisma.message.findMany({
+      where: { threadId: group.threadId, role: "bot" },
+      orderBy: { seq: "asc" },
+      select: { botId: true, runId: true, blocks: true },
+    });
+    const askMessages = roomMessages.filter((message) =>
+      JSON.stringify(message.blocks).includes("Introduce yourself to the room"),
+    );
+    expect(askMessages).toHaveLength(1);
+    expect(askMessages[0]).toMatchObject({
+      botId: chief.id,
+      runId: intro.runId,
+      blocks: [
+        {
+          kind: "text",
+          text: expect.stringMatching(
+            /^(@(Ada|Ben|Cy) ){3}Introduce yourself to the room in one sentence\.$/,
+          ),
+        },
+      ],
+    });
+    for (const row of asked)
+      expect(
+        roomMessages.some(
+          (message) => message.botId === row.actingBotId && message.runId === row.runId,
+        ),
+      ).toBe(true);
+    expect(
+      roomMessages.some((message) =>
+        JSON.stringify(message.blocks).includes("completed, awaiting acceptance"),
+      ),
+    ).toBe(false);
+    const wake = await prisma.run.findFirstOrThrow({ where: { clientNonce: wakeNonce } });
+    expect(wake).toMatchObject({
+      botId: chief.id,
+      threadId: group.threadId,
+      trigger: "follow_up",
+    });
+    const results = requests
+      .get(wake.id)!
+      .history.map((message) => message.content)
+      .join("\n");
+    expect(results).toContain("<ask_results>");
+    expect(results).toContain(`- Ada (id: ${ada.id}), asked "Introduce yourself`);
+    expect(results).toContain(`- Ben (id: ${ben.id}), asked "Introduce yourself`);
+    expect(results).toContain(`- Cy (id: ${cy.id}), asked "Introduce yourself`);
+
+    await createJobReconciler({ prisma, jobs }, { batchSize: 100 }).reconcileOnce();
+    expect(await prisma.run.count({ where: { clientNonce: wakeNonce } })).toBe(1);
+    expect(
+      await prisma.run.count({ where: { delegationId: { in: asked.map((row) => row.id) } } }),
+    ).toBe(3);
+  }, 90_000);
+
+  it("57: a room handoff outlives its coordinator's heavy turn and posts its result", async () => {
+    scriptCoordinator("pass the intro to Ben", "handoff_to_bot", {
+      name: "handoff_to_bot",
+      args: { confirm_name: "Ben", message: "Introduce yourself to the room." },
+    });
+    const owner = await signup(app, `room-handoff-${stamp}@ardurbot.test`, "Room handoff owner");
+    const bots: Bot[] = [];
+    for (const [name, title] of [
+      ["Chief", "Coordinator"],
+      ["Ada", "Researcher"],
+      ["Ben", "Writer"],
+    ])
+      bots.push(
+        await rpc<Bot>(app, owner, "bots/create", {
+          name,
+          title,
+          description: "",
+          instructions: "",
+          notifyOnFinish: true,
+        }),
+      );
+    const [chief, ada, ben] = bots as [Bot, Bot, Bot];
+    const group = await rpc<{ id: string; threadId: string }>(app, owner, "groups/create", {
+      name: "Handoff room",
+      botIds: [chief.id, ada.id, ben.id],
+    });
+    await rpc(app, owner, "groups/update", { groupId: group.id, coordinatorBotId: chief.id });
+    const sent = await rpc<{ runId: string }>(app, owner, "threads/send", {
+      groupId: group.id,
+      text: "pass the intro to Ben",
+    });
+    await waitForDatabase(
+      async () =>
+        (await prisma.run.findUnique({ where: { id: sent.runId }, select: { status: true } }))
+          ?.status === "completed",
+    );
+    const handoff = await prisma.delegation.findFirstOrThrow({
+      where: { parentRunId: sent.runId, actingBotId: ben.id },
+    });
+    const root = await prisma.delegationRoot.findUniqueOrThrow({
+      where: { rootTaskId: handoff.rootTaskId },
+    });
+    expect(root.usedTokens).toBeGreaterThan(root.tokenLimit);
+    await waitForDatabase(
+      async () =>
+        (await prisma.delegation.findUnique({ where: { id: handoff.id } }))?.status === "completed",
+    );
+    expect(await prisma.run.findUnique({ where: { id: handoff.runId! } })).toMatchObject({
+      status: "completed",
+      cancelRequestedAt: null,
+    });
+    const summary = await prisma.message.findFirstOrThrow({
+      where: { threadId: group.threadId, clientNonce: `delegation-summary:${handoff.id}` },
+    });
+    expect(JSON.stringify(summary.blocks)).toContain(
+      "Chief → Ben: completed, awaiting acceptance.",
+    );
+    expect(JSON.stringify(summary.blocks)).not.toContain("Worker stopped.");
+  });
+
   it("17: teach a task end to end", async () => {
-    const cookie = await signup(app, `teach-j-${stamp}@ardurbot.test`, "Teach Ada");
+    const cookie = await signup(app, `teach-j-${stamp}@example.test`, "Teach Ada");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Teacher",
       title: "",
@@ -5928,7 +6185,7 @@ describeJourneys("required product journeys", () => {
     const previousTtl = process.env.TEACH_RECORDING_TTL_MS;
     process.env.TEACH_RECORDING_TTL_MS = "1000";
     try {
-      const cookie = await signup(app, `teach-exp-j-${stamp}@ardurbot.test`, "Teach Exp Ada");
+      const cookie = await signup(app, `teach-exp-j-${stamp}@example.test`, "Teach Exp Ada");
       const bot = await rpc<Bot>(app, cookie, "bots/create", {
         name: "Timer",
         title: "",
@@ -5954,7 +6211,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("19: destination writes pause for approval before side effects", async () => {
-    const cookie = await signup(app, `approval-j-${stamp}@ardurbot.test`, "Approval");
+    const cookie = await signup(app, `approval-j-${stamp}@example.test`, "Approval");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Chief",
       title: "",
@@ -6022,7 +6279,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("20: actions run by default and specific exceptions override broad review rules", async () => {
-    const cookie = await signup(app, `always-j-${stamp}@ardurbot.test`, "Always");
+    const cookie = await signup(app, `always-j-${stamp}@example.test`, "Always");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Chief",
       title: "",
@@ -6093,7 +6350,7 @@ describeJourneys("required product journeys", () => {
   it("21: routine destination writes pause on the same approval card", async () => {
     const cookie = await signup(
       app,
-      `routine-approval-j-${stamp}@ardurbot.test`,
+      `routine-approval-j-${stamp}@example.test`,
       "Routine Approval",
     );
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
@@ -6139,7 +6396,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("22: a routine schedule with any malformed or mixed one-shot cron is rejected", async () => {
-    const cookie = await signup(app, `routine-crons-j-${stamp}@ardurbot.test`, "Routine Crons");
+    const cookie = await signup(app, `routine-crons-j-${stamp}@example.test`, "Routine Crons");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Scheduler",
       title: "",
@@ -6170,7 +6427,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("23: never-run one-shot templates can be armed with a future runAt", async () => {
-    const cookie = await signup(app, `once-arm-j-${stamp}@ardurbot.test`, "Once Arm");
+    const cookie = await signup(app, `once-arm-j-${stamp}@example.test`, "Once Arm");
     const me = await rpc<Me>(app, cookie, "me");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Once Bot",
@@ -6227,7 +6484,7 @@ describeJourneys("required product journeys", () => {
   });
 
   it("24: chat creates a space only after explicit approval", async () => {
-    const cookie = await signup(app, `space-chat-j-${stamp}@ardurbot.test`, "Space Chat");
+    const cookie = await signup(app, `space-chat-j-${stamp}@example.test`, "Space Chat");
     const me = await rpc<Me>(app, cookie, "me");
     const bot = await rpc<Bot>(app, cookie, "bots/create", {
       name: "Chief",

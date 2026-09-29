@@ -404,10 +404,27 @@ export function reduceCommandMessages<
   };
 }
 
-export function commandSummary(block: CommandBlock): string {
+function commandSummaryFields(block: CommandBlock) {
   const duration =
     block.durationMs === null ? COMMAND_NOT_RECORDED : `${Math.round(block.durationMs / 1000)} s`;
-  return `Ran \`${block.command ?? COMMAND_NOT_RECORDED}\` in ${block.cwd ?? COMMAND_NOT_RECORDED} · ${duration} · exit ${block.exitCode ?? COMMAND_NOT_RECORDED}`;
+  return {
+    command: block.command ?? COMMAND_NOT_RECORDED,
+    cwd: block.cwd ?? COMMAND_NOT_RECORDED,
+    duration,
+    exitCode: String(block.exitCode ?? COMMAND_NOT_RECORDED),
+  };
+}
+
+/** Export/markdown form: the command keeps its backticks so the text stays valid markdown. */
+export function commandSummary(block: CommandBlock): string {
+  const fields = commandSummaryFields(block);
+  return `Ran \`${fields.command}\` in ${fields.cwd} · ${fields.duration} · exit ${fields.exitCode}`;
+}
+
+/** Display form for the UI: the same line without the literal backticks. */
+export function commandSummaryDisplay(block: CommandBlock): string {
+  const fields = commandSummaryFields(block);
+  return `Ran ${fields.command} in ${fields.cwd} · ${fields.duration} · exit ${fields.exitCode}`;
 }
 
 export function commandOutput(block: CommandBlock): string {

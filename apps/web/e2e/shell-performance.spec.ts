@@ -185,28 +185,29 @@ test("Board loads on navigation while the shell stays visible and supports direc
   page,
 }) => {
   await installPerformanceFixture(page);
-  await page.route("**/rpc/board/workspaces", (route) =>
+  const workspace = {
+    id: "fixture-board",
+    kind: "space",
+    name: "Board",
+    path: "/fixture/board",
+    prefix: "board",
+    enabled: true,
+    initialized: true,
+  };
+  await page.route("**/rpc/board/view", (route) =>
     route.fulfill({
       json: {
         json: {
-          workspaces: [
-            {
-              id: "fixture-board",
-              kind: "space",
-              name: "Board",
-              path: "/fixture/board",
-              prefix: "board",
-              enabled: true,
-              initialized: true,
-            },
-          ],
+          workspaces: [workspace],
+          workspaceId: workspace.id,
+          snapshot: { items: [], readyIds: [], blockedIds: [] },
+          selected: null,
+          followingIds: [],
+          bots: [],
           problem: null,
         },
       },
     }),
-  );
-  await page.route("**/rpc/board/snapshot", (route) =>
-    route.fulfill({ json: { json: { items: [], readyIds: [], blockedIds: [] } } }),
   );
   const boardScript = /\/assets\/Board-[^/]+\.js$/;
   const requests: string[] = [];
@@ -225,10 +226,17 @@ test("Board loads on navigation while the shell stays visible and supports direc
     await page.goto("/app/fixture-bot-0");
     await expect(page.getByTestId("shell-root")).toHaveAttribute("data-ready", "true");
     expect(requests).toHaveLength(0);
+    // The Board is a tab of the Dashboard, beside its overview.
+    await page.getByRole("link", { name: "Dashboard", exact: true }).click();
+    const dashboard = page.getByTestId("dashboard");
+    const boardTab = dashboard.getByRole("link", { name: "Board", exact: true });
+    await expect(boardTab).toBeVisible();
+    expect(requests).toHaveLength(0);
     const loading = page.waitForRequest(boardScript);
-    await page.getByRole("button", { name: "Board", exact: true }).click();
+    await boardTab.click();
     await loading;
-    await expect(page.getByTestId("bots-sidebar")).toBeVisible();
+    await expect(dashboard.getByRole("heading", { name: "Dashboard" })).toBeVisible();
+    await expect(boardTab).toHaveAttribute("aria-current", "page");
     await expect(page.locator("[data-board-column]")).toHaveCount(0);
     release();
     await expect(page).toHaveURL(/\/app\/board$/);

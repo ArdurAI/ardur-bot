@@ -9,7 +9,7 @@ test("focus choice suggests apps and preserves a completed connection", async ({
   page,
 }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `onboarding-${stamp}@ardurbot.test`, "password12", "Robin");
+  await signup(page, `onboarding-${stamp}@example.test`, "password12", "Robin");
   await completeOnboarding(page);
 
   await expect(
@@ -91,7 +91,7 @@ test("focus choice suggests apps and preserves a completed connection", async ({
 
 test("focus choice follows Simplified Chinese UI locale", async ({ page }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `onboarding-zh-cn-${stamp}@ardurbot.test`, "password12", "Robin");
+  await signup(page, `onboarding-zh-cn-${stamp}@example.test`, "password12", "Robin");
   await completeOnboarding(page);
 
   await expect(page.getByText("What do you want me on first?", { exact: true })).toBeVisible();
@@ -99,7 +99,7 @@ test("focus choice follows Simplified Chinese UI locale", async ({ page }, testI
   const settings = await openUserSettings(page);
   const picker = settings.getByTestId("ui-locale-select");
   await picker.click();
-  await settings.getByRole("option", { name: "简体中文", exact: true }).click();
+  await page.getByRole("option", { name: "简体中文", exact: true }).click();
   await expect(settings.getByRole("group", { name: "语言", exact: true })).toBeVisible();
   await settings.getByRole("button", { name: "关闭用户设置" }).click();
   await expect(settings).toHaveCount(0);
@@ -115,7 +115,7 @@ test("focus choice follows Simplified Chinese UI locale", async ({ page }, testI
 });
 
 test("choice refresh failures leave options available for retry", async ({ page }) => {
-  await signup(page, `choice-refresh-${Date.now()}@ardurbot.test`, "password12", "Choice Retry");
+  await signup(page, `choice-refresh-${Date.now()}@example.test`, "password12", "Choice Retry");
   await completeOnboarding(page);
   const choice = page.getByRole("button", { name: /Day-to-day work/ });
   await expect(choice).toBeEnabled();

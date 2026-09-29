@@ -538,6 +538,7 @@ describe("compactHistory", () => {
     const [request] = harness.runtime.run.mock.calls[0]!;
     expect(request.instructions).toContain("Current date and time");
     expect(request.tools).toBe("none");
+    expect(request.singleRequest).toBe(true);
     expect(request.model).toEqual({
       provider: "openrouter",
       id: "openai/gpt-5.6-luna",

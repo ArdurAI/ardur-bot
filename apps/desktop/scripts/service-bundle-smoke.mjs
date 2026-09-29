@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
-import { cp, mkdir, mkdtemp, rm } from "node:fs/promises";
+import { chmod, cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
@@ -17,6 +17,60 @@ export const SMOKE_SKIP_REASON =
 export function smokeSkipReason(env = process.env) {
   if (env.ARDURBOT_SMOKE_DATABASE_URL?.trim() || env.ARDURBOT_SMOKE_EMBEDDED === "1") return null;
   return SMOKE_SKIP_REASON;
+}
+
+const SERVICE_SECRET_KEYS = [
+  "APP_DATABASE_PASSWORD",
+  "BETTER_AUTH_SECRET",
+  "ENCRYPTION_KEY",
+  "SCREEN_PROXY_SECRET",
+  "SANDBOX_SUPERVISOR_TOKEN",
+];
+
+function secretLine(key, value) {
+  if (/^[A-Za-z0-9._~-]+$/.test(value)) return `${key}=${value}`;
+  const quoted = String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n");
+  return `${key}="${quoted}"`;
+}
+
+/** Control-plane values for the secrets file. The cluster superuser password stays out. */
+export function bundledSecretsText(secrets) {
+  const lines = SERVICE_SECRET_KEYS.filter((key) => secrets[key]).map((key) =>
+    secretLine(key, secrets[key]),
+  );
+  return `${lines.join("\n")}\n`;
+}
+
+/**
+ * The environment of the bundled API and worker. Only PATH is taken from the
+ * parent. Secrets stay in the file named here, and the database URL has no password.
+ */
+export function bundledServiceEnvironment({
+  parent,
+  databaseUrl,
+  secretsFile,
+  dataDir,
+  origin,
+  apiPort,
+  nodePath,
+}) {
+  const url = new URL(databaseUrl);
+  url.password = "";
+  return {
+    PATH: parent.PATH ?? "",
+    NODE_ENV: "production",
+    NODE_PATH: nodePath,
+    DATABASE_URL: url.toString(),
+    ARDURBOT_SECRETS_FILE: secretsFile,
+    DATA_DIR: dataDir,
+    SANDBOX_PROVIDER: "desktop",
+    BETTER_AUTH_URL: origin,
+    WEB_ORIGIN: origin,
+    API_URL: origin,
+    API_HOST: "127.0.0.1",
+    API_PORT: String(apiPort),
+    LOG_FORMAT: "json",
+  };
 }
 
 function redact(text) {
@@ -251,24 +305,28 @@ export async function runSmoke(env = process.env) {
     await migrate(adminUrl, databaseUrl);
     const apiPort = await allocatePort();
     const origin = `http://127.0.0.1:${apiPort}`;
-    const serviceEnv = {
-      PATH: env.PATH ?? "",
-      NODE_ENV: "production",
-      NODE_PATH: path.join(copyDir, "modules"),
-      DATABASE_URL: databaseUrl,
-      DATA_DIR: dataDir,
-      SANDBOX_PROVIDER: "desktop",
-      BETTER_AUTH_SECRET: "smoke-auth-secret-not-a-real-credential-32",
-      ENCRYPTION_KEY: "smoke-encryption-key-not-a-real-credential",
-      SCREEN_PROXY_SECRET: "smoke-screen-proxy-secret-not-real-32x",
-      SANDBOX_SUPERVISOR_TOKEN: "smoke-supervisor-token-not-a-real-credential",
-      BETTER_AUTH_URL: origin,
-      WEB_ORIGIN: origin,
-      API_URL: origin,
-      API_HOST: "127.0.0.1",
-      API_PORT: String(apiPort),
-      LOG_FORMAT: "json",
-    };
+    const secretsFile = path.join(copyDir, "secrets.env");
+    await writeFile(
+      secretsFile,
+      bundledSecretsText({
+        APP_DATABASE_PASSWORD: new URL(databaseUrl).password,
+        BETTER_AUTH_SECRET: `smoke-auth-${randomBytes(24).toString("hex")}`,
+        ENCRYPTION_KEY: `smoke-key-${randomBytes(24).toString("hex")}`,
+        SCREEN_PROXY_SECRET: `smoke-screen-${randomBytes(24).toString("hex")}`,
+        SANDBOX_SUPERVISOR_TOKEN: `smoke-supervisor-${randomBytes(24).toString("hex")}`,
+      }),
+      { mode: 0o600 },
+    );
+    await chmod(secretsFile, 0o600);
+    const serviceEnv = bundledServiceEnvironment({
+      parent: env,
+      databaseUrl,
+      secretsFile,
+      dataDir,
+      origin,
+      apiPort,
+      nodePath: path.join(copyDir, "modules"),
+    });
     handles.push(startService(path.join(copyDir, "api.mjs"), serviceEnv, copyDir));
     handles.push(startService(path.join(copyDir, "worker.mjs"), serviceEnv, copyDir));
     // Ready means both services are up, as the desktop requires: the API's health answer
