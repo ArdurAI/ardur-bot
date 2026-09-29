@@ -83,7 +83,6 @@ duration_re='^([0-9]+(h|m|s))+$'
   die "Give --duration as hours, minutes or seconds, such as 720h."
 output="${output:-ardurbot-${namespace}.kubeconfig}"
 [[ "$output" != -* ]] || die "--output must be a file name."
-[[ ! -e "$output" && ! -L "$output" ]] || die "$output already exists; choose another --output."
 
 kube_args=()
 [[ -z "$context" ]] || kube_args=(--context "$context")
@@ -137,7 +136,7 @@ can_i() {
   [[ -z "${4:-}" ]] || args+=("--subresource=$4")
   case "$1" in
     namespace) args+=(-n "$namespace") ;;
-    all) args+=(--all-namespaces) ;;
+    all) args+=(-A) ;;
   esac
   kubectl --kubeconfig "$output" "${args[@]}"
 }
@@ -148,7 +147,7 @@ command_for() {
   [[ -z "${4:-}" ]] || printf ' --subresource=%s' "$4"
   case "$1" in
     namespace) printf ' -n %s' "$namespace" ;;
-    all) printf ' --all-namespaces' ;;
+    all) printf ' -A' ;;
   esac
 }
 
@@ -181,6 +180,9 @@ if $dry_run; then
   done
   exit 0
 fi
+
+[[ ! -e "$output" && ! -L "$output" ]] || die "$output already exists; choose another --output."
+
 
 command -v kubectl >/dev/null 2>&1 || die "kubectl is not installed or not on PATH."
 
@@ -271,7 +273,16 @@ for check in "${REQUIRED[@]}"; do
     missing=1
   fi
 done
+has_metrics=true
+if ! kube get --raw /apis/metrics.k8s.io/v1beta1 >/dev/null 2>&1; then
+  has_metrics=false
+fi
+
 for check in "${CAPACITY[@]}"; do
+  if [[ "$check" == *"nodes.metrics.k8s.io"* ]] && ! $has_metrics; then
+    printf '  skip %s (metrics API not available)\n' "${check#* }"
+    continue
+  fi
   # shellcheck disable=SC2086
   if can_i $check; then
     printf '  yes  %s (capacity)\n' "${check#* }"

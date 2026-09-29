@@ -127,7 +127,7 @@ Only an opaque reference enters connection metadata. The system clients receive 
 with mode 0600, removed when an operation finishes. Agents stay on the host. Bridge authorization
 checks owner, space, saved connection, home, active run or maintenance grant, and terminal lease.
 Disconnection closes terminals. Kubernetes host transport accepts only the provider's exact
-non-root pod/PVC specifications, running a published computer image or the connection's own image,
+non-root pod/PVC specifications, running a published computer image,
 and embedded HTTPS kubeconfig credentials.
 
 Direct SSH/container transfers allow 16 MiB per file and a 64 MiB checkpoint. Host bridge transfers

@@ -875,7 +875,7 @@ function AddComputer({
                 : null}
             </>
           )}
-          {kind !== "ssh" ? (
+          {kind !== "ssh" && !details?.settings.socket ? (
             <details>
               <summary className="text-sm text-muted-foreground">
                 <Trans>Advanced</Trans>

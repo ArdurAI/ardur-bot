@@ -608,7 +608,9 @@ with `-developer`, and Kubernetes pods and added engines resolve names the same 
 [compute profiles](compute-profiles.md#decisions-and-boundaries).
 
 If you deploy from your own fork, set `ARDURBOT_IMAGE`, `ARDURBOT_UPDATER_IMAGE`, and
-`ARDURBOT_COMPUTER_IMAGE` to your namespace — your CI cannot publish into someone else's.
+`ARDURBOT_COMPUTER_IMAGE` to your namespace — your CI cannot publish into someone else's. The
+Developer computer profile ignores the image override by design; if bots use Developer, retag your
+fork's developer image to match upstream's so the local engine finds it without pulling.
 
 | Tag | Published on | Moves? |
 | --- | --- | --- |

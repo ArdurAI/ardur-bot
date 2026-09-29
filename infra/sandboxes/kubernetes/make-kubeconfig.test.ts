@@ -36,9 +36,11 @@ case " $* " in
   *"cluster.server}"*) printf '%s' "$FAKE_SERVER" ;;
   *"cluster.certificate-authority-data}"*) printf '%s' "$FAKE_CA" ;;
   *"cluster.insecure-skip-tls-verify}"*) printf '%s' "$FAKE_SKIP_TLS" ;;
+  *" get --raw /apis/metrics.k8s.io/v1beta1 "*)
+    if [ -n "$FAKE_NO_METRICS" ]; then exit 1; else echo "metrics"; fi ;;
   *" auth can-i "*)
     case " $* " in
-      *" nodes"* | *" --all-namespaces "*) [ -n "$FAKE_CAPACITY" ] ;;
+      *" nodes"* | *" -A "*) [ -n "$FAKE_CAPACITY" ] ;;
       *"$FAKE_DENY"*) exit 1 ;;
     esac ;;
   *" apply -f - "* | *" create -f - "*) echo "applied" ;;
@@ -74,6 +76,7 @@ function run(args: string[], env: Record<string, string> = {}, setup?: (dir: str
       FAKE_SKIP_TLS: "",
       FAKE_CAPACITY: "",
       FAKE_DENY: "no such check",
+      FAKE_NO_METRICS: "",
       ...env,
     },
   });
@@ -179,7 +182,7 @@ describe("make-kubeconfig.sh", () => {
       "name: ardurbot-computers-capacity-computers",
       "type: kubernetes.io/service-account-token",
       "auth can-i create pods --subresource=exec -n computers",
-      "auth can-i list pods --all-namespaces",
+      "auth can-i list pods -A",
     ])
       expect(result.stdout).toContain(text);
     expect(result.stdout).not.toContain("namespace: ardurbot");
@@ -191,6 +194,11 @@ describe("make-kubeconfig.sh", () => {
     expect(granted.status, granted.stderr).toBe(0);
     expect(granted.stdins[1]).toContain("name: ardurbot-computers-capacity-ardurbot");
     expect(granted.stdout).toContain("yes  list nodes.metrics.k8s.io (capacity)");
+    
+    const noMetrics = run(["--with-capacity"], { FAKE_CAPACITY: "1", FAKE_NO_METRICS: "1" });
+    expect(noMetrics.status, noMetrics.stderr).toBe(0);
+    expect(noMetrics.stdout).toContain("skip list nodes.metrics.k8s.io (metrics API not available)");
+
     const refused = run(["--with-capacity"]);
     expect(refused.status).toBe(1);
     expect(refused.stderr).toContain("Some permissions are missing");

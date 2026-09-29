@@ -44,6 +44,12 @@ describe("Kubernetes computer", () => {
     await execution.return?.();
   });
 
+  it("maps connection failure during test to engine-not-running", async () => {
+    const { api, provider } = fixture();
+    vi.spyOn(api, "version").mockRejectedValue(new Error("Kubernetes request failed; check the connection."));
+    await expect(provider.test(context)).rejects.toThrow("engine-not-running");
+  });
+
   it("waits for PVC deletion before allowing a replacement to reuse its name", async () => {
     const { api, provider } = fixture();
     const computer = await provider.provision({ botId: "replace", homePath: "/unused" }, context);
@@ -171,7 +177,7 @@ describe("Kubernetes computer", () => {
     api.objects.set(`pods/${computer.id}`, { metadata: { name: computer.id, labels: {} } });
     await expect(provider.destroy(computer, context)).rejects.toThrow("identity");
   });
-  it("runs the connection's own image with its pull Secret, and never swaps a running image", async () => {
+  it("runs the connection's own image with its pull Secret, and swaps a running image on drift", async () => {
     vi.stubEnv("ARDURBOT_COMPUTER_IMAGE", "registry.example/deployment:1");
     const { api, provider } = fixture({
       standardImage: "registry.example/private/computer:1",
@@ -185,10 +191,6 @@ describe("Kubernetes computer", () => {
       imagePullSecrets: [{ name: "registry-login" }],
       containers: [{ image: "registry.example/private/computer:1-developer" }],
     });
-    await expect(provider.provision({ ...request, imageProfile: "base" }, context)).rejects.toThrow(
-      "differs from its saved profile",
-    );
-    await provider.stop(computer, context);
     await provider.provision({ ...request, imageProfile: "base" }, context);
     expect(api.objects.get(`pods/${computer.id}`)?.spec).toMatchObject({
       containers: [{ image: "registry.example/private/computer:1" }],

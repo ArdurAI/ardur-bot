@@ -61,7 +61,11 @@ export class KubernetesSandboxProvider implements SandboxProvider {
   }
   /** Reaching the API is the test; capacity stays unknown when the account cannot read nodes. */
   async test(context: AdapterContext) {
-    const version = (await this.api.version?.(context.signal)) ?? "Kubernetes";
+    const version = await this.api.version?.(context.signal).catch((error) => {
+      if (error instanceof Error && error.message.includes("check the connection"))
+        throw new Error("engine-not-running");
+      throw error;
+    }) ?? "Kubernetes";
     return { capacity: await this.capacity(), os: "Linux", version };
   }
   describe() {
@@ -120,10 +124,11 @@ export class KubernetesSandboxProvider implements SandboxProvider {
       if (
         containers?.find((container) => container.name === "computer")?.image !==
         connectionComputerImage(request.imageProfile ?? "base", this.settings)
-      )
-        throw new Error(
-          "The computer image differs from its saved profile; confirm an update in Settings.",
-        );
+      ) {
+        await this.api.remove("pods", name, context.signal);
+        await this.waitAbsent(name, context);
+        pod = null;
+      }
     }
     if (!pod)
       await this.api.create(

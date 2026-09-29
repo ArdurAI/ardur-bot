@@ -227,14 +227,14 @@ export class FleetDockerSandboxProvider extends LinuxFleetSandbox {
         throw new Error(`Pull ${image} into this engine, then try again.`);
       throw error;
     });
-    const existing = await this.owned(name, context);
+    let existing = await this.owned(name, context);
     const networkEgress = request.networkEgress ?? true;
     if (existing && (existing.HostConfig?.NetworkMode !== "none") !== networkEgress)
       throw new Error("The computer network differs from its saved setting; confirm an update.");
-    if (existing && existing.Config.Image !== image)
-      throw new Error(
-        "The computer image differs from its saved profile; confirm an update in Computers.",
-      );
+    if (existing && existing.Config.Image !== image) {
+      await this.engine(["rm", "-f", name], context);
+      existing = null;
+    }
     if (!existing) {
       if (!(await this.ownedVolume(name, context)))
         await this.engine(
