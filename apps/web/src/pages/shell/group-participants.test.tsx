@@ -108,7 +108,7 @@ async function render(currentRuns: readonly Run[] = [], members = defaultMembers
 
 it("joins member names and models on one line, with the full text in the hover title", async () => {
   const div = await render();
-  const full = "Alpha · Ardur · OpenAI · GPT-4 · Beta · Ardur · Anthropic · Claude 3";
+  const full = "Alpha · Ardur · OpenAI · GPT-4 | Beta · Ardur · Anthropic · Claude 3";
   expect(div.textContent).toBe(full);
   // The full text stays available on hover and in the accessibility tree.
   expect(div.getAttribute("title")).toBe(full);
@@ -126,11 +126,45 @@ it("joins member names and models on one line, with the full text in the hover t
   ).toBe("Using claude-3");
 });
 
+it("renders member names in regular text colour and model details as muted", async () => {
+  const div = await render();
+  const participant = div.querySelector('[data-testid="group-participant-b1"]')!;
+  const name = participant.querySelector(".text-foreground");
+  const details = participant.querySelector(".text-muted-foreground");
+  const status = participant.querySelector('[role="status"]');
+
+  expect(name).not.toBeNull();
+  expect(name?.textContent).toBe("Alpha");
+  expect(name?.className).toContain("text-foreground");
+  expect(name?.className).not.toContain("text-muted-foreground");
+
+  expect(details).not.toBeNull();
+  expect(details?.className).toContain("text-muted-foreground");
+  expect(details?.className).not.toContain("text-foreground");
+  expect(details?.contains(status!)).toBe(true);
+});
+
+it("separates members with a distinct separator that differs from intra-member separators", async () => {
+  const div = await render();
+  const participant = div.querySelector('[data-testid="group-participant-b1"]')!;
+  const separator = div.querySelector('[data-testid="group-participant-separator"]');
+
+  expect(separator).not.toBeNull();
+  // Intra-member separator is " · "
+  expect(participant.textContent).toContain(" · ");
+  // The member separator differs from " · "
+  expect(separator?.textContent?.trim()).not.toBe("·");
+  expect(separator?.textContent).toBe(" | ");
+  // Full muted colour, never faded with an opacity modifier, so it keeps readable contrast.
+  expect(separator?.className.split(" ")).toContain("text-muted-foreground");
+  expect(separator?.className).not.toMatch(/text-muted-foreground\/\d+/);
+});
+
 it("marks a member whose admitted run has no pin as Next run", async () => {
   const run = { id: "run-1", botId: "b1", status: "running", runtimePin: null } as Run;
   const div = await render([run]);
   expect(div.textContent).toBe(
-    "Alpha · Next run · Ardur · OpenAI · GPT-4 · Beta · Ardur · Anthropic · Claude 3",
+    "Alpha · Next run · Ardur · OpenAI · GPT-4 | Beta · Ardur · Anthropic · Claude 3",
   );
   expect(
     div
