@@ -1852,7 +1852,11 @@ export function createRunExecutor(deps: ExecutorDeps) {
         checkStop: async () => {
           try {
             const [reason, current] = await Promise.all([
-              checkDelegationExecution(deps.prisma, runId),
+              // Budget stops happen before the next step; this tick must not discard a turn
+              // that has already finished over its reservation.
+              checkDelegationExecution(deps.prisma, runId, undefined, undefined, undefined, {
+                reservation: false,
+              }),
               deps.prisma.run.findUnique({
                 where: { id: runId },
                 select: { cancelRequestedAt: true },

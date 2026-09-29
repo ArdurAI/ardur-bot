@@ -11,13 +11,19 @@ import {
 import { grantedMcpTools, mcpGrantForBot } from "./integration-access.js";
 import { peerReadOnlyRuntimeSupported, peerReadOnlyToolAllowed } from "./peer-policy.js";
 
-/** The recorded ceiling also applies to connector routes resolved after catalog lookup. */
+/**
+ * The recorded ceiling also applies to connector routes resolved after catalog lookup. A worker
+ * that has used its reservation is stopped before its next step; the background stop check
+ * passes `reservation: false`, because usage arrives only after a request finishes and a turn
+ * that ended over its reservation must keep its answer rather than race to discard it.
+ */
 export async function checkDelegationExecution(
   prisma: PrismaClient,
   runId: string,
   tool?: string,
   route?: ConnectorRoute,
   helperDelegationId?: string,
+  options: { reservation?: boolean } = {},
 ): Promise<string | undefined> {
   const run = await prisma.run.findUniqueOrThrow({ where: { id: runId } });
   if (run.goalId) {
@@ -131,7 +137,7 @@ export async function checkDelegationExecution(
   if (
     !["queued", "running"].includes(row.status) ||
     row.deadlineAt <= new Date() ||
-    row.usedTokens >= row.reservedTokens
+    (options.reservation !== false && row.usedTokens >= row.reservedTokens)
   ) {
     if (!helperDelegationId)
       await prisma.run.updateMany({

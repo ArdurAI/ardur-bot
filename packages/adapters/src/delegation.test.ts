@@ -375,3 +375,51 @@ it("keeps workers admitted before their coordinator's turn pushed the task over 
   );
   expect(requestCancel).toHaveBeenCalledOnce();
 });
+it("stops a worker over its reservation before its next step, not after its turn has ended", async () => {
+  const updateMany = vi.fn(async () => ({ count: 1 }));
+  const row = {
+    admissionKey: "group-ask:1:coordinator-run:call:member",
+    status: "running",
+    deadlineAt: new Date(Date.now() + 60_000),
+    // A native member reports its whole turn's usage just before it finishes.
+    usedTokens: 45_000,
+    reservedTokens: 30_000,
+    authority: { scopes: ["ordinary"], connectors: [] },
+  };
+  const prisma = {
+    run: {
+      findUniqueOrThrow: vi.fn(async () => ({
+        id: "run",
+        taskId: "task",
+        threadId: "room",
+        spaceId: "space",
+        userId: "owner",
+        goalId: null,
+        delegationId: "ask",
+        delegationRootTaskId: "root",
+      })),
+      updateMany,
+    },
+    delegationRoot: { findUnique: vi.fn(async () => null) },
+    delegation: { findUniqueOrThrow: vi.fn(async () => row) },
+    thread: { findUnique: vi.fn(async () => ({ groupId: "group" })) },
+    botCommunicationPolicy: { findMany: vi.fn(async () => []) },
+    remoteAuthorityPolicy: { findMany: vi.fn(async () => []) },
+  } as unknown as PrismaClient;
+  expect(
+    await checkDelegationExecution(prisma, "run", undefined, undefined, undefined, {
+      reservation: false,
+    }),
+  ).toBeUndefined();
+  expect(updateMany).not.toHaveBeenCalled();
+  expect(await checkDelegationExecution(prisma, "run", "read_file")).toBe(
+    "This worker has reached its budget or is stopping.",
+  );
+  expect(updateMany).toHaveBeenCalledOnce();
+  row.deadlineAt = new Date(Date.now() - 1);
+  expect(
+    await checkDelegationExecution(prisma, "run", undefined, undefined, undefined, {
+      reservation: false,
+    }),
+  ).toBe("This worker has reached its budget or is stopping.");
+});
