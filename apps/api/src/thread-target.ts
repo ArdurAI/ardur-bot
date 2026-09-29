@@ -29,6 +29,7 @@ import {
   ACTIVE_RUN_STATUSES,
   hasMentionToken,
   isActive,
+  progressMessageId,
   projectMessages,
   resolveAddressedBotIds,
   runFailureError,
@@ -451,7 +452,11 @@ export async function threadSnapshot(
       threadId: target.threadId,
       contextRun: core.contextRun ? mapRun(core.contextRun) : null,
       cursor: core.last?.seq ?? -1,
-      messages: messagesWithLiveEvents(core.messagePage.messages, core.liveEvents),
+      messages: messagesWithLiveEvents(
+        core.messagePage.messages,
+        core.liveEvents,
+        core.run ? [core.run] : [],
+      ),
       olderCursor: core.messagePage.olderCursor,
       run: core.run
         ? {
@@ -531,7 +536,7 @@ export async function threadSnapshot(
     members: target.members,
     threadId: target.threadId,
     cursor: core.last?.seq ?? -1,
-    messages: messagesWithLiveEvents(core.messagePage.messages, core.liveEvents),
+    messages: messagesWithLiveEvents(core.messagePage.messages, core.liveEvents, core.activeRuns),
     olderCursor: core.messagePage.olderCursor,
     // Match the live reducer: a failed latest terminal stays in run even while siblings are
     // still active or start late. A newer completed/cancelled terminal clears it.
@@ -584,22 +589,67 @@ function pickLatestTerminalRun<T extends { id: string; createdAt: Date; complete
   });
 }
 
+/** Drop reply text the run already saved. Tool activity on that draft stays. */
+function withoutSavedReplyText<T extends { blocks: MessageBlock[] }>(message: T): T | null {
+  const blocks = message.blocks.filter(
+    (block) => block.kind !== "text" && !(block.kind === "progress" && block.activity !== true),
+  );
+  if (blocks.length === 0) return null;
+  return { ...message, blocks };
+}
+
+/**
+ * Saved messages with the active runs' live messages after them. A draft whose reply text
+ * is on screen sits at the place its run holds instead, above anything sent after that text
+ * appeared, which is where its saved reply lands. Once that place is released, the saved
+ * narration is the reply: the live draft keeps only tool activity.
+ */
 function messagesWithLiveEvents(
   persisted: ThreadSnapshot["messages"],
   liveEvents: Parameters<typeof projectMessages>[0],
+  runs: ReadonlyArray<{ id: string; replySeq: number | null }>,
 ) {
-  const live = projectMessages(liveEvents).filter((message) => {
-    if (message.blocks.some((block) => block.kind === "progress" || block.kind === "steps")) {
-      return true;
+  const replySeqByRun = new Map(runs.map((run) => [run.id, run.replySeq]));
+  const live = projectMessages(liveEvents)
+    .flatMap((message) => {
+      const replySeq = message.runId ? replySeqByRun.get(message.runId) : undefined;
+      // Only a run whose place was released (replySeq null) has saved its narration.
+      // A missing run, or a place still held (including seq 0), keeps the live text.
+      if (replySeq !== null || message.id !== progressMessageId({ runId: message.runId })) {
+        return [message];
+      }
+      const stripped = withoutSavedReplyText(message);
+      return stripped ? [stripped] : [];
+    })
+    .filter((message) => {
+      if (message.blocks.some((block) => block.kind === "progress" || block.kind === "steps")) {
+        return true;
+      }
+      if (!message.id.startsWith("subagent:")) return false;
+      return !persisted.some((row) =>
+        row.blocks.some(
+          (block) => block.kind === "subagent" && message.id === `subagent:${block.agentId}`,
+        ),
+      );
+    });
+  const heldDrafts = runs
+    .flatMap((run) => {
+      const draft = live.find((message) => message.id === progressMessageId({ runId: run.id }));
+      return draft && run.replySeq != null ? [{ seq: run.replySeq, draft }] : [];
+    })
+    .sort((left, right) => left.seq - right.seq);
+  const placed = new Set<(typeof live)[number]>();
+  const messages: Array<(typeof persisted)[number] | (typeof live)[number]> = [];
+  for (const row of persisted) {
+    for (const { seq, draft } of heldDrafts) {
+      if (seq < row.seq && !placed.has(draft)) {
+        messages.push(draft);
+        placed.add(draft);
+      }
     }
-    if (!message.id.startsWith("subagent:")) return false;
-    return !persisted.some((row) =>
-      row.blocks.some(
-        (block) => block.kind === "subagent" && message.id === `subagent:${block.agentId}`,
-      ),
-    );
-  });
-  return [...persisted, ...live];
+    messages.push(row);
+  }
+  return [...messages, ...live.filter((message) => !placed.has(message))];
 }
 
 function mapRun(run: {

@@ -120,6 +120,9 @@ importers:
         specifier: 8.23.0
         version: 8.23.0
     devDependencies:
+      '@ardurbot/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@ardurbot/db':
         specifier: workspace:*
         version: link:../../packages/db

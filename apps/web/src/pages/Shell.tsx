@@ -177,7 +177,7 @@ import { countOwnerWaiting, openDockSnapshot, publishDockWaitingCount } from "..
 import { scheduleFocusPrompt } from "../lib/focus-prompt";
 import { INSIGHT_ACTION_EVENT } from "../lib/insight-actions";
 import { localTimezone } from "../lib/local-timezone";
-import { copyableMessageText } from "../lib/message-text";
+import { copyableMessageText, replyMarkdownProps } from "../lib/message-text";
 import { messageProviderLabel } from "../lib/messaging";
 import {
   isFileDrag,
@@ -6488,7 +6488,7 @@ const MessageView = memo(function MessageView({
                     key={i}
                     data-quote-message-id={block.kind === "text" ? quoteMessageId : undefined}
                   >
-                    <ChatMarkdown streaming={block.kind === "progress"}>{block.text}</ChatMarkdown>
+                    <ChatMarkdown {...replyMarkdownProps(block)}>{block.text}</ChatMarkdown>
                   </div>
                 );
               }
@@ -6576,7 +6576,7 @@ const MessageView = memo(function MessageView({
                 className="max-w-full rounded-[20px] bg-muted px-[18px] py-3 text-[15.5px] leading-[1.5] text-foreground/90"
                 dir="auto"
               >
-                <ChatMarkdown streaming>{block.text}</ChatMarkdown>
+                <ChatMarkdown {...replyMarkdownProps(block)}>{block.text}</ChatMarkdown>
               </div>
             </div>
           );
