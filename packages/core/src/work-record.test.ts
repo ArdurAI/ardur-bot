@@ -1,6 +1,6 @@
 import type { MessageBlock } from "@ardurbot/contracts";
 import { describe, expect, it } from "vitest";
-import { mapMessageBlockToActivity, workRecordEntries } from "./work-record.js";
+import { mapMessageBlockToActivity, workRecordEntries, workRecordStatus } from "./work-record.js";
 
 describe("mapMessageBlockToActivity", () => {
   it("maps text blocks to narration", () => {
@@ -25,7 +25,7 @@ describe("mapMessageBlockToActivity", () => {
 
   it("reports pending only for a live message", () => {
     const steps: MessageBlock = { kind: "steps", steps: [{ label: "Browser", count: 1 }] };
-    expect(mapMessageBlockToActivity(steps).outcome).toBe("unknown");
+    expect(mapMessageBlockToActivity(steps).outcome).toBe("success");
     expect(mapMessageBlockToActivity(steps, true).outcome).toBe("pending");
     const reasoning: MessageBlock = { kind: "progress", text: "Thinking...", reasoning: true };
     expect(mapMessageBlockToActivity(reasoning).outcome).toBe("success");
@@ -170,5 +170,19 @@ describe("workRecordEntries", () => {
 
   it("keeps a plain reply with no tools out of the record", () => {
     expect(workRecordEntries([{ kind: "progress", text: "On it." }])).toEqual([]);
+  });
+});
+
+describe("workRecordStatus", () => {
+  it("treats non-live durable steps as completed, making the status done", () => {
+    // A completed run with narration between two tool calls.
+    // The first tool call will have no durationMs, the second one has durationMs because of completedRunBlocks behavior.
+    const entries = workRecordEntries([
+      { kind: "steps", steps: [{ label: "Shell", count: 1 }] },
+      { kind: "progress", text: "Moving on." },
+      { kind: "steps", steps: [{ label: "Browser", count: 1 }], durationMs: 1000 },
+      { kind: "text", text: "Done." },
+    ]);
+    expect(workRecordStatus(entries)).toBe("done");
   });
 });

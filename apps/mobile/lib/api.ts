@@ -25,6 +25,7 @@ import {
   cancelResponseBody,
   ensureAiDataConsent,
   isCommandCardEvent,
+  isInterimNarrationAt,
   isReasoningSummaryBlock,
   isRunTerminalEvent,
   mergeCommandLinks,
@@ -947,8 +948,9 @@ export function blockText(
   translateNotice?: (notice: GroupModelFailureNotice) => string,
 ) {
   return message.blocks
-    .map((block) => {
+    .map((block, index) => {
       if (isReasoningSummaryBlock(block)) return "";
+      if (isInterimNarrationAt(message.blocks, index)) return "";
       if (block.kind === "text" && block.notice && translateNotice)
         return translateNotice(block.notice);
       if (block.kind === "channel_message") {

@@ -1481,7 +1481,12 @@ export function replyTextFromBlocks(blocks: readonly MessageBlock[]): string {
  * the bubble had before summaries were stored.
  */
 export function peerRunMessageBlocks(blocks: readonly MessageBlock[]): MessageBlock[] {
-  const reasoning = blocks.filter((block) => isReasoningSummaryBlock(block));
+  const reasoning = blocks.flatMap((block) => {
+    if (block.kind === "progress" && block.reasoning === true) {
+      return [{ ...block, text: redactTaskValue(block.text) }];
+    }
+    return [];
+  });
   const reply = redactTaskValue(replyTextFromBlocks(blocks));
   return [...reasoning, ...(reply.trim() ? [{ kind: "text" as const, text: reply }] : [])];
 }

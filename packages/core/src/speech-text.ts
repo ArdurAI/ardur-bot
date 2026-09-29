@@ -1,5 +1,5 @@
 import type { MessageBlock } from "@ardurbot/contracts";
-import { isReasoningSummaryBlock } from "./tool-activity.js";
+import { isInterimNarrationAt, isReasoningSummaryBlock } from "./tool-activity.js";
 
 /** A fenced block becomes a mention of itself, with its language if known. */
 function describeCodeBlock(fence: string): string {
@@ -198,9 +198,11 @@ export function narrateTool(toolName: string): string | null {
 
 export function speechFromBlocks(blocks: MessageBlock[]): string {
   return blocks
-    .map((block) => {
+    .map((block, index) => {
       // A reasoning summary belongs to the work record; the voice reads the reply.
       if (isReasoningSummaryBlock(block)) return "";
+      // Interim narration is folded into the work record and should not be spoken.
+      if (isInterimNarrationAt(blocks, index)) return "";
       if (block.kind === "text" || block.kind === "progress" || block.kind === "meta")
         return block.text;
       if (block.kind === "ask") return block.text;

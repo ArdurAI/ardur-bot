@@ -114,6 +114,32 @@ describe("finalizeRun", () => {
     ]);
   });
 
+  it("redacts credentials and personal data from peer reasoning summaries", () => {
+    expect(
+      peerRunMessageBlocks([
+        {
+          kind: "progress",
+          text: "Checked jane@example.com with token sk-1234567890 and key -----BEGIN PRIVATE KEY-----\nfoo\n-----END PRIVATE KEY-----.",
+          reasoning: true,
+        },
+        {
+          kind: "text",
+          text: "Checked jane@example.com with token sk-1234567890 and key -----BEGIN PRIVATE KEY-----\nfoo\n-----END PRIVATE KEY-----.",
+        },
+      ]),
+    ).toEqual([
+      {
+        kind: "progress",
+        text: "Checked [Redacted] with token [Redacted] and key [Redacted].",
+        reasoning: true,
+      },
+      {
+        kind: "text",
+        text: "Checked [Redacted] with token [Redacted] and key [Redacted].",
+      },
+    ]);
+  });
+
   it("keeps a reasoning-only peer run as a record entry", () => {
     expect(
       peerRunMessageBlocks([{ kind: "progress", text: "Weighing options.", reasoning: true }]),

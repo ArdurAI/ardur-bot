@@ -46,7 +46,7 @@ export function mapMessageBlockToActivity(block: MessageBlock, live = false): Ac
       title,
       durationMs: block.durationMs,
       // Durable steps carry no durationMs; only a live message may report pending.
-      outcome: block.durationMs !== undefined ? "success" : live ? "pending" : "unknown",
+      outcome: block.durationMs !== undefined || !live ? "success" : "pending",
     };
   }
 

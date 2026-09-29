@@ -1933,9 +1933,7 @@ describe("mobile thread event reduction", () => {
       { kind: "text", text: "Let me check now." },
       { kind: "steps", steps: [{ label: "Slack find channels", count: 1 }] },
     ]);
-    expect(blockText(completed?.messages[0] as MobileMessage)).toBe(
-      "Let me check now.\nSlack find channels",
-    );
+    expect(blockText(completed?.messages[0] as MobileMessage)).toBe("Slack find channels");
   });
 
   it("formats channel messages with their platform attribution", () => {
@@ -1987,16 +1985,17 @@ describe("mobile thread event reduction", () => {
     );
   });
 
-  it("does not speak a reasoning summary", () => {
+  it("does not speak a reasoning summary or interim narration", () => {
     expect(
       blockText(
         mobileMessage("spoken", [
           { kind: "progress", text: "Weighing options.", reasoning: true },
           { kind: "text", text: "Here is the answer." },
           { kind: "steps", steps: [{ label: "Shell", count: 1 }] },
+          { kind: "text", text: "The actual answer is here." },
         ]),
       ),
-    ).toBe("Here is the answer.\nShell");
+    ).toBe("Shell\nThe actual answer is here.");
   });
 
   it("deduplicates durable messages and replaces matching transient subagent state", () => {
