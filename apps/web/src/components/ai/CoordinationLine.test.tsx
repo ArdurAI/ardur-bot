@@ -99,7 +99,7 @@ describe("CoordinationLine", () => {
                 botId: "zai",
                 name: "zai-bot",
                 outcome: "failed",
-                reason: "zai-bot couldn't answer: its model account needs attention",
+                reasonCode: "auth",
               },
             ],
           })}
@@ -123,7 +123,7 @@ describe("CoordinationLine", () => {
     ).toContain("Asked 2 bots");
   });
 
-  it("shows no fix link when the failure has no fixable cause", () => {
+  it("shows no fix link when the failure code is not owner-fixable", () => {
     act(() => {
       root.render(
         <CoordinationLine
@@ -133,7 +133,7 @@ describe("CoordinationLine", () => {
                 botId: "zai",
                 name: "zai-bot",
                 outcome: "failed",
-                reason: "zai-bot couldn't answer",
+                reasonCode: "other",
               },
             ],
           })}
@@ -143,5 +143,49 @@ describe("CoordinationLine", () => {
     const failure = container.querySelector('[data-testid="coordination-failure"]')!;
     expect(failure.textContent).toContain("zai-bot couldn't answer");
     expect(failure.querySelector("button")).toBeNull();
+  });
+
+  it("offers the fix link for a rate-limited member from the code alone", () => {
+    act(() => {
+      root.render(
+        <CoordinationLine
+          block={block({
+            members: [
+              {
+                botId: "zai",
+                name: "zai-bot",
+                outcome: "failed",
+                reasonCode: "rate-limit",
+              },
+            ],
+          })}
+        />,
+      );
+    });
+    const failure = container.querySelector('[data-testid="coordination-failure"]')!;
+    expect(failure.textContent).toContain("hit a rate limit");
+    expect([...failure.querySelectorAll("button")].some((b) => b.textContent === "Fix")).toBe(true);
+  });
+
+  it("reads a round stored with an old English reason as its code", () => {
+    act(() => {
+      root.render(
+        <CoordinationLine
+          block={block({
+            members: [
+              {
+                botId: "zai",
+                name: "zai-bot",
+                outcome: "failed",
+                reason: "zai-bot couldn't answer: its model is unavailable",
+              },
+            ],
+          })}
+        />,
+      );
+    });
+    const failure = container.querySelector('[data-testid="coordination-failure"]')!;
+    expect(failure.textContent).toContain("zai-bot couldn't answer: its model is unavailable");
+    expect([...failure.querySelectorAll("button")].some((b) => b.textContent === "Fix")).toBe(true);
   });
 });

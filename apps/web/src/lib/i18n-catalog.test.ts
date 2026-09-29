@@ -607,6 +607,29 @@ describe("lingui catalogs", () => {
     }
   });
 
+  it("translates each coordination failure reason in every shipped catalog", () => {
+    const sentences = [
+      "{name} couldn't answer",
+      "{name} couldn't answer: its model account needs attention",
+      "{name} couldn't answer: its model account hit a rate limit",
+      "{name} couldn't answer: its model is unavailable",
+      "{name} stopped before answering",
+    ];
+    for (const locale of ["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"]) {
+      const catalog = readFileSync(
+        fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url)),
+        "utf8",
+      );
+      for (const sentence of sentences) {
+        const key = `msgid ${JSON.stringify(sentence)}\nmsgstr "`;
+        const at = catalog.indexOf(key);
+        expect(at, `${locale}: ${sentence} missing from catalog`).toBeGreaterThanOrEqual(0);
+        const translated = catalog.slice(at + key.length, catalog.indexOf('"', at + key.length));
+        expect(translated.trim(), `${locale}: ${sentence} must not be empty`).toBeTruthy();
+      }
+    }
+  });
+
   it("translates new computer placeholders in every shipped catalog", () => {
     const sentences = [
       "Booting live desktop…",

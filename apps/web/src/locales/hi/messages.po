@@ -9071,3 +9071,22 @@ msgstr ""
 #: src/components/ai/CoordinationLine.tsx
 msgid "stopped before answering"
 msgstr "जवाब देने से पहले रुक गया"
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer"
+msgstr "{name} जवाब नहीं दे सका"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer: its model account hit a rate limit"
+msgstr "{name} जवाब नहीं दे सका: इसके मॉडल खाते ने रेट लिमिट पार कर ली है"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer: its model account needs attention"
+msgstr "{name} जवाब नहीं दे सका: इसके मॉडल खाते पर ध्यान देना ज़रूरी है"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer: its model is unavailable"
+msgstr "{name} जवाब नहीं दे सका: इसका मॉडल उपलब्ध नहीं है"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} stopped before answering"
+msgstr "{name} जवाब देने से पहले रुक गया"

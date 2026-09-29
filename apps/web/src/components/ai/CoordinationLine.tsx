@@ -1,5 +1,5 @@
 import type { CoordinationBlock, CoordinationMember } from "@ardurbot/core";
-import { fixableFailure } from "@ardurbot/core";
+import { coordinationMemberFailureCode, fixableFailure } from "@ardurbot/core";
 import { Button } from "@ardurbot/ui-web";
 import { Plural, Trans, useLingui } from "@lingui/react/macro";
 import { Check, ChevronDown, ChevronRight } from "lucide-react";
@@ -148,13 +148,30 @@ function CoordinationFailureRow({
   onOpenMemberSettings?: (botId: string) => void;
 }) {
   const { t } = useLingui();
+  const name = member.name;
+  // The round stores a reason code; each screen translates it, and rounds
+  // stored with an old English reason read through their mapped code.
+  const line = (() => {
+    switch (coordinationMemberFailureCode(member)) {
+      case "auth":
+        return t`${name} couldn't answer: its model account needs attention`;
+      case "rate-limit":
+        return t`${name} couldn't answer: its model account hit a rate limit`;
+      case "model-unavailable":
+        return t`${name} couldn't answer: its model is unavailable`;
+      case "stopped":
+        return t`${name} stopped before answering`;
+      default:
+        return t`${name} couldn't answer`;
+    }
+  })();
   return (
     <div
       className="flex items-center gap-2 py-0.5 text-[12.5px] text-muted-foreground"
       data-testid="coordination-failure"
     >
       <span className="min-w-0 flex-1 truncate" dir="auto">
-        {member.reason ?? t`${member.name} couldn't answer`}
+        {line}
       </span>
       {fixableFailure(member) ? (
         <FixLink botId={member.botId} onOpenMemberSettings={onOpenMemberSettings} />

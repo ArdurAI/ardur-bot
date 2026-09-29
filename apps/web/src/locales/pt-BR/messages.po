@@ -9071,3 +9071,22 @@ msgstr ""
 #: src/components/ai/CoordinationLine.tsx
 msgid "stopped before answering"
 msgstr "parou antes de responder"
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer"
+msgstr "{name} não pôde responder"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer: its model account hit a rate limit"
+msgstr "{name} não pôde responder: a conta do seu modelo atingiu um limite de requisições"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer: its model account needs attention"
+msgstr "{name} não pôde responder: a conta do seu modelo precisa de atenção"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer: its model is unavailable"
+msgstr "{name} não pôde responder: seu modelo está indisponível"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} stopped before answering"
+msgstr "{name} parou antes de responder"

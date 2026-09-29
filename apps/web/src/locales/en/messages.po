@@ -9071,3 +9071,22 @@ msgstr "Reviewer: {reviewer}"
 #: src/components/ai/CoordinationLine.tsx
 msgid "stopped before answering"
 msgstr "stopped before answering"
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer"
+msgstr "{name} couldn't answer"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer: its model account hit a rate limit"
+msgstr "{name} couldn't answer: its model account hit a rate limit"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer: its model account needs attention"
+msgstr "{name} couldn't answer: its model account needs attention"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer: its model is unavailable"
+msgstr "{name} couldn't answer: its model is unavailable"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} stopped before answering"
+msgstr "{name} stopped before answering"

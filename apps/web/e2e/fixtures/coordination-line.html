@@ -22,7 +22,7 @@
       // answered; with one, Radiant could not use its model account.
       const members = failed
         ? [
-            { botId: "radiant", name: "Radiant", outcome: "failed", reason: "Radiant couldn't answer: its model account needs attention" },
+            { botId: "radiant", name: "Radiant", outcome: "failed", reasonCode: "auth" },
             { botId: "test", name: "test", outcome: "answered" },
             { botId: "zai", name: "zai-bot", outcome: "answered" },
           ]

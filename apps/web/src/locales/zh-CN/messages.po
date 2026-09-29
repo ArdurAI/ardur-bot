@@ -9071,3 +9071,22 @@ msgstr "复查模型：{reviewer}"
 #: src/components/ai/CoordinationLine.tsx
 msgid "stopped before answering"
 msgstr "回答前已停止"
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer"
+msgstr "{name} 无法回答"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer: its model account hit a rate limit"
+msgstr "{name} 无法回答：其模型账户已达到速率限制"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer: its model account needs attention"
+msgstr "{name} 无法回答：其模型账户需要处理"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer: its model is unavailable"
+msgstr "{name} 无法回答：其模型不可用"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} stopped before answering"
+msgstr "{name} 在回答前已停止"

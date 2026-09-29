@@ -9071,3 +9071,22 @@ msgstr ""
 #: src/components/ai/CoordinationLine.tsx
 msgid "stopped before answering"
 msgstr "yanıtlamadan durdu"
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer"
+msgstr "{name} yanıtlayamadı"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer: its model account hit a rate limit"
+msgstr "{name} yanıtlayamadı: model hesabı hız sınırına ulaştı"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer: its model account needs attention"
+msgstr "{name} yanıtlayamadı: model hesabı ilgi gerektiriyor"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer: its model is unavailable"
+msgstr "{name} yanıtlayamadı: modeli kullanılamıyor"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} stopped before answering"
+msgstr "{name} yanıtlamadan önce durduruldu"
