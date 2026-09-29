@@ -352,6 +352,29 @@ describe("bot model settings", () => {
   });
 });
 
+it("groups bot settings into cards and keeps memory and computer under Advanced", async () => {
+  await act(async () => root.render(settings()));
+  const cards = [...container.querySelectorAll("section[data-settings-group]")];
+  const title = (card: Element) => card.querySelector("h3")?.textContent;
+  expect(cards.map(title)).toEqual(["Profile", "Model", "Notifications", "Memory", "Computer"]);
+  const card = (label: string) => cards.find((item) => title(item) === label)!;
+  const profileFields = card("Profile").querySelector('input[id$="-name"]')?.closest(".grid");
+  expect(profileFields?.className).toContain("@min-[520px]:grid-cols-2");
+  expect(container.querySelector('[data-testid="bot-settings"]')?.className).toContain(
+    "@container",
+  );
+  expect(card("Model").contains(modelSelect())).toBe(true);
+  expect(card("Notifications").textContent).toContain(
+    "Get notified when this Bot finishes or needs input",
+  );
+  expect(card("Notifications").textContent).toContain("Read replies aloud");
+  const advanced = container.querySelector('[data-testid="bot-settings-advanced"]');
+  expect(advanced?.contains(card("Memory"))).toBe(true);
+  expect(advanced?.contains(card("Computer"))).toBe(true);
+  expect(advanced?.contains(card("Notifications"))).toBe(false);
+  expect(card("Computer").textContent).toBe("ComputerTeamPrivate");
+});
+
 describe("effective bot model", () => {
   const state = { me, catalog, credentials };
   it("shows the catalog label and default reasoning effort", () => {
