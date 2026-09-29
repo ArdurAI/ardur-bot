@@ -865,6 +865,40 @@ describe("instruction file grants", () => {
       });
     },
   );
+  it("refuses a bot folder that overlaps Ardur's protected data, before Codex starts", async () => {
+    // Codex runs under its own sandbox, so the protected paths are enforced on its profile.
+    const guard = { paths: ["/fixture/ardur/data/homes"], ports: [], sockets: [] };
+    for (const folder of ["/fixture/ardur/data/homes/bot-a", "/fixture/ardur/data"]) {
+      const f = fixture();
+      const runtime = new CodexAppServerRuntime(f.spawn, guard);
+      f.request.nativeCwd = folder;
+      const run = (async () => {
+        for await (const _event of runtime.run(f.request)) {
+          // drain
+        }
+      })();
+      await expect(run).rejects.toMatchObject({
+        problem: {
+          code: "runtime-unavailable",
+          reason:
+            "Codex could not start a session in this bot's folder \u2014 change the bot's computer or the pin.",
+        },
+      });
+      expect(f.spawn).not.toHaveBeenCalled();
+    }
+  });
+  it("starts in a folder outside Ardur's protected data", async () => {
+    const guard = { paths: ["/fixture/ardur/data/homes"], ports: [], sockets: [] };
+    const f = fixture();
+    const runtime = new CodexAppServerRuntime(f.spawn, guard);
+    f.request.nativeCwd = "/fixture/ardur/data/desktop-computers/team-a";
+    const events: AgentRuntimeEvent[] = [];
+    for await (const event of runtime.run(f.request)) events.push(event);
+    expect(events.some((event) => event.type === "done")).toBe(true);
+    const launched = f.spawn.mock.calls.map((call) => String((call as unknown[])[0]));
+    expect(launched.length).toBeGreaterThan(0);
+    expect(launched).not.toContain("/usr/bin/sandbox-exec");
+  });
   it("reports a rejected session start as such and sends no turn", async () => {
     const f = fixture("thread-rejected");
     await expect(f.collect()).rejects.toMatchObject({

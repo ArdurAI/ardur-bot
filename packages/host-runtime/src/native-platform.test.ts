@@ -2,9 +2,11 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 import {
   guardNativeSpawn,
+  NATIVE_SESSION_GUARD,
   type NativeSpawn,
   nativeBinaryCandidates,
   nativeEnvironment,
+  sessionSpawnFor,
 } from "./runtimes/native-process.js";
 
 describe("native platform launch policy", () => {
@@ -38,6 +40,42 @@ describe("native platform launch policy", () => {
     expect(source).toContain('env: { ELECTRON_RUN_AS_NODE: "1" }');
     expect(source).toContain("timingSafeEqual");
     expect(source).toContain(`ardur-tools-\${randomUUID()}`);
+  });
+});
+
+describe("sessionSpawnFor", () => {
+  const guard = {
+    paths: ["/fixture/user-data/secrets.env"],
+    ports: [55433],
+    sockets: [],
+  };
+  it("names how every native runtime's session is launched", () => {
+    expect(NATIVE_SESSION_GUARD).toEqual({
+      "claude-code": "wrapped",
+      "codex-app-server": "own-sandbox",
+      antigravity: "wrapped",
+    });
+  });
+  it("runs Codex outside the wrap, because Codex must start its own sandbox", () => {
+    const base = vi.fn() as unknown as NativeSpawn;
+    sessionSpawnFor(
+      "codex-app-server",
+      guard,
+      base,
+      "darwin",
+    )("/fixture/bin/codex", ["app-server"]);
+    const [binary, args] = (base as unknown as ReturnType<typeof vi.fn>).mock.calls[0]!;
+    expect(binary).toBe("/fixture/bin/codex");
+    expect(args).toEqual(["app-server"]);
+  });
+  it("keeps Claude Code and Antigravity inside the wrap on macOS", () => {
+    for (const runtime of ["claude-code", "antigravity"] as const) {
+      const base = vi.fn() as unknown as NativeSpawn;
+      sessionSpawnFor(runtime, guard, base, "darwin")("/fixture/bin/tool", ["-p"]);
+      const [binary, args] = (base as unknown as ReturnType<typeof vi.fn>).mock.calls[0]!;
+      expect(binary).toBe("/usr/bin/sandbox-exec");
+      expect(args[1]).toContain('(subpath "/fixture/user-data/secrets.env")');
+    }
   });
 });
 

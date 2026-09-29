@@ -10,7 +10,12 @@ import type {
 import type { RuntimeAvailability } from "@ardurbot/contracts/runtime-pins";
 import { RuntimePinError, runtimePinProblem } from "@ardurbot/contracts/runtime-pins";
 import * as z from "zod";
-import { guardrailConfigFromEnv } from "../host-guardrails.js";
+import type { HostGuardrailConfig } from "../host-guardrails.js";
+import {
+  guardrailConfigFromEnv,
+  isGuardedPath,
+  resolveGuardrailPathsSync,
+} from "../host-guardrails.js";
 import { startArdurMcpServer } from "./ardur-mcp-server.js";
 import { createArdurToolBridge } from "./claude-mcp-bridge.js";
 import { CodexUsageCollector } from "./codex-usage.js";
@@ -18,10 +23,10 @@ import type { NativeSpawn } from "./native-process.js";
 import {
   findNativeBinary,
   guardedSpawn,
-  guardNativeSpawn,
   jsonLines,
   probeCommand,
   RuntimeQueue,
+  sessionSpawnFor,
   spawnNative,
   stopNative,
 } from "./native-process.js";
@@ -282,7 +287,10 @@ export async function probeCodex(start?: NativeSpawn): Promise<RuntimeAvailabili
 export class CodexAppServerRuntime implements AgentRuntime {
   private running = new Map<string, () => Promise<void>>();
   constructor(
-    private readonly start: NativeSpawn = guardNativeSpawn(spawnNative, guardrailConfigFromEnv()),
+    // Codex applies its own sandbox, so its session runs outside the Seatbelt wrap
+    // (NATIVE_SESSION_GUARD). The guard's paths are still enforced on Codex's own profile.
+    private readonly start: NativeSpawn = sessionSpawnFor("codex-app-server"),
+    private readonly guard: HostGuardrailConfig = guardrailConfigFromEnv(),
   ) {}
   describe() {
     return {
@@ -313,6 +321,18 @@ export class CodexAppServerRuntime implements AgentRuntime {
         "runtime-unavailable",
         "Codex uses its own ChatGPT sign-in. Remove the pinned connection or change the runtime.",
       );
+    // Codex runs under its own sandbox, so Ardur's protected paths are enforced on its
+    // profile here: the bot's folder may not sit inside them or contain them, and no
+    // instruction file from them is granted.
+    const guarded = resolveGuardrailPathsSync(this.guard.paths);
+    if (request.nativeCwd) {
+      const folder = path.resolve(request.nativeCwd);
+      if (isGuardedPath(guarded, folder) || guarded.some((entry) => isGuardedPath([folder], entry)))
+        throw problem(
+          "runtime-unavailable",
+          "Codex could not start a session in this bot's folder — change the bot's computer or the pin.",
+        );
+    }
     const rpc = await openCodex((binary, args) =>
       this.start(binary, args, request.nativeCwd),
     ).catch(() => {
@@ -486,10 +506,14 @@ export class CodexAppServerRuntime implements AgentRuntime {
                 ...(request.nativeCwd
                   ? {
                       [request.nativeCwd]: "read",
-                      ...(await instructionFileReads(request.nativeCwd, {
-                        rootMarkers: config.project_root_markers,
-                        fallbackFilenames: config.project_doc_fallback_filenames,
-                      })),
+                      ...Object.fromEntries(
+                        Object.entries(
+                          await instructionFileReads(request.nativeCwd, {
+                            rootMarkers: config.project_root_markers,
+                            fallbackFilenames: config.project_doc_fallback_filenames,
+                          }),
+                        ).filter(([file]) => !isGuardedPath(guarded, file)),
+                      ),
                     }
                   : {}),
               },
