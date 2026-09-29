@@ -48,6 +48,7 @@ function fixture(runStatus = "running", delegationStatus = "running") {
     depth: 1,
     hop: 1,
     status: delegationStatus,
+    result: null as string | null,
     snapshot,
     card,
     authority: card.approvalBoundaries,
@@ -184,13 +185,89 @@ describe("team.board", () => {
       expect(f.db.delegation.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: expect.objectContaining({
-            status: { in: expect.arrayContaining(["failed", "cancelled"]) },
+            OR: expect.arrayContaining([
+              expect.objectContaining({
+                status: { in: expect.arrayContaining(["failed", "cancelled"]) },
+              }),
+            ]),
           }),
         }),
       );
       expect(result.rows[0]!.delegations.map((row) => row.status)).toContain(status);
     },
   );
+
+  it("bounds terminal handoff records by time without bounding active ones", async () => {
+    const f = fixture();
+    await teamBoard(f.prisma, actor);
+    expect(f.db.delegation.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          OR: [
+            { status: { in: ["queued", "running", "cancel-requested"] } },
+            {
+              status: { in: ["completed", "failed", "cancelled"] },
+              createdAt: { gte: expect.any(Date) },
+            },
+          ],
+        }),
+      }),
+    );
+  });
+
+  it("shows the handoff's recorded reason when a blocked card has no runtime problem", async () => {
+    // The owner stopped the worker mid-turn; the runtime reported its usage limit while
+    // unwinding, the run ended cancelled and no run.failed event exists. The recorded
+    // handoff reason is the card's reason, not a generic line.
+    const f = fixture("cancelled", "failed");
+    f.delegation.result = "Claude Code's usage limit is reached. Try again after it resets.";
+    const row = TeamBoardSchema.parse(await teamBoard(f.prisma, actor)).rows[0]!;
+    expect(row.state).toBe("blocked");
+    expect(row.reason).toBe(
+      "Claude Code's usage limit is reached. Try again after it resets.",
+    );
+    expect(row.reasonCategory).toBe("usage-limit");
+    expect(row.reasonRuntime).toBe("Claude Code");
+  });
+
+  it("shows a recorded provider failure reason a plain handoff carries", async () => {
+    // A pi provider failure carries no runtimeProblem; the redacted reason recorded on
+    // the handoff is still the honest card text.
+    const f = fixture("failed", "failed");
+    f.delegation.result = "rate limit reached; retry later";
+    const row = TeamBoardSchema.parse(await teamBoard(f.prisma, actor)).rows[0]!;
+    expect(row.state).toBe("blocked");
+    expect(row.reason).toBe("rate limit reached; retry later");
+    expect(row.reasonCategory).toBeUndefined();
+  });
+
+  it("stops showing a failed handoff as blocked once the bot has newer work", async () => {
+    const f = fixture("completed", "failed");
+    f.delegation.result = "Claude Code's usage limit is reached. Try again after it resets.";
+    f.delegation.createdAt = new Date("2026-09-28T10:00:00.000Z");
+    Object.assign(f.run, {
+      delegationId: null,
+      createdAt: new Date("2026-09-28T12:00:00.000Z"),
+    });
+    const row = TeamBoardSchema.parse(await teamBoard(f.prisma, actor)).rows[0]!;
+    expect(row.state).toBe("idle");
+    expect(row.reason).toBeNull();
+  });
+
+  it("keeps a failed handoff blocked when the bot's latest run is older than it", async () => {
+    const f = fixture("completed", "failed");
+    f.delegation.result = "Claude Code's usage limit is reached. Try again after it resets.";
+    f.delegation.createdAt = new Date("2026-09-28T12:00:00.000Z");
+    Object.assign(f.run, {
+      delegationId: null,
+      createdAt: new Date("2026-09-28T10:00:00.000Z"),
+    });
+    const row = TeamBoardSchema.parse(await teamBoard(f.prisma, actor)).rows[0]!;
+    expect(row.state).toBe("blocked");
+    expect(row.reason).toBe(
+      "Claude Code's usage limit is reached. Try again after it resets.",
+    );
+  });
 
   it("keeps unavailable usage off the card instead of showing zero", async () => {
     const f = fixture();

@@ -2,6 +2,7 @@ import { oc } from "@orpc/contract";
 import * as z from "zod";
 import { BotAvailabilitySchema } from "./bot-presence.js";
 import { DelegationRecordSchema, DelegationSnapshotSchema } from "./delegation.js";
+import { FailureCategoryIdSchema } from "./failure-categories.js";
 import { HostLabelSchema } from "./fleet.js";
 import { RuntimeInfoSchema } from "./runtime-pins.js";
 export const TeamStateSchema = z.enum([
@@ -44,6 +45,10 @@ export const TeamRowSchema = z.object({
   sentence: z.string().nullable(),
   requesterName: z.string().nullable(),
   reason: z.string().nullable(),
+  /** The failure category of a blocked card's reason, when it is a known one. */
+  reasonCategory: FailureCategoryIdSchema.optional(),
+  /** The runtime display name a categorized reason sentence names, when it names one. */
+  reasonRuntime: z.string().nullable().optional(),
   action: z.string().nullable(),
   rootTaskId: z.string().nullable(),
   delegationId: z.string().nullable(),
