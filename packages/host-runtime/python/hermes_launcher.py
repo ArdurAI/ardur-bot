@@ -16,12 +16,21 @@ from hermes_profile import acknowledge, check_catalog, check_constructed, valida
 
 
 PIN = "29112bef099274229cadff79cdff7bf7b99c4b77"
+TREE = "daaffc303ae437041b7f76be17c5f61b14f2ce99"
 SOURCES = json.loads(Path(__file__).with_name("hermes_sources.json").read_text())
 
 
 def require(condition: bool, message: str) -> None:
     if not condition:
         raise RuntimeError(message)
+
+
+def has_git_metadata(root: Path) -> bool:
+    try:
+        (root / ".git").lstat()
+    except OSError:
+        return False
+    return True
 
 
 def check_install(root: Path, home: Path) -> None:
@@ -31,11 +40,23 @@ def check_install(root: Path, home: Path) -> None:
     require(not (root / ".env").exists(), "Install has a project dotenv")
     require(not (home / ".env").exists(), "Private home has a dotenv")
     require((root / ".venv/bin/python").resolve() == Path(sys.executable).resolve(), "Interpreter differs from install")
-    revision = subprocess.run(
-        ["git", "-C", str(root), "rev-parse", "HEAD"],
-        capture_output=True, text=True, check=True, timeout=5,
-    ).stdout.strip()
-    require(revision == PIN, "Install revision changed")
+    if has_git_metadata(root):
+        revision = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            capture_output=True, text=True, check=True, timeout=5,
+        ).stdout.strip()
+        require(revision == PIN, "Install revision changed")
+    else:
+        marker_path = root / ".ardur-install.json"
+        require(marker_path.is_file(), "Install marker is missing")
+        try:
+            marker = json.loads(marker_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            raise RuntimeError("Install marker mismatch") from error
+        require(
+            isinstance(marker, dict) and marker.get("pin") == PIN and marker.get("tree") == TREE,
+            "Install marker mismatch",
+        )
     for name, expected in SOURCES.items():
         require(hashlib.sha256((root / name).read_bytes()).hexdigest() == expected, f"Install source changed: {name}")
 

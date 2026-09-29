@@ -9,22 +9,48 @@ account. A missing install, unsupported connection, non-host computer, or old ho
 relay protocol blocks execution without changing the saved pin. Local mode and the
 dev stack still need a desktop host computer.
 
+## Install Hermes from settings
+
+On this computer, in desktop local mode or the dev stack, an owner who picks
+Hermes and sees that it is not installed gets an **Install Hermes** button.
+A paired host keeps that message and does not show the button. Windows stays
+unavailable.
+
+The button does not ask for a path, an address, or a version. It downloads the
+pinned Hermes source from GitHub, uv 0.12.19 for this Mac or Linux computer,
+and Python 3.13 with the locked packages for the extras `acp`, `mcp`,
+`computer-use`, and `web`. Those packages are about 200 MB. uv chooses the
+exact Python patch from its own checked list, and Ardur records that patch.
+
+Ardur checks the download before the bot can use it. The unpacked files must
+match git tree `daaffc303ae437041b7f76be17c5f61b14f2ce99`, the file tree of
+commit `29112bef099274229cadff79cdff7bf7b99c4b77`. The uv download must match
+its published checksum. If the files do not match, Ardur removes them and
+stops. Ardur then writes `.ardur-install.json` with the commit, the tree, the
+uv version, the Python version, and the time. Each later launch still checks
+the pinned source-file hashes.
+
+The files live under `<DATA_DIR>/hermes/runtimes`. The versioned directory is
+`hermes-agent-29112bef0992`. When the checks pass, `hermes-agent` points at
+that directory. Per-turn staging stays at `<DATA_DIR>/hermes/staging`.
+
 ## Install a pinned source checkout
 
-The supported upstream source is revision
-`29112bef099274229cadff79cdff7bf7b99c4b77`. Place a checkout at that exact revision at the install
-root. From that checkout, create its `.venv` with the project's own lockfile:
+The same revision can be placed by hand. From that checkout, create its
+`.venv` with the project's own lockfile:
 
 ```sh
-uv sync --locked --extra acp --extra mcp
+uv sync --locked --extra acp --extra mcp --extra computer-use --extra web
 ```
 
 The install root must contain `pyproject.toml`, `uv.lock`, the pinned source
 files and `.venv/bin/python`. It must **not** contain a project `.env` file.
-Ardur checks the required source hashes and interpreter before offering the
-runtime; it never downloads or installs Hermes in this milestone.
+A git checkout is accepted when `HEAD` is the pinned commit. A directory
+without `.git` is accepted when `.ardur-install.json` records that same commit
+and tree. Ardur checks the required source hashes and interpreter before
+offering the runtime.
 
-On both macOS and Linux desktop, the managed install root is
+On both macOS and Linux desktop, the host-service install root is
 `<desktop application data>/host-service/runtimes/hermes-agent` (a sibling of
 the host service's `workspaces` directory). To keep a qualified checkout in a
 different absolute location, set `ARDUR_HERMES_INSTALL=<install-root>` in the
@@ -38,9 +64,13 @@ path across the stack.
 The host probes no other location, including `PATH`, pipx, Homebrew or a
 personal Hermes directory. Restart the desktop app or host service after
 installing or changing the selector. A missing install shows "Hermes is not
-installed on this computer." A checkout that fails its safety check shows "The
-Hermes install on this computer failed its safety check." Windows shows "Hermes
-isn't available on Windows yet."
+installed on this computer." On this computer, that message is where **Install
+Hermes** appears. An install that fails its safety check shows "The Hermes
+install on this computer failed its safety check." When that install is the
+managed one, **Install Hermes** appears again so reinstalling repairs it; an
+install chosen with `ARDUR_HERMES_INSTALL` belongs to the operator and shows
+the same message without the button. Windows shows "Hermes isn't available on
+Windows yet."
 
 The optional qualification lane needs an owner-provided install and fake
 provider; run it separately from normal unit tests:
