@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { SetLearningReviewerInput } from "@ardurbot/contracts";
 import type { ReactNode } from "react";
 import { act, createElement } from "react";
 import { createRoot } from "react-dom/client";
@@ -284,6 +285,79 @@ it("saves a Codex reviewer chosen from the runtime list", async () => {
       }),
     }),
   );
+});
+
+it("sends a thinking change as a choice, with the revision beside it", async () => {
+  learningSettings.mockResolvedValue({
+    enabled: true,
+    canConfigure: true,
+    consolidationEnabled: false,
+    budgets: {},
+    destination: null,
+    reviewerPin: {
+      runtimeKind: "pi",
+      provider: "openai",
+      modelId: "reviewer",
+      credentialId: "cred",
+      effort: "medium",
+      revision: 4,
+    },
+  });
+  request.mockImplementation(async (procedure: string) => {
+    if (procedure === "me") return { isDeploymentOwner: true };
+    if (procedure === "board/workspaces") return { workspaces: [workspace], problem: null };
+    if (procedure === "bots/list") return [];
+    if (procedure === "board/upkeep") return { enabled: false };
+    if (procedure === "models/list") {
+      return [
+        {
+          provider: "openai",
+          id: "reviewer",
+          label: "Reviewer",
+          billing: "usage",
+          thinkingLevels: ["medium", "high"],
+        },
+      ];
+    }
+    if (procedure === "models/credentials") {
+      return [{ id: "cred", provider: "openai", label: "OpenAI", hasKey: true, isDefault: true }];
+    }
+    if (procedure === "runtimes/availability") return { available: false, models: [] };
+    if (procedure === "learning/setReviewer") {
+      return {
+        enabled: true,
+        canConfigure: true,
+        consolidationEnabled: false,
+        reviewerPin: null,
+        budgets: {},
+        destination: null,
+      };
+    }
+    throw new Error(`Unexpected ${procedure}`);
+  });
+  await act(async () => root.render(createElement(BoardsSettings)));
+  const thinking = [...node.querySelectorAll("button")].find((button) =>
+    button.textContent?.startsWith("Thinking:"),
+  );
+  expect(thinking?.textContent).toBe("Thinking: medium");
+  await act(async () => thinking!.click());
+  const opened = sheet.mock.calls.at(-1)?.[0] as {
+    actions: { text: string; onPress: () => void }[];
+  };
+  await act(async () => opened.actions.find((action) => action.text === "high")!.onPress());
+  const saved = request.mock.calls.find((call) => call[0] === "learning/setReviewer")?.[1] as {
+    expectedRevision: number;
+    pin: Record<string, unknown>;
+  };
+  expect(saved.expectedRevision).toBe(4);
+  expect(saved.pin).toEqual({
+    runtimeKind: "pi",
+    provider: "openai",
+    modelId: "reviewer",
+    credentialId: "cred",
+    effort: "high",
+  });
+  expect(SetLearningReviewerInput.parse(saved)).toEqual(saved);
 });
 
 it("opens the model screen when no reviewer choice is available", async () => {

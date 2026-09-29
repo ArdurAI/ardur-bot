@@ -30,7 +30,6 @@ import { hasPairedDevice } from "../lib/dispatch";
 import { useI18n } from "../lib/i18n";
 import {
   loadLearningSettings,
-  type ReviewerChoice,
   reviewerMenuOptions,
   setReviewerPin,
   thinkingMenuOptions,
@@ -389,12 +388,16 @@ export default function BoardsSettings() {
                       t,
                       (effort) => {
                         void work(async () => {
+                          if (!pin.provider || !pin.modelId || !pin.credentialId) return;
                           const expectedRevision = learning?.reviewerPin?.revision ?? 0;
                           setLearning(
                             await setReviewerPin(expectedRevision, {
-                              ...pin,
+                              runtimeKind: pin.runtimeKind,
+                              provider: pin.provider,
+                              modelId: pin.modelId,
+                              credentialId: pin.credentialId,
                               effort,
-                            } as ReviewerChoice),
+                            }),
                           );
                         });
                       },
