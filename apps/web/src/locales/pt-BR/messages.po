@@ -1003,8 +1003,8 @@ msgstr ""
 msgid "Ask"
 msgstr ""
 
-#: src/pages/ide/dialogs.tsx
 #: src/pages/ide/IdePage.tsx
+#: src/pages/workspace/dialogs.tsx
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Ask a bot"
 msgstr ""
@@ -1337,9 +1337,9 @@ msgstr ""
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
-#: src/pages/ide/dialogs.tsx
 #: src/pages/shell/OpenToSetting.tsx
 #: src/pages/shell/top-nav.ts
+#: src/pages/workspace/dialogs.tsx
 msgid "Bots"
 msgstr ""
 
@@ -1974,10 +1974,6 @@ msgstr "O computador está dormindo"
 #: src/pages/Shell.tsx
 msgid "Computer is asleep. Open it to wake."
 msgstr "O computador está em repouso. Abra para acordar."
-
-#: src/pages/workspace/WorkspaceFiles.tsx
-msgid "Computer is busy"
-msgstr "O computador está ocupado"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Computer use"
@@ -6548,7 +6544,7 @@ msgstr "Na fila"
 msgid "Quick access shortcut"
 msgstr ""
 
-#: src/pages/ide/dialogs.tsx
+#: src/pages/workspace/dialogs.tsx
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Quick open"
 msgstr ""
@@ -6578,10 +6574,6 @@ msgstr "Lido"
 #: src/components/PeerMessageReceipt.tsx
 msgid "Read by {recipient}"
 msgstr "Lido por {recipient}"
-
-#: src/pages/workspace/WorkspaceFiles.tsx
-msgid "Read only"
-msgstr "Somente leitura"
 
 #: src/pages/ide/IdePage.tsx
 msgid "Read only: file is larger than 2 MB"
@@ -7383,6 +7375,7 @@ msgstr ""
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/dialogs.tsx
+#: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Save"
 msgstr "Salvar"
 
@@ -7413,6 +7406,7 @@ msgstr "Salvar modelo"
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/ide/IdePage.tsx
 #: src/pages/MemoryHistory.tsx
+#: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Saved"
 msgstr "Salva"
 
@@ -7586,7 +7580,7 @@ msgstr ""
 msgid "Selected bots"
 msgstr "Bots selecionados"
 
-#: src/pages/ide/dialogs.tsx
+#: src/pages/workspace/dialogs.tsx
 msgid "Selection shortened to 32,000 characters."
 msgstr "A seleção foi reduzida a 32.000 caracteres."
 
@@ -8352,6 +8346,10 @@ msgstr ""
 msgid "The bot is working — wait or stop it"
 msgstr ""
 
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "The computer is busy. Wait for it to finish."
+msgstr "O computador está ocupado. Aguarde até ele terminar."
+
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "The connection was cancelled."
 msgstr ""
@@ -8395,9 +8393,9 @@ msgid "Thinking"
 msgstr "Pensando"
 
 #: src/components/ThreadCommandBlock.tsx
-#: src/pages/ide/dialogs.tsx
 #: src/pages/ide/IdePage.tsx
 #: src/pages/ide/terminal.tsx
+#: src/pages/workspace/dialogs.tsx
 msgid "This action could not finish; try again."
 msgstr ""
 
@@ -8499,11 +8497,23 @@ msgstr "Esta versão da configuração não é compatível."
 msgid "This field is not supported."
 msgstr "Este campo não é compatível."
 
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "This file is larger than 2 MB. Open a copy to edit it."
+msgstr "Este arquivo é maior que 2 MB. Abra uma cópia para editá-lo."
+
 #: src/components/ArtifactFileCard.tsx
 msgid "This file is not valid UTF-8 Markdown."
 msgstr "Este arquivo não é válido UTF-8 Markdown."
 
-#: src/pages/ide/file-tree.tsx
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "This file is read-only. Open a copy to edit it."
+msgstr "Este arquivo é somente leitura. Abra uma cópia para editá-lo."
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "This file no longer exists. Save it as a new file or close it."
+msgstr "Este arquivo não existe mais. Salve-o como um novo arquivo ou feche-o."
+
+#: src/pages/workspace/file-tree.tsx
 msgid "This folder is empty."
 msgstr ""
 
@@ -8518,6 +8528,10 @@ msgstr ""
 #: src/pages/Shell.tsx
 msgid "This group's model is blocked by the bot or space settings. Change the destination policy or choose another group model."
 msgstr "O modelo do grupo está bloqueado pelas configurações do bot ou do espaço. Altere a política de destino ou escolha outro modelo para o grupo."
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "This is a binary file. You cannot edit it here."
+msgstr "Este é um arquivo binário. Você não pode editá-lo aqui."
 
 #: src/pages/HostComputerPrompt.tsx
 msgid "this Mac"
@@ -8819,6 +8833,8 @@ msgid "Unpin"
 msgstr "Desafixar"
 
 #: src/pages/ide/IdePage.tsx
+#: src/pages/workspace/WorkspaceFileGuard.tsx
+#: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Unsaved changes"
 msgstr ""
 

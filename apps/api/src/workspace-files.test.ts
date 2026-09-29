@@ -5,6 +5,7 @@ import path from "node:path";
 import { LocalAgentHomeStore } from "@ardurbot/adapters";
 import type { Actor } from "@ardurbot/contracts";
 import { IDE_FILE_BYTES } from "@ardurbot/contracts";
+import { IsolationError } from "@ardurbot/db";
 import { describe, expect, it, vi } from "vitest";
 import { createWorkspaceFiles, workspaceFileSource } from "./workspace-files.js";
 
@@ -155,7 +156,7 @@ describe("bot workspace files", () => {
     expect(tooBig).toMatchObject({
       saved: false,
       approvalRequired: false,
-      reason: "Read only: file is larger than 2 MB",
+      reason: "This file is larger than 2 MB. Open a copy to edit it.",
     });
     expect(f.sandbox.listFiles).not.toHaveBeenCalled();
 
@@ -165,7 +166,7 @@ describe("bot workspace files", () => {
       version: digest("saved"),
     });
     await expect(f.files.save(actor, { ...save, version: digest("saved") })).rejects.toThrow(
-      /Computer is busy/,
+      /The computer is busy. Wait for it to finish./,
     );
     expect(f.home.writeFile).not.toHaveBeenCalled();
     f.computer.maintenanceId = null;
@@ -208,13 +209,13 @@ describe("bot workspace files", () => {
     f.sandbox.readFile.mockResolvedValueOnce(Uint8Array.from([0]));
     await expect(f.files.save(actor, save)).resolves.toMatchObject({
       saved: false,
-      reason: "Binary file",
+      reason: "This is a binary file. You cannot edit it here.",
     });
     const oversized = new Uint8Array(IDE_FILE_BYTES + 1).fill(97);
     f.sandbox.readFile.mockResolvedValueOnce(oversized);
     await expect(f.files.save(actor, save)).resolves.toMatchObject({
       saved: false,
-      reason: "Read only: file is larger than 2 MB",
+      reason: "This file is larger than 2 MB. Open a copy to edit it.",
     });
     expect(f.sandbox.writeFile).not.toHaveBeenCalled();
 
@@ -289,6 +290,94 @@ describe("bot workspace files", () => {
         }),
       ).resolves.toMatchObject({ saved: true, version: digest("hello!") });
       expect(await readFile(path.join(dir, "bots", "bot", "plain.md"), "utf8")).toBe("hello!");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it("describes a deleted file as a refusal with a reason, not a server error", async () => {
+    const f = fixture();
+    // The file was deleted in the sandbox while its tab was open.
+    f.sandbox.listFiles.mockResolvedValue([]);
+    await expect(
+      f.files.save(actor, {
+        ...f.input,
+        path: "notes.md",
+        content: "hello!",
+        version: digest("hello"),
+        approved: false,
+      }),
+    ).resolves.toEqual({
+      saved: false,
+      approvalRequired: false,
+      reason: "This file no longer exists. Save it as a new file or close it.",
+    });
+    expect(f.sandbox.writeFile).not.toHaveBeenCalled();
+  });
+
+  it("refuses a write when a commit swaps in a symlink between the check and the write", async () => {
+    const f = fixture();
+    f.computer.state = "stopped";
+    const root = await mkdtemp(path.join(tmpdir(), "workspace-files-race-"));
+    try {
+      // Swaps run after the pane's read but inside the write call, which is
+      // where a concurrent stop/commit would land its renamed home directory.
+      let swap: () => Promise<void> = async () => undefined;
+      class RacyHomeStore extends LocalAgentHomeStore {
+        override async writeFile(...args: Parameters<LocalAgentHomeStore["writeFile"]>) {
+          await swap();
+          return super.writeFile(...args);
+        }
+        override async writeFileInsideRoot(
+          ...args: Parameters<LocalAgentHomeStore["writeFileInsideRoot"]>
+        ) {
+          await swap();
+          return super.writeFileInsideRoot(...args);
+        }
+      }
+      const home = new RacyHomeStore(root);
+      const dir = home.pathFor("home");
+      const workspace = path.join(dir, "bots", "bot");
+      const other = path.join(dir, "bots", "other", "notes.md");
+      await mkdir(path.join(workspace, "sub"), { recursive: true });
+      await mkdir(path.dirname(other), { recursive: true });
+      await writeFile(path.join(workspace, "sub", "notes.md"), "hello");
+      await writeFile(other, "secret");
+      const files = createWorkspaceFiles({
+        sandbox: f.sandbox,
+        home,
+        prisma: f.db,
+      } as unknown as Parameters<typeof createWorkspaceFiles>[0]);
+      const attempt = () =>
+        files.save(actor, {
+          ...f.input,
+          path: "sub/notes.md",
+          content: "pwned",
+          version: digest("hello"),
+          approved: false,
+        });
+
+      // A parent directory becomes a symlink into another bot's folder.
+      swap = async () => {
+        await rm(path.join(workspace, "sub"), { recursive: true });
+        await symlink(path.join("..", "other"), path.join(workspace, "sub"));
+      };
+      await expect(attempt()).rejects.toThrow(IsolationError);
+      expect(await readFile(other, "utf8")).toBe("secret");
+      await rm(path.join(workspace, "sub"));
+      await mkdir(path.join(workspace, "sub"));
+      await writeFile(path.join(workspace, "sub", "notes.md"), "hello");
+
+      // The target file itself becomes a symlink into another bot's folder.
+      swap = async () => {
+        await rm(path.join(workspace, "sub", "notes.md"));
+        await symlink(
+          path.join("..", "..", "other", "notes.md"),
+          path.join(workspace, "sub", "notes.md"),
+        );
+      };
+      await expect(attempt()).rejects.toThrow(IsolationError);
+      expect(await readFile(other, "utf8")).toBe("secret");
     } finally {
       await rm(root, { recursive: true, force: true });
     }

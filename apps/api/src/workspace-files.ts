@@ -3,6 +3,7 @@ import { lstat, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import type { AdapterContext } from "@ardurbot/adapter-kit";
 import {
+  HomeContainmentError,
   LocalAgentHomeStore,
   teamBotWorkspaceDirectory,
   toComputerRef,
@@ -19,6 +20,11 @@ type Deps = Pick<RouterDeps, "prisma" | "sandbox" | "home">;
 type Request = { botId: string; computerId: string; generation: number; path: string };
 type SaveRequest = Request & { content: string; version: string; approved: boolean };
 const digest = (bytes: Uint8Array | string) => createHash("sha256").update(bytes).digest("hex");
+const fileTooLargeReason = "This file is larger than 2 MB. Open a copy to edit it.";
+const readOnlyReason = "This file is read-only. Open a copy to edit it.";
+const binaryFileReason = "This is a binary file. You cannot edit it here.";
+const fileMissingReason = "This file no longer exists. Save it as a new file or close it.";
+const computerBusyMessage = "The computer is busy. Wait for it to finish.";
 
 export function workspaceFileSource(
   computer: {
@@ -174,11 +180,11 @@ export function createWorkspaceFiles(deps: Deps) {
       return {
         saved: false,
         approvalRequired: false,
-        reason: "Read only: file is larger than 2 MB",
+        reason: fileTooLargeReason,
       };
     const target = await resolve(actor, input, signal);
     if (target.computer.maintenanceId)
-      throw new ORPCError("CONFLICT", { message: "Computer is busy" });
+      throw new ORPCError("CONFLICT", { message: computerBusyMessage });
     const rules = await deps.prisma.actionApprovalRule.findMany({
       where: { spaceId: actor.spaceId, createdByUserId: actor.userId },
     });
@@ -203,13 +209,21 @@ export function createWorkspaceFiles(deps: Deps) {
         }) === "ask",
     );
     if (approvalRequired && !input.approved) return { saved: false, approvalRequired: true };
-    const current = await read(actor, input, signal);
-    if (current.binary) return { saved: false, approvalRequired: false, reason: "Binary file" };
+    let current: Awaited<ReturnType<typeof read>>;
+    try {
+      current = await read(actor, input, signal);
+    } catch (error) {
+      // The file was deleted or stopped being readable while its tab was open.
+      if (error instanceof IsolationError)
+        return { saved: false, approvalRequired: false, reason: fileMissingReason };
+      throw error;
+    }
+    if (current.binary) return { saved: false, approvalRequired: false, reason: binaryFileReason };
     if (current.readOnly)
       return {
         saved: false,
         approvalRequired: false,
-        reason: current.size > IDE_FILE_BYTES ? "Read only: file is larger than 2 MB" : "Read only",
+        reason: current.size > IDE_FILE_BYTES ? fileTooLargeReason : readOnlyReason,
       };
     if (current.version !== input.version)
       return {
@@ -227,13 +241,23 @@ export function createWorkspaceFiles(deps: Deps) {
         where: { id: target.computer.id },
         data: { updatedAt: new Date() },
       });
+    } else if (deps.home instanceof LocalAgentHomeStore) {
+      // The boundary check and the write hold the home store's per-bot lock
+      // together, so a concurrent commit cannot swap a directory or symlink
+      // into place between them.
+      try {
+        await deps.home.writeFileInsideRoot(
+          target.computer.homeKey,
+          target.root,
+          target.filePath,
+          input.content,
+          target.adapterContext,
+        );
+      } catch (error) {
+        if (error instanceof HomeContainmentError) throw new IsolationError();
+        throw error;
+      }
     } else {
-      await assertSavedInsideBotFolder(
-        deps.home,
-        target.computer.homeKey,
-        target.root,
-        target.filePath,
-      );
       await deps.home.writeFile(
         target.computer.homeKey,
         target.filePath,

@@ -1003,8 +1003,8 @@ msgstr ""
 msgid "Ask"
 msgstr ""
 
-#: src/pages/ide/dialogs.tsx
 #: src/pages/ide/IdePage.tsx
+#: src/pages/workspace/dialogs.tsx
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Ask a bot"
 msgstr ""
@@ -1337,9 +1337,9 @@ msgstr ""
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
 #: src/components/integrations/catalog/McpToolReview.tsx
-#: src/pages/ide/dialogs.tsx
 #: src/pages/shell/OpenToSetting.tsx
 #: src/pages/shell/top-nav.ts
+#: src/pages/workspace/dialogs.tsx
 msgid "Bots"
 msgstr ""
 
@@ -1974,10 +1974,6 @@ msgstr "컴퓨터가 절전 상태입니다"
 #: src/pages/Shell.tsx
 msgid "Computer is asleep. Open it to wake."
 msgstr "컴퓨터가 절전 모드입니다. 깨우려면 여세요."
-
-#: src/pages/workspace/WorkspaceFiles.tsx
-msgid "Computer is busy"
-msgstr "컴퓨터가 사용 중입니다"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Computer use"
@@ -6548,7 +6544,7 @@ msgstr "대기 중"
 msgid "Quick access shortcut"
 msgstr ""
 
-#: src/pages/ide/dialogs.tsx
+#: src/pages/workspace/dialogs.tsx
 #: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Quick open"
 msgstr ""
@@ -6578,10 +6574,6 @@ msgstr "읽음"
 #: src/components/PeerMessageReceipt.tsx
 msgid "Read by {recipient}"
 msgstr "{recipient}님이 읽음"
-
-#: src/pages/workspace/WorkspaceFiles.tsx
-msgid "Read only"
-msgstr "읽기 전용"
 
 #: src/pages/ide/IdePage.tsx
 msgid "Read only: file is larger than 2 MB"
@@ -7383,6 +7375,7 @@ msgstr ""
 #: src/pages/RoutineEditor.tsx
 #: src/pages/shell/bot-panel.tsx
 #: src/pages/shell/dialogs.tsx
+#: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Save"
 msgstr "저장"
 
@@ -7413,6 +7406,7 @@ msgstr "모델 저장"
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/ide/IdePage.tsx
 #: src/pages/MemoryHistory.tsx
+#: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Saved"
 msgstr "저장됨"
 
@@ -7586,7 +7580,7 @@ msgstr ""
 msgid "Selected bots"
 msgstr "선택한 봇"
 
-#: src/pages/ide/dialogs.tsx
+#: src/pages/workspace/dialogs.tsx
 msgid "Selection shortened to 32,000 characters."
 msgstr "선택 영역이 32,000자로 줄었습니다."
 
@@ -8352,6 +8346,10 @@ msgstr "API가 다시 작동하지 않습니다. 이 페이지를 새로 고침�
 msgid "The bot is working — wait or stop it"
 msgstr ""
 
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "The computer is busy. Wait for it to finish."
+msgstr "컴퓨터가 바쁩니다. 끝날 때까지 기다리세요."
+
 #: src/components/integrations/card/IntegrationCards.tsx
 msgid "The connection was cancelled."
 msgstr ""
@@ -8395,9 +8393,9 @@ msgid "Thinking"
 msgstr "생각 깊이"
 
 #: src/components/ThreadCommandBlock.tsx
-#: src/pages/ide/dialogs.tsx
 #: src/pages/ide/IdePage.tsx
 #: src/pages/ide/terminal.tsx
+#: src/pages/workspace/dialogs.tsx
 msgid "This action could not finish; try again."
 msgstr ""
 
@@ -8499,11 +8497,23 @@ msgstr "지원되지 않는 구성 버전입니다."
 msgid "This field is not supported."
 msgstr "지원되지 않는 필드입니다."
 
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "This file is larger than 2 MB. Open a copy to edit it."
+msgstr "이 파일은 2MB보다 큽니다. 편집하려면 복사본을 여세요."
+
 #: src/components/ArtifactFileCard.tsx
 msgid "This file is not valid UTF-8 Markdown."
 msgstr "이 파일은 올바른 UTF-8 Markdown 형식이 아닙니다."
 
-#: src/pages/ide/file-tree.tsx
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "This file is read-only. Open a copy to edit it."
+msgstr "이 파일은 읽기 전용입니다. 편집하려면 복사본을 여세요."
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "This file no longer exists. Save it as a new file or close it."
+msgstr "이 파일은 더 이상 존재하지 않습니다. 새 파일로 저장하거나 닫으세요."
+
+#: src/pages/workspace/file-tree.tsx
 msgid "This folder is empty."
 msgstr ""
 
@@ -8518,6 +8528,10 @@ msgstr ""
 #: src/pages/Shell.tsx
 msgid "This group's model is blocked by the bot or space settings. Change the destination policy or choose another group model."
 msgstr "봇 또는 공간 설정에서 이 그룹의 모델을 차단했습니다. 대상 정책을 변경하거나 다른 그룹 모델을 선택하세요."
+
+#: src/pages/workspace/WorkspaceFiles.tsx
+msgid "This is a binary file. You cannot edit it here."
+msgstr "바이너리 파일입니다. 여기에서 편집할 수 없습니다."
 
 #: src/pages/HostComputerPrompt.tsx
 msgid "this Mac"
@@ -8819,6 +8833,8 @@ msgid "Unpin"
 msgstr "고정 해제"
 
 #: src/pages/ide/IdePage.tsx
+#: src/pages/workspace/WorkspaceFileGuard.tsx
+#: src/pages/workspace/WorkspaceFiles.tsx
 msgid "Unsaved changes"
 msgstr ""
 

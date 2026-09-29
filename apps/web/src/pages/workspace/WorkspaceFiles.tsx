@@ -38,18 +38,20 @@ export function WorkspaceFiles({ bot, context }: { bot: Bot; context: WorkspaceC
     switch (reason) {
       case fileChangedReason:
         return t`The file changed. Open it again before saving.`;
-      case "Computer is busy":
-        return t`Computer is busy`;
+      case "The computer is busy. Wait for it to finish.":
+        return t`The computer is busy. Wait for it to finish.`;
       case "Computer changed. Refresh files.":
         return t`Computer changed. Refresh files.`;
       case "Files are unavailable on this computer.":
         return t`Files are unavailable on this computer.`;
-      case "Binary file":
-        return t`Binary file`;
-      case "Read only":
-        return t`Read only`;
-      case "Read only: file is larger than 2 MB":
-        return t`Read only: file is larger than 2 MB`;
+      case "This is a binary file. You cannot edit it here.":
+        return t`This is a binary file. You cannot edit it here.`;
+      case "This file is read-only. Open a copy to edit it.":
+        return t`This file is read-only. Open a copy to edit it.`;
+      case "This file is larger than 2 MB. Open a copy to edit it.":
+        return t`This file is larger than 2 MB. Open a copy to edit it.`;
+      case "This file no longer exists. Save it as a new file or close it.":
+        return t`This file no longer exists. Save it as a new file or close it.`;
       default:
         return t`Could not save this file. Try again.`;
     }
@@ -123,7 +125,7 @@ export function WorkspaceFiles({ bot, context }: { bot: Bot; context: WorkspaceC
       .then((file) => {
         if (file.binary) {
           if (alive.current && boundRef.current === target) {
-            setError(t`Binary file`);
+            setError(t`This is a binary file. You cannot edit it here.`);
             setStatus(null);
           }
           return;
@@ -367,7 +369,7 @@ export function WorkspaceFiles({ bot, context }: { bot: Bot; context: WorkspaceC
                 role="status"
                 className="border-b border-border px-3 py-1 text-xs text-muted-foreground"
               >
-                {t`Read only: file is larger than 2 MB`}
+                {t`This file is larger than 2 MB. Open a copy to edit it.`}
               </p>
             ) : null}
             <div className="min-h-0 flex-1 overflow-hidden">

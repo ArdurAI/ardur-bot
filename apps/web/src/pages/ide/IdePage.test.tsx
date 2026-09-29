@@ -60,7 +60,7 @@ vi.mock("./terminal", () => ({
     <div data-terminal-computer={root.computerId}>terminal surface</div>
   ),
 }));
-vi.mock("./editor", () => ({
+vi.mock("../workspace/editor", () => ({
   default: ({
     document,
     onChange,

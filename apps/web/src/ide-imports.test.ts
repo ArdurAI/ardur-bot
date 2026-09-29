@@ -29,6 +29,17 @@ it("keeps optional screens, Board, Fleet, Dashboard widgets and runtime contract
     .filter(([, source]) => imports(source).some((name) => name.startsWith("@codemirror/")))
     .map(([file]) => path.relative(root, file));
   expect(users).toEqual(["pages/workspace/editor.tsx"]);
+  // The editor components live in pages/workspace; the IDE page must use them
+  // directly instead of re-export stubs left behind in pages/ide.
+  for (const file of [
+    "pages/ide/editor.tsx",
+    "pages/ide/dialogs.tsx",
+    "pages/ide/file-tree.tsx",
+    "pages/ide/model.ts",
+    "pages/ide/splitter.tsx",
+    "pages/ide/unsaved.ts",
+  ])
+    expect(sources.has(path.join(root, file)), file).toBe(false);
   const seen = new Set<string>();
   function walk(file: string) {
     if (seen.has(file)) return;
@@ -73,8 +84,6 @@ it("keeps optional screens, Board, Fleet, Dashboard widgets and runtime contract
     "pages/dashboard/LearningPanel.tsx",
     "pages/dashboard/GovernancePanel.tsx",
     "pages/ide/IdePage.tsx",
-    "pages/ide/editor.tsx",
-    "pages/ide/unsaved.ts",
     "pages/workspace/editor.tsx",
     "pages/ide/diff.tsx",
     "pages/ide/terminal.tsx",

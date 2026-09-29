@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ideShortcut, quickMatches, scanFiles, todayRange } from "./model";
+import { ideShortcut, quickMatches, scanFiles, todayRange } from "./files-model";
 
 describe("IDE quick open and keys", () => {
   it("walks once per directory, matches file names and cancels between directories", async () => {

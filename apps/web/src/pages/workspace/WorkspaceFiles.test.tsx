@@ -321,9 +321,13 @@ describe("workspace files", () => {
   it("describes a failed save with the server reason, not a load error", async () => {
     await click("notes.md");
     await type("hello!");
-    api.save.mockRejectedValueOnce(new ORPCError("CONFLICT", { message: "Computer is busy" }));
+    api.save.mockRejectedValueOnce(
+      new ORPCError("CONFLICT", { message: "The computer is busy. Wait for it to finish." }),
+    );
     await click("Save");
-    expect(host.querySelector("[role='alert']")?.textContent).toBe("Computer is busy");
+    expect(host.querySelector("[role='alert']")?.textContent).toBe(
+      "The computer is busy. Wait for it to finish.",
+    );
     expect(host.textContent).not.toContain("Could not load files. Try again.");
 
     api.save.mockRejectedValueOnce(
@@ -351,6 +355,20 @@ describe("workspace files", () => {
     );
   });
 
+  it("describes a deleted file with an action instead of a generic failure", async () => {
+    await click("notes.md");
+    await type("hello!");
+    api.save.mockResolvedValueOnce({
+      saved: false,
+      approvalRequired: false,
+      reason: "This file no longer exists. Save it as a new file or close it.",
+    });
+    await click("Save");
+    expect(host.querySelector("[role='alert']")?.textContent).toBe(
+      "This file no longer exists. Save it as a new file or close it.",
+    );
+  });
+
   it("shows binary and oversized files without opening an editable buffer", async () => {
     api.read.mockResolvedValueOnce({
       context,
@@ -362,7 +380,7 @@ describe("workspace files", () => {
       version,
     });
     await click("notes.md");
-    expect(host.textContent).toContain("Binary file");
+    expect(host.textContent).toContain("This is a binary file. You cannot edit it here.");
     expect(host.querySelector("textarea")).toBeNull();
 
     api.read.mockResolvedValueOnce({
@@ -377,7 +395,7 @@ describe("workspace files", () => {
     await click("notes.md");
     expect(host.querySelector("textarea")?.readOnly).toBe(true);
     expect(host.querySelector("textarea")?.value).toBe("partial");
-    expect(host.textContent).toContain("Read only: file is larger than 2 MB");
+    expect(host.textContent).toContain("This file is larger than 2 MB. Open a copy to edit it.");
     expect(button("Save")?.disabled).toBe(true);
   });
 });

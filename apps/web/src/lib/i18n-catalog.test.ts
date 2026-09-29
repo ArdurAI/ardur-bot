@@ -531,10 +531,13 @@ describe("lingui catalogs", () => {
   it("translates workspace file save errors in every shipped catalog", async () => {
     const sentences = [
       "Could not save this file. Try again.",
-      "Computer is busy",
+      "The computer is busy. Wait for it to finish.",
       "Computer changed. Refresh files.",
       "The file changed. Open it again before saving.",
-      "Read only",
+      "This file is read-only. Open a copy to edit it.",
+      "This file is larger than 2 MB. Open a copy to edit it.",
+      "This is a binary file. You cannot edit it here.",
+      "This file no longer exists. Save it as a new file or close it.",
     ];
     for (const locale of ["en", "de", "es", "hi", "ko", "pt-BR", "ru", "tr", "zh-CN"]) {
       const filename = fileURLToPath(new URL(`../locales/${locale}/messages.po`, import.meta.url));
