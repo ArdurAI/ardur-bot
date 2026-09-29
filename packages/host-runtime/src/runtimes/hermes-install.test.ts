@@ -10,7 +10,11 @@ import {
 } from "./hermes-install.js";
 
 it("wraps the pinned Hermes process in the host guardrail only on macOS", () => {
-  const guard = { paths: ["/fixture/user-data/secrets.env"], ports: [55433] };
+  const guard = {
+    paths: ["/fixture/user-data/secrets.env"],
+    ports: [55433],
+    sockets: ["/fixture/run/docker.sock"],
+  };
   const wrapped = hermesLaunchArgv(
     "/fixture/.venv/bin/python",
     "/fixture/launcher.py",
@@ -21,6 +25,7 @@ it("wraps the pinned Hermes process in the host guardrail only on macOS", () => 
   expect(wrapped[1]).toBe("-p");
   expect(wrapped[2]).toContain('(subpath "/fixture/user-data/secrets.env")');
   expect(wrapped[2]).toContain('(remote ip "localhost:55433")');
+  expect(wrapped[2]).toContain('(remote unix-socket (literal "/fixture/run/docker.sock"))');
   expect(wrapped.slice(3)).toEqual(["/fixture/.venv/bin/python", "-B", "/fixture/launcher.py"]);
   for (const platform of ["linux", "win32"] as const)
     expect(

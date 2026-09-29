@@ -19,14 +19,17 @@ export interface HostServiceConfig {
 
 /**
  * Ardur's control-plane files on this computer, in every desktop mode: the local-mode
- * secrets and Postgres cluster, the compose stack's env and token, the pairing store, and
- * the app-managed state under the data folder. Computed here, never hardcoded in the
- * guardrail itself; a missing path is still denied as written.
+ * secrets and Postgres cluster, the compose stack's env and token, the pairing store, the
+ * app-managed state under the data folder, and the local-data reset backups — a reset moves
+ * the old secrets.env, cluster and data aside, and the moved copies must stay denied too.
+ * Computed here, never hardcoded in the guardrail itself; a missing path is still denied as
+ * written.
  */
 export function hostGuardPaths(userDataDir: string): string[] {
   return [
     path.join(userDataDir, "secrets.env"),
     path.join(userDataDir, "postgres"),
+    path.join(userDataDir, "backups"),
     path.join(userDataDir, "stack", ".env"),
     path.join(userDataDir, "stack", ".desktop-stack-token"),
     path.join(userDataDir, "host-service", "host-service.enc"),

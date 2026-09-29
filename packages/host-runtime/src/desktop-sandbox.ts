@@ -181,10 +181,11 @@ export class DesktopSandboxProvider implements SandboxProvider {
       const guard = this.opts.guard;
       if (!guard) return { paths: [], profile: null };
       const paths = await resolveGuardrailPaths(guard.paths);
+      const sockets = await resolveGuardrailPaths(guard.sockets);
       const profile =
         (this.opts.platform ?? process.platform) === "darwin" &&
-        (paths.length > 0 || guard.ports.length > 0)
-          ? seatbeltProfile({ paths, ports: guard.ports })
+        (paths.length > 0 || guard.ports.length > 0 || sockets.length > 0)
+          ? seatbeltProfile({ paths, ports: guard.ports, sockets })
           : null;
       return { paths, profile };
     })();

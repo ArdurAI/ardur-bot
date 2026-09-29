@@ -166,6 +166,7 @@ export class BoardRunner {
       return seatbeltProfile({
         paths: await resolveGuardrailPaths(guard.paths),
         ports: guard.ports,
+        sockets: await resolveGuardrailPaths(guard.sockets),
       });
     })();
     return this.guardProfile;

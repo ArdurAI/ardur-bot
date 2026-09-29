@@ -43,7 +43,11 @@ describe("native platform launch policy", () => {
 
 describe("guardNativeSpawn", () => {
   const base = vi.fn() as unknown as NativeSpawn;
-  const guard = { paths: ["/fixture/user-data/secrets.env"], ports: [55433] };
+  const guard = {
+    paths: ["/fixture/user-data/secrets.env"],
+    ports: [55433],
+    sockets: ["/fixture/run/docker.sock"],
+  };
   it("wraps the launch with sandbox-exec on macOS", () => {
     const start = guardNativeSpawn(base, guard, "darwin");
     start("/fixture/bin/claude", ["-p"], "/fixture/work");
@@ -52,6 +56,7 @@ describe("guardNativeSpawn", () => {
     expect(args[0]).toBe("-p");
     expect(args[1]).toContain('(subpath "/fixture/user-data/secrets.env")');
     expect(args[1]).toContain('(remote ip "localhost:55433")');
+    expect(args[1]).toContain('(remote unix-socket (literal "/fixture/run/docker.sock"))');
     expect(args.slice(2)).toEqual(["/fixture/bin/claude", "-p"]);
     expect(cwd).toBe("/fixture/work");
   });
@@ -60,7 +65,7 @@ describe("guardNativeSpawn", () => {
       guardNativeSpawn(base, guard, "linux"),
       guardNativeSpawn(base, guard, "win32"),
       guardNativeSpawn(base, undefined, "darwin"),
-      guardNativeSpawn(base, { paths: [], ports: [] }, "darwin"),
+      guardNativeSpawn(base, { paths: [], ports: [], sockets: [] }, "darwin"),
     ]) {
       start("/fixture/bin/claude", ["-p"], "/fixture/work");
       const [binary, args] = (base as unknown as ReturnType<typeof vi.fn>).mock.calls.at(-1)!;

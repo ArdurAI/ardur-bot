@@ -54,6 +54,8 @@ describe("desktop host service", () => {
     const paths = hostGuardPaths("/fixture/user-data");
     expect(paths).toContain("/fixture/user-data/secrets.env");
     expect(paths).toContain("/fixture/user-data/postgres");
+    // A local-data reset moves the old secrets and cluster aside; the moved copies stay denied.
+    expect(paths).toContain("/fixture/user-data/backups");
     expect(paths).toContain(path.join("/fixture/user-data", "stack", ".env"));
     expect(paths).toContain(path.join("/fixture/user-data", "stack", ".desktop-stack-token"));
     expect(paths).toContain(path.join("/fixture/user-data", "host-service", "host-service.enc"));

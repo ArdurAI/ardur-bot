@@ -6,7 +6,9 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { MigrationApplyError, MigrationHistoryError } from "@ardurbot/db/migrate";
+import { isGuardedPath } from "@ardurbot/host-runtime/host-guardrails";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { hostGuardPaths } from "./host-service.js";
 import { localFoldersFile } from "./local-folders.js";
 import { appendCappedLog, LOG_CAP_BYTES, writeServiceLog } from "./local-logs.js";
 import {
@@ -690,6 +692,34 @@ describe("reset", () => {
     expect(initialised).toHaveLength(1);
     expect(await readFile(path.join(root, "secrets.env"), "utf8")).toMatch(/^POSTGRES_PASSWORD=/m);
     await controller.stop();
+  });
+
+  it("keeps the moved secrets on the host guardrail deny list after a reset", async () => {
+    const root = await userData();
+    await mkdir(path.join(root, "postgres"), { recursive: true });
+    await writeFile(path.join(root, "postgres", "PG_VERSION"), "16\n");
+    await mkdir(path.join(root, "data"), { recursive: true });
+    await writeFile(path.join(root, "secrets.env"), "POSTGRES_PASSWORD=a\n");
+    const controller = new LocalModeController(
+      harness(root, {
+        allocatePort: async () => 23456,
+        portAvailable: async () => true,
+        now: () => Date.UTC(2026, 8, 25, 10, 30),
+        postgresFactory: () => runningPostgres(),
+      }),
+    );
+    const backup = await controller.resetData();
+    // The live copies moved aside; what a later host command must not read is the backup.
+    expect(await readFile(path.join(backup, "secrets.env"), "utf8")).toBe("POSTGRES_PASSWORD=a\n");
+    const denied = hostGuardPaths(root);
+    expect(isGuardedPath(denied, path.join(backup, "secrets.env"))).toBe(true);
+    expect(isGuardedPath(denied, path.join(backup, "postgres", "PG_VERSION"))).toBe(true);
+    expect(isGuardedPath(denied, path.join(backup, "data", "note.txt"))).toBe(true);
+    // The folders host work and the next start still need are not swept in.
+    expect(
+      isGuardedPath(denied, path.join(root, "data", "desktop-computers", "bot", "f.txt")),
+    ).toBe(false);
+    expect(isGuardedPath(denied, path.join(root, "data", "board", "space", "b.db"))).toBe(false);
   });
 
   const unmovable =

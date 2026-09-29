@@ -36,7 +36,11 @@ import { engineFailureReason } from "./fleet/probe.js";
 import { systemFleetProcess } from "./fleet/process.js";
 import { FleetService } from "./fleet/service.js";
 import { getHostEnvironment, inspectHostEnvironment } from "./host-environment.js";
-import { type HostGuardrailConfig, loopbackPortOf } from "./host-guardrails.js";
+import {
+  containerEngineGuard,
+  type HostGuardrailConfig,
+  loopbackPortOf,
+} from "./host-guardrails.js";
 import { inspectHostIntegrations } from "./host-integrations.js";
 import { HostMcpServers } from "./host-mcp.js";
 import { confinedHostCwd } from "./host-policy.js";
@@ -103,17 +107,19 @@ export class HostAgent {
     >,
   ) {
     this.fleet = new FleetService(config.root, config.token ?? randomUUID());
-    this.mcp = new HostMcpServers(config.mcpServers);
+    const engine = containerEngineGuard();
     this.guard = {
       paths: config.guardPaths ?? [],
       ports: [
         ...new Set(
-          [...(config.guardPorts ?? []), loopbackPortOf(config.apiUrl)].filter(
+          [...(config.guardPorts ?? []), ...engine.ports, loopbackPortOf(config.apiUrl)].filter(
             (port): port is number => port !== undefined,
           ),
         ),
       ],
+      sockets: engine.sockets,
     };
+    this.mcp = new HostMcpServers(config.mcpServers, this.guard);
     const start: NativeSpawn = guardNativeSpawn(spawnNative, this.guard);
     this.runtimes = runtimes ?? {
       "claude-code": new ClaudeCodeRuntime(start),

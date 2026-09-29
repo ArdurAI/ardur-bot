@@ -111,10 +111,18 @@ export function hermesLaunchArgv(
   guard?: HostGuardrailConfig,
   platform: NodeJS.Platform = process.platform,
 ): string[] {
-  if (platform !== "darwin" || !guard || (!guard.paths.length && !guard.ports.length))
+  if (
+    platform !== "darwin" ||
+    !guard ||
+    (!guard.paths.length && !guard.ports.length && !guard.sockets.length)
+  )
     return [python, "-B", launcher];
   return seatbeltArgv(
     [python, "-B", launcher],
-    seatbeltProfile({ paths: resolveGuardrailPathsSync(guard.paths), ports: guard.ports }),
+    seatbeltProfile({
+      paths: resolveGuardrailPathsSync(guard.paths),
+      ports: guard.ports,
+      sockets: resolveGuardrailPathsSync(guard.sockets),
+    }),
   );
 }

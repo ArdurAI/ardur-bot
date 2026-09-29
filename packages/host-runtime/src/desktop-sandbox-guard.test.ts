@@ -43,7 +43,7 @@ function processStub(code = 0) {
 }
 
 async function fixture(opts: {
-  guard?: { paths: string[]; ports: number[] };
+  guard?: { paths: string[]; ports: number[]; sockets: string[] };
   platform?: NodeJS.Platform;
 }) {
   const root = await realpath(await mkdtemp(path.join(tmpdir(), "host-guard-")));
@@ -65,6 +65,7 @@ async function fixture(opts: {
     guard: opts.guard ?? {
       paths: [path.join(root, "control-plane")],
       ports: [55433],
+      sockets: [path.join(root, "control-plane", "engine.sock")],
     },
     ...(opts.platform ? { platform: opts.platform } : {}),
   });
@@ -92,6 +93,9 @@ it("wraps host commands in sandbox-exec on macOS with the computed deny profile"
   expect(profile).toContain("(allow default)");
   expect(profile).toContain(`(subpath "${path.join(root, "control-plane")}")`);
   expect(profile).toContain('(remote ip "localhost:55433")');
+  expect(profile).toContain(
+    `(remote unix-socket (literal "${path.join(root, "control-plane", "engine.sock")}"))`,
+  );
   // The real command follows the profile untouched.
   expect(args.slice(2)).toEqual([path.join(root, "echo"), "hi"]);
 });
@@ -106,7 +110,10 @@ it("runs commands unwrapped off macOS without implying protection", async () => 
 });
 
 it("runs unwrapped when no guardrail is configured", async () => {
-  const { root, execute } = await fixture({ guard: { paths: [], ports: [] }, platform: "darwin" });
+  const { root, execute } = await fixture({
+    guard: { paths: [], ports: [], sockets: [] },
+    platform: "darwin",
+  });
   fake.spawn.mockImplementation(() => processStub());
   await execute({ argv: ["echo", "hi"] });
   expect(fake.spawn.mock.calls[0]![0]).toBe(path.join(root, "echo"));
@@ -114,7 +121,7 @@ it("runs unwrapped when no guardrail is configured", async () => {
 
 it("fails the command closed when the guardrail profile cannot be built", async () => {
   const { execute } = await fixture({
-    guard: { paths: [], ports: [70000] },
+    guard: { paths: [], ports: [70000], sockets: [] },
     platform: "darwin",
   });
   const events = await execute({ argv: ["echo", "hi"] });

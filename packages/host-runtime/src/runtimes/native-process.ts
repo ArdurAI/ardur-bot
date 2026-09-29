@@ -55,12 +55,18 @@ export function guardNativeSpawn(
   guard: HostGuardrailConfig | undefined,
   platform: NodeJS.Platform = process.platform,
 ): NativeSpawn {
-  if (platform !== "darwin" || !guard || (!guard.paths.length && !guard.ports.length)) return base;
+  if (
+    platform !== "darwin" ||
+    !guard ||
+    (!guard.paths.length && !guard.ports.length && !guard.sockets.length)
+  )
+    return base;
   let built: string | undefined;
   const profile = () =>
     (built ??= seatbeltProfile({
       paths: resolveGuardrailPathsSync(guard.paths),
       ports: guard.ports,
+      sockets: resolveGuardrailPathsSync(guard.sockets),
     }));
   return (binary, args, cwd) => {
     const wrapped = seatbeltArgv([binary, ...args], profile());

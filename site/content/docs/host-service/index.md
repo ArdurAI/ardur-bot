@@ -99,21 +99,29 @@ sequenceDiagram
   Native Claude/Codex operations keep their fixed adapter arguments.
 - On macOS, host commands additionally run under the host command guardrail
   (`packages/host-runtime/src/host-guardrails.ts`). Every command, background launch,
-  native runtime turn (Claude Code, Codex, Antigravity) and pinned Hermes launch is
-  executed through `/usr/bin/sandbox-exec` with a Seatbelt profile generated per process
-  from the running configuration — the mechanism the Codex CLI and Claude Code sandboxes
-  use on macOS, although `sandbox-exec` is marked DEPRECATED in its own man page. The
-  profile is `(allow default)` plus targeted denies, so ordinary work is untouched while
-  the deny list blocks reads and writes of Ardur's control plane: the env file the stack
-  loaded (recorded as `ARDURBOT_ENV_FILE`), the desktop `secrets.env`, the Postgres data
-  directory, the compose stack's `.env` and stack token, the encrypted host pairing store,
-  and the app-managed state under `DATA_DIR` (everything except the bots' own
-  `desktop-computers` homes and the `board` databases that host board commands write).
-  It also denies outbound connections to the loopback ports of the database, the API and
-  the sandbox supervisor, taken from `DATABASE_URL`, `API_PORT`/`API_URL` and
-  `SANDBOX_SUPERVISOR_URL`; a database or API on another host is out of scope. The
-  in-process file tools apply the same path deny list on every platform, so a registered
-  folder that contains a protected file still cannot serve it.
+  native runtime turn (Claude Code, Codex, Antigravity), pinned Hermes launch and
+  owner-registered local MCP server process is executed through `/usr/bin/sandbox-exec`
+  with a Seatbelt profile generated per process from the running configuration — the
+  mechanism the Codex CLI and Claude Code sandboxes use on macOS, although `sandbox-exec`
+  is marked DEPRECATED in its own man page. The profile is `(allow default)` plus
+  targeted denies, so ordinary work is untouched while the deny list blocks reads and
+  writes of Ardur's control plane: the env file the stack loaded (recorded as
+  `ARDURBOT_ENV_FILE`), the desktop `secrets.env`, the Postgres data directory (the
+  desktop cluster, or every database file in `DATA_DIR` on a source checkout, where the
+  embedded cluster and the dev `credentials.json` sit beside the app state), the compose
+  stack's `.env` and stack token, the encrypted host pairing store, the local-data reset
+  backups under `backups/`, and the app-managed state under `DATA_DIR` (everything except
+  the bots' own `desktop-computers` homes and the `board` databases that host board
+  commands write). It also denies outbound connections to the loopback ports of the
+  database, the API and the sandbox supervisor, taken from `DATABASE_URL`,
+  `API_PORT`/`API_URL` and `SANDBOX_SUPERVISOR_URL`; a database or API on another host is
+  out of scope. Finally it denies connections to the local container-engine sockets — the
+  default Docker socket, Docker Desktop's user sockets, Colima, OrbStack and Podman
+  machine sockets, and whatever `DOCKER_HOST` or `CONTAINER_HOST` points at — because an
+  engine socket is root-equivalent and reaches the stack's own containers and the secrets
+  in their environment. A bot that needs containers belongs on a Docker or VM computer,
+  not on This Mac. The in-process file tools apply the same path deny list on every
+  platform, so a registered folder that contains a protected file still cannot serve it.
 - The guardrail is deliberately narrow. It is not a workspace sandbox: everything else on
   the host remains reachable to commands, including the owner's other files, and it does
   not stop a command from using the owner's signed-in CLI accounts or the network beyond
