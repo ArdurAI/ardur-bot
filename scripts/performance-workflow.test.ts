@@ -105,7 +105,56 @@ ${script}`,
   );
 }
 
+async function compareTimings(verdict: number) {
+  const root = await mkdtemp(path.join(os.tmpdir(), "performance-timings-"));
+  const runnerTemp = path.join(root, "runner");
+  await mkdir(path.join(root, ".context/performance"), { recursive: true });
+  await mkdir(runnerTemp);
+  for (const file of [
+    path.join(runnerTemp, "proxy-before.json"),
+    path.join(runnerTemp, "browser-before.json"),
+    path.join(root, ".context/performance/proxy-after.json"),
+    path.join(root, ".context/performance/browser.json"),
+  ])
+    await writeFile(file, "{}\n");
+  try {
+    // GitHub runs `shell: bash` steps with errexit and pipefail.
+    return spawnSync(
+      "bash",
+      [
+        "-e",
+        "-o",
+        "pipefail",
+        "-c",
+        `node() { printf 'node %s\n' "$*"; return "$VERDICT"; }
+${stepScript("Warn on timing regressions above twenty percent")}`,
+      ],
+      {
+        cwd: root,
+        encoding: "utf8",
+        env: { ...process.env, RUNNER_TEMP: runnerTemp, VERDICT: String(verdict) },
+      },
+    );
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}
+
 describe("advisory performance workflow", () => {
+  it("compares both timing reports and keeps incomplete evidence advisory", async () => {
+    const passed = await compareTimings(0);
+    expect(passed.status, passed.stderr).toBe(0);
+    expect(passed.stdout.match(/node scripts\/performance-budget\.mjs/g)).toHaveLength(2);
+    expect(passed.stdout).not.toContain("::warning");
+    const incomplete = await compareTimings(2);
+    expect(incomplete.status, incomplete.stderr).toBe(0);
+    expect(incomplete.stdout.match(/::warning/g)).toHaveLength(2);
+  });
+  it("still fails the timing step on a known regression", async () => {
+    const regressed = await compareTimings(1);
+    expect(regressed.status).toBe(1);
+    expect(regressed.stdout.match(/node scripts\/performance-budget\.mjs/g)).toHaveLength(1);
+  });
   it("measures the base revision with the candidate's harness and its own production code", async () => {
     const measured = await prepareBase("measure");
     try {

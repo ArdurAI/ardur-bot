@@ -145,7 +145,14 @@ jobs:
             after=".context/performance/${kind}-after.json"
             if [[ "$kind" == browser ]]; then after=.context/performance/browser.json; fi
             if [[ -f "$before" && -f "$after" ]]; then
-              node scripts/performance-budget.mjs "$before" "$after"
+              # Two-file summaries always read as incomplete: they cannot establish a paired verdict.
+              verdict=0
+              node scripts/performance-budget.mjs "$before" "$after" || verdict=$?
+              case "$verdict" in
+                0) ;;
+                2) echo "::warning title=Performance baseline::Incomplete $kind evidence; timings remain advisory." ;;
+                *) exit "$verdict" ;;
+              esac
             else
               echo "::warning title=Performance baseline::Missing $kind report; timings remain unverified."
             fi

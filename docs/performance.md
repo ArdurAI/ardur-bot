@@ -455,6 +455,8 @@ browser contexts with HTTP cache disabled, using the shell's existing `rk:render
 mark. That is navigation to painted authenticated shell, not OS process cold start. Composer-submit
 to the first streamed token appearing in the DOM is recorded separately. It compares the previous
 revision and current revision on the same Ubuntu runner, and emits warnings above **20%**.
+Those comparisons read two-file summaries, which are always incomplete evidence, so the step
+reports incomplete as a warning; only a known regression fails it.
 
 The browser test captures Playwright traces and Chromium timeline traces for message arrival,
 bot switching, and both side-panel transitions. Animation-frame markers within those traces report
