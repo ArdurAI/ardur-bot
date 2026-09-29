@@ -21,6 +21,20 @@ const capturedConfig = {
 
 test("the Hermes short panel and Advanced editor share one draft", async ({ page }, testInfo) => {
   await installPerformanceFixture(page);
+  // The shared fixture answers every runtime probe with an empty list. The settings
+  // form reads that result's model list, so Hermes never stays on screen.
+  await page.route("**/rpc/runtimes/availability", (route) =>
+    route.fulfill({
+      json: {
+        json: {
+          runtimeKind: "hermes",
+          available: false,
+          reason: "Hermes is not installed on this computer.",
+          models: [],
+        },
+      },
+    }),
+  );
   await page.route("**/rpc/runtimeConfig/preview", (route) =>
     route.fulfill({
       json: {
@@ -51,8 +65,11 @@ test("the Hermes short panel and Advanced editor share one draft", async ({ page
     }),
   );
   await page.goto("/app/fixture-bot-0");
+  await expect(page.getByTestId("shell-root")).toHaveAttribute("data-ready", "true");
   await page.getByTestId("bot-settings-trigger").click();
   const settings = page.getByTestId("bot-settings");
+  await expect(settings).toBeVisible();
+  await expect(settings.getByRole("combobox", { name: "Runs on" })).toBeVisible();
   await settings.getByRole("combobox", { name: "Runs on" }).selectOption("hermes");
 
   const panel = settings.getByTestId("runtime-config-panel");
@@ -79,6 +96,7 @@ test("the Hermes short panel and Advanced editor share one draft", async ({ page
   await expect(settings.getByRole("button", { name: "Save", exact: true })).toBeEnabled();
   await expect(json).toHaveValue(/"maxProviderRequests": 16/);
   await captureScreenshot(page, testInfo, "runtime-config-advanced");
+  await page.unrouteAll({ behavior: "ignoreErrors" });
 });
 
 test("a group shows captured runtime settings and refreshes them from the bot", async ({
@@ -88,11 +106,14 @@ test("a group shows captured runtime settings and refreshes them from the bot", 
   await completeOnboarding(page);
   await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
   const botId = await createNamedBot(page, "Config bot");
+  const partnerId = await createNamedBot(page, "Config partner");
   const group = await rpc<Group>(page, "groups/create", {
     name: "Config room",
-    botIds: [botId],
+    botIds: [botId, partnerId],
   });
-  const member = group.members.find((entry) => entry.botId === botId)!;
+  const memberId = group.members.find((entry) => entry.botId === botId)?.memberId;
+  const partnerMemberId = group.members.find((entry) => entry.botId === partnerId)?.memberId;
+  if (!memberId || !partnerMemberId) throw new Error("group is missing a member");
 
   const hermesBot = {
     runtimeKind: "hermes",
@@ -114,12 +135,13 @@ test("a group shows captured runtime settings and refreshes them from the bot", 
   };
   const patchBot = (bots: Bot[]) =>
     bots.map((bot) => (bot.id === botId ? { ...bot, ...hermesBot } : bot));
-  const patchGroup = (entry: Group): Group => ({
-    ...entry,
-    members: entry.members.map((item) =>
+  let groupState: Group = {
+    ...group,
+    members: group.members.map((item) =>
       item.botId === botId ? { ...item, modelPinRevision: 1, runtimePin: hermesPin } : item,
     ),
-  });
+  };
+  const patchGroup = (entry: Group): Group => (entry.id === group.id ? groupState : entry);
   await page.route("**/rpc/bootstrap", async (route) => {
     const response = await route.fetch();
     const body = (await response.json()) as { json: AppBootstrap };
@@ -141,6 +163,7 @@ test("a group shows captured runtime settings and refreshes them from the bot", 
   });
 
   await page.goto(`/app/g/${group.id}`);
+  await expect(page.getByTestId("shell-root")).toHaveAttribute("data-ready", "true");
   await page.getByTestId("bot-settings-trigger").click();
   const control = page.getByTestId(`group-model-${botId}`);
   await control.getByText("Runtime settings", { exact: true }).click();
@@ -150,17 +173,43 @@ test("a group shows captured runtime settings and refreshes them from the bot", 
   await expect(control.getByText("Captured for this group.")).toBeVisible();
   await captureScreenshot(page, testInfo, "runtime-config-group-captured");
 
+  await page.route("**/rpc/groups/setMemberModelPin", async (route) => {
+    groupState = {
+      ...group,
+      members: group.members.map((item) =>
+        item.botId === botId
+          ? {
+              ...item,
+              modelPinRevision: 3,
+              runtimePin: {
+                ...hermesPin,
+                revision: 3,
+                runtimeConfig: botConfig,
+              },
+            }
+          : item,
+      ),
+    };
+    await route.fulfill({
+      status: 200,
+      json: { json: groupState },
+    });
+  });
+
   const refresh = page.waitForRequest(
     (request) =>
       request.url().includes("/rpc/groups/setMemberModelPin") && request.method() === "POST",
   );
-  await page.route("**/rpc/groups/setMemberModelPin", async (route) => {
-    const response = await route.fetch();
-    const body = (await response.json()) as { json: Group };
-    await route.fulfill({ response, json: body });
-  });
+  const responded = page.waitForResponse(
+    (response) =>
+      response.url().includes("/rpc/groups/setMemberModelPin") &&
+      response.request().method() === "POST",
+  );
   await control.getByRole("button", { name: "Use bot runtime settings" }).click();
   const request = await refresh;
+  const response = await responded;
+  expect(response.ok()).toBe(true);
+  expect(response.status()).toBe(200);
   const sent = request.postDataJSON() as {
     json: {
       botId: string;
@@ -171,7 +220,7 @@ test("a group shows captured runtime settings and refreshes them from the bot", 
     };
   };
   expect(sent.json.botId).toBe(botId);
-  expect(sent.json.memberId).toBe(member.memberId);
+  expect(sent.json.memberId).toBe(memberId);
   expect(sent.json.expectedRevision).toBe(1);
   expect(sent.json.expectedBotModelPinRevision).toBe(3);
   expect(sent.json.pin).toMatchObject({
@@ -179,4 +228,9 @@ test("a group shows captured runtime settings and refreshes them from the bot", 
     provider: "openai-compatible",
     modelId: "fixture-model",
   });
+  await expect(control.getByText("Model calls per turn: 10")).toBeVisible();
+  await expect(control.getByText("Time limit (seconds): 60")).toBeVisible();
+  await expect(control.getByText("Context limit (KiB): 32")).toBeVisible();
+  await expect(control.getByRole("button", { name: "Use bot runtime settings" })).toHaveCount(0);
+  await page.unrouteAll({ behavior: "ignoreErrors" });
 });

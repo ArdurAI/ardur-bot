@@ -346,6 +346,7 @@ describe("explicit memory intents", () => {
         botId: "bot",
         threadId: "thread",
         tools: "none",
+        singleRequest: true,
         history: [],
         prompt: expect.stringContaining('"intent":"memory-edit"'),
       }),

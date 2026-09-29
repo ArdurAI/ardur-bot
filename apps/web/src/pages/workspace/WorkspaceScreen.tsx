@@ -27,12 +27,12 @@ export function WorkspaceScreen({
         data-testid="computer-preview"
         className="group relative aspect-[16/10] overflow-hidden rounded-xl bg-muted"
       >
-        {error ? (
-          <div className="grid h-full place-items-center p-4 text-sm">{error}</div>
-        ) : open ? (
+        {open ? (
           <div className="grid h-full place-items-center text-sm text-muted-foreground">
             {t`Open in full window`}
           </div>
+        ) : error ? (
+          <div className="grid h-full place-items-center p-4 text-sm">{error}</div>
         ) : computer?.state === "running" && url && visible ? (
           <iframe
             title={t`Bot screen preview`}

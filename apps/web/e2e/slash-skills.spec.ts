@@ -3,7 +3,7 @@ import { captureScreenshot, completeOnboarding, rpc, signup } from "./helpers";
 
 test("composer / picker lists skills above actions", async ({ page }, testInfo) => {
   const stamp = Date.now();
-  await signup(page, `slash-skills-${stamp}@ardurbot.test`, "password12", "Slash Skills");
+  await signup(page, `slash-skills-${stamp}@example.test`, "password12", "Slash Skills");
   await completeOnboarding(page);
   await page.waitForURL(/\/app\/(?!bots$)[^/]+$/);
 

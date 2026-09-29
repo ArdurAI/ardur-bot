@@ -154,11 +154,6 @@ msgstr "{0} execuções · {1} tokens"
 msgid "{0} runs at these pins; hosted providers may bill per run"
 msgstr ""
 
-#. placeholder {0}: counts.pendingCount
-#: src/pages/LearningInbox.tsx
-msgid "{0} suggestions to review"
-msgstr ""
-
 #. placeholder {0}: bot.name
 #: src/pages/ExternalConversationSettings.tsx
 msgid "{0} will still respond to direct mentions."
@@ -253,6 +248,10 @@ msgstr ""
 msgid "{hours}h ago"
 msgstr "{hours}h atrás"
 
+#: src/pages/LearningInbox.tsx
+msgid "{learned, plural, one {learned # thing this week} other {learned # things this week}}"
+msgstr "{learned, plural, one {aprendeu # coisa esta semana} other {aprendeu # coisas esta semana}}"
+
 #: src/pages/storage/StorageSettings.tsx
 msgid "{location} · Docker not running"
 msgstr ""
@@ -276,13 +275,17 @@ msgstr "{name} terminou"
 msgid "{name} needs your input"
 msgstr ""
 
+#: src/pages/LearningInbox.tsx
+msgid "{pending, plural, one {# suggestion to review} other {# suggestions to review}}"
+msgstr "{pending, plural, one {# sugestão para revisar} other {# sugestões para revisar}}"
+
 #: src/components/composer/ComposerMenu.tsx
 msgid "{reconnectCount} need reconnection"
 msgstr ""
 
 #: src/pages/dashboard/UsagePanel.tsx
-msgid "{records} usage records"
-msgstr "{records} registros de uso"
+msgid "{records, plural, one {# usage record} other {# usage records}}"
+msgstr "{records, plural, one {# registro de uso} other {# registros de uso}}"
 
 #: src/components/teach/TeachRecordingChrome.tsx
 msgid "{remaining} left · bot is watching, not acting"
@@ -309,8 +312,8 @@ msgid "{title}, {label}"
 msgstr "{title}, {label}"
 
 #: src/pages/dashboard/UsagePanel.tsx
-msgid "{tokens} tokens"
-msgstr ""
+msgid "{tokens, plural, one {# token} other {# tokens}}"
+msgstr "{tokens, plural, one {# símbolo} other {# símbolos}}"
 
 #: src/pages/PluginsOverlay.tsx
 msgid "{toolCount, plural, one {# tool} other {# tools}}"
@@ -1150,8 +1153,9 @@ msgstr ""
 #: src/pages/customize/McpConfigEditor.tsx
 #: src/pages/PluginsOverlay.tsx
 #: src/pages/RoutineEditor.tsx
+#: src/pages/Shell.tsx
 msgid "Back"
-msgstr ""
+msgstr "Voltar"
 
 #: src/pages/capabilities/CapabilitiesSettings.tsx
 msgid "Back to capabilities"
@@ -1317,8 +1321,9 @@ msgid "Bot screen preview"
 msgstr "Pré-visualização da tela"
 
 #: src/pages/BotContextMenu.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Bot settings"
-msgstr ""
+msgstr "Configurações do bot"
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Bot to link"
@@ -1605,6 +1610,10 @@ msgstr ""
 #: src/pages/fleet/FleetSettings.tsx
 msgid "Checked {0}"
 msgstr "Verificado em {0}"
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Checking the download"
+msgstr "Verificando o download"
 
 #: src/components/DesktopUpdates.tsx
 #: src/components/OllamaSettings.tsx
@@ -1909,10 +1918,10 @@ msgstr ""
 msgid "Compare bots"
 msgstr ""
 
+#: src/components/composer/ComposerMenu.tsx
 #: src/pages/CompareStart.tsx
-#: src/pages/Shell.tsx
 msgid "Compare with…"
-msgstr ""
+msgstr "Comparar com…"
 
 #: src/pages/ScratchpadSection.tsx
 msgid "Complete"
@@ -2941,7 +2950,7 @@ msgstr ""
 
 #: src/pages/CompareStart.tsx
 msgid "Could not start comparison; retry."
-msgstr ""
+msgstr "Não foi possível iniciar a comparação; tente novamente."
 
 #: src/pages/CompareStart.tsx
 msgid "Could not start comparison; review the pins and retry."
@@ -3053,6 +3062,10 @@ msgstr ""
 #: src/pages/settings/UploadedFiles.tsx
 msgid "Could not update uploaded files."
 msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Couldn't install Hermes. Try again."
+msgstr "Não foi possível instalar o Hermes. Tente de novo."
 
 #: src/pages/MessagingSettingsOverlay.tsx
 msgid "Couldn't load messaging settings"
@@ -3430,6 +3443,10 @@ msgstr ""
 msgid "Developer (git, GitHub and GitLab CLIs, node, jq)"
 msgstr ""
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Developer image"
+msgstr ""
+
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Developer is a larger download and uses more disk space."
 msgstr ""
@@ -3623,9 +3640,17 @@ msgstr "Baixar como markdown"
 msgid "Download Executor"
 msgstr ""
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Downloading"
+msgstr "Baixando"
+
 #: src/components/DesktopUpdates.tsx
 msgid "Downloading…"
 msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Downloads Hermes 0.21.0 from GitHub and about 200 MB of Python packages."
+msgstr "Baixa o Hermes 0.21.0 do GitHub e cerca de 200 MB de pacotes Python."
 
 #: src/components/teach/SkillDraftCard.tsx
 msgid "Draft skill"
@@ -4032,6 +4057,10 @@ msgstr "concluído"
 msgid "Finished"
 msgstr ""
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Finishing"
+msgstr "Concluindo"
+
 #: src/pages/McpOAuthCallback.tsx
 msgid "Finishing MCP connection…"
 msgstr "Finalizando conexão MCP…"
@@ -4083,6 +4112,10 @@ msgstr ""
 #: src/pages/Auth.tsx
 msgid "Forgot password?"
 msgstr "Esqueceu a senha?"
+
+#: src/pages/Shell.tsx
+msgid "Forward"
+msgstr "Avançar"
 
 #: src/pages/import/LocalImportPage.tsx
 msgid "Found on this computer"
@@ -4191,6 +4224,7 @@ msgstr ""
 
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Group"
 msgstr "Grupo"
 
@@ -4198,7 +4232,7 @@ msgstr "Grupo"
 msgid "Group brief"
 msgstr "Resumo do grupo"
 
-#: src/pages/GroupPanel.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Group settings"
 msgstr "Configuração do grupo"
 
@@ -4263,6 +4297,10 @@ msgstr "O Hermes ainda não oferece suporte a esta conexão."
 msgid "Hermes is not installed on this computer."
 msgstr "O Hermes não está instalado neste computador."
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Hermes isn't available on Windows yet."
+msgstr "O Hermes ainda não está disponível no Windows."
+
 #: src/pages/shell/bot-panel.tsx
 msgid "Hermes runs with this computer's access."
 msgstr "O Hermes é executado com o acesso deste computador."
@@ -4273,7 +4311,7 @@ msgstr "Olá, é assim que vou soar quando ler as respostas em voz alta."
 
 #: src/pages/Shell.tsx
 msgid "Hide bots"
-msgstr ""
+msgstr "Ocultar bots"
 
 #: src/pages/customize/McpDiagnostics.tsx
 msgid "Hide logs"
@@ -4361,6 +4399,10 @@ msgstr ""
 
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Image profile"
+msgstr ""
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Image pull secret"
 msgstr ""
 
 #: src/pages/shell/avatar-studio-popover.tsx
@@ -4503,6 +4545,10 @@ msgstr ""
 msgid "Install Beads"
 msgstr ""
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Install Hermes"
+msgstr "Instalar o Hermes"
+
 #: src/pages/customize/PluginsPage.tsx
 msgid "Installed"
 msgstr ""
@@ -4522,6 +4568,10 @@ msgstr "Instalado, mas parado"
 #: src/pages/customize/PluginsPage.tsx
 msgid "Installing"
 msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Installing packages"
+msgstr "Instalando pacotes"
 
 #: src/pages/memory-providers/SupermemorySettingsForm.tsx
 msgid "Instance API key"
@@ -4751,11 +4801,6 @@ msgstr "Saiba mais"
 msgid "Learn more about {title}"
 msgstr "Saiba mais sobre {title}"
 
-#. placeholder {0}: counts.appliedThisWeek
-#: src/pages/LearningInbox.tsx
-msgid "learned {0} things this week"
-msgstr ""
-
 #: src/pages/customize/SkillsPage.tsx
 msgid "Learned skills"
 msgstr ""
@@ -4763,7 +4808,6 @@ msgstr ""
 #: src/pages/dashboard/LearningDialog.tsx
 #: src/pages/dashboard/panels.ts
 #: src/pages/KnowledgeSection.tsx
-#: src/pages/LearningInbox.tsx
 #: src/pages/settings-sections.ts
 #: src/pages/shell/runtime-config-panel.tsx
 msgid "Learning"
@@ -4773,6 +4817,10 @@ msgstr ""
 #: src/pages/settings/PrivacySettings.tsx
 msgid "Learning consent"
 msgstr ""
+
+#: src/pages/LearningInbox.tsx
+msgid "Learning for this space"
+msgstr "Aprendizado para este espaço"
 
 #: src/pages/MemoryHistory.tsx
 msgid "Learning grant"
@@ -5012,6 +5060,11 @@ msgstr ""
 msgid "low — quick, with a little checking"
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/HostComputerPrompt.tsx
+msgid "macOS will not ask for extra permission if you let bots run on this Mac. They run as you."
+msgstr "O macOS não pedirá permissão extra se você permitir que os bots sejam executados neste Mac. Eles são executados como você."
+
 #: src/pages/board/BoardsSettings.tsx
 msgid "Make default"
 msgstr "Definir como padrão"
@@ -5137,6 +5190,7 @@ msgstr ""
 #: src/pages/memory/MemoryProposals.tsx
 #: src/pages/MemorySettingsOverlay.tsx
 #: src/pages/settings-sections.ts
+#: src/pages/shell/bot-panel.tsx
 msgid "Memory"
 msgstr "Memória"
 
@@ -5536,6 +5590,7 @@ msgstr ""
 msgid "New access token"
 msgstr ""
 
+#: src/pages/Shell.tsx
 #: src/pages/shell/bot-panel.tsx
 msgid "New bot"
 msgstr "Novo bot"
@@ -6235,6 +6290,10 @@ msgstr ""
 msgid "Park"
 msgstr "Suspender"
 
+#: src/pages/dashboard/UsagePanel.tsx
+msgid "Partially reported"
+msgstr "Parcialmente reportado"
+
 #: src/components/AskCard.tsx
 #: src/pages/account/AccountSignIn.tsx
 #: src/pages/Auth.tsx
@@ -6350,6 +6409,7 @@ msgstr ""
 msgid "Port"
 msgstr ""
 
+#: src/pages/dashboard/LearningPanel.tsx
 #: src/pages/LearningInbox.tsx
 msgid "Possible regression — review undo"
 msgstr ""
@@ -6454,8 +6514,9 @@ msgstr ""
 #: src/pages/account/AccountProfile.tsx
 #: src/pages/memory/MemoryDocuments.tsx
 #: src/pages/memory/MemoryProposals.tsx
+#: src/pages/shell/bot-panel.tsx
 msgid "Profile"
-msgstr ""
+msgstr "Perfil"
 
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Project ID"
@@ -6481,6 +6542,7 @@ msgstr ""
 msgid "Propose on a branch"
 msgstr ""
 
+#: src/pages/dashboard/LearningPanel.tsx
 #: src/pages/LearningInbox.tsx
 msgid "Proposed consolidation"
 msgstr ""
@@ -6601,6 +6663,10 @@ msgstr ""
 #: src/pages/dashboard/WorkPanel.tsx
 msgid "Ready"
 msgstr ""
+
+#: src/pages/shell/runtime-settings.tsx
+msgid "Ready. The bot can use Hermes."
+msgstr "Pronto. O bot pode usar o Hermes."
 
 #: src/pages/ModelSettingsOverlay.tsx
 #: src/pages/Onboarding.tsx
@@ -7718,11 +7784,16 @@ msgstr ""
 msgid "Set up servers"
 msgstr ""
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "Setting up Python"
+msgstr "Configurando o Python"
+
 #: src/pages/dashboard/DashboardAccountArea.tsx
 #: src/pages/MessagingSettingsOverlay.tsx
 #: src/pages/settings-sections.ts
 #: src/pages/SettingsOverlay.tsx
 #: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Settings"
 msgstr "Configurações"
 
@@ -7766,11 +7837,11 @@ msgstr ""
 
 #: src/pages/Shell.tsx
 msgid "Show bots"
-msgstr ""
+msgstr "Mostrar bots"
 
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Show computer"
-msgstr ""
+msgstr "Mostrar computador"
 
 #: src/pages/system/SystemPage.tsx
 msgid "Show in the menu bar."
@@ -7788,7 +7859,7 @@ msgstr "Mostrar mais"
 msgid "Show password"
 msgstr ""
 
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Show settings"
 msgstr "Mostrar configurações"
 
@@ -8028,6 +8099,10 @@ msgstr ""
 msgid "Standard"
 msgstr ""
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Standard image"
+msgstr ""
+
 #: src/components/composer/command-description.ts
 msgid "Start a new chat"
 msgstr ""
@@ -8219,8 +8294,8 @@ msgid "System"
 msgstr "Sistema"
 
 #: src/pages/ide/terminal.tsx
-#: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
+#: src/pages/shell/take-control-button.tsx
 msgid "Take control"
 msgstr "Assumir o controle"
 
@@ -8366,6 +8441,10 @@ msgstr "Não foi possível criar o primeiro bot. Tente novamente."
 msgid "The group model choice was reloaded. Pick again."
 msgstr "A escolha de modelo do grupo foi recarregada. Escolha novamente."
 
+#: src/pages/shell/runtime-settings.tsx
+msgid "The Hermes install on this computer failed its safety check."
+msgstr "A instalação do Hermes neste computador não passou na verificação de segurança."
+
 #: src/pages/memory/MemoryProposals.tsx
 msgid "The memory changed since this suggestion. Open History before trying again."
 msgstr ""
@@ -8470,6 +8549,7 @@ msgstr "Este chat é somente leitura"
 msgid "This command is not available to this account."
 msgstr ""
 
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this computer"
 msgstr "Este computador"
@@ -8533,6 +8613,7 @@ msgstr "O modelo do grupo está bloqueado pelas configurações do bot ou do esp
 msgid "This is a binary file. You cannot edit it here."
 msgstr "Este é um arquivo binário. Você não pode editá-lo aqui."
 
+#: src/pages/ComputerProfilesSettings.tsx
 #: src/pages/HostComputerPrompt.tsx
 msgid "this Mac"
 msgstr "esse Mac"
@@ -8760,6 +8841,7 @@ msgstr ""
 #: src/pages/Onboarding.tsx
 #: src/pages/shell/computer-screen-error.tsx
 #: src/pages/shell/runtime-config-advanced.tsx
+#: src/pages/shell/runtime-settings.tsx
 msgid "Try again"
 msgstr "Tentar novamente"
 
@@ -9268,7 +9350,7 @@ msgid "Working…"
 msgstr "Funcionando"
 
 #: src/components/integrations/manage/IntegrationDetails.tsx
-#: src/pages/Shell.tsx
+#: src/pages/shell/settings-chrome.tsx
 msgid "Workspace"
 msgstr "Espaço de trabalho"
 
@@ -9341,6 +9423,11 @@ msgstr "Seu endereço de e-mail"
 #: src/pages/Auth.tsx
 msgid "Your name"
 msgstr "O seu nome"
+
+#: src/pages/ComputerProfilesSettings.tsx
+#: src/pages/HostComputerPrompt.tsx
+msgid "Your OS will not ask for extra permission if you let bots run on {hostLabel}. They run as you."
+msgstr "Seu sistema operacional não pedirá permissão extra se você permitir que os bots sejam executados no {hostLabel}. Eles são executados como você."
 
 #: src/pages/DevicesSettings.tsx
 msgid "Your phone can reach this Mac on your network."

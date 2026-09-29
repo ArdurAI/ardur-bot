@@ -26,6 +26,7 @@ import {
 } from "@ardurbot/contracts";
 import { CapacitySnapshotSchema, unknownCapacity } from "@ardurbot/contracts/fleet";
 import { boundedSandboxCommandTimeoutMs, resolveSupervisorToken } from "@ardurbot/core";
+import { secretEnvironment } from "@ardurbot/core/node/service-secrets";
 import { cachedCapacity } from "@ardurbot/host-runtime/fleet/capacity";
 import { outgoingCorrelationHeaders } from "@ardurbot/logging";
 import {
@@ -173,7 +174,7 @@ export class DockerSandboxProvider implements SandboxProvider {
     supervisorToken?: string,
     private readonly engine?: { socket?: string; name: "docker" | "podman" },
   ) {
-    this.supervisorToken = supervisorToken ?? resolveSupervisorToken(process.env);
+    this.supervisorToken = supervisorToken ?? resolveSupervisorToken(secretEnvironment());
     this.terminal = new DockerTerminal(supervisorUrl, (context, botId) =>
       this.headers(context, botId),
     );

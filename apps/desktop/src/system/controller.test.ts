@@ -1,7 +1,11 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { cliVersion } from "../cli.js";
 import { DEFAULT_PREFERENCES } from "./contract.js";
 import { SystemController } from "./controller.js";
+import { SystemStore } from "./store.js";
 
 function fixture(platform = "darwin") {
   let login = false;
@@ -147,6 +151,60 @@ describe("system controller", () => {
     await expect(f.controller.set("menuBar", true)).rejects.toThrow("unavailable");
     await expect(f.controller.openPermission("screen")).rejects.toThrow("unavailable");
     expect(f.deps.openExternal).not.toHaveBeenCalled();
+  });
+  it("saves an explicit menu bar choice separately from other settings", async () => {
+    const f = fixture();
+    await f.controller.initialize();
+    await f.controller.set("menuBar", false);
+    expect(f.deps.menuBar).toHaveBeenCalledWith(false);
+    expect(f.deps.store.write).toHaveBeenCalledWith(expect.objectContaining({ menuBar: false }), {
+      menuBar: false,
+    });
+    await f.controller.set("keepAwake", true);
+    expect(f.deps.store.write).toHaveBeenLastCalledWith(
+      expect.objectContaining({ menuBar: false, keepAwake: true }),
+    );
+  });
+  it("turns the menu bar on by default on macOS and keeps an explicit off", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "system-menu-bar-"));
+    try {
+      const f = fixture();
+      const controller = new SystemController({
+        ...f.deps,
+        store: new SystemStore(directory, "darwin"),
+      });
+      await controller.initialize();
+      expect(f.deps.menuBar).toHaveBeenCalledWith(true);
+      expect(controller.state().preferences.menuBar).toBe(true);
+      await controller.set("menuBar", false);
+      const reloaded = new SystemController({
+        ...f.deps,
+        store: new SystemStore(directory, "darwin"),
+      });
+      await reloaded.initialize();
+      expect(reloaded.state().preferences.menuBar).toBe(false);
+      expect(f.deps.menuBar).toHaveBeenLastCalledWith(false);
+      await reloaded.set("keepAwake", true);
+      expect((await new SystemStore(directory, "darwin").read()).menuBar).toBe(false);
+      expect((await new SystemStore(directory, "linux").read()).menuBar).toBe(false);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+  it.each(["linux", "win32"])("leaves the menu bar off by default on %s", async (platform) => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "system-menu-bar-"));
+    try {
+      const f = fixture(platform);
+      const controller = new SystemController({
+        ...f.deps,
+        store: new SystemStore(directory, platform),
+      });
+      await controller.initialize();
+      expect(f.deps.menuBar).not.toHaveBeenCalled();
+      expect(controller.state().preferences.menuBar).toBe(false);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 });
 

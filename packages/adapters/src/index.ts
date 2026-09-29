@@ -151,6 +151,7 @@ export * from "./remote-mcp.js";
 export * from "./routing/dispatch.js";
 export * from "./routing/route.js";
 export * from "./run-secret.js";
+export { recordStandaloneUsage } from "./run-usage.js";
 export * from "./runtime-registry.js";
 export { ObservedUsageTotals } from "./runtime-usage.js";
 export * from "./runtimes/codex-connect.js";

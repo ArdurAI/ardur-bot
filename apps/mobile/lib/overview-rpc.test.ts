@@ -33,6 +33,22 @@ it("uses the shared read RPCs and validates their contracts", async () => {
   await expect(loadOverviewConnections()).rejects.toThrow();
 });
 
+it("loads Usage from a server that predates the partially reported marker", async () => {
+  const period = { records: 2, inputTokens: 30, outputTokens: 12, cost: null };
+  vi.mocked(rpc).mockResolvedValue({
+    inputTokens: 30,
+    outputTokens: 12,
+    runs: 2,
+    dayStart: "2026-09-24T00:00:00Z",
+    weekStart: "2026-09-21T00:00:00Z",
+    asOf: "2026-09-24T12:00:00Z",
+    providers: [{ provider: "fixture", today: period, week: period, daily: [] }],
+  });
+  const usage = await loadOverviewUsage();
+  expect(usage.providers[0]?.today).toEqual(period);
+  expect(usage.providers[0]?.week.incomplete).toBeUndefined();
+});
+
 it("translates every Overview string in every non-English mobile catalog", () => {
   const source = readFileSync(new URL("../app/overview.tsx", import.meta.url), "utf8");
   const ids = [...source.matchAll(/\bt\(\s*"((?:\\.|[^"\\])*)"/g)].map(

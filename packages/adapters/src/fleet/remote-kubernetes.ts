@@ -10,6 +10,10 @@ import type {
   ComputerConnectionSettings,
   RemoteComputerAction,
 } from "@ardurbot/contracts";
+import {
+  connectionComputerImage,
+  hostAcceptsComputerImage,
+} from "@ardurbot/host-runtime/fleet/computer-image";
 import type { HostClient } from "@ardurbot/host-runtime/host-client";
 import type { KubernetesApi, KubernetesObject } from "../kubernetes-client.js";
 import { KubernetesSandboxProvider } from "../kubernetes-sandbox.js";
@@ -110,7 +114,17 @@ export class HostKubernetesSandboxProvider implements SandboxProvider {
       if (frame.channel === "result") version = String(frame.data);
     return { capacity: await this.capacity(context), os: "Linux", version };
   }
-  provision(request: Parameters<SandboxProvider["provision"]>[0], context: AdapterContext) {
+  async provision(request: Parameters<SandboxProvider["provision"]>[0], context: AdapterContext) {
+    // The host validates pods without the server's environment; explain a refusal here instead.
+    if (
+      !hostAcceptsComputerImage(
+        connectionComputerImage(request.imageProfile ?? "base", this.settings),
+        this.settings,
+      )
+    )
+      throw new Error(
+        "Set this cluster's image under Advanced on its connection: ARDURBOT_COMPUTER_IMAGE does not reach the machine that runs kubectl.",
+      );
     return this.provider(request.botId, context).provision(request, context);
   }
   prepare(computer: ComputerRef, context: AdapterContext) {

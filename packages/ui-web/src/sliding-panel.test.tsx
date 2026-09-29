@@ -92,12 +92,13 @@ it("gives every side panel a keyboard and pointer resize within the conversation
     const aside = host.querySelector("aside");
     const separator = host.querySelector("hr");
     expect(aside?.className).toContain("md:w-(--pane-width)");
-    expect(aside?.className).not.toContain("max-w-[384px]");
+    // The 384 px cap only bounds phones; desktop follows the remembered width.
+    expect(aside?.className).toContain("md:max-w-none");
     expect(aside?.getAttribute("style")).toContain("calc(100vw - 400px)");
     expect(separator?.getAttribute("aria-label")).toBe("Resize pane");
     expect(separator?.tabIndex).toBe(0);
     expect(separator?.getAttribute("aria-valuenow")).toBe("384");
-    expect(separator?.getAttribute("aria-valuemin")).toBe("360");
+    expect(separator?.getAttribute("aria-valuemin")).toBe("384");
     expect(separator?.getAttribute("aria-valuemax")).toBe("800");
     expect(separator?.parentElement?.className).toContain("hidden");
     expect(separator?.parentElement?.className).toContain("md:block");
@@ -111,9 +112,9 @@ it("gives every side panel a keyboard and pointer resize within the conversation
     expect(separator?.getAttribute("aria-valuenow")).toBe("524");
 
     await act(async () => press(separator!, "Home"));
-    expect(separator?.getAttribute("aria-valuenow")).toBe("360");
+    expect(separator?.getAttribute("aria-valuenow")).toBe("384");
     await act(async () => press(separator!, "ArrowRight"));
-    expect(separator?.getAttribute("aria-valuenow")).toBe("360");
+    expect(separator?.getAttribute("aria-valuenow")).toBe("384");
     await act(async () => press(separator!, "End"));
     expect(separator?.getAttribute("aria-valuenow")).toBe("800");
     await act(async () => press(separator!, "ArrowLeft"));
@@ -190,5 +191,164 @@ it("gives every side panel a keyboard and pointer resize within the conversation
     document.documentElement.dir = "";
     storage.clear();
     vi.unstubAllGlobals();
+  }
+});
+
+it("opens wide panels at 560 px and honors the legacy shared width as a starting width", async () => {
+  const saved = new Map<string, string>();
+  vi.stubGlobal("localStorage", {
+    getItem: (key: string) => saved.get(key) ?? null,
+    setItem: (key: string, value: string) => saved.set(key, value),
+  });
+  const host = document.createElement("div");
+  let root = createRoot(host);
+  const handle = () => host.querySelector("hr");
+  try {
+    await act(async () =>
+      root.render(
+        <SlidingPanel open panel="settings" size="wide">
+          <div />
+        </SlidingPanel>,
+      ),
+    );
+    const aside = host.querySelector("aside");
+    expect(aside?.className).toContain("md:w-(--pane-width)");
+    expect(aside?.className).toContain("max-w-[384px]");
+    expect(aside?.className).toContain("md:max-w-none");
+    expect(aside?.style.getPropertyValue("--pane-width")).toBe("min(560px, calc(100vw - 400px))");
+    expect(handle()?.getAttribute("role")).toBe("slider");
+    expect(handle()?.getAttribute("aria-label")).toBe("Resize pane");
+    expect(handle()?.getAttribute("aria-valuemin")).toBe("384");
+    expect(handle()?.getAttribute("aria-valuemax")).toBe("800");
+    await act(async () => {
+      handle()?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }));
+    });
+    expect(handle()?.getAttribute("aria-valuenow")).toBe("580");
+    expect(saved.get("ardurbot:pane-width:settings")).toBe("580");
+    // The legacy shared key is a read-only fallback; it is never rewritten.
+    expect(saved.get("ardurbot:settings-pane-width")).toBeUndefined();
+
+    await act(async () =>
+      root.render(
+        <SlidingPanel open panel="computer" workspace>
+          <div />
+        </SlidingPanel>,
+      ),
+    );
+    expect(handle()?.getAttribute("aria-valuenow")).toBe("480");
+    expect(handle()?.getAttribute("aria-valuemin")).toBe("360");
+    expect(saved.get("ardurbot:pane-width:computer")).toBeUndefined();
+    expect(saved.get("ardurbot:pane-width")).toBeUndefined();
+
+    await act(async () => root.unmount());
+    root = createRoot(host);
+    // A wide panel from an earlier release has only the shared legacy width;
+    // it still opens at that width instead of the default.
+    saved.set("ardurbot:settings-pane-width", "580");
+    await act(async () =>
+      root.render(
+        <SlidingPanel open panel="group-settings" size="wide">
+          <div />
+        </SlidingPanel>,
+      ),
+    );
+    expect(handle()?.getAttribute("aria-valuenow")).toBe("580");
+    for (let step = 0; step < 20; step++) {
+      await act(async () => {
+        handle()?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+      });
+    }
+    expect(handle()?.getAttribute("aria-valuenow")).toBe("384");
+  } finally {
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+  }
+});
+
+it("starts a narrow panel at 384 px with a resize handle", async () => {
+  const host = document.createElement("div");
+  const root = createRoot(host);
+  try {
+    await act(async () =>
+      root.render(
+        <SlidingPanel open panel="create" size="narrow">
+          <div />
+        </SlidingPanel>,
+      ),
+    );
+    expect(host.querySelector("aside")?.className).toContain("max-w-[384px]");
+    const handle = host.querySelector("hr");
+    expect(handle).not.toBeNull();
+    expect(handle?.getAttribute("aria-valuenow")).toBe("384");
+    expect(handle?.getAttribute("aria-valuemin")).toBe("384");
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
+it("keeps a wide panel's width while it slides closed", async () => {
+  const host = document.createElement("div");
+  const root = createRoot(host);
+  try {
+    await act(async () =>
+      root.render(
+        <SlidingPanel open panel="settings" size="wide">
+          <div />
+        </SlidingPanel>,
+      ),
+    );
+    await act(async () =>
+      root.render(
+        <SlidingPanel open={false} panel="closed">
+          {null}
+        </SlidingPanel>,
+      ),
+    );
+    const aside = host.querySelector("aside");
+    expect(aside?.className).toContain("md:w-(--pane-width)");
+    expect(aside?.className).toContain("max-w-[384px]");
+    expect(aside?.className).toContain("md:max-w-none");
+    expect(host.querySelector("hr")).toBeNull();
+
+    await act(async () =>
+      root.render(
+        <SlidingPanel open panel="create">
+          <div />
+        </SlidingPanel>,
+      ),
+    );
+    expect(host.querySelector("aside")?.className).toContain("max-w-[384px]");
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
+
+it("adjusts resize handle for RTL layouts and custom translated labels", async () => {
+  const host = document.createElement("div");
+  const root = createRoot(host);
+  const handle = () => host.querySelector("hr");
+  try {
+    document.dir = "rtl";
+    await act(async () =>
+      root.render(
+        <SlidingPanel open panel="settings" size="wide" resizeLabel="Panelgröße ändern">
+          <div />
+        </SlidingPanel>,
+      ),
+    );
+    expect(handle()?.getAttribute("role")).toBe("slider");
+    expect(handle()?.getAttribute("aria-label")).toBe("Panelgröße ändern");
+    expect(handle()?.getAttribute("aria-valuenow")).toBe("560");
+    await act(async () => {
+      handle()?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }));
+    });
+    expect(handle()?.getAttribute("aria-valuenow")).toBe("540");
+    await act(async () => {
+      handle()?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+    });
+    expect(handle()?.getAttribute("aria-valuenow")).toBe("560");
+  } finally {
+    document.dir = "ltr";
+    await act(async () => root.unmount());
   }
 });

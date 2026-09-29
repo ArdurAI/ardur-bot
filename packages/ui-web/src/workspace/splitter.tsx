@@ -10,6 +10,7 @@ export function Splitter({
   step = 2,
   invert = false,
   unit = "percent",
+  role,
 }: {
   label: string;
   horizontal?: boolean;
@@ -20,6 +21,8 @@ export function Splitter({
   step?: number;
   invert?: boolean;
   unit?: "percent" | "px";
+  /** A docked pane handle behaves as a slider; the IDE divider stays a plain separator. */
+  role?: "separator" | "slider";
 }) {
   const limit = max ?? (horizontal ? 65 : 40);
   const drag = useRef<{ at: number; value: number; extent: number } | null>(null);
@@ -27,6 +30,7 @@ export function Splitter({
   const positive = horizontal ? "ArrowUp" : "ArrowRight";
   return (
     <hr
+      role={role}
       tabIndex={0}
       aria-label={label}
       aria-orientation={horizontal ? "horizontal" : "vertical"}

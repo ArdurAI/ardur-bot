@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { captureScreenshot, completeOnboarding, rpc, signup } from "./helpers";
 
 test("Team opens as a board with one row per bot", async ({ page }, testInfo) => {
-  await signup(page, `team-${Date.now()}@ardurbot.test`, "password12", "Team");
+  await signup(page, `team-${Date.now()}@example.test`, "password12", "Team");
   await completeOnboarding(page);
   await expect(page.getByRole("button", { name: "Team", exact: true })).toHaveCount(0);
   await rpc(page, "bots/create", {
@@ -25,7 +25,7 @@ test("Team opens as a board with one row per bot", async ({ page }, testInfo) =>
 });
 
 test("Team keeps direct work and blocked reasons readable", async ({ page }, testInfo) => {
-  await signup(page, `team-presence-${Date.now()}@ardurbot.test`, "password12", "Team");
+  await signup(page, `team-presence-${Date.now()}@example.test`, "password12", "Team");
   await completeOnboarding(page);
   await rpc(page, "bots/create", {
     name: "Reviewer",
