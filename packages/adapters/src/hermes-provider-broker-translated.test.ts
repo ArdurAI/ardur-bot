@@ -2,9 +2,9 @@ import type { AgentUsage } from "@ardurbot/adapter-kit";
 import type {
   Api,
   AssistantMessageEvent,
+  Model,
   Context as PiContext,
   JsonObject as PiJsonObject,
-  Model,
   SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
 import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
@@ -113,10 +113,7 @@ const usage = (input: number, output: number, total = input + output) => ({
   cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 });
 
-type FixtureMessage = Extract<
-  AssistantMessageEvent,
-  { type: "done" }
->["message"];
+type FixtureMessage = Extract<AssistantMessageEvent, { type: "done" }>["message"];
 
 const text = (value: string) => ({ type: "text" as const, text: value });
 
@@ -319,9 +316,7 @@ describe("worker provider broker translated route", () => {
     const first = frames[0];
     expect(first.object).toBe("chat.completion.chunk");
     expect(first.choices[0].delta.role).toBe("assistant");
-    const content = frames
-      .map((chunk) => chunk.choices[0].delta.content ?? "")
-      .join("");
+    const content = frames.map((chunk) => chunk.choices[0].delta.content ?? "").join("");
     expect(content).toBe("Bonjour");
     const finishFrame = frames.find((chunk) => chunk.choices[0].finish_reason === "stop");
     expect(finishFrame).toBeDefined();
@@ -396,9 +391,11 @@ describe("worker provider broker translated route", () => {
     ]);
 
     // Round trip: assistant tool_call -> tool result -> final text.
-    const second = translatedFixture(
-      [startEvent, ...textDeltaEvents("hi"), doneEvent([text("hi")], "stop", usage(13, 2))],
-    );
+    const second = translatedFixture([
+      startEvent,
+      ...textDeltaEvents("hi"),
+      doneEvent([text("hi")], "stop", usage(13, 2)),
+    ]);
     const response = await second.broker.open(
       second.request({
         body: {
@@ -431,9 +428,7 @@ describe("worker provider broker translated route", () => {
     expect(replayed.messages[1]).toEqual(
       expect.objectContaining({
         role: "assistant",
-        content: [
-          { type: "toolCall", id: "call_1", name: toolName, arguments: { phrase: "hi" } },
-        ],
+        content: [{ type: "toolCall", id: "call_1", name: toolName, arguments: { phrase: "hi" } }],
       }),
     );
     expect(replayed.messages[2]).toEqual(
@@ -528,7 +523,11 @@ describe("worker provider broker translated route", () => {
     );
     const response = await f.broker.open(
       f.request({
-        body: { model: "gemini-fixture", messages: [{ role: "user", content: "hi" }], stream: true },
+        body: {
+          model: "gemini-fixture",
+          messages: [{ role: "user", content: "hi" }],
+          stream: true,
+        },
       }),
     );
     expect(response.status).toBe(200);

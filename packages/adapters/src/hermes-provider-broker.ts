@@ -8,10 +8,16 @@ import { canonicalRuntimeJson } from "@ardurbot/core/runtime-config";
 import type {
   Api,
   AssistantMessageEvent,
-  Context as PiContext,
   Model,
+  Context as PiContext,
   SimpleStreamOptions,
 } from "@earendil-works/pi-ai";
+import {
+  type AdmittedChatMessage,
+  piContext,
+  providerThinkingLevel,
+  translateStream,
+} from "./hermes-provider-translation.js";
 import { chatCompletionsUsage } from "./openai-chat-usage.js";
 import {
   assertAllowedOpenAiCompatibleUrl,
@@ -19,12 +25,6 @@ import {
 } from "./openai-compatible-url.js";
 import { createOpenAiCompatibleFetch } from "./pi-openai-compatible-provider.js";
 import { requestReservationTokens } from "./request-usage.js";
-import {
-  type AdmittedChatMessage,
-  piContext,
-  providerThinkingLevel,
-  translateStream,
-} from "./hermes-provider-translation.js";
 
 /**
  * Production seam to the provider layer's streamSimple. Declared here so tests
@@ -39,9 +39,7 @@ let piStreamSimpleImpl: (
 };
 
 /** Install the production provider-layer bridge (called by the worker's runtime registry). */
-export function setHermesProviderStream(
-  impl: typeof piStreamSimpleImpl,
-): void {
+export function setHermesProviderStream(impl: typeof piStreamSimpleImpl): void {
   piStreamSimpleImpl = impl;
 }
 
@@ -200,9 +198,7 @@ export type BrokerOptions = {
     model: Model<Api> | undefined,
     context: PiContext,
     options?: SimpleStreamOptions,
-  ) =>
-    | AsyncIterable<AssistantMessageEvent>
-    | Promise<AsyncIterable<AssistantMessageEvent>>;
+  ) => AsyncIterable<AssistantMessageEvent> | Promise<AsyncIterable<AssistantMessageEvent>>;
 };
 
 /** Hermes's pinned MCP wire-name transformation. Collisions are fatal. */
@@ -811,7 +807,9 @@ export class HermesProviderBroker {
     body: JsonObject,
     controller: AbortController,
     collector: RequestUsageCollector,
-    finish: (outcome: "success" | "failed" | "cancelled" | "timed-out" | "unknown") => Promise<void>,
+    finish: (
+      outcome: "success" | "failed" | "cancelled" | "timed-out" | "unknown",
+    ) => Promise<void>,
     live: () => void,
     active: () => Promise<void>,
   ): Promise<Response> {

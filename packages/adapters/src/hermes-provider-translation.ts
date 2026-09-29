@@ -1,11 +1,11 @@
 import type {
   Api,
   AssistantMessageEvent,
-  Context as PiContext,
   ImageContent,
+  Model,
+  Context as PiContext,
   JsonObject as PiJsonObject,
   Message as PiMessage,
-  Model,
   ThinkingLevel as PiThinkingLevel,
   Tool as PiTool,
 } from "@earendil-works/pi-ai";
@@ -73,7 +73,7 @@ function imageParts(content: unknown): ImageContent[] {
   const images: ImageContent[] = [];
   for (const part of content) {
     const value = object(part);
-    if (!value || value.type !== "image_url") continue;
+    if (value?.type !== "image_url") continue;
     const url = object(value.image_url)?.url;
     if (typeof url !== "string") continue;
     const match = IMAGE_DATA_URL.exec(url);
@@ -83,14 +83,7 @@ function imageParts(content: unknown): ImageContent[] {
   return images;
 }
 
-const THINKING_LEVELS: readonly string[] = [
-  "minimal",
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max",
-];
+const THINKING_LEVELS: readonly string[] = ["minimal", "low", "medium", "high", "xhigh", "max"];
 
 /** Provider-layer thinking level for the pinned effort; "off" disables thinking. */
 export function providerThinkingLevel(pinnedEffort: string): PiThinkingLevel | undefined {
@@ -196,8 +189,7 @@ export function piContext(body: {
           arguments: args,
         });
       }
-      if (content.length)
-        messages.push(replayedAssistant(body.model, content, timestamp()));
+      if (content.length) messages.push(replayedAssistant(body.model, content, timestamp()));
       continue;
     }
     if (message.role === "tool") {
