@@ -249,7 +249,6 @@ import {
 } from "./shell/message-cards";
 import { ProviderErrorMessage } from "./shell/provider-error-message";
 import {
-  BotSettingsTitle,
   hasSharedPanelHeader,
   isSettingsPanel,
   PanelHeaderTitle,
@@ -616,6 +615,24 @@ export function ShellPage({
     setComputer(next);
   }
 
+  // Visibility judged from the computer identity that owns the screen right now —
+  // commitComputer can run mid-refresh, before React re-renders with the new state.
+  function computerScreenVisible(targetBotId: string): boolean {
+    if (computerOpenRef.current) {
+      const modalBotId = computerBotIdRef.current ?? computerRef.current?.botId;
+      if (modalBotId !== targetBotId) return false;
+      return computerTabRef.current === "screen";
+    }
+    if (panelRef.current !== "computer") return false;
+    const computer = computerRef.current;
+    if (computer?.botId !== targetBotId) return false;
+    const effectiveTab = getEffectiveWorkspaceTab(
+      workspaceTabRef.current,
+      computer?.capabilities?.graphical,
+    );
+    return effectiveTab === "screen" || effectiveTab === "computer";
+  }
+
   function updateSnapshot(update: (prev: ThreadSnapshot | null) => ThreadSnapshot | null) {
     commitSnapshot(update(snapshotRef.current));
   }
@@ -743,6 +760,10 @@ export function ShellPage({
   const [computerBotId, setComputerBotId] = useState<string | undefined>();
   const computerOpenRef = useRef(false);
   const computerBotIdRef = useRef<string | undefined>(undefined);
+  const computerTabRef = useRef<"screen" | "terminal">("screen");
+  // Latest panel/tab identity for guards that run before React re-renders.
+  const panelRef = useRef<Panel>(null);
+  const workspaceTabRef = useRef(workspaceTab);
   const computerBootEpoch = useRef(0);
   const openComputerRef = useRef<(botId?: string) => Promise<void>>(async () => {});
   const [computerViewport, setComputerViewport] = useState<{
@@ -846,6 +867,8 @@ export function ShellPage({
   computerVisible.current = isVisible;
   computerOpenRef.current = computerOpen;
   computerBotIdRef.current = computerBotId ?? active?.id;
+  panelRef.current = panel;
+  workspaceTabRef.current = workspaceTab;
   const activeGroup = groups.find((group) => group.id === groupId);
   useEffect(() => {
     setGoal(null);
@@ -1100,7 +1123,7 @@ export function ShellPage({
   }
 
   async function refreshComputerScreen(id: string, explicitRetry = false) {
-    if (!computerVisible.current) return null;
+    if (!computerVisible.current || !computerScreenVisible(id)) return null;
     const request = ++screenRequest.current;
     dispatchComputerError({
       type: "screen-requested",
@@ -2688,7 +2711,10 @@ export function ShellPage({
     ping();
     const timer = window.setInterval(ping, 60_000);
     return () => window.clearInterval(timer);
-  }, [panel, workspaceTab, computerOpen, computerBot?.id, active?.id, computer?.state]);
+    // The capability-driven tab resolution decides visibility: a computer that
+    // stops being graphical resolves a retained Screen tab to Tasks and must
+    // stop the heartbeat, and one that gains a capability must start it again.
+  }, [panel, effectiveWorkspaceTab, computerOpen, computerBot?.id, active?.id, computer?.state]);
 
   async function openComputer(botId?: string, viewOnly = false) {
     const id = botId ?? active?.id;
@@ -2765,6 +2791,7 @@ export function ShellPage({
     botId: computerBot?.id,
     hasControl,
     working: composerRunning,
+    open: computerOpen,
     onTakeControl: async () => {
       if (computerBot) {
         await rpc.computer.takeover({ botId: computerBot.id });
@@ -2773,7 +2800,11 @@ export function ShellPage({
     },
     onStop: stopRun,
     onOpen: useComputerTerminalOpen(setComputerOpen, setWorkspaceExpanded),
+    onTabChange: (nextTab) => {
+      computerTabRef.current = nextTab;
+    },
   });
+  computerTabRef.current = terminalSurface.tab;
   const displayedComputerError = visibleComputerError(
     computerErrorState,
     Boolean(embeddedScreenUrl),

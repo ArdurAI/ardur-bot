@@ -2,7 +2,7 @@ import type { ComputerStatus } from "@ardurbot/contracts";
 import { Button } from "@ardurbot/ui-web";
 import { t } from "@lingui/core/macro";
 import { Trans } from "@lingui/react/macro";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { terminalSupported, useTerminalController } from "../workspace/terminal-controller";
 
 const ComputerTerminalSession = lazy(() => import("./terminal-session"));
@@ -12,22 +12,39 @@ export function useComputerTerminal({
   botId,
   hasControl,
   working,
+  open: computerOpen,
   onTakeControl,
   onStop,
   onOpen,
+  onTabChange,
 }: {
   computer: ComputerStatus | null;
   botId?: string;
   hasControl: boolean;
   working: boolean;
+  open?: boolean;
   onTakeControl(): Promise<unknown>;
   onStop(): Promise<unknown>;
   onOpen(): void;
+  onTabChange?: (tab: "screen" | "terminal") => void;
 }) {
   const [tab, setTab] = useState<"screen" | "terminal">("screen");
+  const onTabChangeRef = useRef(onTabChange);
+  onTabChangeRef.current = onTabChange;
+
+  const selectTab = (nextTab: "screen" | "terminal") => {
+    setTab(nextTab);
+    onTabChangeRef.current?.(nextTab);
+  };
+
   useEffect(() => {
-    setTab("screen");
+    selectTab("screen");
   }, [botId]);
+  useEffect(() => {
+    if (computerOpen === false) {
+      selectTab("screen");
+    }
+  }, [computerOpen]);
   const controller = useTerminalController({
     botId,
     computerId: computer?.computerId,
@@ -41,10 +58,11 @@ export function useComputerTerminal({
     releaseOnLeave: false,
   });
   const open = () => {
-    setTab("terminal");
+    selectTab("terminal");
     onOpen();
   };
   return {
+    tab,
     open: controller.available ? open : undefined,
     tabs: (
       <div
@@ -57,7 +75,7 @@ export function useComputerTerminal({
           size="sm"
           role="tab"
           aria-selected={tab === "screen"}
-          onClick={() => setTab("screen")}
+          onClick={() => selectTab("screen")}
         >
           <Trans>Screen</Trans>
         </Button>
@@ -66,7 +84,7 @@ export function useComputerTerminal({
           size="sm"
           role="tab"
           aria-selected={tab === "terminal"}
-          onClick={() => setTab("terminal")}
+          onClick={() => selectTab("terminal")}
         >
           <Trans>Terminal</Trans>
         </Button>
@@ -90,7 +108,7 @@ export function useComputerTerminal({
             variant="outline"
             disabled={controller.pending}
             onClick={() =>
-              controller.state === "unavailable" ? setTab("screen") : controller.runAction()
+              controller.state === "unavailable" ? selectTab("screen") : controller.runAction()
             }
           >
             {controller.state === "unavailable" ? t`Back to screen` : controller.actionLabel}

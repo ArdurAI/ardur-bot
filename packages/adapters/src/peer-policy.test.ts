@@ -2,6 +2,7 @@ import type { TaskCard } from "@ardurbot/contracts";
 import { describe, expect, it } from "vitest";
 import {
   peerCardReadInput,
+  peerEffectBoundToolAllowed,
   peerReadOnlyRuntimeSupported,
   peerReadOnlyToolAllowed,
 } from "./peer-policy.js";
@@ -45,5 +46,15 @@ describe("goal desk policy", () => {
     expect(peerReadOnlyRuntimeSupported("pi")).toBe(true);
     expect(peerReadOnlyRuntimeSupported("native")).toBe(false);
     expect(peerReadOnlyRuntimeSupported("")).toBe(false);
+  });
+
+  it("adds exactly the bound tool on top of the read-only desk set", () => {
+    const bound = { toolName: "destination.write" };
+    expect(peerEffectBoundToolAllowed("destination.write", bound)).toBe(true);
+    expect(peerEffectBoundToolAllowed("report_progress", bound)).toBe(true);
+    expect(peerEffectBoundToolAllowed("destination.delete", bound)).toBe(false);
+    expect(peerEffectBoundToolAllowed("shell", bound)).toBe(false);
+    expect(peerEffectBoundToolAllowed("destination.write", undefined)).toBe(false);
+    expect(peerEffectBoundToolAllowed("destination.write", { toolName: undefined })).toBe(false);
   });
 });
