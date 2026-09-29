@@ -1,7 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { lstatSync, readlinkSync, realpathSync, statSync } from "node:fs";
-import { chmod, mkdir, mkdtemp, readFile, rm, utimes, writeFile } from "node:fs/promises";
+import { lstatSync, readdirSync, readlinkSync, realpathSync, statSync } from "node:fs";
+import { chmod, mkdir, mkdtemp, readFile, rm, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { gzipSync } from "node:zlib";
@@ -775,6 +775,27 @@ it("does not release a lock another installer took over", async () => {
     await rm(root, { recursive: true, force: true });
   }
 });
+
+it.skipIf(process.platform === "win32")(
+  "refuses to install into a symlinked runtimes directory",
+  async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "hermes-linked-root-"));
+    const elsewhere = await mkdtemp(path.join(tmpdir(), "hermes-elsewhere-"));
+    const fetchImpl = vi.fn<HermesFetch>();
+    try {
+      await symlink(elsewhere, path.join(root, "runtimes"));
+      await expect(
+        installHermes({ root, fetch: fetchImpl, platform: "linux", arch: "x64" }),
+      ).rejects.toThrow(HERMES_INSTALL_FAILED);
+      expect(fetchImpl).not.toHaveBeenCalled();
+      expect(readHermesInstallStatus(root)?.message).toBe(HERMES_INSTALL_FAILED);
+      expect(readdirSync(elsewhere)).toEqual([]);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+      await rm(elsewhere, { recursive: true, force: true });
+    }
+  },
+);
 
 it("hides command output from the install error", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "hermes-secret-"));

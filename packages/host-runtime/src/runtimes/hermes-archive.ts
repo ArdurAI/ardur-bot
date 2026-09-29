@@ -1,5 +1,5 @@
-import { createHash } from "node:crypto";
-import { chmod, lstat, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { chmod, lstat, mkdir, readdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { gunzipSync } from "node:zlib";
 
@@ -135,9 +135,19 @@ export async function extractUvBinary(
     binary = entry.data;
   }
   if (!binary) throw new HermesArchiveError();
-  await mkdir(path.dirname(destFile), { recursive: true, mode: 0o755 });
-  await writeFile(destFile, binary, { mode: 0o755 });
-  await chmod(destFile, 0o755);
+  const directory = path.dirname(destFile);
+  await mkdir(directory, { recursive: true, mode: 0o755 });
+  // Write a temp file and rename it over the destination: rename replaces a
+  // planted symlink instead of following it.
+  const temporary = path.join(directory, `.uv.${process.pid}.${randomUUID()}.tmp`);
+  try {
+    await writeFile(temporary, binary, { flag: "wx", mode: 0o755 });
+    await chmod(temporary, 0o755);
+    await rename(temporary, destFile);
+  } catch (error) {
+    await unlink(temporary).catch(() => undefined);
+    throw error;
+  }
 }
 
 function stripTop(entryPath: string, kind: TarKind, observe: (top: string) => void): string | null {

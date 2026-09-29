@@ -1,10 +1,10 @@
-import { statSync } from "node:fs";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { lstatSync, statSync } from "node:fs";
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { gzipSync } from "node:zlib";
 import { expect, it } from "vitest";
-import { extractSourceArchive } from "./hermes-archive.js";
+import { extractSourceArchive, extractUvBinary } from "./hermes-archive.js";
 
 function writeOctal(header: Buffer, offset: number, length: number, value: number): void {
   const text = value.toString(8).padStart(length - 1, "0");
@@ -144,3 +144,34 @@ it("still refuses link entries", async () => {
     await rm(dest, { recursive: true, force: true });
   }
 });
+
+it.skipIf(process.platform === "win32")(
+  "writes the uv binary over a planted symlink without following it",
+  async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "hermes-uv-link-"));
+    try {
+      const elsewhere = path.join(root, "elsewhere");
+      await mkdir(elsewhere, { recursive: true });
+      const target = path.join(elsewhere, "uv");
+      await writeFile(target, "original\n");
+      const dir = path.join(root, "runtimes", "uv", "0.12.19");
+      await mkdir(dir, { recursive: true });
+      const destFile = path.join(dir, "uv");
+      await symlink(target, destFile);
+      const archive = gzipTar([
+        entry({
+          name: "uv-x86_64-unknown-linux-musl/uv",
+          data: Buffer.from("#!/bin/sh\nbinary\n"),
+          mode: 0o755,
+        }),
+      ]);
+      await extractUvBinary(archive, destFile, 1024 * 1024);
+      expect(lstatSync(destFile).isSymbolicLink()).toBe(false);
+      expect(statSync(destFile).mode & 0o777).toBe(0o755);
+      expect(await readFile(destFile, "utf8")).toBe("#!/bin/sh\nbinary\n");
+      expect(await readFile(target, "utf8")).toBe("original\n");
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  },
+);

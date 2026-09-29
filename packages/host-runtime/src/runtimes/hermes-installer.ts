@@ -188,7 +188,9 @@ export async function installHermes(deps: {
     }
     phase = "downloading";
     await writeStatus(root, phaseStatus(phase, clock));
+    await assertRealDirectory(path.join(root, "runtimes"));
     await removeStaleVersions(root, versionName);
+    await assertRealDirectory(versionDir);
     await writeFile(path.join(root, "runtimes", ".install.log"), "", { mode: 0o600 });
 
     const source = await download(
@@ -221,6 +223,8 @@ export async function installHermes(deps: {
     if (sha256(uvArchive) !== (deps.uvSha256 ?? release.sha256))
       throw new HermesInstallError(HERMES_INSTALL_FAILED);
     const uvBinary = path.join(root, "runtimes", "uv", UV_VERSION, "uv");
+    await assertRealDirectory(path.join(root, "runtimes", "uv"));
+    await assertRealDirectory(path.dirname(uvBinary));
     await extractUvBinary(uvArchive, uvBinary, UV_INFLATED);
 
     home = await mkdtemp(path.join(tmpdir(), "hermes-uv-"));
@@ -229,6 +233,7 @@ export async function installHermes(deps: {
     const timeoutMs = deps.commandTimeoutMs ?? COMMAND_TIMEOUT_MS;
     phase = "python";
     await writeStatus(root, phaseStatus(phase, clock));
+    await assertRealDirectory(path.join(root, "runtimes", "python"));
     await runChecked(run, uvBinary, ["python", "install", "3.13"], {
       cwd: versionDir,
       env: commandEnv,
@@ -382,6 +387,19 @@ async function releaseLock(root: string, token: string): Promise<void> {
   } catch {
     // The lock is already gone.
   }
+}
+
+/** The install writes only into real directories it owns; a planted symlink is refused. */
+async function assertRealDirectory(directory: string): Promise<void> {
+  let stat;
+  try {
+    stat = await lstat(directory);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+    throw new HermesInstallError(HERMES_INSTALL_FAILED);
+  }
+  if (stat.isSymbolicLink() || !stat.isDirectory())
+    throw new HermesInstallError(HERMES_INSTALL_FAILED);
 }
 
 async function removeStaleVersions(root: string, versionName: string): Promise<void> {
