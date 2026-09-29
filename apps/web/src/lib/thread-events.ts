@@ -26,6 +26,7 @@ import {
   reduceLiveMessageBlocks,
   reduceRunContext,
   runFailureError,
+  showsReplyText,
   subagentBlockFromPayload,
   takeLiveMessage,
   updateCloudAgentMessages,
@@ -566,11 +567,11 @@ export function reduceThreadSnapshot(
 /**
  * A run's live draft holds its place in the thread once it shows reply text: the server
  * holds the reply's position from that first streamed text, and the saved reply fills it.
- * A draft with only tool activity has no place yet (and no bubble); it follows the newest
- * message, where its reply will be saved.
+ * A draft with only tool activity or reasoning has no place yet (and no bubble); it follows
+ * the newest message, where its reply will be saved.
  */
 function draftHoldsPlace(draft: ThreadMessage | undefined): boolean {
-  return draft?.blocks.some((block) => !isToolActivityBlock(block)) ?? false;
+  return draft !== undefined && showsReplyText(draft.blocks);
 }
 
 /** Put a run's updated live draft back: in the place it holds, or after the newest message. */

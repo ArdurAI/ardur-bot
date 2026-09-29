@@ -44,7 +44,9 @@ import {
   groupBotsForSidebar,
   inferAttachmentMimeType,
   isActive,
+  isInterimNarrationAt,
   isPeerReceiptBlocks,
+  isReasoningSummaryBlock,
   isRunTerminalEvent,
   isToolActivityBlock,
   latestAnswerableAskMessageId,
@@ -58,6 +60,7 @@ import {
   serializeComposerPrompt,
   speechFromBlocks,
   userVisibleMessages,
+  workRecordEntries,
 } from "@ardurbot/core";
 import type { GroupAvatarMember } from "@ardurbot/ui-web";
 import {
@@ -129,6 +132,8 @@ import { useLocation, useNavigate, useParams, useSearchParams } from "react-rout
 import { ArtifactFileCard } from "../components/ArtifactFileCard";
 import { AskCard } from "../components/AskCard";
 import { ActiveBotGlyph } from "../components/ai/CollaborationMarker";
+import { CompactWorkRecord } from "../components/ai/CompactWorkRecord";
+import { NarrationBlocks } from "../components/ai/NarrationBlocks";
 import { CloudAgentCard } from "../components/CloudAgentCard";
 import { ComputerMaintenanceActions } from "../components/ComputerMaintenanceActions";
 import {
@@ -151,7 +156,6 @@ import type { FeedbackEdit } from "../components/MessageFeedback";
 import { MessageFeedback } from "../components/MessageFeedback";
 import { MessageHoverMetadata } from "../components/MessageHoverMetadata";
 import { PeerMessageReceipt } from "../components/PeerMessageReceipt";
-import { ThreadCommandBlock } from "../components/ThreadCommandBlock";
 import { SkillDraftCard } from "../components/teach/SkillDraftCard";
 import { TeachCaptureOverlay } from "../components/teach/TeachCaptureOverlay";
 import { TeachComputerOverlayControl } from "../components/teach/TeachComputerOverlay";
@@ -177,7 +181,12 @@ import { countOwnerWaiting, openDockSnapshot, publishDockWaitingCount } from "..
 import { scheduleFocusPrompt } from "../lib/focus-prompt";
 import { INSIGHT_ACTION_EVENT } from "../lib/insight-actions";
 import { localTimezone } from "../lib/local-timezone";
-import { copyableMessageText, replyMarkdownProps } from "../lib/message-text";
+import {
+  copyableMessageText,
+  narrationBubbleBlocks,
+  replyMarkdownProps,
+  workingBotsWithoutVisibleActivity,
+} from "../lib/message-text";
 import { messageProviderLabel } from "../lib/messaging";
 import {
   isFileDrag,
@@ -210,6 +219,7 @@ import {
   transcriptCanSnapAfterFrame,
   transcriptIsNearEnd,
   transcriptMovedDown,
+  useTranscriptFollowSnap,
 } from "../lib/transcript-scroll";
 import { whenSpeakerReady, withSpeaker } from "../lib/tts-lazy";
 import { useModelSettings } from "../lib/use-model-settings";
@@ -5058,7 +5068,8 @@ const Transcript = memo(function Transcript({
     [messages],
   );
   const reactionView = useMemo(() => projectMessageReactions(messages), [messages]);
-  const workingBotName = workingBots.length === 1 ? workingBots[0]?.name : undefined;
+  const indicatorBots = workingBotsWithoutVisibleActivity(workingBots, messages);
+  const workingBotName = indicatorBots.length === 1 ? indicatorBots[0]?.name : undefined;
   const workingLabel =
     workingBotName != null && workingBotName !== ""
       ? t`${workingBotName} is working`
@@ -5152,9 +5163,13 @@ const Transcript = memo(function Transcript({
     );
   }, [scrollRef]);
 
-  useLayoutEffect(() => {
-    if (following.current) snapToEnd();
-  }, [messages, running, snapToEnd]);
+  useTranscriptFollowSnap({
+    messages,
+    running,
+    quoteOpen: quoteDraft !== null,
+    following,
+    snapToEnd,
+  });
 
   useLayoutEffect(() => {
     const button = jumpButtonRef.current;
@@ -5241,7 +5256,12 @@ const Transcript = memo(function Transcript({
           </button>
         ) : null}
         {reactionView.visibleMessages.map((message) => {
-          if (!message.blocks.some((block) => !isToolActivityBlock(block))) return null;
+          // Tool-only and reasoning-only messages still show their compact work record.
+          if (
+            !message.blocks.some((block) => !isToolActivityBlock(block)) &&
+            workRecordEntries(message.blocks).length === 0
+          )
+            return null;
           const peerReceipt = isPeerReceiptBlocks(message.blocks);
           const messageReactions = reactionView.reactions.get(message.id);
           return (
@@ -5354,16 +5374,8 @@ const Transcript = memo(function Transcript({
             </div>
           );
         })}
-        {running &&
-        !messages.some(
-          (message) =>
-            message.id.startsWith("progress:") &&
-            message.blocks.some(
-              (block) =>
-                block.kind === "progress" && !isToolActivityBlock(block) && Boolean(block.text),
-            ),
-        ) ? (
-          <ActiveBotGlyph bots={workingBots} label={workingLabel} />
+        {running && indicatorBots.length > 0 ? (
+          <ActiveBotGlyph bots={indicatorBots} label={workingLabel} />
         ) : null}
       </div>
       {quoteDraft ? (
@@ -6494,7 +6506,7 @@ const MessageView = memo(function MessageView({
     );
   const isLive = message.id.startsWith("progress:");
   const quoteMessageId = message.id.includes(":") ? undefined : message.id;
-  const visibleNarrationBlocks = message.blocks.filter((block) => !isToolActivityBlock(block));
+  const visibleNarrationBlocks = narrationBubbleBlocks(message.blocks);
   const parentJumpId = replyPreview?.id ?? replyToMessageId;
   const speakerBot = message.botId ? peerBot?.(message.botId) : undefined;
   const messageContext = (
@@ -6532,51 +6544,60 @@ const MessageView = memo(function MessageView({
     </>
   );
   if (isNarration) {
-    if (visibleNarrationBlocks.length === 0) return null;
     return (
       <>
         {messageContext}
-        <div className="flex w-fit max-w-full justify-start">
-          <div
-            data-testid="message-bot-bubble"
-            className="max-w-full space-y-2.5 rounded-[20px] bg-muted px-[18px] py-3 text-[15.5px] leading-[1.5] text-foreground/90"
-            dir="auto"
-          >
-            {visibleNarrationBlocks.map((block, i) => {
-              if (block.kind === "text" || block.kind === "progress") {
-                return (
-                  <div
-                    key={i}
-                    data-quote-message-id={block.kind === "text" ? quoteMessageId : undefined}
-                  >
-                    <ChatMarkdown {...replyMarkdownProps(block)}>{block.text}</ChatMarkdown>
-                  </div>
-                );
-              }
-              return null;
-            })}
-            {!isLive && voiceReady && message.blocks.some((block) => block.kind === "text") ? (
-              <button
-                type="button"
-                aria-label={speaking ? t`Stop speaking` : t`Speak this reply`}
-                onClick={onSpeak}
-                className="text-[12px] text-muted-foreground hover:text-foreground"
-              >
-                {speaking ? <Trans>Stop</Trans> : <Trans>Speak</Trans>}
-              </button>
-            ) : null}
+        <CompactWorkRecord blocks={message.blocks} live={isLive} />
+        {visibleNarrationBlocks.length > 0 ? (
+          <div className="flex w-fit max-w-full justify-start">
+            <div
+              data-testid="message-bot-bubble"
+              className="max-w-full space-y-2.5 rounded-[20px] bg-muted px-[18px] py-3 text-[15.5px] leading-[1.5] text-foreground/90"
+              dir="auto"
+            >
+              <NarrationBlocks blocks={visibleNarrationBlocks} quoteMessageId={quoteMessageId} />
+              {!isLive && voiceReady && message.blocks.some((block) => block.kind === "text") ? (
+                <button
+                  type="button"
+                  aria-label={speaking ? t`Stop speaking` : t`Speak this reply`}
+                  onClick={onSpeak}
+                  className="text-[12px] text-muted-foreground hover:text-foreground"
+                >
+                  {speaking ? <Trans>Stop</Trans> : <Trans>Speak</Trans>}
+                </button>
+              ) : null}
+            </div>
           </div>
-        </div>
+        ) : null}
       </>
     );
   }
   return (
     <>
       {messageContext}
+      <CompactWorkRecord blocks={message.blocks} live={isLive} />
       {message.blocks.map((block, i) => {
-        if (block.kind === "command")
-          return <ThreadCommandBlock key={block.command.commandId} block={block.command} />;
-        if (isToolActivityBlock(block)) return null;
+        if (
+          block.kind === "command" ||
+          isToolActivityBlock(block) ||
+          isReasoningSummaryBlock(block) ||
+          isInterimNarrationAt(message.blocks, i)
+        ) {
+          return null;
+        }
+        if (block.kind === "progress") {
+          return (
+            <div key={i} className="flex w-fit max-w-full justify-start">
+              <div
+                data-testid="message-bot-bubble"
+                className="max-w-full rounded-[20px] bg-muted px-[18px] py-3 text-[15.5px] leading-[1.5] text-foreground/90"
+                dir="auto"
+              >
+                <ChatMarkdown {...replyMarkdownProps(block)}>{block.text}</ChatMarkdown>
+              </div>
+            </div>
+          );
+        }
         if (block.kind === "handoff") {
           const from = memberName?.(block.fromBotId) ?? t`bot`;
           const to = memberName?.(block.toBotId) ?? t`bot`;
@@ -6629,19 +6650,6 @@ const MessageView = memo(function MessageView({
             </div>
           );
         }
-        if (block.kind === "progress") {
-          return (
-            <div key={i} className="flex w-fit max-w-full justify-start">
-              <div
-                data-testid="message-bot-bubble"
-                className="max-w-full rounded-[20px] bg-muted px-[18px] py-3 text-[15.5px] leading-[1.5] text-foreground/90"
-                dir="auto"
-              >
-                <ChatMarkdown {...replyMarkdownProps(block)}>{block.text}</ChatMarkdown>
-              </div>
-            </div>
-          );
-        }
         if (block.kind === "subagent") {
           const running = block.status === "running";
           const failed = block.status === "failed";
@@ -6680,6 +6688,7 @@ const MessageView = memo(function MessageView({
             </div>
           );
         }
+
         if (block.kind === "child_bot") {
           const removed = block.status === "deleted" || block.status === "archived";
           return (

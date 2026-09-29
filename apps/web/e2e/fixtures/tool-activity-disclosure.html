@@ -8,32 +8,72 @@
   <body>
     <div id="root"></div>
     <script type="module">
+      import { setupI18n } from "@lingui/core";
+      import { I18nProvider } from "@lingui/react";
       import { createElement as h } from "react";
       import { createRoot } from "react-dom/client";
+      import { CompactWorkRecord } from "../../src/components/ai/CompactWorkRecord";
       import "../../src/styles.css";
 
+      const i18n = setupI18n({ locale: "en", messages: { en: {} } });
       const live = new URLSearchParams(location.search).get("live") === "1";
+      // Live: an in-flight activity beat. Complete: only the finished step
+      // summary remains — a real completed run carries no pending progress.
+      const blocks = live
+        ? [
+            {
+              kind: "progress",
+              text: "Checking calendar...",
+              activity: true,
+            },
+          ]
+        : [
+            {
+              kind: "steps",
+              steps: [{ label: "Google Calendar", count: 1 }],
+              durationMs: 400,
+            },
+          ];
+
+      // Mirrors MessageView: the record is a sibling placed immediately
+      // before the rounded reply bubble, both inside the bubble frame.
+      const record = h(CompactWorkRecord, { blocks, live });
       const response = h(
-        "div",
-        { "data-testid": "response" },
-        live ? "Opening the terminal now…" : "Terminal is open and ready.",
-      );
-      const bubble = h(
         "div",
         {
           className:
-            "max-w-[74%] space-y-2.5 rounded-[20px] bg-[#1A1A1D] px-[18px] py-3 text-[15.5px] leading-[1.5] text-[#DFDFE2]",
+            "max-w-full space-y-2.5 rounded-[20px] bg-muted px-[18px] py-3 text-[15.5px] leading-[1.5] text-foreground/90",
         },
-        response,
+        h(
+          "div",
+          { "data-testid": "response" },
+          live ? "Opening the terminal now…" : "Terminal is open and ready.",
+        ),
       );
+      const bubble = h("div", { className: "flex w-fit max-w-full justify-start" }, response);
+
+      const frame = h(
+        "div",
+        {
+          "data-testid": "message-bubble-frame",
+          className: "relative w-fit min-w-0 max-w-[min(74%,calc(100%_-_6rem))]",
+        },
+        record,
+        bubble,
+      );
+
       createRoot(document.getElementById("root")).render(
         h(
-          "main",
-          {
-            className:
-              "flex min-h-screen items-end bg-[#101012] px-4 py-6 md:px-8 md:py-8",
-          },
-          h("div", { className: "flex w-full justify-start" }, bubble),
+          I18nProvider,
+          { i18n },
+          h(
+            "main",
+            {
+              className:
+                "flex min-h-screen items-end bg-background px-4 py-6 md:px-8 md:py-8",
+            },
+            h("div", { className: "relative flex w-full justify-start" }, frame),
+          ),
         ),
       );
     </script>

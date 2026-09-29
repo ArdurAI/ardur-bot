@@ -903,7 +903,7 @@
     {
       "id": "app-chat",
       "file": "screenshots/app-chat.png",
-      "alt": "Chief of Staff bot conversation showing a release checklist command, a drafted team update, and an approval card beside a six-bot team.",
+      "alt": "Chief of Staff bot conversation showing a release checklist command inside the expanded compact work record, a drafted team update, and an approval card beside a six-bot team.",
       "width": 2880,
       "height": 1800,
       "theme": "light"
