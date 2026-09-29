@@ -359,7 +359,7 @@ export function createLearningService(deps: {
     async configure(
       actor: Actor,
       input: unknown,
-      validateModelPin?: (pin: RuntimePin) => Promise<RuntimePin>,
+      validateModelPin?: (pin: RuntimePin) => Promise<Omit<RuntimePin, "revision">>,
     ) {
       await requireSpaceOwner(deps.prisma, actor);
       const config = SpaceLearningConfigInput.parse(input);
