@@ -3,12 +3,17 @@ import { readFileSync } from "node:fs";
 import { stripTypeScriptTypes } from "node:module";
 import path from "node:path";
 import vm from "node:vm";
+import { darkTokens, lightTokens } from "@ardurbot/ui-tokens";
 import { describe, expect, it, vi } from "vitest";
 import { localResetFailure } from "./local-mode.js";
 import { managedLocalOpenUrl, parseSetupInput } from "./setup-config.js";
 import { UnsavedFiles } from "./unsaved-files.js";
+import { windowBackgroundColor } from "./window-options.js";
 
 class WindowFake extends EventEmitter {
+  constructor(readonly options: { backgroundColor?: string } = {}) {
+    super();
+  }
   destroyed = false;
   webContents = Object.assign(new EventEmitter(), { setWindowOpenHandler: vi.fn() });
   hide = vi.fn();
@@ -69,6 +74,9 @@ function fixture() {
     process: { platform: "linux", env: {} },
     developmentIcon: () => undefined,
     browserWindowOptions: () => ({}),
+    windowBackgroundColor,
+    bootSnapshot: undefined as { current: { theme: string; language: string } } | undefined,
+    nativeTheme: { shouldUseDarkColors: true },
     markOnce: vi.fn(),
     safeOrigin: (url: string) => new URL(url).origin,
     loadAppUrl: vi.fn(async () => undefined),
@@ -96,6 +104,25 @@ function fixture() {
 }
 
 const url = "https://app.example.test";
+
+describe("main window colour before the first paint", () => {
+  it("uses the saved theme, and the system theme when nothing is saved", async () => {
+    const f = fixture();
+    await f.openAppOnce(url);
+    expect(f.mainWindow!.options.backgroundColor).toBe(darkTokens.background);
+    f.nativeTheme.shouldUseDarkColors = false;
+    await f.openAppOnce(url);
+    expect(f.mainWindow!.options.backgroundColor).toBe(lightTokens.background);
+
+    f.bootSnapshot = { current: { theme: "dark", language: "de" } };
+    await f.openAppOnce(url);
+    expect(f.mainWindow!.options.backgroundColor).toBe(darkTokens.background);
+    f.nativeTheme.shouldUseDarkColors = true;
+    f.bootSnapshot = { current: { theme: "light", language: "de" } };
+    await f.openAppOnce(url);
+    expect(f.mainWindow!.options.backgroundColor).toBe(lightTokens.background);
+  });
+});
 
 describe("first-launch setup dispatch", () => {
   it.each([

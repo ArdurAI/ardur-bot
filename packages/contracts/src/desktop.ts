@@ -1,5 +1,6 @@
 import type { DesktopCustomization } from "./desktop-extensions.js";
 import type { GuidedSetupBridge, SetupSnapshot } from "./desktop-setup.js";
+import type { UserPreferences } from "./preferences.js";
 
 /**
  * `unsupported` covers an unpackaged build and a repository with no published releases, which is
@@ -49,7 +50,19 @@ export interface DesktopDeviceListenerState {
   reason?: string;
 }
 
+/**
+ * What the desktop app keeps so a new window paints in the right colours before its page loads.
+ * Only these two values, never anything else from the account.
+ */
+export interface DesktopBootSnapshot {
+  theme: UserPreferences["theme"];
+  /** The UI language the app showed last, as a BCP 47 tag such as `de` or `pt-BR`. */
+  language: string;
+}
+
 export interface ArdurBotDesktop {
+  /** Older desktop apps lack this; the page then keeps its own cache only. */
+  boot?: { save(snapshot: DesktopBootSnapshot): Promise<void> };
   system?: { runSetupAgain?(): Promise<void> };
   guidedSetup?: {
     returnToSetup(): Promise<void>;

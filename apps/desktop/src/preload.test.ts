@@ -40,6 +40,7 @@ describe("desktop preload bridge", () => {
     expect(globalName).toBe("ardurbotDesktop");
     expect(bridge.platform).toBe("linux");
     expect(Object.keys(bridge).sort()).toEqual([
+      "boot",
       "customization",
       "devices",
       "host",
@@ -105,6 +106,7 @@ describe("desktop preload bridge", () => {
     const { exposeInMainWorld } = runPreload("preload.cjs");
     const [, bridge] = exposeInMainWorld.mock.calls[0] as [string, Record<string, unknown>];
     expect(Object.keys(bridge).sort()).toEqual([
+      "boot",
       "customization",
       "devices",
       "host",
@@ -119,6 +121,16 @@ describe("desktop preload bridge", () => {
       "update",
       "window",
     ]);
+  });
+
+  it("hands the theme and language to the main process for the next window", async () => {
+    const { invoke, exposeInMainWorld } = runPreload("preload.cjs");
+    const [, bridge] = exposeInMainWorld.mock.calls[0] as [string, ArdurBotDesktop];
+    await bridge.boot?.save({ theme: "light", language: "de" });
+    expect(invoke).toHaveBeenCalledExactlyOnceWith("desktop.boot.save", {
+      theme: "light",
+      language: "de",
+    });
   });
 
   it("forwards captured codes without leaking the IPC event to the renderer", () => {
