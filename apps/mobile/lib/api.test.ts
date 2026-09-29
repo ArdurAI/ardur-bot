@@ -2353,6 +2353,40 @@ describe("mobile thread event reduction", () => {
     });
     expect(finished?.messages.map((message) => message.id)).toEqual(["m-0", "reply-1", "q-1"]);
   });
+
+  it("marks the live reply as streaming only while its text is growing", () => {
+    const initial = snapshot();
+    const growing = applyMobileThreadEvent(initial, {
+      type: "thread.progress",
+      seq: 4,
+      runId: "run-1",
+      payload: { text: "Chief's summary", streaming: true },
+    });
+    expect(growing?.messages.at(-1)?.blocks.at(-1)).toMatchObject({
+      kind: "progress",
+      streaming: true,
+    });
+
+    // The text stops and the bot moves on to a command; the cursor must go away.
+    const working = applyMobileThreadEvent(growing, {
+      type: "agent.tool.called",
+      seq: 5,
+      runId: "run-1",
+      payload: { name: "run_command" },
+    });
+    const tail = working?.messages.at(-1)?.blocks.at(-1);
+    expect(tail).toMatchObject({ kind: "progress" });
+    expect(tail).not.toHaveProperty("streaming");
+
+    // The run ends; no live draft remains.
+    const done = applyMobileThreadEvent(working, {
+      type: "run.completed",
+      seq: 6,
+      runId: "run-1",
+      payload: {},
+    });
+    expect(done?.messages).toEqual([]);
+  });
 });
 
 function jsonResponse(body: unknown, init?: ResponseInit) {

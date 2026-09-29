@@ -214,6 +214,9 @@ export function reduceLiveMessageBlocks(
     update.type === "progress"
       ? update.payload?.activity === true
       : tail?.kind === "progress" && tail.activity === true;
+  // The cursor follows the reply's text, not the run: only a freshly streamed delta
+  // marks the draft as still growing; tool calls and activity lines leave it off.
+  const streaming = update.type === "progress" && update.payload?.streaming === true && !activity;
 
   if (pendingToolNames.length > 0 && endsSentence(tailText)) {
     let next = activity ? [...segments] : appendTextSegment(segments, tailText);
@@ -227,6 +230,7 @@ export function reduceLiveMessageBlocks(
       kind: "progress",
       text: tailText,
       ...(activity ? { activity: true as const } : {}),
+      ...(streaming ? { streaming: true as const } : {}),
       ...(pendingToolNames.length > 0 ? { pendingToolNames } : {}),
     },
   ];

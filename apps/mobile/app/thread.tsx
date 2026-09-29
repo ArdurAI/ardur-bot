@@ -123,6 +123,7 @@ import { presentMessageActionSheet } from "../lib/message-action-sheet";
 import {
   hasVisibleMessagePresentation,
   isCenteredAgentEvent,
+  liveReplyTextStreaming,
   messagePresentationSegments,
 } from "../lib/message-presentation";
 import { native, useMobileTokens, useResolvedAppearance } from "../lib/native";
@@ -3059,6 +3060,7 @@ function MessageTextCard({
           palette={tokens}
           colorScheme={colorScheme}
           streaming={message.id.startsWith("progress:")}
+          cursor={liveReplyTextStreaming(message.blocks)}
         >
           {contentText}
         </ChatMarkdown>

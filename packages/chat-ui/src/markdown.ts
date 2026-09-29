@@ -1,6 +1,12 @@
 export type ChatMarkdownProps = {
   children: string;
   streaming?: boolean;
+  /**
+   * Show the blinking cursor. Defaults to `streaming`; callers pass false once the
+   * reply's text has stopped growing even though the run (and the streaming layout)
+   * is still active.
+   */
+  cursor?: boolean;
 };
 
 const protocolPattern = /^([a-z][a-z\d+.-]*):/i;

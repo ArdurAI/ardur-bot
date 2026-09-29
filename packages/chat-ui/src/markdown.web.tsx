@@ -90,8 +90,10 @@ const components: Components = {
 export const ChatMarkdown = memo(function ChatMarkdown({
   children,
   streaming = false,
+  cursor,
 }: ChatMarkdownProps) {
   const source = streaming ? closeUnterminatedFence(children) : children;
+  const showCursor = cursor ?? streaming;
 
   return (
     <div className={streaming ? "rk-chat-markdown rk-chat-markdown-streaming" : "rk-chat-markdown"}>
@@ -103,7 +105,7 @@ export const ChatMarkdown = memo(function ChatMarkdown({
       >
         {source}
       </ReactMarkdown>
-      {streaming ? <span aria-hidden="true" className="rk-chat-markdown-cursor" /> : null}
+      {showCursor ? <span aria-hidden="true" className="rk-chat-markdown-cursor" /> : null}
     </div>
   );
 });

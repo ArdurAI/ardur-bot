@@ -1213,7 +1213,7 @@ describe("thread event reduction", () => {
     );
 
     // No sentence terminator has streamed in yet, so the tool call is still hidden and
-    // everything so far renders as one continuous progress block.
+    // everything so far renders as one continuous progress block, still streaming.
     expect(afterMore?.messages).toEqual([
       expect.objectContaining({
         id: "progress:run-1",
@@ -1221,6 +1221,7 @@ describe("thread event reduction", () => {
           {
             kind: "progress",
             text: "Let me check Slack Found it, now sanding",
+            streaming: true,
             pendingToolNames: ["SLACK_FIND_CHANNELS"],
           },
         ],
@@ -1436,6 +1437,60 @@ describe("thread event reduction", () => {
       }),
     );
     expect(finished?.messages.map((item) => item.id)).toEqual(["m-0", "reply-1", "q-1"]);
+  });
+
+  it("marks the live reply as streaming only while its text is growing", () => {
+    const initial = snapshot([]);
+    const growing = reduceThreadSnapshot(
+      initial,
+      event({
+        type: "thread.progress",
+        seq: 1,
+        runId: "run-1",
+        payload: { text: "Chief's summary", streaming: true },
+      }),
+    );
+    expect(growing?.messages.at(-1)?.blocks.at(-1)).toMatchObject({
+      kind: "progress",
+      streaming: true,
+    });
+
+    // The text stops and the bot moves on to a command; the cursor must go away.
+    const working = reduceThreadSnapshot(
+      growing!,
+      event({
+        type: "agent.tool.called",
+        seq: 2,
+        runId: "run-1",
+        payload: { name: "run_command" },
+      }),
+    );
+    const tail = working?.messages.at(-1)?.blocks.at(-1);
+    expect(tail).toMatchObject({ kind: "progress" });
+    expect(tail).not.toHaveProperty("streaming");
+
+    // Text growing again brings the cursor back. A delta without a sentence end keeps
+    // the draft as one progress block, still streaming.
+    const resumed = reduceThreadSnapshot(
+      working!,
+      event({
+        type: "thread.progress",
+        seq: 3,
+        runId: "run-1",
+        payload: { delta: " and more", streaming: true },
+      }),
+    );
+    expect(resumed?.messages.at(-1)?.blocks.at(-1)).toMatchObject({
+      kind: "progress",
+      streaming: true,
+    });
+
+    // The run ends; no live draft remains.
+    const done = reduceThreadSnapshot(
+      resumed!,
+      event({ type: "run.completed", seq: 4, runId: "run-1", payload: {} }),
+    );
+    expect(done?.messages).toEqual([]);
   });
 
   it("updates a waiting group run without replacing the newer active run", () => {

@@ -6375,7 +6375,12 @@ const MessageView = memo(function MessageView({
                     key={i}
                     data-quote-message-id={block.kind === "text" ? quoteMessageId : undefined}
                   >
-                    <ChatMarkdown streaming={block.kind === "progress"}>{block.text}</ChatMarkdown>
+                    <ChatMarkdown
+                      streaming={block.kind === "progress"}
+                      cursor={block.kind === "progress" && block.streaming === true}
+                    >
+                      {block.text}
+                    </ChatMarkdown>
                   </div>
                 );
               }
@@ -6463,7 +6468,9 @@ const MessageView = memo(function MessageView({
                 className="max-w-full rounded-[20px] bg-muted px-[18px] py-3 text-[15.5px] leading-[1.5] text-foreground/90"
                 dir="auto"
               >
-                <ChatMarkdown streaming>{block.text}</ChatMarkdown>
+                <ChatMarkdown streaming cursor={block.streaming === true}>
+                  {block.text}
+                </ChatMarkdown>
               </div>
             </div>
           );

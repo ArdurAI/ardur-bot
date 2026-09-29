@@ -69,6 +69,38 @@ describe("reduceLiveMessageBlocks", () => {
       { kind: "steps", steps: [{ label: "Shell", count: 1 }] },
     ]);
   });
+
+  it("marks reply text as streaming only while it is still growing", () => {
+    const streaming = reduceLiveMessageBlocks([], {
+      type: "progress",
+      payload: { text: "Chief's summary", streaming: true },
+    });
+    expect(streaming).toEqual([{ kind: "progress", text: "Chief's summary", streaming: true }]);
+
+    // A tool call mid-sentence: the text has stopped while the run works on.
+    const working = reduceLiveMessageBlocks(streaming, { type: "tool", name: "run_command" });
+    expect(working).toEqual([
+      { kind: "progress", text: "Chief's summary", pendingToolNames: ["run_command"] },
+    ]);
+
+    // Text growing again re-marks the draft.
+    const growing = reduceLiveMessageBlocks(working, {
+      type: "progress",
+      payload: { delta: " And more", streaming: true },
+    });
+    expect(growing.at(-1)).toMatchObject({ kind: "progress", streaming: true });
+
+    // A completed sentence flushes to durable-styled text plus the tool step: no
+    // live text block remains to carry a cursor.
+    const flushed = reduceLiveMessageBlocks(
+      [{ kind: "progress", text: "Done.", streaming: true } as const],
+      { type: "tool", name: "run_command" },
+    );
+    expect(flushed).toEqual([
+      { kind: "text", text: "Done." },
+      { kind: "steps", steps: [{ label: "Run command", count: 1 }] },
+    ]);
+  });
 });
 
 describe("runFailureError", () => {
@@ -126,7 +158,7 @@ describe("projectMessages", () => {
     ]);
     expect(messages).toHaveLength(2);
     expect(messages[0]?.blocks[0]).toEqual({ kind: "text", text: "hi" });
-    expect(messages[1]?.blocks[0]).toEqual({ kind: "progress", text: "Lisbon" });
+    expect(messages[1]?.blocks[0]).toEqual({ kind: "progress", text: "Lisbon", streaming: true });
   });
 
   it("drops streaming tokens once the completed message is durable", () => {
@@ -354,7 +386,7 @@ describe("projectMessages", () => {
     ]);
     expect(messages[0]?.blocks).toEqual([
       { kind: "steps", steps: [{ label: "Shell", count: 1 }] },
-      { kind: "progress", text: "The check passed." },
+      { kind: "progress", text: "The check passed.", streaming: true },
     ]);
   });
 
@@ -390,11 +422,12 @@ describe("projectMessages", () => {
     ]);
     expect(messages).toHaveLength(1);
     // No sentence terminator has streamed in yet, so the "Shell" call stays hidden and
-    // everything so far renders as one continuous progress tail.
+    // everything so far renders as one continuous progress tail, still streaming.
     expect(messages[0]?.blocks).toEqual([
       {
         kind: "progress",
         text: "Let me check what I have locally and try the GitHub API",
+        streaming: true,
         pendingToolNames: ["shell"],
       },
     ]);

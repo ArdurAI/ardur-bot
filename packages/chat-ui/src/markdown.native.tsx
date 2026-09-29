@@ -128,6 +128,7 @@ const renderRules: RenderRules = {
 export const ChatMarkdown = memo(function ChatMarkdown({
   children,
   streaming = false,
+  cursor,
   palette = darkTokens,
   colorScheme = "dark",
 }: ChatMarkdownProps & { palette?: ColorTokens; colorScheme?: ResolvedAppearance }) {
@@ -142,11 +143,19 @@ export const ChatMarkdown = memo(function ChatMarkdown({
       return false;
     },
   };
+  // The cursor follows the text, not the run: once the reply stops growing it hides,
+  // while the streaming layout stays so partial fences remain sealed.
+  const showCursor = cursor ?? streaming;
 
   return (
     <View style={layout.wrap}>
       {streaming ? (
-        <MarkdownStream {...sharedProps} cursorColor={palette.mutedForeground} streaming>
+        <MarkdownStream
+          {...sharedProps}
+          cursorColor={palette.mutedForeground}
+          cursorStyle={showCursor ? undefined : layout.hiddenCursor}
+          streaming
+        >
           {children}
         </MarkdownStream>
       ) : (
@@ -161,6 +170,11 @@ const layout = StyleSheet.create({
     width: "100%",
     minWidth: 0,
     flexShrink: 1,
+  },
+  hiddenCursor: {
+    width: 0,
+    height: 0,
+    marginTop: 0,
   },
 });
 

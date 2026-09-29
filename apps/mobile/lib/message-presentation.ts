@@ -1,5 +1,5 @@
 import type { MessageBlock } from "@ardurbot/contracts";
-import { isToolActivityBlock } from "@ardurbot/core";
+import { isStreamingTextBlock, isToolActivityBlock } from "@ardurbot/core";
 
 export function isCenteredAgentEvent(blocks: readonly MessageBlock[]): boolean {
   return blocks.some(
@@ -27,4 +27,14 @@ export function messagePresentationSegments(
 
 export function hasVisibleMessagePresentation(blocks: readonly MessageBlock[]): boolean {
   return blocks.some((block) => !isToolActivityBlock(block));
+}
+
+/**
+ * The reply cursor shows only while the live draft's tail text is still growing. Once
+ * the text stops — the bot moved on to commands, cards, or a handoff — the cursor goes
+ * away even though the draft (and its streaming layout) is still live.
+ */
+export function liveReplyTextStreaming(blocks: readonly MessageBlock[]): boolean {
+  const tail = blocks.at(-1);
+  return tail !== undefined && isStreamingTextBlock(tail);
 }
