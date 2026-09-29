@@ -253,6 +253,9 @@ export const DELEGATION_LIMITS = {
   // (DEFAULT_MODEL_CONTEXT_WINDOW) plus one output (DEFAULT_MODEL_MAX_TOKENS).
   // A smaller reservation cannot survive the worker's first request.
   reservationTokens: 36_864,
+  // The reservation every attempt used before per-attempt amounts were stored.
+  // Rows without a stored amount settle against this, never the current default.
+  legacyReservationTokens: 10_000,
   durationMs: 3_600_000,
 } as const;
 export const delegationsContract = {

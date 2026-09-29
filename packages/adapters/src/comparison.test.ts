@@ -205,6 +205,28 @@ describe("comparison orchestration through P2 admission", () => {
     );
     expect(f.state().root.totalDescendants).toBe(3);
   });
+  it("releases a legacy 10,000 merge hold when the stored amount is missing", async () => {
+    const f = comparisonFixture();
+    const comparison = await startComparison(f.deps, comparisonScope, comparisonInput);
+    await f.complete(comparison.results[0]!.runId, "Selected");
+    await f.complete(comparison.results[1]!.runId, "Other");
+    const stored = f.state().comparisons.find((row) => row.id === comparison.id);
+    stored.mergeReservedTokens = null;
+    f.state().root.reservedTokens = DELEGATION_LIMITS.legacyReservationTokens;
+    const beforeLimit = f.state().root.tokenLimit;
+    await mergeComparison(f.deps, comparisonScope, {
+      id: comparison.id,
+      selectedRunIds: [comparison.results[0]!.runId],
+      botId: "third",
+      reserveBudget: false,
+    });
+    // Releasing today's constant from a 10,000 hold would leave the root at 10,000
+    // after the new reservation, or negative if nothing refilled it.
+    expect(f.state().root.reservedTokens).toBe(DELEGATION_LIMITS.reservationTokens);
+    expect(f.state().root.tokenLimit).toBe(
+      beforeLimit + DELEGATION_LIMITS.reservationTokens - DELEGATION_LIMITS.legacyReservationTokens,
+    );
+  });
   it("requires an explicit reservation when merge was not reserved", async () => {
     const f = comparisonFixture();
     const comparison = await startComparison(f.deps, comparisonScope, {

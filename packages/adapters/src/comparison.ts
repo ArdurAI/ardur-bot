@@ -27,7 +27,7 @@ import {
 } from "@ardurbot/db";
 import { getLogger } from "@ardurbot/logging";
 import type { DelegationResolver } from "./delegation.js";
-import { prepareDelegation } from "./delegation.js";
+import { delegationFloorForModel, prepareDelegation } from "./delegation.js";
 import { destinationForModel } from "./model-locality.js";
 
 type Scope = Pick<Actor, "spaceId" | "userId">;
@@ -63,7 +63,12 @@ export async function comparisonParticipants(
           },
         },
       };
-      return { bot, selected, participant };
+      // The reservation this run actually needs: one realistic request on its own pin.
+      const reservation = Math.max(
+        DELEGATION_LIMITS.reservationTokens,
+        delegationFloorForModel(selected.pin, selected),
+      );
+      return { bot, selected, participant, reservation };
     }),
   );
 }
@@ -78,6 +83,7 @@ async function queueComparisonRun(
     participant: ComparisonParticipant;
     prompt: string;
     card: unknown;
+    tokens: number;
     selectedRunIds?: string[];
     frozenInput: Prisma.InputJsonValue;
   },
@@ -100,6 +106,7 @@ async function queueComparisonRun(
       admissionKey: `comparison:${input.comparisonId}:${input.position}`,
       prompt: input.prompt,
       card: input.card,
+      tokens: input.tokens,
     },
     resolvePin,
   );
@@ -285,9 +292,13 @@ export async function startComparison(deps: ComparisonDeps, scope: Scope, raw: C
           requestHash: deviceDigest(JSON.stringify(input)),
           snapshot,
           participants: prepared.map((entry) => entry.participant),
+          // Each run's reservation covers one realistic request on its own pinned model,
+          // so the total the owner chose by choosing participants must sum the floors.
           budgetTokens:
-            (prepared.length + Number(input.reserveMerge)) * DELEGATION_LIMITS.reservationTokens,
+            prepared.reduce((sum, entry) => sum + entry.reservation, 0) +
+            (input.reserveMerge ? DELEGATION_LIMITS.reservationTokens : 0),
           mergeReserved: input.reserveMerge,
+          mergeReservedTokens: input.reserveMerge ? DELEGATION_LIMITS.reservationTokens : null,
         },
       });
       await tx.delegationRoot.create({
@@ -298,7 +309,8 @@ export async function startComparison(deps: ComparisonDeps, scope: Scope, raw: C
           coordinatorThreadId: thread.id,
           // The owner chose this budget by choosing the participants; admit every run.
           tokenLimit:
-            (prepared.length + Number(input.reserveMerge)) * DELEGATION_LIMITS.reservationTokens,
+            prepared.reduce((sum, entry) => sum + entry.reservation, 0) +
+            (input.reserveMerge ? DELEGATION_LIMITS.reservationTokens : 0),
           reservedTokens: input.reserveMerge ? DELEGATION_LIMITS.reservationTokens : 0,
           deadlineAt: new Date(parent.createdAt.getTime() + DELEGATION_LIMITS.durationMs),
         },
@@ -316,6 +328,7 @@ export async function startComparison(deps: ComparisonDeps, scope: Scope, raw: C
               participant: entry.participant,
               prompt: snapshot.text,
               card: snapshot.card,
+              tokens: entry.reservation,
               frozenInput: snapshot,
             },
             async () => entry.selected,
@@ -358,15 +371,28 @@ export async function mergeComparison(deps: ComparisonDeps, scope: Scope, raw: C
         throw new Error("Select completed outputs from this comparison.");
       if (!row.mergeReserved && !input.reserveBudget)
         throw new Error("Reserve one more run before merging; hosted providers may bill per run.");
+      // The merge run reserves what its own pin needs for one request. A comparison with a
+      // held reservation releases exactly what it held (older rows held the legacy 10,000);
+      // when the merge bot's floor exceeds the hold, only that difference extends the cap.
+      const mergeReservation = Math.max(
+        DELEGATION_LIMITS.reservationTokens,
+        delegationFloorForModel(entry.participant.executing.pin, entry.selected),
+      );
+      const mergeHold = row.mergeReservedTokens ?? DELEGATION_LIMITS.legacyReservationTokens;
       if (row.mergeReserved)
         await tx.delegationRoot.update({
           where: { rootTaskId: row.rootTaskId },
-          data: { reservedTokens: { decrement: DELEGATION_LIMITS.reservationTokens } },
+          data: {
+            reservedTokens: { decrement: mergeHold },
+            ...(mergeReservation > mergeHold
+              ? { tokenLimit: { increment: mergeReservation - mergeHold } }
+              : {}),
+          },
         });
       else
         await tx.delegationRoot.update({
           where: { rootTaskId: row.rootTaskId },
-          data: { tokenLimit: { increment: DELEGATION_LIMITS.reservationTokens } },
+          data: { tokenLimit: { increment: mergeReservation } },
         });
       const frozenInput = comparisonMergeInput(selected, comparison.participants);
       const runId = await queueComparisonRun(
@@ -379,6 +405,7 @@ export async function mergeComparison(deps: ComparisonDeps, scope: Scope, raw: C
           participant: entry.participant,
           prompt: "Merge selected outputs and preserve disagreements and sources.",
           card: taskCardRequest("Merge selected outputs and preserve disagreements and sources."),
+          tokens: mergeReservation,
           frozenInput,
           selectedRunIds: input.selectedRunIds,
         },
@@ -389,8 +416,10 @@ export async function mergeComparison(deps: ComparisonDeps, scope: Scope, raw: C
         data: {
           mergeReserved: false,
           ...(!row.mergeReserved
-            ? { budgetTokens: { increment: DELEGATION_LIMITS.reservationTokens } }
-            : {}),
+            ? { budgetTokens: { increment: mergeReservation } }
+            : mergeReservation > mergeHold
+              ? { budgetTokens: { increment: mergeReservation - mergeHold } }
+              : {}),
         },
       });
       return [runId];

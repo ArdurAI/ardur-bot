@@ -443,6 +443,7 @@ export async function admitDelegation(
       ancestorBotIds,
       differences: delegationDifferences(parentSnapshot, snapshot, input.actingName),
       reservedTokens: tokens,
+      attemptReservedTokens: tokens,
       deadlineAt,
       admissionKey: input.admissionKey,
       fingerprint,
@@ -514,6 +515,21 @@ export function delegationStopReason(
   if (row.usedTokens >= row.reservedTokens) return "budget";
   return "stopped";
 }
+/**
+ * The amount the row's current attempt actually reserved. Rows written before
+ * per-attempt amounts were stored keep their old reservation: the legacy 10,000
+ * for a reworked attempt, the row's own reservation for a first attempt.
+ */
+export function delegationAttemptReservation(row: {
+  hop: number;
+  reservedTokens: number;
+  attemptReservedTokens: number | null;
+}): number {
+  return (
+    row.attemptReservedTokens ??
+    (row.hop > 1 ? DELEGATION_LIMITS.legacyReservationTokens : row.reservedTokens)
+  );
+}
 /** Called only after the executor finishes or confirms its abort. The unique summary is durable. */
 export async function finishDelegation(
   tx: Prisma.TransactionClient,
@@ -559,13 +575,15 @@ export async function finishDelegation(
   const usedInAttempt = attemptSpent
     ? (attemptSpent._sum.inputTokens ?? 0) + (attemptSpent._sum.outputTokens ?? 0)
     : row.usedTokens;
-  const attemptLimit = row.hop > 1 ? DELEGATION_LIMITS.reservationTokens : row.reservedTokens;
+  // Settlement uses the amount this attempt actually reserved, never the current
+  // global constant: an older attempt keeps its own reservation.
+  const attemptReserved = delegationAttemptReservation(row);
   await tx.delegationRoot.update({
     where: { rootTaskId: row.rootTaskId },
     data: {
       activeDescendants: { decrement: 1 },
       reservedTokens: {
-        decrement: Math.max(0, attemptLimit - usedInAttempt - brokerHeld),
+        decrement: Math.max(0, attemptReserved - usedInAttempt - brokerHeld),
       },
     },
   });

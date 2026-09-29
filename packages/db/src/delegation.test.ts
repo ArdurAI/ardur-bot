@@ -567,6 +567,7 @@ it("grows the default reservation to the worker's one-request floor", async () =
   const f = fixture();
   const row = await f.admit({ minimumTokens: 65_536 });
   expect(row.reservedTokens).toBe(65_536);
+  expect(row.attemptReservedTokens).toBe(65_536);
   expect(f.state().root).toMatchObject({ reservedTokens: 65_536 });
 });
 it("refuses budgeted delegation to a runtime that cannot enforce it", async () => {
@@ -576,4 +577,46 @@ it("refuses budgeted delegation to a runtime that cannot enforce it", async () =
     f.admit({ snapshot: { ...snapshot, pin: { ...snapshot.pin, runtimeKind: "antigravity" } } }),
   ).rejects.toMatchObject({ problem: { code: "runtime-unbudgeted" } });
   expect(f.state()).toEqual(before);
+});
+it("settles a legacy rework attempt against its old 10000 reservation, never the new size", async () => {
+  const f = fixture();
+  const row = await f.admit();
+  const db = f.worker();
+  await db.$transaction((tx) => finishDelegation(tx, row.id, "completed", "First pass"));
+  // A row written before per-attempt amounts were stored: hop advanced, no stored amount,
+  // and the root still holds the 10,000 the old code reserved for this attempt.
+  const stored = f.state().rows[0];
+  stored.status = "running";
+  stored.hop = 2;
+  delete stored.attemptReservedTokens;
+  stored.usedTokens = 0;
+  f.state().root.reservedTokens = 10_000;
+  f.state().root.activeDescendants = 1;
+  await db.$transaction((tx) => finishDelegation(tx, row.id, "completed", "Legacy finish"));
+  // 36,864 would have driven the reservation to -26,864; the stored fallback releases 10,000.
+  expect(f.state().root.reservedTokens).toBe(0);
+  expect(f.state().root.reservedTokens).toBeGreaterThanOrEqual(0);
+});
+it("settles each attempt against the amount it actually reserved", async () => {
+  const f = fixture();
+  const row = await f.admit({ tokens: 50_000, minimumTokens: 50_000 });
+  expect(f.state().rows[0].attemptReservedTokens).toBe(50_000);
+  const db = f.worker();
+  await db.$transaction((tx) => finishDelegation(tx, row.id, "completed", "First pass"));
+  expect(f.state().root.reservedTokens).toBe(0);
+  f.state().runs.find((run) => run.id === row.runId).status = "completed";
+  await db.$transaction((tx) =>
+    rejectDelegation(tx, { spaceId: "space", userId: "owner" }, row.id, "coordinator", "Revise"),
+  );
+  // Rework reserves what the previous attempt reserved, not the bare default.
+  expect(f.state().rows[0].attemptReservedTokens).toBe(50_000);
+  expect(f.state().root.reservedTokens).toBe(50_000);
+  // The second attempt measures 20,000; the incremental usage settlement converted that
+  // much of the hold, so finishing releases exactly the remaining 30,000.
+  f.tx.usageRecord.aggregate.mockResolvedValue({
+    _sum: { inputTokens: 20_000, outputTokens: 0 },
+  });
+  f.state().root.reservedTokens = 30_000;
+  await db.$transaction((tx) => finishDelegation(tx, row.id, "completed", "Second pass"));
+  expect(f.state().root.reservedTokens).toBe(0);
 });
