@@ -15,7 +15,6 @@ function windowChrome(platform: NodeJS.Platform) {
   const mac = platform === "darwin";
   return {
     backgroundColor: WINDOW_BACKGROUND_COLOR,
-    show: true,
     autoHideMenuBar: true,
     frame: true,
     titleBarStyle: mac ? ("hiddenInset" as const) : ("default" as const),
@@ -24,7 +23,8 @@ function windowChrome(platform: NodeJS.Platform) {
 }
 
 export function browserWindowOptions(platform: NodeJS.Platform) {
-  return { width: 1440, height: 900, ...windowChrome(platform) };
+  // Hidden until ready-to-show so a cold start does not flash an empty frame.
+  return { width: 1440, height: 900, ...windowChrome(platform), show: false };
 }
 
 /**
@@ -37,5 +37,12 @@ export function developmentIconFile(platform: NodeJS.Platform) {
 
 /** The first-run setup window is smaller and keeps the same platform chrome. */
 export function setupWindowOptions(platform: NodeJS.Platform) {
-  return { width: 720, height: 700, minWidth: 480, minHeight: 560, ...windowChrome(platform) };
+  return {
+    width: 720,
+    height: 700,
+    minWidth: 480,
+    minHeight: 560,
+    ...windowChrome(platform),
+    show: true,
+  };
 }

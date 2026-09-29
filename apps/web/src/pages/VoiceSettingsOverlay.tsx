@@ -16,8 +16,9 @@ import {
   NativeSelect,
   NativeSelectOption,
 } from "@ardurbot/ui-web";
+import { selectableRowClasses } from "@ardurbot/ui-web/lib/state-classes";
 import { Trans, useLingui } from "@lingui/react/macro";
-import { XIcon } from "lucide-react";
+import { CheckIcon, XIcon } from "lucide-react";
 import { useEffect, useId, useMemo, useState } from "react";
 import { rpc } from "../lib/rpc";
 
@@ -212,13 +213,15 @@ export function VoiceSettingsOverlay({
                       )
                       .finally(() => markPending(null));
                   }}
-                  className={`flex w-full items-center gap-3 border-b border-border px-3.5 py-3 text-start transition-colors last:border-0 disabled:pointer-events-none disabled:opacity-50 ${
-                    entry.id === provider ? "bg-muted" : "hover:bg-accent"
-                  }`}
+                  className={selectableRowClasses(
+                    entry.id === provider,
+                    "flex w-full items-center gap-3 border-b border-border px-3.5 py-3 text-start last:border-0 disabled:pointer-events-none disabled:opacity-50",
+                  )}
+                  aria-current={entry.id === provider ? "true" : undefined}
                 >
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[15px] text-foreground">{entry.name}</span>
-                    <span className="mt-0.5 block text-[12px] text-muted-foreground/80">
+                    <span className="mt-0.5 block text-[12px] text-muted-foreground/80 font-normal">
                       {entry.transcribe ? (
                         <Trans>Speak + transcribe</Trans>
                       ) : (
@@ -230,6 +233,9 @@ export function VoiceSettingsOverlay({
                     <span className="text-[12px] text-success">
                       <Trans>Connected</Trans>
                     </span>
+                  ) : null}
+                  {entry.id === provider ? (
+                    <CheckIcon className="size-4 shrink-0 text-foreground" />
                   ) : null}
                 </button>
               );

@@ -97,9 +97,9 @@ export function SettingsRow({
       aria-labelledby={id}
       hidden={!visible}
       data-settings-row={label}
-      className="min-w-0 border-0 p-0"
+      className="min-w-0 p-0 border-b border-border last:border-b-0"
     >
-      <div className="flex items-center justify-between gap-4 border-b border-border py-4">
+      <div className="flex items-center justify-between gap-4 py-4">
         <div className="min-w-0">
           <div id={id} className="text-sm font-medium">
             {label}
@@ -108,7 +108,24 @@ export function SettingsRow({
         </div>
         <div className="flex shrink-0 items-center gap-2">{children}</div>
       </div>
-      {content}
+      {content ? <div className="pb-4">{content}</div> : null}
     </fieldset>
+  );
+}
+
+export function SettingsGroup({
+  label,
+  children,
+}: {
+  label: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <section data-settings-group className="mb-6 last:mb-0">
+      <h3 className="px-2 pb-1 font-mono text-[11px] uppercase tracking-[0.1em] text-muted-foreground">
+        {label}
+      </h3>
+      <div className="rounded-xl border border-border bg-card px-4">{children}</div>
+    </section>
   );
 }

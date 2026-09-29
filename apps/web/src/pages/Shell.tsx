@@ -188,7 +188,6 @@ import { readSeenRunErrorIds, rememberSeenRunErrorId } from "../lib/run-error-st
 import type {} from "../lib/scoreboard-trace";
 import { sharedInflight } from "../lib/shared-inflight";
 import {
-  activeMemberRun,
   activeThreadRuns,
   applyThreadSendReceipt,
   clearActiveThreadRuns,
@@ -239,6 +238,7 @@ import {
 import { ComputerScreenError } from "./shell/computer-screen-error";
 import { useComputerTerminal } from "./shell/computer-terminal";
 import { getEffectiveWorkspaceTab, isComputerVisible } from "./shell/computer-visibility";
+import { GroupParticipantModels } from "./shell/group-participants";
 import {
   AppConnectCard,
   ArtifactImage,
@@ -3470,33 +3470,12 @@ export function ShellPage({
               />
             ) : null}
             {inGroup && activeGroup ? (
-              <div
-                data-testid="group-participant-models"
-                className="app-no-drag flex min-w-0 items-center gap-2 overflow-x-auto"
-              >
-                {activeGroup.members.map((member) => {
-                  const participant = bots.find((bot) => bot.id === member.botId);
-                  if (!participant) return null;
-                  const admitted = activeMemberRun(currentRuns, member.botId);
-                  return (
-                    <div
-                      key={member.botId}
-                      data-testid={`group-participant-${member.botId}`}
-                      className="flex shrink-0 items-center gap-1"
-                    >
-                      <span className="text-xs text-muted-foreground">{member.name}</span>
-                      <BotModelChip
-                        bot={participant}
-                        settings={modelSettings}
-                        pin={member.effectiveRuntimePin}
-                        nextPin={member.effectiveRuntimePin}
-                        run={admitted}
-                        display="using"
-                      />
-                    </div>
-                  );
-                })}
-              </div>
+              <GroupParticipantModels
+                activeGroup={activeGroup}
+                bots={bots}
+                currentRuns={currentRuns}
+                modelSettings={modelSettings}
+              />
             ) : null}
             <RunContext run={activeSnapshot?.contextRun ?? activeSnapshot?.run} />
           </div>
@@ -3844,7 +3823,7 @@ export function ShellPage({
                 group={activeGroup}
                 bots={bots}
                 modelSettings={modelSettings}
-                onModelPin={async (member, pin) => {
+                onModelPin={async (member, pin, expectedBotModelPinRevision) => {
                   if (!member.memberId) return;
                   const target = {
                     groupId: activeGroup.id,
@@ -3856,7 +3835,9 @@ export function ShellPage({
                     ? await rpc.groups.setMemberModelPin({
                         ...target,
                         expectedBotModelPinRevision:
-                          bots.find((b) => b.id === member.botId)?.modelPinRevision ?? 0,
+                          expectedBotModelPinRevision ??
+                          bots.find((b) => b.id === member.botId)?.modelPinRevision ??
+                          0,
                         pin,
                       })
                     : await rpc.groups.clearMemberModelPin(target);
@@ -3932,8 +3913,9 @@ export function ShellPage({
                         mode: computerMode,
                       });
                     }
-                    await rpc.bots.update({ botId: active.id, ...patch });
+                    const updated = await rpc.bots.update({ botId: active.id, ...patch });
                     await refreshBots();
+                    return updated;
                   }}
                   onExport={async () => {
                     const { path } = await rpc.export.bot({ botId: active.id });

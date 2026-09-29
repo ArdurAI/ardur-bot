@@ -15,6 +15,8 @@ export const RU_MESSAGES: Record<string, string> = {
   "Conversation with {name}": "Диалог с {name}",
   "{count} active tasks": "{count} активных задач",
   "{count} peer messages waiting": "{count} сообщений от ботов ожидают",
+  "{runtime} can't use Ardur tools — a coordinator needs tools to hand off work.":
+    "{runtime} не может использовать инструменты Ardur — координатору нужны инструменты, чтобы передавать работу.",
   Conversation: "Диалог",
   "Open peer thread": "Открыть диалог с ботом",
   "This chat is view-only": "Этот диалог доступен только для чтения",
@@ -107,6 +109,9 @@ export const RU_MESSAGES: Record<string, string> = {
   "What should your bots call you?": "Как ботам к вам обращаться?",
   "What best describes your work?": "Как лучше всего описать вашу работу?",
   "Instructions for all bots": "Инструкции для всех ботов",
+  "Save instructions": "Сохранить инструкции",
+  "Sign-in and security": "Вход и безопасность",
+  "Devices and sessions": "Устройства и сессии",
   "Space ID": "ID пространства",
   "Log out of all devices": "Выйти на всех устройствах",
   "This signs out every other session and keeps this one signed in.":
