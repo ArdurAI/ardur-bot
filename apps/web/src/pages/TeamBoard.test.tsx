@@ -44,7 +44,10 @@ vi.mock("@lingui/react/macro", () => ({
     },
   }),
 }));
-vi.mock("@lingui/core/macro", () => ({ t: (parts: TemplateStringsArray) => parts.join("") }));
+vi.mock("@lingui/core/macro", () => ({
+  t: (parts: TemplateStringsArray) => parts.join(""),
+  msg: (parts: TemplateStringsArray) => ({ id: parts.join(""), message: parts.join("") }),
+}));
 vi.mock("@ardurbot/ui-web", () => ({
   Button: ({
     variant: _v,
