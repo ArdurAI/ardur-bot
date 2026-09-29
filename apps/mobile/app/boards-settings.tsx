@@ -29,6 +29,7 @@ import { rpc } from "../lib/api";
 import { hasPairedDevice } from "../lib/dispatch";
 import { useI18n } from "../lib/i18n";
 import {
+  effortLabel,
   loadLearningSettings,
   reviewerMenuOptions,
   setReviewerPin,
@@ -374,7 +375,7 @@ export default function BoardsSettings() {
             if (effortLevels.length === 0 || isNativeReviewerKind(kind)) return null;
             return (
               <Button
-                title={t("Thinking: {level}", { level: pin.effort ?? "medium" })}
+                title={t("Thinking: {level}", { level: effortLabel(pin.effort ?? "medium", t) })}
                 disabled={busy || !learning?.canConfigure}
                 onPress={() => {
                   presentMessageActionSheet({

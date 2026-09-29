@@ -1161,6 +1161,12 @@ export const RU_MESSAGES: Record<string, string> = {
   "Learning review is off": "Проверка обучения выключена",
   "Learning review is on": "Проверка обучения включена",
   "Reviewer: {model}": "Проверяющая модель: {model}",
+  "Learning review": "Проверка обучения",
+  "Learning reviewer": "Проверяющая модель обучения",
+  "Thinking: {level}": "Рассуждение: {level}",
+  "Connect a model": "Подключить модель",
+  "Reviews use this connection and may incur model charges.":
+    "Проверки используют это подключение, за вызовы модели может взиматься плата.",
   Enable: "Включить",
   "Filed by {name}": "Создал бот {name}",
   "No reviewer model yet.": "Проверяющая модель ещё не выбрана.",

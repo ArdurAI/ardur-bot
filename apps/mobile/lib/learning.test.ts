@@ -1087,6 +1087,7 @@ it("only trusts a message the server actually sent, and falls back for a transpo
   expect(actionMessage("not an error", fallback)).toBe(fallback);
 });
 
+import type { ThinkingLevel } from "@ardurbot/contracts";
 import { reviewerMenuOptions, setReviewerPin, thinkingMenuOptions } from "./learning.js";
 
 it("reviewerMenuOptions returns connect a model if none", () => {
@@ -1158,15 +1159,36 @@ it("keeps a Hermes connection on Hermes instead of the built-in runtime", () => 
   });
 });
 
-it("thinkingMenuOptions returns options", () => {
+it("thinkingMenuOptions labels every level through the translator", () => {
+  const levels: ThinkingLevel[] = ["low", "medium", "high"];
   const options = thinkingMenuOptions(
-    ["low", "medium", "high"] as any,
+    levels,
     false,
     (k) => k,
     () => {},
   );
-  expect(options.length).toBe(3);
-  expect(options[0]?.text).toBe("low");
+  expect(options.map((option) => option.text)).toEqual(["Low", "Medium", "High"]);
+});
+
+it("thinkingMenuOptions renders translated effort labels", () => {
+  const levels: ThinkingLevel[] = ["low", "medium", "high"];
+  const translate = (key: string) => RU_MESSAGES[key] ?? key;
+  const options = thinkingMenuOptions(levels, false, translate, () => {});
+  expect(options.map((option) => option.text)).toEqual(["Низкий", "Средний", "Высокий"]);
+});
+
+it("catalogs the learning reviewer strings in Russian and Chinese", () => {
+  for (const messages of [RU_MESSAGES, ZH_MESSAGES]) {
+    for (const key of [
+      "Learning review",
+      "Learning reviewer",
+      "Thinking: {level}",
+      "Connect a model",
+      "Reviews use this connection and may incur model charges.",
+    ]) {
+      expect(messages[key], key).toBeTruthy();
+    }
+  }
 });
 
 it("setReviewerPin calls rpc", async () => {

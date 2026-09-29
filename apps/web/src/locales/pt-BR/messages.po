@@ -788,6 +788,7 @@ msgstr "Respondido: {0}"
 msgid "Answered: {answer}"
 msgstr "Respondido: {answer}"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Antigravity"
 msgstr "Antigravity"
@@ -965,6 +966,7 @@ msgstr "Arquivado"
 msgid "Archived. Chat, memory, and files kept."
 msgstr "Arquivado. Chat, memória e arquivos mantidos."
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Ardur (built-in)"
 msgstr ""
@@ -1648,8 +1650,10 @@ msgstr ""
 msgid "Choose a folder inside your home folder."
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/group-model-control.tsx
 #: src/pages/shell/bot-panel.tsx
+#: src/pages/shell/model-pin-select.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Choose a model"
 msgstr ""
@@ -1699,6 +1703,7 @@ msgstr ""
 msgid "Claim"
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Claude Code (your claude sign-in)"
 msgstr ""
@@ -1841,6 +1846,7 @@ msgstr "Código"
 msgid "Code execution on computers"
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Codex (your ChatGPT sign-in)"
 msgstr ""
@@ -2079,6 +2085,7 @@ msgstr ""
 msgid "Connect a desktop app to approve new devices."
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/GuidedOnboarding.tsx
 #: src/pages/Onboarding.tsx
 msgid "Connect a model"
@@ -3691,7 +3698,6 @@ msgstr ""
 msgid "Email"
 msgstr "E-mail"
 
-#: src/pages/board/BoardsSettings.tsx
 #: src/pages/customize/McpDefaults.tsx
 #: src/pages/customize/SkillsPage.tsx
 #: src/pages/LearningInsights.tsx
@@ -4237,6 +4243,7 @@ msgstr "Valor do cabeçalho"
 msgid "Hear a sample"
 msgstr "Ouvir uma amostra"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Hermes"
 msgstr "Hermes"
@@ -4784,12 +4791,9 @@ msgid "Learning review"
 msgstr ""
 
 #: src/pages/board/BoardsSettings.tsx
-msgid "Learning review is off"
-msgstr ""
-
-#: src/pages/board/BoardsSettings.tsx
-msgid "Learning review is on"
-msgstr ""
+#: src/pages/settings-sections.ts
+msgid "Learning reviewer"
+msgstr "Revisor de aprendizado"
 
 #: src/pages/LearningInbox.tsx
 msgid "Learning views"
@@ -5278,6 +5282,7 @@ msgstr "minuto"
 msgid "minutes"
 msgstr "minutos"
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/LearningInsights.tsx
 #: src/pages/MemoryHistory.tsx
 #: src/pages/ModelSettingsOverlay.tsx
@@ -7174,9 +7179,6 @@ msgid "Reviewer"
 msgstr ""
 
 #: src/pages/board/BoardsSettings.tsx
-msgid "Reviewer: {reviewer}"
-msgstr ""
-
 #: src/pages/LearningInbox.tsx
 msgid "Reviews use this connection and may incur model charges."
 msgstr ""
@@ -7296,6 +7298,7 @@ msgid "Runs are active on this computer. Saving this connection change may inter
 msgstr "Há execuções ativas neste computador. Alterar a conexão pode interrompê-las. Salvar mesmo assim?"
 
 #: src/components/integrations/catalog/IntegrationManage.tsx
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Runs on"
 msgstr ""
@@ -7393,6 +7396,7 @@ msgstr "Salvar modelo"
 #: src/components/AskCard.tsx
 #: src/components/teach/SkillDraftCard.tsx
 #: src/pages/account/AccountProfile.tsx
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/customize/ConfigureExtension.tsx
 #: src/pages/ExternalConversationSettings.tsx
 #: src/pages/ide/IdePage.tsx
@@ -8352,6 +8356,10 @@ msgstr "A escolha de modelo do grupo foi recarregada. Escolha novamente."
 msgid "The memory changed since this suggestion. Open History before trying again."
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
+msgid "The reviewer was changed in another window."
+msgstr "O revisor foi alterado em outra janela."
+
 #: src/lib/mcp-sign-in.ts
 msgid "The saved sign-in expired. Sign in again."
 msgstr ""
@@ -8369,6 +8377,7 @@ msgstr ""
 msgid "Theme"
 msgstr ""
 
+#: src/pages/board/BoardsSettings.tsx
 #: src/pages/shell/model-pin-select.tsx
 #: src/pages/shell/runtime-settings.tsx
 msgid "Thinking"

@@ -117,6 +117,17 @@ export function reviewerMenuOptions(
   }));
 }
 
+export function effortLabel(level: string, t: (message: string) => string): string {
+  if (level === "xhigh") return t("Extra high");
+  if (level === "low") return t("Low");
+  if (level === "medium") return t("Medium");
+  if (level === "high") return t("High");
+  if (level === "minimal") return t("Minimal");
+  if (level === "max") return t("Max");
+  if (level === "off") return t("Off");
+  return level.slice(0, 1).toUpperCase() + level.slice(1);
+}
+
 export function thinkingMenuOptions(
   supported: ThinkingLevel[],
   isOllama: boolean,
@@ -128,7 +139,7 @@ export function thinkingMenuOptions(
   );
 
   return options.map((level) => ({
-    text: isOllama ? (level === "off" ? t("Off") : t("On")) : level,
+    text: isOllama ? (level === "off" ? t("Off") : t("On")) : effortLabel(level, t),
     onPress: () => onSelect(level),
   }));
 }
