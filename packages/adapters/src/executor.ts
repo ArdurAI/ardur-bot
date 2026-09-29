@@ -111,6 +111,7 @@ import type { Pool } from "@ardurbot/db";
 import {
   acceptDelegation,
   appendEventInTransaction,
+  type ClaimedSteeringMessage,
   claimQuietBotMessages,
   confirmDispatchStop,
   createSpaceForMember,
@@ -123,6 +124,7 @@ import {
   goalBotAuthorityFingerprint,
   goalExhaustionReason,
   InvalidSpaceNameError,
+  isSteeringContinuationClientNonce,
   isTooManyDatabaseConnections,
   listDelegations,
   loadBotPresence,
@@ -1757,6 +1759,44 @@ export function createRunExecutor(deps: ExecutorDeps) {
       });
       if (started.count !== 1) return;
       current.queueWaitMs ??= Math.max(0, Date.now() - run.createdAt.getTime());
+      if (isSteeringContinuationClientNonce(run.clientNonce)) {
+        // A steering continuation whose batch is already gone (consumed by the
+        // previous run's own steering claim, or discarded on stop) must end
+        // quietly: starting the model would only post a visible "nothing new"
+        // note, and its finalization must not spawn another continuation.
+        // No claimedAt filter — rows claimed by a dead attempt are still input.
+        const waitingInput = await deps.prisma.steeringMessage.findFirst({
+          where: { runId, message: { threadId: run.threadId } },
+          select: { id: true },
+        });
+        if (!waitingInput) {
+          const quietAttempt = await deps.prisma.attempt.create({
+            data: { runId, fence, status: "running" },
+          });
+          const quieted = await deps.events.finalizeRun({
+            onCommitted: () =>
+              tracePoint(runId, "terminal.committed", { attempt: fence, outcome: "success" }),
+            spaceId: run.spaceId,
+            threadId: run.threadId,
+            botId: run.botId,
+            runId,
+            taskId: run.taskId,
+            attemptId: quietAttempt.id,
+            leaseOwner: workerId,
+            leaseFence: fence,
+            outcome: "completed",
+            blocks: [],
+          });
+          // Input that landed during this check is not lost: finalization released
+          // it into a fresh continuation, and that batch gets exactly this one run.
+          if (quieted && quieted.continuationRunId) {
+            await deps.jobs
+              .enqueue(runContinueJob(quieted.continuationRunId))
+              .catch((error) => getLogger().error("steering continuation enqueue", error));
+          }
+          return;
+        }
+      }
       if (!current.startedAt && !run.runtimeComputer && deps.placement) {
         try {
           if (!(await deps.placement(runId, deps.shutdownSignal ?? new AbortController().signal)))
@@ -2406,6 +2446,69 @@ export function createRunExecutor(deps: ExecutorDeps) {
         const workspaceCheckpoint = createRunWorkspaceCheckpoint(() =>
           checkpointRunComputerWorkspace(deps, storedComputer, computer, context),
         );
+        const acceptedSteeringDeliveryIds = new Set<string>();
+        /**
+         * One mapping for a claimed steering item, whether it was claimed at run
+         * start (folded into the prompt below, so every runtime begins its turn
+         * with the waiting input) or claimed by the runtime mid-turn.
+         */
+        const mapClaimedSteeringItem = async (item: ClaimedSteeringMessage) => {
+          const { images, files, unavailableInstruction } = await settleSteeringAttachmentLoads(
+            loadCurrentTurnImages(deps, item.blocks, context),
+            deps.artifacts
+              ? materializeCurrentTurnFiles(
+                  {
+                    prisma: deps.prisma,
+                    artifacts: deps.artifacts,
+                    sandbox: deps.sandbox,
+                  },
+                  item.blocks,
+                  {
+                    context,
+                    computer,
+                    computerMode,
+                    markWorkspaceDirty: workspaceCheckpoint.markDirty,
+                  },
+                )
+              : Promise.resolve([]),
+            item.blocks,
+            context.signal,
+          );
+          workspaceCheckpoint.markFiles(files);
+          const filesInstruction = currentTurnFilesInstruction(files);
+          const deliveryIds = (
+            await deps.prisma.botMessageWake.findMany({
+              where: {
+                runId,
+                state: "bound",
+                steeringMessageId: item.id,
+              },
+              select: { deliveryIds: true },
+            })
+          ).flatMap((wake) => wake.deliveryIds);
+          for (const id of deliveryIds) acceptedSteeringDeliveryIds.add(id);
+          if (selected.pin.runtimeKind !== "pi")
+            await noteBotMessageReadUnconfirmed(deps.prisma, {
+              runId,
+              leaseFence: fence,
+              deliveryIds,
+            });
+          return {
+            id: item.id,
+            messageId: item.messageId,
+            deliveryIds,
+            historyText: item.text,
+            text: [
+              await loadReplyContext(deps.prisma, thread.id, item.messageId),
+              item.text,
+              filesInstruction,
+              unavailableInstruction,
+            ]
+              .filter(Boolean)
+              .join("\n\n"),
+            images,
+          };
+        };
         const commandReplay = await loadRunCommandReplay({
           prisma: deps.prisma,
           run,
@@ -5166,6 +5269,37 @@ export function createRunExecutor(deps: ExecutorDeps) {
           (request) => redactSecrets(JSON.stringify(request), runSecrets),
           { exposedToolNames: new Set(tools.map((tool) => tool.name)) },
         );
+        // Claim waiting steering before the prompt is built so the turn starts with
+        // that input on every runtime, not only on runtimes with a steering callback.
+        // Peer-wake runs keep their receipt-bound claim path inside the runtime, and
+        // a command replay has no live model to consume new input.
+        const initialSteering =
+          !comparisonRun &&
+          !peerReadOnly &&
+          !commandReplay &&
+          !run.clientNonce?.startsWith("peer-wake:") &&
+          deps.events.claimSteering
+            ? await deps.events.claimSteering({
+                threadId: thread.id,
+                botId: bot.id,
+                runId,
+                leaseOwner: workerId,
+                leaseFence: fence,
+                seenIds: [],
+              })
+            : [];
+        const initialSteeringItems = await Promise.all(initialSteering.map(mapClaimedSteeringItem));
+        // The runtime's own claimSteering must not redeliver what the prompt carries.
+        const initialSteeringIds = initialSteeringItems.map((item) => item.id);
+        const initialSteeringMessageIds = new Set(
+          initialSteeringItems.map((item) => item.messageId),
+        );
+        const initialSteeringSection = initialSteeringItems.length
+          ? `Additional user context:\n${initialSteeringItems.map((item) => item.text).join("\n")}`
+          : undefined;
+        const historyWithoutInitialSteering = initialSteeringMessageIds.size
+          ? history.filter((message) => !message.id || !initialSteeringMessageIds.has(message.id))
+          : history;
         const replyContext = peerReadOnly
           ? undefined
           : await loadReplyContext(deps.prisma, thread.id, run.sourceMessageId);
@@ -5192,7 +5326,13 @@ export function createRunExecutor(deps: ExecutorDeps) {
               content: `Completed assignment result (task data):\n${messageToAgentHistoryText(wakeSource)}`,
             }
           : undefined;
-        const prompt = [replyContext, basePrompt, takeoverResume?.promptNote, approvalContinuation]
+        const prompt = [
+          replyContext,
+          initialSteeringSection,
+          basePrompt,
+          takeoverResume?.promptNote,
+          approvalContinuation,
+        ]
           .filter(Boolean)
           .join("\n\n");
         const botDirectory = await loadRunBotDirectory(
@@ -5579,7 +5719,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             tools: comparisonRun ? "none" : tools,
             brief: groupBrief?.content,
             summary: comparisonRun ? null : compactedHistory.summary,
-            history: comparisonRun ? [] : history,
+            history: comparisonRun ? [] : historyWithoutInitialSteering,
             teammates: comparisonRun ? undefined : botDirectory,
             requiredContext,
             sourceMessageId: run.sourceMessageId,
@@ -5705,7 +5845,6 @@ export function createRunExecutor(deps: ExecutorDeps) {
               leaseFence: fence,
               deliveryIds: initialReceiptIds,
             });
-          const acceptedSteeringDeliveryIds = new Set<string>();
           const runtimeEvents = withComparisonInput(
             deps,
             run,
@@ -5882,68 +6021,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
                         runId,
                         leaseOwner: workerId,
                         leaseFence: fence,
-                        seenIds,
+                        seenIds: [...seenIds, ...initialSteeringIds],
                       });
-                      return Promise.all(
-                        steering.map(async (item) => {
-                          const { images, files, unavailableInstruction } =
-                            await settleSteeringAttachmentLoads(
-                              loadCurrentTurnImages(deps, item.blocks, context),
-                              deps.artifacts
-                                ? materializeCurrentTurnFiles(
-                                    {
-                                      prisma: deps.prisma,
-                                      artifacts: deps.artifacts,
-                                      sandbox: deps.sandbox,
-                                    },
-                                    item.blocks,
-                                    {
-                                      context,
-                                      computer,
-                                      computerMode,
-                                      markWorkspaceDirty: workspaceCheckpoint.markDirty,
-                                    },
-                                  )
-                                : Promise.resolve([]),
-                              item.blocks,
-                              context.signal,
-                            );
-                          workspaceCheckpoint.markFiles(files);
-                          const filesInstruction = currentTurnFilesInstruction(files);
-                          const deliveryIds = (
-                            await deps.prisma.botMessageWake.findMany({
-                              where: {
-                                runId,
-                                state: "bound",
-                                steeringMessageId: item.id,
-                              },
-                              select: { deliveryIds: true },
-                            })
-                          ).flatMap((wake) => wake.deliveryIds);
-                          for (const id of deliveryIds) acceptedSteeringDeliveryIds.add(id);
-                          if (selected.pin.runtimeKind !== "pi")
-                            await noteBotMessageReadUnconfirmed(deps.prisma, {
-                              runId,
-                              leaseFence: fence,
-                              deliveryIds,
-                            });
-                          return {
-                            id: item.id,
-                            messageId: item.messageId,
-                            deliveryIds,
-                            historyText: item.text,
-                            text: [
-                              await loadReplyContext(deps.prisma, thread.id, item.messageId),
-                              item.text,
-                              filesInstruction,
-                              unavailableInstruction,
-                            ]
-                              .filter(Boolean)
-                              .join("\n\n"),
-                            images,
-                          };
-                        }),
-                      );
+                      return Promise.all(steering.map(mapClaimedSteeringItem));
                     },
             },
             context,

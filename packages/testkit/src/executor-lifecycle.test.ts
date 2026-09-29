@@ -1,9 +1,10 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { ScriptedAgentRuntime } from "@ardurbot/adapters";
 import { approvalEffectKey } from "@ardurbot/core/node/approval-effect-key";
 import { createThreadEvents, createThreadMessage, loadRunHistoryMessages } from "@ardurbot/db";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { createApp } from "../../../apps/api/src/app.ts";
 
 process.env.WAKEUP_DRIVER = "memory";
@@ -962,6 +963,215 @@ describeIntegration("run executor lifecycle", () => {
         },
       });
     }
+  });
+
+  describe("mid-run message delivery", () => {
+    const MID_RUN_TEXT = "tell the bots to introduce each other";
+
+    /**
+     * A run busy when the owner's message arrives: the message waits as steering,
+     * and finishing the run queues exactly one continuation carrying that batch.
+     */
+    async function seedBusyRunWithMidRunMessage(label: string) {
+      const seeded = await seedRun(label, "start the analysis", {
+        status: "running",
+        leaseOwner: "busy-worker",
+        leaseFence: 1,
+        leaseExpiresAt: new Date(Date.now() + 60_000),
+        startedAt: new Date(),
+      });
+      const attempt = await handles.prisma.attempt.create({
+        data: { runId: seeded.run.id, fence: 1, status: "running" },
+      });
+      const events = createThreadEvents(handles.prisma);
+      const sent = await events.sendUserMessage({
+        spaceId: seeded.me.spaceId,
+        threadId: seeded.thread.id,
+        botId: seeded.bot.id,
+        userId: seeded.me.userId,
+        blocks: [{ kind: "text", text: MID_RUN_TEXT }],
+        prompt: MID_RUN_TEXT,
+        trigger: "user",
+      });
+      // The busy run keeps the message as steering instead of starting a second run.
+      expect(sent.runId).toBe(seeded.run.id);
+      const finalized = await events.finalizeRun({
+        spaceId: seeded.me.spaceId,
+        threadId: seeded.thread.id,
+        botId: seeded.bot.id,
+        runId: seeded.run.id,
+        taskId: seeded.task.id,
+        attemptId: attempt.id,
+        leaseOwner: "busy-worker",
+        leaseFence: 1,
+        outcome: "completed",
+        blocks: [{ kind: "text", text: "analysis done" }],
+      });
+      if (!finalized || !finalized.continuationRunId)
+        throw new Error("The mid-run message must queue exactly one continuation");
+      return { seeded, continuationRunId: finalized.continuationRunId, messageId: sent.messageId };
+    }
+
+    function captureRuntimeRequests() {
+      const requests: Array<{ runId: string; prompt: string; history: unknown }> = [];
+      const spy = vi
+        .spyOn(ScriptedAgentRuntime.prototype, "run")
+        .mockImplementation(async function* (request) {
+          requests.push({
+            runId: request.runId,
+            prompt: request.prompt,
+            history: request.history,
+          });
+          yield { type: "text" as const, text: "introduced the bots" };
+          yield { type: "done" as const, text: "introduced the bots" };
+        });
+      return { requests, restore: () => spy.mockRestore() };
+    }
+
+    it("delivers a message sent during a run into the next run's input", async () => {
+      const { seeded, continuationRunId } = await seedBusyRunWithMidRunMessage("midrun-input");
+      const continuation = await handles.prisma.run.findUniqueOrThrow({
+        where: { id: continuationRunId },
+      });
+      expect(continuation).toMatchObject({
+        status: "queued",
+        trigger: "follow_up",
+        clientNonce: `steering-continuation:${seeded.run.id}`,
+      });
+
+      const { requests, restore } = captureRuntimeRequests();
+      try {
+        // Six rapid continuation triggers for the same batch still run it once.
+        await Promise.all(
+          Array.from({ length: 6 }, (_, index) =>
+            handles.executor.continueRun(continuationRunId, `burst-worker-${index}`),
+          ),
+        );
+      } finally {
+        restore();
+      }
+
+      const run = await handles.prisma.run.findUniqueOrThrow({
+        where: { id: continuationRunId },
+      });
+      expect(run.status).toBe("completed");
+      expect(await handles.prisma.attempt.count({ where: { runId: continuationRunId } })).toBe(1);
+      const delivered = requests.filter((request) => request.prompt.includes(MID_RUN_TEXT));
+      expect(delivered.map((request) => request.runId)).toEqual([continuationRunId]);
+      // The batch rides the prompt, not the transcript — no duplicate in history.
+      expect(JSON.stringify(delivered[0]?.history)).not.toContain(MID_RUN_TEXT);
+    });
+
+    it("keeps six rapid continuation triggers with no new input quiet", async () => {
+      // A completed run's leftover continue triggers are silent no-ops.
+      const plain = await seedRun("continue-noop", "plain request");
+      await handles.executor.continueRun(plain.run.id, "worker-plain");
+      expect(
+        await handles.prisma.run.findUniqueOrThrow({ where: { id: plain.run.id } }),
+      ).toMatchObject({ status: "completed" });
+      const baselineRuns = await handles.prisma.run.count({ where: { botId: plain.bot.id } });
+      const baselineBotMessages = await handles.prisma.message.count({
+        where: { threadId: plain.thread.id, role: "bot" },
+      });
+
+      await Promise.all(
+        Array.from({ length: 6 }, (_, index) =>
+          handles.executor.continueRun(plain.run.id, `noop-worker-${index}`),
+        ),
+      );
+
+      expect(await handles.prisma.run.count({ where: { botId: plain.bot.id } })).toBe(baselineRuns);
+      expect(
+        await handles.prisma.message.count({ where: { threadId: plain.thread.id, role: "bot" } }),
+      ).toBe(baselineBotMessages);
+      expect(await handles.prisma.attempt.count({ where: { runId: plain.run.id } })).toBe(1);
+
+      // A continuation whose batch was discarded (the owner stopped the work) ends
+      // without any visible message and without queuing another continuation.
+      const { seeded, continuationRunId } = await seedBusyRunWithMidRunMessage("continue-quiet");
+      await handles.prisma.steeringMessage.deleteMany({ where: { runId: continuationRunId } });
+      const discardedBotMessages = await handles.prisma.message.count({
+        where: { threadId: seeded.thread.id, role: "bot" },
+      });
+
+      await handles.executor.continueRun(continuationRunId, "quiet-worker");
+
+      const quiet = await handles.prisma.run.findUniqueOrThrow({
+        where: { id: continuationRunId },
+      });
+      expect(quiet.status).toBe("completed");
+      expect(
+        await handles.prisma.message.count({ where: { threadId: seeded.thread.id, role: "bot" } }),
+      ).toBe(discardedBotMessages);
+      expect(await handles.prisma.run.count({ where: { botId: seeded.bot.id } })).toBe(2);
+    });
+
+    it("processes a message sent during a run exactly once", async () => {
+      const { seeded, continuationRunId, messageId } =
+        await seedBusyRunWithMidRunMessage("midrun-once");
+      const { requests, restore } = captureRuntimeRequests();
+      try {
+        await handles.executor.continueRun(continuationRunId, "once-worker");
+      } finally {
+        restore();
+      }
+
+      // One runtime request carried the text, and the steering queue is fully drained.
+      expect(requests.filter((request) => request.prompt.includes(MID_RUN_TEXT))).toHaveLength(1);
+      expect(await handles.prisma.steeringMessage.count({ where: { botId: seeded.bot.id } })).toBe(
+        0,
+      );
+      expect(await handles.prisma.steeringSummary.findMany({ where: { messageId } })).toHaveLength(
+        1,
+      );
+      // No chained continuation re-processes the same message.
+      expect(await handles.prisma.run.count({ where: { botId: seeded.bot.id } })).toBe(2);
+      expect(
+        await handles.prisma.run.count({ where: { botId: seeded.bot.id, status: "queued" } }),
+      ).toBe(0);
+      const roles = (
+        await handles.prisma.message.findMany({
+          where: { threadId: seeded.thread.id },
+          orderBy: { seq: "asc" },
+          select: { role: true },
+        })
+      ).map((message) => message.role);
+      expect(roles).toEqual(["user", "bot", "bot"]);
+    });
+
+    it("starts a reply's run with the reply text and its quoted parent", async () => {
+      const seeded = await seedRun("reply-context", "move it to Monday");
+      const parent = await createThreadMessage(handles.prisma, {
+        threadId: seeded.thread.id,
+        role: "bot",
+        blocks: [{ kind: "text", text: "The deploy window is Friday." }],
+      });
+      const reply = await createThreadMessage(handles.prisma, {
+        threadId: seeded.thread.id,
+        role: "user",
+        origin: "human-typed",
+        actorId: seeded.me.userId,
+        blocks: [{ kind: "text", text: "move it to Monday" }],
+        replyToMessageId: parent.id,
+        replyQuote: "deploy window is Friday",
+      });
+      await handles.prisma.run.update({
+        where: { id: seeded.run.id },
+        data: { sourceMessageId: reply.id },
+      });
+
+      const { requests, restore } = captureRuntimeRequests();
+      try {
+        await handles.executor.continueRun(seeded.run.id, "reply-worker");
+      } finally {
+        restore();
+      }
+
+      const request = requests.find((entry) => entry.runId === seeded.run.id);
+      expect(request?.prompt).toContain("move it to Monday");
+      expect(request?.prompt).toContain("reply_target");
+      expect(request?.prompt).toContain("deploy window is Friday");
+    });
   });
 
   async function seedRun(

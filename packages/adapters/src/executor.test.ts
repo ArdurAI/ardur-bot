@@ -10,6 +10,7 @@ vi.mock("./context/concurrency.js", () => ({
 import type { MessageBlock } from "@ardurbot/contracts";
 import { ONCE_ROUTINE_CRON } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
+import { isSteeringContinuationClientNonce } from "@ardurbot/db";
 import { describe, expect, it, vi } from "vitest";
 import {
   appendToolCompletionAudit,
@@ -1922,4 +1923,111 @@ it("resolves a native Codex bot without the space's inherited hosted OAuth crede
   expect(model).not.toHaveProperty("apiKey");
   expect(lookup).not.toHaveBeenCalled();
   expect(load).not.toHaveBeenCalled();
+});
+
+describe("steering continuation admission", () => {
+  it("marks only steering continuation nonces", () => {
+    expect(isSteeringContinuationClientNonce("steering-continuation:run-1")).toBe(true);
+    expect(isSteeringContinuationClientNonce("steering-continuation:")).toBe(true);
+    expect(isSteeringContinuationClientNonce("peer-wake:run-1")).toBe(false);
+    expect(isSteeringContinuationClientNonce("send:message-1")).toBe(false);
+    expect(isSteeringContinuationClientNonce(null)).toBe(false);
+    expect(isSteeringContinuationClientNonce(undefined)).toBe(false);
+  });
+
+  function continuationFixture() {
+    const run = {
+      id: "run-c",
+      createdAt: new Date("2026-09-28T21:06:44Z"),
+      botId: "bot-1",
+      threadId: "thread-1",
+      taskId: "task-1",
+      userId: "user-1",
+      spaceId: "ws-1",
+      status: "queued",
+      trigger: "follow_up",
+      routineId: null,
+      sourceMessageId: "message-9",
+      checkpoint: null,
+      leaseFence: 0,
+      cancelRequestedAt: null,
+      delegationId: null,
+      goalId: null,
+      comparisonId: null,
+      runtimeComputer: null,
+      clientNonce: "steering-continuation:run-0",
+    };
+    const steeringLookup = vi.fn(async (): Promise<{ id: string } | null> => null);
+    const finalizeRun = vi.fn(async () => ({ continuationRunId: null }));
+    const attemptCreate = vi.fn(async () => ({ id: "attempt-quiet" }));
+    const enqueue = vi.fn(async () => undefined);
+    const prisma = {
+      space: { findUnique: vi.fn(async () => ({ allowedModelDestinations: null })) },
+      run: {
+        findUnique: vi.fn(async () => run),
+        findUniqueOrThrow: vi.fn(async () => ({
+          status: "leased",
+          startedAt: null,
+          sourceMessageId: "message-9",
+        })),
+        updateMany: vi.fn(async () => ({ count: 1 })),
+      },
+      steeringMessage: { findFirst: steeringLookup },
+      attempt: { create: attemptCreate },
+    } as unknown as PrismaClient;
+    const deps = {
+      prisma,
+      events: { append: vi.fn(async () => undefined), finalizeRun },
+      jobs: { enqueue, cancel: vi.fn(async () => undefined) },
+    } as unknown as Parameters<typeof createRunExecutor>[0];
+    return { deps, steeringLookup, finalizeRun, attemptCreate, enqueue };
+  }
+
+  it("ends a continuation with no waiting input quietly, without a visible reply", async () => {
+    const { deps, steeringLookup, finalizeRun, attemptCreate, enqueue } = continuationFixture();
+
+    await createRunExecutor(deps).continueRun("run-c", "worker-1");
+
+    expect(steeringLookup).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ runId: "run-c" }),
+      }),
+    );
+    expect(attemptCreate).toHaveBeenCalledTimes(1);
+    expect(finalizeRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        runId: "run-c",
+        attemptId: "attempt-quiet",
+        outcome: "completed",
+        blocks: [],
+      }),
+    );
+    // No continuation enqueue and no computer/bot setup — the run never really started.
+    expect(enqueue).not.toHaveBeenCalled();
+  });
+
+  it("lets a continuation with waiting input proceed to execution", async () => {
+    const { deps, steeringLookup, finalizeRun } = continuationFixture();
+    steeringLookup.mockResolvedValue({ id: "steer-1" });
+
+    // The guard passes the run through; the next dependency (bot lookup) is absent
+    // from this fixture, which proves execution continued past admission.
+    await expect(createRunExecutor(deps).continueRun("run-c", "worker-1")).rejects.toThrow();
+
+    expect(steeringLookup).toHaveBeenCalledOnce();
+    expect(finalizeRun).not.toHaveBeenCalled();
+  });
+
+  it("does not gate ordinary runs on the steering queue", async () => {
+    const { deps, steeringLookup, finalizeRun } = continuationFixture();
+    const run = await (
+      deps.prisma as unknown as { run: { findUnique: () => unknown } }
+    ).run.findUnique();
+    (run as { clientNonce: string | null }).clientNonce = "send:message-9";
+
+    await expect(createRunExecutor(deps).continueRun("run-c", "worker-1")).rejects.toThrow();
+
+    expect(steeringLookup).not.toHaveBeenCalled();
+    expect(finalizeRun).not.toHaveBeenCalled();
+  });
 });

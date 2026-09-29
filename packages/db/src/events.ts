@@ -1929,6 +1929,18 @@ async function finalizeRunOnce(
   });
 }
 
+/**
+ * Runs created by createSteeringContinuation carry this clientNonce prefix so the
+ * executor can tell "the batch of user messages waiting for a follow-up turn" from
+ * an ordinary follow_up run — a continuation whose batch is gone must end quietly
+ * instead of posting a visible "nothing new" reply.
+ */
+export const STEERING_CONTINUATION_CLIENT_NONCE_PREFIX = "steering-continuation:";
+
+export function isSteeringContinuationClientNonce(clientNonce: string | null | undefined): boolean {
+  return Boolean(clientNonce?.startsWith(STEERING_CONTINUATION_CLIENT_NONCE_PREFIX));
+}
+
 async function createSteeringContinuation(
   tx: Prisma.TransactionClient,
   input: FinalizeRunBase,
@@ -1977,6 +1989,9 @@ async function createSteeringContinuation(
       userId: pending[0]!.userId,
       status: "queued",
       trigger: "follow_up",
+      // One finalization creates at most one continuation, so the finishing run's
+      // id keeps the nonce unique within the space.
+      clientNonce: `${STEERING_CONTINUATION_CLIENT_NONCE_PREFIX}${input.runId}`,
       sourceMessageId: last.message.id,
     },
   });
