@@ -316,11 +316,16 @@ describe("worker provider broker translated route", () => {
     const first = frames[0];
     expect(first.object).toBe("chat.completion.chunk");
     expect(first.choices[0].delta.role).toBe("assistant");
-    const content = frames.map((chunk) => chunk.choices[0].delta.content ?? "").join("");
+    const content = frames.map((chunk) => chunk.choices[0]?.delta?.content ?? "").join("");
     expect(content).toBe("Bonjour");
-    const finishFrame = frames.find((chunk) => chunk.choices[0].finish_reason === "stop");
-    expect(finishFrame).toBeDefined();
-    const usageFrame = frames.find((chunk) => chunk.usage);
+    const finishIndex = frames.findIndex((chunk) => chunk.choices[0]?.finish_reason === "stop");
+    expect(finishIndex).toBe(frames.length - 2);
+    expect(frames[finishIndex].usage).toBeUndefined();
+    const usageIndex = frames.findIndex((chunk) => chunk.usage);
+    expect(usageIndex).toBe(frames.length - 1);
+    expect(finishIndex).toBeLessThan(usageIndex);
+    const usageFrame = frames[usageIndex];
+    expect(usageFrame.choices).toEqual([]);
     expect(usageFrame.usage).toEqual({
       prompt_tokens: 7,
       completion_tokens: 5,
@@ -695,6 +700,7 @@ describe("worker provider broker translated route", () => {
     );
     expect(response.status).toBe(200);
     const usageFrame = parseFrames(await response.text()).find((chunk) => chunk.usage);
+    expect(usageFrame.choices).toEqual([]);
     expect(usageFrame.usage).toEqual({
       prompt_tokens: 3,
       completion_tokens: 4,

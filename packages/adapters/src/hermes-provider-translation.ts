@@ -474,7 +474,7 @@ export async function translateStream(options: {
           object: "chat.completion.chunk",
           created,
           model: modelId,
-          choices: [{ index: 0, delta: {}, finish_reason: finish }],
+          choices: [],
           usage: usageBlock,
         }),
       );
