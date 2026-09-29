@@ -26,7 +26,12 @@ checked. These are server defaults, with no P1 budget editor.
 
 Token usage includes the coordinator and helpers. Recorded consumption replaces
 reserved tokens; terminal workers release unused reservations. A refusal reserves
-nothing. Provider usage can arrive after a completion, so late usage increases
+nothing. Outside a goal, spending past the task's token budget refuses new admissions
+but never takes back a reservation already admitted: each worker stays bounded by its
+own reservation, while a stopped task or a passed deadline still stops every worker.
+A native coordinator such as Claude Code reports its whole turn's usage as the turn
+ends, which is just before its room workers can start. A goal's budget remains the
+owner's cap for its whole tree. Provider usage can arrive after a completion, so late usage increases
 consumption without releasing an already released reservation. Enforcement uses
 reported token usage; an in-flight provider response can cross its reservation
 before the next stop check. This is not a prepaid billing guarantee.
