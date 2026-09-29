@@ -4,7 +4,8 @@ import type {
   AgentRuntime,
   AgentRuntimeEvent,
 } from "@ardurbot/adapter-kit";
-import { abortableDelay, inferHandoffTargetName, peerEffectArgsDigest } from "@ardurbot/core";
+import { abortableDelay, inferHandoffTargetName } from "@ardurbot/core";
+import { peerEffectArgsDigest } from "@ardurbot/core/node/peer-effect-digest";
 
 const running = new Map<string, AbortController>();
 

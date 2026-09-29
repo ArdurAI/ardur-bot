@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { peerEffectArgsDigest } from "./bot-comms-policy.js";
+import { peerEffectArgsDigest } from "./node/peer-effect-digest.js";
 import { parsePeerHoldRequest, peerHoldBoundEffect } from "./peer-hold.js";
 
 const args = { title: "Draft", version: 3 };

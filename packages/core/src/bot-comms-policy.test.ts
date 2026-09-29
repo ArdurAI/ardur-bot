@@ -1,14 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
-  classifyPeerEffectBinding,
   classifyPeerEffects,
   peerEffectAlwaysHuman,
-  peerEffectArgsDigest,
-  peerEffectMatches,
   peerEffectResourceRef,
   peerLimitWindowKey,
   peerPairKey,
 } from "./bot-comms-policy.js";
+import {
+  classifyPeerEffectBinding,
+  peerEffectArgsDigest,
+  peerEffectMatches,
+} from "./node/peer-effect-digest.js";
 
 const digest = "a".repeat(64);
 

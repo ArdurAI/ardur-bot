@@ -1,6 +1,7 @@
 import type { PeerEffectDescriptor } from "@ardurbot/contracts";
 import type { PeerEffectMismatchReason } from "@ardurbot/core";
-import { peerEffectMatches, peerHoldBoundEffect } from "@ardurbot/core";
+import { peerHoldBoundEffect } from "@ardurbot/core";
+import { peerEffectMatches } from "@ardurbot/core/node/peer-effect-digest";
 import type { ExternalEffectStore } from "./approval-effect.js";
 import { claimApprovedEffect, settleUncertainEffect } from "./approval-effect.js";
 

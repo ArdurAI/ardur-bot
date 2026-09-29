@@ -12,7 +12,6 @@ import {
   botMessageHopExhausted,
   buildBotMessageWakePrompt,
   clampBotMessage,
-  classifyPeerEffectBinding,
   classifyPeerEffects,
   nextBotMessageHop,
   peerPairKey,
@@ -20,6 +19,7 @@ import {
   resolveBotAddress,
   taskCardPrompt,
 } from "@ardurbot/core";
+import { classifyPeerEffectBinding } from "@ardurbot/core/node/peer-effect-digest";
 import type { Prisma, PrismaClient } from "@ardurbot/db";
 import {
   appendBotMessageAuditInTransaction,

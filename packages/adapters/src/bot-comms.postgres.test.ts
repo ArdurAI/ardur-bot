@@ -1,12 +1,8 @@
 import { randomUUID } from "node:crypto";
 import type { JobPublisher } from "@ardurbot/adapter-kit";
 import { ALL_DEVICE_SCOPES } from "@ardurbot/contracts";
-import {
-  botMessageReceiptKind,
-  buildBotMessageWakePrompt,
-  peerEffectArgsDigest,
-  peerPairKey,
-} from "@ardurbot/core";
+import { botMessageReceiptKind, buildBotMessageWakePrompt, peerPairKey } from "@ardurbot/core";
+import { peerEffectArgsDigest } from "@ardurbot/core/node/peer-effect-digest";
 import {
   acknowledgeBotMessageInput,
   appendBotMessageWakeInTransaction,

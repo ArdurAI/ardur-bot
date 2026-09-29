@@ -13,7 +13,6 @@ import {
 import {
   blocksToAgentHistoryText,
   buildBotMessageWakePrompt,
-  classifyPeerEffectBinding,
   isApprovalAskBlock,
   isCommandEvent,
   isSecretAskBlock,
@@ -27,6 +26,7 @@ import {
   resolveAskChoice,
   sanitizeJsonValue,
 } from "@ardurbot/core";
+import { classifyPeerEffectBinding } from "@ardurbot/core/node/peer-effect-digest";
 import { getLogger } from "@ardurbot/logging";
 import {
   appendBotMessageAuditInTransaction,

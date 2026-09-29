@@ -1,4 +1,4 @@
-import { peerEffectArgsDigest } from "@ardurbot/core";
+import { peerEffectArgsDigest } from "@ardurbot/core/node/peer-effect-digest";
 import { describe, expect, it } from "vitest";
 import { claimPeerBoundEffect, loadPeerBoundEffect } from "./peer-bound-effect.js";
 

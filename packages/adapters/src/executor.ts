@@ -91,7 +91,6 @@ import {
   nextFence,
   notify,
   parseAskWakeNonce,
-  peerEffectMatches,
   peerEffectResourceRef,
   planActionGate,
   promptInvokesSkill,
@@ -115,6 +114,7 @@ import {
   stableJsonValue,
   toolEffectIdempotencyKey,
 } from "@ardurbot/core/node/approval-effect-key";
+import { peerEffectMatches } from "@ardurbot/core/node/peer-effect-digest";
 import type { Pool } from "@ardurbot/db";
 import {
   acceptDelegation,
