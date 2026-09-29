@@ -267,6 +267,7 @@ import { useTakeControl } from "./shell/use-take-control";
 import { handleWorkspaceOpenRun } from "./shell/workspace-run";
 import { SystemDictation } from "./system/SystemDictation";
 import { WindowChrome } from "./WindowChrome";
+import { terminalSupported } from "./workspace/terminal-controller";
 
 const BotSettings = lazy(() =>
   import("./shell/bot-panel").then((module) => ({ default: module.BotSettings })),
@@ -838,6 +839,8 @@ export function ShellPage({
   const effectiveWorkspaceTab = getEffectiveWorkspaceTab(
     workspaceTab,
     computer?.capabilities?.graphical,
+    true,
+    terminalSupported(computer),
   );
   const isVisible = isComputerVisible(computerOpen, panel, effectiveWorkspaceTab);
   computerVisible.current = isVisible;
@@ -3838,6 +3841,28 @@ export function ShellPage({
                   computer={computer}
                   tab={workspaceTab}
                   onTabChange={setWorkspaceTab}
+                  terminal={
+                    computer
+                      ? {
+                          working: composerRunning,
+                          onTakeControl: async () => {
+                            await rpc.computer.takeover({ botId: active.id });
+                            await refreshComputerFor(active.id);
+                          },
+                          onStop: stopRun,
+                          onStart: async () => {
+                            await bootComputer({
+                              botId: active.id,
+                              takeControl: false,
+                              overlay: false,
+                            });
+                          },
+                          onReleased: () => {
+                            void refreshComputerFor(active.id).catch(() => undefined);
+                          },
+                        }
+                      : null
+                  }
                   onOpenRun={(run) =>
                     handleWorkspaceOpenRun({
                       run,
@@ -4515,6 +4540,9 @@ export function ShellPage({
                       (computer.state === "running" ||
                         (computer.homeRevision && computer.homeRevision !== "empty"))
                         ? [{ id: "files", label: t`Files` }]
+                        : []),
+                      ...(terminalSupported(computer)
+                        ? [{ id: "terminal", label: t`Terminal` }]
                         : []),
                       { id: "routines", label: t`Routines` },
                       ...(computer?.capabilities?.graphical === true

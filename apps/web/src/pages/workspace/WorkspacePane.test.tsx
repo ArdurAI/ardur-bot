@@ -15,6 +15,11 @@ vi.mock("../../lib/rpc", () => ({
   },
 }));
 
+vi.mock("@lingui/core/macro", () => ({
+  t: (parts: TemplateStringsArray, ...values: unknown[]) =>
+    parts.reduce((text, part, i) => text + part + (values[i] ?? ""), ""),
+}));
+
 vi.mock("@lingui/react/macro", () => ({
   useLingui: () => ({
     t: (parts: TemplateStringsArray, ...values: unknown[]) =>
@@ -37,6 +42,14 @@ vi.mock("./WorkspaceFiles", () => ({
 
 vi.mock("./WorkspaceScreen", () => ({
   WorkspaceScreen: () => <div data-testid="workspace-screen">Screen content</div>,
+}));
+
+vi.mock("./WorkspaceTerminal", () => ({
+  WorkspaceTerminal: ({ visible }: { visible: boolean }) => (
+    <div data-testid="workspace-terminal" data-visible={visible}>
+      Terminal content
+    </div>
+  ),
 }));
 
 const bot: Bot = {
@@ -121,6 +134,7 @@ describe("WorkspacePane tab selection and content rendering", () => {
           bot={bot}
           computer={graphicalComputer}
           tab=""
+          terminal={null}
           onTabChange={vi.fn()}
           onOpenRun={vi.fn()}
           routines={<div>Routines content</div>}
@@ -148,6 +162,7 @@ describe("WorkspacePane tab selection and content rendering", () => {
           bot={bot}
           computer={graphicalComputer}
           tab="files"
+          terminal={null}
           onTabChange={vi.fn()}
           onOpenRun={vi.fn()}
           routines={<div>Routines content</div>}
@@ -175,6 +190,7 @@ describe("WorkspacePane tab selection and content rendering", () => {
           bot={bot}
           computer={graphicalComputer}
           tab="screen"
+          terminal={null}
           onTabChange={vi.fn()}
           onOpenRun={vi.fn()}
           routines={<div>Routines content</div>}
@@ -203,6 +219,7 @@ describe("WorkspacePane tab selection and content rendering", () => {
           bot={bot}
           computer={nonGraphical}
           tab="screen"
+          terminal={null}
           onTabChange={vi.fn()}
           onOpenRun={vi.fn()}
           routines={<div>Routines content</div>}
@@ -233,6 +250,7 @@ describe("WorkspacePane tab selection and content rendering", () => {
           bot={bot}
           computer={nonGraphical}
           tab="computer"
+          terminal={null}
           onTabChange={vi.fn()}
           onOpenRun={vi.fn()}
           routines={<div>Routines content</div>}
@@ -264,6 +282,7 @@ describe("WorkspacePane tab selection and content rendering", () => {
           bot={bot}
           computer={graphicalComputer}
           tab="files"
+          terminal={null}
           onTabChange={vi.fn()}
           onOpenRun={vi.fn()}
           routines={<div>Routines content</div>}
@@ -279,5 +298,101 @@ describe("WorkspacePane tab selection and content rendering", () => {
     );
     const activeTab = container.querySelector('[role="tab"][data-active]');
     expect(activeTab?.textContent).toBe("Files");
+  });
+});
+
+describe("WorkspacePane terminal tab", () => {
+  const terminalComputer: ComputerStatus = {
+    ...graphicalComputer,
+    kind: "docker",
+    capabilities: { graphical: true, interactiveTerminal: true },
+  };
+  const terminal = {
+    working: false,
+    onTakeControl: async () => {},
+    onStop: async () => {},
+    onStart: async () => {},
+    onReleased: () => {},
+  };
+
+  it("shows and activates the Terminal tab when the computer supports a terminal", async () => {
+    await act(async () =>
+      root.render(
+        <WorkspacePane
+          bot={bot}
+          computer={terminalComputer}
+          tab="terminal"
+          terminal={terminal}
+          onTabChange={vi.fn()}
+          onOpenRun={vi.fn()}
+          routines={<div>Routines content</div>}
+          screen={{
+            computer: terminalComputer,
+            open: false,
+            url: null,
+            error: null,
+            onOpen: vi.fn(),
+          }}
+        />,
+      ),
+    );
+    const activeTab = container.querySelector('[role="tab"][data-active]');
+    expect(activeTab?.textContent).toBe("Terminal");
+    const content = container.querySelector('[data-testid="workspace-terminal"]');
+    expect(content).not.toBeNull();
+    expect(content?.getAttribute("data-visible")).toBe("true");
+  });
+
+  it("omits the Terminal tab and falls back to Tasks on computers without terminal support", async () => {
+    await act(async () =>
+      root.render(
+        <WorkspacePane
+          bot={bot}
+          computer={graphicalComputer}
+          tab="terminal"
+          terminal={terminal}
+          onTabChange={vi.fn()}
+          onOpenRun={vi.fn()}
+          routines={<div>Routines content</div>}
+          screen={{
+            computer: graphicalComputer,
+            open: false,
+            url: null,
+            error: null,
+            onOpen: vi.fn(),
+          }}
+        />,
+      ),
+    );
+    const activeTab = container.querySelector('[role="tab"][data-active]');
+    expect(activeTab?.textContent).toBe("Tasks");
+    expect(container.querySelector('[role="tablist"]')?.textContent).not.toContain("Terminal");
+    expect(container.querySelector('[data-testid="workspace-terminal"]')).toBeNull();
+  });
+
+  it("omits the Terminal tab when no terminal surface is provided", async () => {
+    await act(async () =>
+      root.render(
+        <WorkspacePane
+          bot={bot}
+          computer={terminalComputer}
+          tab="terminal"
+          terminal={null}
+          onTabChange={vi.fn()}
+          onOpenRun={vi.fn()}
+          routines={<div>Routines content</div>}
+          screen={{
+            computer: terminalComputer,
+            open: false,
+            url: null,
+            error: null,
+            onOpen: vi.fn(),
+          }}
+        />,
+      ),
+    );
+    const activeTab = container.querySelector('[role="tab"][data-active]');
+    expect(activeTab?.textContent).toBe("Tasks");
+    expect(container.querySelector('[role="tablist"]')?.textContent).not.toContain("Terminal");
   });
 });

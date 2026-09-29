@@ -6059,9 +6059,9 @@ msgstr ""
 
 #: src/pages/customize/SkillsPage.tsx
 #: src/pages/ide/IdePage.tsx
-#: src/pages/ide/terminal.tsx
 #: src/pages/ScratchpadSection.tsx
 #: src/pages/Shell.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Open"
 msgstr "Aç"
 
@@ -6186,6 +6186,7 @@ msgstr "Sohbet açılıyor…"
 
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/shell/terminal-session.tsx
+#: src/pages/workspace/WorkspaceTerminal.tsx
 msgid "Opening terminal"
 msgstr ""
 
@@ -6810,6 +6811,7 @@ msgstr ""
 
 #: src/pages/ide/terminal.tsx
 #: src/pages/Shell.tsx
+#: src/pages/workspace/WorkspaceTerminal.tsx
 msgid "Release"
 msgstr "Bırak"
 
@@ -8117,6 +8119,14 @@ msgstr "Pano başlatılsın mı?"
 msgid "Start comparison"
 msgstr ""
 
+#: src/pages/workspace/terminal-controller.ts
+msgid "Start computer"
+msgstr "Bilgisayarı başlat"
+
+#: src/pages/workspace/terminal-controller.ts
+msgid "Start computer to open a terminal"
+msgstr "Terminal açmak için bilgisayarı başlatın"
+
 #: src/pages/GoalForm.tsx
 msgid "Start goal"
 msgstr "Hedefi başlat"
@@ -8179,8 +8189,8 @@ msgstr "Adımlar"
 #: src/pages/DelegationLines.tsx
 #: src/pages/GroupPanel.tsx
 #: src/pages/Shell.tsx
-#: src/pages/shell/computer-terminal.tsx
 #: src/pages/TeamBoard.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Stop"
 msgstr "Durdur"
 
@@ -8291,14 +8301,12 @@ msgstr ""
 msgid "System"
 msgstr "Sistem"
 
-#: src/pages/ide/terminal.tsx
-#: src/pages/shell/computer-terminal.tsx
 #: src/pages/shell/take-control-button.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Take control"
 msgstr "Kontrolü al"
 
-#: src/pages/ide/terminal.tsx
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Take control to open a terminal"
 msgstr ""
 
@@ -8365,8 +8373,10 @@ msgid "Tell your bot what to change or remove"
 msgstr ""
 
 #: src/pages/ide/IdePage.tsx
+#: src/pages/Shell.tsx
 #: src/pages/shell/computer-terminal.tsx
 #: src/pages/shell/terminal-session.tsx
+#: src/pages/workspace/WorkspacePane.tsx
 msgid "Terminal"
 msgstr ""
 
@@ -8374,8 +8384,7 @@ msgstr ""
 msgid "Terminal could not open; try again"
 msgstr ""
 
-#: src/pages/ide/terminal.tsx
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "Terminal is not available on this computer"
 msgstr ""
 
@@ -8415,7 +8424,7 @@ msgstr ""
 msgid "The API did not come back. Refresh this page."
 msgstr ""
 
-#: src/pages/shell/computer-terminal.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "The bot is working — wait or stop it"
 msgstr ""
 
@@ -8470,6 +8479,7 @@ msgstr "Düşünüyor"
 #: src/pages/ide/dialogs.tsx
 #: src/pages/ide/IdePage.tsx
 #: src/pages/ide/terminal.tsx
+#: src/pages/workspace/terminal-controller.ts
 msgid "This action could not finish; try again."
 msgstr ""
 
