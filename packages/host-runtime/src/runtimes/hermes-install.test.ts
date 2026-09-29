@@ -1,12 +1,37 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import {
   hermesInstallCandidate,
+  localHermesInstallCandidate,
+  localHermesRoot,
+  localHermesStaging,
   probeHermesInstall,
   resolveHermesLauncherAsset,
 } from "./hermes-install.js";
+
+it("resolves the local root, staging and managed install under DATA_DIR", async () => {
+  const data = await mkdtemp(path.join(tmpdir(), "hermes-local-root-"));
+  vi.stubEnv("DATA_DIR", data);
+  vi.stubEnv("ARDUR_HERMES_INSTALL", "");
+  try {
+    const root = path.join(path.resolve(data), "hermes");
+    expect(localHermesRoot()).toBe(root);
+    expect(localHermesStaging()).toBe(path.join(root, "staging"));
+    const managed = path.join(root, "runtimes", "hermes-agent");
+    expect(localHermesInstallCandidate()).toBeNull();
+    await mkdir(managed, { recursive: true });
+    expect(localHermesInstallCandidate()).toBe(managed);
+    expect(hermesInstallCandidate(localHermesStaging(), undefined)).toBe(managed);
+    expect(localHermesInstallCandidate()).toBe(
+      hermesInstallCandidate(localHermesStaging(), process.env.ARDUR_HERMES_INSTALL),
+    );
+  } finally {
+    vi.unstubAllEnvs();
+    await rm(data, { recursive: true, force: true });
+  }
+});
 
 it.skipIf(process.platform === "win32")(
   "prefers the explicit install over the one managed host location",

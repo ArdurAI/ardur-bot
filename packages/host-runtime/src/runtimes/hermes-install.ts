@@ -13,8 +13,7 @@ import type * as z from "zod";
 export const HERMES_SOURCE_PIN = "29112bef099274229cadff79cdff7bf7b99c4b77";
 
 export function localHermesRoot(): string {
-  const dataDir = process.env.DATA_DIR ?? "./data";
-  return path.resolve(path.dirname(dataDir));
+  return path.join(path.resolve(process.env.DATA_DIR ?? "./data"), "hermes");
 }
 
 export function localHermesStaging(): string {

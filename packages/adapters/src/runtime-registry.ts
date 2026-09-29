@@ -176,8 +176,8 @@ export async function nativeRuntimeAvailability(
         reason: "Pinned Hermes is unavailable on this host.",
       };
     }
-    const { localHermesRoot, hermesInstallCandidate, probeHermesInstall } = await import("@ardurbot/host-runtime/runtimes/hermes-install");
-    const install = hermesInstallCandidate(localHermesRoot(), process.env.ARDUR_HERMES_INSTALL);
+    const { localHermesInstallCandidate, probeHermesInstall } = await import("@ardurbot/host-runtime/runtimes/hermes-install");
+    const install = localHermesInstallCandidate();
     let available = false;
     if (install) {
       try {

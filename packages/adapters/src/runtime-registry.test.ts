@@ -1,7 +1,12 @@
 import type { AgentRuntime } from "@ardurbot/adapter-kit";
 import type { RuntimePin } from "@ardurbot/contracts";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { RuntimeRegistry } from "./runtime-registry.js";
+import { RuntimeRegistry, nativeRuntimeAvailability } from "./runtime-registry.js";
+
+vi.mock("../../host-runtime/python/hermes_sources.json", () => ({ default: {} }));
 
 const pin: RuntimePin = {
   runtimeKind: "hermes",
@@ -63,4 +68,25 @@ describe("Hermes registry admission", () => {
     });
     expect(f.factory).not.toHaveBeenCalled();
   });
+});
+
+describe("local Hermes availability", () => {
+  it.skipIf(process.platform === "win32")(
+    "probes the same managed install candidate the local runtime uses",
+    async () => {
+      const data = await mkdtemp(path.join(tmpdir(), "hermes-availability-"));
+      vi.stubEnv("DATA_DIR", data);
+      vi.stubEnv("ARDUR_HERMES_INSTALL", "");
+      try {
+        const managed = path.join(path.resolve(data), "hermes", "runtimes", "hermes-agent");
+        await mkdir(path.join(managed, ".venv", "bin"), { recursive: true });
+        await writeFile(path.join(managed, ".venv", "bin", "python"), "fixture");
+        const availability = await nativeRuntimeAvailability("hermes");
+        expect(availability).toMatchObject({ runtimeKind: "hermes", available: true });
+      } finally {
+        vi.unstubAllEnvs();
+        await rm(data, { recursive: true, force: true });
+      }
+    },
+  );
 });

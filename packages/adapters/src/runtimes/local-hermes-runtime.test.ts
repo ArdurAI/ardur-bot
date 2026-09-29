@@ -24,6 +24,7 @@ describe("LocalHermesRuntime", () => {
     installDir = join(root, "install");
     vi.stubEnv("ARDUR_HERMES_INSTALL", installDir);
     vi.stubEnv("ARDURBOT_APP_DATA", root);
+    vi.stubEnv("DATA_DIR", join(root, "data"));
     vi.stubEnv("ARDUR_HERMES_PROVIDER_KEY", "fixture-provider-key-123");
     await mkdir(join(installDir, ".venv", "bin"), { recursive: true });
     await writeFile(join(installDir, "pyproject.toml"), "hermes-agent");
