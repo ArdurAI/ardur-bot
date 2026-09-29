@@ -351,6 +351,7 @@ export function createLearningService(deps: {
         deps.prisma.learningProposal.findMany({
           where: { ...where, status: "pending", expiresAt: { gt: new Date() } },
           orderBy: { createdAt: "desc" },
+          take: 100,
         }),
         summary(actor, botId),
       ]);
