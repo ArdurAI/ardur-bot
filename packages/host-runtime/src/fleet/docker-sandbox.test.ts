@@ -162,3 +162,31 @@ it("uses the successful Test response after a failed capacity sample was cached"
   const tested = await provider.test(context);
   expect(tested.capacity).toMatchObject({ source: "docker", memoryTotal: 8 * 1024 ** 3 });
 });
+it("uses the connection's image and names a missing one instead of pulling", async () => {
+  const image = "registry.example/private/computer:1";
+  let present = true;
+  const run = vi.fn(async (_name: string, args: string[]) => ({
+    code: args.includes("image") && !present ? 1 : 0,
+    stdout: Buffer.alloc(0),
+    stderr: Buffer.from(args.includes("image") && !present ? `Error: No such image: ${image}` : ""),
+  }));
+  const provider = new FleetDockerSandboxProvider(
+    ComputerConnectionSettingsSchema.parse({
+      engine: "docker",
+      endpoint: "unix:///fixture/engine.sock",
+      standardImage: image,
+    }),
+    { run, start: vi.fn() } as FleetProcess,
+  );
+  await provider.provision({ botId: "bot", homePath: "/ignored" }, context);
+  expect(run.mock.calls.find(([, args]) => args.includes("inspect"))?.[1]).toContain(image);
+  expect(run.mock.calls.find(([, args]) => args.includes("--cap-drop"))?.[1]).toContain(image);
+  present = false;
+  run.mockClear();
+  await expect(
+    provider.provision({ botId: "other", homePath: "/ignored" }, context),
+  ).rejects.toThrow(`Pull ${image} into this engine, then try again.`);
+  expect(run.mock.calls.some(([, args]) => args.includes("create") || args.includes("pull"))).toBe(
+    false,
+  );
+});

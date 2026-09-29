@@ -7,7 +7,7 @@ import type {
   ComputerConnectionSettings,
   SshSettings,
 } from "@ardurbot/contracts";
-import { ComputerConnectionSettingsSchema, computerImage } from "@ardurbot/contracts";
+import { ComputerConnectionSettingsSchema } from "@ardurbot/contracts";
 import { SshSettingsSchema } from "@ardurbot/contracts/fleet";
 import {
   cachedCapacity,
@@ -17,6 +17,7 @@ import {
   normalizeEngineInfo,
   parseLinuxCapacity,
 } from "./capacity.js";
+import { connectionComputerImage } from "./computer-image.js";
 import { FLEET_LINUX_CAPABILITIES, fleetComputerKey, LinuxFleetSandbox } from "./linux-sandbox.js";
 import { engineFailureReason } from "./probe.js";
 import type { FleetProcess } from "./process.js";
@@ -219,9 +220,13 @@ export class FleetDockerSandboxProvider extends LinuxFleetSandbox {
     context: AdapterContext,
   ): Promise<ComputerRef> {
     const name = `ardurbot-${fleetComputerKey(context.spaceId, request.botId).slice(0, 40)}`;
-    const image = computerImage(request.imageProfile ?? "base");
+    const image = connectionComputerImage(request.imageProfile ?? "base", this.settings);
     // Never pull, build, or substitute an image during placement.
-    await this.engine(["image", "inspect", image], context);
+    await this.engine(["image", "inspect", image], context).catch((error: unknown) => {
+      if (error instanceof Error && error.message === "Engine command failed.")
+        throw new Error(`Pull ${image} into this engine, then try again.`);
+      throw error;
+    });
     const existing = await this.owned(name, context);
     const networkEgress = request.networkEgress ?? true;
     if (existing && (existing.HostConfig?.NetworkMode !== "none") !== networkEgress)

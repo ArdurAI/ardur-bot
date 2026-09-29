@@ -18,10 +18,11 @@ import type {
   SandboxProvider,
 } from "@ardurbot/adapter-kit";
 import type { ComputerConnectionSettings } from "@ardurbot/contracts";
-import { computerImage, profileCommandError } from "@ardurbot/contracts";
+import { profileCommandError } from "@ardurbot/contracts";
 import { unknownCapacity } from "@ardurbot/contracts/fleet";
 import { boundedSandboxCommandTimeoutMs } from "@ardurbot/core";
 import { cachedCapacity } from "@ardurbot/host-runtime/fleet/capacity";
+import { connectionComputerImage } from "@ardurbot/host-runtime/fleet/computer-image";
 import { normalizeWorkspacePath } from "./computer-support.js";
 import { kubernetesCapacity } from "./fleet/kubernetes-capacity.js";
 import type { KubernetesApi, KubernetesObject } from "./kubernetes-client.js";
@@ -113,7 +114,7 @@ export class KubernetesSandboxProvider implements SandboxProvider {
       const containers = pod.spec?.containers as { name?: string; image?: string }[] | undefined;
       if (
         containers?.find((container) => container.name === "computer")?.image !==
-        computerImage(request.imageProfile ?? "base")
+        connectionComputerImage(request.imageProfile ?? "base", this.settings)
       )
         throw new Error(
           "The computer image differs from its saved profile; confirm an update in Settings.",
