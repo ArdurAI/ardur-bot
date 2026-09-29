@@ -170,6 +170,7 @@ export const RU_MESSAGES: Record<string, string> = {
   Read: "Прочитано",
   Replied: "Получен ответ",
   "Waiting for a turn": "Ожидает очереди",
+  "Waiting for a free place": "Ждёт свободного места",
   Expired: "Срок истёк",
   "Could not update learning. Try again.": "Не удалось обновить обучение. Повторите попытку.",
   "Could not update this task; try again.": "Не удалось обновить задачу. Повторите попытку.",
@@ -1165,6 +1166,7 @@ export const RU_MESSAGES: Record<string, string> = {
   "All bots": "Все боты",
   "Bots keep the board and memory current":
     "Боты поддерживают доску и память в актуальном состоянии",
+  "Bots answering at once": "Боты, отвечающие одновременно",
   "Learning review is off": "Проверка обучения выключена",
   "Learning review is on": "Проверка обучения включена",
   "Reviewer: {model}": "Проверяющая модель: {model}",
@@ -1345,4 +1347,22 @@ export const RU_MESSAGES: Record<string, string> = {
   "Interrupted: {title}": "Прервано: {title}",
   "Unknown: {title}": "Неизвестно: {title}",
   Command: "Команда",
+  "1 bot": "1 бот",
+  "{count} bots": "{count} бота",
+  "{count} answered": "{count} ответили",
+  "Asked {asked} · {answered}": "Спрошено: {asked} · {answered}",
+  "{name} couldn't answer": "{name} не смог ответить",
+  "{name} couldn't answer: its model account needs attention":
+    "{name} не смог ответить: аккаунт его модели требует внимания",
+  "{name} couldn't answer: its model account hit a rate limit":
+    "{name} не смог ответить: аккаунт его модели достиг лимита запросов",
+  "{name} couldn't answer: its model is unavailable":
+    "{name} не смог ответить: его модель недоступна",
+  "{name} stopped before answering": "{name} остановился до ответа",
+  Fix: "Исправить",
+  answered: "ответил",
+  "couldn't answer": "не смог ответить",
+  "stopped before answering": "остановился до ответа",
+  "is waiting for you": "ждёт вас",
+  "has not answered yet": "пока не ответил",
 };

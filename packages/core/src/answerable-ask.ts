@@ -8,8 +8,13 @@ type AskSnapshot = {
   activeRuns?: readonly { id: string; status: string }[];
 };
 
-export function latestAnswerableAskMessageId(snapshot: AskSnapshot | null): string | null {
-  if (!snapshot) return null;
+/**
+ * The questions the person can answer now: for every run that waits for them, its newest
+ * unanswered question. Bots in a room work at the same time, so several can wait at once.
+ */
+export function answerableAskMessageIds(snapshot: AskSnapshot | null): ReadonlySet<string> {
+  const answerable = new Set<string>();
+  if (!snapshot) return answerable;
   const waitingRunIds = new Set(
     (snapshot.activeRuns ?? (snapshot.run ? [snapshot.run] : []))
       .filter((run) => run.status === "waiting_input")
@@ -19,10 +24,11 @@ export function latestAnswerableAskMessageId(snapshot: AskSnapshot | null): stri
     const message = snapshot.messages[index];
     if (!message?.runId || !waitingRunIds.has(message.runId)) continue;
     if (message.blocks.some((block) => block.kind === "ask" && block.status !== "answered")) {
-      return message.id;
+      answerable.add(message.id);
+      waitingRunIds.delete(message.runId);
     }
   }
-  return null;
+  return answerable;
 }
 
 export function selectedAskActionLabel(

@@ -8,6 +8,11 @@
       "types": "./src/index.ts",
       "development": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./node/recall-index": {
+      "types": "./src/node/recall-index.ts",
+      "development": "./src/node/recall-index.ts",
+      "default": "./src/node/recall-index.ts"
     }
   },
   "scripts": {

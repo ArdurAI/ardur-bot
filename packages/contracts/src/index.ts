@@ -50,6 +50,7 @@ export * from "./privacy.js";
 export * from "./provider-errors.js";
 export * from "./reactions.js";
 export * from "./request-usage.js";
+export * from "./room-policy.js";
 export type * from "./rpc.js";
 export * from "./rpc-error.js";
 export * from "./runs.js";

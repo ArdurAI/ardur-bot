@@ -260,6 +260,22 @@ msgstr ""
 msgid "{minutes}m ago"
 msgstr "vor {minutes} Min."
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer"
+msgstr "{name} konnte nicht antworten"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer: its model account hit a rate limit"
+msgstr "{name} konnte nicht antworten: Das Modellkonto hat ein Ratenlimit erreicht"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer: its model account needs attention"
+msgstr "{name} konnte nicht antworten: Das Modellkonto erfordert Aufmerksamkeit"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} couldn't answer: its model is unavailable"
+msgstr "{name} konnte nicht antworten: Sein Modell ist nicht verfügbar"
+
 #. js-lingui-explicit-id
 #: src/lib/use-notifications.ts
 msgid "{name} failed"
@@ -274,6 +290,10 @@ msgstr "{name} ist fertig"
 #: src/lib/use-notifications.ts
 msgid "{name} needs your input"
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "{name} stopped before answering"
+msgstr "{name} wurde vor dem Antworten gestoppt"
 
 #: src/pages/LearningInbox.tsx
 msgid "{pending, plural, one {# suggestion to review} other {# suggestions to review}}"
@@ -319,7 +339,7 @@ msgstr "{tokens, plural, one {# Token} other {# Token}}"
 msgid "{toolCount, plural, one {# tool} other {# tools}}"
 msgstr ""
 
-#: src/pages/Shell.tsx
+#: src/lib/working-indicator.ts
 msgid "{workingBotName} is working"
 msgstr "{workingBotName} arbeitet"
 
@@ -786,6 +806,10 @@ msgstr ""
 msgid "Answer"
 msgstr "Antwort"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "answered"
+msgstr "geantwortet"
+
 #: src/components/AskCard.tsx
 msgid "Answered"
 msgstr "Beantwortet"
@@ -1060,6 +1084,10 @@ msgstr ""
 #: src/components/integrations/IntegrationSetup.tsx
 msgid "Ask the server owner to configure this provider."
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "Asked {asked, plural, one {# bot} other {# bots}} · {answered, plural, one {# answered} other {# answered}}"
+msgstr "Gefragt: {asked, plural, one {# Bot} other {# Bots}} · {answered, plural, one {# geantwortet} other {# geantwortet}}"
 
 #: src/components/integrations/catalog/ToolPicker.tsx
 msgid "asks first"
@@ -1368,7 +1396,11 @@ msgstr ""
 msgid "Bots act without asking by default. Add an exception only when you want to review a type of action first."
 msgstr "Bots handeln standardmäßig ohne Nachfrage. Füge nur dann eine Ausnahme hinzu, wenn du eine Aktionsart zuerst prüfen möchtest."
 
-#: src/pages/Shell.tsx
+#: src/pages/GroupPanel.tsx
+msgid "Bots answering at once"
+msgstr "Bots, die gleichzeitig antworten"
+
+#: src/lib/working-indicator.ts
 msgid "Bots are working"
 msgstr "Bots arbeiten"
 
@@ -2291,6 +2323,10 @@ msgstr ""
 msgid "Conversation with {0}"
 msgstr "Unterhaltung mit {0}"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Coordination round: {asked} asked, {answered} answered"
+msgstr "Koordinationsrunde: {asked} gefragt, {answered} geantwortet"
+
 #: src/pages/GroupPanel.tsx
 msgid "Coordinator"
 msgstr "Koordinator"
@@ -3093,6 +3129,10 @@ msgstr ""
 #: src/pages/settings/UploadedFiles.tsx
 msgid "Could not update uploaded files."
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "couldn't answer"
+msgstr "konnte nicht antworten"
 
 #: src/pages/shell/runtime-settings.tsx
 msgid "Couldn't install Hermes. Try again."
@@ -4109,6 +4149,10 @@ msgstr "MCP-Verbindung wird abgeschlossen…"
 msgid "First bot not created"
 msgstr "Erster Bot noch nicht erstellt"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "Fix"
+msgstr "Beheben"
+
 #: src/pages/shell/runtime-config-panel.tsx
 msgid "Fix the configuration JSON to edit these settings."
 msgstr "Korrigieren Sie das Konfigurations-JSON, um diese Einstellungen zu bearbeiten."
@@ -4295,6 +4339,10 @@ msgstr ""
 #: src/pages/CallView.tsx
 msgid "Hang up, then enter the code on screen."
 msgstr ""
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "has not answered yet"
+msgstr "hat noch nicht geantwortet"
 
 #: src/pages/RoutineEditor.tsx
 msgid "header"
@@ -4678,6 +4726,10 @@ msgstr "Intervallwert"
 #: src/pages/RoutineSchedule.tsx
 msgid "Interval unit"
 msgstr "Intervalleinheit"
+
+#: src/components/ai/CoordinationLine.tsx
+msgid "is waiting for you"
+msgstr "wartet auf dich"
 
 #: src/pages/shell/bot-panel.tsx
 msgid "Isolated"
@@ -8272,6 +8324,10 @@ msgstr ""
 msgid "Stopped"
 msgstr "Gestoppt"
 
+#: src/components/ai/CoordinationLine.tsx
+msgid "stopped before answering"
+msgstr "vor dem Antworten gestoppt"
+
 #: src/pages/dashboard/NowPanel.tsx
 #: src/pages/DelegationLines.tsx
 #: src/pages/workspace/WorkspaceTasks.tsx
@@ -9237,6 +9293,10 @@ msgstr "Stimmfehler"
 #: src/pages/system/SystemPage.tsx
 msgid "Voice shortcut"
 msgstr ""
+
+#: src/lib/working-indicator.ts
+msgid "Waiting for a free place"
+msgstr "Wartet auf einen freien Platz"
 
 #: src/components/PeerMessageReceipt.tsx
 #: src/lib/team-delivery-text.ts

@@ -44,6 +44,12 @@ function fixture() {
         space: { concurrentRuns: 3 },
       })),
     },
+    thread: {
+      findUniqueOrThrow: vi.fn(async () => ({
+        groupId: "group",
+        group: { policy: null },
+      })),
+    },
     chatGroupMember: {
       findUnique: vi.fn(async () => ({ id: "membership" }) as { id: string } | null),
     },
@@ -578,6 +584,11 @@ it("bounds idle maintenance to five changed briefs", async () => {
   const query = vi.fn(async (sql: TemplateStringsArray) => {
     expect(sql.join("")).toContain("LIMIT 5");
     expect(sql.join("")).toContain('b."lastMessageSeq" < t."nextMessageSeq" - 1');
+    // Only the brief's own bot working in the thread postpones it; another room
+    // member's run must not freeze every member's brief.
+    const busy = /NOT EXISTS \(SELECT 1 FROM runs active WHERE ([^)]*)\)/.exec(sql.join(""))?.[1];
+    expect(busy).toContain('active."threadId" = t.id');
+    expect(busy).toContain('active."botId" = b."botId"');
     return Array.from({ length: 5 }, (_, index) => ({ pendingRunId: `run-${index}` }));
   });
   const refresh = vi.fn(async () => undefined);

@@ -16,16 +16,17 @@ import {
 import type { ComposerActionId, ComposerCommand, ComposerSkill } from "@ardurbot/core";
 import {
   abortableDelay,
+  answerableAskMessageIds,
   attachmentsForThread,
   buildComposerMentionOptions,
   type ComposerMention,
   cloudAgentHttpsUrl,
   composerCommands,
   composerSkills,
+  coordinationBlock,
   isApprovalAskBlock,
   isRunTerminalEvent,
   isSecretAskBlock,
-  latestAnswerableAskMessageId,
   mentionChipKey,
   projectMessageReactions,
   resolveComposerSendPlan,
@@ -77,6 +78,7 @@ import { BotAvatar } from "../components/bot-avatar";
 import { BotRuntimeLabel } from "../components/bot-runtime-label";
 import { CompactWorkRecord } from "../components/compact-work-record";
 import { MobileRunContext } from "../components/context-section";
+import { CoordinationLine } from "../components/coordination-line";
 import { DispatchStatus } from "../components/DispatchStatus";
 import {
   MarkdownArtifactPreview,
@@ -1404,7 +1406,7 @@ function Thread() {
     );
   }
 
-  const answerableAskMessageId = latestAnswerableAskMessageId(snap);
+  const answerableAskIds = useMemo(() => answerableAskMessageIds(snap), [snap]);
   const pinRecovery = snap?.run?.runtimeProblem
     ? runtimePinRecovery(snap.run.runtimeProblem, snap.run.botId ?? botId ?? "")
     : null;
@@ -1603,13 +1605,16 @@ function Thread() {
                 message.replyToMessageId ? messagesById.get(message.replyToMessageId) : undefined
               }
               canAnswer={
-                message.id === answerableAskMessageId ||
+                answerableAskIds.has(message.id) ||
                 message.blocks.some(
                   (block) => block.kind === "ask" && block.peerHold && block.status === "pending",
                 )
               }
               onAnswer={answerMessage}
               onOpenBot={openBot}
+              onOpenMemberModelSettings={(botId: string) =>
+                router.push({ pathname: "/bot-settings", params: { botId, focus: "model" } })
+              }
               onPreviewMarkdown={setMarkdownPreview}
               actionProps={actionProps}
             />
@@ -1677,9 +1682,11 @@ function Thread() {
     ) : inGroup && workingGroupBots.length > 0 ? (
       <View
         accessibilityLabel={
-          workingGroupBots.length === 1
-            ? t("{name} is working", { name: workingGroupBots[0]?.name ?? t("Agent") })
-            : t("{count} agents working", { count: workingGroupBots.length })
+          workingGroupBots.every((bot) => bot.status === "queued")
+            ? t("Waiting for a free place")
+            : workingGroupBots.length === 1
+              ? t("{name} is working", { name: workingGroupBots[0]?.name ?? t("Agent") })
+              : t("{count} agents working", { count: workingGroupBots.length })
         }
         accessibilityRole="text"
         style={{
@@ -1708,6 +1715,11 @@ function Thread() {
             </View>
           ))}
         </View>
+        {workingGroupBots.every((bot) => bot.status === "queued") ? (
+          <Text style={{ color: tokens.mutedForeground, fontSize: 13 }}>
+            {t("Waiting for a free place")}
+          </Text>
+        ) : null}
       </View>
     ) : null;
 
@@ -1785,7 +1797,7 @@ function Thread() {
             data={liveMessages}
             inverted
             keyExtractor={(message) => message.id}
-            extraData={answerableAskMessageId}
+            extraData={answerableAskIds}
             style={{ flex: 1, marginTop: 8 }}
             maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
             scrollEventThrottle={16}
@@ -2437,6 +2449,7 @@ const MessageBubble = memo(function MessageBubble({
   canAnswer,
   onAnswer,
   onOpenBot,
+  onOpenMemberModelSettings,
   onPreviewMarkdown,
   actionProps,
 }: {
@@ -2450,6 +2463,7 @@ const MessageBubble = memo(function MessageBubble({
   canAnswer: boolean;
   onAnswer: (message: MobileMessage, answer: string) => Promise<void>;
   onOpenBot: (botId: string, name: string) => void;
+  onOpenMemberModelSettings: (botId: string) => void;
   onPreviewMarkdown: (target: MarkdownArtifactPreviewTarget) => void;
   actionProps: MessageActionProps;
 }) {
@@ -2501,6 +2515,16 @@ const MessageBubble = memo(function MessageBubble({
         detail={handoff.text}
         expanded={peerExpanded}
         onToggle={() => setPeerExpanded((expanded) => !expanded)}
+      />
+    );
+  }
+  const coordination = coordinationBlock(message.blocks);
+  if (coordination) {
+    return (
+      <CoordinationLine
+        block={coordination}
+        actionProps={actionProps}
+        onOpenMemberSettings={onOpenMemberModelSettings}
       />
     );
   }

@@ -30,7 +30,12 @@ vi.mock("@ardurbot/db", async (importOriginal) => ({
 import type { PrismaClient } from "@ardurbot/db";
 import { loadGroupAskResults, sizeDelegationRootForAsk } from "@ardurbot/db";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { askGroupMembers, loadAskWakeContext, wakeCoordinatorAfterAsk } from "./group-ask.js";
+import {
+  askGroupMembers,
+  loadAskWakeContext,
+  recordGroupAskProgress,
+  wakeCoordinatorAfterAsk,
+} from "./group-ask.js";
 
 const run = {
   id: "chief-run",
@@ -203,7 +208,18 @@ describe("ask_members fan-out", () => {
         role: "bot",
         botId: "chief",
         blocks: [
-          { kind: "text", text: "@Ada @Ben @Cy Introduce yourself to the room in two sentences." },
+          {
+            kind: "coordination",
+            nonce: "group-ask:1:chief-run:call-1",
+            round: 1,
+            text: "Introduce yourself to the room in two sentences.",
+            updates: [],
+            members: [
+              { botId: "ada", name: "Ada", outcome: "pending" },
+              { botId: "ben", name: "Ben", outcome: "pending" },
+              { botId: "cy", name: "Cy", outcome: "pending" },
+            ],
+          },
         ],
         clientNonce: "group-ask:1:chief-run:call-1",
       }),
@@ -293,7 +309,14 @@ describe("ask_members fan-out", () => {
     });
     expect(h.runCreate).toHaveBeenCalledOnce();
     expect(h.messageCreate.mock.calls[0]?.[0].data.blocks).toEqual([
-      { kind: "text", text: "@Ada What are you working on?" },
+      {
+        kind: "coordination",
+        nonce: "group-ask:1:chief-run:call-1",
+        round: 1,
+        text: "What are you working on?",
+        updates: [],
+        members: [{ botId: "ada", name: "Ada", outcome: "pending" }],
+      },
     ]);
   });
 
@@ -432,5 +455,79 @@ describe("ask_members fan-in", () => {
     expect(jobs.enqueue).toHaveBeenCalledWith(expect.objectContaining({ name: "run.continue" }));
     await wakeCoordinatorAfterAsk({ prisma: {} as PrismaClient, jobs } as never, null);
     expect(jobs.enqueue).toHaveBeenCalledOnce();
+  });
+});
+
+describe("ask progress notes", () => {
+  function progressHarness(options: { message?: Record<string, unknown> | null } = {}) {
+    const stored =
+      options.message === undefined
+        ? {
+            id: "ask-message",
+            botId: "chief",
+            blocks: [
+              {
+                kind: "coordination",
+                nonce: "group-ask:1:chief-run:call-1",
+                round: 1,
+                text: "Introduce yourself.",
+                updates: [],
+                members: [{ botId: "ada", name: "Ada", outcome: "pending" }],
+              },
+            ],
+          }
+        : options.message;
+    const messageUpdate = vi.fn(
+      async (_args: { data: { blocks: Array<{ kind: string; updates?: string[] }> } }) => ({}),
+    );
+    const eventCreate = vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({
+      id: "event",
+      ...data,
+    }));
+    const tx = {
+      $queryRaw: vi.fn(async () => []),
+      message: {
+        findUnique: vi.fn(async () => stored),
+        findFirst: vi.fn(async () => stored),
+        update: messageUpdate,
+      },
+      thread: { update: vi.fn(async () => ({ nextEventSeq: 4 })) },
+      event: { create: eventCreate },
+    };
+    const prisma = {
+      $transaction: vi.fn(async (operation: (client: typeof tx) => unknown) => operation(tx)),
+    } as unknown as PrismaClient;
+    const deps = { prisma, events: { notify: vi.fn(async () => undefined) } };
+    return { deps, messageUpdate, eventCreate };
+  }
+
+  it("marks a coordinator progress update on the round instead of a chat message", async () => {
+    const h = progressHarness();
+    const folded = await recordGroupAskProgress(h.deps as never, run, {
+      nonce: "group-ask:1:chief-run:call-1",
+      note: "Asked all three.",
+    });
+
+    expect(folded).toBe(true);
+    const blocks = h.messageUpdate.mock.calls[0]?.[0].data.blocks;
+    expect(blocks?.[0]?.kind).toBe("coordination");
+    expect(blocks?.[0]?.updates).toEqual(["Asked all three."]);
+    expect(h.eventCreate.mock.calls[0]?.[0].data).toMatchObject({
+      type: "thread.message.updated",
+      threadId: "room",
+    });
+    expect(h.deps.events.notify).toHaveBeenCalledWith("room", 3);
+  });
+
+  it("posts normally when the round's message is gone", async () => {
+    const h = progressHarness({ message: null });
+    await expect(
+      recordGroupAskProgress(h.deps as never, run, {
+        nonce: "group-ask:1:chief-run:call-1",
+        note: "Asked all three.",
+      }),
+    ).resolves.toBe(false);
+    expect(h.messageUpdate).not.toHaveBeenCalled();
+    expect(h.deps.events.notify).not.toHaveBeenCalled();
   });
 });
