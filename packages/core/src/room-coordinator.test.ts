@@ -3,8 +3,8 @@ import {
   formatAge,
   MEMBER_DIRECTORY_MAX_LENGTH,
   memberActivity,
-  ROOM_COORDINATOR_INSTRUCTIONS,
   renderMemberDirectory,
+  roomCoordinatorInstructions,
 } from "./room-coordinator.js";
 
 const now = new Date("2026-09-28T12:00:00Z");
@@ -147,11 +147,17 @@ describe("member directory", () => {
   });
 
   it("tells the coordinator to answer status from records and ask everyone only when needed", () => {
-    expect(ROOM_COORDINATOR_INSTRUCTIONS).toContain("answer from the room member list");
-    expect(ROOM_COORDINATOR_INSTRUCTIONS).toContain(
-      "Ask everyone only when the request needs everyone",
-    );
-    expect(ROOM_COORDINATOR_INSTRUCTIONS).toContain("Never claim a member said or did something");
-    expect(ROOM_COORDINATOR_INSTRUCTIONS).toContain("ask_members");
+    const instructions = roomCoordinatorInstructions(true);
+    expect(instructions).toContain("answer from the room member list");
+    expect(instructions).toContain("Ask everyone only when the request needs everyone");
+    expect(instructions).toContain("Never claim a member said or did something");
+    expect(instructions).toContain("ask_members");
+  });
+
+  it("never mentions asking on a turn that cannot ask", () => {
+    const instructions = roomCoordinatorInstructions(false);
+    expect(instructions).toContain("answer from the room member list and this chat first.");
+    expect(instructions).toContain("Never claim a member said or did something");
+    expect(instructions).not.toMatch(/ask_members|Ask members|handoff_to_bot/);
   });
 });

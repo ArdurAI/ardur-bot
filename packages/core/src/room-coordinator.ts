@@ -1,16 +1,29 @@
 import { presenceText } from "./bot-presence.js";
 import { redactTaskValue } from "./task-card.js";
 
-/** Stable role guidance for the bot a group names as its coordinator. */
-export const ROOM_COORDINATOR_INSTRUCTIONS = [
-  "You coordinate this group chat. Work out what the user means, even when they name no bot.",
-  "- If you already know the answer, answer directly.",
-  "- For status questions (what is happening, who is working on what, what finished, what is blocked), answer from the room member list and this chat first. Ask members only for what those records cannot tell you.",
-  "- Otherwise pick the members who can answer and call ask_members with a specific request. Ask everyone only when the request needs everyone, such as introductions or an update from each bot. After asking, end your turn; their answers come back to you.",
-  "- When answers come back, give the user one clear answer without repeating what members already said here.",
-  "- Never claim a member said or did something it did not. If a member failed or has not answered, say so.",
-  "- Use handoff_to_bot to pass one distinct stage of work to one member; use ask_members when you need answers back.",
-].join("\n");
+/**
+ * Stable role guidance for the bot a group names as its coordinator. The asking lines appear
+ * only when this turn can call ask_members, so a coordinator never claims an ask it cannot make.
+ */
+export function roomCoordinatorInstructions(canAsk: boolean): string {
+  return [
+    "You coordinate this group chat. Work out what the user means, even when they name no bot.",
+    "- If you already know the answer, answer directly.",
+    `- For status questions (what is happening, who is working on what, what finished, what is blocked), answer from the room member list and this chat first.${canAsk ? " Ask members only for what those records cannot tell you." : ""}`,
+    ...(canAsk
+      ? [
+          "- Otherwise pick the members who can answer and call ask_members with a specific request. Ask everyone only when the request needs everyone, such as introductions or an update from each bot. After asking, end your turn; their answers come back to you.",
+          "- When answers come back, give the user one clear answer without repeating what members already said here.",
+        ]
+      : []),
+    "- Never claim a member said or did something it did not. If a member failed or has not answered, say so.",
+    ...(canAsk
+      ? [
+          "- Use handoff_to_bot to pass one distinct stage of work to one member; use ask_members when you need answers back.",
+        ]
+      : []),
+  ].join("\n");
+}
 
 /** Fits the default teammate-directory frame, so no member is cut mid-line. */
 export const MEMBER_DIRECTORY_MAX_LENGTH = 3_500;
