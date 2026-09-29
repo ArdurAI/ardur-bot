@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { UpdateGroupInput } from "./domain.js";
 import {
   applyRoomPolicyPatch,
   parseRoomPolicy,
@@ -91,5 +92,23 @@ describe("room policy", () => {
     // The version is not a setting: a change cannot rewrite it.
     expect(RoomPolicyPatchSchema.safeParse({ version: 1 }).success).toBe(false);
     expect(() => applyRoomPolicyPatch(null, { maxConcurrentRuns: 9 })).toThrow();
+  });
+
+  it("is checked where a group is updated", () => {
+    const groupId = "group-1";
+    expect(UpdateGroupInput.safeParse({ groupId }).success).toBe(true);
+    expect(UpdateGroupInput.safeParse({ groupId, roomPolicy: {} }).success).toBe(true);
+    expect(
+      UpdateGroupInput.safeParse({ groupId, roomPolicy: { maxConcurrentRuns: 8 } }).success,
+    ).toBe(true);
+    for (const roomPolicy of [
+      { maxConcurrentRuns: 0 },
+      { maxConcurrentRuns: 9 },
+      { maxConcurrentRuns: 2.5 },
+      { other: 1 },
+      { version: 1 },
+    ]) {
+      expect(UpdateGroupInput.safeParse({ groupId, roomPolicy }).success).toBe(false);
+    }
   });
 });

@@ -161,3 +161,29 @@ it("waits only for the same bot's brief, never another bot's", async () => {
   maintenance.length = 0;
   expect((await claim("one", "room", "ada")).count).toBe(1);
 });
+
+it("applies a changed room policy to the next admission and leaves working bots alone", async () => {
+  const groups: Record<string, { policy: unknown }> = {
+    room: { policy: { version: 1, maxConcurrentRuns: 4 } },
+  };
+  const { active, claim } = admissionFixture({
+    botCap: 8,
+    groups,
+    threadGroups: { room: "room" },
+  });
+  for (const bot of ["ada", "beck", "cyd", "dov"])
+    expect((await claim(`run-${bot}`, "room", bot)).count).toBe(1);
+  // Narrowed to one while four bots work: nobody is stopped, and the next bot waits
+  // until the room is back under its new limit.
+  groups.room = { policy: { version: 1, maxConcurrentRuns: 1 } };
+  expect(active).toHaveLength(4);
+  expect((await claim("run-eve", "room", "eve")).queued).toBe(true);
+  active.splice(0, 3);
+  expect((await claim("run-eve", "room", "eve")).queued).toBe(true);
+  active.splice(0, 1);
+  expect((await claim("run-eve", "room", "eve")).count).toBe(1);
+  // Widened again: a waiting bot is admitted on its next try.
+  expect((await claim("run-fay", "room", "fay")).queued).toBe(true);
+  groups.room = { policy: { version: 1, maxConcurrentRuns: 2 } };
+  expect((await claim("run-fay", "room", "fay")).count).toBe(1);
+});
