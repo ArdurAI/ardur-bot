@@ -170,6 +170,23 @@ export function hermesInstallLockHeld(root: string, now = Date.now()): boolean {
   }
 }
 
+export type HermesInstallView =
+  | { state: "installing"; phase: HermesInstallPhase }
+  | { state: "ready" }
+  | { state: "failed" };
+
+/** Progress for a local install. A manual checkout with no status file stays omitted. */
+export function hermesInstallProgress(root: string): HermesInstallView | null {
+  const status = readHermesInstallStatus(root);
+  if (!status) return null;
+  if (status.state === "installing") {
+    if (!hermesInstallLockHeld(root)) return { state: "failed" };
+    return { state: "installing", phase: status.phase ?? "downloading" };
+  }
+  if (status.state === "ready") return { state: "ready" };
+  return { state: "failed" };
+}
+
 function installPidAlive(pid: number): boolean {
   if (!Number.isInteger(pid) || pid <= 0) return false;
   try {

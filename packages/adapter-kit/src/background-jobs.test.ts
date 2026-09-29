@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   dispatchBackgroundJob,
+  hermesInstallJob,
   historyCompactJob,
   historyCompactJobKey,
   messagingDeliverJob,
@@ -26,6 +27,7 @@ function handlers(): BackgroundJobHandlers {
     "history.compact": vi.fn(async () => undefined),
     "messaging.deliver": vi.fn(async () => undefined),
     "cloud_agent.poll": vi.fn(async () => undefined),
+    "hermes.install": vi.fn(async () => undefined),
   };
 }
 
@@ -56,6 +58,21 @@ describe("background job contracts", () => {
       routineId: "routine-1",
       scheduledFor: "2026-08-15T12:00:00.000Z",
     });
+  });
+
+  it("accepts only an empty Hermes install payload", () => {
+    expect(parseBackgroundJob("hermes.install", {})).toEqual({
+      name: "hermes.install",
+      payload: {},
+    });
+    expect(hermesInstallJob()).toEqual({
+      name: "hermes.install",
+      payload: {},
+      replaceKey: "hermes.install",
+    });
+    expect(() => parseBackgroundJob("hermes.install", { root: "no" })).toThrow();
+    expect(() => parseBackgroundJob("hermes.install", { url: "no" })).toThrow();
+    expect(() => parseBackgroundJob("hermes.install", { version: "no" })).toThrow();
   });
 
   it("rejects unknown names and malformed deliveries", () => {

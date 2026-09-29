@@ -178,24 +178,38 @@ export async function nativeRuntimeAvailability(
         reason: "Pinned Hermes is unavailable on this host.",
       };
     }
-    const { localHermesInstallCandidate, probeHermesInstall } = await import(
-      "@ardurbot/host-runtime/runtimes/hermes-install"
-    );
-    const install = localHermesInstallCandidate();
+    const {
+      hermesInstallProgress,
+      localHermesInstallCandidate,
+      localHermesRoot,
+      probeHermesInstall,
+    } = await import("@ardurbot/host-runtime/runtimes/hermes-install");
+    const candidate = localHermesInstallCandidate();
+    const progress = hermesInstallProgress(localHermesRoot());
     let available = false;
-    if (install) {
+    if (candidate) {
       try {
-        probeHermesInstall(install);
+        probeHermesInstall(candidate);
         available = true;
       } catch {
         available = false;
       }
     }
+    const install = available
+      ? progress?.state === "ready"
+        ? { state: "ready" as const }
+        : undefined
+      : progress?.state === "installing"
+        ? progress
+        : progress
+          ? { state: "failed" as const }
+          : undefined;
     return {
       runtimeKind: "hermes",
       available,
       models: [],
       ...(!available ? { reason: "Hermes is not installed on this computer." } : {}),
+      ...(install ? { install } : {}),
     };
   }
   return kind === "claude-code"

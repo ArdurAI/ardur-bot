@@ -11,6 +11,7 @@ import type {
 } from "@ardurbot/adapter-kit";
 import {
   computerControlExpireJobKey,
+  hermesInstallJob,
   messagingDeliverJob,
   routineJobKey,
   routineWakeupJob,
@@ -108,7 +109,13 @@ import {
   verifyMcpInstall,
 } from "@ardurbot/adapters";
 import type { Auth } from "@ardurbot/auth";
-import type { Actor, ComputerStatus, Me, SpaceNavigation } from "@ardurbot/contracts";
+import type {
+  Actor,
+  ComputerStatus,
+  Me,
+  RuntimeAvailability,
+  SpaceNavigation,
+} from "@ardurbot/contracts";
 import {
   COMPUTER_IMAGE_DOWNLOAD_FAILED_CODE,
   ComputerImageDownloadError,
@@ -186,6 +193,16 @@ import {
   updateUserPreferences,
 } from "@ardurbot/db";
 import { redactMcpArguments } from "@ardurbot/host-runtime/mcp-diagnostics";
+import {
+  hermesInstallLockHeld,
+  localHermesRoot,
+} from "@ardurbot/host-runtime/runtimes/hermes-install";
+import {
+  HERMES_HOST_UNAVAILABLE,
+  HERMES_INSTALL_ALREADY,
+  HERMES_INSTALL_BRIDGE,
+  HERMES_INSTALL_RUNNING,
+} from "@ardurbot/host-runtime/runtimes/hermes-installer";
 import { getLogger } from "@ardurbot/logging";
 import type { MemoryService } from "@ardurbot/memory";
 import { MemoryRedactionError } from "@ardurbot/memory";
@@ -566,6 +583,18 @@ function mapSpaceLifecycleError(error: unknown): unknown {
     return new ORPCError("CONFLICT", { message: error.message });
   }
   return error;
+}
+
+/** The settings button is only for the owner of this computer, and only when nothing is installed. */
+function hermesLocalInstallOffer(
+  owner: boolean,
+  desktop: boolean,
+  probe: RuntimeAvailability,
+): RuntimeAvailability["install"] {
+  if (!owner || !desktop) return undefined;
+  if (probe.install) return probe.install;
+  if (!probe.available && probe.reason?.includes("not installed")) return { state: "absent" };
+  return undefined;
 }
 
 export function createRouter(deps: RouterDeps): Router<typeof appContract, RouterContext> {
@@ -1141,6 +1170,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
 
           let healthAvailable = false;
           let healthReason: string | undefined;
+          let localProbe: RuntimeAvailability | undefined;
 
           if (isBridgeMode) {
             healthAvailable = Boolean(
@@ -1155,14 +1185,17 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
                   ? "Update Ardur on the connected computer for the provider relay."
                   : (health?.hermes?.reason ?? "Hermes is not installed on this computer.");
           } else {
-            const localProbe = await nativeRuntimeAvailability("hermes", input.refresh);
+            localProbe = await nativeRuntimeAvailability("hermes", input.refresh);
             healthAvailable = localProbe.available;
             healthReason = localProbe.reason ?? "Hermes is not installed on this computer.";
           }
 
-          const available = Boolean(
-            owner && (!bot || bot.computer?.kind === "desktop") && healthAvailable,
-          );
+          const desktop = !bot || bot.computer?.kind === "desktop";
+          const available = Boolean(owner && desktop && healthAvailable);
+          const install =
+            localProbe && !isBridgeMode
+              ? hermesLocalInstallOffer(Boolean(owner), desktop, localProbe)
+              : undefined;
           return {
             runtimeKind: "hermes" as const,
             available,
@@ -1176,6 +1209,7 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
                       : healthReason,
                 }
               : {}),
+            ...(install ? { install } : {}),
           };
         }
         if (process.env.ARDURBOT_HOST_BRIDGE === "api" && input.runtimeKind !== "pi") {
@@ -1221,6 +1255,20 @@ export function createRouter(deps: RouterDeps): Router<typeof appContract, Route
         if (!(await nativeHostOwner(deps.prisma, context.actor.userId)))
           throw new ORPCError("FORBIDDEN", { message: NATIVE_HOST_OWNER_MESSAGE });
         return nativeConnections.begin(context.actor.userId);
+      }),
+      installHermes: authed.runtimes.installHermes.handler(async ({ context }) => {
+        if (process.env.ARDURBOT_HOST_BRIDGE === "api")
+          throw new ORPCError("FORBIDDEN", { message: HERMES_INSTALL_BRIDGE });
+        if (!(await nativeHostOwner(deps.prisma, context.actor.userId)))
+          throw new ORPCError("FORBIDDEN", { message: NATIVE_HOST_OWNER_MESSAGE });
+        const current = await nativeRuntimeAvailability("hermes");
+        if (current.reason === HERMES_HOST_UNAVAILABLE)
+          throw new ORPCError("BAD_REQUEST", { message: HERMES_HOST_UNAVAILABLE });
+        if (current.available) throw new ORPCError("CONFLICT", { message: HERMES_INSTALL_ALREADY });
+        if (hermesInstallLockHeld(localHermesRoot()))
+          throw new ORPCError("CONFLICT", { message: HERMES_INSTALL_RUNNING });
+        await deps.jobs.enqueue(hermesInstallJob());
+        return { ok: true as const };
       }),
       connectStatus: authed.runtimes.connectStatus.handler(({ context, input }) =>
         nativeConnections.status(context.actor.userId, input.loginId),

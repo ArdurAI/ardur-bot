@@ -24,6 +24,7 @@ import {
   hermesInstallLockHeld,
   hermesInstallLockPath,
   hermesInstallStatusPath,
+  localHermesInstallCandidate,
   localHermesRoot,
   probeHermesInstall,
   qualifyHermesInstall,
@@ -36,6 +37,7 @@ export const HERMES_DOWNLOAD_MISMATCH = "The Hermes download didn't match the ap
 export const HERMES_INSTALL_FAILED = "Couldn't install Hermes. Try again.";
 export const HERMES_INSTALL_RUNNING = "Hermes is already being installed.";
 export const HERMES_INSTALL_ALREADY = "Hermes is already installed.";
+export const HERMES_INSTALL_BRIDGE = "Install Hermes from Ardur on this computer.";
 export const HERMES_HOST_UNAVAILABLE = "Pinned Hermes is unavailable on this host.";
 
 const PHASE_TEXT: Record<HermesInstallPhase, string> = {
@@ -113,6 +115,28 @@ export class HermesInstallError extends Error {
 export async function installManagedHermes(): Promise<void> {
   if (process.env.ARDURBOT_HOST_BRIDGE === "api") return;
   await installHermes({ root: localHermesRoot() });
+}
+
+/** Worker entry. A paired host, a live lock, or an install that already qualifies does nothing. */
+export async function runHermesInstallJob(install?: () => Promise<void>): Promise<void> {
+  if (process.env.ARDURBOT_HOST_BRIDGE === "api") return;
+  const root = localHermesRoot();
+  if (hermesInstallLockHeld(root)) return;
+  const candidate = localHermesInstallCandidate();
+  if (candidate) {
+    try {
+      probeHermesInstall(candidate);
+      return;
+    } catch {
+      // A present candidate that fails its checks can be replaced.
+    }
+  }
+  try {
+    await (install ?? (() => installHermes({ root })))();
+  } catch (error) {
+    if (error instanceof HermesInstallError && error.message === HERMES_INSTALL_RUNNING) return;
+    throw error;
+  }
 }
 
 export async function installHermes(deps: {

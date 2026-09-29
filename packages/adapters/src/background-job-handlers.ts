@@ -9,6 +9,7 @@ import type {
 } from "@ardurbot/adapter-kit";
 import { messagingDeliverJob } from "@ardurbot/adapter-kit";
 import type { Pool, PrismaClient, ThreadEvents } from "@ardurbot/db";
+import { runHermesInstallJob } from "@ardurbot/host-runtime/runtimes/hermes-installer";
 import { getLogger } from "@ardurbot/logging";
 import type { MemoryService } from "@ardurbot/memory";
 import { deliverMemory, maintainBriefs } from "@ardurbot/memory";
@@ -203,6 +204,9 @@ export function createBackgroundJobHandlers(deps: {
         },
         payload,
       );
+    },
+    "hermes.install": async () => {
+      await runHermesInstallJob();
     },
     "history.compact": async (payload) => {
       await compactHistory(

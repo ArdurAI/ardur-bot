@@ -531,15 +531,18 @@ it("refuses a download larger than the cap", async () => {
   }
 });
 
-it.each([
+const unsafeArchives: Array<[string, Buffer[]]> = [
   [
     "path traversal",
-    pax("x", { path: "pkg/../../escaped.txt" }),
-    entry({ name: "pkg/ok.txt", data: Buffer.from("x") }),
+    [
+      pax("x", { path: "pkg/../../escaped.txt" }),
+      entry({ name: "pkg/ok.txt", data: Buffer.from("x") }),
+    ],
   ],
-  ["symlink", entry({ name: "pkg/link", type: "2", link: "pkg/script.sh", mode: 0o777 })],
-  ["hard link", entry({ name: "pkg/hard", type: "1", link: "pkg/script.sh" })],
-])("refuses an archive %s entry", async (_label, ...parts) => {
+  ["symlink", [entry({ name: "pkg/link", type: "2", link: "pkg/script.sh", mode: 0o777 })]],
+  ["hard link", [entry({ name: "pkg/hard", type: "1", link: "pkg/script.sh" })]],
+];
+it.each(unsafeArchives)("refuses an archive %s entry", async (_label, parts) => {
   const root = await mkdtemp(path.join(tmpdir(), "hermes-unsafe-"));
   const fetchImpl: HermesFetch = async () => new Response(gzipTar(parts));
   try {
