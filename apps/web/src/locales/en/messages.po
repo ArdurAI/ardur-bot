@@ -3375,6 +3375,10 @@ msgstr "Developer"
 msgid "Developer (git, GitHub and GitLab CLIs, node, jq)"
 msgstr "Developer (git, GitHub and GitLab CLIs, node, jq)"
 
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Developer image"
+msgstr "Developer image"
+
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Developer is a larger download and uses more disk space."
 msgstr "Developer is a larger download and uses more disk space."
@@ -4303,6 +4307,10 @@ msgstr "Ignore"
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Image profile"
 msgstr "Image profile"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Image pull secret"
+msgstr "Image pull secret"
 
 #: src/pages/shell/avatar-studio-popover.tsx
 msgid "Image upload area"
@@ -7929,6 +7937,10 @@ msgstr "Stale"
 #: src/pages/ComputerProfilesSettings.tsx
 msgid "Standard"
 msgstr "Standard"
+
+#: src/pages/fleet/FleetSettings.tsx
+msgid "Standard image"
+msgstr "Standard image"
 
 #: src/components/composer/command-description.ts
 msgid "Start a new chat"

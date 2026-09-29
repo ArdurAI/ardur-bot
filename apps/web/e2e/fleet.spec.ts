@@ -204,6 +204,12 @@ test("Computers shows fleet capacity, placement and move consent", async ({ page
   await fleet.getByRole("button", { name: "Add computer", exact: true }).click();
   await expect(addDialog).toBeVisible();
   await expect(addDialog.getByLabel("Name")).toHaveValue("");
+  await addDialog.getByLabel("Connection type").selectOption("kubernetes");
+  await addDialog.getByText("Advanced", { exact: true }).click();
+  await expect(addDialog.getByLabel("Standard image")).toBeVisible();
+  await expect(addDialog.getByLabel("Developer image")).toBeVisible();
+  await expect(addDialog.getByLabel("Image pull secret")).toBeVisible();
+  await captureScreenshot(page, testInfo, "fleet-kubernetes-images");
   await addDialog.getByRole("button", { name: "Cancel" }).click();
   await expect(addDialog).not.toBeVisible();
 });
