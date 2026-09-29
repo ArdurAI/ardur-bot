@@ -4,6 +4,7 @@ import type { HermesConnectionRefusal } from "./hermes-connections.js";
 import {
   HERMES_CONNECTION_POLICY,
   hermesConnectionRefusal,
+  hermesConnectionRefusalKind,
   isHermesPassThroughProvider,
 } from "./hermes-connections.js";
 
@@ -30,7 +31,19 @@ describe("HERMES_CONNECTION_POLICY", () => {
       expect(hermesConnectionRefusal(provider, credential), JSON.stringify(rule)).toBe(
         rule.refusal,
       );
+      expect(hermesConnectionRefusalKind(provider, credential), JSON.stringify(rule)).toBe(
+        rule.kind,
+      );
+      // Both functions walk the same table, so they agree on which row matched.
+      expect(hermesConnectionRefusal(provider, credential) === undefined).toBe(
+        hermesConnectionRefusalKind(provider, credential) === undefined,
+      );
     }
+  });
+
+  it("carries a generic kind on every sign-in refusal row", () => {
+    for (const rule of HERMES_CONNECTION_POLICY.signInRefusals)
+      expect(["vendor-app-only", "api-key-required"], JSON.stringify(rule)).toContain(rule.kind);
   });
 
   it("writes one English sentence for every refusal id the rules can produce", () => {
@@ -82,6 +95,18 @@ describe("hermesConnectionRefusal", () => {
   it("refuses any other sign-in connection generically", () => {
     expect(hermesConnectionRefusal("xai", { oauth: true })).toBe("sign-in");
     expect(hermesConnectionRefusal("github-copilot", { oauth: true })).toBe("sign-in");
+  });
+
+  it("returns the generic kind of the same matched row", () => {
+    expect(hermesConnectionRefusalKind(undefined)).toBeUndefined();
+    expect(hermesConnectionRefusalKind("anthropic")).toBeUndefined();
+    expect(hermesConnectionRefusalKind("openai-compatible", { oauth: true })).toBeUndefined();
+    expect(hermesConnectionRefusalKind("openai-codex")).toBe("vendor-app-only");
+    expect(hermesConnectionRefusalKind("anthropic", { connectionIssue: "api-key-required" })).toBe(
+      "vendor-app-only",
+    );
+    expect(hermesConnectionRefusalKind("anthropic", { oauth: true })).toBe("vendor-app-only");
+    expect(hermesConnectionRefusalKind("xai", { oauth: true })).toBe("api-key-required");
   });
 
   it("keeps the pass-through providers in the table and nothing else", () => {
