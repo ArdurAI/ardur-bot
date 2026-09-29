@@ -75,6 +75,7 @@ export function LearningInbox({ botId }: { botId?: string }) {
   const [offers, setOffers] = useState<Array<Pick<LearningGrantInput, "category" | "scope">>>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [conflicts, setConflicts] = useState<Record<string, Conflict | null>>({});
   const busyRef = useRef(busy);
   busyRef.current = busy;
   const request = useRef(0);
@@ -121,6 +122,16 @@ export function LearningInbox({ botId }: { botId?: string }) {
     );
     setSelected((current) => (current?.id === proposal.id ? proposal : current));
   }, []);
+  const rows = [
+    ...(selected ? [selected] : []),
+    ...(inbox?.proposals.filter((item) => item.id !== selected?.id) ?? []),
+  ];
+  const waiting = rows.filter((item) => item.status === "pending");
+  const decided = rows.filter((item) => item.status !== "pending");
+  useEffect(() => {
+    if (!selected || selected.id !== selectedId) return;
+    setTab(selected.status === "pending" ? "inbox" : "timeline");
+  }, [selected, selectedId]);
   async function change(action: () => Promise<unknown>) {
     if (busy) return;
     setBusy(true);
@@ -135,6 +146,21 @@ export function LearningInbox({ botId }: { botId?: string }) {
       setBusy(false);
     }
   }
+  const renderCard = (proposal: LearningProposal) => (
+    <LearningCard
+      key={proposal.id}
+      proposal={proposal}
+      botName={proposal.scope.botId ? inbox?.botNames?.[proposal.scope.botId] : undefined}
+      expanded={proposal.id === selectedId}
+      busy={busy}
+      change={change}
+      settle={settle}
+      conflict={conflicts[proposal.id] ?? null}
+      onConflict={(conflict) =>
+        setConflicts((current) => ({ ...current, [proposal.id]: conflict }))
+      }
+    />
+  );
   return (
     <section aria-label={t`What I learned`} data-testid="learning-inbox" className="space-y-3 py-3">
       <h3 className="text-sm font-medium">
@@ -232,35 +258,26 @@ export function LearningInbox({ botId }: { botId?: string }) {
           </TabsTrigger>
         </TabsList>
         <TabsContent value="timeline">
-          <LearningTimeline
-            botId={botId}
-            openProposal={(id) => {
-              setSelectedId(id);
-              setTab("inbox");
-            }}
-          />
+          <div data-testid="learning-decided" className="space-y-3">
+            {decided.map(renderCard)}
+            <LearningTimeline
+              botId={botId}
+              openProposal={(id) => {
+                setSelectedId(id);
+              }}
+            />
+          </div>
         </TabsContent>
         <TabsContent value="inbox">
-          <LearningBadge botId={botId} />
-          {inbox?.proposals.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              <Trans>Nothing to review.</Trans>
-            </p>
-          ) : null}
-          {[
-            ...(selected ? [selected] : []),
-            ...(inbox?.proposals.filter((p) => p.id !== selected?.id) ?? []),
-          ].map((proposal) => (
-            <LearningCard
-              key={proposal.id}
-              proposal={proposal}
-              botName={proposal.scope.botId ? inbox?.botNames?.[proposal.scope.botId] : undefined}
-              expanded={proposal.id === selectedId}
-              busy={busy}
-              change={change}
-              settle={settle}
-            />
-          ))}
+          <div data-testid="learning-waiting" className="space-y-3">
+            <LearningBadge botId={botId} />
+            {inbox && waiting.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                <Trans>Nothing to review.</Trans>
+              </p>
+            ) : null}
+            {waiting.map(renderCard)}
+          </div>
         </TabsContent>
       </Tabs>
       {offers
@@ -338,6 +355,8 @@ function LearningCard({
   busy,
   change,
   settle,
+  conflict,
+  onConflict,
 }: {
   proposal: LearningProposal;
   botName?: string;
@@ -345,6 +364,8 @@ function LearningCard({
   busy: boolean;
   change: (action: () => Promise<unknown>) => Promise<void>;
   settle: (result: LearningActionResult) => void;
+  conflict: Conflict | null;
+  onConflict: (conflict: Conflict | null) => void;
 }) {
   const { t, i18n } = useLingui();
   const [detailsOpen, setDetailsOpen] = useState(expanded);
@@ -355,7 +376,6 @@ function LearningCard({
   const [draft, setDraft] = useState(proposal.proposedContent ?? "");
   const [settingValue, setSettingValue] = useState(proposal.typedDelta?.value === true);
   const [evidence, setEvidence] = useState<ProposalEvidence | null>(null);
-  const [conflict, setConflict] = useState<Conflict | null>(null);
   const blocked = learningApprovalBlock(proposal);
   const pending = proposal.status === "pending";
   return (
@@ -394,7 +414,7 @@ function LearningCard({
                 void change(async () => {
                   const result = await rpc.learning.reject({ proposalId: proposal.id });
                   settle(result);
-                  setConflict(result.conflict ?? null);
+                  onConflict(result.conflict ?? null);
                 })
               }
             >
@@ -427,7 +447,7 @@ function LearningCard({
                   void change(async () => {
                     const result = await rpc.learning.revert({ proposalId: proposal.id });
                     settle(result);
-                    setConflict(result.conflict ?? null);
+                    onConflict(result.conflict ?? null);
                   })
                 }
               >

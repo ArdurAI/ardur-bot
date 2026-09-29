@@ -118,16 +118,17 @@ test("learning inbox separates suggestions from applied changes and shows Undo",
   await expect(inbox.getByText("3 suggestions to review", { exact: true })).toBeVisible();
   await captureScreenshot(page, testInfo, "learning-inbox-pending");
   await inbox.getByRole("button", { name: "Approve", exact: true }).click();
+  await expect(inbox.getByText("Nothing to review.", { exact: true })).toBeVisible();
+  await expect(inbox.getByText("learned 1 things this week", { exact: true })).toBeVisible();
+  await inbox.getByRole("tab", { name: "Timeline", exact: true }).click();
   await expect(inbox.getByText("Applied", { exact: true })).toBeVisible();
-  await inbox.getByText("Details", { exact: true }).click();
+  await inbox.locator("article").getByText("Details", { exact: true }).click();
   await expect(inbox.getByText("Not enough runs to tell", { exact: true })).toBeVisible();
   await captureScreenshot(page, testInfo, "learning-inbox-applied");
-  await inbox.getByRole("tab", { name: "Timeline", exact: true }).click();
   await expect(
     inbox.getByRole("button", { name: "Revision and observations document:1" }),
   ).toBeVisible();
   await captureScreenshot(page, testInfo, "learning-timeline");
-  await inbox.getByRole("tab", { name: "Inbox", exact: true }).click();
   await inbox.getByRole("button", { name: "Undo", exact: true }).click();
   await expect(inbox.getByText("Undone", { exact: true })).toBeVisible();
   await inbox.getByText("Curator", { exact: true }).click();
@@ -232,6 +233,11 @@ test("learning inbox shows board-item suggestions, their outcome, and a close th
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByRole("switch", { name: "Learning for this space" })).toBeChecked();
   await expect(dialog.getByText("Finish the import follow-up", { exact: true })).toBeVisible();
+  await expect(dialog.getByTestId("learning-waiting")).not.toContainText(
+    "A board item filed by a bot could not be closed.",
+  );
+  await dialog.getByRole("tab", { name: "Timeline", exact: true }).click();
+  await expect(dialog.getByText("Retry the failed export", { exact: true })).toBeVisible();
   await expect(dialog.getByText("A board item filed by a bot could not be closed.")).toBeVisible();
   await expect(
     dialog.getByText(
@@ -239,7 +245,10 @@ test("learning inbox shows board-item suggestions, their outcome, and a close th
       { exact: true },
     ),
   ).toBeVisible();
-  for (const details of await dialog.getByText("Details", { exact: true }).all())
+  for (const details of await dialog
+    .getByTestId("learning-decided")
+    .getByText("Details", { exact: true })
+    .all())
     await details.click();
   await expect(dialog.getByText("Labels: import, follow-up").first()).toBeVisible();
   await expect(

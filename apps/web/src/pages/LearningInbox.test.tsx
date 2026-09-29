@@ -189,11 +189,10 @@ async function click(label: string) {
   expect(button).toBeDefined();
   await act(async () => button!.click());
 }
-it("separates pending copy from applied copy, approves without removing the card, and undoes", async () => {
+it("separates pending copy from applied copy, moves an approval to the timeline, and undoes", async () => {
   await act(async () => root.render(<LearningInbox botId="bot" />));
   expect(container.textContent).toContain("3 suggestions to review");
   expect(container.textContent).not.toContain("learned 3 things");
-  const card = container.querySelector("article");
   const applied = {
     ...proposal,
     status: "applied",
@@ -211,7 +210,10 @@ it("separates pending copy from applied copy, approves without removing the card
   });
   await click("Approve");
   expect(api.approve).toHaveBeenCalledWith({ proposalId: "proposal" });
-  expect(container.querySelector("article")).toBe(card);
+  expect(container.querySelector('[data-testid="learning-waiting"] article')).toBeNull();
+  expect(container.querySelector('[data-testid="learning-decided"]')?.textContent).toContain(
+    "Applied",
+  );
   expect(container.textContent).toContain("learned 1 things this week");
   expect(container.textContent).toContain("Applied");
   await act(async () => {
@@ -814,6 +816,56 @@ it("names the learning switch for what it turns on", async () => {
   expect(toggle.checked).toBe(true);
   expect(container.textContent).toContain("Learning for this space");
   expect(container.textContent).not.toContain("Learning is off for this space.");
+});
+it("keeps decided items out of the inbox and shows them on the timeline", async () => {
+  const waitingItem = {
+    ...proposal,
+    id: "wait",
+    proposedContent: "Still waiting.",
+    status: "pending",
+  };
+  const rejectedItem = {
+    ...proposal,
+    id: "no",
+    proposedContent: "Already rejected.",
+    status: "rejected",
+  };
+  api.list.mockResolvedValue({
+    reviews: [],
+    proposals: [waitingItem, rejectedItem],
+    pendingCount: 1,
+    appliedThisWeek: 0,
+  });
+  await act(async () => root.render(<LearningInbox />));
+  const waiting = container.querySelector('[data-testid="learning-waiting"]');
+  const decided = container.querySelector('[data-testid="learning-decided"]');
+  expect(waiting).toBeTruthy();
+  expect(decided).toBeTruthy();
+  expect(waiting?.textContent).toContain("Still waiting.");
+  expect(waiting?.textContent).not.toContain("Already rejected.");
+  expect(decided?.textContent).toContain("Already rejected.");
+  expect(decided?.textContent).toContain("Rejected");
+  api.reject.mockImplementation(async () => {
+    api.list.mockResolvedValue({
+      reviews: [],
+      proposals: [{ ...waitingItem, status: "rejected" }, rejectedItem],
+      pendingCount: 0,
+      appliedThisWeek: 0,
+    });
+    return {
+      proposal: { ...waitingItem, status: "rejected" },
+      conflict: { before: "before", applied: "applied", current: "current", expectedRevision: 0 },
+    };
+  });
+  await click("Reject");
+  const waitingAfter = container.querySelector('[data-testid="learning-waiting"]');
+  const decidedAfter = container.querySelector('[data-testid="learning-decided"]');
+  expect(waitingAfter?.textContent).toContain("Nothing to review.");
+  expect(waitingAfter?.textContent).not.toContain("Still waiting.");
+  expect(waitingAfter?.textContent).not.toContain("Already rejected.");
+  expect(decidedAfter?.querySelector("[role=alert]")?.textContent).toContain(
+    "Later edits overlap this change. Review both versions in History.",
+  );
 });
 it("sends edited content for a server diff before approval", async () => {
   await act(async () => root.render(<LearningInbox />));
