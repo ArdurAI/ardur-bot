@@ -18,7 +18,14 @@ const api = vi.hoisted(() => ({
   learning: vi.fn(async () => ({
     enabled: false,
     consolidationEnabled: false,
-    reviewerPin: null,
+    reviewerPin: null as null | {
+      runtimeKind: string;
+      provider: string;
+      modelId: string;
+      credentialId: string;
+      effort: string | null;
+      revision: number;
+    },
     budgets: {
       botDailyTokens: 30000,
       spaceDailyTokens: 150000,
@@ -44,6 +51,19 @@ const api = vi.hoisted(() => ({
     { provider: "openai", id: "reviewer", thinkingLevels: ["medium", "high"] },
   ]),
   modelsCredentials: vi.fn(async () => [{ id: "cred", provider: "openai", label: "OpenAI" }]),
+  availability: vi.fn(
+    async (_input: {
+      runtimeKind: string;
+    }): Promise<{
+      runtimeKind?: string;
+      available: boolean;
+      signedIn?: boolean;
+      models: { id: string; label: string; efforts: string[] }[];
+    }> => ({
+      available: false,
+      models: [],
+    }),
+  ),
 }));
 vi.mock("../../lib/rpc", () => ({
   selectedSpaceId: () => "space",
@@ -57,6 +77,7 @@ vi.mock("../../lib/rpc", () => ({
     },
     me: api.me,
     models: { list: api.modelsList, credentials: api.modelsCredentials },
+    runtimes: { availability: api.availability },
   },
 }));
 vi.mock("@lingui/react/macro", () => ({
@@ -376,4 +397,138 @@ it("shows connect a model when no connection can be chosen", async () => {
   api.modelsCredentials.mockResolvedValueOnce([]);
   const node = await render();
   expect(button(node, "Connect a model")).toBeTruthy();
+});
+
+it("offers Codex when that sign-in is usable and no model connection is stored", async () => {
+  api.modelsCredentials.mockResolvedValue([]);
+  api.availability.mockImplementation(async ({ runtimeKind }: { runtimeKind: string }) =>
+    runtimeKind === "codex-app-server"
+      ? {
+          runtimeKind,
+          available: true,
+          signedIn: true,
+          models: [{ id: "gpt-6-sol", label: "Sol", efforts: ["medium", "high"] }],
+        }
+      : { runtimeKind, available: false, models: [] },
+  );
+  const node = await render();
+  expect(node.querySelector('[aria-label="Learning review"]')).not.toBeNull();
+  expect(node.textContent).not.toContain("Connect a model");
+  const runtime = node.querySelector<HTMLSelectElement>("#learning-reviewer-runtime");
+  expect(runtime).not.toBeNull();
+  expect([...runtime!.options].map((option) => option.value)).toEqual([
+    "pi",
+    "claude-code",
+    "codex-app-server",
+    "antigravity",
+    "hermes",
+  ]);
+  await choose(runtime!, "codex-app-server");
+  const model = node.querySelector<HTMLSelectElement>("#learning-reviewer-native-model");
+  expect([...model!.options].some((option) => option.value === "gpt-6-sol")).toBe(true);
+  await choose(model!, "gpt-6-sol");
+  expect(api.setReviewer).toHaveBeenCalledWith(
+    expect.objectContaining({
+      pin: expect.objectContaining({
+        runtimeKind: "codex-app-server",
+        provider: "openai-codex",
+        modelId: "gpt-6-sol",
+        credentialId: "native:codex-app-server",
+      }),
+    }),
+  );
+});
+
+it("keeps a saved Codex reviewer when no connection rows are stored", async () => {
+  const current = await api.learning();
+  api.learning.mockResolvedValue({
+    ...current,
+    reviewerPin: {
+      runtimeKind: "codex-app-server",
+      provider: "openai-codex",
+      modelId: "gpt-6-sol",
+      credentialId: "native:codex-app-server",
+      effort: "medium",
+      revision: 4,
+    },
+  });
+  api.modelsCredentials.mockResolvedValue([]);
+  const node = await render();
+  expect(node.querySelector('[aria-label="Learning review"]')).not.toBeNull();
+  expect(node.querySelector<HTMLSelectElement>("#learning-reviewer-runtime")?.value).toBe(
+    "codex-app-server",
+  );
+});
+
+it("still asks to connect a model when only Hermes is available", async () => {
+  const current = await api.learning();
+  api.learning.mockResolvedValue({ ...current, reviewerPin: null });
+  api.modelsCredentials.mockResolvedValue([]);
+  api.availability.mockImplementation(async ({ runtimeKind }: { runtimeKind: string }) =>
+    runtimeKind === "hermes"
+      ? {
+          runtimeKind,
+          available: true,
+          models: [{ id: "local-model", label: "Local", efforts: ["off"] }],
+        }
+      : { runtimeKind, available: false, models: [] },
+  );
+  const node = await render();
+  expect(button(node, "Connect a model")).toBeTruthy();
+  expect(node.querySelector('[aria-label="Learning review"]')).toBeNull();
+  api.availability.mockImplementation(async () => ({
+    available: false,
+    models: [] as { id: string; label: string; efforts: string[] }[],
+  }));
+});
+
+it("saves Hermes and Antigravity reviewers as those runtimes", async () => {
+  api.modelsList.mockResolvedValue([
+    { provider: "openai-compatible", id: "local-model", thinkingLevels: ["off", "medium"] },
+  ]);
+  api.modelsCredentials.mockResolvedValue([
+    { id: "local", provider: "openai-compatible", label: "Local" },
+  ]);
+  api.availability.mockImplementation(async ({ runtimeKind }: { runtimeKind: string }) =>
+    runtimeKind === "antigravity"
+      ? {
+          runtimeKind,
+          available: true,
+          models: [{ id: "gemini-3.1-pro-high", label: "Pro", efforts: ["high"] }],
+        }
+      : { runtimeKind, available: false, models: [] },
+  );
+  const node = await render();
+  const runtime = node.querySelector<HTMLSelectElement>("#learning-reviewer-runtime")!;
+  await choose(runtime, "hermes");
+  const reviewer = node.querySelector<HTMLSelectElement>("#learning-reviewer")!;
+  const rendered = [...reviewer.options].find((option) => option.value.startsWith("["));
+  expect(rendered?.value).toBe(JSON.stringify(["openai-compatible", "local-model", "local"]));
+  await choose(reviewer, rendered!.value);
+  expect(api.setReviewer).toHaveBeenCalledWith(
+    expect.objectContaining({
+      pin: expect.objectContaining({
+        runtimeKind: "hermes",
+        provider: "openai-compatible",
+        modelId: "local-model",
+        credentialId: "local",
+      }),
+    }),
+  );
+
+  await choose(runtime, "antigravity");
+  const native = node.querySelector<HTMLSelectElement>("#learning-reviewer-native-model")!;
+  expect([...native.options].some((option) => option.value === "gemini-3.1-pro-high")).toBe(true);
+  await choose(native, "gemini-3.1-pro-high");
+  expect(api.setReviewer).toHaveBeenCalledWith(
+    expect.objectContaining({
+      pin: expect.objectContaining({
+        runtimeKind: "antigravity",
+        provider: "antigravity",
+        modelId: "gemini-3.1-pro-high",
+        credentialId: "native:antigravity",
+        effort: "high",
+      }),
+    }),
+  );
 });

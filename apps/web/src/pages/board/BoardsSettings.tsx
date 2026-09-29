@@ -1,4 +1,11 @@
-import type { SpaceLearningConfig } from "@ardurbot/contracts";
+import {
+  antigravityEffortForModel,
+  nativeRuntimeProviders,
+  type RuntimeAvailability,
+  type RuntimeKind,
+  type SetLearningReviewerInput,
+  type SpaceLearningConfig,
+} from "@ardurbot/contracts";
 import type { BoardConfiguration, BoardProblem, BoardWorkspace } from "@ardurbot/contracts/board";
 import { modelPinOptionKey, parseModelPinOptionKey, spaceDefaultEffort } from "@ardurbot/core";
 import {
@@ -21,6 +28,53 @@ import type { ModelSettings } from "../../lib/use-model-settings";
 import type { SettingsPageProps } from "../settings-types";
 import { ModelEffortSelect, ModelPinSelect } from "../shell/model-pin-select";
 
+const REVIEWER_PROBE_KINDS = ["claude-code", "codex-app-server", "antigravity", "hermes"] as const;
+type ReviewerProbeKind = (typeof REVIEWER_PROBE_KINDS)[number];
+const NATIVE_REVIEWER_KINDS = ["claude-code", "codex-app-server", "antigravity"] as const;
+type NativeReviewerKind = (typeof NATIVE_REVIEWER_KINDS)[number];
+
+function isNativeReviewerKind(kind: RuntimeKind): kind is NativeReviewerKind {
+  return (NATIVE_REVIEWER_KINDS as readonly string[]).includes(kind);
+}
+
+async function loadReviewerProbes(): Promise<
+  Partial<Record<ReviewerProbeKind, RuntimeAvailability | null>>
+> {
+  const entries = await Promise.all(
+    REVIEWER_PROBE_KINDS.map(async (runtimeKind) => {
+      const value = await rpc.runtimes.availability({ runtimeKind }).catch(() => null);
+      return [runtimeKind, value] as const;
+    }),
+  );
+  return Object.fromEntries(entries) as Partial<
+    Record<ReviewerProbeKind, RuntimeAvailability | null>
+  >;
+}
+
+/** A signed-in Codex, Claude Code, or Antigravity runtime is enough. Hermes still needs a connection. */
+function nativeReviewerReady(
+  probes: Partial<Record<ReviewerProbeKind, RuntimeAvailability | null>>,
+) {
+  return NATIVE_REVIEWER_KINDS.some((runtimeKind) => {
+    const probe = probes[runtimeKind];
+    return Boolean(probe?.available && probe.models.length > 0);
+  });
+}
+
+function nativeReviewerEffort(
+  kind: NativeReviewerKind,
+  modelId: string,
+  efforts: readonly string[],
+  kept: string | null | undefined,
+): string | null {
+  if (kind === "antigravity") {
+    const expected = antigravityEffortForModel(modelId);
+    return expected === undefined ? (efforts[0] ?? null) : expected;
+  }
+  if (kept && efforts.includes(kept)) return kept;
+  return efforts[0] ?? null;
+}
+
 export default function BoardsSettings({ onBusyChange, navigate }: SettingsPageProps) {
   const { t } = useLingui();
   const [boards, setBoards] = useState<BoardWorkspace[]>([]);
@@ -38,11 +92,19 @@ export default function BoardsSettings({ onBusyChange, navigate }: SettingsPageP
   const [upkeep, setUpkeep] = useState(true);
   const [learning, setLearning] = useState<SpaceLearningConfig | null>(null);
   const [modelSettings, setModelSettings] = useState<ModelSettings | null>(null);
+  const [probes, setProbes] = useState<
+    Partial<Record<ReviewerProbeKind, RuntimeAvailability | null>>
+  >({});
+  const [kind, setKind] = useState<RuntimeKind>("pi");
   const [savedPop, setSavedPop] = useState(false);
   const board = boards.find((row) => row.id === id) ?? boards[0];
-  const reviewer = learning?.destination?.modelId ?? learning?.reviewerPin?.modelId ?? null;
+  const savedReviewer = learning?.reviewerPin ?? null;
+  const canChooseReviewer =
+    (modelSettings?.credentials.length ?? 0) > 0 ||
+    Boolean(savedReviewer?.provider && savedReviewer.modelId && savedReviewer.credentialId) ||
+    nativeReviewerReady(probes);
   async function load() {
-    const [result, bots, upkeepResult, learningResult, me, catalog, credentials] =
+    const [result, bots, upkeepResult, learningResult, me, catalog, credentials, nextProbes] =
       await Promise.all([
         rpc.board.workspaces({}),
         rpc.bots.list(),
@@ -51,14 +113,50 @@ export default function BoardsSettings({ onBusyChange, navigate }: SettingsPageP
         rpc.me(),
         rpc.models.list(),
         rpc.models.credentials(),
+        loadReviewerProbes(),
       ]);
     setBoards(result.workspaces);
     setProblem(result.problem);
     setBots(bots);
     setUpkeep(upkeepResult.enabled);
     setLearning(learningResult);
+    setKind(learningResult.reviewerPin?.runtimeKind ?? "pi");
+    setProbes(nextProbes);
     setModelSettings({ me, catalog, credentials });
     setLoaded(true);
+  }
+  function choiceForKind() {
+    if (!learning) return null;
+    const stored = learning.reviewerPin?.runtimeKind === kind ? learning.reviewerPin : null;
+    const source = stored ?? (kind === "pi" ? learning.destination : null);
+    if (!source?.provider || !source.modelId || !source.credentialId) return null;
+    return {
+      runtimeKind: kind,
+      provider: source.provider,
+      modelId: source.modelId,
+      credentialId: source.credentialId,
+    };
+  }
+  function saveReviewer(pin: SetLearningReviewerInput["pin"]) {
+    if (!learning) return;
+    void work(async () => {
+      try {
+        setLearning(
+          await rpc.learning.setReviewer({
+            expectedRevision: learning.reviewerPin?.revision ?? 0,
+            pin,
+          }),
+        );
+        setSavedPop(true);
+        setTimeout(() => setSavedPop(false), 2000);
+      } catch (error) {
+        if (error instanceof ORPCError && error.code === "CONFLICT") {
+          await load();
+          throw new Error(t`The reviewer was changed in another window.`);
+        }
+        throw error;
+      }
+    }, "learning");
   }
   useEffect(() => {
     let active = true;
@@ -153,15 +251,7 @@ export default function BoardsSettings({ onBusyChange, navigate }: SettingsPageP
       {learning ? (
         <>
           <SettingsRow label={t`Learning review`}>
-            {modelSettings?.credentials.length === 0 ? (
-              <Button
-                variant="outline"
-                disabled={busy || !learning.canConfigure}
-                onClick={() => navigate("models")}
-              >
-                <Trans>Connect a model</Trans>
-              </Button>
-            ) : (
+            {canChooseReviewer ? (
               <Switch
                 aria-label={t`Learning review`}
                 checked={learning.enabled}
@@ -179,6 +269,14 @@ export default function BoardsSettings({ onBusyChange, navigate }: SettingsPageP
                   }, "learning")
                 }
               />
+            ) : (
+              <Button
+                variant="outline"
+                disabled={busy || !learning.canConfigure}
+                onClick={() => navigate("models")}
+              >
+                <Trans>Connect a model</Trans>
+              </Button>
             )}
           </SettingsRow>
           <SettingsRow
@@ -199,109 +297,182 @@ export default function BoardsSettings({ onBusyChange, navigate }: SettingsPageP
             <div className="w-full">
               {learning.canConfigure ? (
                 <>
-                  <ModelPinSelect
-                    id="learning-reviewer"
-                    settings={modelSettings}
-                    showAll={false}
-                    disabled={busy || modelSettings?.credentials.length === 0}
-                    value={
-                      learning.reviewerPin?.provider && learning.reviewerPin.modelId
-                        ? modelPinOptionKey(
-                            learning.reviewerPin.provider,
-                            learning.reviewerPin.modelId,
-                            learning.reviewerPin.credentialId,
-                          )
-                        : learning.destination?.provider && learning.destination.modelId
+                  <NativeSelect
+                    id="learning-reviewer-runtime"
+                    aria-label={t`Runs on`}
+                    value={kind}
+                    disabled={busy || !canChooseReviewer}
+                    onChange={(event) => setKind(event.target.value as RuntimeKind)}
+                  >
+                    <option value="pi">{t`Ardur (built-in)`}</option>
+                    <option value="claude-code">{t`Claude Code (your claude sign-in)`}</option>
+                    <option value="codex-app-server">{t`Codex (your ChatGPT sign-in)`}</option>
+                    <option value="antigravity">{t`Antigravity`}</option>
+                    <option value="hermes">{t`Hermes`}</option>
+                  </NativeSelect>
+                  {kind === "pi" || kind === "hermes" ? (
+                    <ModelPinSelect
+                      id="learning-reviewer"
+                      settings={modelSettings}
+                      showAll={false}
+                      disabled={busy || !canChooseReviewer}
+                      allowedProviders={
+                        kind === "hermes" ? ["openai-compatible", "ollama"] : undefined
+                      }
+                      value={(() => {
+                        const selected =
+                          learning.reviewerPin?.runtimeKind === kind
+                            ? learning.reviewerPin
+                            : kind === "pi"
+                              ? learning.destination
+                              : null;
+                        return selected?.provider && selected.modelId
                           ? modelPinOptionKey(
-                              learning.destination.provider,
-                              learning.destination.modelId,
-                              learning.destination.credentialId,
+                              selected.provider,
+                              selected.modelId,
+                              selected.credentialId,
                             )
-                          : ""
-                    }
-                    onChange={(value) => {
-                      const selected = parseModelPinOptionKey(value);
-                      if (!selected?.provider || !selected.modelId || !selected.credentialId)
-                        return;
-                      const entry = modelSettings?.catalog.find(
-                        (item) =>
-                          item.provider === selected.provider && item.id === selected.modelId,
-                      );
-                      const effortLevels = entry?.thinkingLevels ?? [];
-                      const keptEffort =
-                        learning.reviewerPin?.effort &&
-                        effortLevels.includes(
-                          learning.reviewerPin.effort as (typeof effortLevels)[number],
-                        )
-                          ? learning.reviewerPin.effort
-                          : spaceDefaultEffort(undefined, effortLevels);
-
-                      void work(async () => {
-                        const nextPin = {
-                          runtimeKind: "pi" as const,
+                          : "";
+                      })()}
+                      onChange={(value) => {
+                        const selected = parseModelPinOptionKey(value);
+                        if (!selected?.provider || !selected.modelId || !selected.credentialId)
+                          return;
+                        const entry = modelSettings?.catalog.find(
+                          (item) =>
+                            item.provider === selected.provider && item.id === selected.modelId,
+                        );
+                        const effortLevels = entry?.thinkingLevels ?? [];
+                        const previous =
+                          learning.reviewerPin?.runtimeKind === kind ? learning.reviewerPin : null;
+                        const keptEffort =
+                          previous?.effort &&
+                          effortLevels.includes(previous.effort as (typeof effortLevels)[number])
+                            ? previous.effort
+                            : spaceDefaultEffort(undefined, effortLevels);
+                        saveReviewer({
+                          runtimeKind: kind,
                           provider: selected.provider,
                           modelId: selected.modelId,
                           credentialId: selected.credentialId,
                           effort: keptEffort,
-                        };
-                        try {
-                          setLearning(
-                            await rpc.learning.setReviewer({
-                              expectedRevision: learning.reviewerPin?.revision ?? 0,
-                              pin: nextPin,
-                            }),
+                        });
+                      }}
+                    />
+                  ) : (
+                    <NativeSelect
+                      id="learning-reviewer-native-model"
+                      aria-label={t`Model`}
+                      value={
+                        learning.reviewerPin?.runtimeKind === kind
+                          ? (learning.reviewerPin.modelId ?? "")
+                          : ""
+                      }
+                      disabled={busy || !canChooseReviewer}
+                      onChange={(event) => {
+                        if (!isNativeReviewerKind(kind)) return;
+                        const modelId = event.target.value;
+                        if (!modelId) return;
+                        const models = probes[kind]?.models ?? [];
+                        const entry = models.find((item) => item.id === modelId);
+                        const previous =
+                          learning.reviewerPin?.runtimeKind === kind ? learning.reviewerPin : null;
+                        saveReviewer({
+                          runtimeKind: kind,
+                          provider: nativeRuntimeProviders[kind],
+                          modelId,
+                          credentialId: `native:${kind}`,
+                          effort: nativeReviewerEffort(
+                            kind,
+                            modelId,
+                            entry?.efforts ?? [],
+                            previous?.effort,
+                          ),
+                        });
+                      }}
+                    >
+                      <option value="">{t`Choose a model`}</option>
+                      {learning.reviewerPin?.runtimeKind === kind &&
+                      learning.reviewerPin.modelId &&
+                      !(probes[kind]?.models ?? []).some(
+                        (item) => item.id === learning.reviewerPin?.modelId,
+                      ) ? (
+                        <option value={learning.reviewerPin.modelId}>
+                          {learning.reviewerPin.modelId}
+                        </option>
+                      ) : null}
+                      {(isNativeReviewerKind(kind) ? (probes[kind]?.models ?? []) : []).map(
+                        (entry) => (
+                          <option key={entry.id} value={entry.id}>
+                            {entry.label}
+                          </option>
+                        ),
+                      )}
+                    </NativeSelect>
+                  )}
+                  {kind === "pi" || kind === "hermes"
+                    ? (() => {
+                        const pin = choiceForKind();
+                        if (!pin) return null;
+                        const entry = modelSettings?.catalog.find(
+                          (item) => item.provider === pin.provider && item.id === pin.modelId,
+                        );
+                        const effortLevels = entry?.thinkingLevels ?? [];
+                        if (effortLevels.length === 0) return null;
+                        const shown =
+                          learning.reviewerPin?.runtimeKind === kind
+                            ? learning.reviewerPin
+                            : learning.destination;
+                        return (
+                          <ModelEffortSelect
+                            id="learning-reviewer-effort"
+                            supported={effortLevels}
+                            isOllama={pin.provider === "ollama" || pin.provider === "local"}
+                            defaultLevel="medium"
+                            value={shown?.effort ?? ""}
+                            disabled={busy}
+                            allowDefault={false}
+                            hideLabel={true}
+                            onChange={(effort) => {
+                              saveReviewer({ ...pin, effort });
+                            }}
+                          />
+                        );
+                      })()
+                    : isNativeReviewerKind(kind) && kind !== "antigravity"
+                      ? (() => {
+                          const models = probes[kind]?.models ?? [];
+                          const modelId =
+                            learning.reviewerPin?.runtimeKind === kind
+                              ? learning.reviewerPin.modelId
+                              : "";
+                          const entry = models.find((item) => item.id === modelId);
+                          if (!entry || entry.efforts.length === 0) return null;
+                          return (
+                            <NativeSelect
+                              id="learning-reviewer-effort"
+                              aria-label={t`Thinking`}
+                              value={
+                                learning.reviewerPin?.runtimeKind === kind
+                                  ? (learning.reviewerPin.effort ?? "")
+                                  : ""
+                              }
+                              disabled={busy}
+                              onChange={(event) => {
+                                const pin = choiceForKind();
+                                if (!pin || !event.target.value) return;
+                                saveReviewer({ ...pin, effort: event.target.value });
+                              }}
+                            >
+                              {entry.efforts.map((level) => (
+                                <option key={level} value={level}>
+                                  {level}
+                                </option>
+                              ))}
+                            </NativeSelect>
                           );
-                          setSavedPop(true);
-                          setTimeout(() => setSavedPop(false), 2000);
-                        } catch (e) {
-                          if (e instanceof ORPCError && e.code === "CONFLICT") {
-                            await load();
-                            throw new Error(t`The reviewer was changed in another window.`);
-                          }
-                          throw e;
-                        }
-                      }, "learning");
-                    }}
-                  />
-                  {(() => {
-                    const pin = learning.reviewerPin ?? learning.destination;
-                    if (!pin) return null;
-                    const entry = modelSettings?.catalog.find(
-                      (e) => e.provider === pin.provider && e.id === pin.modelId,
-                    );
-                    const effortLevels = entry?.thinkingLevels ?? [];
-                    if (effortLevels.length === 0) return null;
-                    return (
-                      <ModelEffortSelect
-                        id="learning-reviewer-effort"
-                        supported={effortLevels}
-                        isOllama={pin.provider === "ollama" || pin.provider === "local"}
-                        defaultLevel="medium"
-                        value={pin.effort ?? ""}
-                        disabled={busy}
-                        allowDefault={false}
-                        hideLabel={true}
-                        onChange={(effort) => {
-                          void work(async () => {
-                            setLearning(
-                              await rpc.learning.setReviewer({
-                                expectedRevision: learning.reviewerPin?.revision ?? 0,
-                                pin: {
-                                  runtimeKind: "pi" as const,
-                                  provider: pin.provider!,
-                                  modelId: pin.modelId!,
-                                  credentialId: pin.credentialId!,
-                                  effort,
-                                },
-                              }),
-                            );
-                            setSavedPop(true);
-                            setTimeout(() => setSavedPop(false), 2000);
-                          }, "learning");
-                        }}
-                      />
-                    );
-                  })()}
+                        })()
+                      : null}
                   {savedPop ? <SuccessPop label={t`Saved`} /> : null}
                 </>
               ) : (
