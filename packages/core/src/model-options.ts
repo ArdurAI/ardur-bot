@@ -1,4 +1,5 @@
 import type { ModelCatalogEntry, ModelCredential } from "@ardurbot/contracts";
+import { isModelUnavailableOnSubscription } from "./model-defaults.js";
 import { modelPinOptionKey } from "./model-pin-choice.js";
 
 export function availableProviderModels(
@@ -9,33 +10,43 @@ export function availableProviderModels(
   return catalog.filter(
     (entry) =>
       entry.provider === provider &&
-      (showAll || entry.tier !== "unsupported") &&
-      (!entry.sunset || new Date(entry.sunset) > new Date()),
+      (showAll ||
+        !(entry.auth === "oauth" && isModelUnavailableOnSubscription(provider, entry.id))),
   );
 }
 
 export function unavailableSubscriptionModel(
   catalog: readonly ModelCatalogEntry[],
-  provider: string,
-  modelId: string,
+  provider: string | null | undefined,
+  modelId: string | null | undefined,
 ): boolean {
-  const entry = catalog.find((e) => e.provider === provider && e.id === modelId);
-  return entry?.tier === "unsupported";
+  return Boolean(
+    provider &&
+      modelId &&
+      catalog.some((entry) => entry.provider === provider && entry.auth === "oauth") &&
+      isModelUnavailableOnSubscription(provider, modelId),
+  );
 }
 
 export function connectedModelOptions(
   catalog: readonly ModelCatalogEntry[],
   credentials: readonly ModelCredential[],
 ): Array<{ key: string; provider: string; modelId: string; label: string; local: boolean }> {
-  const options: Array<{ key: string; provider: string; modelId: string; label: string; local: boolean }> = [];
+  const options: Array<{
+    key: string;
+    provider: string;
+    modelId: string;
+    label: string;
+    local: boolean;
+  }> = [];
   const seen = new Set<string>();
-  
+
   for (const credential of credentials) {
     const providerModels = availableProviderModels(catalog, credential.provider, false).filter(
       (entry) =>
         !entry.placeholder && (!entry.credentialId || entry.credentialId === credential.id),
     );
-    
+
     const credentialInCatalog = Boolean(
       credential.modelId &&
         catalog.some(
@@ -45,9 +56,9 @@ export function connectedModelOptions(
             !entry.placeholder,
         ),
     );
-    
+
     const local = credential.provider === "ollama" || credential.provider === "local";
-    
+
     const candidates =
       credential.provider !== "ollama" &&
       credential.modelId &&
@@ -73,14 +84,14 @@ export function connectedModelOptions(
             } · ${entry.label}`,
             local,
           }));
-          
+
     for (const option of candidates) {
       if (seen.has(option.key)) continue;
       seen.add(option.key);
       options.push(option);
     }
   }
-  
+
   // Hosted before Local
   return options.sort((a, b) => {
     if (a.local && !b.local) return 1;
