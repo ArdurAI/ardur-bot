@@ -64,6 +64,7 @@ import { dismissThreadNotifications, resumeLiveNotifications } from "../lib/live
 import { native, useThemedStyles } from "../lib/native";
 import { previewSnippet } from "../lib/preview";
 import { registerPushToken } from "../lib/push";
+import { sealPhaseLabelKey } from "../lib/seal-scene";
 import { querySpaceSearch } from "../lib/search";
 import { mobileSearchDestination } from "../lib/search-destination";
 
@@ -937,9 +938,11 @@ function BotRow({
   const preview = previewSnippet(bot.preview, 40) || bot.title || t("No messages yet");
   const time = bot.updatedAt ? formatThreadTime(bot.updatedAt) : "";
   const tag = botTag(bot.title, bot.name);
+  const phaseLabel = sealPhaseLabelKey(bot.status);
   // Spelled out because an explicit label replaces the one built from the row's children.
   const label = [
     bot.name,
+    phaseLabel ? t(phaseLabel) : null,
     tag,
     bot.notifyOnFinish ? null : t("notifications silenced"),
     bot.unread ? t("unread") : null,

@@ -1,15 +1,20 @@
 import type { AvatarStyle } from "@ardurbot/contracts";
+import type { SealBand, SealPhase } from "@ardurbot/core";
 import {
-  ACTIVE_RUN_STATUSES,
   avatarIdentitySeed,
   avatarInitial,
+  deriveSealPhase,
   organicAvatarPath,
   resolvePersonaColorDef,
+  SEAL_PICTURE_BANDS,
   SHIPPED_BOT_AVATAR_CENTER,
   SHIPPED_BOT_AVATAR_VIEWBOX,
+  sealInitial,
+  sealLayers,
+  sealScenePack,
 } from "@ardurbot/core";
 import { memo, useEffect } from "react";
-import { Image, Text, useColorScheme, View } from "react-native";
+import { Text, useColorScheme, View } from "react-native";
 import Animated, {
   cancelAnimation,
   Easing,
@@ -20,29 +25,35 @@ import Animated, {
   withRepeat,
   withTiming,
 } from "react-native-reanimated";
-import Svg, {
-  Circle,
-  ClipPath,
-  Defs,
-  Ellipse,
-  G,
-  Path,
-  Rect,
-  Image as SvgImage,
-} from "react-native-svg";
+import Svg, { ClipPath, Defs, Ellipse, G, Path, Rect, Image as SvgImage } from "react-native-svg";
 import { mobileTokens } from "../lib/appearance";
 import { workingAvatarDuration, workingAvatarFrame } from "../lib/avatar-motion";
 import { mobileBotAvatarPresentation, sealEdgePath } from "../lib/bot-avatar";
 import { useI18n } from "../lib/i18n";
+import { sealNativeColors } from "../lib/seal-scene";
 import { useAvatarStyle } from "./avatar-style";
 import { NativeSymbol } from "./native-symbol";
+import { SealLayers } from "./seal-layers";
 
 const AnimatedRect = Animated.createAnimatedComponent(Rect);
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+
+/** The four states the avatar exposed before phases, kept for its test id. */
+const AVATAR_STATUS: Record<SealPhase, "running" | "waiting" | "paused" | "idle"> = {
+  idle: "idle",
+  starting: "running",
+  thinking: "running",
+  searching: "running",
+  steps: "running",
+  waiting: "waiting",
+  paused: "paused",
+  done: "idle",
+  error: "idle",
+};
 
 export const BotAvatar = memo(function BotAvatar({
   color,
   size = 54,
+  phase: phaseProp,
   status,
   identity,
   label,
@@ -51,6 +62,9 @@ export const BotAvatar = memo(function BotAvatar({
 }: {
   color: string;
   size?: number;
+  /** What the bot is doing; takes precedence over `status`. */
+  phase?: SealPhase;
+  /** A run status, mapped to a phase when `phase` is not given. */
   status?: string;
   identity?: string;
   /** Display name used for the seal initial; identity stays the hash seed. */
@@ -62,10 +76,8 @@ export const BotAvatar = memo(function BotAvatar({
   const scheme = useColorScheme();
   const tokens = mobileTokens("system", scheme);
 
-  const isRunning = status === "running" || status === "queued" || status === "leased";
-  const isWaiting = status === "waiting_input";
-  const isPaused = status === "waiting_takeover";
-  const avatarStatus = isRunning ? "running" : isWaiting ? "waiting" : isPaused ? "paused" : "idle";
+  const phase = phaseProp ?? deriveSealPhase({ status }).phase;
+  const avatarStatus = AVATAR_STATUS[phase];
 
   const { avatarStyle } = useAvatarStyle();
   const parsed = mobileBotAvatarPresentation(color);
@@ -81,71 +93,24 @@ export const BotAvatar = memo(function BotAvatar({
   const initial = avatarInitial(label ?? effectiveId);
 
   const reducedMotion = useReducedMotion();
-  const progress = useSharedValue(0);
-
-  useEffect(() => {
-    cancelAnimation(progress);
-    progress.value = 0;
-    if (isRunning && !reducedMotion) {
-      progress.value = withRepeat(
-        withTiming(1, {
-          duration: 1600,
-          easing: Easing.linear,
-        }),
-        -1,
-      );
-    }
-    return () => cancelAnimation(progress);
-  }, [isRunning, progress, reducedMotion]);
-
-  const ringStyle = useAnimatedStyle(() => {
-    return {
-      transform: [{ rotate: `${progress.value * 360 - 60}deg` }],
-    };
-  });
-
-  const runningRing = isRunning ? (
-    <Animated.View
-      style={[
-        { position: "absolute", top: -4, left: -4, width: size + 8, height: size + 8 },
-        ringStyle,
-      ]}
-    >
-      <Svg width={size + 8} height={size + 8} viewBox="0 0 56 56">
-        <AnimatedCircle
-          cx="28"
-          cy="28"
-          r="26"
-          fill="none"
-          stroke={tokens.foreground}
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeDasharray="122 41"
-        />
-      </Svg>
-    </Animated.View>
-  ) : null;
-
-  const warningDot = isWaiting ? (
-    <View
-      style={{
-        position: "absolute",
-        top: -size * 0.1,
-        right: -size * 0.1,
-        width: Math.max(8, size * 0.3),
-        height: Math.max(8, size * 0.3),
-        borderRadius: size,
-        backgroundColor: tokens.warning,
-        borderWidth: 3,
-        borderColor: tokens.background,
-      }}
-    />
-  ) : null;
+  // A chosen picture keeps its pigment edge and shows only the ring and badge bands.
+  const chosenPicture =
+    (parsed.kind === "image" && Boolean(parsed.imageUrl)) || parsed.kind === "shape";
+  const organic = !chosenPicture && (variant ?? avatarStyle) === "organic";
+  const layers = organic
+    ? []
+    : sealLayers(sealScenePack(), phase, size, chosenPicture ? SEAL_PICTURE_BANDS : undefined);
+  const colors = sealNativeColors(colorDef.hex, tokens.warning);
+  const scene = (bands: readonly SealBand[]) => {
+    const drawn = layers.filter((layer) => bands.includes(layer.band));
+    return drawn.length > 0 ? (
+      <SealLayers layers={drawn} size={size} colors={colors} moving={!reducedMotion} />
+    ) : null;
+  };
 
   const sealPath = sealEdgePath(size);
-  const runningSealSize = Math.round(size * 0.8);
-  const runningSealPath = sealEdgePath(runningSealSize);
   const clipId = `seal-clip-${size}`;
+  const initialRule = sealInitial(size);
 
   const picture =
     parsed.kind === "image" && parsed.imageUrl ? (
@@ -164,24 +129,12 @@ export const BotAvatar = memo(function BotAvatar({
           href={parsed.imageUrl}
           clipPath={`url(#${clipId})`}
         />
-        <Path
-          d={sealPath}
-          stroke={colorDef.hex}
-          strokeWidth={2}
-          strokeDasharray={isPaused ? "4 3" : undefined}
-          fill="none"
-        />
+        <Path d={sealPath} stroke={colorDef.hex} strokeWidth={2} fill="none" />
       </Svg>
     ) : parsed.kind === "shape" ? (
       <Svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
         <Path d={sealPath} fill={tokens.card} />
-        <Path
-          d={sealPath}
-          stroke={colorDef.hex}
-          strokeWidth={2}
-          strokeDasharray={isPaused ? "4 3" : undefined}
-          fill="none"
-        />
+        <Path d={sealPath} stroke={colorDef.hex} strokeWidth={2} fill="none" />
         <G transform={`translate(${size * 0.1},${size * 0.1}) scale(0.8)`}>
           <Svg viewBox={SHIPPED_BOT_AVATAR_VIEWBOX}>
             <Path d={parsed.shapePath} fill={colorDef.hex} />
@@ -202,49 +155,39 @@ export const BotAvatar = memo(function BotAvatar({
           </Svg>
         </G>
       </Svg>
-    ) : (variant ?? avatarStyle) === "organic" ? (
+    ) : organic ? (
       <OrganicAvatar
         color={colorDef.hex}
         identity={identity}
         size={size}
-        isWorking={isRunning || isWaiting || isPaused}
+        isWorking={avatarStatus !== "idle"}
       />
     ) : (
-      <View
-        style={{
-          width: isRunning ? runningSealSize : size,
-          height: isRunning ? runningSealSize : size,
-          margin: isRunning ? size * 0.1 : 0,
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
+      // The seal: its pigment disc, then the scene, the initial and the ring.
+      <View style={{ width: size, height: size, alignItems: "center", justifyContent: "center" }}>
         <Svg
-          width={isRunning ? runningSealSize : size}
-          height={isRunning ? runningSealSize : size}
-          viewBox={`0 0 ${isRunning ? runningSealSize : size} ${isRunning ? runningSealSize : size}`}
+          width={size}
+          height={size}
+          viewBox={`0 0 ${size} ${size}`}
           style={{ position: "absolute", top: 0, left: 0 }}
         >
-          <Path
-            d={isRunning ? runningSealPath : sealPath}
-            fill={colorDef.hex}
-            stroke={isPaused ? tokens.background : undefined}
-            strokeWidth={isPaused ? 2 : undefined}
-            strokeDasharray={isPaused ? "4 3" : undefined}
-          />
+          <Path d={sealPath} fill={colorDef.hex} />
         </Svg>
+        {scene(["disc", "scene"])}
         <Text
           accessible={false}
           style={{
             color: colorDef.eyeColor,
             fontFamily: "Georgia",
             fontStyle: "italic",
-            fontSize: Math.round((isRunning ? runningSealSize : size) * 0.6),
+            fontSize: Math.round((size * initialRule.size) / 100),
             includeFontPadding: false,
+            transform: [{ translateY: ((initialRule.y - 50) * size) / 100 }],
           }}
         >
           {initial}
         </Text>
+        {scene(["ring", "badge"])}
       </View>
     );
 
@@ -253,9 +196,8 @@ export const BotAvatar = memo(function BotAvatar({
       testID={`bot-avatar-${avatarStatus}`}
       style={{ width: size, height: size, justifyContent: "center", alignItems: "center" }}
     >
-      {runningRing}
       {picture}
-      {warningDot}
+      {chosenPicture ? scene(SEAL_PICTURE_BANDS) : null}
       {muted ? (
         <View
           accessible
