@@ -59,6 +59,11 @@ export class KubernetesSandboxProvider implements SandboxProvider {
   async namespaces() {
     return this.api.namespaces?.() ?? [this.settings.namespace];
   }
+  /** Reaching the API is the test; capacity stays unknown when the account cannot read nodes. */
+  async test(context: AdapterContext) {
+    const version = (await this.api.version?.(context.signal)) ?? "Kubernetes";
+    return { capacity: await this.capacity(), os: "Linux", version };
+  }
   describe() {
     return {
       id: "kubernetes",
