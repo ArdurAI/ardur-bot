@@ -29,7 +29,12 @@ function classify(error: unknown, depth: number): ProviderErrorKind {
       ) {
         return "model-unavailable";
       }
-      if (/\b(rate limit|too many requests|quota exceeded)\b/i.test(error)) return "rate-limit";
+      if (
+        /\b(rate limit|too many requests|quota exceeded|usage limit)\b|\bout of (?:extra )?usage\b/i.test(
+          error,
+        )
+      )
+        return "rate-limit";
       if (
         /\b(unauthorized|authentication|invalid api key|expired token|token expired)\b/i.test(error)
       )

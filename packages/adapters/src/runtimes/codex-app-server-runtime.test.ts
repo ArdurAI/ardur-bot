@@ -455,6 +455,38 @@ describe("Codex app-server protocol", () => {
     expect(final?.request?.categories).toMatchObject({ logicalInput: 30, output: 8 });
     expect(final?.request?.collection?.outcome).toBe("failed");
   });
+  it.each([
+    [
+      { message: "You hit your usage limit. Try again later." },
+      "usage-limit",
+      "usage limit is reached",
+    ],
+    [{ message: "Unauthorized: not logged in" }, "signed-out", "Sign in to Codex"],
+  ] as const)(
+    "names the real cause of a failed turn without echoing its text: %j",
+    async (turnError, reasonId, sentence) => {
+      const f = fixture("success", {
+        duringTurn: [
+          {
+            method: "turn/completed",
+            params: {
+              threadId: "thread-native",
+              turn: { id: "turn-native", status: "failed", error: turnError },
+            },
+          },
+        ],
+      });
+      let failure: unknown;
+      await (async () => {
+        for await (const _ of f.runtime.run(f.request)) void _;
+      })().catch((error) => {
+        failure = error;
+      });
+      expect(failure).toMatchObject({ problem: { code: "runtime-unavailable", reasonId } });
+      expect((failure as Error).message).toContain(sentence);
+      expect((failure as Error).message).not.toContain((turnError as { message: string }).message);
+    },
+  );
   it("names the limitation when a reroute interrupts the turn", async () => {
     const f = fixture("reroute");
     const events: AgentRuntimeEvent[] = [];

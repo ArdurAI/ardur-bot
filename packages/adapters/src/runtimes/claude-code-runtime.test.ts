@@ -136,6 +136,47 @@ describe("Claude stream-json boundary", () => {
       }),
     ).toThrow("Claude Code could not finish");
   });
+  it.each([
+    [
+      {
+        type: "result",
+        subtype: "error_during_execution",
+        is_error: true,
+        result: "Claude usage limit reached",
+      },
+      "usage-limit",
+      "usage limit is reached",
+    ],
+    [
+      { type: "result", subtype: "error_max_budget_usd", is_error: true },
+      "usage-limit",
+      "usage limit is reached",
+    ],
+    [{ type: "result", subtype: "error_max_turns", is_error: true }, "max-turns", "turn limit"],
+    [
+      {
+        type: "result",
+        subtype: "error_during_execution",
+        is_error: true,
+        errors: ["Not logged in · Please run /login"],
+      },
+      "signed-out",
+      "Sign in to Claude Code",
+    ],
+  ] as const)("names the real cause of a failed result: %j", (event, reasonId, sentence) => {
+    const parser = new ClaudeStreamParser(pin);
+    parser.parse(init);
+    let failure: unknown;
+    try {
+      parser.parse(event as unknown as Record<string, unknown>);
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toMatchObject({ problem: { code: "runtime-unavailable", reasonId } });
+    expect((failure as Error).message).toContain(sentence);
+    // The category sentence never echoes the runtime's raw text.
+    expect((failure as Error).message).not.toMatch(/private-output|Please run \/login/);
+  });
   it("uses documented tool isolation and a scoped resume id without passing credentials", () => {
     const args = claudeArguments(request, { command: "node", args: [] }, "session");
     expect(args).toContain("--restricted");

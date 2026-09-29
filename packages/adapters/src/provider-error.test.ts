@@ -15,6 +15,8 @@ it.each([
   [new Error("Invalid API key"), "auth"],
   [{ status: 429, message: "Model not available" }, "rate-limit"],
   ["Rate limit exceeded", "rate-limit"],
+  ["Claude usage limit reached", "rate-limit"],
+  ["You're out of extra usage", "rate-limit"],
   ["Image input is not supported", "other"],
   ["Model tool calls are not supported", "other"],
   ["Model returned invalid JSON", "other"],

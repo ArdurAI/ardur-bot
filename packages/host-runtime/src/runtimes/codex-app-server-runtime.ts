@@ -14,6 +14,11 @@ import { guardrailConfigFromEnv } from "../host-guardrails.js";
 import { startArdurMcpServer } from "./ardur-mcp-server.js";
 import { createArdurToolBridge } from "./claude-mcp-bridge.js";
 import { CodexUsageCollector } from "./codex-usage.js";
+import {
+  nativeFailureDetail,
+  nativeFailureProblem,
+  nativeFailureReasonId,
+} from "./native-failure-signals.js";
 import type { NativeSpawn } from "./native-process.js";
 import {
   findNativeBinary,
@@ -607,7 +612,7 @@ export class CodexAppServerRuntime implements AgentRuntime {
             if (event.method === "item/agentMessage/delta" && typeof params.delta === "string")
               queue.push({ type: "text", text: params.delta });
             if (event.method === "turn/completed") {
-              const turn = params.turn as { id?: string; status: string };
+              const turn = params.turn as { id?: string; status: string; error?: unknown };
               if (turn.id && turn.id !== turnId) continue;
               if (completionHandled) continue;
               completionHandled = true;
@@ -619,7 +624,7 @@ export class CodexAppServerRuntime implements AgentRuntime {
                   () => true,
                   () => false,
                 );
-              usageBarrier = { params: { status: turn.status, verified } };
+              usageBarrier = { params: { status: turn.status, verified, error: turn.error } };
               rpc.events.push(usageBarrier);
               continue;
             }
@@ -636,21 +641,32 @@ export class CodexAppServerRuntime implements AgentRuntime {
                 ),
               );
               usageFinished = true;
-              if (status !== "completed" && !paused && !context?.signal?.aborted)
-                throw problem(
-                  "runtime-unavailable",
-                  "Codex stopped before completing this run — connect it or change the pin.",
-                );
+              if (status !== "completed" && !paused && !context?.signal?.aborted) {
+                // The failed turn's error text names only the category; it is never echoed.
+                const reasonId = nativeFailureReasonId(nativeFailureDetail(params.error));
+                throw reasonId
+                  ? new RuntimePinError(nativeFailureProblem(pin, reasonId))
+                  : problem(
+                      "runtime-unavailable",
+                      "Codex stopped before completing this run — connect it or change the pin.",
+                    );
+              }
               finished = true;
               if (!paused && status === "completed") queue.push({ type: "done" });
               queue.end();
               break;
             }
-            if (event.method === "error")
-              throw problem(
-                "runtime-unavailable",
-                "Codex could not finish this run — connect it or change the pin.",
+            if (event.method === "error") {
+              const reasonId = nativeFailureReasonId(
+                nativeFailureDetail(params.message, params.error),
               );
+              throw reasonId
+                ? new RuntimePinError(nativeFailureProblem(pin, reasonId))
+                : problem(
+                    "runtime-unavailable",
+                    "Codex could not finish this run — connect it or change the pin.",
+                  );
+            }
           }
         } catch (error) {
           pinValid = false;

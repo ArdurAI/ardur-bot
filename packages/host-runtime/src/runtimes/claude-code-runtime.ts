@@ -13,6 +13,11 @@ import { RuntimePinError, runtimePinProblem } from "@ardurbot/contracts/runtime-
 import { guardrailConfigFromEnv } from "../host-guardrails.js";
 import { startArdurMcpServer } from "./ardur-mcp-server.js";
 import { createArdurToolBridge } from "./claude-mcp-bridge.js";
+import {
+  nativeFailureDetail,
+  nativeFailureProblem,
+  nativeFailureReasonId,
+} from "./native-failure-signals.js";
 import type { NativeSpawn } from "./native-process.js";
 import {
   findNativeBinary,
@@ -366,12 +371,21 @@ export class ClaudeStreamParser {
       }
       if (value.is_error || value.subtype !== "success" || !this.initialized) {
         this.pendingUsage.push(...this.finishUsage("failed"));
+        // The reason comes from the documented result fields (subtype, then the result or
+        // errors text for limit and sign-in signals); the raw vendor text is never echoed.
+        const reasonId =
+          value.subtype === "error_max_turns"
+            ? ("max-turns" as const)
+            : (nativeFailureReasonId(nativeFailureDetail(value.result, value.errors)) ??
+              (value.subtype === "error_max_budget_usd" ? ("usage-limit" as const) : undefined));
         throw new RuntimePinError(
-          runtimePinProblem(
-            this.pin,
-            "runtime-unavailable",
-            "Claude Code could not finish this run — connect it or change the pin.",
-          ),
+          reasonId
+            ? nativeFailureProblem(this.pin, reasonId)
+            : runtimePinProblem(
+                this.pin,
+                "runtime-unavailable",
+                "Claude Code could not finish this run — connect it or change the pin.",
+              ),
         );
       }
       if (!usage || !Object.keys(usage).length)
