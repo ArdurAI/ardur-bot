@@ -189,7 +189,13 @@ export class AntigravityRuntime implements AgentRuntime {
       id: "antigravity",
       contractVersion: "1",
       adapterVersion: "0.1.0",
-      capabilities: { streaming: true, compaction: false, tools: false, scripted: false },
+      capabilities: {
+        streaming: true,
+        compaction: false,
+        tools: false,
+        scripted: false,
+        images: false,
+      },
     };
   }
   async abort(runId: string) {

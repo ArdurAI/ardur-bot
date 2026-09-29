@@ -603,6 +603,8 @@ export type AgentRuntimeEvent =
       text: string;
       /** Provider-generated tool status rather than assistant-authored narration. */
       activity?: true;
+      /** Supplied reasoning summary; collapses into the work record. */
+      reasoning?: true;
     }
   | {
       type: "tool";
@@ -637,6 +639,8 @@ export interface AgentRuntimeCapabilities {
   compaction: boolean;
   tools: boolean;
   scripted: boolean;
+  /** False when this runtime rejects every image, whatever the model accepts. */
+  images?: boolean;
   /** Brokered provider calls persist their own receipts; runtime aggregates are informational. */
   usageAccounting?: "runtime" | "external";
 }

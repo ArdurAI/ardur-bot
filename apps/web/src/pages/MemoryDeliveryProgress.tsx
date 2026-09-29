@@ -27,7 +27,7 @@ export function MemoryDeliveryProgress() {
       clearTimeout(timer);
     };
   }, []);
-  if (!progress || !progress.total) return null;
+  if (!progress?.total) return null;
   const { delivered, total, failed } = progress;
   return (
     <p role="status" className="mt-2 text-sm text-muted-foreground">

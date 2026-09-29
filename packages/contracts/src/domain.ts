@@ -485,12 +485,23 @@ export const CreateRoutineInput = z
     }
   });
 
-export const ScratchpadItemStatusSchema = z.enum(["open", "parked", "done"]);
+export const ScratchpadItemStatusSchema = z.enum([
+  "open",
+  "parked",
+  "done",
+  "in_progress",
+  "blocked",
+  "deferred",
+  "ready",
+  "closed",
+]);
 export type ScratchpadItemStatus = z.infer<typeof ScratchpadItemStatusSchema>;
 
 export const ScratchpadItemSchema = z.object({
   id: Id,
   botId: Id,
+  boardWorkspaceId: z.string().nullable().optional(),
+  boardItemId: z.string().nullable().optional(),
   title: z.string(),
   status: ScratchpadItemStatusSchema,
   notes: z.string(),
@@ -1017,6 +1028,43 @@ export type ThreadSnapshot = z.infer<typeof ThreadSnapshotSchema>;
 
 /** Default maximum number of completion tokens for an OpenAI-compatible connection. */
 export const DEFAULT_MODEL_MAX_TOKENS = 4_096;
+
+/**
+ * A reasoning model spends this same budget on its thinking, so the modest default
+ * can be consumed before the reply starts. Wide enough for thinking plus an answer,
+ * still far below a model card's 128k ceiling.
+ */
+export const REASONING_MODEL_MAX_TOKENS = 32_768;
+
+/**
+ * The effective per-request output ceiling the runtime sends to the model endpoint.
+ * Completions default to a modest output cap so OpenRouter-style providers do not
+ * hold credit for a model card's 128k ceiling. A configured maxTokens is the escape.
+ * Reasoning models get the wider default because their thinking is billed against
+ * the same ceiling: at 4k a hard question can leave no room for the reply at all.
+ * Admission floors and runtime request limits both derive from this one resolver.
+ */
+export function resolveCompletionMaxTokens(
+  modelMaxTokens?: number,
+  configuredMaxTokens?: number,
+  optionsMaxTokens?: number,
+  reasoning?: boolean,
+): number {
+  const userCap =
+    typeof configuredMaxTokens === "number" && configuredMaxTokens >= 1
+      ? configuredMaxTokens
+      : reasoning
+        ? REASONING_MODEL_MAX_TOKENS
+        : DEFAULT_MODEL_MAX_TOKENS;
+  const optionCap =
+    typeof optionsMaxTokens === "number" && optionsMaxTokens >= 1
+      ? Math.min(optionsMaxTokens, userCap)
+      : userCap;
+  if (typeof modelMaxTokens === "number" && modelMaxTokens >= 1) {
+    return Math.min(modelMaxTokens, optionCap);
+  }
+  return optionCap;
+}
 
 /** Largest completion-token limit exposed by model settings. */
 export const MAX_MODEL_MAX_TOKENS = 131_072;

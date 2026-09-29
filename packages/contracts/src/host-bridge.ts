@@ -26,6 +26,8 @@ export const HOST_BRIDGE_VERSION = 1;
 export const HOST_FRAME_BYTES = 256 * 1024;
 export const HOST_TOTAL_BYTES = 8 * 1024 * 1024;
 export const HOST_FILE_BYTES = 128 * 1024;
+/** Images one runtime turn can carry across the host bridge. */
+export const HOST_TURN_MAX_IMAGES = 8;
 // Only explicit owner editor writes may carry a larger request. Stream frames keep their limit.
 export const HOST_WRITE_FRAME_BYTES = Math.ceil(IDE_FILE_BYTES / 3) * 4 + 8192;
 export const HOST_IN_FLIGHT = 4;
@@ -162,7 +164,7 @@ export const HostTurnSchema = z.strictObject({
         data: z.string().max(HOST_FILE_BYTES * 2),
       }),
     )
-    .max(8)
+    .max(HOST_TURN_MAX_IMAGES)
     .optional(),
   tools: z.union([z.literal("none"), z.array(tool).max(256)]),
   model: z.strictObject({
@@ -446,7 +448,12 @@ export function hostSocketUrl(apiUrl: string, internal = false) {
 /** Native adapters emit only this shared runtime event vocabulary. */
 export const HostRuntimeEventSchema = z.discriminatedUnion("type", [
   z.strictObject({ type: z.literal("text"), text }),
-  z.strictObject({ type: z.literal("progress"), text, activity: z.literal(true).optional() }),
+  z.strictObject({
+    type: z.literal("progress"),
+    text,
+    activity: z.literal(true).optional(),
+    reasoning: z.literal(true).optional(),
+  }),
   z.strictObject({
     type: z.literal("tool"),
     name: z.string().max(160),

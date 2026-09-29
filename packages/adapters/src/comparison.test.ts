@@ -1,6 +1,7 @@
 import {
   AppBootstrapSchema,
   ComparisonExportSchema,
+  DELEGATION_LIMITS,
   RunActivityRowSchema,
   RunSchema,
   ThreadSnapshotSchema,
@@ -80,7 +81,7 @@ describe("comparison orchestration through P2 admission", () => {
     expect(result.participants.map((item) => item.botId)).toEqual(["coordinator", "worker"]);
     expect(f.state().executions[0].input).toEqual(f.state().executions[1].input);
     expect(f.state().root).toMatchObject({
-      reservedTokens: 30000,
+      reservedTokens: 3 * DELEGATION_LIMITS.reservationTokens,
       totalDescendants: 2,
       activeDescendants: 2,
     });
@@ -96,7 +97,7 @@ describe("comparison orchestration through P2 admission", () => {
     const replay = await startComparison(f.deps, comparisonScope, comparisonInput);
     expect(replay.snapshot).toEqual(frozen);
     expect(f.enqueue).toHaveBeenCalledTimes(2);
-    expect(f.state().root.reservedTokens).toBe(30000);
+    expect(f.state().root.reservedTokens).toBe(3 * DELEGATION_LIMITS.reservationTokens);
     const exported = ComparisonExportSchema.parse(
       JSON.parse(
         JSON.stringify({
@@ -171,7 +172,10 @@ describe("comparison orchestration through P2 admission", () => {
     expect(result.results[1]!.citations).toEqual(["https://example.test/source"]);
     expect(result.results[1]!.usage).toMatchObject({ reported: false, costs: [] });
     expect(result.results[1]!.provenance.reportedModel).toBeNull();
-    expect(f.state().root).toMatchObject({ activeDescendants: 1, reservedTokens: 20000 });
+    expect(f.state().root).toMatchObject({
+      activeDescendants: 1,
+      reservedTokens: 2 * DELEGATION_LIMITS.reservationTokens,
+    });
   });
   it("merges only selected outputs as a separate pinned run and transfers the reserved budget", async () => {
     const f = comparisonFixture();
@@ -192,11 +196,36 @@ describe("comparison orchestration through P2 admission", () => {
     expect(execution.input.instruction).toContain("disagreements");
     expect(merged.merge!.participant.executing.pin.modelId).toBe("third");
     expect(merged.merge!.result.runId).not.toBe(comparison.results[0]!.runId);
-    expect(f.state().root).toMatchObject({ totalDescendants: 3, reservedTokens: 10000 });
+    expect(f.state().root).toMatchObject({
+      totalDescendants: 3,
+      reservedTokens: DELEGATION_LIMITS.reservationTokens,
+    });
     expect((await mergeComparison(f.deps, comparisonScope, input)).merge!.result.runId).toBe(
       merged.merge!.result.runId,
     );
     expect(f.state().root.totalDescendants).toBe(3);
+  });
+  it("releases a legacy 10,000 merge hold when the stored amount is missing", async () => {
+    const f = comparisonFixture();
+    const comparison = await startComparison(f.deps, comparisonScope, comparisonInput);
+    await f.complete(comparison.results[0]!.runId, "Selected");
+    await f.complete(comparison.results[1]!.runId, "Other");
+    const stored = f.state().comparisons.find((row) => row.id === comparison.id);
+    stored.mergeReservedTokens = null;
+    f.state().root.reservedTokens = DELEGATION_LIMITS.legacyReservationTokens;
+    const beforeLimit = f.state().root.tokenLimit;
+    await mergeComparison(f.deps, comparisonScope, {
+      id: comparison.id,
+      selectedRunIds: [comparison.results[0]!.runId],
+      botId: "third",
+      reserveBudget: false,
+    });
+    // Releasing today's constant from a 10,000 hold would leave the root at 10,000
+    // after the new reservation, or negative if nothing refilled it.
+    expect(f.state().root.reservedTokens).toBe(DELEGATION_LIMITS.reservationTokens);
+    expect(f.state().root.tokenLimit).toBe(
+      beforeLimit + DELEGATION_LIMITS.reservationTokens - DELEGATION_LIMITS.legacyReservationTokens,
+    );
   });
   it("requires an explicit reservation when merge was not reserved", async () => {
     const f = comparisonFixture();
@@ -214,7 +243,7 @@ describe("comparison orchestration through P2 admission", () => {
     await expect(mergeComparison(f.deps, comparisonScope, input)).rejects.toThrow(
       "Reserve one more run",
     );
-    expect(f.state().root.reservedTokens).toBe(10000);
+    expect(f.state().root.reservedTokens).toBe(DELEGATION_LIMITS.reservationTokens);
     expect(
       (await mergeComparison(f.deps, comparisonScope, { ...input, reserveBudget: true })).merge,
     ).not.toBeNull();

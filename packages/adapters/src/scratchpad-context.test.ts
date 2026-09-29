@@ -32,6 +32,17 @@ describe("scratchpad prompt context", () => {
         createdAt: new Date("2026-08-25T11:00:00.000Z"),
         updatedAt: new Date("2026-08-25T11:00:00.000Z"),
       },
+      {
+        id: "c",
+        botId: "bot",
+        boardWorkspaceId: "ws1",
+        boardItemId: "item1",
+        title: "Linked item",
+        status: "in_progress",
+        notes: "",
+        createdAt: new Date("2026-08-25T12:00:00.000Z"),
+        updatedAt: new Date("2026-08-25T12:00:00.000Z"),
+      },
     ]);
 
     const result = await loadAgentScratchpadContext(
@@ -42,13 +53,14 @@ describe("scratchpad prompt context", () => {
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
-          status: { in: ["open", "parked"] },
+          status: { in: ["open", "parked", "in_progress", "blocked", "deferred", "ready"] },
         }),
       }),
     );
     expect(result).toContain("<scratchpad_open>");
     expect(result).toContain("[open] Ship scratchpad — link PR (id: a)");
     expect(result).toContain("[parked] Parked idea (id: b)");
+    expect(result).toContain("[in_progress] Linked item (id: c board: ws1 boardItem: item1)");
     expect(result).toContain("not a scheduler");
     expect(result?.endsWith("</scratchpad_open>")).toBe(true);
     expect(result).not.toContain("[done]");

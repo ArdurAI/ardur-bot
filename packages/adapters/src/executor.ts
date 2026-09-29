@@ -61,6 +61,7 @@ import {
   ToolResumedPayloadSchema,
 } from "@ardurbot/contracts";
 import { BoardError } from "@ardurbot/contracts/board";
+import { HOST_TURN_MAX_IMAGES } from "@ardurbot/contracts/host-bridge";
 import {
   type ActionApprovalRule,
   appendTextSegment,
@@ -83,6 +84,7 @@ import {
   inferAttachmentMimeType,
   isMessagingChannelRun,
   isOneShotRoutineCrons,
+  isReasoningSummaryBlock,
   isTerminal,
   MAX_ASK_ROUNDS,
   messagingChannelId,
@@ -120,6 +122,7 @@ import type { Pool } from "@ardurbot/db";
 import {
   acceptDelegation,
   appendEventInTransaction,
+  type ClaimedSteeringMessage,
   claimQuietBotMessages,
   confirmDispatchStop,
   createSpaceForMember,
@@ -132,6 +135,7 @@ import {
   goalBotAuthorityFingerprint,
   goalExhaustionReason,
   InvalidSpaceNameError,
+  isSteeringContinuationClientNonce,
   isTooManyDatabaseConnections,
   listDelegations,
   loadBotPresence,
@@ -429,6 +433,12 @@ import {
   skillUpdateFromTool,
 } from "./skill-tools.js";
 import {
+  ATTACHMENT_UNAVAILABLE_NOTE,
+  fitInitialSteering,
+  splitInitialReceipt,
+  withoutSteeringMessages,
+} from "./steering-input.js";
+import {
   continueRunClaimFence,
   DESKTOP_HELD_FOR_TAKEOVER_MESSAGE,
   refreshTakeoverContinuePlan,
@@ -531,8 +541,7 @@ const READ_ONLY_AGENT_TOOLS = new Set([
   "cloud_agent_status",
 ]);
 const MAX_MODEL_FILE_BYTES = 250_000;
-const TURN_ATTACHMENT_UNAVAILABLE =
-  "An attachment in this message could not be loaded. Tell the user the attachment was unavailable and do not guess its contents.";
+const TURN_ATTACHMENT_UNAVAILABLE = ATTACHMENT_UNAVAILABLE_NOTE;
 const STEERING_ATTACHMENT_UNAVAILABLE = TURN_ATTACHMENT_UNAVAILABLE;
 const BUILTIN_AGENT_TOOL_NAMES = new Set(builtinAgentTools.map((tool) => tool.name));
 
@@ -2477,6 +2486,71 @@ export function createRunExecutor(deps: ExecutorDeps) {
         const workspaceCheckpoint = createRunWorkspaceCheckpoint(() =>
           checkpointRunComputerWorkspace(deps, storedComputer, computer, context),
         );
+        const acceptedSteeringDeliveryIds = new Set<string>();
+        /**
+         * One mapping for a claimed steering item, whether it was claimed at run
+         * start (appended after the request, so every runtime begins its turn
+         * with the waiting input) or claimed by the runtime mid-turn.
+         */
+        const mapClaimedSteeringItem = async (
+          item: ClaimedSteeringMessage,
+          request: string = item.text,
+        ) => {
+          const { images, files, unavailableInstruction } = await settleSteeringAttachmentLoads(
+            loadCurrentTurnImages(deps, item.blocks, context),
+            deps.artifacts
+              ? materializeCurrentTurnFiles(
+                  {
+                    prisma: deps.prisma,
+                    artifacts: deps.artifacts,
+                    sandbox: deps.sandbox,
+                  },
+                  item.blocks,
+                  {
+                    context,
+                    computer,
+                    computerMode,
+                    markWorkspaceDirty: workspaceCheckpoint.markDirty,
+                  },
+                )
+              : Promise.resolve([]),
+            item.blocks,
+            context.signal,
+          );
+          workspaceCheckpoint.markFiles(files);
+          const filesInstruction = currentTurnFilesInstruction(files);
+          const deliveryIds = (
+            await deps.prisma.botMessageWake.findMany({
+              where: {
+                state: "bound",
+                steeringMessageId: item.id,
+              },
+              select: { deliveryIds: true },
+            })
+          ).flatMap((wake) => wake.deliveryIds);
+          for (const id of deliveryIds) acceptedSteeringDeliveryIds.add(id);
+          if (selected.pin.runtimeKind !== "pi")
+            await noteBotMessageReadUnconfirmed(deps.prisma, {
+              runId,
+              leaseFence: fence,
+              deliveryIds,
+            });
+          return {
+            id: item.id,
+            messageId: item.messageId,
+            deliveryIds,
+            historyText: item.text,
+            text: [
+              await loadReplyContext(deps.prisma, thread.id, item.messageId),
+              request,
+              filesInstruction,
+              unavailableInstruction,
+            ]
+              .filter(Boolean)
+              .join("\n\n"),
+            images,
+          };
+        };
         const commandReplay = await loadRunCommandReplay({
           prisma: deps.prisma,
           run,
@@ -2977,6 +3051,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 leaseOwner: workerId,
                 leaseFence: fence,
                 blocks: [
+                  ...redactBlocks(messageSegments, runSecrets),
                   {
                     kind: "ask",
                     text: reason,
@@ -3655,6 +3730,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               leaseOwner: workerId,
               leaseFence: fence,
               blocks: [
+                ...redactBlocks(messageSegments, runSecrets),
                 buildApprovalAskBlock(applied!.effect.id, name, args, runSecrets, {
                   reviewReason,
                   allowAlways:
@@ -4782,6 +4858,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
               leaseOwner: workerId,
               leaseFence: fence,
               blocks: [
+                ...redactBlocks(messageSegments, runSecrets),
                 {
                   kind: "ask",
                   text: String(args.label ?? "Code"),
@@ -5331,49 +5408,81 @@ export function createRunExecutor(deps: ExecutorDeps) {
           turnBlocks,
           currentTurnImages,
         );
-        const taskPrompt = peerReadOnly
-          ? task.prompt
-          : expandSkillReferencesInPrompt(
-              [task.prompt, attachedFilesPrompt, missingImagesInstruction]
-                .filter(Boolean)
-                .join("\n\n"),
-              agentSkills,
+        /** Expands the skills a request names and puts a taught skill it invokes first. */
+        const skillRequest = (request: string, attachments: string[] = []) => {
+          const expanded = peerReadOnly
+            ? request
+            : expandSkillReferencesInPrompt(
+                [request, ...attachments].filter(Boolean).join("\n\n"),
+                agentSkills,
+              );
+          const invokedSkill =
+            !peerReadOnly &&
+            hydratedTaughtSkills.find(
+              (skill) =>
+                (run.trigger === "skill" &&
+                  request.startsWith(`Run ${skill.name || skill.goal.slice(0, 80)}.`)) ||
+                promptInvokesSkill(expanded, skill.name || skill.goal),
             );
-        const invokedSkill =
-          !peerReadOnly &&
-          hydratedTaughtSkills.find(
-            (skill) =>
-              (run.trigger === "skill" &&
-                task.prompt.startsWith(`Run ${skill.name || skill.goal.slice(0, 80)}.`)) ||
-              promptInvokesSkill(taskPrompt, skill.name || skill.goal),
-          );
-        pendingExposures.push(
-          ...invokedKnowledgeExposures(
-            task.prompt,
-            agentSkills,
-            invokedSkill
-              ? {
-                  ...invokedSkill,
-                  name: invokedSkill.name || invokedSkill.goal.slice(0, 80),
-                  playbook: parsePlaybook(invokedSkill.playbook),
-                }
-              : undefined,
-          ),
-        );
-        const basePrompt = invokedSkill
-          ? `${formatSkillRunPrompt(
-              invokedSkill.name || invokedSkill.goal.slice(0, 80),
-              parsePlaybook(invokedSkill.playbook),
-            )}\n\n${taskPrompt}`
-          : taskPrompt;
+          const taught = invokedSkill
+            ? {
+                ...invokedSkill,
+                name: invokedSkill.name || invokedSkill.goal.slice(0, 80),
+                playbook: parsePlaybook(invokedSkill.playbook),
+              }
+            : undefined;
+          return {
+            prompt: taught
+              ? `${formatSkillRunPrompt(taught.name, taught.playbook)}\n\n${expanded}`
+              : expanded,
+            exposures: invokedKnowledgeExposures(request, agentSkills, taught),
+          };
+        };
+        const taskRequest = skillRequest(task.prompt, [
+          attachedFilesPrompt,
+          missingImagesInstruction,
+        ]);
+        pendingExposures.push(...taskRequest.exposures);
+        const basePrompt = taskRequest.prompt;
         const approvalContinuation = buildApprovalContinuation(
           approvedEffects,
           (request) => redactSecrets(JSON.stringify(request), runSecrets),
           { exposedToolNames: new Set(tools.map((tool) => tool.name)) },
         );
-        const replyContext = peerReadOnly
-          ? undefined
-          : await loadReplyContext(deps.prisma, thread.id, run.sourceMessageId);
+        // Waiting messages are claimed before the turn so every runtime starts with them, not
+        // only runtimes with a steering callback. Peer-wake runs keep their receipt-bound claim
+        // inside the runtime, and a command replay has no live model to read new input.
+        const steeringContinuation = isSteeringContinuationClientNonce(run.clientNonce);
+        const claimedSteering =
+          !comparisonRun &&
+          !peerReadOnly &&
+          !commandReplay &&
+          !run.clientNonce?.startsWith("peer-wake:") &&
+          deps.events.claimSteering
+            ? await deps.events.claimSteering({
+                threadId: thread.id,
+                botId: bot.id,
+                runId,
+                leaseOwner: workerId,
+                leaseFence: fence,
+                seenIds: [],
+              })
+            : [];
+        const initialSteering = await Promise.all(
+          claimedSteering.map(async (item) => {
+            // A steering follow-up's task prompt is only a cue; its request is these messages.
+            const request = steeringContinuation ? skillRequest(item.text) : undefined;
+            return {
+              ...(await mapClaimedSteeringItem(item, request?.prompt)),
+              exposures: request?.exposures ?? [],
+            };
+          }),
+        );
+        // A source message that waited as steering carries its own reply context.
+        const replyContext =
+          peerReadOnly || initialSteering.some((item) => item.messageId === run.sourceMessageId)
+            ? undefined
+            : await loadReplyContext(deps.prisma, thread.id, run.sourceMessageId);
         const completionWake =
           run.clientNonce?.startsWith("goal-wake:") || run.clientNonce?.startsWith("peer-wake:");
         const wakeSource =
@@ -5795,33 +5904,84 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 content: `${requiredWakeContext?.content ?? ""}${quietHeader}${quietContext}`,
               }
             : requiredWakeContext;
+          const turnMessage = comparisonRun
+            ? ""
+            : redactSecrets(
+                [
+                  formatCurrentTimeInstruction(),
+                  peerReadOnly ? undefined : workspaceInstruction,
+                  peerReadOnly ? undefined : hostEnvironmentInstruction,
+                  peerReadOnly ? undefined : scratchpadContext,
+                  runReplyGuidance(run.trigger),
+                  prompt,
+                ]
+                  .filter(Boolean)
+                  .join("\n\n"),
+                runSecrets,
+              );
+          // Waiting messages are sized apart from the request: they take the budget and image
+          // allowance the request leaves, and whatever does not fit stays queued for a
+          // later follow-up instead of failing this turn. A runtime that rejects images
+          // still gets the text; the image is noted as unavailable rather than attached.
+          const foldImages = runtimeAcceptsFoldedImages(
+            selected.pin.runtimeKind,
+            runtime.describe().capabilities,
+            acceptsImages,
+          );
+          const preparedSteering = initialSteering.map((item) => {
+            const dropped = !foldImages && (item.images?.length ?? 0) > 0;
+            const note =
+              dropped && !item.text.includes(TURN_ATTACHMENT_UNAVAILABLE)
+                ? TURN_ATTACHMENT_UNAVAILABLE
+                : "";
+            return {
+              ...item,
+              text: redactSecrets([item.text, note].filter(Boolean).join("\n\n"), runSecrets),
+              images: foldImages ? item.images : undefined,
+            };
+          });
+          const folded = fitInitialSteering(
+            preparedSteering,
+            {
+              characters: contextBudgets.message - turnMessage.length,
+              images: foldImages
+                ? HOST_TURN_MAX_IMAGES - (currentTurnImages?.length ?? 0)
+                : HOST_TURN_MAX_IMAGES,
+            },
+            steeringContinuation,
+          );
+          if (folded.deferred.length)
+            await deps.events.releaseSteering({
+              threadId: thread.id,
+              botId: bot.id,
+              runId,
+              leaseOwner: workerId,
+              leaseFence: fence,
+              ids: folded.deferred.map((item) => item.id),
+            });
+          for (const item of folded.included) pendingExposures.push(...item.exposures);
+          const foldedIds = folded.included.map((item) => item.id);
+          const deferredIds = folded.deferred.map((item) => item.id);
+          const foldedDeliveryIds = new Set(folded.included.flatMap((item) => item.deliveryIds));
+          const foldedImages = folded.included.flatMap((item) => item.images ?? []);
+          const recallQuery =
+            steeringContinuation && folded.included.length
+              ? folded.included.map((item) => item.historyText).join("\n")
+              : task.prompt;
           const turnContext = await assembleTurnContext({
             peerReadOnly,
             instructions: comparisonRun ? "" : stableInstructions,
             tools: comparisonRun ? "none" : tools,
             brief: groupBrief?.content,
             summary: comparisonRun ? null : compactedHistory.summary,
-            history: comparisonRun ? [] : history,
+            history: comparisonRun ? [] : withoutSteeringMessages(history, initialSteering),
             teammates: comparisonRun ? undefined : botDirectory,
             goal: comparisonRun || peerReadOnly ? undefined : goalContext,
             requiredContext,
             sourceMessageId: run.sourceMessageId,
-            query: task.prompt,
-            message: comparisonRun
-              ? ""
-              : redactSecrets(
-                  [
-                    formatCurrentTimeInstruction(),
-                    peerReadOnly ? undefined : workspaceInstruction,
-                    peerReadOnly ? undefined : hostEnvironmentInstruction,
-                    peerReadOnly ? undefined : scratchpadContext,
-                    runReplyGuidance(run.trigger),
-                    prompt,
-                  ]
-                    .filter(Boolean)
-                    .join("\n\n"),
-                  runSecrets,
-                ),
+            query: recallQuery,
+            message: turnMessage,
+            steering: folded.included,
             budgets: contextBudgets,
             routingRule: RoutingRuleSchema.safeParse(run.routingRule).data ?? null,
             queueWaitMs: current.queueWaitMs ?? Math.max(0, Date.now() - run.createdAt.getTime()),
@@ -5837,7 +5997,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                             deps.memoryDocuments,
                             semanticMemory,
                             {
-                              query: task.prompt,
+                              query: recallQuery,
                               scope: memoryScope,
                               botId: bot.id,
                               historyGeneration: thread.historyCompactionGeneration,
@@ -5850,7 +6010,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                             value: await recallLocalDocuments(
                               deps.memory,
                               bot.id,
-                              task.prompt,
+                              recallQuery,
                               context,
                             ),
                           };
@@ -5928,7 +6088,6 @@ export function createRunExecutor(deps: ExecutorDeps) {
               leaseFence: fence,
               deliveryIds: initialReceiptIds,
             });
-          const acceptedSteeringDeliveryIds = new Set<string>();
           const runtimeEvents = withComparisonInput(
             deps,
             run,
@@ -5940,22 +6099,35 @@ export function createRunExecutor(deps: ExecutorDeps) {
               botId: bot.id,
               threadId: thread.id,
               runId,
-              inputReceipt: { leaseFence: fence, deliveryIds: initialReceiptIds },
+              inputReceipt: {
+                leaseFence: fence,
+                deliveryIds: [...initialReceiptIds, ...foldedDeliveryIds],
+              },
               providerPurpose: run.delegationId ? "delegated" : "main",
               acknowledgeInput: async (input) => {
                 if (!scripted && selected.pin.runtimeKind !== "pi")
                   throw new Error("Input acknowledgement is unsupported by this runtime.");
                 if (input.runId !== runId || input.leaseFence !== fence)
                   throw new Error("Input acknowledgement scope mismatch.");
-                const acceptedDeliveryIds =
-                  input.mode === "steering" ? [...acceptedSteeringDeliveryIds] : initialReceiptIds;
-                const result = await acknowledgeBotMessageReceipt(deps, input, acceptedDeliveryIds);
-                if (result.refused) {
-                  getLogger().warn("bot message input acknowledgement refused", {
-                    runId,
-                    reason: result.refused,
-                  });
-                  throw new Error("Bot message input acknowledgement was refused.");
+                for (const receipt of splitInitialReceipt(input, foldedDeliveryIds)) {
+                  const acceptedDeliveryIds =
+                    receipt.mode === "steering"
+                      ? [...acceptedSteeringDeliveryIds]
+                      : initialReceiptIds;
+                  const result = await acknowledgeBotMessageReceipt(
+                    deps,
+                    receipt,
+                    acceptedDeliveryIds,
+                  );
+                  if (result.refused) {
+                    getLogger().warn("bot message input acknowledgement refused", {
+                      runId,
+                      reason: result.refused,
+                      receiptDeliveryIds: receipt.deliveryIds,
+                      acceptedDeliveryIds,
+                    });
+                    throw new Error("Bot message input acknowledgement was refused.");
+                  }
                 }
               },
               sourceMessageId: run.sourceMessageId,
@@ -5964,7 +6136,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
               stablePrefix: turnContext.stablePrefix,
               history: turnContext.history,
               stableHistory: turnContext.stableHistory,
-              currentTurnImages,
+              currentTurnImages: foldedImages.length
+                ? [...(currentTurnImages ?? []), ...foldedImages]
+                : currentTurnImages,
               tools: selected.pin.runtimeKind === "antigravity" ? "none" : tools,
               model: resolved,
               resumeFromCheckpoint: takeoverResume?.checkpoint,
@@ -6034,6 +6208,13 @@ export function createRunExecutor(deps: ExecutorDeps) {
                   name,
                   redactSecrets(task, runSecrets),
                   redactTaskValue(card, runSecrets),
+                  // Helpers run on this run's resolved connection; its configured
+                  // output cap and context window set the helper's admission floor.
+                  {
+                    contextWindow: selected.contextWindow,
+                    maxTokens: selected.maxTokens,
+                    reasoning: selected.reasoning,
+                  },
                 );
                 if ("error" in admitted) return admitted;
                 try {
@@ -6106,68 +6287,9 @@ export function createRunExecutor(deps: ExecutorDeps) {
                         runId,
                         leaseOwner: workerId,
                         leaseFence: fence,
-                        seenIds,
+                        seenIds: [...seenIds, ...foldedIds, ...deferredIds],
                       });
-                      return Promise.all(
-                        steering.map(async (item) => {
-                          const { images, files, unavailableInstruction } =
-                            await settleSteeringAttachmentLoads(
-                              loadCurrentTurnImages(deps, item.blocks, context),
-                              deps.artifacts
-                                ? materializeCurrentTurnFiles(
-                                    {
-                                      prisma: deps.prisma,
-                                      artifacts: deps.artifacts,
-                                      sandbox: deps.sandbox,
-                                    },
-                                    item.blocks,
-                                    {
-                                      context,
-                                      computer,
-                                      computerMode,
-                                      markWorkspaceDirty: workspaceCheckpoint.markDirty,
-                                    },
-                                  )
-                                : Promise.resolve([]),
-                              item.blocks,
-                              context.signal,
-                            );
-                          workspaceCheckpoint.markFiles(files);
-                          const filesInstruction = currentTurnFilesInstruction(files);
-                          const deliveryIds = (
-                            await deps.prisma.botMessageWake.findMany({
-                              where: {
-                                runId,
-                                state: "bound",
-                                steeringMessageId: item.id,
-                              },
-                              select: { deliveryIds: true },
-                            })
-                          ).flatMap((wake) => wake.deliveryIds);
-                          for (const id of deliveryIds) acceptedSteeringDeliveryIds.add(id);
-                          if (selected.pin.runtimeKind !== "pi")
-                            await noteBotMessageReadUnconfirmed(deps.prisma, {
-                              runId,
-                              leaseFence: fence,
-                              deliveryIds,
-                            });
-                          return {
-                            id: item.id,
-                            messageId: item.messageId,
-                            deliveryIds,
-                            historyText: item.text,
-                            text: [
-                              await loadReplyContext(deps.prisma, thread.id, item.messageId),
-                              item.text,
-                              filesInstruction,
-                              unavailableInstruction,
-                            ]
-                              .filter(Boolean)
-                              .join("\n\n"),
-                            images,
-                          };
-                        }),
-                      );
+                      return Promise.all(steering.map((item) => mapClaimedSteeringItem(item)));
                     },
             },
             context,
@@ -6272,6 +6394,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 pendingProgress = "";
                 lastProgressAt = Date.now();
               }
+              const safeText = redactSecrets(event.text, runSecrets);
               await deps.events.append({
                 spaceId: run.spaceId,
                 threadId: thread.id,
@@ -6279,10 +6402,28 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 type: run.delegationId ? "delegation.progress" : "thread.progress",
                 runId,
                 payload: {
-                  text: redactSecrets(event.text, runSecrets),
+                  text: safeText,
                   ...(event.activity ? { activity: true } : {}),
+                  ...(event.reasoning ? { reasoning: true } : {}),
                 },
               });
+              // The live beat clears when the run finishes, so the finished work record
+              // keeps the summary itself. Consecutive summaries replace that tail, matching
+              // the live reducer. Reply text still streaming stays one block. A note held
+              // for message_user is flushed first so the summary cannot land ahead of it.
+              if (event.reasoning && !event.activity && safeText.trim()) {
+                if (pendingToolNames.length > 0) flushPendingTools();
+                const summary = {
+                  kind: "progress" as const,
+                  text: safeText,
+                  reasoning: true as const,
+                };
+                const tail = messageSegments.at(-1);
+                messageSegments =
+                  tail && isReasoningSummaryBlock(tail)
+                    ? [...messageSegments.slice(0, -1), summary]
+                    : [...messageSegments, summary];
+              }
             } else if (event.type === "ask") {
               if (!(await renewRunLease(deps, runId, workerId, fence))) return;
               const safeText = redactSecrets(event.text, runSecrets);
@@ -6303,6 +6444,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 leaseOwner: workerId,
                 leaseFence: fence,
                 blocks: [
+                  ...redactBlocks(messageSegments, runSecrets),
                   {
                     kind: "ask",
                     text: safeText,
@@ -6366,6 +6508,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 leaseOwner: workerId,
                 leaseFence: fence,
                 reason: safeReason,
+                blocks: redactBlocks(messageSegments, runSecrets),
                 computerId: storedComputer.id,
               });
               if (!paused) return;
@@ -6509,6 +6652,21 @@ export function createRunExecutor(deps: ExecutorDeps) {
                 recordContextUsage(turnContext.snapshot, recorded);
                 await saveContextSnapshot();
               }
+              // Stop as soon as persisted usage crosses the reservation. Waiting for the
+              // next heartbeat would let a native runtime start another request.
+              const watchedDelegation = event.delegationId ?? run.delegationId;
+              if (watchedDelegation) {
+                const stop = await checkDelegationExecution(
+                  deps.prisma,
+                  runId,
+                  undefined,
+                  undefined,
+                  event.delegationId && event.delegationId !== run.delegationId
+                    ? event.delegationId
+                    : undefined,
+                );
+                if (stop) runAbortController?.abort(new DispatchStopRequested());
+              }
             } else if (event.type === "done") {
               if (!assembled && event.text) {
                 if (publishedMidTurnUserMessage || discardedMidTurnNarration) {
@@ -6592,7 +6750,7 @@ export function createRunExecutor(deps: ExecutorDeps) {
             ? []
             : finalBlocksAfterMidTurnProgress(
                 redactBlocks(completionBlocks, runSecrets),
-                publishedMidTurnUserMessage || runAllowsSilentEmpty(run.trigger),
+                runAllowsSilentEmpty(run.trigger) ? "silent-routine" : "ordinary-run",
               );
           const text = handedOff
             ? ""
@@ -7195,7 +7353,8 @@ export function completionMessageSegments(
 ): MessageBlock[] {
   if (options?.suppressOutput) return [];
   const fallback = options?.emptyResponseText?.trim() || "done.";
-  if (segments.length > 0) {
+  // A reasoning summary annotates work; on its own the turn produced nothing.
+  if (segments.some((segment) => !isReasoningSummaryBlock(segment))) {
     if (
       !options?.allowSilentEmpty &&
       options?.emptyResponseText !== undefined &&
@@ -7206,7 +7365,7 @@ export function completionMessageSegments(
     return segments;
   }
   if (options?.allowSilentEmpty || options?.skipEmptyFallback) return [];
-  return [{ kind: "text", text: fallback }];
+  return [...segments, { kind: "text", text: fallback }];
 }
 
 /** User-facing text for completion notifications; empty when only tool/step activity remains. */
@@ -7227,6 +7386,16 @@ export function completionNotificationPreview(text: string): string {
 
 export function completionMarksUnread(trigger: string, text: string): boolean {
   return trigger !== "routine" || Boolean(text);
+}
+
+/** Antigravity, and any runtime that declares it, rejects every image. */
+export function runtimeAcceptsFoldedImages(
+  runtimeKind: string,
+  capabilities: { images?: boolean },
+  acceptsImages: boolean,
+): boolean {
+  if (runtimeKind === "antigravity" || capabilities.images === false) return false;
+  return acceptsImages;
 }
 
 export function missingTurnImagesInstruction(
@@ -7365,7 +7534,13 @@ function redactBlocks(blocks: MessageBlock[], secrets: string[]): MessageBlock[]
     if (block.kind === "text") {
       return { kind: "text" as const, text: redactSecrets(block.text, secrets) };
     }
-    if (block.kind === "bot_message_sent" || block.kind === "bot_message_received") {
+    // A kept reasoning summary was redacted when it streamed; a secret added later in
+    // the run is still caught here, as it is for text.
+    if (
+      block.kind === "progress" ||
+      block.kind === "bot_message_sent" ||
+      block.kind === "bot_message_received"
+    ) {
       return { ...block, text: redactSecrets(block.text, secrets) };
     }
     return block;

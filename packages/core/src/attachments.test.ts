@@ -62,6 +62,16 @@ describe("attachment helpers", () => {
     ).toBe("hello\n[image: shot.png]\n[file: brief.pdf (application/pdf, 99 bytes)]");
   });
 
+  it("leaves reasoning summaries out of agent history", () => {
+    expect(
+      blocksToAgentHistoryText([
+        { kind: "progress", text: "Weighing options.", reasoning: true },
+        { kind: "steps", steps: [{ label: "Shell", count: 1 }] },
+        { kind: "text", text: "The answer is four." },
+      ]),
+    ).toBe("The answer is four.");
+  });
+
   it("infers attachment mime types from extensions", () => {
     expect(inferAttachmentMimeType("photo.JPG", "")).toBe("image/jpeg");
     expect(inferAttachmentMimeType("notes.pdf", "")).toBe("application/pdf");

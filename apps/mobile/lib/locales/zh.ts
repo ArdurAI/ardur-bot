@@ -1281,4 +1281,11 @@ export const ZH_MESSAGES: Record<string, string> = {
   "Reset to defaults": "重置为默认值",
   "Fix the configuration JSON to edit these settings.": "请修复配置 JSON 后再编辑这些设置。",
   Reload: "重新加载",
+  "Done: {title}": "完成：{title}",
+  "Failed: {title}": "失败：{title}",
+  "Working: {title}": "工作中：{title}",
+  Interrupted: "已中断",
+  "Interrupted: {title}": "已中断: {title}",
+  "Unknown: {title}": "未知: {title}",
+  Command: "命令",
 };

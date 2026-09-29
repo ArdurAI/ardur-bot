@@ -1,6 +1,7 @@
 import { taskCardPrompt } from "@ardurbot/core";
 import type { PrismaClient } from "@ardurbot/db";
 import { startDelegation, withTransactionRetry } from "@ardurbot/db";
+import type { DelegationModelLimits } from "./delegation.js";
 import { delegationFailure, prepareDelegation } from "./delegation.js";
 
 export async function admitRunHelper(
@@ -10,6 +11,7 @@ export async function admitRunHelper(
   name: string,
   task: string,
   card?: unknown,
+  workerLimits?: DelegationModelLimits,
 ) {
   const result = await withTransactionRetry(() =>
     prisma.$transaction(async (tx) => {
@@ -23,6 +25,7 @@ export async function admitRunHelper(
         admissionKey: `helper:${run.id}:${executionId}`,
         prompt: task,
         card,
+        workerLimits,
       });
       if (!admitted.ok) return admitted;
       if (["completed", "accepted", "failed", "cancelled"].includes(admitted.record.status))

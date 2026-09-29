@@ -25,6 +25,8 @@ import {
   cancelResponseBody,
   ensureAiDataConsent,
   isCommandCardEvent,
+  isInterimNarrationAt,
+  isReasoningSummaryBlock,
   isRunTerminalEvent,
   mergeCommandLinks,
   mergeThreadHistory,
@@ -35,6 +37,7 @@ import {
   reduceLiveMessageBlocks,
   reduceRunContext,
   runFailureError,
+  showsReplyText,
   signupRequiresEmailVerification,
   takeLiveMessage,
   updateCloudAgentMessages,
@@ -48,7 +51,6 @@ import type { EndpointResult } from "./endpoint";
 import { defaultApiBase, normalizeApiBase } from "./endpoint";
 import { t } from "./i18n";
 import { resumeLiveNotifications } from "./live-notifications";
-import { hasVisibleMessagePresentation } from "./message-presentation";
 import { RpcError } from "./rpc-error";
 import {
   clearSessionToken,
@@ -920,7 +922,9 @@ export function messagingProviderLabel(provider: string, transport?: string): st
 
 export function copyableMobileMessageText(message: MobileMessage): string {
   return message.blocks
-    .map((block) => {
+    .map((block, index) => {
+      if (isReasoningSummaryBlock(block)) return "";
+      if (isInterimNarrationAt(message.blocks, index)) return "";
       if (block.kind === "channel_message") {
         return `${messagingProviderLabel(block.provider, block.transport)} · ${block.fromLabel}: ${block.text}`;
       }
@@ -947,7 +951,9 @@ export function blockText(
   translateNotice?: (notice: GroupModelFailureNotice) => string,
 ) {
   return message.blocks
-    .map((block) => {
+    .map((block, index) => {
+      if (isReasoningSummaryBlock(block)) return "";
+      if (isInterimNarrationAt(message.blocks, index)) return "";
       if (block.kind === "text" && block.notice && translateNotice)
         return translateNotice(block.notice);
       if (block.kind === "channel_message") {
@@ -1297,11 +1303,11 @@ export function applyMobileThreadEvent(
 /**
  * A run's live draft holds its place in the thread once it shows reply text: the server
  * holds the reply's position from that first streamed text, and the saved reply fills it.
- * A draft with only tool activity has no place yet (and no bubble); it follows the newest
- * message, where its reply will be saved.
+ * A draft with only tool activity or reasoning has no place yet (and no bubble); it follows
+ * the newest message, where its reply will be saved.
  */
 function draftHoldsPlace(draft: MobileMessage | undefined): boolean {
-  return draft !== undefined && hasVisibleMessagePresentation(draft.blocks);
+  return draft !== undefined && showsReplyText(draft.blocks);
 }
 
 /** Put a run's updated live draft back: in the place it holds, or after the newest message. */
